@@ -548,18 +548,26 @@ gorsel kabulunun editor ve RTS browser smoke ile ayrica yapilmasi gerekir.
 
 ### Faz 2 - Su materyali ve temel kopuk
 
-- [ ] Cift-faz normal flow ekle.
-- [ ] Sığ/derin renk ve alpha uygula.
-- [ ] Kiyi displacement sonumunu ekle.
-- [ ] Kiyi ve procedural rapids kopugunu ekle.
-- [ ] Dusuk genlikli WPO ekle.
-- [ ] Su shadow/collision/render-order kurallarini netlestir.
+- [x] Cift-faz normal flow ekle.
+- [x] Sığ/derin renk ve alpha uygula.
+- [x] Kiyi displacement sonumunu ekle.
+- [x] Kiyi ve procedural rapids kopugunu ekle.
+- [x] Dusuk genlikli WPO ekle.
+- [x] Su shadow/collision/render-order kurallarini netlestir.
 
 Kabul:
 
 - Akista gorunur texture reset'i yoktur.
 - Kiyida vertex hareketinden kaynakli bosluk/tasma yoktur.
 - Su yatagi top-down kamerada okunur.
+
+Uygulama notu (2026-07-24): Ribbon'a Landscape yuksekliginden bake edilen
+`waterDepth` ve spline egrilik/egiminden uretilen `rapidness` attribute'lari
+eklendi. Shader iki farkli hiz/olcekte normal fazini blend eder; kiyida WPO
+soner ve kopuk yalniz kiyi/rapid verisinden gelir. Su `transparent`,
+`depthWrite=false`, shadow kapali ve collision/navigation disidir. Production
+build ile gameplay-proof authored-level browser smoke basarili; paylasilan
+engine paketi ise ilgisiz yol `ageLayers` beklenti uyusmazliginda duruyor.
 
 ### Faz 3 - Paylasilan planar reflection
 

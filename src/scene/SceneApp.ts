@@ -6122,7 +6122,7 @@ export class SceneApp {
       const landscape = this.layout?.landscapes?.find((candidate) => candidate.id === resolved.landscapeRef);
       const data = landscape ? this.landscapeData.get(landscape.id) : null;
       const spline = data?.splines?.find((candidate) => candidate.id === resolved.splineRef);
-      if (!landscape || !spline) {
+      if (!landscape || !data || !spline) {
         console.warn(`[river-water] Skipped ${resolved.id}: missing Landscape/spline ${resolved.landscapeRef}/${resolved.splineRef}.`);
         continue;
       }
@@ -6130,6 +6130,7 @@ export class SceneApp {
       const item: RiverWaterRenderItem = {
         ...resolved,
         spline,
+        landscapeData: data,
         position: [...landscape.position],
         rotation: landscape.rotation ? [...landscape.rotation] : [0, 0, 0],
       };

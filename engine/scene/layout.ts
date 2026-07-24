@@ -885,6 +885,18 @@ export interface LayoutRiverWater {
   normalScale?: number;
   /** Manifest texture asset id; absent uses the built-in water normal default. */
   normalTexture?: string;
+  /** Deep-channel colour (hex `#rrggbb`). */
+  deepColor?: string;
+  /** Shallow-bank colour (hex `#rrggbb`). */
+  shallowColor?: string;
+  /** Maximum material alpha, 0..1. */
+  opacity?: number;
+  /** Vertical-only wave amplitude in world units; shore vertices fade to zero. */
+  waveAmplitude?: number;
+  /** Main wave length in world units. */
+  waveLength?: number;
+  /** Multiplier for procedural shore/rapid foam, 0..1. */
+  foamIntensity?: number;
 }
 
 export interface RoomLayout {

@@ -1,7 +1,7 @@
 # ThreeAges RTS Painted Roads Plani (Yol Araci + Landscape Paint)
 
 Olusturulma tarihi: 2026-07-24  
-Durum: Faz 0-4 uygulandi (kod + testler yesil); Faz 5 opsiyonel bekliyor,
+Durum: Faz 0-5 uygulandi (kod + testler yesil, kullanici Faz 0-4'u test etti);
 Faz 6 gorsel/smoke kaniti kullaniciya bagli  
 Kapsam: RTS yol aracinin gorselini kutu mesh'lerden landscape paint katmanina
 tasimak. Grid/lojistik mantigi ve maliyet modeli degismez; degisen yalniz
@@ -218,17 +218,24 @@ Kabul:
 Amac: Merkez-gudumlu ilerlemeyle gorsel terfi — yol agi ayni kalir, boyanan
 katman cag ile degisir.
 
-- [ ] `KingdomProgressionSystem` tier'ina gore `layerId` secimi: erken cag
-  `dirt` (M_GroundDirty), ileri cag cobblestone (bugun "snow" slotundaki
-  m-cooblestone).
-- [ ] Tier degisiminde tam repaint tetiklenmesi (restore + yeni katmanla boya).
-- [ ] "snow" slotunun anlamsal adi karari (bkz. Riskler R4) bu fazdan once
-  netlestirilir.
+- [x] Age -> `layerId` secimi `roads.json` `visual.ageLayers` ile veri-gudumlu:
+  `settlement -> dirt` (M_GroundDirty), `town -> snow` (m-cooblestone =
+  M_CobbleStone_Rough). Cozumleme `RtsApp.roadLayerForAge`; eslesmeyen age
+  varsayilan `layerId`'ye duser (asla yolsuz kalmaz).
+- [x] Tier "completed" event'inde (player) `roadPainter.setLayer(event.age) +
+  syncRoadVisuals()` -> tek repaint (restore + yeni katmanla boya). `setupRoadPainter`
+  baslangicta mevcut age katmanini kurar; `reset()` settlement katmanina doner.
+- [x] "snow" slotu id olarak korundu (R4 karari): materyal ataması
+  (M_CobbleStone_Rough) slotun gorunumunu belirledigi icin id degistirmeye ve
+  sidecar/validator migrasyonuna gerek yok; painter yalnizca `layerId: "snow"`
+  boyar.
 
 Kabul:
 
-- Cag atlaminda mevcut yollar tek seferde yeni katmana terfi eder; lojistik
-  veri degismez.
+- [x] Cag atlaminda mevcut yollar tek repaint'te yeni katmana terfi eder;
+  `RoadGraph` topolojisi/maliyeti degismez (painter salt okur). Testle sabit:
+  "Faz 5: an age layer swap promotes the same road with no old-layer residue".
+- [ ] Gorsel onay: town cagina gecince yollarin cobblestone'a donmesi (kullanici).
 
 ### Faz 6 - Kabul, smoke ve dokumantasyon
 
@@ -264,10 +271,12 @@ Kabul:
   kenarlar yumusak/benekli okunur (istenen el-boyamasi hissi). Daha keskin
   istenirse editor tarafinda `resampleLandscapeData` ile 257'ye cikma
   secenegi vardir — runtime plani etkilemez, ayri authoring karari.
-- **R4 - 4 katman siniri ve "snow" slotu:** Splat malzemesi 4 katmanla
-  sinirli; cobblestone bugun "snow" id'sinde yasiyor. Faz 5'ten once slotun
-  yeniden adlandirilmasi/temizligi kararlastirilmali (sidecar + validator
-  etkisi arastirilarak).
+- **R4 - 4 katman siniri ve "snow" slotu (KARAR: id korundu):** Splat malzemesi
+  4 katmanla sinirli; cobblestone "snow" id'sinde yasiyor. Faz 5'te slot id'si
+  **degistirilmedi** — layer id salt bir anahtar, gorunumu atanan materyal
+  (M_CobbleStone_Rough) belirliyor; yeniden adlandirma sidecar + validator
+  migrasyonu gerektirir ve gorsel bir kazanc saglamaz. `ageLayers.town = "snow"`
+  ile boyaniyor.
 - **R5 - Cift gorsel kaynak:** Editor'de elle boyanmis yollar ile runtime
   yol boyasi ayni katmani kullanir; pristine restore yalniz runtime'in
   boyadigi bolgeyi geri alir, el boyamasi korunur (snapshot mount'taki

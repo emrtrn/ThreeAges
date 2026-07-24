@@ -322,6 +322,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     const item: RiverWaterRenderItem = {
       ...resolved,
       spline,
+      landscapeData: landscape.data,
       position: landscape.actor.position,
       rotation: landscape.actor.rotation ?? [0, 0, 0],
     };

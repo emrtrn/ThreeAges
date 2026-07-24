@@ -1,5 +1,6 @@
 import {
   BufferGeometry,
+  Color,
   DoubleSide,
   Float32BufferAttribute,
   Mesh,
@@ -7,8 +8,8 @@ import {
   Texture,
 } from "three";
 
-import type { ForgeLandscapeSpline, LandscapeSplinePolylineSample } from "@engine/scene/landscape";
-import { splineToPolyline } from "@engine/scene/landscape";
+import type { ForgeLandscapeData, ForgeLandscapeSpline, LandscapeSplinePolylineSample } from "@engine/scene/landscape";
+import { landscapeHeightAtLocal, splineToPolyline } from "@engine/scene/landscape";
 import type { Vec3 } from "@engine/scene/layout";
 import type { ResolvedRiverWater } from "@engine/scene/riverWater";
 
@@ -20,6 +21,8 @@ export interface RiverWaterRibbonData {
   uvs: number[];
   flowDirections: number[];
   shoreDistances: number[];
+  waterDepths: number[];
+  rapidness: number[];
   indices: number[];
 }
 
@@ -30,6 +33,8 @@ export interface BuildRiverWaterRibbonOptions {
   sampleSpacing?: number;
   /** World units represented by one U repeat of the normal texture. */
   normalTileLength?: number;
+  /** Optional Landscape data used to bake shallow/deep water into the ribbon. */
+  landscapeData?: ForgeLandscapeData;
 }
 
 interface RiverSample extends LandscapeSplinePolylineSample {
@@ -109,6 +114,8 @@ export function buildRiverWaterRibbon(
   const uvs: number[] = [];
   const flowDirections: number[] = [];
   const shoreDistances: number[] = [];
+  const waterDepths: number[] = [];
+  const rapidness: number[] = [];
   const indices: number[] = [];
   const width = 5;
   const tileLength = Math.max(EPSILON, options.normalTileLength ?? DEFAULT_NORMAL_TILE_LENGTH);
@@ -123,6 +130,15 @@ export function buildRiverWaterRibbon(
       const length = Math.hypot(dx, dz) || 1;
       const flowX = dx / length;
       const flowZ = dz / length;
+      const previousDx = sample.position[0] - previous.position[0];
+      const previousDz = sample.position[2] - previous.position[2];
+      const nextDx = next.position[0] - sample.position[0];
+      const nextDz = next.position[2] - sample.position[2];
+      const previousLength = Math.hypot(previousDx, previousDz) || 1;
+      const nextLength = Math.hypot(nextDx, nextDz) || 1;
+      const turn = 1 - Math.max(-1, Math.min(1, (previousDx * nextDx + previousDz * nextDz) / (previousLength * nextLength)));
+      const slope = Math.abs(next.position[1] - previous.position[1]) / Math.max(length, EPSILON);
+      const localRapidness = Math.min(1, turn * 1.5 + slope * 0.75);
       const sideX = -flowZ;
       const sideZ = flowX;
       for (let lateral = 0; lateral < width; lateral += 1) {
@@ -132,6 +148,11 @@ export function buildRiverWaterRibbon(
         uvs.push(sample.distance / tileLength, v);
         flowDirections.push(flowX, flowZ);
         shoreDistances.push(Math.abs(v - 0.5) * 2);
+        const terrainHeight = options.landscapeData
+          ? landscapeHeightAtLocal(options.landscapeData, sample.position[0] + sideX * offset, sample.position[2] + sideZ * offset)
+          : options.surfaceLevel - 1;
+        waterDepths.push(Math.max(0, options.surfaceLevel - terrainHeight));
+        rapidness.push(localRapidness);
       }
     }
     for (let row = 0; row < chain.length - 1; row += 1) {
@@ -143,18 +164,33 @@ export function buildRiverWaterRibbon(
     }
     vertexBase += chain.length * width;
   }
-  return { positions, uvs, flowDirections, shoreDistances, indices };
+  return { positions, uvs, flowDirections, shoreDistances, waterDepths, rapidness, indices };
 }
 
 const VERTEX_SHADER = `
 attribute vec2 flowDirection;
 attribute float shoreDistance;
+attribute float waterDepth;
+attribute float rapidness;
 varying vec2 vRiverUv;
 varying float vShoreDistance;
+varying float vWaterDepth;
+varying float vRapidness;
+uniform float time;
+uniform float flowSpeed;
+uniform float waveAmplitude;
+uniform float waveLength;
 void main() {
   vRiverUv = uv;
   vShoreDistance = shoreDistance;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vWaterDepth = waterDepth;
+  vRapidness = rapidness;
+  float centreWeight = pow(max(0.0, 1.0 - shoreDistance), 1.6);
+  float wavePhase = uv.x * 6.283185 / max(waveLength, 0.01) - time * flowSpeed * 2.0;
+  float wave = sin(wavePhase) + sin(wavePhase * 1.73 + uv.y * 5.0) * 0.35;
+  vec3 displaced = position;
+  displaced.y += wave * waveAmplitude * centreWeight * (0.65 + rapidness * 0.35);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
 }`;
 
 const FRAGMENT_SHADER = `
@@ -163,21 +199,34 @@ uniform float time;
 uniform float flowSpeed;
 uniform float normalScale;
 uniform float hasNormalMap;
+uniform vec3 deepColor;
+uniform vec3 shallowColor;
+uniform float opacity;
+uniform float foamIntensity;
 varying vec2 vRiverUv;
 varying float vShoreDistance;
+varying float vWaterDepth;
+varying float vRapidness;
 void main() {
-  vec2 flowUv = vec2(vRiverUv.x * normalScale - time * flowSpeed, vRiverUv.y * normalScale);
-  vec3 sampledNormal = texture2D(normalMap, flowUv).xyz * 2.0 - 1.0;
-  float ripple = hasNormalMap * (sampledNormal.x + sampledNormal.y) * 0.08;
-  float shoreLight = smoothstep(0.0, 1.0, vShoreDistance) * 0.12;
-  vec3 deep = vec3(0.025, 0.18, 0.25);
-  vec3 shallow = vec3(0.08, 0.34, 0.40);
-  vec3 color = mix(deep, shallow, shoreLight + 0.25) + ripple;
-  gl_FragColor = vec4(color, 0.82);
+  vec2 baseUv = vec2(vRiverUv.x * normalScale, vRiverUv.y * normalScale);
+  vec2 normalA = texture2D(normalMap, baseUv - vec2(time * flowSpeed, 0.0)).xy * 2.0 - 1.0;
+  vec2 normalB = texture2D(normalMap, baseUv * 1.37 + vec2(0.37, 0.61) - vec2(time * flowSpeed * 0.73, 0.0)).xy * 2.0 - 1.0;
+  float phase = 0.5 + 0.5 * sin(time * flowSpeed * 1.4);
+  float ripple = hasNormalMap * dot(mix(normalA, normalB, phase), vec2(0.07));
+  float depth = clamp(vWaterDepth / 2.2, 0.0, 1.0);
+  vec3 color = mix(shallowColor, deepColor, depth) + ripple;
+  float shoreNoise = 0.5 + 0.5 * sin(vRiverUv.x * 9.0 - time * flowSpeed * 3.0 + sin(vRiverUv.x * 2.7));
+  float shoreFoam = smoothstep(0.56, 0.96, vShoreDistance) * shoreNoise;
+  float rapidFoam = smoothstep(0.16, 0.75, vRapidness) * (0.45 + 0.55 * shoreNoise);
+  float foam = clamp((shoreFoam + rapidFoam) * foamIntensity, 0.0, 1.0);
+  color = mix(color, vec3(0.84, 0.93, 0.91), foam * 0.72);
+  float alpha = opacity * mix(0.58, 1.0, depth);
+  gl_FragColor = vec4(color, alpha);
 }`;
 
 export interface RiverWaterRenderItem extends ResolvedRiverWater {
   spline: ForgeLandscapeSpline;
+  landscapeData: ForgeLandscapeData;
   position: Vec3;
   rotation: Vec3;
 }
@@ -189,12 +238,15 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     const ribbon = buildRiverWaterRibbon(item.spline, {
       surfaceLevel: item.surfaceLevel,
       widthScale: item.widthScale,
+      landscapeData: item.landscapeData,
     });
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(ribbon.positions, 3));
     geometry.setAttribute("uv", new Float32BufferAttribute(ribbon.uvs, 2));
     geometry.setAttribute("flowDirection", new Float32BufferAttribute(ribbon.flowDirections, 2));
     geometry.setAttribute("shoreDistance", new Float32BufferAttribute(ribbon.shoreDistances, 1));
+    geometry.setAttribute("waterDepth", new Float32BufferAttribute(ribbon.waterDepths, 1));
+    geometry.setAttribute("rapidness", new Float32BufferAttribute(ribbon.rapidness, 1));
     geometry.setIndex(ribbon.indices);
     geometry.computeBoundingSphere();
     const material = new ShaderMaterial({
@@ -206,6 +258,12 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         flowSpeed: { value: item.flowSpeed },
         normalScale: { value: item.normalScale },
         hasNormalMap: { value: normalMap ? 1 : 0 },
+        deepColor: { value: new Color(item.deepColor) },
+        shallowColor: { value: new Color(item.shallowColor) },
+        opacity: { value: item.opacity },
+        waveAmplitude: { value: item.waveAmplitude },
+        waveLength: { value: item.waveLength },
+        foamIntensity: { value: item.foamIntensity },
       },
       transparent: true,
       depthWrite: false,
@@ -221,6 +279,11 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       "XYZ",
     );
     this.visible = !item.hidden;
+    // Water is a visual transparent overlay: it neither writes opaque depth nor
+    // participates in shadow maps/collision, leaving terrain and RTS blockers as
+    // their respective render/gameplay authorities.
+    this.castShadow = false;
+    this.receiveShadow = false;
     this.renderOrder = 1;
     this.onBeforeRender = () => {
       this.material.uniforms["time"]!.value = performance.now() / 1000;

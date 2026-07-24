@@ -1339,7 +1339,16 @@ export class RtsApp {
       if (event.type === "completed") {
         for (const structure of event.structures) this.applyUpgradedVisual(structure);
         this.territory.refresh();
-        if (isPlayer) this.placement.refreshPreview();
+        if (isPlayer) {
+          this.placement.refreshPreview();
+          // Faz 5: promote the road paint to the new age's layer (dirt→cobblestone
+          // at Town) in one repaint. Topology/logistics are untouched — only the
+          // painted layer changes; a no-op when the age's layer is unchanged.
+          if (this.roadPainter) {
+            this.roadPainter.setLayer(this.roadLayerForAge(event.age));
+            this.syncRoadVisuals();
+          }
+        }
       }
       // §51 wants the AI's age-up called out; only the Town event marks it, since
       // a level-up is not a milestone the player needs warning about.
@@ -1787,7 +1796,20 @@ export class RtsApp {
     );
     this.roadPlacement.setPaintedMode(true);
     this.canvas.dataset.rtsRoads = "painted";
+    // Start on the layer for the player's current age (settlement → dirt).
+    this.roadPainter.setLayer(this.roadLayerForAge(this.ageOf(PLAYER_OWNER)));
     this.roadPainter.sync(this.roads.all(), this.roads.version);
+  }
+
+  /**
+   * The paint layer roads use at a given age (Painted Roads Faz 5). Centre-led
+   * progression promotes the *look* only — same topology, a richer layer
+   * (settlement → dirt, town → cobblestone). Unmapped ages fall back to the
+   * default layer, so a data gap degrades to the dirt path, never to nothing.
+   */
+  private roadLayerForAge(age: SettlementAge): string {
+    const visual = this.options.roadBalance.visual;
+    return visual.ageLayers?.[age] ?? visual.layerId;
   }
 
   /**

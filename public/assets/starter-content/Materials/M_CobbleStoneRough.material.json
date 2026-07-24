@@ -15,8 +15,8 @@
   "emissiveTexture": null,
   "ormTexture": null,
   "uvTiling": {
-    "x": 2,
-    "y": 2
+    "x": 3,
+    "y": 3
   },
   "roughness": 0.8,
   "metalness": 0,

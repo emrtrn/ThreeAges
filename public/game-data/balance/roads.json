@@ -3,6 +3,10 @@
   "woodCostPerCell": 4,
   "visual": {
     "layerId": "dirt",
+    "ageLayers": {
+      "settlement": "dirt",
+      "town": "snow"
+    },
     "width": 2.5,
     "falloff": 2,
     "strength": 0.9,

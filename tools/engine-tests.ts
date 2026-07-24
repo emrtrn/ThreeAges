@@ -20532,6 +20532,27 @@ check("RoadPaintSurface reset restores the exact pristine snapshot", () => {
   assert.deepEqual(data.layers.map((l) => l.weights), pristine);
 });
 
+check("Faz 5: an age layer swap promotes the same road with no old-layer residue", () => {
+  const segs = roadGraphOf([[{ x: -6, z: 0 }, { x: 6, z: 0 }]]).all();
+  const dirtOpts = ROAD_PAINT_OPTS;
+  const rockOpts = { ...ROAD_PAINT_OPTS, visual: { ...ROAD_PAINT_VISUAL, layerId: "rock" } };
+
+  // One surface: paint into dirt (early age), then re-paint the same network into
+  // rock (age promotion) — exactly what RoadTerrainPainter.setLayer drives.
+  const promoted = createFlatLandscapeData("small");
+  const surface = new RoadPaintSurface(promoted);
+  surface.repaint(roadGraphToLandscapeSpline(segs, dirtOpts));
+  surface.repaint(roadGraphToLandscapeSpline(segs, rockOpts));
+  const centre = 32 * 65 + 32;
+  assert.ok(promoted.layers.find((l) => l.id === "rock")!.weights[centre]! > 0.5, "rock now carries the road");
+  assert.ok(promoted.layers.find((l) => l.id === "dirt")!.weights[centre]! < 0.01, "no dirt residue after promotion");
+
+  // Fresh surface painting only rock is the ground truth for "no residue".
+  const fresh = createFlatLandscapeData("small");
+  new RoadPaintSurface(fresh).repaint(roadGraphToLandscapeSpline(segs, rockOpts));
+  assert.deepEqual(promoted.layers, fresh.layers, "promotion equals painting the new layer from pristine");
+});
+
 check("resolveLandscapeSplineMeshChains joins reversed compatible segments and stops at branches", () => {
   const mesh = { enabled: true, assetId: "road", deform: true } as const;
   const chain: ForgeLandscapeSpline = {
@@ -31276,7 +31297,16 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
   assert.deepEqual(balance, {
     cellSize: 2,
     woodCostPerCell: 4,
-    visual: { layerId: "dirt", width: 2.5, falloff: 2, strength: 0.9, jitter: 0.6, jitterSpacingCells: 5, widthVariation: 0.15 },
+    visual: {
+      layerId: "dirt",
+      width: 2.5,
+      falloff: 2,
+      strength: 0.9,
+      jitter: 0.6,
+      jitterSpacingCells: 5,
+      widthVariation: 0.15,
+      ageLayers: { settlement: "dirt", town: "snow" },
+    },
   });
   const roads = new RoadGraph(balance);
   const blockers = [{ min: [-1, -1, -1], max: [1, 3, 1] }];
@@ -35597,6 +35627,12 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     flowSpeed: 0.35,
     normalScale: 1,
     normalTexture: "t-water-n",
+    deepColor: "#063447",
+    shallowColor: "#2f8b91",
+    opacity: 0.82,
+    waveAmplitude: 0.04,
+    waveLength: 3.5,
+    foamIntensity: 0.55,
   });
   assert.deepEqual(validateRiverWater({
     id: "river-1",
@@ -35605,6 +35641,11 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     surfaceLevel: -1.4,
     widthScale: 0.88,
     flowSpeed: 0.35,
+    deepColor: "#123456",
+    opacity: 0.7,
+    waveAmplitude: 0.08,
+    waveLength: 4,
+    foamIntensity: 0.6,
     ignoredCollision: true,
   }), {
     id: "river-1",
@@ -35613,6 +35654,11 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     surfaceLevel: -1.4,
     widthScale: 0.88,
     flowSpeed: 0.35,
+    deepColor: "#123456",
+    opacity: 0.7,
+    waveAmplitude: 0.08,
+    waveLength: 4,
+    foamIntensity: 0.6,
   });
   assert.throws(() => validateRiverWater({ id: "river-1", landscapeRef: "landscape-1" }));
 });
@@ -35638,6 +35684,9 @@ check("River Water ribbon follows spline width with arc-length UVs and flow attr
   assert.equal(ribbon.flowDirections.length / 2, ribbon.positions.length / 3);
   assert.ok(ribbon.shoreDistances.includes(0));
   assert.ok(ribbon.shoreDistances.includes(1));
+  assert.equal(ribbon.waterDepths.length, ribbon.positions.length / 3);
+  assert.equal(ribbon.rapidness.length, ribbon.positions.length / 3);
+  assert.ok(ribbon.rapidness.some((value) => value > 0), "turns contribute procedural rapids foam data");
   assert.ok(ribbon.indices.length > 0);
 });
 

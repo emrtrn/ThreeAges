@@ -380,6 +380,19 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-07-24* - **Painted Roads Faz 5: çağ→katman görsel terfisi.** Kullanıcı
+  Faz 0-4'ü test etti (çalışıyor) ve Faz 5'i onayladı: settlement çağında toprak,
+  town çağında cobblestone. `roads.json` `visual.ageLayers` (`settlement→dirt`,
+  `town→snow`) veri-güdümlü; `RtsApp.roadLayerForAge` çözer, eşleşmeyen age
+  default `layerId`'ye düşer. `RoadTerrainPainter.setLayer(layerId)` aktif katmanı
+  değiştirir + `lastVersion=-1` ile sonraki `sync`i tam repaint'e zorlar (restore
+  eski katman → yeni katmanla boya, residü yok). Player tier "completed" event'inde
+  (`event.age`) tetiklenir; `setupRoadPainter` başlangıç katmanını, `reset()`
+  restart'ta settlement katmanını kurar. **Karar (R4):** "snow" layer id'si
+  korundu — id salt anahtar, görünümü atanan materyal (M_CobbleStone_Rough)
+  belirler; rename sidecar+validator migrasyonu gerektirir, görsel kazanç yok.
+  Test: "Faz 5: an age layer swap promotes the same road with no old-layer
+  residue"; `test:engine` yeşil (1087). Kalan: town'a geçişin görsel onayı.
 - *2026-07-24* - **Painted Roads (RTS yol görseli → landscape dirt paint),
   Faz 0-4 uygulandı.** RTS yol aracının kutu-mesh görseli, mount edilmiş
   authored Landscape'in `dirt` paint katmanına boyanan doğal patikayla

@@ -1270,6 +1270,7 @@ function validateAiTargetWeights(value: unknown, where: string): AiTargetWeights
 /** Built-in road-paint tuning used when `roads.json` omits the `visual` block. */
 const DEFAULT_ROAD_VISUAL: RoadVisual = {
   layerId: "dirt",
+  ageLayers: { settlement: "dirt", town: "snow" },
   width: 2.5,
   falloff: 2,
   strength: 0.9,
@@ -1277,6 +1278,20 @@ const DEFAULT_ROAD_VISUAL: RoadVisual = {
   jitterSpacingCells: 5,
   widthVariation: 0.15,
 };
+
+/** Parse the optional per-age paint-layer override map (age → non-empty layer id). */
+function validateRoadAgeLayers(value: unknown, scope: string): Readonly<Record<string, string>> | undefined {
+  if (value === undefined) return undefined;
+  const map = asObject(value, `${scope}.ageLayers`);
+  const entries: Array<[string, string]> = [];
+  for (const [age, layer] of Object.entries(map)) {
+    if (typeof layer !== "string" || layer.length === 0) {
+      throw new GameDataError(`${scope}.ageLayers.${age}: must be a non-empty layer id`);
+    }
+    entries.push([age, layer]);
+  }
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
 
 /** Optional finite number field, falling back to `fallback` when absent. */
 function optionalFiniteNumber(
@@ -1310,7 +1325,8 @@ function validateRoadVisual(value: unknown, where: string): RoadVisual {
   if (width <= 0 || falloff < 0 || strength <= 0 || jitter < 0 || jitterSpacingCells < 1 || widthVariation < 0) {
     throw new GameDataError(`${scope}: width/strength must be > 0, others must be non-negative (spacing >= 1)`);
   }
-  return { layerId, width, falloff, strength, jitter, jitterSpacingCells, widthVariation };
+  const ageLayers = validateRoadAgeLayers(obj["ageLayers"], scope);
+  return { layerId, width, falloff, strength, jitter, jitterSpacingCells, widthVariation, ...(ageLayers ? { ageLayers } : {}) };
 }
 
 /** Validate the small data-owned road cost/grid contract before RTS uses it. */

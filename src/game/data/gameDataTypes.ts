@@ -592,8 +592,15 @@ export interface AiBalance {
  * Landscape is mounted the box-mesh render ignores them entirely.
  */
 export interface RoadVisual {
-  /** Landscape paint layer the road corridor blends toward (e.g. `dirt`). */
+  /** Default landscape paint layer the corridor blends toward (e.g. `dirt`). */
   readonly layerId: string;
+  /**
+   * Per-age paint-layer override, keyed by {@link SettlementAge} (Painted Roads
+   * Faz 5). The centre-led age drives a *visual* promotion — same road topology,
+   * a different layer: e.g. `settlement → dirt`, `town → cobblestone`. An age
+   * absent here falls back to {@link layerId}; logistics never reads this.
+   */
+  readonly ageLayers?: Readonly<Record<string, string>>;
   /** Corridor full width in world units (fully painted core before falloff). */
   readonly width: number;
   /** Soft edge distance blended out past the core, in world units. */

@@ -277,6 +277,8 @@ export interface RoadTerrainPainterTarget {
 export class RoadTerrainPainter {
   private readonly surface: RoadPaintSurface;
   private lastVersion = -1;
+  /** The paint layer roads currently blend toward; changes with age (Faz 5). */
+  private activeLayerId: string;
 
   constructor(
     private readonly target: RoadTerrainPainterTarget,
@@ -284,6 +286,18 @@ export class RoadTerrainPainter {
     private readonly visual: RoadVisual,
   ) {
     this.surface = new RoadPaintSurface(target.data);
+    this.activeLayerId = visual.layerId;
+  }
+
+  /**
+   * Switch the layer roads paint into (e.g. age promotion dirt→cobblestone). Only
+   * forces a repaint when it actually changes — the caller drives the repaint by
+   * calling {@link sync} next, and the invalidated version guarantees it runs.
+   */
+  setLayer(layerId: string): void {
+    if (layerId === this.activeLayerId) return;
+    this.activeLayerId = layerId;
+    this.lastVersion = -1;
   }
 
   /** Repaint the terrain for the current network, unless `version` is unchanged. */
@@ -293,7 +307,7 @@ export class RoadTerrainPainter {
     const spline = roadGraphToLandscapeSpline(segments, {
       cellSize: this.cellSize,
       origin: this.target.position,
-      visual: this.visual,
+      visual: { ...this.visual, layerId: this.activeLayerId },
     });
     this.refreshGeometry(this.surface.repaint(spline));
   }
@@ -301,6 +315,7 @@ export class RoadTerrainPainter {
   /** Drop all road paint back to the mount-time snapshot (match restart/dispose). */
   reset(): void {
     this.lastVersion = -1;
+    this.activeLayerId = this.visual.layerId;
     this.refreshGeometry(this.surface.reset());
   }
 
@@ -311,7 +326,7 @@ export class RoadTerrainPainter {
       this.target.data,
       dirty,
       "lit",
-      this.visual.layerId,
+      this.activeLayerId,
       this.target.layerColors,
     );
   }

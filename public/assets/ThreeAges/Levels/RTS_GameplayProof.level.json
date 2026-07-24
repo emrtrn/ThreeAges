@@ -229,11 +229,51 @@
     {
       "assetId": "archery-secondage-level1",
       "placements": []
+    },
+    {
+      "assetId": "rock",
+      "placements": [
+        {
+          "position": [
+            12.97,
+            -2,
+            24.06
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 5
+        },
+        {
+          "position": [
+            12.51,
+            -2,
+            24.43
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 7
+        }
+      ]
     }
   ],
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true
+  },
+  "skyAtmosphere": {
+    "rayleigh": 1,
+    "turbidity": 1,
+    "mie": 0.002,
+    "mieDirectionalG": 0.6
+  },
+  "postProcess": {
+    "antialias": "smaa",
+    "bloom": {
+      "enabled": true,
+      "threshold": 1,
+      "intensity": 1,
+      "radius": 1
+    }
   },
   "lights": [
     {
@@ -623,6 +663,25 @@
       ],
       "dataRef": "landscapes/landscape-1.landscape.json",
       "name": "Landscape"
+    }
+  ],
+  "riverWaters": [
+    {
+      "id": "river-water-1",
+      "landscapeRef": "landscape-1",
+      "splineRef": "spline-1",
+      "name": "River Water",
+      "surfaceLevel": -1.4,
+      "widthScale": 0.88,
+      "flowSpeed": 0.35,
+      "normalScale": 1,
+      "normalTexture": "t-water-n",
+      "deepColor": "#063447",
+      "shallowColor": "#2f8b91",
+      "opacity": 0.82,
+      "waveAmplitude": 0.04,
+      "waveLength": 3.5,
+      "foamIntensity": 0.55
     }
   ],
   "actors": [

@@ -1106,6 +1106,17 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   } else if (input.normalTexture !== undefined && input.normalTexture !== null) {
     throw new Error("river water normalTexture must be a string, null, or omitted");
   }
+  for (const key of ["deepColor", "shallowColor"] as const) {
+    if (input[key] !== undefined) water[key] = validateHexColor(input[key], `river water ${key}`);
+  }
+  const opacity = validateOptionalNumber(input.opacity, "river water opacity", 0, 1);
+  if (opacity !== undefined) water.opacity = Number(opacity.toFixed(3));
+  const waveAmplitude = validateOptionalNumber(input.waveAmplitude, "river water waveAmplitude", 0, 1);
+  if (waveAmplitude !== undefined) water.waveAmplitude = Number(waveAmplitude.toFixed(3));
+  const waveLength = validateOptionalNumber(input.waveLength, "river water waveLength", 0.1, 100);
+  if (waveLength !== undefined) water.waveLength = Number(waveLength.toFixed(3));
+  const foamIntensity = validateOptionalNumber(input.foamIntensity, "river water foamIntensity", 0, 1);
+  if (foamIntensity !== undefined) water.foamIntensity = Number(foamIntensity.toFixed(3));
   return water;
 }
 
