@@ -18,6 +18,9 @@ export interface ResolvedRiverWater {
   waveAmplitude: number;
   waveLength: number;
   foamIntensity: number;
+  reflectionMode: "off" | "sharedPlanar";
+  reflectionGroup: string | null;
+  reflectionQuality: "low" | "medium" | "high";
 }
 
 export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
@@ -37,6 +40,9 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   waveAmplitude: 0.04,
   waveLength: 3.5,
   foamIntensity: 0.55,
+  reflectionMode: "off",
+  reflectionGroup: null,
+  reflectionQuality: "medium",
 };
 
 /** Fills optional River Water Body presentation fields without inspecting the spline. */
@@ -59,6 +65,11 @@ export function resolveRiverWater(actor: LayoutRiverWater | null | undefined): R
     waveAmplitude: actor?.waveAmplitude ?? defaults.waveAmplitude,
     waveLength: actor?.waveLength ?? defaults.waveLength,
     foamIntensity: actor?.foamIntensity ?? defaults.foamIntensity,
+    reflectionMode: actor?.reflectionMode === "sharedPlanar" ? "sharedPlanar" : "off",
+    reflectionGroup: actor?.reflectionGroup?.trim() || null,
+    reflectionQuality: actor?.reflectionQuality === "low" || actor?.reflectionQuality === "high"
+      ? actor.reflectionQuality
+      : defaults.reflectionQuality,
   };
 }
 
@@ -67,4 +78,17 @@ export function uniqueRiverWaterId(waters: readonly LayoutRiverWater[]): string 
   let index = 1;
   while (ids.has(`river-water-${index}`)) index += 1;
   return `river-water-${index}`;
+}
+
+/**
+ * Returns the sharing key only for enabled, non-Low planar reflection. The world
+ * plane is deliberately part of the key so a mistaken author group cannot make
+ * two different heights sample the same reflection camera.
+ */
+export function riverWaterReflectionGroupKey(
+  water: Pick<ResolvedRiverWater, "reflectionMode" | "reflectionGroup" | "reflectionQuality">,
+  worldPlaneY: number,
+): string | null {
+  if (water.reflectionMode !== "sharedPlanar" || water.reflectionQuality === "low") return null;
+  return `${water.reflectionGroup ?? "river"}:${worldPlaneY.toFixed(3)}:${water.reflectionQuality}`;
 }

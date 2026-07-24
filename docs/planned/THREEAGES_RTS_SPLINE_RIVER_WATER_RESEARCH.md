@@ -571,10 +571,10 @@ engine paketi ise ilgisiz yol `ageLayers` beklenti uyusmazliginda duruyor.
 
 ### Faz 3 - Paylasilan planar reflection
 
-- [ ] Reflection uretimini gorunen Reflective Surface plane'inden ayir.
-- [ ] Ayni kot/grup sular icin tek reflection kaynagi kullan.
-- [ ] Resolution scale, update interval ve visibility throttling ekle.
-- [ ] Low/Medium/High kalite baglantisini kur.
+- [x] Reflection uretimini gorunen Reflective Surface plane'inden ayir.
+- [x] Ayni kot/grup sular icin tek reflection kaynagi kullan.
+- [x] Resolution scale, update interval ve visibility throttling ekle.
+- [x] Low/Medium/High kalite baglantisini kur.
 - [ ] Reflection render layer filtresini ekle.
 
 Kabul:
@@ -582,6 +582,14 @@ Kabul:
 - Iki nehir ayni kotta tek reflection scene render'i paylasir.
 - Her spline segmenti ayri render target olusturmaz.
 - Low profilde planar reflection tamamen kapanabilir.
+
+Uygulama notu (2026-07-24): `PlanarReflectionSource`, gorunen plane yerine
+River Water Body tarafindan paylasilan bir render target/kamera kaynagidir.
+Gruplama anahtari reflection group + dunya su kotu + kalite profilini icerir;
+farkli kotlar ayni hedefi paylasamaz. Low kaynak olusturmaz, Medium 256px ve
+en az 32ms, High 512px ve en az 4ms aralikla guncellenir. Kaynak, gorunmeyen
+su ribbon'i cizilmedigi icin update edilmez. Render-layer filtrelemesi sonraki
+Faz 3 dilimi olarak acik kalir.
 
 ### Faz 4 - Author edilen obstacle kopugu
 

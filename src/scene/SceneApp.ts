@@ -205,6 +205,8 @@ import {
   type RiverWaterObjectLike,
   type RiverWaterRenderItem,
 } from "@engine/render-three/riverWater";
+import { riverWaterReflectionGroupKey } from "@engine/scene/riverWater";
+import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import {
   FoliageRenderBinding,
   foliageInstanceFromRoll,
@@ -1053,6 +1055,8 @@ export class SceneApp {
   private landscapeObjects: LandscapeObject[] = [];
   /** Visible spline-water ribbons, index-aligned with `layout.riverWaters`. */
   private riverWaterObjects: RiverWaterObjectLike[] = [];
+  /** Shared planar reflection sources, one per River Water Body plane/group. */
+  private riverReflectionSources: PlanarReflectionSource[] = [];
   /** Loaded normal maps owned by the editor water preview. */
   private readonly riverWaterTextures = new Map<string, Texture>();
   /** Instanced spline-mesh groups (Faz 6 Road Tool) parented under each landscape, by index. */
@@ -1573,6 +1577,8 @@ export class SceneApp {
       disposeRiverWaterObject(water);
     }
     this.riverWaterObjects = [];
+    for (const source of this.riverReflectionSources) source.dispose();
+    this.riverReflectionSources = [];
     for (const texture of this.riverWaterTextures.values()) texture.dispose();
     this.riverWaterTextures.clear();
     this.lightOutlineGeometry.dispose();
@@ -6116,7 +6122,10 @@ export class SceneApp {
       disposeRiverWaterObject(object);
     }
     this.riverWaterObjects = [];
+    for (const source of this.riverReflectionSources) source.dispose();
+    this.riverReflectionSources = [];
     const waters = this.layout?.riverWaters ?? [];
+    const reflectionSourceByKey = new Map<string, PlanarReflectionSource>();
     for (const actor of waters) {
       const resolved = resolveRiverWater(actor);
       const landscape = this.layout?.landscapes?.find((candidate) => candidate.id === resolved.landscapeRef);
@@ -6126,6 +6135,17 @@ export class SceneApp {
         console.warn(`[river-water] Skipped ${resolved.id}: missing Landscape/spline ${resolved.landscapeRef}/${resolved.splineRef}.`);
         continue;
       }
+      let reflectionSource: PlanarReflectionSource | null = null;
+      const planeY = landscape.position[1] + resolved.surfaceLevel;
+      const reflectionKey = riverWaterReflectionGroupKey(resolved, planeY);
+      if (reflectionKey && resolved.reflectionQuality !== "low") {
+        reflectionSource = reflectionSourceByKey.get(reflectionKey) ?? null;
+        if (!reflectionSource) {
+          reflectionSource = new PlanarReflectionSource(planeY, resolved.reflectionQuality);
+          reflectionSourceByKey.set(reflectionKey, reflectionSource);
+          this.riverReflectionSources.push(reflectionSource);
+        }
+      }
       const normalMap = await this.loadRiverWaterNormalTexture(resolved.normalTexture);
       const item: RiverWaterRenderItem = {
         ...resolved,
@@ -6133,6 +6153,7 @@ export class SceneApp {
         landscapeData: data,
         position: [...landscape.position],
         rotation: landscape.rotation ? [...landscape.rotation] : [0, 0, 0],
+        reflectionSource,
       };
       const object = createRiverWaterObject(item, normalMap);
       object.raycast = () => {};

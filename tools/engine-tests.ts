@@ -373,7 +373,7 @@ import {
 } from "../engine/scene/landscape";
 import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/landscape";
 import { buildRiverWaterRibbon } from "../engine/render-three/riverWater";
-import { resolveRiverWater } from "../engine/scene/riverWater";
+import { resolveRiverWater, riverWaterReflectionGroupKey } from "../engine/scene/riverWater";
 import {
   evaluateLandscapeSplineSegment,
   landscapeSplineSegmentComponent,
@@ -31305,7 +31305,7 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
       jitter: 0.6,
       jitterSpacingCells: 5,
       widthVariation: 0.15,
-      ageLayers: { settlement: "dirt", town: "snow" },
+      ageLayers: { settlement: "dirt", town: "rock" },
     },
   });
   const roads = new RoadGraph(balance);
@@ -35633,6 +35633,9 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     waveAmplitude: 0.04,
     waveLength: 3.5,
     foamIntensity: 0.55,
+    reflectionMode: "off",
+    reflectionGroup: null,
+    reflectionQuality: "medium",
   });
   assert.deepEqual(validateRiverWater({
     id: "river-1",
@@ -35646,6 +35649,9 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     waveAmplitude: 0.08,
     waveLength: 4,
     foamIntensity: 0.6,
+    reflectionMode: "sharedPlanar",
+    reflectionGroup: "river-a",
+    reflectionQuality: "high",
     ignoredCollision: true,
   }), {
     id: "river-1",
@@ -35659,8 +35665,22 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     waveAmplitude: 0.08,
     waveLength: 4,
     foamIntensity: 0.6,
+    reflectionMode: "sharedPlanar",
+    reflectionGroup: "river-a",
+    reflectionQuality: "high",
   });
   assert.throws(() => validateRiverWater({ id: "river-1", landscapeRef: "landscape-1" }));
+  const shared = resolveRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    reflectionMode: "sharedPlanar",
+    reflectionGroup: "river-a",
+    reflectionQuality: "high",
+  });
+  assert.equal(riverWaterReflectionGroupKey(shared, -1.4), "river-a:-1.400:high");
+  assert.equal(riverWaterReflectionGroupKey({ ...shared, reflectionQuality: "low" }, -1.4), null);
+  assert.notEqual(riverWaterReflectionGroupKey(shared, -1.5), riverWaterReflectionGroupKey(shared, -1.4));
 });
 
 check("River Water ribbon follows spline width with arc-length UVs and flow attributes", () => {

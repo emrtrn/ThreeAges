@@ -1270,7 +1270,7 @@ function validateAiTargetWeights(value: unknown, where: string): AiTargetWeights
 /** Built-in road-paint tuning used when `roads.json` omits the `visual` block. */
 const DEFAULT_ROAD_VISUAL: RoadVisual = {
   layerId: "dirt",
-  ageLayers: { settlement: "dirt", town: "snow" },
+  ageLayers: { settlement: "dirt", town: "rock" },
   width: 2.5,
   falloff: 2,
   strength: 0.9,

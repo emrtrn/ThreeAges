@@ -1010,6 +1010,8 @@ export class RtsApp {
     this.scene.add(this.roadPlacement.root);
     this.scene.add(this.roadDebugView.root);
     this.scene.add(this.territory.root);
+    // Hidden until a building placement begins; syncPlacementUi() toggles it.
+    this.territory.root.visible = false;
     if (this.strategicPointView) this.scene.add(this.strategicPointView.root);
     // §59, after the ground overlays it has to cover and before the units it
     // must not: fogged units are hidden outright by the visibility binder, not
@@ -1072,6 +1074,12 @@ export class RtsApp {
 
     this.resize();
     this.consumeCommandInput();
+    // The territory fill masks the landscape texture, so it earns its clutter
+    // only while the player is choosing where a building goes. Bind it to the
+    // building-placement mode every frame — cheap and idempotent, so no cancel
+    // path can leave it stale — and the ground reads as terrain the rest of the
+    // time instead of a permanent control heatmap.
+    this.territory.root.visible = this.placement.isActive;
     // The camera keeps running while paused and on the start screen: looking at
     // the map is not playing the match, and freezing it would trap the player
     // staring at whatever the last frame happened to show.

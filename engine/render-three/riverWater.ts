@@ -3,6 +3,7 @@ import {
   Color,
   DoubleSide,
   Float32BufferAttribute,
+  Matrix4,
   Mesh,
   ShaderMaterial,
   Texture,
@@ -12,6 +13,7 @@ import type { ForgeLandscapeData, ForgeLandscapeSpline, LandscapeSplinePolylineS
 import { landscapeHeightAtLocal, splineToPolyline } from "@engine/scene/landscape";
 import type { Vec3 } from "@engine/scene/layout";
 import type { ResolvedRiverWater } from "@engine/scene/riverWater";
+import type { PlanarReflectionSource } from "./planarReflectionSource";
 
 export { resolveRiverWater, RIVER_WATER_DEFAULTS, uniqueRiverWaterId, type ResolvedRiverWater } from "@engine/scene/riverWater";
 
@@ -176,10 +178,12 @@ varying vec2 vRiverUv;
 varying float vShoreDistance;
 varying float vWaterDepth;
 varying float vRapidness;
+varying vec4 vReflectionUv;
 uniform float time;
 uniform float flowSpeed;
 uniform float waveAmplitude;
 uniform float waveLength;
+uniform mat4 reflectionTextureMatrix;
 void main() {
   vRiverUv = uv;
   vShoreDistance = shoreDistance;
@@ -190,6 +194,7 @@ void main() {
   float wave = sin(wavePhase) + sin(wavePhase * 1.73 + uv.y * 5.0) * 0.35;
   vec3 displaced = position;
   displaced.y += wave * waveAmplitude * centreWeight * (0.65 + rapidness * 0.35);
+  vReflectionUv = reflectionTextureMatrix * modelMatrix * vec4(displaced, 1.0);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
 }`;
 
@@ -203,10 +208,13 @@ uniform vec3 deepColor;
 uniform vec3 shallowColor;
 uniform float opacity;
 uniform float foamIntensity;
+uniform sampler2D reflectionTexture;
+uniform float reflectionStrength;
 varying vec2 vRiverUv;
 varying float vShoreDistance;
 varying float vWaterDepth;
 varying float vRapidness;
+varying vec4 vReflectionUv;
 void main() {
   vec2 baseUv = vec2(vRiverUv.x * normalScale, vRiverUv.y * normalScale);
   vec2 normalA = texture2D(normalMap, baseUv - vec2(time * flowSpeed, 0.0)).xy * 2.0 - 1.0;
@@ -220,6 +228,11 @@ void main() {
   float rapidFoam = smoothstep(0.16, 0.75, vRapidness) * (0.45 + 0.55 * shoreNoise);
   float foam = clamp((shoreFoam + rapidFoam) * foamIntensity, 0.0, 1.0);
   color = mix(color, vec3(0.84, 0.93, 0.91), foam * 0.72);
+  vec2 reflectionUv = vReflectionUv.xy / max(vReflectionUv.w, 0.0001);
+  reflectionUv += mix(normalA, normalB, phase) * 0.025;
+  vec3 reflected = texture2D(reflectionTexture, reflectionUv).rgb;
+  float reflectionAmount = reflectionStrength * (0.15 + depth * 0.2) * (1.0 - foam * 0.65);
+  color = mix(color, reflected, clamp(reflectionAmount, 0.0, 0.45));
   float alpha = opacity * mix(0.58, 1.0, depth);
   gl_FragColor = vec4(color, alpha);
 }`;
@@ -229,6 +242,8 @@ export interface RiverWaterRenderItem extends ResolvedRiverWater {
   landscapeData: ForgeLandscapeData;
   position: Vec3;
   rotation: Vec3;
+  /** Optional shared source; absent covers off/low reflection profiles. */
+  reflectionSource?: PlanarReflectionSource | null;
 }
 
 export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
@@ -264,6 +279,9 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         waveAmplitude: { value: item.waveAmplitude },
         waveLength: { value: item.waveLength },
         foamIntensity: { value: item.foamIntensity },
+        reflectionTexture: { value: item.reflectionSource?.binding.texture ?? null },
+        reflectionTextureMatrix: { value: item.reflectionSource?.binding.textureMatrix ?? new Matrix4() },
+        reflectionStrength: { value: item.reflectionSource?.binding.strength ?? 0 },
       },
       transparent: true,
       depthWrite: false,
@@ -285,8 +303,10 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.castShadow = false;
     this.receiveShadow = false;
     this.renderOrder = 1;
-    this.onBeforeRender = () => {
+    item.reflectionSource?.addConsumer(this);
+    this.onBeforeRender = (renderer, scene, camera) => {
       this.material.uniforms["time"]!.value = performance.now() / 1000;
+      item.reflectionSource?.update(renderer, scene, camera);
     };
   }
 

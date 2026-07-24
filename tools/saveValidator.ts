@@ -1117,6 +1117,20 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   if (waveLength !== undefined) water.waveLength = Number(waveLength.toFixed(3));
   const foamIntensity = validateOptionalNumber(input.foamIntensity, "river water foamIntensity", 0, 1);
   if (foamIntensity !== undefined) water.foamIntensity = Number(foamIntensity.toFixed(3));
+  if (input.reflectionMode === "sharedPlanar") water.reflectionMode = "sharedPlanar";
+  else if (input.reflectionMode !== undefined && input.reflectionMode !== "off") {
+    throw new Error("river water reflectionMode must be off or sharedPlanar");
+  }
+  if (typeof input.reflectionGroup === "string" && input.reflectionGroup.length > 0) {
+    water.reflectionGroup = input.reflectionGroup;
+  } else if (input.reflectionGroup !== undefined && input.reflectionGroup !== null) {
+    throw new Error("river water reflectionGroup must be a string, null, or omitted");
+  }
+  if (input.reflectionQuality === "low" || input.reflectionQuality === "medium" || input.reflectionQuality === "high") {
+    water.reflectionQuality = input.reflectionQuality;
+  } else if (input.reflectionQuality !== undefined && input.reflectionQuality !== null) {
+    throw new Error("river water reflectionQuality must be low, medium, high, null, or omitted");
+  }
   return water;
 }
 

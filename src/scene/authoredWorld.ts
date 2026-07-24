@@ -23,6 +23,8 @@ import type { InstancedMesh } from "three";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import { createLandscapeObject, type LandscapeLayerColors, type LandscapeLayerTexture, type LandscapeObject, type LandscapeRenderItem } from "@engine/render-three/landscape";
 import { createRiverWaterObject, disposeRiverWaterObject, resolveRiverWater, type RiverWaterObjectLike, type RiverWaterRenderItem } from "@engine/render-three/riverWater";
+import { riverWaterReflectionGroupKey } from "@engine/scene/riverWater";
+import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import { createFlatLandscapeData, LANDSCAPE_DEFAULT_LAYERS, resolveLandscape, type ForgeLandscapeData } from "@engine/scene/landscape";
 import type { AssetManifest } from "@engine/assets/manifest";
 import type { LightObjectRecord } from "@engine/render-three/lights";
@@ -238,6 +240,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
   const mountedLandscapes: MountedLandscape[] = [];
   const landscapeLayerTextures: Texture[] = [];
   const riverWaterObjects: RiverWaterObjectLike[] = [];
+  const riverReflectionSources: PlanarReflectionSource[] = [];
   const riverWaterTextures: Texture[] = [];
   const landscapes = layout.landscapes ?? [];
   const riverWaters = layout.riverWaters ?? [];
@@ -293,6 +296,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     }
   }
   const riverNormalCache = new Map<string, Texture | null>();
+  const riverReflectionSourceByKey = new Map<string, PlanarReflectionSource>();
   for (const actor of riverWaters) {
     const resolved = resolveRiverWater(actor);
     const landscape = landscapeDataById.get(resolved.landscapeRef);
@@ -300,6 +304,17 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     if (!landscape || !spline) {
       warn(`Authored-world river water skipped: ${resolved.id} references missing Landscape/spline (${resolved.landscapeRef}/${resolved.splineRef}).`);
       continue;
+    }
+    let reflectionSource: PlanarReflectionSource | null = null;
+    const planeY = landscape.actor.position[1] + resolved.surfaceLevel;
+    const reflectionKey = riverWaterReflectionGroupKey(resolved, planeY);
+    if (reflectionKey && resolved.reflectionQuality !== "low") {
+      reflectionSource = riverReflectionSourceByKey.get(reflectionKey) ?? null;
+      if (!reflectionSource) {
+        reflectionSource = new PlanarReflectionSource(planeY, resolved.reflectionQuality);
+        riverReflectionSourceByKey.set(reflectionKey, reflectionSource);
+        riverReflectionSources.push(reflectionSource);
+      }
     }
     let normalMap = riverNormalCache.get(resolved.normalTexture);
     if (normalMap === undefined) {
@@ -325,6 +340,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
       landscapeData: landscape.data,
       position: landscape.actor.position,
       rotation: landscape.actor.rotation ?? [0, 0, 0],
+      reflectionSource,
     };
     const object = createRiverWaterObject(item, normalMap);
     root.add(object);
@@ -378,6 +394,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     for (const texture of landscapeLayerTextures) texture.dispose();
     for (const texture of riverWaterTextures) texture.dispose();
     for (const river of riverWaterObjects) disposeRiverWaterObject(river);
+    for (const source of riverReflectionSources) source.dispose();
     for (const record of lightRecords) {
       const light = record.light as { dispose?: () => void };
       light.dispose?.();

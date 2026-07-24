@@ -897,6 +897,12 @@ export interface LayoutRiverWater {
   waveLength?: number;
   /** Multiplier for procedural shore/rapid foam, 0..1. */
   foamIntensity?: number;
+  /** `sharedPlanar` lets same-plane bodies share one reflection render; default is off. */
+  reflectionMode?: "off" | "sharedPlanar";
+  /** Optional shared planar-reflection group. Bodies on different planes must not share it. */
+  reflectionGroup?: string;
+  /** Low disables planar reflection; Medium/High select its target/update budget. */
+  reflectionQuality?: "low" | "medium" | "high";
 }
 
 export interface RoomLayout {

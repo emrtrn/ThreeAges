@@ -681,7 +681,10 @@
       "opacity": 0.82,
       "waveAmplitude": 0.04,
       "waveLength": 3.5,
-      "foamIntensity": 0.55
+      "foamIntensity": 0.55,
+      "reflectionMode": "sharedPlanar",
+      "reflectionGroup": "river-level-minus-1-4",
+      "reflectionQuality": "medium"
     }
   ],
   "actors": [

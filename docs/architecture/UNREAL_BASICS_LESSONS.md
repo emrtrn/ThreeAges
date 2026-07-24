@@ -383,8 +383,9 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 - *2026-07-24* - **Painted Roads Faz 5: çağ→katman görsel terfisi.** Kullanıcı
   Faz 0-4'ü test etti (çalışıyor) ve Faz 5'i onayladı: settlement çağında toprak,
   town çağında cobblestone. `roads.json` `visual.ageLayers` (`settlement→dirt`,
-  `town→snow`) veri-güdümlü; `RtsApp.roadLayerForAge` çözer, eşleşmeyen age
-  default `layerId`'ye düşer. `RoadTerrainPainter.setLayer(layerId)` aktif katmanı
+  `town→rock`) veri-güdümlü; `RtsApp.roadLayerForAge` çözer, eşleşmeyen age
+  default `layerId`'ye düşer. (Kullanıcı landscape materyallerini yeniden atadı:
+  cobblestone `rock` slotunda — `m-cobblestonerough-material`.) `RoadTerrainPainter.setLayer(layerId)` aktif katmanı
   değiştirir + `lastVersion=-1` ile sonraki `sync`i tam repaint'e zorlar (restore
   eski katman → yeni katmanla boya, residü yok). Player tier "completed" event'inde
   (`event.age`) tetiklenir; `setupRoadPainter` başlangıç katmanını, `reset()`
