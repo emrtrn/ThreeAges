@@ -702,36 +702,32 @@
       "splineRef": "spline-1",
       "name": "River Water 1",
       "surfaceLevel": -1,
+      "flowSpeed": 0.2,
+      "normalScale": 1,
+      "foamColor": "#b3e5ff",
       "opacity": 1,
       "bedVisibility": 0.2,
       "absorptionDistance": 1,
-      "foamOpacity": 0.7,
+      "waveAmplitude": 0.1,
+      "waveLength": 3,
+      "foamOpacity": 1,
       "shoreWaveSpacing": 4,
-      "shoreWaveSpeed": 0.3,
-      "shoreWaveReach": 0.3,
+      "shoreWaveSpeed": 0.4,
+      "shoreWaveReach": 0.4,
       "shoreWaveBreakupScale": 1,
       "foamStamps": [
-        {
-          "id": "foam-1",
-          "kind": "point",
-          "position": [
-            15.39,
-            -1,
-            20.51
-          ],
-          "radius": 4,
-          "intensity": 0.7
-        },
         {
           "id": "foam-2",
           "kind": "point",
           "position": [
-            14.33,
+            14.81,
             -1,
-            20.17
+            19.98
           ],
           "radius": 4,
-          "intensity": 0.7
+          "intensity": 1,
+          "ringCount": 3,
+          "expansionSpeed": 0.65
         }
       ],
       "reflectionMode": "sharedPlanar",
