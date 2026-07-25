@@ -358,6 +358,52 @@ testler veriyi yansıtmayı bırakmış):
   diyor ve `foamMasks` artık sabit 0. Test kaldırılan davranışa göre
   güncellendi (legacy veri hâlâ *yüklenebiliyor*, sadece hiçbir şey basmıyor).
 
+## 6.1 Oynanış bulgusu: "AI hiç level/çağ atlamıyor" (2026-07-25)
+
+`?rts&preset=gameplay_proof` ile oynandı, AI hiç seviye ya da çağ atlamadı.
+Headless olarak gerçekçi kaynakla (500/500/0/0 — preset'in düşmana verdiği) tekrar
+üretildi. **Sebep §4'ün kapıları değil; iki ayrı şey:**
+
+### (a) Test dünyasında hiç ağaç yoktu — düzeltildi
+
+`aiTestWorld`, `EconomyProductionSystem`'e `ForestSystem` vermiyordu. Sonuç: her
+kereste ocağı `missing-forest` raporluyor, **odun geliri yapısal olarak sıfır**.
+AI'ın bütün ekonomi testleri bu yüzden 4000–6000 başlangıç odunu hediyesiyle
+koşuyordu, yani "AI Kasaba'ya ulaşıyor" testi odun ekonomisini hiç sınamıyordu.
+
+Harness'a haritanın gerçek koruları, gerçek `missing-forest` yerleştirme kuralı ve
+gerçek `placementBlockers` (yol + ayakta ağaç) bağlandı. Bu bağlanınca AI 500/500
+ile gerçekten gelişiyor: karakol → ev → taş ocağı → altın madeni → genişleme,
+~24. dakikada Yerleşim **Lv2**, ~32. dakikada **Lv3**.
+
+### (b) Kalan gerçek blocker: odun tükeniyor, Kasaba'ya para yetmiyor
+
+Yerleşim Lv3'ten sonra AI takılıyor ve **niyeti `ageUp` olarak kalıyor** — yani
+karar mantığı doğru çalışıyor, parası yetmiyor:
+
+| t | çağ | F | W | S | G |
+| --- | --- | --- | --- | --- | --- |
+| 1920s | Lv3 | 339 | 330 | 300 | 89 |
+| 4320s | Lv3 | 4619 | **330** | **300** | **107** |
+
+Kasaba maliyeti 500/500/200/100. Taş ve altın yeterli, **odun 330'da donuyor** ve
+yiyecek dışında hiçbir gelir kalmıyor: üs kereste ocağının 20 birim `gatherRadius`
+içindeki koru (~1592 odun) ~32. dakikada tükeniyor, taş (300) ve altın yatakları da
+bitiyor. Ondan sonra AI sonsuza kadar yiyecek biriktiriyor.
+
+Yani sorun **AI kararı değil, haritanın AI tarafındaki kaynak arzı**: tek koru bir
+maçı taşımıyor ve ikinci kereste ocağı slotu (`atEnemyBase(18, -14)`) *aynı* koruyu
+tapıyor. Ele alınacak yer `08_MAP_AND_WORLD_DESIGN` / `03_ECONOMY_AND_RESOURCES`
+tarafı, seçenekler:
+
+1. Düşman tarafına ikinci bir koru author etmek (oyuncu tarafı simetrik olmalı),
+2. `trees[].capacity`'yi yükseltmek (`denseForestTrees` zaten ikiye katlıyor),
+3. Genişleme bölgelerinin üretim slotunu taze koruya taşımak,
+4. AI'ın Market'i odun almak için kullanmasını `aiTradeManager`'a öğretmek
+   (bugün yalnız çağ için eksik olan kaynağa ticaret yapıyor).
+
+Bu bir denge/harita kararı, o yüzden veriyi kendi başıma değiştirmedim.
+
 ## 7. Sırada — oynanış doğrulaması (kod işi değil)
 
 Faz 5'in son maddesi hâlâ açık: `?rts&debug` ile en az 5 maç. Panelde yeni iki

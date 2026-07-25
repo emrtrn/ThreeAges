@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_GoldMine",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "goldMineMesh",
+      "component": "StaticMeshComponent",
+      "props": {
+        "assetId": "mine"
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

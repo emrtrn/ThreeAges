@@ -21,6 +21,8 @@ import { allBuildingMeshPaths, buildingMeshPath } from "./rtsBuildingArt";
 
 const FOUNDATION_TOP = 0.18;
 const MODEL_FOOTPRINT_FILL = 0.86;
+/** The centre is spawned by its own system, so its footprint is not in `stats` here. */
+const COMMAND_CENTER_FOOTPRINT = 8;
 
 export class RtsBuildingVisuals {
   private readonly loader;
@@ -42,9 +44,22 @@ export class RtsBuildingVisuals {
   }
 
   applyToCenter(center: CommandCenter, age: SettlementAge = "settlement"): void {
-    const path = buildingMeshPath("command_center", age, center.level);
-    const visual = path ? this.create(path, 8, 8) : null;
+    // The centre goes through the same Actor-first resolution as every other
+    // building; it is only spawned differently, not presented differently.
+    const visual = this.actorVisuals?.createBuildingVisual(
+      "command_center",
+      "completed",
+      center.level,
+      COMMAND_CENTER_FOOTPRINT,
+      COMMAND_CENTER_FOOTPRINT,
+      age,
+    ) ?? this.legacyCenterVisual(age, center.level);
     if (visual) center.setVisual(visual);
+  }
+
+  private legacyCenterVisual(age: SettlementAge, level: number): Group | null {
+    const path = buildingMeshPath("command_center", age, level);
+    return path ? this.create(path, COMMAND_CENTER_FOOTPRINT, COMMAND_CENTER_FOOTPRINT) : null;
   }
 
   createForStructure(structure: PlacedStructure, age: SettlementAge = "settlement"): Group | null {

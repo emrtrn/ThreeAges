@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_CommandCenter_FirstAge_T3",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "commandCenterMesh",
+      "component": "StaticMeshComponent",
+      "props": {
+        "assetId": "towncenter-firstage-level3"
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

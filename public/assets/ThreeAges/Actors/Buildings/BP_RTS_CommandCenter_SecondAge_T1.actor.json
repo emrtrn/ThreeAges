@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "type": "actor",
-  "name": "BP_RTS_Barracks_T2",
+  "name": "BP_RTS_CommandCenter_SecondAge_T1",
   "parentClass": "actor",
   "variables": [],
   "components": [
@@ -11,10 +11,10 @@
       "props": {}
     },
     {
-      "id": "barracksMesh",
+      "id": "commandCenterMesh",
       "component": "StaticMeshComponent",
       "props": {
-        "assetId": "barracks-firstage-level2"
+        "assetId": "towncenter-secondage-level1"
       },
       "parent": "root"
     }

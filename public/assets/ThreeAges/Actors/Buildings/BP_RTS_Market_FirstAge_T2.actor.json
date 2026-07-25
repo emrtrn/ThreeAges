@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "type": "actor",
-  "name": "BP_RTS_Barracks_T1",
+  "name": "BP_RTS_Market_FirstAge_T2",
   "parentClass": "actor",
   "variables": [],
   "components": [
@@ -11,10 +11,10 @@
       "props": {}
     },
     {
-      "id": "barracksMesh",
+      "id": "marketMesh",
       "component": "StaticMeshComponent",
       "props": {
-        "assetId": "barracks-firstage-level1"
+        "assetId": "market-firstage-level2"
       },
       "parent": "root"
     }

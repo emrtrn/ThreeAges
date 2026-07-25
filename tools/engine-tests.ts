@@ -53,7 +53,7 @@ import {
   buildUiDebugSnapshot,
 } from "../src/scene/runtimeDebugSnapshot";
 import { RuntimeActorSpawnCoordinator } from "../src/scene/runtimeActorSpawnCoordinator";
-import { normalizeActorScriptDef } from "../engine/scene/actorScript";
+import { normalizeActorScriptDef, type ActorScriptDef } from "../engine/scene/actorScript";
 import {
   GameDataError,
   validateAgeBalance,
@@ -72,6 +72,14 @@ import {
   rtsUnitActorRef,
   validateRtsContentCatalog,
 } from "../src/game/rts/content/rtsContentCatalog";
+import {
+  RtsActorPresentationError,
+  parseRtsMeshManifest,
+  rtsContentCatalogRefs,
+  rtsContentCoverageGaps,
+  validateRtsPresentationActor,
+} from "../src/game/rts/content/rtsContentValidation";
+import { buildActorPresentationTree } from "../src/game/rts/content/rtsActorPresentationTree";
 import { CommandSystem } from "../src/game/rts/commands/commandSystem";
 import { CommandMarkerSystem } from "../src/game/rts/commands/commandMarker";
 import { CommandCenterSystem } from "../src/game/rts/structures/commandCenterSystem";
@@ -29515,9 +29523,10 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
   );
   assert.equal(rtsUnitActorRef(catalog, "guard_placeholder"), "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json");
   assert.equal(rtsBuildingActorRef(catalog, "barracks", "construction", 1), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json");
-  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 1), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json");
-  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 2), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T2.actor.json");
-  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 3), null, "unmapped tiers keep the legacy fallback");
+  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 1), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T1.actor.json");
+  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 2), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T2.actor.json");
+  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 3), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T3.actor.json");
+  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 4), null, "levels the ages cannot reach stay unmapped");
   assert.deepEqual(catalog.ui, {}, "Faz F owns the first UI mapping");
 
   // The Farm is the first per-age building: six Actors, one per (age, level).
@@ -29536,12 +29545,27 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
     "an unspecified age keeps the Settlement default",
   );
   assert.equal(rtsBuildingActorRef(catalog, "farm", "completed", 4, "town"), null, "unmapped levels keep the legacy fallback");
-  assert.equal(rtsBuildingActorRef(catalog, "farm", "construction", 1), null, "the Farm authors no construction Actor yet");
+  assert.equal(
+    rtsBuildingActorRef(catalog, "farm", "construction", 2, "town"),
+    "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T2.actor.json",
+    "a building with no construction Actor raises the model it is becoming",
+  );
   assert.equal(
     rtsBuildingActorRef(catalog, "barracks", "completed", 1, "town"),
-    "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json",
-    "age-agnostic buildings ignore the age argument",
+    "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T1.actor.json",
+    "an aged building answers the owner's age, not the Settlement default",
   );
+  // The resource camps are the deliberate exception: the pack ships one model
+  // each, so every age and level resolves to the same Actor rather than to null.
+  for (const age of ["settlement", "town"] as const) {
+    for (const level of [1, 2, 3]) {
+      assert.equal(
+        rtsBuildingActorRef(catalog, "quarry", "completed", level, age),
+        "assets/ThreeAges/Actors/Buildings/BP_RTS_Quarry.actor.json",
+        `the quarry keeps its single model at ${age} level ${level}`,
+      );
+    }
+  }
 
   const validPilot = validateRtsContentCatalog({
     schema: 1,
@@ -29552,13 +29576,13 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
     buildings: {
       barracks: {
         constructionActorRef: "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json",
-        levels: { "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json" },
+        levels: { "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T1.actor.json" },
       },
     },
     ui: { hud: "threeages-rts-hud" },
   }, context);
   assert.equal(validPilot.units.guard_placeholder?.actorRef, "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json");
-  assert.equal(validPilot.buildings.barracks?.levels["1"], "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json");
+  assert.equal(validPilot.buildings.barracks?.levels["1"], "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T1.actor.json");
 
   assert.throws(
     () => validateRtsContentCatalog({ schema: 1, type: "rtsContentCatalog", units: { unknown: { actorRef: "assets/A.actor.json" } }, buildings: {}, ui: {} }, context),
@@ -29582,27 +29606,232 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
   );
 });
 
-check("Assetization Faz C: shipped Guard, Barracks and Farm Actor assets normalize to their authored mesh components", () => {
-  const actors = [
-    ["public/assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json", "SkeletalMeshComponent", "ual1-standard-rm"],
-    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json", "StaticMeshComponent", "barracks-firstage-level1"],
-    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json", "StaticMeshComponent", "barracks-firstage-level1"],
-    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T2.actor.json", "StaticMeshComponent", "barracks-firstage-level2"],
-    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T1.actor.json", "StaticMeshComponent", "farm-firstage-level1-wheat"],
-    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T2.actor.json", "StaticMeshComponent", "farm-firstage-level2-wheat"],
-    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T3.actor.json", "StaticMeshComponent", "farm-firstage-level3-wheat"],
-    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T1.actor.json", "StaticMeshComponent", "farm-secondage-level1-wheat"],
-    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T2.actor.json", "StaticMeshComponent", "farm-secondage-level2-wheat"],
-    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T3.actor.json", "StaticMeshComponent", "farm-secondage-level3-wheat"],
-  ] as const;
+check("Actor presentation Faz 1: the catalog covers every playable RTS identity at every reachable tier", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const buildingBalance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const ageBalance = validateAgeBalance(
+    JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
+  );
+  const catalog = validateRtsContentCatalog(
+    JSON.parse(readFileSync("public/game-data/content/rts-content.json", "utf8")) as unknown,
+    { unitBalance, buildingBalance },
+  );
 
-  for (const [path, component, assetId] of actors) {
-    const actor = normalizeActorScriptDef(JSON.parse(readFileSync(path, "utf8")) as unknown, path);
-    assert.ok(
-      actor.components.some((entry) => entry.component === component && entry.props.assetId === assetId),
-      `${path} keeps its authored ${component} asset reference`,
-    );
+  // The tier ladder comes from age balance, not from the art pack: whatever a
+  // match can actually reach is what the catalog must answer for. Adding a
+  // fourth level to an age therefore fails here until its Actors are authored.
+  const levelsByAge = {
+    settlement: 1 + ageBalance.settlement.levelUpgrades.length,
+    town: 1 + ageBalance.town.levelUpgrades.length,
+  } as const;
+  assert.deepEqual(levelsByAge, { settlement: 3, town: 3 });
+
+  // The one approved exception (plan "cikis kriterleri"): the pack ships a single
+  // character mesh, so mapping the other three roles would make Archer, Topçu and
+  // Worker the same model — strictly less readable than the role-shaped code
+  // silhouettes they use today. The Guard is the one authored character.
+  const approvedUnitExceptions = ["archer_placeholder", "siege_placeholder", "worker_placeholder"];
+  assert.deepEqual(
+    Object.keys(unitBalance).filter((id) => !approvedUnitExceptions.includes(id)),
+    ["guard_placeholder"],
+    "the approved unit exceptions cover every role that is not the authored Guard",
+  );
+
+  assert.deepEqual(
+    rtsContentCoverageGaps(catalog, {
+      unitIds: Object.keys(unitBalance),
+      buildingIds: Object.keys(buildingBalance),
+      levelsByAge,
+      approvedUnitExceptions,
+    }),
+    [],
+    "every building resolves an Actor for both states, both ages and every level",
+  );
+
+  // Without the exception list the same call must still see the units as gaps —
+  // otherwise the allowance above would be silently hiding nothing.
+  assert.deepEqual(
+    rtsContentCoverageGaps(catalog, {
+      unitIds: Object.keys(unitBalance),
+      buildingIds: [],
+      levelsByAge,
+    }),
+    approvedUnitExceptions.map((id) => `unit:${id}`),
+    "coverage is only clean because the unit exceptions are declared",
+  );
+});
+
+check("Actor presentation Faz 2: every catalog Actor is renderable and every mesh it names is a manifested file", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const buildingBalance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const catalog = validateRtsContentCatalog(
+    JSON.parse(readFileSync("public/game-data/content/rts-content.json", "utf8")) as unknown,
+    { unitBalance, buildingBalance },
+  );
+  const manifest = parseRtsMeshManifest(
+    JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
+  );
+
+  const refs = rtsContentCatalogRefs(catalog);
+  assert.ok(refs.length >= 40, `the pack ships the whole building set (${refs.length} Actors)`);
+
+  for (const ref of refs) {
+    const path = `public/${ref}`;
+    assert.ok(statSync(path).isFile(), `catalog Actor is missing on disk: ${path}`);
+    const def = normalizeActorScriptDef(JSON.parse(readFileSync(path, "utf8")) as unknown, ref);
+    validateRtsPresentationActor(def, ref, manifest);
+    // The manifest entry passing is not the same as the model being there; the
+    // factory loads these paths, so a stale manifest row must fail here too.
+    for (const node of def.components) {
+      const assetId = node.props.assetId;
+      if (typeof assetId !== "string") continue;
+      const asset = manifest.get(assetId);
+      if (!asset) continue;
+      assert.ok(statSync(`public/${asset.path}`).isFile(), `${ref} names a missing model file: ${asset.path}`);
+    }
   }
+
+  // Spot-check the two hand-authored Actors that the generated set does not cover:
+  // the multi-mesh Farm and the Barracks scaffold.
+  const farm = normalizeActorScriptDef(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T2.actor.json", "utf8")) as unknown,
+    "farm",
+  );
+  assert.deepEqual(
+    farm.components.filter((node) => node.component === "StaticMeshComponent").map((node) => node.props.assetId),
+    ["farm-secondage-level2-wheat", "farm-secondage-level2"],
+    "the Farm keeps both authored meshes",
+  );
+});
+
+check("Actor presentation Faz 2: a broken presentation Actor fails with its ref and component named", () => {
+  const manifest = new Map([
+    ["static-asset", { path: "assets/A.gltf", assetType: "staticMesh" as const }],
+    ["skeletal-asset", { path: "assets/B.glb", assetType: "skeletalMesh" as const }],
+  ]);
+  const actor = (components: unknown[]): ActorScriptDef =>
+    normalizeActorScriptDef({ schema: 1, type: "actor", name: "BP_Test", components }, "BP_Test");
+  const mesh = (id: string, assetId: string, component = "StaticMeshComponent") =>
+    ({ id, component, parent: "root", props: { assetId } });
+  const root = { id: "root", component: "Transform", props: {} };
+
+  const rejects = (components: unknown[], expected: RegExp, why: string): void => {
+    assert.throws(
+      () => validateRtsPresentationActor(actor(components), "assets/BP_Test.actor.json", manifest),
+      (error: unknown) =>
+        error instanceof RtsActorPresentationError
+        && error.ref === "assets/BP_Test.actor.json"
+        && expected.test(error.message),
+      why,
+    );
+  };
+
+  rejects([root], /at least one mesh component/, "a presentation Actor with nothing to draw is an error");
+  rejects([root, mesh("body", "")], /"body" has no assetId/, "an empty assetId is an error, not an empty scene");
+  rejects([root, mesh("body", "not-in-manifest")], /unmanifested asset "not-in-manifest"/, "an unknown asset id is an error");
+  rejects(
+    [root, mesh("body", "skeletal-asset")],
+    /StaticMeshComponent "body" names a skeletalMesh asset/,
+    "a static component may not point at a skeletal asset",
+  );
+  rejects(
+    [root, mesh("body", "static-asset"), mesh("body", "static-asset")],
+    /duplicate component id "body"/,
+    "a duplicate id would silently drop one of the two meshes",
+  );
+  rejects(
+    [root, { id: "body", component: "StaticMeshComponent", parent: "missing", props: { assetId: "static-asset" } }],
+    /names unknown parent "missing"/,
+    "a dangling parent would leave the mesh out of the tree",
+  );
+  rejects(
+    [
+      root,
+      { id: "a", component: "StaticMeshComponent", parent: "b", props: { assetId: "static-asset" } },
+      { id: "b", component: "Transform", parent: "a", props: {} },
+    ],
+    /cyclic parent chain/,
+    "a cycle would orphan both nodes from the Actor root",
+  );
+
+  // The healthy shapes the pack actually uses stay accepted.
+  validateRtsPresentationActor(
+    actor([root, mesh("body", "static-asset"), mesh("prop", "static-asset")]),
+    "assets/BP_Test.actor.json",
+    manifest,
+  );
+  validateRtsPresentationActor(
+    actor([root, mesh("body", "skeletal-asset", "SkeletalMeshComponent")]),
+    "assets/BP_Test.actor.json",
+    manifest,
+  );
+});
+
+check("Actor presentation Faz 2: a multi-mesh Actor builds every component at its authored local transform", () => {
+  const def = normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_MultiMesh",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "ground", component: "StaticMeshComponent", parent: "root", props: { assetId: "ground" } },
+      { id: "offset", component: "Transform", parent: "root", props: { position: [2, 0, 0], scale: [2, 2, 2] } },
+      {
+        id: "wheat",
+        component: "StaticMeshComponent",
+        parent: "offset",
+        props: { assetId: "wheat", position: [0, 1, 0], rotation: [0, 90, 0] },
+      },
+    ],
+  }, "BP_MultiMesh");
+
+  const templates = new Map([["ground", new Group()], ["wheat", new Group()]]);
+  for (const [id, template] of templates) {
+    template.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
+    template.name = `${id}-template`;
+  }
+  const root = buildActorPresentationTree(def, "BP_MultiMesh", (assetId) => templates.get(assetId));
+
+  const nodeNamed = (name: string) => {
+    const found = root.getObjectByName(name);
+    assert.ok(found, `the tree contains the "${name}" component`);
+    return found!;
+  };
+  // Both meshes exist: the second StaticMeshComponent is a real second subtree,
+  // not a model quietly overwriting the first at the root origin.
+  const models = [...templates.keys()].map((id) => nodeNamed(`${id}-template`));
+  assert.equal(models.length, 2, "both authored meshes are instantiated");
+  assert.notEqual(models[0], models[1]);
+  for (const [id, template] of templates) {
+    assert.notEqual(nodeNamed(`${id}-template`), template, "each instance is a clone, not the shared template");
+  }
+
+  const wheat = nodeNamed("wheat");
+  assert.equal(wheat.parent, nodeNamed("offset"), "authored parenting is preserved");
+  assert.deepEqual(wheat.position.toArray(), [0, 1, 0], "the local position is preserved");
+  assert.ok(Math.abs(wheat.rotation.y - Math.PI / 2) < 1e-6, "authored degrees become radians");
+
+  root.updateMatrixWorld(true);
+  const world = new Vector3();
+  wheat.getWorldPosition(world);
+  // The parent Transform's offset and scale compose onto the child, which is the
+  // whole reason a bare Transform is kept as a node.
+  assert.deepEqual([world.x, world.y, world.z], [2, 2, 0]);
+
+  // The authored "root" Transform is itself a component node under the returned
+  // presentation Group, so the whole Actor can be offset by editing that one node.
+  const ground = nodeNamed("ground");
+  assert.equal(ground.parent, nodeNamed("root"), "a root-parented mesh hangs off the authored root component");
+  assert.equal(nodeNamed("root").parent, root);
+  assert.deepEqual(ground.position.toArray(), [0, 0, 0]);
 });
 
 check("Assetization Faz C: UnitSystem resolves catalog presentation pick targets without body-child assumptions", () => {
@@ -33011,6 +33240,12 @@ function aiTestWorld(
   // As in RtsApp: the map's real deposits, so the AI's quarry and gold mine are
   // gated on covering one exactly as the player's are.
   const resourceNodes = new ResourceNodeSystem(resourceBalance, RTS_BLOCKOUT_MAP.resourceNodes);
+  // As in RtsApp: the map's real groves. Omitting them made every lumber camp in
+  // this harness report `missing-forest` and produce nothing, so the AI's wood
+  // income was structurally zero and its economy tests only worked because they
+  // were handed thousands of starting wood. A wood economy cannot be tested
+  // against a world with no trees in it.
+  const forests = new ForestSystem(RTS_BLOCKOUT_MAP.trees);
   // As in RtsApp: production must not re-grab a worker that is mid-construction.
   // The two systems reference each other, so the link is resolved lazily.
   let workerConstructionRef: WorkerConstructionSystem | null = null;
@@ -33020,6 +33255,7 @@ function aiTestWorld(
     navigation,
     (unit) => workerConstructionRef !== null && workerConstructionRef.stateFor(unit) !== "idle",
     resourceNodes,
+    forests,
   );
   const roads = new RoadGraph(balance);
   const depots = new DepotLogisticsSystem(structures, roads);
@@ -33073,7 +33309,17 @@ function aiTestWorld(
     (stats, x, z) => stats.economy?.requiresResourceNode
       && !resourceNodes.canExtractAt(stats.economy.resourceId, x, z, stats.footprint.width, stats.footprint.depth)
       ? "missing-resource-node"
-      : null,
+      // As in RtsApp: a camp must stand beside a live grove, so an anchor that has
+      // drifted off the trees fails here rather than standing idle forever.
+      : stats.economy?.requiresForest
+        && !forests.hasLiveTreeNear(x, z, stats.economy.gatherRadius ?? 0, stats.footprint)
+        ? "missing-forest"
+        : null,
+    // As in RtsApp: roads and standing trees reserve build space without blocking
+    // navigation, so a camp is placed beside a grove and never on top of it. This
+    // is also the blocker set that makes the authored-anchor test honest — without
+    // it a slot sitting on a tree would read as placeable here and fail in game.
+    () => [...roads.occupancyBlockers(), ...forests.liveTreeBlockers()],
   );
   const roadConstruction = new RoadConstructionService(
     roads,
@@ -36789,3 +37035,4 @@ function webpVp8xHeader(width: number, height: number): Uint8Array {
   bytes[29] = (h >> 16) & 0xff;
   return bytes;
 }
+

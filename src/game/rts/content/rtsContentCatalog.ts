@@ -49,10 +49,15 @@ export function rtsUnitActorRef(catalog: RtsContentCatalog, unitId: string): Rts
 }
 
 /**
- * The construction and completed-tier mappings intentionally use separate Actor
- * assets. Completed tiers resolve the owner's age first (`ages`) and fall back to
- * the age-agnostic `levels`, so a building only authors per-age art when its
- * models actually differ by age.
+ * Completed tiers resolve the owner's age first (`ages`) and fall back to the
+ * age-agnostic `levels`, so a building only authors per-age art when its models
+ * actually differ by age.
+ *
+ * `construction` may author its own Actor (a scaffold that looks nothing like
+ * the finished building). When it does not, the site shows the very building
+ * that is being raised — the completed Actor for the same age and level, drawn
+ * translucent by the caller — rather than dropping to the legacy single-mesh
+ * path, which would make the site and the finished model disagree.
  */
 export function rtsBuildingActorRef(
   catalog: RtsContentCatalog,
@@ -62,7 +67,7 @@ export function rtsBuildingActorRef(
   age: SettlementAge = "settlement",
 ): RtsActorRef | null {
   const entry = catalog.buildings[buildingId];
-  if (state === "construction") return entry?.constructionActorRef ?? null;
+  if (state === "construction" && entry?.constructionActorRef) return entry.constructionActorRef;
   const key = String(level);
   return entry?.ages?.[age]?.[key] ?? entry?.levels[key] ?? null;
 }

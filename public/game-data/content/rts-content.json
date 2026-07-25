@@ -7,11 +7,80 @@
     }
   },
   "buildings": {
-    "barracks": {
-      "constructionActorRef": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json",
+    "command_center": {
       "levels": {
-        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json",
-        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T2.actor.json"
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_FirstAge_T1.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_FirstAge_T2.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_FirstAge_T3.actor.json"
+      },
+      "ages": {
+        "settlement": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_FirstAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_FirstAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_FirstAge_T3.actor.json"
+        },
+        "town": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_SecondAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_SecondAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_SecondAge_T3.actor.json"
+        }
+      }
+    },
+    "house": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_FirstAge_T1.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_FirstAge_T2.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_FirstAge_T3.actor.json"
+      },
+      "ages": {
+        "settlement": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_FirstAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_FirstAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_FirstAge_T3.actor.json"
+        },
+        "town": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_SecondAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_SecondAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_SecondAge_T3.actor.json"
+        }
+      }
+    },
+    "depot": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_FirstAge_T1.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_FirstAge_T2.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_FirstAge_T3.actor.json"
+      },
+      "ages": {
+        "settlement": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_FirstAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_FirstAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_FirstAge_T3.actor.json"
+        },
+        "town": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_SecondAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_SecondAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_SecondAge_T3.actor.json"
+        }
+      }
+    },
+    "outpost": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_FirstAge_T1.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_FirstAge_T2.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_FirstAge_T3.actor.json"
+      },
+      "ages": {
+        "settlement": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_FirstAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_FirstAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_FirstAge_T3.actor.json"
+        },
+        "town": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_SecondAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_SecondAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_SecondAge_T3.actor.json"
+        }
       }
     },
     "farm": {
@@ -30,6 +99,85 @@
           "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T1.actor.json",
           "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T2.actor.json",
           "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T3.actor.json"
+        }
+      }
+    },
+    "lumber_camp": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json"
+      }
+    },
+    "quarry": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Quarry.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Quarry.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Quarry.actor.json"
+      }
+    },
+    "gold_mine": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_GoldMine.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_GoldMine.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_GoldMine.actor.json"
+      }
+    },
+    "market": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_FirstAge_T1.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_FirstAge_T2.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_FirstAge_T3.actor.json"
+      },
+      "ages": {
+        "settlement": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_FirstAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_FirstAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_FirstAge_T3.actor.json"
+        },
+        "town": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_SecondAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_SecondAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_SecondAge_T3.actor.json"
+        }
+      }
+    },
+    "barracks": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T1.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T2.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T3.actor.json"
+      },
+      "ages": {
+        "settlement": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T3.actor.json"
+        },
+        "town": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T3.actor.json"
+        }
+      },
+      "constructionActorRef": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json"
+    },
+    "archery_range": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_FirstAge_T1.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_FirstAge_T2.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_FirstAge_T3.actor.json"
+      },
+      "ages": {
+        "settlement": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_FirstAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_FirstAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_FirstAge_T3.actor.json"
+        },
+        "town": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_SecondAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_SecondAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_SecondAge_T3.actor.json"
         }
       }
     }

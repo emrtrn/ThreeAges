@@ -19910,6 +19910,186 @@
       "license": "Project-local RTS presentation asset"
     },
     {
+      "id": "threeages-rts-archeryrange-firstage-t1-actor",
+      "name": "BP RTS ArcheryRange FirstAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_FirstAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "archery-range",
+        "settlement",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 546
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-archeryrange-firstage-t2-actor",
+      "name": "BP RTS ArcheryRange FirstAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_FirstAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "archery-range",
+        "settlement",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 546
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-archeryrange-firstage-t3-actor",
+      "name": "BP RTS ArcheryRange FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "archery-range",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 546
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-archeryrange-secondage-t1-actor",
+      "name": "BP RTS ArcheryRange SecondAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_SecondAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "archery-range",
+        "town",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 548
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-archeryrange-secondage-t2-actor",
+      "name": "BP RTS ArcheryRange SecondAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_SecondAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "archery-range",
+        "town",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 548
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-archeryrange-secondage-t3-actor",
+      "name": "BP RTS ArcheryRange SecondAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_ArcheryRange_SecondAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "archery-range",
+        "town",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 548
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
       "id": "threeages-rts-barracks-construction-actor",
       "name": "BP RTS Barracks Construction.Actor",
       "assetType": "prefab",
@@ -19934,21 +20114,22 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 476
+        "bytes": 788
       },
       "license": "Project-local RTS presentation asset"
     },
     {
-      "id": "threeages-rts-barracks-t1-actor",
-      "name": "BP RTS Barracks T1.Actor",
+      "id": "threeages-rts-barracks-firstage-t1-actor",
+      "name": "BP RTS Barracks FirstAge T1.Actor",
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Buildings",
-      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T1.actor.json",
       "tags": [
         "threeages",
         "rts",
         "building",
         "barracks",
+        "settlement",
         "tier1"
       ],
       "placeable": false,
@@ -19963,21 +20144,22 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 466
+        "bytes": 539
       },
       "license": "Project-local RTS presentation asset"
     },
     {
-      "id": "threeages-rts-barracks-t2-actor",
-      "name": "BP RTS Barracks T2.Actor",
+      "id": "threeages-rts-barracks-firstage-t2-actor",
+      "name": "BP RTS Barracks FirstAge T2.Actor",
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Buildings",
-      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T2.actor.json",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T2.actor.json",
       "tags": [
         "threeages",
         "rts",
         "building",
         "barracks",
+        "settlement",
         "tier2"
       ],
       "placeable": false,
@@ -19992,7 +20174,487 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 443
+        "bytes": 539
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-barracks-firstage-t3-actor",
+      "name": "BP RTS Barracks FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "barracks",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 539
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-barracks-secondage-t1-actor",
+      "name": "BP RTS Barracks SecondAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "barracks",
+        "town",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 541
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-barracks-secondage-t2-actor",
+      "name": "BP RTS Barracks SecondAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "barracks",
+        "town",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 541
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-barracks-secondage-t3-actor",
+      "name": "BP RTS Barracks SecondAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "barracks",
+        "town",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 541
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-commandcenter-firstage-t1-actor",
+      "name": "BP RTS CommandCenter FirstAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_FirstAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "command-center",
+        "settlement",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 551
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-commandcenter-firstage-t2-actor",
+      "name": "BP RTS CommandCenter FirstAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_FirstAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "command-center",
+        "settlement",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 551
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-commandcenter-firstage-t3-actor",
+      "name": "BP RTS CommandCenter FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "command-center",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 551
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-commandcenter-secondage-t1-actor",
+      "name": "BP RTS CommandCenter SecondAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_SecondAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "command-center",
+        "town",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 553
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-commandcenter-secondage-t2-actor",
+      "name": "BP RTS CommandCenter SecondAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_SecondAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "command-center",
+        "town",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 553
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-commandcenter-secondage-t3-actor",
+      "name": "BP RTS CommandCenter SecondAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_CommandCenter_SecondAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "command-center",
+        "town",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 553
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-depot-firstage-t1-actor",
+      "name": "BP RTS Depot FirstAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_FirstAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "depot",
+        "settlement",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 532
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-depot-firstage-t2-actor",
+      "name": "BP RTS Depot FirstAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_FirstAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "depot",
+        "settlement",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 532
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-depot-firstage-t3-actor",
+      "name": "BP RTS Depot FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "depot",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 532
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-depot-secondage-t1-actor",
+      "name": "BP RTS Depot SecondAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_SecondAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "depot",
+        "town",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 534
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-depot-secondage-t2-actor",
+      "name": "BP RTS Depot SecondAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_SecondAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "depot",
+        "town",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 534
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-depot-secondage-t3-actor",
+      "name": "BP RTS Depot SecondAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Depot_SecondAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "depot",
+        "town",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 534
       },
       "license": "Project-local RTS presentation asset"
     },
@@ -20173,6 +20835,630 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 717
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-goldmine-actor",
+      "name": "BP RTS GoldMine.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_GoldMine.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "gold-mine"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 507
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-house-firstage-t1-actor",
+      "name": "BP RTS House FirstAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_FirstAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "house",
+        "settlement",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 533
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-house-firstage-t2-actor",
+      "name": "BP RTS House FirstAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_FirstAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "house",
+        "settlement",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 533
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-house-firstage-t3-actor",
+      "name": "BP RTS House FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "house",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 533
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-house-secondage-t1-actor",
+      "name": "BP RTS House SecondAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_SecondAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "house",
+        "town",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 535
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-house-secondage-t2-actor",
+      "name": "BP RTS House SecondAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_SecondAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "house",
+        "town",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 535
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-house-secondage-t3-actor",
+      "name": "BP RTS House SecondAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_House_SecondAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "house",
+        "town",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 535
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-lumbercamp-actor",
+      "name": "BP RTS LumberCamp.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "lumber-camp"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 534
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-market-firstage-t1-actor",
+      "name": "BP RTS Market FirstAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_FirstAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "market",
+        "settlement",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 533
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-market-firstage-t2-actor",
+      "name": "BP RTS Market FirstAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_FirstAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "market",
+        "settlement",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 533
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-market-firstage-t3-actor",
+      "name": "BP RTS Market FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "market",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 533
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-market-secondage-t1-actor",
+      "name": "BP RTS Market SecondAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_SecondAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "market",
+        "town",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 535
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-market-secondage-t2-actor",
+      "name": "BP RTS Market SecondAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_SecondAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "market",
+        "town",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 535
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-market-secondage-t3-actor",
+      "name": "BP RTS Market SecondAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_SecondAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "market",
+        "town",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 535
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-outpost-firstage-t1-actor",
+      "name": "BP RTS Outpost FirstAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_FirstAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "outpost",
+        "settlement",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 539
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-outpost-firstage-t2-actor",
+      "name": "BP RTS Outpost FirstAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_FirstAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "outpost",
+        "settlement",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 539
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-outpost-firstage-t3-actor",
+      "name": "BP RTS Outpost FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "outpost",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 539
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-outpost-secondage-t1-actor",
+      "name": "BP RTS Outpost SecondAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_SecondAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "outpost",
+        "town",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 541
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-outpost-secondage-t2-actor",
+      "name": "BP RTS Outpost SecondAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_SecondAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "outpost",
+        "town",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 541
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-outpost-secondage-t3-actor",
+      "name": "BP RTS Outpost SecondAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Outpost_SecondAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "outpost",
+        "town",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 541
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-quarry-actor",
+      "name": "BP RTS Quarry.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Quarry.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "quarry"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 503
       },
       "license": "Project-local RTS presentation asset"
     },

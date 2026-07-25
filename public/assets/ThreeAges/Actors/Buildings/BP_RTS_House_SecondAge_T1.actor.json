@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_House_SecondAge_T1",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "houseMesh",
+      "component": "StaticMeshComponent",
+      "props": {
+        "assetId": "houses-secondage-1-level1"
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

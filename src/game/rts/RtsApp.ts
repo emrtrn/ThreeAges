@@ -2282,6 +2282,7 @@ export class RtsApp {
           this.ageOf(PLAYER_OWNER),
           this.progression.tierFor(PLAYER_OWNER).level,
         ));
+      for (const center of this.centers.all()) this.buildingVisuals.applyToCenter(center, this.ageOf(center.owner));
       for (const structure of this.structures.all()) {
         if (structure.construction.complete) this.applyStructureVisual(structure);
         else this.applyConstructionVisual(structure);
