@@ -31024,6 +31024,34 @@ check("Faz 7 exact unit stacks split onto legal ground in one separation pass", 
   }
 });
 
+check("Faz 7 unit separation can be disabled so RTS bodies pass through each other", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const first = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const second = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+
+  updateUnitSeparation([first, second], 1 / 60, { navigation, enabled: false });
+
+  assert.deepEqual(first.position.toArray(), [0, 0, 0]);
+  assert.deepEqual(second.position.toArray(), [0, 0, 0]);
+});
+
+check("RTS farms and lumber camps reserve building space but not unit navigation", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const farm = buildings.farm ?? assert.fail("farm balance missing");
+  const lumberCamp = buildings.lumber_camp ?? assert.fail("lumber camp balance missing");
+  const barracks = buildings.barracks ?? assert.fail("barracks balance missing");
+  const structures = new PlacedStructureSystem();
+  structures.place("player", farm, 0, 0);
+  structures.place("player", lumberCamp, 10, 0);
+  structures.place("player", barracks, 20, 0);
+
+  assert.equal(structures.navigationBlockers().length, 3, "all footprints remain occupied for building placement");
+  assert.equal(structures.unitNavigationBlockers().length, 1, "only actual buildings block unit paths");
+});
+
 check("Faz 7 a group order hands each unit its nearest slot, not its selection index", () => {
   const units = new UnitSystem();
   const navigation = new RtsNavigation();

@@ -46,6 +46,8 @@ const COMPLETION_DROP_HEIGHT = 2.5;
  */
 const COLLAPSE_DURATION = 0.9;
 const COLLAPSE_SINK_DEPTH = 2.2;
+/** Economy scenery that reserves build space but units may walk through. */
+const UNIT_PASS_THROUGH_STRUCTURE_IDS = new Set(["farm", "lumber_camp"]);
 
 export interface PlacedStructure {
   readonly id: number;
@@ -194,6 +196,17 @@ export class PlacedStructureSystem {
 
   navigationBlockers(): readonly NavBlocker[] {
     return this.structures.map((structure) => structure.blocker);
+  }
+
+  /**
+   * Blockers for unit pathfinding. Farms and lumber camps retain their full
+   * footprint for placement/roads, but are intentionally pass-through ground so
+   * workers cannot be boxed in between an economy site and a new building.
+   */
+  unitNavigationBlockers(): readonly NavBlocker[] {
+    return this.structures
+      .filter((structure) => !UNIT_PASS_THROUGH_STRUCTURE_IDS.has(structure.stats.id))
+      .map((structure) => structure.blocker);
   }
 
   /** Apply active worker-seconds and promote the site visual when it completes. */

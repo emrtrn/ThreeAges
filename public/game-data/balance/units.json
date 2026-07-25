@@ -24,7 +24,7 @@
     "requiredAge": "settlement",
     "requiredSettlementLevel": 1,
     "cost": {
-      "food": 60,
+      "food": 40,
       "wood": 20
     },
     "populationCost": 1,
@@ -55,7 +55,7 @@
     "requiredAge": "town",
     "requiredSettlementLevel": 1,
     "cost": {
-      "food": 50,
+      "food": 40,
       "wood": 40
     },
     "populationCost": 1
@@ -85,9 +85,9 @@
     "requiredAge": "town",
     "requiredSettlementLevel": 1,
     "cost": {
-      "wood": 140,
-      "stone": 100,
-      "gold": 60
+      "wood": 100,
+      "stone": 20,
+      "gold": 10
     },
     "populationCost": 3,
     "structureAttackVfx": "cannonball"

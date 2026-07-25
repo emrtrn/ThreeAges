@@ -34,6 +34,11 @@ const HARD_UNSTACK_CLEARANCE = 0.05;
 const HARD_UNSTACK_ANGLE_ATTEMPTS = 16;
 
 export interface UnitSeparationOptions {
+  /**
+   * Enables unit-to-unit body separation. RTS gameplay can opt out while
+   * retaining formation, routing and destination-reservation behavior.
+   */
+  readonly enabled?: boolean;
   /** Vetoes pushes into unwalkable ground; without it, geometry is not respected. */
   readonly navigation?: RtsNavigation;
 }
@@ -44,6 +49,7 @@ export function updateUnitSeparation(
   dt: number,
   options: UnitSeparationOptions = {},
 ): void {
+  if (options.enabled === false) return;
   if (dt <= 0 || units.length < 2) return;
   // A unit being rescued out of a footprint is deliberately absent here: it is
   // walking through ground separation would refuse to let it stand on, so it must

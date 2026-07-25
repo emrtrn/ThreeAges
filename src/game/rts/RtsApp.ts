@@ -655,14 +655,20 @@ export class RtsApp {
       this.structures,
       this.kingdoms,
       this.navigation,
-      () => this.navigationBlockers(),
+      () => this.occupancyBlockers(),
       this.territory,
       (structure) => {
         this.applyConstructionVisual(structure);
         this.assignWorkerToConstruction(structure);
         this.autoConnectRoad(structure);
+        // Construction reserves every footprint for placement, but farms and
+        // lumber camps are intentionally omitted from *unit* navigation.
+        this.refreshNavigationBlockers();
       },
-      (structure) => this.workerConstruction.cancelStructure(structure),
+      (structure) => {
+        this.workerConstruction.cancelStructure(structure);
+        this.refreshNavigationBlockers();
+      },
       (stats, x, z) => stats.economy?.requiresResourceNode
         && !this.resourceNodes.canExtractAt(
           stats.economy.resourceId,
@@ -698,7 +704,7 @@ export class RtsApp {
       // deposit point, so one road tile on top of it refused every legal quarry
       // centre and — with no way to unpave a road — retired the deposit for good.
       () => [
-        ...this.navigationBlockers(),
+        ...this.occupancyBlockers(),
         ...this.forests.liveTreeBlockers(),
         ...this.resourceNodes.liveNodeBlockers(),
       ],
@@ -1468,9 +1474,10 @@ export class RtsApp {
       targets: this.combatTargets(),
     });
     updateUnitMovement(this.units.all(), dt, { navigation: this.navigation });
-    // Separation runs after movement so it corrects the overlap this frame's
-    // steps actually created, rather than one frame of stale positions.
-    updateUnitSeparation(this.units.all(), dt, { navigation: this.navigation });
+    // RTS bodies deliberately do not collide with other RTS bodies: formations,
+    // destination reservations and command staggering still govern where they
+    // head, but units may pass through one another instead of crowd-deadlocking.
+    updateUnitSeparation(this.units.all(), dt, { navigation: this.navigation, enabled: false });
     this.workerConstruction.update(dt);
     this.economyProduction?.update(dt);
     this.syncForestVisibility();
@@ -2146,6 +2153,15 @@ export class RtsApp {
   }
 
   private navigationBlockers() {
+    return [
+      ...this.spatial.navigationBlockers,
+      ...this.centers.navigationBlockers(),
+      ...this.structures.unitNavigationBlockers(),
+    ];
+  }
+
+  /** Building and road placement keeps every structure footprint reserved. */
+  private occupancyBlockers() {
     return [
       ...this.spatial.navigationBlockers,
       ...this.centers.navigationBlockers(),
