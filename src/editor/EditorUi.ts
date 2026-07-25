@@ -1282,13 +1282,46 @@ export class EditorUi {
     // Hand the current viewport camera pose to the runtime (default camera mode
     // starts there). Temporary session override — not written to the layout.
     writePlayCameraPose(this.app.getPlayCameraPose());
-    const previewUrl = this.projectInfo?.manifest.editor.previewUrl ?? "/";
+    const previewUrl = this.playPreviewUrl();
     const opened = window.open(previewUrl, "_blank", "noopener");
     if (opened) {
       this.setStatus(`Saved. Opening game: ${previewUrl}`, "success");
     } else {
       this.setStatus(`Saved. Popup blocked — open ${previewUrl} manually.`, "warning");
     }
+  }
+
+  /**
+   * The preview URL with the level being edited attached as `?level=`.
+   *
+   * Play saves *this* scene, so the runtime has to be told which scene that was;
+   * without it a runtime that picks its own map (the RTS route reads its preset)
+   * can open a different one, and the edits look like they never saved.
+   *
+   * Deliberately generic: the editor states which level it is editing and says
+   * nothing about how a game uses it. A runtime free to ignore the parameter —
+   * the character route does — is unaffected, and a project that pins its own
+   * `level` in `editor.previewUrl` keeps it, since an explicit choice by the
+   * project author outranks this default.
+   */
+  private playPreviewUrl(): string {
+    const configured = this.projectInfo?.manifest.editor.previewUrl ?? "/";
+    const activeLevel = this.projectInfo?.manifest.editor.defaultScene;
+    if (!activeLevel) return configured;
+    // Parsed against the current origin so a relative preview URL ("/?rts") and
+    // an absolute one both round-trip; only same-document relative URLs are
+    // rewritten back to a relative string.
+    let url: URL;
+    try {
+      url = new URL(configured, window.location.origin);
+    } catch {
+      return configured;
+    }
+    if (url.searchParams.has("level")) return configured;
+    url.searchParams.set("level", normalizeProjectPath(activeLevel));
+    return url.origin === window.location.origin
+      ? `${url.pathname}${url.search}${url.hash}`
+      : url.toString();
   }
 
   private async loadContent(projectName: HTMLElement): Promise<void> {

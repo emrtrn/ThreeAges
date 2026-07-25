@@ -8,6 +8,7 @@
  * local transform" a unit test rather than a screenshot.
  */
 import { Box3, Group, Mesh, type Object3D } from "three";
+import { clone as cloneSkeletonHierarchy } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { isMeshComponentKind, type ActorScriptDef } from "@engine/scene/actorScript";
 
 const DEGREES_TO_RADIANS = Math.PI / 180;
@@ -69,7 +70,14 @@ export function buildActorPresentationTree(
     const assetId = component.props.assetId;
     const template = typeof assetId === "string" ? resolveTemplate(assetId) : undefined;
     if (!template) continue;
-    const model = template.clone(true);
+    // `Object3D.clone` is not enough for a SkeletalMeshComponent: it copies the
+    // SkinnedMesh but leaves it bound to the *template's* skeleton, whose bones
+    // live outside the scene and are never updated. The clone then skins against
+    // stale bone matrices and collapses out of view — the unit's rings and health
+    // bar still draw, so the symptom is an invisible body, not a missing actor.
+    // SkeletonUtils.clone rebinds each clone to its own bones and is a plain deep
+    // clone for the static-mesh case.
+    const model = cloneSkeletonHierarchy(template);
     model.traverse((child) => {
       if (child instanceof Mesh) {
         child.castShadow = true;

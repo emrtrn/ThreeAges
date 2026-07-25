@@ -53,9 +53,15 @@ export class UnitSystem {
     return this.unitsOf(owner).filter((unit) => unit.role !== "worker");
   }
 
-  /** Refresh every health bar and billboard it toward the shared RTS camera. */
-  updatePresentation(cameraQuaternion: Quaternion): void {
-    for (const unit of this.units) unit.updatePresentation(cameraQuaternion);
+  /**
+   * Advance every unit's presentation: health bars, camera billboarding, and the
+   * animation mixer of any unit backed by an animated Actor.
+   *
+   * `deltaSeconds` is the rendered-frame delta, which is why this is not folded
+   * into the simulation step.
+   */
+  updatePresentation(deltaSeconds: number, cameraQuaternion: Quaternion): void {
+    for (const unit of this.units) unit.updatePresentation(deltaSeconds, cameraQuaternion);
   }
 
   setPresentationFactory(factory: ((owner: UnitOwner, stats: UnitBalanceStats) => RtsPresentationHandle | null) | null): void {

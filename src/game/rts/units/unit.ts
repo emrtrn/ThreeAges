@@ -25,7 +25,7 @@ import {
 } from "three";
 import type { Object3D } from "three";
 import type { UnitBalanceStats, UnitRoleId } from "../../data/gameDataTypes";
-import type { CombatTarget } from "../combat/combatTarget";
+import { combatDistance, type CombatTarget } from "../combat/combatTarget";
 // Body tint and the ground ring read from one source, so a unit can never wear
 // one team's colour on its body and another's underneath it.
 import { TEAM_COLOR, createTeamRing } from "../team/teamColors";
@@ -45,12 +45,31 @@ export type UnitRole = UnitRoleId;
  */
 export type UnitStance = "aggressive" | "hold";
 
+/**
+ * Per-frame simulation summary handed to an animated presentation.
+ *
+ * Deliberately tiny and derived: the presentation may read what the unit is
+ * doing but owns none of it, so nothing here is state the unit keeps only for
+ * rendering. `deltaSeconds` is the rendered-frame delta, not the simulation's —
+ * a walk cycle should look the same at any game speed, exactly like the health
+ * bars and tracers it plays alongside.
+ */
+export interface RtsPresentationUpdate {
+  readonly deltaSeconds: number;
+  /** Observed ground speed (units/s), measured from actual displacement. */
+  readonly planarSpeed: number;
+  /** True while a live target is inside weapon range — i.e. blows are landing. */
+  readonly attacking: boolean;
+  /** True once the defeat pose has begun. */
+  readonly dying: boolean;
+}
+
 /** Presentation-only Actor/legacy render handle. It owns no simulation data. */
 export interface RtsPresentationHandle {
   readonly root: Object3D;
   readonly pickTargets: readonly Object3D[];
   readonly selectionRadius: number;
-  readonly update?: (deltaSeconds: number) => void;
+  readonly update?: (state: RtsPresentationUpdate) => void;
   dispose(): void;
 }
 
@@ -132,6 +151,8 @@ export class Unit {
   private readonly targetRing: Mesh;
   private readonly healthBar: HealthBar;
   private presentation: RtsPresentationHandle | null = null;
+  /** Where the body stood at the last presentation frame; see `measurePlanarSpeed`. */
+  private readonly lastPresentationPosition = new Vector3();
   private fallbackBody: Mesh | null = null;
   private pickTargets: readonly Object3D[] = [];
   private movePath: Vector3[] = [];
@@ -179,6 +200,9 @@ export class Unit {
     this.object = new Group();
     this.object.name = `rts-unit-${this.role}-${owner}-${this.id}`;
     this.object.position.set(x, 0, z);
+    // Seeded at the spawn point so the first measured frame reads as standing
+    // still rather than as an instant teleport from the world origin.
+    this.lastPresentationPosition.set(x, 0, z);
     this.health = new HealthComponent(stats.maxHealth);
     this.attack = new AttackComponent(stats);
 
@@ -260,10 +284,45 @@ export class Unit {
     this.ring.visible = selected;
   }
 
-  /** Refresh the health bar and keep it turned toward the camera. */
-  updatePresentation(cameraQuaternion: Quaternion): void {
+  /** Refresh the health bar, billboard it, and advance the animated presentation. */
+  updatePresentation(deltaSeconds: number, cameraQuaternion: Quaternion): void {
     this.healthBar.set(this.health.ratio);
     this.healthBar.faceCamera(cameraQuaternion);
+    this.presentation?.update?.({
+      deltaSeconds,
+      planarSpeed: this.measurePlanarSpeed(deltaSeconds),
+      attacking: this.isTradingBlows(),
+      dying: this.dying,
+    });
+  }
+
+  /**
+   * Ground speed observed since the last presentation frame.
+   *
+   * Measured from displacement rather than read off `speed` or the move target,
+   * so it tells the truth in every case the animation has to survive: a unit
+   * blocked by a crowd, shoved by separation, or stopped mid-order is reported
+   * as slow because it *is* slow. It also costs the unit no extra simulation
+   * state — the previous position is a presentation-local memory.
+   */
+  private measurePlanarSpeed(deltaSeconds: number): number {
+    const previous = this.lastPresentationPosition;
+    const dx = this.object.position.x - previous.x;
+    const dz = this.object.position.z - previous.z;
+    previous.set(this.object.position.x, 0, this.object.position.z);
+    if (deltaSeconds <= 0) return 0;
+    return Math.hypot(dx, dz) / deltaSeconds;
+  }
+
+  /**
+   * Whether this unit is actually landing blows rather than merely walking after
+   * something. Holding a target is not enough: a Guard chasing across the map
+   * should still be shown walking.
+   */
+  private isTradingBlows(): boolean {
+    const target = this.attackTarget;
+    if (!target || target.health.depleted || this.dying) return false;
+    return combatDistance(this.position, target) <= this.attack.range;
   }
 
   /** Order the unit to walk to a ground point (y is ignored). */

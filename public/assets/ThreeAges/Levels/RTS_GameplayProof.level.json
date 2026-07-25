@@ -214,6 +214,14 @@
           "scale": 10.27
         }
       ]
+    },
+    {
+      "assetId": "archery-firstage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "shape:cube",
+      "placements": []
     }
   ],
   "characters": [],
@@ -609,7 +617,8 @@
         0
       ],
       "dataRef": "landscapes/landscape-1.landscape.json",
-      "name": "Landscape"
+      "name": "Landscape",
+      "locked": true
     }
   ],
   "riverWaters": [

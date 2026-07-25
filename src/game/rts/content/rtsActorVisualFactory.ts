@@ -10,7 +10,7 @@
  * reserved for what genuinely is one — an unreachable manifest, without which no
  * reference can resolve at all.
  */
-import { Group, Mesh, type Object3D, type WebGLRenderer } from "three";
+import { Group, Mesh, type AnimationClip, type Object3D, type WebGLRenderer } from "three";
 import { isMeshComponentKind, normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import { projectFileUrl } from "@/project/ProjectSystem";
@@ -25,7 +25,21 @@ import {
 } from "./rtsContentValidation";
 import { buildActorPresentationTree, fitPresentationToFootprint } from "./rtsActorPresentationTree";
 import { createRtsActorPlaceholder } from "./rtsActorPlaceholder";
+import { createRtsUnitPresentation, type RtsUnitAnimationSource } from "./rtsUnitPresentation";
+import { loadAssetSkeleton, type AssetSkeletonDef } from "@/scene/assetSkeletonLoader";
 import type { RtsPresentationHandle, UnitOwner } from "../units/unit";
+
+/**
+ * One resolved mesh asset: the model to clone plus everything an animated
+ * instance needs. Clips and the skeleton sidecar are cached beside the scene
+ * because they are per-*asset* facts — every unit cloned from this model shares
+ * them, while each clone gets its own bones and its own mixer.
+ */
+interface RtsModelTemplate {
+  readonly scene: Object3D;
+  readonly animations: readonly AnimationClip[];
+  readonly skeleton: AssetSkeletonDef;
+}
 
 /** One catalog entry that could not be built, named by ref and failing component. */
 export interface RtsActorLoadFailure {
@@ -68,9 +82,9 @@ function readNumberVariable(def: ActorScriptDef, key: string, fallback: number):
 export class RtsActorVisualFactory {
   private readonly loader;
   private readonly definitions = new Map<RtsActorRef, ActorScriptDef>();
-  private readonly templates = new Map<string, Object3D>();
+  private readonly templates = new Map<string, RtsModelTemplate>();
   /** In-flight/settled model loads, keyed by asset id — see {@link templateFor}. */
-  private readonly templateLoads = new Map<string, Promise<Object3D>>();
+  private readonly templateLoads = new Map<string, Promise<RtsModelTemplate>>();
   private readonly manifestMeshes = new Map<string, RtsMeshAsset>();
   /** Refs that failed to load and now render as the explicit stand-in. */
   private readonly failures = new Map<RtsActorRef, string>();
@@ -141,12 +155,12 @@ export class RtsActorVisualFactory {
       if (child instanceof Mesh) pickTargets.push(child);
     });
     if (pickTargets.length === 0) return null;
-    return {
+    return createRtsUnitPresentation({
       root,
       pickTargets,
       selectionRadius: readNumberVariable(def, "selectionRadius", 0.5),
-      dispose: () => root.removeFromParent(),
-    };
+      animation: this.animationSourceFor(def),
+    });
   }
 
   createBuildingVisual(
@@ -168,7 +182,7 @@ export class RtsActorVisualFactory {
   }
 
   dispose(): void {
-    for (const template of this.templates.values()) disposeTemplate(template);
+    for (const template of this.templates.values()) disposeTemplate(template.scene);
     this.templates.clear();
     // A rejected entry left here would keep an unhandled rejection alive past the
     // app it belonged to.
@@ -216,19 +230,45 @@ export class RtsActorVisualFactory {
    * download instead of racing for it — and a model that failed stays failed for
    * every Actor that names it, rather than being retried once per reference.
    */
-  private templateFor(assetId: string, path: string): Promise<Object3D> {
+  private templateFor(assetId: string, path: string): Promise<RtsModelTemplate> {
     let pending = this.templateLoads.get(assetId);
     if (!pending) {
-      pending = this.loader.loadAsync(projectFileUrl(path)).then((gltf) => gltf.scene);
+      // The sidecar rides along with the model: it names which clip is idle,
+      // which is walk, and which clips must have their root motion locked. It
+      // never rejects — a missing sidecar resolves to the empty default, which
+      // simply means "this asset animates nothing".
+      pending = Promise.all([
+        this.loader.loadAsync(projectFileUrl(path)),
+        loadAssetSkeleton(path),
+      ]).then(([gltf, skeleton]) => ({ scene: gltf.scene, animations: gltf.animations, skeleton }));
       this.templateLoads.set(assetId, pending);
     }
     return pending;
   }
 
+  /**
+   * The animation source for an Actor: the first mesh component whose model
+   * actually ships clips. Actors are free to hang static props off an animated
+   * body — those contribute no clips and are skipped rather than treated as a
+   * second, competing skeleton.
+   */
+  private animationSourceFor(def: ActorScriptDef): RtsUnitAnimationSource | null {
+    for (const component of def.components) {
+      if (!isMeshComponentKind(component.component)) continue;
+      const assetId = component.props.assetId;
+      if (typeof assetId !== "string") continue;
+      const template = this.templates.get(assetId);
+      if (template && template.animations.length > 0) {
+        return { clips: template.animations, skeleton: template.skeleton };
+      }
+    }
+    return null;
+  }
+
   private createActorVisual(ref: RtsActorRef): Group | null {
     const def = this.definitions.get(ref);
     if (!def) return this.failures.has(ref) ? createRtsActorPlaceholder(ref) : null;
-    return buildActorPresentationTree(def, ref, (assetId) => this.templates.get(assetId));
+    return buildActorPresentationTree(def, ref, (assetId) => this.templates.get(assetId)?.scene);
   }
 }
 

@@ -249,6 +249,14 @@ export interface RtsAppOptions {
   readonly contentCatalog?: RtsContentCatalog;
   /** Faz D opt-in Level gameplay markers. Omitted keeps the blockout fallback. */
   readonly level?: RtsLevelDefinition;
+  /** The path {@link level} was loaded from, published as a debugging witness. */
+  readonly levelRef?: string;
+  /**
+   * Why {@link levelRef} could not be played, when it named a Level the RTS
+   * refused. The match falls back to the blockout map and says so rather than
+   * leaving the route blank.
+   */
+  readonly levelLoadError?: string;
   /**
    * Faz E opt-in raw Level layout, carrying the authored static world (instances,
    * lights, world settings) the markers omit. Present only under the `levelAssets`
@@ -459,7 +467,14 @@ export class RtsApp {
     this.spatial = resolveRtsSpatialLayout(this.options.level);
     // Browser-visible witness of which spatial authority the match resolved:
     // the authored Level (Faz D opt-in) or the legacy rtsMapBlockout fallback.
-    this.canvas.dataset.rtsLevel = this.options.level ? "authored" : "blockout";
+    this.canvas.dataset.rtsLevel = this.options.levelLoadError
+      ? "invalid"
+      : this.options.level ? "authored" : "blockout";
+    // *Which* map, not just "a map". The editor's Play hands over the level it is
+    // editing, so being able to read back what actually opened is what turns
+    // "my edits did not show up" from a guess into a one-glance answer.
+    this.canvas.dataset.rtsLevelRef = this.options.levelRef ?? "";
+    this.canvas.dataset.rtsLevelError = this.options.levelLoadError ?? "";
     // Faz E: does the Level carry a static world to mount? Known synchronously so
     // buildScene / loadMapArt can gate the legacy ridge before the async load.
     this.authoredWorldIntended = this.options.levelLayout
@@ -825,6 +840,15 @@ export class RtsApp {
       onCameraSettings: (settings) => this.cameraController.setSettings(settings),
     });
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
+    if (this.options.levelLoadError) {
+      // On screen, not only in the console: someone who just pressed Play and got
+      // an unfamiliar map is looking at the game, and this is the answer to why.
+      this.debugOverlay?.setLevelLines([
+        `seviye REDDEDİLDİ: ${this.options.levelRef}`,
+        `  ! ${this.options.levelLoadError}`,
+        "  blokaj haritası ile devam ediliyor",
+      ]);
+    }
     if (this.options.prosperityDebugEnabled) {
       this.debugOverlay?.setProgressionLines([
         "Refah: bilgi metriği etkin; çağ ve üretim için gereksinim değildir.",
@@ -1196,7 +1220,7 @@ export class RtsApp {
     this.projectiles.update(dt);
     this.firebrands.update(dt);
     this.cannonballs.update(dt);
-    this.units.updatePresentation(this.cameraController.camera.quaternion);
+    this.units.updatePresentation(dt, this.cameraController.camera.quaternion);
     this.selectionPanel.setSelection(this.selectionView());
     // Notices expire on real seconds for the same reason a health bar animates
     // on them: at §38's 8x test speed a warning that vanished eight times faster

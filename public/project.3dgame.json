@@ -8,8 +8,8 @@
   "editor": {
     "defaultScene": "assets/ThreeAges/Levels/RTS_GameplayProof.level.json",
     "assetManifest": "assets/manifest.json",
-    "gridSize": 0.25,
-    "gridEnabled": false,
+    "gridSize": 1,
+    "gridEnabled": true,
     "snapRotationDeg": 15,
     "snapRotationEnabled": true,
     "snapScale": 0.1,

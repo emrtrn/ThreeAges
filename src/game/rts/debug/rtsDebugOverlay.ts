@@ -24,6 +24,7 @@ export class RtsDebugOverlay {
   private progressionLines: readonly string[] = [];
   private visionLines: readonly string[] = [];
   private presentationLines: readonly string[] = [];
+  private levelLines: readonly string[] = [];
   private elapsedSeconds = 0;
 
   constructor() {
@@ -46,6 +47,15 @@ export class RtsDebugOverlay {
   /** Optional, static progression diagnostics such as the Phase 6 Refah flag. */
   setProgressionLines(lines: readonly string[]): void {
     this.progressionLines = lines;
+  }
+
+  /**
+   * Why the requested Level is not the one being played. Its own block rather
+   * than a presentation line: the Actor pack reports asynchronously and would
+   * otherwise overwrite this the moment it finished loading.
+   */
+  setLevelLines(lines: readonly string[]): void {
+    this.levelLines = lines;
   }
 
   /**
@@ -143,6 +153,7 @@ export class RtsDebugOverlay {
       ...producerLinks.map((producer) => `  yapı#${producer.structureId} (${producer.resourceId}): ${producer.status}${producer.depotStructureId ? ` · depo#${producer.depotStructureId}` : ""}`),
     );
     lines.push("kaynak hareketleri:", ...(this.resourceLines.length ? this.resourceLines : ["- yok"]));
+    if (this.levelLines.length > 0) lines.push("", ...this.levelLines);
     if (this.presentationLines.length > 0) lines.push("", ...this.presentationLines);
     if (this.progressionLines.length > 0) lines.push("", ...this.progressionLines);
     if (this.visionLines.length > 0) lines.push("", ...this.visionLines);

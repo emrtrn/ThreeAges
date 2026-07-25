@@ -13,6 +13,7 @@ import { NodeIO } from "@gltf-transform/core";
 import { KHRMaterialsSpecular } from "@gltf-transform/extensions";
 import {
   BackSide,
+  Bone,
   BoxGeometry,
   DoubleSide,
   Group,
@@ -28,6 +29,8 @@ import {
   RepeatWrapping,
   SRGBColorSpace,
   Scene,
+  Skeleton,
+  SkinnedMesh,
   Texture,
   Vector2,
   Vector3,
@@ -107,6 +110,11 @@ import { RTS_WORLD_HALF_EXTENT } from "../src/game/rts/world/rtsGround";
 import { RTS_BLOCKOUT_MAP } from "../src/game/rts/world/rtsMapBlockout";
 import { adaptRtsLevel, RtsLevelError } from "../src/game/rts/world/rtsLevelAdapter";
 import { resolveRtsSpatialLayout } from "../src/game/rts/world/rtsSpatialLayout";
+import {
+  RtsLevelRefError,
+  requireRtsLevelRef,
+  resolveRtsLevelRef,
+} from "../src/game/rts/world/rtsLevelRef";
 import { levelHasAuthoredWorld } from "../src/game/rts/world/rtsAuthoredWorld";
 import {
   RTS_PLACEMENT_GRID_SIZE,
@@ -29484,6 +29492,60 @@ check("Assetization Faz D: RtsApp spatial inputs stay legacy until an authored L
   assert.throws(() => resolveRtsSpatialLayout({ ...authored, routes: new Map() }), RtsLevelError);
 });
 
+check("Play-the-level-you-edit: ?level= outranks the preset, and a bad path is refused", () => {
+  const coreMatch = "assets/ThreeAges/Levels/RTS_CoreMatch.level.json";
+  const proof = "assets/ThreeAges/Levels/RTS_GameplayProof.level.json";
+
+  // The whole point: the editor's Play passes the level it just saved, and that
+  // is what opens — even though the preset names a different map.
+  assert.equal(
+    resolveRtsLevelRef({ levelParam: coreMatch, presetLevelRef: proof, levelAssetsEnabled: false }),
+    coreMatch,
+    "an explicit ?level= wins over the preset's map",
+  );
+  // ...and without needing the flag: naming a Level *is* the opt-in. Requiring
+  // the flag here would mean a Play URL silently falling back to the preset map,
+  // which is the exact divergence this resolver removes.
+  assert.equal(
+    resolveRtsLevelRef({ levelParam: proof, levelAssetsEnabled: false }),
+    proof,
+    "?level= does not need ?flags=levelAssets",
+  );
+
+  // Without it, the preset path is unchanged: still gated by the flag.
+  assert.equal(resolveRtsLevelRef({ levelParam: null, presetLevelRef: proof, levelAssetsEnabled: true }), proof);
+  assert.equal(
+    resolveRtsLevelRef({ levelParam: null, presetLevelRef: proof, levelAssetsEnabled: false }),
+    null,
+    "the preset's map stays behind levelAssets",
+  );
+  assert.equal(resolveRtsLevelRef({ levelParam: "", presetLevelRef: proof, levelAssetsEnabled: true }), proof, "an empty ?level= is absent");
+  assert.equal(resolveRtsLevelRef({ levelParam: null, levelAssetsEnabled: true }), null, "no map at all keeps the blockout");
+
+  // A malformed path throws rather than falling through to the preset: the
+  // caller asked for one map, and quietly opening another is the bug.
+  for (const bad of [
+    "/assets/ThreeAges/Levels/RTS_CoreMatch.level.json",
+    "assets/../../etc/passwd.level.json",
+    "assets\\ThreeAges\\Levels\\RTS_CoreMatch.level.json",
+    "https://elsewhere.example/RTS_CoreMatch.level.json",
+    "assets/ThreeAges/Levels/RTS_CoreMatch.json",
+  ]) {
+    assert.throws(
+      () => resolveRtsLevelRef({ levelParam: bad, presetLevelRef: proof, levelAssetsEnabled: true }),
+      RtsLevelRefError,
+      `"${bad}" must be refused, not silently replaced by the preset map`,
+    );
+  }
+
+  // The shipped wiring: the editor's active level and the preview URL's preset
+  // agree today, and Play now carries the level explicitly either way.
+  const project = JSON.parse(readFileSync("public/project.3dgame.json", "utf8")) as {
+    editor: { defaultScene: string; previewUrl?: string };
+  };
+  assert.equal(requireRtsLevelRef(project.editor.defaultScene, "defaultScene"), project.editor.defaultScene);
+});
+
 check("Assetization Faz E: the shipped RTS Core Match Level authors a mountable static world", () => {
   const layout = JSON.parse(readFileSync("public/assets/ThreeAges/Levels/RTS_CoreMatch.level.json", "utf8")) as {
     worldSettings?: { staticObjectsCastShadow?: boolean };
@@ -29845,6 +29907,67 @@ check("Actor presentation Faz 2: a multi-mesh Actor builds every component at it
   assert.equal(ground.parent, nodeNamed("root"), "a root-parented mesh hangs off the authored root component");
   assert.equal(nodeNamed("root").parent, root);
   assert.deepEqual(ground.position.toArray(), [0, 0, 0]);
+});
+
+check("Skeletal animasyon Faz A: her instance kendi iskeletine baglanir, geometriyi paylasir", () => {
+  const def = normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_Skeletal",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "body", component: "SkeletalMeshComponent", parent: "root", props: { assetId: "guard" } },
+    ],
+  }, "BP_Skeletal");
+
+  const bone = new Bone();
+  bone.name = "guard-hips";
+  const geometry = new BoxGeometry(1, 1, 1);
+  const material = new MeshBasicMaterial();
+  const skinned = new SkinnedMesh(geometry, material);
+  skinned.name = "guard-body";
+  skinned.add(bone);
+  skinned.bind(new Skeleton([bone]));
+  const template = new Group();
+  template.name = "guard-template";
+  template.add(skinned);
+
+  const build = () => buildActorPresentationTree(def, "BP_Skeletal", () => template);
+  const instances = [build(), build()];
+  const bodies = instances.map((tree) => {
+    const found = tree.getObjectByName("guard-body");
+    assert.ok(found instanceof SkinnedMesh, "the skinned mesh survives the clone as a SkinnedMesh");
+    return found as SkinnedMesh;
+  });
+
+  // The whole point of Faz A. A plain Object3D.clone leaves every instance bound
+  // to the *template's* skeleton, whose bones live outside the scene and are
+  // never updated — the mesh then skins against stale matrices and collapses out
+  // of view, which is exactly the "health bar visible, body invisible" symptom.
+  for (const body of bodies) {
+    assert.notEqual(body.skeleton, skinned.skeleton, "no instance is left on the template's skeleton");
+  }
+  assert.notEqual(bodies[0]!.skeleton, bodies[1]!.skeleton, "two units never share one skeleton");
+  assert.notEqual(
+    bodies[0]!.skeleton.bones[0],
+    bodies[1]!.skeleton.bones[0],
+    "each instance poses its own bones",
+  );
+  for (const body of bodies) {
+    assert.equal(body.skeleton.bones.length, 1);
+    assert.equal(body.skeleton.bones[0]!.name, "guard-hips", "bones keep the names the clips bind to");
+    // Bones must be the ones inside this instance's own subtree, otherwise the
+    // rebinding is cosmetic and the mixer would still drive the template.
+    assert.equal(body.getObjectByName("guard-hips"), body.skeleton.bones[0]);
+  }
+
+  // Cloning must not duplicate GPU resources: the unit disposal path relies on
+  // instances sharing the template's geometry and material, and disposes only
+  // after detaching the presentation subtree.
+  for (const body of bodies) {
+    assert.equal(body.geometry, geometry, "instances share the template geometry");
+    assert.equal(body.material, material, "instances share the template material");
+  }
 });
 
 check("Actor presentation Faz 3: a stand-in is visibly not art, and reports as its own state", () => {

@@ -20,6 +20,38 @@ game loads the layout you just saved, so you test exactly what you authored.
 (A project can still point Play at an external runtime by setting
 `editor.previewUrl` in `public/project.3dgame.json`; absent, Play opens `/`.)
 
+Play also appends **`level=<editor.defaultScene>`** to that URL, so a runtime that
+would otherwise choose its own map opens the scene you were editing instead. The
+editor only states which level it is editing; what a game does with the parameter
+is the game's business, and a runtime free to ignore it (the character route
+does) is unaffected. A project that pins its own `level` in `editor.previewUrl`
+keeps it.
+
+### The RTS route and `?level=`
+
+`?rts` reads it (`src/game/rts/world/rtsLevelRef.ts`):
+
+- `?rts&level=<path>` plays that Level, and does **not** need
+  `?flags=levelAssets` — naming a Level explicitly is the opt-in.
+- Without it, the active preset's `levelRef` still applies, still behind
+  `?flags=levelAssets`.
+- The path must be public-root-relative and end in `.level.json`.
+
+A Level the RTS cannot play — a malformed path, or a scene with no RTS markers in
+it, which is what any half-finished map looks like — does not blank the route. It
+falls back to the code blockout map and says why: `data-rts-level="invalid"`,
+`data-rts-level-error="<reason>"` on the canvas, a console error, and a
+`seviye REDDEDİLDİ` block in the `?debug` overlay. `data-rts-level-ref` always
+names the map that was asked for, which is the quickest answer to "which map am I
+actually on".
+
+Only the seven `BP_RTS_*` marker Actors under
+`public/assets/ThreeAges/Actors/Markers/` carry gameplay meaning
+(`src/game/rts/world/rtsLevelAdapter.ts`). Building and unit *presentation*
+Actors are art the Content Catalog resolves by gameplay id; placing one in a
+Level does nothing at runtime. Static decor goes in as mesh `instances`, not as
+Actors.
+
 ## Authoring data
 
 The editor reads and writes this repo's own `public/`:

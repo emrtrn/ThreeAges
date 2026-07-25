@@ -68,6 +68,31 @@ test("Actor presentation Faz 5: a bookmark carrying the removed flag still boots
   expect(errors, "an unknown flag must not disturb the RTS match").toEqual([]);
 });
 
+test("Play the level you edit: ?level= opens that map, whatever the preset names", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  const coreMatch = "assets/ThreeAges/Levels/RTS_CoreMatch.level.json";
+  // `gameplay_proof` names RTS_GameplayProof, so if the preset were still winning
+  // this would open the wrong map — the failure the parameter exists to prevent.
+  await page.goto(`/?rts&debug&preset=gameplay_proof&level=${coreMatch}`);
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored", { timeout: 30_000 });
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-ref", coreMatch);
+
+  // No `flags=levelAssets` above: naming a Level explicitly is the opt-in. The
+  // preset's own map stays behind the flag, unchanged.
+  await page.goto("/?rts&debug&preset=gameplay_proof");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "blockout");
+
+  await page.goto(`/?rts&debug&preset=gameplay_proof&level=${coreMatch}`);
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-ref", coreMatch, { timeout: 30_000 });
+  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
+  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+
+  expect(errors, "an explicitly named Level must boot a playable match").toEqual([]);
+});
+
 test("Assetization Faz D: the opt-in authored Level drives the spatial layout of a live match", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

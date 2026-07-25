@@ -19,6 +19,7 @@ import {
 } from "@/game/core/runtimeConfig";
 import { loadAgeBalance, loadAiBalance, loadBuildingBalance, loadGamePreset, loadResourceBalance, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
 import { loadRtsContentCatalog } from "@/game/rts/content/rtsContentLoader";
+import { resolveRtsLevelRef } from "@/game/rts/world/rtsLevelRef";
 import type { GamePreset } from "@/game/data/gameDataTypes";
 
 function requireElement<T extends HTMLElement>(id: string): T {
@@ -115,19 +116,48 @@ async function main(): Promise<void> {
     // mapping from gameplay ids to art, and there is no second art path left to
     // quietly fall back to — a match booted without it would be an art-less match.
     const contentCatalog = await loadRtsContentCatalog(unitBalance, buildingBalance);
-    const authoredLevel = levelAssetsEnabled && preset?.levelRef
-      ? await (await import("@/game/rts/world/rtsLevelLoader")).loadRtsLevel(
-        preset.levelRef,
-        { buildings: buildingBalance, resources: resourceBalance },
-      )
-      : undefined;
+    // `?level=` (what the editor's Play button passes) outranks the preset's map,
+    // so the level being edited is the level that opens. See `rtsLevelRef.ts`.
+    //
+    // Neither a malformed path nor a scene without RTS markers may leave a blank
+    // page. Play opens whatever is being edited, and mid-edit that scene can be
+    // missing a Kingdom Start or simply not be an RTS map at all — an ordinary
+    // authoring state, not a crash. Refuse it, say why, and open the blockout map
+    // so the round trip still lands somewhere playable. Silence is the one
+    // unacceptable outcome: the whole point of `?level=` is that you can tell
+    // which map you are on.
+    const levelParam = params.get("level");
+    let levelRef: string | null = null;
+    let authoredLevel: Awaited<ReturnType<typeof import("@/game/rts/world/rtsLevelLoader")["loadRtsLevel"]>> | undefined;
+    let levelLoadError: string | undefined;
+    try {
+      levelRef = resolveRtsLevelRef({
+        levelParam,
+        presetLevelRef: preset?.levelRef,
+        levelAssetsEnabled,
+      });
+      if (levelRef) {
+        authoredLevel = await (await import("@/game/rts/world/rtsLevelLoader")).loadRtsLevel(
+          levelRef,
+          { buildings: buildingBalance, resources: resourceBalance },
+        );
+      }
+    } catch (error) {
+      levelLoadError = error instanceof Error ? error.message : String(error);
+      // Name the value that was asked for, even when it never became a valid ref.
+      levelRef = levelRef ?? levelParam;
+      logger("System").error(`RTS Level "${levelRef}" could not be played`, error);
+    }
     const rts = new RtsApp(canvas, {
       debug: params.has("debug"),
       prosperityDebugEnabled,
       regionalVictoryEnabled,
       fogOfWarEnabled,
       contentCatalog,
-      ...(authoredLevel ? { level: authoredLevel.definition, levelLayout: authoredLevel.layout } : {}),
+      ...(authoredLevel && levelRef
+        ? { level: authoredLevel.definition, levelLayout: authoredLevel.layout, levelRef }
+        : {}),
+      ...(levelLoadError ? { levelRef: levelRef ?? "", levelLoadError } : {}),
       unitBalance,
       buildingBalance,
       resourceBalance,
