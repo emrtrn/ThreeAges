@@ -202,7 +202,7 @@ import { retaliateAgainstAttack, updateUnitEngagement } from "../src/game/rts/co
 import { resolveDamage } from "../src/game/rts/combat/damageResolution";
 import { ProjectileSystem } from "../src/game/rts/combat/projectileSystem";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
-import type { CombatTarget } from "../src/game/rts/combat/combatTarget";
+import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
 import type { UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import { Unit } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
@@ -1188,22 +1188,25 @@ const RTS_TEST_ARCHER_STATS = {
 
 const RTS_TEST_SIEGE_STATS = {
   ...RTS_TEST_UNIT_STATS,
-  label: "Test Koçbaşı",
+  label: "Test Topçu",
   role: "siege",
   armorClass: "heavy",
-  maxHealth: 200,
-  moveSpeed: 4,
-  attackDamage: 28,
-  attackCooldown: 4,
-  attackRange: 2.6,
-  acquisitionRange: 7,
-  chaseRange: 8,
+  maxHealth: 180,
+  moveSpeed: 3.8,
+  attackType: "ranged",
+  attackDamage: 34,
+  attackCooldown: 5.5,
+  attackRange: 15,
+  acquisitionRange: 15,
+  chaseRange: 15,
+  visionRadius: 16,
   damageMultipliers: { light: 0.35, heavy: 0.3, structure: 2.5 },
   productionBuildingId: "barracks",
   requiredAge: "town",
   requiredSettlementLevel: 2,
   cost: { wood: 140 },
   populationCost: 3,
+  structureAttackVfx: "cannonball",
 } as const satisfies UnitBalanceStats;
 
 const RTS_TEST_UNIT_BALANCE: UnitBalance = {
@@ -28740,9 +28743,17 @@ check("unit balance validates combat stats for stable unit ids", () => {
   assert.equal(balance["guard_placeholder"]?.role, "guard");
   assert.equal(balance["archer_placeholder"]?.attackType, "ranged");
   assert.equal(balance["siege_placeholder"]?.role, "siege");
+  // The siege line is a gun, not a battering ram: it throws its shot, and it throws it
+  // from further out than the Archer walking beside it.
+  assert.equal(balance["siege_placeholder"]?.attackType, "ranged");
+  assert.equal(balance["siege_placeholder"]?.structureAttackVfx, "cannonball");
+  assert.ok(
+    balance["siege_placeholder"]!.attackRange > balance["archer_placeholder"]!.attackRange,
+    "the gun opens fire from behind the line that escorts it",
+  );
   assert.deepEqual(balance["worker_placeholder"]?.cost, { food: 50 });
 
-  // The Archer opens from a Town-age Range; only the Ram needs Barracks II.
+  // The Archer opens from a Town-age Range; only the artillery needs Barracks II.
   assert.equal(balance["guard_placeholder"]?.requiredSettlementLevel, 1);
   assert.equal(balance["archer_placeholder"]?.requiredSettlementLevel, 1);
   assert.equal(balance["siege_placeholder"]?.requiredSettlementLevel, 2);
@@ -28824,6 +28835,28 @@ check("unit balance validates combat stats for stable unit ids", () => {
     "a unit that sees less far than it shoots could never open fire",
   );
   assert.throws(() => validateUnitBalance({ "Guard Placeholder": RTS_TEST_UNIT_STATS }), GameDataError);
+});
+
+check("the Topçu shells a defended building from outside the building's own reach", () => {
+  // This is the whole point of trading the old battering ram for a gun: siege
+  // that has to walk into a Karakol's arrows is siege the defender answers for
+  // free. If a retune ever puts the tower's range above the gun's, the unit is
+  // a ram again with extra steps — so the relationship, not either number, is
+  // the contract.
+  const units = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const defenceRanges = Object.values(buildings)
+    .map((building) => building.defense?.attackRange ?? 0);
+  const longestDefence = Math.max(...defenceRanges);
+  assert.ok(longestDefence > 0, "at least one building shoots back, or this proves nothing");
+  assert.ok(
+    units["siege_placeholder"]!.attackRange > longestDefence,
+    `the gun (${units["siege_placeholder"]!.attackRange}) must outrange the longest building defence (${longestDefence})`,
+  );
 });
 
 check("building balance validates grid-aligned Phase 2 footprints", () => {
@@ -30632,7 +30665,7 @@ check("Faz 7 soft counters make each role the answer to a different target", () 
   const units = new UnitSystem();
   const guard = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
   const archer = units.spawn("player", 0, 0, RTS_TEST_ARCHER_STATS);
-  const ram = units.spawn("player", 0, 0, RTS_TEST_SIEGE_STATS);
+  const gun = units.spawn("player", 0, 0, RTS_TEST_SIEGE_STATS);
   const lightEnemy = units.spawn("enemy", 0, 0, RTS_TEST_ARCHER_STATS);
   const heavyEnemy = units.spawn("enemy", 0, 0, RTS_TEST_UNIT_STATS);
   const wall: CombatTarget = {
@@ -30649,12 +30682,12 @@ check("Faz 7 soft counters make each role the answer to a different target", () 
     "the Guard, not the Archer, is what answers a heavy front line",
   );
   assert.ok(
-    resolveDamage(ram.stats, wall) > resolveDamage(guard.stats, wall) * 4,
+    resolveDamage(gun.stats, wall) > resolveDamage(guard.stats, wall) * 4,
     "plan §46: siege is necessary against buildings",
   );
   assert.ok(
-    resolveDamage(ram.stats, lightEnemy) < resolveDamage(archer.stats, lightEnemy)
-      && resolveDamage(ram.stats, heavyEnemy) < resolveDamage(guard.stats, heavyEnemy),
+    resolveDamage(gun.stats, lightEnemy) < resolveDamage(archer.stats, lightEnemy)
+      && resolveDamage(gun.stats, heavyEnemy) < resolveDamage(guard.stats, heavyEnemy),
     "plan §46: siege is weak against units and must be escorted",
   );
 
@@ -30716,6 +30749,64 @@ check("Faz 7 idle units acquire the nearest enemy and prefer troops over buildin
   raider.health.damage(raider.health.max);
   updateUnitEngagement(units.all(), { navigation, targets });
   assert.equal(defender.attackTarget, wall, "with the troops gone the building becomes the target");
+});
+
+check("the Topçu inverts that preference and shells the building instead", () => {
+  // §33 gives the gun 2.50 against masonry and 0.35 against a person, so the
+  // troops-first rule every other role follows would have it spend its whole
+  // reload on the target it cannot hurt. Answering the soldier is the escort's
+  // job — this is the one role that keeps firing at the wall.
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const gun = units.spawn("player", 0, 0, RTS_TEST_SIEGE_STATS);
+  const raider = units.spawn("enemy", 3, 0, RTS_TEST_UNIT_STATS);
+  const wall: CombatTarget = {
+    owner: "enemy",
+    position: new Vector3(9, 0, 0),
+    health: new HealthComponent(500),
+    armorClass: "structure",
+  };
+  const targets = [gun, raider, wall];
+
+  updateUnitEngagement([gun], { navigation, targets });
+  assert.equal(gun.attackTarget, wall, "the further building outranks the closer soldier");
+
+  // And with nothing left to besiege it does not simply stand there.
+  wall.health.damage(wall.health.max);
+  gun.setAttackTarget(null);
+  updateUnitEngagement([gun], { navigation, targets });
+  assert.equal(gun.attackTarget, raider, "with no building in reach it answers the troops");
+});
+
+check("a blocked firing position closes in instead of leaving the gun standing still", () => {
+  const navigation = new RtsNavigation();
+  const range = RTS_TEST_SIEGE_STATS.attackRange;
+  const keep: CombatTarget = {
+    owner: "enemy",
+    position: new Vector3(0, 0, 0),
+    health: new HealthComponent(800),
+    armorClass: "structure",
+    combatRadius: 3,
+  };
+  const start = new Vector3(0, 0, -25);
+
+  // Clear ground: the gun stands off as far as its range allows.
+  const open = navigation.planAttack(start, keep, range) ?? assert.fail("open ground path missing");
+  const openEnd = open[open.length - 1] ?? assert.fail("empty path");
+  assert.ok(combatDistance(openEnd, keep) <= range, "the firing point is in range");
+  assert.ok(combatDistance(openEnd, keep) > range * 0.7, "and it is not walked up to needlessly");
+
+  // A band of woods across the far firing ring. The gun has to give up some
+  // stand-off rather than the shot: siege that refuses to move is siege the
+  // player watches do nothing.
+  navigation.setBlockers([{ min: [-6, -1, -19], max: [6, 4, -13] }]);
+  const blocked = navigation.planAttack(start, keep, range) ?? assert.fail("blocked ring gave up");
+  const blockedEnd = blocked[blocked.length - 1] ?? assert.fail("empty path");
+  assert.ok(combatDistance(blockedEnd, keep) <= range, "the fallback position can still fire");
+  assert.ok(
+    navigation.isWalkable(blockedEnd.x, blockedEnd.z),
+    "and it is ground the gun may actually stand on",
+  );
 });
 
 check("Faz 7 a plain Move is not derailed, but an attack-move stops and resumes", () => {
@@ -30833,7 +30924,7 @@ check("Faz 7 Hold Position fires without stepping off its ground", () => {
 
 check("Faz 7 the AI reads Archers and Rams as army, not as nothing", () => {
   // Regression: `role === "guard"` meant "every combat unit" only while Guard
-  // and worker were the only roles. Once Faz 7 shipped the Archer and the Ram,
+  // and worker were the only roles. Once Faz 7 shipped the Archer and the Topçu,
   // any surviving Guard-only filter made a whole army invisible to the AI.
   const units = new UnitSystem();
   units.spawn("enemy", 0, 0, RTS_TEST_ARCHER_STATS);
@@ -30855,7 +30946,7 @@ check("Faz 7 the AI reads Archers and Rams as army, not as nothing", () => {
  * A corridor is two blockers with a gap between them. The gap is quoted as its
  * clear width, which is what the plan's "geçit minimum genişliği" is about: the
  * grid erodes each wall by the agent radius, so a 3-unit gap is a comfortable
- * lane for a 0.5-radius Guard and refuses a 0.75-radius Ram outright.
+ * lane for a 0.5-radius Guard and refuses a 0.75-radius Topçu outright.
  *
  * The walls run past the world bounds on purpose: a wall that stops short of the
  * map edge is not a corridor at all, it is a detour, and the pathfinder will
@@ -31016,22 +31107,22 @@ check("Faz 7 two squads meeting head-on in a bridge do not deadlock", () => {
   );
 });
 
-check("Faz 7 the wide Ram crosses a corridor with its escort without being swallowed by it", () => {
+check("Faz 7 the wide Topçu crosses a corridor with its escort without being swallowed by it", () => {
   const units = new UnitSystem();
   const navigation = new RtsNavigation();
   navigation.setBlockers(corridorBlockers(4));
 
-  // The Ram is the largest body the roster fields. A siege line is escorted
-  // (§46: siege is weak against units), so the case that matters is the Ram
-  // inside a crowd of Guards, in a gap, not the Ram alone on open ground.
-  const ram = units.spawn("player", 0, 8, RTS_TEST_SIEGE_STATS);
+  // The Topçu is the largest body the roster fields. A siege line is escorted
+  // (§46: siege is weak against units), so the case that matters is the gun
+  // inside a crowd of Guards, in a gap, not the gun alone on open ground.
+  const gun = units.spawn("player", 0, 8, RTS_TEST_SIEGE_STATS);
   const escort: Unit[] = [];
   for (let i = 0; i < 8; i += 1) {
     escort.push(units.spawn("player", -3 + (i % 4) * 2, 11 + Math.floor(i / 4) * 2, RTS_TEST_UNIT_STATS));
   }
-  const squad = [ram, ...escort];
+  const squad = [gun, ...escort];
   assert.ok(
-    escort.every((guard) => ram.navRadius > guard.navRadius),
+    escort.every((guard) => gun.navRadius > guard.navRadius),
     "the siege body is wider than the infantry it travels with",
   );
 
@@ -31040,16 +31131,16 @@ check("Faz 7 the wide Ram crosses a corridor with its escort without being swall
     unit.setMovePath(path ?? []);
   }
   simulateSquad(squad, navigation, 40);
-  assert.ok(squad.every((unit) => unit.position.z < -4), "the whole squad, Ram included, is through");
+  assert.ok(squad.every((unit) => unit.position.z < -4), "the whole squad, gun included, is through");
   assert.ok(squad.every((unit) => unit.pathTarget === null), "and nobody is left grinding on an order");
 
-  // The width has to buy the Ram real ground: the crowd keeps its distance from
+  // The width has to buy the gun real ground: the crowd keeps its distance from
   // the wide body, which is the one place the roster's radii are expressible.
   for (const guard of escort) {
-    const gap = Math.hypot(ram.position.x - guard.position.x, ram.position.z - guard.position.z);
+    const gap = Math.hypot(gun.position.x - guard.position.x, gun.position.z - guard.position.z);
     assert.ok(
-      gap > ram.navRadius,
-      `Guard ${guard.id} is standing inside the Ram (${gap.toFixed(2)} < ${ram.navRadius})`,
+      gap > gun.navRadius,
+      `Guard ${guard.id} is standing inside the gun (${gap.toFixed(2)} < ${gun.navRadius})`,
     );
   }
 });
@@ -32236,7 +32327,18 @@ check("RTS worker production queues paid worker orders by command-centre age cap
   for (let index = 0; index < 5; index += 1) {
     assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
   }
-  assert.equal(units.workersOf("player").length, 5);
+  const producedWorkers = units.workersOf("player");
+  assert.equal(producedWorkers.length, 5);
+  for (const worker of producedWorkers) {
+    for (const other of producedWorkers) {
+      if (worker === other) continue;
+      const distance = worker.position.distanceTo(other.position);
+      assert.ok(
+        distance >= worker.navRadius + other.navRadius,
+        "each new worker chooses an exit clear of workers already waiting at the centre",
+      );
+    }
+  }
   assert.equal(production.queuedCount("player"), 0);
   assert.deepEqual(population.snapshot(), { current: 5, reserved: 0, capacity: 25, used: 5 });
 
@@ -33662,7 +33764,7 @@ check("Faz 8 §53: the AI researches Barracks II and fields a mixed army", () =>
   const board = world.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
 
   // §53's ratio has been data since Faz 7, but it could never be honoured: the
-  // Archer and the Ram sit behind `requiredSettlementLevel: 2`, and nothing in the
+  // Archer and the Topçu sit behind `requiredSettlementLevel: 2`, and nothing in the
   // AI could research the tier. It fielded Guards and only Guards, whatever the
   // ratio asked for — the "AI karışık ordu üretiyor" criterion failed on a
   // missing executor rather than on a scoring rule.
@@ -33683,10 +33785,10 @@ check("Faz 8 §53: the AI researches Barracks II and fields a mixed army", () =>
     "the AI's progression is its own; the player's kingdom is untouched",
   );
 
-  // Known gap, recorded rather than asserted: the Ram is the one role §53 asks
+  // Known gap, recorded rather than asserted: the Topçu is the one role §53 asks
   // for that this map cannot fund. The two safe deposits hold 300 stone / 200
   // gold, and the Town age (150) plus the Barracks tier (80) spend almost all of
-  // the stone before a single 100-stone Ram is affordable. §53's siege share
+  // the stone before a single 100-stone gun is affordable. §53's siege share
   // needs the *external* deposits, and this map authors both of them on the
   // player's half — so "AI yapı hedefleri için kuşatma kullanıyor" is blocked on
   // the map's resource layout, not on anything in the AI.

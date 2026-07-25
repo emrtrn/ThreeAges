@@ -8,12 +8,13 @@
  * a thin data+render holder, not a mega-object (plan §14).
  *
  * Faz 7 made the silhouette, speed, armour class and counters data-owned: a
- * Guard, an Archer and a Ram are the same class with different `stats`.
+ * Guard, an Archer and a Topçu are the same class with different `stats`.
  */
 import {
   BoxGeometry,
   CapsuleGeometry,
   Color,
+  CylinderGeometry,
   Group,
   Mesh,
   MeshStandardMaterial,
@@ -62,15 +63,31 @@ export const WORKER_RETURN_DELAY_SECONDS = 3;
 
 /**
  * Per-role silhouette. GDD 06 §3.4 asks that a role be readable before its UI
- * is: the Archer is slighter than the Guard, and the Ram is an unmistakable
- * low box rather than a person.
+ * is: the Archer is slighter than the Guard, and the Topçu is unmistakably a
+ * wheeled gun rather than a person.
  */
-const ROLE_BODY: Record<UnitRoleId, { readonly radius: number; readonly length: number; readonly box?: boolean }> = {
+const ROLE_BODY: Record<UnitRoleId, {
+  readonly radius: number;
+  readonly length: number;
+  readonly box?: boolean;
+  /** Built as a wheeled gun — a carriage with a barrel — instead of one body. */
+  readonly gun?: boolean;
+}> = {
   guard: { radius: UNIT_RADIUS, length: 1.0 },
   archer: { radius: UNIT_RADIUS * 0.78, length: 1.15 },
-  siege: { radius: UNIT_RADIUS * 1.5, length: 0.9, box: true },
+  siege: { radius: UNIT_RADIUS * 1.5, length: 0.9, box: true, gun: true },
   worker: { radius: UNIT_RADIUS * 0.85, length: 0.8 },
 };
+
+/** Dark iron for a gun barrel; the carriage stays in team colour. */
+const GUN_BARREL_COLOR = "#2f3438";
+const GUN_WHEEL_COLOR = "#6b4a2c";
+/**
+ * How far the muzzle is raised above level, in radians. A gun that lobs its
+ * shot has to look like one while it stands still, which is the state the
+ * player mostly sees a siege line in.
+ */
+const GUN_ELEVATION = 0.34;
 
 let nextUnitId = 1;
 
@@ -84,7 +101,7 @@ export class Unit {
   /**
    * Ground footprint radius, used both to plan on a grid the body actually fits
    * and to keep the crowd from standing inside itself. It follows the silhouette:
-   * the Ram is genuinely wider than the Archer, so it navigates as a wider agent.
+   * the Topçu is genuinely wider than the Archer, so it navigates as a wider agent.
    */
   readonly navRadius: number;
   /** {@link CombatTarget}: which §33 column attackers resolve against. */
@@ -455,6 +472,22 @@ export class Unit {
   }
 
   /**
+   * Turn to face a point on the ground, without touching any order.
+   *
+   * `unitMovement` already faces the heading while a unit walks; this is the
+   * standing case, which only mattered once a unit's silhouette had a front. A
+   * gun that shells a wall while pointing somewhere else reads as broken, and an
+   * Archer loosing arrows over its shoulder reads no better.
+   */
+  faceTowards(x: number, z: number): void {
+    const dx = x - this.object.position.x;
+    const dz = z - this.object.position.z;
+    // Standing exactly on the target leaves no heading to take; keep the last one.
+    if (dx * dx + dz * dz < 1e-6) return;
+    this.object.rotation.y = Math.atan2(dx, dz);
+  }
+
+  /**
    * Distance from where an auto-acquired chase began, or 0 when this unit is not
    * on a leashed chase. The combat system compares it to `attack.chaseRange`.
    */
@@ -519,8 +552,43 @@ export class Unit {
     body.castShadow = true;
     body.userData.unitId = this.id;
     this.fallbackBody = body;
-    this.pickTargets = [body];
+    this.pickTargets = shape.gun ? [body, this.addGunParts(body, shape)] : [body];
     this.object.add(body);
+  }
+
+  /**
+   * Turn the plain siege box into a wheeled gun: a barrel raised over the
+   * carriage and two wheels under it. Everything hangs off the carriage mesh, so
+   * the existing single-`fallbackBody` lifecycle still owns all of it — and the
+   * barrel is returned because a click on it must select the gun too.
+   *
+   * The barrel points +Z, which is the heading `unitMovement` and
+   * {@link faceTowards} rotate the unit to, so it aims where the gun is aiming.
+   */
+  private addGunParts(carriage: Mesh, shape: { readonly radius: number; readonly length: number }): Mesh {
+    const barrel = new Mesh(
+      new CylinderGeometry(shape.radius * 0.3, shape.radius * 0.38, shape.radius * 2.8, 8),
+      new MeshStandardMaterial({ color: new Color(GUN_BARREL_COLOR), roughness: 0.4, metalness: 0.55 }),
+    );
+    // A cylinder is built along +Y; a quarter turn lays it along +Z, and taking
+    // the elevation back off that raises the muzzle.
+    barrel.rotation.x = Math.PI / 2 - GUN_ELEVATION;
+    barrel.position.set(0, shape.length * 0.45, shape.radius * 0.35);
+    barrel.castShadow = true;
+    barrel.userData.unitId = this.id;
+    carriage.add(barrel);
+
+    const wheelGeometry = new CylinderGeometry(shape.radius * 0.45, shape.radius * 0.45, shape.radius * 0.28, 10);
+    const wheelMaterial = new MeshStandardMaterial({ color: new Color(GUN_WHEEL_COLOR), roughness: 0.8 });
+    for (const side of [-1, 1]) {
+      const wheel = new Mesh(wheelGeometry, wheelMaterial);
+      // Lay each wheel on its side so it rolls along the gun's heading.
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(side * shape.radius * 0.95, -shape.length * 0.12, 0);
+      wheel.castShadow = true;
+      carriage.add(wheel);
+    }
+    return barrel;
   }
 
   private disposePresentation(): void {
@@ -529,12 +597,16 @@ export class Unit {
       this.presentation = null;
     }
     if (this.fallbackBody) {
-      this.fallbackBody.removeFromParent();
-      this.fallbackBody.geometry.dispose();
-      const materials = Array.isArray(this.fallbackBody.material)
-        ? this.fallbackBody.material
-        : [this.fallbackBody.material];
-      for (const material of materials) material.dispose();
+      const body = this.fallbackBody;
+      body.removeFromParent();
+      // Traversed rather than disposed directly: a gun's barrel and wheels are
+      // children of the carriage, and they own geometries of their own.
+      body.traverse((child) => {
+        if (!(child instanceof Mesh)) return;
+        child.geometry.dispose();
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        for (const material of materials) material.dispose();
+      });
       this.fallbackBody = null;
     }
     this.pickTargets = [];

@@ -47,6 +47,7 @@ import type {
   UnitBalance,
   UnitDamageMultipliers,
   UnitRoleId,
+  UnitStructureAttackVfx,
   UiAssetPath,
 } from "./gameDataTypes";
 
@@ -259,6 +260,7 @@ export function validateGamePreset(
 
 const UNIT_ROLES: readonly UnitRoleId[] = ["guard", "archer", "siege", "worker"];
 const UNIT_ATTACK_TYPES: readonly UnitAttackType[] = ["melee", "ranged"];
+const UNIT_STRUCTURE_ATTACK_VFX: readonly UnitStructureAttackVfx[] = ["firebrand", "cannonball"];
 const UNIT_ARMOR_CLASSES: readonly UnitArmorClass[] = ["light", "heavy", "structure"];
 /** A unit's own armour is what attackers hit; only buildings are "structure". */
 const UNIT_SELF_ARMOR_CLASSES: readonly UnitArmorClass[] = ["light", "heavy"];
@@ -381,6 +383,15 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     }
     const icon = optionalUiAssetPath(stats, "icon", statsWhere);
     const portrait = optionalUiAssetPath(stats, "portrait", statsWhere);
+    const structureAttackVfx = stats["structureAttackVfx"];
+    if (
+      structureAttackVfx !== undefined
+      && !UNIT_STRUCTURE_ATTACK_VFX.includes(structureAttackVfx as UnitStructureAttackVfx)
+    ) {
+      throw new GameDataError(
+        `${statsWhere}.structureAttackVfx: must be one of ${UNIT_STRUCTURE_ATTACK_VFX.join(", ")}`,
+      );
+    }
     units[id] = {
       label: requireString(stats, "label", statsWhere),
       ...(icon ? { icon } : {}),
@@ -406,6 +417,7 @@ export function validateUnitBalance(value: unknown): UnitBalance {
       requiredSettlementLevel,
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
       populationCost,
+      ...(structureAttackVfx ? { structureAttackVfx: structureAttackVfx as UnitStructureAttackVfx } : {}),
     };
   }
   if (Object.keys(units).length === 0) {

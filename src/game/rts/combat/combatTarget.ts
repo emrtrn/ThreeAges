@@ -1,5 +1,5 @@
 /** Shared combat-facing contract for RTS units and damageable structures. */
-import type { Vector3 } from "three";
+import { Vector3 } from "three";
 
 import type { UnitArmorClass } from "../../data/gameDataTypes";
 import type { HealthComponent } from "../units/health";
@@ -27,4 +27,46 @@ export interface CombatTarget {
 export function combatDistance(position: Vector3, target: CombatTarget): number {
   return Math.max(0, Math.hypot(position.x - target.position.x, position.z - target.position.z)
     - (target.combatRadius ?? 0));
+}
+
+/**
+ * Height a thrown effect lands at on a building. The balance data carries no
+ * model height, so this is a wall-ish constant rather than a per-building
+ * lookup: it only has to read as "against the structure", and a footprint-
+ * derived guess would still be wrong for every model with a tower.
+ */
+const STRUCTURE_IMPACT_HEIGHT = 1.7;
+
+/**
+ * Where a thrown effect should hit `target`, seen from `from`: the point on the
+ * near edge the attacker is standing at, not the target's pivot. Aiming at the
+ * pivot would send a torch *through* a large building to land in its middle.
+ */
+export function structureImpactPoint(from: Vector3, target: CombatTarget): Vector3 {
+  const point = new Vector3(target.position.x, target.position.y + STRUCTURE_IMPACT_HEIGHT, target.position.z);
+  const radius = target.combatRadius ?? 0;
+  if (radius <= 0) return point;
+  const dx = from.x - target.position.x;
+  const dz = from.z - target.position.z;
+  const length = Math.hypot(dx, dz);
+  // Directly on top of the pivot there is no near edge to pick; the pivot is
+  // then as good an aim point as any.
+  if (length < 1e-4) return point;
+  point.x += (dx / length) * radius;
+  point.z += (dz / length) * radius;
+  return point;
+}
+
+/** Height a shot lands at on a person — chest height on the placeholder bodies. */
+const UNIT_IMPACT_HEIGHT = 0.9;
+
+/**
+ * Where a lobbed shot should hit `target`, whichever class it is: the near edge
+ * of a building (see {@link structureImpactPoint}) or the body of a unit. An
+ * artillery piece fires the same ball at both, so it needs one aim point that
+ * answers for both rather than a caller-side branch on armour class.
+ */
+export function combatImpactPoint(from: Vector3, target: CombatTarget): Vector3 {
+  if (target.armorClass === "structure") return structureImpactPoint(from, target);
+  return new Vector3(target.position.x, target.position.y + UNIT_IMPACT_HEIGHT, target.position.z);
 }

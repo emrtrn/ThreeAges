@@ -27,7 +27,8 @@
       "food": 60,
       "wood": 20
     },
-    "populationCost": 1
+    "populationCost": 1,
+    "structureAttackVfx": "firebrand"
   },
   "archer_placeholder": {
     "label": "Okçu",
@@ -60,26 +61,26 @@
     "populationCost": 1
   },
   "siege_placeholder": {
-    "label": "Koçbaşı",
+    "label": "Topçu",
     "icon": "/assets/ui/icons/unit-siege.svg",
     "portrait": "/assets/ui/portraits/unit.svg",
     "role": "siege",
     "armorClass": "heavy",
-    "maxHealth": 220,
-    "moveSpeed": 4.2,
-    "attackType": "melee",
-    "attackDamage": 28,
-    "attackCooldown": 4,
-    "attackRange": 2.6,
-    "acquisitionRange": 7,
-    "chaseRange": 8,
-    "visionRadius": 9,
+    "maxHealth": 180,
+    "moveSpeed": 3.8,
+    "attackType": "ranged",
+    "attackDamage": 34,
+    "attackCooldown": 5.5,
+    "attackRange": 15,
+    "acquisitionRange": 15,
+    "chaseRange": 15,
+    "visionRadius": 16,
     "damageMultipliers": {
       "light": 0.35,
       "heavy": 0.3,
       "structure": 2.5
     },
-    "trainingSeconds": 75,
+    "trainingSeconds": 80,
     "productionBuildingId": "barracks",
     "requiredAge": "town",
     "requiredSettlementLevel": 2,
@@ -88,7 +89,8 @@
       "stone": 100,
       "gold": 60
     },
-    "populationCost": 3
+    "populationCost": 3,
+    "structureAttackVfx": "cannonball"
   },
   "worker_placeholder": {
     "label": "İşçi",

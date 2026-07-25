@@ -3,7 +3,7 @@
  * ("Muhafız / Okçu / Kuşatma oranı") and the centre-led progression plan §4.
  *
  * §53's composition ratio was data long before the AI could honour it: the Archer
- * and the Ram sit behind a global centre tier (`requiredSettlementLevel`), so a
+ * and the Topçu sit behind a global centre tier (`requiredSettlementLevel`), so a
  * kingdom that has not levelled its centre can only ever field Guards no matter
  * what the ratio asks for.
  *

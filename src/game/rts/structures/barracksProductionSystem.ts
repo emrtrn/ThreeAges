@@ -3,7 +3,7 @@
  *
  * A military building trains only the units its data assigns to that building,
  * sequentially, and places each on a navigable exit outside the footprint. The
- * Archer belongs to the Town-age Range; the Ram remains at Barracks II. Paid
+ * Archer belongs to the Town-age Range; the Topçu remains at Barracks II. Paid
  * orders follow the building-level 5 / 10 / 20 queue progression.
  */
 import { Vector3 } from "three";
@@ -209,7 +209,7 @@ export class BarracksProductionSystem {
   /**
    * Population the paid, not-yet-spawned orders of this kingdom already hold.
    *
-   * A head count cannot stand in for this: a Ram costs three. Any caller
+   * A head count cannot stand in for this: a Topçu costs three. Any caller
    * budgeting an army has to read what the queue has *committed* to, not only
    * what has walked out of the door — otherwise a full queue silently overshoots
    * the budget by everything still in it.

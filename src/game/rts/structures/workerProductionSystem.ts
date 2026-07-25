@@ -6,7 +6,7 @@ import type { PopulationReservation } from "../economy/populationSystem";
 import type { ResourceReservation } from "../economy/resourceWallet";
 import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
-import type { UnitOwner } from "../units/unit";
+import { UNIT_RADIUS, type UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { CommandCenter } from "./commandCenter";
 import type { CommandCenterSystem } from "./commandCenterSystem";
@@ -51,6 +51,16 @@ export function workerQueueCapacityForCenterLevel(level: number): number {
 
 const EXIT_GAP = 1.3;
 const CENTER_HALF_FOOTPRINT = 3.5;
+/** Workers are smaller than the common Guard-sized {@link UNIT_RADIUS} body. */
+const WORKER_NAV_RADIUS = UNIT_RADIUS * 0.85;
+/** Keep a visible gap so a fresh worker does not immediately re-enter a crowd. */
+const EXIT_UNIT_CLEARANCE = 0.15;
+/**
+ * The first ring puts one worker on each side of the centre. Further rings only
+ * come into play when every nearer exit is occupied, so a long queue spreads
+ * around the building instead of repeatedly spawning at its eastern door.
+ */
+const EXIT_RING_OFFSETS = [0, 1.5, 3] as const;
 
 export class WorkerProductionSystem {
   private readonly queues = new Map<UnitOwner, WorkerQueue>();
@@ -165,12 +175,28 @@ export class WorkerProductionSystem {
 
   private findSafeExit(center: CommandCenter): Vector3 | null {
     const { x, z } = center.position;
-    const candidates = [
-      new Vector3(x + CENTER_HALF_FOOTPRINT + EXIT_GAP, 0, z),
-      new Vector3(x - CENTER_HALF_FOOTPRINT - EXIT_GAP, 0, z),
-      new Vector3(x, 0, z + CENTER_HALF_FOOTPRINT + EXIT_GAP),
-      new Vector3(x, 0, z - CENTER_HALF_FOOTPRINT - EXIT_GAP),
-    ];
-    return candidates.find((point) => this.navigation.plan(point, point) !== null) ?? null;
+    for (const extraDistance of EXIT_RING_OFFSETS) {
+      const distance = CENTER_HALF_FOOTPRINT + EXIT_GAP + extraDistance;
+      const candidates = [
+        new Vector3(x + distance, 0, z),
+        new Vector3(x - distance, 0, z),
+        new Vector3(x, 0, z + distance),
+        new Vector3(x, 0, z - distance),
+      ];
+      const exit = candidates.find((point) =>
+        this.navigation.plan(point, point) !== null && this.isClearOfUnits(point),
+      );
+      if (exit) return exit;
+    }
+    return null;
+  }
+
+  /** A spawn point must be clear of every live body, not merely static terrain. */
+  private isClearOfUnits(point: Vector3): boolean {
+    return this.units.all().every((unit) => {
+      if (unit.health.depleted || unit.dying) return true;
+      const requiredDistance = WORKER_NAV_RADIUS + unit.navRadius + EXIT_UNIT_CLEARANCE;
+      return point.distanceToSquared(unit.position) >= requiredDistance * requiredDistance;
+    });
   }
 }

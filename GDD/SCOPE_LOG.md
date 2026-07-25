@@ -141,6 +141,30 @@ Format:
   `02 §24/§25/§30`, `04 §31`, `11 §7/§10/§83`, `12 §26/§29/§38`,
   `13 §42/§53/§55/§64`.
 
+### SL-008 — Kuşatma birimi koçbaşı yerine menzilli topçu (2026-07-25)
+
+- **Karar:** `06 §110`'daki "koçbaşı mı, mancınık mı" açık sorusu **topçu**
+  lehine kapatıldı. `siege_placeholder` artık menzilli (`attackType: "ranged"`,
+  menzil 15) ve gülleyi lob ederek atıyor; kimliği (yapıya 2.50, birime 0.35) ve
+  kapısı (Kasaba + Kışla Lv2, 3 nüfus) değişmedi.
+- **Kapsam etkisi:** Dahil (aynı birim yuvası, aynı veri sözleşmesi; melee →
+  ranged bir denge + sunum değişikliği).
+- **Gerekçe:** Koçbaşı kuşatmayı bir *yürüme* problemine çeviriyordu: duvara
+  temas etmek zorunda olduğu için Karakol'un 12 menzilli okları bedava cevap
+  oluyor, oyuncunun tek kararı "koru ve yürü" kalıyordu. 15 menzilli topçu
+  savunmanın dışından ateş ederek kararı **konumlandırmaya** taşıyor; savunanın
+  cevabı da netleşiyor — topu bulup üzerine gitmek. Menzil ilişkisi (topçu >
+  en uzun bina savunması) `test:engine` içinde sözleşme olarak korunuyor.
+- **Yan etki ve çözümü:** (1) Hedef tercihi rol bazlı oldu — topçu menzilindeki
+  yapıyı askere yeğler (`engagementSystem`), diğer roller eskisi gibi askeri
+  yeğler. (2) Ateş pozisyonu 15 birim uzakta geometrik seçildiği için ağaç/kaya
+  üstüne düşebiliyor; `planAttack` artık reddedilen halkayı yakınlaştırarak
+  (0.9 → 0.6 → 0.35 menzil payı) tekrar deniyor, yoksa top hiç ateş etmeden
+  duruyordu. (3) Sunum: `cannonballSystem` (lob + toz patlaması) ve tekerlekli
+  top silueti; `structureAttackVfx: "cannonball"` her hedefte geçerlidir.
+- **İlgili:** `06 §9.1/§110`, `02 §30.1`, `04 §3.3`, `12 §33`,
+  `public/game-data/balance/units.json`, `src/game/rts/combat/cannonballSystem.ts`.
+
 ---
 
 ## 3. Referans — Scope-Cut Sırası
@@ -176,3 +200,8 @@ bölümde listelidir.
   sanat kararına bağlandı. GDD 02, 04, 11, 12 ve 13 buna göre güncellendi.
 - SL-007'nin yan etkisi (birim kapısının çağdan kopması) ayrı çağ kapısı ve
   Okçuluk Alanı ile kapatıldı; `02 §30.1` ve `04 §8.2` eklendi.
+
+### Sürüm 0.5 (2026-07-25)
+
+- SL-008 ile kuşatma birimi koçbaşından menzilli topçuya çevrildi; `06 §9.1`
+  yeniden yazıldı, `06 §110` ve `GDD_MASTER §9.3` açık soruları kapatıldı.

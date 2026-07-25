@@ -357,7 +357,7 @@ test("RTS Phase 9 the Barracks panel gates the Archer and the Ram behind a tier-
     await expect(page.locator(`[data-rts-action="train:${unitId}"]`)).toBeVisible();
   }
   await expect(page.locator('[data-rts-action="train:archer_placeholder"]')).toContainText("Okçu Üret");
-  await expect(page.locator('[data-rts-action="train:siege_placeholder"]')).toContainText("Koçbaşı Üret");
+  await expect(page.locator('[data-rts-action="train:siege_placeholder"]')).toContainText("Topçu Üret");
   await expect(page.locator('[data-rts-action="train:archer_placeholder"]')).toHaveAttribute(
     "title",
     /Kışla Lv2 gerekir/,

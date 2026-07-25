@@ -74,7 +74,7 @@ export interface AiBlackboard {
   readonly armyComposition: Readonly<Record<UnitRoleId, number>>;
   /**
    * §55: population the field army occupies. Summed from each unit's own cost
-   * rather than inferred from the head count, because a Ram costs three.
+   * rather than inferred from the head count, because a Topçu costs three.
    */
   readonly armyPopulation: number;
   readonly ownArmyPower: number;
@@ -153,7 +153,7 @@ export class AiBlackboardReader {
     const workers = ownUnits.filter((unit) => unit.role === "worker");
     // Every combat unit, not just Guards: `role === "guard"` meant "the whole
     // army" only while Guard and worker were the only roles. Faz 7 added the
-    // Archer and the Ram, and an AI that cannot see them reads an Archer push
+    // Archer and the Topçu, and an AI that cannot see them reads an Archer push
     // as zero threat (AI design §56/§62).
     const ownArmy = units.armyOf(owner);
     const ownArmyPower = power(ownArmy);
@@ -245,8 +245,8 @@ export class AiBlackboardReader {
  * §52: ArmyPower = Σ(UnitBasePower × HealthRatio).
  *
  * AI-1 pinned UnitBasePower at 1 because Guard was the only combat unit. Faz 7
- * added the Archer and the Ram, so the per-role value is data (`balance/ai.json`
- * `army.rolePower`) — a Ram counted as one Guard would have the AI read a siege
+ * added the Archer and the Topçu, so the per-role value is data (`balance/ai.json`
+ * `army.rolePower`) — a Topçu counted as one Guard would have the AI read a siege
  * push as a even fight and a Guard wall as unbeatable.
  */
 export function armyPower(units: readonly Unit[], balance: AiBalance): number {

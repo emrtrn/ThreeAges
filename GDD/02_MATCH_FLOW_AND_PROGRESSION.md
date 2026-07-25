@@ -716,7 +716,7 @@ değişir, ayrı bir yükseltme düğmesiyle değil.
 ### 30.1 Birim kapısı da iki boyutludur
 
 Seviyenin çağ kapısı kalkınca (§25.2) birim açılımı bir süre çağdan kopmuştu:
-`Kışla Lv2` gerektiren Okçu ve Koçbaşı, Yerleşim çağında da üretilebilir hale
+`Kışla Lv2` gerektiren Okçu ve Topçu, Yerleşim çağında da üretilebilir hale
 gelmişti. Bu **birim verisine ayrı bir çağ kapısı eklenerek** kapatıldı — yapı
 tarafındaki iki eksen artık birim tarafında da var:
 
@@ -725,7 +725,7 @@ tarafındaki iki eksen artık birim tarafında da var:
 | İşçi | Merkez | Yerleşim | Lv1 |
 | Muhafız | Kışla | Yerleşim | Lv1 |
 | Okçu | **Okçuluk Alanı** | Kasaba | Lv1 |
-| Koçbaşı | Kışla | Kasaba | Lv2 |
+| Topçu | Kışla | Kasaba | Lv2 |
 
 Veri sözleşmesi (`UnitBalanceStats`): `productionBuildingId` + `requiredAge` +
 `requiredBuildingLevel`. Yapılar da opsiyonel `requiredAge` taşır — Okçuluk

@@ -276,7 +276,10 @@ Süvari:
 
 ## 9. Kuşatma Birimleri
 
-### 9.1 Koçbaşı veya Hafif Kuşatma Aracı
+### 9.1 Topçu
+
+**Karar (2026-07-25, `SL-008`):** kuşatma birimi koçbaşı değil **topçudur** —
+gülleyi menzilden fırlatır, duvara yürümez.
 
 Rolü:
 
@@ -287,14 +290,20 @@ Rolü:
 Güçlü yönleri:
 
 - yapı bonusu,
-- yüksek sağlık veya yapı direnci.
+- **savunma menzilinin dışından ateş etme** (topçu menzili > Karakol menzili),
+- kuşatmayı oyuncunun konumlandırma kararına çevirmesi.
 
 Zayıf yönleri:
 
 - yavaş hareket,
-- birimlere karşı düşük hasar,
+- birimlere karşı çok düşük hasar,
+- uzun atış aralığı (tek gülle, uzun tekrar süresi),
 - pahalı üretim,
-- koruma gereksinimi.
+- koruma gereksinimi — kendisine yaklaşan piyadeye cevabı yoktur.
+
+Hedef tercihi diğer rollerin tersidir: topçu, menzilindeki **yapıyı** yakındaki
+askere yeğler. Askeri cevaplamak koruma hattının işidir; topçunun 0.35 çarpanıyla
+harcadığı her tekrar süresi kaybedilmiş bir güllesidir.
 
 ### 9.2 Vertical slice kapsamı
 
@@ -1924,7 +1933,8 @@ Muhafız + Okçu grubu
 ### Birim kadrosu
 
 - Süvari vertical slice içinde kesin olarak bulunacak mı?
-- Kuşatma birimi koçbaşı mı, mancınık mı olmalı?
+- ~~Kuşatma birimi koçbaşı mı, mancınık mı olmalı?~~ **Karar verildi:** menzilli
+  topçu — gülle fırlatır, savunma menzilinin dışından döver (`06 §9.1`, `SL-008`).
 - ~~Okçu ayrı binada mı, Kışla II içinde mi açılmalı?~~ **Karar verildi:** ayrı
   bina — Okçuluk Alanı, yalnız Kasaba çağı (`02 §30.1`, `SL-007`).
 - Keşif için özel birim gerekli mi?

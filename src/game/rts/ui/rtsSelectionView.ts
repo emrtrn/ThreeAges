@@ -285,7 +285,7 @@ export const TRADE_SELL_ACTION_PREFIX = "trade-sell:";
 const ROLE_DESCRIPTION: Record<UnitRoleId, string> = {
   guard: "Ön hat. Okçuları korur, dar geçidi tutar; yapılara karşı zayıftır.",
   archer: "Menzilli destek. Ön hattın arkasından vurur; yakın dövüşte erir.",
-  siege: "Kuşatma. Yapıları yıkar; birimlere karşı savunmasızdır, koruma ister.",
+  siege: "Kuşatma topçusu. Yapıları menzil dışından döver; birimlere karşı savunmasızdır, koruma ister.",
   worker: "Ekonomi birimi. İnşa eder ve kaynak üretir; savaşmaz.",
 };
 

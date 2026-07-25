@@ -19,6 +19,15 @@ const NAV_BOUNDS = [{
   max: [RTS_WORLD_HALF_EXTENT, UNIT_HEIGHT + 1, RTS_WORLD_HALF_EXTENT],
 }] as const;
 
+/**
+ * Shares of a weapon's range {@link RtsNavigation.planAttack} will try as a
+ * firing distance, in order. The first is the one every attacker used before
+ * long-range siege existed: stand as far back as the weapon allows, with a
+ * little margin for the target drifting. The rest are the retries — closer,
+ * still comfortably in range, and much more likely to be clear ground.
+ */
+const PLAN_ATTACK_RANGE_SHARES = [0.9, 0.6, 0.35] as const;
+
 /** Plans and caches paths for the Phase 1 infantry placeholder. */
 export class RtsNavigation {
   private readonly gridCache = new NavGridCache();
@@ -35,11 +44,11 @@ export class RtsNavigation {
    * Return a waypoint path, including the exact start/goal, or null when the
    * destination cannot be reached within the current ground bounds.
    *
-   * Every role plans on the one infantry grid, including the wider Ram. That is
+   * Every role plans on the one infantry grid, including the wider Topçu. That is
    * a resolution decision, not an oversight: the cell is 1 world unit and the
    * whole roster's radii span 0.39–0.75, so a per-agent grid could not express a
-   * gap that admits a Guard and refuses a Ram — it would only cost a second
-   * 14k-cell bake per blocker change to return the same answer. The Ram's width
+   * gap that admits a Guard and refuses a Topçu — it would only cost a second
+   * 14k-cell bake per blocker change to return the same answer. The gun's width
    * is enforced where it is expressible instead: `unitSeparation` spaces bodies
    * by {@link Unit.navRadius}. Revisit if the cell size ever drops (which needs
    * the engine's `MAX_GRID_CELLS` raised first).
@@ -111,18 +120,30 @@ export class RtsNavigation {
    * centres are solid navigation blockers, so their centre can never be a
    * valid walking goal. The closest perimeter point preserves the attacker's
    * current flank; the grid then finds the required detour around obstacles.
+   *
+   * The firing point is geometric, so it can land inside a forest or on a ridge
+   * — and the further out a weapon shoots, the more often it does. A melee unit
+   * stops a body-width from its target and effectively never hit this; the
+   * Topçu's firing ring is fifteen units out, where an unreachable point would
+   * leave the gun standing still with nothing on screen explaining why. So a
+   * refused ring is retried closer in rather than given up on: each fallback
+   * moves *toward* the target, which is always still inside weapon range.
    */
   planAttack(start: Vector3, target: CombatTarget, attackRange: number): Vector3[] | null {
     if (combatDistance(start, target) <= attackRange) return [];
-    const radius = target.combatRadius === undefined
-      ? Math.max(UNIT_RADIUS * 2, attackRange * 0.85)
-      : target.combatRadius + attackRange * 0.9;
     const startAngle = Math.atan2(start.z - target.position.z, start.x - target.position.x);
-    const goal = new Vector3(
-      target.position.x + Math.cos(startAngle) * radius,
-      0,
-      target.position.z + Math.sin(startAngle) * radius,
-    );
-    return this.plan(start, goal);
+    for (const share of PLAN_ATTACK_RANGE_SHARES) {
+      const radius = target.combatRadius === undefined
+        ? Math.max(UNIT_RADIUS * 2, attackRange * share * 0.94)
+        : target.combatRadius + attackRange * share;
+      const goal = new Vector3(
+        target.position.x + Math.cos(startAngle) * radius,
+        0,
+        target.position.z + Math.sin(startAngle) * radius,
+      );
+      const path = this.plan(start, goal);
+      if (path) return path;
+    }
+    return null;
   }
 }

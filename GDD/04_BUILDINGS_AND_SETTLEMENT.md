@@ -101,11 +101,11 @@ Yükseltme mümkün olduğunca sadece daha fazla sağlık veya üretim vermemeli
 
 - Depo Lv2 yalnızca daha fazla stok değil, alternatif yol bağlantısı desteği sağlar.
 - Karakol Lv2 yalnızca daha dayanıklı değil, daha geniş kontrol alanı üretir.
-- Kışla Lv2 yalnızca daha hızlı üretmez, yeni birlik türü açar (Koçbaşı).
+- Kışla Lv2 yalnızca daha hızlı üretmez, yeni birlik türü açar (Topçu).
 
 > **Not — birim kapısı çağ + seviye çiftidir.** §31 uyarınca seviye merdiveninin
 > çağ kapısı yoktur, dolayısıyla `requiredBuildingLevel` tek başına bir çağ
-> kapısı değildir. Birimler bu yüzden ayrıca `requiredAge` taşır: Koçbaşı
+> kapısı değildir. Birimler bu yüzden ayrıca `requiredAge` taşır: Topçu
 > *Kasaba çağı + Kışla Lv2* ister. Okçu ise Kışla'dan tamamen çıkarılıp kendi
 > binasına (Okçuluk Alanı, Kasaba çağı) taşındı. Tablo: `02 §30.1`.
 

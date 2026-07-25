@@ -64,9 +64,9 @@
       "placements": [
         {
           "position": [
-            -43.2,
+            -43,
             0.02,
-            41.4
+            50.96
           ],
           "scaleLocked": true,
           "groupId": "group-mrzfsd39-k0",
@@ -91,9 +91,9 @@
       "placements": [
         {
           "position": [
-            -43.59,
+            -43.39,
             0.01,
-            42.48
+            52.04
           ],
           "scaleLocked": true,
           "groupId": "group-mrzfsd39-k0",
@@ -118,9 +118,9 @@
       "placements": [
         {
           "position": [
-            -42.35,
+            -42.15,
             0,
-            42.49
+            52.05
           ],
           "scaleLocked": true,
           "groupId": "group-mrzfsd39-k0",
@@ -658,9 +658,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json",
       "position": [
-        -53.31,
+        -46.64,
         0,
-        45.61
+        40.39
       ],
       "name": "Player Start",
       "scale": 1,
@@ -683,9 +683,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
       "position": [
-        -42.84,
+        -43.05,
         0,
-        42.39
+        51.37
       ],
       "name": "Resource player_safe_stone",
       "scale": 1,

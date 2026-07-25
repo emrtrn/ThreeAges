@@ -44,6 +44,10 @@ export function updateUnitCombat(
       continue;
     }
     if (combatDistance(unit.position, target) > unit.attack.range) continue;
+    // In range and about to shoot: face what is being shot at. A unit that
+    // reached its firing position has stopped moving, so nothing else is going
+    // to turn it, and the Topçu's barrel has to point down its own line of fire.
+    unit.faceTowards(target.position.x, target.position.z);
     const change = unit.attack.tryHit(target);
     if (change) onHit?.({ attacker: unit, target, change, ranged: unit.attack.ranged });
     if (target.health.depleted) unit.setAttackTarget(null);

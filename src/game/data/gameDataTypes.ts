@@ -85,6 +85,19 @@ export type UnitRoleId = "guard" | "archer" | "siege" | "worker";
 /** Melee lands instantly at range; ranged spawns a tracer toward the target. */
 export type UnitAttackType = "melee" | "ranged";
 
+/**
+ * How a unit's hits are shown when they should not look like an ordinary stab
+ * or arrow. Presentation only — the damage is always the unit's own resolved
+ * hit. Each value states its own scope:
+ *
+ * - `firebrand`: the Guard's thrown torch, on buildings only. Its hits on
+ *   people stay melee, because that is what they are.
+ * - `cannonball`: the artillery's lobbed iron ball, on *every* target it fires
+ *   at. A gun does not switch to a bow because a soldier walked in front of the
+ *   wall, so this one is not gated on the target class.
+ */
+export type UnitStructureAttackVfx = "firebrand" | "cannonball";
+
 /** Buildings that can own a unit production queue. */
 export type ProductionBuildingId = "command_center" | "barracks" | "archery_range";
 
@@ -151,13 +164,19 @@ export interface UnitBalanceStats {
    * reached to train this unit (1..3). Centre-led progression (see
    * `docs/planned/THREEAGES_CENTER_LED_PROGRESSION_PLAN.md`): a unit gate is a
    * statement about the whole kingdom's tier, not about one production building.
-   * Guard = Settlement Lv1, Archer = Town Lv1, Ram = Town Lv2.
+   * Guard = Settlement Lv1, Archer = Town Lv1, artillery = Town Lv2.
    */
   readonly requiredSettlementLevel: number;
   /** Resources reserved when this unit enters a production queue. */
   readonly cost: StartingResources;
   /** Population capacity consumed by this unit once queued. */
   readonly populationCost: number;
+  /**
+   * Optional attack presentation for units whose weapon is not an ordinary
+   * blade or arrow. Omitted means a hit looks the same whatever it lands on,
+   * which is the default for every role that has no siege identity of its own.
+   */
+  readonly structureAttackVfx?: UnitStructureAttackVfx;
 }
 
 /** `public/game-data/balance/units.json` — keyed by stable unit id. */

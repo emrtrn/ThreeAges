@@ -137,22 +137,28 @@ function nearestHostile(
   range: number,
   options: EngagementOptions,
 ): CombatTarget | null {
+  // Troops outrank buildings at any distance inside the circle: a Guard that
+  // answers the wall instead of the Archer shooting it reads as broken.
+  //
+  // Siege is the one role that inverts it. Its shot is built to break masonry
+  // and barely scratches a person (GDD 12 §33), so a gun that turns away from
+  // the gate to plink at the worker walking past it is spending the whole
+  // reload on nothing — and it is the escort's job to answer that worker.
+  const prefersStructures = unit.role === "siege";
   let best: CombatTarget | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
-  let bestIsStructure = true;
+  let bestPreferred = false;
   for (const target of options.targets) {
     if (target === (unit as CombatTarget)) continue;
     if (target.owner === unit.owner || target.health.depleted) continue;
     const distance = combatDistance(unit.position, target);
     if (distance > range) continue;
-    // Troops outrank buildings at any distance inside the circle: a Guard that
-    // answers the wall instead of the Archer shooting it reads as broken.
-    const isStructure = target.armorClass === "structure";
-    if (best && bestIsStructure === isStructure && distance >= bestDistance) continue;
-    if (best && bestIsStructure !== isStructure && bestIsStructure === false) continue;
+    const preferred = (target.armorClass === "structure") === prefersStructures;
+    if (best && preferred === bestPreferred && distance >= bestDistance) continue;
+    if (best && preferred !== bestPreferred && bestPreferred) continue;
     best = target;
     bestDistance = distance;
-    bestIsStructure = isStructure;
+    bestPreferred = preferred;
   }
   return best;
 }

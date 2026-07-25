@@ -843,8 +843,8 @@ Bütün kararların Faz 0’da kapanması gerekmez. Bir karar yalnızca ilgili �
 
 ## 9.3 Ürün B öncesi
 
-- [x] Okçu Kasaba Çağı Okçuluk Alanı Lv1 içinde açılır; Koçbaşı Kasaba Çağı Kışla Lv2 içinde açılır.
-- [ ] Kuşatma birimi koçbaşı mı, mancınık mı olacak?
+- [x] Okçu Kasaba Çağı Okçuluk Alanı Lv1 içinde açılır; Topçu Kasaba Çağı Kışla Lv2 içinde açılır.
+- [x] Kuşatma birimi menzilli **topçu** olacak (`06 §9.1`, `SL-008`).
 - [ ] Kasabaya geçiş maliyeti ve koşulları nedir?
 - [ ] Alternatif lojistik rotalar nasıl seçilecektir?
 - [ ] AI-2 savunma ve saldırı eşikleri nedir?
@@ -868,7 +868,7 @@ Bütün kararların Faz 0’da kapanması gerekmez. Bir karar yalnızca ilgili �
 - İlk maç yalnız düşman merkezini yok ederek biter.
 - Süvari vertical slice kapsamından çıkarılmıştır.
 - Okçu Kasaba Çağında açılan Okçuluk Alanı'nda üretilir.
-- İlk kuşatma adayı koçbaşıdır.
+- İlk kuşatma birimi menzilli topçudur.
 - Kamera yönü sabittir.
 - İlk yol prototipi işçi gerektirmez.
 - Yalnız Yol I ile başlanır.

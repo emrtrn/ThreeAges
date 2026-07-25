@@ -15,7 +15,7 @@ import type { CombatTarget } from "./combatTarget";
  *
  * The multiplier is looked up on the *attacker*: §33 is a table of what each
  * attacker does to each armour class, not a table of resistances. That is what
- * lets a Ram read as anti-building (2.50 vs structure) while its raw 28 damage
+ * lets the Topçu read as anti-building (2.50 vs structure) while its raw 34 damage
  * stays weak against troops.
  */
 type DamageSourceStats = Pick<UnitBalanceStats, "attackDamage" | "damageMultipliers">;

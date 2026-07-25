@@ -75,8 +75,10 @@ import { updateUnitCombat } from "./units/unitCombat";
 import { updateUnitDeaths } from "./units/unitDeath";
 import { retaliateAgainstAttack, updateUnitEngagement } from "./combat/engagementSystem";
 import { ProjectileSystem } from "./combat/projectileSystem";
+import { FirebrandSystem } from "./combat/firebrandSystem";
+import { CannonballSystem } from "./combat/cannonballSystem";
 import { StructureDefenseSystem } from "./combat/structureDefenseSystem";
-import type { CombatTarget } from "./combat/combatTarget";
+import { combatImpactPoint, structureImpactPoint, type CombatTarget } from "./combat/combatTarget";
 import { RtsNavigation } from "./navigation/rtsNavigation";
 import { MarqueeOverlay } from "./selection/marqueeOverlay";
 import { SelectionSystem } from "./selection/selectionSystem";
@@ -399,6 +401,8 @@ export class RtsApp {
   private readonly worldProgressOverlay = new RtsWorldProgressOverlay();
   private buildingLabelCache: ReadonlyMap<string, string> | null = null;
   private readonly projectiles = new ProjectileSystem();
+  private readonly firebrands = new FirebrandSystem();
+  private readonly cannonballs = new CannonballSystem();
   private readonly structureDefense = new StructureDefenseSystem();
   private readonly hudBar = new RtsHudBar(
     () => this.selectIdleWorkers(),
@@ -947,6 +951,8 @@ export class RtsApp {
     this.selectionPanel.dispose();
     this.worldProgressOverlay.dispose();
     this.projectiles.dispose();
+    this.firebrands.dispose();
+    this.cannonballs.dispose();
     this.hudBar.dispose();
     this.notificationFeed.dispose();
     this.gameSpeedControls.dispose();
@@ -1063,6 +1069,8 @@ export class RtsApp {
     if (this.ghostStructures) this.scene.add(this.ghostStructures.root);
     this.scene.add(this.units.root);
     this.scene.add(this.projectiles.root);
+    this.scene.add(this.firebrands.root);
+    this.scene.add(this.cannonballs.root);
     this.scene.add(this.commandMarkers.root);
   }
 
@@ -1175,6 +1183,8 @@ export class RtsApp {
     // Presentation runs on the rendered-frame delta, not the simulation's: a
     // tracer and a health bar should look the same at any game speed.
     this.projectiles.update(dt);
+    this.firebrands.update(dt);
+    this.cannonballs.update(dt);
     this.units.updatePresentation(this.cameraController.camera.quaternion);
     this.selectionPanel.setSelection(this.selectionView());
     // Notices expire on real seconds for the same reason a health bar animates
@@ -1472,7 +1482,22 @@ export class RtsApp {
       dt,
       (hit) => {
         this.debugOverlay?.recordHit(hit);
-        if (hit.ranged) this.projectiles.spawn(hit.attacker.owner, hit.attacker.position, hit.target.position);
+        const attackVfx = hit.attacker.stats.structureAttackVfx;
+        const onStructure = hit.target.armorClass === "structure";
+        // The Topçu's shot *is* a lobbed iron ball, so it replaces the arrow
+        // tracer rather than joining it — and it lands on a soldier as readily
+        // as on a wall, which is why this one is not gated on the target class.
+        if (attackVfx === "cannonball") {
+          this.cannonballs.spawn(hit.attacker.position, combatImpactPoint(hit.attacker.position, hit.target));
+        } else if (hit.ranged) {
+          this.projectiles.spawn(hit.attacker.owner, hit.attacker.position, hit.target.position);
+        }
+        // A Guard's blow against a building is thrown fire, not a swing: same
+        // point-blank attack and same damage, shown as an attempt to burn the
+        // structure down (`structureAttackVfx` in balance/units.json).
+        if (attackVfx === "firebrand" && onStructure) {
+          this.firebrands.spawn(hit.attacker.position, structureImpactPoint(hit.attacker.position, hit.target));
+        }
         if (hit.target instanceof Unit) {
           retaliateAgainstAttack(hit.target, hit.attacker, this.navigation);
         }
@@ -2026,6 +2051,8 @@ export class RtsApp {
     // painter is reset explicitly: pristine terrain restored, ready to repaint.
     this.roadPainter?.reset();
     this.projectiles.clear();
+    this.firebrands.clear();
+    this.cannonballs.clear();
     this.rallyPointPending = false;
     this.structureConstruction.resetReservations();
     this.kingdoms.reset();
