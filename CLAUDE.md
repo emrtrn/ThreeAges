@@ -56,6 +56,17 @@ engine/editor.
   Manifest paths are relative to the public root.
 - After editing TypeScript, run `npx tsc --noEmit`; the dev server skips
   type-checking.
+- **Visual acceptance is the user's call, not a test to build.** When the open
+  question is "does it look right in the running game" — is the model visible,
+  upright, animating, the right size — finish the code, say plainly what should
+  now be on screen, and **ask the user to look**. Do not stand up Playwright
+  smoke specs, screenshot diffs, or temporary spec files to prove it
+  independently; the user is at the machine and answers in seconds. Automated
+  gates still run for everything they actually cover (`npx tsc --noEmit`,
+  `npm run test:engine`, `npm run build:verify`), and genuine invariants —
+  a name collision, a shared skeleton, a dropped field — still get pinned as
+  engine tests. `npm run smoke:browser` stays a maintained suite; the rule is
+  about not inventing one-off browser proofs.
 - **CI** (`.github/workflows/ci.yml`) runs `build:verify`
   (`tsc --noEmit` + `vite build` + `test:engine` + `verify:dist --strict`) and
   `check:assets` on every push/PR to `main` — the automated mirror of the local

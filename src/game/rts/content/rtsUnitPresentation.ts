@@ -19,6 +19,13 @@ import type { RtsPresentationHandle, RtsPresentationUpdate } from "../units/unit
 
 /** Everything an animated instance needs from the asset it was cloned from. */
 export interface RtsUnitAnimationSource {
+  /**
+   * Node the mixer binds to: the cloned model, not the presentation root.
+   * Tracks resolve nodes by name, and authored component ids share that
+   * namespace with bone names — binding above the model lets a component called
+   * "root" capture the `root` bone's track and lay the whole unit on its back.
+   */
+  readonly target: Object3D;
   readonly clips: readonly AnimationClip[];
   /** Sidecar authoring: which clip fills each semantic role, and root-motion locks. */
   readonly skeleton: AssetSkeletonDef;
@@ -37,6 +44,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   readonly pickTargets: readonly Object3D[];
   readonly selectionRadius: number;
   private animator: CrossfadeAnimator | null = null;
+  /** The node the mixer was bound to, so disposal uncaches the same root. */
+  private animationTarget: Object3D | null = null;
 
   constructor(options: RtsUnitPresentationOptions) {
     this.root = options.root;
@@ -48,7 +57,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // Root motion is locked from the sidecar, not from code: RTS movement is
     // authoritative over position, so a walk clip that carries its own
     // translation would drag the body away from where the simulation put it.
-    this.animator = new CrossfadeAnimator(this.root, animation.clips, {
+    this.animationTarget = animation.target;
+    this.animator = new CrossfadeAnimator(animation.target, animation.clips, {
       rootMotion: animation.skeleton.rootMotion,
     });
     // Faz B plays the authored idle and nothing else; the speed/attack fields of
@@ -70,8 +80,9 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       // mixer's per-root binding cache. Without the second, every unit that ever
       // died stays referenced for the lifetime of the match.
       this.animator.mixer.stopAllAction();
-      this.animator.mixer.uncacheRoot(this.root);
+      if (this.animationTarget) this.animator.mixer.uncacheRoot(this.animationTarget);
       this.animator = null;
+      this.animationTarget = null;
     }
     // Detaching before the owning unit disposes its subtree is what keeps the
     // shared template's geometry and materials alive for every other instance.

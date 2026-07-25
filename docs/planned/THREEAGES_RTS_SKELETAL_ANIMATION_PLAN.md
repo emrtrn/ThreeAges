@@ -129,9 +129,16 @@ gorsel regresyon yoktur.
       `LayeredCharacterAnimator` degil - RTS birimi saldirmak icin zaten durur
       ve katmanli animator birim basina iki mixer maliyeti getirir.
 
-Kabul: **Karsilandi.** Tarayici tanigi: `?rts&debug&preset=gameplay_proof`
-uzerinde 10 muhafiz gorunur haldedir, 250 ms arayla alinan dort kirpilmis kare
-birbirinden farklidir (poz ilerliyor) ve konsol hatasi yoktur.
+- [x] **Tuzak, pinlendi:** mixer yazarin bilesen agacina degil klonlanmis
+      modele baglanir. glTF parcalari dugumleri isimle adresler; UAL1 rig'inde
+      `root` adli bir kemik var (dinlenme rotasyonu X'te -90°, Z-up telafisi) ve
+      Actor Script'ler tabanina `root` demeyi seviyor. Sunum kokune baglanirsa
+      `PropertyBinding` once bileseni bulur, kemik hic surulmez ve -90° tum
+      birime uygulanir - muhafizlar sirtustu yatar. Engine testi:
+      "Skeletal animasyon Faz B: bir kemik adiyla cakisan bileseni klip suremez".
+
+Kabul: **Karsilandi** - kullanici onayladi (2026-07-26): muhafizlar dik duruyor
+ve animasyon oynuyor.
 
 ### Faz C - Locomotion: bosta / yurume
 
@@ -222,4 +229,5 @@ Faz D'ye ancak locomotion stabil olduktan sonra gecilir.
 | --- | --- | --- |
 | 2026-07-25 | - | Plan olusturuldu; uygulama baslamadi. |
 | 2026-07-26 | A | Klip + sidecar cache'i, `SkeletonUtils.clone` ile instans basina iskelet. Muhafizlar gorunur oldu. |
-| 2026-07-26 | B | `rtsUnitPresentation` + tick zinciri; authored `Idle_Loop` oynuyor. `tsc`, `test:engine` (1108), `build:verify` gecti. |
+| 2026-07-26 | B | `rtsUnitPresentation` + tick zinciri; authored `Idle_Loop` oynuyor. `tsc`, `test:engine` (1109), `build:verify` gecti. |
+| 2026-07-26 | B | Kemik/bilesen isim cakismasi duzeltildi (mixer modele baglanir). Kullanici dogruladi: dik ve hareketli. |

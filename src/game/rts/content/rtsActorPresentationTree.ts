@@ -78,6 +78,12 @@ export function buildActorPresentationTree(
     // SkeletonUtils.clone rebinds each clone to its own bones and is a plain deep
     // clone for the static-mesh case.
     const model = cloneSkeletonHierarchy(template);
+    // Tagged so an animator can bind to the model itself rather than to this
+    // tree. It matters because animation tracks address nodes *by name*, and
+    // authored component ids share a namespace with the model's bone names — a
+    // rig with a `root` bone and a component called "root" would otherwise have
+    // its clip drive the component node and throw the whole Actor on its back.
+    model.userData.rtsActorMeshAssetId = assetId;
     model.traverse((child) => {
       if (child instanceof Mesh) {
         child.castShadow = true;

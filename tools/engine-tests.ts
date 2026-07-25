@@ -24,6 +24,7 @@ import {
   Object3D,
   PerspectiveCamera,
   PointLight,
+  PropertyBinding,
   Quaternion,
   Raycaster,
   RepeatWrapping,
@@ -29968,6 +29969,63 @@ check("Skeletal animasyon Faz A: her instance kendi iskeletine baglanir, geometr
     assert.equal(body.geometry, geometry, "instances share the template geometry");
     assert.equal(body.material, material, "instances share the template material");
   }
+
+  // The animator must be able to bind to the model rather than to the authored
+  // component tree; see the bone/component name-collision test below.
+  const tagged: Object3D[] = [];
+  instances[0]!.traverse((child) => {
+    if (child.userData.rtsActorMeshAssetId === "guard") tagged.push(child);
+  });
+  assert.equal(tagged.length, 1, "the cloned model is tagged exactly once, as the mixer's bind target");
+  assert.ok(tagged[0]!.getObjectByName("guard-hips"), "the tagged node contains the rig it animates");
+});
+
+check("Skeletal animasyon Faz B: bir kemik adiyla cakisan bileseni klip suremez", () => {
+  // The trap this pins: glTF animation tracks address nodes *by name*, and the
+  // UAL1 rig carries a bone literally called "root" whose rest rotation is -90°
+  // about X (the Z-up compensation the bind matrices already account for).
+  // Actor Scripts conventionally call their base component "root" too. Bind a
+  // mixer to the presentation tree and PropertyBinding resolves "root" to the
+  // component Group it meets first — the bone is never driven, and the -90° is
+  // applied to the whole unit instead. On screen: guards flat on their backs.
+  const def = normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_Collide",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "body", component: "SkeletalMeshComponent", parent: "root", props: { assetId: "guard" } },
+    ],
+  }, "BP_Collide");
+
+  const bone = new Bone();
+  bone.name = "root";
+  const skinned = new SkinnedMesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
+  skinned.name = "guard-body";
+  skinned.add(bone);
+  skinned.bind(new Skeleton([bone]));
+  const template = new Group();
+  template.add(skinned);
+
+  const tree = buildActorPresentationTree(def, "BP_Collide", () => template);
+  const component = tree.getObjectByName("root");
+  assert.ok(component, "the authored component node exists and is named 'root'");
+
+  let target: Object3D | null = null;
+  tree.traverse((child) => {
+    if (!target && child.userData.rtsActorMeshAssetId === "guard") target = child;
+  });
+  assert.ok(target, "the model is tagged as the bind target");
+
+  // Binding from the tagged model reaches the bone; binding from the tree would
+  // reach the component instead. Comparing the two resolutions is the assertion.
+  const fromModel = PropertyBinding.findNode(target!, "root");
+  assert.ok(fromModel instanceof Bone, "binding to the model resolves 'root' to a bone");
+  const clonedSkin = target!.getObjectByName("guard-body") as SkinnedMesh;
+  assert.equal(fromModel, clonedSkin.skeleton.bones[0], "and it is this instance's own bone");
+  const fromTree = PropertyBinding.findNode(tree, "root");
+  assert.equal(fromTree, component, "binding to the tree would capture the component — never do this");
+  assert.notEqual(fromModel, fromTree, "the two namespaces genuinely collide, which is why the target matters");
 });
 
 check("Actor presentation Faz 3: a stand-in is visibly not art, and reports as its own state", () => {

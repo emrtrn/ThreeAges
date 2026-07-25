@@ -159,7 +159,7 @@ export class RtsActorVisualFactory {
       root,
       pickTargets,
       selectionRadius: readNumberVariable(def, "selectionRadius", 0.5),
-      animation: this.animationSourceFor(def),
+      animation: this.animationSourceFor(root),
     });
   }
 
@@ -247,22 +247,27 @@ export class RtsActorVisualFactory {
   }
 
   /**
-   * The animation source for an Actor: the first mesh component whose model
-   * actually ships clips. Actors are free to hang static props off an animated
-   * body — those contribute no clips and are skipped rather than treated as a
-   * second, competing skeleton.
+   * The animation source for a built presentation tree: the first cloned model
+   * that actually ships clips, together with the node to bind a mixer to.
+   *
+   * The bind target is the model subtree, never the presentation root. Animation
+   * tracks address nodes by name, and authored component ids live in the same
+   * namespace as the rig's bone names — binding higher up lets a component
+   * called "root" swallow the `root` bone's track. Actors may also hang static
+   * props off an animated body; those carry no clips and are skipped rather than
+   * treated as a second, competing skeleton.
    */
-  private animationSourceFor(def: ActorScriptDef): RtsUnitAnimationSource | null {
-    for (const component of def.components) {
-      if (!isMeshComponentKind(component.component)) continue;
-      const assetId = component.props.assetId;
-      if (typeof assetId !== "string") continue;
+  private animationSourceFor(root: Object3D): RtsUnitAnimationSource | null {
+    let source: RtsUnitAnimationSource | null = null;
+    root.traverse((child) => {
+      if (source) return;
+      const assetId = child.userData.rtsActorMeshAssetId;
+      if (typeof assetId !== "string") return;
       const template = this.templates.get(assetId);
-      if (template && template.animations.length > 0) {
-        return { clips: template.animations, skeleton: template.skeleton };
-      }
-    }
-    return null;
+      if (!template || template.animations.length === 0) return;
+      source = { target: child, clips: template.animations, skeleton: template.skeleton };
+    });
+    return source;
   }
 
   private createActorVisual(ref: RtsActorRef): Group | null {
