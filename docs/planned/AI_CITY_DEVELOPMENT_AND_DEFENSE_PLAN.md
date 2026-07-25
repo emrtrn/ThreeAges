@@ -1,0 +1,297 @@
+# AI Şehir Gelişimi, Savunma ve Çağ Kapılı Saldırı Planı
+
+Oluşturulma tarihi: 2026-07-25
+Durum: Planlandı. Kod yazılmadı.
+Kaynak istek: "AI gelişmiş bir şehir kursun, savunmayı ihmal etmesin, kasaba
+çağına geçmeden saldırıya geçmesin."
+
+İlgili dokümanlar: `GDD/07_ENEMY_AI_DESIGN_v0.2.md` (§24, §27, §30, §34, §40–§43,
+§53–§55, §59, §62), `GDD/13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` §53 (4)
+(mevcut saldırmazlık penceresi kaydı).
+
+---
+
+## 1. Teşhis — AI bugün neden asker basıp saldırıyor
+
+Bunlar okunmuş koddan çıkan gerçekler, tahmin değil.
+
+### 1.1 Saldırının tek kapısı zaman, çağ değil
+
+`intentScorer.scoreAttack` (`src/game/rts/ai/intentScorer.ts:228`) yalnızca
+`army.peaceSeconds` (bugün 600 sn) ile geciktiriliyor. Çağ kontrolü yok. Yani
+10. maç dakikasından sonra AI **Yerleşim çağında** saldırmaya tam yetkili.
+
+### 1.2 Saldırı skoru pratikte tavanı görüyor
+
+`armyReadiness = (powerRatio - 0.9) / (2.0 - 0.9)`; `powerRatio` kendi ordu
+gücünün *görülen* düşman ordu gücüne oranı. Oyuncu erken oyunda ekonomi
+kurarken az asker tutuyorsa oran hızla 2.0'ı geçer → `armyReadiness = 1.0` →
+`attack` skoru `1.0 × intentWeights.attack (1.0) = 1.0`.
+
+Rakip niyetlerin gerçekçi tavanları bunun altında:
+
+- `ageUp`: gereksinim eksikken `requirementProgress (0.3) × oran × 1.1` → en
+  fazla ~0.33 (`intentScorer.ts:145`).
+- `economy`: terimler toplamı; temel binalar dikildikten sonra `workerNeed`,
+  `populationPressure` ve `recoveryNeed` sıfıra iner, geriye yalnız
+  `incomeDeficit (0.3)` kalır.
+- `expand`: `wood/400 × safety × 0.9` → en fazla 0.9.
+
+Üstüne `KingdomDirector` histerezisi (%25, `kingdomDirector.ts:102`) bir kere
+1.0'a oturmuş `attack`'ı devrilemez yapıyor: rakibin 1.25 puan alması gerekir,
+bu imkânsız. Bu tam olarak `intentScorer.ts:258-266`'daki yorumun uyardığı
+tuzağın çağ ekseninde tekrarı.
+
+### 1.3 Asker üretimi hiçbir niyete bağlı değil
+
+`AiProductionManager.update` (`aiProductionManager.ts:49`) `AiController`'ın
+`economyDue` dalında **her zaman** çalışıyor (`aiController.ts:254`) — direktör
+ne yapıyorsa yapsın. Sırası: pop tavanı doluysa çık → işçi hedefi (`settlement:
+12`) dolana kadar işçi → sonra **kalan her şey orduya**, `populationShare: 0.55`
+tavanına kadar. Yani "asker basma" AI'ın arka planda sürekli çalışan varsayılan
+davranışı; strateji değil.
+
+### 1.4 "Gelişmiş şehir" diye bir hedef yok
+
+`buildOrder` (`aiEconomyManager.ts:74`) her bina için yalnız `count === 0`
+kontrolü yapıyor. Harita da bunu pekiştiriyor: `enemyBaseAnchors`
+(`src/game/rts/world/rtsMapBlockout.ts:198`) her binadan **birer** slot veriyor
+(6 ev hariç). Sonuç: 8 bina + 6 ev dikildi mi `buildOrder` boş dönüyor, ekonomi
+niyetinin yapacak işi kalmıyor, skoru düşüyor, `attack` sahayı devralıyor.
+
+Ayrıca merkez seviyesi (Lv2/Lv3) kendi başına hedeflenmiyor:
+`AiUpgradeManager.update` yalnızca üretim yöneticisi tier'a takıldığında
+yatırım yapıyor (`aiUpgradeManager.ts:53`), `AiAgeManager` ise yalnız `ageUp`
+niyeti koşarken Lv3'e tırmanıyor. Kasabaya geçen AI, Town Lv1'de takılı kalıyor.
+
+### 1.5 Savunma repertuarı neredeyse boş
+
+- `enemyBaseAnchors` içinde **hiç savunma yapısı slotu yok**. `outpost` yalnızca
+  `enemyExpansions` içinde (`rtsMapBlockout.ts:250`, `:279`).
+- `buildings.json`'da savunması olan tek yapı `outpost`
+  (`defense.attackDamage: 10`, menzil 12, 2 ok). GDD §41 "Kule: kritik geçit
+  veya karakol yakını" diyor ama `watchtower` binası veride yok.
+- `army.minimumDefensePower: 2` — Muhafız gücü 1.0 olduğuna göre üste iki
+  Muhafız bırakmak yeterli sayılıyor; üçüncü Muhafız sahaya çıkıyor
+  (`armyManager.ts:206`).
+- `scoreDefend` `responseAbility` ile çarpıyor, yani ordusuz AI ~0 skorluyor. Bu
+  kasıtlı (§27) ve doğru; ama "savunmayı ihmal etmeme" bu skorla değil,
+  garnizon + yapı ile çözülür.
+
+### 1.6 Yan gerçek: outpost, Town'un ön koşulu
+
+`ages.json` → `town.requiredBuildingIds` içinde `outpost` var. Bugün outpost
+yalnız genişlemeden geldiği için **genişleme, Kasaba'nın zorunlu yolu**. Üsse
+savunma karakolu eklemek bu bağı koparır. Bu, aşağıdaki A kararının konusu.
+
+---
+
+## 2. Tasarım hedefi (kabul kriterleri)
+
+1. AI, Kasaba çağına geçmeden saldırı **başlatmaz**; kendisine yapılan saldırıya
+   her zaman normal cevap verir.
+2. AI, temel 8 binayı dikip durmaz: ikinci üretim binaları, ev hattı, market ve
+   merkez seviyeleri dahil bir "şehir hedefi" tamamlar.
+3. AI üste her zaman anlamlı bir garnizon + en az bir savunma yapısı tutar.
+4. Bütün eşik ve sayılar `balance/ai.json` içinde veri olarak durur; formül
+   *şekli* kodda kalır (mevcut `intentScorer` ilkesi).
+5. Tek kopya kuralı: yeni kapı bir yerde durur (`intentScorer`), `armyManager`'a
+   ikinci kopya konmaz — `intent !== "attack"` zaten `regroup`'a düşürüyor.
+
+---
+
+## 3. Karar noktaları (uygulamadan önce netleşmesi gerekenler)
+
+### Karar A — Üs savunma yapısı hangi bina?
+
+- **A1 (önerilen): mevcut `outpost`'u üste de anchor'la.** Kod işi yok, veri +
+  harita işi. Bedeli: Town gereksinimi genişlemeden bağımsız karşılanabilir hale
+  gelir; genişleme *ekonomik* bir tercih olur, zorunluluk olmaz.
+- **A2: yeni `watchtower` binası ekle** (`buildings.json` + progression + ikon +
+  görsel + validator). Outpost genişlemeye özel kalır, Town gereksinimi
+  bozulmaz. Bedeli: yeni bina kimliği = art/UI/veri işi, plan uzar.
+
+### Karar B — Kasaba'ya hiç geçemeyen AI
+
+Çağ kapısı sert olursa, ekonomisi çökmüş bir AI hiç saldırmaz ve maç kilitlenir.
+
+- **B1 (önerilen): geç emniyet supabı.** `army.attackAgeGraceSeconds` (örn.
+  1800 sn); bu süre geçtiyse çağ kapısı kalkar. `0` = supap kapalı, yani sert
+  kapı hâlâ ifade edilebilir.
+- **B2: sert kapı.** Kasaba yoksa saldırı yok. Daha okunabilir, ama uzun maçta
+  hareketsiz AI riski var.
+
+---
+
+## 4. Uygulama planı
+
+Faz sırası kasıtlı: her faz kendi başına build-passing ve oynanabilir.
+
+### Faz 1 — Çağ kapılı saldırı (hedef 1)
+
+**Veri** — `public/game-data/balance/ai.json` → `army`:
+
+```json
+"attackMinimumAge": "town",
+"attackAgeGraceSeconds": 1800
+```
+
+**Tip** — `src/game/data/gameDataTypes.ts` → `AiBalance.army`:
+`attackMinimumAge: SettlementAge`, `attackAgeGraceSeconds: number`. Yorumda
+nedeni yazılır (§24: çağ atlama ekonomi ile denge içinde olmalı).
+
+**Doğrulama** — `src/game/data/validateGameData.ts` → `validateAiBalance`
+(`:1113` civarı): `attackMinimumAge` iki geçerli çağ id'sinden biri olmalı;
+`attackAgeGraceSeconds >= 0`.
+
+**Kapı** — `intentScorer.scoreAttack`, mevcut `peaceSeconds` bloğunun **hemen
+altına** (sıra önemli: iki kapı da zaman/çağ, mesaj sırası logta okunur kalsın):
+
+```ts
+// Kasaba çağına geçmeden saldırı başlatılmaz. Defend dokunulmaz.
+if (bb.age !== balance.army.attackMinimumAge
+  && (grace <= 0 || bb.now < grace)) return { rawScore: 0, reason: "..." };
+```
+
+Reason metni adıyla söylenmeli: `"kasaba çağına ulaşılmadı, saldırı yok"` /
+supap açıldığında `"çağ kapısı zaman aşımıyla kalktı"`.
+
+**Neden burada:** `armyManager.chooseMission` (`:202`) `intent !== "attack"`
+iken `regroup` veriyor, dolayısıyla bastırılmış niyet hedef seçimini de bastırır
+ve sürüklenecek ikinci pencere olmaz. Bu, `peaceSeconds` için verilmiş kararla
+aynı gerekçe (GDD/13 §53 (4)).
+
+**Not:** `SettlementAge` yalnız iki değer olduğu için `attackMinimumAge`
+bugün "settlement" (kapı kapalı) veya "town" (kapı açık) demektir; alanın çağ
+tipinde olması Kingdom çağı geldiğinde kod değişikliği gerektirmemesi için.
+
+### Faz 2 — Saldırının gelişim çarpanı (hedef 1 + 4)
+
+Faz 1 kapıyı Kasaba'ya kadar tutar; Kasaba'dan sonra §1.2'deki 1.0 tavanı geri
+gelir. Bunun için `scoreAttack`'a §30 çarpanı olarak bir terim eklenir:
+
+```text
+Attack = ArmyReadiness × Opportunity × DevelopmentReadiness
+```
+
+`DevelopmentReadiness` = şehir hedeflerinin tamamlanma oranı (Faz 3'ün
+`buildingTargets`'ından türetilir), `scoring.attack.developmentFloor` ile
+tabanlanır (örn. 0.35 — yani yarım kalmış şehir saldırıyı kısar, sıfırlamaz).
+
+Bu terim `ageUp`'ın `economyMaturity` teriminin aynadaki karşılığı: saldırı da
+ekonomiye borçlu hale gelir.
+
+### Faz 3 — Şehir hedefleri (hedef 2)
+
+**Veri** — `ai.json` → `economy.buildingTargets`, çağ anahtarlı (mevcut
+`army.composition` ve `economy.workerTarget` ile aynı şekil):
+
+```json
+"buildingTargets": {
+  "settlement": { "house": 4, "farm": 1, "lumber_camp": 1, "quarry": 1,
+                  "gold_mine": 1, "barracks": 1, "outpost": 1, "market": 1 },
+  "town":       { "house": 8, "farm": 2, "lumber_camp": 2, "quarry": 1,
+                  "gold_mine": 1, "barracks": 1, "archery_range": 1,
+                  "outpost": 3, "market": 1 }
+}
+```
+
+**Kod** — `aiEconomyManager.buildOrder`: `count === 0` kontrolleri
+`count < target` olur. Sıra (tasarım) kodda kalır, sayılar (tuning) veriye
+gider. Ev, mevcut nüfus baskısı kuralını korur *ve* hedefe kadar arka planda
+istenir. `AI_WOOD_SAFETY_STOCK` mantığı aynen korunur.
+
+**Harita** — `rtsMapBlockout.enemyBaseAnchors`: ikinci `farm`, ikinci
+`lumber_camp`, ek `house` slotları ve (Karar A1 ise) üs savunma karakolu
+slotları eklenir. Kritik kısıtlar aynen geçerli:
+
+- Slot, çağın kontrol yarıçapı içinde olmalı (Yerleşim başlangıç 28).
+- Footprint'ler ve yol hücreleri (`enemyBaseRoute`, genişleme koridorları) ile
+  çakışma yasak.
+- Quarry/gold_mine slotları düğüm bağımlı; onlara dokunulmaz.
+- Oyuncu tarafında anchor yok (oyuncu serbest kurar), yani bu değişiklik
+  simetriyi bozmaz.
+
+**Merkez seviyesi** — `scoreAgeUp` bugün `bb.age === "town"` iken 0 dönüyor
+(`intentScorer.ts:134`). Bunun yerine Town'da kalan `levelUpgrades` varsa skor
+üretmeye devam etsin; `AiAgeManager` zaten `startLevelUpgrade` çağırabiliyor
+(`aiAgeManager.ts:57`), yani yeni makine gerekmez — yalnız "Town'a vardık, iş
+bitti" erken çıkışının kaldırılması ve reason metinlerinin güncellenmesi.
+
+### Faz 4 — Savunma (hedef 3)
+
+1. **Garnizonu çağa ölçekle.** `army.minimumDefensePower: 2` →
+   `Record<SettlementAge, number>`, örn. `{ "settlement": 3, "town": 6 }`.
+   Okuyucular: `intentScorer.scoreAttack:252`, `armyManager.chooseMission:206`,
+   `armyManager.garrison` (bkz. `armyManager.ts` garrison seçimi). Üçü de aynı
+   yardımcıdan okumalı ki eşik tek kopya kalsın.
+2. **Savunma yapısı build order'da.** `buildOrder`'da savunma yapısı
+   `barracks`'tan **sonra**, `quarry`'den **önce** istenir: §34'ün "askerî
+   yapıdan önce taş kazma" uyarısına ters düşmez ve Town gereksinimini de erken
+   karşılar.
+3. **`populationShare` düşür.** `0.55` → `0.40`. Ev hedefi büyüdüğü için mutlak
+   ordu boyutu düşmez, ama işçi/ordu dengesi ekonomiye kayar. `populationShare`
+   yorumundaki PopulationBlocked gerekçesi hâlâ geçerli, tavan kalkmıyor.
+4. **İşçi hedefi.** `workerTarget`: `settlement: 12 → 14`, `town: 16 → 22`.
+   Sıralama önemli: bu değişiklik ev hedefi (Faz 3) yükselmeden yapılmamalı,
+   yoksa nüfus kilidi acil durumu sıklaşır.
+
+### Faz 5 — Görünürlük ve doğrulama
+
+**Debug paneli** — `aiDebugView` yeni nedenleri gösterir: çağ kapısı durumu,
+`DevelopmentReadiness` yüzdesi, şehir hedeflerinde eksik kalanlar. `?rts&debug`
+ile bir maçı izlerken "neden saldırmıyor" sorusu panelden okunabilmeli (§82).
+
+**Engine testleri** — `tools/engine-tests.ts` (mevcut `AI_TEST_BALANCE` /
+`aiTestBlackboard` altyapısı kullanılır):
+
+- Scorer: Yerleşim'de `now > peaceSeconds` iken `attack` skoru 0; aynı
+  blackboard `age: "town"` ile > 0. Sınır: supap saniyesinde kapı kalkar.
+- Scorer: `DevelopmentReadiness` düşükken `attack` skorunun kısıldığı, hedefler
+  tamamlandığında tam skorladığı.
+- `buildOrder`: hedef sayılarına uyduğu; bir hedef dolduğunda o binayı
+  istemediği; ev nüfus baskısı kuralının hedefle çakışmadığı.
+- Garnizon: `minimumDefensePower` çağa göre okunduğu ve `settlement` eşiğinin
+  altında sahaya çıkılmadığı.
+- Entegrasyon (headless maç): Yerleşim'de baskın bir ordu ile **her tikte**
+  `assaultTarget`/`harassEconomy`'ye geçilmediği; Town'a geçince geçildiği.
+  Kurulum tuzağı — GDD/13 §53 (4) kaydındaki iki hata tekrarlanmamalı: pop
+  tavanını dolduran ordu `population-blocked` acilini tetikleyip direktörü
+  Economy'ye kilitler, ve işçisiz krallıkta Economy zaten 1.0 skorlar; ikisi de
+  kapıyı değil o yarışı ölçer.
+
+**Kapılar** — `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`.
+
+**Save-validator notu** — bu planın bütün veri alanları `balance/ai.json`,
+`balance/ages.json` ve `balance/buildings.json` içinde. CLAUDE.md'nin üç
+allowlist yüzeyi (layout / skeleton / effect) bu dosyalara uygulanmaz; doğru
+yüzey `src/game/data/validateGameData.ts`. Karar A2 seçilirse `buildings.json`
+şeması ve onun validator'ı da genişler.
+
+**Oynanış doğrulaması** — `?rts&debug` ile en az 5 maç: AI Kasaba'ya geçiyor,
+şehir hedeflerini tamamlıyor, üste karakol + garnizon tutuyor, saldırıyı Kasaba
+sonrasında başlatıyor, ve rush'a karşı hâlâ savunma yapıyor. Sonuç
+`GDD/13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` §53 kaydına yeni madde olarak
+işlenir (mevcut 4. madde formatında).
+
+---
+
+## 5. Riskler
+
+| Risk | Etki | Karşılık |
+| --- | --- | --- |
+| AI Kasaba'ya hiç geçemez, maç kilitlenir | Yüksek | Karar B1 supabı; ayrıca Faz 5 oynanış testinde açıkça aranır |
+| Üs karakolu Town gereksinimini karşılayınca AI genişlemeyi bırakır | Orta | `expand` skoru ekonomik değere bağlı kalıyor; oynanışta izlenir. Kabul edilemezse Karar A2 |
+| Yeni anchor'lar footprint/yol çakışması yaratır | Orta | Slotlar grid'e snap; `AiBuildManager` §43 kara listesi hatayı logta adıyla söyler |
+| Ev + işçi hedefi büyürken nüfus kilidi sıklaşır | Orta | Faz 3 (ev) Faz 4.4'ten (işçi) önce; `populationShare` düşüşü headroom açar |
+| Attack tavanı Faz 2'de fazla kısılır, AI hiç saldırmaz | Orta | `developmentFloor` veri; 0 = terim etkisiz, eski davranış ifade edilebilir |
+
+---
+
+## 6. Kapsam dışı
+
+- Ayrı baskın/kuşatma/savunma orduları (§51: AI-1 tek saha ordusu).
+- Serbest biçimli şehir planlayıcı (§40: anchor tabanlı kalır).
+- Yeni birim rolleri veya combat dengesi.
+- Zorluk profilleri (`profiles`) — bu plan normal profili düzeltiyor; profil
+  farklılaştırması ayrı iş.

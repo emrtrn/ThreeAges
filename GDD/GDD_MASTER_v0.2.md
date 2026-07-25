@@ -843,7 +843,7 @@ Bütün kararların Faz 0’da kapanması gerekmez. Bir karar yalnızca ilgili �
 
 ## 9.3 Ürün B öncesi
 
-- [x] Okçu Kasaba Çağı Okçuluk Alanı Lv1 içinde açılır; Topçu Kasaba Çağı Kışla Lv2 içinde açılır.
+- [x] Okçu Kasaba Çağı Okçuluk Alanı Lv1 içinde açılır; Topçu Kasaba Çağı Kışla Lv1 içinde açılır (ikisi de çağ geçişiyle birlikte, `02 §30.1`).
 - [x] Kuşatma birimi menzilli **topçu** olacak (`06 §9.1`, `SL-008`).
 - [ ] Kasabaya geçiş maliyeti ve koşulları nedir?
 - [ ] Alternatif lojistik rotalar nasıl seçilecektir?

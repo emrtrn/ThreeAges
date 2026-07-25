@@ -165,6 +165,28 @@ Format:
 - **İlgili:** `06 §9.1/§110`, `02 §30.1`, `04 §3.3`, `12 §33`,
   `public/game-data/balance/units.json`, `src/game/rts/combat/cannonballSystem.ts`.
 
+### SL-009 — Topçu'nun seviye kapısı kaldırıldı: Kasaba Lv2 → Lv1 (2026-07-25)
+
+- **Karar:** `siege_placeholder.requiredSettlementLevel` 2'den 1'e çekildi.
+  Topçu artık Okçuluk Alanı gibi **Kasaba Çağı'na geçildiği anda** üretilebilir;
+  üretim yapısı (Kışla), maliyeti, nüfusu ve kimliği değişmedi.
+- **Kapsam etkisi:** Dahil (tek veri alanı; kapı makinesi olduğu gibi duruyor).
+- **Gerekçe:** Kasaba'ya geçiş her krallığın merkez seviyesini Lv1'e sıfırlıyor
+  (`02 §30`), dolayısıyla "Kasaba + Lv2" çağın *üstüne* ikinci bir yükseltme
+  dayatıyordu: çağ rozetini yeni almış oyuncu Kışla panelinde hâlâ kilitli bir
+  Topçu görüyor, "Kasaba Çağındayım ama Kasaba birimimi üretemiyorum" çelişkisi
+  doğuyordu. Okçuluk Alanı çağla birlikte açılırken kuşatmanın bir üst basamakta
+  beklemesi için tasarım gerekçesi yoktu — Kasaba'nın vaadi tam kadrosudur.
+- **Yan etki ve çözümü:** (1) `siege_test` preset'i artık Kasaba Lv1'de açılıyor;
+  senaryo hâlâ kapının öbür tarafında başlıyor, sadece kapı bir basamak aşağıda.
+  (2) `AiUpgradeManager` sevkiyattaki hiçbir birim için gerekmiyor artık; kod
+  duruyor çünkü kapı verinin (`requiredSettlementLevel`), bir retune birimi
+  yeniden Lv1'in üstüne koyabilir. (3) Seviye ekseni kaldırılmadı — Kışla Lv2/Lv3
+  hâlâ kuyruk kapasitesi veriyor, sadece yeni birlik türü açmıyor (`04 §3.3`).
+- **İlgili:** `02 §30.1`, `04 §3.3`, `GDD_MASTER §9.3`,
+  `public/game-data/balance/units.json`,
+  `public/game-data/presets/siege_test.json`, `tools/engine-tests.ts`.
+
 ---
 
 ## 3. Referans — Scope-Cut Sırası
@@ -205,3 +227,6 @@ bölümde listelidir.
 
 - SL-008 ile kuşatma birimi koçbaşından menzilli topçuya çevrildi; `06 §9.1`
   yeniden yazıldı, `06 §110` ve `GDD_MASTER §9.3` açık soruları kapatıldı.
+- SL-009 ile Topçu'nun seviye kapısı kaldırıldı (Kasaba Lv2 → Lv1); Kasaba
+  kadrosunun tamamı artık çağ geçişiyle birlikte açılıyor. `02 §30.1` ve
+  `04 §3.3` buna göre güncellendi.

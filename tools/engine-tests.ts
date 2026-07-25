@@ -28344,7 +28344,7 @@ check("game-data presets load and debug_fast is faster", () => {
   // The siege scenario opens on the tier the Topçu is gated behind, so a
   // bombardment can be tested without first playing the economy that unlocks it.
   const siege = validateGamePreset(readPresetJson("siege_test"), "siege_test");
-  assert.deepEqual(siege.startingTier, { age: "town", level: 2 });
+  assert.deepEqual(siege.startingTier, { age: "town", level: 1 });
   // A shipped balance preset must never carry the handicap.
   assert.equal(proof.startingTier, undefined);
   assert.equal(coreMatch.startingTier, undefined);
@@ -28777,10 +28777,16 @@ check("unit balance validates combat stats for stable unit ids", () => {
   );
   assert.deepEqual(balance["worker_placeholder"]?.cost, { food: 50 });
 
-  // The Archer opens from a Town-age Range; only the artillery needs Barracks II.
+  // The Town milestone is the whole gate for the Town-age roster: the Archer opens
+  // from a Town-age Range and the artillery from the Barracks the kingdom already
+  // owns, both the moment the age commits. No shipped unit asks for a centre level
+  // above the Lv1 the Town transition resets every kingdom to — a second gate one
+  // upgrade past the age read as a Town that had not actually arrived.
   assert.equal(balance["guard_placeholder"]?.requiredSettlementLevel, 1);
   assert.equal(balance["archer_placeholder"]?.requiredSettlementLevel, 1);
-  assert.equal(balance["siege_placeholder"]?.requiredSettlementLevel, 2);
+  assert.equal(balance["siege_placeholder"]?.requiredSettlementLevel, 1);
+  assert.equal(balance["siege_placeholder"]?.requiredAge, "town");
+  assert.equal(balance["siege_placeholder"]?.productionBuildingId, "barracks");
   assert.equal(balance["archer_placeholder"]?.productionBuildingId, "archery_range");
   assert.equal(balance["archer_placeholder"]?.requiredAge, "town");
 
@@ -32282,10 +32288,10 @@ check("RTS workers rest for three seconds after reaching a player-ordered point"
 });
 
 check("a preset's opening tier makes the Town-gated Topçu trainable from the first second", () => {
-  // The debug switch behind `?preset=siege_test`: the gun sits at Town Lv2, and
-  // "play the economy that reaches Town Lv2" is not a step worth repeating every
-  // time the bombardment itself is being looked at. The gate is untouched — the
-  // scenario simply starts on the far side of it.
+  // The debug switch behind `?preset=siege_test`: the gun sits at Town Lv1, and
+  // "play the economy that reaches the Town age" is not a step worth repeating
+  // every time the bombardment itself is being looked at. The gate is untouched —
+  // the scenario simply starts on the far side of it.
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
@@ -32305,7 +32311,7 @@ check("a preset's opening tier makes the Town-gated Topçu trainable from the fi
     ["player"], units, structures,
     { food: 2000, wood: 2000, stone: 2000, gold: 2000 }, 60,
   );
-  const opening = { age: "town", level: 2 } as const;
+  const opening = { age: "town", level: 1 } as const;
   const progression = new KingdomProgressionSystem(
     ["player"], ages, centers, structures, kingdoms, opening,
   );
@@ -33993,10 +33999,12 @@ check("Faz 8 §53: the AI researches Barracks II and fields a mixed army", () =>
   const board = world.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
 
   // §53's ratio has been data since Faz 7, but it could never be honoured: the
-  // Archer and the Topçu sit behind `requiredSettlementLevel: 2`, and nothing in the
-  // AI could research the tier. It fielded Guards and only Guards, whatever the
-  // ratio asked for — the "AI karışık ordu üretiyor" criterion failed on a
-  // missing executor rather than on a scoring rule.
+  // Archer and the Topçu both sat behind `requiredSettlementLevel: 2`, and nothing
+  // in the AI could research the tier. It fielded Guards and only Guards, whatever
+  // the ratio asked for — the "AI karışık ordu üretiyor" criterion failed on a
+  // missing executor rather than on a scoring rule. Both are Town Lv1 now, so the
+  // age itself is what the AI has to reach; the tier executor stays because the
+  // gate machinery is data-owned and a retune can put a unit back above Lv1.
   const ranges = world.structures.ownedBy("enemy").filter((structure) => structure.stats.id === "archery_range");
   assert.ok(ranges.some((structure) => structure.construction.complete), "the AI completes its Town-age Range");
   const barracks = world.structures.ownedBy("enemy").filter((structure) => structure.stats.id === "barracks");

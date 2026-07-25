@@ -703,7 +703,7 @@ bulunduğu çağın içinde Lv1–Lv3 merdivenini kendi başına tırmanır.
 | Kışla | Açık | Açık | Açık | Lv1–3 |
 | Okçuluk Alanı | Kapalı | Açık | Açık | Lv1–3 |
 | Süvari yapısı | Kapalı | Opsiyonel | Açık | TBD |
-| Kuşatma | Kapalı | Kışla Lv2 içinde | Kışla Lv2 içinde | — |
+| Kuşatma | Kapalı | Kışla içinde | Kışla içinde | — |
 | Karakol | Açık | Açık | Açık | Lv1–3 |
 | Kule | Kapsam dışı | Kapsam dışı | Koşullu | TBD |
 | Pazar | Kapalı | Açık | Açık | TBD |
@@ -725,7 +725,16 @@ tarafındaki iki eksen artık birim tarafında da var:
 | İşçi | Merkez | Yerleşim | Lv1 |
 | Muhafız | Kışla | Yerleşim | Lv1 |
 | Okçu | **Okçuluk Alanı** | Kasaba | Lv1 |
-| Topçu | Kışla | Kasaba | Lv2 |
+| Topçu | Kışla | Kasaba | Lv1 |
+
+**Topçu'nun seviye kapısı kaldırıldı (Lv2 → Lv1).** Kasaba'ya geçiş her krallığın
+merkez seviyesini Lv1'e sıfırlar (§30), dolayısıyla "Kasaba + Lv2" oyuncuya çağı
+açtıktan *sonra* bir yükseltme daha dayatıyordu: çağ rozetini alan oyuncu Kışla
+panelinde hâlâ kilitli bir Topçu görüyordu ve "Kasaba Çağındayım ama Kasaba
+birimimi üretemiyorum" çelişkisi doğuyordu. Artık çağın kendisi tüm Kasaba
+kadrosunun kapısıdır: Okçuluk Alanı da Topçu da geçiş tamamlandığı anda açılır.
+Seviye kapısı veri alanı olarak duruyor (`requiredSettlementLevel`), sadece
+sevkiyattaki hiçbir birim onu 1'in üstünde kullanmıyor.
 
 Veri sözleşmesi (`UnitBalanceStats`): `productionBuildingId` + `requiredAge` +
 `requiredBuildingLevel`. Yapılar da opsiyonel `requiredAge` taşır — Okçuluk

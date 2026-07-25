@@ -1,10 +1,10 @@
 {
   "id": "siege_test",
-  "label": "Siege Test (Topçu, Kasaba Lv2)",
+  "label": "Siege Test (Topçu, Kasaba Lv1)",
   "flags": {},
   "startingTier": {
     "age": "town",
-    "level": 2
+    "level": 1
   },
   "startingResources": {
     "food": 1000,

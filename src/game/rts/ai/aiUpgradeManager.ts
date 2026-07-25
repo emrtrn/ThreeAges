@@ -3,9 +3,11 @@
  * ("Muhafız / Okçu / Kuşatma oranı") and the centre-led progression plan §4.
  *
  * §53's composition ratio was data long before the AI could honour it: the Archer
- * and the Topçu sit behind a global centre tier (`requiredSettlementLevel`), so a
- * kingdom that has not levelled its centre can only ever field Guards no matter
- * what the ratio asks for.
+ * and the Topçu sat behind a global centre tier (`requiredSettlementLevel`), so a
+ * kingdom that had not levelled its centre could only ever field Guards no matter
+ * what the ratio asked for. Both are Town Lv1 today, so no shipped unit needs this
+ * executor to unlock — it stays because the tier ladder is data, and a retune that
+ * puts a unit back above Lv1 must not need a code change to become reachable.
  *
  * Under centre-led progression a unit is gated on the kingdom's global tier, not
  * a building's own level, so this executor invests in the centre level through

@@ -72,9 +72,10 @@ export interface GamePreset {
    *
    * A test-only handicap in the same family as {@link enemyStartingResources}:
    * it exists so a Town-age feature can be exercised without first playing the
-   * ten minutes of economy that unlock it — the Topçu sits behind Town Lv2, and
-   * "reach Town Lv2" is not a useful step in a bombardment test. Applied to both
-   * kingdoms, so the match stays symmetric; never ship a balance preset with it.
+   * ten minutes of economy that unlock it — the Topçu sits behind the Town age,
+   * and "reach the Town age" is not a useful step in a bombardment test. Applied
+   * to both kingdoms, so the match stays symmetric; never ship a balance preset
+   * with it.
    */
   startingTier?: StartingTier;
   /** Simulation speed multiplier (1 = real time; debug_fast raises it). */
@@ -183,7 +184,12 @@ export interface UnitBalanceStats {
    * reached to train this unit (1..3). Centre-led progression (see
    * `docs/planned/THREEAGES_CENTER_LED_PROGRESSION_PLAN.md`): a unit gate is a
    * statement about the whole kingdom's tier, not about one production building.
-   * Guard = Settlement Lv1, Archer = Town Lv1, artillery = Town Lv2.
+   *
+   * Every shipped unit sits at Lv1 of its own age — Guard = Settlement Lv1,
+   * Archer = Town Lv1, artillery = Town Lv1 — so `requiredAge` carries the whole
+   * unlock and reaching an age opens everything that age adds. The field stays
+   * because the ladder is data: a retune can put a unit above Lv1 without a code
+   * change, and the gate is enforced either way.
    */
   readonly requiredSettlementLevel: number;
   /** Resources reserved when this unit enters a production queue. */

@@ -83,7 +83,7 @@
     "trainingSeconds": 80,
     "productionBuildingId": "barracks",
     "requiredAge": "town",
-    "requiredSettlementLevel": 2,
+    "requiredSettlementLevel": 1,
     "cost": {
       "wood": 140,
       "stone": 100,
