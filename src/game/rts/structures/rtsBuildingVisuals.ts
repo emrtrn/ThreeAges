@@ -2,19 +2,23 @@
  * Visual library for the RTS building contracts.
  *
  * Gameplay continues to own footprints, navigation blockers and construction;
- * this module only replaces their temporary box meshes once the corresponding
- * glTF is ready. Models are shared templates keyed by mesh path and every placed
- * structure gets a clone, so the same building can appear many times without
- * repeated requests. The gameplay-to-path mapping lives in {@link rtsBuildingArt}
- * so it stays Three.js-free and testable; callers pass the owner's
- * {@link SettlementAge} to pick the art family (defaulting to Settlement/First
- * Age, which preserves the pre-age-split behaviour of every current call site).
+ * this module only decides what a structure looks like.
+ *
+ * Since the presentation plan's Faz 4 the authored Actor pack is the authority
+ * for that, and every entry point here asks it first. The legacy
+ * {@link rtsBuildingArt} glTF tables survive for exactly one job: covering the
+ * seconds between the match appearing and the pack finishing its load. Once the
+ * pack is ready they are never consulted again — a building the catalog cannot
+ * answer for is a coverage bug, and it shows the explicit stand-in rather than a
+ * plausible-looking model that hides the gap. Faz 5 deletes them.
  */
 import { Box3, Group, Mesh, type Object3D, type WebGLRenderer } from "three";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 
 import type { SettlementAge } from "../../data/gameDataTypes";
 import type { RtsActorVisualFactory } from "../content/rtsActorVisualFactory";
+import { createRtsActorPlaceholder } from "../content/rtsActorPlaceholder";
+import { fitPresentationToFootprint } from "../content/rtsActorPresentationTree";
 import type { CommandCenter } from "./commandCenter";
 import type { PlacedStructure } from "./placedStructureSystem";
 import { allBuildingMeshPaths, buildingMeshPath } from "./rtsBuildingArt";
@@ -46,38 +50,65 @@ export class RtsBuildingVisuals {
   applyToCenter(center: CommandCenter, age: SettlementAge = "settlement"): void {
     // The centre goes through the same Actor-first resolution as every other
     // building; it is only spawned differently, not presented differently.
-    const visual = this.actorVisuals?.createBuildingVisual(
+    const visual = this.resolve(
       "command_center",
       "completed",
       center.level,
       COMMAND_CENTER_FOOTPRINT,
       COMMAND_CENTER_FOOTPRINT,
       age,
-    ) ?? this.legacyCenterVisual(age, center.level);
+      () => buildingMeshPath("command_center", age, center.level),
+    );
     if (visual) center.setVisual(visual);
   }
 
-  private legacyCenterVisual(age: SettlementAge, level: number): Group | null {
-    const path = buildingMeshPath("command_center", age, level);
-    return path ? this.create(path, COMMAND_CENTER_FOOTPRINT, COMMAND_CENTER_FOOTPRINT) : null;
+  /**
+   * The one resolution order every call site shares: the authored Actor, then —
+   * only while the pack is still loading — the legacy model, and otherwise the
+   * explicit stand-in.
+   *
+   * A pack that is loaded and still cannot answer means the catalog is missing a
+   * mapping. Showing legacy art there would make a coverage bug look like a
+   * finished building, which is how the second Farm mesh stayed invisible for so
+   * long; the stand-in makes it a thing someone reports instead.
+   */
+  private resolve(
+    buildingId: string,
+    state: "construction" | "completed",
+    level: number,
+    footprintWidth: number,
+    footprintDepth: number,
+    age: SettlementAge,
+    legacyPath: () => string | null,
+  ): Group | null {
+    const actorVisual = this.actorVisuals?.createBuildingVisual(
+      buildingId,
+      state,
+      level,
+      footprintWidth,
+      footprintDepth,
+      age,
+    );
+    if (actorVisual) return actorVisual;
+    if (this.actorVisuals?.isReady()) {
+      const placeholder = createRtsActorPlaceholder(`${buildingId}@${age}#${level}:${state}`);
+      placeholder.userData.rtsSharedModel = true;
+      fitPresentationToFootprint(placeholder, footprintWidth, footprintDepth);
+      return placeholder;
+    }
+    const path = legacyPath();
+    return path ? this.create(path, footprintWidth, footprintDepth) : null;
   }
 
   createForStructure(structure: PlacedStructure, age: SettlementAge = "settlement"): Group | null {
-    const actorVisual = this.actorVisuals?.createBuildingVisual(
+    return this.resolve(
       structure.stats.id,
       "completed",
       structure.level,
       structure.stats.footprint.width,
       structure.stats.footprint.depth,
       age,
-    );
-    if (actorVisual) return actorVisual;
-    const path = visualMeshPathForStructure(structure, age);
-    if (!path) return null;
-    return this.create(
-      path,
-      structure.stats.footprint.width,
-      structure.stats.footprint.depth,
+      () => visualMeshPathForStructure(structure, age),
     );
   }
 
@@ -88,17 +119,15 @@ export class RtsBuildingVisuals {
     age: SettlementAge = "settlement",
     level = 1,
   ): Group | null {
-    const actorVisual = this.actorVisuals?.createBuildingVisual(
+    return this.resolve(
       buildingId,
       "completed",
       level,
       footprintWidth,
       footprintDepth,
       age,
+      () => buildingMeshPath(buildingId, age, level),
     );
-    if (actorVisual) return actorVisual;
-    const path = buildingMeshPath(buildingId, age, level);
-    return path ? this.create(path, footprintWidth, footprintDepth) : null;
   }
 
   createConstructionVisual(
@@ -106,17 +135,15 @@ export class RtsBuildingVisuals {
     age: SettlementAge = "settlement",
     level = 1,
   ): Group | null {
-    const actorVisual = this.actorVisuals?.createBuildingVisual(
+    return this.resolve(
       structure.stats.id,
       "construction",
       level,
       structure.stats.footprint.width,
       structure.stats.footprint.depth,
       age,
+      () => buildingMeshPath(structure.stats.id, age, level),
     );
-    if (actorVisual) return actorVisual;
-    const path = buildingMeshPath(structure.stats.id, age, level);
-    return path ? this.create(path, structure.stats.footprint.width, structure.stats.footprint.depth) : null;
   }
 
   dispose(): void {

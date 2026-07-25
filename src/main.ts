@@ -35,8 +35,6 @@ function requireElement<T extends HTMLElement>(id: string): T {
  */
 interface BootFoundationResult {
   readonly preset: GamePreset | null;
-  /** Assetization Faz B's opt-in catalog load gate. */
-  readonly contentAssetsEnabled: boolean;
   /** Assetization Faz D's opt-in authored gameplay-Level gate. */
   readonly levelAssetsEnabled: boolean;
   /** Prosperity is debug-only in Phase 6 and never enters gameplay gates. */
@@ -83,7 +81,6 @@ async function bootFoundation(): Promise<BootFoundationResult> {
   }
   return {
     preset,
-    contentAssetsEnabled: config.flags.contentAssets,
     levelAssetsEnabled: config.flags.levelAssets,
     prosperityDebugEnabled: config.flags.prosperity,
     regionalVictoryEnabled: config.flags.regionalVictory,
@@ -92,7 +89,7 @@ async function bootFoundation(): Promise<BootFoundationResult> {
 }
 
 async function main(): Promise<void> {
-  const { preset, contentAssetsEnabled, levelAssetsEnabled, prosperityDebugEnabled, regionalVictoryEnabled, fogOfWarEnabled } =
+  const { preset, levelAssetsEnabled, prosperityDebugEnabled, regionalVictoryEnabled, fogOfWarEnabled } =
     await bootFoundation();
 
   const params = new URLSearchParams(location.search);
@@ -113,11 +110,12 @@ async function main(): Promise<void> {
       loadRoadBalance(),
       loadAiBalance(),
     ]);
-    // The catalog remains opt-in until its Actor Script consumers land in Faz C.
-    // Keeping the fetch behind this flag preserves the default legacy boot path.
-    const contentCatalog = contentAssetsEnabled
-      ? await loadRtsContentCatalog(unitBalance, buildingBalance)
-      : undefined;
+    // The Actor pack is how the RTS renders (presentation plan Faz 4), so the
+    // catalog loads on every start rather than behind the retired `contentAssets`
+    // flag. A catalog that fails to load is fatal to the route on purpose: it is
+    // the mapping from gameplay ids to art, and a match rendered without it would
+    // be a silently art-less match.
+    const contentCatalog = await loadRtsContentCatalog(unitBalance, buildingBalance);
     const authoredLevel = levelAssetsEnabled && preset?.levelRef
       ? await (await import("@/game/rts/world/rtsLevelLoader")).loadRtsLevel(
         preset.levelRef,
@@ -129,7 +127,7 @@ async function main(): Promise<void> {
       prosperityDebugEnabled,
       regionalVictoryEnabled,
       fogOfWarEnabled,
-      ...(contentCatalog ? { contentCatalog } : {}),
+      contentCatalog,
       ...(authoredLevel ? { level: authoredLevel.definition, levelLayout: authoredLevel.layout } : {}),
       unitBalance,
       buildingBalance,

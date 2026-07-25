@@ -17,13 +17,13 @@
 /** The canonical flag set (plan §13). All default OFF — each is a later or
  *  conditional system, not part of Ürün A's core.
  *
- *  `contentAssets` is the migration gate for
- *  `docs/planned/THREEAGES_RTS_CONTENT_ASSETIZATION_PLAN.md`: with it off the
- *  RTS resolves visuals through the legacy code-side tables
- *  (`rtsBuildingArt`, `rtsMapArt`, `Unit`'s placeholder geometry), which stay
- *  the only authority until each phase's acceptance is met. Turning it on
- *  (`?flags=contentAssets`) selects the Content Drawer asset path instead. It
- *  is never added to a shipped preset before the plan's §13 removal gate. */
+ *  `contentAssets` is **retired and a no-op**. It was the migration gate for
+ *  `docs/planned/THREEAGES_RTS_CONTENT_ASSETIZATION_PLAN.md`, selecting the
+ *  authored Actor pack instead of the legacy code-side art tables. Since the
+ *  Actor presentation plan's Faz 4 the pack is how the RTS renders by default, so
+ *  `?flags=contentAssets` changes nothing — it is kept for one release only so an
+ *  existing bookmark or preset does not fail to resolve, and is removed in that
+ *  plan's Faz 5. */
 export const FEATURE_FLAG_IDS = [
   "age3",
   "regionalVictory",

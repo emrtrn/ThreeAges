@@ -33,6 +33,12 @@ export const COMMAND_CENTER_MAX_HEALTH = 300;
 /** Initial buildable territory around a newly placed command centre. */
 export const COMMAND_CENTER_CONTROL_RADIUS = 28;
 const COMMAND_CENTER_FOOTPRINT = 7;
+/**
+ * The single child slot the centre's building model occupies. Whatever art is
+ * current lives under this name, so replacing it is "remove the slot, add the
+ * new one" rather than a guess at what the previous model was called.
+ */
+const COMMAND_CENTER_MODEL_SLOT = "rts-complete-building-model";
 
 
 export class CommandCenter implements UpgradableStructure {
@@ -165,15 +171,30 @@ export class CommandCenter implements UpgradableStructure {
     this.selectionRing.visible = selected;
   }
 
-  /** Replace the Faz 1 primitive tower with an RTS building asset. */
+  /**
+   * Replace the Faz 1 primitive tower with an RTS building asset.
+   *
+   * The incoming visual is *renamed* to the slot it occupies, exactly as
+   * `PlacedStructureSystem.setCompletedVisual` does, and the previous occupant is
+   * found by that slot name. Matching on the visual's own name instead would miss
+   * anything the caller happened to name differently — which is how a re-skin
+   * (the pack finishing its load, a level-up, an age change) could leave the old
+   * model standing inside the new one.
+   */
   setVisual(visual: Object3D): void {
     const placeholder = this.object.getObjectByName("rts-command-center-placeholder");
     if (placeholder) {
       this.object.remove(placeholder);
       disposeObjectMeshes(placeholder);
     }
-    const existing = this.object.getObjectByName("rts-complete-building-model");
-    if (existing) this.object.remove(existing);
+    const existing = this.object.getObjectByName(COMMAND_CENTER_MODEL_SLOT);
+    if (existing) {
+      this.object.remove(existing);
+      // Shared Actor/glTF templates are skipped inside; only per-centre geometry
+      // is actually released.
+      disposeObjectMeshes(existing);
+    }
+    visual.name = COMMAND_CENTER_MODEL_SLOT;
     this.object.add(visual);
   }
 

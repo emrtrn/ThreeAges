@@ -45,7 +45,7 @@ import {
   roomLayoutToSceneDocument,
 } from "../engine/scene/legacyRoomLayoutAdapter";
 import { validateSceneDocument } from "../engine/scene/sceneSerialization";
-import { resolveFeatureFlags } from "../src/game/core/featureFlags";
+import { isFeatureFlag, resolveFeatureFlags } from "../src/game/core/featureFlags";
 import { normalizeAssetCollisionDef } from "../src/scene/assetCollisionLoader";
 import {
   buildGameModeDebugSnapshot,
@@ -29067,23 +29067,23 @@ check("Faz M1 the Market is buildable and every balance building has art wired",
  * authority lives today*, and is expected to be rewritten — not deleted — by the
  * phase named in its comment. The flag is the gate all of that hangs from.
  */
-check("Assetization Faz A: the content-asset migration is gated off by default", () => {
-  assert.equal(
-    resolveFeatureFlags().contentAssets,
-    false,
-    "Faz A ships no behaviour change: the legacy code-side art path stays the default",
-  );
-  assert.equal(resolveFeatureFlags({}, "contentAssets").contentAssets, true, "?flags=contentAssets opts in");
+check("Actor presentation Faz 4: contentAssets is a retired no-op that still resolves", () => {
+  // The flag no longer gates anything: the Actor pack is the default presentation
+  // and `main.ts` loads the catalog on every RTS start. It stays resolvable for
+  // one release so an existing bookmark or preset does not fail to boot, and is
+  // removed in Faz 5 — this assertion is what has to be deleted with it.
+  assert.equal(resolveFeatureFlags().contentAssets, false, "the retired flag stays off by default");
+  assert.equal(resolveFeatureFlags({}, "contentAssets").contentAssets, true, "?flags=contentAssets still resolves");
+  assert.ok(isFeatureFlag("contentAssets"), "an existing URL or preset naming it must not fail validation");
+
   assert.equal(resolveFeatureFlags().levelAssets, false, "Level gameplay data remains opt-in during Faz D");
   assert.equal(resolveFeatureFlags({}, "levelAssets").levelAssets, true, "?flags=levelAssets opts in");
-  // The flag is a dev opt-in, never a shipped preset's (plan §9 Faz A, §13).
+
+  // No shipped preset needs to name it either way, precisely because it no longer
+  // decides anything.
   for (const presetId of ["core_match", "gameplay_proof", "debug_fast"]) {
     const preset = validateGamePreset(readPresetJson(presetId), presetId);
-    assert.notEqual(
-      preset.flags?.contentAssets,
-      true,
-      `preset "${presetId}" may not enable contentAssets before the plan's §13 removal gate`,
-    );
+    assert.notEqual(preset.flags?.contentAssets, true, `preset "${presetId}" does not need the retired flag`);
   }
 });
 
@@ -29922,6 +29922,7 @@ check("Actor presentation Faz 3: fitting a multi-mesh Actor keeps every authored
 check("Actor presentation Faz 3: construction, completed, preview and the centre share one Actor selection path", () => {
   const calls: Array<[string, string, number, number, number, string]> = [];
   const actorVisuals = {
+    isReady: () => true,
     createBuildingVisual: (
       buildingId: string,
       state: string,
@@ -29962,11 +29963,38 @@ check("Actor presentation Faz 3: construction, completed, preview and the centre
     ["command_center", "completed", 3, 8, 8, "town"],
   ]);
 
-  // With no Actor for an id, each of those call sites falls back rather than
-  // rendering nothing — the transition-period contract.
-  const empty = { createBuildingVisual: () => null } as unknown as RtsActorVisualFactory;
-  const fallbackVisuals = new RtsBuildingVisuals(undefined as unknown as WebGLRenderer, empty);
-  assert.equal(fallbackVisuals.createForStructure(structure, "town"), null, "an unloaded legacy pack yields no visual");
+  // Faz 4: re-skinning the centre replaces its model instead of stacking one on
+  // top of the other. The pack finishing its load, a level-up and an age change
+  // all land here, and an Actor visual carries its own ref-derived name — so a
+  // slot that matched on the incoming name would leave every previous model
+  // standing inside the new one.
+  visuals.applyToCenter(center, "town");
+  center.level = 1;
+  visuals.applyToCenter(center, "settlement");
+  const models = center.object.children.filter((child) => child.name === "rts-complete-building-model");
+  assert.equal(models.length, 1, "the centre holds one building model, whatever it was re-skinned from");
+  assert.equal(calls.length, 6, "each re-skin asked the factory again");
+
+  // Faz 4: a *loaded* pack with no answer for an id is a coverage bug, and the
+  // player sees the stand-in. Legacy art here would dress a missing mapping up as
+  // a finished building.
+  const loadedButEmpty = {
+    isReady: () => true,
+    createBuildingVisual: () => null,
+  } as unknown as RtsActorVisualFactory;
+  const gap = new RtsBuildingVisuals(undefined as unknown as WebGLRenderer, loadedButEmpty)
+    .createForStructure(structure, "town");
+  assert.ok(gap && isRtsActorPlaceholder(gap), "an uncovered id shows the stand-in, not legacy art");
+
+  // While the pack is still loading, the legacy path is still allowed to cover
+  // the field — that, and only that, is what it is kept for until Faz 5.
+  const stillLoading = {
+    isReady: () => false,
+    createBuildingVisual: () => null,
+  } as unknown as RtsActorVisualFactory;
+  const loading = new RtsBuildingVisuals(undefined as unknown as WebGLRenderer, stillLoading)
+    .createForStructure(structure, "town");
+  assert.equal(loading, null, "with no legacy models loaded either, the box placeholder stays");
 });
 
 check("Assetization Faz C: UnitSystem resolves catalog presentation pick targets without body-child assumptions", () => {

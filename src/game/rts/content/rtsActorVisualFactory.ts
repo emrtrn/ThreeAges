@@ -111,6 +111,15 @@ export class RtsActorVisualFactory {
     this.ready = true;
   }
 
+  /**
+   * Whether the pack has finished loading. Callers use it to tell "no Actor for
+   * this id" (a coverage bug worth showing) apart from "not loaded yet" (a
+   * moment, during which the legacy art still covers the field).
+   */
+  isReady(): boolean {
+    return this.ready;
+  }
+
   /** Counts and reasons for whatever the pack could not build. */
   report(): RtsActorLoadReport {
     return {

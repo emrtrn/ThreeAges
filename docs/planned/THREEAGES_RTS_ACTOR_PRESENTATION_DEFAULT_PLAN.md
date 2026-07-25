@@ -1,7 +1,7 @@
 # ThreeAges RTS Actor Sunumunu Varsayilan Yapma Plani
 
 Olusturulma tarihi: 2026-07-25  
-Durum: Faz 1, Faz 2 ve Faz 3 uygulandi. Faz 4-5 bekliyor.
+Durum: Faz 1-4 uygulandi. Faz 5 (legacy temizligi) bekliyor.
 
 ## Karar
 
@@ -93,6 +93,41 @@ Faz 3 tamamlandi.
 - Footprint fit `fitPresentationToFootprint` olarak ayrildi: bounds tum agac
   uzerinden aliniyor, sadece root olcekleniyor; coklu mesh'in lokal offsetleri
   korunuyor (testle kanitli).
+
+Faz 4 tamamlandi.
+
+- `main.ts` katalogu her RTS baslangicinda flag'siz yukluyor. Katalog yuklenemezse
+  rota bilincli olarak patliyor: katalog gameplay id -> sanat eslemesidir, onsuz
+  acilan mac sessizce sanatsiz bir mactir.
+- `?flags=contentAssets` **retired no-op**. Bir surum boyunca cozulmeye devam
+  ediyor ki mevcut bir bookmark veya preset boot'u kirmasin; Faz 5'te kaldirilacak.
+  `featureFlags.ts` dokumantasyonu ve engine testi bunu acikca soyluyor.
+- `RtsBuildingVisuals`in dort giris noktasi (completed, construction, preview,
+  command center) tek bir `resolve()` sirasindan geciyor: authored Actor → (yalniz
+  pack henuz yuklenirken) legacy glTF → acik placeholder. Pack hazirken katalogun
+  cevaplayamadigi bir id artik legacy sanat degil placeholder gosteriyor; aksi
+  halde kapsama hatasi bitmis bir bina gibi gorunurdu.
+- `RtsActorVisualFactory.isReady()` eklendi: "bu id icin Actor yok" (kapsama
+  hatasi) ile "henuz yuklenmedi" (birkac saniyelik pencere) artik ayirt ediliyor.
+- Browser testleri yeniden yazildi: varsayilan `?rts` rotasi
+  `data-rts-content-assets="ready"` + `data-rts-content-placeholders="0"` veriyor,
+  ve iki URL'nin (`?rts` ile `?rts&flags=contentAssets`) debug overlay'indeki
+  `sunum: X/Y Actor` satiri birebir ayni — Faz 4'un teslim olcutu.
+- Legacy `rtsBuildingArt.ts` + preload hala duruyor, tek isi pack yuklenene kadar
+  gecen saniyeleri kapatmak. Faz 5 bunlari siler.
+- **Gercek bir gorsel sizinti duzeltildi** (risk tablosundaki "eski visual leak
+  etmez" satiri): `CommandCenter.setVisual` eski modeli
+  `"rts-complete-building-model"` adiyla ariyordu, ama Actor gorseli kendi
+  ref-turevli adini tasiyor. Yani pack yuklendiginde / level-up'ta / cag
+  degisiminde eski model kaldirilmiyor, yenisi ustune ekleniyordu. Artik
+  `PlacedStructureSystem.setCompletedVisual` ile ayni disiplin: gelen gorsel slot
+  adiyla yeniden adlandiriliyor ve onceki o adla kaldiriliyor. Regresyon testi
+  eklendi.
+
+Not: `tests/smoke/rts-building-placement.spec.ts` icindeki 6 test **bu
+degisikliklerden once de dusuyor** (stash'lenmis temiz agacta ayni hatayla
+dogrulandi: hiz kontrolu butonu "element is outside of the viewport"). Bu plan
+kapsaminda degil, ayrica ele alinmali.
 
 ## Faz 1 — Kapsam envanteri ve veri sozlesmesi
 

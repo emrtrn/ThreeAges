@@ -1,63 +1,68 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Assetization Faz A browser baseline.
+ * Actor presentation Faz 4 browser witness.
  *
- * Later content-catalog and Actor Script work must not change the ordinary RTS
- * boot path merely by existing. Engine tests pin the flag resolver and legacy
- * authorities; this test is the browser-level witness that the default route
- * still starts a playable legacy match without runtime errors.
+ * The plain `?rts` route renders the authored Actor pack — no flag involved. The
+ * pack's own health is published on the canvas, so "the default route is on the
+ * authored path and nothing in it fell back" is a fact this test can read rather
+ * than infer from a screenshot.
  */
-test("Assetization Faz A: default RTS boot stays on the legacy visual path", async ({ page }) => {
+test("Actor presentation Faz 4: the default RTS route renders the authored Actor pack", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
   await page.goto("/?rts&debug");
   await expect(page.locator("#game-canvas")).toBeVisible();
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-assets", "ready", { timeout: 30_000 });
+  // Zero stand-ins is the shipped state, published as a number so "healthy" and
+  // "not reported yet" can never read the same. A broken Actor would leave
+  // `data-rts-content-assets="placeholder"` and a non-zero count here.
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-placeholders", "0");
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
 
+  // No flag was passed, and none was needed.
   const contentAssetsEnabled = await page.evaluate(() => {
     const forge = (window as unknown as {
       __forge?: { config?: { flags?: { contentAssets?: unknown } } };
     }).__forge;
     return forge?.config?.flags?.contentAssets;
   });
-  expect(contentAssetsEnabled, "the asset migration must stay opt-in during Faz A").toBe(false);
+  expect(contentAssetsEnabled, "the Actor pack must not depend on the retired flag").toBe(false);
 
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
   await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+  await expect(page.locator(".rts-debug-overlay")).toContainText("placeholder yok");
 
   expect(errors, "default RTS boot must not produce console errors").toEqual([]);
 });
 
-test("Assetization Faz C: the opt-in catalog loads Actor presentations without changing match boot", async ({ page }) => {
+test("Actor presentation Faz 4: the retired contentAssets flag changes nothing", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
-  await page.goto("/?rts&debug&flags=contentAssets");
-  await expect(page.locator("#game-canvas")).toBeVisible();
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-assets", "ready", { timeout: 30_000 });
-  await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
-  const contentAssetsEnabled = await page.evaluate(() => {
-    const forge = (window as unknown as {
-      __forge?: { config?: { flags?: { contentAssets?: unknown } } };
-    }).__forge;
-    return forge?.config?.flags?.contentAssets;
-  });
-  expect(contentAssetsEnabled).toBe(true);
+  // The plan's Faz 4 delivery criterion: both URLs render the same Actor pack.
+  // The debug overlay's presentation line carries the loaded/requested counts, so
+  // comparing it across the two routes compares what each of them actually built.
+  const presentationLine = async (url: string): Promise<string> => {
+    await page.goto(url);
+    await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-assets", "ready", { timeout: 30_000 });
+    await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-placeholders", "0");
+    const overlay = await page.locator(".rts-debug-overlay").textContent();
+    return overlay?.split("\n").find((line) => line.startsWith("sunum:")) ?? "";
+  };
 
-  // Faz 3: the pack reports its own health. Zero stand-ins is the shipped state,
-  // and it is published as a number so "healthy" and "not reported yet" can never
-  // read the same — a broken Actor would show `placeholder` here instead.
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-placeholders", "0");
+  const withoutFlag = await presentationLine("/?rts&debug");
+  const withFlag = await presentationLine("/?rts&debug&flags=contentAssets");
+  expect(withoutFlag).toMatch(/^sunum: \d+\/\d+ Actor · placeholder yok$/);
+  expect(withFlag, "the retired flag is a no-op: both routes build the same pack").toBe(withoutFlag);
 
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
-  await expect(page.locator(".rts-debug-overlay")).toContainText("placeholder yok");
-  expect(errors, "the catalog loader must not disturb the RTS match").toEqual([]);
+  expect(errors, "the retired flag must not disturb the RTS match").toEqual([]);
 });
 
 test("Assetization Faz D: the opt-in authored Level drives the spatial layout of a live match", async ({ page }) => {
