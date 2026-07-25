@@ -2345,6 +2345,46 @@ Erken oyun saldırmazlık süresi (4. madde) bunlardan bağımsızdı ve tamamla
 çeşitliliğinin gerçekten geri geldiğini görmek için yeni bir maç turu gerekiyor
 (§70 denge önceliklerine bağlanmalı).
 
+- [x] **6. Çağ kapılı saldırı + şehir gelişimi (denge bulgusu — AI hiç
+  gelişmiyor; yapıldı 2026-07-25).** 4. maddenin zaman penceresi rush'ı
+  geciktirdi ama davranışı değiştirmedi: AI pencere boyunca ekonomisini askere
+  çeviriyor, 10. dakikada Yerleşim çağında saldırıya kalkıyor ve çağ atlamayı da
+  gelişmiş bir şehri de hiç görmüyordu. Üç kök neden ölçüldü: (a) `scoreAttack`
+  yalnız `peaceSeconds` ile kapılıydı, çağ kontrolü yoktu; (b) `buildOrder` her
+  binadan *bir* tane istiyordu, yani sekiz bina dikilince Economy niyetinin
+  yapacak işi kalmıyor ve histerezisle birleşen 1.0'lık Attack maçın kalanını
+  alıyordu; (c) üste hiç savunma yapısı slotu yoktu ve `minimumDefensePower: 2`
+  üste iki Muhafız bırakıyordu.
+  **Yapılan (hepsi veri + tek kopya kural):** `army.attackMinimumAge: "town"`
+  emniyet supabı `army.attackAgeGraceSeconds: 1800` ile;
+  `scoring.attack.developmentFloor: 0.35` (yarım kalmış şehir saldırıyı kısar,
+  sıfırlamaz — authored anchor'lar tükenebildiği için gate değil floor);
+  `scoring.economy.developmentNeed: 0.45` (aynı eksik Economy'yi yukarı çeker,
+  yoksa plan hiç kurulmaz — *yalnız* Economy niyeti bina diker);
+  `economy.buildingTargets` çağ anahtarlı şehir planı ve `buildOrder`'da
+  `count < target`; `army.minimumDefensePower` çağ haritası (3/6);
+  `army.populationShare` 0.55 → 0.40; `economy.workerTarget` 14/22; Town'da
+  `ageUp` merkez seviye merdivenini puanlamaya devam ediyor
+  (`AiBlackboard.centerLevel` + `centerLevelUpgradeCost`).
+  **Harita:** üsse bir karakol slotu (`atEnemyBase(-18, 24)`), ikinci farm,
+  ikinci lumber camp ve yedinci ev; `RTS_CoreMatch.level.json` kopyası da
+  eşitlendi. Karakol tek, çünkü `canPlaceExpansion` footprint içinde nötr hücre
+  şart koşuyor — ikincisi ilkinin kontrol yarıçapında yer bulamıyor.
+  **Kapı yine tek yerde:** `intentScorer.scoreAttack`; `armyManager` zaten
+  `intent !== "attack"` iken `regroup`'a düşüyor. Savunma dokunulmadı — AI
+  kavgaya *başlamakta* yavaş, kendisine yapılana cevap vermekte değil.
+  **Doğrulama:** `build:verify` yeşil, `test:engine` 1101 check. Skorer
+  seviyesinde çağ kapısı/supap sınırı ve gelişim çarpanı; entegrasyon
+  seviyesinde Yerleşim AI'ı pencere kapandıktan sonra da saldırmıyor, şehir planı
+  ayakta olan Kasaba AI'ı saldırıyor. Yeni iki veri testi: `buildingTargets`
+  gerçek bina id'lerini adlandırıyor ve her hedefin authored slotu var; her
+  authored anchor maç başında yerleştirilebilir *ve* 2 birimlik ızgarada.
+  **Yan bulgu:** `test:engine` bu iş başlamadan önce de kırmızıydı (bayat veri
+  sabitleri + kaldırılmış River strip foam); ayrıntı ve deponun dayanıklılık
+  sınıfı hakkındaki açık karar
+  `docs/planned/AI_CITY_DEVELOPMENT_AND_DEFENSE_PLAN.md` §6'da.
+  **Açık kalan:** `?rts&debug` ile 5 maçlık oynanış turu.
+
 **Üçüncü çağ kapsam dışı (karar: 2026-07-18, `SL-007`).** Arşivde `ThirdAge`
 bina modeli yok ve üretilmeyecek. Slice **iki çağ × üç seviye** olarak
 kesinleşti: `FirstAge` ve `SecondAge` sanat aileleri, her biri Lv1–3. Kod tarafı

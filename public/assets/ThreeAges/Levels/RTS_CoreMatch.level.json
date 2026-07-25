@@ -3019,6 +3019,62 @@
       }
     },
     {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        16,
+        0,
+        -46
+      ],
+      "name": "Enemy house (16,-46)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "house",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        20,
+        0,
+        -14
+      ],
+      "name": "Enemy outpost (20,-14)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "outpost",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        32,
+        0,
+        -18
+      ],
+      "name": "Enemy farm (32,-18)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "farm",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        56,
+        0,
+        -52
+      ],
+      "name": "Enemy lumber_camp (56,-52)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "lumber_camp",
+        "regionId": "enemy-base"
+      }
+    },
+    {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
         10,

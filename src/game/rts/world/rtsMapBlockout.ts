@@ -225,6 +225,34 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     { buildingId: "house", ...atEnemyBase(16, -6) },
     { buildingId: "house", ...atEnemyBase(-12, -10) },
     { buildingId: "house", ...atEnemyBase(12, -10) },
+    // A seventh house slot behind the base. The six above are exactly the Town
+    // housing target, which leaves no slack at all: `liveTreeBlockers` reserve
+    // build space in the real game and the (16,-6) slot sits on `enemy-wood-8`,
+    // so that one is only free once the grove around it has been cut.
+    { buildingId: "house", ...atEnemyBase(-22, -8) },
+    // §41 "Kule: kritik geçit veya karakol yakını". The outpost is the only building
+    // on this data set carrying a `defense` block, so this is the AI's base defence
+    // — and, under the Town requirement list, also what lets it satisfy `outpost`
+    // without first having to complete a region.
+    //
+    // Out on the threatened side (the player's centre is at (-38, 38), i.e. -x/+z
+    // from here, which is where the army rallies and where both flanking routes
+    // arrive) and deliberately *straddling* the control edge: an outpost validates
+    // through `canPlaceExpansion`, which demands a neutral cell inside the
+    // footprint, so a slot tucked safely inside the base is rejected outright.
+    // Exactly one, for the same reason — a second base outpost inside this one's
+    // 16-unit control radius would find no neutral cell left and never be built.
+    //
+    // Every offset here is even: `snapToPlacementGrid` rounds to a 2-unit grid, so
+    // an odd coordinate would be silently moved off the slot it was authored on.
+    { buildingId: "outpost", ...atEnemyBase(-18, 24) },
+    // Second producers for the Town settlement plan. Both sit clear of the base
+    // spine, of the two expansion corridors and of their fallbacks, and inside the
+    // 28-unit starting control radius footprint-corner included.
+    { buildingId: "farm", ...atEnemyBase(-6, 20) },
+    // The second camp goes east because `requiresForest` needs a live tree within
+    // its 20-unit gather radius, and the enemy grove is the only one in reach.
+    { buildingId: "lumber_camp", ...atEnemyBase(18, -14) },
   ],
   // Spur to the centre, spine across the base, then a branch down to each of the
   // two starting producers. The leg back along z=-18 is retraced on purpose:

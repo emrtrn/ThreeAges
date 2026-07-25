@@ -46,10 +46,27 @@ export class AiAgeManager {
 
   /** Try to advance toward Town by one step. Called while the intent is AgeUp. */
   update(bb: AiBlackboard): AiAgeOutcome {
-    if (bb.age === "town") return { kind: "done" };
     if (bb.ageUpgrading) return { kind: "upgrading" };
 
     const snapshot = this.progression.snapshot(this.owner);
+    // Town: the age is behind us but the level ladder is not. Every building's
+    // stats hang off the centre tier, so this is the same "invest surplus into
+    // development" step as below — which is why it shares this executor rather
+    // than needing one of its own.
+    if (bb.age === "town") {
+      if (snapshot.level >= 3) return { kind: "done" };
+      const result = this.progression.startLevelUpgrade(this.owner);
+      if (result === "started") {
+        this.log.record({
+          at: bb.now,
+          kind: "intent-selected",
+          intent: "ageUp",
+          reason: `kasaba merkez seviyesi ${snapshot.level + 1} yükseltiliyor`,
+        });
+        return { kind: "started" };
+      }
+      return this.levelOutcome(result, bb);
+    }
     // Below Settlement Lv3 the Town gate is not open yet: climb the centre level
     // ladder first. Each level is "cost only", so a refused start is only ever a
     // wait on the stockpile.

@@ -13,6 +13,7 @@ import type { AiControllerSnapshot } from "./aiController";
 import type { AiDecisionEntry } from "./aiDecisionLog";
 import { AI_MAX_EXPANSION_PLANS } from "./aiExpansionCoordinator";
 import { RETREAT_REASON_TEXT } from "./armyManager";
+import { developmentReadiness } from "./intentScorer";
 
 /** Plan §48 debug list: "Son on karar". */
 const MAX_DECISION_LINES = 10;
@@ -29,7 +30,15 @@ export function formatRtsAiDebug(
   lines.push(
     `niyet: ${snapshot.intent ?? "-"}${snapshot.plan ? ` · plan ${snapshot.plan.id} (${snapshot.planSeconds.toFixed(1)}sn)` : ""}`,
   );
-  if (bb) lines.push(`çağ: ${bb.age}${bb.ageUpgrading ? " (yükseltiliyor)" : ""}`);
+  // The centre level belongs next to the age: under centre-led progression the two
+  // together are the kingdom's tier, and the AI now invests in the level ladder for
+  // its own sake — "Town" alone cannot tell a Lv1 Town from a Lv3 one.
+  if (bb) {
+    lines.push(
+      `çağ: ${bb.age} Lv${bb.centerLevel}${bb.ageUpgrading ? " (yükseltiliyor)" : ""}`
+      + `${bb.centerLevelUpgradeCost ? "" : " · seviye tavanı"}`,
+    );
+  }
   lines.push(
     `ordu görevi: ${snapshot.mission ?? "-"} · güç ${snapshot.armyPower.toFixed(1)}`
     + ` · üste kalan ${snapshot.garrisonCount}`,
@@ -58,6 +67,17 @@ export function formatRtsAiDebug(
   // §82 "Aktif yapı planı": what the build slot is holding right now, which is
   // the difference between "the AI is saving up" and "the AI is stuck".
   lines.push(`aktif inşaat: ${snapshot.activeBuild ?? "-"}`);
+  // The settlement plan, because it now damps the attack as well as driving the
+  // economy: without this line a suppressed Attack reads as a mystery rather than
+  // as "the city is 60% built". Needs the balance the targets live in.
+  if (bb && balance) {
+    const development = developmentReadiness(bb, balance);
+    lines.push(
+      `şehir planı: %${Math.round(development.ratio * 100)}`
+      + ` (saldırı çarpanı ${development.readiness.toFixed(2)})`
+      + `${development.missing.length > 0 ? ` · eksik ${development.missing.join(", ")}` : ""}`,
+    );
+  }
   if (snapshot.concluded) lines.push("maç bitti: karar üretimi durdu");
 
   if (snapshot.scores.length > 0) {

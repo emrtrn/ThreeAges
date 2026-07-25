@@ -15,7 +15,7 @@
  */
 import { Vector3 } from "three";
 
-import type { AiBalance, BuildingBalanceStats } from "../../data/gameDataTypes";
+import type { AiBalance, BuildingBalanceStats, SettlementAge } from "../../data/gameDataTypes";
 import type { CombatTarget } from "../combat/combatTarget";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
@@ -23,7 +23,7 @@ import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import { issueAttackOrder } from "../units/attackPathing";
-import { armyPower, type AiBlackboard } from "./aiBlackboard";
+import { armyPower, minimumDefensePowerFor, type AiBlackboard } from "./aiBlackboard";
 import type { AiDecisionLog } from "./aiDecisionLog";
 import type { AiVisionFilter } from "./aiVisionFilter";
 import { commandCenterMemoryId } from "../vision/enemyMemorySystem";
@@ -97,6 +97,13 @@ export class ArmyManager {
   private retreatReason: AiRetreatReason | null = null;
   /** §58: the objective the contest mission is marching on, else null. */
   private contestPoint: AiObjectiveWatch["contestable"][number] | null = null;
+  /**
+   * §54: the age as of the last army evaluation, because the garrison size is
+   * age-scaled and {@link state} is read by the §82 panel outside a tick — there
+   * is no blackboard to consult there, and reading the progression system
+   * directly would give this manager a world source it otherwise does not have.
+   */
+  private age: SettlementAge = "settlement";
 
   constructor(
     private readonly owner: UnitOwner,
@@ -141,6 +148,7 @@ export class ArmyManager {
 
   /** One army evaluation (§78 cadence), driven by the director's intent. */
   update(blackboard: AiBlackboard, intent: AiIntent | null): void {
+    this.age = blackboard.age;
     const army = this.fieldArmy();
     if (army.length === 0) {
       this.setMission(null, blackboard, "ordu yok");
@@ -157,6 +165,7 @@ export class ArmyManager {
     this.targetScore = null;
     this.retreatReason = null;
     this.contestPoint = null;
+    this.age = "settlement";
   }
 
   /** §51: every live combat unit belongs to the one field army. */
@@ -203,7 +212,7 @@ export class ArmyManager {
 
     // §54/§59: only what is left after the garrison may take the field, so an
     // army that is merely at the minimum never leaves the base undefended.
-    if (armyPower(army, this.balance) - this.balance.army.minimumDefensePower <= 0) {
+    if (armyPower(army, this.balance) - minimumDefensePowerFor(blackboard.age, this.balance) <= 0) {
       return this.withoutTarget("regroup");
     }
 
@@ -384,7 +393,7 @@ export class ArmyManager {
    * "keep a few units around the centre" form instead of a separate group.
    */
   private garrison(army: readonly Unit[]): readonly Unit[] {
-    const minimum = this.balance.army.minimumDefensePower;
+    const minimum = minimumDefensePowerFor(this.age, this.balance);
     if (minimum <= 0) return [];
     const center = this.centers.get(this.owner);
     if (!center) return [];

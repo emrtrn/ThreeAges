@@ -9,13 +9,18 @@
   },
   "army": {
     "peaceSeconds": 600,
+    "attackMinimumAge": "town",
+    "attackAgeGraceSeconds": 1800,
     "attackPowerRatio": 1.1,
     "riskyAttackPowerRatio": 0.9,
     "retreatPowerRatio": 0.8,
     "retreatHealthRatio": 0.45,
     "dominancePowerRatio": 2.0,
-    "minimumDefensePower": 2,
-    "populationShare": 0.55,
+    "minimumDefensePower": {
+      "settlement": 3,
+      "town": 6
+    },
+    "populationShare": 0.4,
     "rolePower": {
       "guard": 1.0,
       "archer": 0.9,
@@ -37,8 +42,8 @@
   },
   "economy": {
     "workerTarget": {
-      "settlement": 12,
-      "town": 16
+      "settlement": 14,
+      "town": 22
     },
     "populationPressureBuffer": 3,
     "incomeTargetsPerMinute": {
@@ -46,6 +51,29 @@
       "wood": 18,
       "stone": 10,
       "gold": 6
+    },
+    "buildingTargets": {
+      "settlement": {
+        "house": 4,
+        "farm": 1,
+        "lumber_camp": 1,
+        "quarry": 1,
+        "gold_mine": 1,
+        "barracks": 1,
+        "outpost": 1,
+        "market": 1
+      },
+      "town": {
+        "house": 6,
+        "farm": 2,
+        "lumber_camp": 2,
+        "quarry": 1,
+        "gold_mine": 1,
+        "barracks": 1,
+        "archery_range": 1,
+        "outpost": 2,
+        "market": 1
+      }
     }
   },
   "scoring": {
@@ -54,6 +82,7 @@
       "incomeDeficit": 0.3,
       "populationPressure": 0.25,
       "recoveryNeed": 0.1,
+      "developmentNeed": 0.45,
       "immediateThreat": 0.5
     },
     "ageUp": {
@@ -64,6 +93,9 @@
     },
     "expand": {
       "recipeWoodCost": 400
+    },
+    "attack": {
+      "developmentFloor": 0.35
     },
     "normalizers": {
       "threatPower": 4,

@@ -93,6 +93,7 @@ import { levelHasAuthoredWorld } from "../src/game/rts/world/rtsAuthoredWorld";
 import {
   RTS_PLACEMENT_GRID_SIZE,
   buildingFootprintBlocker,
+  snapToPlacementGrid,
   validateBuildingPlacement,
 } from "../src/game/rts/structures/placementGrid";
 import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
@@ -28894,7 +28895,7 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
   assert.deepEqual(buildings.house?.footprint, { width: 4, depth: 4 });
-  assert.equal(buildings.barracks?.cost.wood, 160);
+  assert.equal(buildings.barracks?.cost.wood, 140);
   assert.deepEqual(buildings.farm?.economy, {
     resourceId: "food",
     workerCapacity: 3,
@@ -28942,8 +28943,8 @@ check("Faz 6 stone and gold data defines finite safe and richer external deposit
   const resources = validateResourceBalance(
     JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
   );
-  assert.deepEqual(resources.stone?.safeNode, { capacity: 300, perWorkerPerMinute: 5 });
-  assert.deepEqual(resources.gold?.externalNode, { capacity: 700, perWorkerPerMinute: 5 });
+  assert.deepEqual(resources.stone?.safeNode, { capacity: 300, perWorkerPerMinute: 6 });
+  assert.deepEqual(resources.gold?.externalNode, { capacity: 700, perWorkerPerMinute: 6 });
   for (const resource of Object.values(resources)) {
     assert.ok(resource.externalNode.capacity > resource.safeNode.capacity,
       `${resource.id}: expansion must offer more total material than the safe deposit`);
@@ -28975,10 +28976,10 @@ check("Faz 6 assigns all four resources to distinct core-match decisions", () =>
   );
   assert.equal(units.worker_placeholder?.cost.food, 50, "food pays for worker growth");
   assert.equal(units.guard_placeholder?.cost.wood, 20, "wood contributes to military production");
-  assert.equal(buildings.house?.cost.wood, 80, "wood pays for settlement construction");
-  assert.equal(ages.town.levelUpgrades[0]?.cost.stone, 120, "stone pays for Town-era centre level upgrades");
-  assert.equal(ages.town.cost.gold, 150, "gold is a mandatory Town transition resource");
-  assert.deepEqual(ages.town.cost, { food: 600, wood: 350, stone: 150, gold: 150 });
+  assert.equal(buildings.house?.cost.wood, 50, "wood pays for settlement construction");
+  assert.equal(ages.town.levelUpgrades[0]?.cost.stone, 60, "stone pays for Town-era centre level upgrades");
+  assert.equal(ages.town.cost.gold, 100, "gold is a mandatory Town transition resource");
+  assert.deepEqual(ages.town.cost, { food: 500, wood: 500, stone: 200, gold: 100 });
 });
 
 check("Faz 6 completed resource buildings replace their construction placeholders with mapped models", () => {
@@ -28993,7 +28994,7 @@ check("Faz 6 completed resource buildings replace their construction placeholder
       level: 1,
       construction,
     });
-  assert.equal(visualFor("lumber_camp"), `${STATIC_MESH_ROOT}/Resource_Tree_Group_Cut.gltf`);
+  assert.equal(visualFor("lumber_camp"), `${STATIC_MESH_ROOT}/Resource_PineTree_Group_Cut.gltf`);
   assert.equal(visualFor("quarry"), `${STATIC_MESH_ROOT}/Mine.gltf`);
   assert.equal(visualFor("gold_mine"), `${STATIC_MESH_ROOT}/Mine.gltf`);
   assert.equal(visualFor("quarry", pending), null, "an unfinished foundation keeps its construction visual");
@@ -29012,7 +29013,7 @@ check("Faz 0 building mesh paths resolve by age family and in-age level", () => 
   assert.equal(buildingMeshPath("barracks", "settlement", 9), `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level3.gltf`);
   // Fixed resource meshes ignore age and level; unknown buildings map to null.
   assert.equal(buildingMeshPath("quarry", "town", 3), `${STATIC_MESH_ROOT}/Mine.gltf`);
-  assert.equal(buildingMeshPath("lumber_camp", "settlement", 1), `${STATIC_MESH_ROOT}/Resource_Tree_Group_Cut.gltf`);
+  assert.equal(buildingMeshPath("lumber_camp", "settlement", 1), `${STATIC_MESH_ROOT}/Resource_PineTree_Group_Cut.gltf`);
   assert.equal(buildingMeshPath("nonexistent", "settlement", 1), null);
   assert.equal(hasBuildingArt("barracks"), true);
   assert.equal(hasBuildingArt("nonexistent"), false);
@@ -29611,7 +29612,7 @@ check("centre-led progression: level-ups and the Town transition advance the who
   const ages = validateAgeBalance(
     JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
   );
-  assert.deepEqual(ages.town.cost, { food: 600, wood: 350, stone: 150, gold: 150 });
+  assert.deepEqual(ages.town.cost, { food: 500, wood: 500, stone: 200, gold: 100 });
   assert.equal(ages.town.upgradeSeconds, 105);
   assert.equal(ages.settlement.commandCenter.controlRadius, 28);
   assert.deepEqual(ages.town.commandCenter, { controlRadius: 32, workerTrainingSeconds: 9 });
@@ -29830,7 +29831,7 @@ check("Faz 2: the art resolver maps the two ages to their families and keeps fix
   // Settlement -> First Age, unchanged.
   assert.equal(buildingMeshPath("house", "settlement", 1), `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level1.gltf`);
   // KR-04/§8: resource camps ship one mesh and ignore both age and level.
-  assert.equal(buildingMeshPath("lumber_camp", "town", 3), `${STATIC_MESH_ROOT}/Resource_Tree_Group_Cut.gltf`);
+  assert.equal(buildingMeshPath("lumber_camp", "town", 3), `${STATIC_MESH_ROOT}/Resource_PineTree_Group_Cut.gltf`);
   assert.equal(buildingMeshPath("quarry", "town", 2), buildingMeshPath("quarry", "settlement", 1));
   assert.equal(buildingMeshPath("gold_mine", "town", 2), buildingMeshPath("gold_mine", "settlement", 1));
 });
@@ -32408,7 +32409,7 @@ check("RTS Barracks queues paid Guards by age capacity and trains them at a safe
   for (let index = 0; index < 5; index += 1) assert.equal(production.queueGuard("player"), "queued");
   assert.equal(production.queuedCount("player"), 5);
   assert.equal(production.queueCapacity("player"), 5);
-  assert.equal(wallet.amount("food"), 2700, "every settlement Guard order reserves its food immediately");
+  assert.equal(wallet.amount("food"), 2800, "every settlement Guard order reserves its food immediately");
   assert.equal(population.snapshot().reserved, 5, "every queued Guard reserves its population slot");
   assert.equal(production.queueGuard("player"), "queue-full", "Settlement Barracks hold at most five Guard orders");
   for (let index = 0; index < 5; index += 1) assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
@@ -32886,6 +32887,10 @@ function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
     ageMissingBuildingIds: ["farm", "lumber_camp", "quarry", "gold_mine", "barracks", "outpost"],
     ageAffordable: false,
     ageCost: { food: 600, wood: 350, stone: 150, gold: 150 },
+    // Centre Lv1 with no level action pending, so a test that is not about the
+    // level ladder does not accidentally score AgeUp on it.
+    centerLevel: 1,
+    centerLevelUpgradeCost: null,
     armyComposition: { guard: 0, archer: 0, siege: 0, worker: 0 },
     armyPopulation: 0,
     ownArmyPower: 0,
@@ -32902,8 +32907,43 @@ function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
   };
 }
 
+/**
+ * A blackboard with every *Attack* precondition satisfied: past the §53 (4) peace
+ * window (the base default), at the age `army.attackMinimumAge` names, and with
+ * that age's `economy.buildingTargets` settlement plan standing.
+ *
+ * Same reason the base default sits past the peace window: without it every
+ * Attack assertion below would silently become a test of the age gate or of the
+ * development multiplier instead of the power ratio it means to measure. Read off
+ * the balance rather than pinned, so retuning either gate cannot strand a test.
+ */
+function aiAttackReadyBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
+  const age = AI_TEST_BALANCE.army.attackMinimumAge;
+  const workers = AI_TEST_BALANCE.economy.workerTarget[age];
+  return aiTestBlackboard({
+    age,
+    buildingCounts: { ...AI_TEST_BALANCE.economy.buildingTargets[age] },
+    workerCount: workers,
+    population: workers,
+    // Clear of `populationPressureBuffer`, or the Economy intent this is compared
+    // against would be scoring a population lock rather than the city.
+    populationCap: workers + 10,
+    ageMissingBuildingIds: [],
+    ...overrides,
+  });
+}
+
 /** A headless RTS world wired exactly like RtsApp, for driving the AI in tests. */
-function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 200 }) {
+function aiTestWorld(
+  startingResources: StartingResources = { food: 200, wood: 200 },
+  /**
+   * Opening centre tier, as `GamePreset.startingTier` supplies it in the real
+   * game. The AI's age gate (`army.attackMinimumAge`) makes "which age is this
+   * kingdom in" a precondition of attacking at all, and playing a whole economy
+   * up to Town inside a unit test would measure the economy rather than the gate.
+   */
+  startingTier: StartingTier | undefined = undefined,
+) {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
@@ -33011,7 +33051,9 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
   );
   // Centre-led progression: one system both kingdoms advance through, centres
   // included. The Town gate and the composition tier gate are reachable by the AI.
-  const progression = new KingdomProgressionSystem(["player", "enemy"], ageBalance, centers, structures, kingdoms);
+  const progression = new KingdomProgressionSystem(
+    ["player", "enemy"], ageBalance, centers, structures, kingdoms, startingTier,
+  );
   for (const center of centers.all()) progression.applyToStructure(center);
   const workerProduction = new WorkerProductionSystem(
     units, centers, navigation, worker, kingdoms,
@@ -33086,6 +33128,44 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     units, structures, centers, kingdoms, ai, workerConstruction, territory, roads, progression,
     production, resourceNodes, step,
   };
+}
+
+/**
+ * Stand the age's whole `economy.buildingTargets` plan up at the enemy's authored
+ * anchors, completed, so a test can start from a *developed* AI.
+ *
+ * Placed straight through {@link PlacedStructureSystem} rather than through the
+ * construction service: this is a fixture, not a claim that the AI could pay for
+ * or reach these slots — that is what the opening test below is for. What it does
+ * assert is that the authored anchor set can actually satisfy the plan; a target
+ * with no slot to stand on would otherwise show up as a mysteriously damped
+ * Attack score somewhere else.
+ */
+function completeAiSettlementPlan(
+  world: ReturnType<typeof aiTestWorld>,
+  age: "settlement" | "town",
+): void {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  // Base slots first, then the regions': the Town plan's second outpost only
+  // exists out on an expansion, exactly as it does in a real match.
+  const free = [
+    ...RTS_BLOCKOUT_MAP.enemyBaseAnchors,
+    ...RTS_BLOCKOUT_MAP.enemyExpansions.flatMap((region) => [region.outpost, region.depot, region.production]),
+  ];
+  for (const [buildingId, target] of Object.entries(AI_TEST_BALANCE.economy.buildingTargets[age])) {
+    const stats = buildings[buildingId] ?? assert.fail(`buildingTargets names an unknown building "${buildingId}"`);
+    for (let placed = 0; placed < target; placed += 1) {
+      const index = free.findIndex((anchor) => anchor.buildingId === buildingId);
+      assert.ok(index >= 0, `no authored enemy anchor left for ${buildingId} (${placed + 1}/${target})`);
+      const anchor = free.splice(index, 1)[0] ?? assert.fail("anchor missing");
+      const structure = world.structures.place("enemy", stats, anchor.x, anchor.z);
+      world.structures.advanceConstruction(structure, stats.constructionSeconds);
+      world.progression.applyToStructure(structure);
+    }
+  }
+  world.territory.refresh();
 }
 
 /**
@@ -33189,6 +33269,123 @@ check("ai balance validates cadences, ordered power thresholds and the no-cheat 
     () => validateAiBalance({ ...raw, profiles: { normal: raw["profiles"] } }),
     GameDataError,
   );
+  const withArmy = (army: Record<string, unknown>) => ({ ...raw, army: { ...(raw["army"] as object), ...army } });
+  // The age gate has to name a real age; a typo would silently never match and the
+  // AI would never attack again.
+  assert.throws(() => validateAiBalance(withArmy({ attackMinimumAge: "kingdom" })), GameDataError);
+  assert.throws(() => validateAiBalance(withArmy({ attackAgeGraceSeconds: -1 })), GameDataError);
+  // A fail-safe inside the non-aggression window could never be the thing that
+  // lifted the age gate, so the two windows must not be authored out of order.
+  assert.throws(
+    () => validateAiBalance(withArmy({ attackAgeGraceSeconds: 1, peaceSeconds: 600 })),
+    GameDataError,
+  );
+  // 0 is the hard gate and stays expressible — the fail-safe is a choice, not a rule.
+  assert.equal(validateAiBalance(withArmy({ attackAgeGraceSeconds: 0 })).army.attackAgeGraceSeconds, 0);
+  // §54: a Town garrison thinner than a Settlement one would have the AI empty its
+  // base exactly as the base became worth raiding.
+  assert.throws(
+    () => validateAiBalance(withArmy({ minimumDefensePower: { settlement: 6, town: 3 } })),
+    GameDataError,
+  );
+  const withEconomy = (economy: Record<string, unknown>) =>
+    ({ ...raw, economy: { ...(raw["economy"] as object), ...economy } });
+  // Building targets are counts: a fraction or a zero is a typo, not a plan, and an
+  // empty plan would leave the economy intent with nothing to build.
+  assert.throws(
+    () => validateAiBalance(withEconomy({ buildingTargets: { settlement: { house: 1.5 }, town: { house: 1 } } })),
+    GameDataError,
+  );
+  assert.throws(
+    () => validateAiBalance(withEconomy({ buildingTargets: { settlement: {}, town: { house: 1 } } })),
+    GameDataError,
+  );
+  assert.throws(
+    () => validateAiBalance(withEconomy({ buildingTargets: { settlement: { house: 1 } } })),
+    GameDataError,
+  );
+  const withScoring = (scoring: Record<string, unknown>) =>
+    ({ ...raw, scoring: { ...(raw["scoring"] as object), ...scoring } });
+  // It multiplies a 0..1 score, so outside 0..1 it either inverts the term or lifts
+  // Attack above every other intent.
+  assert.throws(() => validateAiBalance(withScoring({ attack: { developmentFloor: 1.4 } })), GameDataError);
+  assert.throws(() => validateAiBalance(withScoring({ attack: { developmentFloor: -0.1 } })), GameDataError);
+});
+
+check("the AI's settlement plan names real buildings and every target has an authored slot", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const ages = validateAgeBalance(
+    JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
+  );
+  // `validateAiBalance` only ever sees ai.json, so a building id typo in
+  // `buildingTargets` passes validation and then shows up as a development term
+  // that can never reach 1 — a permanently damped Attack with no visible cause.
+  // This is the cheapest place that sees both files.
+  for (const age of ["settlement", "town"] as const) {
+    const plan = AI_TEST_BALANCE.economy.buildingTargets[age];
+    for (const [buildingId, target] of Object.entries(plan)) {
+      const stats = buildings[buildingId] ?? assert.fail(`buildingTargets.${age} names unknown building "${buildingId}"`);
+      // A slot the AI could never legally build on is a target it can never meet.
+      if (stats.requiredAge) {
+        assert.equal(stats.requiredAge, age, `${buildingId} cannot be in the ${age} plan: it needs ${stats.requiredAge}`);
+      }
+      const slots = RTS_BLOCKOUT_MAP.enemyBaseAnchors.filter((anchor) => anchor.buildingId === buildingId).length
+        + RTS_BLOCKOUT_MAP.enemyExpansions.filter((region) =>
+          [region.outpost, region.depot, region.production].some((slot) => slot.buildingId === buildingId)).length;
+      assert.ok(
+        slots >= target,
+        `${age} plan wants ${target}× ${buildingId} but only ${slots} anchors are authored`,
+      );
+    }
+  }
+  // The two halves of "developed" must agree: every building the Town transition
+  // requires is something the settlement plan actually asks for, or the AI would
+  // reach its target city and still be unable to age up.
+  for (const required of ages.town.requiredBuildingIds) {
+    assert.ok(
+      (AI_TEST_BALANCE.economy.buildingTargets.settlement[required] ?? 0) > 0,
+      `the Settlement plan must include ${required}, which the Town transition requires`,
+    );
+  }
+});
+
+check("every authored enemy base anchor is a placeable slot at match start (§40)", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const world = aiTestWorld();
+  // Each anchor is judged on an empty base, which is the question that matters:
+  // "is this slot authored somewhere legal", not "can all of them coexist" (they
+  // are alternatives for one build slot, and §43 blacklists a bad one anyway).
+  for (const anchor of RTS_BLOCKOUT_MAP.enemyBaseAnchors) {
+    const stats = buildings[anchor.buildingId] ?? assert.fail(`unknown anchor building ${anchor.buildingId}`);
+    // Snapping is the trap this catches: an odd coordinate is silently moved to the
+    // nearest 2-unit cell, so the slot that was authored is not the slot that is built.
+    const snapped = snapToPlacementGrid(anchor.x, anchor.z);
+    assert.deepEqual(
+      snapped,
+      { x: anchor.x, z: anchor.z },
+      `${anchor.buildingId} @${anchor.x},${anchor.z} is off the placement grid`,
+    );
+    const result = world.ai.snapshot() && validateBuildingPlacement(
+      stats,
+      anchor.x,
+      anchor.z,
+      world.centers.navigationBlockers(),
+      {
+        owner: "enemy",
+        ownsFootprint: world.territory.ownsFootprint.bind(world.territory),
+        canPlaceExpansion: world.territory.canPlaceExpansion.bind(world.territory),
+      },
+    );
+    assert.equal(
+      result.valid,
+      true,
+      `${anchor.buildingId} @${anchor.x},${anchor.z} is not placeable: ${result.reason}`,
+    );
+  }
 });
 
 check("AI intent scoring reflects the §30 drivers and always names a reason", () => {
@@ -33209,7 +33406,7 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
   assert.match(scoreFor(locked, "economy").reason, /nüfus kilidi/);
 
   // §27: a threatened base raises Defend and suppresses Attack.
-  const threatened = aiTestBlackboard({ baseThreat: 3, ownArmyPower: 4, knownEnemyArmyPower: 3 });
+  const threatened = aiAttackReadyBlackboard({ baseThreat: 3, ownArmyPower: 8, knownEnemyArmyPower: 3 });
   assert.ok(scoreFor(threatened, "defend").score > 0);
   assert.equal(scoreFor(threatened, "attack").reason, "üs tehdit altında, saldırı beklemede");
   assert.ok(scoreFor(threatened, "attack").score < scoreFor(threatened, "defend").score);
@@ -33219,12 +33416,12 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
   const { peaceSeconds } = AI_TEST_BALANCE.army;
   assert.ok(peaceSeconds > 0, "§53 (4): the window must actually be authored");
   const routArmy = { ownArmyPower: 30, knownEnemyArmyPower: 10 } as const;
-  const opening = aiTestBlackboard({ ...routArmy, now: peaceSeconds - 1 });
+  const opening = aiAttackReadyBlackboard({ ...routArmy, now: peaceSeconds - 1 });
   assert.equal(scoreFor(opening, "attack").score, 0, "§53 (4): no attack inside the window");
   assert.match(scoreFor(opening, "attack").reason, /saldırmazlık süresi/);
   // The boundary is inclusive on the open side: at exactly peaceSeconds the
   // window is over, or "300 sn" would silently mean 301.
-  const justAfter = aiTestBlackboard({ ...routArmy, now: peaceSeconds });
+  const justAfter = aiAttackReadyBlackboard({ ...routArmy, now: peaceSeconds });
   assert.ok(scoreFor(justAfter, "attack").score > 0, "§53 (4): the window ends at peaceSeconds");
   // The window suppresses starting a fight, never answering one: a base under
   // attack during the opening must still score Defend.
@@ -33239,10 +33436,17 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
     "§53 (4): defence stays live inside the window",
   );
 
-  // §59: the army may not leave while it is below the minimum base defence.
-  const thinArmy = aiTestBlackboard({ ownArmyPower: 1 });
-  assert.equal(scoreFor(thinArmy, "attack").score, 0);
-  const strongArmy = aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 1 });
+  // §59: the army may not leave while it is below the minimum base defence, which
+  // is read per age — a Town holds back more than a Settlement opening does.
+  const townDefense = AI_TEST_BALANCE.army.minimumDefensePower.town;
+  assert.ok(
+    townDefense >= AI_TEST_BALANCE.army.minimumDefensePower.settlement,
+    "§54: a Town garrison is never thinner than a Settlement one",
+  );
+  const thinArmy = aiAttackReadyBlackboard({ ownArmyPower: townDefense });
+  assert.equal(scoreFor(thinArmy, "attack").score, 0, "exactly the minimum leaves nothing deployable");
+  assert.match(scoreFor(thinArmy, "attack").reason, /minimum savunmanın altında/);
+  const strongArmy = aiAttackReadyBlackboard({ ownArmyPower: townDefense + 6, knownEnemyArmyPower: 1 });
   assert.ok(scoreFor(strongArmy, "attack").score > 0);
 
   // §62: readiness climbs toward dominance rather than saturating at the bar the
@@ -33250,14 +33454,56 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
   // the same as a rout — when it did, Attack sat at a permanent 1.0 that §7's
   // hysteresis made unbeatable, and the AI rushed the first fight it could take
   // and then never developed, aged up or rebuilt again.
-  const evenFight = aiTestBlackboard({ ownArmyPower: 11, knownEnemyArmyPower: 10 });
-  const rout = aiTestBlackboard({ ownArmyPower: 30, knownEnemyArmyPower: 10 });
+  const evenFight = aiAttackReadyBlackboard({ ownArmyPower: 11, knownEnemyArmyPower: 10 });
+  const rout = aiAttackReadyBlackboard({ ownArmyPower: 30, knownEnemyArmyPower: 10 });
   assert.ok(
     scoreFor(evenFight, "attack").score < scoreFor(rout, "attack").score,
     "§62: a marginal advantage scores below a decisive one",
   );
   assert.ok(scoreFor(evenFight, "attack").score < 0.5, "§62: a coin-flip fight is not a maxed intent");
   assert.equal(scoreFor(rout, "attack").score, 1, "§62: dominance is what maxes the attack intent");
+
+  // §24 age gate: past the peace window, a rout-strength army in the wrong age
+  // still may not start a fight, and the reason names the age rather than the
+  // power ratio. Defend is untouched — the AI is slow to start a fight, not slow
+  // to answer one.
+  const { attackMinimumAge, attackAgeGraceSeconds } = AI_TEST_BALANCE.army;
+  assert.equal(attackMinimumAge, "town", "the shipped balance gates the attack on the Town age");
+  const beforeAgeGate = aiAttackReadyBlackboard({ ...routArmy, age: "settlement" });
+  assert.equal(scoreFor(beforeAgeGate, "attack").score, 0, "no attack before the age gate opens");
+  assert.match(scoreFor(beforeAgeGate, "attack").reason, /çağ kapısı/);
+  const rushedPreAge = aiAttackReadyBlackboard({
+    age: "settlement",
+    baseThreat: 3,
+    ownArmyPower: 8,
+    knownEnemyArmyPower: 3,
+  });
+  assert.ok(scoreFor(rushedPreAge, "defend").score > 0, "defence stays live before the age gate");
+  // The fail-safe: without it a kingdom that can never reach Town would stand in
+  // its base forever and no match could end.
+  assert.ok(attackAgeGraceSeconds >= peaceSeconds, "the fail-safe cannot fire inside the peace window");
+  const graced = aiAttackReadyBlackboard({ ...routArmy, age: "settlement", now: attackAgeGraceSeconds });
+  assert.ok(scoreFor(graced, "attack").score > 0, "the age gate lifts once the fail-safe expires");
+
+  // The development multiplier: reaching the age is not a finish line. A dominant
+  // army in a half-built city scores below the same army in a finished one, so the
+  // AI keeps developing instead of parking Attack at a permanent 1.0.
+  const halfBuilt = aiAttackReadyBlackboard({ ...routArmy, buildingCounts: { barracks: 1 } });
+  assert.ok(
+    scoreFor(halfBuilt, "attack").score < scoreFor(rout, "attack").score,
+    "an unfinished settlement plan damps the attack",
+  );
+  assert.match(scoreFor(halfBuilt, "attack").reason, /şehir gelişimi/);
+  // Damped, never zeroed: authored anchors run out (§43), and a city the AI can
+  // never finish must not mean a match that can never end.
+  assert.ok(
+    scoreFor(halfBuilt, "attack").score > 0,
+    "development is a floor, not a second gate",
+  );
+  assert.ok(
+    scoreFor(halfBuilt, "economy").score > scoreFor(rout, "economy").score,
+    "and the same shortfall is what raises Economy, or the plan would never be built",
+  );
 
   // §26: expansion waits for a base economy, then happens exactly once. Scored
   // on rawScore because the weight currently gates the whole intent off (below).
@@ -33369,11 +33615,16 @@ check("Faz 8 §48: intent scoring is data-driven and reads all four resources", 
   // §36: a zero stone income is a real deficit even while food and wood are at
   // target. A mean across the four would let three healthy incomes hide it —
   // and with Town gated behind stone *and* gold, that is the deficit that matters.
+  // Both carry the age's finished settlement plan, so the only difference between
+  // them is the income — otherwise the development term would be doing the work
+  // this assertion means to attribute to `incomeDeficit`.
+  const builtCity = { ...AI_TEST_BALANCE.economy.buildingTargets.settlement };
   const noStone = aiTestBlackboard({
+    buildingCounts: builtCity,
     resourceIncomePerMinute: { food: 20, wood: 18, stone: 0, gold: 6 },
   });
   assert.equal(scoreFor(noStone, "economy").reason, "stone geliri yetersiz");
-  const settled = aiTestBlackboard();
+  const settled = aiTestBlackboard({ buildingCounts: builtCity });
   assert.equal(scoreFor(settled, "economy").reason, "ekonomi hedefe yakın");
   assert.ok(
     scoreFor(noStone, "economy").score > scoreFor(settled, "economy").score,
@@ -33405,7 +33656,12 @@ check("Faz 8 §48: intent scoring is data-driven and reads all four resources", 
     scoreFor(townWorkers, "economy").rawScore > 0,
     "a Town economy still wants workers at the Settlement target",
   );
-  assert.match(scoreFor(townWorkers, "economy").reason, /işçi hedefin altında \(8\/16\)/);
+  // Read off the balance: a literal here silently becomes a different claim the
+  // day the Town target moves.
+  assert.match(
+    scoreFor(townWorkers, "economy").reason,
+    new RegExp(`işçi hedefin altında \\(8/${AI_TEST_BALANCE.economy.workerTarget.town}\\)`),
+  );
 });
 
 check("KingdomDirector holds a plan through commitment and hysteresis, and emergencies cut it", () => {
@@ -33418,9 +33674,19 @@ check("KingdomDirector holds a plan through commitment and hysteresis, and emerg
   // that has nothing to do with what is being tested. Only the origin moves; the
   // deltas below are the commitment/hysteresis boundaries themselves.
   const t0 = AI_TEST_BALANCE.army.peaceSeconds;
+  /**
+   * The rival is Attack, so every world below has to be one Attack is *allowed*
+   * in: past the peace window, at the age the gate names, and with the settlement
+   * plan built. Expansion is switched off for the same reason — with a finished
+   * opening it out-scores the understaffed economy this test wants as the incumbent
+   * plan, and this test is about the margin rule rather than about which two
+   * intents happen to be competing.
+   */
+  const directorWorld = (overrides: Partial<AiBlackboard> = {}) =>
+    aiAttackReadyBlackboard({ workerCount: 1, expansionPlanAvailable: false, ...overrides });
 
   // A fresh director commits immediately and explains why.
-  const first = director.evaluate(aiTestBlackboard({ now: t0, workerCount: 1 }));
+  const first = director.evaluate(directorWorld({ now: t0 }));
   assert.ok(first);
   assert.equal(first?.intent, "economy");
   assert.equal(first?.status, "running");
@@ -33428,7 +33694,7 @@ check("KingdomDirector holds a plan through commitment and hysteresis, and emerg
   assert.ok((log.latest?.reason ?? "").length > 0);
 
   // §7: inside the commitment window a better rival cannot take over.
-  const tempting = aiTestBlackboard({ now: t0 + 2, ownArmyPower: 9, knownEnemyArmyPower: 1, workerCount: 8 });
+  const tempting = directorWorld({ now: t0 + 2, ownArmyPower: 9, knownEnemyArmyPower: 1, workerCount: 8 });
   assert.equal(director.evaluate(tempting)?.id, first?.id, "plan is held during commitment");
   assert.equal(log.latest?.kind, "intent-held");
   assert.match(log.latest?.reason ?? "", /bağlılık süresi/);
@@ -33437,7 +33703,7 @@ check("KingdomDirector holds a plan through commitment and hysteresis, and emerg
   // the scoring coefficients into ai.json, so the boundary is read back off the
   // scorer rather than pinned to numbers that would rot the next time the data
   // is retuned — what this test is about is the margin rule, not the tuning.
-  const marginal = aiTestBlackboard({ now: t0 + 30, workerCount: 1, ownArmyPower: 12.7, knownEnemyArmyPower: 10 });
+  const marginal = directorWorld({ now: t0 + 30, ownArmyPower: 13, knownEnemyArmyPower: 10 });
   const marginalScores = scoreIntents(marginal, AI_TEST_BALANCE);
   const scoreOf = (intent: AiIntent) =>
     marginalScores.find((score) => score.intent === intent)?.score ?? assert.fail(`${intent} missing`);
@@ -33449,7 +33715,7 @@ check("KingdomDirector holds a plan through commitment and hysteresis, and emerg
   assert.match(log.latest?.reason ?? "", /histerezis/);
 
   // A decisively better intent past commitment does take over.
-  const decisive = aiTestBlackboard({ now: t0 + 40, workerCount: 8, ownArmyPower: 9, knownEnemyArmyPower: 1 });
+  const decisive = directorWorld({ now: t0 + 40, workerCount: 8, ownArmyPower: 9, knownEnemyArmyPower: 1 });
   const switched = director.evaluate(decisive);
   assert.equal(switched?.intent, "attack");
   assert.notEqual(switched?.id, first?.id);
@@ -33458,7 +33724,7 @@ check("KingdomDirector holds a plan through commitment and hysteresis, and emerg
   assert.match(log.latest?.reason ?? "", /economy → attack/);
 
   // §7: an emergency bypasses commitment entirely — no waiting.
-  const raided = aiTestBlackboard({ now: t0 + 41, baseThreat: 4, ownArmyPower: 9, emergencyFlags: ["base-under-attack"] });
+  const raided = directorWorld({ now: t0 + 41, baseThreat: 4, ownArmyPower: 9, emergencyFlags: ["base-under-attack"] });
   const emergency = director.evaluate(raided);
   assert.equal(emergency?.intent, "defend");
   assert.equal(log.latest?.kind, "emergency");
@@ -33533,6 +33799,34 @@ check("AI debug view exposes the intent, its reason and the decision trail (plan
   assert.match(text, /kararlar:/);
   assert.match(text, /intent-selected/);
   assert.match(text, /hedef: -/, "an army with no mission shows no target");
+
+  // The two lines the new gates need to be debuggable at all: which tier the
+  // kingdom is on (the age alone cannot tell a Lv1 Town from a Lv3 one) and how far
+  // the settlement plan has got, because that plan now damps Attack as well as
+  // driving Economy — otherwise a suppressed attack reads as a mystery.
+  const gated = formatRtsAiDebug(
+    aiTestSnapshot({
+      intent: "economy",
+      scores: scoreIntents(blackboard, AI_TEST_BALANCE),
+      blackboard,
+    }),
+    log.recent(),
+    1,
+    AI_TEST_BALANCE,
+  ).join("\n");
+  assert.match(gated, /çağ: settlement Lv1/, "§82: the centre tier is one readable line");
+  assert.match(gated, /şehir planı: %0/, "an empty base reads as a plan at zero");
+  assert.match(gated, /eksik house 0\/\d/, "and names what is missing");
+  assert.match(gated, /çağ kapısı/, "the attack score says which gate is holding it");
+  // The panel must be able to say the level ladder is finished, or a Town Lv3 AI
+  // that has stopped wanting AgeUp looks like one that is stuck.
+  const capped = formatRtsAiDebug(
+    aiTestSnapshot({ blackboard: aiTestBlackboard({ age: "town", centerLevel: 3 }) }),
+    log.recent(),
+    1,
+    AI_TEST_BALANCE,
+  ).join("\n");
+  assert.match(capped, /çağ: town Lv3 · seviye tavanı/);
 
   // §60/§82: an attacking AI explains which target it picked and why.
   const attacking = formatRtsAiDebug(
@@ -33670,14 +33964,41 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
       `§53 (4): the army must not assault at ${elapsed.toFixed(1)}s (got ${mission})`,
     );
   }
-  // …and once the window closes it does go, so this is a delay and not a mute.
-  // Long enough to clear the director's cadence and §7 commitment window.
+  // …and the §24 age gate keeps holding it *after* the window closes, because this
+  // kingdom is still a Settlement. Long enough to clear the director's cadence and
+  // §7's commitment window several times over, so this is the gate rather than a
+  // plan that has not been re-evaluated yet.
   for (let index = 0; index < 200; index += 1) peaceful.ai.update(0.5);
-  const releasedSnap = peaceful.ai.snapshot();
-  const released = releasedSnap.mission;
+  const heldByAge = peaceful.ai.snapshot();
   assert.ok(
-    released !== null && attackMissions.includes(released),
-    `§53 (4): the army attacks once the window closes (got ${released}, intent ${releasedSnap.intent})`,
+    heldByAge.mission === null || !attackMissions.includes(heldByAge.mission),
+    `the age gate holds the army past the peace window (got ${heldByAge.mission})`,
+  );
+  const gateReason = peaceful.ai.snapshot().scores.find((score) => score.intent === "attack")?.reason ?? "";
+  assert.match(gateReason, /çağ kapısı/, "and the panel says which gate is holding it");
+
+  // …and a Town kingdom with its settlement plan standing does go, so both gates
+  // are a delay and not a mute. Everything else is identical to the world above.
+  const released = aiTestWorld(
+    { food: 200, wood: 200 },
+    { age: "town", level: 1 },
+  );
+  completeAiSettlementPlan(released, "town");
+  for (let index = 0; index < 14; index += 1) {
+    released.units.spawn("enemy", -6 + index * 2, -24, worker);
+  }
+  // Above `minimumDefensePower.town`: at exactly the minimum there is nothing
+  // deployable and the army correctly stays home (§54/§59).
+  const townGuards = Math.ceil(AI_TEST_BALANCE.army.minimumDefensePower.town) + 2;
+  for (let index = 0; index < townGuards; index += 1) {
+    released.units.spawn("enemy", -6 + index * 2, -20, guard);
+  }
+  for (let index = 0; index < Math.ceil(peaceSeconds / 0.5) + 200; index += 1) released.ai.update(0.5);
+  const releasedSnap = released.ai.snapshot();
+  const releasedMission = releasedSnap.mission;
+  assert.ok(
+    releasedMission !== null && attackMissions.includes(releasedMission),
+    `a developed Town AI attacks once both gates open (got ${releasedMission}, intent ${releasedSnap.intent})`,
   );
 
   // §57: an enemy at the base overrides whatever the director wanted. The
@@ -34409,15 +34730,25 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   assert.equal(nextBuilding(bb(), AI_TEST_BALANCE), "farm");
   assert.equal(nextBuilding(bb({ buildingCounts: { farm: 1 } }), AI_TEST_BALANCE), "lumber_camp");
   assert.equal(nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1 } }), AI_TEST_BALANCE), "barracks");
-  // Faz 8: the Town age needs stone and gold too, so the opening now continues
-  // past the Barracks into the two extractors — after it, so the base is never
-  // mining while it has nothing to defend itself with.
+  // Base defence comes straight after the Barracks: the outpost is the only
+  // building carrying a `defense` block, so an undefended base does not live long
+  // enough to spend the stone the extractors below would mine.
   assert.equal(
     nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 } }), AI_TEST_BALANCE),
+    "outpost",
+  );
+  // Faz 8: the Town age needs stone and gold too, so the opening continues past
+  // the Barracks into the two extractors — after it, so the base is never mining
+  // while it has nothing to defend itself with.
+  assert.equal(
+    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, outpost: 1 } }), AI_TEST_BALANCE),
     "quarry",
   );
   assert.equal(
-    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, quarry: 1 } }), AI_TEST_BALANCE),
+    nextBuilding(
+      bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, outpost: 1, quarry: 1 } }),
+      AI_TEST_BALANCE,
+    ),
     "gold_mine",
   );
   // Faz M4 extends the opening by one: the Market, last, because it converts an
@@ -34425,18 +34756,35 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   // stone at a spread while its own deposits sat untouched.
   assert.equal(
     nextBuilding(
-      bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, quarry: 1, gold_mine: 1 } }),
+      bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, outpost: 1, quarry: 1, gold_mine: 1 } }),
       AI_TEST_BALANCE,
     ),
     "market",
   );
+  // A "complete base" is now the age's whole settlement plan, housing included —
+  // the one-of-each opening is what left the economy intent with nothing to do
+  // once eight buildings stood, and handed the rest of the match to Attack.
+  const settlementPlan = AI_TEST_BALANCE.economy.buildingTargets.settlement;
   assert.equal(
     nextBuilding(
-      bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, quarry: 1, gold_mine: 1, market: 1 } }),
+      bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, outpost: 1, quarry: 1, gold_mine: 1, market: 1 } }),
       AI_TEST_BALANCE,
     ),
+    "house",
+    "an unfinished housing target keeps the settlement plan open",
+  );
+  assert.equal(
+    nextBuilding(bb({ buildingCounts: { ...settlementPlan } }), AI_TEST_BALANCE),
     null,
-    "a complete base stops requesting buildings",
+    "a complete settlement plan stops requesting buildings",
+  );
+  // Targets are counts, not flags: one of a building the plan wants two of is
+  // still a shortfall. This is what makes the AI grow a city rather than a base.
+  const townPlan = AI_TEST_BALANCE.economy.buildingTargets.town;
+  assert.ok(townPlan["farm"] !== undefined && townPlan["farm"] > 1, "the Town plan asks for a second farm");
+  assert.ok(
+    buildOrder(bb({ age: "town", buildingCounts: { ...townPlan, farm: 1 } }), AI_TEST_BALANCE).includes("farm"),
+    "a target of two is not satisfied by one",
   );
 
   // Faz 8: the order is a *priority list*, not a single pick. A single pick
@@ -34445,8 +34793,17 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   // mine underneath it are never reached, so the Town age stays unreachable.
   assert.deepEqual(
     buildOrder(bb({ population: 19, populationCap: 20, buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 } }), AI_TEST_BALANCE),
-    ["house", "quarry", "gold_mine", "market"],
+    ["house", "outpost", "quarry", "gold_mine", "market"],
     "a blocked priority still lets the ones below it through",
+  );
+  // Urgent housing is listed *once*, at the top: the settlement plan's own housing
+  // want is suppressed when pressure has already named it, or the order would ask
+  // the single build slot for the same building twice.
+  assert.equal(
+    buildOrder(bb({ population: 19, populationCap: 20, buildingCounts: {} }), AI_TEST_BALANCE)
+      .filter((wanted) => wanted === "house").length,
+    1,
+    "the same building is never queued twice in one order",
   );
   // §34: housing outranks the economy order, so a lock is never reached.
   assert.equal(
@@ -34586,9 +34943,21 @@ check("every building declares a positive durability, and a bad one fails loudly
   for (const [id, stats] of Object.entries(buildings)) {
     assert.ok(stats.maxHealth > 0, `${id} must declare durability`);
   }
-  // GDD §37 health classes: a depot outlasts a farm, an outpost outlasts both.
-  assert.ok((buildings.depot?.maxHealth ?? 0) > (buildings.farm?.maxHealth ?? 0));
-  assert.ok((buildings.outpost?.maxHealth ?? 0) > (buildings.depot?.maxHealth ?? 0));
+  // Health classes: the border structure outlasts every economic building.
+  //
+  // This used to also claim "a depot outlasts a farm". Centre-led progression
+  // (`be5d42d`) removed the per-building health ladder and the shipped data has
+  // since put depot, farm and lumber camp in one 100-HP class, with the extractors
+  // at 200 and the outpost at 500 — so that half of the claim had been false in
+  // data for several commits while the assertion sat red. It is dropped rather
+  // than "fixed" by editing durability, because which class a depot belongs in is
+  // a balance decision and not something a test may quietly decide.
+  for (const economic of ["depot", "farm", "lumber_camp", "quarry", "gold_mine", "market"] as const) {
+    assert.ok(
+      (buildings.outpost?.maxHealth ?? 0) > (buildings[economic]?.maxHealth ?? 0),
+      `the outpost must outlast ${economic}`,
+    );
+  }
 
   const withFarm = (farm: Record<string, unknown>) => ({ ...raw, farm: { ...(raw["farm"] as object), ...farm } });
   // A structure without durability would be silently invulnerable — the exact
@@ -34818,16 +35187,39 @@ check("§54: the AI holds a garrison at its base instead of sending every guard"
   assert.ok(world.army.currentMission === "harassEconomy" || world.army.currentMission === "assaultTarget");
 
   const state = world.army.state();
-  // §54: minimumDefensePower (2) worth of guards stays home; the rest strike.
-  assert.equal(state.garrisonCount, 2, "the minimum defence is held back");
+  // §54: `minimumDefensePower` worth of guards stays home; the rest strike. The
+  // minimum is per age now, and read off the balance rather than pinned — a
+  // literal here would silently become a different claim the day it is retuned.
+  const settlementDefense = AI_TEST_BALANCE.army.minimumDefensePower.settlement;
+  assert.equal(state.garrisonCount, settlementDefense, "the minimum defence is held back");
   const striking = guards.filter((unit) => unit.attackTarget !== null);
-  assert.equal(striking.length, 4, "everything above the minimum takes the field");
+  assert.equal(striking.length, 6 - settlementDefense, "everything above the minimum takes the field");
+
+  // §54: a Town holds back more, because it has more to lose. Same army, same
+  // ratio, only the age differs — so the garrison is the only thing that can.
+  const town = armyTestWorld();
+  const townGuardCount = Math.ceil(AI_TEST_BALANCE.army.minimumDefensePower.town) + 2;
+  town.enemyGuards(townGuardCount);
+  town.playerBuilding("farm", 0, 16);
+  town.army.update(
+    aiTestBlackboard({ age: "town", ownArmyPower: townGuardCount, knownEnemyArmyPower: 3 }),
+    "attack",
+  );
+  assert.equal(
+    town.army.state().garrisonCount,
+    AI_TEST_BALANCE.army.minimumDefensePower.town,
+    "§54: the Town garrison is the one the Town age asks for",
+  );
+  assert.ok(
+    AI_TEST_BALANCE.army.minimumDefensePower.town > settlementDefense,
+    "and the shipped balance actually scales it with the age",
+  );
 
   // §59/§54: an army that *is* the minimum has nothing to spare, so it stays.
   const thin = armyTestWorld();
-  thin.enemyGuards(2);
+  thin.enemyGuards(settlementDefense);
   thin.playerBuilding("farm", 0, 16);
-  thin.army.update(aiTestBlackboard({ ownArmyPower: 2, knownEnemyArmyPower: 0.5 }), "attack");
+  thin.army.update(aiTestBlackboard({ ownArmyPower: settlementDefense, knownEnemyArmyPower: 0.5 }), "attack");
   assert.equal(thin.army.currentMission, "regroup", "a minimum-sized army never leaves the base empty");
   assert.equal(
     thin.units.unitsOf("enemy").filter((unit) => unit.attackTarget !== null).length,
@@ -35867,11 +36259,18 @@ check("Faz M4: the AI trades toward the age it is short for, and stops once it c
     ).includes("market"),
     "the economy manager's order can actually produce the Market the rule needs",
   );
-  // ...and it is last: the Market converts an economy, it does not make one.
-  assert.equal(
-    buildOrder(aiTestBlackboard({ buildingCounts: {} }), AI_TEST_BALANCE).at(-1),
-    "market",
+  // ...and it comes after both extractors: the Market converts an economy, it does
+  // not make one, so ahead of them the AI would buy stone at a spread while its own
+  // deposits sat untouched. (It is no longer *last* — the settlement plan's growth
+  // housing sits below it, because a house never outranks a producer the economy is
+  // short of. Urgent housing is a separate, higher want at the top of the order.)
+  const fullOrder = buildOrder(aiTestBlackboard({ buildingCounts: {} }), AI_TEST_BALANCE);
+  assert.ok(
+    fullOrder.indexOf("market") > fullOrder.indexOf("quarry")
+    && fullOrder.indexOf("market") > fullOrder.indexOf("gold_mine"),
+    "the Market is wanted only once the extractors it would otherwise replace are asked for",
   );
+  assert.equal(fullOrder.at(-1), "house", "growth housing is the lowest-priority want");
 
   // The rule is worthless if the AI can never build the Market it needs, and an
   // anchor is only a coordinate until something checks it. This is the one that
@@ -36263,7 +36662,12 @@ check("River Water ribbon follows spline width with arc-length UVs and flow attr
     segmentProfiles: [{ splineSegmentRef: "bc", flowSpeedMultiplier: 1.75, rapidness: 0.8 }],
   });
   assert.ok(ribbon.positions.length > 30, "ribbon cross-section vertices are emitted for each sampled row");
-  assert.equal((ribbon.positions.length / 3) % 9, 0, "authored static foam increases ribbon cross-section resolution");
+  // Strip Foam has been retired (`riverWater.ts`: "Keep the legacy data loadable,
+  // but do not allocate mask resolution or render it into newly built river
+  // ribbons"), so the cross-section is the plain 5-vertex row again rather than the
+  // 9 the baked foam used to widen it to. The stamps below stay in the fixture on
+  // purpose: authored legacy data must still *load* without changing the ribbon.
+  assert.equal((ribbon.positions.length / 3) % 5, 0, "ribbon rows carry the plain cross-section");
   assert.equal(ribbon.positions[1], -1.4);
   assert.equal(ribbon.uvs[0], 0);
   assert.ok(ribbon.uvs.at(-2)! > 7, "U follows accumulated distance rather than control-point index");
@@ -36273,7 +36677,10 @@ check("River Water ribbon follows spline width with arc-length UVs and flow attr
   assert.equal(ribbon.waterDepths.length, ribbon.positions.length / 3);
   assert.equal(ribbon.rapidness.length, ribbon.positions.length / 3);
   assert.equal(ribbon.foamMasks.length, ribbon.positions.length / 3);
-  assert.ok(ribbon.foamMasks.some((value) => value > 0.8), "authored strip stamps bake a visible foam core into the ribbon");
+  assert.ok(
+    ribbon.foamMasks.every((value) => value === 0),
+    "retired Strip Foam bakes nothing into the ribbon, even from authored stamps",
+  );
   assert.equal(ribbon.flowSpeedMultipliers.length, ribbon.positions.length / 3);
   assert.ok(ribbon.flowSpeedMultipliers.some((value) => value === 1.75), "segment profile controls local flow speed");
   assert.ok(ribbon.rapidness.some((value) => value >= 0.8), "segment profile controls authored rapids");

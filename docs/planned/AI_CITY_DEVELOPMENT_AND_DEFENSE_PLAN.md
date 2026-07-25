@@ -1,7 +1,11 @@
 # AI Şehir Gelişimi, Savunma ve Çağ Kapılı Saldırı Planı
 
 Oluşturulma tarihi: 2026-07-25
-Durum: Planlandı. Kod yazılmadı.
+Durum: **Uygulandı** (2026-07-25). Karar A1 (mevcut `outpost`, yeni bina yok) ve
+B1 (`attackAgeGraceSeconds` emniyet supabı) seçildi. Gerçekleşen ile plan
+arasındaki farklar §6'da.
+Kapılar: `npx tsc --noEmit` yeşil, `npm run test:engine` 1101 check yeşil,
+`npm run build:verify` yeşil, `npm run check:assets` PASS.
 Kaynak istek: "AI gelişmiş bir şehir kursun, savunmayı ihmal etmesin, kasaba
 çağına geçmeden saldırıya geçmesin."
 
@@ -288,7 +292,87 @@ işlenir (mevcut 4. madde formatında).
 
 ---
 
-## 6. Kapsam dışı
+## 6. Gerçekleşen — plandan sapmalar
+
+Uygulama sırasında planın eksik veya yanlış olduğu yerler. Hepsi kasıtlı ve
+gerekçeli:
+
+1. **`scoring.economy.developmentNeed` planda yoktu, eklendi.** Faz 3 build
+   order'ı uzatıyor ama *yalnızca* Economy niyeti bina diker
+   (`aiController.update` → `if (currentIntent === "economy")`). Skorda "şehir
+   eksik" diye bir terim olmadığı için AI'ın bu planı seçmek için hiçbir nedeni
+   olmayacaktı — yani Faz 3 kod olarak var, davranış olarak ölü olurdu.
+   `AiAttackScoring.developmentFloor`'un aynadaki karşılığı, ağırlık `0.45`.
+
+2. **Üs karakolu slotu tek, ve sınırı kesiyor.** Karakol
+   `canPlaceExpansion` ile doğrulanıyor ve footprint'inin içinde **nötr** hücre
+   şart (`territoryControlSystem.ts:126`). Yani üsün göbeğine karakol
+   dikilemiyor; slot kontrol kenarını kesmek zorunda —
+   `atEnemyBase(-18, 24)`, tehdit gelen yön. İkinci bir üs karakolu da bu yüzden
+   iptal: ilkinin 16 birim kontrol yarıçapı içindeki her slotta nötr hücre
+   kalmıyor. Kasaba hedefi `outpost: 2` yine ulaşılabilir (üs 1 + genişleme 2).
+   Bunu yakalayan şey yeni "her authored anchor yerleştirilebilir mi" testi.
+
+3. **Grid snap tuzağı.** `snapToPlacementGrid` 2 birimlik ızgaraya yuvarlıyor,
+   yani tek sayılı bir koordinat sessizce başka hücreye kayıyor. Bütün yeni
+   offset'ler çift; test bunu artık her anchor için doğruluyor.
+
+4. **İkinci `lumber_camp` doğuya kondu.** `requiresForest` + `gatherRadius: 20`,
+   ve üsün kontrol yarıçapı içinde ağaç olan tek yön o.
+
+5. **Yedinci ev slotu eklendi.** Mevcut altı slot Kasaba ev hedefinin tam
+   kendisiydi, hiç pay bırakmıyordu — ve `(16,-6)` slotu gerçek oyunda
+   `enemy-wood-8` ağacının üstünde duruyor (`liveTreeBlockers` yerleştirmeyi
+   engelliyor, ağaçlar kesilene kadar o slot ölü).
+
+6. **`RTS_CoreMatch.level.json` de güncellendi.** Level, blockout'un anchor
+   listesinin birebir kopyası ve bir test bunu `deepEqual` ile karşılaştırıyor,
+   yani yeni slotlar iki yere de yazılmak zorunda.
+
+7. **Town'da `ageUp` artık merkez seviyesini puanlıyor.** Plan bunu "Faz 3"e
+   sıkıştırmıştı; gerçekte `AiBlackboard`'a iki alan gerekti (`centerLevel`,
+   `centerLevelUpgradeCost`) çünkü skorer merkez seviyesini hiç görmüyordu.
+
+### Yol üstünde bulunan, bu işe ait olmayan kırıklar
+
+`npm run test:engine` bu iş **başlamadan önce de kırmızıydı** ve ilk hatada
+durduğu için arkasındaki ~1090 check hiç koşmuyordu. Kendi işimi doğrulayabilmek
+için şu bayat iddiaları shipped veriye çektim (hiçbiri denge değişikliği değil,
+testler veriyi yansıtmayı bırakmış):
+
+- `barracks.cost.wood` 160 → 140, `house.cost.wood` 80 → 50 (`40b9112`).
+- `resources.stone.safeNode.perWorkerPerMinute` 5 → 6,
+  `gold.externalNode` 5 → 6 (`544e157`).
+- `ages.town.cost` 600/350/150/150 → 500/500/200/100 ve
+  `levelUpgrades[0].cost.stone` 120 → 60 (iki yerde).
+- Muhafız yiyecek maliyeti 60 → 40 olduğu için kuyruk rezervasyonu 2700 → 2800.
+- **Depo dayanıklılık sınıfı:** test "depo bir çiftlikten uzun yaşar" diyordu;
+  centre-led progression (`be5d42d`) per-bina sağlık merdivenini kaldırdığından
+  beri depo/çiftlik/kereste ocağı aynı 100 HP sınıfında. İddia *kaldırıldı*,
+  veri **değiştirilmedi** — deponun hangi sınıfta olduğu bir denge kararı ve
+  testin sessizce vereceği bir karar değil. GDD 04'te bu sıralamayı doğrulayan
+  bir cümle de yok. **Karar senin:** deponun daha dayanıklı olması gerekiyorsa
+  `buildings.json` → `depot.maxHealth` yükseltilmeli.
+- **River Water strip foam:** test authored strip stamp'lerin ribbon'a foam
+  bastığını iddia ediyordu; `riverWater.ts:141` "Strip Foam has been retired"
+  diyor ve `foamMasks` artık sabit 0. Test kaldırılan davranışa göre
+  güncellendi (legacy veri hâlâ *yüklenebiliyor*, sadece hiçbir şey basmıyor).
+
+## 7. Sırada — oynanış doğrulaması (kod işi değil)
+
+Faz 5'in son maddesi hâlâ açık: `?rts&debug` ile en az 5 maç. Panelde yeni iki
+satır var (`çağ: town Lv2`, `şehir planı: %72 (saldırı çarpanı 0.81) · eksik …`)
+ve `niyet puanları` altında saldırının nedeni artık adıyla okunuyor
+(`çağ kapısı: town çağına ulaşılmadı`, `şehir gelişimi %60, güç oranı 1.40`).
+Sonuç `GDD/13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` §53 kaydına, mevcut
+4. madde formatında işlenmeli.
+
+Denge için ilk bakılacak üç sayı:
+`scoring.attack.developmentFloor` (0.35 — saldırının ne kadar kısıldığı),
+`scoring.economy.developmentNeed` (0.45 — şehri bitirme baskısı),
+`army.populationShare` (0.40 — ordu/ekonomi paylaşımı).
+
+## 8. Kapsam dışı
 
 - Ayrı baskın/kuşatma/savunma orduları (§51: AI-1 tek saha ordusu).
 - Serbest biçimli şehir planlayıcı (§40: anchor tabanlı kalır).

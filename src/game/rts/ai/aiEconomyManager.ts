@@ -73,20 +73,48 @@ export function detectBottleneck(bb: AiBlackboard, balance: AiBalance): AiBottle
  */
 export function buildOrder(bb: AiBlackboard, balance: AiBalance): readonly string[] {
   const order: string[] = [];
+  const targets = balance.economy.buildingTargets[bb.age];
+  /** Wanted while the age's plan asks for more of this building than stands. */
+  const short = (buildingId: string): boolean =>
+    (bb.buildingCounts[buildingId] ?? 0) < (targets[buildingId] ?? 0);
+
   const headroom = bb.populationCap - bb.population;
-  // §37 PopulationBlocked → "Ev planını yüksek öncelikli yap".
+  // §37 PopulationBlocked → "Ev planını yüksek öncelikli yap". Deliberately ahead
+  // of the target check and not subject to it: a population lock has to be
+  // relieved even by a house the settlement plan did not ask for, or the plan
+  // itself becomes the thing that wedges the AI at its cap.
   if (headroom <= balance.economy.populationPressureBuffer) order.push("house");
-  if ((bb.buildingCounts["farm"] ?? 0) === 0) order.push("farm");
-  if ((bb.buildingCounts["lumber_camp"] ?? 0) === 0) order.push("lumber_camp");
-  if ((bb.buildingCounts["barracks"] ?? 0) === 0) order.push("barracks");
+  if (short("farm")) order.push("farm");
+  if (short("lumber_camp")) order.push("lumber_camp");
+  if (short("barracks")) order.push("barracks");
+  // §41 "Kule: kritik geçit veya karakol yakını" — the AI's only structure with a
+  // `defense` block, so on this data set the outpost *is* the base defence. After
+  // the Barracks (something has to garrison it) and before the extractors, which
+  // only gate the age: an undefended base does not live long enough to spend the
+  // stone. It also satisfies the Town requirement without waiting for a region.
+  if (short("outpost")) order.push("outpost");
   // §24: the Town age needs all four resources. These come after the Barracks so
   // the base is never mining stone while it has nothing to defend itself with.
-  if ((bb.buildingCounts["quarry"] ?? 0) === 0) order.push("quarry");
-  if ((bb.buildingCounts["gold_mine"] ?? 0) === 0) order.push("gold_mine");
+  if (short("quarry")) order.push("quarry");
+  if (short("gold_mine")) order.push("gold_mine");
   // Faz M4, last on purpose: the Market converts an economy, it does not make
   // one. Ahead of the extractors it would have the AI buy the stone it could
   // have mined, at a spread, while its deposits sat untouched.
-  if ((bb.buildingCounts["market"] ?? 0) === 0) order.push("market");
+  if (short("market")) order.push("market");
+  // Everything else the age's plan asks for, in the plan's own key order — the
+  // Town Archery Range today. Listing it above would have needed a second age
+  // branch here for a building the ratio (§53) already asks for by name; letting
+  // data name it keeps the *order* above about priority and the *contents* about
+  // tuning. The named wants are filtered out so nothing is queued twice.
+  const named = new Set(order);
+  for (const buildingId of Object.keys(targets)) {
+    if (named.has(buildingId) || buildingId === "house") continue;
+    if (short(buildingId)) order.push(buildingId);
+  }
+  // The settlement plan's housing, last: it is what raises the population ceiling
+  // the army and worker targets grow into, but it never outranks a producer the
+  // economy is actually short of. The urgent case is already handled at the top.
+  if (!named.has("house") && short("house")) order.push("house");
   return order;
 }
 

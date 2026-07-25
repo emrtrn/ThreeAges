@@ -1052,6 +1052,7 @@ const AI_ECONOMY_SCORING_TERMS: readonly (keyof AiEconomyScoring)[] = [
   "incomeDeficit",
   "populationPressure",
   "recoveryNeed",
+  "developmentNeed",
   "immediateThreat",
 ];
 const AI_AGE_UP_SCORING_TERMS: readonly (keyof AiAgeUpScoring)[] = [
@@ -1109,14 +1110,26 @@ export function validateAiBalance(value: unknown): AiBalance {
   }
 
   const armyObj = asObject(obj["army"], `${where}.army`);
+  const attackMinimumAge = requireString(armyObj, "attackMinimumAge", `${where}.army`);
+  if (!SETTLEMENT_AGES.includes(attackMinimumAge as SettlementAge)) {
+    throw new GameDataError(
+      `${where}.army.attackMinimumAge: must be one of ${SETTLEMENT_AGES.join(", ")}`,
+    );
+  }
   const army = {
     peaceSeconds: requireFiniteNumber(armyObj, "peaceSeconds", `${where}.army`),
+    attackMinimumAge: attackMinimumAge as SettlementAge,
+    attackAgeGraceSeconds: requireFiniteNumber(armyObj, "attackAgeGraceSeconds", `${where}.army`),
     attackPowerRatio: requirePositive(armyObj, "attackPowerRatio", `${where}.army`),
     riskyAttackPowerRatio: requirePositive(armyObj, "riskyAttackPowerRatio", `${where}.army`),
     retreatPowerRatio: requirePositive(armyObj, "retreatPowerRatio", `${where}.army`),
     retreatHealthRatio: requireFiniteNumber(armyObj, "retreatHealthRatio", `${where}.army`),
     dominancePowerRatio: requirePositive(armyObj, "dominancePowerRatio", `${where}.army`),
-    minimumDefensePower: requireFiniteNumber(armyObj, "minimumDefensePower", `${where}.army`),
+    minimumDefensePower: validateAiAgeNumbers(
+      armyObj["minimumDefensePower"],
+      `${where}.army.minimumDefensePower`,
+      { allowZero: true },
+    ),
     populationShare: requirePositive(armyObj, "populationShare", `${where}.army`),
     rolePower: validateAiRolePower(armyObj["rolePower"], `${where}.army.rolePower`),
     composition: validateAiCompositions(armyObj["composition"], `${where}.army.composition`),
@@ -1140,13 +1153,29 @@ export function validateAiBalance(value: unknown): AiBalance {
       `${where}.army: expected retreatPowerRatio <= riskyAttackPowerRatio <= attackPowerRatio`,
     );
   }
-  if (army.minimumDefensePower < 0) {
-    throw new GameDataError(`${where}.army: minimumDefensePower must be >= 0`);
+  // §54: a Town holds more than a Settlement opening does. The reverse would have
+  // the AI thin its garrison exactly as its city became worth raiding.
+  if (army.minimumDefensePower.town < army.minimumDefensePower.settlement) {
+    throw new GameDataError(`${where}.army.minimumDefensePower: town must be >= settlement`);
   }
   // §53 (4): 0 disables the window (the pre-grace behaviour, still expressible);
   // negative is meaningless and would read as "attack before the match started".
   if (army.peaceSeconds < 0) {
     throw new GameDataError(`${where}.army: peaceSeconds must be >= 0`);
+  }
+  // Same shape as peaceSeconds: 0 disables the fail-safe (a hard age gate, which
+  // is a legitimate design choice), while a negative value would read as "the
+  // gate lifted before the match started" and silently disable the gate itself.
+  if (army.attackAgeGraceSeconds < 0) {
+    throw new GameDataError(`${where}.army: attackAgeGraceSeconds must be >= 0`);
+  }
+  // A fail-safe that fires inside the non-aggression window could never be the
+  // thing that lifted the gate — peaceSeconds would still be suppressing Attack —
+  // so this ordering is what keeps the two windows from reading as one.
+  if (army.attackAgeGraceSeconds > 0 && army.attackAgeGraceSeconds < army.peaceSeconds) {
+    throw new GameDataError(
+      `${where}.army: attackAgeGraceSeconds must be 0 or >= peaceSeconds`,
+    );
   }
   // §55: a share of 1 lets the army fill the population by itself, which is the
   // deadlock the ceiling exists to prevent — there would be no headroom left for
@@ -1182,6 +1211,10 @@ export function validateAiBalance(value: unknown): AiBalance {
     workerTarget,
     populationPressureBuffer: requireFiniteNumber(economyObj, "populationPressureBuffer", `${where}.economy`),
     incomeTargetsPerMinute,
+    buildingTargets: validateAiBuildingTargets(
+      economyObj["buildingTargets"],
+      `${where}.economy.buildingTargets`,
+    ),
   };
   if (economy.populationPressureBuffer < 0) {
     throw new GameDataError(`${where}.economy: populationPressureBuffer must be >= 0`);
@@ -1232,6 +1265,70 @@ function validateAiRolePower(value: unknown, where: string): Record<UnitRoleId, 
   // of villagers as defended and suppress the AI's own defend score.
   if (power.worker !== 0) throw new GameDataError(`${where}: "worker" must be 0 — workers never fight`);
   return power;
+}
+
+/**
+ * A per-age number map (`{ settlement, town }`), for the tuning values that grew
+ * an age axis. Every age must be stated: an omitted one would silently read as
+ * `undefined` at exactly the moment the AI entered it.
+ */
+function validateAiAgeNumbers(
+  value: unknown,
+  where: string,
+  options: { readonly allowZero: boolean },
+): Record<SettlementAge, number> {
+  const obj = asObject(value, where);
+  const numbers = {} as Record<SettlementAge, number>;
+  for (const age of SETTLEMENT_AGES) {
+    numbers[age] = options.allowZero
+      ? requireFiniteNumber(obj, age, where)
+      : requirePositive(obj, age, where);
+    if (numbers[age] < 0) throw new GameDataError(`${where}: "${age}" must be >= 0`);
+  }
+  for (const key of Object.keys(obj)) {
+    if (!SETTLEMENT_AGES.includes(key as SettlementAge)) {
+      throw new GameDataError(`${where}: unknown age "${key}"`);
+    }
+  }
+  return numbers;
+}
+
+/**
+ * The per-age settlement plan (building id → target count).
+ *
+ * The ids are not cross-checked against `buildings.json` here — this validator
+ * only sees `ai.json` — so a typo would read as a building that never gets built,
+ * holding the development term below 1 forever. `engine-tests.ts` closes that gap
+ * with a cross-file assertion, which is the cheapest place that sees both files.
+ */
+function validateAiBuildingTargets(
+  value: unknown,
+  where: string,
+): Record<SettlementAge, Record<string, number>> {
+  const obj = asObject(value, where);
+  const targets = {} as Record<SettlementAge, Record<string, number>>;
+  for (const age of SETTLEMENT_AGES) {
+    const scope = `${where}.${age}`;
+    const ageObj = asObject(obj[age], scope);
+    const plan: Record<string, number> = {};
+    for (const buildingId of Object.keys(ageObj)) {
+      const count = requireFiniteNumber(ageObj, buildingId, scope);
+      if (!Number.isInteger(count) || count < 1) {
+        throw new GameDataError(`${scope}: "${buildingId}" must be an integer >= 1`);
+      }
+      plan[buildingId] = count;
+    }
+    if (Object.keys(plan).length === 0) {
+      throw new GameDataError(`${scope}: at least one building must be targeted, or the AI builds nothing`);
+    }
+    targets[age] = plan;
+  }
+  for (const key of Object.keys(obj)) {
+    if (!SETTLEMENT_AGES.includes(key as SettlementAge)) {
+      throw new GameDataError(`${where}: unknown age "${key}"`);
+    }
+  }
+  return targets;
 }
 
 /** §53: the army shape per age. An all-zero ratio would train nothing at all. */
@@ -1289,6 +1386,16 @@ function validateAiScoring(value: unknown, where: string): AiScoringBalance {
   const expandObj = asObject(obj["expand"], `${where}.expand`);
   const expand = { recipeWoodCost: requirePositive(expandObj, "recipeWoodCost", `${where}.expand`) };
 
+  const attackObj = asObject(obj["attack"], `${where}.attack`);
+  const attack = {
+    developmentFloor: requireFiniteNumber(attackObj, "developmentFloor", `${where}.attack`),
+  };
+  // It is a multiplier on a 0..1 score: outside 0..1 it would either invert the
+  // term (negative) or amplify Attack past every other intent (> 1).
+  if (!(attack.developmentFloor >= 0 && attack.developmentFloor <= 1)) {
+    throw new GameDataError(`${where}.attack: developmentFloor must be within 0..1`);
+  }
+
   const normalizersObj = asObject(obj["normalizers"], `${where}.normalizers`);
   const normalizers = {
     // Both are divisors: a zero would make every threat read as infinite.
@@ -1296,7 +1403,7 @@ function validateAiScoring(value: unknown, where: string): AiScoringBalance {
     disconnectedProducers: requirePositive(normalizersObj, "disconnectedProducers", `${where}.normalizers`),
   };
 
-  return { economy, ageUp, expand, normalizers };
+  return { economy, ageUp, expand, attack, normalizers };
 }
 
 /** §60: every term is weighted in data, and an unknown term is a typo, not a feature. */

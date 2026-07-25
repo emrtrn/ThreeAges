@@ -48,7 +48,7 @@ const BUILDING_ART: Record<string, ArtResolver> = {
   archery_range: { kind: "aged", basename: (f, l) => `Archery_${f}_Level${l}` },
   farm: { kind: "aged", basename: (f, l) => `Farm_${f}_Level${l}_Wheat` },
   market: { kind: "aged", basename: (f, l) => `Market_${f}_Level${l}` },
-  lumber_camp: { kind: "fixed", basename: "Resource_Tree_Group_Cut" },
+  lumber_camp: { kind: "fixed", basename: "Resource_PineTree_Group_Cut" },
   quarry: { kind: "fixed", basename: "Mine" },
   gold_mine: { kind: "fixed", basename: "Mine" },
 };

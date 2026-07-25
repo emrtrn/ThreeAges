@@ -500,6 +500,19 @@ export interface AiEconomyScoring {
   readonly incomeDeficit: number;
   readonly populationPressure: number;
   readonly recoveryNeed: number;
+  /**
+   * How much an unfinished `economy.buildingTargets` plan pulls on the economy
+   * score.
+   *
+   * The counterpart to {@link AiAttackScoring.developmentFloor}, and the term that
+   * makes the plan reachable at all: only the Economy intent places buildings
+   * (`AiController` runs the economy executor when that intent is committed), so a
+   * settlement plan the score never asks for is a plan the AI never builds. With
+   * the old one-of-each opening this term had nothing to measure — the order
+   * emptied itself after eight buildings — which is why it arrives with the
+   * targets rather than before them.
+   */
+  readonly developmentNeed: number;
   /** Subtracted: a base under attack is not the moment to expand the economy. */
   readonly immediateThreat: number;
 }
@@ -525,6 +538,29 @@ export interface AiExpandScoring {
   readonly recipeWoodCost: number;
 }
 
+/**
+ * §30's Attack terms beyond the power ratio: how much a half-built settlement
+ * holds the attack back.
+ *
+ * The age gate (`army.attackMinimumAge`) stops the AI attacking *before* Town;
+ * this stops it treating the age transition as a finish line. Without it, a Town
+ * AI with a dominant army scores a flat 1.0 on Attack, §7's hysteresis makes that
+ * unbeatable (a rival needs 1.25×), and the second half of the match is the same
+ * "convert everything into soldiers" opening the age gate was added to end.
+ */
+export interface AiAttackScoring {
+  /**
+   * The development multiplier at a settlement that has built nothing, rising
+   * linearly to 1 as `economy.buildingTargets` are met.
+   *
+   * Deliberately a floor and not a gate: authored anchors can run out, and an AI
+   * that could never finish its target city would otherwise never attack at all
+   * and no match could end. 0 makes development a hard requirement, 1 disables
+   * the term — both still expressible in data.
+   */
+  readonly developmentFloor: number;
+}
+
 /** §29: the divisors that normalise raw world quantities into 0..1 terms. */
 export interface AiScoringNormalizers {
   /** Enemy power at the base that reads as a full-strength threat. */
@@ -537,6 +573,7 @@ export interface AiScoringBalance {
   readonly economy: AiEconomyScoring;
   readonly ageUp: AiAgeUpScoring;
   readonly expand: AiExpandScoring;
+  readonly attack: AiAttackScoring;
   readonly normalizers: AiScoringNormalizers;
 }
 
@@ -571,6 +608,29 @@ export interface AiBalance {
      * never the AI's ability to answer a rush against itself.
      */
     readonly peaceSeconds: number;
+    /**
+     * §24: the age the AI must have reached before it may *start* a fight.
+     *
+     * `peaceSeconds` bought the opening a fixed number of minutes; this buys it a
+     * *state*. Playtesting after the window found the AI still spent the whole
+     * Settlement age converting its economy into Guards, because nothing in §30
+     * tied attacking to development — so the age transition and the developed
+     * city §9 asks for were something the AI skipped rather than something it
+     * played toward.
+     *
+     * Typed as an age rather than a boolean so a third age (Kingdom) needs no
+     * code change: "settlement" is the pre-gate behaviour, still expressible.
+     */
+    readonly attackMinimumAge: SettlementAge;
+    /**
+     * Fail-safe for {@link attackMinimumAge}: match seconds after which the age
+     * gate lifts regardless of the age reached.
+     *
+     * An AI whose economy was raided flat may never reach Town, and a hard gate
+     * would leave it standing in its base forever while the match could not end.
+     * 0 disables the fail-safe — the hard gate is still expressible in data.
+     */
+    readonly attackAgeGraceSeconds: number;
     /** §62: attack when own/enemy power is at or above this. */
     readonly attackPowerRatio: number;
     /** §62: below `attackPowerRatio`, only a high-value target justifies attacking. */
@@ -586,8 +646,15 @@ export interface AiBalance {
      * §60 requires that the centre not always be the best target.
      */
     readonly dominancePowerRatio: number;
-    /** §54: power held back at the base before the field army may leave. */
-    readonly minimumDefensePower: number;
+    /**
+     * §54: power held back at the base before the field army may leave, per age.
+     *
+     * Per age rather than flat because what "the base is defended" means scales
+     * with what there is to lose: a single flat value low enough for a Settlement
+     * opening (two Guards) left a whole Town — four producers, a Market, an
+     * Archery Range — behind the same two Guards.
+     */
+    readonly minimumDefensePower: Readonly<Record<SettlementAge, number>>;
     /**
      * §55: the largest share of the population cap the field army may occupy.
      *
@@ -620,6 +687,23 @@ export interface AiBalance {
      * lets a balanced four-resource economy settle instead of over-building one.
      */
     readonly incomeTargetsPerMinute: Readonly<Record<string, number>>;
+    /**
+     * How many of each building the AI's settlement is driving toward, per age
+     * (building id → count).
+     *
+     * The opening template (§34) only ever asked "does one exist", so the AI
+     * stopped developing the moment its first of each building stood: eight
+     * buildings and nothing left for the economy intent to do, which is what
+     * handed the match to Attack by default. A target count turns §34 from an
+     * opening checklist into a settlement plan, and keeps the *order* (design) in
+     * `aiEconomyManager.buildOrder` while the counts (tuning) live here.
+     *
+     * A target the authored anchors cannot satisfy is not an error — the build
+     * manager's §43 blacklist reports the exhausted slots and the order falls
+     * through to the next want — but it does hold {@link AiAttackScoring} below
+     * its full development reading, so the two are tuned together.
+     */
+    readonly buildingTargets: Readonly<Record<SettlementAge, Readonly<Record<string, number>>>>;
   };
   /** §29–§30: the utility formula's own coefficients, not just its weights. */
   readonly scoring: AiScoringBalance;

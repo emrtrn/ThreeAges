@@ -70,6 +70,19 @@ export interface AiBlackboard {
    * "how short am I" into a subtraction instead of a heuristic.
    */
   readonly ageCost: Readonly<Record<string, number>>;
+  /** §19 DevelopmentLevel: the centre level (1–3) inside the current age. */
+  readonly centerLevel: number;
+  /**
+   * The next centre *level* upgrade's cost, or null when none remains.
+   *
+   * Under centre-led progression the level ladder is the second half of
+   * "development", and in the Town age it is the only half left — so §30's AgeUp
+   * has to be able to score it, or a Town AI reads as finished at Lv1 and its
+   * buildings never leave their weakest tier. Null covers both ends: Town Lv3
+   * (nothing left) and a transition already in flight (`ageUpgrading` holds the
+   * intent instead).
+   */
+  readonly centerLevelUpgradeCost: Readonly<Record<string, number>> | null;
   /** §52: live combat units per role, so §53 can read the army's shape. */
   readonly armyComposition: Readonly<Record<UnitRoleId, number>>;
   /**
@@ -219,6 +232,13 @@ export class AiBlackboardReader {
       ageAffordable: Object.entries(this.sources.townCost)
         .every(([id, cost]) => (stocks[id] ?? 0) >= cost),
       ageCost: this.sources.townCost,
+      centerLevel: ageSnapshot.level,
+      // Only a "level" action: the town transition is already carried by
+      // `ageCost`/`ageAffordable`, and folding the two into one field would have
+      // the scorer price an age transition as a level-up.
+      centerLevelUpgradeCost: ageSnapshot.nextAction?.kind === "level"
+        ? ageSnapshot.nextAction.cost
+        : null,
       armyComposition: composition(ownArmy),
       armyPopulation: ownArmy.reduce((total, unit) => total + unit.stats.populationCost, 0),
       ownArmyPower,
@@ -254,6 +274,19 @@ export function armyPower(units: readonly Unit[], balance: AiBalance): number {
     (total, unit) => total + (balance.army.rolePower[unit.role] ?? 0) * unit.health.ratio,
     0,
   );
+}
+
+/**
+ * §54: the base defence this age insists on keeping before the field army may
+ * leave.
+ *
+ * Shared by the three places that have to agree on it — the garrison the army
+ * holds back, the mission choice that refuses to march without it, and §30's
+ * Attack deployable check. A flat number let those three drift apart the moment
+ * the value became age-scaled, so this is the single read.
+ */
+export function minimumDefensePowerFor(age: SettlementAge, balance: AiBalance): number {
+  return balance.army.minimumDefensePower[age];
 }
 
 function composition(army: readonly Unit[]): Record<UnitRoleId, number> {
