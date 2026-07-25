@@ -7,7 +7,7 @@
  * ridge, so infantry must choose the west or east approach. Buildings will add
  * their own dynamic blockers to this same navigation layer in the next slice.
  */
-import { BoxGeometry, CircleGeometry, Color, Group, Mesh, MeshStandardMaterial } from "three";
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
@@ -394,45 +394,18 @@ export function createRtsMapBlockout(map: RtsMapBlockout = RTS_BLOCKOUT_MAP): Gr
   const root = new Group();
   root.name = "rts-map-blockout";
 
-  // No start-position discs: the blockout drew a filled team-coloured circle
-  // under each command centre to say whose base this was. The §64 team rings now
-  // answer that on every unit and building, and the disc only added a coloured
-  // patch of ground the centre's own ring had to compete with.
-  root.add(createZoneMarker("rts-central-expansion", map.centralExpansion, "#d7ad52", 7));
-  root.add(createZoneMarker("rts-external-resource", map.externalResource, "#63a86e", 5));
-  for (const node of map.resourceNodes) {
-    root.add(createZoneMarker(
-      `rts-resource-node-${node.id}`,
-      node,
-      node.resourceId === "gold" ? "#d6af3a" : "#8f969b",
-      node.kind === "external" ? 2.5 : 2,
-    ));
-  }
-
+  // No ground discs at all any more. The blockout used to paint a filled circle
+  // for every authored region — a team-coloured one under each command centre, a
+  // gold one over the central expansion, a green one over the external resource
+  // and a gold/grey one on every resource node. Each of those has since gained a
+  // real answer: the §64 team rings read ownership on every unit and building,
+  // and the deposits are read from their own gold/stone pile art. The discs only
+  // left coloured patches of ground competing with the art standing on them.
   for (const blocker of map.navigationBlockers) {
     root.add(createRockRidge(blocker));
   }
   root.add(...createBoundaryPlaceholders());
   return root;
-}
-
-function createZoneMarker(name: string, point: RtsMapPoint, color: string, radius: number): Mesh {
-  const marker = new Mesh(
-    new CircleGeometry(radius, 32),
-    new MeshStandardMaterial({
-      color: new Color(color),
-      emissive: new Color(color),
-      emissiveIntensity: 0.12,
-      roughness: 0.9,
-      transparent: true,
-      opacity: 0.48,
-    }),
-  );
-  marker.name = name;
-  marker.rotation.x = -Math.PI / 2;
-  marker.position.set(point.x, 0.025, point.z);
-  marker.receiveShadow = true;
-  return marker;
 }
 
 function createRockRidge(blocker: NavBlocker): Mesh {

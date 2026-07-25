@@ -134,6 +134,12 @@ export class Unit {
    * target, and every other order-issuing method clears it.
    */
   private rescuing = false;
+  /**
+   * A short, automatic crowd-recovery window. Unlike {@link rescuing}, this
+   * does not waive world navigation: it only asks `unitSeparation` to leave
+   * this body out while overlapping movers get a chance to pass each other.
+   */
+  private collisionRecoverySeconds = 0;
   private workerReturnDelayAfterMove = 0;
   private workerReturnDelayRemaining = 0;
   private selectedFlag = false;
@@ -250,6 +256,7 @@ export class Unit {
     this.movePath = [];
     this.playerMoveOrder = false;
     this.rescuing = false;
+    this.collisionRecoverySeconds = 0;
     this.resumeAutomaticWorkerAssignment();
     this.moveTarget = new Vector3(x, 0, z);
   }
@@ -274,6 +281,23 @@ export class Unit {
   /** Whether a rescue escort still owns this unit (true until it reaches clear ground). */
   get isRescuing(): boolean {
     return this.rescuing && this.moveTarget !== null;
+  }
+
+  /** Start a bounded unit-to-unit collision recovery without changing the order. */
+  beginCollisionRecovery(seconds: number): void {
+    this.collisionRecoverySeconds = Math.max(this.collisionRecoverySeconds, Math.max(0, seconds));
+  }
+
+  /** True while crowd separation must temporarily ignore this unit. */
+  get isCollisionRecovering(): boolean {
+    return this.collisionRecoverySeconds > 0;
+  }
+
+  /** Advance recovery time; returns true exactly when its window expires. */
+  advanceCollisionRecovery(dt: number): boolean {
+    if (this.collisionRecoverySeconds <= 0) return false;
+    this.collisionRecoverySeconds = Math.max(0, this.collisionRecoverySeconds - Math.max(0, dt));
+    return this.collisionRecoverySeconds === 0;
   }
 
   /** Replace the current movement order with a planned ground waypoint path. */
@@ -322,6 +346,7 @@ export class Unit {
     this.movePath = points.map((point) => point.clone());
     this.playerMoveOrder = playerMoveOrder;
     this.rescuing = false;
+    this.collisionRecoverySeconds = 0;
     if (!playerMoveOrder) this.resumeAutomaticWorkerAssignment();
   }
 
@@ -336,6 +361,7 @@ export class Unit {
     this.movePath = points.map((point) => point.clone());
     this.attackMoveTarget = destination.clone();
     this.playerMoveOrder = false;
+    this.collisionRecoverySeconds = 0;
   }
 
   /**
@@ -381,6 +407,7 @@ export class Unit {
     this.movePath = [];
     this.playerMoveOrder = false;
     this.rescuing = false;
+    this.collisionRecoverySeconds = 0;
     this.resumeAutomaticWorkerAssignment();
   }
 
@@ -400,6 +427,7 @@ export class Unit {
     this.attackMoveTarget = null;
     this.moveTarget = null;
     this.movePath = [];
+    this.collisionRecoverySeconds = 0;
   }
 
   /**
@@ -414,6 +442,7 @@ export class Unit {
     this.attackTarget?.setTargetedBy?.(-1);
     this.attackTarget = target;
     this.rescuing = false;
+    this.collisionRecoverySeconds = 0;
     this.autoAcquired = target !== null && auto;
     this.chaseOrigin = target !== null && auto ? this.position.clone() : null;
     this.moveTarget = null;

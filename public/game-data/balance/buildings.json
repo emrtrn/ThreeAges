@@ -20,29 +20,29 @@
         },
         {
           "level": 2,
-          "maxHealth": 400,
+          "maxHealth": 350,
           "queueCapacity": 7
         },
         {
           "level": 3,
-          "maxHealth": 500,
+          "maxHealth": 400,
           "queueCapacity": 9
         }
       ],
       "town": [
         {
           "level": 1,
-          "maxHealth": 650,
+          "maxHealth": 500,
           "queueCapacity": 12
         },
         {
           "level": 2,
-          "maxHealth": 800,
+          "maxHealth": 600,
           "queueCapacity": 16
         },
         {
           "level": 3,
-          "maxHealth": 1000,
+          "maxHealth": 800,
           "queueCapacity": 20
         }
       ]
@@ -57,7 +57,7 @@
       "depth": 4
     },
     "cost": {
-      "wood": 80
+      "wood": 50
     },
     "constructionSeconds": 25,
     "maxHealth": 100,
@@ -72,29 +72,29 @@
         },
         {
           "level": 2,
-          "maxHealth": 150,
+          "maxHealth": 110,
           "populationCapacity": 6
         },
         {
           "level": 3,
-          "maxHealth": 200,
+          "maxHealth": 120,
           "populationCapacity": 7
         }
       ],
       "town": [
         {
           "level": 1,
-          "maxHealth": 250,
+          "maxHealth": 130,
           "populationCapacity": 8
         },
         {
           "level": 2,
-          "maxHealth": 300,
+          "maxHealth": 140,
           "populationCapacity": 9
         },
         {
           "level": 3,
-          "maxHealth": 350,
+          "maxHealth": 150,
           "populationCapacity": 10
         }
       ]
@@ -109,16 +109,16 @@
       "depth": 6
     },
     "cost": {
-      "wood": 120
+      "wood": 60
     },
     "constructionSeconds": 45,
-    "maxHealth": 500,
+    "maxHealth": 100,
     "visionRadius": 10,
     "progression": {
       "settlement": [
         {
           "level": 1,
-          "maxHealth": 500,
+          "maxHealth": 100,
           "storageCapacity": {
             "food": 500,
             "wood": 500,
@@ -128,7 +128,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 750,
+          "maxHealth": 110,
           "storageCapacity": {
             "food": 750,
             "wood": 750,
@@ -138,7 +138,7 @@
         },
         {
           "level": 3,
-          "maxHealth": 1050,
+          "maxHealth": 120,
           "storageCapacity": {
             "food": 1000,
             "wood": 1000,
@@ -150,7 +150,7 @@
       "town": [
         {
           "level": 1,
-          "maxHealth": 1300,
+          "maxHealth": 130,
           "storageCapacity": {
             "food": 1400,
             "wood": 1400,
@@ -160,7 +160,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 1600,
+          "maxHealth": 140,
           "storageCapacity": {
             "food": 1800,
             "wood": 1800,
@@ -170,7 +170,7 @@
         },
         {
           "level": 3,
-          "maxHealth": 1900,
+          "maxHealth": 150,
           "storageCapacity": {
             "food": 2400,
             "wood": 2400,
@@ -190,10 +190,10 @@
       "depth": 6
     },
     "cost": {
-      "wood": 140
+      "wood": 100
     },
     "constructionSeconds": 45,
-    "maxHealth": 700,
+    "maxHealth": 500,
     "visionRadius": 30,
     "territory": {
       "controlRadius": 16,
@@ -215,7 +215,7 @@
       "settlement": [
         {
           "level": 1,
-          "maxHealth": 700,
+          "maxHealth": 500,
           "territory": {
             "controlRadius": 16,
             "connectedControlRadius": 20
@@ -226,7 +226,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 1000,
+          "maxHealth": 600,
           "territory": {
             "controlRadius": 20,
             "connectedControlRadius": 24
@@ -237,7 +237,7 @@
         },
         {
           "level": 3,
-          "maxHealth": 1350,
+          "maxHealth": 700,
           "territory": {
             "controlRadius": 24,
             "connectedControlRadius": 28
@@ -250,7 +250,7 @@
       "town": [
         {
           "level": 1,
-          "maxHealth": 1700,
+          "maxHealth": 800,
           "territory": {
             "controlRadius": 28,
             "connectedControlRadius": 32
@@ -261,7 +261,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 2100,
+          "maxHealth": 900,
           "territory": {
             "controlRadius": 32,
             "connectedControlRadius": 36
@@ -272,7 +272,7 @@
         },
         {
           "level": 3,
-          "maxHealth": 2550,
+          "maxHealth": 1000,
           "territory": {
             "controlRadius": 36,
             "connectedControlRadius": 40
@@ -293,10 +293,10 @@
       "depth": 6
     },
     "cost": {
-      "wood": 80
+      "wood": 40
     },
     "constructionSeconds": 35,
-    "maxHealth": 300,
+    "maxHealth": 100,
     "visionRadius": 8,
     "economy": {
       "resourceId": "food",
@@ -308,7 +308,7 @@
       "settlement": [
         {
           "level": 1,
-          "maxHealth": 300,
+          "maxHealth": 100,
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 10,
@@ -317,7 +317,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 400,
+          "maxHealth": 110,
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 12,
@@ -326,7 +326,7 @@
         },
         {
           "level": 3,
-          "maxHealth": 520,
+          "maxHealth": 120,
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 14,
@@ -337,7 +337,7 @@
       "town": [
         {
           "level": 1,
-          "maxHealth": 650,
+          "maxHealth": 130,
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 16,
@@ -346,7 +346,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 800,
+          "maxHealth": 140,
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 18,
@@ -355,7 +355,7 @@
         },
         {
           "level": 3,
-          "maxHealth": 960,
+          "maxHealth": 150,
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 20,
@@ -374,10 +374,10 @@
       "depth": 6
     },
     "cost": {
-      "wood": 100
+      "wood": 80
     },
     "constructionSeconds": 35,
-    "maxHealth": 300,
+    "maxHealth": 100,
     "visionRadius": 9,
     "economy": {
       "resourceId": "wood",
@@ -392,7 +392,7 @@
       "settlement": [
         {
           "level": 1,
-          "maxHealth": 300,
+          "maxHealth": 100,
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 20,
@@ -402,7 +402,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 400,
+          "maxHealth": 110,
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 30,
@@ -412,7 +412,7 @@
         },
         {
           "level": 3,
-          "maxHealth": 520,
+          "maxHealth": 118,
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 40,
@@ -424,7 +424,7 @@
       "town": [
         {
           "level": 1,
-          "maxHealth": 650,
+          "maxHealth": 130,
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 50,
@@ -434,7 +434,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 800,
+          "maxHealth": 140,
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 60,
@@ -467,7 +467,7 @@
       "wood": 120
     },
     "constructionSeconds": 40,
-    "maxHealth": 450,
+    "maxHealth": 200,
     "visionRadius": 9,
     "economy": {
       "resourceId": "stone",
@@ -480,7 +480,7 @@
       "settlement": [
         {
           "level": 1,
-          "maxHealth": 450,
+          "maxHealth": 200,
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 5,
@@ -489,7 +489,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 600,
+          "maxHealth": 220,
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 6,
@@ -498,7 +498,7 @@
         },
         {
           "level": 3,
-          "maxHealth": 780,
+          "maxHealth": 240,
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 7,
@@ -509,7 +509,7 @@
       "town": [
         {
           "level": 1,
-          "maxHealth": 1000,
+          "maxHealth": 260,
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 8,
@@ -518,7 +518,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 1250,
+          "maxHealth": 280,
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 9,
@@ -527,7 +527,7 @@
         },
         {
           "level": 3,
-          "maxHealth": 1500,
+          "maxHealth": 300,
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 10,
@@ -546,10 +546,10 @@
       "depth": 6
     },
     "cost": {
-      "wood": 140
+      "wood": 120
     },
     "constructionSeconds": 45,
-    "maxHealth": 450,
+    "maxHealth": 200,
     "visionRadius": 9,
     "economy": {
       "resourceId": "gold",
@@ -562,7 +562,7 @@
       "settlement": [
         {
           "level": 1,
-          "maxHealth": 450,
+          "maxHealth": 200,
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 3,
@@ -571,7 +571,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 600,
+          "maxHealth": 220,
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 4,
@@ -580,7 +580,7 @@
         },
         {
           "level": 3,
-          "maxHealth": 780,
+          "maxHealth": 240,
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 5,
@@ -591,7 +591,7 @@
       "town": [
         {
           "level": 1,
-          "maxHealth": 1000,
+          "maxHealth": 260,
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 6,
@@ -600,7 +600,7 @@
         },
         {
           "level": 2,
-          "maxHealth": 1250,
+          "maxHealth": 280,
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 7,
@@ -609,7 +609,7 @@
         },
         {
           "level": 3,
-          "maxHealth": 1500,
+          "maxHealth": 300,
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 8,
@@ -628,10 +628,10 @@
       "depth": 8
     },
     "cost": {
-      "wood": 150
+      "wood": 20
     },
     "constructionSeconds": 50,
-    "maxHealth": 500,
+    "maxHealth": 100,
     "visionRadius": 12,
     "market": {
       "lotSize": 100,
@@ -649,34 +649,34 @@
       "settlement": [
         {
           "level": 1,
-          "maxHealth": 500,
+          "maxHealth": 100,
           "tradeCommission": 0.15
         },
         {
           "level": 2,
-          "maxHealth": 750,
+          "maxHealth": 110,
           "tradeCommission": 0.12
         },
         {
           "level": 3,
-          "maxHealth": 1000,
+          "maxHealth": 120,
           "tradeCommission": 0.09
         }
       ],
       "town": [
         {
           "level": 1,
-          "maxHealth": 1250,
+          "maxHealth": 130,
           "tradeCommission": 0.08
         },
         {
           "level": 2,
-          "maxHealth": 1500,
+          "maxHealth": 140,
           "tradeCommission": 0.07
         },
         {
           "level": 3,
-          "maxHealth": 1800,
+          "maxHealth": 150,
           "tradeCommission": 0.06
         }
       ]
@@ -691,43 +691,43 @@
       "depth": 8
     },
     "cost": {
-      "wood": 160
+      "wood": 140
     },
     "constructionSeconds": 55,
-    "maxHealth": 650,
+    "maxHealth": 400,
     "visionRadius": 12,
     "progression": {
       "settlement": [
         {
           "level": 1,
-          "maxHealth": 650,
+          "maxHealth": 400,
           "queueCapacity": 5
         },
         {
           "level": 2,
-          "maxHealth": 900,
+          "maxHealth": 450,
           "queueCapacity": 10
         },
         {
           "level": 3,
-          "maxHealth": 1200,
+          "maxHealth": 500,
           "queueCapacity": 15
         }
       ],
       "town": [
         {
           "level": 1,
-          "maxHealth": 1500,
+          "maxHealth": 550,
           "queueCapacity": 20
         },
         {
           "level": 2,
-          "maxHealth": 1850,
+          "maxHealth": 600,
           "queueCapacity": 25
         },
         {
           "level": 3,
-          "maxHealth": 2250,
+          "maxHealth": 700,
           "queueCapacity": 30
         }
       ]
@@ -742,29 +742,29 @@
       "depth": 8
     },
     "cost": {
-      "wood": 160,
+      "wood": 140,
       "stone": 40
     },
     "constructionSeconds": 55,
     "requiredAge": "town",
-    "maxHealth": 600,
+    "maxHealth": 500,
     "visionRadius": 14,
     "progression": {
       "settlement": [],
       "town": [
         {
           "level": 1,
-          "maxHealth": 600,
+          "maxHealth": 500,
           "queueCapacity": 20
         },
         {
           "level": 2,
-          "maxHealth": 850,
+          "maxHealth": 600,
           "queueCapacity": 25
         },
         {
           "level": 3,
-          "maxHealth": 1100,
+          "maxHealth": 700,
           "queueCapacity": 30
         }
       ]

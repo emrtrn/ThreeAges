@@ -75,9 +75,9 @@
         },
         {
           "position": [
-            -36.94,
+            -33.91,
             0.02,
-            15.78
+            15.53
           ],
           "scaleLocked": true,
           "groupId": "group-mrzfsvqu-3mt",
@@ -102,9 +102,9 @@
         },
         {
           "position": [
-            -37.83,
+            -34.8,
             0.01,
-            16.78
+            16.53
           ],
           "scaleLocked": true,
           "groupId": "group-mrzfsvqu-3mt",
@@ -129,9 +129,9 @@
         },
         {
           "position": [
-            -36.82,
+            -33.79,
             0,
-            17.2
+            16.95
           ],
           "scaleLocked": true,
           "groupId": "group-mrzfsvqu-3mt",
@@ -658,9 +658,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json",
       "position": [
-        -51.1,
+        -53.31,
         0,
-        50.81
+        45.61
       ],
       "name": "Player Start",
       "scale": 1,
@@ -769,11 +769,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -56,
+        -55.87,
         0,
-        40
+        22.66
       ],
       "name": "Tree player-wood-1",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-1",
         "forestId": "player-grove",
@@ -784,11 +785,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -54,
+        -58.17,
         0,
-        38
+        25.98
       ],
       "name": "Tree player-wood-1-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-1-dense",
         "forestId": "player-grove",
@@ -799,11 +801,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -52,
+        -55.8,
         0,
-        42
+        19.01
       ],
       "name": "Tree player-wood-2",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-2",
         "forestId": "player-grove",
@@ -814,11 +817,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -54,
+        -59.17,
         0,
-        44
+        18.31
       ],
       "name": "Tree player-wood-2-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-2-dense",
         "forestId": "player-grove",
@@ -829,11 +833,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -48,
+        -59.41,
         0,
-        40
+        24.93
       ],
       "name": "Tree player-wood-3",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-3",
         "forestId": "player-grove",
@@ -844,11 +849,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -46,
+        -57,
         0,
-        38
+        20.67
       ],
       "name": "Tree player-wood-3-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-3-dense",
         "forestId": "player-grove",
@@ -874,11 +880,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -58,
+        -60.34,
         0,
-        36
+        28.87
       ],
       "name": "Tree player-wood-4-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-4-dense",
         "forestId": "player-grove",
@@ -889,11 +896,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -52,
+        -54.19,
         0,
-        32
+        30.73
       ],
       "name": "Tree player-wood-5",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-5",
         "forestId": "player-grove",
@@ -904,11 +912,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -50,
+        -51.85,
         0,
-        30
+        28.72
       ],
       "name": "Tree player-wood-5-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-5-dense",
         "forestId": "player-grove",
@@ -919,11 +928,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -48,
+        -58.16,
         0,
-        34
+        28.33
       ],
       "name": "Tree player-wood-6",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-6",
         "forestId": "player-grove",
@@ -934,11 +944,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -50,
+        -56.39,
         0,
-        36
+        25.13
       ],
       "name": "Tree player-wood-6-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-6-dense",
         "forestId": "player-grove",
@@ -979,11 +990,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -48,
+        -49.34,
         0,
-        28
+        26.73
       ],
       "name": "Tree player-wood-8",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-8",
         "forestId": "player-grove",
@@ -994,11 +1006,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -50,
+        -58.46,
         0,
-        30
+        31.62
       ],
       "name": "Tree player-wood-8-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-8-dense",
         "forestId": "player-grove",
@@ -1324,11 +1337,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -38,
+        -42.86,
         0,
-        8
+        9.92
       ],
       "name": "Tree west-wood-3-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "west-wood-3-dense",
         "forestId": "west-grove",
@@ -1369,11 +1383,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -42,
+        -47.45,
         0,
-        4
+        16.07
       ],
       "name": "Tree west-wood-5",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "west-wood-5",
         "forestId": "west-grove",
@@ -1384,11 +1399,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -40,
+        -46.68,
         0,
-        2
+        20.3
       ],
       "name": "Tree west-wood-5-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "west-wood-5-dense",
         "forestId": "west-grove",
@@ -1399,11 +1415,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -38,
+        -46.45,
         0,
-        6
+        18.11
       ],
       "name": "Tree west-wood-6",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "west-wood-6",
         "forestId": "west-grove",
@@ -1804,11 +1821,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        12,
+        2.18,
         0,
-        42
+        46.05
       ],
       "name": "Tree south-wood-2-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-2-dense",
         "forestId": "south-grove",
@@ -1819,11 +1837,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        16,
+        2.1,
         0,
-        42
+        48
       ],
       "name": "Tree south-wood-3",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-3",
         "forestId": "south-grove",
@@ -1834,11 +1853,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        14,
+        4.9,
         0,
-        44
+        47.57
       ],
       "name": "Tree south-wood-3-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-3-dense",
         "forestId": "south-grove",
@@ -1849,11 +1869,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        6,
+        -1.82,
         0,
-        36
+        41.04
       ],
       "name": "Tree south-wood-4",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-4",
         "forestId": "south-grove",
@@ -1864,11 +1885,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        8,
+        -2.63,
         0,
-        34
+        40.92
       ],
       "name": "Tree south-wood-4-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-4-dense",
         "forestId": "south-grove",
@@ -1879,11 +1901,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        14,
+        -0.57,
         0,
-        36
+        45.12
       ],
       "name": "Tree south-wood-5",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-5",
         "forestId": "south-grove",
@@ -1894,11 +1917,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        12,
+        -0.12,
         0,
-        38
+        42.86
       ],
       "name": "Tree south-wood-5-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-5-dense",
         "forestId": "south-grove",
@@ -1939,11 +1963,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -58,
+        -60.62,
         0,
-        40
+        26.54
       ],
       "name": "Tree player-wood-10",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-10",
         "forestId": "player-grove",
@@ -1954,11 +1979,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -60,
+        -57.82,
         0,
-        42
+        23.99
       ],
       "name": "Tree player-wood-10-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-10-dense",
         "forestId": "player-grove",
@@ -1999,11 +2025,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -56,
+        -56.84,
         0,
-        36
+        30.16
       ],
       "name": "Tree player-wood-12",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-12",
         "forestId": "player-grove",
@@ -2014,11 +2041,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -58,
+        -60.84,
         0,
-        38
+        20.4
       ],
       "name": "Tree player-wood-12-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-12-dense",
         "forestId": "player-grove",
@@ -2029,11 +2057,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -56,
+        -59.34,
         0,
-        38
+        30.05
       ],
       "name": "Tree player-wood-13",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-13",
         "forestId": "player-grove",
@@ -2044,11 +2073,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -54,
+        -54.04,
         0,
-        36
+        22.94
       ],
       "name": "Tree player-wood-13-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-13-dense",
         "forestId": "player-grove",
@@ -2059,11 +2089,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -56,
+        -60.8,
         0,
-        42
+        23.76
       ],
       "name": "Tree player-wood-14",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-14",
         "forestId": "player-grove",
@@ -2074,11 +2105,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -58,
+        -59.09,
         0,
-        44
+        21.54
       ],
       "name": "Tree player-wood-14-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-14-dense",
         "forestId": "player-grove",
@@ -2284,11 +2316,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -48,
+        -48.96,
         0,
-        2
+        17.37
       ],
       "name": "Tree west-wood-7-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "west-wood-7-dense",
         "forestId": "west-grove",
@@ -2839,11 +2872,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        4,
+        -2.37,
         0,
-        36
+        40.84
       ],
       "name": "Tree south-wood-7",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-7",
         "forestId": "south-grove",
@@ -2899,11 +2933,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        8,
+        0.12,
         0,
-        36
+        40.03
       ],
       "name": "Tree south-wood-9",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-9",
         "forestId": "south-grove",
@@ -2914,11 +2949,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        6,
+        -0.39,
         0,
-        38
+        37.74
       ],
       "name": "Tree south-wood-9-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-9-dense",
         "forestId": "south-grove",
@@ -2944,11 +2980,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        10,
+        5.42,
         0,
-        42
+        45.56
       ],
       "name": "Tree south-wood-10-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-10-dense",
         "forestId": "south-grove",

@@ -41,6 +41,10 @@ const PROGRESS_FRACTION = 0.2;
  * is standing in, and must not spend the match trying.
  */
 const CONGESTION_ARRIVAL_RADIUS = 2;
+/** One short phase-through is enough to break a body-to-body deadlock. */
+const COLLISION_RECOVERY_SECONDS = 0.6;
+/** Never phase the same order repeatedly; ordinary re-planning remains the fallback. */
+const MAX_COLLISION_RECOVERIES = 1;
 /** How far an unstick manoeuvre steps away from the current crowd. */
 const ESCAPE_DISTANCE = 2.5;
 /** A candidate needs this much breathing room before it becomes an escape route. */
@@ -67,6 +71,10 @@ interface CongestionState {
    * change is not progress, and must not refund {@link MAX_REPLANS}.
    */
   replanned: boolean;
+  /** Automatic unit-to-unit collision recoveries already spent on this order. */
+  collisionRecoveries: number;
+  /** Final point to restore once the temporary recovery window ends. */
+  collisionRecoveryGoal: Vector3 | null;
 }
 
 /**
@@ -92,6 +100,7 @@ export function updateUnitMovement(
 ): void {
   for (const unit of units) {
     unit.advanceWorkerReturnDelay(dt);
+    if (unit.advanceCollisionRecovery(dt)) resumeCollisionRecovery(unit, options.navigation);
     if (unit.health.depleted) {
       unit.stop();
       continue;
@@ -163,7 +172,15 @@ function trackCongestion(
   navigation: RtsNavigation | undefined,
 ): void {
   const state = congestion.get(unit)
-    ?? { seconds: 0, replans: 0, waypoint: null, lastDistance: distanceBefore, replanned: false };
+    ?? {
+      seconds: 0,
+      replans: 0,
+      waypoint: null,
+      lastDistance: distanceBefore,
+      replanned: false,
+      collisionRecoveries: 0,
+      collisionRecoveryGoal: null,
+    };
   congestion.set(unit, state);
   if (state.waypoint !== waypoint) {
     state.waypoint = waypoint;
@@ -187,7 +204,24 @@ function trackCongestion(
   if (state.seconds < CONGESTION_TIMEOUT) return;
 
   state.seconds = 0;
-  const destination = unit.pathDestination;
+  // Planned routes retain their final waypoint; the footprint-eviction and
+  // rescue-adjacent direct orders use `moveTarget` instead.
+  const destination = unit.pathDestination ?? unit.moveTarget;
+  if (
+    destination
+    && state.collisionRecoveries < MAX_COLLISION_RECOVERIES
+    && hasOverlappingMover(unit, units)
+  ) {
+    // The static grid has already supplied a valid route; this is only a
+    // body-to-body deadlock. Let the involved movers pass through the crowd for
+    // a moment, then rebuild the route from their new, separated positions.
+    state.collisionRecoveries += 1;
+    state.collisionRecoveryGoal = destination.clone();
+    state.waypoint = null;
+    state.replanned = true;
+    unit.beginCollisionRecovery(COLLISION_RECOVERY_SECONDS);
+    return;
+  }
   if (navigation && destination && state.replans < MAX_REPLANS) {
     state.replans += 1;
     // Repeating a static-grid route cannot resolve a body-to-body deadlock:
@@ -216,6 +250,28 @@ function trackCongestion(
     unit.stop();
   }
   congestion.delete(unit);
+}
+
+/** Whether another live mover is physically overlapping this body right now. */
+function hasOverlappingMover(unit: Unit, units: readonly Unit[]): boolean {
+  return units.some((other) => {
+    if (other === unit || other.health.depleted || other.dying || other.isRescuing) return false;
+    const minimum = unit.navRadius + other.navRadius;
+    return Math.hypot(unit.position.x - other.position.x, unit.position.z - other.position.z) < minimum;
+  });
+}
+
+/** Rejoin the original order as soon as temporary crowd phasing ends. */
+function resumeCollisionRecovery(unit: Unit, navigation: RtsNavigation | undefined): void {
+  const state = congestion.get(unit);
+  const destination = state?.collisionRecoveryGoal;
+  if (!state || !destination) return;
+  state.collisionRecoveryGoal = null;
+  state.seconds = 0;
+  state.waypoint = null;
+  if (!navigation) return;
+  const path = navigation.plan(unit.position, destination);
+  if (path && path.length > 0) unit.replanPath(path);
 }
 
 /** Find a walkable retreat or side-step, then continue to the original goal. */

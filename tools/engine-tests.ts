@@ -31144,6 +31144,42 @@ check("Faz 7 a unit the crowd gives no ground gives its order up instead of grin
   assert.ok(plans <= 2, `and the re-plan budget is spent rather than refunded (${plans} re-plans)`);
 });
 
+check("Faz 7 overlapping movers briefly phase through each other, then keep their route", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const first = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const second = units.spawn("player", 0, 0.1, RTS_TEST_UNIT_STATS);
+  const goal = new Vector3(0, 0, -30);
+  const firstPath = navigation.plan(first.position, goal) ?? assert.fail("first route missing");
+  const secondPath = navigation.plan(second.position, goal) ?? assert.fail("second route missing");
+  first.setMovePath(firstPath);
+  second.setMovePath(secondPath);
+
+  // Pin both bodies together long enough to reproduce a crowd deadlock. The
+  // recovery must trigger from real overlap, not from one isolated stalled unit.
+  const dt = 1 / 30;
+  for (let i = 0; i < 60; i += 1) {
+    const firstPosition = first.position.clone();
+    const secondPosition = second.position.clone();
+    updateUnitMovement([first, second], dt, { navigation });
+    first.position.copy(firstPosition);
+    second.position.copy(secondPosition);
+  }
+  assert.equal(first.isCollisionRecovering, true, "the first jammed mover gets a bounded recovery window");
+  assert.equal(second.isCollisionRecovering, true, "the overlapping partner is recovered too");
+
+  const firstPosition = first.position.clone();
+  const secondPosition = second.position.clone();
+  updateUnitSeparation([first, second], dt, { navigation });
+  assert.deepEqual(first.position.toArray(), firstPosition.toArray(), "recovery disables only crowd separation");
+  assert.deepEqual(second.position.toArray(), secondPosition.toArray(), "the partner is not pushed during recovery");
+
+  for (let i = 0; i < 30; i += 1) updateUnitMovement([first, second], dt, { navigation });
+  assert.equal(first.isCollisionRecovering, false, "the recovery window is short-lived");
+  assert.equal(second.isCollisionRecovering, false, "the partner also returns to normal collision");
+  assert.ok(first.pathTarget && second.pathTarget, "both units resume routes instead of losing their targets");
+});
+
 check("Faz 7 a group order onto unreachable ground stops the unit instead of walking it into rock", () => {
   const units = new UnitSystem();
   const navigation = new RtsNavigation();

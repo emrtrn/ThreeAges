@@ -643,6 +643,17 @@ function validateBuildingProgression(
       if (maxHealth <= previousHealth) {
         throw new GameDataError(`${entryWhere}.maxHealth: must exceed the previous tier`);
       }
+      // A tier is applied to a *live* building, and `HealthComponent.upgradeMax`
+      // refuses to lower a ceiling — so a tier under the base `maxHealth` throws
+      // at the moment construction completes, inside the completion handler, which
+      // then never reaches the building's model: the finished building is left
+      // wearing its grey placeholder box and never gets its tier stats. Caught
+      // here so bad data fails loudly at load instead of mid-match.
+      if (maxHealth < base.maxHealth) {
+        throw new GameDataError(
+          `${entryWhere}.maxHealth: may not drop below the building's base maxHealth (${base.maxHealth})`,
+        );
+      }
       previousHealth = maxHealth;
 
       const populationRaw = entry["populationCapacity"];
