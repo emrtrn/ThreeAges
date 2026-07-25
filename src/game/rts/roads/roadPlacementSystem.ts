@@ -26,13 +26,34 @@ const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 const ROAD_COLOR = new Color("#8f7042");
 const PREVIEW_COLOR = new Color("#d3c267");
 const INVALID_COLOR = new Color("#d65b55");
+/** Erase highlight — red reads as "this tile goes away", not "this is refused". */
+const ERASE_COLOR = new Color("#e0603f");
 
-export type RoadPlacementReason = "choose-start" | "choose-end" | "invalid-route" | "insufficient-resources";
+export type RoadPlacementReason =
+  | "choose-start"
+  | "choose-end"
+  | "invalid-route"
+  | "insufficient-resources"
+  | "choose-erase"
+  | "no-road-here";
+
+/** Draw a new route, or unpave an existing one (GDD 10 §44 "Yol Silme"). */
+export type RoadPlacementMode = "build" | "erase";
+
+/** The tile an erase click would take, plus what losing it does to the network. */
+export interface RoadEraseTarget {
+  readonly cell: RoadCell;
+  /** Removing this tile would cut its network in two — the §44 impact warning. */
+  readonly splits: boolean;
+}
 
 export interface RoadPlacementState {
   readonly active: boolean;
+  readonly mode: RoadPlacementMode;
   readonly start: RoadCell | null;
   readonly plan: RoadPlan | null;
+  /** Erase mode only: the hovered road tile, or null over bare ground. */
+  readonly target: RoadEraseTarget | null;
   readonly reason: RoadPlacementReason | null;
 }
 
@@ -56,8 +77,10 @@ export class RoadPlacementSystem {
     depthWrite: false,
   });
   private active = false;
+  private mode: RoadPlacementMode = "build";
   private start: RoadCell | null = null;
   private plan: RoadPlan | null = null;
+  private target: RoadEraseTarget | null = null;
   private reason: RoadPlacementReason | null = null;
   /**
    * When an authored terrain is mounted the road look is painted onto it
@@ -89,27 +112,51 @@ export class RoadPlacementSystem {
   }
 
   state(): RoadPlacementState {
-    return { active: this.active, start: this.start, plan: this.plan, reason: this.reason };
+    return {
+      active: this.active,
+      mode: this.mode,
+      start: this.start,
+      plan: this.plan,
+      target: this.target,
+      reason: this.reason,
+    };
   }
 
   begin(): void {
     this.active = true;
+    this.mode = "build";
     this.start = null;
     this.plan = null;
+    this.target = null;
     this.reason = "choose-start";
+    this.clearPreview();
+  }
+
+  /** Enter erase mode: each left click unpaves the road tile under the cursor. */
+  beginErase(): void {
+    this.active = true;
+    this.mode = "erase";
+    this.start = null;
+    this.plan = null;
+    this.target = null;
+    this.reason = "choose-erase";
     this.clearPreview();
   }
 
   cancel(): void {
     this.active = false;
+    this.mode = "build";
     this.start = null;
     this.plan = null;
+    this.target = null;
     this.reason = null;
     this.clearPreview();
   }
 
   previewAt(screenX: number, screenY: number): RoadPlacementState {
-    if (!this.active || !this.start) return this.state();
+    if (!this.active) return this.state();
+    if (this.mode === "erase") return this.previewEraseAt(screenX, screenY);
+    if (!this.start) return this.state();
     const point = this.groundPoint(screenX, screenY);
     if (!point) return this.state();
     this.plan = this.construction.plan(this.start, point);
@@ -120,6 +167,7 @@ export class RoadPlacementSystem {
 
   confirmAt(screenX: number, screenY: number): RoadPlacementState {
     if (!this.active) return this.state();
+    if (this.mode === "erase") return this.confirmEraseAt(screenX, screenY);
     const point = this.groundPoint(screenX, screenY);
     if (!point) return this.state();
     if (!this.start) {
@@ -145,6 +193,29 @@ export class RoadPlacementSystem {
     this.reason = "choose-end";
     this.clearPreview();
     return this.state();
+  }
+
+  /** Highlight the tile an erase click would take, and read its network impact. */
+  private previewEraseAt(screenX: number, screenY: number): RoadPlacementState {
+    const point = this.groundPoint(screenX, screenY);
+    if (!point) return this.state();
+    const cell = this.roads.cellAt(point);
+    this.target = cell ? { cell, splits: this.roads.wouldDisconnect(cell) } : null;
+    this.reason = cell ? "choose-erase" : "no-road-here";
+    this.renderPreview(cell ? { cells: [cell], newCells: [], woodCost: 0 } : null, ERASE_COLOR);
+    return this.state();
+  }
+
+  /**
+   * Unpave the hovered tile, then re-pick under the unchanged pointer so both the
+   * highlight and the split warning describe the network that now exists — the
+   * tile behind the cursor may have become a bridge the moment this one went.
+   */
+  private confirmEraseAt(screenX: number, screenY: number): RoadPlacementState {
+    const target = this.previewEraseAt(screenX, screenY).target;
+    if (!target) return this.state();
+    this.construction.demolish([target.cell]);
+    return this.previewEraseAt(screenX, screenY);
   }
 
   reset(): void {

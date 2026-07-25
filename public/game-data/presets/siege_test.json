@@ -1,0 +1,33 @@
+{
+  "id": "siege_test",
+  "label": "Siege Test (Topçu, Kasaba Lv2)",
+  "flags": {},
+  "startingTier": {
+    "age": "town",
+    "level": 2
+  },
+  "startingResources": {
+    "food": 1000,
+    "wood": 1000,
+    "stone": 600,
+    "gold": 600
+  },
+  "startingUnits": {
+    "guard": 6,
+    "worker": 8
+  },
+  "enemyStartingResources": {
+    "food": 500,
+    "wood": 500,
+    "stone": 0,
+    "gold": 0
+  },
+  "enemyStartingUnits": {
+    "guard": 2,
+    "worker": 6
+  },
+  "gameSpeed": 2,
+  "mapState": "two_flanks_blockout",
+  "levelRef": "assets/ThreeAges/Levels/RTS_GameplayProof.level.json",
+  "aiProfile": "normal"
+}

@@ -142,6 +142,15 @@ test("Landscape Faz 5: command and build placement picking work over the mounted
   await expect(status).toContainText("Yol başlangıcını");
   await canvas.click({ button: "right", position: { x: 640, y: 400 } });
 
+  // The erase tool (GDD 10 §44) arms the same plane and reports whether the tile
+  // under the cursor carries a road, so it exercises the identical ground pick.
+  await page.getByRole("button", { name: "Yol Sil", exact: true }).click();
+  await expect(status).toContainText("Silmek için");
+  await canvas.hover({ position: { x: 640, y: 400 } });
+  await expect(status).toContainText("Silmek için");
+  await canvas.click({ button: "right", position: { x: 640, y: 400 } });
+  await expect(status).toHaveText("Bir yapı seçin.");
+
   expect(errors, "gameplay picking over the landscape must not error").toEqual([]);
 });
 

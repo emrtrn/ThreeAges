@@ -150,6 +150,8 @@ async function main(): Promise<void> {
       ...(preset?.enemyStartingUnits
         ? { enemyStartingUnits: preset.enemyStartingUnits }
         : {}),
+      // Same opt-in shape: without it the match opens at Settlement Lv1.
+      ...(preset?.startingTier ? { startingTier: preset.startingTier } : {}),
     });
     rts.start();
     return;

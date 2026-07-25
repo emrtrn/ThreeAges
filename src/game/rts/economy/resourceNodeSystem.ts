@@ -4,7 +4,22 @@
  * unlimited private buffer. The class has no renderer dependency so both the
  * player and headless AI use exactly the same depletion rule.
  */
+import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { ResourceBalance } from "../../data/gameDataTypes";
+
+/**
+ * Half-extent of the road-free reserve around a live deposit, in world units.
+ *
+ * Must stay *below* half a road cell (`roads.json` cellSize / 2 = 1) so the
+ * reserve covers the deposit's own road tile and nothing more. That single tile
+ * is the whole point: an extractor footprint has to contain the deposit point
+ * ({@link ResourceNodeSystem.canExtractAt}), and roads reserve build space, so a
+ * road paved *on* the deposit rules out every legal extractor centre at once and
+ * kills the deposit for the rest of the match. Reserving wider would be worse
+ * than the bug — a road kept 3+ cells away can no longer touch the extractor's
+ * footprint, and the mine is built but permanently `unlinked-road`.
+ */
+export const RTS_RESOURCE_NODE_BLOCK_HALF_EXTENT = 0.8;
 
 export type ResourceNodeKind = "safe" | "external";
 
@@ -68,6 +83,29 @@ export class ResourceNodeSystem {
 
   reset(): void {
     for (const node of this.nodes.values()) node.remaining = node.capacity;
+  }
+
+  /**
+   * Road-space reserve for every deposit that still has material in it, mirroring
+   * {@link ForestSystem.liveTreeBlockers}: a route bends around the yield rather
+   * than paving over it. Deposits stay out of the *building* blocker list — a
+   * quarry is supposed to sit on one — and out of unit navigation, which is why
+   * this is its own query rather than a nav blocker.
+   *
+   * A depleted deposit stops reserving, exactly as a felled tree does: there is
+   * no extractor left to place, so the ground goes back to being ordinary ground.
+   */
+  liveNodeBlockers(): readonly NavBlocker[] {
+    const blockers: NavBlocker[] = [];
+    for (const node of this.nodes.values()) {
+      if (node.remaining <= 0) continue;
+      const { x, z } = node.definition;
+      blockers.push({
+        min: [x - RTS_RESOURCE_NODE_BLOCK_HALF_EXTENT, 0, z - RTS_RESOURCE_NODE_BLOCK_HALF_EXTENT],
+        max: [x + RTS_RESOURCE_NODE_BLOCK_HALF_EXTENT, 3, z + RTS_RESOURCE_NODE_BLOCK_HALF_EXTENT],
+      });
+    }
+    return blockers;
   }
 
   snapshots(): readonly ResourceNodeSnapshot[] {

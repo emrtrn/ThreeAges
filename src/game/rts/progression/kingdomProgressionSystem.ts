@@ -20,6 +20,7 @@ import type {
   EconomyProductionBalance,
   SettlementAge,
   StartingResources,
+  StartingTier,
 } from "../../data/gameDataTypes";
 import type { ResourceReservation } from "../economy/resourceWallet";
 import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
@@ -134,8 +135,18 @@ export class KingdomProgressionSystem {
     private readonly centers: CommandCenterSystem,
     private readonly structures: PlacedStructureSystem,
     private readonly kingdoms: KingdomRegistry,
+    /**
+     * Tier the match opens on. Every kingdom starts at Settlement Lv1 unless a
+     * test preset says otherwise (`GamePreset.startingTier`) — a Town-age
+     * feature is otherwise only reachable by first playing the economy that
+     * unlocks it. Held so {@link reset} returns to the same opening, or a
+     * restart would silently drop a scenario back to Settlement Lv1.
+     */
+    private readonly openingTier: StartingTier = { age: "settlement", level: 1 },
   ) {
-    for (const owner of owners) this.states.set(owner, { age: "settlement", level: 1, upgrade: null });
+    for (const owner of owners) {
+      this.states.set(owner, { age: openingTier.age, level: openingTier.level, upgrade: null });
+    }
   }
 
   /** The owner's single active tier — the one query every runtime consumer reads. */
@@ -233,12 +244,12 @@ export class KingdomProgressionSystem {
     this.applyTier(structure, age, level);
   }
 
-  /** Reset every owner to Settlement Lv1, refunding any open reservation. */
+  /** Reset every owner to the opening tier, refunding any open reservation. */
   reset(): void {
     for (const [owner, state] of this.states) {
       if (state.upgrade) this.kingdoms.get(owner).wallet.refund(state.upgrade.reservation);
-      state.age = "settlement";
-      state.level = 1;
+      state.age = this.openingTier.age;
+      state.level = this.openingTier.level;
       state.upgrade = null;
     }
   }

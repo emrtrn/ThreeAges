@@ -78,6 +78,7 @@ export class RtsBuildPalette {
     buildings: BuildingBalance,
     private readonly onChoose: (id: string) => void,
     private readonly onChooseRoad: () => void = () => {},
+    private readonly onChooseRoadErase: () => void = () => {},
   ) {
     this.root.className = "rts-build-palette ui-interactive";
     this.root.setAttribute("aria-label", "Yapı yerleştirme");
@@ -158,6 +159,27 @@ export class RtsBuildPalette {
         road.append(icon, label, cost);
         road.addEventListener("click", this.onChooseRoad);
         choices.appendChild(road);
+        // GDD 10 §44 "Yol Silme". Sits beside the tool that made the mistake,
+        // because a paved tile reserves its ground: without this, a route drawn
+        // across a stone or gold deposit locked that deposit out of the match.
+        const erase = document.createElement("button");
+        erase.type = "button";
+        erase.className = "rts-build-choice";
+        erase.dataset.rtsBuilding = "road-erase";
+        erase.setAttribute("aria-label", "Yol Sil");
+        const eraseIcon = document.createElement("img");
+        eraseIcon.className = "rts-build-choice-icon";
+        eraseIcon.src = "/assets/ui/icons/command-stop.svg";
+        eraseIcon.alt = "";
+        const eraseLabel = document.createElement("span");
+        eraseLabel.className = "rts-build-choice-label";
+        eraseLabel.textContent = "Yol Sil";
+        const eraseCost = document.createElement("span");
+        eraseCost.className = "rts-build-choice-cost";
+        eraseCost.textContent = "İade yok";
+        erase.append(eraseIcon, eraseLabel, eraseCost);
+        erase.addEventListener("click", this.onChooseRoadErase);
+        choices.appendChild(erase);
       }
       if (category.includesTempleSoon) {
         const temple = document.createElement("button");
@@ -238,6 +260,16 @@ export class RtsBuildPalette {
   setRoadState(state: RoadPlacementState): void {
     if (!state.active) {
       this.status.textContent = "Bir yapı seçin.";
+      return;
+    }
+    if (state.mode === "erase") {
+      // The split warning is the §44 "bağlantı etkisi": it is the one erase whose
+      // cost is not the tile itself, so it has to be readable before the click.
+      this.status.textContent = !state.target
+        ? "Silmek için bir yol karosuna tıklayın; çıkmak için sağ tık yapın."
+        : state.target.splits
+          ? "Uyarı: bu karo ağı ikiye böler. Silmek için tıklayın (odun iadesi yok)."
+          : "Silmek için tıklayın (odun iadesi yok).";
       return;
     }
     this.status.textContent = state.plan

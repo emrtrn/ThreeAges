@@ -60,4 +60,21 @@ export class RoadConstructionService {
     this.roads.commit(plan);
     this.onCommitted();
   }
+
+  /**
+   * Unpave road tiles (GDD 10 §44 "Yol Silme"), returning how many were actually
+   * there. Roads reserve build space, so before this existed a paved tile was a
+   * permanent claim on its ground — a route laid across a stone or gold deposit
+   * retired that deposit for the whole match with no way to take it back.
+   *
+   * No refund: the wood went into the ground and roads are unowned, so there is
+   * no wallet to credit — the same asymmetry {@link commitFree} relies on. Fires
+   * the commit hook only when topology really changed, so the visuals and the
+   * territory grid refresh exactly once per erase.
+   */
+  demolish(cells: readonly RoadCell[]): number {
+    const removed = this.roads.remove(cells);
+    if (removed > 0) this.onCommitted();
+    return removed;
+  }
 }

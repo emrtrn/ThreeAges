@@ -34,6 +34,7 @@ import type {
   RoadBalance,
   SettlementAge,
   StartingResources,
+  StartingTier,
   StartingUnits,
   UnitBalance,
 } from "@/game/data/gameDataTypes";
@@ -265,6 +266,11 @@ export interface RtsAppOptions {
   /** Test-preset handicap: enemy-only stockpile/forces (see `GamePreset`). */
   readonly enemyStartingResources?: StartingResources;
   readonly enemyStartingUnits?: StartingUnits;
+  /**
+   * Test-preset opening centre tier for both kingdoms (see `GamePreset`). Unset
+   * means the ordinary Settlement Lv1 start.
+   */
+  readonly startingTier?: StartingTier;
   /** Data-owned grid and wood cost for the Phase 4 road graph. */
   readonly roadBalance: RoadBalance;
   /** Data-owned AI cadences, thresholds and intent weights (Faz 5). */
@@ -502,6 +508,8 @@ export class RtsApp {
       this.centers,
       this.structures,
       this.kingdoms,
+      // Undefined keeps the system's own Settlement Lv1 opening.
+      this.options.startingTier,
     );
     // §58. Built here — before the AI, which reads the objective watch — and
     // only when the flag is on, so `regionalVictory` off means these four are
@@ -682,10 +690,18 @@ export class RtsApp {
     this.roadConstruction = new RoadConstructionService(
       this.roads,
       this.kingdoms,
-      // Standing trees reserve road cells too, so a route bends around a grove
-      // rather than paving over harvestable wood. They stay out of
-      // navigationBlockers() itself, which units path through to reach the trees.
-      () => [...this.navigationBlockers(), ...this.forests.liveTreeBlockers()],
+      // Standing trees and live stone/gold deposits reserve road cells too, so a
+      // route bends around the yield rather than paving over it. Both stay out of
+      // navigationBlockers() itself, which units path through to reach them.
+      //
+      // Deposits are the sharper case: an extractor footprint must *contain* the
+      // deposit point, so one road tile on top of it refused every legal quarry
+      // centre and — with no way to unpave a road — retired the deposit for good.
+      () => [
+        ...this.navigationBlockers(),
+        ...this.forests.liveTreeBlockers(),
+        ...this.resourceNodes.liveNodeBlockers(),
+      ],
       () => {
         this.syncRoadVisuals();
         // A committed road can link an outpost to its main network, which grows
@@ -771,6 +787,12 @@ export class RtsApp {
       () => {
         this.placement.cancel();
         this.roadPlacement.begin();
+        this.syncPlacementUi();
+        this.syncRoadUi();
+      },
+      () => {
+        this.placement.cancel();
+        this.roadPlacement.beginErase();
         this.syncPlacementUi();
         this.syncRoadUi();
       },

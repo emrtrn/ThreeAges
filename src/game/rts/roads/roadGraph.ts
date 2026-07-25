@@ -111,6 +111,48 @@ export class RoadGraph {
     }));
   }
 
+  /**
+   * The committed cell a world point falls in, or null when that tile is bare.
+   * The erase tool's pick: it turns a ground ray into the exact tile `remove`
+   * takes, so the pointer layer never has to know the grid measure.
+   */
+  cellAt(point: RoadCell): RoadCell | null {
+    return this.cells.get(this.key(this.snap(point))) ?? null;
+  }
+
+  /**
+   * Would removing this cell split the network it sits in? (GDD 10 §44: "Yol
+   * silme işleminde bağlantı etkisi önceden gösterilir".)
+   *
+   * True when two of the cell's road neighbours can no longer reach each other
+   * without it — a bridge tile. False for a dead end (nothing behind it to cut
+   * off) and false for a tile inside a loop, where the network closes around the
+   * gap. The query is pure: the cell is skipped during the walk rather than
+   * removed, so a hover preview costs the caller nothing.
+   */
+  wouldDisconnect(cell: RoadCell): boolean {
+    const target = this.snap(cell);
+    const targetKey = this.key(target);
+    if (!this.cells.has(targetKey)) return false;
+    const neighbors = this.neighbors(target).filter((neighbor) => this.cells.has(this.key(neighbor)));
+    const first = neighbors[0];
+    if (!first || neighbors.length < 2) return false;
+    // Seeding `visited` with the target is what stands in for removing it.
+    const visited = new Set<string>([targetKey, this.key(first)]);
+    const queue = [first];
+    for (let index = 0; index < queue.length; index += 1) {
+      const current = queue[index];
+      if (!current) continue;
+      for (const neighbor of this.neighbors(current)) {
+        const key = this.key(neighbor);
+        if (!this.cells.has(key) || visited.has(key)) continue;
+        visited.add(key);
+        queue.push(neighbor);
+      }
+    }
+    return neighbors.some((neighbor) => !visited.has(this.key(neighbor)));
+  }
+
   /** True if two road cells share any connected component, including loops. */
   connected(a: RoadCell, b: RoadCell): boolean {
     const start = this.snap(a);

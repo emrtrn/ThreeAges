@@ -41,6 +41,7 @@ import type {
   RoadVisual,
   SettlementAge,
   StartingResources,
+  StartingTier,
   StartingUnits,
   UnitArmorClass,
   UnitAttackType,
@@ -189,6 +190,27 @@ function validateStartingUnits(value: unknown, where: string): StartingUnits {
 }
 
 /**
+ * A preset's opening centre tier. Both fields are required when the object is
+ * present: a half-stated tier ("Town", no level) would silently pick a level for
+ * the author, and the point of the field is that the scenario is reproducible
+ * from data alone.
+ */
+function validateStartingTier(value: unknown, where: string): StartingTier {
+  const obj = asObject(value, `${where}.startingTier`);
+  const age = requireString(obj, "age", `${where}.startingTier`);
+  if (!SETTLEMENT_AGES.includes(age as SettlementAge)) {
+    throw new GameDataError(
+      `${where}.startingTier.age: must be one of ${SETTLEMENT_AGES.join(", ")}`,
+    );
+  }
+  const level = requireFiniteNumber(obj, "level", `${where}.startingTier`);
+  if (level !== 1 && level !== 2 && level !== 3) {
+    throw new GameDataError(`${where}.startingTier.level: must be 1, 2 or 3`);
+  }
+  return { age: age as SettlementAge, level };
+}
+
+/**
  * Validate a preset. When `expectedId` is given (the file name), it must match
  * the preset's `id` field — a reference check that keeps files self-describing.
  */
@@ -249,6 +271,9 @@ export function validateGamePreset(
             `${where}.enemy`,
           ),
         }
+      : {}),
+    ...(obj["startingTier"] !== undefined
+      ? { startingTier: validateStartingTier(obj["startingTier"], where) }
       : {}),
     gameSpeed,
     // mapState is intentionally allowed empty until a blockout exists (Faz 2).

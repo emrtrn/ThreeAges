@@ -32,6 +32,15 @@ export interface StartingUnits {
 }
 
 /**
+ * The centre tier a preset may open on (see {@link GamePreset.startingTier}).
+ * One of the six playable tiers: Settlement 1–3 then Town 1–3.
+ */
+export interface StartingTier {
+  readonly age: SettlementAge;
+  readonly level: 1 | 2 | 3;
+}
+
+/**
  * A test preset — `public/game-data/presets/<id>.json` (plan §72).
  * Presets decide feature flags, starting resources, game speed, map state and
  * AI profile so a scenario is reproducible from data alone.
@@ -58,6 +67,16 @@ export interface GamePreset {
    */
   enemyStartingResources?: StartingResources;
   enemyStartingUnits?: StartingUnits;
+  /**
+   * Centre tier every kingdom opens the match on, instead of Settlement Lv1.
+   *
+   * A test-only handicap in the same family as {@link enemyStartingResources}:
+   * it exists so a Town-age feature can be exercised without first playing the
+   * ten minutes of economy that unlock it — the Topçu sits behind Town Lv2, and
+   * "reach Town Lv2" is not a useful step in a bombardment test. Applied to both
+   * kingdoms, so the match stays symmetric; never ship a balance preset with it.
+   */
+  startingTier?: StartingTier;
   /** Simulation speed multiplier (1 = real time; debug_fast raises it). */
   gameSpeed: number;
   /** Map/level this preset boots into (blockout id; empty until Faz 2). */

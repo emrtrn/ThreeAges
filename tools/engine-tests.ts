@@ -28340,6 +28340,30 @@ check("game-data presets load and debug_fast is faster", () => {
   assert.deepEqual(coreMatch.startingResources, { food: 500, wood: 500, stone: 0, gold: 0 });
   // debug_fast exists to raise the sim speed (plan §19 acceptance criterion).
   assert.ok(fast.gameSpeed > proof.gameSpeed);
+
+  // The siege scenario opens on the tier the Topçu is gated behind, so a
+  // bombardment can be tested without first playing the economy that unlocks it.
+  const siege = validateGamePreset(readPresetJson("siege_test"), "siege_test");
+  assert.deepEqual(siege.startingTier, { age: "town", level: 2 });
+  // A shipped balance preset must never carry the handicap.
+  assert.equal(proof.startingTier, undefined);
+  assert.equal(coreMatch.startingTier, undefined);
+
+  assert.throws(
+    () => validateGamePreset({ ...readPresetJson("siege_test") as object, startingTier: { age: "town" } }),
+    GameDataError,
+    "a half-stated tier would pick a level for the author",
+  );
+  assert.throws(
+    () => validateGamePreset({ ...readPresetJson("siege_test") as object, startingTier: { age: "town", level: 4 } }),
+    GameDataError,
+    "there are six playable tiers, not seven",
+  );
+  assert.throws(
+    () => validateGamePreset({ ...readPresetJson("siege_test") as object, startingTier: { age: "empire", level: 1 } }),
+    GameDataError,
+    "an unknown age must not slip in through a test preset",
+  );
 });
 
 check("Faz 6 prosperity is opt-in debug information, not a default gameplay flag", () => {
@@ -31526,6 +31550,151 @@ check("RTS a road routes around a standing tree and straight through once it is 
   assert.ok(through.cells.some((cell) => cell.x === 0 && cell.z === 0), "the felled tree no longer diverts the road");
 });
 
+check("RTS a road bends around a live stone deposit and paves straight through a depleted one", () => {
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const resourceBalance = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  const roads = new RoadGraph(balance);
+  const nodes = new ResourceNodeSystem({
+    ...resourceBalance,
+    stone: { ...resourceBalance.stone!, externalNode: { capacity: 10, perWorkerPerMinute: 5 } },
+  }, [{ id: "on-route", resourceId: "stone", kind: "external", x: 0, z: 0 }]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { wood: 500 }, 20);
+  const construction = new RoadConstructionService(roads, kingdoms, () => nodes.liveNodeBlockers());
+
+  const detour = construction.plan({ x: -6, z: 0 }, { x: 6, z: 0 });
+  assert.ok(detour, "a road still connects past a deposit");
+  assert.ok(detour.cells.every((cell) => cell.x !== 0 || cell.z !== 0), "the route bends around the deposit tile");
+  // The reserve is deliberately one tile wide: a road pushed further out could no
+  // longer touch the extractor's footprint, trading the deadlock for a permanent
+  // `unlinked-road`. Neighbouring tiles must stay pavable.
+  assert.ok(
+    detour.cells.some((cell) => Math.abs(cell.x) <= 2 && Math.abs(cell.z) <= 2),
+    "the road still runs within touching distance of a quarry built on the deposit",
+  );
+
+  // Mine the deposit dry; like a felled tree, it stops reserving its tile.
+  assert.equal(nodes.extract("stone", 0, 0, 2, 2, 10), 10);
+  const through = construction.plan({ x: -6, z: 0 }, { x: 6, z: 0 });
+  assert.ok(through, "a road plans across the emptied deposit");
+  assert.ok(
+    through.cells.some((cell) => cell.x === 0 && cell.z === 0),
+    "a depleted deposit no longer diverts the road",
+  );
+});
+
+check("RTS a road paved on a deposit refuses every quarry centre until the tile is erased", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const roadBalance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const resourceBalance = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  const nodes = new ResourceNodeSystem(resourceBalance, [
+    { id: "test-stone", resourceId: "stone", kind: "safe", x: 0, z: 0 },
+  ]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const centers = new CommandCenterSystem();
+  // Far enough that the centre's own 8x8 footprint never touches the extractor's,
+  // so "blocked" below can only mean the road tile.
+  centers.spawn("player", 0, 10);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(centers.navigationBlockers());
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 500 }, 20);
+  const territory = new TerritoryControlSystem(() => centers.all().map((center) => ({
+    owner: center.owner, x: center.position.x, z: center.position.z, radius: COMMAND_CENTER_CONTROL_RADIUS,
+  })));
+  territory.refresh();
+  const roads = new RoadGraph(roadBalance);
+  const roadConstruction = new RoadConstructionService(roads, kingdoms, () => []);
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => [...centers.navigationBlockers(), ...structures.navigationBlockers()],
+    territory,
+    () => {},
+    () => {},
+    (stats, x, z) => stats.economy?.requiresResourceNode
+      && !nodes.canExtractAt(stats.economy.resourceId, x, z, stats.footprint.width, stats.footprint.depth)
+      ? "missing-resource-node"
+      : null,
+    () => roads.occupancyBlockers(),
+  );
+
+  // Pave the deposit's own tile — the shape the router now refuses to produce,
+  // but which older saves and hand-drawn routes already contain.
+  const onDeposit = roads.plan({ x: 0, z: 0 }, { x: 0, z: 0 }, []);
+  assert.ok(onDeposit);
+  roads.commit(onDeposit);
+  // A 6x6 extractor must *contain* the deposit point, so its legal centres are the
+  // nine grid cells within three units of it — and one road tile overlaps all nine.
+  const centres: Array<readonly [number, number]> = [];
+  for (const x of [-2, 0, 2]) for (const z of [-2, 0, 2]) centres.push([x, z]);
+  for (const [x, z] of centres) {
+    assert.equal(
+      construction.validate("player", "quarry", x, z)?.reason,
+      "blocked",
+      `a road on the deposit refuses the quarry centred at ${x},${z}`,
+    );
+  }
+
+  // §44 Yol Silme is the way back out: unpave the tile and the ground is buildable.
+  assert.equal(roadConstruction.demolish([{ x: 0, z: 0 }]), 1);
+  assert.equal(roads.all().length, 0, "the erased tile leaves the network");
+  const built = construction.build("player", "quarry", 0, 0);
+  assert.ok(built.built, "the quarry fits once the road tile is erased");
+  assert.equal(kingdoms.get("player").wallet.amount("wood"), 380, "erasing a road refunds nothing");
+});
+
+check("RTS road erase picks the hovered tile and warns only when losing it splits the network", () => {
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const roads = new RoadGraph(balance);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { wood: 500 }, 20);
+  let commits = 0;
+  const construction = new RoadConstructionService(roads, kingdoms, () => [], () => { commits += 1; });
+  const spine = construction.build("player", { x: -4, z: 0 }, { x: 4, z: 0 });
+  assert.ok(spine.built);
+  assert.equal(commits, 1);
+
+  // The pick snaps a ground point to its committed tile, and reports bare ground.
+  assert.deepEqual(roads.cellAt({ x: 0.7, z: -0.4 }), { x: 0, z: 0 }, "a ground point resolves to its road tile");
+  assert.equal(roads.cellAt({ x: 0, z: 20 }), null, "bare ground has no tile to erase");
+
+  // A straight run: the interior is a bridge, the two ends are not.
+  assert.equal(roads.wouldDisconnect({ x: 0, z: 0 }), true, "cutting mid-run splits the spine");
+  assert.equal(roads.wouldDisconnect({ x: -4, z: 0 }), false, "a dead end cuts nothing off");
+
+  // Close a loop around the middle; the same tile stops being a bridge.
+  assert.ok(construction.build("player", { x: -2, z: 0 }, { x: -2, z: 4 }).built);
+  assert.ok(construction.build("player", { x: -2, z: 4 }, { x: 2, z: 4 }).built);
+  assert.ok(construction.build("player", { x: 2, z: 4 }, { x: 2, z: 0 }).built);
+  assert.equal(roads.wouldDisconnect({ x: 0, z: 0 }), false, "a loop closes around the gap");
+
+  const before = roads.all().length;
+  assert.equal(construction.demolish([{ x: 0, z: 0 }]), 1);
+  assert.equal(roads.all().length, before - 1);
+  assert.equal(roads.connected({ x: -4, z: 0 }, { x: 4, z: 0 }), true, "the loop keeps both ends linked");
+  // Erasing bare ground changes nothing and must not fire the repaint hook.
+  const quiet = commits;
+  assert.equal(construction.demolish([{ x: 0, z: 20 }]), 0);
+  assert.equal(commits, quiet, "an erase that removed nothing does not refresh visuals");
+});
+
 check("RTS auto-connect paves a free access road from a building placed short of the network", () => {
   const balance = validateRoadBalance(
     JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
@@ -32108,6 +32277,66 @@ check("RTS workers rest for three seconds after reaching a player-ordered point"
   updateUnitMovement([worker], 0.2);
   construction.update(0);
   assert.equal(construction.stateFor(worker), "moving", "automatic work resumes once the three-second delay ends");
+  structures.clear();
+  units.clear();
+});
+
+check("a preset's opening tier makes the Town-gated Topçu trainable from the first second", () => {
+  // The debug switch behind `?preset=siege_test`: the gun sits at Town Lv2, and
+  // "play the economy that reaches Town Lv2" is not a step worth repeating every
+  // time the bombardment itself is being looked at. The gate is untouched — the
+  // scenario simply starts on the far side of it.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const ages = validateAgeBalance(
+    JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
+  );
+  const barracksStats = buildings.barracks ?? assert.fail("barracks definition missing");
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 0);
+  const navigation = new RtsNavigation();
+  const kingdoms = new KingdomRegistry(
+    ["player"], units, structures,
+    { food: 2000, wood: 2000, stone: 2000, gold: 2000 }, 60,
+  );
+  const opening = { age: "town", level: 2 } as const;
+  const progression = new KingdomProgressionSystem(
+    ["player"], ages, centers, structures, kingdoms, opening,
+  );
+  assert.deepEqual(progression.tierFor("player"), opening, "the match opens on the preset's tier");
+
+  const barracks = structures.place("player", { ...barracksStats, constructionSeconds: 0.1 }, 20, 0);
+  structures.advanceConstruction(barracks, 0.1);
+  progression.applyToStructure(barracks);
+  navigation.setBlockers(structures.navigationBlockers());
+  const production = new BarracksProductionSystem(
+    units,
+    structures,
+    navigation,
+    unitBalance,
+    kingdoms,
+    undefined,
+    (structure) => guardQueueCapacityForAgeLevel(structure.level),
+    undefined,
+    undefined,
+    (owner) => progression.tierFor(owner).age,
+  );
+  assert.equal(production.queueUnit("player", "siege_placeholder"), "queued");
+
+  // A restart returns to the scenario's opening, not to Settlement Lv1: the same
+  // preset must describe the same match twice.
+  progression.reset();
+  assert.deepEqual(progression.tierFor("player"), opening);
+
+  // And the default construction is unchanged — this is opt-in only.
+  const ordinary = new KingdomProgressionSystem(["player"], ages, centers, structures, kingdoms);
+  assert.deepEqual(ordinary.tierFor("player"), { age: "settlement", level: 1 });
   structures.clear();
   units.clear();
 });
