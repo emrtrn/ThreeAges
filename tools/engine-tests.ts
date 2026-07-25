@@ -29520,6 +29520,29 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
   assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 3), null, "unmapped tiers keep the legacy fallback");
   assert.deepEqual(catalog.ui, {}, "Faz F owns the first UI mapping");
 
+  // The Farm is the first per-age building: six Actors, one per (age, level).
+  for (const [age, family] of [["settlement", "FirstAge"], ["town", "SecondAge"]] as const) {
+    for (const level of [1, 2, 3]) {
+      assert.equal(
+        rtsBuildingActorRef(catalog, "farm", "completed", level, age),
+        `assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_${family}_T${level}.actor.json`,
+        `farm ${age} level ${level} resolves its own Actor`,
+      );
+    }
+  }
+  assert.equal(
+    rtsBuildingActorRef(catalog, "farm", "completed", 1),
+    "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T1.actor.json",
+    "an unspecified age keeps the Settlement default",
+  );
+  assert.equal(rtsBuildingActorRef(catalog, "farm", "completed", 4, "town"), null, "unmapped levels keep the legacy fallback");
+  assert.equal(rtsBuildingActorRef(catalog, "farm", "construction", 1), null, "the Farm authors no construction Actor yet");
+  assert.equal(
+    rtsBuildingActorRef(catalog, "barracks", "completed", 1, "town"),
+    "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json",
+    "age-agnostic buildings ignore the age argument",
+  );
+
   const validPilot = validateRtsContentCatalog({
     schema: 1,
     type: "rtsContentCatalog",
@@ -29552,14 +29575,25 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
     RtsContentCatalogError,
     "Actor references must stay public-root-relative and traversal-free",
   );
+  assert.throws(
+    () => validateRtsContentCatalog({ schema: 1, type: "rtsContentCatalog", units: {}, buildings: { farm: { levels: {}, ages: { thirdAge: { "1": "assets/A.actor.json" } } } }, ui: {} }, context),
+    RtsContentCatalogError,
+    "per-age art must name a real settlement age",
+  );
 });
 
-check("Assetization Faz C: shipped Guard and Barracks Actor assets normalize to their authored mesh components", () => {
+check("Assetization Faz C: shipped Guard, Barracks and Farm Actor assets normalize to their authored mesh components", () => {
   const actors = [
     ["public/assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json", "SkeletalMeshComponent", "ual1-standard-rm"],
     ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json", "StaticMeshComponent", "barracks-firstage-level1"],
     ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json", "StaticMeshComponent", "barracks-firstage-level1"],
     ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T2.actor.json", "StaticMeshComponent", "barracks-firstage-level2"],
+    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T1.actor.json", "StaticMeshComponent", "farm-firstage-level1-wheat"],
+    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T2.actor.json", "StaticMeshComponent", "farm-firstage-level2-wheat"],
+    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T3.actor.json", "StaticMeshComponent", "farm-firstage-level3-wheat"],
+    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T1.actor.json", "StaticMeshComponent", "farm-secondage-level1-wheat"],
+    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T2.actor.json", "StaticMeshComponent", "farm-secondage-level2-wheat"],
+    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T3.actor.json", "StaticMeshComponent", "farm-secondage-level3-wheat"],
   ] as const;
 
   for (const [path, component, assetId] of actors) {

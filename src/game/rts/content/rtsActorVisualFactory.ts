@@ -9,6 +9,7 @@ import { Box3, Group, Mesh, type Object3D, type WebGLRenderer } from "three";
 import { isMeshComponentKind, normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import { projectFileUrl } from "@/project/ProjectSystem";
+import type { SettlementAge } from "@/game/data/gameDataTypes";
 import { rtsBuildingActorRef, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
 import type { RtsPresentationHandle, UnitOwner } from "../units/unit";
 
@@ -75,6 +76,9 @@ export class RtsActorVisualFactory {
     for (const entry of Object.values(this.catalog.buildings)) {
       if (entry.constructionActorRef) refs.add(entry.constructionActorRef);
       for (const ref of Object.values(entry.levels)) refs.add(ref);
+      for (const levels of Object.values(entry.ages ?? {})) {
+        for (const ref of Object.values(levels)) refs.add(ref);
+      }
     }
     for (const ref of refs) await this.loadActor(ref);
     this.ready = true;
@@ -106,9 +110,10 @@ export class RtsActorVisualFactory {
     level: number,
     footprintWidth: number,
     footprintDepth: number,
+    age: SettlementAge = "settlement",
   ): Group | null {
     if (!this.ready) return null;
-    const actorRef = rtsBuildingActorRef(this.catalog, buildingId, state, level);
+    const actorRef = rtsBuildingActorRef(this.catalog, buildingId, state, level, age);
     if (!actorRef) return null;
     const visual = this.createActorVisual(actorRef);
     if (!visual) return null;

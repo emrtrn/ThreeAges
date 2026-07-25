@@ -54,6 +54,7 @@ export class RtsBuildingVisuals {
       structure.level,
       structure.stats.footprint.width,
       structure.stats.footprint.depth,
+      age,
     );
     if (actorVisual) return actorVisual;
     const path = visualMeshPathForStructure(structure, age);
@@ -78,6 +79,7 @@ export class RtsBuildingVisuals {
       level,
       footprintWidth,
       footprintDepth,
+      age,
     );
     if (actorVisual) return actorVisual;
     const path = buildingMeshPath(buildingId, age, level);
@@ -95,6 +97,7 @@ export class RtsBuildingVisuals {
       level,
       structure.stats.footprint.width,
       structure.stats.footprint.depth,
+      age,
     );
     if (actorVisual) return actorVisual;
     const path = buildingMeshPath(structure.stats.id, age, level);

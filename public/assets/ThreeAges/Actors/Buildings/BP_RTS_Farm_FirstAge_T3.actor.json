@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "type": "actor",
-  "name": "BP_RTS_Barracks_Construction",
+  "name": "BP_RTS_Farm_FirstAge_T3",
   "parentClass": "actor",
   "variables": [],
   "components": [
@@ -11,10 +11,10 @@
       "props": {}
     },
     {
-      "id": "barracksMesh",
+      "id": "farmMesh",
       "component": "StaticMeshComponent",
       "props": {
-        "assetId": "barracks-firstage-level1"
+        "assetId": "farm-firstage-level3-wheat"
       },
       "parent": "root"
     },
@@ -22,12 +22,7 @@
       "id": "staticMeshComponent",
       "component": "StaticMeshComponent",
       "props": {
-        "position": [
-          1,
-          0,
-          0
-        ],
-        "assetId": "crate-big-stack2"
+        "assetId": "farm-firstage-level3"
       },
       "parent": "root"
     }

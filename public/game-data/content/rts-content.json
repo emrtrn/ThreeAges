@@ -13,6 +13,25 @@
         "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json",
         "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T2.actor.json"
       }
+    },
+    "farm": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T1.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T2.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T3.actor.json"
+      },
+      "ages": {
+        "settlement": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T3.actor.json"
+        },
+        "town": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T3.actor.json"
+        }
+      }
     }
   },
   "ui": {}

@@ -5,11 +5,13 @@
  * authored Actor/UI assets. Gameplay numbers remain in balance JSON; the
  * catalog never becomes a second source for cost, health, timing, or rules.
  */
-import type { BuildingBalance, UnitBalance } from "@/game/data/gameDataTypes";
+import type { BuildingBalance, SettlementAge, UnitBalance } from "@/game/data/gameDataTypes";
 
 export const RTS_CONTENT_CATALOG_SCHEMA = 1;
 
 export type RtsActorRef = `assets/${string}.actor.json`;
+
+const SETTLEMENT_AGES: readonly SettlementAge[] = ["settlement", "town"];
 
 export interface RtsUnitContentEntry {
   readonly actorRef: RtsActorRef;
@@ -19,6 +21,12 @@ export interface RtsBuildingContentEntry {
   readonly constructionActorRef?: RtsActorRef;
   /** Completed-building Actor assets keyed by the in-age level ("1", "2", ...). */
   readonly levels: Readonly<Record<string, RtsActorRef>>;
+  /**
+   * Optional per-age override of {@link levels}, for buildings whose art family
+   * changes with the owner's age (the pack ships one Farm set per age). Looked up
+   * first; anything it does not map falls back to the age-agnostic `levels`.
+   */
+  readonly ages?: Readonly<Partial<Record<SettlementAge, Readonly<Record<string, RtsActorRef>>>>>;
 }
 
 export interface RtsContentCatalog {
@@ -40,17 +48,23 @@ export function rtsUnitActorRef(catalog: RtsContentCatalog, unitId: string): Rts
   return catalog.units[unitId]?.actorRef ?? null;
 }
 
-/** The construction and completed-tier mappings intentionally use separate Actor assets. */
+/**
+ * The construction and completed-tier mappings intentionally use separate Actor
+ * assets. Completed tiers resolve the owner's age first (`ages`) and fall back to
+ * the age-agnostic `levels`, so a building only authors per-age art when its
+ * models actually differ by age.
+ */
 export function rtsBuildingActorRef(
   catalog: RtsContentCatalog,
   buildingId: string,
   state: "construction" | "completed",
   level: number,
+  age: SettlementAge = "settlement",
 ): RtsActorRef | null {
   const entry = catalog.buildings[buildingId];
-  return state === "construction"
-    ? entry?.constructionActorRef ?? null
-    : entry?.levels[String(level)] ?? null;
+  if (state === "construction") return entry?.constructionActorRef ?? null;
+  const key = String(level);
+  return entry?.ages?.[age]?.[key] ?? entry?.levels[key] ?? null;
 }
 
 /** Thrown when catalog JSON is malformed or names a balance id that does not exist. */
@@ -112,6 +126,33 @@ function validateUnits(value: unknown, context: RtsContentCatalogValidationConte
   return entries;
 }
 
+function validateLevels(value: unknown, where: string): Record<string, RtsActorRef> {
+  const rawLevels = asObject(value, where);
+  const levels: Record<string, RtsActorRef> = {};
+  for (const [level, actorRef] of Object.entries(rawLevels)) {
+    if (!/^[1-9][0-9]*$/.test(level)) {
+      throw new RtsContentCatalogError(`${where}: "${level}" must be a positive integer key`);
+    }
+    levels[level] = requireActorRef(actorRef, `${where}."${level}"`);
+  }
+  return levels;
+}
+
+function validateAges(
+  value: unknown,
+  where: string,
+): NonNullable<RtsBuildingContentEntry["ages"]> {
+  const rawAges = asObject(value, where);
+  const ages: Partial<Record<SettlementAge, Record<string, RtsActorRef>>> = {};
+  for (const [age, rawLevels] of Object.entries(rawAges)) {
+    if (!SETTLEMENT_AGES.includes(age as SettlementAge)) {
+      throw new RtsContentCatalogError(`${where}: "${age}" must be one of ${SETTLEMENT_AGES.join(", ")}`);
+    }
+    ages[age as SettlementAge] = validateLevels(rawLevels, `${where}."${age}"`);
+  }
+  return ages;
+}
+
 function validateBuildings(
   value: unknown,
   context: RtsContentCatalogValidationContext,
@@ -125,20 +166,14 @@ function validateBuildings(
     }
     const entryWhere = `${where}."${id}"`;
     const entry = asObject(raw, entryWhere);
-    requireExactKeys(entry, ["constructionActorRef", "levels"], entryWhere);
-    const rawLevels = asObject(entry["levels"], `${entryWhere}.levels`);
-    const levels: Record<string, RtsActorRef> = {};
-    for (const [level, actorRef] of Object.entries(rawLevels)) {
-      if (!/^[1-9][0-9]*$/.test(level)) {
-        throw new RtsContentCatalogError(`${entryWhere}.levels: "${level}" must be a positive integer key`);
-      }
-      levels[level] = requireActorRef(actorRef, `${entryWhere}.levels."${level}"`);
-    }
+    requireExactKeys(entry, ["constructionActorRef", "levels", "ages"], entryWhere);
+    const levels = validateLevels(entry["levels"], `${entryWhere}.levels`);
     entries[id] = {
       ...(entry["constructionActorRef"] === undefined
         ? {}
         : { constructionActorRef: requireActorRef(entry["constructionActorRef"], `${entryWhere}.constructionActorRef`) }),
       levels,
+      ...(entry["ages"] === undefined ? {} : { ages: validateAges(entry["ages"], `${entryWhere}.ages`) }),
     };
   }
   return entries;

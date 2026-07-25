@@ -19997,6 +19997,186 @@
       "license": "Project-local RTS presentation asset"
     },
     {
+      "id": "threeages-rts-farm-firstage-t1-actor",
+      "name": "BP RTS Farm FirstAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "farm",
+        "settlement",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 714
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-farm-firstage-t2-actor",
+      "name": "BP RTS Farm FirstAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "farm",
+        "settlement",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 714
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-farm-firstage-t3-actor",
+      "name": "BP RTS Farm FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "farm",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 714
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-farm-secondage-t1-actor",
+      "name": "BP RTS Farm SecondAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "farm",
+        "town",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 717
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-farm-secondage-t2-actor",
+      "name": "BP RTS Farm SecondAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "farm",
+        "town",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 717
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-farm-secondage-t3-actor",
+      "name": "BP RTS Farm SecondAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "farm",
+        "town",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 717
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
       "id": "threeages-rts-kingdom-start-marker",
       "name": "BP RTS Kingdom Start.Actor",
       "assetType": "prefab",
