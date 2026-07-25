@@ -19,7 +19,10 @@
 > gelişim, §11 eşleştirme tablosu ve §83 asset listesi yeniden yazıldı. Model
 > matrisi tek eksenli `t1/t2/t3` değil, **çağ ailesi × Lv1–3** çarpımıdır
 > (`02 §25`). ThirdAge ailesinin asseti yoktur (`SL-007`). Kod karşılığı:
-> `src/game/rts/structures/rtsBuildingArt.ts`.
+> Kod karşılığı artık kod değil veri: `public/game-data/content/rts-content.json`
+> ve `public/assets/ThreeAges/Actors/Buildings/*.actor.json`
+> (`rtsBuildingArt.ts` 2026-07-25'te silindi; bkz.
+> `docs/reference/RTS_ACTOR_PRESENTATION_AUTHORING.md`).
 >
 > **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. Asset entegrasyonu ve görsel polish, oynanış kanıtı (Kapı A) geçilmeden başlamaz. Forge'a özgü teknik hizalama (mevcut Content Browser/manifest, glTF import, VFX sistemi) için bkz. `TECH_DECISIONS.md`.
 
@@ -229,8 +232,8 @@ Dosya adlarında:
 
 > **v0.1'den değişiklik.** Eski kural "seviye `t1`, `t2`, `t3` ile belirtilmeli"
 > diyordu; bu, çağ ile seviyeyi tek eksen sayan modele aitti. Arşivdeki gerçek
-> adlandırma ve `rtsBuildingArt.ts` çözümleyicisi yukarıdaki iki-eksenli şablonu
-> kullanır.
+> adlandırma ve Actor kataloğu yukarıdaki iki-eksenli şablonu kullanır (çözümleme
+> 2026-07-25'te `rtsBuildingArt.ts`ten kataloğa taşındı).
 
 ---
 
@@ -1425,8 +1428,10 @@ Liste **çağ × seviye** matrisidir (`02 §25.3`): merdivenli her yapı için
 `{TabanAd}_{ÇağAilesi}_Level{1..3}`. Bağlı iki çağ (FirstAge, SecondAge) için
 bina başına altı model gerekir; ThirdAge sütunu **eksiktir** (`SL-007`).
 
-Kaynak: `src/game/rts/structures/rtsBuildingArt.ts` (`BUILDING_ART`) — bu tablo
-o eşlemenin belge karşılığıdır; ikisi birlikte güncellenmelidir.
+Kaynak: `public/game-data/content/rts-content.json` (RTS Content Catalog) — bu
+tablo o eşlemenin belge karşılığıdır; ikisi birlikte güncellenmelidir. Eşleme
+2026-07-25'te koddan (`rtsBuildingArt.ts`) veriye taşındı; her kimlik için
+kapsama engine testiyle zorunludur.
 
 | Oyun yapısı | Mesh şablonu | FirstAge Lv1–3 | SecondAge Lv1–3 | ThirdAge Lv1–3 |
 |---|---|---|---|---|

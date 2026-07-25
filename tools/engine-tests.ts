@@ -178,13 +178,6 @@ import { ConstructionComponent } from "../src/game/rts/structures/constructionCo
 import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "../src/game/rts/structures/workerProductionSystem";
-import { visualMeshPathForStructure } from "../src/game/rts/structures/rtsBuildingVisuals";
-import {
-  allBuildingMeshPaths,
-  buildingMeshPath,
-  hasBuildingArt,
-  STATIC_MESH_ROOT,
-} from "../src/game/rts/structures/rtsBuildingArt";
 import {
   COMMAND_CENTER_CONTROL_RADIUS,
   TerritoryControlSystem,
@@ -29000,41 +28993,50 @@ check("Faz 6 assigns all four resources to distinct core-match decisions", () =>
   assert.deepEqual(ages.town.cost, { food: 500, wood: 500, stone: 200, gold: 100 });
 });
 
-check("Faz 6 completed resource buildings replace their construction placeholders with mapped models", () => {
-  const buildings = validateBuildingBalance(
-    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+/**
+ * The shipped catalog, validated against the shipped balance tables — the same
+ * pair the runtime boots from. Every presentation assertion below reads it rather
+ * than a fixture, so a mapping removed from the data fails a test.
+ */
+function shippedRtsContentCatalog(): RtsContentCatalog {
+  return validateRtsContentCatalog(
+    JSON.parse(readFileSync("public/game-data/content/rts-content.json", "utf8")) as unknown,
+    {
+      unitBalance: validateUnitBalance(
+        JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+      ),
+      buildingBalance: validateBuildingBalance(
+        JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+      ),
+    },
   );
-  const completed = { complete: true } as import("../src/game/rts/structures/constructionComponent").ConstructionComponent;
-  const pending = { complete: false } as import("../src/game/rts/structures/constructionComponent").ConstructionComponent;
-  const visualFor = (id: "lumber_camp" | "quarry" | "gold_mine", construction = completed) =>
-    visualMeshPathForStructure({
-      stats: buildings[id] ?? assert.fail(`${id} balance missing`),
-      level: 1,
-      construction,
-    });
-  assert.equal(visualFor("lumber_camp"), `${STATIC_MESH_ROOT}/Resource_PineTree_Group_Cut.gltf`);
-  assert.equal(visualFor("quarry"), `${STATIC_MESH_ROOT}/Mine.gltf`);
-  assert.equal(visualFor("gold_mine"), `${STATIC_MESH_ROOT}/Mine.gltf`);
-  assert.equal(visualFor("quarry", pending), null, "an unfinished foundation keeps its construction visual");
-});
+}
 
-check("Faz 0 building mesh paths resolve by age family and in-age level", () => {
-  // Aged buildings pick the art family from the age and the variant from level.
-  assert.equal(buildingMeshPath("command_center", "settlement", 1), `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level1.gltf`);
-  assert.equal(buildingMeshPath("command_center", "town", 1), `${STATIC_MESH_ROOT}/TownCenter_SecondAge_Level1.gltf`);
-  assert.equal(buildingMeshPath("house", "settlement", 2), `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level2.gltf`);
-  assert.equal(buildingMeshPath("depot", "settlement", 3), `${STATIC_MESH_ROOT}/Storage_FirstAge_Level3.gltf`);
-  assert.equal(buildingMeshPath("barracks", "town", 3), `${STATIC_MESH_ROOT}/Barracks_SecondAge_Level3.gltf`);
-  assert.equal(buildingMeshPath("farm", "town", 2), `${STATIC_MESH_ROOT}/Farm_SecondAge_Level2_Wheat.gltf`);
-  // Level is clamped to the pack's 1..3 range rather than fabricating a path.
-  assert.equal(buildingMeshPath("barracks", "settlement", 0), `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level1.gltf`);
-  assert.equal(buildingMeshPath("barracks", "settlement", 9), `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level3.gltf`);
-  // Fixed resource meshes ignore age and level; unknown buildings map to null.
-  assert.equal(buildingMeshPath("quarry", "town", 3), `${STATIC_MESH_ROOT}/Mine.gltf`);
-  assert.equal(buildingMeshPath("lumber_camp", "settlement", 1), `${STATIC_MESH_ROOT}/Resource_PineTree_Group_Cut.gltf`);
-  assert.equal(buildingMeshPath("nonexistent", "settlement", 1), null);
-  assert.equal(hasBuildingArt("barracks"), true);
-  assert.equal(hasBuildingArt("nonexistent"), false);
+check("Actor presentation Faz 5: the catalog resolves art by age family and in-age level", () => {
+  const catalog = shippedRtsContentCatalog();
+  const actor = (name: string) => `assets/ThreeAges/Actors/Buildings/${name}.actor.json`;
+
+  // Aged buildings take the art family from the owner's age and the variant from
+  // the in-age level — the two axes the legacy path used to encode in a filename.
+  assert.equal(rtsBuildingActorRef(catalog, "command_center", "completed", 1, "settlement"), actor("BP_RTS_CommandCenter_FirstAge_T1"));
+  assert.equal(rtsBuildingActorRef(catalog, "command_center", "completed", 1, "town"), actor("BP_RTS_CommandCenter_SecondAge_T1"));
+  assert.equal(rtsBuildingActorRef(catalog, "house", "completed", 2, "settlement"), actor("BP_RTS_House_FirstAge_T2"));
+  assert.equal(rtsBuildingActorRef(catalog, "depot", "completed", 3, "settlement"), actor("BP_RTS_Depot_FirstAge_T3"));
+  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 3, "town"), actor("BP_RTS_Barracks_SecondAge_T3"));
+  assert.equal(rtsBuildingActorRef(catalog, "farm", "completed", 2, "town"), actor("BP_RTS_Farm_SecondAge_T2"));
+
+  // The resource camps ship one model each, so age and level resolve to the same
+  // Actor rather than to nothing.
+  assert.equal(rtsBuildingActorRef(catalog, "quarry", "completed", 3, "town"), actor("BP_RTS_Quarry"));
+  assert.equal(rtsBuildingActorRef(catalog, "lumber_camp", "completed", 1, "settlement"), actor("BP_RTS_LumberCamp"));
+  assert.equal(rtsBuildingActorRef(catalog, "gold_mine", "construction", 2, "town"), actor("BP_RTS_GoldMine"));
+
+  // Unlike the legacy table, a level outside the ladder is not clamped to the
+  // nearest model: it resolves to nothing, and the caller shows the stand-in.
+  // Clamping is how a level the game cannot reach used to look supported.
+  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 0, "settlement"), null);
+  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 9, "settlement"), null);
+  assert.equal(rtsBuildingActorRef(catalog, "nonexistent", "completed", 1, "settlement"), null);
 });
 
 check("Faz M1 the Market is buildable and every balance building has art wired", () => {
@@ -29049,13 +29051,23 @@ check("Faz M1 the Market is buildable and every balance building has art wired",
   assert.equal(market.market?.lotSize, 100);
   assert.deepEqual(Object.keys(market.market?.basePrice ?? {}).sort(), ["food", "stone", "wood"]);
   // Both age families and all three levels resolve — the art pack ships all six.
-  assert.equal(buildingMeshPath("market", "settlement", 1), `${STATIC_MESH_ROOT}/Market_FirstAge_Level1.gltf`);
-  assert.equal(buildingMeshPath("market", "town", 3), `${STATIC_MESH_ROOT}/Market_SecondAge_Level3.gltf`);
-  // The invariant that would have caught a forgotten resolver line: a building
-  // the data can place but the art map does not know renders as a placeholder
-  // box, which looks like a bug rather than the missing wiring it is.
+  const catalog = shippedRtsContentCatalog();
+  assert.equal(
+    rtsBuildingActorRef(catalog, "market", "completed", 1, "settlement"),
+    "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_FirstAge_T1.actor.json",
+  );
+  assert.equal(
+    rtsBuildingActorRef(catalog, "market", "completed", 3, "town"),
+    "assets/ThreeAges/Actors/Buildings/BP_RTS_Market_SecondAge_T3.actor.json",
+  );
+  // The invariant that would have caught a forgotten mapping: a building the data
+  // can place but the catalog does not know now renders as the explicit stand-in,
+  // which is a bug report rather than a building that merely looks wrong.
   for (const id of Object.keys(buildings)) {
-    assert.ok(hasBuildingArt(id), `building "${id}" has no art resolver`);
+    assert.ok(
+      rtsBuildingActorRef(catalog, id, "completed", 1, "settlement"),
+      `building "${id}" has no Actor mapping`,
+    );
   }
 });
 
@@ -29067,62 +29079,53 @@ check("Faz M1 the Market is buildable and every balance building has art wired",
  * authority lives today*, and is expected to be rewritten — not deleted — by the
  * phase named in its comment. The flag is the gate all of that hangs from.
  */
-check("Actor presentation Faz 4: contentAssets is a retired no-op that still resolves", () => {
-  // The flag no longer gates anything: the Actor pack is the default presentation
-  // and `main.ts` loads the catalog on every RTS start. It stays resolvable for
-  // one release so an existing bookmark or preset does not fail to boot, and is
-  // removed in Faz 5 — this assertion is what has to be deleted with it.
-  assert.equal(resolveFeatureFlags().contentAssets, false, "the retired flag stays off by default");
-  assert.equal(resolveFeatureFlags({}, "contentAssets").contentAssets, true, "?flags=contentAssets still resolves");
-  assert.ok(isFeatureFlag("contentAssets"), "an existing URL or preset naming it must not fail validation");
+check("Actor presentation Faz 5: the contentAssets flag is gone, and an old URL still boots", () => {
+  // The flag is removed: the Actor pack is simply how the RTS renders, and there
+  // is no legacy art path left for it to switch to.
+  assert.equal(isFeatureFlag("contentAssets"), false, "the retired flag is no longer a known id");
+  // An old bookmark must still open the game. Unknown ids in `?flags=` are
+  // ignored, so the URL boots and the pack loads as it would have anyway.
+  assert.deepEqual(
+    resolveFeatureFlags({}, "contentAssets"),
+    resolveFeatureFlags(),
+    "a URL naming the removed flag resolves to the ordinary defaults",
+  );
+  assert.equal(resolveFeatureFlags({}, "contentAssets,fogOfWar").fogOfWar, true, "flags beside it still apply");
+
+  // A *preset* is the one place it must fail loudly: a checked-in file naming a
+  // flag that no longer exists is a stale file, not a runtime nicety.
+  assert.throws(
+    () => validateGamePreset({ ...readPresetJson("core_match"), flags: { contentAssets: true } }, "core_match"),
+    GameDataError,
+    "a preset naming the removed flag is rejected",
+  );
 
   assert.equal(resolveFeatureFlags().levelAssets, false, "Level gameplay data remains opt-in during Faz D");
   assert.equal(resolveFeatureFlags({}, "levelAssets").levelAssets, true, "?flags=levelAssets opts in");
-
-  // No shipped preset needs to name it either way, precisely because it no longer
-  // decides anything.
-  for (const presetId of ["core_match", "gameplay_proof", "debug_fast"]) {
-    const preset = validateGamePreset(readPresetJson(presetId), presetId);
-    assert.notEqual(preset.flags?.contentAssets, true, `preset "${presetId}" does not need the retired flag`);
-  }
 });
 
-check("Assetization Faz A: the legacy visual authorities are recorded before Faz C moves them", () => {
+check("Actor presentation Faz 5: the catalog is the only art authority left", () => {
+  const catalog = shippedRtsContentCatalog();
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
-  const units = validateUnitBalance(
-    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
-  );
 
-  // Buildings: `rtsBuildingArt` is the sole mapping today, and it covers the
-  // whole balance table. Faz C replaces this lookup with the content catalog for
-  // the Barracks pilot only — every other id must still resolve here meanwhile.
+  // The code-side art table this used to pin (`rtsBuildingArt`) is deleted. The
+  // check it carried survives as the thing that actually matters: every building
+  // the data can place resolves art, and it resolves it from the catalog.
   for (const id of Object.keys(buildings)) {
-    assert.ok(hasBuildingArt(id), `building "${id}" has no art resolver`);
+    assert.ok(rtsBuildingActorRef(catalog, id, "completed", 1, "settlement"), `building "${id}" has no Actor`);
   }
-  assert.equal(
-    buildingMeshPath("barracks", "settlement", 1),
-    `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level1.gltf`,
-    "the Faz C pilot's legacy path, kept as the fallback the catalog falls back *to*",
-  );
-  assert.equal(
-    buildingMeshPath("barracks", "settlement", 2),
-    `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level2.gltf`,
-  );
 
-  // Units: the gap Faz C exists to close. There is no unit art mapping at all —
-  // `Unit` builds role-shaped placeholder geometry in its own constructor, so
-  // nothing outside TypeScript can change how a unit looks. When the Guard's
-  // Actor Script lands, this assertion is what has to be rewritten.
-  for (const id of Object.keys(units)) {
-    assert.equal(
-      hasBuildingArt(id),
-      false,
-      `unit "${id}" must not be resolved through the building art table`,
-    );
-  }
-  assert.ok(units.guard_placeholder, "guard_placeholder is the Faz C unit pilot");
+  // A source-level guard so the deleted module cannot quietly reappear as a
+  // second authority: nothing under src/ may resolve a building mesh by path.
+  const visuals = readFileSync("src/game/rts/structures/rtsBuildingVisuals.ts", "utf8");
+  assert.ok(!/^import .*rtsBuildingArt/m.test(visuals), "the visual library no longer imports the legacy art table");
+  assert.ok(!visuals.includes(".gltf"), "the visual library no longer names model files at all");
+  assert.throws(
+    () => statSync("src/game/rts/structures/rtsBuildingArt.ts"),
+    "the legacy art table is gone from the tree",
+  );
 });
 
 check("Assetization Faz A: RTS_BLOCKOUT_MAP is still the spatial authority Faz D takes over", () => {
@@ -29937,7 +29940,7 @@ check("Actor presentation Faz 3: construction, completed, preview and the centre
       return visual;
     },
   } as unknown as RtsActorVisualFactory;
-  const visuals = new RtsBuildingVisuals(undefined as unknown as WebGLRenderer, actorVisuals);
+  const visuals = new RtsBuildingVisuals(actorVisuals);
 
   const stats = {
     id: "barracks",
@@ -29982,7 +29985,7 @@ check("Actor presentation Faz 3: construction, completed, preview and the centre
     isReady: () => true,
     createBuildingVisual: () => null,
   } as unknown as RtsActorVisualFactory;
-  const gap = new RtsBuildingVisuals(undefined as unknown as WebGLRenderer, loadedButEmpty)
+  const gap = new RtsBuildingVisuals(loadedButEmpty)
     .createForStructure(structure, "town");
   assert.ok(gap && isRtsActorPlaceholder(gap), "an uncovered id shows the stand-in, not legacy art");
 
@@ -29992,7 +29995,7 @@ check("Actor presentation Faz 3: construction, completed, preview and the centre
     isReady: () => false,
     createBuildingVisual: () => null,
   } as unknown as RtsActorVisualFactory;
-  const loading = new RtsBuildingVisuals(undefined as unknown as WebGLRenderer, stillLoading)
+  const loading = new RtsBuildingVisuals(stillLoading)
     .createForStructure(structure, "town");
   assert.equal(loading, null, "with no legacy models loaded either, the box placeholder stays");
 });
@@ -30021,13 +30024,32 @@ check("Assetization Faz C: UnitSystem resolves catalog presentation pick targets
   assert.equal(units.unitForObject(pickMesh), null, "despawning unregisters the Actor pick target");
 });
 
-check("Faz 0 preload set is deduplicated and every mesh file exists on disk", () => {
-  const paths = allBuildingMeshPaths();
-  assert.equal(new Set(paths).size, paths.length, "preload paths are deduplicated");
-  assert.ok(paths.includes(`${STATIC_MESH_ROOT}/TownCenter_SecondAge_Level1.gltf`), "both age families are preloaded");
-  for (const path of paths) {
-    const diskPath = `public${path}`;
-    assert.ok(statSync(diskPath).isFile(), `preloaded mesh is missing on disk: ${diskPath}`);
+check("Actor presentation Faz 5: the pack's load set is deduplicated and present on disk", () => {
+  // What the eager boot-time preload used to guarantee, now asked of the set the
+  // Actor factory actually loads: every reference resolves to a file, and a mesh
+  // shared by several Actors is fetched once.
+  const catalog = shippedRtsContentCatalog();
+  const manifest = parseRtsMeshManifest(
+    JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
+  );
+  const refs = rtsContentCatalogRefs(catalog);
+  assert.equal(new Set(refs).size, refs.length, "Actor references are deduplicated");
+
+  const assetIds = new Set<string>();
+  for (const ref of refs) {
+    const def = normalizeActorScriptDef(JSON.parse(readFileSync(`public/${ref}`, "utf8")) as unknown, ref);
+    for (const node of def.components) {
+      if (typeof node.props.assetId === "string") assetIds.add(node.props.assetId);
+    }
+  }
+  // Both age families reach the field, and the Mine shared by quarry and gold
+  // mine is one entry rather than two.
+  assert.ok(assetIds.has("towncenter-secondage-level1"), "the Second Age family is in the load set");
+  assert.ok(assetIds.has("towncenter-firstage-level1"), "the First Age family is in the load set");
+  for (const assetId of assetIds) {
+    const asset = manifest.get(assetId);
+    assert.ok(asset, `Actor mesh "${assetId}" is not in the manifest`);
+    assert.ok(statSync(`public/${asset!.path}`).isFile(), `Actor mesh is missing on disk: ${asset!.path}`);
   }
 });
 
@@ -30249,17 +30271,22 @@ check("Faz 4: every progression-enabled building declares a complete, non-regres
   }
 });
 
-check("Faz 2: the art resolver maps the two ages to their families and keeps fixed camps age-agnostic", () => {
-  // Town -> Second Age: the SecondAge meshes reach the field for the first time.
-  assert.equal(buildingMeshPath("house", "town", 1), `${STATIC_MESH_ROOT}/Houses_SecondAge_1_Level1.gltf`);
-  assert.equal(buildingMeshPath("barracks", "town", 1), `${STATIC_MESH_ROOT}/Barracks_SecondAge_Level1.gltf`);
-  assert.equal(buildingMeshPath("command_center", "town", 2), `${STATIC_MESH_ROOT}/TownCenter_SecondAge_Level2.gltf`);
+check("Faz 2: the catalog maps the two ages to their families and keeps fixed camps age-agnostic", () => {
+  const catalog = shippedRtsContentCatalog();
+  const ref = (id: string, age: SettlementAge, level: number) =>
+    rtsBuildingActorRef(catalog, id, "completed", level, age);
+  const actor = (name: string) => `assets/ThreeAges/Actors/Buildings/${name}.actor.json`;
+
+  // Town -> Second Age: the SecondAge Actors reach the field for the first time.
+  assert.equal(ref("house", "town", 1), actor("BP_RTS_House_SecondAge_T1"));
+  assert.equal(ref("barracks", "town", 1), actor("BP_RTS_Barracks_SecondAge_T1"));
+  assert.equal(ref("command_center", "town", 2), actor("BP_RTS_CommandCenter_SecondAge_T2"));
   // Settlement -> First Age, unchanged.
-  assert.equal(buildingMeshPath("house", "settlement", 1), `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level1.gltf`);
-  // KR-04/§8: resource camps ship one mesh and ignore both age and level.
-  assert.equal(buildingMeshPath("lumber_camp", "town", 3), `${STATIC_MESH_ROOT}/Resource_PineTree_Group_Cut.gltf`);
-  assert.equal(buildingMeshPath("quarry", "town", 2), buildingMeshPath("quarry", "settlement", 1));
-  assert.equal(buildingMeshPath("gold_mine", "town", 2), buildingMeshPath("gold_mine", "settlement", 1));
+  assert.equal(ref("house", "settlement", 1), actor("BP_RTS_House_FirstAge_T1"));
+  // KR-04/§8: resource camps ship one model and ignore both age and level.
+  assert.equal(ref("lumber_camp", "town", 3), actor("BP_RTS_LumberCamp"));
+  assert.equal(ref("quarry", "town", 2), ref("quarry", "settlement", 1));
+  assert.equal(ref("gold_mine", "town", 2), ref("gold_mine", "settlement", 1));
 });
 
 check("Faz 6 quarry uses its finite stone node and cannot be placed away from one", () => {

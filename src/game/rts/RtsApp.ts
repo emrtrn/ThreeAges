@@ -242,9 +242,9 @@ export interface RtsAppOptions {
    */
   readonly fogOfWarEnabled?: boolean;
   /**
-   * Opt-in authored-content mappings loaded by the `contentAssets` flag.
-   * Faz B only passes this contract through; Faz C consumes the Guard/Barracks
-   * entries, so the legacy presentation path remains unchanged for now.
+   * The gameplay-id -> Actor mapping the whole presentation hangs from. `main.ts`
+   * always supplies it; it stays optional only for the harnesses that drive an
+   * `RtsApp` without art, which then render the code-side boxes throughout.
    */
   readonly contentCatalog?: RtsContentCatalog;
   /** Faz D opt-in Level gameplay markers. Omitted keeps the blockout fallback. */
@@ -488,7 +488,7 @@ export class RtsApp {
     // Published from the start so "no placeholders" and "not reported yet" are
     // never the same reading for a test or a bug report.
     this.canvas.dataset.rtsContentPlaceholders = "0";
-    this.buildingVisuals = new RtsBuildingVisuals(this.renderer, this.actorVisuals);
+    this.buildingVisuals = new RtsBuildingVisuals(this.actorVisuals);
     this.mapArt = new RtsMapArt(this.renderer);
     this.roads = new RoadGraph(this.options.roadBalance);
     this.roadDebugView = new RoadDebugView(this.roads);
@@ -924,7 +924,6 @@ export class RtsApp {
       this.progression.applyToStructure(structure);
       this.applyStructureVisual(structure, true);
     });
-    void this.loadBuildingVisuals();
     void this.loadActorVisuals();
     this.spawnStartingUnits();
     // §59: one fog pass before the first frame is drawn.
@@ -1009,7 +1008,6 @@ export class RtsApp {
     this.workerProduction.reset();
     this.structures.clear();
     this.centers.clear();
-    this.buildingVisuals.dispose();
     this.actorVisuals?.dispose();
     this.mapArt.dispose();
     // Faz E: release the authored world's GPU resources so restart/dispose leaves
@@ -1025,29 +1023,6 @@ export class RtsApp {
     this.renderer.dispose();
   }
 
-  private async loadBuildingVisuals(): Promise<void> {
-    try {
-      await this.buildingVisuals.load();
-      if (this.disposed) return;
-      this.placement.setPreviewFactory((buildingId, width, depth) =>
-        this.buildingVisuals.createPreviewForBuilding(
-          buildingId,
-          width,
-          depth,
-          this.ageOf(PLAYER_OWNER),
-          this.progression.tierFor(PLAYER_OWNER).level,
-        ));
-      for (const center of this.centers.all()) this.buildingVisuals.applyToCenter(center, this.ageOf(center.owner));
-      for (const structure of this.structures.all()) {
-        if (structure.construction.complete) this.applyStructureVisual(structure);
-        else this.applyConstructionVisual(structure);
-      }
-    } catch (error) {
-      // Keep the original construction visuals usable if an optional art asset
-      // is unavailable in a development build or an interrupted reload.
-      this.log.warn("First Age RTS building models could not be loaded", error);
-    }
-  }
 
   private buildScene(): void {
     // Hemispheric-ish fill: ambient for base visibility, one shadowing key light.

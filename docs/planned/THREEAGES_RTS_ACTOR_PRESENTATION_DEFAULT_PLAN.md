@@ -1,7 +1,7 @@
 # ThreeAges RTS Actor Sunumunu Varsayilan Yapma Plani
 
 Olusturulma tarihi: 2026-07-25  
-Durum: Faz 1-4 uygulandi. Faz 5 (legacy temizligi) bekliyor.
+Durum: Tamamlandi (Faz 1-5, 2026-07-25).
 
 ## Karar
 
@@ -123,6 +123,29 @@ Faz 4 tamamlandi.
   `PlacedStructureSystem.setCompletedVisual` ile ayni disiplin: gelen gorsel slot
   adiyla yeniden adlandiriliyor ve onceki o adla kaldiriliyor. Regresyon testi
   eklendi.
+
+Faz 5 tamamlandi.
+
+- `src/game/rts/structures/rtsBuildingArt.ts` silindi. `RtsBuildingVisuals` artik
+  glTF yuklemiyor, sablon tutmuyor, renderer istemiyor: gameplay durumlarini tek
+  bir Actor aramasina baglayan ince bir katman. `RtsApp.loadBuildingVisuals()` ve
+  eager preload kaldirildi.
+- `contentAssets` flag kaydindan cikarildi. Eski bir `?flags=contentAssets` URL'i
+  hala aciliyor (bilinmeyen id yok sayilir, browser testiyle kanitli); flag'i
+  adlandiran bir **preset** artik dogrulamada reddediliyor — bayat dosya sessizce
+  gecmesin diye.
+- Legacy yolu test eden dort engine testi katalog karsiliklariyla degistirildi
+  (yas ailesi/seviye cozumleme, kaynak kamplari, Market kapsamı, yukleme kumesi).
+  Ek olarak kaynak seviyesinde bir muhafiz: `rtsBuildingVisuals.ts` legacy tabloyu
+  import edemez, model dosyasi adi tasiyamaz ve silinen modul geri gelemez.
+- Davranis farki: legacy tablo seviyeyi 1..3'e **kirpiyordu**, katalog kirpmiyor.
+  Oyunun ulasamadigi bir seviye artik desteklenmis gibi gorunmek yerine hicbir sey
+  cozuyor ve cagrisan stand-in gosteriyor.
+- Authoring rehberi yazildi: `docs/reference/RTS_ACTOR_PRESENTATION_AUTHORING.md`
+  (coklu mesh, lokal transform/derece donusumu, footprint fit'in ne yaptigi,
+  coplanar z-fighting, dogrulama kurallari ve tam ekleme dongusu).
+- `GDD/TECH_DECISIONS.md` TD-011 kapandi; `GDD/11_ART_ASSETS_AND_PRESENTATION.md`
+  icindeki kod-otoritesi referanslari katalog/Actor dosyalarina yonlendirildi.
 
 Not: `tests/smoke/rts-building-placement.spec.ts` icindeki 6 test **bu
 degisikliklerden once de dusuyor** (stash'lenmis temiz agacta ayni hatayla

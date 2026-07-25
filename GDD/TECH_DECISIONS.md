@@ -141,15 +141,24 @@ Kök `CLAUDE.md`'den kilit gerçekler:
   veya ekonomi servisini doğrudan çağırmaz.
 - **Durum:** Kilitlendi. Kaynak plan: K-06.
 
-### TD-011 - Asset migration feature flag ile opt-in kalır
+### TD-011 - Asset migration feature flag ile opt-in kaldı, sonra varsayılan oldu
 
-- **Karar:** `contentAssets` varsayılan olarak kapalıdır ve shipped preset
-  tarafından açılmaz. Geçiş boyunca legacy visual path fallback olarak
-  korunur; kaldırma ancak content coverage, browser smoke ve dispose gate'leri
-  kanıtlandıktan sonra yapılır.
-- **Gerekçe:** Authoring migration'ı mevcut `?rts` akışında davranış
-  değişikliği yaratmadan, geri dönüşlü olarak ilerler.
-- **Durum:** Kilitlendi. Kaynak plan: Faz A ve Section 13 kaldırma kapısı.
+- **Karar (ilk):** `contentAssets` varsayılan olarak kapalıydı ve shipped preset
+  tarafından açılmazdı; geçiş boyunca legacy visual path fallback olarak
+  korundu. Kaldırma, content coverage, browser smoke ve dispose gate'lerinin
+  kanıtlanmasına bağlandı.
+- **Kapanış (2026-07-25):** Kapılar karşılandı. Actor pack tüm building
+  kimliklerini iki çağ ve üç seviye için kapsıyor, doğrulama CI'da çalışıyor ve
+  browser smoke varsayılan `?rts` rotasında `data-rts-content-assets="ready"`
+  görüyor. Bunun üzerine katalog flag'siz yüklenmeye başladı, `rtsBuildingArt.ts`
+  ve eager preload silindi, `contentAssets` flag kaydından çıkarıldı. Eski bir
+  `?flags=contentAssets` URL'i hâlâ açılır (bilinmeyen id yok sayılır); flag'i
+  adlandıran bir **preset** ise artık doğrulamada reddedilir.
+- **Gerekçe:** Authoring migration'ı geri dönüşlü ilerledi; tek sanat otoritesi
+  kaldığında paralel yolun bakım maliyeti anlamsızlaştı.
+- **Durum:** Kapandı. Kaynak plan:
+  `docs/planned/THREEAGES_RTS_ACTOR_PRESENTATION_DEFAULT_PLAN.md` Faz 4–5.
+  Authoring rehberi: `docs/reference/RTS_ACTOR_PRESENTATION_AUTHORING.md`.
 
 ---
 

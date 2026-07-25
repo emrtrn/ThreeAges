@@ -110,11 +110,10 @@ async function main(): Promise<void> {
       loadRoadBalance(),
       loadAiBalance(),
     ]);
-    // The Actor pack is how the RTS renders (presentation plan Faz 4), so the
-    // catalog loads on every start rather than behind the retired `contentAssets`
-    // flag. A catalog that fails to load is fatal to the route on purpose: it is
-    // the mapping from gameplay ids to art, and a match rendered without it would
-    // be a silently art-less match.
+    // The Actor pack is how the RTS renders, so the catalog loads on every start.
+    // A catalog that fails to load is fatal to the route on purpose: it is the
+    // mapping from gameplay ids to art, and there is no second art path left to
+    // quietly fall back to — a match booted without it would be an art-less match.
     const contentCatalog = await loadRtsContentCatalog(unitBalance, buildingBalance);
     const authoredLevel = levelAssetsEnabled && preset?.levelRef
       ? await (await import("@/game/rts/world/rtsLevelLoader")).loadRtsLevel(

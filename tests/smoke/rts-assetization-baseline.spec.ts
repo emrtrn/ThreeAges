@@ -1,14 +1,15 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Actor presentation Faz 4 browser witness.
+ * Actor presentation browser witness.
  *
- * The plain `?rts` route renders the authored Actor pack — no flag involved. The
- * pack's own health is published on the canvas, so "the default route is on the
- * authored path and nothing in it fell back" is a fact this test can read rather
- * than infer from a screenshot.
+ * The plain `?rts` route renders the authored Actor pack — no flag involved, and
+ * since Faz 5 no second art path exists to fall back to. The pack's own health is
+ * published on the canvas, so "the default route is on the authored path and
+ * nothing in it fell back" is a fact this test can read rather than infer from a
+ * screenshot.
  */
-test("Actor presentation Faz 4: the default RTS route renders the authored Actor pack", async ({ page }) => {
+test("Actor presentation: the default RTS route renders the authored Actor pack", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
@@ -21,14 +22,15 @@ test("Actor presentation Faz 4: the default RTS route renders the authored Actor
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-placeholders", "0");
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
 
-  // No flag was passed, and none was needed.
-  const contentAssetsEnabled = await page.evaluate(() => {
+  // No flag was passed, and there is no longer one to pass: the removed
+  // `contentAssets` id is not part of the resolved flag state at all.
+  const flagIds = await page.evaluate(() => {
     const forge = (window as unknown as {
-      __forge?: { config?: { flags?: { contentAssets?: unknown } } };
+      __forge?: { config?: { flags?: Record<string, unknown> } };
     }).__forge;
-    return forge?.config?.flags?.contentAssets;
+    return Object.keys(forge?.config?.flags ?? {});
   });
-  expect(contentAssetsEnabled, "the Actor pack must not depend on the retired flag").toBe(false);
+  expect(flagIds, "the Actor pack must not depend on a feature flag").not.toContain("contentAssets");
 
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
@@ -39,11 +41,12 @@ test("Actor presentation Faz 4: the default RTS route renders the authored Actor
   expect(errors, "default RTS boot must not produce console errors").toEqual([]);
 });
 
-test("Actor presentation Faz 4: the retired contentAssets flag changes nothing", async ({ page }) => {
+test("Actor presentation Faz 5: a bookmark carrying the removed flag still boots the same pack", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
-  // The plan's Faz 4 delivery criterion: both URLs render the same Actor pack.
+  // Removing a flag must not strand the URLs people already have. An unknown id
+  // in `?flags=` is ignored, so the route opens and builds exactly the same pack.
   // The debug overlay's presentation line carries the loaded/requested counts, so
   // comparing it across the two routes compares what each of them actually built.
   const presentationLine = async (url: string): Promise<string> => {
@@ -54,15 +57,15 @@ test("Actor presentation Faz 4: the retired contentAssets flag changes nothing",
     return overlay?.split("\n").find((line) => line.startsWith("sunum:")) ?? "";
   };
 
-  const withoutFlag = await presentationLine("/?rts&debug");
-  const withFlag = await presentationLine("/?rts&debug&flags=contentAssets");
-  expect(withoutFlag).toMatch(/^sunum: \d+\/\d+ Actor · placeholder yok$/);
-  expect(withFlag, "the retired flag is a no-op: both routes build the same pack").toBe(withoutFlag);
+  const plain = await presentationLine("/?rts&debug");
+  const staleBookmark = await presentationLine("/?rts&debug&flags=contentAssets");
+  expect(plain).toMatch(/^sunum: \d+\/\d+ Actor · placeholder yok$/);
+  expect(staleBookmark, "the removed flag is ignored, not fatal").toBe(plain);
 
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
-  expect(errors, "the retired flag must not disturb the RTS match").toEqual([]);
+  expect(errors, "an unknown flag must not disturb the RTS match").toEqual([]);
 });
 
 test("Assetization Faz D: the opt-in authored Level drives the spatial layout of a live match", async ({ page }) => {
