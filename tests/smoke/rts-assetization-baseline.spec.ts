@@ -48,9 +48,15 @@ test("Assetization Faz C: the opt-in catalog loads Actor presentations without c
   });
   expect(contentAssetsEnabled).toBe(true);
 
+  // Faz 3: the pack reports its own health. Zero stand-ins is the shipped state,
+  // and it is published as a number so "healthy" and "not reported yet" can never
+  // read the same — a broken Actor would show `placeholder` here instead.
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-placeholders", "0");
+
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
+  await expect(page.locator(".rts-debug-overlay")).toContainText("placeholder yok");
   expect(errors, "the catalog loader must not disturb the RTS match").toEqual([]);
 });
 

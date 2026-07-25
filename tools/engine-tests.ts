@@ -79,7 +79,17 @@ import {
   rtsContentCoverageGaps,
   validateRtsPresentationActor,
 } from "../src/game/rts/content/rtsContentValidation";
-import { buildActorPresentationTree } from "../src/game/rts/content/rtsActorPresentationTree";
+import {
+  buildActorPresentationTree,
+  fitPresentationToFootprint,
+} from "../src/game/rts/content/rtsActorPresentationTree";
+import { createRtsActorPlaceholder, isRtsActorPlaceholder } from "../src/game/rts/content/rtsActorPlaceholder";
+import {
+  formatRtsActorPresentationDebug,
+  rtsContentAssetsState,
+  type RtsActorVisualFactory,
+} from "../src/game/rts/content/rtsActorVisualFactory";
+import { RtsBuildingVisuals } from "../src/game/rts/structures/rtsBuildingVisuals";
 import { CommandSystem } from "../src/game/rts/commands/commandSystem";
 import { CommandMarkerSystem } from "../src/game/rts/commands/commandMarker";
 import { CommandCenterSystem } from "../src/game/rts/structures/commandCenterSystem";
@@ -29832,6 +29842,131 @@ check("Actor presentation Faz 2: a multi-mesh Actor builds every component at it
   assert.equal(ground.parent, nodeNamed("root"), "a root-parented mesh hangs off the authored root component");
   assert.equal(nodeNamed("root").parent, root);
   assert.deepEqual(ground.position.toArray(), [0, 0, 0]);
+});
+
+check("Actor presentation Faz 3: a stand-in is visibly not art, and reports as its own state", () => {
+  const placeholder = createRtsActorPlaceholder("assets/Broken.actor.json");
+  assert.ok(isRtsActorPlaceholder(placeholder), "the stand-in is identifiable to tooling and tests");
+  const meshes: Mesh[] = [];
+  placeholder.traverse((child) => {
+    if (child instanceof Mesh) meshes.push(child);
+  });
+  assert.equal(meshes.length, 1, "the stand-in renders something rather than nothing");
+  // It is built from code geometry on purpose: a stand-in that loads an asset can
+  // fail for the same reason as the Actor it is replacing.
+  assert.ok(meshes[0]!.geometry.type.includes("Box"));
+
+  // It goes through the same footprint fit as authored art, so a broken building
+  // occupies exactly the tile the player sees it blocking.
+  fitPresentationToFootprint(placeholder, 6, 6);
+  placeholder.updateMatrixWorld(true);
+  const bounds = new Box3().setFromObject(placeholder);
+  assert.ok(Math.abs((bounds.max.x - bounds.min.x) - 6 * 0.86) < 1e-6, "the stand-in fills the footprint");
+  assert.ok(Math.abs(bounds.min.y - 0.18) < 1e-6, "the stand-in stands on the foundation, not in it");
+
+  // The report is the difference between "no placeholders" and "never reported".
+  const healthy = { requested: 52, loaded: 52, failures: [] };
+  assert.equal(rtsContentAssetsState(healthy), "ready");
+  assert.deepEqual(formatRtsActorPresentationDebug(healthy), ["sunum: 52/52 Actor · placeholder yok"]);
+
+  const degraded = {
+    requested: 52,
+    loaded: 51,
+    failures: [{
+      ref: "assets/Broken.actor.json",
+      reason: 'assets/Broken.actor.json: mesh component "body" names unmanifested asset "gone"',
+    }],
+  };
+  // A pack with one bad Actor is neither "ready" nor the pack-wide "fallback":
+  // the match is running, degraded, and says so.
+  assert.equal(rtsContentAssetsState(degraded), "placeholder");
+  assert.deepEqual(formatRtsActorPresentationDebug(degraded), [
+    "sunum: 51/52 Actor · 1 placeholder",
+    '  ! assets/Broken.actor.json: mesh component "body" names unmanifested asset "gone"',
+  ]);
+});
+
+check("Actor presentation Faz 3: fitting a multi-mesh Actor keeps every authored local offset", () => {
+  // A field with its wheat set beside it: two meshes whose *relationship* is the
+  // authored art. Fitting must move the pair, never re-seat each mesh separately.
+  const actor = new Group();
+  const field = new Mesh(new BoxGeometry(4, 1, 4), new MeshBasicMaterial());
+  field.position.set(0, 0.5, 0);
+  const wheat = new Mesh(new BoxGeometry(1, 2, 1), new MeshBasicMaterial());
+  wheat.position.set(1.5, 1, 0.5);
+  actor.add(field, wheat);
+
+  const unfitted = new Box3().setFromObject(actor);
+  fitPresentationToFootprint(actor, 6, 6);
+  actor.updateMatrixWorld(true);
+
+  const scale = actor.scale.x;
+  assert.ok(scale > 0);
+  assert.deepEqual(field.position.toArray(), [0, 0.5, 0], "local offsets are untouched by the fit");
+  assert.deepEqual(wheat.position.toArray(), [1.5, 1, 0.5]);
+  assert.equal(field.scale.x, 1, "children are not scaled independently");
+  assert.equal(wheat.scale.x, 1);
+
+  const fitted = new Box3().setFromObject(actor);
+  // The whole Actor — both meshes together — is what fills the footprint, and the
+  // wheat's proportional offset inside that bound survives the scaling.
+  assert.ok(Math.abs((fitted.max.x - fitted.min.x) - 6 * 0.86) < 1e-6, "the pair fills the footprint");
+  assert.ok(Math.abs(fitted.min.y - 0.18) < 1e-6, "the pair stands on the foundation");
+  const before = (1.5 - unfitted.min.x) / (unfitted.max.x - unfitted.min.x);
+  const wheatWorld = new Vector3();
+  wheat.getWorldPosition(wheatWorld);
+  const after = (wheatWorld.x - fitted.min.x) / (fitted.max.x - fitted.min.x);
+  assert.ok(Math.abs(before - after) < 1e-6, "the wheat keeps its place within the field");
+});
+
+check("Actor presentation Faz 3: construction, completed, preview and the centre share one Actor selection path", () => {
+  const calls: Array<[string, string, number, number, number, string]> = [];
+  const actorVisuals = {
+    createBuildingVisual: (
+      buildingId: string,
+      state: string,
+      level: number,
+      width: number,
+      depth: number,
+      age: string,
+    ) => {
+      calls.push([buildingId, state, level, width, depth, age]);
+      const visual = new Group();
+      visual.name = `stub:${buildingId}:${state}:${level}:${age}`;
+      return visual;
+    },
+  } as unknown as RtsActorVisualFactory;
+  const visuals = new RtsBuildingVisuals(undefined as unknown as WebGLRenderer, actorVisuals);
+
+  const stats = {
+    id: "barracks",
+    footprint: { width: 8, depth: 8 },
+  } as unknown as PlacedStructure["stats"];
+  const structure = { stats, level: 2, construction: { complete: true } } as unknown as PlacedStructure;
+
+  assert.ok(visuals.createForStructure(structure, "town"), "a completed structure resolves an Actor");
+  assert.ok(visuals.createConstructionVisual(structure, "town", 2), "a construction site resolves an Actor");
+  assert.ok(visuals.createPreviewForBuilding("barracks", 8, 8, "town", 2), "the placement preview resolves an Actor");
+
+  const center = new CommandCenterSystem().spawn("player", 0, 0);
+  center.level = 3;
+  visuals.applyToCenter(center, "town");
+
+  // Every entry point asks the same factory with the same identity, so a state,
+  // a level-up or an age change can never be the one case that quietly drops to
+  // the legacy mesh path.
+  assert.deepEqual(calls, [
+    ["barracks", "completed", 2, 8, 8, "town"],
+    ["barracks", "construction", 2, 8, 8, "town"],
+    ["barracks", "completed", 2, 8, 8, "town"],
+    ["command_center", "completed", 3, 8, 8, "town"],
+  ]);
+
+  // With no Actor for an id, each of those call sites falls back rather than
+  // rendering nothing — the transition-period contract.
+  const empty = { createBuildingVisual: () => null } as unknown as RtsActorVisualFactory;
+  const fallbackVisuals = new RtsBuildingVisuals(undefined as unknown as WebGLRenderer, empty);
+  assert.equal(fallbackVisuals.createForStructure(structure, "town"), null, "an unloaded legacy pack yields no visual");
 });
 
 check("Assetization Faz C: UnitSystem resolves catalog presentation pick targets without body-child assumptions", () => {

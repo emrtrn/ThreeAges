@@ -7,10 +7,14 @@
  * makes "a second StaticMeshComponent really is a second node, at its authored
  * local transform" a unit test rather than a screenshot.
  */
-import { Group, Mesh, type Object3D } from "three";
+import { Box3, Group, Mesh, type Object3D } from "three";
 import { isMeshComponentKind, type ActorScriptDef } from "@engine/scene/actorScript";
 
 const DEGREES_TO_RADIANS = Math.PI / 180;
+/** Foundation slabs stand this proud of the ground; models sit on top of them. */
+const FOUNDATION_TOP = 0.18;
+/** Leave a margin inside the footprint so neighbours never visually touch. */
+const MODEL_FOOTPRINT_FILL = 0.86;
 
 function readVec3(value: unknown): [number, number, number] | null {
   if (!Array.isArray(value) || value.length !== 3) return null;
@@ -76,4 +80,28 @@ export function buildActorPresentationTree(
   }
 
   return root;
+}
+
+/**
+ * Scale a whole Actor into its gameplay footprint and stand it on the foundation.
+ *
+ * The bounds are taken over the entire tree, and only the root is scaled and
+ * lifted, so a multi-mesh Actor keeps every authored local offset: the wheat
+ * stays where the author put it relative to the field instead of each mesh being
+ * independently squeezed into the same box.
+ */
+export function fitPresentationToFootprint(
+  model: Object3D,
+  footprintWidth: number,
+  footprintDepth: number,
+): void {
+  const sourceBounds = new Box3().setFromObject(model);
+  const sourceWidth = sourceBounds.max.x - sourceBounds.min.x;
+  const sourceDepth = sourceBounds.max.z - sourceBounds.min.z;
+  if (sourceWidth <= 0 || sourceDepth <= 0) return;
+  const scale = Math.min(footprintWidth / sourceWidth, footprintDepth / sourceDepth) * MODEL_FOOTPRINT_FILL;
+  model.scale.multiplyScalar(scale);
+  model.updateMatrixWorld(true);
+  const fittedBounds = new Box3().setFromObject(model);
+  model.position.y += FOUNDATION_TOP - fittedBounds.min.y;
 }

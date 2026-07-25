@@ -1,7 +1,7 @@
 # ThreeAges RTS Actor Sunumunu Varsayilan Yapma Plani
 
 Olusturulma tarihi: 2026-07-25  
-Durum: Faz 1 ve Faz 2 uygulandi. Faz 3-5 bekliyor.
+Durum: Faz 1, Faz 2 ve Faz 3 uygulandi. Faz 4-5 bekliyor.
 
 ## Karar
 
@@ -68,6 +68,31 @@ Faz 1 ve Faz 2 tamamlandi.
 - Level tavani art paketinden degil age balance'tan turetiliyor
   (`1 + levelUpgrades.length`), bu yuzden yeni bir level eklemek Actor'lari
   authorlanana kadar testi kirar.
+
+Faz 3 tamamlandi.
+
+- `RtsActorVisualFactory.load()` artik per-Actor: bir ref'in bozuk olmasi sadece
+  o ref'i placeholder'a dusurur, pack'in geri kalani render edilmeye devam eder.
+  Pack capinda hata yalnizca manifest erisilemediginde (hicbir ref cozulemez).
+- Hata mesajlari `RtsActorPresentationError` uzerinden hep ref + component id
+  tasiyor; glTF yukleme hatasi da component'e baglaniyor.
+- Placeholder acik bir isaret: kod geometrisinden magenta kutu
+  (`rtsActorPlaceholder.ts`). Asset yuklemez — cunku degistirdigi seyi bozan
+  sebep placeholder'i da bozabilirdi. Ayni footprint fit'inden geciyor.
+- Actor bir yariya kadar yuklenirse artik hic kaydedilmiyor; `definitions.set`
+  tum modeller elde olduktan sonra calisiyor, yani "sessizce eksik mesh"li agac
+  olusamaz.
+- Gorunurluk: `data-rts-content-assets` degerine `placeholder` eklendi,
+  `data-rts-content-placeholders` sayiyi yayinliyor (basta "0"), her bozuk ref
+  log'a yaziliyor ve `?debug` overlay'inde `sunum: X/Y Actor · N placeholder`
+  blogu var (`setPresentationLines`).
+- Faz 1 pack'i 5 kat buyuttugu icin seri yukleme `?rts&flags=contentAssets`
+  boot'unu 30 sn'nin uzerine cikariyordu; yukleme paralellestirildi ve mesh
+  sablonlari promise seviyesinde paylasiliyor (`templateFor`), boylece es zamanli
+  Actor'lar ayni modeli iki kez indirmiyor. Browser smoke 11 sn'de yesil.
+- Footprint fit `fitPresentationToFootprint` olarak ayrildi: bounds tum agac
+  uzerinden aliniyor, sadece root olcekleniyor; coklu mesh'in lokal offsetleri
+  korunuyor (testle kanitli).
 
 ## Faz 1 — Kapsam envanteri ve veri sozlesmesi
 

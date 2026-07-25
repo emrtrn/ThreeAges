@@ -23,6 +23,7 @@ export class RtsDebugOverlay {
   private aiLines: readonly string[] = [];
   private progressionLines: readonly string[] = [];
   private visionLines: readonly string[] = [];
+  private presentationLines: readonly string[] = [];
   private elapsedSeconds = 0;
 
   constructor() {
@@ -45,6 +46,14 @@ export class RtsDebugOverlay {
   /** Optional, static progression diagnostics such as the Phase 6 Refah flag. */
   setProgressionLines(lines: readonly string[]): void {
     this.progressionLines = lines;
+  }
+
+  /**
+   * Actor presentation pack health: how much of the pack loaded and which refs
+   * are standing in. Empty when the pack is not in use at all.
+   */
+  setPresentationLines(lines: readonly string[]): void {
+    this.presentationLines = lines;
   }
 
   /** §59 fog block, formatted by `formatVisionDebug`. Empty while the flag is off. */
@@ -134,6 +143,7 @@ export class RtsDebugOverlay {
       ...producerLinks.map((producer) => `  yapı#${producer.structureId} (${producer.resourceId}): ${producer.status}${producer.depotStructureId ? ` · depo#${producer.depotStructureId}` : ""}`),
     );
     lines.push("kaynak hareketleri:", ...(this.resourceLines.length ? this.resourceLines : ["- yok"]));
+    if (this.presentationLines.length > 0) lines.push("", ...this.presentationLines);
     if (this.progressionLines.length > 0) lines.push("", ...this.progressionLines);
     if (this.visionLines.length > 0) lines.push("", ...this.visionLines);
     if (this.aiLines.length > 0) lines.push("", ...this.aiLines);

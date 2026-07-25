@@ -27,8 +27,9 @@ export class RtsActorPresentationError extends Error {
     /** The catalog reference that led here, so a failure names its own entry point. */
     readonly ref: string,
     message: string,
+    options?: ErrorOptions,
   ) {
-    super(`${ref}: ${message}`);
+    super(`${ref}: ${message}`, options);
     this.name = "RtsActorPresentationError";
   }
 }

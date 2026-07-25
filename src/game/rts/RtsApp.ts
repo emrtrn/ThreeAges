@@ -39,7 +39,12 @@ import type {
   UnitBalance,
 } from "@/game/data/gameDataTypes";
 import type { RtsContentCatalog } from "./content/rtsContentCatalog";
-import { RtsActorVisualFactory } from "./content/rtsActorVisualFactory";
+import {
+  RtsActorVisualFactory,
+  formatRtsActorPresentationDebug,
+  rtsContentAssetsState,
+  type RtsActorLoadReport,
+} from "./content/rtsActorVisualFactory";
 import { AiController } from "./ai/aiController";
 import { formatRtsAiDebug } from "./ai/aiDebugView";
 import { RtsCameraController } from "./camera/rtsCameraController";
@@ -480,6 +485,9 @@ export class RtsApp {
       ? new RtsActorVisualFactory(this.renderer, this.options.contentCatalog)
       : null;
     this.canvas.dataset.rtsContentAssets = this.actorVisuals ? "loading" : "disabled";
+    // Published from the start so "no placeholders" and "not reported yet" are
+    // never the same reading for a test or a bug report.
+    this.canvas.dataset.rtsContentPlaceholders = "0";
     this.buildingVisuals = new RtsBuildingVisuals(this.renderer, this.actorVisuals);
     this.mapArt = new RtsMapArt(this.renderer);
     this.roads = new RoadGraph(this.options.roadBalance);
@@ -2267,7 +2275,7 @@ export class RtsApp {
     try {
       await this.actorVisuals.load();
       if (this.disposed) return;
-      this.canvas.dataset.rtsContentAssets = "ready";
+      this.reportActorVisuals(this.actorVisuals.report());
       this.units.setPresentationFactory((owner, stats) =>
         this.actorVisuals?.createUnitPresentation(
           Object.entries(this.options.unitBalance).find(([, value]) => value === stats)?.[0] ?? "",
@@ -2288,11 +2296,32 @@ export class RtsApp {
         else this.applyConstructionVisual(structure);
       }
     } catch (error) {
-      // The visual pilot is optional. Keep the legacy mesh/placeholder path
-      // playable when a Content Drawer class or one of its model refs is broken.
+      // Only a pack-wide failure reaches here now — an unreachable manifest, with
+      // which no reference resolves at all. A single broken Actor is handled
+      // per-Actor inside `load()` and shows as a placeholder instead.
       this.log.warn("RTS Actor presentation pack could not be loaded; using legacy visuals", error);
       this.canvas.dataset.rtsContentAssets = "fallback";
     }
+  }
+
+  /**
+   * Make the pack's health readable without a screenshot: the canvas dataset is
+   * the browser test's witness, the log names each broken ref, and the `?debug`
+   * overlay carries the running count so a placeholder cannot sit unnoticed in a
+   * corner of the map for a whole match.
+   */
+  private reportActorVisuals(report: RtsActorLoadReport): void {
+    this.canvas.dataset.rtsContentAssets = rtsContentAssetsState(report);
+    this.canvas.dataset.rtsContentPlaceholders = String(report.failures.length);
+    for (const failure of report.failures) {
+      this.log.warn(`RTS Actor placeholder in use — ${failure.reason}`);
+    }
+    if (report.failures.length > 0) {
+      this.log.warn(
+        `RTS Actor pack loaded ${report.loaded}/${report.requested} Actors; ${report.failures.length} placeholder(s) in use`,
+      );
+    }
+    this.debugOverlay?.setPresentationLines(formatRtsActorPresentationDebug(report));
   }
 
   /**
