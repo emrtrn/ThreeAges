@@ -155,6 +155,10 @@ import { TerritoryControlSystem } from "./territory/territoryControlSystem";
 import { StrategicPointSystem } from "./objectives/strategicPointSystem";
 import { StrategicPointView } from "./objectives/strategicPointView";
 import { RegionalVictorySystem } from "./objectives/regionalVictorySystem";
+import {
+  victoryChoiceForFlag,
+  type VictoryConditionChoice,
+} from "./match/victoryConditionChoice";
 import { VisionSystem, type VisionSource } from "./vision/visionSystem";
 import {
   EnemyMemorySystem,
@@ -236,6 +240,19 @@ export interface RtsAppOptions {
    * empty space on screen).
    */
   readonly regionalVictoryEnabled?: boolean;
+  /**
+   * §78.1: called when the start card's victory condition differs from the one
+   * this app was built with, so the host can re-boot the match with the chosen
+   * flag. Supplying it is what puts the picker on the card at all.
+   *
+   * A callback rather than a `location.reload()` here because §13 makes the flag
+   * read-only after it resolves, and the objective systems are constructed once,
+   * in the constructor, ahead of the AI that reads them. Rebuilding them mid-life
+   * would mean a second construction order to keep correct forever; re-resolving
+   * the match setup is the same one-way path every other flag already takes, and
+   * it happens at the only moment nothing has been played yet.
+   */
+  readonly onVictoryConditionChange?: (choice: VictoryConditionChoice) => void;
   /**
    * `?flags=fogOfWar` (§59, Faz 11): unknown / explored / visible layers, for
    * both kingdoms. Symmetric on purpose — see `ai/aiVisionFilter.ts`.
@@ -388,6 +405,12 @@ export class RtsApp {
   private readonly ghostStructures: GhostStructureView | null;
   private readonly fogVisibility: FogVisibilityBinder | null;
   private readonly objectiveTracker: RtsObjectiveTracker | null;
+  /**
+   * §78.1: what the start card has selected. Seeded from the *resolved* flag so
+   * a match booted with `?flags=regionalVictory` opens on the matching row, and
+   * only ever read while the start card is up.
+   */
+  private victoryCondition: VictoryConditionChoice;
   private readonly match = new RtsMatchState();
   /** §51: whether the simulation should be running; `match` owns who won. */
   private readonly flow = new RtsMatchFlow();
@@ -557,6 +580,7 @@ export class RtsApp {
       this.strategicPointView = null;
       this.objectiveTracker = null;
     }
+    this.victoryCondition = victoryChoiceForFlag(this.options.regionalVictoryEnabled === true);
     // §59. Same construction rule as §58 above: the flag off means these five
     // are null and nothing downstream ever asks them anything, so a disabled
     // fog costs nothing at runtime (plan §13).
@@ -838,6 +862,11 @@ export class RtsApp {
       // Applied live while the card is up: §51's pause deliberately keeps the
       // camera running, so the player can judge the dial by moving the map.
       onCameraSettings: (settings) => this.cameraController.setSettings(settings),
+      // §78.1. Only wired when the host can re-resolve the match setup; without
+      // it the overlay builds no picker, so the card is unchanged.
+      ...(this.options.onVictoryConditionChange
+        ? { onVictoryCondition: (choice: VictoryConditionChoice) => { this.victoryCondition = choice; } }
+        : {}),
     });
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
     if (this.options.levelLoadError) {
@@ -991,7 +1020,7 @@ export class RtsApp {
     // The runtime is live but the match is not: §51's start screen holds the
     // simulation until the player asks for it. The scene still renders behind
     // the card, so the opening position is something they can look at first.
-    this.matchOverlay.showStart();
+    this.matchOverlay.showStart(this.victoryCondition);
     this.frameHandle = requestAnimationFrame(this.onFrame);
   }
 
@@ -2015,6 +2044,18 @@ export class RtsApp {
 
   /** §51: leave the start screen and let the simulation run. */
   private readonly beginMatch = (): void => {
+    // §78.1: the choice is committed here, at match setup, and never again. If it
+    // asks for a different rule set than this app was built with, the host
+    // re-resolves the boot instead — nothing has been played yet, so there is no
+    // match state to lose, and §13's "read-only once resolved" stays intact.
+    if (
+      this.options.onVictoryConditionChange &&
+      this.victoryCondition !== victoryChoiceForFlag(this.options.regionalVictoryEnabled === true)
+    ) {
+      this.log.info(`RTS match setup: victory condition -> ${this.victoryCondition}`);
+      this.options.onVictoryConditionChange(this.victoryCondition);
+      return;
+    }
     if (!this.flow.begin()) return;
     this.matchOverlay.hide();
     this.log.info("RTS match started");

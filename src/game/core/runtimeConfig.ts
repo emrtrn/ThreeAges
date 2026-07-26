@@ -35,20 +35,34 @@ export interface BootOptions {
   urlFlags?: string | null;
   /** Optional gameSpeed override (e.g. from a debug URL param). */
   gameSpeedOverride?: number | null;
+  /**
+   * Explicit player-made match-setup choices (§78.1), applied last so they win
+   * over both the preset and `?flags=`. Unlike `urlFlags` — which can only force
+   * a flag *on* — these carry `false` too: a player who picked "Askerî" on the
+   * start card must get a military-only match even under a preset that enables
+   * the regional route. Omit (or leave a flag out) to change nothing.
+   */
+  flagOverrides?: Partial<Record<string, boolean>> | null;
 }
 
 const DEFAULT_GAME_SPEED = 1;
 
 /**
  * Build the effective runtime config from an (optional) preset plus boot
- * options. Flag precedence follows resolveFeatureFlags: defaults → preset →
- * URL. gameSpeed comes from the preset unless a numeric override is given.
+ * options. Flag precedence follows resolveFeatureFlags and then §78.1's player
+ * choice: defaults → preset → URL → flagOverrides. gameSpeed comes from the
+ * preset unless a numeric override is given.
  */
 export function createRuntimeConfig(
   preset: GamePreset | null,
   opts: BootOptions,
 ): RuntimeConfig {
-  const flags = resolveFeatureFlags(preset?.flags, opts.urlFlags ?? null);
+  const resolved = resolveFeatureFlags(preset?.flags, opts.urlFlags ?? null);
+  // Re-resolved rather than spread, so an override still passes through the same
+  // unknown-id filtering every other flag source does.
+  const flags = opts.flagOverrides
+    ? resolveFeatureFlags({ ...resolved, ...opts.flagOverrides })
+    : resolved;
   const gameSpeed =
     typeof opts.gameSpeedOverride === "number" && opts.gameSpeedOverride > 0
       ? opts.gameSpeedOverride

@@ -19,6 +19,12 @@ import {
 } from "@/game/core/runtimeConfig";
 import { loadAgeBalance, loadAiBalance, loadBuildingBalance, loadGamePreset, loadResourceBalance, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
 import { loadRtsContentCatalog } from "@/game/rts/content/rtsContentLoader";
+import {
+  readStoredVictoryCondition,
+  victoryConditionFlagOverride,
+  writeStoredVictoryCondition,
+  type VictoryConditionChoice,
+} from "@/game/rts/match/victoryConditionChoice";
 import { resolveRtsLevelRef } from "@/game/rts/world/rtsLevelRef";
 import type { GamePreset } from "@/game/data/gameDataTypes";
 
@@ -54,6 +60,22 @@ interface BootFoundationResult {
   readonly fogOfWarEnabled: boolean;
 }
 
+/**
+ * Where §78.1's match-setup choice lives: session storage, so it survives the
+ * setup re-boot and dies with the tab. A match setting is not a saved profile —
+ * a new tab should open on the default (§78.1: "Varsayılan yalnız askerî").
+ *
+ * Access is guarded because a browser with storage disabled throws on the
+ * *property*, before any call: the game must still boot, just without a memory.
+ */
+function matchSetupStorage(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 async function bootFoundation(): Promise<BootFoundationResult> {
   installGlobalErrorHandlers();
   const isDev = import.meta.env.DEV;
@@ -72,7 +94,13 @@ async function bootFoundation(): Promise<BootFoundationResult> {
     log.warn(`Preset "${presetId}" unavailable; using defaults`, error);
   }
 
-  const config = createRuntimeConfig(preset, readBootOptionsFromUrl(isDev));
+  // §78.1: the start card's victory condition, chosen in a previous pass through
+  // this boot. Null until the player picks one, which is what keeps `?flags=` and
+  // the §72 test presets authoritative for anyone who never touched the card.
+  const config = createRuntimeConfig(preset, {
+    ...readBootOptionsFromUrl(isDev),
+    flagOverrides: victoryConditionFlagOverride(readStoredVictoryCondition(matchSetupStorage())),
+  });
   log.info(`runtime config ready (preset ${config.presetId})`);
 
   if (isDev) {
@@ -153,6 +181,14 @@ async function main(): Promise<void> {
       prosperityDebugEnabled,
       regionalVictoryEnabled,
       fogOfWarEnabled,
+      // §78.1: store the choice and re-run this boot, which resolves the flag
+      // through the same defaults → preset → URL → choice path as a cold start.
+      // A reload rather than an in-place rebuild because §13 fixes flags at
+      // resolve time; the cost is one reload of a start screen nobody has played.
+      onVictoryConditionChange: (choice: VictoryConditionChoice) => {
+        writeStoredVictoryCondition(matchSetupStorage(), choice);
+        location.reload();
+      },
       contentCatalog,
       ...(authoredLevel && levelRef
         ? { level: authoredLevel.definition, levelLayout: authoredLevel.layout, levelRef }

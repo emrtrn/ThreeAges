@@ -14,6 +14,7 @@
 import { DEFAULT_RTS_CAMERA_SETTINGS, type RtsCameraSettings } from "../camera/rtsCameraConfig";
 import { formatMatchDuration } from "./rtsMatchClock";
 import type { RtsMatchEndReason, RtsMatchOutcome } from "./rtsMatchState";
+import { DEFAULT_VICTORY_CONDITION, type VictoryConditionChoice } from "./victoryConditionChoice";
 
 export interface RtsMatchOverlayHandlers {
   readonly onStart: () => void;
@@ -22,7 +23,41 @@ export interface RtsMatchOverlayHandlers {
   readonly onSurrender: () => void;
   /** §51 "Minimal ayarlar": camera feel, changed live behind the pause card. */
   readonly onCameraSettings: (settings: RtsCameraSettings) => void;
+  /**
+   * §78.1: the victory condition picked while the match is being set up. Absent
+   * when the host cannot act on a choice, and then the picker is not built at
+   * all — a control wired to nothing is worse than no control (see the settings
+   * note below).
+   */
+  readonly onVictoryCondition?: (choice: VictoryConditionChoice) => void;
 }
+
+interface VictoryConditionRow {
+  readonly choice: VictoryConditionChoice;
+  readonly label: string;
+  /** Shown only while that row is selected; §78.1 wants the rule spelled out. */
+  readonly hint: string;
+}
+
+/**
+ * §78.1 task 4. The regional hint is not flavour: a strategic point is taken by
+ * the control area of a road-connected outpost, never by parking units on it.
+ * `strategicPointSystem.ts` has always enforced that and nothing ever said it,
+ * and an undiscoverable rule produces exactly the surprise defeat §58's second
+ * acceptance criterion forbids.
+ */
+const VICTORY_CONDITION_ROWS: readonly VictoryConditionRow[] = [
+  {
+    choice: "military",
+    label: "Askerî",
+    hint: "Maç yalnızca düşman merkezi yıkıldığında biter.",
+  },
+  {
+    choice: "military_regional",
+    label: "Askerî + Bölgesel",
+    hint: "Askerî zafer geçerliliğini korur. Ek olarak iki stratejik geçidi 180 saniye boyunca birlikte elinde tutan taraf kazanır. Geçitler oraya birlik göndererek değil, yola bağlı bir karakolun kontrol alanıyla alınır.",
+  },
+];
 
 /**
  * §51 lists four settings; two of them are built here and two are deliberately
@@ -91,6 +126,10 @@ export class RtsMatchOverlay {
   private surrenderArmed = false;
   private readonly settings = document.createElement("div");
   private cameraSettings: RtsCameraSettings = DEFAULT_RTS_CAMERA_SETTINGS;
+  /** §78.1 match setup; empty and permanently hidden without a choice handler. */
+  private readonly setup = document.createElement("div");
+  private readonly setupHint = document.createElement("p");
+  private victoryCondition: VictoryConditionChoice = DEFAULT_VICTORY_CONDITION;
 
   constructor(private readonly handlers: RtsMatchOverlayHandlers) {
     this.root.className = "rts-match-overlay ui-interactive";
@@ -102,10 +141,66 @@ export class RtsMatchOverlay {
     this.duration.dataset.rtsResultDuration = "";
     this.duration.className = "rts-match-duration";
     this.actions.className = "rts-match-actions";
+    this.buildSetup();
     this.buildSettings();
-    this.card.append(this.title, this.detail, this.duration, this.actions, this.settings);
+    // Setup sits above the actions: it is read *before* "Maçı Başlat", unlike the
+    // pause card's settings, which are a detour taken after the card is already up.
+    this.card.append(this.title, this.detail, this.duration, this.setup, this.actions, this.settings);
     this.root.appendChild(this.card);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
+  }
+
+  /**
+   * §78.1: the victory condition, on the existing start card rather than a menu
+   * of its own — §50 chose one modal on purpose, and a second surface would
+   * reintroduce the "two cards on screen at once" it was avoiding.
+   *
+   * Radios, not buttons: this is one exclusive answer to one question, and the
+   * native control is what a keyboard and a screen reader already understand.
+   */
+  private buildSetup(): void {
+    this.setup.className = "rts-match-setup";
+    this.setup.hidden = true;
+    if (!this.handlers.onVictoryCondition) return;
+    const group = document.createElement("fieldset");
+    group.className = "rts-match-setup-group";
+    const legend = document.createElement("legend");
+    legend.textContent = "Zafer koşulu";
+    group.appendChild(legend);
+    for (const row of VICTORY_CONDITION_ROWS) {
+      const wrapper = document.createElement("label");
+      wrapper.className = "rts-match-setup-option";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "rts-victory-condition";
+      input.value = row.choice;
+      input.dataset.rtsVictoryCondition = row.choice;
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        this.setVictoryCondition(row.choice);
+        this.handlers.onVictoryCondition?.(row.choice);
+      });
+      const label = document.createElement("span");
+      label.textContent = row.label;
+      wrapper.append(input, label);
+      group.appendChild(wrapper);
+    }
+    // One hint line that swaps, rather than a paragraph under each row: only the
+    // selected rule is in force, and two explanations side by side would ask the
+    // player to work out which one they are currently reading.
+    this.setupHint.className = "rts-match-setup-hint";
+    this.setupHint.dataset.rtsVictoryHint = "";
+    this.setup.append(group, this.setupHint);
+  }
+
+  /** Reflect a choice in the radios and the hint. Fires no handler. */
+  private setVictoryCondition(choice: VictoryConditionChoice): void {
+    this.victoryCondition = choice;
+    for (const input of this.setup.querySelectorAll<HTMLInputElement>("input[type='radio']")) {
+      input.checked = input.value === choice;
+    }
+    this.setupHint.textContent =
+      VICTORY_CONDITION_ROWS.find((row) => row.choice === choice)?.hint ?? "";
   }
 
   /**
@@ -143,14 +238,33 @@ export class RtsMatchOverlay {
     }
   }
 
-  /** §51: a simple start screen, deliberately not a main menu. */
-  showStart(): void {
+  /**
+   * §51: a simple start screen, deliberately not a main menu.
+   *
+   * `victoryCondition` is the state the match would boot with — the resolved
+   * flag, not a remembered preference — so a dev URL or a §72 preset that
+   * already enables the regional route opens with that row selected instead of
+   * quietly contradicting the card.
+   */
+  showStart(victoryCondition: VictoryConditionChoice = DEFAULT_VICTORY_CONDITION): void {
+    if (this.handlers.onVictoryCondition) this.setVictoryCondition(victoryCondition);
     this.render(
       "Üç Çağ: Sınır Krallıkları",
       "Ekonomini kur, yolunu bağla ve düşman merkezini yık.",
       [{ label: "Maçı Başlat", action: this.handlers.onStart, primary: true, key: "start" }],
       "neutral",
+      false,
+      null,
+      // §78.1: the picker belongs to match setup and nowhere else. The pause and
+      // result cards must not offer it — a condition that could change mid-match
+      // is a rule the player cannot plan against.
+      true,
     );
+  }
+
+  /** What the card currently has selected; `RtsApp` reads it on start. */
+  get selectedVictoryCondition(): VictoryConditionChoice {
+    return this.victoryCondition;
   }
 
   showPause(): void {
@@ -207,8 +321,12 @@ export class RtsMatchOverlay {
     tone: OverlayTone,
     showSettings = false,
     durationSeconds: number | null = null,
+    showSetup = false,
   ): void {
     this.settings.hidden = !showSettings;
+    // §78.1 / §60: with no choice handler the block was never populated, so it
+    // stays hidden and the start card looks exactly as it did before.
+    this.setup.hidden = !showSetup || !this.handlers.onVictoryCondition;
     this.card.dataset.tone = tone;
     this.title.textContent = title;
     this.detail.textContent = detail;

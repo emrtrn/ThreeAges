@@ -2506,7 +2506,8 @@ Bu fazdaki her alt sistem bağımsız scope kararıdır.
 Tamamı `regionalVictory` feature flag'i arkasında ve varsayılan **kapalı**:
 bayrak kapalıyken sistemler hiç kurulmaz (§13 "kapalı bayrak runtime'da hiçbir
 şeye mal olmamalı"), ekranda da §60 uyarınca hiçbir iz bırakmaz.
-`?rts&flags=regionalVictory` ile açılır.
+`?rts&flags=regionalVictory` ile açılır — ve §78.1'den beri başlatma kartındaki
+"Zafer koşulu" seçiminden de.
 
 Test durumu: `tools/engine-tests.ts` içinde beş `§58` kontrolü (tutma/durma/
 gerileme, uyarı bandı, maç sonucu önceliği, AI contest davranışı);
@@ -2526,7 +2527,7 @@ kabul edildi:**
 - [x] İkinci zafer türü askerî zaferi gereksiz hale getirmiyor.
 
 Sistem kabul edildiği için §78.1 (maç kurulum ekranında zafer koşulu seçimi)
-artık ön koşulunu karşılıyor.
+ön koşulunu karşıladı ve **uygulandı**.
 
 > **Ayarlanacak sayılar** (`DEFAULT_REGIONAL_VICTORY_SETTINGS`): gereken süre
 > 180 sn, gerileme 1/3, uyarı bandı 60 sn. Şu an kodda sabit; playtest bunları
@@ -3017,30 +3018,45 @@ ekranda olması" riskini geri getirirdi.
 
 ### Ön koşul
 
-- [ ] §58'in dört kabul kriteri Faz 13'te ölçülmüş ve sistem kabul edilmiş.
-      Reddedilirse bu bölüm tamamen düşer ve §60'ın "Kapsamdan Çıkarıldı"
-      formatında kapatılır.
+- [x] §58'in dört kabul kriteri Faz 13'te ölçülmüş ve sistem kabul edilmiş.
+      (2026-07-18 playtest'i; §58'in kabul kriterleri bölümüne bakınız.)
 
 ### Görevler
 
-- [ ] Başlatma kartına zafer koşulu seçimi ekle (Askerî / Askerî + Bölgesel).
-      Varsayılan yalnız askerî: §58 ikinci bir *rota*, oyuncunun sormadan
-      karşılaştığı bir kural değil.
-- [ ] Seçimi `regionalVictory` bayrağına bağla. Bayrak §13 uyarınca maç
-      başladıktan sonra salt-okunur kalmalı — seçim maç *kurulurken* çözülür,
-      duraklatma menüsünde değiştirilemez.
-- [ ] Seçenek kapalıyken ekranda hiçbir iz bırakma (§60 ve §80'deki "yarım veya
-      kapalı özellik UI'da görünmüyor" maddesi).
-- [ ] Bölgesel zafer seçiliyken kısa bir açıklama göster: nokta yol bağlantılı
-      karakolun kontrol alanıyla alınır, birlik göndererek değil. Bu kural
-      `strategicPointSystem.ts` içinde doğru çalışıyor ama hiçbir yerde
-      oyuncuya söylenmiyor; keşfedilemez bir kural sürpriz yenilgi üretir.
+- [x] Başlatma kartına zafer koşulu seçimi ekle (Askerî / Askerî + Bölgesel).
+      Varsayılan yalnız askerî. (`match/rtsMatchOverlay.ts` içinde radio grubu;
+      `match/victoryConditionChoice.ts` seçimin saf modeli.)
+- [x] Seçimi `regionalVictory` bayrağına bağla. Seçim maç *kurulurken* çözülür:
+      `BootOptions.flagOverrides` (`core/runtimeConfig.ts`) bayrak zincirinin en
+      sonuna eklendi — varsayılan → preset → `?flags=` → oyuncu seçimi. "Maçı
+      Başlat"a basıldığında seçim booted duruma eşitse maç doğrudan başlar,
+      farklıysa `main.ts` seçimi `sessionStorage`'a yazıp boot'u yeniden çözer.
+      Bayrak §13 uyarınca çözüldükten sonra salt-okunur kalır; §58 sistemleri
+      hâlâ tek yerde, constructor'da ve AI'dan önce kuruluyor.
+- [x] Seçenek kapalıyken ekranda hiçbir iz bırakma. (Sistemler kurulmuyor;
+      seçici de yalnızca `onVictoryConditionChange` sağlandığında inşa ediliyor,
+      aksi halde kart bire bir eskisi gibi.)
+- [x] Bölgesel zafer seçiliyken kısa bir açıklama göster: nokta yol bağlantılı
+      karakolun kontrol alanıyla alınır, birlik göndererek değil.
+      (`VICTORY_CONDITION_ROWS` içindeki hint; seçili satıra göre değişir.)
+
+Not: seçim `sessionStorage`'da tutulur — maç ayarı, kaydedilmiş profil değil;
+yeni sekme §78.1'in istediği varsayılanla (yalnız askerî) açılır. `?flags=
+regionalVictory` ve §72 test preset'leri çalışmaya devam eder: oyuncu karttan
+bir seçim yapmadıkça hiçbir override yazılmaz, kart da o boot'un *çözülmüş*
+bayrağını seçili gösterir.
+
+Test durumu: `tools/engine-tests.ts` içinde bir `§78.1` kontrolü (seçimin preset
+ve `?flags=` üzerindeki önceliği, seçim yokken hiçbir şeyi değiştirmemesi, bozuk
+depolamanın karar vermemesi, override'ın tek bayrağı aşamaması).
 
 ### Kabul kriterleri
 
-- [ ] Oyuncu URL düzenlemeden bölgesel zaferi açıp bir maç oynayabiliyor.
-- [ ] Seçenek kapalıyken §58'in hiçbir UI ögesi görünmüyor.
-- [ ] Maç ortasında zafer koşulu değişmiyor.
+- [x] Oyuncu URL düzenlemeden bölgesel zaferi açıp bir maç oynayabiliyor.
+- [x] Seçenek kapalıyken §58'in hiçbir UI ögesi görünmüyor.
+- [x] Maç ortasında zafer koşulu değişmiyor. (Seçici yalnızca başlatma kartında;
+      duraklatma ve sonuç kartları onu hiç göstermiyor, "Yeniden Başlat" da
+      başlatma kartına dönmeden doğrudan yeni maça giriyor.)
 
 ---
 

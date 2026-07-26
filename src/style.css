@@ -271,6 +271,63 @@ body {
   cursor: pointer;
 }
 
+/*
+ * §78.1 match setup: read before "Maçı Başlat", so it sits above the actions and
+ * is separated from the pitch above it rather than from the buttons below.
+ */
+.rts-match-setup {
+  margin-top: 18px;
+  padding-top: 14px;
+  text-align: left;
+  border-top: 1px solid rgb(226 185 92 / 22%);
+}
+
+.rts-match-setup[hidden] {
+  display: none;
+}
+
+.rts-match-setup-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.rts-match-setup-group legend {
+  padding: 0;
+  color: var(--ta-ink-muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rts-match-setup-option {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  color: var(--ta-ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.rts-match-setup-option input[type="radio"] {
+  accent-color: var(--ta-gold);
+  cursor: pointer;
+}
+
+/*
+ * The rule the player is opting into, in the muted register of an explanation —
+ * it must not compete with the title, but §78.1 exists because this text was
+ * missing entirely, so it is not allowed to be decoration either.
+ */
+.rts-match-card p.rts-match-setup-hint {
+  max-width: 42ch;
+  margin-top: 10px;
+  color: var(--ta-ink-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .rts-match-card button {
   padding: 9px 16px;
   color: var(--ta-btn-ink);

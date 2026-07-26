@@ -50,6 +50,16 @@ import {
 } from "../engine/scene/legacyRoomLayoutAdapter";
 import { validateSceneDocument } from "../engine/scene/sceneSerialization";
 import { isFeatureFlag, resolveFeatureFlags } from "../src/game/core/featureFlags";
+import { createRuntimeConfig } from "../src/game/core/runtimeConfig";
+import {
+  DEFAULT_VICTORY_CONDITION,
+  readStoredVictoryCondition,
+  victoryChoiceEnablesRegional,
+  victoryChoiceForFlag,
+  victoryConditionFlagOverride,
+  writeStoredVictoryCondition,
+  type VictoryConditionStorage,
+} from "../src/game/rts/match/victoryConditionChoice";
 import { normalizeAssetCollisionDef } from "../src/scene/assetCollisionLoader";
 import {
   buildGameModeDebugSnapshot,
@@ -250,7 +260,7 @@ import { resolveDamage } from "../src/game/rts/combat/damageResolution";
 import { ProjectileSystem } from "../src/game/rts/combat/projectileSystem";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
 import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
-import type { UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
+import type { GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import { Unit, UNIT_DEATH_SECONDS, type RtsPresentationHandle } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import { SelectionSystem } from "../src/game/rts/selection/selectionSystem";
@@ -32087,6 +32097,77 @@ check("§58: a completed regional counter ends the match, and never re-ends a de
   assert.equal(razed.outcome, "victory");
   assert.equal(razed.reason, "center-destroyed");
   centers.clear();
+});
+
+check("§78.1: the start card's victory choice outranks the preset and ?flags=, and only when made", () => {
+  const stored = (value: string | null): VictoryConditionStorage => ({
+    getItem: () => value,
+    setItem: () => {},
+  });
+
+  // Nothing chosen yet: the dev URL and the §72 test presets stay authoritative,
+  // which is what keeps `?flags=regionalVictory` a working door after §78.1.
+  assert.equal(readStoredVictoryCondition(stored(null)), null);
+  assert.equal(
+    createRuntimeConfig(null, {
+      isDev: true,
+      urlFlags: "regionalVictory",
+      flagOverrides: victoryConditionFlagOverride(readStoredVictoryCondition(stored(null))),
+    }).flags.regionalVictory,
+    true,
+    "an unchosen session must not quietly switch the flag off",
+  );
+
+  // Chosen: it wins in both directions. Turning it *off* against a preset that
+  // enables it is the half `urlFlags` cannot express — flags there only force on.
+  assert.equal(
+    createRuntimeConfig(null, {
+      isDev: true,
+      flagOverrides: victoryConditionFlagOverride(readStoredVictoryCondition(stored("military_regional"))),
+    }).flags.regionalVictory,
+    true,
+  );
+  assert.equal(
+    createRuntimeConfig({ id: "p", label: "P", flags: { regionalVictory: true } } as GamePreset, {
+      isDev: true,
+      urlFlags: "regionalVictory",
+      flagOverrides: victoryConditionFlagOverride(readStoredVictoryCondition(stored("military"))),
+    }).flags.regionalVictory,
+    false,
+    "a player who picked Askerî gets a military-only match whatever the preset says",
+  );
+
+  // Corrupt or stale storage is not a choice; it must not decide a match.
+  assert.equal(readStoredVictoryCondition(stored("regional_only")), null);
+  assert.equal(readStoredVictoryCondition(null), null, "storage-less browsers still boot");
+  const throwing: VictoryConditionStorage = {
+    getItem: () => {
+      throw new Error("blocked");
+    },
+    setItem: () => {
+      throw new Error("blocked");
+    },
+  };
+  assert.equal(readStoredVictoryCondition(throwing), null);
+  assert.doesNotThrow(() => writeStoredVictoryCondition(throwing, "military_regional"));
+
+  // §13: the override still goes through the flag filter, so a choice can never
+  // widen the flag set beyond the one flag it owns.
+  const flags = createRuntimeConfig(null, {
+    isDev: true,
+    flagOverrides: { regionalVictory: true, notARealFlag: true },
+  }).flags;
+  assert.equal(flags.regionalVictory, true);
+  assert.equal("notARealFlag" in flags, false);
+  assert.equal(flags.fogOfWar, false, "§78.1 offers one condition, not a flag console");
+
+  // The card seeds from the resolved flag, not from storage: a match booted on a
+  // preset that enables the route must open with that row already selected.
+  assert.equal(victoryChoiceForFlag(true), "military_regional");
+  assert.equal(victoryChoiceForFlag(false), DEFAULT_VICTORY_CONDITION);
+  assert.equal(DEFAULT_VICTORY_CONDITION, "military", "§78.1: the second route is opt-in");
+  assert.equal(victoryChoiceEnablesRegional("military"), false);
+  assert.equal(victoryChoiceEnablesRegional("military_regional"), true);
 });
 
 /**
