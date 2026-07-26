@@ -235,10 +235,17 @@ oyununda gorunur.
 
 Not: Pakette topçu sanati yok. Iki Siege Actor'u da manifestteki primitive
 shape'lerden kuruldu (`shape-cube` govde, `shape-cylinder` namlu, `shape-torus`
-tekerlek), 100-birimlik shape olceginden gameplay olcegine component `scale`'i
-ile getirildi ve torus'un merkez-disi export orijini pivot altinda local
-`position` ile merkezlendi. Nihai mesh Faz 4'un isi; component agaci ve wheelSpin
-sozlesmesi model degistiginde aynen kalir.
+tekerlek) ve torus'un merkez-disi export orijini pivot altinda local `position`
+ile merkezlendi. Nihai mesh Faz 4'un isi; component agaci ve wheelSpin sozlesmesi
+model degistiginde aynen kalir.
+
+Olcek tuzagi: `Shapes` paketinin modelleri accessor'larinda 100 birim, fakat
+0.01'lik kucultmeyi glTF *node*'unda tasiyorlar — yani dosyada zaten 1 birimlik.
+Olcuyu accessor'dan okuyup bir 0.01 daha uygulamak topçuyu 100 kat kucuk yapar:
+yuklenir, validate olur, tekerlegi doner ve gorunmez. Actor verisinin icinde
+bunu soyleyebilecek hicbir sey yok, o yuzden regression testi mesh'in kendisini
+okuyup yazili `radius`un gercek tekerlek yaricapina esit oldugunu ve govdenin
+bir arac boyutunda kaldigini dogruluyor.
 
 Kabul: topcu yururken iki tekerlek ayni mesafeyi kat edecek sekilde doner,
 dururken donmez; component local transformlari ve namlu/pivot hiyerarsisi

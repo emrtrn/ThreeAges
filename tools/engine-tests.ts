@@ -30002,6 +30002,74 @@ check("Siege Faz 3: both shipped Siege Actors are a chassis, a barrel and two in
   }
 });
 
+check("Siege Faz 3: the authored wheel radius is the radius the wheel mesh actually has", () => {
+  // The bug this pins: the Shapes pack models are 100 units in their accessors and
+  // carry the 0.01 that scales them down on the glTF *node*. Sizing a component
+  // off the accessors alone builds a siege engine a hundred times too small — it
+  // loads, validates, spins, and is invisible. Nothing in the Actor data can say
+  // so; only the mesh can, so the mesh is what this reads.
+  const meshSize = (path: string): readonly [number, number, number] => {
+    const buffer = readFileSync(path);
+    const json = JSON.parse(buffer.subarray(20, 20 + buffer.readUInt32LE(12)).toString("utf8")) as {
+      nodes: { scale?: number[]; mesh?: number }[];
+      meshes: { primitives: { attributes: { POSITION: number } }[] }[];
+      accessors: { min?: number[]; max?: number[] }[];
+    };
+    const node = json.nodes.find((entry) => entry.mesh !== undefined)!;
+    const nodeScale = node.scale ?? [1, 1, 1];
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+    for (const primitive of json.meshes[node.mesh!]!.primitives) {
+      const accessor = json.accessors[primitive.attributes.POSITION]!;
+      for (let axis = 0; axis < 3; axis += 1) {
+        min[axis] = Math.min(min[axis]!, accessor.min![axis]!);
+        max[axis] = Math.max(max[axis]!, accessor.max![axis]!);
+      }
+    }
+    return [0, 1, 2].map((axis) => (max[axis]! - min[axis]!) * Math.abs(nodeScale[axis]!)) as unknown as readonly [number, number, number];
+  };
+
+  const manifest = parseRtsMeshManifest(
+    JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
+  );
+  for (const ref of [
+    "assets/ThreeAges/Actors/Units/BP_RTS_Siege.actor.json",
+    "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Siege.actor.json",
+  ]) {
+    const def = normalizeActorScriptDef(JSON.parse(readFileSync(`public/${ref}`, "utf8")) as unknown, ref);
+    const sizeOf = (componentId: string): readonly [number, number, number] => {
+      const node = def.components.find((entry) => entry.id === componentId)!;
+      const base = meshSize(`public/${manifest.get(node.props.assetId as string)!.path}`);
+      const scale = (node.props.scale as number[] | undefined) ?? [1, 1, 1];
+      return [base[0] * scale[0]!, base[1] * scale[1]!, base[2] * scale[2]!] as const;
+    };
+
+    // A wheel whose authored radius disagrees with its mesh either skates over the
+    // ground or digs into it, and the error is proportional to the disagreement.
+    const motions = readRtsActorMotions(def);
+    assert.ok("motions" in motions);
+    for (const [pivotId, motion] of "motions" in motions ? motions.motions : []) {
+      const wheelId = def.components.find((node) => node.parent === pivotId)!.id;
+      const size = sizeOf(wheelId);
+      // The wheel is turned onto its rolling axis, so its diameter is the largest
+      // of the three extents whichever way it was oriented.
+      const diameter = Math.max(...size);
+      assert.ok(
+        Math.abs(diameter - motion.radius * 2) < 1e-6,
+        `${ref} ${wheelId}: mesh diameter ${diameter} must be twice the authored radius ${motion.radius}`,
+      );
+    }
+
+    // And the engine as a whole has to be a vehicle a player can see next to a
+    // ~1 unit tall soldier, which is the check the 100x miss would have failed.
+    const chassis = sizeOf("chassis");
+    assert.ok(chassis[0] > 0.8 && chassis[0] < 3, `${ref} chassis is ${chassis[0]} wide, which is not a vehicle`);
+    assert.ok(chassis[2] > 0.8 && chassis[2] < 4, `${ref} chassis is ${chassis[2]} deep, which is not a vehicle`);
+    const barrel = sizeOf("barrel");
+    assert.ok(Math.max(...barrel) > 0.5 && Math.max(...barrel) < 2.5, `${ref} barrel length ${Math.max(...barrel)} is not a gun`);
+  }
+});
+
 check("Actor presentation Faz 2: every catalog Actor is renderable and every mesh it names is a manifested file", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
