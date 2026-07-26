@@ -781,6 +781,57 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Story/tutorial mission card. Anchored directly above the build palette rather
+   than in a free corner: through the opening chain every objective is answered
+   by a button in that palette, and putting the sentence a glance away from the
+   button it names is the whole reason the card helps. 220px palette + its 12px
+   bottom inset + a 12px gap. Read-only, like the notification feed. */
+.rts-mission-panel {
+  position: absolute;
+  left: max(12px, env(safe-area-inset-left));
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 232px);
+  box-sizing: border-box;
+  width: min(340px, calc(100vw - 24px));
+  padding: 8px 10px 9px;
+  color: var(--ta-ink);
+  font-size: 12px;
+  background: var(--ta-surface);
+  border: 1px solid var(--ta-border);
+  border-left: 3px solid var(--ta-gold);
+  border-radius: 5px;
+  box-shadow: var(--ta-panel-shadow);
+  pointer-events: none;
+}
+
+.rts-mission-panel[hidden] {
+  display: none;
+}
+
+.rts-mission-heading {
+  margin: 0;
+  color: var(--ta-ink-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rts-mission-title {
+  display: block;
+  margin-top: 3px;
+  color: var(--ta-gold);
+  font: 700 14px/1.25 Cinzel, Georgia, serif;
+}
+
+/* The teaching line. Quieter than the title because it is read once and then
+   stops being news, but full width and full leading — it is a sentence, not a
+   status. */
+.rts-mission-why {
+  margin: 5px 0 0;
+  color: var(--ta-ink-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 /* Faz 11 §58 regional victory readout. Top-right under the speed controls: the
    left edge is the debug overlay's and the bottom-centre belongs to selection,
    so this is the one free anchor that stays visible during a fight. Read-only,

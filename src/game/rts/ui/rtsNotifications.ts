@@ -38,7 +38,8 @@ export type RtsNotificationKind =
   | "regional-victory-warning"
   | "peace-active"
   | "peace-ending"
-  | "peace-ended";
+  | "peace-ended"
+  | "mission";
 
 /** Drives presentation weight only; the feed never reorders by severity. */
 export type RtsNotificationSeverity = "info" | "warning" | "alert";
@@ -84,6 +85,12 @@ const RULES: Readonly<Record<RtsNotificationKind, NotificationRule>> = {
   "peace-active": { severity: "info", displaySeconds: 8, cooldownSeconds: 0 },
   "peace-ending": { severity: "alert", displaySeconds: 10, cooldownSeconds: 0 },
   "peace-ended": { severity: "warning", displaySeconds: 8, cooldownSeconds: 0 },
+  // Mission beats: the story frame, a step clearing, the chain ending. Each is a
+  // one-shot event with its own `subject`, raised by the director's transition
+  // rather than polled, so no cooldown applies. Longer on screen than most info
+  // notices because it is prose to be read, not a state to be glanced at — and
+  // the card below already carries whatever the player must still act on.
+  mission: { severity: "info", displaySeconds: 10, cooldownSeconds: 0 },
 };
 
 /**

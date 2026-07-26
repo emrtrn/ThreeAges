@@ -16,11 +16,13 @@ import {
   validateGamePreset,
   validateGameVersion,
   validateBuildingBalance,
+  validateMissionScript,
   validateResourceBalance,
   validateRoadBalance,
   validateUnitBalance,
 } from "./validateGameData";
 import type { AgeBalance, AiBalance, BuildingBalance, GamePreset, GameVersion, ResourceBalance, RoadBalance, UnitBalance } from "./gameDataTypes";
+import type { MissionScript } from "../rts/tutorial/missionScript";
 
 const log = logger("Data");
 
@@ -108,4 +110,22 @@ export async function loadRoadBalance(): Promise<RoadBalance> {
   const balance = validateRoadBalance(await fetchJson(url));
   log.debug(`loaded road balance (${balance.cellSize}u cell, ${balance.woodCostPerCell} wood/cell)`);
   return balance;
+}
+
+/**
+ * Load and validate `public/game-data/missions/<id>.json` — the story/tutorial
+ * chain (Hikâye / Öğretici Tur Modu, Faz 1).
+ *
+ * `knownBuildingIds` comes from the already-loaded building balance so a goal
+ * naming a building that does not exist fails here, at load, rather than
+ * becoming a step the player can never clear.
+ */
+export async function loadMissionScript(
+  id: string,
+  knownBuildingIds: ReadonlySet<string>,
+): Promise<MissionScript> {
+  const url = `${GAME_DATA_ROOT}/missions/${id}.json`;
+  const script = validateMissionScript(await fetchJson(url), id, knownBuildingIds);
+  log.debug(`loaded mission "${script.id}" (${script.steps.length} steps)`);
+  return script;
 }

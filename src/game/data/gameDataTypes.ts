@@ -747,6 +747,24 @@ export interface RoadVisual {
   readonly widthVariation: number;
 }
 
+/**
+ * Purely presentational ground pad painted under every standing building's
+ * footprint, the area counterpart of {@link RoadVisual}'s corridor. A building
+ * sitting straight on grass reads as dropped on the field; clearing its ground to
+ * the same worn layer the roads use ties the settlement together. Placement,
+ * navigation and territory never read this — the pad is paint, not footprint.
+ */
+export interface BuildingPadVisual {
+  /** Landscape paint layer the pad blends toward (e.g. `dirt`). */
+  readonly layerId: string;
+  /** World units the pad extends past the footprint edge before falling off. */
+  readonly padding: number;
+  /** Soft edge distance blended out past the padded core, in world units. */
+  readonly falloff: number;
+  /** Peak paint weight under the building (0..1); `0` disables the pad. */
+  readonly strength: number;
+}
+
 /** `public/game-data/balance/roads.json` — first-pass logistics road tuning. */
 export interface RoadBalance {
   /** Grid cell width in world units; intentionally independent from unit navigation. */
@@ -755,6 +773,12 @@ export interface RoadBalance {
   readonly woodCostPerCell: number;
   /** Presentational road-paint tuning; absent in data falls back to built-in defaults. */
   readonly visual: RoadVisual;
+  /**
+   * Presentational building ground-pad tuning. It lives with the road block
+   * because both are the same feature — terrain paint driven by the settlement —
+   * and share one landscape paint surface at runtime.
+   */
+  readonly buildingPad: BuildingPadVisual;
   /** Auto-built access road on placement; absent disables the feature. */
   readonly autoConnect?: RoadAutoConnect;
 }

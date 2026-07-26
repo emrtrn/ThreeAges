@@ -10,11 +10,17 @@
       "settlement": "dirt",
       "town": "rock"
     },
-    "width": 2,
-    "falloff": 1,
+    "width": 1,
+    "falloff": 0.5,
     "strength": 0.9,
     "jitter": 0.6,
     "jitterSpacingCells": 5,
     "widthVariation": 0.15
+  },
+  "buildingPad": {
+    "layerId": "dirt",
+    "padding": 0.1,
+    "falloff": 0.5,
+    "strength": 0.95
   }
 }

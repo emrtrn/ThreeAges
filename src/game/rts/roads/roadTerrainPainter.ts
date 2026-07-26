@@ -17,19 +17,26 @@
  *    removed/rerouted road leaves no residue and hand-painted terrain survives.
  * 3. {@link RoadTerrainPainter} — wires (1)+(2) to a mounted terrain and refreshes
  *    only the dirty chunk geometry, dirty-checked on `RoadGraph.version`.
+ *
+ * Building ground pads ({@link structurePadsToRectPaints}) ride along here rather
+ * than in a painter of their own: a landscape has exactly one pristine snapshot,
+ * and two surfaces restoring the same vertices would erase each other's paint.
+ * One surface, one repaint — roads and pads simply blend where they overlap.
  */
 import type { Vec3 } from "@engine/scene/layout";
 import {
+  applyLandscapeRectPaint,
   applyLandscapeSplinePaint,
   type ForgeLandscapeData,
   type ForgeLandscapeSpline,
   type ForgeLandscapeSplinePoint,
   type ForgeLandscapeSplineSegment,
+  type LandscapeRectPaint,
   type LandscapeSplineApplyBounds,
 } from "@engine/scene/landscape";
 import { updateLandscapeObjectGeometry, type LandscapeLayerColors, type LandscapeObject } from "@engine/render-three/landscape";
 
-import type { RoadVisual } from "../../data/gameDataTypes";
+import type { BuildingPadVisual, RoadVisual } from "../../data/gameDataTypes";
 import type { RoadCell, RoadDirection, RoadSegment } from "./roadGraph";
 
 interface DirStep {
@@ -198,6 +205,37 @@ export function roadGraphToLandscapeSpline(
   return { id: "rts-roads", name: "RTS Roads", smooth: true, points, segments: splineSegments };
 }
 
+/** A standing building's ground footprint, in world XZ (centre + full extents). */
+export interface StructurePad {
+  readonly x: number;
+  readonly z: number;
+  readonly width: number;
+  readonly depth: number;
+}
+
+/**
+ * Turns building footprints into rounded-rect paint pads, so the ground a
+ * building stands on is the same worn layer its roads are (the settlement clears
+ * the ground it builds on). Pure and three.js-free, like the spline builder
+ * above. A `strength: 0` pad visual returns nothing — the documented off switch.
+ */
+export function structurePadsToRectPaints(
+  pads: readonly StructurePad[],
+  origin: Vec3,
+  visual: BuildingPadVisual,
+): LandscapeRectPaint[] {
+  if (visual.strength <= 0) return [];
+  return pads.map((pad) => ({
+    layerId: visual.layerId,
+    centerX: pad.x - origin[0],
+    centerZ: pad.z - origin[2],
+    halfWidth: Math.max(0, pad.width / 2 + visual.padding),
+    halfDepth: Math.max(0, pad.depth / 2 + visual.padding),
+    falloff: visual.falloff,
+    strength: visual.strength,
+  }));
+}
+
 /** Union of two inclusive grid-space bounds; `null` operands are ignored. */
 function unionBounds(
   a: LandscapeSplineApplyBounds | null,
@@ -229,12 +267,20 @@ export class RoadPaintSurface {
     this.pristine = data.layers.map((layer) => layer.weights.slice());
   }
 
-  repaint(spline: ForgeLandscapeSpline): LandscapeSplineApplyBounds | null {
+  /**
+   * Repaint the whole settlement footprint on the terrain: the road corridor
+   * first, then the building pads on top, both derived from scratch. Returns the
+   * union of the restored and freshly painted regions as geometry-dirty bounds.
+   */
+  repaint(spline: ForgeLandscapeSpline, rects: readonly LandscapeRectPaint[] = []): LandscapeSplineApplyBounds | null {
     const restored = this.paintedBounds;
     if (restored) this.restore(restored);
-    const result = applyLandscapeSplinePaint(this.data, spline);
-    this.paintedBounds = result.bounds;
-    return unionBounds(restored, result.bounds);
+    const painted = unionBounds(
+      applyLandscapeSplinePaint(this.data, spline).bounds,
+      applyLandscapeRectPaint(this.data, rects).bounds,
+    );
+    this.paintedBounds = painted;
+    return unionBounds(restored, painted);
   }
 
   /** Reset every painted vertex back to the mount-time snapshot (idempotent). */
@@ -277,13 +323,20 @@ export interface RoadTerrainPainterTarget {
 export class RoadTerrainPainter {
   private readonly surface: RoadPaintSurface;
   private lastVersion = -1;
+  /** Set by every input change; cleared by the {@link sync} that consumes it. */
+  private dirty = true;
   /** The paint layer roads currently blend toward; changes with age (Faz 5). */
   private activeLayerId: string;
+  /** Ground pads of the currently standing buildings, in world XZ. */
+  private pads: readonly StructurePad[] = [];
+  /** Last building revision the pads were rebuilt for; `-1` means "never". */
+  private padRevision = -1;
 
   constructor(
     private readonly target: RoadTerrainPainterTarget,
     private readonly cellSize: number,
     private readonly visual: RoadVisual,
+    private readonly padVisual: BuildingPadVisual,
   ) {
     this.surface = new RoadPaintSurface(target.data);
     this.activeLayerId = visual.layerId;
@@ -292,29 +345,50 @@ export class RoadTerrainPainter {
   /**
    * Switch the layer roads paint into (e.g. age promotion dirt→cobblestone). Only
    * forces a repaint when it actually changes — the caller drives the repaint by
-   * calling {@link sync} next, and the invalidated version guarantees it runs.
+   * calling {@link sync} next, and the dirty flag guarantees it runs.
    */
   setLayer(layerId: string): void {
     if (layerId === this.activeLayerId) return;
     this.activeLayerId = layerId;
-    this.lastVersion = -1;
+    this.dirty = true;
   }
 
-  /** Repaint the terrain for the current network, unless `version` is unchanged. */
+  /**
+   * Refresh the building ground pads, dirty-checked on `revision` — a monotonic
+   * counter of every place/cancel/destroy across the building systems. `resolve`
+   * only runs when that number moved, so the caller may hand over a fresh array
+   * without paying for it on the frames where nothing was built.
+   */
+  setStructurePads(revision: number, resolve: () => readonly StructurePad[]): void {
+    if (revision === this.padRevision) return;
+    this.padRevision = revision;
+    this.pads = resolve();
+    this.dirty = true;
+  }
+
+  /** Repaint the terrain for the current network, unless nothing has changed. */
   sync(segments: readonly RoadSegment[], version: number): void {
-    if (version === this.lastVersion) return;
-    this.lastVersion = version;
+    if (version !== this.lastVersion) {
+      this.lastVersion = version;
+      this.dirty = true;
+    }
+    if (!this.dirty) return;
+    this.dirty = false;
     const spline = roadGraphToLandscapeSpline(segments, {
       cellSize: this.cellSize,
       origin: this.target.position,
       visual: { ...this.visual, layerId: this.activeLayerId },
     });
-    this.refreshGeometry(this.surface.repaint(spline));
+    const rects = structurePadsToRectPaints(this.pads, this.target.position, this.padVisual);
+    this.refreshGeometry(this.surface.repaint(spline, rects));
   }
 
-  /** Drop all road paint back to the mount-time snapshot (match restart/dispose). */
+  /** Drop all road/pad paint back to the mount-time snapshot (match restart/dispose). */
   reset(): void {
     this.lastVersion = -1;
+    this.padRevision = -1;
+    this.pads = [];
+    this.dirty = true;
     this.activeLayerId = this.visual.layerId;
     this.refreshGeometry(this.surface.reset());
   }

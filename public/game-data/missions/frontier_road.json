@@ -1,0 +1,26 @@
+{
+  "id": "frontier_road",
+  "label": "Sınır Yolu",
+  "intro": "Kral seni terk edilmiş bir sınır vadisine gönderdi. Burada bir zamanlar işleyen bir krallık vardı; yolları kesildiğinde açlıktan dağıldı. Vadiyi yeniden ayağa kaldır.",
+  "outro": "İlk hasat hazineye ulaştı. Vadi artık bir yerleşim. Buradan sonrası senin.",
+  "steps": [
+    {
+      "id": "first_harvest",
+      "title": "Bir Tarla kur",
+      "why": "İşçileri sen göndermeyeceksin: tamamlanan tarla, yakındaki boştaki işçileri kendisi işe alır. Senin işin nereye kurulacağına karar vermek.",
+      "goal": { "kind": "structure-built", "buildingId": "farm", "count": 1 }
+    },
+    {
+      "id": "empty_treasury",
+      "title": "Bir Depo kur",
+      "why": "Tarla üretiyor ama hazinen artmıyor. Hasat tarlanın kendi ambarında birikiyor ve teslim edilecek bir yer arıyor.",
+      "goal": { "kind": "structure-built", "buildingId": "depot", "count": 1 }
+    },
+    {
+      "id": "connect_the_road",
+      "title": "Tarlayı yolla depoya bağla",
+      "why": "Depo tek başına yetmez. Hasat ancak tarlaya değen bir yol, aynı ağ üzerinden depoya ulaştığında hazineye akar. Tarlayı seçip lojistik satırını okursan neyin eksik olduğunu her zaman görürsün.",
+      "goal": { "kind": "producer-linked", "resourceId": "food", "count": 1 }
+    }
+  ]
+}

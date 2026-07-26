@@ -1048,26 +1048,110 @@ export function applyLandscapeSplinePaint(
       if (!sample) continue;
       const paint = sample.segment.paint!;
       const activeIndex = data.layers.findIndex((entry) => entry.id === paint.layerId);
-      const active = data.layers[activeIndex];
-      if (!active) continue;
+      if (activeIndex < 0) continue;
       const index = z * verticesX + x;
       const amount = Math.min(1, sample.influence * paint.strength);
-      const target = Math.min(1, (active.weights[index] ?? 0) + amount);
-      if (target <= (active.weights[index] ?? 0) + 1e-6) continue;
-      const remaining = 1 - target;
-      const otherTotal = data.layers.reduce(
-        (total, layer, layerIndex) => total + (layerIndex === activeIndex ? 0 : layer.weights[index] ?? 0),
-        0,
-      );
-      active.weights[index] = target;
-      for (const [layerIndex, layer] of data.layers.entries()) {
-        if (layerIndex === activeIndex) continue;
-        const value = layer.weights[index] ?? 0;
-        layer.weights[index] = otherTotal > 0 ? (value / otherTotal) * remaining : 0;
-      }
-      normalizeLandscapeLayerWeights(data, index);
+      if (!blendLandscapeLayerWeight(data, index, activeIndex, amount)) continue;
       changed = true;
       bounds = expandBounds(bounds, x, z);
+    }
+  }
+  return { changed, bounds };
+}
+
+/**
+ * Raises one vertex's `activeIndex` layer weight by `amount` and renormalizes the
+ * rest of the set around it. The single place a paint effect mutates weights, so a
+ * spline corridor and a rect pad ({@link applyLandscapeRectPaint}) blend by exactly
+ * the same rule. Returns whether the vertex actually moved.
+ */
+export function blendLandscapeLayerWeight(
+  data: ForgeLandscapeData,
+  vertexIndex: number,
+  activeIndex: number,
+  amount: number,
+): boolean {
+  const active = data.layers[activeIndex];
+  if (!active) return false;
+  const current = active.weights[vertexIndex] ?? 0;
+  const target = Math.min(1, current + amount);
+  if (target <= current + 1e-6) return false;
+  const remaining = 1 - target;
+  const otherTotal = data.layers.reduce(
+    (total, layer, layerIndex) => total + (layerIndex === activeIndex ? 0 : layer.weights[vertexIndex] ?? 0),
+    0,
+  );
+  active.weights[vertexIndex] = target;
+  for (const [layerIndex, layer] of data.layers.entries()) {
+    if (layerIndex === activeIndex) continue;
+    const value = layer.weights[vertexIndex] ?? 0;
+    layer.weights[vertexIndex] = otherTotal > 0 ? (value / otherTotal) * remaining : 0;
+  }
+  normalizeLandscapeLayerWeights(data, vertexIndex);
+  return true;
+}
+
+/**
+ * One axis-aligned, soft-edged paint pad in landscape-local X/Z. The counterpart
+ * of a spline corridor for things that are areas rather than lines — a building
+ * footprint, a clearing — so callers do not have to fake a rectangle out of
+ * segments. Corners round off over `falloff`, which is what makes a pad read as
+ * worn ground instead of a stamped box.
+ */
+export interface LandscapeRectPaint {
+  /** Paint layer the pad blends toward (must exist in `data.layers`). */
+  readonly layerId: string;
+  /** Pad centre in landscape-local coordinates (world − landscape position). */
+  readonly centerX: number;
+  readonly centerZ: number;
+  /** Half extents of the fully painted core, before `falloff`. */
+  readonly halfWidth: number;
+  readonly halfDepth: number;
+  /** Soft edge distance blended out past the core, in world units. */
+  readonly falloff: number;
+  /** Peak paint weight applied over the core (0..1). */
+  readonly strength: number;
+}
+
+/**
+ * Destructively paints rounded-rect pads into landscape paint layers. Unlike the
+ * spline pass this only walks each pad's own vertex box, so painting many small
+ * pads stays proportional to their area rather than to the whole heightfield.
+ * Overlapping pads simply blend twice — they are additive like any other paint.
+ * Mutates `data.layers`.
+ */
+export function applyLandscapeRectPaint(
+  data: ForgeLandscapeData,
+  rects: readonly LandscapeRectPaint[],
+): LandscapeSplineApplyResult {
+  const { verticesX, verticesZ, spacing } = data.size;
+  const { originX, originZ } = landscapeGridOrigin(data.size);
+  let changed = false;
+  let bounds: LandscapeSplineApplyBounds | null = null;
+  for (const rect of rects) {
+    if (rect.strength <= 0) continue;
+    const activeIndex = data.layers.findIndex((layer) => layer.id === rect.layerId);
+    if (activeIndex < 0) continue;
+    const reach = Math.max(0, rect.falloff);
+    const gridX = (local: number): number => (local + originX) / spacing;
+    const gridZ = (local: number): number => (local + originZ) / spacing;
+    const x0 = Math.max(0, Math.floor(gridX(rect.centerX - rect.halfWidth - reach)));
+    const x1 = Math.min(verticesX - 1, Math.ceil(gridX(rect.centerX + rect.halfWidth + reach)));
+    const z0 = Math.max(0, Math.floor(gridZ(rect.centerZ - rect.halfDepth - reach)));
+    const z1 = Math.min(verticesZ - 1, Math.ceil(gridZ(rect.centerZ + rect.halfDepth + reach)));
+    for (let z = z0; z <= z1; z += 1) {
+      const localZ = z * spacing - originZ;
+      const dz = Math.max(Math.abs(localZ - rect.centerZ) - rect.halfDepth, 0);
+      for (let x = x0; x <= x1; x += 1) {
+        const localX = x * spacing - originX;
+        const dx = Math.max(Math.abs(localX - rect.centerX) - rect.halfWidth, 0);
+        const influence = corridorInfluence(Math.hypot(dx, dz), 0, reach);
+        if (influence <= 0) continue;
+        const index = z * verticesX + x;
+        if (!blendLandscapeLayerWeight(data, index, activeIndex, Math.min(1, influence * rect.strength))) continue;
+        changed = true;
+        bounds = expandBounds(bounds, x, z);
+      }
     }
   }
   return { changed, bounds };

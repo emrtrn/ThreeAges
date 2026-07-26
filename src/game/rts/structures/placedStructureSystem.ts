@@ -108,6 +108,13 @@ export class PlacedStructureSystem {
    * building that no longer exists.
    */
   private readonly collapses: { readonly object: Object3D; elapsed: number }[] = [];
+  /**
+   * Monotonic counter of every membership change (place/cancel/destroy/clear).
+   * Presentation that mirrors the standing set — the terrain's building ground
+   * pads — dirty-checks on this instead of rebuilding the list every frame, the
+   * same contract `RoadGraph.version` gives the painted roads.
+   */
+  version = 0;
 
   constructor() {
     this.root.name = "rts-placed-structures";
@@ -189,6 +196,7 @@ export class PlacedStructureSystem {
       storageCapacity: null,
     };
     this.structures.push(structure);
+    this.version += 1;
     this.registerPickTargets(structure, progressFill);
     this.registerPickTargets(structure, pickProxy);
     return structure;
@@ -307,6 +315,7 @@ export class PlacedStructureSystem {
     const index = this.structures.indexOf(structure);
     if (index < 0) return false;
     this.structures.splice(index, 1);
+    this.version += 1;
     this.disposeStructure(structure);
     return true;
   }
@@ -337,6 +346,7 @@ export class PlacedStructureSystem {
     const index = this.structures.indexOf(structure);
     if (index < 0) return false;
     this.structures.splice(index, 1);
+    this.version += 1;
     this.beginCollapse(structure);
     return true;
   }
@@ -344,6 +354,7 @@ export class PlacedStructureSystem {
   clear(): void {
     for (const structure of this.structures) this.disposeStructure(structure);
     this.structures.length = 0;
+    this.version += 1;
     this.dropAnimations.clear();
     // A restart takes the husks with it: they belong to the finished match.
     for (const collapse of this.collapses) {

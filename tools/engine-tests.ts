@@ -60,6 +60,14 @@ import {
   writeStoredVictoryCondition,
   type VictoryConditionStorage,
 } from "../src/game/rts/match/victoryConditionChoice";
+import { MissionDirector } from "../src/game/rts/tutorial/missionDirector";
+import {
+  isGoalMet,
+  type MissionProducerFact,
+  type MissionStructureFact,
+  type MissionWorldSnapshot,
+} from "../src/game/rts/tutorial/missionPredicates";
+import type { MissionScript } from "../src/game/rts/tutorial/missionScript";
 import { normalizeAssetCollisionDef } from "../src/scene/assetCollisionLoader";
 import {
   buildGameModeDebugSnapshot,
@@ -76,6 +84,7 @@ import {
   validateGamePreset,
   validateGameVersion,
   validateMarketBalance,
+  validateMissionScript,
   validateResourceBalance,
   validateRoadBalance,
   validateUnitBalance,
@@ -248,7 +257,7 @@ import type { RtsStrategicPoint } from "../src/game/rts/world/rtsMapBlockout";
 import { simulationSteps, type RtsSimulationSpeed } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
 import { planAutoRoadConnection } from "../src/game/rts/roads/autoRoadConnector";
-import { roadGraphToLandscapeSpline, RoadPaintSurface } from "../src/game/rts/roads/roadTerrainPainter";
+import { roadGraphToLandscapeSpline, RoadPaintSurface, structurePadsToRectPaints } from "../src/game/rts/roads/roadTerrainPainter";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { congestionSeconds, updateUnitMovement } from "../src/game/rts/units/unitMovement";
@@ -20530,9 +20539,15 @@ const ROAD_PAINT_VISUAL = {
   widthVariation: 0,
 } as const;
 const ROAD_PAINT_OPTS = { cellSize: 2, origin: [0, 0, 0] as [number, number, number], visual: ROAD_PAINT_VISUAL };
+const BUILDING_PAD_VISUAL = { layerId: "dirt", padding: 0.5, falloff: 1, strength: 0.95 } as const;
 
 function roadGraphOf(commits: ReadonlyArray<readonly [RoadCell, RoadCell]>): RoadGraph {
-  const roads = new RoadGraph({ cellSize: 2, woodCostPerCell: 4, visual: ROAD_PAINT_VISUAL });
+  const roads = new RoadGraph({
+    cellSize: 2,
+    woodCostPerCell: 4,
+    visual: ROAD_PAINT_VISUAL,
+    buildingPad: BUILDING_PAD_VISUAL,
+  });
   for (const [start, end] of commits) {
     const plan = roads.plan(start, end, []);
     assert.ok(plan, "test road plan must be routable");
@@ -20647,6 +20662,62 @@ check("Faz 5: an age layer swap promotes the same road with no old-layer residue
   const fresh = createFlatLandscapeData("small");
   new RoadPaintSurface(fresh).repaint(roadGraphToLandscapeSpline(segs, rockOpts));
   assert.deepEqual(promoted.layers, fresh.layers, "promotion equals painting the new layer from pristine");
+});
+
+// --- Building ground pads: footprint → rounded-rect paint on the road surface ---
+
+check("structurePadsToRectPaints pads a footprint into landscape-local space", () => {
+  const rects = structurePadsToRectPaints(
+    [{ x: 4, z: -2, width: 6, depth: 4 }],
+    [1, 0, 1], // the landscape actor's world position; pads paint in local space
+    BUILDING_PAD_VISUAL,
+  );
+  const rect = rects[0];
+  assert.ok(rect);
+  assert.equal(rect.centerX, 3);
+  assert.equal(rect.centerZ, -3);
+  assert.equal(rect.halfWidth, 3.5, "half width + padding");
+  assert.equal(rect.halfDepth, 2.5, "half depth + padding");
+  assert.equal(rect.layerId, "dirt");
+  const off = structurePadsToRectPaints([{ x: 0, z: 0, width: 6, depth: 6 }], [0, 0, 0], {
+    ...BUILDING_PAD_VISUAL,
+    strength: 0,
+  });
+  assert.deepEqual(off, [], "strength 0 is the documented off switch");
+});
+
+check("a building pad clears its own ground and razing it leaves no residue", () => {
+  const data = createFlatLandscapeData("small");
+  const pristine = data.layers.map((layer) => layer.weights.slice());
+  const surface = new RoadPaintSurface(data);
+  const noRoads = roadGraphToLandscapeSpline([], ROAD_PAINT_OPTS);
+  const pads = structurePadsToRectPaints([{ x: 0, z: 0, width: 6, depth: 6 }], [0, 0, 0], BUILDING_PAD_VISUAL);
+
+  assert.ok(surface.repaint(noRoads, pads), "a pad dirties vertices even with no road network");
+  const dirt = data.layers.find((layer) => layer.id === "dirt")!;
+  const grass = data.layers.find((layer) => layer.id === "grass")!;
+  const centre = 32 * 65 + 32;
+  assert.ok(dirt.weights[centre]! > 0.9, "the ground under the building is dirt");
+  assert.ok(grass.weights[centre]! < 0.1, "grass gives way under the footprint");
+  assert.equal(dirt.weights[centre + 8], 0, "well outside the pad the field is untouched");
+
+  surface.repaint(noRoads, []);
+  assert.deepEqual(data.layers.map((l) => l.weights), pristine, "a razed building takes its pad with it");
+});
+
+check("one repaint carries the road corridor and the building pads together", () => {
+  const data = createFlatLandscapeData("small");
+  const surface = new RoadPaintSurface(data);
+  const roads = roadGraphToLandscapeSpline(roadGraphOf([[{ x: -8, z: 8 }, { x: 8, z: 8 }]]).all(), ROAD_PAINT_OPTS);
+  const pads = structurePadsToRectPaints([{ x: 0, z: -8, width: 6, depth: 6 }], [0, 0, 0], BUILDING_PAD_VISUAL);
+  surface.repaint(roads, pads);
+  const dirt = data.layers.find((layer) => layer.id === "dirt")!;
+  assert.ok(dirt.weights[(32 + 8) * 65 + 32]! > 0.5, "the road corridor is painted");
+  assert.ok(dirt.weights[(32 - 8) * 65 + 32]! > 0.5, "the building pad is painted in the same pass");
+  assert.ok(
+    data.layers.every((layer) => layer.weights.every((weight) => weight <= 1 + 1e-6)),
+    "overlapping paint sources never push a weight past 1",
+  );
 });
 
 check("resolveLandscapeSplineMeshChains joins reversed compatible segments and stops at branches", () => {
@@ -32180,6 +32251,176 @@ check("§78.1: the start card's victory choice outranks the preset and ?flags=, 
   assert.equal(DEFAULT_VICTORY_CONDITION, "military", "§78.1: the second route is opt-in");
   assert.equal(victoryChoiceEnablesRegional("military"), false);
   assert.equal(victoryChoiceEnablesRegional("military_regional"), true);
+});
+
+/**
+ * Hikâye / Öğretici Tur Modu, Faz 1 — the three properties the mode rests on.
+ *
+ * The director has no per-step "done" flags: the active step is the first one
+ * whose predicate is false. These checks are here because that single decision
+ * is what makes the chain order-independent, reversible and impossible to
+ * deadlock, and a future refactor that quietly reintroduced completion flags
+ * would pass every other test in this file while stranding the one player the
+ * mode exists for.
+ */
+const missionWorld = (
+  structures: readonly MissionStructureFact[],
+  producers: readonly MissionProducerFact[] = [],
+): MissionWorldSnapshot => ({ structures, producers });
+
+const farm = (complete = true): MissionStructureFact => ({ owner: "player", buildingId: "farm", complete });
+const depot = (complete = true): MissionStructureFact => ({ owner: "player", buildingId: "depot", complete });
+const linkedFarm = (): MissionProducerFact => ({ owner: "player", resourceId: "food", status: "linked" });
+
+const missionTestScript: MissionScript = {
+  id: "test_chain",
+  label: "Test",
+  intro: "intro",
+  outro: "outro",
+  steps: [
+    { id: "s1", title: "Tarla", why: "w", goal: { kind: "structure-built", buildingId: "farm", count: 1 } },
+    { id: "s2", title: "Depo", why: "w", goal: { kind: "structure-built", buildingId: "depot", count: 1 } },
+    { id: "s3", title: "Yol", why: "w", goal: { kind: "producer-linked", resourceId: "food", count: 1 } },
+  ],
+};
+
+check("mission goals read only the player's completed world", () => {
+  // Placement is not completion: a foundation the player just clicked down would
+  // otherwise clear the step before the building it talks about exists.
+  assert.equal(isGoalMet(missionTestScript.steps[0]!.goal, missionWorld([farm(false)])), false);
+  assert.equal(isGoalMet(missionTestScript.steps[0]!.goal, missionWorld([farm()])), true);
+
+  // The enemy building a farm must never advance the player's chain.
+  assert.equal(
+    isGoalMet(missionTestScript.steps[0]!.goal, missionWorld([{ owner: "enemy", buildingId: "farm", complete: true }])),
+    false,
+  );
+
+  // `linked` is the whole four-condition rule reduced to the one bit that means
+  // "this building is paying you"; every other status is a farm that is not.
+  const goal = missionTestScript.steps[2]!.goal;
+  assert.equal(isGoalMet(goal, missionWorld([], [linkedFarm()])), true);
+  for (const status of ["outside-control", "unlinked-road", "unlinked-depot", "depot-occupied"]) {
+    assert.equal(
+      isGoalMet(goal, missionWorld([], [{ owner: "player", resourceId: "food", status }])),
+      false,
+      `"${status}" is not a working supply line`,
+    );
+  }
+  // resourceId narrows: a linked lumber camp does not clear a food objective.
+  assert.equal(
+    isGoalMet(goal, missionWorld([], [{ owner: "player", resourceId: "wood", status: "linked" }])),
+    false,
+  );
+});
+
+check("the mission chain is order-independent, reversible and cannot deadlock", () => {
+  const director = new MissionDirector(missionTestScript);
+
+  // Opening: the first unmet step is announced, and only announced. Nothing is
+  // reported as completed, because the player has not been asked to do anything.
+  const opening = director.evaluate(missionWorld([]));
+  assert.deepEqual(opening.map((event) => event.kind), ["step-activated"]);
+  assert.equal(director.state().step?.id, "s1");
+  assert.equal(director.state().index, 0);
+  assert.equal(director.state().total, 3);
+
+  // A world that has not changed raises nothing — the panel must not restart its
+  // announcement four times a second.
+  assert.deepEqual(director.evaluate(missionWorld([])), []);
+
+  // Order independence: the player builds the depot *first*. Step 2 is already
+  // satisfied when the chain reaches it, so finishing the farm clears both in one
+  // evaluation and lands on step 3. An event-driven chain would have missed the
+  // depot and stuck here forever.
+  const jump = director.evaluate(missionWorld([farm(), depot()]));
+  assert.deepEqual(jump.map((event) => event.kind), ["step-completed", "step-completed", "step-activated"]);
+  assert.deepEqual(
+    jump.filter((event) => event.kind === "step-completed").map((event) => event.step.id),
+    ["s1", "s2"],
+  );
+  assert.equal(director.state().step?.id, "s3");
+
+  // Reversibility: the depot is destroyed. "Connect the farm to the depot" is
+  // meaningless with no depot, so step 2 re-opens — and reports no completion,
+  // which would be a congratulation for having lost a building.
+  const reopened = director.evaluate(missionWorld([farm()]));
+  assert.deepEqual(reopened.map((event) => event.kind), ["step-activated"]);
+  assert.equal(director.state().step?.id, "s2");
+  assert.equal(director.state().finished, false);
+
+  // Rebuild and link: the chain finishes, announcing the steps that just cleared.
+  const finish = director.evaluate(missionWorld([farm(), depot()], [linkedFarm()]));
+  assert.deepEqual(finish.map((event) => event.kind), ["step-completed", "step-completed", "chain-finished"]);
+  assert.equal(director.state().finished, true);
+  assert.equal(director.state().step, null, "the card disappears; there is no completion screen to dismiss");
+
+  // The finish is latched, and it is the only thing that is. Losing the farm an
+  // hour later must not re-open a tutorial the player finished.
+  assert.deepEqual(director.evaluate(missionWorld([])), []);
+  assert.equal(director.state().finished, true);
+
+  // A restart replays the chain from the top.
+  director.reset();
+  assert.equal(director.state().finished, false);
+  assert.deepEqual(director.evaluate(missionWorld([])).map((event) => event.kind), ["step-activated"]);
+  assert.equal(director.state().step?.id, "s1");
+
+  // A chain whose steps are all satisfied before it is ever shown finishes
+  // without claiming the player completed steps they were never given.
+  const preSatisfied = new MissionDirector(missionTestScript);
+  assert.deepEqual(
+    preSatisfied.evaluate(missionWorld([farm(), depot()], [linkedFarm()])).map((event) => event.kind),
+    ["chain-finished"],
+  );
+
+  // An empty chain is an authoring mistake that must not become a mode showing a
+  // blank card forever.
+  assert.throws(() => new MissionDirector({ ...missionTestScript, steps: [] }), /no steps/);
+});
+
+check("the shipped mission script validates, and a broken one fails at load", () => {
+  const buildingIds = new Set(Object.keys(
+    validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown),
+  ));
+  const raw = JSON.parse(readFileSync("public/game-data/missions/frontier_road.json", "utf8")) as unknown;
+  const script = validateMissionScript(raw, "frontier_road", buildingIds);
+  assert.equal(script.steps.length, 3);
+  assert.equal(script.steps[0]!.goal.kind, "structure-built");
+
+  // Every shipped step must be reachable: a goal is only worth writing if some
+  // world satisfies it, and the director must be able to walk the whole chain.
+  const walked = new MissionDirector(script);
+  walked.evaluate(missionWorld([]));
+  const events = walked.evaluate(missionWorld([farm(), depot()], [linkedFarm()]));
+  assert.equal(events.at(-1)?.kind, "chain-finished", "the shipped chain can actually be completed");
+
+  // The reference check is the point of passing building ids in: a typo'd
+  // building becomes a step nobody can clear, and the player it strands is by
+  // definition the one who cannot tell that the game is wrong rather than them.
+  const typo = { ...(raw as Record<string, unknown>) } as { steps: { goal: { buildingId: string } }[] };
+  const broken = JSON.parse(JSON.stringify(typo)) as typeof typo;
+  broken.steps[0]!.goal.buildingId = "farmm";
+  assert.throws(() => validateMissionScript(broken, "frontier_road", buildingIds), /unknown building "farmm"/);
+
+  assert.throws(() => validateMissionScript({ ...(raw as object), steps: [] }, "frontier_road"), /non-empty array/);
+  assert.throws(
+    () => validateMissionScript({ ...(raw as object), id: "other" }, "frontier_road"),
+    /does not match file name/,
+  );
+
+  const duplicate = JSON.parse(JSON.stringify(raw)) as { steps: { id: string }[] };
+  duplicate.steps[1]!.id = duplicate.steps[0]!.id;
+  assert.throws(() => validateMissionScript(duplicate, "frontier_road"), /duplicate step id/);
+
+  // A zero count is a step that is met before the player does anything.
+  const zeroCount = JSON.parse(JSON.stringify(raw)) as { steps: { goal: { count: number } }[] };
+  zeroCount.steps[0]!.goal.count = 0;
+  assert.throws(() => validateMissionScript(zeroCount, "frontier_road"), /integer >= 1/);
+
+  const unknownKind = JSON.parse(JSON.stringify(raw)) as { steps: { goal: { kind: string } }[] };
+  unknownKind.steps[0]!.goal.kind = "vibes";
+  assert.throws(() => validateMissionScript(unknownKind, "frontier_road"), /unknown mission goal "vibes"/);
 });
 
 /**

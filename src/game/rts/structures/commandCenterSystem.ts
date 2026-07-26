@@ -9,6 +9,11 @@ import { CommandCenter } from "./commandCenter";
 export class CommandCenterSystem {
   readonly root = new Group();
   private readonly centers = new Map<UnitOwner, CommandCenter>();
+  /**
+   * Monotonic counter of spawn/clear, the centre's half of the building
+   * revision presentation dirty-checks against (see `PlacedStructureSystem.version`).
+   */
+  version = 0;
 
   constructor() {
     this.root.name = "rts-command-centers";
@@ -26,6 +31,7 @@ export class CommandCenterSystem {
     }
     const center = new CommandCenter(owner, x, z, maxHealth, stats);
     this.centers.set(owner, center);
+    this.version += 1;
     this.root.add(center.object);
     return center;
   }
@@ -51,6 +57,7 @@ export class CommandCenterSystem {
       center.dispose();
     }
     this.centers.clear();
+    this.version += 1;
   }
 
   all(): readonly CommandCenter[] {

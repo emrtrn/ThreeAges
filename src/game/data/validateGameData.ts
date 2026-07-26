@@ -9,6 +9,7 @@
  */
 import { isFeatureFlag } from "../core/featureFlags";
 import { AI_TARGET_WEIGHTS } from "./gameDataTypes";
+import type { MissionGoal, MissionScript, MissionStep } from "../rts/tutorial/missionScript";
 
 /**
  * Mirrors `RTS_WORLD_HALF_EXTENT` (`rts/world/rtsGround.ts`), duplicated rather
@@ -30,6 +31,7 @@ import type {
   AiScoringBalance,
   AiTargetWeights,
   BuildingBalance,
+  BuildingPadVisual,
   BuildingProgressionBalance,
   BuildingProgressionTier,
   GamePreset,
@@ -1487,6 +1489,33 @@ function validateRoadVisual(value: unknown, where: string): RoadVisual {
   return { layerId, width, falloff, strength, jitter, jitterSpacingCells, widthVariation, ...(ageLayers ? { ageLayers } : {}) };
 }
 
+/** Built-in building ground-pad tuning used when `roads.json` omits `buildingPad`. */
+const DEFAULT_BUILDING_PAD: BuildingPadVisual = {
+  layerId: "dirt",
+  padding: 0.6,
+  falloff: 1.2,
+  strength: 0.95,
+};
+
+/** Validate the optional presentational building ground-pad block (defaults when absent). */
+function validateBuildingPadVisual(value: unknown, where: string): BuildingPadVisual {
+  if (value === undefined) return { ...DEFAULT_BUILDING_PAD };
+  const scope = `${where}.buildingPad`;
+  const obj = asObject(value, scope);
+  const layerId = typeof obj["layerId"] === "string" && obj["layerId"].length > 0
+    ? (obj["layerId"] as string)
+    : DEFAULT_BUILDING_PAD.layerId;
+  const padding = optionalFiniteNumber(obj, "padding", scope, DEFAULT_BUILDING_PAD.padding);
+  const falloff = optionalFiniteNumber(obj, "falloff", scope, DEFAULT_BUILDING_PAD.falloff);
+  // `strength: 0` is the documented off switch, so it is the one value here that
+  // may be zero — everything else only has to stay non-negative.
+  const strength = optionalFiniteNumber(obj, "strength", scope, DEFAULT_BUILDING_PAD.strength);
+  if (padding < 0 || falloff < 0 || strength < 0 || strength > 1) {
+    throw new GameDataError(`${scope}: padding/falloff must be >= 0 and strength must be within 0..1`);
+  }
+  return { layerId, padding, falloff, strength };
+}
+
 /** Validate the small data-owned road cost/grid contract before RTS uses it. */
 export function validateRoadBalance(value: unknown): RoadBalance {
   const where = "balance/roads.json";
@@ -1501,6 +1530,7 @@ export function validateRoadBalance(value: unknown): RoadBalance {
     cellSize,
     woodCostPerCell,
     visual: validateRoadVisual(obj["visual"], where),
+    buildingPad: validateBuildingPadVisual(obj["buildingPad"], where),
     ...(autoConnect ? { autoConnect } : {}),
   };
 }
@@ -1515,4 +1545,103 @@ function validateRoadAutoConnect(value: unknown, where: string): RoadAutoConnect
     throw new GameDataError(`${scope}: maxCells must be a non-negative integer`);
   }
   return { maxCells };
+}
+
+/**
+ * Validate a mission script — Hikâye / Öğretici Tur Modu, Faz 1.
+ *
+ * A mission script is content, so it lands under the same rule as every other
+ * file in `public/game-data/`: an unvalidated field is a silently dropped field
+ * (CLAUDE.md). The stakes are a little different here, though. Bad balance data
+ * produces a match that plays wrong; a bad mission script produces a step that
+ * can *never* clear, and the player it strands is by definition the one who does
+ * not yet know enough to work out that the game is lying to them. So the
+ * reference check below is not a nicety.
+ *
+ * @param knownBuildingIds when supplied, every `structure-built` goal must name
+ *   a building that exists in the balance table. A typo'd `"farmm"` then fails
+ *   at load instead of becoming an objective nobody can complete.
+ */
+export function validateMissionScript(
+  value: unknown,
+  expectedId?: string,
+  knownBuildingIds?: ReadonlySet<string>,
+): MissionScript {
+  const where = expectedId ? `mission "${expectedId}"` : "mission";
+  const obj = asObject(value, where);
+
+  const id = requireString(obj, "id", where);
+  if (expectedId !== undefined && id !== expectedId) {
+    throw new GameDataError(`${where}: id "${id}" does not match file name "${expectedId}"`);
+  }
+
+  const rawSteps = obj["steps"];
+  if (!Array.isArray(rawSteps) || rawSteps.length === 0) {
+    throw new GameDataError(`${where}.steps: expected a non-empty array`);
+  }
+
+  const seen = new Set<string>();
+  const steps = rawSteps.map((rawStep, index) => {
+    const scope = `${where}.steps[${index}]`;
+    const step = asObject(rawStep, scope);
+    const stepId = requireString(step, "id", scope);
+    // Step ids are how a save, a log line or a bug report names one step of the
+    // chain; two steps sharing one is a bug waiting to be untraceable.
+    if (seen.has(stepId)) throw new GameDataError(`${scope}: duplicate step id "${stepId}"`);
+    seen.add(stepId);
+    return {
+      id: stepId,
+      title: requireString(step, "title", scope),
+      why: requireString(step, "why", scope),
+      goal: validateMissionGoal(step["goal"], `${scope}.goal`, knownBuildingIds),
+    } satisfies MissionStep;
+  });
+
+  return {
+    id,
+    label: requireString(obj, "label", where),
+    intro: requireString(obj, "intro", where),
+    outro: requireString(obj, "outro", where),
+    steps,
+  };
+}
+
+function validateMissionGoal(
+  value: unknown,
+  where: string,
+  knownBuildingIds?: ReadonlySet<string>,
+): MissionGoal {
+  const obj = asObject(value, where);
+  const kind = requireString(obj, "kind", where);
+  // A count that is zero or fractional describes a goal that is either already
+  // met or can never be met exactly; both are authoring mistakes, not designs.
+  const count = requireFiniteNumber(obj, "count", where);
+  if (!Number.isInteger(count) || count < 1) {
+    throw new GameDataError(`${where}.count: must be an integer >= 1`);
+  }
+
+  if (kind === "structure-built") {
+    const buildingId = requireString(obj, "buildingId", where);
+    if (knownBuildingIds && !knownBuildingIds.has(buildingId)) {
+      throw new GameDataError(`${where}.buildingId: unknown building "${buildingId}"`);
+    }
+    return { kind, buildingId, count };
+  }
+
+  if (kind === "producer-linked") {
+    // `resourceId` is not reference-checked: `balance/resources.json` only holds
+    // the finite stone/gold deposit profiles, so food and wood — the two a first
+    // mission is most likely to name — are legitimately absent from it. A wrong
+    // id here narrows the goal rather than breaking it, and the omitted form
+    // (any producer) stays correct either way.
+    const resourceId = obj["resourceId"];
+    if (resourceId !== undefined && (typeof resourceId !== "string" || resourceId.length === 0)) {
+      throw new GameDataError(`${where}.resourceId: must be a non-empty string when present`);
+    }
+    return resourceId === undefined
+      ? { kind, count }
+      : { kind, resourceId: resourceId as string, count };
+  }
+
+  throw new GameDataError(`${where}.kind: unknown mission goal "${kind}"`);
 }

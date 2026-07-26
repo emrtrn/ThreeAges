@@ -21,6 +21,7 @@ const ICON_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "peace-active": "☮",
   "peace-ending": "⚔",
   "peace-ended": "⚔",
+  mission: "✧",
 };
 
 export class RtsNotificationFeed {

@@ -171,9 +171,20 @@ import { FogVisibilityBinder } from "./vision/fogVisibilityBinder";
 import { VisionSystemAiFilter } from "./ai/aiVisionFilter";
 import { formatVisionDebug } from "./vision/formatVisionDebug";
 import { RtsObjectiveTracker } from "./ui/rtsObjectiveTracker";
+import { RtsMissionPanel } from "./ui/rtsMissionPanel";
+import { MissionDirector } from "./tutorial/missionDirector";
+import type { MissionWorldSnapshot } from "./tutorial/missionPredicates";
+import type { MissionScript } from "./tutorial/missionScript";
 import type { AiObjectiveWatch } from "./ai/armyManager";
 
 const MAX_PIXEL_RATIO = 2;
+/**
+ * How often mission goals are re-checked, in real seconds. Objectives are polled
+ * (see `tutorial/missionDirector.ts`) and the poll rebuilds the road/depot graph
+ * projection, so it runs a few times a second: a quarter second is imperceptible
+ * on "go build a depot" and a fraction of the cost of doing it every frame.
+ */
+const MISSION_POLL_SECONDS = 0.25;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
 const MAX_FRAME_SECONDS = 1 / 15;
 const SCENE_BACKGROUND = "#20262b";
@@ -307,6 +318,11 @@ export interface RtsAppOptions {
   readonly aiBalance: AiBalance;
   /** Difficulty profile the enemy kingdom runs with (AI design §70). */
   readonly aiProfile: AiProfile;
+  /**
+   * Story/tutorial chain to run alongside the match (`?mission=<id>`). Omitted
+   * for an ordinary match, which is the default in every route.
+   */
+  readonly missionScript?: MissionScript;
 }
 
 export class RtsApp {
@@ -405,6 +421,23 @@ export class RtsApp {
   private readonly ghostStructures: GhostStructureView | null;
   private readonly fogVisibility: FogVisibilityBinder | null;
   private readonly objectiveTracker: RtsObjectiveTracker | null;
+  /**
+   * Story/tutorial chain (Hikâye / Öğretici Tur Modu). Both null unless the boot
+   * supplied a script, so an ordinary match carries no mission code at all.
+   * The director only ever *reads* this app; nothing here may depend on it.
+   */
+  private readonly missions: MissionDirector | null;
+  private readonly missionPanel: RtsMissionPanel | null;
+  /**
+   * Real seconds since the last mission evaluation. Objectives are polled rather
+   * than evented (see {@link MissionDirector}), and the poll rebuilds the
+   * logistics snapshot, so it runs a few times a second instead of every frame —
+   * far below anything a player can perceive in a "go build a depot" objective,
+   * and far above what the graph rebuild would cost at 60Hz.
+   */
+  private missionPollTimer = 0;
+  /** The chain's opening line is one-shot per match; reset by a restart. */
+  private missionIntroPosted = false;
   /**
    * §78.1: what the start card has selected. Seeded from the *resolved* flag so
    * a match booted with `?flags=regionalVictory` opens on the matching row, and
@@ -581,6 +614,16 @@ export class RtsApp {
       this.objectiveTracker = null;
     }
     this.victoryCondition = victoryChoiceForFlag(this.options.regionalVictoryEnabled === true);
+    // Same "absent means nothing exists" construction rule as §58 above: without
+    // a script there is no director and no card, so an ordinary match never pays
+    // for the mode and can never be changed by it.
+    if (this.options.missionScript) {
+      this.missions = new MissionDirector(this.options.missionScript);
+      this.missionPanel = new RtsMissionPanel();
+    } else {
+      this.missions = null;
+      this.missionPanel = null;
+    }
     // §59. Same construction rule as §58 above: the flag off means these five
     // are null and nothing downstream ever asks them anything, so a disabled
     // fog costs nothing at runtime (plan §13).
@@ -1049,6 +1092,7 @@ export class RtsApp {
     this.roadDebugView.dispose();
     this.territory.dispose();
     this.strategicPointView?.dispose();
+    this.missionPanel?.dispose();
     // Reveal before disposing: the binder set `visible = false` on live scene
     // objects, and tearing the fog down without undoing that would leave them
     // permanently invisible to whatever renders next.
@@ -1240,6 +1284,8 @@ export class RtsApp {
       this.productionLogistics,
     );
     this.roadDebugView.refresh();
+    // Cheap when nothing was built: two integer compares (see syncStructurePads).
+    this.syncStructurePads();
     this.commandMarkers.update(dt);
     this.structures.updateVisualAnimations(dt);
     this.updateHealthBarLinger(dt);
@@ -1255,6 +1301,10 @@ export class RtsApp {
       this.cameraController.camera.position,
     );
     this.selectionPanel.setSelection(this.selectionView());
+    // Objectives run on the rendered-frame delta like the rest of the read-only
+    // presentation: the story card is paced for a person reading it, not for the
+    // simulation, so §38's 8x test speed must not race the chain past them.
+    this.updateMissions(dt);
     // Notices expire on real seconds for the same reason a health bar animates
     // on them: at §38's 8x test speed a warning that vanished eight times faster
     // would be unreadable exactly when the match is hardest to follow.
@@ -1267,6 +1317,66 @@ export class RtsApp {
     if (this.postProcessPipeline) this.postProcessPipeline.render(dt);
     else this.renderer.render(this.scene, this.cameraController.camera);
   };
+
+  /**
+   * Advance the story/tutorial chain — Hikâye / Öğretici Tur Modu, Faz 1.
+   *
+   * Read-only in both directions: it asks the world what is true and tells the
+   * card and the feed. Nothing in the simulation is gated on it, so a mission
+   * that misbehaves costs the player a wrong sentence, never a wrong match.
+   */
+  private updateMissions(dt: number): void {
+    const missions = this.missions;
+    if (!missions) return;
+    // Only while the match is genuinely being played. Behind the start card or a
+    // pause the world is frozen, and ticking objectives there would let the chain
+    // announce progress at a player who is not looking at the field.
+    if (!this.match.active || !this.flow.running) return;
+
+    if (!this.missionIntroPosted) {
+      this.missionIntroPosted = true;
+      this.notifications.post({ kind: "mission", subject: "intro", text: missions.intro });
+    }
+
+    this.missionPollTimer += dt;
+    if (this.missionPollTimer < MISSION_POLL_SECONDS) return;
+    this.missionPollTimer = 0;
+
+    for (const event of missions.evaluate(this.missionWorldSnapshot())) {
+      // A newly activated step is *not* announced: the card below already says
+      // it, and posting the same instruction twice trains the player to read
+      // neither. Only what the card cannot show goes to the feed — that a step
+      // just cleared, and that the chain is over.
+      if (event.kind === "step-completed") {
+        this.notifications.post({
+          kind: "mission",
+          subject: `done:${event.step.id}`,
+          text: `Görev tamam: ${event.step.title}`,
+        });
+      } else if (event.kind === "chain-finished") {
+        this.notifications.post({ kind: "mission", subject: "outro", text: missions.outro });
+      }
+    }
+    this.missionPanel?.setState(missions.state());
+  }
+
+  /**
+   * The world as a mission goal sees it: the two narrow fact lists
+   * `missionPredicates.ts` declares, and nothing else. Producer facts come
+   * straight from the logistics graph the selection panel already reads, so an
+   * objective and the panel explaining it can never disagree about whether a
+   * farm is linked.
+   */
+  private missionWorldSnapshot(): MissionWorldSnapshot {
+    return {
+      structures: this.structures.all().map((structure) => ({
+        owner: structure.owner,
+        buildingId: structure.stats.id,
+        complete: structure.construction.complete,
+      })),
+      producers: this.productionLogistics.snapshots(),
+    };
+  }
 
   /** Present player construction, training, and damaged-building health above all world geometry. */
   /**
@@ -1998,12 +2108,46 @@ export class RtsApp {
       terrain,
       this.options.roadBalance.cellSize,
       this.options.roadBalance.visual,
+      this.options.roadBalance.buildingPad,
     );
     this.roadPlacement.setPaintedMode(true);
     this.canvas.dataset.rtsRoads = "painted";
     // Start on the layer for the player's current age (settlement → dirt).
     this.roadPainter.setLayer(this.roadLayerForAge(this.ageOf(PLAYER_OWNER)));
-    this.roadPainter.sync(this.roads.all(), this.roads.version);
+    // Centres already stand when the terrain mounts, so their pads come with the
+    // first paint rather than one building later.
+    this.syncStructurePads();
+  }
+
+  /**
+   * Building ground pads: the terrain under every standing building is cleared to
+   * the pad layer, the same way a road paints its corridor — a building on bare
+   * grass reads as dropped onto the field. Presentation only: this mirrors the
+   * building systems and never writes footprints, navigation or territory back.
+   *
+   * The revision is the sum of the two building systems' monotonic counters, so
+   * any place/cancel/destroy/clear on either side moves it and the pad list is
+   * rebuilt exactly once per change. The repaint itself is the road painter's,
+   * because a landscape has a single pristine snapshot to restore against.
+   */
+  private syncStructurePads(): void {
+    const painter = this.roadPainter;
+    if (!painter) return;
+    painter.setStructurePads(this.structures.version + this.centers.version, () => [
+      ...this.centers.all().map((center) => ({
+        x: center.position.x,
+        z: center.position.z,
+        width: center.stats.footprint.width,
+        depth: center.stats.footprint.depth,
+      })),
+      ...this.structures.all().map((structure) => ({
+        x: structure.x,
+        z: structure.z,
+        width: structure.stats.footprint.width,
+        depth: structure.stats.footprint.depth,
+      })),
+    ]);
+    painter.sync(this.roads.all(), this.roads.version);
   }
 
   /**
@@ -2151,6 +2295,13 @@ export class RtsApp {
     // A fresh match reopens the saldırmazlık window, so its notices must be
     // allowed to fire again from the top.
     this.peaceAnnounceStage = 0;
+    // Likewise the story chain: a restart replays it from the first objective,
+    // intro included. The director derives its own position from the world, so
+    // this only has to un-latch the finish and the one-shot intro.
+    this.missions?.reset();
+    this.missionIntroPosted = false;
+    this.missionPollTimer = 0;
+    this.missionPanel?.setState(null);
     this.attackWatch.reset();
     this.match.reset();
     this.clock.reset();

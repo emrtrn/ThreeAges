@@ -17,7 +17,7 @@ import {
   readBootOptionsFromUrl,
   snapshotRuntimeConfig,
 } from "@/game/core/runtimeConfig";
-import { loadAgeBalance, loadAiBalance, loadBuildingBalance, loadGamePreset, loadResourceBalance, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
+import { loadAgeBalance, loadAiBalance, loadBuildingBalance, loadGamePreset, loadMissionScript, loadResourceBalance, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
 import { loadRtsContentCatalog } from "@/game/rts/content/rtsContentLoader";
 import {
   readStoredVictoryCondition,
@@ -144,6 +144,22 @@ async function main(): Promise<void> {
     // mapping from gameplay ids to art, and there is no second art path left to
     // quietly fall back to — a match booted without it would be an art-less match.
     const contentCatalog = await loadRtsContentCatalog(unitBalance, buildingBalance);
+    // Story/tutorial chain (Hikâye / Öğretici Tur Modu, Faz 1). Opt-in through
+    // `?mission=<id>` until Faz 2 gives the start card a mode row; until then an
+    // ordinary match is what every URL without the parameter still gets.
+    //
+    // A script that fails to load must not take the match down with it: the mode
+    // is guidance layered over a match that is perfectly playable without it, so
+    // a bad file costs the player their objectives and nothing else.
+    const missionId = params.get("mission");
+    let missionScript: Awaited<ReturnType<typeof loadMissionScript>> | undefined;
+    if (missionId) {
+      try {
+        missionScript = await loadMissionScript(missionId, new Set(Object.keys(buildingBalance)));
+      } catch (error) {
+        logger("System").warn(`Mission "${missionId}" unavailable; playing an ordinary match`, error);
+      }
+    }
     // `?level=` (what the editor's Play button passes) outranks the preset's map,
     // so the level being edited is the level that opens. See `rtsLevelRef.ts`.
     //
@@ -215,6 +231,7 @@ async function main(): Promise<void> {
         : {}),
       // Same opt-in shape: without it the match opens at Settlement Lv1.
       ...(preset?.startingTier ? { startingTier: preset.startingTier } : {}),
+      ...(missionScript ? { missionScript } : {}),
     });
     rts.start();
     return;
