@@ -360,7 +360,7 @@
           {
             "id": "p1",
             "position": [
-              59,
+              62,
               0,
               -30
             ],
@@ -369,7 +369,7 @@
           {
             "id": "p2",
             "position": [
-              59,
+              62,
               0,
               -24
             ],
@@ -378,7 +378,7 @@
           {
             "id": "p3",
             "position": [
-              59,
+              62,
               0,
               -40
             ],
@@ -431,7 +431,7 @@
           {
             "id": "p2",
             "position": [
-              59,
+              62,
               0,
               -20
             ],
@@ -440,7 +440,7 @@
           {
             "id": "p3",
             "position": [
-              59,
+              62,
               0,
               -24
             ],
@@ -449,7 +449,7 @@
           {
             "id": "p4",
             "position": [
-              59,
+              62,
               0,
               -40
             ],
@@ -463,18 +463,6 @@
           "rts.route:enemy:enemy_east:1"
         ]
       }
-    }
-  ],
-  "landscapes": [
-    {
-      "id": "landscape-1",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "dataRef": "landscapes/landscape-1.landscape.json",
-      "name": "Landscape"
     }
   ],
   "actors": [
@@ -904,12 +892,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        52,
+        58,
         0,
-        -36
+        -32
       ],
       "name": "Tree enemy-wood-3-dense",
-      "scale": 1,
       "variableOverrides": {
         "treeId": "enemy-wood-3-dense",
         "forestId": "enemy-grove",
@@ -980,12 +967,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        53,
+        58,
         0,
-        -39
+        -38
       ],
       "name": "Tree enemy-wood-6",
-      "scale": 1,
       "variableOverrides": {
         "treeId": "enemy-wood-6",
         "forestId": "enemy-grove",
@@ -1986,12 +1972,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        52,
+        58,
         0,
-        -33
+        -30
       ],
       "name": "Tree enemy-wood-11-dense",
-      "scale": 1,
       "variableOverrides": {
         "treeId": "enemy-wood-11-dense",
         "forestId": "enemy-grove",
@@ -2047,12 +2032,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        54,
+        58,
         0,
-        -32
+        -28
       ],
       "name": "Tree enemy-wood-13-dense",
-      "scale": 1,
       "variableOverrides": {
         "treeId": "enemy-wood-13-dense",
         "forestId": "enemy-grove",
@@ -3135,12 +3119,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
-        64,
+        66,
         0,
         -32
       ],
       "name": "enemy_east outpost",
-      "scale": 1,
       "variableOverrides": {
         "regionId": "enemy_east",
         "role": "outpost",
@@ -3150,12 +3133,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
-        64,
+        66,
         0,
         -40
       ],
       "name": "enemy_east depot",
-      "scale": 1,
       "variableOverrides": {
         "regionId": "enemy_east",
         "role": "depot",
@@ -3165,12 +3147,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
-        64,
+        66,
         0,
         -24
       ],
       "name": "enemy_east production",
-      "scale": 1,
       "variableOverrides": {
         "regionId": "enemy_east",
         "role": "production",
