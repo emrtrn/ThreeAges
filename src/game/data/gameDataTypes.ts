@@ -212,7 +212,7 @@ export type UnitBalance = Readonly<Record<string, UnitBalanceStats>>;
  * curated UI directories; this keeps data-driven panels from accepting an
  * arbitrary URL as artwork.
  */
-export type UiAssetPath = `/assets/ui/${"icons" | "portraits"}/${string}.svg`;
+export type UiAssetPath = `/assets/ui/${"icons" | "portraits"}/${string}.${"svg" | "png"}`;
 
 /** One grid-aligned RTS building definition, loaded from balance/buildings.json. */
 export interface BuildingBalanceStats {

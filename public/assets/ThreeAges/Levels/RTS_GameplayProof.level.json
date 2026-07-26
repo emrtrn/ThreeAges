@@ -617,8 +617,7 @@
         0
       ],
       "dataRef": "landscapes/landscape-1.landscape.json",
-      "name": "Landscape",
-      "locked": true
+      "name": "Landscape"
     }
   ],
   "riverWaters": [

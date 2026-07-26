@@ -57,7 +57,12 @@ export function uniqueLandscapeName(baseName: string, landscapes: LayoutLandscap
 
 // --- Sidecar data (`*.landscape.json`) --------------------------------------
 
-/** Faz 1 preset sizes: `small`/`medium` are the safe range, `large` the Faz 1 upper bound. */
+/**
+ * Preset sizes: `small`/`medium` are the safe range, `large` (exposed in the
+ * editor as "High") is the upper bound the save validator accepts. Presets only
+ * set vertex density — the terrain's world footprint is preserved on resample,
+ * so `large` is how a wide level keeps a fine grid.
+ */
 export type LandscapeSizePreset = "small" | "medium" | "large";
 
 export interface LandscapeSize {

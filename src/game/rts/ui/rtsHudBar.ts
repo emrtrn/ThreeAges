@@ -17,6 +17,7 @@ import type { AgeBalance } from "../../data/gameDataTypes";
 import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
 import { RESOURCE_ORDER, formatInventoryAmount, resourceLabel } from "./resourceLabels";
+import { resourceIconSrc } from "./rtsUiIcons";
 
 /** The §51 warning text, keyed by the failure the logistics system resolved. */
 const LOGISTICS_WARNING: Readonly<Record<Exclude<ProducerLogisticsStatus, "linked">, string>> = {
@@ -72,7 +73,7 @@ export class RtsHudBar {
       cell.dataset.rtsResource = resourceId;
       const icon = document.createElement("img");
       icon.className = "rts-hud-resource-icon";
-      icon.src = `/assets/ui/icons/resource-${resourceId}.svg`;
+      icon.src = resourceIconSrc(resourceId);
       icon.alt = "";
       icon.setAttribute("aria-hidden", "true");
       const label = document.createElement("span");

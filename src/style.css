@@ -471,7 +471,7 @@ body {
    * breakpoint may change their boundaries, never a game value.
    */
   display: grid;
-  grid-template-columns: repeat(4, 170px);
+  grid-template-columns: repeat(4, 180px);
   flex: 0 0 auto;
   gap: 14px;
 }
@@ -480,13 +480,25 @@ body {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   overflow: hidden;
 }
 
+/*
+ * Icon size is a custom property because it is the one HUD dimension that has
+ * to move with the *artwork*, not with the layout: a flat glyph reads at 21px,
+ * a rendered/painted icon needs the extra area before its detail resolves. The
+ * breakpoints below step it down alongside the column width so a wider icon
+ * never eats the readout it labels. The bar is 58px tall with 5px padding, so
+ * anything up to 48px fits the row without changing --rts-hud-bar-height.
+ */
 .rts-hud-resource-icon {
-  width: 21px;
-  height: 21px;
+  width: var(--rts-hud-icon-size, 48px);
+  height: var(--rts-hud-icon-size, 48px);
+  /* Never let the flex row shrink the icon into a smear, and keep a
+     non-square export letterboxed instead of stretched. */
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
 .rts-hud-resource-values {
@@ -653,6 +665,7 @@ body {
 @media (max-width: 1700px) {
   .rts-hud-resources {
     grid-template-columns: repeat(4, 150px);
+    --rts-hud-icon-size: 30px;
   }
 
   .rts-hud-age {
@@ -674,6 +687,7 @@ body {
   .rts-hud-resources {
     grid-template-columns: repeat(4, 136px);
     gap: 8px;
+    --rts-hud-icon-size: 26px;
   }
 }
 

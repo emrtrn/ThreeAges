@@ -104,8 +104,10 @@ function optionalUiAssetPath(
 ): UiAssetPath | undefined {
   const value = obj[key];
   if (value === undefined) return undefined;
-  if (typeof value !== "string" || !/^\/assets\/ui\/(?:icons|portraits)\/[a-z0-9][a-z0-9_-]*\.svg$/.test(value)) {
-    throw new GameDataError(`${where}.${key}: must be a /assets/ui/icons/ or /assets/ui/portraits/ SVG path`);
+  if (typeof value !== "string" || !/^\/assets\/ui\/(?:icons|portraits)\/[a-z0-9][a-z0-9_-]*\.(?:svg|png)$/.test(value)) {
+    throw new GameDataError(
+      `${where}.${key}: must be a /assets/ui/icons/ or /assets/ui/portraits/ SVG or PNG path`,
+    );
   }
   return value as UiAssetPath;
 }

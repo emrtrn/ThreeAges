@@ -28978,6 +28978,18 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
     GameDataError,
     "UI assets are packaged paths, not arbitrary URLs",
   );
+  // Raster icon art is a first-class option: authored artwork does not always
+  // come out of a vector tool, and forcing SVG pushed forks toward a fake
+  // conversion (a PNG wrapped in an <svg>) that defeats the check entirely.
+  const rasterIcon = validateBuildingBalance({
+    house: { label: "Ev", icon: "/assets/ui/icons/building-house.png", footprint: { width: 4, depth: 4 }, cost: {}, constructionSeconds: 25, maxHealth: 100, visionRadius: 8 },
+  });
+  assert.equal(rasterIcon.house?.icon, "/assets/ui/icons/building-house.png");
+  assert.throws(
+    () => validateBuildingBalance({ house: { label: "Ev", icon: "/assets/ui/icons/building-house.webp", footprint: { width: 4, depth: 4 }, cost: {}, constructionSeconds: 25, maxHealth: 100, visionRadius: 8 } }),
+    GameDataError,
+    "the allowed extensions stay an explicit list, not anything image-shaped",
+  );
 });
 
 check("Faz B UI artwork is data-driven and every shipped reference exists", () => {

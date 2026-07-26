@@ -196,6 +196,7 @@ import {
   type LandscapeLayerWeights,
   type LandscapeObject,
   type LandscapeRenderItem,
+  type LandscapeSizePreset,
   type LandscapeViewMode,
 } from "@engine/render-three/landscape";
 import {
@@ -9584,7 +9585,7 @@ export class SceneApp {
   }
 
   /** Resamples the selected terrain and paint layers to a supported editor preset. */
-  resampleSelectedLandscape(preset: "small" | "medium"): void {
+  resampleSelectedLandscape(preset: LandscapeSizePreset): void {
     if (this.selection?.kind !== "landscape") return;
     const index = this.selection.index;
     const actor = this.layout?.landscapes?.[index];

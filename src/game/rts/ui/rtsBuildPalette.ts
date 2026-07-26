@@ -25,6 +25,11 @@ import type { RoadPlacementState } from "../roads/roadPlacementSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
 
 import { canAffordCost, formatResourceCost } from "./resourceLabels";
+import {
+  PALETTE_ROAD_ERASE_ICON,
+  PALETTE_ROAD_ICON,
+  PALETTE_TEMPLE_SOON_ICON,
+} from "./rtsUiIcons";
 
 /**
  * §51 "Yapı kategorileri". Grouped by the question the player is asking — "I
@@ -148,7 +153,7 @@ export class RtsBuildPalette {
         road.setAttribute("aria-label", "Yol");
         const icon = document.createElement("img");
         icon.className = "rts-build-choice-icon";
-        icon.src = "/assets/ui/icons/command-patrol.svg";
+        icon.src = PALETTE_ROAD_ICON;
         icon.alt = "";
         const label = document.createElement("span");
         label.className = "rts-build-choice-label";
@@ -169,7 +174,7 @@ export class RtsBuildPalette {
         erase.setAttribute("aria-label", "Yol Sil");
         const eraseIcon = document.createElement("img");
         eraseIcon.className = "rts-build-choice-icon";
-        eraseIcon.src = "/assets/ui/icons/command-stop.svg";
+        eraseIcon.src = PALETTE_ROAD_ERASE_ICON;
         eraseIcon.alt = "";
         const eraseLabel = document.createElement("span");
         eraseLabel.className = "rts-build-choice-label";
@@ -189,7 +194,7 @@ export class RtsBuildPalette {
         temple.setAttribute("aria-label", "Tapınak — Yakında");
         const icon = document.createElement("img");
         icon.className = "rts-build-choice-icon";
-        icon.src = "/assets/ui/icons/building-command-center.svg";
+        icon.src = PALETTE_TEMPLE_SOON_ICON;
         icon.alt = "";
         const label = document.createElement("span");
         label.className = "rts-build-choice-label";
