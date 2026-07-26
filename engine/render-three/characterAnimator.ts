@@ -85,6 +85,20 @@ export class CrossfadeAnimator {
   }
 
   /**
+   * Scales playback of the current single-clip action; 1 is the authored speed.
+   * A no-op in weighted-blend mode, where {@link playBlend} owns every action's
+   * time scale to keep the contributing clips phase-synced.
+   *
+   * Callers re-apply this after each {@link play}, which resets the rate to 1 —
+   * the rate is a property of how fast the entity is moving *now*, not of the
+   * clip, so it belongs to the frame rather than to the transition.
+   */
+  setPlaybackRate(rate: number): void {
+    if (this.blendActions.size > 0 || !this.current) return;
+    this.actions.get(this.current)?.setEffectiveTimeScale(rate);
+  }
+
+  /**
    * Drives a weighted blend of clips (a blend space's resolved weights). Weights
    * are re-normalized; unknown/zero-weight clips are ignored. Contributing clips
    * are kept phase-synced — each runs at a time scale that makes every clip

@@ -2279,6 +2279,7 @@ export class RtsApp {
         this.actorVisuals?.createUnitPresentation(
           Object.entries(this.options.unitBalance).find(([, value]) => value === stats)?.[0] ?? "",
           owner,
+          stats.moveSpeed,
         ) ?? null);
       this.units.refreshPresentations();
       this.placement.setPreviewFactory((buildingId, width, depth) =>

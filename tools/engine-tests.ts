@@ -88,6 +88,14 @@ import {
   fitPresentationToFootprint,
 } from "../src/game/rts/content/rtsActorPresentationTree";
 import { createRtsActorPlaceholder, isRtsActorPlaceholder } from "../src/game/rts/content/rtsActorPlaceholder";
+import { createRtsUnitPresentation } from "../src/game/rts/content/rtsUnitPresentation";
+import {
+  classifyRtsAnimation,
+  resolveRtsAnimationRole,
+  rtsLocomotionTuning,
+  rtsPlaybackRate,
+  selectRtsAnimation,
+} from "../src/game/rts/units/rtsUnitAnimation";
 import {
   formatRtsActorPresentationDebug,
   rtsContentAssetsState,
@@ -30026,6 +30034,180 @@ check("Skeletal animasyon Faz B: bir kemik adiyla cakisan bileseni klip suremez"
   const fromTree = PropertyBinding.findNode(tree, "root");
   assert.equal(fromTree, component, "binding to the tree would capture the component — never do this");
   assert.notEqual(fromModel, fromTree, "the two namespaces genuinely collide, which is why the target matters");
+});
+
+check("Skeletal animasyon Faz C: hiz esikleri, rol onceligi ve dusme zinciri", () => {
+  // Tuning is per-unit, derived from the Guard's authored 6 units/s.
+  const tuning = rtsLocomotionTuning(6);
+  const at = (planarSpeed: number, attacking = false, dying = false) =>
+    classifyRtsAnimation({ planarSpeed, attacking, dying }, tuning);
+
+  assert.equal(at(0), "idle");
+  // Separation and crowd shoving leave a standing unit with a little residual
+  // speed every frame; it must not start walking on the spot because of it.
+  assert.equal(at(0.4), "idle", "jitter below the walk threshold still reads as standing");
+  assert.equal(at(1.5), "walk");
+  assert.equal(at(6), "run", "a unit at its full move speed is running, not walking");
+  // Priority: a unit in weapon range is fighting even if the crowd is still
+  // pushing it around, and a dying unit falls rather than finishing its swing.
+  assert.equal(at(6, true), "attack", "being in range outranks any residual speed");
+  assert.equal(at(6, true, true), "death", "death outranks everything else");
+
+  const available = new Set(["Idle_Loop", "Sprint_Loop", "A_TPose"]);
+  const animationSet = { idle: "Idle_Loop", run: "Sprint_Loop" };
+  assert.deepEqual(
+    resolveRtsAnimationRole("walk", animationSet, available),
+    { role: "run", clip: "Sprint_Loop" },
+    "a missing walk escalates to the run clip rather than to nothing",
+  );
+  assert.deepEqual(
+    resolveRtsAnimationRole("attack", animationSet, available),
+    { role: "idle", clip: "Idle_Loop" },
+    "roles this asset does not author end at idle — Faz E adds the data, not the code",
+  );
+
+  // The two null cases, and the reason the chain must never end in "any clip":
+  // A_TPose is a real clip in the shipped UAL1 set, so a lazy last-resort scan
+  // would pin a unit in the exact pose this whole track exists to avoid. Null
+  // means "hold the pose you already have".
+  assert.equal(resolveRtsAnimationRole("idle", {}, available), null, "an unauthored asset selects nothing");
+  assert.equal(
+    resolveRtsAnimationRole("idle", { idle: "Missing_Clip" }, available),
+    null,
+    "an authored clip the model does not ship never resolves — and never falls through to A_TPose",
+  );
+
+  // Foot contact: the rate is keyed off the clip that actually plays. A unit
+  // walking on the run clip has to be slowed to the *run* calibration.
+  assert.equal(rtsPlaybackRate("run", 6, tuning), 1, "the run clip is calibrated to full move speed");
+  assert.ok(Math.abs(rtsPlaybackRate("walk", 2, tuning) - 2 / 3) < 1e-6, "half speed on the walk clip");
+  assert.equal(rtsPlaybackRate("run", 0.5, tuning), tuning.minPlaybackRate, "a crawl never freezes the clip");
+  assert.equal(rtsPlaybackRate("run", 60, tuning), tuning.maxPlaybackRate, "nor does a shove make it blur");
+  assert.equal(rtsPlaybackRate("attack", 4, tuning), 1, "action clips play at their authored speed");
+  assert.equal(rtsPlaybackRate("death", 4, tuning), 1);
+
+  const selection = selectRtsAnimation(
+    { planarSpeed: 2, attacking: false, dying: false },
+    { idle: "Idle_Loop", walk: "Walk_Loop" },
+    new Set(["Idle_Loop", "Walk_Loop"]),
+    tuning,
+  );
+  assert.equal(selection?.clip, "Walk_Loop");
+  assert.equal(selection?.requested, "walk");
+  assert.ok(Math.abs((selection?.playbackRate ?? 0) - 2 / 3) < 1e-6);
+});
+
+/**
+ * A one-bone model whose walk clip both translates (root motion, on Z) and lifts
+ * (a plain pose channel, on Y). The two axes are what the Faz C assertions read:
+ * Z proves `lockXZ` reached the mixer, Y proves the clip ran at all.
+ */
+function buildRtsWalkModel(): { model: Group; clips: AnimationClip[] } {
+  const bone = new Bone();
+  bone.name = "hips";
+  const model = new Group();
+  model.name = "guard-model";
+  model.add(bone);
+  return {
+    model,
+    clips: [
+      new AnimationClip("Idle_Loop", 1, [
+        new VectorKeyframeTrack("hips.position", [0, 1], [0, 0, 0, 0, 0, 0]),
+      ]),
+      new AnimationClip("Walk_Loop", 1, [
+        new VectorKeyframeTrack("hips.position", [0, 1], [0, 0, 0, 0, 1, 2]),
+      ]),
+    ],
+  };
+}
+
+check("Skeletal animasyon Faz C: lockXZ animatore ulasir ve klip hiza gore olceklenir", () => {
+  const drive = (rootMotion: unknown) => {
+    const { model, clips } = buildRtsWalkModel();
+    const root = new Group();
+    root.add(model);
+    const presentation = createRtsUnitPresentation({
+      root,
+      pickTargets: [],
+      selectionRadius: 0.5,
+      moveSpeed: 6,
+      animation: {
+        target: model,
+        clips,
+        skeleton: normalizeAssetSkeleton({
+          animationSet: { idle: "Idle_Loop", walk: "Walk_Loop" },
+          rootMotion,
+        }),
+      },
+    });
+    // 2 units/s against a 6 units/s Guard: walking, at two-thirds of the walk
+    // clip's calibrated speed. Two steps so the idle→walk crossfade settles.
+    for (let i = 0; i < 2; i += 1) {
+      presentation.update?.({ deltaSeconds: 0.25, planarSpeed: 2, attacking: false, dying: false });
+    }
+    return model.getObjectByName("hips")!;
+  };
+
+  const locked = drive([{ clip: "Walk_Loop", mode: "lockXZ" }]);
+  const free = drive([]);
+
+  assert.ok(locked.position.y > 0.1, "the clip actually played — the pose channel advanced");
+  // The Faz C invariant: RTS movement owns position, so a walk clip that carries
+  // its own translation would drag the body away from where the simulation put
+  // it. The sidecar's lockXZ is what prevents that, and this is the proof it is
+  // still being handed to the animator rather than dropped on the way.
+  assert.equal(locked.position.z, 0, "lockXZ pins the root track's Z at its base value");
+  assert.ok(free.position.z > 0.1, "without the sidecar setting the same clip does translate");
+
+  // Rate: at two-thirds speed the unlocked clip is ~0.67 along its 2-unit Z
+  // travel after 0.5s. At the authored rate it would be at ~1.0 — the gap
+  // between those is exactly the foot slide this scales away.
+  assert.ok(
+    free.position.z > 0.55 && free.position.z < 0.78,
+    `walk playback follows the observed speed (z=${free.position.z})`,
+  );
+});
+
+check("Skeletal animasyon Faz C: animasyon secimi birimin konumunu ve statlarini degistirmez", () => {
+  const { model, clips } = buildRtsWalkModel();
+  const root = new Group();
+  root.add(model);
+  const unit = new Unit("player", 3, -4, RTS_TEST_UNIT_STATS, createRtsUnitPresentation({
+    root,
+    pickTargets: [],
+    selectionRadius: 0.5,
+    moveSpeed: RTS_TEST_UNIT_STATS.moveSpeed,
+    animation: {
+      target: model,
+      clips,
+      // Deliberately *un*locked, so the clip pushes as hard as it can against the
+      // unit's transform: the walk track translates a node called "hips" by two
+      // units of Z per loop.
+      skeleton: normalizeAssetSkeleton({ animationSet: { idle: "Idle_Loop", walk: "Walk_Loop" } }),
+    },
+  }));
+
+  // Walked the way the movement system walks it: the simulation writes the
+  // transform, the presentation only observes the displacement it left behind.
+  const camera = new Quaternion();
+  let x = 3;
+  for (let i = 0; i < 8; i += 1) {
+    x += 0.6;
+    unit.object.position.x = x;
+    unit.updatePresentation(0.1, camera);
+  }
+
+  assert.ok(model.getObjectByName("hips")!.position.y > 0.1, "the animation genuinely ran");
+  // Presentation is one-way: it reads the simulation and writes only its own
+  // subtree. Nothing a unit is judged by may move because a clip played — least
+  // of all its position, which the walk clip is actively translating on Z.
+  assert.ok(Math.abs(unit.position.x - x) < 1e-9, "the unit is exactly where the simulation put it");
+  assert.equal(unit.position.z, -4, "root motion never reaches the unit transform");
+  assert.equal(unit.position.y, 0);
+  assert.equal(unit.health.current, RTS_TEST_UNIT_STATS.maxHealth, "no clip deals or heals damage");
+  assert.equal(unit.attack.ready, true, "no clip spends or refunds an attack cooldown");
+  assert.equal(unit.moveTarget, null, "no clip issues an order");
+  assert.equal(unit.dying, false);
 });
 
 check("Actor presentation Faz 3: a stand-in is visibly not art, and reports as its own state", () => {

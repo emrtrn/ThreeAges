@@ -143,8 +143,13 @@ export class RtsActorVisualFactory {
     };
   }
 
-  /** Returns null until loaded or whenever a catalog entry intentionally does not exist. */
-  createUnitPresentation(unitId: string, _owner: UnitOwner): RtsPresentationHandle | null {
+  /**
+   * Returns null until loaded or whenever a catalog entry intentionally does not
+   * exist. `moveSpeed` is the unit's authored ground speed, which the animated
+   * handle needs to calibrate its walk/run boundary and playback rate — it is
+   * balance data read straight off the unit's stats, never off the Actor Script.
+   */
+  createUnitPresentation(unitId: string, _owner: UnitOwner, moveSpeed?: number): RtsPresentationHandle | null {
     const actorRef = rtsUnitActorRef(this.catalog, unitId);
     if (!actorRef || !this.ready) return null;
     const root = this.createActorVisual(actorRef);
@@ -160,6 +165,7 @@ export class RtsActorVisualFactory {
       pickTargets,
       selectionRadius: readNumberVariable(def, "selectionRadius", 0.5),
       animation: this.animationSourceFor(root),
+      moveSpeed,
     });
   }
 

@@ -1,7 +1,8 @@
 # ThreeAges RTS Skeletal Animasyon Uygulama Plani
 
 Olusturulma tarihi: 2026-07-25
-Durum: Faz A ve Faz B tamamlandi. Sonraki is: Faz C (locomotion).
+Durum: Faz A, Faz B ve Faz C tamamlandi (C icin kullanici gozlemi bekleniyor).
+Sonraki is: Faz D (saldiri ve olum).
 Kapsam: RTS birimlerinin skeletal mesh'ini yasayan bir karakter haline getirmek;
 bosta durma, yurume, saldiri ve olum animasyonlarini oynatan bir sunum katmani.
 
@@ -142,19 +143,36 @@ ve animasyon oynuyor.
 
 ### Faz C - Locomotion: bosta / yurume
 
-- [ ] `src/game/rts/units/rtsUnitAnimation.ts`: saf (Three.js'siz) durum
-      secici - `(hiz, saldiri, olum) -> semantic rol`.
-- [ ] Rol dusme zinciri: eksik klip bir ust role duser, asla T-pose'a dusmez.
-- [ ] Ayak kaymasi: klip zaman olcegi gercek hiza oranlansin veya
-      `Walk_Loop`/`Jog_Fwd_Loop`/`Sprint_Loop` arasi `playBlend` ile gecilsin.
-      (Muhafizin `moveSpeed` degeri 6 birim/s; sabit hizda oynatilirsa kayar.)
-- [ ] `lockXZ` root motion ayarinin uygulandigi dogrulansin - birim animasyonla
-      surüklenmemeli.
-- [ ] Engine test: hiz esikleri ve rol dusme zinciri.
-- [ ] Engine test: animasyon secimi birim konumunu/statlarini degistirmez.
+- [x] `src/game/rts/units/rtsUnitAnimation.ts`: saf (Three.js'siz) durum
+      secici - `(hiz, saldiri, olum) -> semantic rol`. Roller:
+      `idle`/`walk`/`run`/`attack`/`death`; oncelik olum > saldiri > hiz.
+      `attack`/`death` bugun zaten siniflandirilir ama sidecar'da karsiligi
+      yoktur (Faz E), bu yuzden idle'a duserler - oynatma semantigi (tek atim)
+      Faz D'nin isi.
+- [x] Rol dusme zinciri: eksik klip bir ust role duser (`walk` -> `run` ->
+      `idle`), asla T-pose'a dusmez. **Karar:** zincir bos donunce secici `null`
+      dondurur ve surucu mevcut pozu korur; "eldeki herhangi bir klip" son
+      caresi bilerek yok, cunku UAL1 setinde `A_TPose` gercek bir klip adidir
+      ve tam da kacinilan poza kilitlerdi.
+- [x] Ayak kaymasi: klip zaman olcegi gercek hiza oranlanir
+      (`CrossfadeAnimator.setPlaybackRate`, her karede `play` sonrasi yeniden
+      uygulanir). `playBlend` secilmedi: sidecar'in blend space'i ornek
+      tasimiyor. **Kalibrasyon varsayimi:** run klibi birimin tam `moveSpeed`
+      degerinde (Muhafiz icin 6 birim/s), walk klibi onun yarisinda doğru
+      okunur; oran `[0.4, 1.8]` araliğina kirpilir. Esikler de birim basina
+      `moveSpeed`'ten turetilir - 4 birim/s'lik Isci ile 6'lik Muhafiz ayni
+      sabit esigi paylasamaz.
+- [x] `lockXZ` root motion ayarinin uygulandigi dogrulandi - engine testi ayni
+      klibi ayarli/ayarsiz surerek Z surüklenmesinin yalnizca ayarsiz halde
+      olustugunu pinler.
+- [x] Engine test: hiz esikleri, rol onceligi ve dusme zinciri
+      ("Skeletal animasyon Faz C: hiz esikleri, rol onceligi ve dusme zinciri").
+- [x] Engine test: animasyon secimi birim konumunu/statlarini degistirmez
+      (yurutulen birimde konum, can, saldiri cooldown'u ve emir degismez).
 
 Kabul: Emirle yurume, durunca crossfade ile idle'a donus; hiz degisiminde
-ayak temasi tutarli.
+ayak temasi tutarli. **Kullanici gozlemi bekliyor** (kalibrasyon sabitleri
+`RTS_LOCOMOTION_CALIBRATION` altinda tek yerde, gerekirse oradan ayarlanir).
 
 ### Faz D - Saldiri ve olum
 
@@ -231,3 +249,4 @@ Faz D'ye ancak locomotion stabil olduktan sonra gecilir.
 | 2026-07-26 | A | Klip + sidecar cache'i, `SkeletonUtils.clone` ile instans basina iskelet. Muhafizlar gorunur oldu. |
 | 2026-07-26 | B | `rtsUnitPresentation` + tick zinciri; authored `Idle_Loop` oynuyor. `tsc`, `test:engine` (1109), `build:verify` gecti. |
 | 2026-07-26 | B | Kemik/bilesen isim cakismasi duzeltildi (mixer modele baglanir). Kullanici dogruladi: dik ve hareketli. |
+| 2026-07-26 | C | Saf secici `rtsUnitAnimation.ts`, hiza oranli oynatma (`setPlaybackRate`), `moveSpeed` sunuma tasindi. `tsc` ve `test:engine` (1112) gecti. |
