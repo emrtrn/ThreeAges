@@ -62,6 +62,8 @@ export interface RtsPresentationUpdate {
   readonly attacking: boolean;
   /** True once the defeat pose has begun. */
   readonly dying: boolean;
+  /** Blows landed so far; each increment is one swing to play (Faz D). */
+  readonly attackCount: number;
 }
 
 /** Presentation-only Actor/legacy render handle. It owns no simulation data. */
@@ -70,6 +72,17 @@ export interface RtsPresentationHandle {
   readonly pickTargets: readonly Object3D[];
   readonly selectionRadius: number;
   readonly update?: (state: RtsPresentationUpdate) => void;
+  /**
+   * How long this presentation's authored death animation runs, in seconds.
+   *
+   * Undefined means it has none, and the unit's own collapse pose plays for
+   * {@link UNIT_DEATH_SECONDS} instead. When it is defined it *replaces* that
+   * constant, because the defeat window exists to let the death read on screen
+   * and a fixed 0.35s would cut nearly every authored death clip off mid-fall.
+   * This is the presentation reporting a fact about its asset, not asking for
+   * gameplay time: nothing else about the unit's removal changes.
+   */
+  readonly deathSeconds?: number | undefined;
   dispose(): void;
 }
 
@@ -293,6 +306,7 @@ export class Unit {
       planarSpeed: this.measurePlanarSpeed(deltaSeconds),
       attacking: this.isTradingBlows(),
       dying: this.dying,
+      attackCount: this.attack.blowCount,
     });
   }
 
@@ -564,14 +578,29 @@ export class Unit {
     return true;
   }
 
-  /** Advance the brief collapse pose; true means the registry may now remove it. */
+  /**
+   * The defeat window this unit actually plays: its presentation's authored
+   * death animation when it has one, otherwise the code collapse's fixed
+   * {@link UNIT_DEATH_SECONDS}.
+   */
+  get deathSeconds(): number {
+    return this.presentation?.deathSeconds ?? UNIT_DEATH_SECONDS;
+  }
+
+  /** Advance the defeat pose; true means the registry may now remove the unit. */
   updateDeath(dt: number): boolean {
     if (this.deathElapsed === null) return false;
-    this.deathElapsed = Math.min(UNIT_DEATH_SECONDS, this.deathElapsed + Math.max(0, dt));
-    const progress = this.deathElapsed / UNIT_DEATH_SECONDS;
-    this.object.rotation.z = -Math.PI * 0.5 * progress;
-    this.object.position.y = -UNIT_RADIUS * 0.2 * progress;
-    return this.deathElapsed >= UNIT_DEATH_SECONDS;
+    const duration = this.deathSeconds;
+    this.deathElapsed = Math.min(duration, this.deathElapsed + Math.max(0, dt));
+    // The tip-over is the *fallback* death. An asset that animates its own fall
+    // must not also be rotated by code, or the body lands twice — once from the
+    // clip's own collapse and once from this, ending face-down in the ground.
+    if (this.presentation?.deathSeconds === undefined) {
+      const progress = this.deathElapsed / duration;
+      this.object.rotation.z = -Math.PI * 0.5 * progress;
+      this.object.position.y = -UNIT_RADIUS * 0.2 * progress;
+    }
+    return this.deathElapsed >= duration;
   }
 
   /** Release the per-unit render allocations when it permanently leaves play. */

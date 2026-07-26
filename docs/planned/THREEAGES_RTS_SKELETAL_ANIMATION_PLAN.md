@@ -1,8 +1,9 @@
 # ThreeAges RTS Skeletal Animasyon Uygulama Plani
 
 Olusturulma tarihi: 2026-07-25
-Durum: Faz A, Faz B ve Faz C tamamlandi (C icin kullanici gozlemi bekleniyor).
-Sonraki is: Faz D (saldiri ve olum).
+Durum: Faz A-D tamamlandi (C kullanici tarafindan dogrulandi; D gozlem
+bekliyor). Faz E'nin sema kismi D ile birlikte indi. Sonraki is: Faz F
+(kapsam ve performans).
 Kapsam: RTS birimlerinin skeletal mesh'ini yasayan bir karakter haline getirmek;
 bosta durma, yurume, saldiri ve olum animasyonlarini oynatan bir sunum katmani.
 
@@ -176,30 +177,53 @@ ayak temasi tutarli. **Kullanici gozlemi bekliyor** (kalibrasyon sabitleri
 
 ### Faz D - Saldiri ve olum
 
-- [ ] Saldiri tek atimlik (loop'suz) oynatilsin; tetik `AttackComponent`
-      cooldown'undan turetilsin.
-- [ ] Olum: `Death01` oynasin. `UNIT_DEATH_SECONDS` (bugun 0.35 sn) klip
-      suresinden kisa; bu sayi veriden gelsin ki birim animasyon bitmeden
-      kaybolmasin.
-- [ ] Karar: hasarin animasyon notify penceresinde uygulanmasi bu fazin
-      **disindadir**. Hasar bugunku yerinde kalir; notify'li vurus penceresi
-      ayri bir simulasyon degisikligi olarak Faz F'ye birakilir.
-- [ ] Engine test: saldiri animasyonu hasar/cooldown sonucunu degistirmez.
-- [ ] Engine test: olum animasyonu suresi ile despawn zamanlamasi tutarlidir.
+- [x] Saldiri tek atimlik (loop'suz) oynatilir: `CrossfadeAnimator.playOnce`
+      (`LoopOnce` + `clampWhenFinished`). Tetik `AttackComponent.blowCount` -
+      `tryHit` hasari cozdukten *sonra* artan monoton sayac; her artis bir
+      salinim. Bagimlilik yonu bilerek tek yonlu: sayaci kimse savasta okumaz.
+- [x] Surekli kanal ile tek atimlik kanal ayrildi: `attack`/`death` rollerinin
+      **dongusel** dusme zinciri artik kendi klibine ulasmiyor, `idle`'a
+      cikiyor. Menzilde ama darbeler arasinda bekleyen birim kilic klibine
+      kilitlenmez.
+- [x] Olum: `Death01` oynar ve gecis geri donussuz kilitlenir (`advanceRtsAction`
+      death latch). `UNIT_DEATH_SECONDS` (0.35 sn) yerine sunumun bildirdigi
+      klip suresi kullanilir (`RtsPresentationHandle.deathSeconds`), boylece
+      birim kendi dususu bitmeden despawn olmaz. Klipsiz birim eski sabit
+      pencereyi ve kod-tabanli devrilmeyi korur; **authored olumde kod
+      rotasyonu devre disi** - ikisi ust uste binerse govde yere gomuluyordu.
+- [x] Karar korundu: hasarin animasyon notify penceresinde uygulanmasi bu fazin
+      **disindadir**; Faz F'de ayri bir simulasyon degisikligi olarak durur.
+- [x] Engine test: saldiri animasyonu hasar/cooldown sonucunu degistirmez
+      (sunum kareleri sayaci, cooldown'u ve hedefin canini kimildatmaz;
+      reddedilen saldiri animasyon da oynatmaz).
+- [x] Engine test: olum animasyonu suresi ile despawn zamanlamasi tutarlidir
+      (authored klip bitene kadar registry'de kalir, kapsul fallback'i sabit
+      surede cikar).
+- [x] **Sapma - Faz E'nin sema kismi buraya cekildi.** D'nin veriye dayali
+      olabilmesi icin `attack`/`death` semantic rolleri simdi eklendi:
+      `ANIMATION_SET_ROLES` (loader), `SKELETON_ANIMATION_SET_ROLES`
+      (`tools/saveValidator.ts` allowlist) ve UAL1 sidecar
+      (`Sword_Attack` / `Death01`). Engine test iki listeyi karsilastirip
+      round-trip'i pinler. Aksi halde D klip adini koda gomerdi (§4 sinirlarina
+      aykiri). Faz E'de artik yalnizca "kodda kalan sabit klip adi yok"
+      denetimi kaldi. Editor UI rol listesini `ANIMATION_SET_ROLES`'tan
+      urettigi icin iki rol Skeletal Mesh Editor'de kendiliginden goründu.
 
 Kabul: Menzile giren muhafiz her saldirida bir kez `Sword_Attack` oynatir;
-olen birim dusme animasyonunu tamamlar.
+olen birim dusme animasyonunu tamamlar. **Kullanici gozlemi bekliyor.**
 
 ### Faz E - Klip isimlerini veriye tasima
 
-- [ ] `animationSet`'e `attack` ve `death` semantic rolleri eklensin.
-- [ ] **Allowlist:** yeni `animationSet` alanlari `tools/saveValidator.ts`
-      icindeki `validateAnimationSet`'e eklensin - yoksa editor kaydinda
-      sessizce dusulur (bkz. CLAUDE.md, ikinci allowlist yuzeyi).
-- [ ] Loader tarafi (`src/scene/assetSkeletonLoader.ts` `normalizeAssetSkeleton`)
-      ile validator ayni sekli tanimlasin.
+- [x] `animationSet`'e `attack` ve `death` semantic rolleri eklendi (Faz D'de,
+      yukaridaki sapma maddesine bakiniz).
+- [x] **Allowlist:** `SKELETON_ANIMATION_SET_ROLES` guncellendi.
+- [x] Loader ile validator ayni sekli tanimliyor; engine testi iki listeyi
+      dogrudan karsilastiriyor.
 - [ ] Kodda kalan sabit klip ismi olmasin; yalnizca semantic rol + dusme zinciri.
-- [ ] Engine test: sidecar'da olmayan bir rol icin dusme zinciri devreye girer.
+      (Denetlenmedi - RTS yolunda sabit klip adi kalmadi, ama TPS tarafindaki
+      `locomotionAnimation.ts` hala `CLIP_FALLBACKS` isim sozlugu tasiyor.)
+- [x] Engine test: sidecar'da olmayan bir rol icin dusme zinciri devreye girer
+      (Faz C testi).
 
 Kabul: Bir klip ismi degistiginde yalnizca veri dosyasi duzenlenir.
 
@@ -250,3 +274,5 @@ Faz D'ye ancak locomotion stabil olduktan sonra gecilir.
 | 2026-07-26 | B | `rtsUnitPresentation` + tick zinciri; authored `Idle_Loop` oynuyor. `tsc`, `test:engine` (1109), `build:verify` gecti. |
 | 2026-07-26 | B | Kemik/bilesen isim cakismasi duzeltildi (mixer modele baglanir). Kullanici dogruladi: dik ve hareketli. |
 | 2026-07-26 | C | Saf secici `rtsUnitAnimation.ts`, hiza oranli oynatma (`setPlaybackRate`), `moveSpeed` sunuma tasindi. `tsc` ve `test:engine` (1112) gecti. |
+| 2026-07-26 | C | Kullanici dogruladi: yurume/durma calisiyor. |
+| 2026-07-26 | D | Tek atimlik saldiri/olum (`playOnce` + `advanceRtsAction`), `blowCount` tetigi, despawn artik authored olum klibini bekliyor. `attack`/`death` rolleri sema+allowlist'e eklendi. `build:verify` (1116) gecti. |

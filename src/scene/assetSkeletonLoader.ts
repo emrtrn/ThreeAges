@@ -7,7 +7,23 @@
 import type { Vec3 } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
 
-export const ANIMATION_SET_ROLES = ["idle", "walk", "run", "jump", "fall"] as const;
+/**
+ * Semantic clip roles an asset may author. `idle`/`walk`/`run`/`jump`/`fall`
+ * are continuous locomotion states; `attack`/`death` are one-shot actions,
+ * played once per event rather than looped (RTS skeletal animation plan Faz D).
+ *
+ * Adding a role here also requires adding it to `SKELETON_ANIMATION_SET_ROLES`
+ * in `tools/saveValidator.ts`, or an editor save silently drops it.
+ */
+export const ANIMATION_SET_ROLES = [
+  "idle",
+  "walk",
+  "run",
+  "jump",
+  "fall",
+  "attack",
+  "death",
+] as const;
 export type AnimationSetRole = (typeof ANIMATION_SET_ROLES)[number];
 
 export interface AssetSkeletonSocketDef {

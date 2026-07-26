@@ -2585,7 +2585,17 @@ export function validateSaveMaterialSlotsPayload(value: unknown): {
   };
 }
 
-const SKELETON_ANIMATION_SET_ROLES = ["idle", "walk", "run", "jump", "fall"] as const;
+// Mirrors ANIMATION_SET_ROLES in src/scene/assetSkeletonLoader.ts. A role the
+// loader knows but this list does not is dropped on every editor save.
+const SKELETON_ANIMATION_SET_ROLES = [
+  "idle",
+  "walk",
+  "run",
+  "jump",
+  "fall",
+  "attack",
+  "death",
+] as const;
 const SKELETON_ROOT_MOTION_MODES = ["preserve", "lockXZ", "lockXYZ"] as const;
 
 function validateAnimationSet(value: unknown): Record<string, string> {

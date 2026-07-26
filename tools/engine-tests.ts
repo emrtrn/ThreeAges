@@ -90,11 +90,15 @@ import {
 import { createRtsActorPlaceholder, isRtsActorPlaceholder } from "../src/game/rts/content/rtsActorPlaceholder";
 import { createRtsUnitPresentation } from "../src/game/rts/content/rtsUnitPresentation";
 import {
+  advanceRtsAction,
   classifyRtsAnimation,
   resolveRtsAnimationRole,
+  rtsActionClip,
   rtsLocomotionTuning,
   rtsPlaybackRate,
   selectRtsAnimation,
+  RTS_ACTION_NONE,
+  type RtsAnimationInput,
 } from "../src/game/rts/units/rtsUnitAnimation";
 import {
   formatRtsActorPresentationDebug,
@@ -233,7 +237,7 @@ import { ProjectileSystem } from "../src/game/rts/combat/projectileSystem";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
 import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
 import type { UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
-import { Unit } from "../src/game/rts/units/unit";
+import { Unit, UNIT_DEATH_SECONDS, type RtsPresentationHandle } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import { SelectionSystem } from "../src/game/rts/selection/selectionSystem";
 import type { MarqueeOverlay } from "../src/game/rts/selection/marqueeOverlay";
@@ -833,6 +837,7 @@ import {
   validateAssetVertexColors,
   validateSaveAssetVertexColorsPayload,
   validateSaveGameDataPayload,
+  validateAssetSkeletonDef,
 } from "./saveValidator";
 import {
   normalizeFoliageType,
@@ -892,6 +897,7 @@ import {
 import { actorPreviewNodes } from "../engine/scene/actorPreview";
 import { normalizeForgeMaterialDef } from "../engine/assets/material";
 import {
+  ANIMATION_SET_ROLES,
   normalizeAssetSkeleton,
   resolveBlendSpaceWeights,
   skeletonSidecarPath,
@@ -30063,7 +30069,15 @@ check("Skeletal animasyon Faz C: hiz esikleri, rol onceligi ve dusme zinciri", (
   assert.deepEqual(
     resolveRtsAnimationRole("attack", animationSet, available),
     { role: "idle", clip: "Idle_Loop" },
-    "roles this asset does not author end at idle — Faz E adds the data, not the code",
+    "the continuous channel stands an engaged unit at idle",
+  );
+  // Faz D: even with the attack clip authored, the *continuous* chain still
+  // resolves to idle. Swings are one-shots fired per blow by advanceRtsAction;
+  // looping the sword clip here would swing on a cadence the cooldown never had.
+  assert.deepEqual(
+    resolveRtsAnimationRole("attack", { idle: "Idle_Loop", attack: "Sword_Attack" }, new Set(["Idle_Loop", "Sword_Attack"])),
+    { role: "idle", clip: "Idle_Loop" },
+    "the looping channel never claims the one-shot swing clip",
   );
 
   // The two null cases, and the reason the chain must never end in "any clip":
@@ -30087,7 +30101,7 @@ check("Skeletal animasyon Faz C: hiz esikleri, rol onceligi ve dusme zinciri", (
   assert.equal(rtsPlaybackRate("death", 4, tuning), 1);
 
   const selection = selectRtsAnimation(
-    { planarSpeed: 2, attacking: false, dying: false },
+    { planarSpeed: 2, attacking: false, dying: false, attackCount: 0 },
     { idle: "Idle_Loop", walk: "Walk_Loop" },
     new Set(["Idle_Loop", "Walk_Loop"]),
     tuning,
@@ -30143,7 +30157,7 @@ check("Skeletal animasyon Faz C: lockXZ animatore ulasir ve klip hiza gore olcek
     // 2 units/s against a 6 units/s Guard: walking, at two-thirds of the walk
     // clip's calibrated speed. Two steps so the idle→walk crossfade settles.
     for (let i = 0; i < 2; i += 1) {
-      presentation.update?.({ deltaSeconds: 0.25, planarSpeed: 2, attacking: false, dying: false });
+      presentation.update?.({ deltaSeconds: 0.25, planarSpeed: 2, attacking: false, dying: false, attackCount: 0 });
     }
     return model.getObjectByName("hips")!;
   };
@@ -30208,6 +30222,179 @@ check("Skeletal animasyon Faz C: animasyon secimi birimin konumunu ve statlarini
   assert.equal(unit.attack.ready, true, "no clip spends or refunds an attack cooldown");
   assert.equal(unit.moveTarget, null, "no clip issues an order");
   assert.equal(unit.dying, false);
+});
+
+check("Skeletal animasyon Faz D: tek atimlik saldiri her darbede bir kez, olum ise bir kez ve geri donussuz", () => {
+  const durations = { attack: 0.5, death: 1.2 };
+  const input = (over: Partial<RtsAnimationInput> = {}): RtsAnimationInput => ({
+    planarSpeed: 0,
+    attacking: false,
+    dying: false,
+    attackCount: 0,
+    ...over,
+  });
+
+  // A blow starts the swing, and it runs down to nothing over its own length.
+  let state = advanceRtsAction(RTS_ACTION_NONE, input({ attackCount: 1, attacking: true }), durations, 0.1);
+  assert.equal(state.kind, "attack");
+  assert.equal(state.remainingSeconds, 0.5, "the swing is given the clip's whole length");
+  state = advanceRtsAction(state, input({ attackCount: 1, attacking: true }), durations, 0.3);
+  assert.equal(state.kind, "attack", "the swing is not cut short while it is still running");
+  state = advanceRtsAction(state, input({ attackCount: 1, attacking: true }), durations, 0.3);
+  assert.equal(state.kind, "none", "locomotion resumes the frame the swing expires");
+  // The failure this guards: a unit still in range but between blows must not be
+  // left holding the sword clip, or it swings on a cadence its cooldown never had.
+  assert.equal(state.remainingSeconds, 0);
+
+  // Every increment is its own swing, even one arriving mid-swing.
+  state = advanceRtsAction(state, input({ attackCount: 2, attacking: true }), durations, 0.1);
+  assert.equal(state.remainingSeconds, 0.5);
+  state = advanceRtsAction(state, input({ attackCount: 2, attacking: true }), durations, 0.2);
+  state = advanceRtsAction(state, input({ attackCount: 3, attacking: true }), durations, 0.1);
+  assert.equal(state.remainingSeconds, 0.5, "a fresh blow restarts the swing from the top");
+
+  // Death latches: it interrupts a swing, never restarts, and never gives the
+  // pose back. A unit must still be lying there when the death system despawns
+  // it — returning to idle mid-fall would resurrect it on screen.
+  state = advanceRtsAction(state, input({ dying: true, attackCount: 3 }), durations, 0.1);
+  assert.equal(state.kind, "death");
+  assert.equal(state.remainingSeconds, 1.2, "the fall interrupts the swing and takes the full clip");
+  state = advanceRtsAction(state, input({ dying: true, attackCount: 4 }), durations, 0.5);
+  assert.equal(state.kind, "death", "a blow landed on the way down does not restart anything");
+  assert.ok(Math.abs(state.remainingSeconds - 0.7) < 1e-9);
+  state = advanceRtsAction(state, input({ dying: true, attackCount: 4 }), durations, 5);
+  assert.equal(state.kind, "death", "the pose is held past the end of the clip");
+  assert.equal(state.remainingSeconds, 0);
+
+  // An asset that authors neither clip never enters the one-shot channel, which
+  // is what keeps a half-authored unit — and the capsule fallback — playable.
+  const unauthored = { attack: null, death: null };
+  assert.equal(advanceRtsAction(RTS_ACTION_NONE, input({ attackCount: 1 }), unauthored, 0.1).kind, "none");
+  assert.equal(advanceRtsAction(RTS_ACTION_NONE, input({ dying: true }), unauthored, 0.1).kind, "none");
+
+  // Clip resolution is data, not code: the role name indexes the sidecar.
+  const set = { idle: "Idle_Loop", attack: "Sword_Attack", death: "Death01" };
+  const shipped = new Set(["Idle_Loop", "Sword_Attack", "Death01"]);
+  assert.equal(rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 1 }, set, shipped), "Sword_Attack");
+  assert.equal(rtsActionClip({ kind: "death", remainingSeconds: 1, attackCount: 1 }, set, shipped), "Death01");
+  assert.equal(rtsActionClip(RTS_ACTION_NONE, set, shipped), null, "no action means locomotion owns the pose");
+  assert.equal(
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 1 }, set, new Set(["Idle_Loop"])),
+    null,
+    "an authored clip the model does not ship resolves to nothing, not to a guess",
+  );
+});
+
+check("Skeletal animasyon Faz D: attack/death rolleri editor kaydinda hayatta kalir", () => {
+  // The second allowlist surface (CLAUDE.md): the loader and the save validator
+  // define the role vocabulary twice, and a role only the loader knows is
+  // silently dropped the first time the asset is saved from the editor. That
+  // failure is invisible until a unit stops swinging days later, so the two
+  // lists are compared directly rather than trusted to stay in step.
+  const roundTripped = validateAssetSkeletonDef({
+    schema: 1,
+    animationSet: Object.fromEntries(ANIMATION_SET_ROLES.map((role) => [role, `${role}-clip`])),
+  }).animationSet as Record<string, string>;
+  for (const role of ANIMATION_SET_ROLES) {
+    assert.equal(roundTripped[role], `${role}-clip`, `the validator preserves the "${role}" role`);
+  }
+  assert.equal(roundTripped.attack, "attack-clip", "Faz D's swing survives a save");
+  assert.equal(roundTripped.death, "death-clip", "so does its death");
+
+  // And the loader reads back exactly what the validator wrote — one vocabulary,
+  // not two that happen to overlap today.
+  assert.deepEqual(normalizeAssetSkeleton({ animationSet: roundTripped }).animationSet, roundTripped);
+
+  // The shipped Guard asset actually authors both, which is what makes Faz D
+  // data-driven rather than a clip name compiled into the selector.
+  const shipped = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/starter-content/SkeletalMeshes/UAL1_Standard_RM.skeleton.json", "utf8")) as unknown,
+  );
+  assert.ok(shipped.animationSet.attack, "the Guard authors an attack clip");
+  assert.ok(shipped.animationSet.death, "the Guard authors a death clip");
+});
+
+check("Skeletal animasyon Faz D: saldiri animasyonu hasari ve cooldown'u degistirmez", () => {
+  // The blow counter the animation triggers off is written by tryHit *after* the
+  // damage resolves, so this pins the direction of the dependency: a fight runs
+  // identically whether or not anything is watching it.
+  const units = new UnitSystem();
+  const attacker = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const target = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
+  assert.equal(attacker.attack.blowCount, 0, "a unit that has not swung has landed no blows");
+
+  const first = attacker.attack.tryHit(target);
+  assert.ok(first, "the first swing lands");
+  assert.equal(attacker.attack.blowCount, 1, "exactly one swing to play per landed blow");
+  const healthAfterHit = target.health.current;
+
+  // Presentation frames in between must move nothing: not the counter, not the
+  // cooldown, not the target's health.
+  const camera = new Quaternion();
+  for (let i = 0; i < 10; i += 1) attacker.updatePresentation(0.1, camera);
+  assert.equal(attacker.attack.blowCount, 1, "rendering frames do not manufacture swings");
+  assert.equal(target.health.current, healthAfterHit, "rendering frames deal no damage");
+  assert.equal(attacker.attack.ready, false, "and they do not tick the cooldown down either");
+
+  // The cooldown is spent only by simulation time, and the second blow costs the
+  // same as the first — the animation has no say in either.
+  attacker.attack.update(RTS_TEST_UNIT_STATS.attackCooldown);
+  assert.equal(attacker.attack.ready, true);
+  const second = attacker.attack.tryHit(target);
+  assert.equal(second?.amount, first.amount, "identical swings deal identical damage");
+  assert.equal(attacker.attack.blowCount, 2);
+
+  // A blocked swing is not a swing: no counter movement means no animation.
+  const blocked = attacker.attack.tryHit(target);
+  assert.equal(blocked, null, "the cooldown refuses the third swing");
+  assert.equal(attacker.attack.blowCount, 2, "a refused swing plays no animation");
+
+  units.clear();
+});
+
+check("Skeletal animasyon Faz D: despawn authored olum klibini bekler, kapsul dususu ise sabit sureyi", () => {
+  const deathClipSeconds = 1.4;
+  const withDeathClip = (): RtsPresentationHandle => ({
+    root: new Group(),
+    pickTargets: [],
+    selectionRadius: 0.5,
+    deathSeconds: deathClipSeconds,
+    dispose: () => undefined,
+  });
+
+  const units = new UnitSystem();
+  units.setPresentationFactory(() => withDeathClip());
+  const animated = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  units.setPresentationFactory(null);
+  const capsule = units.spawn("player", 6, 0, RTS_TEST_UNIT_STATS);
+
+  assert.equal(animated.deathSeconds, deathClipSeconds, "the authored clip length replaces the constant");
+  assert.equal(capsule.deathSeconds, UNIT_DEATH_SECONDS, "an unanimated unit keeps the code collapse window");
+  // The Faz D bug this exists to prevent: UNIT_DEATH_SECONDS is 0.35s and every
+  // authored death is longer, so a unit would blink out of existence part-way
+  // through its own fall.
+  assert.ok(deathClipSeconds > UNIT_DEATH_SECONDS, "the fixture is the case that actually breaks");
+
+  const removed: Unit[] = [];
+  const selection = { remove: (unit: Unit) => removed.push(unit) };
+  animated.health.damage(RTS_TEST_UNIT_STATS.maxHealth);
+  capsule.health.damage(RTS_TEST_UNIT_STATS.maxHealth);
+
+  updateUnitDeaths(units, selection, UNIT_DEATH_SECONDS);
+  assert.ok(!units.all().includes(capsule), "the capsule's fixed collapse ends on schedule");
+  assert.ok(units.all().includes(animated), "the animated unit is still falling");
+
+  updateUnitDeaths(units, selection, deathClipSeconds - UNIT_DEATH_SECONDS - 0.01);
+  assert.ok(units.all().includes(animated), "and is not removed a frame early");
+  updateUnitDeaths(units, selection, 0.02);
+  assert.ok(!units.all().includes(animated), "it leaves once its own clip has finished");
+
+  // The clip animates the fall itself, so the code tip-over must stay off it —
+  // applying both lands the body twice and buries it in the ground.
+  assert.equal(animated.object.rotation.z, 0, "an authored death is not also rotated by code");
+  assert.ok(capsule.object.rotation.z < 0, "the fallback still tips over, as it always did");
+
+  units.clear();
 });
 
 check("Actor presentation Faz 3: a stand-in is visibly not art, and reports as its own state", () => {

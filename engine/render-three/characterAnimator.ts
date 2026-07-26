@@ -1,4 +1,4 @@
-import { AnimationMixer, LoopRepeat } from "three";
+import { AnimationMixer, LoopOnce, LoopRepeat } from "three";
 import type { AnimationAction, AnimationClip, Object3D } from "three";
 import { applyRootMotionToClips, type RootMotionClipSetting } from "./rootMotion";
 
@@ -80,6 +80,39 @@ export class CrossfadeAnimator {
     next.play();
     const prev = this.current ? this.actions.get(this.current) : undefined;
     if (prev && duration > 0) prev.crossFadeTo(next, duration, false);
+    else if (prev) prev.stop();
+    this.current = name;
+  }
+
+  /** Authored length of a clip in seconds, or null when this animator lacks it. */
+  clipDuration(name: string): number | null {
+    return this.actions.get(name)?.getClip().duration ?? null;
+  }
+
+  /**
+   * Plays `name` through exactly once and holds its final pose
+   * (`clampWhenFinished`), for event clips like a swing or a death.
+   *
+   * Unlike {@link play} this always restarts, even when the clip is already
+   * current: re-triggering the same clip is the normal case (a second sword
+   * blow), and a no-op there would silently drop every swing after the first.
+   * The looping state a later {@link play} crossfades to is unaffected, but the
+   * one-shot's own action keeps its `LoopOnce` mode — so a clip must not be
+   * driven through both entry points.
+   */
+  playOnce(name: string, fadeSeconds = 0.08): void {
+    if (this.blendActions.size > 0) this.stopBlend();
+    const next = this.actions.get(name);
+    if (!next) return;
+    next.reset();
+    next.enabled = true;
+    next.setLoop(LoopOnce, 1);
+    next.clampWhenFinished = true;
+    next.setEffectiveTimeScale(1);
+    next.setEffectiveWeight(1);
+    next.play();
+    const prev = this.current && this.current !== name ? this.actions.get(this.current) : undefined;
+    if (prev && fadeSeconds > 0) prev.crossFadeTo(next, fadeSeconds, false);
     else if (prev) prev.stop();
     this.current = name;
   }

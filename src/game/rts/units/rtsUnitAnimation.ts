@@ -27,6 +27,13 @@ export interface RtsAnimationInput {
   readonly attacking: boolean;
   /** True once the defeat pose has begun. */
   readonly dying: boolean;
+  /**
+   * How many blows this unit has landed so far. Only its *changes* are read —
+   * one swing animation per increment — so the presentation stays event-driven
+   * off the same cooldown the damage came from, without the animation getting a
+   * vote in when that damage lands.
+   */
+  readonly attackCount: number;
 }
 
 /**
@@ -120,8 +127,14 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   idle: ["idle"],
   walk: ["walk", "run", "idle"],
   run: ["run", "walk", "idle"],
-  attack: ["attack", "idle"],
-  death: ["death", "idle"],
+  // `attack` and `death` deliberately do *not* reach their own clips here. This
+  // chain feeds the continuous, looping channel, and those two clips are
+  // one-shots played per event by {@link advanceRtsAction} — looping a sword
+  // swing between blows would show a unit attacking on a cadence its cooldown
+  // never had. What the continuous channel wants for an engaged or fallen unit
+  // is the standing pose underneath the action.
+  attack: ["idle"],
+  death: ["idle"],
 };
 
 /**
@@ -195,4 +208,91 @@ export function selectRtsAnimation(
     clip: resolved.clip,
     playbackRate: rtsPlaybackRate(resolved.role, input.planarSpeed, tuning),
   };
+}
+
+/* ------------------------------------------------------------------------- *
+ * One-shot actions — Faz D
+ *
+ * Attack and death are events, not states: each is played through exactly once
+ * and then gets out of the way. They ride above the continuous locomotion
+ * channel, so a unit that finishes a swing returns to whatever it was doing
+ * without the selector having to remember that it swung.
+ * ------------------------------------------------------------------------- */
+
+/** The one-shot currently overriding locomotion, if any. */
+export interface RtsActionState {
+  readonly kind: "none" | "attack" | "death";
+  /** Seconds left of the running clip. Reaches 0 on the frame it finishes. */
+  readonly remainingSeconds: number;
+  /** The blow count this state was last reconciled against; see {@link advanceRtsAction}. */
+  readonly attackCount: number;
+}
+
+/** A unit that has neither swung nor fallen. */
+export const RTS_ACTION_NONE: RtsActionState = { kind: "none", remainingSeconds: 0, attackCount: 0 };
+
+/**
+ * Authored lengths of the one-shot clips, in seconds. Null means the asset
+ * ships no clip for that role, and the action never starts — which is how the
+ * capsule fallback and any half-authored asset keep working.
+ */
+export interface RtsActionDurations {
+  readonly attack: number | null;
+  readonly death: number | null;
+}
+
+/**
+ * Advances the one-shot channel by one frame.
+ *
+ * Three rules, in order:
+ *  1. **Death latches.** Once it starts it is never interrupted, never
+ *     restarted, and never returns to locomotion — a unit only dies once, and
+ *     it must still be lying there when the death system despawns it.
+ *  2. **A new blow restarts the swing.** Any change in `attackCount` begins the
+ *     attack clip from the top, even if the previous swing is still running.
+ *  3. **Otherwise the running action runs down**, and locomotion resumes on the
+ *     frame it expires.
+ *
+ * The returned state always carries the input's `attackCount`, so blows landed
+ * while an action was uninterruptible do not queue up and fire late.
+ */
+export function advanceRtsAction(
+  state: RtsActionState,
+  input: RtsAnimationInput,
+  durations: RtsActionDurations,
+  deltaSeconds: number,
+): RtsActionState {
+  const dt = Math.max(0, deltaSeconds);
+  if (input.dying) {
+    if (state.kind === "death") {
+      return { ...state, remainingSeconds: Math.max(0, state.remainingSeconds - dt) };
+    }
+    if (durations.death === null) {
+      // No authored death clip: the unit's own collapse pose owns its defeat.
+      return { kind: "none", remainingSeconds: 0, attackCount: input.attackCount };
+    }
+    return { kind: "death", remainingSeconds: durations.death, attackCount: input.attackCount };
+  }
+  if (input.attackCount !== state.attackCount && durations.attack !== null) {
+    return { kind: "attack", remainingSeconds: durations.attack, attackCount: input.attackCount };
+  }
+  if (state.kind === "attack") {
+    const remaining = state.remainingSeconds - dt;
+    if (remaining > 0) return { kind: "attack", remainingSeconds: remaining, attackCount: input.attackCount };
+  }
+  return { kind: "none", remainingSeconds: 0, attackCount: input.attackCount };
+}
+
+/**
+ * The clip a running one-shot should be playing, or null when the continuous
+ * locomotion channel owns the pose this frame.
+ */
+export function rtsActionClip(
+  state: RtsActionState,
+  animationSet: RtsAnimationSet,
+  available: ReadonlySet<string>,
+): string | null {
+  if (state.kind === "none") return null;
+  const clip = animationSet[state.kind];
+  return clip && available.has(clip) ? clip : null;
 }

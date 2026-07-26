@@ -14,6 +14,7 @@ import type { HealthChange } from "./health";
 
 export class AttackComponent {
   private cooldownRemaining = 0;
+  private blows = 0;
 
   constructor(private readonly stats: UnitBalanceStats) {}
 
@@ -46,6 +47,17 @@ export class AttackComponent {
     return this.cooldownRemaining === 0;
   }
 
+  /**
+   * How many blows this unit has landed, counted purely so a presentation can
+   * play one swing animation per hit. Nothing in combat reads it: it is written
+   * by {@link tryHit} after the damage is already resolved, so an animation can
+   * never move a hit, and removing every presentation would leave the fight
+   * identical. Monotonic for the unit's lifetime.
+   */
+  get blowCount(): number {
+    return this.blows;
+  }
+
   /** Damage this attack would deal to a target, for UI counter hints. */
   damageAgainst(target: CombatTarget): number {
     return resolveDamage(this.stats, target);
@@ -59,6 +71,7 @@ export class AttackComponent {
     if (!this.ready || target.health.depleted) return null;
     const change = target.health.damage(resolveDamage(this.stats, target));
     this.cooldownRemaining = this.stats.attackCooldown;
+    this.blows += 1;
     return change;
   }
 }
