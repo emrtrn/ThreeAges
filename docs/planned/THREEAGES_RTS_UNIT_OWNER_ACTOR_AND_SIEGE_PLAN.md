@@ -1,8 +1,12 @@
 # RTS Birim Owner Actor'lari ve Coklu-Component Topcu Plani
 
 Olusturulma tarihi: 2026-07-26  
-Durum: Faz 1 ve Faz 3 tamamlandi (2026-07-26). Faz 2 kismen: sekiz Actor
-dosyasinin tamami mevcut, kalan madde asagida isaretli. Faz 4 bekliyor.
+Durum: Faz 1, Faz 2 ve Faz 3 tamamlandi (2026-07-26). Faz 4 (sanat + browser
+kabulu) bekliyor; sanat kararlari kullaniciya ait.
+
+Acik bulgu: `RtsPresentationHandle.selectionRadius` sekiz Actor'un hepsinde
+author ediliyor ve factory tarafindan okunuyor, fakat hicbir yerde tuketilmiyor —
+secim halkasi hala sabit `UNIT_RADIUS`tan cizilir. Detay asagida.
 
 Renk semasi (kullanici karari, 2026-07-26): isciler her iki tarafta da tintsiz
 (`ual1-standard-rm`in kendi sari-turuncusu), oyuncu muhafizi turkuaz `#2fb3ad`,
@@ -206,8 +210,18 @@ overlay bunu placeholder olarak raporlar.
 3. [x] Eski `approvedUnitExceptions` listesini kaldir; kapsama istegi dort unit
    balance id'sinin tamamini zorunlu kabul etsin. — liste bos; alan yalnizca
    yari-authored fork'lar icin kaciş yolu olarak duruyor.
-4. [ ] Her unit icin pick target, secim halkasi, health bar ve existing animation
-   handle davranisini regression testle koru.
+4. [x] Her unit icin pick target, secim halkasi, health bar ve existing animation
+   handle davranisini regression testle koru. — sekiz Actor'un tamami tek testte:
+   her mesh component'i bir pick target (topçuda dort: govde, namlu, iki
+   tekerlek) ve hepsi ayni Actor'un altinda; `selectionRadius` Actor
+   degiskeninden geliyor ve Details alaninin araliginda; Actor takilinca birimin
+   halkalari ve health bar'i yerinde kaliyor; hasar aynen isliyor; klipsiz bir
+   Actor `deathSeconds` bildirmiyor (topçu artik iskeletsiz — uygulayamayacagi bir
+   olum suresi bildirse enkaz sahada asili kalirdi).
+
+   Bunun icin factory'nin iki ozel adimi disa alindi
+   (`collectRtsPickTargets`, `readRtsSelectionRadius`), yoksa test factory'nin
+   degil kendi kopyasinin davranisini dogrulardi.
 
 Kabul: normal `?rts` akisi role-shaped kod geometrisine dusmez; Content
 Drawer'da bir Actor'un mesh veya transformu kaydedildiginde o role'un yeni
@@ -306,6 +320,19 @@ dusmemesi icin `tools/saveValidator.ts`de ilgili `validate*` fonksiyonuna da
 allowlist eklenmelidir. Bu plandaki `rtsPresentationMotion` Actor prop'u ise
 Actor Script'in normal props verisidir; yine de editor ve save round-trip testi
 zorunludur.
+
+## Acik bulgu — bagli olmayan `selectionRadius`
+
+Faz 2 adim 4 sirasinda cikti: her sekiz Actor bir `selectionRadius` degiskeni
+author ediyor, `RtsActorVisualFactory` bunu okuyup `RtsPresentationHandle`e
+koyuyor, fakat **hicbir tuketici yok**. `Unit` secim halkasini sabit
+`UNIT_RADIUS * 1.25..1.55` ile cizer. Yani 1.5 birim genisligindeki topçu ile
+okçu ayni halkayi tasir ve Actor'daki degeri degistirmek hicbir sey yapmaz.
+
+Bu bir davranis degisikligi oldugu ve her birimin gorunumunu etkileyecegi icin
+bu dilimde baglanmadi; test mevcut davranisi oldugu gibi pinliyor. Baglanacaksa
+karar iki taraflidir: halka Actor'un degerini mi izlesin (topçunun halkasi
+buyur), yoksa alan Actor'lardan kaldirilip sabit mi kalsin.
 
 ## Bilincli olarak sonraya birakilanlar
 

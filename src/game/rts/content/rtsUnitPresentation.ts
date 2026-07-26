@@ -14,7 +14,8 @@
  * (`@engine/perf/distanceUpdateRate`) that the subsystem uses — the cadence
  * policy is shared even though the tick owner is not.
  */
-import type { AnimationClip, Object3D } from "three";
+import { Mesh, type AnimationClip, type Object3D } from "three";
+import type { ActorScriptDef } from "@engine/scene/actorScript";
 
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
 import {
@@ -236,4 +237,31 @@ class RtsUnitPresentation implements RtsPresentationHandle {
 
 export function createRtsUnitPresentation(options: RtsUnitPresentationOptions): RtsPresentationHandle {
   return new RtsUnitPresentation(options);
+}
+
+/**
+ * Every mesh under a presentation, which is what a click on the unit may land on.
+ *
+ * All of them, not just the body: a siege engine is a chassis, a barrel and two
+ * wheels, and a player who clicks the barrel has clicked the gun. Selection is
+ * the one place where a multi-component Actor must still behave as one object.
+ */
+export function collectRtsPickTargets(root: Object3D): Object3D[] {
+  const targets: Object3D[] = [];
+  root.traverse((child) => {
+    if (child instanceof Mesh) targets.push(child);
+  });
+  return targets;
+}
+
+/**
+ * The Actor's authored selection radius.
+ *
+ * Authored rather than measured from the model's bounds: the ring says how big
+ * the unit is *to the player's mouse*, which is a design call, and deriving it
+ * from geometry would make a wide-armed pose select differently from a narrow one.
+ */
+export function readRtsSelectionRadius(def: ActorScriptDef | undefined, fallback = 0.5): number {
+  const value = def?.variables.find((field) => field.key === "selectionRadius")?.default;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }

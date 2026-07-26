@@ -98,7 +98,9 @@ import {
 } from "../src/game/rts/content/rtsPresentationMotion";
 import { createRtsActorPlaceholder, isRtsActorPlaceholder } from "../src/game/rts/content/rtsActorPlaceholder";
 import {
+  collectRtsPickTargets,
   createRtsUnitPresentation,
+  readRtsSelectionRadius,
   RTS_ANIMATION_DISTANCE_SETTINGS,
 } from "../src/game/rts/content/rtsUnitPresentation";
 import {
@@ -30067,6 +30069,117 @@ check("Siege Faz 3: the authored wheel radius is the radius the wheel mesh actua
     assert.ok(chassis[2] > 0.8 && chassis[2] < 4, `${ref} chassis is ${chassis[2]} deep, which is not a vehicle`);
     const barrel = sizeOf("barrel");
     assert.ok(Math.max(...barrel) > 0.5 && Math.max(...barrel) < 2.5, `${ref} barrel length ${Math.max(...barrel)} is not a gun`);
+  }
+});
+
+check("Unit Actors Faz 2: all eight shipped unit Actors still present as one selectable, damageable unit", () => {
+  // The eight Actors are the whole authoring surface a match renders units from,
+  // and they changed a lot: four became eight, the Topçu went from one skeletal
+  // body to four static meshes, the Workers lost their tint. None of that may
+  // reach selection, health or the death timing, which is what this pins.
+  const manifest = parseRtsMeshManifest(
+    JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
+  );
+
+  // Stand-ins for the real models: the point is the tree the Actor builds around
+  // them, not the art. The skeletal one is genuinely skinned, because an
+  // unskinned stub would not exercise the rebinding clone path.
+  const staticTemplate = (): Group => {
+    const group = new Group();
+    group.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial()));
+    return group;
+  };
+  const skeletalTemplate = (): Group => {
+    const bone = new Bone();
+    bone.name = "hips";
+    const skinned = new SkinnedMesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
+    skinned.add(bone);
+    skinned.bind(new Skeleton([bone]));
+    const group = new Group();
+    group.add(skinned);
+    return group;
+  };
+  const templates = new Map<string, Group>();
+  const resolveTemplate = (assetId: string): Group => {
+    let template = templates.get(assetId);
+    if (!template) {
+      template = manifest.get(assetId)?.assetType === "skeletalMesh" ? skeletalTemplate() : staticTemplate();
+      templates.set(assetId, template);
+    }
+    return template;
+  };
+
+  const roles = ["Guard", "Worker", "Archer", "Siege"] as const;
+  const statsFor: Record<string, UnitBalanceStats> = {
+    Guard: RTS_TEST_UNIT_STATS,
+    Worker: { ...RTS_TEST_UNIT_STATS, role: "worker" },
+    Archer: { ...RTS_TEST_UNIT_STATS, role: "archer" },
+    Siege: { ...RTS_TEST_UNIT_STATS, role: "siege" },
+  };
+
+  for (const role of roles) {
+    for (const [owner, file] of [["player", `BP_RTS_${role}`], ["enemy", `BP_RTS_Enemy_${role}`]] as const) {
+      const ref = `assets/ThreeAges/Actors/Units/${file}.actor.json`;
+      const def = normalizeActorScriptDef(JSON.parse(readFileSync(`public/${ref}`, "utf8")) as unknown, ref);
+      validateRtsPresentationActor(def, ref, manifest);
+      const root = buildActorPresentationTree(def, ref, resolveTemplate);
+
+      // Pick targets: every mesh, so a click anywhere on the Actor selects it.
+      // A unit with none would be permanently unselectable, which no test above
+      // this line would notice.
+      const pickTargets = collectRtsPickTargets(root);
+      const meshKinds = new Set(["StaticMeshComponent", "SkeletalMeshComponent", "MeshRenderer"]);
+      const expectedMeshes = def.components.filter((node) => meshKinds.has(node.component)).length;
+      assert.equal(pickTargets.length, expectedMeshes, `${ref} exposes one pick target per mesh component`);
+      assert.ok(pickTargets.length > 0, `${ref} is selectable at all`);
+      if (role === "Siege") {
+        assert.equal(pickTargets.length, 4, "the siege engine is picked by chassis, barrel or either wheel");
+      }
+
+      // The ring size is authored, and must stay inside the range the Details
+      // field offers — a radius outside it is data the editor could not have
+      // produced and the player could not click.
+      const selectionRadius = readRtsSelectionRadius(def);
+      assert.ok(selectionRadius >= 0.1 && selectionRadius <= 4, `${ref} authors a usable selection radius`);
+      assert.equal(
+        selectionRadius,
+        def.variables.find((field) => field.key === "selectionRadius")?.default,
+        `${ref} selection radius comes from the Actor, not from a default`,
+      );
+
+      const presentation = createRtsUnitPresentation({
+        root,
+        pickTargets,
+        selectionRadius,
+        animation: null,
+        moveSpeed: statsFor[role]!.moveSpeed,
+        wheelSpins: bindRtsWheelSpins(def, root),
+      });
+      const unit = new Unit(owner, 0, 0, statsFor[role]!, presentation);
+
+      // Installing an Actor replaces the code body — and nothing else. The rings
+      // and the health bar are the unit's own furniture and must survive it.
+      assert.ok(unit.object.children.includes(root), `${ref} hangs its Actor under the unit`);
+      assert.ok(unit.object.children.length > 1, `${ref} keeps the unit's rings and health bar`);
+      assert.deepEqual(unit.presentationPickTargets(), pickTargets, `${ref} hands its pick targets to the unit`);
+      for (const target of unit.presentationPickTargets()) {
+        let ancestor: Object3D | null = target;
+        while (ancestor && ancestor !== root) ancestor = ancestor.parent;
+        assert.equal(ancestor, root, `${ref} pick targets all belong to this Actor`);
+      }
+
+      // Health is simulation state and is not the Actor's to affect.
+      unit.health.damage(statsFor[role]!.maxHealth / 2);
+      assert.ok(Math.abs(unit.health.ratio - 0.5) < 1e-9, `${ref} takes damage exactly as before`);
+
+      // No clips, so no authored death: the unit falls back to its own collapse
+      // window. The Topçu is the case that matters — it has no skeleton at all
+      // now, and a presentation claiming a death length it cannot play would
+      // hold the wreck on the field for a clip that never runs.
+      assert.equal(presentation.deathSeconds, undefined, `${ref} reports no authored death without clips`);
+
+      unit.dispose();
+    }
   }
 });
 

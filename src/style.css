@@ -407,15 +407,24 @@ body {
 }
 
 .rts-hud-resources {
-  display: flex;
-  flex-shrink: 0;
+  /*
+   * A resource cell used to be a content-sized flex item.  Consequently
+   * `999/900` and `1000/900` occupied different widths and pushed every
+   * readout to their right.  These are fixed slots instead: only a viewport
+   * breakpoint may change their boundaries, never a game value.
+   */
+  display: grid;
+  grid-template-columns: repeat(4, 170px);
+  flex: 0 0 auto;
   gap: 14px;
 }
 
 .rts-hud-resource {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 4px;
+  overflow: hidden;
 }
 
 .rts-hud-resource-icon {
@@ -425,7 +434,8 @@ body {
 
 .rts-hud-resource-values {
   display: grid;
-  grid-template-columns: auto auto;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: baseline;
   column-gap: 4px;
 }
@@ -445,11 +455,14 @@ body {
  * a single-digit stock a full 28px away from its own income.
  */
 .rts-hud-resource-amount {
-  min-width: 34px;
+  min-width: 0;
+  overflow: hidden;
   color: var(--ta-gold);
   font-size: 15px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   text-align: right;
 }
 
@@ -473,6 +486,7 @@ body {
   margin-left: auto;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .rts-hud-population,
@@ -574,6 +588,36 @@ body {
 
 .rts-hud-warning[hidden] {
   display: none;
+}
+
+/* Keep the one-row HUD usable below desktop widths without letting it spill off
+   the canvas.  The resource columns stay equal in each mode, so live values
+   still cannot move neighbouring controls. */
+@media (max-width: 1700px) {
+  .rts-hud-resources {
+    grid-template-columns: repeat(4, 150px);
+  }
+
+  .rts-hud-age {
+    display: none;
+  }
+}
+
+@media (max-width: 1400px) {
+  .rts-hud-bar {
+    gap: 8px;
+  }
+
+  .rts-hud-kingdom-name,
+  .rts-hud-idle-workers,
+  .rts-hud-worker-actions {
+    display: none;
+  }
+
+  .rts-hud-resources {
+    grid-template-columns: repeat(4, 136px);
+    gap: 8px;
+  }
 }
 
 /*

@@ -26,7 +26,12 @@ import {
 import { buildActorPresentationTree, fitPresentationToFootprint, tintedCopy } from "./rtsActorPresentationTree";
 import { createRtsActorPlaceholder } from "./rtsActorPlaceholder";
 import { bindRtsWheelSpins } from "./rtsPresentationMotion";
-import { createRtsUnitPresentation, type RtsUnitAnimationSource } from "./rtsUnitPresentation";
+import {
+  collectRtsPickTargets,
+  createRtsUnitPresentation,
+  readRtsSelectionRadius,
+  type RtsUnitAnimationSource,
+} from "./rtsUnitPresentation";
 import { loadAssetSkeleton, type AssetSkeletonDef } from "@/scene/assetSkeletonLoader";
 import type { RtsPresentationHandle, UnitOwner } from "../units/unit";
 
@@ -72,11 +77,6 @@ export function formatRtsActorPresentationDebug(report: RtsActorLoadReport): str
     `${header} · ${report.failures.length} placeholder`,
     ...report.failures.map((failure) => `  ! ${failure.reason}`),
   ];
-}
-
-function readNumberVariable(def: ActorScriptDef, key: string, fallback: number): number {
-  const value = def.variables.find((field) => field.key === key)?.default;
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 /** Builds cloned Actor Script component trees from the manifest-resolved mesh assets. */
@@ -164,10 +164,7 @@ export class RtsActorVisualFactory {
     if (!actorRef || !this.ready) return null;
     const root = this.createActorVisual(actorRef);
     if (!root) return null;
-    const pickTargets: Object3D[] = [];
-    root.traverse((child) => {
-      if (child instanceof Mesh) pickTargets.push(child);
-    });
+    const pickTargets = collectRtsPickTargets(root);
     if (pickTargets.length === 0) return null;
     // A ref that failed to load has no def, and `createActorVisual` has already
     // handed back the stand-in. Returning null here instead would drop the unit
@@ -177,7 +174,7 @@ export class RtsActorVisualFactory {
     return createRtsUnitPresentation({
       root,
       pickTargets,
-      selectionRadius: def ? readNumberVariable(def, "selectionRadius", 0.5) : 0.5,
+      selectionRadius: readRtsSelectionRadius(def),
       animation: def ? this.animationSourceFor(root) : null,
       moveSpeed,
       wheelSpins: def ? bindRtsWheelSpins(def, root) : [],

@@ -23,7 +23,6 @@
     {
       "id": "chassis",
       "component": "StaticMeshComponent",
-      "parent": "root",
       "props": {
         "assetId": "shape-cube",
         "position": [
@@ -37,12 +36,12 @@
           1.9
         ],
         "materialTint": "#4a6f72"
-      }
+      },
+      "parent": "root"
     },
     {
       "id": "turretPivot",
       "component": "Transform",
-      "parent": "root",
       "props": {
         "position": [
           0,
@@ -54,12 +53,12 @@
           0,
           0
         ]
-      }
+      },
+      "parent": "root"
     },
     {
       "id": "barrel",
       "component": "StaticMeshComponent",
-      "parent": "turretPivot",
       "props": {
         "assetId": "shape-cylinder",
         "position": [
@@ -78,12 +77,12 @@
           0.22
         ],
         "materialTint": "#2f3438"
-      }
+      },
+      "parent": "turretPivot"
     },
     {
       "id": "leftWheelPivot",
       "component": "Transform",
-      "parent": "root",
       "props": {
         "position": [
           -0.78,
@@ -96,12 +95,12 @@
           "radius": 0.34,
           "direction": 1
         }
-      }
+      },
+      "parent": "root"
     },
     {
       "id": "leftWheel",
       "component": "StaticMeshComponent",
-      "parent": "leftWheelPivot",
       "props": {
         "assetId": "shape-torus",
         "position": [
@@ -120,12 +119,12 @@
           0.68
         ],
         "materialTint": "#6b4a2c"
-      }
+      },
+      "parent": "leftWheelPivot"
     },
     {
       "id": "rightWheelPivot",
       "component": "Transform",
-      "parent": "root",
       "props": {
         "position": [
           0.78,
@@ -138,12 +137,12 @@
           "radius": 0.34,
           "direction": 1
         }
-      }
+      },
+      "parent": "root"
     },
     {
       "id": "rightWheel",
       "component": "StaticMeshComponent",
-      "parent": "rightWheelPivot",
       "props": {
         "assetId": "shape-torus",
         "position": [
@@ -162,7 +161,8 @@
           0.68
         ],
         "materialTint": "#6b4a2c"
-      }
+      },
+      "parent": "rightWheelPivot"
     }
   ],
   "interfaces": [],
