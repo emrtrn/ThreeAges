@@ -1,9 +1,10 @@
 # ThreeAges RTS Skeletal Animasyon Uygulama Plani
 
 Olusturulma tarihi: 2026-07-25
-Durum: Faz A-D tamamlandi (C kullanici tarafindan dogrulandi; D gozlem
-bekliyor). Faz E'nin sema kismi D ile birlikte indi. Sonraki is: Faz F
-(kapsam ve performans).
+Durum: Faz A-F kod tarafinda tamamlandi. A-D kullanici tarafindan dogrulandi
+(C ve D: 2026-07-26); E kapandi; F'nin tek acik maddesi bilerek ertelenen
+opsiyonel notify-hasari karari. Bekleyen: Faz F'nin kullanici gozlemi
+(uc yeni rolun rengi ve 40 birimde akicilik).
 Kapsam: RTS birimlerinin skeletal mesh'ini yasayan bir karakter haline getirmek;
 bosta durma, yurume, saldiri ve olum animasyonlarini oynatan bir sunum katmani.
 
@@ -172,8 +173,9 @@ ve animasyon oynuyor.
       (yurutulen birimde konum, can, saldiri cooldown'u ve emir degismez).
 
 Kabul: Emirle yurume, durunca crossfade ile idle'a donus; hiz degisiminde
-ayak temasi tutarli. **Kullanici gozlemi bekliyor** (kalibrasyon sabitleri
-`RTS_LOCOMOTION_CALIBRATION` altinda tek yerde, gerekirse oradan ayarlanir).
+ayak temasi tutarli. **Karsilandi** - kullanici onayladi (2026-07-26).
+(Kalibrasyon sabitleri `RTS_LOCOMOTION_CALIBRATION` altinda tek yerde,
+gerekirse oradan ayarlanir.)
 
 ### Faz D - Saldiri ve olum
 
@@ -210,7 +212,8 @@ ayak temasi tutarli. **Kullanici gozlemi bekliyor** (kalibrasyon sabitleri
       urettigi icin iki rol Skeletal Mesh Editor'de kendiliginden goründu.
 
 Kabul: Menzile giren muhafiz her saldirida bir kez `Sword_Attack` oynatir;
-olen birim dusme animasyonunu tamamlar. **Kullanici gozlemi bekliyor.**
+olen birim dusme animasyonunu tamamlar. **Karsilandi** - kullanici onayladi
+(2026-07-26).
 
 ### Faz E - Klip isimlerini veriye tasima
 
@@ -219,9 +222,13 @@ olen birim dusme animasyonunu tamamlar. **Kullanici gozlemi bekliyor.**
 - [x] **Allowlist:** `SKELETON_ANIMATION_SET_ROLES` guncellendi.
 - [x] Loader ile validator ayni sekli tanimliyor; engine testi iki listeyi
       dogrudan karsilastiriyor.
-- [ ] Kodda kalan sabit klip ismi olmasin; yalnizca semantic rol + dusme zinciri.
-      (Denetlenmedi - RTS yolunda sabit klip adi kalmadi, ama TPS tarafindaki
-      `locomotionAnimation.ts` hala `CLIP_FALLBACKS` isim sozlugu tasiyor.)
+- [x] Kodda kalan sabit klip ismi olmasin; yalnizca semantic rol + dusme zinciri.
+      **Denetlendi (2026-07-26):** `src/` ve `engine/` icinde tek bir UAL1 klip
+      adi gecmiyor. TPS tarafindaki `locomotionAnimation.ts` `CLIP_FALLBACKS`
+      sozlugunu koruyor ama bu ihlal degil: `resolveLocomotionClip` once
+      authored `animationSet` rollerini dener, isim sozlugu yalnizca *sidecar'i
+      olmayan* bir asset icin son care sezgiseldir. Sidecar'li her asset -
+      RTS'in tamami dahil - veriyle surulur.
 - [x] Engine test: sidecar'da olmayan bir rol icin dusme zinciri devreye girer
       (Faz C testi).
 
@@ -229,18 +236,59 @@ Kabul: Bir klip ismi degistiginde yalnizca veri dosyasi duzenlenir.
 
 ### Faz F - Kapsam ve performans
 
-- [ ] Archer / Siege / Worker icin Actor mapping'i (`rts-content.json`) ve rol
-      ayrimi karari (ayri mesh, ekipman veya material).
-- [ ] Worker icin calisma animasyonu (`Fixing_Kneeling` adayi).
-- [ ] Uzak birimlerin mixer'i seyrek guncellensin - kalabalik orduda asil
-      kaldirac budur. Iki secenek: `RtsApp`'e engine subsystem registry'si
-      tanitip `AnimationSubsystem.setDistanceUpdateSettings` kullanmak, ya da
-      ayni `distanceUpdateRate` yardimcisini `rtsUnitPresentation` icinde
-      yerel olarak uygulamak.
-- [ ] 20 ve 40 aktif skeletal instance ile frame-butce olcumu.
+- [x] Archer / Siege / Worker icin Actor mapping'i (`rts-content.json`) ve rol
+      ayrimi karari. **Karar (kullanici, 2026-07-26): material tint.** Ucu de
+      `ual1-standard-rm` rig'ini kullanan kendi Actor'unu alir
+      (`BP_RTS_Archer` / `BP_RTS_Siege` / `BP_RTS_Worker`); ayrim
+      `SkeletalMeshComponent`'e authored `materialTint` prop'u ile yapilir
+      (Archer `#4f8f4a`, Topcu `#3f4a55`, Isci `#dfbd5b` - eski kapsul Isci'nin
+      rengi). Socket/ekipman yolu secilmedi: sidecar'in `sockets` listesi bos ve
+      presentation tree'de socket attach yolu yok, ikisi de Faz F'yi belirgin
+      buyuturdu. Takim rengi secim halkasinda kalir; tint yalnizca rolu anlatir.
+      **Sinir:** Topcu artik tekerlekli top degil, gri boyali bir insan - ayri
+      mesh gelene kadar siluet okunurlugu bu kadar.
+- [x] `materialTint` uygulama yolu: `buildActorPresentationTree` material'i
+      klonlayip boyar, `RtsActorVisualFactory` klonu `${material.uuid}|${tint}`
+      ile cache'ler (bir rol = bir material, 40 birim degil) ve `dispose` bu
+      kopyalari birakir. Geometri/iskelet paylasimi (Faz A) degismedi; tint'siz
+      Actor - Muhafiz - sablonun kendi material'ini paylasmaya devam eder.
+      `props` serbest kayit oldugu icin allowlist degisikligi gerekmedi.
+      Uc Actor `public/assets/manifest.json`'a da kaydedildi (Guard ile ayni
+      sekilde), yoksa `check:assets` "unregistered" uyarisi verir ve Content
+      Browser'da gorunmezler.
+- [x] Kapsam istisnasi kapandi: `approvedUnitExceptions` artik bos, her birim
+      kimligi bir Actor'a cozuluyor. Engine testi hem "istisnasiz tam kapsam"
+      hem de "iki birim ayni Actor'u paylasmaz" kosulunu pinliyor; istisna
+      mekanizmasi (fork'lar icin) ayrica test ediliyor.
+- [x] Worker icin calisma animasyonu: yeni `work` semantic rolu
+      (`ANIMATION_SET_ROLES` + `SKELETON_ANIMATION_SET_ROLES` allowlist + UAL1
+      sidecar `work: "Fixing_Kneeling"`). Secicide oncelik olum > saldiri >
+      hareket > **is** > bosta - is hareketin *altinda*, cunku birim siteye
+      yururken de atanmis durumdadir. Dusme zinciri `work -> idle`.
+      `WorkerConstructionSystem` bayragi `state === "building"` oldugunda
+      kaldirir, `release` her cikis yolunda birakir.
+- [x] Uzak birimlerin mixer'i seyrek guncellenir. Iki secenekten **ikincisi**
+      secildi: `rtsUnitPresentation` ayni saf zamanlayiciyi
+      (`@engine/perf/distanceUpdateRate`) yerel olarak kullanir; `RtsApp`'e
+      subsystem registry'si tanitilmadi. Ayar
+      `RTS_ANIMATION_DISTANCE_SETTINGS` (45 birim otesi 15 Hz). Atlanan zaman
+      biriktirilir, atilmaz - kameraya geri giren birim klibinin dogru
+      yerindedir. Kamera konumu bilinmiyorsa (headless cagiran) davranis
+      Faz F oncesiyle birebir ayni kalir.
+- [x] 20 ve 40 aktif skeletal instance ile frame-butce olcumu. Deterministik
+      kisim: 40 yakin birim = 2400 mixer degerlendirmesi/60 kare, 40 uzak birim
+      = 600 (dortte biri). Duvar saati kismi yalnizca tripwire - test tek
+      kemikli rig kullaniyor (40 birim ~0.06 ms/kare), bu sayi gercek ~70
+      kemikli UAL1 ordusu hakkinda bir sey soylemez; **tarayicida 40 birimle
+      gozlem hala kullanicinin isi.**
 - [ ] (Opsiyonel, ayri karar) Hasarin notify penceresinde uygulanmasi.
+      **Ertelendi:** bu bir simulasyon degisikligi (hasarin zamanlamasi
+      animasyona baglanir) ve §4'teki "animasyon simulasyonu surmez" sinirini
+      bilerek delen tek madde. Ayri bir karar olarak acik birakildi.
 
 Kabul: Normal akista kapsul fallback gorunmez; 40 birimde frame butcesi korunur.
+**Kullanici gozlemi bekliyor** - ozellikle uc yeni rolun renkleri ve 40 birimlik
+bir orduda kamera yakin/uzak akiciligi.
 
 ## 6. Test ve Kabul Matrisi
 
@@ -276,3 +324,6 @@ Faz D'ye ancak locomotion stabil olduktan sonra gecilir.
 | 2026-07-26 | C | Saf secici `rtsUnitAnimation.ts`, hiza oranli oynatma (`setPlaybackRate`), `moveSpeed` sunuma tasindi. `tsc` ve `test:engine` (1112) gecti. |
 | 2026-07-26 | C | Kullanici dogruladi: yurume/durma calisiyor. |
 | 2026-07-26 | D | Tek atimlik saldiri/olum (`playOnce` + `advanceRtsAction`), `blowCount` tetigi, despawn artik authored olum klibini bekliyor. `attack`/`death` rolleri sema+allowlist'e eklendi. `build:verify` (1116) gecti. |
+| 2026-07-26 | C, D | Kullanici dogruladi: yurume/durma, saldiri ve olum animasyonlari calisiyor. Iki fazin kabulu de karsilandi; Faz F acildi. |
+| 2026-07-26 | E | Denetim: `src/`+`engine/` icinde sabit UAL1 klip adi yok. TPS `CLIP_FALLBACKS` sidecar'siz asset'ler icin son care, ihlal degil. Faz E kapandi. |
+| 2026-07-26 | F | Archer/Siege/Worker Actor'lari + `materialTint` yolu, `work` rolu (`Fixing_Kneeling`), mesafeye gore mixer throttle (45 birim / 15 Hz), 20-40 instance butce testi. Kapsam istisnasi kaldirildi. `tsc` ve `test:engine` (1121) gecti. |

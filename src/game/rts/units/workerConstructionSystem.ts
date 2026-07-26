@@ -123,6 +123,10 @@ export class WorkerConstructionSystem {
     const assignment = this.assignments.get(worker.id);
     if (!assignment) return false;
     assignment.worker.stop();
+    // Presentation only: a released builder must not keep kneeling at a site it
+    // no longer belongs to. Cleared here so every exit path — cancelled site,
+    // player order, death, completion — goes through one place.
+    assignment.worker.setWorking(false);
     this.assignments.delete(worker.id);
     return true;
   }
@@ -166,10 +170,15 @@ export class WorkerConstructionSystem {
         this.release(worker);
         continue;
       }
+      // The builder pose follows the assignment's own state, so it starts the
+      // frame the worker settles on its approach point and stops the frame the
+      // site is finished — no separate timer to drift out of step with.
+      worker.setWorking(assignment.state === "building");
       if (assignment.state !== "moving") continue;
       if (worker.position.distanceTo(assignment.approach) <= BUILD_RANGE) {
         worker.stop();
         assignment.state = "building";
+        worker.setWorking(true);
         continue;
       }
       // A failed/stopped route used to leave the assignment occupied forever.

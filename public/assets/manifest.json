@@ -19910,6 +19910,90 @@
       "license": "Project-local RTS presentation asset"
     },
     {
+      "id": "threeages-rts-archer-actor",
+      "name": "BP RTS Archer.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Units",
+      "path": "assets/ThreeAges/Actors/Units/BP_RTS_Archer.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "unit",
+        "archer"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 804
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-siege-actor",
+      "name": "BP RTS Siege.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Units",
+      "path": "assets/ThreeAges/Actors/Units/BP_RTS_Siege.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "unit",
+        "siege"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 802
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-worker-actor",
+      "name": "BP RTS Worker.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Units",
+      "path": "assets/ThreeAges/Actors/Units/BP_RTS_Worker.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "unit",
+        "worker"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 804
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
       "id": "threeages-rts-archeryrange-firstage-t1-actor",
       "name": "BP RTS ArcheryRange FirstAge T1.Actor",
       "assetType": "prefab",

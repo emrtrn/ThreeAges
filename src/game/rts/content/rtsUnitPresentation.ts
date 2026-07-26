@@ -9,12 +9,19 @@
  *
  * The mixer is advanced from the RTS frame loop rather than registered with the
  * engine's `AnimationSubsystem`, because `RtsApp` runs its own rAF loop and has
- * no subsystem registry to register with. Throttling distant units is Faz F's
- * job and can either introduce that registry or throttle here.
+ * no subsystem registry to register with. Faz F therefore took the second of the
+ * two options it left open and throttles here, reusing the same pure scheduler
+ * (`@engine/perf/distanceUpdateRate`) that the subsystem uses — the cadence
+ * policy is shared even though the tick owner is not.
  */
 import type { AnimationClip, Object3D } from "three";
 
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
+import {
+  consumeDistanceUpdateDelta,
+  isFarFromFocus,
+  type DistanceUpdateRateSettings,
+} from "@engine/perf/distanceUpdateRate";
 import type { AssetSkeletonDef } from "@/scene/assetSkeletonLoader";
 import {
   advanceRtsAction,
@@ -62,6 +69,21 @@ const LOCOMOTION_FADE_SECONDS = 0.18;
 /** A swing and a fall are meant to read as sudden, so they cut in far faster. */
 const ACTION_FADE_SECONDS = 0.06;
 
+/**
+ * When a unit's animation may run on a reduced cadence, and how reduced.
+ *
+ * The scale is the RTS camera's, not a character game's: at the default pitch a
+ * unit 45 world units from the camera is a small figure near the edge of the
+ * view, where a 15 Hz cycle is indistinguishable from a 60 Hz one — while an army
+ * of them is exactly where per-frame mixer evaluation stops being affordable.
+ * Skipped time is accumulated, never dropped, so a unit that walks back into
+ * range is where its clip should be rather than behind it.
+ */
+export const RTS_ANIMATION_DISTANCE_SETTINGS: DistanceUpdateRateSettings = {
+  farDistance: 45,
+  farUpdateHz: 15,
+};
+
 class RtsUnitPresentation implements RtsPresentationHandle {
   readonly root: Object3D;
   readonly pickTargets: readonly Object3D[];
@@ -79,6 +101,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private startedAction: RtsActionState = RTS_ACTION_NONE;
   /** See {@link RtsPresentationHandle.deathSeconds}: undefined when unauthored. */
   readonly deathSeconds: number | undefined = undefined;
+  /** Render time a far unit has banked since its last mixer update (Faz F). */
+  private pendingSeconds = 0;
 
   constructor(options: RtsUnitPresentationOptions) {
     this.root = options.root;
@@ -119,12 +143,29 @@ class RtsUnitPresentation implements RtsPresentationHandle {
    * pose outright, and locomotion drives whenever none is. All of the judgement
    * lives in the pure module; what is left here is the Three.js half — start,
    * crossfade, scale playback, tick.
+   *
+   * A frame this unit is too far away to be worth evaluating returns early with
+   * its time banked; the next frame that does run gets the whole accumulated
+   * delta, so clip phase, swing length and death length stay wall-clock correct
+   * however often the mixer was actually stepped.
    */
   update(state: RtsPresentationUpdate): void {
     const animator = this.animator;
     if (!animator || state.deltaSeconds <= 0) return;
 
-    this.action = advanceRtsAction(this.action, state, this.actionDurations, state.deltaSeconds);
+    const deltaSeconds = consumeDistanceUpdateDelta({
+      deltaSeconds: state.deltaSeconds,
+      accumulatedSeconds: this.pendingSeconds,
+      isFar: isFarFromFocus(state.cameraDistanceSquared, RTS_ANIMATION_DISTANCE_SETTINGS),
+      settings: RTS_ANIMATION_DISTANCE_SETTINGS,
+    });
+    if (deltaSeconds <= 0) {
+      this.pendingSeconds += state.deltaSeconds;
+      return;
+    }
+    this.pendingSeconds = 0;
+
+    this.action = advanceRtsAction(this.action, state, this.actionDurations, deltaSeconds);
     const actionClip = rtsActionClip(this.action, this.animationSet, animator.clips);
     if (actionClip) {
       // Restarted only when the state machine says a *new* one-shot began.
@@ -134,7 +175,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
         animator.playOnce(actionClip, ACTION_FADE_SECONDS);
         this.startedAction = this.action;
       }
-      animator.mixer.update(state.deltaSeconds);
+      animator.mixer.update(deltaSeconds);
       return;
     }
     this.startedAction = RTS_ACTION_NONE;
@@ -148,7 +189,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       // a crowd from skating, since its feet then cycle at the speed it moves.
       animator.setPlaybackRate(selection.playbackRate);
     }
-    animator.mixer.update(state.deltaSeconds);
+    animator.mixer.update(deltaSeconds);
   }
 
   /** Authored length of the clip a semantic role names, or null when unauthored. */

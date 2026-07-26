@@ -10,7 +10,7 @@
  * reserved for what genuinely is one — an unreachable manifest, without which no
  * reference can resolve at all.
  */
-import { Group, Mesh, type AnimationClip, type Object3D, type WebGLRenderer } from "three";
+import { Group, Mesh, type AnimationClip, type Material, type Object3D, type WebGLRenderer } from "three";
 import { isMeshComponentKind, normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import { projectFileUrl } from "@/project/ProjectSystem";
@@ -23,7 +23,7 @@ import {
   validateRtsPresentationActor,
   type RtsMeshAsset,
 } from "./rtsContentValidation";
-import { buildActorPresentationTree, fitPresentationToFootprint } from "./rtsActorPresentationTree";
+import { buildActorPresentationTree, fitPresentationToFootprint, tintedCopy } from "./rtsActorPresentationTree";
 import { createRtsActorPlaceholder } from "./rtsActorPlaceholder";
 import { createRtsUnitPresentation, type RtsUnitAnimationSource } from "./rtsUnitPresentation";
 import { loadAssetSkeleton, type AssetSkeletonDef } from "@/scene/assetSkeletonLoader";
@@ -86,6 +86,15 @@ export class RtsActorVisualFactory {
   /** In-flight/settled model loads, keyed by asset id — see {@link templateFor}. */
   private readonly templateLoads = new Map<string, Promise<RtsModelTemplate>>();
   private readonly manifestMeshes = new Map<string, RtsMeshAsset>();
+  /**
+   * Tinted material variants, keyed by source material and tint.
+   *
+   * Cached at the factory rather than built per instance because a tint is an
+   * *Actor* fact: every Archer wants the same green copy of the same material.
+   * Without this, forty Archers would carry forty materials and forty shader
+   * programs would be compiled for what is one appearance.
+   */
+  private readonly tintedMaterials = new Map<string, Material>();
   /** Refs that failed to load and now render as the explicit stand-in. */
   private readonly failures = new Map<RtsActorRef, string>();
   private requested = 0;
@@ -190,6 +199,10 @@ export class RtsActorVisualFactory {
   dispose(): void {
     for (const template of this.templates.values()) disposeTemplate(template.scene);
     this.templates.clear();
+    // The tinted copies are this factory's own GPU resources — the templates it
+    // disposes above never referenced them, so nothing else will free them.
+    for (const material of this.tintedMaterials.values()) material.dispose();
+    this.tintedMaterials.clear();
     // A rejected entry left here would keep an unhandled rejection alive past the
     // app it belonged to.
     for (const pending of this.templateLoads.values()) pending.catch(() => undefined);
@@ -279,7 +292,22 @@ export class RtsActorVisualFactory {
   private createActorVisual(ref: RtsActorRef): Group | null {
     const def = this.definitions.get(ref);
     if (!def) return this.failures.has(ref) ? createRtsActorPlaceholder(ref) : null;
-    return buildActorPresentationTree(def, ref, (assetId) => this.templates.get(assetId)?.scene);
+    return buildActorPresentationTree(
+      def,
+      ref,
+      (assetId) => this.templates.get(assetId)?.scene,
+      (material, tint) => this.tintedMaterial(material, tint),
+    );
+  }
+
+  private tintedMaterial(material: Material, tint: string): Material {
+    const key = `${material.uuid}|${tint}`;
+    let tinted = this.tintedMaterials.get(key);
+    if (!tinted) {
+      tinted = tintedCopy(material, tint);
+      this.tintedMaterials.set(key, tinted);
+    }
+    return tinted;
   }
 }
 

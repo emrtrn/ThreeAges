@@ -145,9 +145,13 @@ export interface RtsCoverageRequest {
   /** Highest in-age level each age can reach (`1 + levelUpgrades.length`). */
   readonly levelsByAge: Readonly<Record<SettlementAge, number>>;
   /**
-   * Gameplay ids knowingly left to the legacy code silhouette. The pack ships one
-   * character mesh, so the three non-Guard units would all become the same model —
-   * strictly less readable than the role-shaped bodies they have today.
+   * Gameplay ids knowingly left to the legacy code silhouette.
+   *
+   * Empty as of Faz F: every unit now maps to an Actor. The three non-Guard roles
+   * share the pack's single character mesh and are told apart by an authored
+   * `materialTint`, which is what made mapping them an improvement over the
+   * code-built bodies rather than a loss of readability. The field stays because
+   * a fork with half-authored art needs the same escape hatch.
    */
   readonly approvedUnitExceptions?: readonly string[];
 }

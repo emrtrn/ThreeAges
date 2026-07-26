@@ -17,7 +17,7 @@
  */
 
 /** What the unit is doing, independent of which clips its asset carries. */
-export type RtsAnimationRole = "idle" | "walk" | "run" | "attack" | "death";
+export type RtsAnimationRole = "idle" | "walk" | "run" | "work" | "attack" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
 export interface RtsAnimationInput {
@@ -27,6 +27,13 @@ export interface RtsAnimationInput {
   readonly attacking: boolean;
   /** True once the defeat pose has begun. */
   readonly dying: boolean;
+  /**
+   * True while the unit is standing at a job it performs in place — today, a
+   * worker building a foundation. It is deliberately a single flag rather than
+   * one per job: the animation only needs "working here", and every job the RTS
+   * has is performed from a standstill at an approach point.
+   */
+  readonly working: boolean;
   /**
    * How many blows this unit has landed so far. Only its *changes* are read —
    * one swing animation per increment — so the presentation stays event-driven
@@ -105,6 +112,10 @@ export function rtsLocomotionTuning(moveSpeed: number): RtsLocomotionTuning {
  * Classifies the snapshot into a role. Death outranks everything — a unit that
  * dies mid-swing falls rather than finishing the blow — and a unit in weapon
  * range is fighting even if crowd shoving still gives it some residual speed.
+ *
+ * Work sits *below* locomotion on purpose. A builder is assigned to its site for
+ * the whole walk over, and only reaches the pose once it has stopped; ranking
+ * work above movement would have it kneel while still crossing the map.
  */
 export function classifyRtsAnimation(
   input: RtsAnimationInput,
@@ -114,6 +125,7 @@ export function classifyRtsAnimation(
   if (input.attacking) return "attack";
   if (input.planarSpeed >= tuning.runSpeed) return "run";
   if (input.planarSpeed > tuning.walkSpeed) return "walk";
+  if (input.working) return "work";
   return "idle";
 }
 
@@ -127,6 +139,10 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   idle: ["idle"],
   walk: ["walk", "run", "idle"],
   run: ["run", "walk", "idle"],
+  // Work is continuous and looped like locomotion, so it *does* reach its own
+  // clip. An asset that authors none simply stands there, which is what the
+  // capsule-era worker did and is never wrong — only less expressive.
+  work: ["work", "idle"],
   // `attack` and `death` deliberately do *not* reach their own clips here. This
   // chain feeds the continuous, looping channel, and those two clips are
   // one-shots played per event by {@link advanceRtsAction} — looping a sword

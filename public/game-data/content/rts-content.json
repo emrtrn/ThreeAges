@@ -4,6 +4,15 @@
   "units": {
     "guard_placeholder": {
       "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json"
+    },
+    "archer_placeholder": {
+      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Archer.actor.json"
+    },
+    "siege_placeholder": {
+      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Siege.actor.json"
+    },
+    "worker_placeholder": {
+      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Worker.actor.json"
     }
   },
   "buildings": {

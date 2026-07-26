@@ -86,9 +86,13 @@ import {
 import {
   buildActorPresentationTree,
   fitPresentationToFootprint,
+  tintedCopy,
 } from "../src/game/rts/content/rtsActorPresentationTree";
 import { createRtsActorPlaceholder, isRtsActorPlaceholder } from "../src/game/rts/content/rtsActorPlaceholder";
-import { createRtsUnitPresentation } from "../src/game/rts/content/rtsUnitPresentation";
+import {
+  createRtsUnitPresentation,
+  RTS_ANIMATION_DISTANCE_SETTINGS,
+} from "../src/game/rts/content/rtsUnitPresentation";
 import {
   advanceRtsAction,
   classifyRtsAnimation,
@@ -29720,38 +29724,43 @@ check("Actor presentation Faz 1: the catalog covers every playable RTS identity 
   } as const;
   assert.deepEqual(levelsByAge, { settlement: 3, town: 3 });
 
-  // The one approved exception (plan "cikis kriterleri"): the pack ships a single
-  // character mesh, so mapping the other three roles would make Archer, Topçu and
-  // Worker the same model — strictly less readable than the role-shaped code
-  // silhouettes they use today. The Guard is the one authored character.
-  const approvedUnitExceptions = ["archer_placeholder", "siege_placeholder", "worker_placeholder"];
-  assert.deepEqual(
-    Object.keys(unitBalance).filter((id) => !approvedUnitExceptions.includes(id)),
-    ["guard_placeholder"],
-    "the approved unit exceptions cover every role that is not the authored Guard",
-  );
-
+  // Faz F closed the last exception: Archer, Topçu and Worker now map to Actors of
+  // their own. They share the pack's single character mesh and are told apart by
+  // an authored `materialTint`, so mapping them gained the animated body without
+  // costing the role readability the code silhouettes used to provide. No unit id
+  // may be left to the legacy path any more.
   assert.deepEqual(
     rtsContentCoverageGaps(catalog, {
       unitIds: Object.keys(unitBalance),
       buildingIds: Object.keys(buildingBalance),
       levelsByAge,
-      approvedUnitExceptions,
     }),
     [],
-    "every building resolves an Actor for both states, both ages and every level",
+    "every unit and every building resolves an Actor, with no declared exceptions",
   );
 
-  // Without the exception list the same call must still see the units as gaps —
-  // otherwise the allowance above would be silently hiding nothing.
+  // Each role must resolve to its *own* Actor: one shared ref would put four
+  // identically tinted bodies on the field and pass the coverage check above.
+  const unitRefs = Object.keys(unitBalance).map((id) => rtsUnitActorRef(catalog, id));
+  assert.equal(new Set(unitRefs).size, unitRefs.length, "no two unit ids share one Actor");
+
+  // The exception mechanism itself still has to work, for a fork whose art is
+  // only half authored — proven against a catalog that genuinely lacks the entry.
+  const guardOnly = { ...catalog, units: { guard_placeholder: catalog.units.guard_placeholder! } };
   assert.deepEqual(
-    rtsContentCoverageGaps(catalog, {
+    rtsContentCoverageGaps(guardOnly, { unitIds: Object.keys(unitBalance), buildingIds: [], levelsByAge }),
+    ["unit:archer_placeholder", "unit:siege_placeholder", "unit:worker_placeholder"],
+    "an unmapped unit is reported as a gap",
+  );
+  assert.deepEqual(
+    rtsContentCoverageGaps(guardOnly, {
       unitIds: Object.keys(unitBalance),
       buildingIds: [],
       levelsByAge,
+      approvedUnitExceptions: ["archer_placeholder", "siege_placeholder", "worker_placeholder"],
     }),
-    approvedUnitExceptions.map((id) => `unit:${id}`),
-    "coverage is only clean because the unit exceptions are declared",
+    [],
+    "and declaring it as an approved exception is what clears it",
   );
 });
 
@@ -30395,6 +30404,267 @@ check("Skeletal animasyon Faz D: despawn authored olum klibini bekler, kapsul du
   assert.ok(capsule.object.rotation.z < 0, "the fallback still tips over, as it always did");
 
   units.clear();
+});
+
+check("Skeletal animasyon Faz F: rol tinti klonu boyar, sabloni ve material paylasimini bozmaz", () => {
+  // Faz F's answer to "the pack ships one character mesh": Archer, Topçu and
+  // Worker are the Guard's rig wearing an authored `materialTint`. The three
+  // things that must all hold at once are pinned here — the tint reaches the
+  // clone, the template it was cloned from is never recoloured, and one role
+  // costs one material however many units of it are on the field.
+  const defFor = (tint?: string) => normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_Tint",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      {
+        id: "body",
+        component: "SkeletalMeshComponent",
+        parent: "root",
+        props: tint === undefined ? { assetId: "unit" } : { assetId: "unit", materialTint: tint },
+      },
+    ],
+  }, "BP_Tint");
+
+  const geometry = new BoxGeometry(1, 1, 1);
+  const material = new MeshStandardMaterial({ color: "#ffffff" });
+  const bone = new Bone();
+  bone.name = "hips";
+  const skinned = new SkinnedMesh(geometry, material);
+  skinned.name = "unit-body";
+  skinned.add(bone);
+  skinned.bind(new Skeleton([bone]));
+  const template = new Group();
+  template.add(skinned);
+  const bodyOf = (tree: Group) => tree.getObjectByName("unit-body") as SkinnedMesh;
+
+  // The Guard authors no tint, and must stay exactly on the Faz A sharing path.
+  const plain = bodyOf(buildActorPresentationTree(defFor(), "BP_Tint", () => template));
+  assert.equal(plain.material, material, "an untinted Actor still shares the template's own material");
+
+  // Stands in for the factory's cache, and counts what it saves.
+  const cache = new Map<string, Material>();
+  let built = 0;
+  const resolve = (source: Material, tint: string): Material => {
+    const key = `${source.uuid}|${tint}`;
+    let hit = cache.get(key);
+    if (!hit) {
+      built += 1;
+      hit = tintedCopy(source, tint);
+      cache.set(key, hit);
+    }
+    return hit;
+  };
+
+  const archer = defFor("#4f8f4a");
+  const squad = [0, 1, 2].map(() => bodyOf(buildActorPresentationTree(archer, "BP_Tint", () => template, resolve)));
+  assert.equal(built, 1, "a squad of one role compiles one material, not one per unit");
+  for (const body of squad) {
+    assert.notEqual(body.material, material, "the tinted body is not on the shared template material");
+    assert.equal((body.material as MeshStandardMaterial).color.getHexString(), "4f8f4a", "and it wears its role's colour");
+    // Tinting is a material-only override: duplicating geometry or the skeleton
+    // would undo the whole reason the roles share one mesh.
+    assert.equal(body.geometry, geometry, "tinting never duplicates geometry");
+  }
+  assert.equal(squad[0]!.material, squad[1]!.material, "two Archers share one tinted material");
+  assert.notEqual(squad[0]!.skeleton, squad[1]!.skeleton, "while still posing their own skeletons");
+  assert.equal(material.color.getHexString(), "ffffff", "the template's material is never mutated in place");
+
+  const siege = bodyOf(buildActorPresentationTree(defFor("#3f4a55"), "BP_Tint", () => template, resolve));
+  assert.notEqual(siege.material, squad[0]!.material, "a different role is a different material");
+  assert.equal(built, 2, "keyed by tint as well as by source material");
+});
+
+check("Skeletal animasyon Faz F: isci sitesinde calisir, yolda degil", () => {
+  // Worker speed, so the thresholds are the ones a Worker actually crosses.
+  const tuning = rtsLocomotionTuning(4);
+  const at = (planarSpeed: number, working: boolean, over: Partial<RtsAnimationInput> = {}) =>
+    classifyRtsAnimation({ planarSpeed, attacking: false, dying: false, working, attackCount: 0, ...over }, tuning);
+
+  assert.equal(at(0, true), "work", "a builder standing at its site kneels");
+  assert.equal(at(0, false), "idle", "and an unassigned worker just stands");
+  // The ordering that matters: an assignment lasts the whole walk over, so work
+  // must lose to locomotion or the worker would kneel while crossing the map.
+  assert.equal(at(3, true), "run", "a builder still travelling is travelling");
+  assert.equal(at(1, true), "walk");
+  assert.equal(at(0, true, { attacking: true }), "attack", "a struck worker fights rather than builds");
+  assert.equal(at(0, true, { dying: true }), "death", "and death still outranks everything");
+
+  // Unlike the one-shot roles, work is continuous and does reach its own clip.
+  assert.deepEqual(
+    resolveRtsAnimationRole("work", { idle: "Idle_Loop", work: "Fixing_Kneeling" }, new Set(["Idle_Loop", "Fixing_Kneeling"])),
+    { role: "work", clip: "Fixing_Kneeling" },
+  );
+  assert.deepEqual(
+    resolveRtsAnimationRole("work", { idle: "Idle_Loop" }, new Set(["Idle_Loop"])),
+    { role: "idle", clip: "Idle_Loop" },
+    "an asset with no work clip stands there — never a T-pose",
+  );
+
+  // Data, not code: the clip name lives in the shipped sidecar.
+  const shipped = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/starter-content/SkeletalMeshes/UAL1_Standard_RM.skeleton.json", "utf8")) as unknown,
+  );
+  assert.equal(shipped.animationSet.work, "Fixing_Kneeling", "the pack authors the worker's job clip");
+});
+
+check("Skeletal animasyon Faz F: insaat sistemi calisma bayragini kaldirir ve isi bitince birakir", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+
+  // The flag is presentation-only and private; it is read the one way the
+  // animation reads it, through the snapshot the unit hands its handle.
+  let working = false;
+  const units = new UnitSystem();
+  units.setPresentationFactory(() => ({
+    root: new Group(),
+    pickTargets: [],
+    selectionRadius: 0.5,
+    update: (state) => { working = state.working; },
+    dispose: () => undefined,
+  }));
+  const worker = units.spawn("player", 6, 0, RTS_TEST_WORKER_STATS);
+  const camera = new Quaternion();
+  const observe = () => {
+    worker.updatePresentation(1 / 60, camera);
+    return working;
+  };
+
+  const structures = new PlacedStructureSystem();
+  const site = structures.place("player", { ...house, constructionSeconds: 0.5 }, 0, 0);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const construction = new WorkerConstructionSystem(units, structures, navigation);
+
+  assert.equal(observe(), false, "an unassigned worker is not working");
+  assert.deepEqual(construction.assignNearest(site), { assigned: true });
+  construction.update(1 / 60);
+  assert.equal(construction.stateFor(worker), "moving");
+  assert.equal(observe(), false, "nor is one still walking to the site");
+
+  let reachedSite = false;
+  for (let frame = 0; frame < 300 && !site.construction.complete; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    construction.update(1 / 60);
+    if (construction.stateFor(worker) === "building") reachedSite ||= observe();
+  }
+  assert.equal(reachedSite, true, "a worker that has settled on its approach point is working");
+  assert.equal(site.construction.complete, true, "the fixture actually finishes the building");
+  // Completion releases the assignment, and the pose has to end with it — a
+  // worker kneeling at a finished house is the visible form of a leaked flag.
+  assert.equal(construction.stateFor(worker), "idle");
+  assert.equal(observe(), false, "and it stops working the moment the site is done");
+
+  structures.clear();
+  units.clear();
+});
+
+/**
+ * Runs one animated presentation for `frames` frames at 60 Hz and reports how
+ * many of them actually moved the rig. Pose movement is the observable proxy for
+ * "the mixer was evaluated", which is the cost Faz F set out to bound.
+ */
+function driveRtsPresentationFrames(options: {
+  frames: number;
+  cameraDistanceSquared: number | null;
+}): { poseUpdates: number; poseY: number } {
+  const { model, clips } = buildRtsWalkModel();
+  const root = new Group();
+  root.add(model);
+  const presentation = createRtsUnitPresentation({
+    root,
+    pickTargets: [],
+    selectionRadius: 0.5,
+    moveSpeed: 6,
+    animation: {
+      target: model,
+      clips,
+      skeleton: normalizeAssetSkeleton({ animationSet: { idle: "Idle_Loop", walk: "Walk_Loop" } }),
+    },
+  });
+  const hips = model.getObjectByName("hips")!;
+  let poseUpdates = 0;
+  let previous = hips.position.y;
+  for (let frame = 0; frame < options.frames; frame += 1) {
+    presentation.update?.({
+      deltaSeconds: 1 / 60,
+      planarSpeed: 2,
+      attacking: false,
+      dying: false,
+      working: false,
+      attackCount: 0,
+      cameraDistanceSquared: options.cameraDistanceSquared,
+    });
+    if (hips.position.y !== previous) poseUpdates += 1;
+    previous = hips.position.y;
+  }
+  return { poseUpdates, poseY: hips.position.y };
+}
+
+check("Skeletal animasyon Faz F: uzaktaki birim seyrek guncellenir, ama biriken zamani kaybetmez", () => {
+  const seconds = 1;
+  const frames = 60 * seconds;
+  const near = driveRtsPresentationFrames({ frames, cameraDistanceSquared: 4 });
+  const far = driveRtsPresentationFrames({
+    frames,
+    // Comfortably past the far boundary; the units this exists for are the ones
+    // at the edge of an RTS camera's view, not the ones under it.
+    cameraDistanceSquared: (RTS_ANIMATION_DISTANCE_SETTINGS.farDistance! + 20) ** 2,
+  });
+  // A caller that cannot supply a camera keeps the pre-Faz-F behaviour exactly.
+  const unknown = driveRtsPresentationFrames({ frames, cameraDistanceSquared: null });
+
+  assert.equal(near.poseUpdates, frames, "a unit under the camera is evaluated every frame");
+  assert.equal(unknown.poseUpdates, frames, "and so is one whose distance is unknown");
+
+  const expectedFar = Math.round(seconds * RTS_ANIMATION_DISTANCE_SETTINGS.farUpdateHz!);
+  assert.equal(far.poseUpdates, expectedFar, `a far unit runs at its own cadence (${far.poseUpdates} of ${frames})`);
+  assert.ok(far.poseUpdates * 3 < near.poseUpdates, "which is the saving the throttle exists for");
+
+  // The half that makes throttling safe rather than merely cheap: skipped time is
+  // banked and spent on the next update, so a unit that walks back under the
+  // camera is where its clip should be instead of a second behind it.
+  assert.ok(
+    Math.abs(far.poseY - near.poseY) < 0.02,
+    `a throttled clip ends the same second at the same pose (far=${far.poseY}, near=${near.poseY})`,
+  );
+});
+
+check("Skeletal animasyon Faz F: 20 ve 40 skeletal instance frame butcesi", () => {
+  const measure = (units: number, cameraDistanceSquared: number | null) => {
+    const frames = 60;
+    const started = performance.now();
+    let poseUpdates = 0;
+    for (let unit = 0; unit < units; unit += 1) {
+      poseUpdates += driveRtsPresentationFrames({ frames, cameraDistanceSquared }).poseUpdates;
+    }
+    return { msPerFrame: (performance.now() - started) / frames, poseUpdates };
+  };
+
+  const twenty = measure(20, 4);
+  const forty = measure(40, 4);
+  const fortyFar = measure(40, 90 ** 2);
+
+  // The deterministic half of the budget: mixer evaluations per frame. This is
+  // what the throttle actually bounds, and it holds on any machine.
+  assert.equal(twenty.poseUpdates, 20 * 60, "20 near units are each evaluated every frame");
+  assert.equal(forty.poseUpdates, 40 * 60, "and so are 40");
+  assert.equal(fortyFar.poseUpdates, 40 * 15, "a distant army costs a quarter of that");
+
+  // The wall-clock half is a regression tripwire, not a benchmark. These are
+  // one-bone rigs with a single track, so the measured cost (well under a
+  // millisecond per frame) says nothing about what a 40-unit army of the real
+  // ~70-bone UAL1 rig costs in a browser — only the count assertions above
+  // transfer. The ceiling is deliberately far above any real measurement so a
+  // slow CI box never fails, while an accidental per-frame clone or rebind — the
+  // mistakes that have actually happened on this path — blows straight through it.
+  assert.ok(
+    forty.msPerFrame < 25,
+    `40 animated units cost ${forty.msPerFrame.toFixed(2)} ms/frame (20 units: ${twenty.msPerFrame.toFixed(2)} ms/frame)`,
+  );
 });
 
 check("Actor presentation Faz 3: a stand-in is visibly not art, and reports as its own state", () => {

@@ -62,8 +62,19 @@ export interface RtsPresentationUpdate {
   readonly attacking: boolean;
   /** True once the defeat pose has begun. */
   readonly dying: boolean;
+  /** True while the unit is standing at an in-place job — a builder on its site (Faz F). */
+  readonly working: boolean;
   /** Blows landed so far; each increment is one swing to play (Faz D). */
   readonly attackCount: number;
+  /**
+   * Squared distance from the camera, or null when the caller does not know it.
+   *
+   * Presentations may spend less time on units the player can barely see. Null
+   * disables that entirely — every frame is a near frame — which is what keeps a
+   * caller that has no camera (an engine test, a headless harness) on the exact
+   * animation behaviour it had before the throttle existed.
+   */
+  readonly cameraDistanceSquared: number | null;
 }
 
 /** Presentation-only Actor/legacy render handle. It owns no simulation data. */
@@ -196,6 +207,8 @@ export class Unit {
   private selectedFlag = false;
   private targeterCount = 0;
   private deathElapsed: number | null = null;
+  /** See {@link setWorking}: presentation-only, written by the job system. */
+  private working = false;
 
   constructor(
     owner: UnitOwner,
@@ -297,8 +310,14 @@ export class Unit {
     this.ring.visible = selected;
   }
 
-  /** Refresh the health bar, billboard it, and advance the animated presentation. */
-  updatePresentation(deltaSeconds: number, cameraQuaternion: Quaternion): void {
+  /**
+   * Refresh the health bar, billboard it, and advance the animated presentation.
+   *
+   * `cameraPosition` is optional and purely a budget hint: with it the handle may
+   * update a distant unit's mixer less often, without it every unit is treated as
+   * near. Nothing the simulation reads depends on which of the two it gets.
+   */
+  updatePresentation(deltaSeconds: number, cameraQuaternion: Quaternion, cameraPosition?: Vector3): void {
     this.healthBar.set(this.health.ratio);
     this.healthBar.faceCamera(cameraQuaternion);
     this.presentation?.update?.({
@@ -306,8 +325,22 @@ export class Unit {
       planarSpeed: this.measurePlanarSpeed(deltaSeconds),
       attacking: this.isTradingBlows(),
       dying: this.dying,
+      working: this.working,
       attackCount: this.attack.blowCount,
+      cameraDistanceSquared: cameraPosition ? this.object.position.distanceToSquared(cameraPosition) : null,
     });
+  }
+
+  /**
+   * Mark the unit as performing (or having stopped) an in-place job.
+   *
+   * Presentation-only, and owned by whichever system runs the job — construction
+   * today. It is stored on the unit rather than queried from that system because
+   * the presentation snapshot is assembled here and must stay a plain read of
+   * unit state; nothing in movement, combat or death consults it.
+   */
+  setWorking(working: boolean): void {
+    this.working = working;
   }
 
   /**

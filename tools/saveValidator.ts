@@ -2593,6 +2593,7 @@ const SKELETON_ANIMATION_SET_ROLES = [
   "run",
   "jump",
   "fall",
+  "work",
   "attack",
   "death",
 ] as const;

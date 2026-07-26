@@ -1220,7 +1220,11 @@ export class RtsApp {
     this.projectiles.update(dt);
     this.firebrands.update(dt);
     this.cannonballs.update(dt);
-    this.units.updatePresentation(dt, this.cameraController.camera.quaternion);
+    this.units.updatePresentation(
+      dt,
+      this.cameraController.camera.quaternion,
+      this.cameraController.camera.position,
+    );
     this.selectionPanel.setSelection(this.selectionView());
     // Notices expire on real seconds for the same reason a health bar animates
     // on them: at §38's 8x test speed a warning that vanished eight times faster

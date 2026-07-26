@@ -8,7 +8,7 @@
  */
 import { Group, type Object3D } from "three";
 
-import type { Quaternion } from "three";
+import type { Quaternion, Vector3 } from "three";
 
 import type { UnitBalanceStats } from "../../data/gameDataTypes";
 import type { CombatTarget } from "../combat/combatTarget";
@@ -58,10 +58,11 @@ export class UnitSystem {
    * animation mixer of any unit backed by an animated Actor.
    *
    * `deltaSeconds` is the rendered-frame delta, which is why this is not folded
-   * into the simulation step.
+   * into the simulation step. `cameraPosition` lets each handle spend less time
+   * on units far from view; omitting it keeps every unit on the near cadence.
    */
-  updatePresentation(deltaSeconds: number, cameraQuaternion: Quaternion): void {
-    for (const unit of this.units) unit.updatePresentation(deltaSeconds, cameraQuaternion);
+  updatePresentation(deltaSeconds: number, cameraQuaternion: Quaternion, cameraPosition?: Vector3): void {
+    for (const unit of this.units) unit.updatePresentation(deltaSeconds, cameraQuaternion, cameraPosition);
   }
 
   setPresentationFactory(factory: ((owner: UnitOwner, stats: UnitBalanceStats) => RtsPresentationHandle | null) | null): void {
