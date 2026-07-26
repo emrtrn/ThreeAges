@@ -32,6 +32,17 @@ const EXACT_STACK_DISTANCE = 0.05;
 /** Small clearance left between a recovered stack and other bodies. */
 const HARD_UNSTACK_CLEARANCE = 0.05;
 const HARD_UNSTACK_ANGLE_ATTEMPTS = 16;
+/** Idle clusters are moved once, then left perfectly still. */
+const IDLE_SETTLE_CLEARANCE = 0.08;
+const IDLE_SETTLE_ANGLE_ATTEMPTS = 16;
+const IDLE_SETTLE_RING_MULTIPLIERS = [1, 1.5, 2] as const;
+
+interface IdleSettleState {
+  readonly wasMoving: boolean;
+}
+
+/** Per-unit transition memory; weak ownership disappears with a despawned unit. */
+const idleSettleState = new WeakMap<Unit, IdleSettleState>();
 
 export interface UnitSeparationOptions {
   /**
@@ -39,6 +50,11 @@ export interface UnitSeparationOptions {
    * retaining formation, routing and destination-reservation behavior.
    */
   readonly enabled?: boolean;
+  /**
+   * Keep collision only for idle bodies. A moving unit is absent from both sides
+   * of separation, so it can pass through stationary or moving units.
+   */
+  readonly stationaryOnly?: boolean;
   /** Vetoes pushes into unwalkable ground; without it, geometry is not respected. */
   readonly navigation?: RtsNavigation;
 }
@@ -55,7 +71,12 @@ export function updateUnitSeparation(
   // walking through ground separation would refuse to let it stand on, so it must
   // neither be pushed nor push others until it reaches the clear point it was sent to.
   const active = units.filter(
-    (unit) => !unit.health.depleted && !unit.dying && !unit.isRescuing && !unit.isCollisionRecovering,
+    (unit) =>
+      !unit.health.depleted
+      && !unit.dying
+      && !unit.isRescuing
+      && !unit.isCollisionRecovering
+      && (!options.stationaryOnly || !unit.hasMovementOrder),
   );
   if (active.length < 2) return;
 
@@ -115,6 +136,103 @@ export function updateUnitSeparation(
     if (options.navigation && !options.navigation.isWalkable(nextX, nextZ)) continue;
     unit.position.x = nextX;
     unit.position.z = nextZ;
+  }
+}
+
+/**
+ * Resolve an idle overlap exactly once, on a moving → idle transition.
+ *
+ * This deliberately replaces continuous idle pushing in the RTS runtime. A
+ * continuous positional correction changes every neighbour's force on the next
+ * frame, which makes a dense stopped group shimmer. Here a stopped cluster is
+ * placed atomically on legal ground and then remains untouched until it receives
+ * another move order.
+ */
+export function settleStoppedUnitOverlaps(
+  units: readonly Unit[],
+  navigation: RtsNavigation | undefined,
+): void {
+  if (!navigation) return;
+  const idle = units.filter(isIdleLiveUnit);
+  const newlyIdle: Unit[] = [];
+  for (const unit of units) {
+    const wasMoving = idleSettleState.get(unit)?.wasMoving;
+    const moving = unit.hasMovementOrder;
+    if (wasMoving === true && !moving && isIdleLiveUnit(unit)) newlyIdle.push(unit);
+    idleSettleState.set(unit, { wasMoving: moving });
+  }
+  for (const unit of newlyIdle) {
+    const cluster = overlappingIdleCluster(unit, idle);
+    if (cluster.length > 1) placeSettledIdleCluster(cluster, idle, navigation);
+  }
+}
+
+function isIdleLiveUnit(unit: Unit): boolean {
+  return !unit.health.depleted
+    && !unit.dying
+    && !unit.isRescuing
+    && !unit.isCollisionRecovering
+    && !unit.hasMovementOrder;
+}
+
+/** Every idle body connected by an overlap is one cluster to settle together. */
+function overlappingIdleCluster(seed: Unit, idle: readonly Unit[]): Unit[] {
+  const cluster = [seed];
+  const remaining = new Set(idle.filter((unit) => unit !== seed));
+  let expanded = true;
+  while (expanded) {
+    expanded = false;
+    for (const candidate of [...remaining]) {
+      if (!cluster.some((member) => bodiesOverlap(member, candidate))) continue;
+      remaining.delete(candidate);
+      cluster.push(candidate);
+      expanded = true;
+    }
+  }
+  return cluster;
+}
+
+function bodiesOverlap(left: Unit, right: Unit): boolean {
+  return distanceBetween(left, right) < left.navRadius + right.navRadius;
+}
+
+/** Atomically arrange an idle overlap on a nearby legal ring. */
+function placeSettledIdleCluster(
+  cluster: readonly Unit[],
+  allIdle: readonly Unit[],
+  navigation: RtsNavigation,
+): void {
+  const ordered = [...cluster].sort((left, right) => left.id - right.id);
+  const centerX = ordered.reduce((sum, unit) => sum + unit.position.x, 0) / ordered.length;
+  const centerZ = ordered.reduce((sum, unit) => sum + unit.position.z, 0) / ordered.length;
+  const largestRadius = Math.max(...ordered.map((unit) => unit.navRadius));
+  const minimumRingRadius = (largestRadius * 2) / (2 * Math.sin(Math.PI / ordered.length))
+    + IDLE_SETTLE_CLEARANCE;
+  const outsiders = allIdle.filter((unit) => !cluster.includes(unit));
+  const phaseSeed = ordered.reduce((sum, unit) => sum + unit.id, 0) % IDLE_SETTLE_ANGLE_ATTEMPTS;
+
+  for (const multiplier of IDLE_SETTLE_RING_MULTIPLIERS) {
+    const ringRadius = minimumRingRadius * multiplier;
+    for (let attempt = 0; attempt < IDLE_SETTLE_ANGLE_ATTEMPTS; attempt += 1) {
+      const phase = ((phaseSeed + attempt) / IDLE_SETTLE_ANGLE_ATTEMPTS) * Math.PI * 2;
+      const positions = ordered.map((_, index) => {
+        const angle = phase + (index / ordered.length) * Math.PI * 2;
+        return { x: centerX + Math.cos(angle) * ringRadius, z: centerZ + Math.sin(angle) * ringRadius };
+      });
+      const legal = positions.every((position, index) => {
+        const unit = ordered[index]!;
+        if (!navigation.isWalkable(position.x, position.z)) return false;
+        return outsiders.every((other) => Math.hypot(position.x - other.position.x, position.z - other.position.z)
+          >= unit.navRadius + other.navRadius + IDLE_SETTLE_CLEARANCE);
+      });
+      if (!legal) continue;
+      positions.forEach((position, index) => {
+        const unit = ordered[index]!;
+        unit.position.x = position.x;
+        unit.position.z = position.z;
+      });
+      return;
+    }
   }
 }
 

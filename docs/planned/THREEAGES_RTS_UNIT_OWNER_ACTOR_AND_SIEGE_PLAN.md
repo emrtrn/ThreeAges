@@ -1,7 +1,12 @@
 # RTS Birim Owner Actor'lari ve Coklu-Component Topcu Plani
 
 Olusturulma tarihi: 2026-07-26  
-Durum: Planlandi — ayri bir oturumda uygulanacak.
+Durum: Faz 1 ve Faz 3 tamamlandi (2026-07-26). Faz 2 kismen: sekiz Actor
+dosyasinin tamami mevcut, kalan madde asagida isaretli. Faz 4 bekliyor.
+
+Renk semasi (kullanici karari, 2026-07-26): isciler her iki tarafta da tintsiz
+(`ual1-standard-rm`in kendi sari-turuncusu), oyuncu muhafizi turkuaz `#2fb3ad`,
+enemy muhafiz kirmizi `#c23b2f`. Okçu ve topçu rol renklerinde birakildi.
 
 ## Karar
 
@@ -165,15 +170,25 @@ presentation handle'i icinde calisir ve birim hareketinin gorunur karsiligidir.
 
 ## Uygulama asamalari
 
-### Faz 1 — Katalog ve owner resolver
+### Faz 1 — Katalog ve owner resolver — **TAMAMLANDI (2026-07-26)**
 
-1. `RtsUnitContentEntry`ye `ownerActorRefs` ekle; schema validator'i owner
-   anahtarlarini ve Actor reflerini dogrulasin.
-2. Owner-aware `rtsUnitActorRef` yaz; factory'nin mevcut `_owner` parametresini
-   bu resolver'a bagla.
-3. Katalog ref toplama, pack load raporu ve coverage testine enemy reflerini
-   ekle.
-4. Dort varsayilan ve dort enemy mapping'i `rts-content.json`e gir.
+1. [x] `RtsUnitContentEntry`ye `ownerActorRefs` ekle; schema validator'i owner
+   anahtarlarini ve Actor reflerini dogrulasin. — `ownerActorRefs` +
+   `validateOwnerActorRefs`; `player` anahtari ve bilinmeyen owner reddedilir.
+2. [x] Owner-aware `rtsUnitActorRef` yaz; factory'nin mevcut `_owner`
+   parametresini bu resolver'a bagla. — owner parametresi varsayilan `"player"`.
+   Ayrica `createUnitPresentation` artik yuklenememis bir ref icin `null`
+   dondurup legacy govdeye dusmuyor; placeholder handle'i donduruyor.
+3. [x] Katalog ref toplama, pack load raporu ve coverage testine enemy
+   reflerini ekle. — `rtsContentCatalogRefs` owner ref'lerini de topluyor;
+   coverage `unit:<id>@enemy` gap'i uretiyor (yeni
+   `rtsUnitOwnerActorRefIsAuthored`), yani fallback bir kapsama bosluguu gizleyemez.
+4. [x] Dort varsayilan ve dort enemy mapping'i `rts-content.json`e gir.
+
+Not: Plan yazilirken yalnizca `BP_RTS_Guard` vardi; iskelet-animasyon track'i bu
+arada Worker/Archer/Siege varsayilan Actor'larini da eklemisti. Bu nedenle Faz 1
+ile birlikte yalnizca dort enemy dosyasi yazildi (yedi degil) ve Faz 2 adim 1
+kapandi.
 
 Kabul: player ve enemy ayni gameplay id ile spawn oldugunda farkli Actor
 ref'leri secilir; bir enemy ref'i bozulursa player birimi etkilenmez ve debug
@@ -181,28 +196,49 @@ overlay bunu placeholder olarak raporlar.
 
 ### Faz 2 — Dort rolun Content Actor seti
 
-1. Worker, Archer ve Siege varsayilan Actor'larini; Guard, Worker, Archer ve
-   Siege enemy Actor'larini olustur.
-2. Tum sekiz ref'in manifest/component validation'dan gectigini dogrula.
-3. Eski `approvedUnitExceptions` listesini kaldir; kapsama istegi dort unit
-   balance id'sinin tamamini zorunlu kabul etsin.
-4. Her unit icin pick target, secim halkasi, health bar ve existing animation
+1. [x] Worker, Archer ve Siege varsayilan Actor'larini; Guard, Worker, Archer ve
+   Siege enemy Actor'larini olustur. — Sekizi de mevcut ve manifestte kayitli.
+   Enemy'ler simdilik ayni `ual1-standard-rm` mesh'ini kirmizi aile
+   `materialTint`leriyle kullaniyor; nihai sanat Faz 4.
+2. [x] Tum sekiz ref'in manifest/component validation'dan gectigini dogrula. —
+   mevcut "Faz 2: every catalog Actor is renderable" testi artik sekizini de
+   kapsiyor (ref toplama enemy'leri de aldigi icin).
+3. [x] Eski `approvedUnitExceptions` listesini kaldir; kapsama istegi dort unit
+   balance id'sinin tamamini zorunlu kabul etsin. — liste bos; alan yalnizca
+   yari-authored fork'lar icin kaciş yolu olarak duruyor.
+4. [ ] Her unit icin pick target, secim halkasi, health bar ve existing animation
    handle davranisini regression testle koru.
 
 Kabul: normal `?rts` akisi role-shaped kod geometrisine dusmez; Content
 Drawer'da bir Actor'un mesh veya transformu kaydedildiginde o role'un yeni
 oyununda gorunur.
 
-### Faz 3 — Siege component motion
+### Faz 3 — Siege component motion — **TAMAMLANDI (2026-07-26)**
 
-1. `rtsPresentationMotion.wheelSpin` parse/validate et; Actor Script Editor'a
-   form alanlarini ekle ve raw prop round-trip'ini koru.
-2. Actor presentation tree'de component id -> runtime node baglantisini
-   presentation handle'a ver.
-3. Wheel driver'i `RtsUnitPresentation.update()` icine ekle; skeletal
-   animatorla birlikte, fakat ondan bagimsiz calissin.
-4. Player ve enemy Siege Actor'larini ayri chassis/barrel/tekerlek
+1. [x] `rtsPresentationMotion.wheelSpin` parse/validate et; Actor Script
+   Editor'a form alanlarini ekle ve raw prop round-trip'ini koru. — yeni
+   `src/game/rts/content/rtsPresentationMotion.ts`; hatali metadata
+   `validateRtsPresentationActor` uzerinden Actor'u placeholder'a dusuruyor.
+   Editor'da her `Transform` icin "RTS wheel spin" bolumu (toggle, axis, radius,
+   direction); prop normal Actor Script props verisi oldugu icin `/__save-actor`
+   yolunda ek allowlist gerekmiyor, round-trip testle pinlendi.
+2. [x] Actor presentation tree'de component id -> runtime node baglantisini
+   presentation handle'a ver. — node'lar `RTS_ACTOR_COMPONENT_ID` userData'si
+   tasiyor (isim degil: component id'leri bone isimleriyle ayni namespace'i
+   paylasiyor), `findActorComponentNode` + `bindRtsWheelSpins`.
+3. [x] Wheel driver'i `RtsUnitPresentation.update()` icine ekle; skeletal
+   animatorla birlikte, fakat ondan bagimsiz calissin. — animator early
+   return'unun *ustunde*: topçunun mixer'i yok, animator'a bagli olsa tekerlekler
+   hic donmezdi. Olculen `planarSpeed` kullaniliyor, authored `moveSpeed` degil.
+4. [x] Player ve enemy Siege Actor'larini ayri chassis/barrel/tekerlek
    componentleriyle author et.
+
+Not: Pakette topçu sanati yok. Iki Siege Actor'u da manifestteki primitive
+shape'lerden kuruldu (`shape-cube` govde, `shape-cylinder` namlu, `shape-torus`
+tekerlek), 100-birimlik shape olceginden gameplay olcegine component `scale`'i
+ile getirildi ve torus'un merkez-disi export orijini pivot altinda local
+`position` ile merkezlendi. Nihai mesh Faz 4'un isi; component agaci ve wheelSpin
+sozlesmesi model degistiginde aynen kalir.
 
 Kabul: topcu yururken iki tekerlek ayni mesafeyi kat edecek sekilde doner,
 dururken donmez; component local transformlari ve namlu/pivot hiyerarsisi

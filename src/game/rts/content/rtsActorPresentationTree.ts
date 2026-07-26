@@ -74,6 +74,23 @@ function applyMaterialTint(model: Object3D, tint: string, resolve: TintedMateria
  * root. Components whose template is missing still get their node — the tree
  * shape stays honest, and the validator is what refuses to load such a pack.
  */
+/** `userData` key carrying the authored component id of a presentation node. */
+export const RTS_ACTOR_COMPONENT_ID = "rtsActorComponentId";
+
+/**
+ * The node built for an authored component id, or null.
+ *
+ * Matched on {@link RTS_ACTOR_COMPONENT_ID} rather than on `name`, so a bone that
+ * happens to be called `leftWheelPivot` can never be mistaken for the pivot.
+ */
+export function findActorComponentNode(root: Object3D, componentId: string): Object3D | null {
+  let found: Object3D | null = null;
+  root.traverse((child) => {
+    if (found === null && child.userData[RTS_ACTOR_COMPONENT_ID] === componentId) found = child;
+  });
+  return found;
+}
+
 export function buildActorPresentationTree(
   def: ActorScriptDef,
   name: string,
@@ -88,6 +105,10 @@ export function buildActorPresentationTree(
   for (const component of def.components) {
     const node = new Group();
     node.name = component.id;
+    // The id in userData, not just in `name`: component ids share a namespace
+    // with the model's bone names once a rig is cloned underneath, so anything
+    // looking a component up by name can land on a bone instead.
+    node.userData[RTS_ACTOR_COMPONENT_ID] = component.id;
     const position = readVec3(component.props.position);
     const rotation = readVec3(component.props.rotation);
     const scale = readVec3(component.props.scale);
@@ -131,9 +152,11 @@ export function buildActorPresentationTree(
         child.receiveShadow = true;
       }
     });
-    // Role readability on a one-character pack: Archer, Topçu and Worker are the
-    // same rig as the Guard, told apart by an authored tint. Untinted components
-    // keep the template's own shared materials untouched.
+    // Role and faction readability on a one-character pack: every unit is the
+    // same rig, told apart by an authored tint — and the Guard authors one per
+    // owner, so the two armies read apart at a glance. Untinted components (the
+    // Workers, who wear the model's own colours) keep the template's shared
+    // materials untouched.
     const tint = component.props.materialTint;
     if (typeof tint === "string" && tint.length > 0) {
       applyMaterialTint(model, tint, resolveTintedMaterial);

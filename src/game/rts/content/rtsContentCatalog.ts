@@ -6,6 +6,7 @@
  * catalog never becomes a second source for cost, health, timing, or rules.
  */
 import type { BuildingBalance, SettlementAge, UnitBalance } from "@/game/data/gameDataTypes";
+import type { UnitOwner } from "@/game/rts/units/unit";
 
 export const RTS_CONTENT_CATALOG_SCHEMA = 1;
 
@@ -13,8 +14,24 @@ export type RtsActorRef = `assets/${string}.actor.json`;
 
 const SETTLEMENT_AGES: readonly SettlementAge[] = ["settlement", "town"];
 
+/**
+ * Owners that may author their own presentation variant.
+ *
+ * `player` is deliberately absent: `actorRef` is the single player authority, so
+ * an override for it would create a second place to look when the player's art
+ * is wrong. See {@link validateOwnerActorRefs}.
+ */
+const OVERRIDABLE_OWNERS: readonly UnitOwner[] = ["enemy"];
+
 export interface RtsUnitContentEntry {
   readonly actorRef: RtsActorRef;
+  /**
+   * Per-owner presentation overrides. Only the owners in
+   * {@link OVERRIDABLE_OWNERS} may appear; an owner without an entry uses
+   * `actorRef`. This is presentation only — picking a different enemy Actor
+   * never changes cost, health, AI, or navigation.
+   */
+  readonly ownerActorRefs?: Readonly<Partial<Record<UnitOwner, RtsActorRef>>>;
 }
 
 export interface RtsBuildingContentEntry {
@@ -43,9 +60,34 @@ export interface RtsContentCatalogValidationContext {
   readonly buildingBalance: BuildingBalance;
 }
 
-/** Resolve a catalog mapping without letting callers inspect its JSON shape. */
-export function rtsUnitActorRef(catalog: RtsContentCatalog, unitId: string): RtsActorRef | null {
-  return catalog.units[unitId]?.actorRef ?? null;
+/**
+ * Resolve a catalog mapping without letting callers inspect its JSON shape.
+ *
+ * An owner with an authored override resolves to it; every other owner resolves
+ * to `actorRef`. A ref that exists but fails to load is *not* handled here — the
+ * factory renders it as the explicit placeholder rather than quietly borrowing
+ * the default Actor, so a missing enemy variant stays a visible art gap.
+ */
+export function rtsUnitActorRef(
+  catalog: RtsContentCatalog,
+  unitId: string,
+  owner: UnitOwner = "player",
+): RtsActorRef | null {
+  const entry = catalog.units[unitId];
+  if (!entry) return null;
+  return entry.ownerActorRefs?.[owner] ?? entry.actorRef;
+}
+
+/**
+ * Whether an owner has its *own* authored Actor, as opposed to resolving through
+ * the `actorRef` fallback. Coverage uses this; presentation does not.
+ */
+export function rtsUnitOwnerActorRefIsAuthored(
+  catalog: RtsContentCatalog,
+  unitId: string,
+  owner: UnitOwner,
+): boolean {
+  return catalog.units[unitId]?.ownerActorRefs?.[owner] !== undefined;
 }
 
 /**
@@ -115,6 +157,34 @@ function requireManifestAssetId(value: unknown, where: string): string {
   return value;
 }
 
+/**
+ * Owner overrides are rejected for anything but a known non-player owner, so a
+ * typo (`"enemey"`, `"ai"`) fails the pack load instead of silently leaving that
+ * army on the default Actor — the exact failure this authoring split exists to
+ * make visible.
+ */
+function validateOwnerActorRefs(
+  value: unknown,
+  where: string,
+): NonNullable<RtsUnitContentEntry["ownerActorRefs"]> {
+  const raw = asObject(value, where);
+  const refs: Partial<Record<UnitOwner, RtsActorRef>> = {};
+  for (const [owner, ref] of Object.entries(raw)) {
+    if (owner === "player") {
+      throw new RtsContentCatalogError(
+        `${where}: "player" is not overridable — actorRef is the player authority`,
+      );
+    }
+    if (!OVERRIDABLE_OWNERS.includes(owner as UnitOwner)) {
+      throw new RtsContentCatalogError(
+        `${where}: "${owner}" must be one of ${OVERRIDABLE_OWNERS.join(", ")}`,
+      );
+    }
+    refs[owner as UnitOwner] = requireActorRef(ref, `${where}."${owner}"`);
+  }
+  return refs;
+}
+
 function validateUnits(value: unknown, context: RtsContentCatalogValidationContext): RtsContentCatalog["units"] {
   const where = "rts-content.json.units";
   const rawEntries = asObject(value, where);
@@ -125,8 +195,13 @@ function validateUnits(value: unknown, context: RtsContentCatalogValidationConte
     }
     const entryWhere = `${where}."${id}"`;
     const entry = asObject(raw, entryWhere);
-    requireExactKeys(entry, ["actorRef"], entryWhere);
-    entries[id] = { actorRef: requireActorRef(entry["actorRef"], `${entryWhere}.actorRef`) };
+    requireExactKeys(entry, ["actorRef", "ownerActorRefs"], entryWhere);
+    entries[id] = {
+      actorRef: requireActorRef(entry["actorRef"], `${entryWhere}.actorRef`),
+      ...(entry["ownerActorRefs"] === undefined
+        ? {}
+        : { ownerActorRefs: validateOwnerActorRefs(entry["ownerActorRefs"], `${entryWhere}.ownerActorRefs`) }),
+    };
   }
   return entries;
 }

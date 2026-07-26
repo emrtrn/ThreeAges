@@ -13,7 +13,14 @@
  */
 import { isMeshComponentKind, type ActorScriptDef } from "@engine/scene/actorScript";
 import type { SettlementAge } from "@/game/data/gameDataTypes";
-import { rtsBuildingActorRef, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
+import { readRtsActorMotions } from "./rtsPresentationMotion";
+import {
+  rtsBuildingActorRef,
+  rtsUnitActorRef,
+  rtsUnitOwnerActorRefIsAuthored,
+  type RtsActorRef,
+  type RtsContentCatalog,
+} from "./rtsContentCatalog";
 
 /** The manifest facts a presentation Actor may be checked against. */
 export interface RtsMeshAsset {
@@ -56,7 +63,13 @@ export function parseRtsMeshManifest(value: unknown): Map<string, RtsMeshAsset> 
 /** Every distinct Actor the catalog can resolve to, in a stable order. */
 export function rtsContentCatalogRefs(catalog: RtsContentCatalog): readonly RtsActorRef[] {
   const refs = new Set<RtsActorRef>();
-  for (const entry of Object.values(catalog.units)) refs.add(entry.actorRef);
+  for (const entry of Object.values(catalog.units)) {
+    refs.add(entry.actorRef);
+    // Owner variants are separate files with their own meshes; leaving them out
+    // here would load the pack "successfully" and then fail per enemy unit at
+    // spawn time, when the manifest is no longer being reported on.
+    for (const ref of Object.values(entry.ownerActorRefs ?? {})) refs.add(ref);
+  }
   for (const entry of Object.values(catalog.buildings)) {
     if (entry.constructionActorRef) refs.add(entry.constructionActorRef);
     for (const ref of Object.values(entry.levels)) refs.add(ref);
@@ -107,6 +120,11 @@ export function validateRtsPresentationActor(
       cursor = byId.get(cursor)?.parent;
     }
   }
+
+  // Presentation motion is authored metadata, so a wrong axis or a zero radius is
+  // a load failure here rather than a wheel that turns oddly on the field.
+  const motions = readRtsActorMotions(def);
+  if ("problem" in motions) throw new RtsActorPresentationError(ref, motions.problem);
 
   const meshNodes = def.components.filter((node) => isMeshComponentKind(node.component));
   if (meshNodes.length === 0) {
@@ -169,6 +187,11 @@ export function rtsContentCoverageGaps(
   for (const unitId of request.unitIds) {
     if (exceptions.has(unitId)) continue;
     if (!rtsUnitActorRef(catalog, unitId)) gaps.push(`unit:${unitId}`);
+    // The enemy variant is required rather than inferred. `rtsUnitActorRef`
+    // falls back to `actorRef` for an unmapped owner, so without this check a new
+    // role would ship with both armies wearing the player's art and nothing would
+    // say so.
+    else if (!rtsUnitOwnerActorRefIsAuthored(catalog, unitId, "enemy")) gaps.push(`unit:${unitId}@enemy`);
   }
   for (const buildingId of request.buildingIds) {
     for (const [age, maxLevel] of Object.entries(request.levelsByAge) as [SettlementAge, number][]) {

@@ -9,7 +9,7 @@
     "gold": 300
   },
   "startingUnits": {
-    "guard": 40,
+    "guard": 10,
     "worker": 10
   },
   "enemyStartingResources": {

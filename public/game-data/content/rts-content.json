@@ -3,16 +3,28 @@
   "type": "rtsContentCatalog",
   "units": {
     "guard_placeholder": {
-      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json"
+      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json",
+      "ownerActorRefs": {
+        "enemy": "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Guard.actor.json"
+      }
     },
     "archer_placeholder": {
-      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Archer.actor.json"
+      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Archer.actor.json",
+      "ownerActorRefs": {
+        "enemy": "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Archer.actor.json"
+      }
     },
     "siege_placeholder": {
-      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Siege.actor.json"
+      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Siege.actor.json",
+      "ownerActorRefs": {
+        "enemy": "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Siege.actor.json"
+      }
     },
     "worker_placeholder": {
-      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Worker.actor.json"
+      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Worker.actor.json",
+      "ownerActorRefs": {
+        "enemy": "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Worker.actor.json"
+      }
     }
   },
   "buildings": {

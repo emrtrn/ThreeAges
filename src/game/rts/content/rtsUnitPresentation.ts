@@ -35,6 +35,7 @@ import {
   type RtsLocomotionTuning,
 } from "../units/rtsUnitAnimation";
 import type { RtsPresentationHandle, RtsPresentationUpdate } from "../units/unit";
+import { advanceRtsWheelSpins, type RtsWheelSpinBinding } from "./rtsPresentationMotion";
 
 /** Everything an animated instance needs from the asset it was cloned from. */
 export interface RtsUnitAnimationSource {
@@ -62,6 +63,12 @@ export interface RtsUnitPresentationOptions {
    * then behave like a 1 unit/s unit, which is only ever a stand-in.
    */
   readonly moveSpeed?: number | undefined;
+  /**
+   * Authored presentation motions already bound to their runtime nodes. Empty or
+   * omitted for every unit that is a body with a walk cycle; the siege engine is
+   * what this exists for.
+   */
+  readonly wheelSpins?: readonly RtsWheelSpinBinding[] | undefined;
 }
 
 /** Crossfade length between locomotion clips: long enough to blend, short enough to obey. */
@@ -103,12 +110,15 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   readonly deathSeconds: number | undefined = undefined;
   /** Render time a far unit has banked since its last mixer update (Faz F). */
   private pendingSeconds = 0;
+  /** Authored wheel pivots, turned by measured travel rather than by a clip. */
+  private readonly wheelSpins: readonly RtsWheelSpinBinding[];
 
   constructor(options: RtsUnitPresentationOptions) {
     this.root = options.root;
     this.pickTargets = options.pickTargets;
     this.selectionRadius = options.selectionRadius;
     this.tuning = rtsLocomotionTuning(options.moveSpeed ?? 1);
+    this.wheelSpins = options.wheelSpins ?? [];
 
     const animation = options.animation;
     if (!animation || animation.clips.length === 0) return;
@@ -150,8 +160,16 @@ class RtsUnitPresentation implements RtsPresentationHandle {
    * however often the mixer was actually stepped.
    */
   update(state: RtsPresentationUpdate): void {
+    if (state.deltaSeconds <= 0) return;
+    // Before the animator, and outside its early return: a siege engine is static
+    // meshes on pivots with no mixer at all, so gating the wheels on an animator
+    // would leave them frozen for the one unit they exist for. Full delta, not the
+    // throttled one — the throttle is there to skip mixer evaluation, and adding a
+    // float to a rotation is not what it was protecting.
+    advanceRtsWheelSpins(this.wheelSpins, state.planarSpeed, state.deltaSeconds);
+
     const animator = this.animator;
-    if (!animator || state.deltaSeconds <= 0) return;
+    if (!animator) return;
 
     const deltaSeconds = consumeDistanceUpdateDelta({
       deltaSeconds: state.deltaSeconds,

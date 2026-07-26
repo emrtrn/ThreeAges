@@ -19905,7 +19905,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 665
+        "bytes": 801
       },
       "license": "Project-local RTS presentation asset"
     },
@@ -19961,7 +19961,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 802
+        "bytes": 3283
       },
       "license": "Project-local RTS presentation asset"
     },
@@ -19989,7 +19989,123 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 804
+        "bytes": 769
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-enemy-guard-actor",
+      "name": "BP RTS Enemy Guard.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Units",
+      "path": "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Guard.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "unit",
+        "guard",
+        "enemy"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 807
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-enemy-worker-actor",
+      "name": "BP RTS Enemy Worker.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Units",
+      "path": "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Worker.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "unit",
+        "worker",
+        "enemy"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 775
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-enemy-archer-actor",
+      "name": "BP RTS Enemy Archer.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Units",
+      "path": "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Archer.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "unit",
+        "archer",
+        "enemy"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 810
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-enemy-siege-actor",
+      "name": "BP RTS Enemy Siege.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Units",
+      "path": "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Siege.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "unit",
+        "siege",
+        "enemy"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 3289
       },
       "license": "Project-local RTS presentation asset"
     },

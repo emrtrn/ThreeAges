@@ -74,7 +74,9 @@ import {
   RtsContentCatalogError,
   rtsBuildingActorRef,
   rtsUnitActorRef,
+  rtsUnitOwnerActorRefIsAuthored,
   validateRtsContentCatalog,
+  type RtsActorRef,
 } from "../src/game/rts/content/rtsContentCatalog";
 import {
   RtsActorPresentationError,
@@ -85,9 +87,15 @@ import {
 } from "../src/game/rts/content/rtsContentValidation";
 import {
   buildActorPresentationTree,
+  findActorComponentNode,
   fitPresentationToFootprint,
   tintedCopy,
 } from "../src/game/rts/content/rtsActorPresentationTree";
+import {
+  advanceRtsWheelSpins,
+  bindRtsWheelSpins,
+  readRtsActorMotions,
+} from "../src/game/rts/content/rtsPresentationMotion";
 import { createRtsActorPlaceholder, isRtsActorPlaceholder } from "../src/game/rts/content/rtsActorPlaceholder";
 import {
   createRtsUnitPresentation,
@@ -232,7 +240,7 @@ import { roadGraphToLandscapeSpline, RoadPaintSurface } from "../src/game/rts/ro
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { congestionSeconds, updateUnitMovement } from "../src/game/rts/units/unitMovement";
-import { updateUnitSeparation } from "../src/game/rts/units/unitSeparation";
+import { settleStoppedUnitOverlaps, updateUnitSeparation } from "../src/game/rts/units/unitSeparation";
 import { assignGroupDestinations } from "../src/game/rts/units/groupOrders";
 import { issueAttackOrder } from "../src/game/rts/units/attackPathing";
 import { retaliateAgainstAttack, updateUnitEngagement } from "../src/game/rts/combat/engagementSystem";
@@ -29764,6 +29772,236 @@ check("Actor presentation Faz 1: the catalog covers every playable RTS identity 
   );
 });
 
+check("Unit owner Actors Faz 1: an owner resolves its own variant, and only a real owner may author one", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const buildingBalance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const context = { unitBalance, buildingBalance };
+  const catalog = validateRtsContentCatalog(
+    JSON.parse(readFileSync("public/game-data/content/rts-content.json", "utf8")) as unknown,
+    context,
+  );
+
+  // The same gameplay id, two armies, two files. This is the whole point of the
+  // split: an enemy Worker can be re-authored without touching the player's.
+  for (const [unitId, role] of [
+    ["guard_placeholder", "Guard"],
+    ["worker_placeholder", "Worker"],
+    ["archer_placeholder", "Archer"],
+    ["siege_placeholder", "Siege"],
+  ] as const) {
+    assert.equal(
+      rtsUnitActorRef(catalog, unitId, "player"),
+      `assets/ThreeAges/Actors/Units/BP_RTS_${role}.actor.json`,
+      `${unitId} player art is the default actorRef`,
+    );
+    assert.equal(
+      rtsUnitActorRef(catalog, unitId, "enemy"),
+      `assets/ThreeAges/Actors/Units/BP_RTS_Enemy_${role}.actor.json`,
+      `${unitId} enemy art is its own file`,
+    );
+    assert.ok(rtsUnitOwnerActorRefIsAuthored(catalog, unitId, "enemy"), `${unitId} authors the enemy variant`);
+  }
+  // Omitting the owner must keep meaning "player", so every existing caller that
+  // has not been taught about owners keeps resolving the same art as before.
+  assert.equal(rtsUnitActorRef(catalog, "guard_placeholder"), rtsUnitActorRef(catalog, "guard_placeholder", "player"));
+
+  // An owner without an override falls back rather than failing: the fallback is
+  // the authoring convenience, and coverage is what stops it hiding a gap.
+  const playerOnly = validateRtsContentCatalog({
+    schema: 1,
+    type: "rtsContentCatalog",
+    units: { guard_placeholder: { actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json" } },
+    buildings: {},
+    ui: {},
+  }, context);
+  assert.equal(
+    rtsUnitActorRef(playerOnly, "guard_placeholder", "enemy"),
+    "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json",
+    "an unmapped owner falls back to the default Actor",
+  );
+  assert.equal(rtsUnitOwnerActorRefIsAuthored(playerOnly, "guard_placeholder", "enemy"), false);
+  assert.deepEqual(
+    rtsContentCoverageGaps(playerOnly, { unitIds: ["guard_placeholder"], buildingIds: [], levelsByAge: { settlement: 1, town: 1 } }),
+    ["unit:guard_placeholder@enemy"],
+    "the fallback is reported as an art gap, not silently accepted",
+  );
+
+  assert.throws(
+    () => validateRtsContentCatalog({
+      schema: 1,
+      type: "rtsContentCatalog",
+      units: {
+        guard_placeholder: {
+          actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json",
+          ownerActorRefs: { player: "assets/ThreeAges/Actors/Units/BP_RTS_Guard_Alt.actor.json" },
+        },
+      },
+      buildings: {},
+      ui: {},
+    }, context),
+    RtsContentCatalogError,
+    "player is not overridable — actorRef is the single player authority",
+  );
+  assert.throws(
+    () => validateRtsContentCatalog({
+      schema: 1,
+      type: "rtsContentCatalog",
+      units: {
+        guard_placeholder: {
+          actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json",
+          ownerActorRefs: { enemey: "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Guard.actor.json" },
+        },
+      },
+      buildings: {},
+      ui: {},
+    }, context),
+    RtsContentCatalogError,
+    "a misspelled owner key fails the load instead of leaving that army on the default art",
+  );
+
+  // Owner variants are separate files with their own meshes, so the pack has to
+  // fetch them at load — not discover them missing at the first enemy spawn.
+  const refs = new Set(rtsContentCatalogRefs(catalog));
+  for (const role of ["Guard", "Worker", "Archer", "Siege"]) {
+    const ref = `assets/ThreeAges/Actors/Units/BP_RTS_Enemy_${role}.actor.json`;
+    assert.ok(refs.has(ref as RtsActorRef), `${ref} is loaded with the pack`);
+  }
+});
+
+check("Siege Faz 3: wheelSpin metadata is validated, bound to its pivot, and turned by measured travel", () => {
+  const defWith = (motion: unknown, withWheel = true) => normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_Wheels",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "chassis", component: "StaticMeshComponent", parent: "root", props: { assetId: "shape-cube" } },
+      { id: "leftWheelPivot", component: "Transform", parent: "root", props: { position: [-0.78, 0.34, 0], rtsPresentationMotion: motion } },
+      ...(withWheel
+        ? [{ id: "leftWheel", component: "StaticMeshComponent", parent: "leftWheelPivot", props: { assetId: "shape-torus" } }]
+        : []),
+    ],
+  }, "BP_Wheels");
+
+  const good = readRtsActorMotions(defWith({ kind: "wheelSpin", axis: "x", radius: 0.34, direction: 1 }));
+  assert.ok("motions" in good && good.motions.length === 1, "a well-formed wheelSpin is read off its pivot");
+  assert.deepEqual(
+    "motions" in good ? good.motions[0] : null,
+    ["leftWheelPivot", { kind: "wheelSpin", axis: "x", radius: 0.34, direction: 1 }],
+  );
+
+  // Each of these is a wheel that would otherwise turn at an absurd rate, about
+  // the wrong axis, or not at all — all of which read as a bug in the model.
+  for (const [motion, why] of [
+    [{ kind: "wheelSpin", axis: "w", radius: 0.34, direction: 1 }, "an axis that is not x/y/z"],
+    [{ kind: "wheelSpin", axis: "x", radius: 0, direction: 1 }, "a zero radius"],
+    [{ kind: "wheelSpin", axis: "x", radius: -0.34, direction: 1 }, "a negative radius"],
+    [{ kind: "wheelSpin", axis: "x", radius: Number.NaN, direction: 1 }, "a non-finite radius"],
+    [{ kind: "wheelSpin", axis: "x", radius: 0.34, direction: 2 }, "a direction that is not ±1"],
+    [{ kind: "trackRoll", axis: "x", radius: 0.34, direction: 1 }, "an unknown motion kind"],
+  ] as const) {
+    const read = readRtsActorMotions(defWith(motion));
+    assert.ok("problem" in read, `${why} is refused`);
+    assert.ok("problem" in read && read.problem.includes("leftWheelPivot"), "and the failure names the component");
+  }
+
+  // A pivot with nothing under it is the shape of a rename or a reparent, and
+  // would present as a wheel that mysteriously never turns.
+  const orphan = readRtsActorMotions(defWith({ kind: "wheelSpin", axis: "x", radius: 0.34, direction: 1 }, false));
+  assert.ok("problem" in orphan && orphan.problem.includes("needs a wheel component"), "wheelSpin without a wheel is refused");
+
+  // Broken metadata must fail the Actor the same way a missing mesh does: as a
+  // placeholder named by ref and component, not as a silently static wheel.
+  assert.throws(
+    () => validateRtsPresentationActor(
+      defWith({ kind: "wheelSpin", axis: "x", radius: 0, direction: 1 }),
+      "assets/A.actor.json",
+      new Map([["shape-cube", { path: "a.glb", assetType: "staticMesh" as const }], ["shape-torus", { path: "b.glb", assetType: "staticMesh" as const }]]),
+    ),
+    RtsActorPresentationError,
+    "a bad wheelSpin fails the Actor load",
+  );
+
+  // The prop is plain Actor Script data, so the editor's save round-trip has to
+  // return it unchanged — there is no allowlist protecting it.
+  const roundTripped = normalizeActorScriptDef(
+    JSON.parse(JSON.stringify(defWith({ kind: "wheelSpin", axis: "z", radius: 0.5, direction: -1 }))) as unknown,
+    "BP_Wheels",
+  );
+  assert.deepEqual(
+    roundTripped.components.find((node) => node.id === "leftWheelPivot")?.props.rtsPresentationMotion,
+    { kind: "wheelSpin", axis: "z", radius: 0.5, direction: -1 },
+    "normalize -> save -> normalize keeps the motion prop intact",
+  );
+
+  // Binding goes through the authored component id in userData, not the node
+  // name, so a bone of the same name could never capture the spin.
+  const def = defWith({ kind: "wheelSpin", axis: "x", radius: 0.34, direction: 1 });
+  const tree = buildActorPresentationTree(def, "BP_Wheels", () => undefined);
+  const pivot = findActorComponentNode(tree, "leftWheelPivot");
+  assert.ok(pivot, "the pivot node is found by component id");
+  const bindings = bindRtsWheelSpins(def, tree);
+  assert.equal(bindings.length, 1);
+  assert.equal(bindings[0]!.node, pivot);
+
+  // One second at 1.7 units/s over a 0.34 radius wheel is exactly 5 radians of
+  // turn: the wheel covers the ground rather than skating over it.
+  advanceRtsWheelSpins(bindings, 1.7, 1);
+  assert.ok(Math.abs(pivot!.rotation.x - 5) < 1e-9, "rolling distance / radius is the turn angle");
+  assert.equal(pivot!.rotation.y, 0, "and only the authored axis is written");
+  assert.equal(pivot!.rotation.z, 0);
+
+  // A siege engine stuck in a crowd stands with its wheels still — the whole
+  // reason this reads measured speed rather than the authored moveSpeed.
+  advanceRtsWheelSpins(bindings, 0, 1);
+  assert.ok(Math.abs(pivot!.rotation.x - 5) < 1e-9, "a stopped unit does not turn its wheels");
+
+  // Direction is the export-orientation fix, so it flips the sign and nothing else.
+  const mirrored = bindRtsWheelSpins(defWith({ kind: "wheelSpin", axis: "x", radius: 0.34, direction: -1 }), tree);
+  const before = pivot!.rotation.x;
+  advanceRtsWheelSpins(mirrored, 1.7, 1);
+  assert.ok(Math.abs(pivot!.rotation.x - (before - 5)) < 1e-9, "direction -1 turns the other way by the same amount");
+});
+
+check("Siege Faz 3: both shipped Siege Actors are a chassis, a barrel and two independently pivoted wheels", () => {
+  const manifest = parseRtsMeshManifest(
+    JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
+  );
+  for (const ref of [
+    "assets/ThreeAges/Actors/Units/BP_RTS_Siege.actor.json",
+    "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Siege.actor.json",
+  ]) {
+    const def = normalizeActorScriptDef(JSON.parse(readFileSync(`public/${ref}`, "utf8")) as unknown, ref);
+    validateRtsPresentationActor(def, ref, manifest);
+
+    // Four separate meshes, not one baked model: this is what lets the barrel be
+    // elevated and the wheels be turned without re-exporting anything.
+    const meshes = def.components.filter((node) => node.component === "StaticMeshComponent").map((node) => node.id);
+    assert.deepEqual([...meshes].sort(), ["barrel", "chassis", "leftWheel", "rightWheel"], `${ref} authors four mesh components`);
+    assert.equal(def.components.find((node) => node.id === "barrel")?.parent, "turretPivot", "the barrel hangs off its own pivot");
+
+    const motions = readRtsActorMotions(def);
+    assert.ok("motions" in motions, `${ref} wheel metadata validates`);
+    const byPivot = new Map("motions" in motions ? motions.motions : []);
+    assert.deepEqual([...byPivot.keys()].sort(), ["leftWheelPivot", "rightWheelPivot"], "both wheels spin, and only the wheels");
+    // Same radius on both sides, or the two wheels would disagree about how far
+    // the engine has travelled and visibly drift apart.
+    assert.equal(byPivot.get("leftWheelPivot")!.radius, byPivot.get("rightWheelPivot")!.radius);
+    for (const [pivotId, motion] of byPivot) {
+      const wheel = def.components.find((node) => node.parent === pivotId);
+      assert.ok(wheel, `${pivotId} carries a wheel`);
+      // The pivot must sit at the wheel's centre height, or the wheel orbits a
+      // point it is not centred on and wobbles instead of rolling.
+      const pivotY = (def.components.find((node) => node.id === pivotId)?.props.position as number[])[1];
+      assert.ok(Math.abs(pivotY - motion.radius) < 1e-9, `${pivotId} sits one radius off the ground`);
+    }
+  }
+});
+
 check("Actor presentation Faz 2: every catalog Actor is renderable and every mesh it names is a manifested file", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
@@ -30439,7 +30677,8 @@ check("Skeletal animasyon Faz F: rol tinti klonu boyar, sabloni ve material payl
   template.add(skinned);
   const bodyOf = (tree: Group) => tree.getObjectByName("unit-body") as SkinnedMesh;
 
-  // The Guard authors no tint, and must stay exactly on the Faz A sharing path.
+  // An Actor that authors no tint (the Workers, who wear the model's own
+  // colours) must stay exactly on the Faz A sharing path.
   const plain = bodyOf(buildActorPresentationTree(defFor(), "BP_Tint", () => template));
   assert.equal(plain.material, material, "an untinted Actor still shares the template's own material");
 
@@ -32308,6 +32547,49 @@ check("Faz 7 unit separation can be disabled so RTS bodies pass through each oth
 
   assert.deepEqual(first.position.toArray(), [0, 0, 0]);
   assert.deepEqual(second.position.toArray(), [0, 0, 0]);
+});
+
+check("Faz 7 moving units pass through idle bodies, then collide after stopping", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const moving = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const idle = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  moving.setMoveTarget(10, 0);
+
+  updateUnitSeparation([moving, idle], 1 / 60, { navigation, stationaryOnly: true });
+  assert.deepEqual(moving.position.toArray(), [0, 0, 0], "a moving unit is not pushed by an idle body");
+  assert.deepEqual(idle.position.toArray(), [0, 0, 0], "the idle body does not push back on a mover");
+
+  moving.stop();
+  updateUnitSeparation([moving, idle], 1 / 60, { navigation, stationaryOnly: true });
+  assert.ok(
+    moving.position.distanceTo(idle.position) >= moving.navRadius + idle.navRadius,
+    "once both units are idle, ordinary collision separation resumes",
+  );
+});
+
+check("Faz 7 a stopped overlap settles once instead of continuously shimmering", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const first = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const second = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  first.setMoveTarget(10, 0);
+
+  // First observation records the active order; stopping on the next tick is
+  // the transition that authorizes one atomic idle-cluster placement.
+  settleStoppedUnitOverlaps([first, second], navigation);
+  first.stop();
+  settleStoppedUnitOverlaps([first, second], navigation);
+  assert.ok(
+    first.position.distanceTo(second.position) >= first.navRadius + second.navRadius,
+    "the stopped cluster is no longer overlapping",
+  );
+  const settledFirst = first.position.toArray();
+  const settledSecond = second.position.toArray();
+
+  settleStoppedUnitOverlaps([first, second], navigation);
+  assert.deepEqual(first.position.toArray(), settledFirst, "a settled idle unit is not pushed again next frame");
+  assert.deepEqual(second.position.toArray(), settledSecond, "the idle cluster remains visually still");
 });
 
 check("RTS farms and lumber camps reserve building space but not unit navigation", () => {
@@ -38045,4 +38327,3 @@ function webpVp8xHeader(width: number, height: number): Uint8Array {
   bytes[29] = (h >> 16) & 0xff;
   return bytes;
 }
-

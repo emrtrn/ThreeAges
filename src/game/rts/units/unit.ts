@@ -406,6 +406,11 @@ export class Unit {
     return this.rescuing && this.moveTarget !== null;
   }
 
+  /** True while an active ground route or direct destination owns this unit. */
+  get hasMovementOrder(): boolean {
+    return this.movePath.length > 0 || this.moveTarget !== null;
+  }
+
   /** Start a bounded unit-to-unit collision recovery without changing the order. */
   beginCollisionRecovery(seconds: number): void {
     this.collisionRecoverySeconds = Math.max(this.collisionRecoverySeconds, Math.max(0, seconds));

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "type": "actor",
-  "name": "BP_RTS_Siege",
+  "name": "BP_RTS_Enemy_Siege",
   "parentClass": "actor",
   "variables": [
     {
@@ -36,7 +36,7 @@
           0.005,
           0.019
         ],
-        "materialTint": "#4a6f72"
+        "materialTint": "#7a3a33"
       }
     },
     {

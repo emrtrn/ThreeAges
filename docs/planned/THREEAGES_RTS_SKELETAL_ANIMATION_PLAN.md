@@ -241,8 +241,15 @@ Kabul: Bir klip ismi degistiginde yalnizca veri dosyasi duzenlenir.
       `ual1-standard-rm` rig'ini kullanan kendi Actor'unu alir
       (`BP_RTS_Archer` / `BP_RTS_Siege` / `BP_RTS_Worker`); ayrim
       `SkeletalMeshComponent`'e authored `materialTint` prop'u ile yapilir
-      (Archer `#4f8f4a`, Topcu `#3f4a55`, Isci `#dfbd5b` - eski kapsul Isci'nin
-      rengi). Socket/ekipman yolu secilmedi: sidecar'in `sockets` listesi bos ve
+      (Archer `#4f8f4a`, Topcu `#3f4a55`, Isci `#d9d3c2`).
+      **Tint secerken bilinmesi gereken:** UAL1 hicbir doku tasimaz; govde
+      materyali (`M_Main`) duz turuncudur (`baseColorFactor` ~ `#cc6710`,
+      eklemler `M_Joints` mor). Muhafiz tint'siz oldugu icin sahada *turuncu*
+      gorunur, dolayisiyla sicak/turuncu-yakini bir tint pratikte gorunmez olur -
+      ilk denenen oker `#dfbd5b` (eski kapsul Isci'nin rengi) tam bu yuzden
+      Muhafiz'dan ayirt edilemedi (kullanici gozlemi, 2026-07-26). Yeni tintler
+      turuncudan hue *veya* deger olarak uzak secilmelidir.
+      Socket/ekipman yolu secilmedi: sidecar'in `sockets` listesi bos ve
       presentation tree'de socket attach yolu yok, ikisi de Faz F'yi belirgin
       buyuturdu. Takim rengi secim halkasinda kalir; tint yalnizca rolu anlatir.
       **Sinir:** Topcu artik tekerlekli top degil, gri boyali bir insan - ayri
@@ -287,8 +294,10 @@ Kabul: Bir klip ismi degistiginde yalnizca veri dosyasi duzenlenir.
       bilerek delen tek madde. Ayri bir karar olarak acik birakildi.
 
 Kabul: Normal akista kapsul fallback gorunmez; 40 birimde frame butcesi korunur.
-**Kullanici gozlemi bekliyor** - ozellikle uc yeni rolun renkleri ve 40 birimlik
-bir orduda kamera yakin/uzak akiciligi.
+**Kismen karsilandi** (kullanici, 2026-07-26): Isci insaat sirasinda diz cokme
+animasyonuna giriyor; 40 birimlik orduda sorun yok. Isci rengi Muhafiz'dan
+ayirt edilemedigi icin `#dfbd5b` -> `#d9d3c2` degistirildi; **yeni renk gozlem
+bekliyor.**
 
 ## 6. Test ve Kabul Matrisi
 
@@ -327,3 +336,4 @@ Faz D'ye ancak locomotion stabil olduktan sonra gecilir.
 | 2026-07-26 | C, D | Kullanici dogruladi: yurume/durma, saldiri ve olum animasyonlari calisiyor. Iki fazin kabulu de karsilandi; Faz F acildi. |
 | 2026-07-26 | E | Denetim: `src/`+`engine/` icinde sabit UAL1 klip adi yok. TPS `CLIP_FALLBACKS` sidecar'siz asset'ler icin son care, ihlal degil. Faz E kapandi. |
 | 2026-07-26 | F | Archer/Siege/Worker Actor'lari + `materialTint` yolu, `work` rolu (`Fixing_Kneeling`), mesafeye gore mixer throttle (45 birim / 15 Hz), 20-40 instance butce testi. Kapsam istisnasi kaldirildi. `tsc` ve `test:engine` (1121) gecti. |
+| 2026-07-26 | F | Kullanici gozlemi: isci calisma animasyonu ve 40 birimlik ordu tamam. Isci tinti Muhafiz'in (tint'siz) turuncusundan ayirt edilemedi -> `#d9d3c2`. |

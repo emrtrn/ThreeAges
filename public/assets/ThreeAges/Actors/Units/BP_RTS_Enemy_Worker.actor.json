@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "type": "actor",
-  "name": "BP_RTS_Worker",
+  "name": "BP_RTS_Enemy_Worker",
   "parentClass": "actor",
   "variables": [
     {

@@ -803,6 +803,7 @@ export class ActorScriptEditor {
     const cameraField = node.component === "Camera" ? cameraFields(node) : "";
     const springArmField = node.component === "SpringArm" ? springArmFields(node) : "";
     const aiControllerField = node.component === "AIController" ? this.aiControllerFields(node) : "";
+    const wheelSpinField = node.component === "Transform" ? wheelSpinFields(node) : "";
     const pos = readVec3Prop(node.props.position, [0, 0, 0]);
     const rot = readVec3Prop(node.props.rotation, [0, 0, 0]);
     const scl = readVec3Prop(node.props.scale, [1, 1, 1]);
@@ -837,6 +838,7 @@ export class ActorScriptEditor {
       ${springArmField}
       ${cameraField}
       ${aiControllerField}
+      ${wheelSpinField}
       <div class="as-section-label">Transform <small>(preview)</small></div>
       ${transformRows}
       <details class="as-advanced">
@@ -1341,6 +1343,7 @@ export class ActorScriptEditor {
     this.bindSpringArmDetails(node);
     this.bindCameraDetails(node);
     this.bindAIControllerDetails(node);
+    this.bindWheelSpinDetails(node);
     this.bindNumberProps(node);
     this.detailsHost.querySelectorAll<HTMLElement>("[data-as-vec]").forEach((rowEl) => {
       const key = rowEl.dataset.asVec as "position" | "rotation" | "scale";
@@ -1787,6 +1790,58 @@ export class ActorScriptEditor {
    * Details form to `node.props[key]`, committing on change. Shared by the Spring
    * Arm and Camera forms; only one node's form is mounted at a time.
    */
+  /**
+   * Wires the RTS wheel-spin form (no-op on a node that shows none).
+   *
+   * Every control rewrites the whole nested `rtsPresentationMotion` object, so a
+   * half-written motion can never reach disk: the prop is either absent or
+   * complete. The radius is clamped above zero here because a zero radius is a
+   * load failure downstream, and refusing it at the keystroke is friendlier than
+   * turning the Actor into a placeholder on next launch.
+   */
+  private bindWheelSpinDetails(node: ComponentTemplateNode): void {
+    const read = (): Record<string, SceneJsonValue> => {
+      const motion = node.props.rtsPresentationMotion;
+      return typeof motion === "object" && motion !== null && !Array.isArray(motion)
+        ? { ...(motion as Record<string, SceneJsonValue>) }
+        : {};
+    };
+    const write = (patch: Record<string, SceneJsonValue>): void => {
+      const spin = { ...read(), ...patch };
+      node.props.rtsPresentationMotion = {
+        kind: "wheelSpin",
+        axis: typeof spin.axis === "string" ? spin.axis : "x",
+        radius: Math.max(0.01, readNumberProp(spin.radius, 0.34)),
+        direction: spin.direction === -1 ? -1 : 1,
+      };
+      this.markDirty();
+    };
+
+    const toggle = this.detailsHost.querySelector<HTMLInputElement>("[data-as-wheelspin-on]");
+    toggle?.addEventListener("change", () => {
+      if (toggle.checked) write({});
+      else delete node.props.rtsPresentationMotion;
+      this.markDirty();
+      this.renderDetails();
+    });
+    const axis = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-wheelspin-axis]");
+    axis?.addEventListener("change", () => {
+      write({ axis: axis.value });
+      this.renderDetails();
+    });
+    const direction = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-wheelspin-direction]");
+    direction?.addEventListener("change", () => {
+      write({ direction: direction.value === "-1" ? -1 : 1 });
+      this.renderDetails();
+    });
+    const radius = this.detailsHost.querySelector<HTMLInputElement>("[data-as-wheelspin-radius]");
+    radius?.addEventListener("input", () => {
+      const value = Number(radius.value);
+      if (Number.isFinite(value) && value > 0) write({ radius: value });
+    });
+    radius?.addEventListener("change", () => this.renderDetails());
+  }
+
   private bindNumberProps(node: ComponentTemplateNode): void {
     this.detailsHost.querySelectorAll<HTMLInputElement>("[data-as-num]").forEach((input) => {
       const key = input.dataset.asNum;
@@ -2580,6 +2635,63 @@ function numberPropField(
  * length + offsets place the camera socket; the lag/collision toggles shape the
  * follow feel. Writes to `node.props`.
  */
+/**
+ * The "RTS wheel spin" Details form, shown on any Transform.
+ *
+ * A wheel is a pivot the RTS unit presentation turns in step with the distance
+ * the unit actually travelled — the siege engine's answer to a walk cycle. The
+ * form writes one nested `rtsPresentationMotion` object, and clearing the toggle
+ * deletes the key outright rather than leaving a disabled husk behind.
+ *
+ * It is offered on every Transform because the editor is generic: it has no way
+ * to know which Actor is a siege engine, and gating the form on a naming
+ * convention would be exactly the project-specific rule the editor must not
+ * carry. An Actor that is not an RTS unit simply never has the prop read.
+ */
+function wheelSpinFields(node: ComponentTemplateNode): string {
+  const motion = node.props.rtsPresentationMotion;
+  const on = typeof motion === "object" && motion !== null && !Array.isArray(motion);
+  const spin = on ? (motion as Record<string, SceneJsonValue>) : {};
+  if (!on) {
+    return `
+      <div class="as-section-label">RTS wheel spin</div>
+      <label class="as-field as-check">
+        <input type="checkbox" data-as-wheelspin-on />
+        <span>Spin this pivot as a wheel</span>
+      </label>
+    `;
+  }
+  const axis = typeof spin.axis === "string" ? spin.axis : "x";
+  const direction = spin.direction === -1 ? -1 : 1;
+  return `
+    <div class="as-section-label">RTS wheel spin</div>
+    <label class="as-field as-check">
+      <input type="checkbox" data-as-wheelspin-on checked />
+      <span>Spin this pivot as a wheel</span>
+    </label>
+    <label class="as-field">
+      <span>Axis</span>
+      <select data-as-wheelspin-axis>
+        ${["x", "y", "z"]
+          .map((value) => `<option value="${value}" ${value === axis ? "selected" : ""}>${value.toUpperCase()}</option>`)
+          .join("")}
+      </select>
+    </label>
+    <label class="as-field">
+      <span>Radius</span>
+      <input type="number" data-as-wheelspin-radius value="${readNumberProp(spin.radius, 0.34)}" step="0.01" min="0.01" />
+    </label>
+    <label class="as-field">
+      <span>Direction</span>
+      <select data-as-wheelspin-direction>
+        <option value="1" ${direction === 1 ? "selected" : ""}>Forward (+1)</option>
+        <option value="-1" ${direction === -1 ? "selected" : ""}>Reversed (−1)</option>
+      </select>
+    </label>
+    <p class="as-details-note">Turn angle is travelled distance ÷ radius, so the radius must match the wheel mesh.</p>
+  `;
+}
+
 function springArmFields(node: ComponentTemplateNode): string {
   const props = node.props;
   const lag = props.enableCameraLag === true;

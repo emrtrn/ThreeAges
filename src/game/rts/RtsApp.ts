@@ -76,7 +76,7 @@ import type { RoomLayout } from "@engine/scene/layout";
 import { UnitSystem } from "./units/unitSystem";
 import { Unit } from "./units/unit";
 import { updateUnitMovement } from "./units/unitMovement";
-import { updateUnitSeparation } from "./units/unitSeparation";
+import { settleStoppedUnitOverlaps } from "./units/unitSeparation";
 import { updateUnitCombat } from "./units/unitCombat";
 import { updateUnitDeaths } from "./units/unitDeath";
 import { retaliateAgainstAttack, updateUnitEngagement } from "./combat/engagementSystem";
@@ -1485,10 +1485,9 @@ export class RtsApp {
       targets: this.combatTargets(),
     });
     updateUnitMovement(this.units.all(), dt, { navigation: this.navigation });
-    // RTS bodies deliberately do not collide with other RTS bodies: formations,
-    // destination reservations and command staggering still govern where they
-    // head, but units may pass through one another instead of crowd-deadlocking.
-    updateUnitSeparation(this.units.all(), dt, { navigation: this.navigation, enabled: false });
+    // Moving bodies pass through one another. When an order ends, settle a real
+    // idle overlap once instead of continuously pushing the whole stopped group.
+    settleStoppedUnitOverlaps(this.units.all(), this.navigation);
     this.workerConstruction.update(dt);
     this.economyProduction?.update(dt);
     this.syncForestVisibility();
