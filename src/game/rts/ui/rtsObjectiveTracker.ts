@@ -34,6 +34,23 @@ const HOLDER_LABEL: Readonly<Record<UnitOwner | "neutral", string>> = {
   neutral: "boş",
 };
 
+/**
+ * §78.1's rule, said where the player is when they need it.
+ *
+ * The start card explains the condition once and then closes, so mid-match the
+ * only word left for an unheld point was "boş" — accurate, and silent about the
+ * one thing a player has to know: a point is taken by the control area of a
+ * road-connected outpost, never by standing an army on it. Sending units and
+ * watching nothing happen is the discoverability failure §58's "sürpriz yenilgi
+ * yaratmıyor" box and §78.1's rationale both point at.
+ *
+ * Only on a neutral point. A point held by the enemy already gives honest
+ * feedback for an army sent at it — it goes "çekişmeli" and stalls their counter,
+ * which is a real and useful move — so a hint there would argue against a correct
+ * action. And a point already held needs no instructions.
+ */
+const UNHELD_POINT_HINT = "Yola bağlı karakol gerekir.";
+
 export interface RtsObjectiveTrackerState {
   readonly points: readonly StrategicPointStatus[];
   readonly progress: readonly RegionalVictoryProgress[];
@@ -113,6 +130,17 @@ export class RtsObjectiveTracker {
       // still held would misdescribe what the counter is doing.
       state.textContent = status.contested ? "çekişmeli" : HOLDER_LABEL[status.holder];
       row.append(name, state);
+      // Its own line under the pair rather than a longer status word: the
+      // name/holder columns are what a player scans every few seconds, and the
+      // hint is read once and then stops being news. It disappears the moment the
+      // point has a holder, so a taken objective carries no leftover instruction.
+      if (status.holder === "neutral") {
+        const hint = document.createElement("span");
+        hint.className = "rts-objective-point-hint";
+        hint.dataset.rtsObjectiveHint = "";
+        hint.textContent = UNHELD_POINT_HINT;
+        row.appendChild(hint);
+      }
       return row;
     }));
   }

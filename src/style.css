@@ -837,10 +837,24 @@ body {
 
 .rts-objective-point {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
   padding: 2px 0;
   color: var(--ta-ink-muted);
+}
+
+/*
+ * The "how" under an unheld objective. Wraps to a full line of its own so the
+ * name/holder columns above it keep their scannable shape, and stays quieter
+ * than both — it is an instruction read once, not a status watched all match.
+ */
+.rts-objective-point-hint {
+  flex-basis: 100%;
+  margin-top: 1px;
+  color: var(--ta-ink-muted);
+  font-size: 11px;
+  opacity: 0.85;
 }
 
 .rts-objective-point[data-holder="player"] {

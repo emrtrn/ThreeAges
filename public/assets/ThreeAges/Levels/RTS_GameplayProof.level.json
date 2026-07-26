@@ -3035,11 +3035,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_StrategicPoint.actor.json",
       "position": [
-        -20,
+        -34,
         0,
-        -20
+        -51
       ],
       "name": "Strategic west_pass",
+      "scale": 1,
       "variableOverrides": {
         "pointId": "west_pass",
         "label": "Batı Geçidi",
@@ -3049,11 +3050,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_StrategicPoint.actor.json",
       "position": [
-        20,
+        34,
         0,
-        20
+        54
       ],
       "name": "Strategic east_pass",
+      "scale": 1,
       "variableOverrides": {
         "pointId": "east_pass",
         "label": "Doğu Geçidi",

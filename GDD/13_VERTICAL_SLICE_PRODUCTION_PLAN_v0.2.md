@@ -3039,6 +3039,15 @@ ekranda olması" riskini geri getirirdi.
 - [x] Bölgesel zafer seçiliyken kısa bir açıklama göster: nokta yol bağlantılı
       karakolun kontrol alanıyla alınır, birlik göndererek değil.
       (`VICTORY_CONDITION_ROWS` içindeki hint; seçili satıra göre değişir.)
+      **Playtest düzeltmesi:** kart açıklaması tek başına yetmedi. İlk oyuncu
+      denemesinde geçitlere birlik gönderilip sayacın başlamaması beklendi —
+      kart "Maçı Başlat"ta kapandığı için maç sırasında elde kalan tek metin
+      izleyicideki "boş" kelimesiydi. Açıklama artık `ui/rtsObjectiveTracker.ts`
+      içinde de var: sahipsiz bir noktanın altında "Yola bağlı karakol gerekir."
+      satırı; nokta bir sahip kazandığı anda kayboluyor. Yalnızca *nötr* nokta
+      için — düşmandaki bir noktaya birlik göndermek gerçekten işe yarar
+      (çekişmeli yapar, sayacı durdurur), oraya ipucu koymak doğru hamleyi
+      caydırırdı.
 
 Not: seçim `sessionStorage`'da tutulur — maç ayarı, kaydedilmiş profil değil;
 yeni sekme §78.1'in istediği varsayılanla (yalnız askerî) açılır. `?flags=
