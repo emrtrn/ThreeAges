@@ -19,7 +19,6 @@ import {
   type SelectionAction,
   type SelectionPanelContent,
 } from "./rtsSelectionView";
-import { attachIconFallback } from "./rtsUiIcons";
 
 export class RtsSelectionPanel {
   private readonly root = document.createElement("section");
@@ -40,7 +39,6 @@ export class RtsSelectionPanel {
   private readonly progressFill = document.createElement("div");
   private readonly actionRow = document.createElement("div");
   private readonly actionTray = document.createElement("div");
-  private readonly commandChips = document.createElement("div");
   private readonly actionButtons = new Map<string, HTMLButtonElement>();
   private readonly hints = document.createElement("p");
   /**
@@ -78,7 +76,6 @@ export class RtsSelectionPanel {
     this.actionRow.className = "rts-selection-actions ui-interactive";
     this.actionTray.className = "rts-selection-action-tray ui-interactive";
     this.actionTray.hidden = true;
-    this.commandChips.className = "rts-selection-command-chips";
     this.hints.className = "rts-selection-hints";
     // A labelled fill bar for a running timed job (a level-up). Assembled once
     // and shown/hidden per frame; only the label, seconds and fill width move.
@@ -96,7 +93,7 @@ export class RtsSelectionPanel {
     const details = document.createElement("div");
     details.className = "rts-selection-details";
     details.append(this.body, this.progress);
-    this.root.append(this.portrait, this.header, details, this.actionRow, this.commandChips, this.hints);
+    this.root.append(this.portrait, this.header, details, this.actionRow, this.hints);
     const overlay = document.getElementById("ui-overlay") ?? document.body;
     overlay.append(this.root, this.actionTray);
     this.setSelection({ kind: "none" });
@@ -123,7 +120,6 @@ export class RtsSelectionPanel {
     // Multi-command buildings keep their live facts in the compact selection
     // panel, but lift their verbs into independent cards immediately above it.
     // Demolish remains contextual to its selected structure in the panel.
-    const hasCommandChips = (content.commandChips?.length ?? 0) > 0;
     const usesFloatingActions = content.actionLayout !== undefined;
     const panelActions = usesFloatingActions
       ? content.actions.filter((action) => action.id === DEMOLISH_ACTION)
@@ -131,7 +127,7 @@ export class RtsSelectionPanel {
     const trayActions = usesFloatingActions
       ? content.actions.filter((action) => action.id !== DEMOLISH_ACTION)
       : [];
-    this.root.dataset.rtsActionLayout = hasCommandChips || panelActions.length > 1
+    this.root.dataset.rtsActionLayout = panelActions.length > 1
         ? "deck"
         : panelActions.length === 1
           ? "single"
@@ -142,7 +138,6 @@ export class RtsSelectionPanel {
     this.hints.textContent = content.hint;
     this.hints.hidden = content.hint.length === 0;
     this.renderSlots(content.slots ?? []);
-    this.renderCommandChips(content.commandChips ?? []);
     const portrait = content.portrait ?? null;
     this.portraitImage.hidden = portrait === null;
     if (portrait && this.portraitImage.src !== new URL(portrait, window.location.origin).href) {
@@ -194,32 +189,6 @@ export class RtsSelectionPanel {
       const count = document.createElement("b");
       count.textContent = `×${slot.count}`;
       entry.appendChild(count);
-      return entry;
-    }));
-  }
-
-  private renderCommandChips(chips: readonly import("./rtsSelectionView").SelectionCommandChip[]): void {
-    const signature = chips.map((chip) => `${chip.icon ?? ""}|${chip.label}|${chip.key}`).join(";");
-    if (this.commandChips.dataset.rtsCommands === signature) return;
-    this.commandChips.dataset.rtsCommands = signature;
-    this.commandChips.hidden = chips.length === 0;
-    this.commandChips.replaceChildren(...chips.map((chip) => {
-      const entry = document.createElement("span");
-      entry.className = "rts-selection-command-chip";
-      if (chip.icon) {
-        const icon = document.createElement("img");
-        icon.src = chip.icon;
-        icon.alt = "";
-        attachIconFallback(icon);
-        entry.appendChild(icon);
-      }
-      const label = document.createElement("span");
-      label.className = "rts-selection-command-label";
-      label.textContent = chip.label;
-      entry.appendChild(label);
-      const key = document.createElement("kbd");
-      key.textContent = chip.key;
-      entry.appendChild(key);
       return entry;
     }));
   }

@@ -308,20 +308,105 @@ body {
   display: none;
 }
 
+.rts-match-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rts-match-settings-header strong {
+  color: var(--ta-gold);
+  font-size: 14px;
+}
+
+.rts-match-card button.rts-match-settings-reset {
+  min-height: 0;
+  padding: 4px 8px;
+  color: var(--ta-ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .rts-match-setting {
   display: grid;
-  grid-template-columns: 1fr 160px;
-  gap: 10px;
+  grid-template-columns: minmax(132px, 1fr) minmax(180px, 1.25fr);
+  gap: 12px;
   align-items: center;
-  margin-top: 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
   color: var(--ta-ink);
   font-size: 13px;
+  background: rgb(15 11 7 / 34%);
+  border: 1px solid rgb(198 152 64 / 18%);
+  border-radius: 3px;
+}
+
+.rts-match-setting-label {
+  font-weight: 700;
+}
+
+.rts-match-setting-control {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+}
+
+.rts-match-setting-value {
+  min-width: 52px;
+  padding: 3px 5px;
+  color: var(--ta-gold);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  background: rgb(71 49 21 / 58%);
+  border: 1px solid rgb(226 185 92 / 34%);
+  border-radius: 3px;
 }
 
 .rts-match-setting input[type="range"] {
   width: 100%;
+  height: 16px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
   accent-color: var(--ta-gold);
   cursor: pointer;
+}
+
+.rts-match-setting input[type="range"]::-webkit-slider-runnable-track {
+  height: 5px;
+  background: linear-gradient(90deg, #e8bb58 0%, #b77b24 100%);
+  border: 1px solid rgb(17 11 6 / 80%);
+  border-radius: 999px;
+}
+
+.rts-match-setting input[type="range"]::-webkit-slider-thumb {
+  width: 15px;
+  height: 15px;
+  margin-top: -6px;
+  appearance: none;
+  background: #f0c55d;
+  border: 1px solid #5e3b13;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 60%);
+}
+
+.rts-match-setting input[type="range"]::-moz-range-track {
+  height: 5px;
+  background: linear-gradient(90deg, #e8bb58 0%, #b77b24 100%);
+  border: 1px solid rgb(17 11 6 / 80%);
+  border-radius: 999px;
+}
+
+.rts-match-setting input[type="range"]::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  background: #f0c55d;
+  border: 1px solid #5e3b13;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 }
 
 /*
@@ -395,6 +480,17 @@ body {
   border-image-repeat: stretch;
   text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
   transition: filter 100ms ease, transform 100ms ease;
+}
+
+/* Pause is normally opened to return to the match. Make that safe path visible
+   without borrowing the red treatment reserved for a confirmed surrender. */
+.rts-match-card button[data-primary="true"] {
+  color: #211508;
+  background: var(--ta-btn-bg);
+  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  text-shadow:
+    0 1px 0 rgb(255 237 176 / 72%),
+    0 -1px 1px rgb(66 39 8 / 34%);
 }
 
 .rts-match-card button:hover:not(:disabled) {
@@ -838,6 +934,146 @@ body {
     grid-template-columns: repeat(4, 136px);
     gap: 8px;
     --rts-hud-icon-size: 26px;
+  }
+}
+
+/*
+ * Once the status and global controls need the same room as the resource
+ * wallet, preserve all four resources instead of letting the flex row push
+ * them outside the frame. The secondary labels/rates are useful at a glance
+ * on a wide screen, but the stock and capacity are the decision-critical
+ * readout in this compact mode.
+ */
+@media (max-width: 1180px) {
+  .rts-hud-bar {
+    gap: 6px;
+    padding-right: max(18px, env(safe-area-inset-right));
+    padding-left: max(18px, env(safe-area-inset-left));
+  }
+
+  .rts-hud-identity {
+    display: none;
+  }
+
+  .rts-hud-resources {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    flex: 1 1 0;
+    min-width: 260px;
+    max-width: 360px;
+    margin-left: 0;
+    gap: 5px;
+    --rts-hud-icon-size: 22px;
+  }
+
+  .rts-hud-resource {
+    gap: 4px;
+  }
+
+  .rts-hud-resource-values {
+    display: block;
+  }
+
+  .rts-hud-resource-label,
+  .rts-hud-resource-income {
+    display: none;
+  }
+
+  .rts-hud-resource-amount {
+    display: block;
+    font-size: 11px;
+    text-align: left;
+  }
+
+  .rts-hud-status {
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .rts-hud-match-readouts {
+    gap: 6px;
+  }
+
+  /* This overrides the intermediate-width hiding rule above: compact buttons
+     cost less room than removing the idle-worker decision entirely. */
+  .rts-hud-worker-cluster {
+    display: flex;
+    gap: 3px;
+    padding-left: 6px;
+  }
+
+  .rts-hud-idle-workers {
+    min-width: 50px;
+    padding: 3px 4px;
+    font-size: 10px;
+  }
+
+  .rts-hud-worker-actions {
+    gap: 3px;
+  }
+
+  .rts-hud-worker-action {
+    min-width: 37px;
+    padding: 3px 4px;
+    font-size: 10px;
+  }
+
+  .rts-hud-utility-controls {
+    gap: 4px;
+    padding-left: 6px;
+  }
+
+  .rts-hud-utility-controls .rts-game-speed-label {
+    display: none;
+  }
+
+  .rts-game-speed button {
+    min-width: 34px;
+    padding: 5px 6px;
+  }
+}
+
+/* The narrowest desktop/portrait view receives two deliberate HUD rows. This
+   is a real layout change, not hidden economic state: resources stay together
+   on the first row, while match and global controls retain their touch targets
+   below. A critical warning temporarily takes the resource row because it is
+   more urgent than the passive wallet readout. */
+@media (max-width: 840px) {
+  :root {
+    --rts-hud-bar-height: 108px;
+  }
+
+  .rts-hud-bar {
+    align-content: center;
+    flex-wrap: wrap;
+    row-gap: 5px;
+    height: var(--rts-hud-bar-height);
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .rts-hud-resources {
+    order: 0;
+    flex: 1 0 100%;
+    width: 100%;
+    max-width: none;
+  }
+
+  .rts-hud-status {
+    order: 2;
+    margin-left: 0;
+  }
+
+  .rts-hud-utility-controls {
+    order: 3;
+    margin-left: auto;
+  }
+
+  .rts-hud-warning {
+    position: absolute;
+    z-index: 1;
+    top: 8px;
+    right: max(18px, env(safe-area-inset-right));
+    left: max(18px, env(safe-area-inset-left));
   }
 }
 
@@ -1413,88 +1649,6 @@ body {
   height: 14px;
 }
 
-.rts-selection-command-chips {
-  display: grid;
-  grid-row: 1 / span 2;
-  grid-column: 3;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  min-height: 0;
-}
-
-.rts-selection-command-chips[hidden] {
-  display: none;
-}
-
-.rts-selection-command-chip {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 32px minmax(0, 1fr);
-  align-items: center;
-  justify-items: center;
-  gap: 2px;
-  min-width: 0;
-  padding: 5px 5px 4px;
-  color: var(--ta-ink);
-  font-size: 10px;
-  line-height: 1.15;
-  background: rgb(62 43 25 / 86%);
-  border: 1px solid var(--ta-border);
-  border-radius: 3px;
-}
-
-/* The shorter inspector keeps tactical commands usable by compacting their
-   icon cards, not by hiding an order or truncating its key binding. */
-.rts-selection-panel[data-rts-action-layout="deck"] .rts-selection-command-chip {
-  grid-template-rows: 21px minmax(0, 1fr);
-  gap: 1px;
-  padding: 2px 3px;
-  font-size: 9px;
-  line-height: 1.08;
-}
-
-.rts-selection-panel[data-rts-action-layout="deck"] .rts-selection-command-chip img {
-  width: 21px;
-  height: 21px;
-}
-
-.rts-selection-panel[data-rts-action-layout="deck"] .rts-selection-command-chip kbd {
-  top: 2px;
-  right: 2px;
-  padding: 1px 3px;
-  font-size: 9px;
-}
-
-.rts-selection-command-chip img {
-  width: 30px;
-  height: 30px;
-  object-fit: contain;
-}
-
-.rts-selection-command-label {
-  display: -webkit-box;
-  overflow: hidden;
-  width: 100%;
-  font-weight: 700;
-  text-align: center;
-  text-overflow: ellipsis;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.rts-selection-command-chip kbd {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  padding: 2px 4px;
-  color: var(--ta-btn-ink);
-  font: 700 10px/1 ui-monospace, Consolas, monospace;
-  background: var(--ta-btn-bg);
-  border-radius: 2px;
-}
-
 .rts-selection-summary {
   margin-top: 1px;
   color: var(--ta-gold);
@@ -1509,7 +1663,7 @@ body {
 
 .rts-selection-body {
   max-height: 100%;
-  overflow: auto;
+  overflow: hidden;
 }
 
 /* Faz 9: the fixed role/counter/stance rows became a variable-length body, one

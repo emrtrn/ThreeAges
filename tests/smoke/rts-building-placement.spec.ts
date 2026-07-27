@@ -47,10 +47,11 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await expect(page.getByRole("button", { name: "Ekonomi", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Lojistik", exact: true }).click();
   await expect(page.getByRole("button", { name: "Yol", exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Oyun hızı" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Normal", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "4X", exact: true }).click();
-  await expect(page.getByRole("button", { name: "4X", exact: true })).toHaveAttribute("aria-pressed", "true");
+  const hud = page.locator(".rts-hud-bar");
+  await expect(hud.getByRole("region", { name: "Oyun hızı" })).toBeVisible();
+  await expect(hud.getByRole("button", { name: "Normal", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await hud.getByRole("button", { name: "4X", exact: true }).click();
+  await expect(hud.getByRole("button", { name: "4X", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Ekonomi", exact: true }).click();
   await expect(page.getByRole("button", { name: "Tarla", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Oduncu Kampı", exact: true })).toBeVisible();
@@ -140,7 +141,7 @@ test("RTS Phase 9 the HUD strip stays clear of the map at 1366x768 and 1920x1080
 
     // Faz C: speed moved into the bar's right-side utility cluster, while the
     // debug panel remains a sibling and must still clear the published height.
-    const speed = await page.locator(".rts-game-speed").boundingBox();
+    const speed = await page.locator(".rts-hud-utility-controls .rts-game-speed").boundingBox();
     if (!speed) throw new Error(".rts-game-speed has no box");
     expect(speed.y).toBeGreaterThanOrEqual(bar.y);
     expect(speed.y + speed.height).toBeLessThanOrEqual(bar.y + bar.height);
@@ -311,8 +312,11 @@ test("RTS Phase 9 build tools: categories, the affordability lock, and settings 
   // control the player drags while nothing happens (§13's "yarım sistem").
   await page.keyboard.press("Escape");
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
-  await expect(page.locator(".rts-match-setting")).toHaveText(["Kamera hızı", "Kamera yumuşatma"]);
+  await expect(page.locator(".rts-match-setting").nth(0)).toContainText("Kamera hızı");
+  await expect(page.locator(".rts-match-setting").nth(1)).toContainText("Yakınlaştırma yumuşaklığı");
   await expect(page.locator("[data-rts-setting]")).toHaveCount(2);
+  await expect(page.locator("[data-rts-setting-value]")).toHaveText(["Normal", "Dengeli"]);
+  await expect(page.getByRole("button", { name: "Varsayılan", exact: true })).toBeVisible();
 
   expect(errors).toEqual([]);
 });

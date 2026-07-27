@@ -38155,13 +38155,15 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
 
   const army = describeSelection({ kind: "units", units: [guard(1), guard(2)] })
     ?? assert.fail("an army selection has a panel");
-  assert.equal(army.title, "Seçim");
+  assert.equal(army.title, "Test Muhafızı");
   assert.equal(army.portrait, RTS_TEST_UNIT_STATS.icon, "the enlarged selection visual comes from the unit icon");
-  assert.match(army.summary, /2 .* — Can: 160\/200/);
+  assert.equal(army.summary, "Can: 160/200");
   // §33: the matchup line is read off the same multipliers combat resolves
   // against, so the panel cannot advertise a matchup the data does not give.
   assert.match(army.lines.join(" | "), /Güçlü: ağır birim/);
   assert.match(army.lines.join(" | "), /Duruş: Serbest/);
+  assert.match(army.lines.join(" | "), /Komut: Bekliyor/);
+  assert.match(army.hint, /F: Saldırı-Hareket/);
 
   const mixedStance = describeSelection({ kind: "units", units: [guard(1), guard(2, "hold")] })
     ?? assert.fail("panel missing");
@@ -38173,8 +38175,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
     kind: "units",
     units: [worker(1, "idle"), worker(2, "idle"), worker(3, "idle"), guard(4), guard(5)],
   }) ?? assert.fail("panel missing");
-  assert.equal(mixed.title, "Seçim");
-  assert.match(mixed.lines[0] ?? "", /Ön hat/, "the dominant *combat* role describes a mixed group");
+  assert.equal(mixed.title, "Test Muhafızı", "the dominant combat role labels a mixed group");
 
   // §51 lists the worker panel separately: a Worker has no matchup and no
   // stance, and the army panel has no answer for what it is doing instead.
@@ -38184,7 +38185,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   }) ?? assert.fail("panel missing");
   assert.equal(workers.title, "İşçi");
   assert.equal(
-    workers.lines[1],
+    workers.lines[0],
     "Görev: 1 boşta · 2 inşaatta · 1 üretimde",
     "the breakdown reads in a fixed order, whatever order the workers arrived in",
   );

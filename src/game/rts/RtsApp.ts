@@ -2672,6 +2672,13 @@ export class RtsApp {
           health: unit.health.current,
           maxHealth: unit.health.max,
           stance: unit.stance,
+          order: unit.attackMoveTarget !== null
+            ? "attack-moving"
+            : unit.attackTarget !== null
+              ? "attacking"
+              : unit.hasMovementOrder
+                ? "moving"
+                : "idle",
           job: unit.role === "worker" ? this.workerJob(unit) : null,
           // Standing on ground the grid forbids means the unit was caught under a
           // footprint; that is the only state the rescue button reacts to.

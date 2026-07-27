@@ -111,11 +111,22 @@ interface SettingRow {
   readonly key: keyof RtsCameraSettings;
   readonly label: string;
   readonly hint: string;
+  readonly valueLabel: (value: number) => string;
 }
 
 const CAMERA_SETTING_ROWS: readonly SettingRow[] = [
-  { key: "panSpeed", label: "Kamera hızı", hint: "WASD ile kaydırma hızı." },
-  { key: "smoothing", label: "Kamera yumuşatma", hint: "Zoom'un hedefe yumuşama miktarı." },
+  {
+    key: "panSpeed",
+    label: "Kamera hızı",
+    hint: "WASD ile kaydırma hızı.",
+    valueLabel: (value) => value < 0.35 ? "Yavaş" : value > 0.65 ? "Hızlı" : "Normal",
+  },
+  {
+    key: "smoothing",
+    label: "Yakınlaştırma yumuşaklığı",
+    hint: "Yakınlaştırma hedefe ne kadar yumuşak ulaşır.",
+    valueLabel: (value) => value < 0.35 ? "Anlık" : value > 0.65 ? "Yumuşak" : "Dengeli",
+  },
 ];
 
 interface ResultText {
@@ -299,15 +310,30 @@ export class RtsMatchOverlay {
    */
   private buildSettings(): void {
     this.settings.className = "rts-match-settings";
+    const header = document.createElement("div");
+    header.className = "rts-match-settings-header";
     const heading = document.createElement("strong");
     heading.textContent = "Ayarlar";
-    this.settings.appendChild(heading);
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "rts-match-settings-reset";
+    reset.textContent = "Varsayılan";
+    reset.addEventListener("click", () => this.applyCameraSettings(DEFAULT_RTS_CAMERA_SETTINGS));
+    header.append(heading, reset);
+    this.settings.appendChild(header);
     for (const row of CAMERA_SETTING_ROWS) {
       const wrapper = document.createElement("label");
       wrapper.className = "rts-match-setting";
       wrapper.title = row.hint;
       const label = document.createElement("span");
+      label.className = "rts-match-setting-label";
       label.textContent = row.label;
+      const control = document.createElement("span");
+      control.className = "rts-match-setting-control";
+      const value = document.createElement("output");
+      value.className = "rts-match-setting-value";
+      value.dataset.rtsSettingValue = row.key;
+      value.textContent = row.valueLabel(this.cameraSettings[row.key]);
       const slider = document.createElement("input");
       slider.type = "range";
       slider.min = "0";
@@ -318,12 +344,25 @@ export class RtsMatchOverlay {
       // `input`, not `change`: the camera is behind the card and the player is
       // judging the change by watching it, so it has to move as they drag.
       slider.addEventListener("input", () => {
-        this.cameraSettings = { ...this.cameraSettings, [row.key]: Number(slider.value) };
-        this.handlers.onCameraSettings(this.cameraSettings);
+        this.applyCameraSettings({ ...this.cameraSettings, [row.key]: Number(slider.value) });
       });
-      wrapper.append(label, slider);
+      control.append(value, slider);
+      wrapper.append(label, control);
       this.settings.appendChild(wrapper);
     }
+  }
+
+  /** Keep the live camera, sliders and their human-readable state in lockstep. */
+  private applyCameraSettings(settings: RtsCameraSettings): void {
+    this.cameraSettings = settings;
+    for (const row of CAMERA_SETTING_ROWS) {
+      const value = settings[row.key];
+      const slider = this.settings.querySelector<HTMLInputElement>(`[data-rts-setting="${row.key}"]`);
+      if (slider) slider.value = String(value);
+      const output = this.settings.querySelector<HTMLOutputElement>(`[data-rts-setting-value="${row.key}"]`);
+      if (output) output.textContent = row.valueLabel(value);
+    }
+    this.handlers.onCameraSettings(this.cameraSettings);
   }
 
   /**
@@ -373,7 +412,7 @@ export class RtsMatchOverlay {
       // Enter/Escape still resume through the match input handler, but opening
       // pause must not paint this as an already selected button. Gold belongs to
       // the button the player is actively hovering or tabbing to.
-      { label: "Devam Et", action: this.handlers.onResume, primary: false, key: "resume" },
+      { label: "Devam Et", action: this.handlers.onResume, primary: true, key: "resume" },
       // The escape hatch lives here rather than on the mission card: that card is
       // read-only by design (it must never swallow a click meant for the map),
       // and the pause menu is already the surface a player opens to stop and

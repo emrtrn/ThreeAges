@@ -28,7 +28,6 @@ import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
 import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
 import { formatCostShortfall, formatResourceCost, resourceLabel } from "./resourceLabels";
-import { UNIT_ATTACK_MOVE_ICON, UNIT_FREE_ICON, UNIT_HOLD_ICON, UNIT_STOP_ICON } from "./rtsUiIcons";
 
 /**
  * A button the selected thing offers. Declarative on purpose: the panel maps
@@ -75,6 +74,8 @@ export interface SelectedUnitView {
   readonly health: number;
   readonly maxHealth: number;
   readonly stance: UnitStance;
+  /** The player-facing order state, computed by the runtime from the Unit. */
+  readonly order?: UnitOrder;
   /** Workers only; a Guard has no job beyond its orders. */
   readonly job: WorkerJob | null;
   /**
@@ -85,6 +86,9 @@ export interface SelectedUnitView {
    */
   readonly trapped: boolean;
 }
+
+/** Compact live order state for the selection panel; it deliberately names no target. */
+export type UnitOrder = "idle" | "moving" | "attacking" | "attack-moving";
 
 /** A site that is not a building yet: the only thing to say is when it will be. */
 export interface ConstructionDetailView {
@@ -267,8 +271,6 @@ export interface SelectionPanelContent {
   readonly health?: { readonly current: number; readonly max: number } | null;
   /** Collapsed role list for multi-unit selections; layout, not game state. */
   readonly slots?: readonly SelectionSlot[];
-  /** Keyboard commands echoed as non-clickable chips; bindings stay in RtsApp. */
-  readonly commandChips?: readonly SelectionCommandChip[];
   /** A running timed job (e.g. a level-up), or null/absent when nothing is timed. */
   readonly progress?: SelectionProgress | null;
 }
@@ -277,13 +279,6 @@ export interface SelectionSlot {
   readonly label: string;
   readonly icon: string | null;
   readonly count: number;
-}
-
-export interface SelectionCommandChip {
-  readonly label: string;
-  readonly key: string;
-  /** Optional command artwork; the label remains available to every player. */
-  readonly icon?: string;
 }
 
 /**
@@ -307,14 +302,6 @@ export const DEMOLISH_ACTION = "demolish";
 export const CANCEL_CONSTRUCTION_ACTION = "cancel-construction";
 export const TRADE_BUY_ACTION_PREFIX = "trade-buy:";
 export const TRADE_SELL_ACTION_PREFIX = "trade-sell:";
-
-/** GDD 06 §6–§9 role summaries, in the player's language. */
-const ROLE_DESCRIPTION: Record<UnitRoleId, string> = {
-  guard: "Ön hat. Okçuları korur, dar geçidi tutar; yapılara karşı zayıftır.",
-  archer: "Menzilli destek. Ön hattın arkasından vurur; yakın dövüşte erir.",
-  siege: "Kuşatma topçusu. Yapıları menzil dışından döver; birimlere karşı savunmasızdır, koruma ister.",
-  worker: "Ekonomi birimi. İnşa eder ve kaynak üretir; savaşmaz.",
-};
 
 const ARMOR_CLASS_LABEL: Record<UnitArmorClass, string> = {
   light: "hafif birim",
@@ -361,13 +348,8 @@ const LOGISTICS_REASON: Record<ProducerLogisticsStatus, string> = {
   "depot-occupied": "Bağlı Depo düşman işgali altında; işgali kaldırın.",
 };
 
-const UNIT_COMMAND_CHIPS: readonly SelectionCommandChip[] = [
-  { label: "Saldırı-Hareket", key: "F", icon: UNIT_ATTACK_MOVE_ICON },
-  { label: "Pozisyonu Koru", key: "H", icon: UNIT_HOLD_ICON },
-  { label: "Serbest", key: "G", icon: UNIT_FREE_ICON },
-  { label: "Dur", key: "X", icon: UNIT_STOP_ICON },
-];
 const WORKER_HINT = "Sağ tık: inşaata veya üretim yapısına ata · X: Görevi bırak";
+const ARMY_HINT = "F: Saldırı-Hareket · H: Koru · G: Serbest · X: Dur";
 const OUTPOST_HINT = "Sağ tık: menzildeki düşmana saldırı emri ver";
 
 /** Above this an attacker is meaningfully strong; below its mirror, weak. */
@@ -417,13 +399,14 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
   for (const unit of units) counts.set(unit.role, (counts.get(unit.role) ?? 0) + 1);
   const health = units.reduce((total, unit) => total + unit.health, 0);
   const maxHealth = units.reduce((total, unit) => total + unit.maxHealth, 0);
-  const summary = `${[...counts]
-    .map(([role, count]) => `${count} ${labelFor(units, role)}`)
-    .join(" · ")} — Can: ${Math.ceil(health)}/${Math.ceil(maxHealth)}`;
-  const slots = [...counts].map(([role, count]) => {
+  const summary = `Can: ${Math.ceil(health)}/${Math.ceil(maxHealth)}`;
+  // The portrait already identifies a one-role selection and carries its count.
+  // Keep this compact role strip only when a box selection mixes roles, where it
+  // is the only short way to explain the group composition.
+  const slots = counts.size > 1 ? [...counts].map(([role, count]) => {
     const sample = units.find((unit) => unit.role === role)!;
     return { label: sample.stats.label, icon: sample.stats.icon ?? null, count };
-  });
+  }) : [];
 
   // A selection of nothing but workers is an economy question, and the army
   // panel has no answer to it: a Worker has no matchup and no stance. §51 lists
@@ -434,7 +417,7 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
     return {
       title: "İşçi",
       summary,
-      lines: [ROLE_DESCRIPTION.worker, `Görev: ${jobBreakdown(units)}`],
+      lines: [`Görev: ${jobBreakdown(units)}`],
       // A worker's verbs are all world gestures — right-click to assign, X to
       // drop the job — so the only button it ever carries is the rescue, and
       // only while one of these workers is trapped inside a footprint.
@@ -457,28 +440,27 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
   const sample = units.find((unit) => unit.role === dominantRole)!;
   const stances = new Set(units.map((unit) => unit.stance));
   return {
-    title: "Seçim",
+    title: sample.stats.label,
     summary,
     lines: [
-      ROLE_DESCRIPTION[dominantRole],
-      counterText(sample.stats),
       `Duruş: ${stances.size > 1 ? "Karışık" : STANCE_LABEL[[...stances][0] ?? "aggressive"]}`,
+      `Komut: ${orderBreakdown(units)}`,
+      counterText(sample.stats),
     ],
     // Army verbs are keyboard commands with a world target (F/H/G/X); the hint
     // row already teaches them, and a button cannot take the target anyway. The
     // rescue is the exception — it needs no world target — and appears only when
     // a selected unit is trapped.
     actions: rescueActions(units),
-    // The four command cards already carry both their Turkish label and key;
-    // repeating the bindings in the bottom hint would only steal vertical room
-    // from the command deck.
-    hint: "",
+    // Commands remain keyboard-first. Presenting them as flat text rather than
+    // button-shaped cards prevents a false promise that a click will issue a
+    // ground-target command.
+    hint: ARMY_HINT,
     tooltip: null,
     portrait: sample.stats.icon ?? null,
     selectionCount: units.length,
     health: { current: health, max: maxHealth },
     slots,
-    commandChips: UNIT_COMMAND_CHIPS,
   };
 }
 
@@ -988,9 +970,20 @@ function jobBreakdown(units: readonly SelectedUnitView[]): string {
     .join(" · ");
 }
 
-function labelFor(units: readonly SelectedUnitView[], role: UnitRoleId): string {
-  return units.find((unit) => unit.role === role)?.stats.label ?? role;
+const UNIT_ORDER_LABEL: Record<UnitOrder, string> = {
+  idle: "Bekliyor",
+  moving: "Hareket ediyor",
+  attacking: "Saldırıyor",
+  "attack-moving": "Saldırı-hareket",
+};
+
+/** A mixed group must not claim every unit is following the first unit's order. */
+function orderBreakdown(units: readonly SelectedUnitView[]): string {
+  const orders = new Set(units.map((unit) => unit.order ?? "idle"));
+  if (orders.size !== 1) return "Karışık";
+  return UNIT_ORDER_LABEL[[...orders][0] ?? "idle"];
 }
+
 
 /** Read the §33 row straight off the unit's data rather than restating it. */
 function counterText(stats: UnitBalanceStats): string {
