@@ -482,17 +482,6 @@ body {
   transition: filter 100ms ease, transform 100ms ease;
 }
 
-/* Pause is normally opened to return to the match. Make that safe path visible
-   without borrowing the red treatment reserved for a confirmed surrender. */
-.rts-match-card button[data-primary="true"] {
-  color: #211508;
-  background: var(--ta-btn-bg);
-  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
-  text-shadow:
-    0 1px 0 rgb(255 237 176 / 72%),
-    0 -1px 1px rgb(66 39 8 / 34%);
-}
-
 .rts-match-card button:hover:not(:disabled) {
   filter: brightness(1.1);
   transform: translateY(-1px);

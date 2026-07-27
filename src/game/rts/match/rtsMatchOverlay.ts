@@ -412,7 +412,7 @@ export class RtsMatchOverlay {
       // Enter/Escape still resume through the match input handler, but opening
       // pause must not paint this as an already selected button. Gold belongs to
       // the button the player is actively hovering or tabbing to.
-      { label: "Devam Et", action: this.handlers.onResume, primary: true, key: "resume" },
+      { label: "Devam Et", action: this.handlers.onResume, primary: false, key: "resume" },
       // The escape hatch lives here rather than on the mission card: that card is
       // read-only by design (it must never swallow a click meant for the map),
       // and the pause menu is already the surface a player opens to stop and
