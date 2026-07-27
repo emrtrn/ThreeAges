@@ -337,6 +337,7 @@ const LOGISTICS_LABEL: Record<ProducerLogisticsStatus, string> = {
   "outside-control": "Kontrol Dışı",
   "unlinked-road": "Yol Yok",
   "unlinked-depot": "Depo Yok",
+  "unlinked-main-network": "Merkez Ağı Yok",
   "depot-occupied": "Depo İşgal Altında",
 };
 
@@ -345,6 +346,7 @@ const LOGISTICS_REASON: Record<ProducerLogisticsStatus, string> = {
   "outside-control": "Kontrol alanı kaybedildi; Karakolu veya alanı geri alın.",
   "unlinked-road": "Yapı footprint’ine temas eden bir yol hücresi gerekli.",
   "unlinked-depot": "Aynı yol ağında tamamlanmış bir Depo gerekli.",
+  "unlinked-main-network": "Yolu, Merkezin başlangıç yol halkasına bağlayın.",
   "depot-occupied": "Bağlı Depo düşman işgali altında; işgali kaldırın.",
 };
 
@@ -667,7 +669,11 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
         title,
         summary,
         lines: [
-          `Yol: ${detail.status === "linked" ? "bağlı" : "yok"}`,
+          `Yol: ${detail.status === "linked"
+            ? "Merkez ağına bağlı"
+            : detail.status === "unlinked-main-network"
+              ? "Merkez ağına bağlı değil"
+              : "yok"}`,
           `Teslim eden yapı: ${detail.linkedProducers}`,
           ...(detail.occupied ? ["Düşman işgali altında — teslimat durdu."] : []),
         ],
@@ -676,8 +682,10 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
         tooltip: detail.occupied
           ? "İşgali kaldırmadan bu Depoya bağlı üreticiler global stoğa aktaramaz."
           : detail.status === "linked"
-            ? "Bu Depo, aynı yol ağındaki üreticilerin çıktısını global stoğa aktarır."
-            : "Depo footprint’ine temas eden bir yol hücresi kurun.",
+            ? "Bu Depo, Merkeze bağlı yol ağındaki üreticilerin çıktısını global stoğa aktarır ve kapasite ekler."
+            : detail.status === "unlinked-main-network"
+              ? "Depo yola bağlı, ancak bu yol Merkezin başlangıç halkasına ulaşmıyor."
+              : "Depo footprint’ine temas eden bir yol hücresi kurun.",
       };
     case "outpost":
       return {

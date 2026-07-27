@@ -106,6 +106,7 @@ import { StructureConstructionService } from "./structures/structureConstruction
 import { KingdomRegistry } from "./kingdom/kingdomRegistry";
 import { RoadConstructionService } from "./roads/roadConstructionService";
 import { planAutoRoadConnection } from "./roads/autoRoadConnector";
+import { centerAccessRoadPlan } from "./roads/centerAccessRoad";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { RtsSelectionPanel } from "./ui/rtsSelectionPanel";
 import { RtsWorldProgressOverlay, type RtsWorldProgressEntry } from "./ui/rtsWorldProgressOverlay";
@@ -604,8 +605,8 @@ export class RtsApp {
     this.roadDebugView = new RoadDebugView(this.roads);
     this.roadOverlayVisible = Boolean(this.options.debug);
     this.roadDebugView.root.visible = this.roadOverlayVisible;
-    this.depotLogistics = new DepotLogisticsSystem(this.structures, this.roads);
-    this.resourceCapacity = new ResourceCapacitySystem(this.structures);
+    this.depotLogistics = new DepotLogisticsSystem(this.structures, this.roads, this.centers);
+    this.resourceCapacity = new ResourceCapacitySystem(this.structures, this.depotLogistics);
     this.logisticsOccupation = new LogisticsOccupationSystem(this.depotLogistics);
     this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics, this.territory, this.logisticsOccupation);
     this.resourceNodes = new ResourceNodeSystem(this.options.resourceBalance, this.spatial.resourceNodes);
@@ -1221,6 +1222,7 @@ export class RtsApp {
       void this.loadAuthoredWorld(this.options.levelLayout);
     }
     this.spawnCenters();
+    this.seedCenterAccessRoads();
     this.cameraController.setFocus(this.openingFocus.x, this.openingFocus.z);
     this.territory.refresh();
     this.refreshNavigationBlockers();
@@ -2003,6 +2005,18 @@ export class RtsApp {
     this.buildingVisuals.applyToCenter(enemyCenter, this.ageOf(enemyCenter.owner));
   }
 
+  /** Seed a free all-sides road loop around each command centre at match start. */
+  private seedCenterAccessRoads(): void {
+    for (const center of this.centers.all()) {
+      this.roads.commit(centerAccessRoadPlan(this.roads, {
+        x: center.position.x,
+        z: center.position.z,
+        footprint: center.stats.footprint,
+      }));
+    }
+    this.syncRoadVisuals();
+  }
+
   /**
    * Worker queue size for a kingdom's centre. The active age × level tier owns
    * it; the hard-coded ladder remains only for a centre spawned without balance
@@ -2439,6 +2453,7 @@ export class RtsApp {
     // match would rebuild the world and leave it frozen behind a hidden menu.
     this.flow.restart();
     this.spawnCenters();
+    this.seedCenterAccessRoads();
     // A restart is a fresh match, so the view returns to the opening framing too
     // — otherwise the player restarts into wherever they had scrolled to, which
     // under fog is very likely unexplored ground.

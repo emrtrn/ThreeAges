@@ -24,6 +24,7 @@ const LOGISTICS_WARNING: Readonly<Record<Exclude<ProducerLogisticsStatus, "linke
   "outside-control": "Lojistik kesildi: üretim yapısı Kontrol Dışı.",
   "unlinked-road": "Lojistik kesildi: üretim yapısını yola bağlayın.",
   "unlinked-depot": "Lojistik kesildi: aynı yol ağında Depo yok.",
+  "unlinked-main-network": "Lojistik kesildi: yolu Merkez yol ağına bağlayın.",
   "depot-occupied": "Lojistik kesildi: Depo düşman işgali altında.",
 };
 

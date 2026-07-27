@@ -7,6 +7,7 @@
 import type { StartingResources } from "../../data/gameDataTypes";
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { UnitOwner } from "../units/unit";
+import type { DepotLogisticsSystem } from "./depotLogisticsSystem";
 
 export const STOCK_RESOURCE_IDS = ["food", "wood", "stone", "gold"] as const;
 
@@ -24,12 +25,18 @@ export interface ResourceCapacitySnapshot {
 }
 
 export class ResourceCapacitySystem {
-  constructor(private readonly structures: PlacedStructureSystem) {}
+  constructor(
+    private readonly structures: PlacedStructureSystem,
+    /** A live match supplies this, so isolated road islands cannot add capacity. */
+    private readonly depots?: DepotLogisticsSystem,
+  ) {}
 
   capacityFor(owner: UnitOwner): StartingResources {
     const capacity: Record<string, number> = { ...COMMAND_CENTER_STORAGE_CAPACITY };
+    const depotStatusById = new Map(this.depots?.snapshots().map((depot) => [depot.structureId, depot.status]));
     for (const depot of this.structures.ownedBy(owner)) {
       if (!depot.construction.complete || depot.stats.id !== "depot" || !depot.storageCapacity) continue;
+      if (this.depots && depotStatusById.get(depot.id) !== "linked") continue;
       for (const resourceId of STOCK_RESOURCE_IDS) {
         capacity[resourceId] = (capacity[resourceId] ?? 0) + (depot.storageCapacity[resourceId] ?? 0);
       }

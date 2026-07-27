@@ -1,13 +1,14 @@
 /**
- * Phase 4 depot nodes. A completed depot becomes an endpoint of the road graph
- * when a road tile physically touches its footprint; transfer is layered on
- * this stable node contract in the following logistics slices.
+ * Phase 4 depot nodes. A completed depot joins the global store only when a
+ * touching road also reaches its owner's command centre. This keeps stock and
+ * storage capacity physically rooted in the same road network.
  */
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
+import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { RoadCell, RoadGraph } from "../roads/roadGraph";
 import type { UnitOwner } from "../units/unit";
 
-export type DepotNodeStatus = "unlinked" | "linked";
+export type DepotNodeStatus = "unlinked" | "unlinked-main-network" | "linked";
 
 export interface DepotNodeSnapshot {
   readonly structureId: number;
@@ -24,13 +25,31 @@ export class DepotLogisticsSystem {
   constructor(
     private readonly structures: PlacedStructureSystem,
     private readonly roads: RoadGraph,
+    /** Omitted only by isolated harnesses that intentionally root logistics at a depot. */
+    private readonly centers?: CommandCenterSystem,
   ) {}
 
-  snapshots(): readonly DepotNodeSnapshot[] {
-    const componentByCell = new Map<string, number>();
-    for (const component of this.roads.components()) {
-      for (const cell of component.cells) componentByCell.set(this.key(cell), component.id);
+  /** Centre-road component for each kingdom; null means its centre lost its road. */
+  mainComponentIds(): ReadonlyMap<UnitOwner, number | null> {
+    const componentByCell = this.componentIds();
+    const result = new Map<UnitOwner, number | null>();
+    if (!this.centers) return result;
+    for (const center of this.centers.all()) {
+      const roadCell = roadCellTouchingFootprint(
+        this.roads,
+        center.position.x,
+        center.position.z,
+        center.stats.footprint.width,
+        center.stats.footprint.depth,
+      );
+      result.set(center.owner, roadCell ? componentByCell.get(this.key(roadCell)) ?? null : null);
     }
+    return result;
+  }
+
+  snapshots(): readonly DepotNodeSnapshot[] {
+    const componentByCell = this.componentIds();
+    const mainComponentByOwner = this.mainComponentIds();
     return this.structures.all()
       .filter((structure) => structure.construction.complete && structure.stats.id === "depot")
       .map((structure) => {
@@ -42,6 +61,7 @@ export class DepotLogisticsSystem {
           structure.stats.footprint.depth,
         );
         const componentId = roadCell ? componentByCell.get(this.key(roadCell)) ?? null : null;
+        const mainComponentId = mainComponentByOwner.get(structure.owner);
         return {
           structureId: structure.id,
           owner: structure.owner,
@@ -49,9 +69,21 @@ export class DepotLogisticsSystem {
           z: structure.z,
           roadCell,
           componentId,
-          status: componentId === null ? "unlinked" : "linked",
+          status: componentId === null
+            ? "unlinked"
+            : mainComponentId === undefined || mainComponentId === componentId
+              ? "linked"
+              : "unlinked-main-network",
         };
       });
+  }
+
+  private componentIds(): Map<string, number> {
+    const componentByCell = new Map<string, number>();
+    for (const component of this.roads.components()) {
+      for (const cell of component.cells) componentByCell.set(this.key(cell), component.id);
+    }
+    return componentByCell;
   }
 
   private key(cell: RoadCell): string {

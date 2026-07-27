@@ -216,6 +216,7 @@ import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
 import { updateStructureDestruction } from "../src/game/rts/structures/structureDestruction";
 import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
 import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
+import { centerAccessRoadPlan } from "../src/game/rts/roads/centerAccessRoad";
 import {
   canAffordCost,
   formatCostShortfall,
@@ -34221,6 +34222,53 @@ check("RTS auto-connect paves a free access road from a building placed short of
     null,
     "maxNewCells of 0 disables the feature",
   );
+});
+
+check("RTS command-centre road rings form the only active logistics network", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const centerStats = buildings.command_center ?? assert.fail("command centre definition missing");
+  const depotStats = buildings.depot ?? assert.fail("depot definition missing");
+  const farmStats = buildings.farm ?? assert.fail("farm definition missing");
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 0, centerStats.maxHealth, centerStats);
+  const roads = new RoadGraph(balance);
+  roads.commit(centerAccessRoadPlan(roads, { x: 0, z: 0, footprint: centerStats.footprint }));
+  for (const cell of [{ x: 6, z: 0 }, { x: -6, z: 0 }, { x: 0, z: 6 }, { x: 0, z: -6 }]) {
+    assert.ok(roads.cellAt(cell), `the centre ring exposes the ${cell.x},${cell.z} side`);
+  }
+
+  const structures = new PlacedStructureSystem();
+  const depot = structures.place("player", depotStats, 20, 0);
+  const farm = structures.place("player", farmStats, 20, 10);
+  structures.advanceConstruction(depot, depotStats.constructionSeconds);
+  structures.advanceConstruction(farm, farmStats.constructionSeconds);
+  depot.storageCapacity = depotStats.progression?.settlement[0]?.storageCapacity ?? null;
+  const isolatedRoute = roads.plan({ x: 16, z: 0 }, { x: 16, z: 10 }, []);
+  assert.ok(isolatedRoute);
+  roads.commit(isolatedRoute);
+
+  const depots = new DepotLogisticsSystem(structures, roads, centers);
+  const production = new ProductionLogisticsSystem(structures, roads, depots);
+  const capacity = new ResourceCapacitySystem(structures, depots);
+  assert.equal(depots.snapshots()[0]?.status, "unlinked-main-network");
+  assert.equal(production.snapshots()[0]?.status, "unlinked-main-network");
+  assert.equal(capacity.capacityFor("player").food, 500, "an isolated depot cannot add global capacity");
+
+  const connection = roads.plan({ x: 6, z: 0 }, { x: 16, z: 0 }, []);
+  assert.ok(connection);
+  roads.commit(connection);
+  assert.equal(depots.snapshots()[0]?.status, "linked");
+  assert.equal(production.snapshots()[0]?.status, "linked", "a producer may deliver through the centre network");
+  assert.equal(capacity.capacityFor("player").food, 1000, "the connected depot adds its tier capacity to the centre store");
+  assert.equal(structures.destroy(depot), true);
+  assert.equal(production.snapshots()[0]?.status, "linked", "the connected centre remains a delivery endpoint without a depot");
+  assert.equal(capacity.capacityFor("player").food, 500, "the centre retains its own opening storage after a depot is lost");
+  structures.clear();
 });
 
 check("RTS full storage leaves linked production in its local buffer until capacity is freed", () => {
