@@ -26,6 +26,7 @@ import type { BuildingPlacementState } from "../structures/buildingPlacementSyst
 
 import { canAffordCost, formatResourceCost } from "./resourceLabels";
 import {
+  attachIconFallback,
   PALETTE_ROAD_ERASE_ICON,
   PALETTE_ROAD_ICON,
   PALETTE_TEMPLE_SOON_ICON,
@@ -78,6 +79,21 @@ export class RtsBuildPalette {
   private readonly tabs = new Map<string, HTMLButtonElement>();
   private readonly categoryPanels = new Map<string, HTMLElement>();
   private activeCategory = "Ekonomi";
+  /**
+   * Placement is *modal*: one pick arms the cursor until a right-click or a
+   * different pick disarms it, and the road tool stays armed across a whole
+   * drag. The button that armed it has to say so for that whole span, or the
+   * player is reading the map to work out what a click will do.
+   *
+   * Held as two independent fields rather than one, because the two owners
+   * ({@link BuildingPlacementState}, {@link RoadPlacementState}) push on their
+   * own schedules and in either order — recomputing from both on every push is
+   * what keeps a road highlight from being cleared by a placement tick that
+   * happens to land after it.
+   */
+  private readonly roadButtons = new Map<"build" | "erase", HTMLButtonElement>();
+  private armedBuildingId: string | null = null;
+  private armedRoadMode: "build" | "erase" | null = null;
 
   constructor(
     buildings: BuildingBalance,
@@ -132,6 +148,7 @@ export class RtsBuildPalette {
           icon.className = "rts-build-choice-icon";
           icon.src = stats.icon;
           icon.alt = "";
+          attachIconFallback(icon);
           button.appendChild(icon);
         }
         const label = document.createElement("span");
@@ -163,6 +180,7 @@ export class RtsBuildPalette {
         cost.textContent = "Odun / hücre";
         road.append(icon, label, cost);
         road.addEventListener("click", this.onChooseRoad);
+        this.roadButtons.set("build", road);
         choices.appendChild(road);
         // GDD 10 §44 "Yol Silme". Sits beside the tool that made the mistake,
         // because a paved tile reserves its ground: without this, a route drawn
@@ -184,6 +202,7 @@ export class RtsBuildPalette {
         eraseCost.textContent = "İade yok";
         erase.append(eraseIcon, eraseLabel, eraseCost);
         erase.addEventListener("click", this.onChooseRoadErase);
+        this.roadButtons.set("erase", erase);
         choices.appendChild(erase);
       }
       if (category.includesTempleSoon) {
@@ -219,6 +238,8 @@ export class RtsBuildPalette {
   }
 
   setState(state: BuildingPlacementState): void {
+    this.armedBuildingId = state.activeBuildingId;
+    this.syncArmedButtons();
     if (!state.activeBuildingId) {
       this.status.textContent = "Bir yapı seçin.";
       return;
@@ -263,6 +284,8 @@ export class RtsBuildPalette {
 
   /** Road mode is owned by the road system; the palette only narrates it. */
   setRoadState(state: RoadPlacementState): void {
+    this.armedRoadMode = state.active ? state.mode : null;
+    this.syncArmedButtons();
     if (!state.active) {
       this.status.textContent = "Bir yapı seçin.";
       return;
@@ -319,6 +342,25 @@ export class RtsBuildPalette {
     if (!title) return;
     this.root.hidden = false;
     this.selectCategory(title);
+  }
+
+  /**
+   * Mark whichever button currently owns the cursor. `aria-pressed` rides along
+   * with the class because "armed until you disarm it" is a toggle, not a
+   * one-shot action — a screen reader that announces it as a plain button
+   * describes a mode the player cannot hear they are in.
+   */
+  private syncArmedButtons(): void {
+    for (const [id, entry] of this.buildButtons) {
+      const armed = id === this.armedBuildingId;
+      entry.button.classList.toggle("is-armed", armed);
+      entry.button.setAttribute("aria-pressed", String(armed));
+    }
+    for (const [mode, button] of this.roadButtons) {
+      const armed = mode === this.armedRoadMode;
+      button.classList.toggle("is-armed", armed);
+      button.setAttribute("aria-pressed", String(armed));
+    }
   }
 
   private selectCategory(title: string): void {

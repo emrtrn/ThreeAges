@@ -35,3 +35,22 @@ export const PALETTE_TEMPLE_SOON_ICON = "/assets/ui/icons/building-command-cente
 export function resourceIconSrc(resourceId: string): string {
   return RESOURCE_ICONS[resourceId] ?? RESOURCE_ICON_FALLBACK;
 }
+
+/**
+ * Painted art arrives one file at a time, while `balance/*.json` names the
+ * final `.png` for every row at once.  Without this, every building whose
+ * artwork has not been drawn yet renders an empty card — the icon is the whole
+ * face of a build button, so a miss is a blank tile, not a small gap.  Falls
+ * back to the placeholder `.svg` beside it, once, so a genuinely missing file
+ * cannot loop.
+ */
+export function attachIconFallback(icon: HTMLImageElement): void {
+  icon.addEventListener(
+    "error",
+    () => {
+      if (!icon.src.endsWith(".png")) return;
+      icon.src = icon.src.slice(0, -".png".length) + ".svg";
+    },
+    { once: true },
+  );
+}
