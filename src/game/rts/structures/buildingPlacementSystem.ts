@@ -270,7 +270,10 @@ function clonePreviewMaterial(material: import("three").Material | import("three
     const copy = item.clone();
     copy.transparent = true;
     copy.opacity = 0.5;
-    copy.depthWrite = false;
+    // Match an in-progress construction site. The river is a transparent
+    // overlay rendered later, so the ghost must retain depth in order not to
+    // be composited underneath water at the selected placement.
+    copy.depthWrite = true;
     return copy;
   };
   return Array.isArray(material) ? material.map(clone) : clone(material);
