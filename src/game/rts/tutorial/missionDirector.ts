@@ -35,7 +35,7 @@
  * Pure: no DOM, no three.js, no timers. `test:engine` drives it with object
  * literals.
  */
-import { isGoalMet, type MissionWorldSnapshot } from "./missionPredicates";
+import { isGoalMet, measureGoal, type MissionGoalProgress, type MissionWorldSnapshot } from "./missionPredicates";
 import type { MissionScript, MissionStep } from "./missionScript";
 
 export interface MissionDirectorState {
@@ -45,6 +45,13 @@ export interface MissionDirectorState {
   readonly index: number;
   readonly total: number;
   readonly finished: boolean;
+  /**
+   * How far into the active step the player is, as of the last evaluation; null
+   * when there is no active step. Carried on the state rather than recomputed by
+   * the card, so the number on screen and the number the chain advances on are
+   * the same read of the same world.
+   */
+  readonly progress: MissionGoalProgress | null;
 }
 
 export type MissionDirectorEvent =
@@ -61,6 +68,12 @@ export class MissionDirector {
    * script edited between sessions cannot silently latch a different step.
    */
   private readonly latched = new Set<string>();
+  /**
+   * The active step's progress at the last evaluation. Kept here rather than
+   * recomputed in {@link state} because `state()` has no world to read — the
+   * director is a pure function of what it was last shown.
+   */
+  private activeProgress: MissionGoalProgress | null = null;
 
   constructor(private readonly script: MissionScript) {
     if (script.steps.length === 0) {
@@ -107,6 +120,13 @@ export class MissionDirector {
       !this.latched.has(step.id) && !isGoalMet(step.goal, world));
     const previousIndex = this.activeIndex;
 
+    // Progress is refreshed on every pass, including the ones that change no
+    // step: "1/3 linked" becoming "2/3 linked" is the whole reason the counter
+    // exists, and that happens without the chain moving at all.
+    this.activeProgress = nextIndex < 0
+      ? null
+      : measureGoal(this.script.steps[nextIndex]!.goal, world);
+
     if (nextIndex < 0) {
       this.finishedChain = true;
       this.activeIndex = null;
@@ -149,6 +169,7 @@ export class MissionDirector {
       index: index ?? -1,
       total: this.script.steps.length,
       finished: this.finishedChain,
+      progress: index === null ? null : this.activeProgress,
     };
   }
 
@@ -169,12 +190,14 @@ export class MissionDirector {
     if (this.finishedChain) return false;
     this.finishedChain = true;
     this.activeIndex = null;
+    this.activeProgress = null;
     return true;
   }
 
   /** A restarted match replays the chain from the top. */
   reset(): void {
     this.activeIndex = null;
+    this.activeProgress = null;
     this.finishedChain = false;
     this.latched.clear();
   }

@@ -8,7 +8,7 @@
  * exact same way (tests feed readFileSync content).
  */
 import { isFeatureFlag } from "../core/featureFlags";
-import { AI_TARGET_WEIGHTS } from "./gameDataTypes";
+import { AI_TARGET_WEIGHTS, MAX_AURA_DAMAGE_RESISTANCE } from "./gameDataTypes";
 import type { MissionGoal, MissionScript, MissionStep } from "../rts/tutorial/missionScript";
 
 /**
@@ -587,6 +587,30 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
         damageMultipliers: validateDamageMultipliers(defenseData["damageMultipliers"], `${defenseWhere}.damageMultipliers`),
       };
     }
+    const auraRaw = stats["aura"];
+    let aura: BuildingBalance["string"]["aura"];
+    if (auraRaw !== undefined) {
+      const auraWhere = `${statsWhere}.aura`;
+      const auraData = asObject(auraRaw, auraWhere);
+      const radius = requireFiniteNumber(auraData, "radius", auraWhere);
+      const healPerSecond = requireFiniteNumber(auraData, "healPerSecond", auraWhere);
+      const damageResistance = requireFiniteNumber(auraData, "damageResistance", auraWhere);
+      if (radius <= 0 || healPerSecond <= 0) {
+        throw new GameDataError(`${auraWhere}: radius and healPerSecond must be > 0`);
+      }
+      // The same reach test the Outpost's vision gets: a support field the size
+      // of the map is not a place on it, and would make the building's position
+      // — the only decision the player makes about it — meaningless.
+      if (radius > WORLD_HALF_EXTENT_FOR_VISION_CHECK / 2) {
+        throw new GameDataError(`${auraWhere}.radius: must be <= ${WORLD_HALF_EXTENT_FOR_VISION_CHECK / 2}`);
+      }
+      if (damageResistance <= 0 || damageResistance > MAX_AURA_DAMAGE_RESISTANCE) {
+        throw new GameDataError(
+          `${auraWhere}.damageResistance: must be > 0 and <= ${MAX_AURA_DAMAGE_RESISTANCE}`,
+        );
+      }
+      aura = { radius, healPerSecond, damageResistance };
+    }
     const progressionRaw = stats["progression"];
     const progression = progressionRaw === undefined ? undefined : validateBuildingProgression(
       progressionRaw,
@@ -618,6 +642,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       ...(territory ? { territory } : {}),
       ...(market ? { market } : {}),
       ...(defense ? { defense } : {}),
+      ...(aura ? { aura } : {}),
       ...(progression ? { progression } : {}),
     };
   }
@@ -1655,7 +1680,7 @@ function validateMissionGoal(
       : { kind, resourceId: resourceId as string, count };
   }
 
-  if (kind === "outpost-connected" || kind === "population-headroom") {
+  if (kind === "outpost-connected" || kind === "population-headroom" || kind === "market-trade") {
     return { kind, count };
   }
 

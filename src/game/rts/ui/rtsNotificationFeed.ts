@@ -24,6 +24,28 @@ const ICON_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   mission: "✧",
 };
 
+/**
+ * Notification imagery deliberately reuses the shipped building icons wherever
+ * a physical thing is the subject. The small generated set fills only the
+ * abstract-state gaps (route, era, strategic point, and treaty), so the feed
+ * speaks the same visual language without duplicating the icon library.
+ */
+const ICON_SRC_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
+  "population-full": "/assets/ui/icons/building-house.png",
+  "resource-depleted": "/assets/ui/icons/building-quarry.png",
+  "logistics-cut": "/assets/ui/icons/notification_logistics_cut.png",
+  "logistics-restored": "/assets/ui/icons/notification_logistics_restored.png",
+  "outpost-under-attack": "/assets/ui/icons/building-outpost.png",
+  "center-under-attack": "/assets/ui/icons/building-command-center.png",
+  "age-upgraded": "/assets/ui/icons/notification_age_up.png",
+  "enemy-age-upgraded": "/assets/ui/icons/notification_age_up.png",
+  "regional-victory-warning": "/assets/ui/icons/notification_regional_victory.png",
+  "peace-active": "/assets/ui/icons/notification_peace.png",
+  "peace-ending": "/assets/ui/icons/notification_peace.png",
+  "peace-ended": "/assets/ui/icons/notification_peace.png",
+  mission: "/assets/ui/icons/notification_age_up.png",
+};
+
 export class RtsNotificationFeed {
   private readonly root = document.createElement("aside");
   private signature = " ";
@@ -60,7 +82,17 @@ export class RtsNotificationFeed {
       const icon = document.createElement("span");
       icon.className = "rts-notification-icon";
       icon.setAttribute("aria-hidden", "true");
-      icon.textContent = ICON_BY_KIND[notification.kind];
+      const iconImage = document.createElement("img");
+      iconImage.src = ICON_SRC_BY_KIND[notification.kind];
+      iconImage.alt = "";
+      iconImage.decoding = "async";
+      // Legacy glyphs remain a robust final fallback if a deployment omits a
+      // static asset, but ordinary runtime paths use the image set above.
+      iconImage.addEventListener("error", () => {
+        iconImage.remove();
+        icon.textContent = ICON_BY_KIND[notification.kind];
+      }, { once: true });
+      icon.appendChild(iconImage);
       const text = document.createElement("span");
       text.className = "rts-notification-text";
       text.textContent = notification.text;

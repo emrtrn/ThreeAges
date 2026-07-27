@@ -29,7 +29,6 @@ import {
   attachIconFallback,
   PALETTE_ROAD_ERASE_ICON,
   PALETTE_ROAD_ICON,
-  PALETTE_TEMPLE_SOON_ICON,
 } from "./rtsUiIcons";
 
 /**
@@ -52,13 +51,15 @@ interface BuildCategory {
   readonly title: string;
   readonly buildingIds: readonly string[];
   readonly includesRoad?: boolean;
-  readonly includesTempleSoon?: boolean;
 }
 
 const BUILD_CATEGORIES: readonly BuildCategory[] = [
   { title: "Ekonomi", buildingIds: ["farm", "lumber_camp", "quarry", "gold_mine", "market"] },
   { title: "Lojistik", buildingIds: ["depot", "outpost"], includesRoad: true },
-  { title: "Yerleşim", buildingIds: ["house"], includesTempleSoon: true },
+  // The Tapınak files under "Yerleşim" rather than "Askerî": it trains nothing
+  // and fires nothing — what it does is make a place worth standing in, which is
+  // the same claim the House makes about ground the player has taken.
+  { title: "Yerleşim", buildingIds: ["house", "temple"] },
   { title: "Askerî", buildingIds: ["barracks", "archery_range"] },
 ];
 
@@ -206,26 +207,6 @@ export class RtsBuildPalette {
         erase.addEventListener("click", this.onChooseRoadErase);
         this.roadButtons.set("erase", erase);
         choices.appendChild(erase);
-      }
-      if (category.includesTempleSoon) {
-        const temple = document.createElement("button");
-        temple.type = "button";
-        temple.className = "rts-build-choice is-coming-soon";
-        temple.disabled = true;
-        temple.setAttribute("aria-label", "Tapınak — Yakında");
-        const icon = document.createElement("img");
-        icon.className = "rts-build-choice-icon";
-        icon.src = PALETTE_TEMPLE_SOON_ICON;
-        icon.alt = "";
-        attachIconFallback(icon);
-        const label = document.createElement("span");
-        label.className = "rts-build-choice-label";
-        label.textContent = "Tapınak";
-        const status = document.createElement("span");
-        status.className = "rts-build-choice-cost";
-        status.textContent = "Yakında";
-        temple.append(icon, label, status);
-        choices.appendChild(temple);
       }
       this.categoryPanels.set(category.title, choices);
       grid.appendChild(choices);

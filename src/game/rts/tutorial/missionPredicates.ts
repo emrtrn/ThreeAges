@@ -68,40 +68,85 @@ export interface MissionWorldSnapshot {
    * match, so a restart cannot inherit a cleared objective.
    */
   readonly razedEnemyBuildings: Readonly<Record<string, number>>;
+  /**
+   * Market trades the player has completed this match. A tally for the same
+   * reason as {@link razedEnemyBuildings}: what it counts is an event that
+   * leaves nothing behind to read.
+   */
+  readonly marketTrades: number;
+}
+
+/**
+ * How far along a goal is: how much of what it asks for the player currently
+ * has, against how much it wants.
+ *
+ * Measured rather than merely tested, because "how many more" is the question a
+ * multi-count objective ("three linked producers") raises the moment it appears,
+ * and the card can only answer it if the predicate hands the number over. For a
+ * goal that is not a tally — reaching a tier — `target` is 1 and `current` is 0
+ * or 1, which is the honest reading: there is no half of an age.
+ */
+export interface MissionGoalProgress {
+  readonly current: number;
+  readonly target: number;
 }
 
 /** The side a mission speaks for. Goals never read the enemy's world. */
 const MISSION_OWNER: UnitOwner = "player";
 
-export function isGoalMet(goal: MissionGoal, world: MissionWorldSnapshot): boolean {
+export function measureGoal(goal: MissionGoal, world: MissionWorldSnapshot): MissionGoalProgress {
   switch (goal.kind) {
     case "structure-built":
-      return world.structures.filter((structure) =>
-        structure.owner === MISSION_OWNER
-        && structure.buildingId === goal.buildingId
-        && structure.complete).length >= goal.count;
+      return {
+        current: world.structures.filter((structure) =>
+          structure.owner === MISSION_OWNER
+          && structure.buildingId === goal.buildingId
+          && structure.complete).length,
+        target: goal.count,
+      };
     case "producer-linked":
-      return world.producers.filter((producer) =>
-        producer.owner === MISSION_OWNER
-        && producer.status === "linked"
-        && (goal.resourceId === undefined || producer.resourceId === goal.resourceId)).length >= goal.count;
+      return {
+        current: world.producers.filter((producer) =>
+          producer.owner === MISSION_OWNER
+          && producer.status === "linked"
+          && (goal.resourceId === undefined || producer.resourceId === goal.resourceId)).length,
+        target: goal.count,
+      };
     case "outpost-connected":
-      return world.structures.filter((structure) =>
-        structure.owner === MISSION_OWNER
-        && structure.complete
-        && structure.roadConnected === true).length >= goal.count;
+      return {
+        current: world.structures.filter((structure) =>
+          structure.owner === MISSION_OWNER
+          && structure.complete
+          && structure.roadConnected === true).length,
+        target: goal.count,
+      };
     case "population-headroom":
-      return world.populationHeadroom >= goal.count;
+      return { current: world.populationHeadroom, target: goal.count };
     case "tier-reached":
       // Age outranks level: Town Lv1 satisfies "reach Settlement Lv3", because a
       // kingdom that has moved on has plainly cleared what came before it. The
       // alternative re-opens a finished step for a player who over-achieved.
-      return ageRank(world.tier.age) > ageRank(goal.age)
-        || (world.tier.age === goal.age && world.tier.level >= goal.level);
+      return {
+        current: ageRank(world.tier.age) > ageRank(goal.age)
+          || (world.tier.age === goal.age && world.tier.level >= goal.level)
+          ? 1
+          : 0,
+        target: 1,
+      };
     case "unit-count":
-      return world.units.filter((unit) =>
-        unit.owner === MISSION_OWNER && unit.role === goal.role).length >= goal.count;
+      return {
+        current: world.units.filter((unit) =>
+          unit.owner === MISSION_OWNER && unit.role === goal.role).length,
+        target: goal.count,
+      };
     case "enemy-structure-razed":
-      return (world.razedEnemyBuildings[goal.buildingId] ?? 0) >= goal.count;
+      return { current: world.razedEnemyBuildings[goal.buildingId] ?? 0, target: goal.count };
+    case "market-trade":
+      return { current: world.marketTrades, target: goal.count };
   }
+}
+
+export function isGoalMet(goal: MissionGoal, world: MissionWorldSnapshot): boolean {
+  const progress = measureGoal(goal, world);
+  return progress.current >= progress.target;
 }

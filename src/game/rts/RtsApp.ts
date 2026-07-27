@@ -84,6 +84,7 @@ import { ProjectileSystem } from "./combat/projectileSystem";
 import { FirebrandSystem } from "./combat/firebrandSystem";
 import { CannonballSystem } from "./combat/cannonballSystem";
 import { StructureDefenseSystem } from "./combat/structureDefenseSystem";
+import { SupportAuraSystem } from "./structures/supportAuraSystem";
 import { combatImpactPoint, structureImpactPoint, type CombatTarget } from "./combat/combatTarget";
 import { RtsNavigation } from "./navigation/rtsNavigation";
 import { MarqueeOverlay } from "./selection/marqueeOverlay";
@@ -458,6 +459,13 @@ export class RtsApp {
    */
   private razedEnemyBuildings: Record<string, number> = {};
   /**
+   * Market trades the player has completed this match — the second mission fact
+   * with no reading in the world, since traded resources are indistinguishable
+   * from mined ones the moment they land in the wallet. Counted at the single
+   * call site that can succeed, so it cannot drift from what the wallet did.
+   */
+  private playerMarketTrades = 0;
+  /**
    * §78.1: what the start card has selected. Seeded from the *resolved* flag so
    * a match booted with `?flags=regionalVictory` opens on the matching row, and
    * only ever read while the start card is up.
@@ -498,6 +506,7 @@ export class RtsApp {
   private readonly firebrands = new FirebrandSystem();
   private readonly cannonballs = new CannonballSystem();
   private readonly structureDefense = new StructureDefenseSystem();
+  private readonly supportAuras = new SupportAuraSystem();
   private readonly hudBar = new RtsHudBar(
     () => this.selectIdleWorkers(),
     () => this.assignSelectedIdleWorkers(),
@@ -928,9 +937,10 @@ export class RtsApp {
       // Applied live while the card is up: §51's pause deliberately keeps the
       // camera running, so the player can judge the dial by moving the map.
       onCameraSettings: (settings) => this.cameraController.setSettings(settings),
-      // §78.1. Only wired when the host can re-resolve the match setup; without
-      // it the overlay builds no picker, so the card is unchanged.
-      ...(this.options.onVictoryConditionChange
+      // Regional victory is a free-match rule. A story chain owns its objective,
+      // so the picker is absent there as well as the regional systems being
+      // absent from the runtime (the host forces its flag off at boot).
+      ...(this.options.onVictoryConditionChange && !this.options.missionScript
         ? { onVictoryCondition: (choice: VictoryConditionChoice) => { this.victoryCondition = choice; } }
         : {}),
       // Faz 2 mode row. Like the picker above it is only built when the host can
@@ -1447,6 +1457,7 @@ export class RtsApp {
       tier: this.progression.tierFor(PLAYER_OWNER),
       populationHeadroom: Math.max(0, population.capacity - population.used),
       razedEnemyBuildings: this.razedEnemyBuildings,
+      marketTrades: this.playerMarketTrades,
     };
   }
 
@@ -1727,6 +1738,10 @@ export class RtsApp {
     this.syncEconomyUi();
     this.syncNotifications();
     this.announcePeaceWindow();
+    // Before any blow lands this tick: a unit standing in a Tapınak's field must
+    // already be protected when it is hit, not from the tick after. The same
+    // pass mends units and clears the protection of everyone who left a field.
+    this.supportAuras.update(this.structures.all(), this.units.all(), dt);
     updateUnitCombat(
       this.units.all(),
       dt,
@@ -2356,6 +2371,9 @@ export class RtsApp {
     this.projectiles.clear();
     this.firebrands.clear();
     this.cannonballs.clear();
+    // The units it was tracking are gone with the match; the readout must not
+    // keep answering for them.
+    this.supportAuras.clear();
     this.rallyPointPending = false;
     this.structureConstruction.resetReservations();
     this.kingdoms.reset();
@@ -2381,6 +2399,7 @@ export class RtsApp {
     this.missionIntroPosted = false;
     this.missionPollTimer = 0;
     this.razedEnemyBuildings = {};
+    this.playerMarketTrades = 0;
     this.missionPanel?.setState(null);
     this.attackWatch.reset();
     this.match.reset();
@@ -2945,6 +2964,18 @@ export class RtsApp {
         roster: this.barracksProduction.trainableUnits(structure),
       };
     }
+    // Keyed on the data for the same reason the Market is: a building projects a
+    // support field because its balance declares an `aura` block, which is the
+    // exact condition `SupportAuraSystem` acts on.
+    if (structure.stats.aura) {
+      return {
+        kind: "aura",
+        radius: structure.stats.aura.radius,
+        healPerSecond: structure.stats.aura.healPerSecond,
+        damageResistance: structure.stats.aura.damageResistance,
+        sustainedUnits: this.supportAuras.sustainedCount(structure.owner),
+      };
+    }
     // Population is the only thing a House does, and the panel reads it the same
     // way `PopulationSystem` totals it — data plus whatever T2 granted.
     return {
@@ -3212,6 +3243,7 @@ export class RtsApp {
     const result = direction === "buy"
       ? this.marketTrade.buy(PLAYER_OWNER, resourceId)
       : this.marketTrade.sell(PLAYER_OWNER, resourceId);
+    if (result === "traded") this.playerMarketTrades += 1;
     const message: Record<MarketTradeResult, string> = {
       traded: direction === "buy"
         ? `${lot} ${label} alındı (${quote?.buyPrice ?? 0} altın).`

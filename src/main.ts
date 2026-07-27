@@ -189,6 +189,11 @@ async function main(): Promise<void> {
         logger("System").warn(`Mission "${missionId}" unavailable; playing an ordinary match`, error);
       }
     }
+    // A story chain owns the match objective. Regional victory is an alternate
+    // free-match win condition, so allowing both would let a player finish the
+    // round before the teaching chain is complete. Keep the saved free-match
+    // preference intact, but never construct the regional systems for a story.
+    const storyModeRegionalVictoryEnabled = !missionScript && regionalVictoryEnabled;
     // `?level=` (what the editor's Play button passes) outranks the preset's map,
     // so the level being edited is the level that opens. See `rtsLevelRef.ts`.
     //
@@ -224,7 +229,7 @@ async function main(): Promise<void> {
     const rts = new RtsApp(canvas, {
       debug: params.has("debug"),
       prosperityDebugEnabled,
-      regionalVictoryEnabled,
+      regionalVictoryEnabled: storyModeRegionalVictoryEnabled,
       fogOfWarEnabled,
       // §78.1: store the choice and re-run this boot, which resolves the flag
       // through the same defaults → preset → URL → choice path as a cold start.

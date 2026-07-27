@@ -63,6 +63,7 @@ import {
 import { MissionDirector } from "../src/game/rts/tutorial/missionDirector";
 import {
   isGoalMet,
+  measureGoal,
   type MissionProducerFact,
   type MissionStructureFact,
   type MissionWorldSnapshot,
@@ -276,6 +277,7 @@ import { retaliateAgainstAttack, updateUnitEngagement } from "../src/game/rts/co
 import { resolveDamage } from "../src/game/rts/combat/damageResolution";
 import { ProjectileSystem } from "../src/game/rts/combat/projectileSystem";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
+import { SupportAuraSystem } from "../src/game/rts/structures/supportAuraSystem";
 import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
 import type { GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import { Unit, UNIT_DEATH_SECONDS, type RtsPresentationHandle } from "../src/game/rts/units/unit";
@@ -32019,6 +32021,73 @@ check("a selected outpost prioritizes its player-ordered enemy inside the extend
   units.clear();
 });
 
+check("a completed Tapınak mends its own units in range and softens the blows they take", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const templeStats = buildings.temple ?? assert.fail("temple definition missing");
+  const aura = templeStats.aura ?? assert.fail("temple aura missing");
+  assert.equal(templeStats.cost.wood, 200, "the Tapınak is bought with 200 wood");
+  assert.equal(templeStats.requiredAge, undefined, "the Tapınak is buildable in either age");
+
+  const structures = new PlacedStructureSystem();
+  const temple = structures.place("player", templeStats, 0, 0);
+  const units = new UnitSystem();
+  const inside = units.spawn("player", aura.radius - 1, 0, RTS_TEST_UNIT_STATS);
+  const outside = units.spawn("player", aura.radius + 2, 0, RTS_TEST_UNIT_STATS);
+  const enemyInside = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
+  for (const unit of [inside, outside, enemyInside]) unit.health.damage(20);
+  const auras = new SupportAuraSystem();
+
+  // An unfinished site protects nobody: the build time is the price of the field.
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(inside.health.current, inside.health.max - 20, "a construction site heals nothing");
+  assert.equal(inside.damageResistance, 0, "a construction site protects nobody");
+
+  structures.advanceConstruction(temple, templeStats.constructionSeconds);
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(
+    inside.health.current,
+    inside.health.max - 20 + aura.healPerSecond,
+    "a unit inside the field is mended at the data rate",
+  );
+  assert.equal(inside.damageResistance, aura.damageResistance, "and stands behind the field's resistance");
+  assert.equal(outside.health.current, outside.health.max - 20, "a unit outside the radius is untouched");
+  assert.equal(outside.damageResistance, 0, "and unprotected");
+  assert.equal(enemyInside.health.current, enemyInside.health.max - 20, "the field never serves the other kingdom");
+  assert.equal(enemyInside.damageResistance, 0);
+  assert.equal(auras.sustainedCount("player"), 1, "the readout counts only the units it reached");
+
+  // The protection is the reason the building exists, so it has to be the thing
+  // combat actually resolves against — not a number only the panel can see.
+  const attacker = units.spawn("enemy", aura.radius - 1.5, 0, RTS_TEST_UNIT_STATS);
+  const fullDamage = RTS_TEST_UNIT_STATS.attackDamage * RTS_TEST_UNIT_STATS.damageMultipliers.heavy;
+  assert.ok(
+    Math.abs(resolveDamage(RTS_TEST_UNIT_STATS, inside) - fullDamage * (1 - aura.damageResistance)) < 1e-9,
+    "a blow on a sheltered unit lands reduced",
+  );
+  assert.equal(resolveDamage(RTS_TEST_UNIT_STATS, outside), fullDamage, "and unreduced outside the field");
+  attacker.stop();
+
+  // Walking out of the field ends the protection on the very next tick, with no
+  // bookkeeping to unwind — the reason the pass rewrites every unit from zero.
+  inside.position.set(aura.radius + 5, 0, 0);
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(inside.damageResistance, 0, "leaving the radius drops the protection immediately");
+  assert.equal(auras.sustainedCount("player"), 0);
+
+  // Overlapping fields take the strongest rather than stacking, or a cluster of
+  // Tapınaks would put unkillable troops on the field.
+  const second = structures.place("player", templeStats, 3, 0);
+  structures.advanceConstruction(second, templeStats.constructionSeconds);
+  outside.position.set(1, 0, 0);
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(outside.damageResistance, aura.damageResistance, "two overlapping fields do not stack");
+
+  structures.clear();
+  units.clear();
+});
+
 check("RTS match enters victory when the enemy command center is depleted", () => {
   const centers = new CommandCenterSystem();
   centers.spawn("player", 0, 16, 300);
@@ -32283,6 +32352,7 @@ const missionWorld = (
   tier: { age: "settlement", level: 1 },
   populationHeadroom: 0,
   razedEnemyBuildings: {},
+  marketTrades: 0,
   ...extra,
 });
 
@@ -32382,6 +32452,54 @@ check("the Faz 2 mission goals measure the rule they teach", () => {
   assert.equal(isGoalMet(razed, missionWorld([])), false);
   assert.equal(isGoalMet(razed, missionWorld([], [], { razedEnemyBuildings: { farm: 3 } })), false);
   assert.equal(isGoalMet(razed, missionWorld([], [], { razedEnemyBuildings: { outpost: 1 } })), true);
+
+  // Trading is the other tally: owning a Market is not the lesson, using it is.
+  const traded: MissionGoal = { kind: "market-trade", count: 1 };
+  assert.equal(
+    isGoalMet(traded, missionWorld([{ owner: "player", buildingId: "market", complete: true }])),
+    false,
+    "a Market that has never traded teaches nothing",
+  );
+  assert.equal(isGoalMet(traded, missionWorld([], [], { marketTrades: 1 })), true);
+});
+
+check("a mission goal reports how far along it is, not just whether it is done", () => {
+  // The counter exists because a multi-count step ("three linked producers") is
+  // the one place the card's sentence cannot answer "how many more" — which is
+  // exactly where the chain lost a player before it had one.
+  const three: MissionGoal = { kind: "producer-linked", count: 3 };
+  const linked = (resourceId: string) => ({ owner: "player", resourceId, status: "linked" } as const);
+  assert.deepEqual(measureGoal(three, missionWorld([], [linked("wood")])), { current: 1, target: 3 });
+  assert.deepEqual(
+    measureGoal(three, missionWorld([], [linked("wood"), linked("food"), linked("stone")])),
+    { current: 3, target: 3 },
+  );
+  // Progress and completion are the same read: a card showing 3/3 beside an
+  // objective the chain still considers open would be the worst of both.
+  assert.equal(isGoalMet(three, missionWorld([], [linked("wood"), linked("food"), linked("stone")])), true);
+  // A tier is not a tally — there is no half of an age.
+  assert.deepEqual(
+    measureGoal({ kind: "tier-reached", age: "town", level: 1 }, missionWorld([])),
+    { current: 0, target: 1 },
+  );
+
+  // The director carries the number so the card and the chain cannot disagree,
+  // and refreshes it on passes that change no step — which is most of them.
+  const script: MissionScript = {
+    id: "progress_chain",
+    label: "P",
+    intro: "i",
+    outro: "o",
+    steps: [{ id: "three", title: "Üç", why: "w", goal: three }],
+  };
+  const director = new MissionDirector(script);
+  director.evaluate(missionWorld([], [linked("wood")]));
+  assert.deepEqual(director.state().progress, { current: 1, target: 3 });
+  assert.deepEqual(director.evaluate(missionWorld([], [linked("wood"), linked("food")])), [], "no step change");
+  assert.deepEqual(director.state().progress, { current: 2, target: 3 }, "…but the counter moved");
+  director.evaluate(missionWorld([], [linked("wood"), linked("food"), linked("stone")]));
+  assert.equal(director.state().finished, true);
+  assert.equal(director.state().progress, null, "a finished chain has nothing to count");
 });
 
 check("a latched step stays cleared once the player has done it", () => {
@@ -32563,6 +32681,8 @@ check("the shipped mission script validates, and a broken one fails at load", ()
     [
       farm(),
       depot(),
+      { owner: "player", buildingId: "lumber_camp", complete: true },
+      { owner: "player", buildingId: "market", complete: true },
       { owner: "player", buildingId: "outpost", complete: true, roadConnected: true },
       { owner: "player", buildingId: "barracks", complete: true },
     ],
@@ -32570,6 +32690,7 @@ check("the shipped mission script validates, and a broken one fails at load", ()
       linkedFarm(),
       { owner: "player", resourceId: "wood", status: "linked" },
       { owner: "player", resourceId: "stone", status: "linked" },
+      { owner: "player", resourceId: "gold", status: "linked" },
     ],
     {
       units: [
@@ -32580,6 +32701,7 @@ check("the shipped mission script validates, and a broken one fails at load", ()
       tier: { age: "town", level: 1 },
       populationHeadroom: 5,
       razedEnemyBuildings: { outpost: 1 },
+      marketTrades: 1,
     },
   );
   const walked = new MissionDirector(script);
@@ -32592,6 +32714,31 @@ check("the shipped mission script validates, and a broken one fails at load", ()
   for (const step of script.steps) {
     assert.equal(isGoalMet(step.goal, finishedValley), true, `step "${step.id}" is unreachable`);
   }
+
+  // Reachable is not the same as affordable, and the chain's first real failure
+  // was the second one: every building in this project is bought with wood, so a
+  // chain that spends the opening stockpile before any wood is *coming in* ends
+  // with a player who cannot place anything at all — a deadlock the director
+  // cannot detect, because each individual step stays perfectly satisfiable.
+  //
+  // Hence the invariant: the buildings demanded before wood starts flowing must
+  // cost well under the leanest shipped stockpile, leaving the rest for roads
+  // (`roads.json` charges wood per cell too) and for a misplaced building or two.
+  const balance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const woodFlowing = script.steps.findIndex((step) =>
+    step.goal.kind === "producer-linked" && step.goal.resourceId === "wood");
+  assert.ok(woodFlowing >= 0, "the chain must connect a wood producer at some point");
+  const openingWoodCost = script.steps.slice(0, woodFlowing + 1)
+    .reduce((total, step) => step.goal.kind === "structure-built"
+      ? total + (balance[step.goal.buildingId]?.cost["wood"] ?? 0) * step.goal.count
+      : total, 0);
+  const leanestStartingWood = 500; // core_match / gameplay_proof both open here.
+  assert.ok(
+    openingWoodCost <= leanestStartingWood / 2,
+    `the opening spends ${openingWoodCost} wood before any comes in (budget ${leanestStartingWood / 2})`,
+  );
 
   // The reference check is the point of passing building ids in: a typo'd
   // building becomes a step nobody can clear, and the player it strands is by

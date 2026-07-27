@@ -7,7 +7,7 @@
  * match goes through here, so the counter table is a data table rather than a
  * rule scattered across the unit, structure and siege code paths.
  */
-import type { UnitBalanceStats } from "../../data/gameDataTypes";
+import { MAX_AURA_DAMAGE_RESISTANCE, type UnitBalanceStats } from "../../data/gameDataTypes";
 import type { CombatTarget } from "./combatTarget";
 
 /**
@@ -17,11 +17,22 @@ import type { CombatTarget } from "./combatTarget";
  * attacker does to each armour class, not a table of resistances. That is what
  * lets the Topçu read as anti-building (2.50 vs structure) while its raw 34 damage
  * stays weak against troops.
+ *
+ * The target's own {@link CombatTarget.damageResistance} is then taken off the
+ * result. That is not a second counter table — it is a *granted* protection a
+ * support building is projecting onto this target right now, and it belongs
+ * here for the same reason the counters do: every hit in the match, from a unit,
+ * a tower, a cannonball or a torch, comes through this one function, so a
+ * protection applied here cannot be missed by one damage path.
  */
 type DamageSourceStats = Pick<UnitBalanceStats, "attackDamage" | "damageMultipliers">;
 
 export function resolveDamage(attacker: DamageSourceStats, target: CombatTarget): number {
-  return attacker.attackDamage * attacker.damageMultipliers[target.armorClass];
+  const raw = attacker.attackDamage * attacker.damageMultipliers[target.armorClass];
+  // Clamped rather than trusted: the field is written per tick by a system, and
+  // a stray value above the cap would make a unit outright unkillable.
+  const resistance = Math.min(Math.max(target.damageResistance ?? 0, 0), MAX_AURA_DAMAGE_RESISTANCE);
+  return raw * (1 - resistance);
 }
 
 /**

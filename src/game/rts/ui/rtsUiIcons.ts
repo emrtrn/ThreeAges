@@ -4,9 +4,9 @@
  * Building and unit artwork comes from `balance/*.json` (`icon`),
  * so swapping that artwork is a data edit.  A handful of HUD and palette icons
  * have no data row to hang off — resource readouts are derived from the fixed
- * resource order, and the road / erase / temple palette entries are hardcoded
- * UI affordances rather than buildings.  Collecting them here means an art
- * swap is one edit in one file instead of a grep through the UI modules.
+ * resource order, and the road / erase palette entries are hardcoded UI
+ * affordances rather than buildings.  Collecting them here means an art swap is
+ * one edit in one file instead of a grep through the UI modules.
  *
  * Both `.svg` and `.png` are accepted (matching `UiAssetPath`); change the
  * extension here when the file on disk changes.
@@ -26,7 +26,6 @@ const RESOURCE_ICONS: Readonly<Record<string, string>> = {
 /** Build-palette entries that are tools or placeholders, not buildings. */
 export const PALETTE_ROAD_ICON = "/assets/ui/icons/road.png";
 export const PALETTE_ROAD_ERASE_ICON = "/assets/ui/icons/road-delete.png";
-export const PALETTE_TEMPLE_SOON_ICON = "/assets/ui/icons/building-command-center.png";
 
 /** Player-command artwork shared by the selected-unit readout and tools. */
 export const UNIT_ATTACK_MOVE_ICON = "/assets/ui/icons/command-attack-move.png";

@@ -153,6 +153,16 @@ export class Unit {
   readonly health: HealthComponent;
   /** JSON-backed damage, range, counters and cooldown state. */
   readonly attack: AttackComponent;
+  /**
+   * {@link CombatTarget}: fraction of incoming damage currently absorbed.
+   *
+   * Not a unit stat and never authored on one — it is rewritten from zero every
+   * tick by {@link SupportAuraSystem} from the support fields the unit is
+   * standing in. Held on the unit rather than looked up at the moment of the hit
+   * because a hit is resolved from a {@link CombatTarget}, which knows nothing
+   * about buildings; this is the target-side answer that contract can read.
+   */
+  damageResistance = 0;
   /** Active move destination (y = 0), or null when idle/arrived. */
   moveTarget: Vector3 | null = null;
   /** Enemy this unit is currently fighting, or null. */

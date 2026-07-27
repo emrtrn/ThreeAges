@@ -19,7 +19,9 @@ export class RtsMissionPanel {
   private readonly heading = document.createElement("p");
   private readonly title = document.createElement("strong");
   private readonly why = document.createElement("p");
+  private readonly progress = document.createElement("p");
   private signature = "";
+  private progressText = "";
 
   constructor() {
     this.root.className = "rts-mission-panel";
@@ -33,7 +35,15 @@ export class RtsMissionPanel {
     this.title.className = "rts-mission-title";
     this.title.dataset.rtsMissionTitle = "";
     this.why.className = "rts-mission-why";
-    this.root.append(this.heading, this.title, this.why);
+    // Counter last, under the reason: a step is read top-down once and then
+    // glanced at, and what the glance is looking for is the number.
+    this.progress.className = "rts-mission-progress";
+    this.progress.dataset.rtsMissionProgress = "";
+    // Outside the card's aria-live region: a counter that ticked 1/3 → 2/3 while
+    // the screen reader was mid-sentence on the objective would talk over the
+    // instruction it belongs to.
+    this.progress.setAttribute("aria-hidden", "true");
+    this.root.append(this.heading, this.title, this.why, this.progress);
     this.root.hidden = true;
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
   }
@@ -48,9 +58,21 @@ export class RtsMissionPanel {
     if (!state || !state.step) {
       this.root.hidden = true;
       this.signature = "";
+      this.progressText = "";
       return;
     }
     this.root.hidden = false;
+    // Updated ahead of (and independently of) the signature check: progress moves
+    // while the step does not — that is the case the counter was added for.
+    // A single-count goal shows nothing; "0/1" restates the card's own title.
+    const progressText = state.progress && state.progress.target > 1
+      ? `${Math.min(state.progress.current, state.progress.target)}/${state.progress.target}`
+      : "";
+    if (progressText !== this.progressText) {
+      this.progressText = progressText;
+      this.progress.textContent = progressText;
+      this.progress.hidden = progressText === "";
+    }
     // Rebuilt only on a real change: this is pushed every frame, and a card that
     // re-created its own DOM sixty times a second would restart the aria-live
     // announcement each time.

@@ -96,6 +96,15 @@ export type MissionGoal =
   /** At least `count` living units of one role. Pair with `latch` on a build-up step. */
   | { readonly kind: "unit-count"; readonly role: UnitRoleId; readonly count: number }
   /**
+   * `count` completed Market trades this match, either direction.
+   *
+   * A tally like {@link MissionGoal} `enemy-structure-razed`, and for the same
+   * reason: a trade is an event that leaves no trace in the world a predicate
+   * could read afterwards — the resources it moved are indistinguishable from
+   * resources that were mined. Inherently one-shot, so it needs no `latch`.
+   */
+  | { readonly kind: "market-trade"; readonly count: number }
+  /**
    * `count` enemy buildings of `buildingId` razed this match. A tally rather than
    * a world query — the thing it counts no longer exists — so a step using it is
    * inherently one-shot and does not need `latch`.

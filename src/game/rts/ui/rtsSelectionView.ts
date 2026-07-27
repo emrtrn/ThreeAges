@@ -179,6 +179,22 @@ export interface MarketDetailView {
   readonly connected: boolean;
 }
 
+/**
+ * The Tapınak's support field. Every number here is read straight off the
+ * building's `aura` balance block plus the live count the aura system reached
+ * this tick, so the panel cannot advertise protection the simulation is not
+ * actually applying.
+ */
+export interface AuraDetailView {
+  readonly kind: "aura";
+  readonly radius: number;
+  readonly healPerSecond: number;
+  /** Absorbed fraction of incoming damage, 0..1. */
+  readonly damageResistance: number;
+  /** Own units the field reached on the last tick. */
+  readonly sustainedUnits: number;
+}
+
 /** A completed building with no ongoing job of its own (House, and future kin). */
 export interface PassiveDetailView {
   readonly kind: "passive";
@@ -192,6 +208,7 @@ export type StructureDetailView =
   | OutpostDetailView
   | MilitaryDetailView
   | MarketDetailView
+  | AuraDetailView
   | PassiveDetailView
   | CenterDetailView;
 
@@ -701,6 +718,23 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
       return describeMarket(title, summary, detail);
     case "center":
       return describeCenter(title, summary, detail);
+    case "aura":
+      return {
+        title,
+        summary,
+        lines: [
+          `Etki alanı: ${detail.radius} birim yarıçap`,
+          `İyileştirme: saniyede ${detail.healPerSecond} can`,
+          `Hasar direnci: %${Math.round(detail.damageResistance * 100)}`,
+          detail.sustainedUnits > 0
+            ? `Alan içinde ${detail.sustainedUnits} birim korunuyor.`
+            : "Alanda birim yok.",
+        ],
+        actions: [],
+        hint: STRUCTURE_HINT,
+        tooltip: "Alandaki kendi birimleriniz sürekli iyileşir ve aldıkları hasar azalır;"
+          + " üst üste binen tapınaklar toplanmaz, en güçlü etki geçerlidir.",
+      };
     case "passive":
       return {
         title,

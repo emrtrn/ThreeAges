@@ -1,31 +1,49 @@
 {
   "id": "frontier_road",
   "label": "Sınır Yolu",
-  "intro": "Kral seni terk edilmiş bir sınır vadisine gönderdi. Burada bir zamanlar işleyen bir krallık vardı; yolları kesildiğinde açlıktan dağıldı. Sağ tuşla birlik gönderir, WASD ile haritayı gezersin. Vadiyi yeniden ayağa kaldır.",
+  "intro": "Kral seni terk edilmiş bir sınır vadisine gönderdi. Burada bir zamanlar işleyen bir krallık vardı; yolları kesildiğinde açlıktan dağıldı. Sağ tuşla birlik gönderir, WASD ile haritayı gezersin. Elindeki her şey odunla kuruluyor — ilk işin odunu akıtmak.",
   "outro": "Rakip lordun ileri karakolu düştü. Vadi artık senin krallığın — buradan sonrası sana kalmış.",
   "steps": [
     {
-      "id": "first_harvest",
-      "title": "Bir Tarla kur",
-      "why": "İşçileri sen göndermeyeceksin: tamamlanan tarla, yakındaki boştaki işçileri kendisi işe alır. Senin işin nereye kurulacağına karar vermek.",
-      "goal": { "kind": "structure-built", "buildingId": "farm", "count": 1 }
+      "id": "first_axe",
+      "title": "Ormanın yanına bir Oduncu Kampı kur",
+      "why": "Bu vadide ev, depo, yol, kışla — hepsi odunla kuruluyor, ve elindeki odun sayılı. İşçileri sen göndermeyeceksin: tamamlanan kamp, yakındaki boştaki işçileri kendisi işe alır. Senin işin nereye kurulacağına karar vermek.",
+      "goal": { "kind": "structure-built", "buildingId": "lumber_camp", "count": 1 }
     },
     {
       "id": "empty_treasury",
       "title": "Bir Depo kur",
-      "why": "Tarla üretiyor ama hazinen artmıyor. Hasat tarlanın kendi ambarında birikiyor ve teslim edilecek bir yer arıyor.",
+      "why": "Kamp odun kesiyor ama hazinen artmıyor. Hasat kampın kendi ambarında birikiyor ve teslim edilecek bir yer arıyor; o yer Depo.",
       "goal": { "kind": "structure-built", "buildingId": "depot", "count": 1 }
     },
     {
       "id": "connect_the_road",
-      "title": "Tarlayı yolla depoya bağla",
-      "why": "Depo tek başına yetmez. Hasat ancak tarlaya değen bir yol, aynı ağ üzerinden depoya ulaştığında hazineye akar. Tarlayı seçip lojistik satırını okursan neyin eksik olduğunu her zaman görürsün.",
+      "title": "Oduncu kampını yolla depoya bağla",
+      "why": "Depo tek başına yetmez. Hasat ancak kampa değen bir yol, aynı ağ üzerinden depoya ulaştığında hazineye akar. Kampı seçip lojistik satırını okursan neyin eksik olduğunu her zaman görürsün.",
+      "goal": { "kind": "producer-linked", "resourceId": "wood", "count": 1 }
+    },
+    {
+      "id": "market",
+      "title": "Bir Pazar kur",
+      "why": "Pazar 20 oduna kurulur ve elindeki fazlayı işine yarayana çevirir. Başlangıçtaki yiyecek yığını işçi ve asker eğitmekten başka bir işe yaramıyor; Pazar onu altına, altını da odun ya da taşa çevirir. Sıkıştığında açacağın vana budur.",
+      "goal": { "kind": "structure-built", "buildingId": "market", "count": 1 }
+    },
+    {
+      "id": "first_trade",
+      "title": "Pazar'da bir alım ya da satım yap",
+      "why": "Pazar'ı seç: yiyecek sat, altın kazan; altınla odun ya da taş satın al. Her işlem fiyatı aleyhine kaydırır ve Pazar komisyon alır — bu yüzden Pazar sonsuz kaynak değil, kendi üretimini kuruncaya kadar dayandığın köprüdür. Komisyon Merkez seviyesi yükseldikçe düşer.",
+      "goal": { "kind": "market-trade", "count": 1 }
+    },
+    {
+      "id": "first_harvest",
+      "title": "Bir Tarla kur ve onu da hatta bağla",
+      "why": "Yiyecek yalnız işçi ve asker eğitirken harcanır — yani ordunun ve nüfusunun büyüme hızı doğrudan tarlalarına bağlı. Tarla da aynı kuralın altında: değen bir yol, aynı ağda bir depo.",
       "goal": { "kind": "producer-linked", "resourceId": "food", "count": 1 }
     },
     {
       "id": "roof_and_people",
       "title": "Nüfus için yer aç",
-      "why": "Nüfus tavanına dayandığında hiçbir şey üretemezsin — ne işçi, ne asker. Ev kurmak, sınırı büyütmenin tek yolu.",
+      "why": "Nüfus tavanına dayandığında hiçbir şey üretemezsin — ne işçi, ne asker. Ev kurmak, üretim yapılarına işçi yetiştirmenin tek yolu.",
       "goal": { "kind": "population-headroom", "count": 5 }
     },
     {
@@ -41,10 +59,16 @@
       "goal": { "kind": "outpost-connected", "count": 1 }
     },
     {
-      "id": "wood_and_stone",
-      "title": "Üç üretim yapısını hatta bağla",
-      "why": "Her yeni üretim yapısı aynı dört koşulu ister: kontrol alanı, yapıya değen yol, aynı ağda kendi depon, işgal altında olmayan bir depo. Kısa ve açık yol mu, uzun ve güvenli yol mu — kararı sen verirsin.",
-      "goal": { "kind": "producer-linked", "count": 3 }
+      "id": "quarry_linked",
+      "title": "Taş Ocağı kur ve hatta bağla",
+      "why": "Taş bir taş yatağının üzerine kurulur ve genişledikçe yatak tükenir; bu yüzden yeni ocaklar seni kontrol alanının kenarına doğru iter. Aynı dört koşul burada da geçerli: kontrol alanı, ocağa değen yol, aynı ağda kendi depon, işgal altında olmayan bir depo.",
+      "goal": { "kind": "producer-linked", "resourceId": "stone", "count": 1 }
+    },
+    {
+      "id": "gold_mine_linked",
+      "title": "Altın Madeni kur ve hatta bağla",
+      "why": "Altın hem Pazar'ın hem çağ geçişinin parası ve en yavaş akan kaynak. Madenin yolu uzarsa hat daha kırılgan olur — kısa ve açık yol mu, uzun ve güvenli yol mu, kararı sen verirsin.",
+      "goal": { "kind": "producer-linked", "resourceId": "gold", "count": 1 }
     },
     {
       "id": "barracks",
@@ -55,14 +79,14 @@
     {
       "id": "standing_guard",
       "title": "Üç muhafız eğit",
-      "why": "Karakolun ve yolun, ordunun olmadığı sürece savunmasız hedeflerdir. Yol kesilirse üretim de durur.",
+      "why": "Karakolun ve yolun, ordunun olmadığı sürece savunmasız hedeflerdir. Düşman deponun üstünde durursa binayı yıkmadan da hattını keser; üretimin o anda durur.",
       "goal": { "kind": "unit-count", "role": "guard", "count": 3 },
       "latch": true
     },
     {
       "id": "town",
       "title": "Kasaba çağına geç",
-      "why": "Kasaba, yeni yapı ve birlikleri açar; ama geçiş sırasında kaynağın da savunman da zayıflar. Ne zaman geçeceğin maçın en pahalı kararı.",
+      "why": "Kasaba yeni yapı ve birlikleri açar; geçiş sırasında hem kaynağın hem savunman zayıflar. Merkez sana hangi yapıların eksik olduğunu söyler — ne zaman geçeceğin maçın en pahalı kararı.",
       "goal": { "kind": "tier-reached", "age": "town", "level": 1 }
     },
     {

@@ -19,6 +19,15 @@ export interface CombatTarget {
    * footprint. Units use zero; command centres expose their perimeter.
    */
   readonly combatRadius?: number;
+  /**
+   * Fraction of incoming damage this target currently absorbs, 0..1.
+   *
+   * Written by whatever grants the protection rather than owned by the target —
+   * today the Temple's support field ({@link SupportAuraSystem}), which rewrites
+   * it every tick. Absent means "none", which is what keeps every target that
+   * nothing protects — structures included — resolving exactly as before.
+   */
+  readonly damageResistance?: number;
   /** Units show a target ring; structures may omit that presentation hook. */
   setTargetedBy?(delta: number): void;
 }

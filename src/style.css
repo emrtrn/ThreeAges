@@ -190,12 +190,18 @@ body {
 
 .rts-match-card {
   min-width: 250px;
-  padding: 24px 30px;
+  max-width: min(640px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  padding: 42px 48px;
+  overflow: auto;
   color: #f6f1de;
   text-align: center;
   background: var(--ta-surface-raised);
-  border: 1px solid var(--ta-border-strong);
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-image-source: url("/assets/ui/skin/modal_frame_9s.png");
+  border-image-slice: 180 fill;
+  border-image-width: 30px;
+  border-image-repeat: stretch;
   box-shadow: 0 16px 48px rgb(0 0 0 / 40%);
 }
 
@@ -207,7 +213,9 @@ body {
 
 /* A loss announced in the victory gold reads, for a beat, as a win. */
 .rts-match-card[data-tone="defeat"] {
-  border-color: var(--ta-alert);
+  box-shadow:
+    inset 0 0 0 2px rgb(224 149 92 / 70%),
+    0 16px 48px rgb(0 0 0 / 50%);
 }
 
 .rts-match-card[data-tone="defeat"] h1 {
@@ -335,8 +343,23 @@ body {
   font-weight: 700;
   cursor: pointer;
   background: var(--ta-btn-bg);
-  border: 0;
-  border-radius: 4px;
+  border: 1px solid transparent;
+  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  border-image-slice: 150 fill;
+  border-image-width: 12px;
+  border-image-repeat: stretch;
+  text-shadow: 0 1px 2px rgb(49 31 10 / 75%);
+  transition: filter 100ms ease, transform 100ms ease;
+}
+
+.rts-match-card button:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.rts-match-card button:active:not(:disabled) {
+  filter: brightness(0.88);
+  transform: translateY(1px);
 }
 
 /*
@@ -346,13 +369,15 @@ body {
 .rts-match-card button[data-primary="false"] {
   color: var(--ta-ink);
   background: var(--ta-btn2-bg);
-  border: 1px solid var(--ta-border-strong);
+  border-image-source: url("/assets/ui/skin/button_secondary_9s.png");
+  text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
 }
 
 .rts-match-card button[data-danger="true"] {
   color: #fff1cf;
   background: #7a3527;
-  border-color: var(--ta-alert);
+  border-image-source: url("/assets/ui/skin/button_danger_9s.png");
+  text-shadow: 0 1px 2px rgb(39 0 0 / 85%);
 }
 
 /* Read-only Faz 1 diagnostics, intentionally available only with ?rts&debug. */
@@ -731,28 +756,30 @@ body {
   grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  padding: 7px 9px;
+  padding: 10px 16px;
   color: var(--ta-ink);
   font-size: 12px;
   background: var(--ta-surface);
-  border: 1px solid var(--ta-border);
-  border-left-width: 3px;
-  border-radius: 4px;
-  box-shadow: 0 6px 18px rgb(0 0 0 / 30%);
+  border: 1px solid transparent;
+  border-image-source: url("/assets/ui/skin/notification_card_9s.png");
+  border-image-slice: 86 fill;
+  border-image-width: 9px;
+  border-image-repeat: stretch;
+  box-shadow: inset 3px 0 0 var(--ta-positive), 0 6px 18px rgb(0 0 0 / 30%);
 }
 
 .rts-notification-icon {
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   place-items: center;
-  color: var(--ta-positive);
-  font-family: Georgia, serif;
-  font-size: 15px;
-  line-height: 1;
-  background: rgb(0 0 0 / 24%);
-  border: 1px solid currentcolor;
-  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rts-notification-icon img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
 }
 
 .rts-notification-text {
@@ -760,12 +787,12 @@ body {
 }
 
 .rts-notification[data-severity="info"] {
-  border-left-color: var(--ta-positive);
+  box-shadow: inset 3px 0 0 var(--ta-positive), 0 6px 18px rgb(0 0 0 / 30%);
 }
 
 .rts-notification[data-severity="warning"] {
   color: #fff1cf;
-  border-left-color: var(--ta-gold);
+  box-shadow: inset 3px 0 0 var(--ta-gold), 0 6px 18px rgb(0 0 0 / 30%);
 }
 
 .rts-notification[data-severity="warning"] .rts-notification-icon {
@@ -774,9 +801,12 @@ body {
 
 .rts-notification[data-severity="alert"] {
   color: #fff1cf;
-  background: var(--ta-danger-bg);
-  border-color: rgb(224 155 92 / 70%);
-  border-left-color: var(--ta-alert);
+  border-image-source: url("/assets/ui/skin/notification_alert_9s.png");
+  border-image-slice: 100 fill;
+  box-shadow:
+    inset 3px 0 0 var(--ta-alert),
+    inset 0 0 20px rgb(125 36 27 / 35%),
+    0 6px 18px rgb(0 0 0 / 36%);
 }
 
 .rts-notification[data-severity="alert"] .rts-notification-icon {
@@ -790,24 +820,18 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Story/tutorial mission card. Anchored directly above the build palette rather
-   than in a free corner: through the opening chain every objective is answered
-   by a button in that palette, and putting the sentence a glance away from the
-   button it names is the whole reason the card helps. 220px palette + its 12px
-   bottom inset + a 12px gap. Read-only, like the notification feed. */
+/* Story/tutorial mission card. A story and Regional Victory are mutually
+   exclusive objective systems, so they share the same clear top-right anchor
+   below the HUD. Read-only, like the notification feed. */
 .rts-mission-panel {
   position: absolute;
-  left: max(12px, env(safe-area-inset-left));
-  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 232px);
+  top: calc(var(--rts-hud-bar-height) + 12px);
+  right: max(12px, env(safe-area-inset-right));
   box-sizing: border-box;
-  width: min(340px, calc(100vw - 24px));
-  padding: 8px 10px 9px;
+  width: min(300px, calc(100vw - 24px));
+  padding: 18px 20px 20px;
   color: var(--ta-ink);
   font-size: 12px;
-  background: var(--ta-surface);
-  border: 1px solid var(--ta-border);
-  border-left: 3px solid var(--ta-gold);
-  border-radius: 5px;
   box-shadow: var(--ta-panel-shadow);
   pointer-events: none;
 }
@@ -817,11 +841,21 @@ body {
 }
 
 .rts-mission-heading {
+  display: flex;
+  min-height: 27px;
+  align-items: center;
   margin: 0;
+  padding: 4px 10px;
   color: var(--ta-ink-muted);
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  background: var(--ta-surface-raised);
+  border: 1px solid transparent;
+  border-image-source: url("/assets/ui/skin/title_strip_9s.png");
+  border-image-slice: 120 fill;
+  border-image-width: 8px;
+  border-image-repeat: stretch;
 }
 
 .rts-mission-title {
@@ -841,6 +875,20 @@ body {
   line-height: 1.45;
 }
 
+/* The count a multi-part step is at ("2/3"). Gold and tabular so a glance can
+   compare it against the target without reading the sentence above it again;
+   hidden entirely on a single-count step, where it would only restate the title. */
+.rts-mission-progress {
+  margin: 6px 0 0;
+  color: var(--ta-gold);
+  font: 700 13px/1 Cinzel, Georgia, serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.rts-mission-progress[hidden] {
+  display: none;
+}
+
 /* Faz 11 §58 regional victory readout. Top-right under the speed controls: the
    left edge is the debug overlay's and the bottom-centre belongs to selection,
    so this is the one free anchor that stays visible during a fight. Read-only,
@@ -850,14 +898,24 @@ body {
   top: calc(var(--rts-hud-bar-height) + 12px);
   right: max(12px, env(safe-area-inset-right));
   width: min(230px, calc(100vw - 24px));
-  padding: 6px 8px 8px;
+  padding: 18px 18px 20px;
   color: var(--ta-ink);
   font-size: 12px;
-  background: var(--ta-surface);
-  border: 1px solid var(--ta-border);
-  border-radius: 5px;
   box-shadow: var(--ta-panel-shadow);
   pointer-events: none;
+}
+
+/* The regional tracker and story card are different mechanics, but both are
+   concise objective readouts. Sharing the already-proven panel frame makes
+   that relationship visible without inventing a second HUD language. */
+.rts-mission-panel,
+.rts-objective-tracker {
+  background: var(--ta-surface);
+  border: 1px solid transparent;
+  border-image-source: url("/assets/ui/panel.png");
+  border-image-slice: 150 fill;
+  border-image-width: 16px;
+  border-image-repeat: stretch;
 }
 
 .rts-objective-tracker[hidden] {
@@ -869,14 +927,18 @@ body {
   width: 100%;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 1px 6px;
+  min-height: 27px;
+  padding: 4px 10px;
   color: var(--ta-ink);
   font: 700 12px/1.2 Cinzel, Georgia, serif;
   text-align: left;
   cursor: pointer;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid rgb(201 152 62 / 34%);
+  background: var(--ta-surface-raised);
+  border: 1px solid transparent;
+  border-image-source: url("/assets/ui/skin/title_strip_9s.png");
+  border-image-slice: 120 fill;
+  border-image-width: 8px;
+  border-image-repeat: stretch;
 }
 
 .rts-objective-toggle:hover,
@@ -886,12 +948,11 @@ body {
 }
 
 .rts-objective-tracker[data-collapsed="true"] {
-  padding-bottom: 6px;
+  padding-bottom: 18px;
 }
 
 .rts-objective-tracker[data-collapsed="true"] .rts-objective-toggle {
-  padding-bottom: 0;
-  border-bottom-color: transparent;
+  padding-bottom: 4px;
 }
 
 .rts-objective-content[hidden] {
@@ -1265,8 +1326,23 @@ body {
   font-weight: 700;
   cursor: pointer;
   background: var(--ta-btn-bg);
-  border: 0;
-  border-radius: 3px;
+  border: 1px solid transparent;
+  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  border-image-slice: 150 fill;
+  border-image-width: 9px;
+  border-image-repeat: stretch;
+  text-shadow: 0 1px 2px rgb(49 31 10 / 75%);
+  transition: filter 100ms ease, transform 100ms ease;
+}
+
+.rts-selection-action:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.rts-selection-action:active:not(:disabled) {
+  filter: brightness(0.88);
+  transform: translateY(1px);
 }
 
 .rts-selection-action:disabled {
@@ -1327,31 +1403,38 @@ body {
 
 .rts-build-tab {
   min-width: 0;
-  padding: 5px 2px;
+  padding: 6px 4px;
   overflow: hidden;
   color: var(--ta-ink-muted);
   font: 700 10px/1.1 var(--ta-font-display);
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
-  background: rgb(48 34 21 / 86%);
-  border: 1px solid var(--ta-border);
-  border-radius: 3px;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
+  background: var(--ta-btn2-bg);
+  border: 1px solid transparent;
+  border-image-source: url("/assets/ui/skin/button_secondary_9s.png");
+  border-image-slice: 150 fill;
+  border-image-width: 7px;
+  border-image-repeat: stretch;
+  transition: filter 100ms ease, transform 80ms ease;
 }
 
 .rts-build-tab:hover:not([aria-pressed="true"]) {
   color: var(--ta-gold);
-  border-color: var(--ta-gold-soft);
+  filter: brightness(1.12);
 }
 
 .rts-build-tab:active {
+  filter: brightness(0.88);
   transform: translateY(1px);
 }
 
 .rts-build-tab[aria-pressed="true"] {
   color: var(--ta-btn-ink);
   background: var(--ta-btn-bg);
-  border-color: var(--ta-gold);
+  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  text-shadow: 0 1px 2px rgb(49 31 10 / 75%);
 }
 
 .rts-build-grid {

@@ -251,6 +251,8 @@ export interface BuildingBalanceStats {
   readonly market?: MarketBalance;
   /** Optional stationary ranged defense, fired only after construction completes. */
   readonly defense?: BuildingDefenseBalance;
+  /** Present on support structures which sustain nearby friendly units (the Temple). */
+  readonly aura?: BuildingAuraBalance;
   /**
    * Complete age × level balance matrix — the single source of a building's
    * live stats. Every entry is an absolute value for one of the six playable
@@ -338,6 +340,33 @@ export interface TerritoryBuildingBalance {
   /** Maximum gap from friendly territory when this special structure is placed. */
   readonly expansionPlacementRange: number;
 }
+
+/**
+ * Passive support field of a completed structure, applied to the owner's units
+ * standing inside it (the Temple).
+ *
+ * Both effects are one radius rather than two: the player reads a support
+ * building as "my army is better *here*", and a heal that reached further than
+ * the protection — or the reverse — would make that one place two places.
+ * {@link damageResistance} is capped well under 1 by the validator, because a
+ * field that made units unkillable would end every fight at the building rather
+ * than in it.
+ */
+export interface BuildingAuraBalance {
+  /** World-space radius from the structure's centre. */
+  readonly radius: number;
+  /** Health restored per second to each friendly unit inside the radius. */
+  readonly healPerSecond: number;
+  /** Fraction of incoming damage absorbed while inside, 0..{@link MAX_AURA_DAMAGE_RESISTANCE}. */
+  readonly damageResistance: number;
+}
+
+/**
+ * Ceiling on {@link BuildingAuraBalance.damageResistance}. Stated here rather
+ * than only in the validator because the combat side clamps to the same number:
+ * one constant means data and resolution cannot disagree about what "capped" is.
+ */
+export const MAX_AURA_DAMAGE_RESISTANCE = 0.75;
 
 /** Data-owned stationary ranged attack for a completed defensive structure. */
 export interface BuildingDefenseBalance {

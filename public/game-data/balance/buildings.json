@@ -673,6 +673,55 @@
       ]
     }
   },
+  "temple": {
+    "label": "Tapınak",
+    "icon": "/assets/ui/icons/building-temple.png",
+    "footprint": {
+      "width": 8,
+      "depth": 8
+    },
+    "cost": {
+      "wood": 200
+    },
+    "constructionSeconds": 60,
+    "maxHealth": 400,
+    "visionRadius": 14,
+    "aura": {
+      "radius": 16,
+      "healPerSecond": 2,
+      "damageResistance": 0.2
+    },
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 400
+        },
+        {
+          "level": 2,
+          "maxHealth": 450
+        },
+        {
+          "level": 3,
+          "maxHealth": 500
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 550
+        },
+        {
+          "level": 2,
+          "maxHealth": 650
+        },
+        {
+          "level": 3,
+          "maxHealth": 750
+        }
+      ]
+    }
+  },
   "barracks": {
     "label": "Kışla",
     "icon": "/assets/ui/icons/building-barracks.png",

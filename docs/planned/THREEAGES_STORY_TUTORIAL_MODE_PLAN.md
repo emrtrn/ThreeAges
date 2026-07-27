@@ -302,6 +302,49 @@ bitirir. **"Öğretici bitti" ekranı yok.**
 - Her adımda "Atla" değil, **"Bu turu serbest oyuna çevir"** seçeneği bulunur:
   tek bir buton yönetmeni tamamen kaldırır, maç devam eder.
 
+### 6.3 İlk oyun testinin getirdiği düzeltme (2026-07-27)
+
+Zincirin ilk hali oyun testinde iki yerden kırıldı; ikisi de tasarımın kendi
+ölçütüne göre hata, "zorluk" değil.
+
+**1. Yanlış açılış: tarla.** Bu projede *her* yapı odunla satın alınıyor (ev 50,
+depo 60, karakol 100, kışla 140; yol hücresi başına 4). Zincir tarla → depo →
+yol → ev → Merkez Lv2 sırasını dayattığında oyuncu açılış odununu, eline hiç
+odun *geçmeden* harcıyor ve hiçbir şey inşa edemediği bir duruma düşüyordu.
+Yönetmen bunu göremez: adımların her biri tek tek hâlâ sağlanabilir durumda, ama
+bileşke bir kilit. Ayrıca §2.1'in dersi (yapı işçisini kendi tutar) oduncu
+kampında tarladakiyle birebir aynı şekilde öğreniliyor — yani açılışı odun yapmak
+hiçbir ders kaybettirmiyor. Zincir artık **Oduncu Kampı → Depo → yol bağlantısı**
+ile açılıyor; tarla, ekonomi ayakta durduktan sonra 6. adımda geliyor.
+
+Bu, `test:engine`'de bir değişmezle sabitlendi: odun akmaya başlamadan önce
+zincirin istediği yapıların toplam odun maliyeti, en cömert olmayan preset'in
+açılış stoğunun yarısını geçemez. Kalan yarısı yollara ve yanlış yere konmuş bir
+iki binaya ait.
+
+**2. Sayısız çoklu hedef.** "Üç üretim yapısını hatta bağla"
+(`producer-linked, count: 3`, kaynak belirtilmemiş) oyuncuya *hangi* üç yapının
+kastedildiğini söylemiyordu, kaçının sayıldığını da göstermiyordu. İki düzeltme:
+adım kaynak kaynak ayrıldı (Taş Ocağı adımı, Altın Madeni adımı — her biri kendi
+`resourceId`'siyle ve kendi cümlesiyle), ve yüklem tablosu artık yalnız
+"oldu/olmadı" değil **sayı** döndürüyor (`measureGoal`). Görev kartı hedefi
+birden büyük olan adımlarda `2/3` sayacını gösteriyor. `isGoalMet` aynı ölçümden
+türetiliyor, yani kartın gösterdiği sayı ile zincirin ilerlediği sayı aynı okuma.
+
+**3. Pazar zincire girdi (yeni `market-trade` hedefi).** Kullanıcının isteği ve
+aynı zamanda odun sıkışıklığının tasarım içi cevabı: açılıştaki yiyecek yığını
+(500) yalnız işçi/asker eğitiminde harcanıyor, yani ilk dakikalarda ölü sermaye.
+Pazar 20 odun ve o yığını altına, altını da odun ve taşa çeviriyor. İki adım
+eklendi — Pazar'ı kur, bir işlem yap — ve ikincisi yeni bir hedef türü gerektirdi:
+`market-trade`, `enemy-structure-razed` gibi bir sayaç, çünkü takas dünyada
+okunabilir bir iz bırakmıyor (satın alınan odunla kesilen odun cüzdanda
+ayırt edilemez). Sayaç `RtsApp.trade()` içinde, başarılı olabilen tek çağrı
+yerinde tutuluyor.
+
+Zincir bu haliyle 15 adım. Açık kalan §11.1 (ayrı `tutorial` preset'i) **hâlâ
+açık** — bu düzeltme kilidi preset'i değiştirmeden, zincirin kendi sırasıyla
+çözüyor, ki maçın dengesine dokunmamak tercih edilir.
+
 ---
 
 ## 7. Kapsam Dışı (bilinçli)
@@ -359,13 +402,15 @@ tartışılmalı.
       `validateMissionGoal` dalı
 - [x] Tek seferlik adımlar için `latch` alanı (opt-in; varsayılan hâlâ
       "yüklem yanlışsa adım yeniden açılır")
-- [x] Zincir yazıldı — **11 adım** (aşağıdaki iki sapmayla)
+- [x] Zincir yazıldı — **15 adım** (aşağıdaki iki sapma + §6.3'teki oyun testi düzeltmesi)
 - [x] Başlangıç kartında "Maç türü" satırı (Hikâye turu / Serbest maç)
 - [x] "Tutoriali geç": kartta tek tık + `missionSeen` biti (localStorage), böylece
       turu bir kez çözen oyuncuya bir daha varsayılan olarak açılmıyor
 - [x] "Serbest oyuna çevir" — duraklatma menüsünde, `MissionDirector.abandon()`
+- [x] Görev kartında ilerleme sayacı (`measureGoal`, çoklu hedefli adımlarda `2/3`)
 - [ ] `reminderSeconds` + "Göster" davranışı
-- [ ] `tutorial` preset'i (§6.2'deki kaynak dengesi için)
+- [ ] `tutorial` preset'i (§6.2'deki kaynak dengesi için) — §6.3'ten sonra
+      zorunlu değil, cila
 
 **Zincirde iki bilinçli sapma:**
 
