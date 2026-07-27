@@ -1298,29 +1298,32 @@ body {
   transform: translateX(-50%);
 }
 
-.rts-selection-action-tray[hidden] {
-  display: none;
-}
-
 .rts-selection-action-tray .rts-selection-action {
-  flex: 1 1 118px;
-  max-width: 180px;
-  min-height: 44px;
+  box-sizing: border-box;
+  flex: 0 0 156px;
+  width: 156px;
+  height: 50px;
+  min-height: 50px;
   padding: 5px 8px;
   font-size: 10px;
   line-height: 1.1;
 }
 
-/* Eight trade verbs remain readable in two short rows. The price is always
-   visible; index details stay available through the button tooltip. */
-.rts-selection-action-tray[data-rts-action-layout="market"] .rts-selection-action {
-  flex-basis: 112px;
-  max-width: 134px;
-  min-height: 38px;
-  gap: 1px;
-  padding: 3px 5px;
-  font-size: 9px;
-  line-height: 1.05;
+/* Every floating command uses the same 156 × 50px card. The market fills a
+   three-column, two-row grid in data order: food, wood, stone; buy then sell. */
+.rts-selection-action-tray[data-rts-action-layout="market"] {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: repeat(3, 156px);
+  grid-template-rows: repeat(2, 50px);
+  justify-content: center;
+  width: 480px;
+}
+
+/* This must follow the market grid rule: both selectors have the same
+   specificity, and an empty selection must always hide its detached tray. */
+.rts-selection-action-tray[hidden] {
+  display: none;
 }
 
 .rts-selection-portrait {

@@ -685,10 +685,8 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
         title,
         summary,
         lines: [
-          `Ağ: ${detail.status === "linked" ? `bileşen #${detail.componentId}` : "yola bağlı değil"}`,
+          `Yol: ${detail.status === "linked" ? "bağlı" : "yok"}`,
           `Teslim eden yapı: ${detail.linkedProducers}`,
-          `Depo katkısı: ${formatStorageCapacity(detail.contribution ?? {})}`,
-          `Global stok: ${formatStorageStock(detail.stock ?? {}, detail.capacity ?? {})}`,
           ...(detail.occupied ? ["Düşman işgali altında — teslimat durdu."] : []),
         ],
         actions: [],
@@ -755,21 +753,6 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
         tooltip: null,
       };
   }
-}
-
-function formatStorageCapacity(capacity: Readonly<Record<string, number>>): string {
-  return ["food", "wood", "stone", "gold"]
-    .map((resourceId) => `${resourceLabel(resourceId)} ${capacity[resourceId] ?? 0}`)
-    .join(" · ");
-}
-
-function formatStorageStock(
-  stock: Readonly<Record<string, number>>,
-  capacity: Readonly<Record<string, number>>,
-): string {
-  return ["food", "wood", "stone", "gold"]
-    .map((resourceId) => `${resourceLabel(resourceId)} ${Math.floor(stock[resourceId] ?? 0)}/${capacity[resourceId] ?? 0}`)
-    .join(" · ");
 }
 
 function describeCenter(
