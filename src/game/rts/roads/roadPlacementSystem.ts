@@ -1,7 +1,6 @@
 /** Interactive start/end road drawing, preview, cost payment, and rendering. */
 import {
   BoxGeometry,
-  ConeGeometry,
   Color,
   Group,
   Mesh,
@@ -72,7 +71,7 @@ export class RoadPlacementSystem {
   private readonly roadCenterGeometry: BoxGeometry;
   private readonly roadArmGeometry: BoxGeometry;
   private readonly startMarkerGeometry: RingGeometry;
-  private readonly endMarkerGeometry: ConeGeometry;
+  private readonly endMarkerGeometry: BoxGeometry;
   private readonly invalidMarkerGeometry: BoxGeometry;
   private readonly roadMaterial = new MeshStandardMaterial({ color: ROAD_COLOR, roughness: 0.95 });
   private readonly previewMaterial = new MeshStandardMaterial({
@@ -87,6 +86,7 @@ export class RoadPlacementSystem {
   private readonly endMarkerMaterial = new MeshBasicMaterial({ color: PREVIEW_COLOR, transparent: true, opacity: 0.92, depthWrite: false });
   private readonly invalidMarkerMaterial = new MeshBasicMaterial({ color: INVALID_COLOR, transparent: true, opacity: 0.94, depthWrite: false });
   private readonly startMarker: Mesh;
+  private readonly hoverMarker: Mesh;
   private readonly endMarker: Mesh;
   private readonly invalidMarker = new Group();
   private active = false;
@@ -121,15 +121,17 @@ export class RoadPlacementSystem {
     this.roadCenterGeometry = new BoxGeometry(laneWidth, 0.08, laneWidth);
     this.roadArmGeometry = new BoxGeometry(laneWidth, 0.08, this.roads.cellSize * 0.6);
     this.startMarkerGeometry = new RingGeometry(this.roads.cellSize * 0.17, this.roads.cellSize * 0.28, 20);
-    this.endMarkerGeometry = new ConeGeometry(this.roads.cellSize * 0.16, 0.34, 4);
+    this.endMarkerGeometry = new BoxGeometry(this.roads.cellSize * 0.28, 0.075, this.roads.cellSize * 0.28);
     this.invalidMarkerGeometry = new BoxGeometry(this.roads.cellSize * 0.46, 0.055, this.roads.cellSize * 0.075);
     this.startMarker = new Mesh(this.startMarkerGeometry, this.startMarkerMaterial);
     this.startMarker.name = "rts-road-start-marker";
     this.startMarker.rotation.x = -Math.PI / 2;
+    this.hoverMarker = new Mesh(this.startMarkerGeometry, this.startMarkerMaterial);
+    this.hoverMarker.name = "rts-road-hover-marker";
+    this.hoverMarker.rotation.x = -Math.PI / 2;
     this.endMarker = new Mesh(this.endMarkerGeometry, this.endMarkerMaterial);
     this.endMarker.name = "rts-road-end-marker";
-    this.endMarker.position.y = 0.23;
-    this.endMarker.rotation.y = Math.PI / 4;
+    this.endMarker.position.y = 0.085;
     this.invalidMarker.name = "rts-road-invalid-marker";
     for (const rotation of [Math.PI / 4, -Math.PI / 4]) {
       const stroke = new Mesh(this.invalidMarkerGeometry, this.invalidMarkerMaterial);
@@ -137,7 +139,7 @@ export class RoadPlacementSystem {
       stroke.rotation.y = rotation;
       this.invalidMarker.add(stroke);
     }
-    this.markers.add(this.startMarker, this.endMarker, this.invalidMarker);
+    this.markers.add(this.hoverMarker, this.startMarker, this.endMarker, this.invalidMarker);
     this.root.add(this.permanent, this.preview, this.markers);
     this.syncMarkers();
   }
@@ -197,10 +199,15 @@ export class RoadPlacementSystem {
   previewAt(screenX: number, screenY: number): RoadPlacementState {
     if (!this.active) return this.state();
     if (this.mode === "erase") return this.previewEraseAt(screenX, screenY);
-    if (!this.start) return this.state();
     const point = this.groundPoint(screenX, screenY);
     if (!point) return this.state();
     this.previewEnd = this.roads.snapCell(point);
+    if (!this.start) {
+      this.plan = null;
+      this.reason = this.construction.plan(point, point) ? "choose-start" : "invalid-route";
+      this.renderPreview(null, this.reason === "choose-start" ? PREVIEW_COLOR : INVALID_COLOR);
+      return this.state();
+    }
     this.plan = this.construction.plan(this.start, point);
     this.reason = this.plan ? "choose-end" : "invalid-route";
     this.renderPreview(this.plan, this.plan ? PREVIEW_COLOR : INVALID_COLOR);
@@ -313,12 +320,15 @@ export class RoadPlacementSystem {
   /** Keep route semantics visible without relying on the preview colour alone. */
   private syncMarkers(): void {
     const building = this.active && this.mode === "build";
+    this.hoverMarker.visible = building && this.start === null && this.previewEnd !== null && this.reason === "choose-start";
+    if (this.previewEnd) this.hoverMarker.position.set(this.previewEnd.x, 0.065, this.previewEnd.z);
+
     this.startMarker.visible = building && this.start !== null;
     if (this.start) this.startMarker.position.set(this.start.x, 0.065, this.start.z);
 
     const planEnd = this.plan?.cells.at(-1) ?? null;
     this.endMarker.visible = building && planEnd !== null && this.reason === "choose-end";
-    if (planEnd) this.endMarker.position.set(planEnd.x, 0.23, planEnd.z);
+    if (planEnd) this.endMarker.position.set(planEnd.x, 0.085, planEnd.z);
 
     const invalid = building
       && this.previewEnd !== null
