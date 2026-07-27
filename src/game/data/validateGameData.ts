@@ -1458,6 +1458,7 @@ const DEFAULT_ROAD_VISUAL: RoadVisual = {
   jitter: 0.6,
   jitterSpacingCells: 5,
   widthVariation: 0.15,
+  cornerRoundness: 0.5,
 };
 
 /** Parse the optional per-age paint-layer override map (age → non-empty layer id). */
@@ -1503,11 +1504,12 @@ function validateRoadVisual(value: unknown, where: string): RoadVisual {
   const jitter = optionalFiniteNumber(obj, "jitter", scope, DEFAULT_ROAD_VISUAL.jitter);
   const jitterSpacingCells = optionalFiniteNumber(obj, "jitterSpacingCells", scope, DEFAULT_ROAD_VISUAL.jitterSpacingCells);
   const widthVariation = optionalFiniteNumber(obj, "widthVariation", scope, DEFAULT_ROAD_VISUAL.widthVariation);
-  if (width <= 0 || falloff < 0 || strength <= 0 || jitter < 0 || jitterSpacingCells < 1 || widthVariation < 0) {
-    throw new GameDataError(`${scope}: width/strength must be > 0, others must be non-negative (spacing >= 1)`);
+  const cornerRoundness = optionalFiniteNumber(obj, "cornerRoundness", scope, DEFAULT_ROAD_VISUAL.cornerRoundness);
+  if (width <= 0 || falloff < 0 || strength <= 0 || jitter < 0 || jitterSpacingCells < 1 || widthVariation < 0 || cornerRoundness < 0 || cornerRoundness > 1) {
+    throw new GameDataError(`${scope}: width/strength must be > 0; jitter/variation must be non-negative; spacing >= 1; cornerRoundness must be 0..1`);
   }
   const ageLayers = validateRoadAgeLayers(obj["ageLayers"], scope);
-  return { layerId, width, falloff, strength, jitter, jitterSpacingCells, widthVariation, ...(ageLayers ? { ageLayers } : {}) };
+  return { layerId, width, falloff, strength, jitter, jitterSpacingCells, widthVariation, cornerRoundness, ...(ageLayers ? { ageLayers } : {}) };
 }
 
 /** Built-in building ground-pad tuning used when `roads.json` omits `buildingPad`. */

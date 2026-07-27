@@ -770,6 +770,12 @@ export interface RoadVisual {
   readonly jitterSpacingCells: number;
   /** Per-point width variation as a fraction of `width` (±), `0` disables it. */
   readonly widthVariation: number;
+  /**
+   * Tangent scale used when the painted road spline rounds a grid corner.
+   * `0` keeps corners square; `0.5` matches the original Catmull-Rom-like
+   * rounding; `1` produces the broadest supported turn.
+   */
+  readonly cornerRoundness: number;
 }
 
 /**

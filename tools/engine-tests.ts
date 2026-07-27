@@ -20549,6 +20549,7 @@ const ROAD_PAINT_VISUAL = {
   jitter: 0,
   jitterSpacingCells: 5,
   widthVariation: 0,
+  cornerRoundness: 0.5,
 } as const;
 const ROAD_PAINT_OPTS = { cellSize: 2, origin: [0, 0, 0] as [number, number, number], visual: ROAD_PAINT_VISUAL };
 const BUILDING_PAD_VISUAL = { layerId: "dirt", padding: 0.5, falloff: 1, strength: 0.95 } as const;
@@ -20574,6 +20575,7 @@ check("roadGraphToLandscapeSpline collapses a straight run to one segment", () =
   assert.equal(spline.segments.length, 1, "interior straight cells drop out");
   assert.equal(spline.points.length, 2, "only the two run endpoints survive");
   assert.equal(spline.smooth, true);
+  assert.equal(spline.smoothness, 0.5);
   assert.ok(spline.segments.every((s) => s.paint?.layerId === "dirt" && s.paint.strength === 0.9));
 });
 

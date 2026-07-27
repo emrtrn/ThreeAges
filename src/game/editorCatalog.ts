@@ -405,6 +405,7 @@ const AI_FIELDS = [
 const ROADS_FIELDS = [
   { path: "cellSize", label: "Hücre boyutu (birim)", min: 0.1, step: 0.1 },
   { path: "woodCostPerCell", label: "Hücre başına odun maliyeti", min: 0, step: 1 },
+  { path: "visual.cornerRoundness", label: "Köşe yuvarlaklığı", min: 0, max: 1, step: 0.05 },
 ];
 
 export const GAME_EDITOR_CATALOG = {

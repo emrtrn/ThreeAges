@@ -202,7 +202,14 @@ export function roadGraphToLandscapeSpline(
     }
   }
 
-  return { id: "rts-roads", name: "RTS Roads", smooth: true, points, segments: splineSegments };
+  return {
+    id: "rts-roads",
+    name: "RTS Roads",
+    smooth: true,
+    smoothness: visual.cornerRoundness,
+    points,
+    segments: splineSegments,
+  };
 }
 
 /** A standing building's ground footprint, in world XZ (centre + full extents). */

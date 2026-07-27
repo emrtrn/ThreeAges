@@ -17,13 +17,14 @@ export function landscapeSplineSegmentComponent(
   const end = points.get(segment.endPointId);
   if (!start || !end) return null;
   const smooth = spline.smooth === true;
+  const smoothness = Math.max(0, Math.min(1, spline.smoothness ?? 0.5));
   const beforeStart = neighbourPosition(spline, points, start.id, end.id) ?? reflect(start.position, end.position);
   const afterEnd = neighbourPosition(spline, points, end.id, start.id) ?? reflect(end.position, start.position);
   const startPoint = smooth
-    ? { id: `${segment.id}:start`, position: clone(start.position), pointType: "curveCustom" as const, leaveTangent: scale(subtract(end.position, beforeStart), 0.5) }
+    ? { id: `${segment.id}:start`, position: clone(start.position), pointType: "curveCustom" as const, leaveTangent: scale(subtract(end.position, beforeStart), smoothness) }
     : { id: `${segment.id}:start`, position: clone(start.position), pointType: "linear" as const };
   const endPoint = smooth
-    ? { id: `${segment.id}:end`, position: clone(end.position), pointType: "curveCustom" as const, arriveTangent: scale(subtract(afterEnd, start.position), 0.5) }
+    ? { id: `${segment.id}:end`, position: clone(end.position), pointType: "curveCustom" as const, arriveTangent: scale(subtract(afterEnd, start.position), smoothness) }
     : { id: `${segment.id}:end`, position: clone(end.position), pointType: "linear" as const };
   return { schema: 1, closed: false, defaultUp: [0, 1, 0], reparamStepsPerSegment: 8, points: [startPoint, endPoint] };
 }

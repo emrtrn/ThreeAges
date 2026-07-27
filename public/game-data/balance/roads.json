@@ -15,7 +15,9 @@
     "strength": 0.9,
     "jitter": 0.6,
     "jitterSpacingCells": 5,
-    "widthVariation": 0.15
+    "widthVariation": 0.15,
+    "cornerRoundness": 0.1
+  
   },
   "buildingPad": {
     "layerId": "dirt",

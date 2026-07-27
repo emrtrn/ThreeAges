@@ -193,6 +193,11 @@ export interface ForgeLandscapeSpline {
    * manual Bezier handles — `arriveTangent`/`leaveTangent` are unused in this mode.
    */
   smooth?: boolean;
+  /**
+   * Tangent scale for smooth spline corners. Absent preserves the historic 0.5
+   * Catmull-Rom-style turn; 0 makes a smooth spline follow its straight pieces.
+   */
+  smoothness?: number;
   points: ForgeLandscapeSplinePoint[];
   segments: ForgeLandscapeSplineSegment[];
 }
