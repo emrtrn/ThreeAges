@@ -1,12 +1,15 @@
 /** Interactive start/end road drawing, preview, cost payment, and rendering. */
 import {
   BoxGeometry,
+  ConeGeometry,
   Color,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Plane,
   Raycaster,
+  RingGeometry,
   Vector2,
   Vector3,
   type PerspectiveCamera,
@@ -61,12 +64,16 @@ export class RoadPlacementSystem {
   readonly root = new Group();
   private readonly permanent = new Group();
   private readonly preview = new Group();
+  private readonly markers = new Group();
   private readonly raycaster = new Raycaster();
   private readonly ndc = new Vector2();
   private readonly hit = new Vector3();
   private readonly previewGeometry: BoxGeometry;
   private readonly roadCenterGeometry: BoxGeometry;
   private readonly roadArmGeometry: BoxGeometry;
+  private readonly startMarkerGeometry: RingGeometry;
+  private readonly endMarkerGeometry: ConeGeometry;
+  private readonly invalidMarkerGeometry: BoxGeometry;
   private readonly roadMaterial = new MeshStandardMaterial({ color: ROAD_COLOR, roughness: 0.95 });
   private readonly previewMaterial = new MeshStandardMaterial({
     color: PREVIEW_COLOR,
@@ -76,10 +83,18 @@ export class RoadPlacementSystem {
     opacity: 0.68,
     depthWrite: false,
   });
+  private readonly startMarkerMaterial = new MeshBasicMaterial({ color: PREVIEW_COLOR, transparent: true, opacity: 0.92, depthWrite: false });
+  private readonly endMarkerMaterial = new MeshBasicMaterial({ color: PREVIEW_COLOR, transparent: true, opacity: 0.92, depthWrite: false });
+  private readonly invalidMarkerMaterial = new MeshBasicMaterial({ color: INVALID_COLOR, transparent: true, opacity: 0.94, depthWrite: false });
+  private readonly startMarker: Mesh;
+  private readonly endMarker: Mesh;
+  private readonly invalidMarker = new Group();
   private active = false;
   private mode: RoadPlacementMode = "build";
   private start: RoadCell | null = null;
   private plan: RoadPlan | null = null;
+  /** The hovered grid cell even when no route can be planned, for an invalid-end marker. */
+  private previewEnd: RoadCell | null = null;
   private target: RoadEraseTarget | null = null;
   private reason: RoadPlacementReason | null = null;
   /**
@@ -100,11 +115,31 @@ export class RoadPlacementSystem {
     this.root.name = "rts-roads";
     this.permanent.name = "rts-road-segments";
     this.preview.name = "rts-road-preview";
+    this.markers.name = "rts-road-placement-markers";
     const laneWidth = this.roads.cellSize * 0.56;
     this.previewGeometry = new BoxGeometry(this.roads.cellSize * 0.86, 0.07, this.roads.cellSize * 0.86);
     this.roadCenterGeometry = new BoxGeometry(laneWidth, 0.08, laneWidth);
     this.roadArmGeometry = new BoxGeometry(laneWidth, 0.08, this.roads.cellSize * 0.6);
-    this.root.add(this.permanent, this.preview);
+    this.startMarkerGeometry = new RingGeometry(this.roads.cellSize * 0.17, this.roads.cellSize * 0.28, 20);
+    this.endMarkerGeometry = new ConeGeometry(this.roads.cellSize * 0.16, 0.34, 4);
+    this.invalidMarkerGeometry = new BoxGeometry(this.roads.cellSize * 0.46, 0.055, this.roads.cellSize * 0.075);
+    this.startMarker = new Mesh(this.startMarkerGeometry, this.startMarkerMaterial);
+    this.startMarker.name = "rts-road-start-marker";
+    this.startMarker.rotation.x = -Math.PI / 2;
+    this.endMarker = new Mesh(this.endMarkerGeometry, this.endMarkerMaterial);
+    this.endMarker.name = "rts-road-end-marker";
+    this.endMarker.position.y = 0.23;
+    this.endMarker.rotation.y = Math.PI / 4;
+    this.invalidMarker.name = "rts-road-invalid-marker";
+    for (const rotation of [Math.PI / 4, -Math.PI / 4]) {
+      const stroke = new Mesh(this.invalidMarkerGeometry, this.invalidMarkerMaterial);
+      stroke.position.y = 0.075;
+      stroke.rotation.y = rotation;
+      this.invalidMarker.add(stroke);
+    }
+    this.markers.add(this.startMarker, this.endMarker, this.invalidMarker);
+    this.root.add(this.permanent, this.preview, this.markers);
+    this.syncMarkers();
   }
 
   get isActive(): boolean {
@@ -127,9 +162,11 @@ export class RoadPlacementSystem {
     this.mode = "build";
     this.start = null;
     this.plan = null;
+    this.previewEnd = null;
     this.target = null;
     this.reason = "choose-start";
     this.clearPreview();
+    this.syncMarkers();
   }
 
   /** Enter erase mode: each left click unpaves the road tile under the cursor. */
@@ -138,9 +175,11 @@ export class RoadPlacementSystem {
     this.mode = "erase";
     this.start = null;
     this.plan = null;
+    this.previewEnd = null;
     this.target = null;
     this.reason = "choose-erase";
     this.clearPreview();
+    this.syncMarkers();
   }
 
   cancel(): void {
@@ -148,9 +187,11 @@ export class RoadPlacementSystem {
     this.mode = "build";
     this.start = null;
     this.plan = null;
+    this.previewEnd = null;
     this.target = null;
     this.reason = null;
     this.clearPreview();
+    this.syncMarkers();
   }
 
   previewAt(screenX: number, screenY: number): RoadPlacementState {
@@ -159,6 +200,7 @@ export class RoadPlacementSystem {
     if (!this.start) return this.state();
     const point = this.groundPoint(screenX, screenY);
     if (!point) return this.state();
+    this.previewEnd = this.roads.snapCell(point);
     this.plan = this.construction.plan(this.start, point);
     this.reason = this.plan ? "choose-end" : "invalid-route";
     this.renderPreview(this.plan, this.plan ? PREVIEW_COLOR : INVALID_COLOR);
@@ -170,14 +212,18 @@ export class RoadPlacementSystem {
     if (this.mode === "erase") return this.confirmEraseAt(screenX, screenY);
     const point = this.groundPoint(screenX, screenY);
     if (!point) return this.state();
+    this.previewEnd = this.roads.snapCell(point);
     if (!this.start) {
       const startPlan = this.construction.plan(point, point);
       if (!startPlan) {
         this.reason = "invalid-route";
+        this.syncMarkers();
         return this.state();
       }
       this.start = startPlan.cells[0] ?? null;
       this.reason = this.start ? "choose-end" : "invalid-route";
+      this.previewEnd = null;
+      this.syncMarkers();
       return this.state();
     }
     const state = this.previewAt(screenX, screenY);
@@ -190,8 +236,10 @@ export class RoadPlacementSystem {
     }
     this.start = build.plan.cells.at(-1) ?? null;
     this.plan = null;
+    this.previewEnd = null;
     this.reason = "choose-end";
     this.clearPreview();
+    this.syncMarkers();
     return this.state();
   }
 
@@ -227,11 +275,18 @@ export class RoadPlacementSystem {
   dispose(): void {
     this.clearMeshes(this.permanent);
     this.clearMeshes(this.preview);
+    this.clearMeshes(this.markers);
     this.previewGeometry.dispose();
     this.roadCenterGeometry.dispose();
     this.roadArmGeometry.dispose();
+    this.startMarkerGeometry.dispose();
+    this.endMarkerGeometry.dispose();
+    this.invalidMarkerGeometry.dispose();
     this.roadMaterial.dispose();
     this.previewMaterial.dispose();
+    this.startMarkerMaterial.dispose();
+    this.endMarkerMaterial.dispose();
+    this.invalidMarkerMaterial.dispose();
     this.root.clear();
   }
 
@@ -245,10 +300,31 @@ export class RoadPlacementSystem {
 
   private renderPreview(plan: RoadPlan | null, color: Color): void {
     this.clearPreview();
-    if (!plan) return;
+    if (!plan) {
+      this.syncMarkers();
+      return;
+    }
     this.previewMaterial.color.copy(color);
     this.previewMaterial.emissive.copy(color);
     for (const cell of plan.cells) this.preview.add(this.createPreviewMesh(cell));
+    this.syncMarkers();
+  }
+
+  /** Keep route semantics visible without relying on the preview colour alone. */
+  private syncMarkers(): void {
+    const building = this.active && this.mode === "build";
+    this.startMarker.visible = building && this.start !== null;
+    if (this.start) this.startMarker.position.set(this.start.x, 0.065, this.start.z);
+
+    const planEnd = this.plan?.cells.at(-1) ?? null;
+    this.endMarker.visible = building && planEnd !== null && this.reason === "choose-end";
+    if (planEnd) this.endMarker.position.set(planEnd.x, 0.23, planEnd.z);
+
+    const invalid = building
+      && this.previewEnd !== null
+      && (this.reason === "invalid-route" || this.reason === "insufficient-resources");
+    this.invalidMarker.visible = invalid;
+    if (this.previewEnd) this.invalidMarker.position.set(this.previewEnd.x, 0, this.previewEnd.z);
   }
 
   /**

@@ -9,19 +9,70 @@
  * one glance apart.
  *
  * Presentation only. It decides nothing — `MissionDirector` owns the chain and
- * `RtsApp` hands the result down. Like the objective tracker it takes no pointer
- * input, so it can never swallow a click meant for the map.
+ * `RtsApp` hands the result down. Its only pointer input is the disclosure
+ * button; it never changes mission or simulation state.
  */
 import type { MissionDirectorState } from "../tutorial/missionDirector";
+import type { MissionGoal } from "../tutorial/missionScript";
+
+const BUILDING_LABELS: Readonly<Record<string, string>> = {
+  lumber_camp: "Oduncu Kampı",
+  depot: "Depo",
+  market: "Pazar",
+  farm: "Tarla",
+  house: "Ev",
+  outpost: "Karakol",
+  quarry: "Taş Ocağı",
+  gold_mine: "Altın Madeni",
+  barracks: "Kışla",
+  command_center: "Merkez",
+};
+
+const RESOURCE_LABELS: Readonly<Record<string, string>> = {
+  wood: "odun",
+  food: "yiyecek",
+  stone: "taş",
+  gold: "altın",
+};
+
+const UNIT_LABELS: Readonly<Record<string, string>> = {
+  worker: "İşçi",
+  guard: "Muhafız",
+  archer: "Okçu",
+};
+
+function progressTargetLabel(goal: MissionGoal): string {
+  switch (goal.kind) {
+    case "structure-built":
+    case "enemy-structure-razed":
+      return BUILDING_LABELS[goal.buildingId] ?? goal.buildingId;
+    case "producer-linked":
+      return goal.resourceId ? `${RESOURCE_LABELS[goal.resourceId] ?? goal.resourceId} bağlantısı` : "bağlantı";
+    case "outpost-connected":
+      return "bağlı Karakol";
+    case "population-headroom":
+      return "boş nüfus";
+    case "tier-reached":
+      return `${goal.age === "town" ? "Kasaba" : "Yerleşim"} Lv${goal.level}`;
+    case "unit-count":
+      return UNIT_LABELS[goal.role] ?? goal.role;
+    case "market-trade":
+      return "Pazar işlemi";
+  }
+}
 
 export class RtsMissionPanel {
   private readonly root = document.createElement("section");
-  private readonly heading = document.createElement("p");
+  private readonly toggle = document.createElement("button");
+  private readonly toggleLabel = document.createElement("span");
+  private readonly toggleIcon = document.createElement("span");
+  private readonly content = document.createElement("div");
   private readonly title = document.createElement("strong");
   private readonly why = document.createElement("p");
   private readonly progress = document.createElement("p");
   private signature = "";
   private progressText = "";
+  private collapsed = true;
 
   constructor() {
     this.root.className = "rts-mission-panel";
@@ -31,19 +82,31 @@ export class RtsMissionPanel {
     // at the panel, so it is announced. `polite` rather than `assertive`: it must
     // wait its turn behind anything urgent the match is saying.
     this.root.setAttribute("aria-live", "polite");
-    this.heading.className = "rts-mission-heading";
+    this.toggle.type = "button";
+    this.toggle.className = "rts-mission-heading ui-interactive";
+    this.toggle.setAttribute("aria-controls", "rts-mission-content");
+    this.toggleIcon.setAttribute("aria-hidden", "true");
+    this.toggle.append(this.toggleLabel, this.toggleIcon);
+    this.toggle.addEventListener("click", () => {
+      this.collapsed = !this.collapsed;
+      this.syncCollapsedState();
+    });
+    this.content.id = "rts-mission-content";
+    this.content.className = "rts-mission-content";
     this.title.className = "rts-mission-title";
     this.title.dataset.rtsMissionTitle = "";
     this.why.className = "rts-mission-why";
-    // Counter last, under the reason: a step is read top-down once and then
-    // glanced at, and what the glance is looking for is the number.
+    // Kept outside the collapsible explanation: after the first read, the counter
+    // is the one part of the card the player needs to scan during play.
     this.progress.className = "rts-mission-progress";
     this.progress.dataset.rtsMissionProgress = "";
     // Outside the card's aria-live region: a counter that ticked 1/3 → 2/3 while
     // the screen reader was mid-sentence on the objective would talk over the
     // instruction it belongs to.
     this.progress.setAttribute("aria-hidden", "true");
-    this.root.append(this.heading, this.title, this.why, this.progress);
+    this.content.append(this.why);
+    this.root.append(this.toggle, this.title, this.progress, this.content);
+    this.syncCollapsedState();
     this.root.hidden = true;
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
   }
@@ -63,10 +126,10 @@ export class RtsMissionPanel {
     }
     this.root.hidden = false;
     // Updated ahead of (and independently of) the signature check: progress moves
-    // while the step does not — that is the case the counter was added for.
-    // A single-count goal shows nothing; "0/1" restates the card's own title.
-    const progressText = state.progress && state.progress.target > 1
-      ? `${Math.min(state.progress.current, state.progress.target)}/${state.progress.target}`
+    // while the step does not. It stays visible even for a 1-step objective, so
+    // the card always has the same scan order: objective, progress, details.
+    const progressText = state.progress
+      ? `${Math.min(state.progress.current, state.progress.target)}/${state.progress.target} ${progressTargetLabel(state.step.goal)}`
       : "";
     if (progressText !== this.progressText) {
       this.progressText = progressText;
@@ -79,12 +142,24 @@ export class RtsMissionPanel {
     const signature = `${state.index}/${state.total}:${state.step.id}`;
     if (signature === this.signature) return;
     this.signature = signature;
-    this.heading.textContent = `Görev ${state.index + 1}/${state.total}`;
+    this.toggleLabel.textContent = `Görev ${state.index + 1}/${state.total}`;
     this.title.textContent = state.step.title;
     this.why.textContent = state.step.why;
+    this.syncCollapsedState();
   }
 
   dispose(): void {
     this.root.remove();
+  }
+
+  private syncCollapsedState(): void {
+    this.root.dataset.collapsed = String(this.collapsed);
+    this.content.hidden = this.collapsed;
+    this.toggle.setAttribute("aria-expanded", String(!this.collapsed));
+    this.toggle.setAttribute(
+      "aria-label",
+      `${this.collapsed ? "Görev ayrıntılarını aç" : "Görev ayrıntılarını kapat"}${this.title.textContent ? `: ${this.title.textContent}` : ""}`,
+    );
+    this.toggleIcon.textContent = this.collapsed ? "⌄" : "⌃";
   }
 }

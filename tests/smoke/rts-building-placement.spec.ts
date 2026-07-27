@@ -85,10 +85,15 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
 
   await page.getByRole("button", { name: "Lojistik", exact: true }).click();
   await page.getByRole("button", { name: "Yol", exact: true }).click();
-  await expect(page.locator(".rts-build-status")).toHaveText(
-    "Yol başlangıcını sol tıkla seçin; sağ tıkla bitirin.",
-  );
-  await page.locator("#game-canvas").click({ button: "right", position: { x: 640, y: 420 } });
+  await expect(page.locator(".rts-build-status")).toHaveText("Yol çizimi");
+  await expect(page.locator(".rts-build-road-hint")).toHaveText("Sol tık: başlangıç seç · Sağ tık: çık");
+  const roadCanvas = page.locator("#game-canvas");
+  await roadCanvas.click({ position: { x: 640, y: 420 } });
+  await expect(page.locator(".rts-build-status")).toHaveText("Yol çiziliyor");
+  await expect(page.locator(".rts-build-road-hint")).toHaveText("Ucu seçin · Sağ tık: bitir");
+  await roadCanvas.hover({ position: { x: 720, y: 420 } });
+  await expect(page.locator(".rts-build-road-hint")).toContainText(/Sağ tık: bitir · \d+ hücre · \d+ Odun/);
+  await roadCanvas.click({ button: "right", position: { x: 640, y: 420 } });
   await page.getByRole("button", { name: "Yerleşim", exact: true }).click();
 
   await page.getByRole("button", { name: "Ev", exact: true }).click();

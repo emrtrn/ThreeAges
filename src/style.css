@@ -1170,7 +1170,7 @@ body {
   right: max(12px, env(safe-area-inset-right));
   box-sizing: border-box;
   width: min(300px, calc(100vw - 24px));
-  padding: 18px 20px 20px;
+  padding: 18px 20px;
   color: var(--ta-ink);
   font-size: 12px;
   box-shadow: var(--ta-panel-shadow);
@@ -1183,14 +1183,20 @@ body {
 
 .rts-mission-heading {
   display: flex;
+  width: 100%;
   min-height: 27px;
   align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
   margin: 0;
   padding: 4px 10px;
   color: var(--ta-ink-muted);
+  font: 700 11px/1.2 Cinzel, Georgia, serif;
+  text-align: left;
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  cursor: pointer;
   background: var(--ta-surface-raised);
   border: 1px solid transparent;
   border-image-source: url("/assets/ui/skin/title_strip_9s.png");
@@ -1199,16 +1205,34 @@ body {
   border-image-repeat: stretch;
 }
 
+.rts-mission-heading:hover,
+.rts-mission-heading:focus-visible {
+  color: var(--ta-gold);
+  outline: none;
+}
+
+.rts-mission-heading > span:last-child {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.rts-mission-content[hidden] {
+  display: none;
+}
+
 .rts-mission-title {
-  display: block;
+  display: -webkit-box;
+  overflow: hidden;
   margin-top: 3px;
   color: var(--ta-gold);
   font: 700 14px/1.25 Cinzel, Georgia, serif;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-/* The teaching line. Quieter than the title because it is read once and then
-   stops being news, but full width and full leading — it is a sentence, not a
-   status. */
+/* The teaching line is optional detail. It is quieter than the title because it
+   is read once, then deliberately hidden until the player asks for it again. */
 .rts-mission-why {
   margin: 5px 0 0;
   color: var(--ta-ink-muted);
@@ -1216,11 +1240,10 @@ body {
   line-height: 1.45;
 }
 
-/* The count a multi-part step is at ("2/3"). Gold and tabular so a glance can
-   compare it against the target without reading the sentence above it again;
-   hidden entirely on a single-count step, where it would only restate the title. */
+/* The counter is always present and stays in one place, including on a single
+   target. Gold and tabular make it readable at a glance during play. */
 .rts-mission-progress {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   color: var(--ta-gold);
   font: 700 13px/1 Cinzel, Georgia, serif;
   font-variant-numeric: tabular-nums;
@@ -2155,6 +2178,18 @@ body {
   margin-top: 3px;
   color: var(--ta-ink);
   font-size: 12px;
+}
+
+.rts-build-road-hint {
+  min-height: 1.35em;
+  margin: 1px 0 0;
+  color: var(--ta-ink-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.rts-build-road-hint[hidden] {
+  display: none;
 }
 
 /* The palette's resource/worker/population/income rows moved to .rts-hud-bar and

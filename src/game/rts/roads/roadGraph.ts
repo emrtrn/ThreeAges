@@ -54,6 +54,11 @@ export class RoadGraph {
     return this.revision;
   }
 
+  /** Resolve a ground point to the road grid without exposing the grid math to a view. */
+  snapCell(point: RoadCell): RoadCell {
+    return this.snap(point);
+  }
+
   /** Preview the shortest valid orthogonal route and charge only new cells. */
   plan(start: RoadCell, end: RoadCell, blockers: readonly NavBlocker[]): RoadPlan | null {
     const source = this.snap(start);

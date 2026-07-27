@@ -66,6 +66,7 @@ const BUILD_CATEGORIES: readonly BuildCategory[] = [
 export class RtsBuildPalette {
   private readonly root = document.createElement("section");
   private readonly status = document.createElement("p");
+  private readonly roadHint = document.createElement("p");
   private readonly buildButtons = new Map<
     string,
     {
@@ -215,6 +216,9 @@ export class RtsBuildPalette {
     this.root.appendChild(this.actionMessage);
     this.status.className = "rts-build-status";
     this.root.appendChild(this.status);
+    this.roadHint.className = "rts-build-road-hint";
+    this.roadHint.hidden = true;
+    this.root.appendChild(this.roadHint);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setState({ activeBuildingId: null, result: null });
     this.setAgeState({ age: "settlement", upgrading: false });
@@ -222,6 +226,7 @@ export class RtsBuildPalette {
   }
 
   setState(state: BuildingPlacementState): void {
+    this.roadHint.hidden = true;
     this.armedBuildingId = state.activeBuildingId;
     this.syncArmedButtons();
     if (!state.activeBuildingId) {
@@ -272,21 +277,31 @@ export class RtsBuildPalette {
     this.syncArmedButtons();
     if (!state.active) {
       this.status.textContent = "Bir yapı seçin.";
+      this.roadHint.hidden = true;
       return;
     }
+    this.roadHint.hidden = false;
     if (state.mode === "erase") {
       // The split warning is the §44 "bağlantı etkisi": it is the one erase whose
       // cost is not the tile itself, so it has to be readable before the click.
-      this.status.textContent = !state.target
-        ? "Silmek için bir yol karosuna tıklayın; çıkmak için sağ tık yapın."
+      this.status.textContent = "Yol siliniyor";
+      this.roadHint.textContent = !state.target
+        ? "Bir yol karosuna tıklayın · Sağ tık: çık"
         : state.target.splits
-          ? "Uyarı: bu karo ağı ikiye böler. Silmek için tıklayın (odun iadesi yok)."
-          : "Silmek için tıklayın (odun iadesi yok).";
+          ? "Uyarı: bu karo ağı ikiye böler · Tıkla: sil · İade yok"
+          : "Tıkla: sil · Odun iadesi yok";
       return;
     }
-    this.status.textContent = state.plan
-      ? `Yol rotası hazır. Bitirmek için sağ tık yapın · ${state.plan.newCells.length} hücre, ${state.plan.woodCost} Odun.`
-      : "Yol başlangıcını sol tıkla seçin; bitirmek için sağ tık yapın.";
+    this.status.textContent = state.start ? "Yol çiziliyor" : "Yol çizimi";
+    this.roadHint.textContent = state.plan
+      ? `Sağ tık: bitir · ${state.plan.newCells.length} hücre · ${state.plan.woodCost} Odun`
+      : state.reason === "invalid-route"
+        ? "Geçersiz rota · başka kare seç"
+        : state.reason === "insufficient-resources"
+          ? "Kaynak yetersiz · rota çizilemedi"
+          : state.start
+            ? "Ucu seçin · Sağ tık: bitir"
+            : "Sol tık: başlangıç seç · Sağ tık: çık";
   }
 
   /**
