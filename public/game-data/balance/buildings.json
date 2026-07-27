@@ -1,8 +1,8 @@
 {
   "command_center": {
     "label": "Merkez",
-    "icon": "/assets/ui/icons/building-command-center.svg",
-    "portrait": "/assets/ui/portraits/building.svg",
+    "icon": "/assets/ui/icons/building-command-center.png",
+    "portrait": "/assets/ui/portraits/building.png",
     "footprint": {
       "width": 8,
       "depth": 8
@@ -50,8 +50,8 @@
   },
   "house": {
     "label": "Ev",
-    "icon": "/assets/ui/icons/building-house.svg",
-    "portrait": "/assets/ui/portraits/building.svg",
+    "icon": "/assets/ui/icons/building-house.png",
+    "portrait": "/assets/ui/portraits/building.png",
     "footprint": {
       "width": 4,
       "depth": 4
@@ -102,8 +102,8 @@
   },
   "depot": {
     "label": "Depo",
-    "icon": "/assets/ui/icons/building-depot.svg",
-    "portrait": "/assets/ui/portraits/building.svg",
+    "icon": "/assets/ui/icons/building-depot.png",
+    "portrait": "/assets/ui/portraits/building.png",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -183,8 +183,8 @@
   },
   "outpost": {
     "label": "Karakol",
-    "icon": "/assets/ui/icons/building-outpost.svg",
-    "portrait": "/assets/ui/portraits/building.svg",
+    "icon": "/assets/ui/icons/building-outpost.png",
+    "portrait": "/assets/ui/portraits/building.png",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -287,7 +287,7 @@
   "farm": {
     "label": "Tarla",
     "icon": "/assets/ui/icons/building-farm.png",
-    "portrait": "/assets/ui/portraits/building.svg",
+    "portrait": "/assets/ui/portraits/building.png",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -368,7 +368,7 @@
   "lumber_camp": {
     "label": "Oduncu Kampı",
     "icon": "/assets/ui/icons/building-lumber-camp.png",
-    "portrait": "/assets/ui/portraits/building.svg",
+    "portrait": "/assets/ui/portraits/building.png",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -458,7 +458,7 @@
   "quarry": {
     "label": "Taş Ocağı",
     "icon": "/assets/ui/icons/building-quarry.png",
-    "portrait": "/assets/ui/portraits/building.svg",
+    "portrait": "/assets/ui/portraits/building.png",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -540,7 +540,7 @@
   "gold_mine": {
     "label": "Altın Madeni",
     "icon": "/assets/ui/icons/building-gold-mine.png",
-    "portrait": "/assets/ui/portraits/building.svg",
+    "portrait": "/assets/ui/portraits/building.png",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -622,7 +622,7 @@
   "market": {
     "label": "Pazar",
     "icon": "/assets/ui/icons/building-market.png",
-    "portrait": "/assets/ui/portraits/building.svg",
+    "portrait": "/assets/ui/portraits/building.png",
     "footprint": {
       "width": 8,
       "depth": 8
@@ -684,8 +684,8 @@
   },
   "barracks": {
     "label": "Kışla",
-    "icon": "/assets/ui/icons/building-barracks.svg",
-    "portrait": "/assets/ui/portraits/building.svg",
+    "icon": "/assets/ui/icons/building-barracks.png",
+    "portrait": "/assets/ui/portraits/building.png",
     "footprint": {
       "width": 8,
       "depth": 8
@@ -735,8 +735,8 @@
   },
   "archery_range": {
     "label": "Okçuluk Alanı",
-    "icon": "/assets/ui/icons/building-archery-range.svg",
-    "portrait": "/assets/ui/portraits/building.svg",
+    "icon": "/assets/ui/icons/building-archery-range.png",
+    "portrait": "/assets/ui/portraits/building.png",
     "footprint": {
       "width": 8,
       "depth": 8
