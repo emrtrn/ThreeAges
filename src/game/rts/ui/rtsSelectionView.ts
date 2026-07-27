@@ -46,6 +46,11 @@ export interface SelectionAction {
   /** Shown under the label; null when the action costs nothing. */
   readonly cost: string | null;
   readonly enabled: boolean;
+  /**
+   * True while this command has an ongoing effect, such as a production queue
+   * or a kingdom upgrade. This is presentation state, not a pressed toggle.
+   */
+  readonly active?: boolean;
   /** Why it is refused. Null when enabled — a legal action needs no excuse. */
   readonly reason: string | null;
   /**
@@ -627,6 +632,7 @@ function centerProgressionAction(view: CenterProgressionView): SelectionAction {
       label: `${view.townLabel} Çağına Geç`,
       cost,
       enabled: reason === null,
+      active: snapshot.upgrading,
       reason,
       hint: shortfall ? `Eksik: ${shortfall}. Toplam maliyet: ${cost}.` : `Maliyet: ${cost}.`,
     };
@@ -640,6 +646,7 @@ function centerProgressionAction(view: CenterProgressionView): SelectionAction {
     label: `${targetLabel}'ye Yükselt`,
     cost,
     enabled: reason === null,
+    active: snapshot.upgrading,
     reason,
     hint: shortfall
       ? `Tüm yapılar ${targetLabel} olur. Eksik: ${shortfall}.`
@@ -794,6 +801,7 @@ function describeCenter(
         // order is placed and answered with a message: pre-computing them here
         // would restate two systems' rules and could disagree with them.
         enabled: !townUpgrading,
+        active: queue.queued > 0,
         reason: townUpgrading ? `${progression.townLabel} Çağı yükseltmesi sürerken Merkez üretim yapamaz.` : null,
       },
       centerProgressionAction(progression),

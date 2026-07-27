@@ -3,6 +3,15 @@ import {
   type RtsSimulationSpeed,
 } from "../simulation/simulationSpeed";
 
+export type RtsGameSpeedControlMode = "player" | "debug";
+
+export interface RtsGameSpeedControlsOptions {
+  /** Player HUD deliberately exposes only the final, player-facing rates. */
+  readonly speeds?: readonly RtsSimulationSpeed[];
+  /** Debug mode keeps the accelerated iteration rates out of the player HUD. */
+  readonly mode?: RtsGameSpeedControlMode;
+}
+
 const SPEED_LABEL: Record<RtsSimulationSpeed, string> = {
   1: "Normal",
   2: "2X",
@@ -10,7 +19,11 @@ const SPEED_LABEL: Record<RtsSimulationSpeed, string> = {
   8: "8X",
 };
 
-/** Small always-visible speed selector for faster RTS iteration. */
+/**
+ * Speed picker presentation. It owns button state only; RtsApp remains the
+ * single authority for the active simulation rate when player and debug
+ * controls are both mounted.
+ */
 export class RtsGameSpeedControls {
   private readonly root = document.createElement("section");
   private readonly buttons = new Map<RtsSimulationSpeed, HTMLButtonElement>();
@@ -19,22 +32,28 @@ export class RtsGameSpeedControls {
   constructor(
     initialSpeed: RtsSimulationSpeed,
     private readonly onChange: (speed: RtsSimulationSpeed) => void,
+    options: RtsGameSpeedControlsOptions = {},
   ) {
     this.speed = initialSpeed;
     this.root.className = "rts-game-speed ui-interactive";
-    this.root.setAttribute("aria-label", "Oyun hızı");
+    const mode = options.mode ?? "player";
+    this.root.dataset.rtsSpeedMode = mode;
+    this.root.setAttribute("aria-label", mode === "debug" ? "Geliştirici oyun hızı" : "Oyun hızı");
+    const label = document.createElement("span");
+    label.className = "rts-game-speed-label";
+    label.textContent = mode === "debug" ? "Hız (Geliştirici)" : "Hız";
     const choices = document.createElement("div");
     choices.className = "rts-game-speed-choices";
-    for (const speed of RTS_SIMULATION_SPEEDS) {
+    for (const speed of options.speeds ?? RTS_SIMULATION_SPEEDS) {
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = SPEED_LABEL[speed];
       button.dataset.rtsSpeed = String(speed);
-      button.addEventListener("click", () => this.setSpeed(speed));
+      button.addEventListener("click", () => this.chooseSpeed(speed));
       this.buttons.set(speed, button);
       choices.appendChild(button);
     }
-    this.root.appendChild(choices);
+    this.root.append(label, choices);
     this.render();
   }
 
@@ -47,10 +66,16 @@ export class RtsGameSpeedControls {
     this.root.remove();
   }
 
-  private setSpeed(speed: RtsSimulationSpeed): void {
+  /** Reflect a speed selected by a sibling player/debug control without looping. */
+  setSpeed(speed: RtsSimulationSpeed): void {
     if (this.speed === speed) return;
     this.speed = speed;
     this.render();
+  }
+
+  private chooseSpeed(speed: RtsSimulationSpeed): void {
+    if (this.speed === speed) return;
+    this.setSpeed(speed);
     this.onChange(speed);
   }
 

@@ -1,10 +1,19 @@
 # ThreeAges UI Görsel Varlık Envanteri
 
-> **Durum:** Üretim öncesi envanter  
+> **Durum:** Uygulama sürüyor
 > **Tarih:** 2026-07-26  
 > **Referans:** `GDD/UI_Reference.png`  
 > **Hedef:** Mevcut RTS UI dizilimini ve mekaniğini koruyarak görsel dili referansa yaklaştırmak  
 > **Görsel üretim aracı:** GPT Image 2
+
+---
+
+## Uygulama durumu — 2026-07-27
+
+- `UI-SKIN-012`: Çoklu-birim slotları için şeffaf metal 9-slice çerçeve üretildi. Seçim panelinde kullanılmadı; ileride başka bir UI yüzeyinde değerlendirmek üzere saklanıyor.
+- `UI-SKIN-013`: Seçim portresi için şeffaf ahşap-bronz çerçeve üretildi. Seçim panelinde kullanılmadı; ileride başka bir UI yüzeyinde değerlendirmek üzere saklanıyor.
+
+Bu varlıklar şu an runtime'a bağlı değildir; seçim, üretim, maliyet ve ikon veri sözleşmeleri değişmez.
 
 ---
 
@@ -61,6 +70,9 @@ Bu öğeler için şimdilik görsel üretilmemelidir.
 
 ### Üretim kuralları
 
+- Genel eylem butonları koyu ikincil yüzeyde başlar; yalnız hover veya klavye odağında altın birincil yüzeye geçer.
+- Kalıcı altın yüzey sadece gerçekten seçili veya devam eden durumlar içindir: aktif sekme, yerleştirme modu, üretim kuyruğu ve yükseltme.
+- Modal açılışındaki ilk eylem bir Enter/Esc kısayolu olsa bile otomatik olarak altın görünmez; klavye hedefi `Tab` ile açıkça seçilir.
 - Görsellerin içine metin, sayı, fiyat, tuş adı veya ilerleme yüzdesi gömülmemelidir.
 - Dinamik metin ve durum renkleri HTML/CSS tarafından çizilmeye devam etmelidir.
 - Panel çerçeveleri tek çözünürlüğe kilitlenmemeli; köşe, kenar ve merkez parçalarıyla 9-slice uyumlu hazırlanmalıdır.
@@ -135,6 +147,8 @@ Bu öğelerin genişliği dinamik kalmalıdır. GPT Image 2 yalnızca track, uç
 | `UI-BAR-007` | Donmuş/gerileyen sayaç overlay'i | Bölgesel zafer | Stalled, decaying |
 | `UI-BAR-008` | Dünya üstü bar çerçevesi | Yapı ve birim üstü göstergeler | Normal, sağlık |
 
+Uygulama durumu: Ortak koyu metal 9-slice track `UI-BAR-001` / `UI-BAR-003` için üretildi ve seçim, dünya üstü, bölgesel zafer ve çağ/seviye çubuklarına bağlandı: `public/assets/ui/skin/progress_track_9s.png`. Dolumlar veri odaklı CSS'te kalır; sağlık çubukları `%60` ve üstünde yeşil, `%30–59` arasında altın, altında kırmızı gösterilir. Altın dolum inşaat, üretim ve ilerleme için ayrılmıştır. İşçi ve askerlerin Three.js billboard sağlık barları da aynı koyu/bronzu çerçeve ve bu eşiklerle güncellendi; DOM track'i yerine küçük ölçekte net kalan katmanlı mesh kullanılır. Birim canı tam doluyken bar gizlidir; ilk hasarla görünür.
+
 ---
 
 ## 6. Üst HUD ikonları
@@ -168,6 +182,8 @@ Bu öğelerin genişliği dinamik kalmalıdır. GPT Image 2 yalnızca track, uç
 | `UI-SYS-CHEVRON-DOWN` | Panel kapalı | Görev paneli |
 
 Hız rakamları görsele gömülmemelidir; `1×/2×/4×/8×` HTML metni olarak kalmalıdır.
+
+Uygulama kararı: Oyuncuya açık üst HUD yalnızca `Normal` ve `2×` hızlarını gösterir. `4×` ve `8×`, geliştirme sürecinde sadece `?rts&debug` ile açılan sol üst debug yüzeyinde bulunur. Boş işçi sayısı, `Seç (I)` ve `Ata (R)` eylemlerinin yanında durum rozeti olarak görünür; duraklatma denetimi sağda `Ⅱ` simgesiyle, açıklayıcı tooltip ile sunulur.
 
 ---
 
@@ -524,6 +540,8 @@ Mevcut mekanikler tarayıcı imleciyle çalışabilir; tema tamamlanırken aşa�
 | `UI-CURSOR-DISABLED` | Yasak/geçersiz eylem |
 
 Önerilen kaynak: `128×128`; runtime hotspot ayarlı `32×32` ve `64×64` türevleri.
+
+Uygulama durumu: `UI-CURSOR-DEFAULT` üretildi ve yalnız RTS harita canvas’ına bağlandı. Kaynak: `public/assets/ui/cursors/cursor_default_128.png`; runtime: `cursor_default.png` (`32×32`, hotspot `2,2`). Menüdeki etkin butonlar ve maç türü/radyo seçenekleri için `UI-CURSOR-SELECT` işaret-parmak imleci eklendi: `cursor_pointer_128.png` ve `cursor_pointer.png` (`32×32`, hotspot `3,2`). Duruma bağlı imleçler, ilgili oyun durumlarına bağlanacak sonraki dilimdedir.
 
 ---
 

@@ -9,18 +9,18 @@
     "gold": 100
   },
   "startingUnits": {
-    "guard": 10,
-    "worker": 10
+    "guard": 2,
+    "worker": 6
   },
   "enemyStartingResources": {
     "food": 500,
     "wood": 500,
-    "stone": 0,
-    "gold": 0
+    "stone": 100,
+    "gold": 100
   },
   "enemyStartingUnits": {
-    "guard": 0,
-    "worker": 1
+    "guard": 2,
+    "worker": 6
   },
   "gameSpeed": 1,
   "mapState": "two_flanks_blockout",

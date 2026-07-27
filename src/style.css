@@ -54,6 +54,7 @@
   --ta-btn-ink: #2b2010;
   --ta-btn2-bg: #3a2d1c;
   --ta-panel-shadow: inset 0 0 0 1px rgb(0 0 0 / 45%), 0 8px 24px rgb(0 0 0 / 40%);
+  --ta-progress-track: url("/assets/ui/skin/progress_track_9s.png");
 }
 
 html,
@@ -78,6 +79,20 @@ body {
   /* All gestures belong to the game, not the browser (scroll/zoom). */
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* The map gets its own compact Three Ages pointer; overlay controls continue
+   to use the standard hand cursor, which remains the clearer click cue. */
+#game-canvas[data-rts-cursor="default"] {
+  cursor: url("/assets/ui/cursors/cursor_default.png") 2 2, default;
+}
+
+/* Clickable RTS menus share the map cursor's materials, but use the familiar
+   raised index finger to make an HTML action distinct from a map command. */
+.ui-interactive button:not(:disabled),
+.ui-interactive .rts-match-setup-option,
+.ui-interactive input[type="radio"]:not(:disabled) {
+  cursor: url("/assets/ui/cursors/cursor_pointer.png") 3 2, pointer;
 }
 
 /* In editor mode the canvas is a first-class work surface rather than a
@@ -148,25 +163,55 @@ body {
 
 .rts-world-progress-track {
   display: block;
-  height: 8px;
-  padding: 1px;
-  border: 1px solid rgb(0 0 0 / 80%);
-  border-radius: 3px;
-  background: rgb(15 11 8 / 88%);
+  box-sizing: border-box;
+  height: 12px;
+  overflow: hidden;
+  background: #1b110c;
+  border: 3px solid transparent;
+  border-image-source: var(--ta-progress-track);
+  border-image-slice: 24 fill;
+  border-image-width: 3px;
+  border-image-repeat: stretch;
   box-shadow: 0 1px 3px rgb(0 0 0 / 65%);
 }
 
 .rts-world-progress-fill {
   display: block;
+  position: relative;
   height: 100%;
   min-width: 1px;
-  border-radius: 1px;
-  background: linear-gradient(90deg, #d9b84d, #f4e77c);
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, #fff1a4 0%, #e3b64a 46%, #9d6724 100%),
+    #d9b84d;
+  box-shadow: inset 0 1px rgb(255 248 196 / 65%), inset 0 -1px rgb(78 43 14 / 55%);
   transition: width 80ms linear;
 }
 
-.rts-world-health .rts-world-progress-fill {
-  background: linear-gradient(90deg, #b83732, #e56e50);
+.rts-world-progress-fill::after,
+.rts-selection-health-fill::after,
+.rts-selection-progress-fill::after,
+.rts-objective-bar-fill::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background: repeating-linear-gradient(135deg, rgb(255 255 255 / 16%) 0 2px, transparent 2px 7px);
+}
+
+.rts-world-health[data-rts-health-tone="healthy"] .rts-world-progress-fill,
+.rts-selection-health[data-rts-health-tone="healthy"] .rts-selection-health-fill {
+  background: linear-gradient(180deg, #cae99a 0%, #79ad57 46%, #3d6a39 100%);
+}
+
+.rts-world-health[data-rts-health-tone="warning"] .rts-world-progress-fill,
+.rts-selection-health[data-rts-health-tone="warning"] .rts-selection-health-fill {
+  background: linear-gradient(180deg, #ffe29a 0%, #d6a23e 46%, #8d551d 100%);
+}
+
+.rts-world-health[data-rts-health-tone="critical"] .rts-world-progress-fill,
+.rts-selection-health[data-rts-health-tone="critical"] .rts-selection-health-fill {
+  background: linear-gradient(180deg, #f59a73 0%, #c94f3b 46%, #772821 100%);
 }
 
 /*
@@ -338,17 +383,17 @@ body {
 
 .rts-match-card button {
   padding: 9px 16px;
-  color: var(--ta-btn-ink);
+  color: var(--ta-ink);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
-  background: var(--ta-btn-bg);
+  background: var(--ta-btn2-bg);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  border-image-source: url("/assets/ui/skin/button_secondary_9s.png");
   border-image-slice: 150 fill;
   border-image-width: 12px;
   border-image-repeat: stretch;
-  text-shadow: 0 1px 2px rgb(49 31 10 / 75%);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
   transition: filter 100ms ease, transform 100ms ease;
 }
 
@@ -362,15 +407,15 @@ body {
   transform: translateY(1px);
 }
 
-/*
- * Only the default action wears the bright fill. "Teslim Ol" sitting in the
- * same pill as "Devam Et" would read as an equally ordinary thing to click.
- */
-.rts-match-card button[data-primary="false"] {
-  color: var(--ta-ink);
-  background: var(--ta-btn2-bg);
-  border-image-source: url("/assets/ui/skin/button_secondary_9s.png");
-  text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
+/* Gold means the current pointer/keyboard target. It is never granted merely
+   because a button is first in a modal; confirmed-danger buttons stay red. */
+.rts-match-card button:not([data-danger="true"]):is(:hover, :focus-visible) {
+  color: #211508;
+  background: var(--ta-btn-bg);
+  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  text-shadow:
+    0 1px 0 rgb(255 237 176 / 72%),
+    0 -1px 1px rgb(66 39 8 / 34%);
 }
 
 .rts-match-card button[data-danger="true"] {
@@ -392,7 +437,7 @@ body {
   padding: 10px 12px;
   color: var(--ta-ink);
   font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
-  white-space: pre-wrap;
+  white-space: normal;
   /* This panel can exceed its viewport. Opt back into pointer input so its
      native scrollbar and mouse-wheel scrolling stay usable above the canvas. */
   pointer-events: auto;
@@ -401,14 +446,36 @@ body {
   border-radius: 5px;
 }
 
-/* Compact simulation-speed selector. Faz C mounts it in the HUD's utility end. */
+.rts-debug-overlay-readout {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+}
+
+/* Compact simulation-speed selector. The player HUD only gets final rates;
+   temporary accelerated rates stay on the explicitly debug-only surface. */
 .rts-game-speed {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
   color: var(--ta-ink);
+}
+
+.rts-game-speed-label {
+  color: var(--ta-ink-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .rts-game-speed-choices {
   display: flex;
-  gap: 5px;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--ta-border-strong);
+  border-radius: 3px;
 }
 
 .rts-game-speed button {
@@ -420,14 +487,35 @@ body {
   font-weight: 700;
   cursor: pointer;
   background: var(--ta-btn2-bg);
-  border: 1px solid var(--ta-border-strong);
-  border-radius: 3px;
+  border: 0;
+  border-right: 1px solid var(--ta-border-strong);
+}
+
+.rts-game-speed button:last-child {
+  border-right: 0;
+}
+
+.rts-game-speed button:not([aria-pressed="true"]):is(:hover, :focus-visible) {
+  color: #211508;
+  background: var(--ta-btn-bg);
+  outline: none;
 }
 
 .rts-game-speed button[aria-pressed="true"] {
   color: var(--ta-btn-ink);
   background: var(--ta-btn-bg);
   border-color: var(--ta-gold);
+}
+
+.rts-game-speed[data-rts-speed-mode="debug"] {
+  flex-wrap: wrap;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(198 152 64 / 35%);
+}
+
+.rts-game-speed[data-rts-speed-mode="debug"] .rts-game-speed-label {
+  flex-basis: 100%;
 }
 
 /*
@@ -583,13 +671,30 @@ body {
 .rts-hud-status {
   display: flex;
   flex-shrink: 0;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   /* Pins the status block to the right edge whether or not the warning between
      them is showing. */
   margin-left: auto;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.rts-hud-match-readouts,
+.rts-hud-worker-cluster {
+  display: flex;
+  align-items: center;
+}
+
+.rts-hud-match-readouts {
+  gap: 9px;
+}
+
+.rts-hud-worker-cluster {
+  gap: 5px;
+  padding-left: 8px;
+  border-left: 1px solid rgb(198 152 64 / 38%);
 }
 
 .rts-hud-population,
@@ -604,13 +709,23 @@ body {
 }
 
 .rts-hud-idle-workers {
+  display: inline-flex;
+  min-width: 62px;
+  justify-content: center;
+  padding: 3px 5px;
   color: var(--ta-ink-muted);
+  font-size: 11px;
+  background: rgb(14 10 7 / 52%);
+  border: 1px solid rgb(198 152 64 / 30%);
+  border-radius: 3px;
 }
 
 /* Idle labour and a full population are both "you owe the game a decision". */
 .rts-hud-idle-workers[data-idle="true"] {
   color: var(--ta-gold);
   font-weight: 700;
+  background: rgb(115 75 25 / 42%);
+  border-color: var(--ta-gold);
 }
 
 .rts-hud-worker-actions {
@@ -621,7 +736,8 @@ body {
 .rts-hud-worker-action {
   border: 1px solid var(--ta-border);
   border-radius: 4px;
-  padding: 2px 6px;
+  min-width: 46px;
+  padding: 3px 5px;
   color: var(--ta-ink);
   font: inherit;
   font-size: 11px;
@@ -629,9 +745,11 @@ body {
   cursor: pointer;
 }
 
-.rts-hud-worker-action:hover:not(:disabled) {
+.rts-hud-worker-action:not(:disabled):is(:hover, :focus-visible) {
+  color: #211508;
+  background: var(--ta-btn-bg);
   border-color: var(--ta-gold);
-  color: #fff1a3;
+  outline: none;
 }
 
 .rts-hud-worker-action:disabled {
@@ -643,24 +761,27 @@ body {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  padding-left: 8px;
+  border-left: 1px solid rgb(198 152 64 / 38%);
 }
 
 .rts-hud-menu-button {
-  min-width: 28px;
-  padding: 4px 6px;
+  min-width: 32px;
+  padding: 4px 7px;
   color: var(--ta-ink);
-  font: 700 15px/1 Georgia, serif;
+  font: 700 17px/1 Georgia, serif;
   cursor: pointer;
   background: var(--ta-btn2-bg);
   border: 1px solid var(--ta-border-strong);
   border-radius: 3px;
 }
 
-.rts-hud-menu-button:hover {
+.rts-hud-menu-button:is(:hover, :focus-visible) {
   color: var(--ta-btn-ink);
   background: var(--ta-btn-bg);
   border-color: var(--ta-gold);
+  outline: none;
 }
 
 .rts-hud-population[data-full="true"] {
@@ -713,8 +834,7 @@ body {
   }
 
   .rts-hud-kingdom-name,
-  .rts-hud-idle-workers,
-  .rts-hud-worker-actions {
+  .rts-hud-worker-cluster {
     display: none;
   }
 
@@ -1031,19 +1151,26 @@ body {
 }
 
 .rts-objective-bar-track {
-  height: 6px;
+  box-sizing: border-box;
+  height: 10px;
   overflow: hidden;
-  background: rgb(0 0 0 / 40%);
-  border-radius: 3px;
+  background: #1b110c;
+  border: 3px solid transparent;
+  border-image-source: var(--ta-progress-track);
+  border-image-slice: 24 fill;
+  border-image-width: 3px;
+  border-image-repeat: stretch;
 }
 
 .rts-objective-bar-fill {
+  position: relative;
   height: 100%;
-  background: #2d7fd6;
+  overflow: hidden;
+  background: linear-gradient(180deg, #77c5ff 0%, #2d7fd6 55%, #1a4f91 100%);
 }
 
 .rts-objective-bar[data-owner="enemy"] .rts-objective-bar-fill {
-  background: #c0392b;
+  background: linear-gradient(180deg, #ef8879 0%, #c0392b 55%, #76231f 100%);
 }
 
 /* A stalled counter must not look like a climbing one — the difference between
@@ -1122,18 +1249,25 @@ body {
 }
 
 .rts-selection-health {
-  height: 7px;
+  box-sizing: border-box;
+  height: 12px;
   margin-top: 7px;
   overflow: hidden;
-  background: rgb(25 11 8 / 82%);
-  border: 1px solid var(--ta-border);
-  border-radius: 3px;
+  background: #1b110c;
+  border: 3px solid transparent;
+  border-image-source: var(--ta-progress-track);
+  border-image-slice: 24 fill;
+  border-image-width: 3px;
+  border-image-repeat: stretch;
 }
 
 .rts-selection-health-fill {
+  position: relative;
   width: 0;
   height: 100%;
-  background: linear-gradient(90deg, #9e3931, #7fba58);
+  overflow: hidden;
+  background: linear-gradient(180deg, #cae99a 0%, #79ad57 46%, #3d6a39 100%);
+  box-shadow: inset 0 1px rgb(255 255 255 / 38%), inset 0 -1px rgb(0 0 0 / 34%);
   transition: width 120ms linear;
 }
 
@@ -1284,17 +1418,24 @@ body {
 
 .rts-selection-progress-track {
   margin-top: 3px;
-  height: 6px;
-  background: rgb(0 0 0 / 34%);
-  border: 1px solid rgb(140 108 60 / 40%);
-  border-radius: 3px;
+  box-sizing: border-box;
+  height: 12px;
   overflow: hidden;
+  background: #1b110c;
+  border: 3px solid transparent;
+  border-image-source: var(--ta-progress-track);
+  border-image-slice: 24 fill;
+  border-image-width: 3px;
+  border-image-repeat: stretch;
 }
 
 .rts-selection-progress-fill {
+  position: relative;
   height: 100%;
   width: 0;
-  background: linear-gradient(90deg, #c9a24b, var(--ta-gold));
+  overflow: hidden;
+  background: linear-gradient(180deg, #fff1a4 0%, #e3b64a 46%, #9d6724 100%);
+  box-shadow: inset 0 1px rgb(255 248 196 / 65%), inset 0 -1px rgb(78 43 14 / 55%);
   transition: width 120ms linear;
 }
 
@@ -1318,26 +1459,39 @@ body {
 
 .rts-selection-action {
   display: grid;
-  gap: 2px;
-  padding: 5px 9px;
-  color: var(--ta-btn-ink);
+  min-height: 36px;
+  gap: 3px;
+  padding: 7px 12px;
+  place-items: center;
+  color: #d5bf8e;
   font: inherit;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 800;
+  text-align: center;
   cursor: pointer;
-  background: var(--ta-btn-bg);
+  background: var(--ta-btn2-bg);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  border-image-source: url("/assets/ui/skin/button_secondary_9s.png");
   border-image-slice: 150 fill;
   border-image-width: 9px;
   border-image-repeat: stretch;
-  text-shadow: 0 1px 2px rgb(49 31 10 / 75%);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
   transition: filter 100ms ease, transform 100ms ease;
 }
 
-.rts-selection-action:hover:not(:disabled) {
+.rts-selection-action:not(:disabled):is(:hover, :focus-visible) {
+  color: #211508;
+  background: var(--ta-btn-bg);
+  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  text-shadow:
+    0 1px 0 rgb(255 237 176 / 72%),
+    0 -1px 1px rgb(66 39 8 / 34%);
   filter: brightness(1.1);
   transform: translateY(-1px);
+}
+
+.rts-selection-action:not(:disabled):is(:hover, :focus-visible) .rts-selection-action-cost {
+  color: #211508;
 }
 
 .rts-selection-action:active:not(:disabled) {
@@ -1346,18 +1500,46 @@ body {
 }
 
 .rts-selection-action:disabled {
-  opacity: 0.48;
   cursor: default;
+  filter: saturate(0.7);
+}
+
+/* Gold is reserved for a command that is currently doing work. It is not a
+   generic primary-button color: the selected build tab uses it for the same
+   reason, to identify the active state at a glance. */
+.rts-selection-action[data-rts-active="true"] {
+  color: #211508;
+  background: var(--ta-btn-bg);
+  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  text-shadow:
+    0 1px 0 rgb(255 237 176 / 72%),
+    0 -1px 1px rgb(66 39 8 / 34%);
+}
+
+.rts-selection-action[data-rts-active="true"]:disabled {
+  filter: none;
+}
+
+/* A locked upgrade is still a useful purchase plan. Dimming the whole button
+   made its required resources disappear precisely when the player needed them. */
+.rts-selection-action:disabled .rts-selection-action-label,
+.rts-selection-action:disabled .rts-selection-action-cost {
+  color: #4b2e0d;
+}
+
+.rts-selection-action[data-rts-active="true"] .rts-selection-action-label,
+.rts-selection-action[data-rts-active="true"] .rts-selection-action-cost {
+  color: #211508;
 }
 
 .rts-selection-action-label {
-  line-height: 1.1;
+  line-height: 1.15;
 }
 
 .rts-selection-action-cost {
-  color: #6b5320;
+  color: #bea66f;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 800;
   line-height: 1.1;
 }
 
@@ -1397,16 +1579,19 @@ body {
 .rts-build-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 3px;
-  margin-top: 7px;
+  gap: 4px;
+  margin-top: 8px;
 }
 
 .rts-build-tab {
+  display: grid;
+  min-height: 26px;
   min-width: 0;
-  padding: 6px 4px;
+  padding: 0 5px;
+  place-items: center;
   overflow: hidden;
-  color: var(--ta-ink-muted);
-  font: 700 10px/1.1 var(--ta-font-display);
+  color: #d5bf8e;
+  font: 800 11px/1 var(--ta-font-display);
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
@@ -1431,10 +1616,12 @@ body {
 }
 
 .rts-build-tab[aria-pressed="true"] {
-  color: var(--ta-btn-ink);
+  color: #211508;
   background: var(--ta-btn-bg);
   border-image-source: url("/assets/ui/skin/button_primary_9s.png");
-  text-shadow: 0 1px 2px rgb(49 31 10 / 75%);
+  text-shadow:
+    0 1px 0 rgb(255 237 176 / 72%),
+    0 -1px 1px rgb(66 39 8 / 34%);
 }
 
 .rts-build-grid {
@@ -1465,7 +1652,7 @@ body {
   flex-direction: column;
   justify-content: flex-end;
   min-width: 0;
-  padding: 0 0 4px;
+  padding: 0 2px 5px;
   overflow: hidden;
   color: #f6e7c4;
   font: inherit;
@@ -1518,13 +1705,15 @@ body {
 .rts-build-category-panel .rts-build-choice-cost {
   position: relative;
   z-index: 2;
-  padding: 0 3px;
+  padding: 0 4px;
   text-shadow: 0 1px 2px rgb(0 0 0 / 85%);
   pointer-events: none;
 }
 
 .rts-build-category-panel .rts-build-choice-label {
-  min-height: 0;
+  display: grid;
+  min-height: 22px;
+  align-content: end;
   overflow: hidden;
   color: #f6e7c4;
   font-size: 10px;
@@ -1535,7 +1724,8 @@ body {
 }
 
 .rts-build-category-panel .rts-build-choice-cost {
-  margin-top: 2px;
+  min-height: 10px;
+  margin-top: 1px;
   color: var(--ta-gold);
   font-size: 9px;
   line-height: 1.1;
@@ -1680,7 +1870,7 @@ body {
 
 .rts-build-status {
   min-height: 1.35em;
-  margin-top: 8px;
+  margin-top: 3px;
   color: var(--ta-ink);
   font-size: 12px;
 }
@@ -1691,9 +1881,10 @@ body {
 
 .rts-build-action-message {
   min-height: 1.35em;
-  margin-top: 4px;
+  margin-top: 5px;
   color: var(--ta-gold);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.3;
   font-weight: 700;
 }
 

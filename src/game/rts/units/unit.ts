@@ -328,8 +328,12 @@ export class Unit {
    * near. Nothing the simulation reads depends on which of the two it gets.
    */
   updatePresentation(deltaSeconds: number, cameraQuaternion: Quaternion, cameraPosition?: Vector3): void {
-    this.healthBar.set(this.health.ratio);
-    this.healthBar.faceCamera(cameraQuaternion);
+    // beginDeath() hides the bar for the short death presentation. Do not
+    // immediately revive it here with a zero-health update on the next frame.
+    if (!this.health.depleted) {
+      this.healthBar.set(this.health.ratio);
+      this.healthBar.faceCamera(cameraQuaternion);
+    }
     this.presentation?.update?.({
       deltaSeconds,
       planarSpeed: this.measurePlanarSpeed(deltaSeconds),

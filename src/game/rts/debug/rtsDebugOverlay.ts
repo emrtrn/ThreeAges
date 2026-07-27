@@ -17,7 +17,8 @@ const MAX_DAMAGE_LINES = 6;
 const MAX_RESOURCE_LINES = 8;
 
 export class RtsDebugOverlay {
-  private readonly root = document.createElement("pre");
+  private readonly root = document.createElement("section");
+  private readonly readout = document.createElement("pre");
   private readonly damageLines: string[] = [];
   private readonly resourceLines: string[] = [];
   private aiLines: readonly string[] = [];
@@ -29,8 +30,15 @@ export class RtsDebugOverlay {
 
   constructor() {
     this.root.className = "rts-debug-overlay";
+    this.readout.className = "rts-debug-overlay-readout";
+    this.root.appendChild(this.readout);
     const host = document.getElementById("ui-overlay") ?? document.body;
     host.appendChild(this.root);
+  }
+
+  /** Keeps temporary test controls inside the same explicitly debug-only surface. */
+  mountControl(control: { mount(parent: HTMLElement): void }): void {
+    control.mount(this.root);
   }
 
   recordHit(hit: CombatHit): void {
@@ -158,7 +166,7 @@ export class RtsDebugOverlay {
     if (this.progressionLines.length > 0) lines.push("", ...this.progressionLines);
     if (this.visionLines.length > 0) lines.push("", ...this.visionLines);
     if (this.aiLines.length > 0) lines.push("", ...this.aiLines);
-    this.root.textContent = lines.join("\n");
+    this.readout.textContent = lines.join("\n");
   }
 
   dispose(): void {

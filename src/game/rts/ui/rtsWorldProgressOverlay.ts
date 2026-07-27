@@ -16,6 +16,8 @@ export interface RtsWorldProgressEntry {
   readonly label: string;
   /** Health uses a separate fill treatment but shares the same world anchor. */
   readonly variant?: "progress" | "health";
+  /** Health remains semantic at a glance instead of always reading as damage-red. */
+  readonly healthTone?: "healthy" | "warning" | "critical";
 }
 
 interface MountedEntry {
@@ -79,6 +81,8 @@ export class RtsWorldProgressOverlay {
     mounted.root.hidden = false;
     mounted.root.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
     mounted.root.classList.toggle("rts-world-health", entry.variant === "health");
+    if (entry.healthTone) mounted.root.dataset.rtsHealthTone = entry.healthTone;
+    else delete mounted.root.dataset.rtsHealthTone;
     mounted.label.textContent = entry.label;
     mounted.fill.style.width = `${(Math.max(0, Math.min(1, entry.progress)) * 100).toFixed(1)}%`;
   }

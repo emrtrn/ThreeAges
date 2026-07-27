@@ -370,7 +370,10 @@ export class RtsMatchOverlay {
    */
   showPause(missionRunning = false): void {
     this.render("Duraklatıldı", "Maç durduruldu.", [
-      { label: "Devam Et", action: this.handlers.onResume, primary: true, key: "resume" },
+      // Enter/Escape still resume through the match input handler, but opening
+      // pause must not paint this as an already selected button. Gold belongs to
+      // the button the player is actively hovering or tabbing to.
+      { label: "Devam Et", action: this.handlers.onResume, primary: false, key: "resume" },
       // The escape hatch lives here rather than on the mission card: that card is
       // read-only by design (it must never swallow a click meant for the map),
       // and the pause menu is already the surface a player opens to stop and
@@ -463,7 +466,11 @@ export class RtsMatchOverlay {
       return element;
     }));
     this.root.classList.add("is-visible");
-    this.actions.querySelector<HTMLButtonElement>("button")?.focus();
+    // A modal's first action is a shortcut target, not an already selected
+    // choice. Focus the card itself; Tab moves into the first action and then
+    // intentionally reveals its gold state. Enter/Escape stay owned by input.
+    this.card.tabIndex = -1;
+    this.card.focus({ preventScroll: true });
   }
 }
 

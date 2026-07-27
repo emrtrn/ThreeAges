@@ -124,10 +124,12 @@ export class RtsSelectionPanel {
     const health = content.health ?? null;
     this.health.hidden = health === null;
     if (health) {
-      const percent = Math.round(Math.min(1, Math.max(0, health.current / health.max)) * 100);
+      const ratio = Math.min(1, Math.max(0, health.current / health.max));
+      const percent = Math.round(ratio * 100);
       this.healthFill.style.width = `${percent}%`;
+      this.health.dataset.rtsHealthTone = ratio >= 0.6 ? "healthy" : ratio >= 0.3 ? "warning" : "critical";
       this.health.title = `Can: ${Math.ceil(health.current)}/${Math.ceil(health.max)}`;
-    }
+    } else delete this.health.dataset.rtsHealthTone;
     // Reuse the paragraphs rather than replaceChildren: the line count is stable
     // for a given selection, so the common re-render is a text swap.
     while (this.lines.length < content.lines.length) {
@@ -221,6 +223,7 @@ export class RtsSelectionPanel {
         button.type = "button";
         button.className = "rts-selection-action";
         button.dataset.rtsAction = action.id;
+        button.dataset.rtsActive = action.active ? "true" : "false";
         button.setAttribute("aria-label", action.label);
         const label = document.createElement("span");
         label.className = "rts-selection-action-label";
@@ -246,6 +249,7 @@ export class RtsSelectionPanel {
       // selection. Refreshing only disabled/title left an old Depot label on an
       // newly selected House whenever the action set itself did not change.
       button.setAttribute("aria-label", action.label);
+      button.dataset.rtsActive = action.active ? "true" : "false";
       const label = button.querySelector<HTMLElement>(".rts-selection-action-label");
       if (label) label.textContent = action.label;
       const existingCost = button.querySelector<HTMLElement>(".rts-selection-action-cost");

@@ -531,6 +531,7 @@ export class RtsApp {
   /** §51 "saldırı altında": combat has no event bus, so health is sampled. */
   private readonly attackWatch = new RtsAttackWatch();
   private readonly gameSpeedControls: RtsGameSpeedControls;
+  private readonly debugSpeedControls: RtsGameSpeedControls | null;
   private readonly unsubscribeWalletChanges: (() => void) | null;
   private readonly log = logger("System");
   private frameHandle = 0;
@@ -543,6 +544,13 @@ export class RtsApp {
   private rallyPointPending = false;
   private lastW = 0;
   private lastH = 0;
+
+  /** One simulation authority, mirrored into the player and debug pickers. */
+  private setSimulationSpeed(speed: RtsSimulationSpeed): void {
+    this.simulationSpeed = speed;
+    this.gameSpeedControls.setSpeed(speed);
+    this.debugSpeedControls?.setSpeed(speed);
+  }
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -559,6 +567,9 @@ export class RtsApp {
     // "my edits did not show up" from a guess into a one-glance answer.
     this.canvas.dataset.rtsLevelRef = this.options.levelRef ?? "";
     this.canvas.dataset.rtsLevelError = this.options.levelLoadError ?? "";
+    // The cursor belongs to the RTS map surface only. HTML controls retain
+    // their familiar browser pointer so their click affordance stays explicit.
+    this.canvas.dataset.rtsCursor = "default";
     // Faz E: does the Level carry a static world to mount? Known synchronously so
     // buildScene / loadMapArt can gate the legacy ridge before the async load.
     this.authoredWorldIntended = this.options.levelLayout
@@ -925,8 +936,9 @@ export class RtsApp {
         this.syncRoadUi();
       },
     );
-    this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => {
-      this.simulationSpeed = speed;
+    this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => this.setSimulationSpeed(speed), {
+      speeds: [1, 2],
+      mode: "player",
     });
     this.hudBar.mountUtilityControl(this.gameSpeedControls);
     this.matchOverlay = new RtsMatchOverlay({
@@ -952,6 +964,10 @@ export class RtsApp {
       onAbandonMission: () => this.abandonMission(),
     });
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
+    this.debugSpeedControls = this.debugOverlay
+      ? new RtsGameSpeedControls(1, (speed) => this.setSimulationSpeed(speed), { mode: "debug" })
+      : null;
+    if (this.debugSpeedControls) this.debugOverlay?.mountControl(this.debugSpeedControls);
     if (this.options.levelLoadError) {
       // On screen, not only in the console: someone who just pressed Play and got
       // an unfamiliar map is looking at the game, and this is the answer to why.
@@ -1115,12 +1131,14 @@ export class RtsApp {
   dispose(): void {
     this.disposed = true;
     this.running = false;
+    delete this.canvas.dataset.rtsCursor;
     if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
     this.frameHandle = 0;
     this.input.detach();
     this.pointer.detach();
     this.marquee.dispose();
     this.matchOverlay.dispose();
+    this.debugSpeedControls?.dispose();
     this.debugOverlay?.dispose();
     this.unsubscribeWalletChanges?.();
     this.buildPalette.dispose();
@@ -1573,6 +1591,7 @@ export class RtsApp {
           progress: structure.health.ratio,
           label: `Can ${Math.ceil(structure.health.current)}/${Math.ceil(structure.health.max)}`,
           variant: "health",
+          healthTone: structure.health.ratio >= 0.6 ? "healthy" : structure.health.ratio >= 0.3 ? "warning" : "critical",
         });
       }
     }
@@ -1585,6 +1604,7 @@ export class RtsApp {
         progress: center.health.ratio,
         label: `Can ${Math.ceil(center.health.current)}/${Math.ceil(center.health.max)}`,
         variant: "health",
+        healthTone: center.health.ratio >= 0.6 ? "healthy" : center.health.ratio >= 0.3 ? "warning" : "critical",
       });
     }
     // Centre-led progression is the longest thing the player ever waits on and

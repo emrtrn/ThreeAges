@@ -113,24 +113,34 @@ export class RtsHudBar {
     this.idleWorkers.className = "rts-hud-idle-workers";
     this.age.className = "rts-hud-age";
     this.duration.className = "rts-hud-duration";
+    const matchReadouts = document.createElement("div");
+    matchReadouts.className = "rts-hud-match-readouts";
+    matchReadouts.append(this.age, this.duration, this.population);
+    const workerCluster = document.createElement("div");
+    workerCluster.className = "rts-hud-worker-cluster";
     const workerActions = document.createElement("div");
     workerActions.className = "rts-hud-worker-actions";
     this.selectIdleWorkers.type = "button";
     this.selectIdleWorkers.className = "rts-hud-worker-action";
-    this.selectIdleWorkers.textContent = "Boştaları Seç (I)";
+    this.selectIdleWorkers.textContent = "Seç (I)";
+    this.selectIdleWorkers.setAttribute("aria-label", "Boştaki işçileri seç (I)");
+    this.selectIdleWorkers.title = "Boştaki işçileri seç (I)";
     this.selectIdleWorkers.addEventListener("click", onSelectIdleWorkers);
     this.assignIdleWorkers.type = "button";
     this.assignIdleWorkers.className = "rts-hud-worker-action";
-    this.assignIdleWorkers.textContent = "İşe Gönder (R)";
+    this.assignIdleWorkers.textContent = "Ata (R)";
+    this.assignIdleWorkers.setAttribute("aria-label", "Seçili işçileri işe ata (R)");
+    this.assignIdleWorkers.title = "Seçili işçileri işe ata (R)";
     this.assignIdleWorkers.addEventListener("click", onAssignIdleWorkers);
     workerActions.append(this.selectIdleWorkers, this.assignIdleWorkers);
-    status.append(this.age, this.duration, this.population, this.idleWorkers, workerActions);
+    workerCluster.append(this.idleWorkers, workerActions);
+    status.append(matchReadouts, workerCluster);
     this.root.appendChild(status);
     this.utilityControls.className = "rts-hud-utility-controls";
     const pause = document.createElement("button");
     pause.type = "button";
     pause.className = "rts-hud-menu-button";
-    pause.textContent = "☰";
+    pause.textContent = "Ⅱ";
     pause.setAttribute("aria-label", "Menü ve duraklat (Esc)");
     pause.title = "Menü ve duraklat (Esc)";
     pause.addEventListener("click", onOpenPauseMenu);
@@ -168,8 +178,9 @@ export class RtsHudBar {
   }
 
   setIdleWorkerCount(count: number): void {
-    const text = `Boşta işçi: ${count}`;
+    const text = `Boşta: ${count}`;
     if (this.idleWorkers.textContent !== text) this.idleWorkers.textContent = text;
+    this.idleWorkers.title = `Boşta işçi: ${count}`;
     this.idleWorkers.dataset.idle = String(count > 0);
     this.selectIdleWorkers.disabled = count === 0;
     this.assignIdleWorkers.disabled = count === 0;
