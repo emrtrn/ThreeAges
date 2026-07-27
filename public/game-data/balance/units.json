@@ -2,7 +2,6 @@
   "guard_placeholder": {
     "label": "Muhafız",
     "icon": "/assets/ui/icons/unit-guard.png",
-    "portrait": "/assets/ui/portraits/unit.png",
     "role": "guard",
     "armorClass": "heavy",
     "maxHealth": 110,
@@ -33,7 +32,6 @@
   "archer_placeholder": {
     "label": "Okçu",
     "icon": "/assets/ui/icons/unit-archer.png",
-    "portrait": "/assets/ui/portraits/unit.png",
     "role": "archer",
     "armorClass": "light",
     "maxHealth": 75,
@@ -63,7 +61,6 @@
   "siege_placeholder": {
     "label": "Topçu",
     "icon": "/assets/ui/icons/unit-siege.png",
-    "portrait": "/assets/ui/portraits/unit.png",
     "role": "siege",
     "armorClass": "heavy",
     "maxHealth": 180,
@@ -95,7 +92,6 @@
   "worker_placeholder": {
     "label": "İşçi",
     "icon": "/assets/ui/icons/unit-worker.png",
-    "portrait": "/assets/ui/portraits/unit.png",
     "role": "worker",
     "armorClass": "light",
     "maxHealth": 50,

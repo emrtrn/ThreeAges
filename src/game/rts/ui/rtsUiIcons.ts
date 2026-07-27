@@ -1,7 +1,7 @@
 /**
  * Icon paths that are *not* reachable from balance data.
  *
- * Building and unit artwork comes from `balance/*.json` (`icon` / `portrait`),
+ * Building and unit artwork comes from `balance/*.json` (`icon`),
  * so swapping that artwork is a data edit.  A handful of HUD and palette icons
  * have no data row to hang off — resource readouts are derived from the fixed
  * resource order, and the road / erase / temple palette entries are hardcoded
@@ -24,9 +24,15 @@ const RESOURCE_ICONS: Readonly<Record<string, string>> = {
 };
 
 /** Build-palette entries that are tools or placeholders, not buildings. */
-export const PALETTE_ROAD_ICON = "/assets/ui/icons/command-patrol.svg";
-export const PALETTE_ROAD_ERASE_ICON = "/assets/ui/icons/command-stop.svg";
-export const PALETTE_TEMPLE_SOON_ICON = "/assets/ui/icons/building-command-center.svg";
+export const PALETTE_ROAD_ICON = "/assets/ui/icons/road.png";
+export const PALETTE_ROAD_ERASE_ICON = "/assets/ui/icons/road-delete.png";
+export const PALETTE_TEMPLE_SOON_ICON = "/assets/ui/icons/building-command-center.png";
+
+/** Player-command artwork shared by the selected-unit readout and tools. */
+export const UNIT_ATTACK_MOVE_ICON = "/assets/ui/icons/command-attack-move.png";
+export const UNIT_HOLD_ICON = "/assets/ui/icons/command-hold.png";
+export const UNIT_FREE_ICON = PALETTE_ROAD_ICON;
+export const UNIT_STOP_ICON = "/assets/ui/icons/command-stop.png";
 
 /**
  * Resolve the HUD icon for a resource.  Falls back rather than rendering a

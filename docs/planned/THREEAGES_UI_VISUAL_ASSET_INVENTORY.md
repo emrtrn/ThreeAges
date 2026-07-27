@@ -68,7 +68,7 @@ Bu öğeler için şimdilik görsel üretilmemelidir.
 - Takım rengi portreye kalıcı biçimde gömülmemeli; mümkünse nötr art üzerinde küçük mavi/kırmızı UI vurgusu sonradan uygulanmalıdır.
 - Kaynak dosyası şeffaf PNG olmalıdır. Runtime için daha sonra optimize PNG/WebP türevi üretilebilir.
 - İkon ana üretimi en az `512×512`; runtime türevi `256×256` önerilir.
-- Portre ana üretimi en az `768×1024` (3:4); UI kırpımı `384×512` önerilir.
+- Seçim paneli için ayrı portre ana üretimi gerekmez. Kare yapı/birim ikonu, geniş dikey çerçevede büyütülüp hafif kırpılarak kullanılır.
 
 ---
 
@@ -171,14 +171,9 @@ Hız rakamları görsele gömülmemelidir; `1×/2×/4×/8×` HTML metni olarak k
 
 ---
 
-## 7. Yapı kartı ve yapı portresi listesi
+## 7. Yapı kartı ve seçim görseli listesi
 
-Her satır için iki türev gerekir:
-
-1. **Kart thumbnail'i:** kare, güçlü siluet, şeffaf arka plan.
-2. **Seçim portresi:** 3:4 dikey kırpım veya aynı ana resmin portreye uygun yüksek çözünürlüklü türevi.
-
-Tek yüksek çözünürlüklü ana resim iki kullanım için de uygun kadrajda üretilebilirse ayrı çizim zorunlu değildir.
+Her yapı için tek bir **kare kart ikonu** gerekir: palet ve seçim paneli aynı kaynağı kullanır. Seçim paneli ikonu geniş dikey çerçevede büyütür ve hafif kırpar; ayrı portre türevi üretilmez.
 
 | ID | Runtime veri kimliği | Yapı | Kart thumbnail | Seçim portresi | Not |
 |---|---|---|---:|---:|---|
@@ -213,9 +208,9 @@ Kilit, yetersiz kaynak ve geçersiz konum için ana yapı görselini yeniden ür
 
 ---
 
-## 8. Birim thumbnail ve portre listesi
+## 8. Birim thumbnail ve seçim görseli listesi
 
-Mevcut runtime'da dört birim rolü vardır. Aynı görsel; çoklu seçim slotu, üretim seçeneği ve seçim portresi için türetilebilir.
+Mevcut runtime'da dört birim rolü vardır. Aynı kare ikon; çoklu seçim slotu, üretim seçeneği ve seçim panelinin büyütülmüş/kırpılmış görseli için kullanılır.
 
 | ID | Runtime veri kimliği | Birim | Kare thumbnail | Seçim portresi | Küçük slot ikonu |
 |---|---|---|---:|---:|---:|
@@ -350,7 +345,7 @@ Mevcut seçim panelinin üretilecek veya kaplanacak tüm parçaları:
 
 - Panel ana çerçevesi
 - Portre çerçevesi
-- Portre görseli
+- Büyük ikon görseli (aynı kare kaynak, dikey çerçevede kırpılır)
 - Seçim adedi rozeti (`×N`)
 - Başlık
 - Özet/rol satırı
@@ -371,6 +366,11 @@ Mevcut seçim panelinin üretilecek veya kaplanacak tüm parçaları:
 - Klavye tuş kapağı
 - Alt ipucu satırı
 - İç scroll yüzeyi
+
+Ordu komutları, sağdaki sabit ikiye iki komut güvertesinde yer alır: her kart
+büyük ikon, kısa Türkçe ad ve tuş kapağı taşır. Bu alan ilk aşamada salt-okunur
+gösterimdir; gelecekte komut butonları aynı ölçü ve konumda etkileşimli olur.
+Birlik seçiminde tekrar eden alt tuş ipucu gösterilmez.
 
 ### Seçim paneli içerik modları
 
@@ -538,9 +538,9 @@ Bu sayı varyantların nasıl paketlendiğine göre değişebilir. İlk planlama
 | Kaynak ikonları | 4 |
 | Krallık/sistem ikonları | 12 |
 | Yapı/yol/tapınak ana thumbnail artları | 14 |
-| Yapı seçim portreleri | 11 |
+| Yapı seçim portreleri | 0 (mevcut kare ikonlar kullanılır) |
 | Birim ana thumbnail artları | 4 |
-| Birim seçim portreleri | 4 |
+| Birim seçim portreleri | 0 (mevcut kare ikonlar kullanılır) |
 | Komut/eylem ikonları | 17 |
 | Bildirim ikonları | 12 |
 | Durum overlay ikonları | 11 |
@@ -585,7 +585,7 @@ Bu paket oyun içine alınıp okunabilirlik ve tema onayı yapılmadan tüm ikon
 
 ### Paket 4 — Seçim paneli
 
-- Tüm birim ve yapı portreleri
+- Yeni birim/yapı portresi gerekmez; mevcut kare ikonların seçim çerçevesindeki kırpımı doğrulanır
 - Birlik slotları
 - Komut ve eylem ikonları
 - Bar ve ilerleme setleri
@@ -624,11 +624,6 @@ public/assets/ui/
       notification_logistics_cut.png
     states/
       state_locked.png
-  portraits/
-    buildings/
-      building_command_center.png
-    units/
-      unit_guard.png
   cursors/
     cursor_attack.png
 ```

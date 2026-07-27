@@ -28,7 +28,7 @@
    * because the elements that must clear the bar are its *siblings* in
    * #ui-overlay, and a custom property only inherits downward.
    */
-  --rts-hud-bar-height: 58px;
+  --rts-hud-bar-height: 82px;
 
   /*
    * ThreeAges medieval theme tokens (docs/planned/THREEAGES_UI_RESTYLING_PLAN.md,
@@ -428,12 +428,21 @@ body {
   flex-wrap: nowrap;
   gap: 12px;
   height: var(--rts-hud-bar-height);
-  padding: 5px max(12px, env(safe-area-inset-right)) 5px max(12px, env(safe-area-inset-left));
+  /* The HUD art has a physical inner rule, so the information row needs to
+     sit inside it rather than read as if it touches the metal frame. */
+  padding: 12px max(30px, env(safe-area-inset-right)) 12px max(30px, env(safe-area-inset-left));
   color: var(--ta-ink);
-  /* Opaque, unlike the floating panels: the bar is a frame edge, and a
-     translucent one would let map contrast fight the numbers. */
+  /*
+   * `panleHUD.png` arrived with transparent canvas above and below the real
+   * frame.  The non-destructive `-9slice` derivative trims only that canvas;
+   * this keeps the 150px source slices aligned to the actual corners.
+   */
   background: var(--ta-surface-solid);
-  border-bottom: 1px solid var(--ta-border);
+  border: 1px solid transparent;
+  border-image-source: url("/assets/ui/panleHUD-9slice.png");
+  border-image-slice: 150 fill;
+  border-image-width: 20px;
+  border-image-repeat: stretch;
   box-shadow: 0 4px 18px rgb(0 0 0 / 32%);
 }
 
@@ -997,17 +1006,14 @@ body {
   bottom: max(12px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
   display: grid;
-  grid-template-columns: 74px minmax(0, 1fr) minmax(150px, 31%);
+  grid-template-columns: 88px minmax(0, 1fr) minmax(176px, 31%);
   grid-template-rows: 62px minmax(52px, 1fr) 25px;
   gap: 6px 10px;
   width: min(620px, calc(100vw - 640px));
   box-sizing: border-box;
   height: 220px;
-  padding: 9px 11px;
+  padding: 22px 24px;
   color: var(--ta-ink);
-  background: var(--ta-surface);
-  border: 1px solid var(--ta-border);
-  border-radius: 5px;
   box-shadow: var(--ta-panel-shadow);
 }
 
@@ -1028,6 +1034,9 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
+  transform: scale(1.14);
+  transform-origin: center;
 }
 
 .rts-selection-count {
@@ -1093,13 +1102,13 @@ body {
 }
 
 .rts-selection-command-chips {
-  display: flex;
+  display: grid;
   grid-row: 1 / span 2;
   grid-column: 3;
-  flex-wrap: wrap;
-  gap: 5px;
-  align-content: start;
-  overflow: auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  min-height: 0;
 }
 
 .rts-selection-command-chips[hidden] {
@@ -1107,19 +1116,45 @@ body {
 }
 
 .rts-selection-command-chip {
-  display: inline-flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 32px minmax(0, 1fr);
   align-items: center;
-  gap: 5px;
-  padding: 4px 5px;
+  justify-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 5px 5px 4px;
   color: var(--ta-ink);
   font-size: 10px;
+  line-height: 1.15;
   background: rgb(62 43 25 / 86%);
   border: 1px solid var(--ta-border);
   border-radius: 3px;
 }
 
+.rts-selection-command-chip img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.rts-selection-command-label {
+  display: -webkit-box;
+  overflow: hidden;
+  width: 100%;
+  font-weight: 700;
+  text-align: center;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .rts-selection-command-chip kbd {
-  padding: 1px 3px;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px 4px;
   color: var(--ta-btn-ink);
   font: 700 10px/1 ui-monospace, Consolas, monospace;
   background: var(--ta-btn-bg);
@@ -1258,12 +1293,29 @@ body {
   box-sizing: border-box;
   width: min(544px, calc(100vw - 24px));
   height: 244px;
-  padding: 10px 12px;
+  padding: 22px 24px;
   color: var(--ta-ink);
-  background: var(--ta-surface);
-  border: 1px solid var(--ta-border);
-  border-radius: 5px;
   box-shadow: var(--ta-panel-shadow);
+}
+
+/*
+ * The shared RTS frame is one full panel image rather than a pre-cut sprite
+ * sheet.  Its ornaments occupy the first/last ~150 source pixels, so that is
+ * the safe slice: corners never scale, edges stretch, and only the plain dark
+ * centre fills the variable panel area.  `border-image-width` deliberately
+ * exceeds the physical 1px border; it paints the 22px artwork without changing
+ * the layout box, while the matching 22px padding keeps all controls clear of
+ * the frame's inner rule.
+ */
+.rts-selection-panel,
+.rts-build-palette {
+  background: var(--ta-surface);
+  border: 1px solid transparent;
+  border-image-source: url("/assets/ui/panel.png");
+  border-image-slice: 150 fill;
+  border-image-width: 22px;
+  border-image-repeat: stretch;
+  border-radius: 0;
 }
 
 .rts-build-tabs {

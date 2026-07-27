@@ -1,10 +1,10 @@
 /**
  * Worker construction assignments for the settlement loop.
  *
- * Foundations receive one automatic builder so the economy cannot deadlock.
- * The player can then add selected workers explicitly; every active builder
- * contributes one worker-second of progress, up to the small approach-point
- * cap below.
+ * Foundations pull in every idle worker, up to the approach-point cap below,
+ * and — only when no idle worker exists — take a single gatherer off its job so
+ * the economy cannot deadlock. The player can still add selected workers
+ * explicitly; every active builder contributes one worker-second of progress.
  */
 import { Vector3 } from "three";
 
@@ -51,17 +51,39 @@ export class WorkerConstructionSystem {
     /** Automatic recovery may only preempt automatic economy work; an explicit
      * player construction order may replace any economy assignment. */
     private readonly releaseFromOtherWork: (worker: Unit, source: AssignmentSource) => boolean = () => false,
+    /**
+     * Whether a site may pull in *every* idle worker instead of just one. The
+     * player's kingdom opts in: hand-adding three more workers to each new
+     * foundation was busywork. The AI keeps the single-builder rule its economy
+     * managers are tuned around — flooding its own sites cost it buildings.
+     */
+    private readonly autoStaffsToCapacity: (structure: PlacedStructure) => boolean = () => false,
   ) {}
 
-  /** Assign one automatic builder, including recovery for an abandoned site. */
+  /**
+   * Staff a foundation automatically. For a kingdom that opts into capacity
+   * staffing every genuinely idle worker joins, up to the approach-point cap;
+   * otherwise one builder does. Only when the site would otherwise stay empty is
+   * a worker pulled off automatic economy work — gathering keeps the rest.
+   */
   assignNearest(structure: PlacedStructure): WorkerAssignmentResult {
     if (structure.construction.complete || this.assignmentCount(structure) >= MAX_BUILDERS_PER_SITE) {
       return { assigned: false, reason: "no-idle-worker" };
     }
     const free = this.candidatesFor(structure, (worker) => !this.isReservedForOtherWork(worker));
-    if (this.tryAssign(free, structure, "automatic")) return { assigned: true };
+    const toCapacity = this.autoStaffsToCapacity(structure);
+    let assignedAny = false;
+    for (const worker of free) {
+      if (this.assignmentCount(structure) >= MAX_BUILDERS_PER_SITE) break;
+      if (!this.tryAssign([worker], structure, "automatic")) continue;
+      assignedAny = true;
+      if (!toCapacity) break;
+    }
+    if (assignedAny) return { assigned: true };
+    // A foundation must not deadlock behind automatic gathering assignments —
+    // but preemption stays a last resort, so it only applies to an empty site.
+    if (this.assignmentCount(structure) > 0) return { assigned: false, reason: "no-idle-worker" };
 
-    // A foundation must not deadlock behind automatic gathering assignments.
     const gathering = this.candidatesFor(structure, (worker) => this.isReservedForOtherWork(worker));
     for (const worker of gathering) {
       if (!this.releaseFromOtherWork(worker, "automatic")) continue;
@@ -160,7 +182,7 @@ export class WorkerConstructionSystem {
   }
 
   update(deltaSeconds: number): void {
-    this.restaffAbandonedSites();
+    this.staffConstructionSites();
     for (const assignment of [...this.assignments.values()]) {
       const { worker, structure } = assignment;
       if (worker.health.depleted || !this.structures.all().includes(structure)) {
@@ -204,11 +226,19 @@ export class WorkerConstructionSystem {
     }
   }
 
-  /** Keep one automatic worker on a foundation that lost all of its builders. */
-  private restaffAbandonedSites(): void {
-    const staffed = new Set([...this.assignments.values()].map((assignment) => assignment.structure));
+  /**
+   * Keep every unfinished foundation staffed up to the cap. Workers that fall
+   * idle later — a finished site, a gatherer released by its producer — join an
+   * ongoing build instead of standing around.
+   */
+  private staffConstructionSites(): void {
     for (const structure of this.structures.all()) {
-      if (structure.construction.complete || staffed.has(structure)) continue;
+      if (structure.construction.complete) continue;
+      const staffed = this.assignmentCount(structure);
+      // A kingdom without capacity staffing keeps the old rule: top up only a
+      // site that lost every builder.
+      if (staffed >= MAX_BUILDERS_PER_SITE) continue;
+      if (staffed > 0 && !this.autoStaffsToCapacity(structure)) continue;
       this.assignNearest(structure);
     }
   }
@@ -228,9 +258,9 @@ export class WorkerConstructionSystem {
         && !worker.blocksAutomaticWorkerAssignment && !this.isReservedForOtherWork(worker)).length;
   }
 
-  /** Immediately retry automatic staffing of abandoned foundations. */
+  /** Immediately retry automatic staffing of unfinished foundations. */
   assignIdleWorkers(): void {
-    this.restaffAbandonedSites();
+    this.staffConstructionSites();
   }
 
   reset(): void {

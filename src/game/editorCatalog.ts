@@ -78,7 +78,6 @@ const UNITS_FIELDS = [
 const BUILDINGS_FIELDS = [
   { path: "label", label: "Ad", hint: "Binanın oyunda ve arayüzde görünen adı." },
   { path: "icon", label: "İkon yolu", hint: "Yapı paletindeki simgenin dosya yolu (public köküne göre)." },
-  { path: "portrait", label: "Portre yolu", hint: "Seçim panelindeki portre görselinin dosya yolu." },
   {
     path: "requiredAge",
     label: "Gerekli çağ",

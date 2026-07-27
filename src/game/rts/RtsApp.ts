@@ -702,6 +702,10 @@ export class RtsApp {
       (worker, source) => source === "manual"
         ? this.economyProduction?.release(worker) ?? false
         : this.economyProduction?.releaseAutomatic(worker) ?? false,
+      // Only the player's sites pull in every idle worker: hand-picking three
+      // more builders per foundation was busywork the player always did anyway.
+      // The AI's build/economy managers stay on the tuned single-builder rule.
+      (structure) => structure.owner === PLAYER_OWNER,
     );
     this.economyProduction = new EconomyProductionSystem(
       this.units,
@@ -2643,7 +2647,7 @@ export class RtsApp {
         structure: {
           id: structure.id,
           label: structure.stats.label,
-          portrait: structure.stats.portrait,
+          icon: structure.stats.icon,
           level: structure.level,
           ageLabel: this.ageOf(structure.owner) === "town" ? "Kasaba" : "Yerleşim",
           health: structure.health.current,
@@ -2661,7 +2665,7 @@ export class RtsApp {
       structure: {
         id: 0,
         label: this.options.buildingBalance["command_center"]?.label ?? "Merkez",
-        portrait: this.options.buildingBalance["command_center"]?.portrait,
+        icon: this.options.buildingBalance["command_center"]?.icon,
         level: center.level,
         ageLabel: this.ageOf(center.owner) === "town" ? "Kasaba" : "Yerleşim",
         health: center.health.current,

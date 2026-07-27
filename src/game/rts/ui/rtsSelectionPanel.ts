@@ -13,6 +13,7 @@
  * It hands the id back and lets `RtsApp` own the verb.
  */
 import { describeSelection, type RtsSelectionView, type SelectionPanelContent } from "./rtsSelectionView";
+import { attachIconFallback } from "./rtsUiIcons";
 
 export class RtsSelectionPanel {
   private readonly root = document.createElement("section");
@@ -110,6 +111,7 @@ export class RtsSelectionPanel {
     this.title.textContent = content.title;
     this.summary.textContent = content.summary;
     this.hints.textContent = content.hint;
+    this.hints.hidden = content.hint.length === 0;
     this.renderSlots(content.slots ?? []);
     this.renderCommandChips(content.commandChips ?? []);
     const portrait = content.portrait ?? null;
@@ -166,14 +168,24 @@ export class RtsSelectionPanel {
   }
 
   private renderCommandChips(chips: readonly import("./rtsSelectionView").SelectionCommandChip[]): void {
-    const signature = chips.map((chip) => `${chip.label}|${chip.key}`).join(";");
+    const signature = chips.map((chip) => `${chip.icon ?? ""}|${chip.label}|${chip.key}`).join(";");
     if (this.commandChips.dataset.rtsCommands === signature) return;
     this.commandChips.dataset.rtsCommands = signature;
     this.commandChips.hidden = chips.length === 0;
     this.commandChips.replaceChildren(...chips.map((chip) => {
       const entry = document.createElement("span");
       entry.className = "rts-selection-command-chip";
-      entry.textContent = chip.label;
+      if (chip.icon) {
+        const icon = document.createElement("img");
+        icon.src = chip.icon;
+        icon.alt = "";
+        attachIconFallback(icon);
+        entry.appendChild(icon);
+      }
+      const label = document.createElement("span");
+      label.className = "rts-selection-command-label";
+      label.textContent = chip.label;
+      entry.appendChild(label);
       const key = document.createElement("kbd");
       key.textContent = chip.key;
       entry.appendChild(key);

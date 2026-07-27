@@ -1212,6 +1212,7 @@ let checks = 0;
  */
 const RTS_TEST_UNIT_STATS = {
   label: "Test Muhafızı",
+  icon: "/assets/ui/icons/unit-guard.png",
   role: "guard",
   armorClass: "heavy",
   maxHealth: 100,
@@ -29046,8 +29047,8 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
     arrowsPerVolley: 2,
     damageMultipliers: { light: 1.2, heavy: 0.8, structure: 0.25 },
   });
-  assert.equal(buildings.house?.icon, "/assets/ui/icons/building-house.svg");
-  assert.equal(buildings.house?.portrait, "/assets/ui/portraits/building.svg");
+  assert.equal(buildings.house?.icon, "/assets/ui/icons/building-house.png");
+  assert.equal(buildings.house?.portrait, undefined, "selection artwork reuses the building icon");
   assert.throws(
     () => validateBuildingBalance({ house: { label: "Ev", footprint: { width: 0, depth: 4 }, cost: {}, constructionSeconds: 25 } }),
     GameDataError,
@@ -29071,16 +29072,16 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
   );
 });
 
-check("Faz B UI artwork is data-driven and every shipped reference exists", () => {
+check("Faz B UI icons are data-driven and every shipped reference exists", () => {
   const tables = [
     validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown),
     validateUnitBalance(JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown),
   ];
-  assert.equal(tables[1].worker_placeholder?.icon, "/assets/ui/icons/unit-worker.svg");
-  assert.equal(tables[1].worker_placeholder?.portrait, "/assets/ui/portraits/unit.svg");
+  assert.equal(tables[1].worker_placeholder?.icon, "/assets/ui/icons/unit-worker.png");
+  assert.equal(tables[1].worker_placeholder?.portrait, undefined, "selection artwork reuses the unit icon");
   for (const table of tables) {
     for (const definition of Object.values(table)) {
-      for (const asset of [definition.icon, definition.portrait]) {
+      for (const asset of [definition.icon]) {
         assert.ok(asset, `${definition.label} needs a UI artwork reference`);
         assert.ok(statSync(`public${asset}`).isFile(), `${definition.label} references a missing UI asset: ${asset}`);
       }
@@ -34463,6 +34464,67 @@ check("RTS selected workers add linear construction speed at separate work point
   structures.clear();
 });
 
+check("RTS a player foundation staffs itself to capacity, and preempts only one gatherer", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+
+  // Five idle workers, four work points: the player used to hand-add the other
+  // three builders to every foundation, which is the busywork this removes.
+  const units = new UnitSystem();
+  for (let index = 0; index < 5; index += 1) units.spawn("player", -6 + index * 3, 6, RTS_TEST_WORKER_STATS);
+  const structures = new PlacedStructureSystem();
+  const site = structures.place("player", { ...house, constructionSeconds: 40 }, 0, 0);
+  const idleStaffing = new WorkerConstructionSystem(
+    units, structures, new RtsNavigation(), undefined, undefined, undefined,
+    (structure) => structure.owner === "player",
+  );
+  assert.deepEqual(idleStaffing.assignNearest(site), { assigned: true });
+  assert.equal(idleStaffing.assignedWorkers(site), 4, "every idle worker joins, up to the work-point cap");
+  assert.equal(idleStaffing.idleWorkerCount("player"), 1, "the fifth has nowhere to stand and stays idle");
+  structures.clear();
+  units.clear();
+
+  // With no idle worker the site still gets exactly one builder: gathering is
+  // not worth stalling four ways over a single foundation.
+  const busyUnits = new UnitSystem();
+  for (let index = 0; index < 5; index += 1) busyUnits.spawn("player", -6 + index * 3, 6, RTS_TEST_WORKER_STATS);
+  const busyStructures = new PlacedStructureSystem();
+  const busySite = busyStructures.place("player", { ...house, constructionSeconds: 40 }, 0, 0);
+  const gathering = new Set(busyUnits.all().map((unit) => unit.id));
+  const preempting = new WorkerConstructionSystem(
+    busyUnits, busyStructures, new RtsNavigation(),
+    (worker) => gathering.has(worker.id),
+    undefined,
+    (worker) => gathering.delete(worker.id),
+    (structure) => structure.owner === "player",
+  );
+  assert.deepEqual(preempting.assignNearest(busySite), { assigned: true });
+  assert.equal(preempting.assignedWorkers(busySite), 1, "only one worker leaves its job");
+  preempting.update(0);
+  assert.equal(preempting.assignedWorkers(busySite), 1, "and the per-frame restaff does not drain the rest");
+  assert.equal(gathering.size, 4, "the other four keep gathering");
+  busyStructures.clear();
+  busyUnits.clear();
+
+  // The AI opts out: its build and economy managers are tuned around one
+  // automatic builder, and flooding its own sites cost it finished buildings.
+  const aiUnits = new UnitSystem();
+  for (let index = 0; index < 5; index += 1) aiUnits.spawn("enemy", -6 + index * 3, 6, RTS_TEST_WORKER_STATS);
+  const aiStructures = new PlacedStructureSystem();
+  const aiSite = aiStructures.place("enemy", { ...house, constructionSeconds: 40 }, 0, 0);
+  const aiConstruction = new WorkerConstructionSystem(
+    aiUnits, aiStructures, new RtsNavigation(), undefined, undefined, undefined,
+    (structure) => structure.owner === "player",
+  );
+  assert.deepEqual(aiConstruction.assignNearest(aiSite), { assigned: true });
+  aiConstruction.update(0);
+  assert.equal(aiConstruction.assignedWorkers(aiSite), 1, "an AI foundation keeps its single automatic builder");
+  aiStructures.clear();
+  aiUnits.clear();
+});
+
 check("RTS construction names missing-worker and unreachable placement errors", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -37947,6 +38009,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   const army = describeSelection({ kind: "units", units: [guard(1), guard(2)] })
     ?? assert.fail("an army selection has a panel");
   assert.equal(army.title, "Seçim");
+  assert.equal(army.portrait, RTS_TEST_UNIT_STATS.icon, "the enlarged selection visual comes from the unit icon");
   assert.match(army.summary, /2 .* — Can: 160\/200/);
   // §33: the matchup line is read off the same multipliers combat resolves
   // against, so the panel cannot advertise a matchup the data does not give.

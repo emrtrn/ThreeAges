@@ -28,6 +28,7 @@ import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
 import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
 import { formatCostShortfall, formatResourceCost, resourceLabel } from "./resourceLabels";
+import { UNIT_ATTACK_MOVE_ICON, UNIT_FREE_ICON, UNIT_HOLD_ICON, UNIT_STOP_ICON } from "./rtsUiIcons";
 
 /**
  * A button the selected thing offers. Declarative on purpose: the panel maps
@@ -197,8 +198,8 @@ export type StructureDetailView =
 export interface SelectedStructureView {
   readonly id: number;
   readonly label: string;
-  /** Data-owned selection artwork; panels never derive it from a structure id. */
-  readonly portrait?: string | undefined;
+  /** Data-owned icon enlarged and cropped by the selection-panel frame. */
+  readonly icon?: string | undefined;
   readonly level: number;
   /** Current age family, supplied by the runtime because the UI does not own age state. */
   readonly ageLabel?: string;
@@ -257,6 +258,8 @@ export interface SelectionSlot {
 export interface SelectionCommandChip {
   readonly label: string;
   readonly key: string;
+  /** Optional command artwork; the label remains available to every player. */
+  readonly icon?: string;
 }
 
 /**
@@ -334,12 +337,11 @@ const LOGISTICS_REASON: Record<ProducerLogisticsStatus, string> = {
   "depot-occupied": "Bağlı Depo düşman işgali altında; işgali kaldırın.",
 };
 
-const UNIT_HINT = "F: Saldırı-Hareket · H: Pozisyonu Koru · G: Serbest · X: Dur";
 const UNIT_COMMAND_CHIPS: readonly SelectionCommandChip[] = [
-  { label: "Saldırı-Hareket", key: "F" },
-  { label: "Pozisyonu Koru", key: "H" },
-  { label: "Serbest", key: "G" },
-  { label: "Dur", key: "X" },
+  { label: "Saldırı-Hareket", key: "F", icon: UNIT_ATTACK_MOVE_ICON },
+  { label: "Pozisyonu Koru", key: "H", icon: UNIT_HOLD_ICON },
+  { label: "Serbest", key: "G", icon: UNIT_FREE_ICON },
+  { label: "Dur", key: "X", icon: UNIT_STOP_ICON },
 ];
 const WORKER_HINT = "Sağ tık: inşaata veya üretim yapısına ata · X: Görevi bırak";
 const STRUCTURE_HINT = "Sağ tık: seçili işçileri bu yapıya ata";
@@ -416,7 +418,7 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
       actions: rescueActions(units),
       hint: WORKER_HINT,
       tooltip: "Boşta bir işçi, oyuncunun oyuna borçlu olduğu bir karardır.",
-      portrait: first.stats.portrait ?? first.stats.icon ?? null,
+      portrait: first.stats.icon ?? null,
       selectionCount: units.length,
       health: { current: health, max: maxHealth },
       slots,
@@ -444,9 +446,12 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
     // rescue is the exception — it needs no world target — and appears only when
     // a selected unit is trapped.
     actions: rescueActions(units),
-    hint: UNIT_HINT,
+    // The four command cards already carry both their Turkish label and key;
+    // repeating the bindings in the bottom hint would only steal vertical room
+    // from the command deck.
+    hint: "",
     tooltip: null,
-    portrait: sample.stats.portrait ?? sample.stats.icon ?? null,
+    portrait: sample.stats.icon ?? null,
     selectionCount: units.length,
     health: { current: health, max: maxHealth },
     slots,
@@ -460,7 +465,7 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
     return {
       ...base,
       actions: [...base.actions, cancelConstructionAction(structure)],
-      portrait: structure.portrait ?? null,
+      portrait: structure.icon ?? null,
       selectionCount: 1,
       health: { current: structure.health, max: structure.maxHealth },
     };
@@ -481,7 +486,7 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
     ...base,
     actions,
     progress: structure.detail.kind === "center" ? centerProgress(structure.detail.progression) : null,
-    portrait: structure.portrait ?? null,
+    portrait: structure.icon ?? null,
     selectionCount: 1,
     health: { current: structure.health, max: structure.maxHealth },
   };

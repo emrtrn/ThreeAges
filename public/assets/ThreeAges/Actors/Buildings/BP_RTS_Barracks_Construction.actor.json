@@ -17,19 +17,6 @@
         "assetId": "barracks-firstage-level1"
       },
       "parent": "root"
-    },
-    {
-      "id": "staticMeshComponent",
-      "component": "StaticMeshComponent",
-      "props": {
-        "position": [
-          1,
-          0,
-          0
-        ],
-        "assetId": "crate-big-stack2"
-      },
-      "parent": "root"
     }
   ],
   "interfaces": [],

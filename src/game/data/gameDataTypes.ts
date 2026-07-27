@@ -134,8 +134,6 @@ export interface UnitBalanceStats {
    * code; omitted remains valid for headless fixtures and future content.
    */
   readonly icon?: UiAssetPath;
-  /** Larger selection-panel artwork for this unit, when it has one. */
-  readonly portrait?: UiAssetPath;
   /** Battlefield role, driving both production gating and UI role copy. */
   readonly role: UnitRoleId;
   /** What attackers resolve their §33 multiplier against when hitting this unit. */
@@ -212,7 +210,7 @@ export type UnitBalance = Readonly<Record<string, UnitBalanceStats>>;
  * curated UI directories; this keeps data-driven panels from accepting an
  * arbitrary URL as artwork.
  */
-export type UiAssetPath = `/assets/ui/${"icons" | "portraits"}/${string}.${"svg" | "png"}`;
+export type UiAssetPath = `/assets/ui/icons/${string}.${"svg" | "png"}`;
 
 /** One grid-aligned RTS building definition, loaded from balance/buildings.json. */
 export interface BuildingBalanceStats {
@@ -221,8 +219,6 @@ export interface BuildingBalanceStats {
   readonly label: string;
   /** Compact tile/icon artwork used by build and selection UI. */
   readonly icon?: UiAssetPath;
-  /** Larger selection-panel artwork, when distinct from the compact icon. */
-  readonly portrait?: UiAssetPath;
   /** World-space footprint dimensions; both are multiples of the placement grid. */
   readonly footprint: { readonly width: number; readonly depth: number };
   /** Resource reservation is implemented in the following Phase 2 slice. */

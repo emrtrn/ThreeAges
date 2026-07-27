@@ -172,6 +172,7 @@ export class RtsBuildPalette {
         icon.className = "rts-build-choice-icon";
         icon.src = PALETTE_ROAD_ICON;
         icon.alt = "";
+        attachIconFallback(icon);
         const label = document.createElement("span");
         label.className = "rts-build-choice-label";
         label.textContent = "Yol";
@@ -194,6 +195,7 @@ export class RtsBuildPalette {
         eraseIcon.className = "rts-build-choice-icon";
         eraseIcon.src = PALETTE_ROAD_ERASE_ICON;
         eraseIcon.alt = "";
+        attachIconFallback(eraseIcon);
         const eraseLabel = document.createElement("span");
         eraseLabel.className = "rts-build-choice-label";
         eraseLabel.textContent = "Yol Sil";
@@ -215,6 +217,7 @@ export class RtsBuildPalette {
         icon.className = "rts-build-choice-icon";
         icon.src = PALETTE_TEMPLE_SOON_ICON;
         icon.alt = "";
+        attachIconFallback(icon);
         const label = document.createElement("span");
         label.className = "rts-build-choice-label";
         label.textContent = "Tapınak";
