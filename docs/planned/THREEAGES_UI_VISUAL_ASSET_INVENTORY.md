@@ -185,6 +185,8 @@ Hız rakamları görsele gömülmemelidir; `1×/2×/4×/8×` HTML metni olarak k
 
 Uygulama kararı: Oyuncuya açık üst HUD yalnızca `Normal` ve `2×` hızlarını gösterir. `4×` ve `8×`, geliştirme sürecinde sadece `?rts&debug` ile açılan sol üst debug yüzeyinde bulunur. Boş işçi sayısı, `Seç (I)` ve `Ata (R)` eylemlerinin yanında durum rozeti olarak görünür; duraklatma denetimi sağda `Ⅱ` simgesiyle, açıklayıcı tooltip ile sunulur.
 
+Uygulama durumu: Oyuncu krallık arması `public/assets/ui/arma.png`, üst HUD'da eski metin tabanlı `TA` rozeti ve `Krallık` yazısının yerine kullanılır. Mevcut dikey `frame.png` üst HUD'a bağlanmaz; büyük krallık/profil yüzeyleri için saklanır.
+
 ---
 
 ## 7. Yapı kartı ve seçim görseli listesi

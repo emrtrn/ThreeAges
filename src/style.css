@@ -28,7 +28,7 @@
    * because the elements that must clear the bar are its *siblings* in
    * #ui-overlay, and a custom property only inherits downward.
    */
-  --rts-hud-bar-height: 82px;
+  --rts-hud-bar-height: 72px;
 
   /*
    * ThreeAges medieval theme tokens (docs/planned/THREEAGES_UI_RESTYLING_PLAN.md,
@@ -563,26 +563,18 @@ body {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 7px;
+  /* The crest intentionally hangs a little lower than the information row;
+     its silhouette marks player ownership without needing a text label. */
+  overflow: visible;
 }
 
 .rts-hud-crest {
-  display: grid;
-  width: 28px;
-  height: 32px;
-  place-items: center;
-  color: #3a2515;
-  font: 800 10px/1 Cinzel, Georgia, serif;
-  letter-spacing: -0.04em;
-  background: var(--ta-gold);
-  clip-path: polygon(50% 0, 92% 16%, 84% 76%, 50% 100%, 16% 76%, 8% 16%);
-}
-
-.rts-hud-kingdom-name {
-  color: var(--ta-gold);
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
+  display: block;
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  transform: translateY(2px);
+  filter: drop-shadow(0 3px 4px rgb(0 0 0 / 48%));
 }
 
 .rts-hud-resources {
@@ -595,6 +587,7 @@ body {
   display: grid;
   grid-template-columns: repeat(4, 180px);
   flex: 0 0 auto;
+  margin-left: 20px;
   gap: 14px;
 }
 
@@ -767,10 +760,14 @@ body {
 }
 
 .rts-hud-menu-button {
-  min-width: 32px;
-  padding: 4px 7px;
+  /* Pause is the one global HUD action: give its symbol a slightly larger,
+     square hit target without turning the compact top strip into modal UI. */
+  min-width: 36px;
+  min-height: 28px;
+  padding: 4px 9px;
   color: var(--ta-ink);
-  font: 700 17px/1 Georgia, serif;
+  font: 700 18px/1 Georgia, serif;
+  letter-spacing: 0.04em;
   cursor: pointer;
   background: var(--ta-btn2-bg);
   border: 1px solid var(--ta-border-strong);
@@ -833,7 +830,6 @@ body {
     gap: 8px;
   }
 
-  .rts-hud-kingdom-name,
   .rts-hud-worker-cluster {
     display: none;
   }
@@ -1195,18 +1191,136 @@ body {
   transform: translateX(-50%);
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr) minmax(176px, 31%);
-  grid-template-rows: 62px minmax(52px, 1fr) 25px;
+  grid-template-rows: 48px minmax(42px, 1fr) 24px;
   gap: 6px 10px;
   width: min(620px, calc(100vw - 640px));
   box-sizing: border-box;
-  height: 220px;
-  padding: 22px 24px;
+  height: 165px;
+  padding: 16px 24px;
   color: var(--ta-ink);
   box-shadow: var(--ta-panel-shadow);
 }
 
 .rts-selection-panel[hidden] {
   display: none;
+}
+
+/* Ordinary structures only offer a contextual cancel/demolish command. Let the
+   description use the former command rail; the one small command sits beside
+   the persistent hint instead of forcing the facts into a scrollbox. */
+.rts-selection-panel[data-rts-action-layout="wide"],
+.rts-selection-panel[data-rts-action-layout="single"] {
+  grid-template-columns: 88px minmax(0, 1fr) 104px;
+  grid-template-rows: 48px minmax(0, 1fr) 24px;
+}
+
+.rts-selection-panel[data-rts-action-layout="wide"] .rts-selection-portrait,
+.rts-selection-panel[data-rts-action-layout="single"] .rts-selection-portrait {
+  grid-row: 1 / span 2;
+  grid-column: 1;
+}
+
+.rts-selection-panel[data-rts-action-layout="wide"] .rts-selection-header,
+.rts-selection-panel[data-rts-action-layout="single"] .rts-selection-header {
+  grid-row: 1;
+  grid-column: 2 / -1;
+}
+
+.rts-selection-panel[data-rts-action-layout="wide"] .rts-selection-details,
+.rts-selection-panel[data-rts-action-layout="single"] .rts-selection-details {
+  grid-row: 2;
+  grid-column: 2 / -1;
+}
+
+.rts-selection-panel[data-rts-action-layout="wide"] .rts-selection-body,
+.rts-selection-panel[data-rts-action-layout="single"] .rts-selection-body {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(3, max-content);
+  grid-auto-flow: column;
+  align-content: start;
+  column-gap: 18px;
+  row-gap: 3px;
+  overflow: hidden;
+}
+
+.rts-selection-panel[data-rts-action-layout="wide"] .rts-selection-line,
+.rts-selection-panel[data-rts-action-layout="single"] .rts-selection-line {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.rts-selection-panel[data-rts-action-layout="wide"] .rts-selection-hints {
+  grid-row: 3;
+  grid-column: 1 / -1;
+}
+
+.rts-selection-panel[data-rts-action-layout="single"] .rts-selection-hints {
+  display: none;
+}
+
+.rts-selection-panel[data-rts-action-layout="single"] .rts-selection-actions {
+  display: grid;
+  grid-row: 3;
+  grid-column: 3;
+  align-content: stretch;
+  max-height: none;
+  overflow: visible;
+}
+
+.rts-selection-panel[data-rts-action-layout="single"] .rts-selection-action {
+  min-height: 24px;
+  padding: 2px 5px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.rts-selection-panel[data-rts-action-layout="single"] .rts-selection-line {
+  margin: 0;
+}
+
+/* Center, military and market verbs float as individual controls rather than
+   borrowing the selected-building frame. The tray itself is deliberately
+   frameless: each command keeps its own familiar button skin. */
+.rts-selection-action-tray {
+  position: absolute;
+  left: 50%;
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 175px);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  width: min(560px, calc(100vw - 48px));
+  margin: 0;
+  pointer-events: auto;
+  transform: translateX(-50%);
+}
+
+.rts-selection-action-tray[hidden] {
+  display: none;
+}
+
+.rts-selection-action-tray .rts-selection-action {
+  flex: 1 1 118px;
+  max-width: 180px;
+  min-height: 44px;
+  padding: 5px 8px;
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+/* Eight trade verbs remain readable in two short rows. The price is always
+   visible; index details stay available through the button tooltip. */
+.rts-selection-action-tray[data-rts-action-layout="market"] .rts-selection-action {
+  flex-basis: 112px;
+  max-width: 134px;
+  min-height: 38px;
+  gap: 1px;
+  padding: 3px 5px;
+  font-size: 9px;
+  line-height: 1.05;
 }
 
 .rts-selection-portrait {
@@ -1251,7 +1365,7 @@ body {
 .rts-selection-health {
   box-sizing: border-box;
   height: 12px;
-  margin-top: 7px;
+  margin-top: 2px;
   overflow: hidden;
   background: #1b110c;
   border: 3px solid transparent;
@@ -1328,6 +1442,28 @@ body {
   border-radius: 3px;
 }
 
+/* The shorter inspector keeps tactical commands usable by compacting their
+   icon cards, not by hiding an order or truncating its key binding. */
+.rts-selection-panel[data-rts-action-layout="deck"] .rts-selection-command-chip {
+  grid-template-rows: 21px minmax(0, 1fr);
+  gap: 1px;
+  padding: 2px 3px;
+  font-size: 9px;
+  line-height: 1.08;
+}
+
+.rts-selection-panel[data-rts-action-layout="deck"] .rts-selection-command-chip img {
+  width: 21px;
+  height: 21px;
+}
+
+.rts-selection-panel[data-rts-action-layout="deck"] .rts-selection-command-chip kbd {
+  top: 2px;
+  right: 2px;
+  padding: 1px 3px;
+  font-size: 9px;
+}
+
 .rts-selection-command-chip img {
   width: 30px;
   height: 30px;
@@ -1357,7 +1493,7 @@ body {
 }
 
 .rts-selection-summary {
-  margin-top: 3px;
+  margin-top: 1px;
   color: var(--ta-gold);
   font-size: 12px;
   font-weight: 700;

@@ -256,6 +256,8 @@ export interface SelectionPanelContent {
   readonly lines: readonly string[];
   /** Buttons the selection offers; empty for anything the player cannot command. */
   readonly actions: readonly SelectionAction[];
+  /** Presentation family for a structure with a non-generic command deck. */
+  readonly actionLayout?: "compact" | "command-deck" | "market";
   readonly hint: string;
   /** Hover explanation for the panel body; null when there is nothing to resolve. */
   readonly tooltip: string | null;
@@ -366,7 +368,6 @@ const UNIT_COMMAND_CHIPS: readonly SelectionCommandChip[] = [
   { label: "Dur", key: "X", icon: UNIT_STOP_ICON },
 ];
 const WORKER_HINT = "Sağ tık: inşaata veya üretim yapısına ata · X: Görevi bırak";
-const STRUCTURE_HINT = "Sağ tık: seçili işçileri bu yapıya ata";
 const OUTPOST_HINT = "Sağ tık: menzildeki düşmana saldırı emri ver";
 
 /** Above this an attacker is meaningfully strong; below its mirror, weak. */
@@ -672,7 +673,7 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
             : `${detail.assignedWorkers} işçi çalışıyor.`,
         ],
         actions: [],
-        hint: STRUCTURE_HINT,
+        hint: "",
         tooltip: detail.assignedWorkers === 0
           ? "Bir işçi seçip bu şantiyeye sağ tıklayın; işçisiz şantiye ilerlemez."
           : "Daha fazla işçi atamak inşaatı doğrusal olarak hızlandırır.",
@@ -691,7 +692,7 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
           ...(detail.occupied ? ["Düşman işgali altında — teslimat durdu."] : []),
         ],
         actions: [],
-        hint: STRUCTURE_HINT,
+        hint: "",
         tooltip: detail.occupied
           ? "İşgali kaldırmadan bu Depoya bağlı üreticiler global stoğa aktaramaz."
           : detail.status === "linked"
@@ -738,7 +739,7 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
             : "Alanda birim yok.",
         ],
         actions: [],
-        hint: STRUCTURE_HINT,
+        hint: "",
         tooltip: "Alandaki kendi birimleriniz sürekli iyileşir ve aldıkları hasar azalır;"
           + " üst üste binen tapınaklar toplanmaz, en güçlü etki geçerlidir.",
       };
@@ -750,7 +751,7 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
           ? [`Nüfus kapasitesi: +${detail.populationCapacity}`]
           : ["Pasif yapı."],
         actions: [],
-        hint: STRUCTURE_HINT,
+        hint: "",
         tooltip: null,
       };
   }
@@ -806,7 +807,8 @@ function describeCenter(
       },
       centerProgressionAction(progression),
     ],
-    hint: STRUCTURE_HINT,
+    actionLayout: "compact",
+    hint: "",
     tooltip: snapshot.upgrading
       ? "Yükseltme tamamlanınca Merkez etkileri tüm yapılara uygulanır."
       : "Merkez işçi üretir, krallığın kademesini yükseltir ve kontrol alanının çekirdeğidir.",
@@ -835,7 +837,7 @@ function describeProducer(
     // Staffing a producer is a world gesture (select workers, right-click it),
     // so there is no verb here a button could carry.
     actions: [],
-    hint: STRUCTURE_HINT,
+    hint: "",
     tooltip: logistics
       ? LOGISTICS_REASON[logistics]
       : "Yapı tamamlanınca lojistik bağlantısı hesaplanır.",
@@ -873,7 +875,8 @@ function describeMilitary(
         reason: null,
       },
     ],
-    hint: STRUCTURE_HINT,
+    actionLayout: "command-deck",
+    hint: "",
     tooltip: !detail.connected
       ? "Kontrol alanı kaybedilen askerî yapı üretim yapamaz; alanı geri alın."
       : detail.upgrading
@@ -910,18 +913,16 @@ function describeMarket(
     summary,
     lines: [
       `Lot: ${trade.lotSize} birim · komisyon %${commissionPercent}`,
-      ...trade.prices.map((price) => {
-        const band = price.atCeiling ? " (tavan)" : price.atFloor ? " (taban)" : "";
-        return `${resourceLabel(price.resourceId)}: al ${price.buyPrice} / sat ${price.sellPrice} altın`
-          + ` · endeks ×${price.index.toFixed(2)}${band}`;
-      }),
-      ...(detail.connected ? [] : ["Kontrol Dışı — bu Pazar ticaret yapamaz."]),
+      detail.connected
+        ? "Fiyat ve endeks, aşağıdaki Al/Sat kartlarında."
+        : "Kontrol Dışı — bu Pazar ticaret yapamaz.",
     ],
     actions: trade.prices.flatMap((price) => [
-      tradeAction("buy", price.resourceId, price.buyPrice, trade.lotSize, detail.connected),
-      tradeAction("sell", price.resourceId, price.sellPrice, trade.lotSize, detail.connected),
+      tradeAction("buy", price.resourceId, price.buyPrice, trade.lotSize, price.index, detail.connected),
+      tradeAction("sell", price.resourceId, price.sellPrice, trade.lotSize, price.index, detail.connected),
     ]),
-    hint: STRUCTURE_HINT,
+    actionLayout: "market",
+    hint: "",
     tooltip: detail.connected
       ? "Alım fiyatı yükseltir, satım düşürür. Komisyon yüzünden anlık al-sat her zaman zarardır."
       : "Kontrol alanı kaybedilen Pazar ticaret yapamaz; alanı geri alın.",
@@ -940,6 +941,7 @@ function tradeAction(
   resourceId: string,
   price: number,
   lotSize: number,
+  index: number,
   connected: boolean,
 ): SelectionAction {
   const buying = direction === "buy";
@@ -952,6 +954,7 @@ function tradeAction(
     cost: `${buying ? "-" : "+"}${price} ${goldLabel}`,
     enabled: connected,
     reason: connected ? null : "Kontrol Dışı: bu Pazar ticaret yapamaz.",
+    hint: `${resourceLabel(resourceId)} endeksi ×${index.toFixed(2)}. ${buying ? "Alım" : "Satım"} fiyatı: ${price} ${goldLabel}.`,
   };
 }
 

@@ -55,14 +55,11 @@ export class RtsHudBar {
     const identity = document.createElement("div");
     identity.className = "rts-hud-identity";
     identity.setAttribute("aria-label", "Krallık");
-    const crest = document.createElement("span");
+    const crest = document.createElement("img");
     crest.className = "rts-hud-crest";
-    crest.setAttribute("aria-hidden", "true");
-    crest.textContent = "TA";
-    const kingdomName = document.createElement("strong");
-    kingdomName.className = "rts-hud-kingdom-name";
-    kingdomName.textContent = "Krallık";
-    identity.append(crest, kingdomName);
+    crest.src = "/assets/ui/arma.png";
+    crest.alt = "Oyuncu krallığı arması";
+    identity.appendChild(crest);
     this.root.appendChild(identity);
 
     const resources = document.createElement("div");

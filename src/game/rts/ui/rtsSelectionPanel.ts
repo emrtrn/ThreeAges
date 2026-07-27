@@ -12,7 +12,13 @@
  * label and whether it is enabled — it does not know what any of them *mean*.
  * It hands the id back and lets `RtsApp` own the verb.
  */
-import { describeSelection, type RtsSelectionView, type SelectionPanelContent } from "./rtsSelectionView";
+import {
+  DEMOLISH_ACTION,
+  describeSelection,
+  type RtsSelectionView,
+  type SelectionAction,
+  type SelectionPanelContent,
+} from "./rtsSelectionView";
 import { attachIconFallback } from "./rtsUiIcons";
 
 export class RtsSelectionPanel {
@@ -33,6 +39,7 @@ export class RtsSelectionPanel {
   private readonly progressTime = document.createElement("span");
   private readonly progressFill = document.createElement("div");
   private readonly actionRow = document.createElement("div");
+  private readonly actionTray = document.createElement("div");
   private readonly commandChips = document.createElement("div");
   private readonly actionButtons = new Map<string, HTMLButtonElement>();
   private readonly hints = document.createElement("p");
@@ -69,6 +76,8 @@ export class RtsSelectionPanel {
     this.header.append(this.title, this.summary, this.health, this.slots);
     this.body.className = "rts-selection-body ui-interactive";
     this.actionRow.className = "rts-selection-actions ui-interactive";
+    this.actionTray.className = "rts-selection-action-tray ui-interactive";
+    this.actionTray.hidden = true;
     this.commandChips.className = "rts-selection-command-chips";
     this.hints.className = "rts-selection-hints";
     // A labelled fill bar for a running timed job (a level-up). Assembled once
@@ -88,7 +97,8 @@ export class RtsSelectionPanel {
     details.className = "rts-selection-details";
     details.append(this.body, this.progress);
     this.root.append(this.portrait, this.header, details, this.actionRow, this.commandChips, this.hints);
-    (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
+    const overlay = document.getElementById("ui-overlay") ?? document.body;
+    overlay.append(this.root, this.actionTray);
     this.setSelection({ kind: "none" });
   }
 
@@ -100,14 +110,33 @@ export class RtsSelectionPanel {
     if (signature === this.signature) return;
     this.signature = signature;
     this.root.hidden = isEmptySelection;
-    if (!this.root.hidden) this.render(content);
+    if (this.root.hidden) this.actionTray.hidden = true;
+    else this.render(content);
   }
 
   dispose(): void {
     this.root.remove();
+    this.actionTray.remove();
   }
 
   private render(content: SelectionPanelContent): void {
+    // Multi-command buildings keep their live facts in the compact selection
+    // panel, but lift their verbs into independent cards immediately above it.
+    // Demolish remains contextual to its selected structure in the panel.
+    const hasCommandChips = (content.commandChips?.length ?? 0) > 0;
+    const usesFloatingActions = content.actionLayout !== undefined;
+    const panelActions = usesFloatingActions
+      ? content.actions.filter((action) => action.id === DEMOLISH_ACTION)
+      : content.actions;
+    const trayActions = usesFloatingActions
+      ? content.actions.filter((action) => action.id !== DEMOLISH_ACTION)
+      : [];
+    this.root.dataset.rtsActionLayout = hasCommandChips || panelActions.length > 1
+        ? "deck"
+        : panelActions.length === 1
+          ? "single"
+          : "wide";
+    this.actionTray.dataset.rtsActionLayout = content.actionLayout ?? "";
     this.title.textContent = content.title;
     this.summary.textContent = content.summary;
     this.hints.textContent = content.hint;
@@ -145,7 +174,7 @@ export class RtsSelectionPanel {
     }
     this.body.title = content.tooltip ?? "";
     this.renderProgress(content);
-    this.renderActions(content);
+    this.renderActions(panelActions, trayActions);
   }
 
   private renderSlots(slots: readonly import("./rtsSelectionView").SelectionSlot[]): void {
@@ -212,13 +241,21 @@ export class RtsSelectionPanel {
    * state and reason are refreshed in place. Replacing the nodes every frame
    * would cancel the press the player is in the middle of making.
    */
-  private renderActions(content: SelectionPanelContent): void {
-    const wanted = content.actions.map((action) => action.id).join("|");
+  private renderActions(
+    panelActions: readonly SelectionAction[],
+    trayActions: readonly SelectionAction[],
+  ): void {
+    const rendered = [
+      ...panelActions.map((action) => ({ action, parent: this.actionRow })),
+      ...trayActions.map((action) => ({ action, parent: this.actionTray })),
+    ];
+    const wanted = rendered.map(({ action, parent }) => `${parent === this.actionTray ? "tray" : "panel"}:${action.id}`).join("|");
     if (this.actionRow.dataset.rtsActions !== wanted) {
       this.actionRow.dataset.rtsActions = wanted;
       this.actionRow.replaceChildren();
+      this.actionTray.replaceChildren();
       this.actionButtons.clear();
-      for (const action of content.actions) {
+      for (const { action, parent } of rendered) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "rts-selection-action";
@@ -237,11 +274,12 @@ export class RtsSelectionPanel {
         }
         button.addEventListener("click", () => this.onAction(action.id));
         this.actionButtons.set(action.id, button);
-        this.actionRow.appendChild(button);
+        parent.appendChild(button);
       }
     }
-    this.actionRow.hidden = content.actions.length === 0;
-    for (const action of content.actions) {
+    this.actionRow.hidden = panelActions.length === 0;
+    this.actionTray.hidden = trayActions.length === 0;
+    for (const { action } of rendered) {
       const button = this.actionButtons.get(action.id);
       if (!button) continue;
       // Action ids are stable commands (for example every building upgrade is
