@@ -67,7 +67,15 @@ import {
   type MissionStructureFact,
   type MissionWorldSnapshot,
 } from "../src/game/rts/tutorial/missionPredicates";
-import type { MissionScript } from "../src/game/rts/tutorial/missionScript";
+import type { MissionGoal, MissionScript } from "../src/game/rts/tutorial/missionScript";
+import {
+  DEFAULT_MISSION_SCRIPT_ID,
+  hasSeenMission,
+  markMissionSeen,
+  missionScriptIdForMode,
+  resolveMissionMode,
+  writeMissionMode,
+} from "../src/game/rts/tutorial/missionModeChoice";
 import { normalizeAssetCollisionDef } from "../src/scene/assetCollisionLoader";
 import {
   buildGameModeDebugSnapshot,
@@ -32266,7 +32274,16 @@ check("§78.1: the start card's victory choice outranks the preset and ?flags=, 
 const missionWorld = (
   structures: readonly MissionStructureFact[],
   producers: readonly MissionProducerFact[] = [],
-): MissionWorldSnapshot => ({ structures, producers });
+  extra: Partial<MissionWorldSnapshot> = {},
+): MissionWorldSnapshot => ({
+  structures,
+  producers,
+  units: [],
+  tier: { age: "settlement", level: 1 },
+  populationHeadroom: 0,
+  razedEnemyBuildings: {},
+  ...extra,
+});
 
 const farm = (complete = true): MissionStructureFact => ({ owner: "player", buildingId: "farm", complete });
 const depot = (complete = true): MissionStructureFact => ({ owner: "player", buildingId: "depot", complete });
@@ -32312,6 +32329,93 @@ check("mission goals read only the player's completed world", () => {
     isGoalMet(goal, missionWorld([], [{ owner: "player", resourceId: "wood", status: "linked" }])),
     false,
   );
+});
+
+check("the Faz 2 mission goals measure the rule they teach", () => {
+  // An outpost that is merely built is not the lesson: the lesson is the road
+  // back to the centre, which is what widens its control area.
+  const connect: MissionGoal = { kind: "outpost-connected", count: 1 };
+  const outpost = (roadConnected: boolean, complete = true): MissionStructureFact =>
+    ({ owner: "player", buildingId: "outpost", complete, roadConnected });
+  assert.equal(isGoalMet(connect, missionWorld([outpost(false)])), false);
+  assert.equal(isGoalMet(connect, missionWorld([outpost(true, false)])), false, "a site under construction controls nothing");
+  assert.equal(isGoalMet(connect, missionWorld([outpost(true)])), true);
+  // A building with no notion of connectivity can never satisfy it, whatever
+  // else is true of it — the fact is absent, not false-y by accident.
+  assert.equal(
+    isGoalMet(connect, missionWorld([{ owner: "player", buildingId: "farm", complete: true }])),
+    false,
+  );
+
+  const headroom: MissionGoal = { kind: "population-headroom", count: 5 };
+  assert.equal(isGoalMet(headroom, missionWorld([], [], { populationHeadroom: 4 })), false);
+  assert.equal(isGoalMet(headroom, missionWorld([], [], { populationHeadroom: 5 })), true);
+
+  // Age outranks level: a kingdom that reached Town has plainly cleared
+  // "get to Settlement Lv3", and re-opening that step would punish over-achieving.
+  const settlementLv3: MissionGoal = { kind: "tier-reached", age: "settlement", level: 3 };
+  assert.equal(isGoalMet(settlementLv3, missionWorld([], [], { tier: { age: "settlement", level: 2 } })), false);
+  assert.equal(isGoalMet(settlementLv3, missionWorld([], [], { tier: { age: "settlement", level: 3 } })), true);
+  assert.equal(isGoalMet(settlementLv3, missionWorld([], [], { tier: { age: "town", level: 1 } })), true);
+  // ...and the reverse does not hold: Settlement Lv3 is not Town.
+  assert.equal(
+    isGoalMet({ kind: "tier-reached", age: "town", level: 1 }, missionWorld([], [], { tier: { age: "settlement", level: 3 } })),
+    false,
+  );
+
+  const guards: MissionGoal = { kind: "unit-count", role: "guard", count: 3 };
+  const army = (role: "guard" | "worker", owner: "player" | "enemy" = "player") => ({ owner, role } as const);
+  assert.equal(isGoalMet(guards, missionWorld([], [], { units: [army("guard"), army("guard")] })), false);
+  assert.equal(
+    isGoalMet(guards, missionWorld([], [], { units: [army("guard"), army("guard"), army("worker")] })),
+    false,
+    "workers are not guards",
+  );
+  assert.equal(
+    isGoalMet(guards, missionWorld([], [], { units: [army("guard"), army("guard"), army("guard", "enemy")] })),
+    false,
+    "the enemy's army does not fill the player's quota",
+  );
+
+  const razed: MissionGoal = { kind: "enemy-structure-razed", buildingId: "outpost", count: 1 };
+  assert.equal(isGoalMet(razed, missionWorld([])), false);
+  assert.equal(isGoalMet(razed, missionWorld([], [], { razedEnemyBuildings: { farm: 3 } })), false);
+  assert.equal(isGoalMet(razed, missionWorld([], [], { razedEnemyBuildings: { outpost: 1 } })), true);
+});
+
+check("a latched step stays cleared once the player has done it", () => {
+  // The distinction the flag exists for: a depot is something you *have* (lose it
+  // and the work is real again), three trained guards are something you *did*.
+  const script: MissionScript = {
+    id: "latch_chain",
+    label: "L",
+    intro: "i",
+    outro: "o",
+    steps: [
+      { id: "army", title: "Ordu", why: "w", goal: { kind: "unit-count", role: "guard", count: 3 }, latch: true },
+      { id: "depot", title: "Depo", why: "w", goal: { kind: "structure-built", buildingId: "depot", count: 1 } },
+    ],
+  };
+  const guard = { owner: "player", role: "guard" } as const;
+  const director = new MissionDirector(script);
+  director.evaluate(missionWorld([]));
+  assert.equal(director.state().step?.id, "army");
+
+  director.evaluate(missionWorld([], [], { units: [guard, guard, guard] }));
+  assert.equal(director.state().step?.id, "depot");
+
+  // The army dies. The latched step must not re-open — the player did train them,
+  // and demanding it again would read as blame for having used the army.
+  director.evaluate(missionWorld([], [], { units: [] }));
+  assert.equal(director.state().step?.id, "depot", "a latched step stays cleared");
+
+  // The unlatched step beside it still re-opens, which is the whole point of
+  // making the latch opt-in rather than the default.
+  director.evaluate(missionWorld([depot()], [], { units: [] }));
+  assert.equal(director.state().finished, true);
+  director.reset();
+  director.evaluate(missionWorld([], [], { units: [guard, guard, guard] }));
+  assert.equal(director.state().step?.id, "depot", "reset clears the latch too");
 });
 
 check("the mission chain is order-independent, reversible and cannot deadlock", () => {
@@ -32379,21 +32483,114 @@ check("the mission chain is order-independent, reversible and cannot deadlock", 
   assert.throws(() => new MissionDirector({ ...missionTestScript, steps: [] }), /no steps/);
 });
 
+check("the story offer defaults on once, and every answer counts as answering it", () => {
+  const store = (initial: Record<string, string> = {}) => {
+    const data = { ...initial };
+    return {
+      data,
+      getItem: (key: string) => data[key] ?? null,
+      setItem: (key: string, value: string) => { data[key] = value; },
+    };
+  };
+
+  // A first-time player gets the tur without asking for it — they are the reason
+  // the mode exists, and they are also the least likely to go looking for it.
+  assert.equal(resolveMissionMode(store(), store()), "story");
+  // Someone who has already met it does not get it again on a new tab.
+  const seen = store();
+  markMissionSeen(seen);
+  assert.equal(hasSeenMission(seen), true);
+  assert.equal(resolveMissionMode(store(), seen), "free");
+
+  // An explicit pick this session outranks both: a player who has finished the
+  // tur can still choose to replay it.
+  const session = store();
+  writeMissionMode(session, "story");
+  assert.equal(resolveMissionMode(session, seen), "story");
+  writeMissionMode(session, "free");
+  assert.equal(resolveMissionMode(session, store()), "free");
+
+  // Corrupt storage is not a choice and must not decide a match.
+  assert.equal(resolveMissionMode(store({ "threeages.missionMode": "sideways" }), store()), "story");
+  // A browser that cannot remember anything still boots, on the first-time side.
+  assert.equal(resolveMissionMode(null, null), "story");
+  const throwing = {
+    getItem: () => { throw new Error("blocked"); },
+    setItem: () => { throw new Error("blocked"); },
+  };
+  assert.equal(resolveMissionMode(throwing, throwing), "story");
+  assert.doesNotThrow(() => markMissionSeen(throwing));
+  assert.doesNotThrow(() => writeMissionMode(throwing, "free"));
+
+  // The mode is the only thing that names a script file.
+  assert.equal(missionScriptIdForMode("story"), DEFAULT_MISSION_SCRIPT_ID);
+  assert.equal(missionScriptIdForMode("free"), null);
+});
+
+check("abandoning the chain ends it without claiming it was completed", () => {
+  const director = new MissionDirector(missionTestScript);
+  director.evaluate(missionWorld([]));
+  assert.equal(director.state().step?.id, "s1");
+
+  assert.equal(director.abandon(), true);
+  assert.equal(director.state().step, null, "the card goes away");
+  assert.equal(director.state().finished, true);
+  // No completion event was raised, and none can be from here: leaving the tur
+  // is not finishing it, and the feed must not congratulate the player for it.
+  assert.deepEqual(director.evaluate(missionWorld([farm(), depot()], [linkedFarm()])), []);
+  // A repeated click is not a second escape, so the caller can tell them apart.
+  assert.equal(director.abandon(), false);
+
+  // A restart brings the tur back — abandoning is for this match, not forever.
+  director.reset();
+  assert.deepEqual(director.evaluate(missionWorld([])).map((event) => event.kind), ["step-activated"]);
+});
+
 check("the shipped mission script validates, and a broken one fails at load", () => {
   const buildingIds = new Set(Object.keys(
     validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown),
   ));
   const raw = JSON.parse(readFileSync("public/game-data/missions/frontier_road.json", "utf8")) as unknown;
   const script = validateMissionScript(raw, "frontier_road", buildingIds);
-  assert.equal(script.steps.length, 3);
   assert.equal(script.steps[0]!.goal.kind, "structure-built");
 
   // Every shipped step must be reachable: a goal is only worth writing if some
   // world satisfies it, and the director must be able to walk the whole chain.
+  // This is the check that catches a chain nobody can finish — the failure mode
+  // that strands exactly the player the mode exists for.
+  const finishedValley = missionWorld(
+    [
+      farm(),
+      depot(),
+      { owner: "player", buildingId: "outpost", complete: true, roadConnected: true },
+      { owner: "player", buildingId: "barracks", complete: true },
+    ],
+    [
+      linkedFarm(),
+      { owner: "player", resourceId: "wood", status: "linked" },
+      { owner: "player", resourceId: "stone", status: "linked" },
+    ],
+    {
+      units: [
+        { owner: "player", role: "guard" },
+        { owner: "player", role: "guard" },
+        { owner: "player", role: "guard" },
+      ],
+      tier: { age: "town", level: 1 },
+      populationHeadroom: 5,
+      razedEnemyBuildings: { outpost: 1 },
+    },
+  );
   const walked = new MissionDirector(script);
   walked.evaluate(missionWorld([]));
-  const events = walked.evaluate(missionWorld([farm(), depot()], [linkedFarm()]));
+  const events = walked.evaluate(finishedValley);
   assert.equal(events.at(-1)?.kind, "chain-finished", "the shipped chain can actually be completed");
+
+  // And every step is individually reachable, not merely the chain as a whole:
+  // a step that no world satisfies would hide behind an earlier one failing.
+  for (const step of script.steps) {
+    assert.equal(isGoalMet(step.goal, finishedValley), true, `step "${step.id}" is unreachable`);
+  }
 
   // The reference check is the point of passing building ids in: a typo'd
   // building becomes a step nobody can clear, and the player it strands is by

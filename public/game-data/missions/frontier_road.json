@@ -1,8 +1,8 @@
 {
   "id": "frontier_road",
   "label": "Sınır Yolu",
-  "intro": "Kral seni terk edilmiş bir sınır vadisine gönderdi. Burada bir zamanlar işleyen bir krallık vardı; yolları kesildiğinde açlıktan dağıldı. Vadiyi yeniden ayağa kaldır.",
-  "outro": "İlk hasat hazineye ulaştı. Vadi artık bir yerleşim. Buradan sonrası senin.",
+  "intro": "Kral seni terk edilmiş bir sınır vadisine gönderdi. Burada bir zamanlar işleyen bir krallık vardı; yolları kesildiğinde açlıktan dağıldı. Sağ tuşla birlik gönderir, WASD ile haritayı gezersin. Vadiyi yeniden ayağa kaldır.",
+  "outro": "Rakip lordun ileri karakolu düştü. Vadi artık senin krallığın — buradan sonrası sana kalmış.",
   "steps": [
     {
       "id": "first_harvest",
@@ -21,6 +21,55 @@
       "title": "Tarlayı yolla depoya bağla",
       "why": "Depo tek başına yetmez. Hasat ancak tarlaya değen bir yol, aynı ağ üzerinden depoya ulaştığında hazineye akar. Tarlayı seçip lojistik satırını okursan neyin eksik olduğunu her zaman görürsün.",
       "goal": { "kind": "producer-linked", "resourceId": "food", "count": 1 }
+    },
+    {
+      "id": "roof_and_people",
+      "title": "Nüfus için yer aç",
+      "why": "Nüfus tavanına dayandığında hiçbir şey üretemezsin — ne işçi, ne asker. Ev kurmak, sınırı büyütmenin tek yolu.",
+      "goal": { "kind": "population-headroom", "count": 5 }
+    },
+    {
+      "id": "grow_from_the_center",
+      "title": "Merkezi 2. seviyeye çıkar",
+      "why": "Yükseltme binanın kendisinden değil, Merkez'den yapılır. Merkez seviye atlayınca krallığındaki bütün yapılar aynı anda o seviyeye geçer; tek tek bina yükseltmek diye bir şey yok.",
+      "goal": { "kind": "tier-reached", "age": "settlement", "level": 2 }
+    },
+    {
+      "id": "beyond_the_border",
+      "title": "Karakol kur ve yola bağla",
+      "why": "Yapıyı ancak kendi kontrol alanına kurabilirsin; alanı büyüten şey karakoldur. Karakolu Merkez'e yolla bağlarsan kontrol alanı daha da genişler — bağlamazsan dar kalır.",
+      "goal": { "kind": "outpost-connected", "count": 1 }
+    },
+    {
+      "id": "wood_and_stone",
+      "title": "Üç üretim yapısını hatta bağla",
+      "why": "Her yeni üretim yapısı aynı dört koşulu ister: kontrol alanı, yapıya değen yol, aynı ağda kendi depon, işgal altında olmayan bir depo. Kısa ve açık yol mu, uzun ve güvenli yol mu — kararı sen verirsin.",
+      "goal": { "kind": "producer-linked", "count": 3 }
+    },
+    {
+      "id": "barracks",
+      "title": "Kışla kur",
+      "why": "Rakip lord da bu vadiyi yerleştirmekle görevli. Ekonomin büyüdükçe görünür bir hedef haline geliyorsun.",
+      "goal": { "kind": "structure-built", "buildingId": "barracks", "count": 1 }
+    },
+    {
+      "id": "standing_guard",
+      "title": "Üç muhafız eğit",
+      "why": "Karakolun ve yolun, ordunun olmadığı sürece savunmasız hedeflerdir. Yol kesilirse üretim de durur.",
+      "goal": { "kind": "unit-count", "role": "guard", "count": 3 },
+      "latch": true
+    },
+    {
+      "id": "town",
+      "title": "Kasaba çağına geç",
+      "why": "Kasaba, yeni yapı ve birlikleri açar; ama geçiş sırasında kaynağın da savunman da zayıflar. Ne zaman geçeceğin maçın en pahalı kararı.",
+      "goal": { "kind": "tier-reached", "age": "town", "level": 1 }
+    },
+    {
+      "id": "valley_is_yours",
+      "title": "Rakibin ileri karakolunu yık",
+      "why": "Karakol yıkıldığında rakip yalnız bir binayı değil, ona bağlı kontrol alanını ve o alandaki üretimin verimini kaybeder. Vurulacak yer ordunun kendisi değil, ordunun beslendiği hattır.",
+      "goal": { "kind": "enemy-structure-razed", "buildingId": "outpost", "count": 1 }
     }
   ]
 }

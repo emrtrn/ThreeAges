@@ -1589,11 +1589,16 @@ export function validateMissionScript(
     // chain; two steps sharing one is a bug waiting to be untraceable.
     if (seen.has(stepId)) throw new GameDataError(`${scope}: duplicate step id "${stepId}"`);
     seen.add(stepId);
+    const latch = step["latch"];
+    if (latch !== undefined && typeof latch !== "boolean") {
+      throw new GameDataError(`${scope}.latch: must be a boolean when present`);
+    }
     return {
       id: stepId,
       title: requireString(step, "title", scope),
       why: requireString(step, "why", scope),
       goal: validateMissionGoal(step["goal"], `${scope}.goal`, knownBuildingIds),
+      ...(latch === undefined ? {} : { latch }),
     } satisfies MissionStep;
   });
 
@@ -1613,6 +1618,9 @@ function validateMissionGoal(
 ): MissionGoal {
   const obj = asObject(value, where);
   const kind = requireString(obj, "kind", where);
+  // The one kind with no tally; everything below shares the "at least count of
+  // something" shape, so `count` is required once here rather than per branch.
+  if (kind === "tier-reached") return validateMissionTierGoal(obj, where);
   // A count that is zero or fractional describes a goal that is either already
   // met or can never be met exactly; both are authoring mistakes, not designs.
   const count = requireFiniteNumber(obj, "count", where);
@@ -1621,6 +1629,14 @@ function validateMissionGoal(
   }
 
   if (kind === "structure-built") {
+    const buildingId = requireString(obj, "buildingId", where);
+    if (knownBuildingIds && !knownBuildingIds.has(buildingId)) {
+      throw new GameDataError(`${where}.buildingId: unknown building "${buildingId}"`);
+    }
+    return { kind, buildingId, count };
+  }
+
+  if (kind === "enemy-structure-razed") {
     const buildingId = requireString(obj, "buildingId", where);
     if (knownBuildingIds && !knownBuildingIds.has(buildingId)) {
       throw new GameDataError(`${where}.buildingId: unknown building "${buildingId}"`);
@@ -1643,5 +1659,33 @@ function validateMissionGoal(
       : { kind, resourceId: resourceId as string, count };
   }
 
+  if (kind === "outpost-connected" || kind === "population-headroom") {
+    return { kind, count };
+  }
+
+  if (kind === "unit-count") {
+    const role = requireString(obj, "role", where);
+    if (!UNIT_ROLES.includes(role as UnitRoleId)) {
+      throw new GameDataError(`${where}.role: must be one of ${UNIT_ROLES.join(", ")}`);
+    }
+    return { kind, role: role as UnitRoleId, count };
+  }
+
   throw new GameDataError(`${where}.kind: unknown mission goal "${kind}"`);
+}
+
+/**
+ * The tier goal is the one that carries no `count`, so it is validated apart
+ * from the tally kinds above rather than being bent into their shape.
+ */
+function validateMissionTierGoal(obj: Record<string, unknown>, where: string): MissionGoal {
+  const age = requireString(obj, "age", where);
+  if (!SETTLEMENT_AGES.includes(age as SettlementAge)) {
+    throw new GameDataError(`${where}.age: must be one of ${SETTLEMENT_AGES.join(", ")}`);
+  }
+  const level = requireFiniteNumber(obj, "level", where);
+  if (level !== 1 && level !== 2 && level !== 3) {
+    throw new GameDataError(`${where}.level: must be 1, 2 or 3`);
+  }
+  return { kind: "tier-reached", age: age as SettlementAge, level };
 }

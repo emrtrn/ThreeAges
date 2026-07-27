@@ -25,6 +25,12 @@ import {
   writeStoredVictoryCondition,
   type VictoryConditionChoice,
 } from "@/game/rts/match/victoryConditionChoice";
+import {
+  markMissionSeen,
+  missionScriptIdForMode,
+  resolveMissionMode,
+  writeMissionMode,
+} from "@/game/rts/tutorial/missionModeChoice";
 import { resolveRtsLevelRef } from "@/game/rts/world/rtsLevelRef";
 import type { GamePreset } from "@/game/data/gameDataTypes";
 
@@ -71,6 +77,24 @@ interface BootFoundationResult {
 function matchSetupStorage(): Storage | null {
   try {
     return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where the "you have met the story tur" bit lives (Hikâye / Öğretici Tur Modu,
+ * Faz 2). Local rather than session, and that is the whole point: the *choice*
+ * is a match setting, but whether this person has already been offered the tur
+ * is a fact about them that has to outlive the tab, or every new tab would open
+ * the tutorial again for someone who finished it last week.
+ *
+ * Guarded for the same reason as above: a browser with storage disabled throws
+ * on the property, and the game must still boot — just without a memory.
+ */
+function missionSeenStorage(): Storage | null {
+  try {
+    return window.localStorage;
   } catch {
     return null;
   }
@@ -151,7 +175,12 @@ async function main(): Promise<void> {
     // A script that fails to load must not take the match down with it: the mode
     // is guidance layered over a match that is perfectly playable without it, so
     // a bad file costs the player their objectives and nothing else.
-    const missionId = params.get("mission");
+    // `?mission=<id>` still pins one explicitly — a dev door, and the way a
+    // second chain would be tried before the card knows about it. Otherwise the
+    // start card's mode row decides, defaulting to the tur for a player who has
+    // never resolved the offer and to free play for one who has.
+    const missionMode = resolveMissionMode(matchSetupStorage(), missionSeenStorage());
+    const missionId = params.get("mission") ?? missionScriptIdForMode(missionMode);
     let missionScript: Awaited<ReturnType<typeof loadMissionScript>> | undefined;
     if (missionId) {
       try {
@@ -232,6 +261,16 @@ async function main(): Promise<void> {
       // Same opt-in shape: without it the match opens at Settlement Lv1.
       ...(preset?.startingTier ? { startingTier: preset.startingTier } : {}),
       ...(missionScript ? { missionScript } : {}),
+      // Same store-and-reload shape as the victory condition: what the mode row
+      // changes is which chain the *boot* loads, and §13 fixes that at resolve
+      // time. One reload of a start screen nobody has played yet.
+      onMissionModeChange: (choice) => {
+        writeMissionMode(matchSetupStorage(), choice);
+        // Declining is an answer too, so it counts as having met the offer.
+        if (choice === "free") markMissionSeen(missionSeenStorage());
+        location.reload();
+      },
+      onMissionResolved: () => markMissionSeen(missionSeenStorage()),
     });
     rts.start();
     return;

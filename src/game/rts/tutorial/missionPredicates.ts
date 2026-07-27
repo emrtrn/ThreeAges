@@ -16,6 +16,8 @@
  * consumer; the free-match contextual hints of `GDD/10` §87 are meant to be its
  * second, reusing the same predicates as *triggers* rather than as objectives.
  */
+import type { SettlementAge, UnitRoleId } from "../../data/gameDataTypes";
+import { ageRank } from "../progression/kingdomProgressionSystem";
 import type { UnitOwner } from "../units/unit";
 import type { MissionGoal } from "./missionScript";
 
@@ -24,6 +26,25 @@ export interface MissionStructureFact {
   readonly owner: UnitOwner;
   readonly buildingId: string;
   readonly complete: boolean;
+  /**
+   * For a structure that projects control (today: the outpost), whether it is
+   * road-connected back to its Command Centre. Absent on everything else, so a
+   * connectivity goal can never be satisfied by a building that has no such
+   * notion in the first place.
+   */
+  readonly roadConnected?: boolean;
+}
+
+/** One living unit, reduced to what a goal may ask about it. */
+export interface MissionUnitFact {
+  readonly owner: UnitOwner;
+  readonly role: UnitRoleId;
+}
+
+/** The player kingdom's centre-led tier. */
+export interface MissionTierFact {
+  readonly age: SettlementAge;
+  readonly level: 1 | 2 | 3;
 }
 
 /** What a goal needs to know about one production building's supply line. */
@@ -37,6 +58,16 @@ export interface MissionProducerFact {
 export interface MissionWorldSnapshot {
   readonly structures: readonly MissionStructureFact[];
   readonly producers: readonly MissionProducerFact[];
+  readonly units: readonly MissionUnitFact[];
+  readonly tier: MissionTierFact;
+  /** Population capacity still free (capacity minus used, never negative). */
+  readonly populationHeadroom: number;
+  /**
+   * Enemy buildings razed this match, keyed by building id. A tally rather than
+   * a world read, because what it counts has left the world; reset with the
+   * match, so a restart cannot inherit a cleared objective.
+   */
+  readonly razedEnemyBuildings: Readonly<Record<string, number>>;
 }
 
 /** The side a mission speaks for. Goals never read the enemy's world. */
@@ -54,5 +85,23 @@ export function isGoalMet(goal: MissionGoal, world: MissionWorldSnapshot): boole
         producer.owner === MISSION_OWNER
         && producer.status === "linked"
         && (goal.resourceId === undefined || producer.resourceId === goal.resourceId)).length >= goal.count;
+    case "outpost-connected":
+      return world.structures.filter((structure) =>
+        structure.owner === MISSION_OWNER
+        && structure.complete
+        && structure.roadConnected === true).length >= goal.count;
+    case "population-headroom":
+      return world.populationHeadroom >= goal.count;
+    case "tier-reached":
+      // Age outranks level: Town Lv1 satisfies "reach Settlement Lv3", because a
+      // kingdom that has moved on has plainly cleared what came before it. The
+      // alternative re-opens a finished step for a player who over-achieved.
+      return ageRank(world.tier.age) > ageRank(goal.age)
+        || (world.tier.age === goal.age && world.tier.level >= goal.level);
+    case "unit-count":
+      return world.units.filter((unit) =>
+        unit.owner === MISSION_OWNER && unit.role === goal.role).length >= goal.count;
+    case "enemy-structure-razed":
+      return (world.razedEnemyBuildings[goal.buildingId] ?? 0) >= goal.count;
   }
 }

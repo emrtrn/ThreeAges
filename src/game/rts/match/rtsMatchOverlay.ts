@@ -15,6 +15,7 @@ import { DEFAULT_RTS_CAMERA_SETTINGS, type RtsCameraSettings } from "../camera/r
 import { formatMatchDuration } from "./rtsMatchClock";
 import type { RtsMatchEndReason, RtsMatchOutcome } from "./rtsMatchState";
 import { DEFAULT_VICTORY_CONDITION, type VictoryConditionChoice } from "./victoryConditionChoice";
+import type { MissionModeChoice } from "../tutorial/missionModeChoice";
 
 export interface RtsMatchOverlayHandlers {
   readonly onStart: () => void;
@@ -30,6 +31,13 @@ export interface RtsMatchOverlayHandlers {
    * note below).
    */
   readonly onVictoryCondition?: (choice: VictoryConditionChoice) => void;
+  /**
+   * The story/tutorial mode row (Faz 2). Absent when the host cannot act on it,
+   * and then the row is not built at all — same rule as the picker above.
+   */
+  readonly onMissionMode?: (choice: MissionModeChoice) => void;
+  /** Faz 2 "serbest oyuna çevir": end a live chain without ending the match. */
+  readonly onAbandonMission?: () => void;
 }
 
 interface VictoryConditionRow {
@@ -56,6 +64,36 @@ const VICTORY_CONDITION_ROWS: readonly VictoryConditionRow[] = [
     choice: "military_regional",
     label: "Askerî + Bölgesel",
     hint: "Askerî zafer geçerliliğini korur. Ek olarak iki stratejik geçidi 180 saniye boyunca birlikte elinde tutan taraf kazanır. Geçitler oraya birlik göndererek değil, yola bağlı bir karakolun kontrol alanıyla alınır.",
+  },
+];
+
+interface MissionModeRow {
+  readonly choice: MissionModeChoice;
+  readonly label: string;
+  readonly hint: string;
+}
+
+/**
+ * The story/tutorial offer, phrased as a mode rather than as a "tutorial"
+ * checkbox. The tur *is* a match — same rules, same victory, same AI — so
+ * calling it training would misdescribe what the player is about to do and make
+ * the honest choice ("I want to be shown the ropes") feel like the lesser one.
+ *
+ * "Serbest maç" states the cost of skipping in its hint rather than warning
+ * about it: a player who knows RTS should be able to decline in one click
+ * without being lectured, and a player who does not know this game's road and
+ * depot rules should be able to read, in one line, what they are turning down.
+ */
+const MISSION_MODE_ROWS: readonly MissionModeRow[] = [
+  {
+    choice: "story",
+    label: "Hikâye turu",
+    hint: "Normal bir maç, sırayla verilen görevlerle. Yol, depo ve kontrol alanı kurallarını oynayarak öğrenirsin; zincir bittiğinde maç serbest devam eder.",
+  },
+  {
+    choice: "free",
+    label: "Serbest maç",
+    hint: "Görev yok. Bu oyunun yol/depo lojistiği ve Merkez'den yükseltme düzeni türün alışıldık kurallarından farklı; hepsini kendin keşfedersin.",
   },
 ];
 
@@ -130,6 +168,9 @@ export class RtsMatchOverlay {
   private readonly setup = document.createElement("div");
   private readonly setupHint = document.createElement("p");
   private victoryCondition: VictoryConditionChoice = DEFAULT_VICTORY_CONDITION;
+  /** Faz 2 mission mode; empty and permanently hidden without a mode handler. */
+  private readonly missionHint = document.createElement("p");
+  private missionMode: MissionModeChoice = "story";
 
   constructor(private readonly handlers: RtsMatchOverlayHandlers) {
     this.root.className = "rts-match-overlay ui-interactive";
@@ -161,6 +202,11 @@ export class RtsMatchOverlay {
   private buildSetup(): void {
     this.setup.className = "rts-match-setup";
     this.setup.hidden = true;
+    // The mode row comes first: it decides what kind of match this is, and the
+    // victory condition is a rule *inside* that match. Reading them the other way
+    // round asks the player to pick how the game ends before knowing whether they
+    // are being walked through it.
+    this.buildMissionMode();
     if (!this.handlers.onVictoryCondition) return;
     const group = document.createElement("fieldset");
     group.className = "rts-match-setup-group";
@@ -193,14 +239,56 @@ export class RtsMatchOverlay {
     this.setup.append(group, this.setupHint);
   }
 
+  /** The mode row, built on the same radio/one-swapping-hint pattern as above. */
+  private buildMissionMode(): void {
+    if (!this.handlers.onMissionMode) return;
+    const group = document.createElement("fieldset");
+    group.className = "rts-match-setup-group";
+    const legend = document.createElement("legend");
+    legend.textContent = "Maç türü";
+    group.appendChild(legend);
+    for (const row of MISSION_MODE_ROWS) {
+      const wrapper = document.createElement("label");
+      wrapper.className = "rts-match-setup-option";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "rts-mission-mode";
+      input.value = row.choice;
+      input.dataset.rtsMissionMode = row.choice;
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        this.setMissionMode(row.choice);
+        this.handlers.onMissionMode?.(row.choice);
+      });
+      const label = document.createElement("span");
+      label.textContent = row.label;
+      wrapper.append(input, label);
+      group.appendChild(wrapper);
+    }
+    this.missionHint.className = "rts-match-setup-hint";
+    this.missionHint.dataset.rtsMissionHint = "";
+    this.setup.append(group, this.missionHint);
+  }
+
   /** Reflect a choice in the radios and the hint. Fires no handler. */
   private setVictoryCondition(choice: VictoryConditionChoice): void {
     this.victoryCondition = choice;
-    for (const input of this.setup.querySelectorAll<HTMLInputElement>("input[type='radio']")) {
+    // Scoped by name, not by type: the card now carries two radio groups, and an
+    // unscoped selector would clear the mode row every time the condition moved.
+    for (const input of this.setup.querySelectorAll<HTMLInputElement>("input[name='rts-victory-condition']")) {
       input.checked = input.value === choice;
     }
     this.setupHint.textContent =
       VICTORY_CONDITION_ROWS.find((row) => row.choice === choice)?.hint ?? "";
+  }
+
+  private setMissionMode(choice: MissionModeChoice): void {
+    this.missionMode = choice;
+    for (const input of this.setup.querySelectorAll<HTMLInputElement>("input[name='rts-mission-mode']")) {
+      input.checked = input.value === choice;
+    }
+    this.missionHint.textContent =
+      MISSION_MODE_ROWS.find((row) => row.choice === choice)?.hint ?? "";
   }
 
   /**
@@ -246,8 +334,12 @@ export class RtsMatchOverlay {
    * already enables the regional route opens with that row selected instead of
    * quietly contradicting the card.
    */
-  showStart(victoryCondition: VictoryConditionChoice = DEFAULT_VICTORY_CONDITION): void {
+  showStart(
+    victoryCondition: VictoryConditionChoice = DEFAULT_VICTORY_CONDITION,
+    missionMode: MissionModeChoice = "story",
+  ): void {
     if (this.handlers.onVictoryCondition) this.setVictoryCondition(victoryCondition);
+    if (this.handlers.onMissionMode) this.setMissionMode(missionMode);
     this.render(
       "Üç Çağ: Sınır Krallıkları",
       "Ekonomini kur, yolunu bağla ve düşman merkezini yık.",
@@ -267,9 +359,26 @@ export class RtsMatchOverlay {
     return this.victoryCondition;
   }
 
-  showPause(): void {
+  get selectedMissionMode(): MissionModeChoice {
+    return this.missionMode;
+  }
+
+  /**
+   * @param missionRunning whether a story chain is live, which is the only state
+   *   in which the escape hatch means anything. Offering it on a free match
+   *   would be a button that does nothing.
+   */
+  showPause(missionRunning = false): void {
     this.render("Duraklatıldı", "Maç durduruldu.", [
       { label: "Devam Et", action: this.handlers.onResume, primary: true, key: "resume" },
+      // The escape hatch lives here rather than on the mission card: that card is
+      // read-only by design (it must never swallow a click meant for the map),
+      // and the pause menu is already the surface a player opens to stop and
+      // change how they are playing. Unconfirmed, unlike surrender — leaving the
+      // tur costs nothing that cannot be had back by restarting.
+      ...(missionRunning && this.handlers.onAbandonMission
+        ? [{ label: "Serbest oyuna çevir", action: this.handlers.onAbandonMission, key: "abandon-mission" }]
+        : []),
       { label: "Yeniden Başlat", action: this.handlers.onRestart, key: "restart" },
       this.surrenderArmed
         ? { label: "Teslim olmayı onayla", action: this.handlers.onSurrender, key: "surrender", danger: true }
@@ -326,7 +435,10 @@ export class RtsMatchOverlay {
     this.settings.hidden = !showSettings;
     // §78.1 / §60: with no choice handler the block was never populated, so it
     // stays hidden and the start card looks exactly as it did before.
-    this.setup.hidden = !showSetup || !this.handlers.onVictoryCondition;
+    // Shown when the start card is up and *something* in it exists to set. A host
+    // that wires only one of the two rows still gets that row.
+    this.setup.hidden = !showSetup
+      || (!this.handlers.onVictoryCondition && !this.handlers.onMissionMode);
     this.card.dataset.tone = tone;
     this.title.textContent = title;
     this.detail.textContent = detail;

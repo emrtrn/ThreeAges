@@ -20,12 +20,17 @@
  * - **Restart safety.** State is a single index derived from the world, so a
  *   restarted match needs no persistence story at all.
  *
- * The finish *is* latched, and only the finish: once every step has been true at
- * once the chain is over for the match. Without that, a late-game population
- * squeeze or a razed farm would re-open a tutorial the player finished twenty
- * minutes ago. Steps that are one-shot by nature (kill something, reach a tier
- * once) will want their own per-step latch when Faz 2 adds those goal kinds;
- * none of Faz 1's three do.
+ * Two things latch, and only two.
+ *
+ * The **finish**: once every step has been true at once the chain is over for
+ * the match. Without that, a late-game population squeeze or a razed farm would
+ * re-open a tutorial the player finished twenty minutes ago.
+ *
+ * A step marked **`latch`**: its goal measures something the player *did* rather
+ * than something they still have (see {@link MissionStep.latch}). Opting in per
+ * step rather than latching everything keeps the default honest — most of the
+ * chain is about a kingdom that has to keep working, and a farm that has stopped
+ * paying is worth being told about again.
  *
  * Pure: no DOM, no three.js, no timers. `test:engine` drives it with object
  * literals.
@@ -51,6 +56,11 @@ export class MissionDirector {
   /** null until the first evaluation, so the opening emits an activation. */
   private activeIndex: number | null = null;
   private finishedChain = false;
+  /**
+   * Ids of `latch` steps that have already cleared. Ids rather than indices so a
+   * script edited between sessions cannot silently latch a different step.
+   */
+  private readonly latched = new Set<string>();
 
   constructor(private readonly script: MissionScript) {
     if (script.steps.length === 0) {
@@ -83,7 +93,18 @@ export class MissionDirector {
   evaluate(world: MissionWorldSnapshot): readonly MissionDirectorEvent[] {
     if (this.finishedChain) return [];
 
-    const nextIndex = this.script.steps.findIndex((step) => !isGoalMet(step.goal, world));
+    // Latch before searching: a latched step counts as met from here on, so the
+    // search below cannot walk back into it. Every step is re-tested each pass,
+    // not just the active one — a `latch` step the player satisfied early is
+    // caught the moment it is true rather than when the chain arrives at it.
+    for (const step of this.script.steps) {
+      if (step.latch && !this.latched.has(step.id) && isGoalMet(step.goal, world)) {
+        this.latched.add(step.id);
+      }
+    }
+
+    const nextIndex = this.script.steps.findIndex((step) =>
+      !this.latched.has(step.id) && !isGoalMet(step.goal, world));
     const previousIndex = this.activeIndex;
 
     if (nextIndex < 0) {
@@ -131,9 +152,30 @@ export class MissionDirector {
     };
   }
 
+  /**
+   * End the chain now and leave the match running — the "serbest oyuna çevir"
+   * escape hatch.
+   *
+   * Deliberately the same terminal state as finishing rather than a third mode:
+   * from here on the director raises nothing and the card is gone, which is
+   * exactly what "I'll take it from here" should do. It is *not* a completion,
+   * so no `chain-finished` event fires and nothing congratulates the player for
+   * a tur they chose to leave.
+   *
+   * @returns `true` if a live chain was ended; `false` when there was nothing to
+   *   abandon, so a caller can tell a real escape from a repeated click.
+   */
+  abandon(): boolean {
+    if (this.finishedChain) return false;
+    this.finishedChain = true;
+    this.activeIndex = null;
+    return true;
+  }
+
   /** A restarted match replays the chain from the top. */
   reset(): void {
     this.activeIndex = null;
     this.finishedChain = false;
+    this.latched.clear();
   }
 }

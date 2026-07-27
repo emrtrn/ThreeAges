@@ -354,15 +354,33 @@ tartışılmalı.
 
 ### Faz 2 — Tam zincir
 
-- [ ] Kalan yüklemler (`tier-reached`, `control-radius-covers`, `unit-count`, …)
-      ve her yeni hedef türü için `validateMissionGoal`'a bir dal
-- [ ] Tek seferlik (monoton) adımlar için `latch` alanı — Faz 1'in üç adımının
-      hiçbiri buna ihtiyaç duymuyor, ama "3 asker eğit" gibi bir adım asker
-      öldüğünde yeniden açılmamalı
-- [ ] 0–12 arası tüm görevler yazıldı
-- [ ] `tutorial` preset'i + başlangıç kartındaki mod seçimi (sessionStorage)
+- [x] Kalan yüklemler: `outpost-connected`, `population-headroom`,
+      `tier-reached`, `unit-count`, `enemy-structure-razed` + her biri için
+      `validateMissionGoal` dalı
+- [x] Tek seferlik adımlar için `latch` alanı (opt-in; varsayılan hâlâ
+      "yüklem yanlışsa adım yeniden açılır")
+- [x] Zincir yazıldı — **11 adım** (aşağıdaki iki sapmayla)
+- [x] Başlangıç kartında "Maç türü" satırı (Hikâye turu / Serbest maç)
+- [x] "Tutoriali geç": kartta tek tık + `missionSeen` biti (localStorage), böylece
+      turu bir kez çözen oyuncuya bir daha varsayılan olarak açılmıyor
+- [x] "Serbest oyuna çevir" — duraklatma menüsünde, `MissionDirector.abandon()`
 - [ ] `reminderSeconds` + "Göster" davranışı
-- [ ] "Serbest oyuna çevir" butonu
+- [ ] `tutorial` preset'i (§6.2'deki kaynak dengesi için)
+
+**Zincirde iki bilinçli sapma:**
+
+1. **0. görev ("Vadiye iniş") ayrı bir adım değil.** Konum tabanlı bir hedef
+   (`unit-near-point`) yazmayı ve haritaya marker koymayı gerektiriyordu; oysa
+   birlik seçip göndermek bu planın kendi ölçütüne göre **tahmin edilebilir** bir
+   şey, yani görev olmamalı. Kontroller `intro` metninin içinde veriliyor.
+2. **9. görev ("Kesik yol") Faz 3'e taşındı.** Scripted baskın gerektiriyor;
+   zincir onsuz da baştan sona tamamlanabiliyor.
+
+**Bir tasarım düzeltmesi:** §6'daki `control-radius-covers` hedefi
+`outpost-connected` oldu. `RtsApp.outpostConnectedToMainRoad()` zaten var ve
+territory sistemi karakolun yarıçapını tam olarak ona göre veriyor — yani
+öğretilen kural doğrudan ölçülüyor, haritaya marker koyup onun bir sonucunu
+ölçmek yerine. Taşınan bir marker'ın adımı sessizce bozması da böylece imkânsız.
 
 ### Faz 3 — Tempo ve tehdit
 
@@ -385,25 +403,34 @@ tartışılmalı.
 
 ---
 
-## 10. Karar Bekleyen Sorular
+## 10. Verilen Kararlar (eski "Karar Bekleyen Sorular")
 
-1. **Mod seçimi nerede?** Başlangıç kartına üçüncü satır (zafer koşulunun
-   yanına) mı, yoksa ayrı bir "Yeni Oyun" ekranı mı? Öneri: başlangıç kartı —
-   `victoryConditionChoice` örüntüsü hazır, yeni ekran maliyetli.
-2. **Tur zorunlu mu?** İlk açılışta öğretici tur varsayılan seçili gelsin mi,
-   yoksa serbest maç mı varsayılan kalsın? Öneri: ilk açılışta öğretici
-   varsayılan, bir kez tamamlandıktan sonra serbest maç varsayılan.
-3. **Harita:** Faz 1–3 `RTS_CoreMatch` üzerinde mi kalsın (öneri: evet), yoksa
-   en baştan özel bir öğretici harita mı yazılsın?
-4. **12. görevin bitişi:** Zincir stratejik nokta ile mi bitsin (bölgesel zafer
-   bayrağı gerekir) yoksa rakip ileri karakolunun yıkılmasıyla mı (bayrak
-   gerektirmez)? Öneri: ikincisi varsayılan, bayrak açıksa birincisi.
-5. **Anlatı derinliği:** Tek cümlelik `why` satırları yeterli mi, yoksa görev
-   başlarında 2–3 cümlelik hikâye vuruşu isteniyor mu?
+1. **Mod seçimi** başlangıç kartına üçüncü satır olarak kondu, `victoryCondition`
+   örüntüsüyle. Mod satırı zafer koşulunun **üstünde**: hangi tür maç oynandığı,
+   o maçın nasıl biteceğinden önce gelen karar.
+2. **Varsayılan:** ilk kez oynayana Hikâye turu, turu bir kez çözene Serbest maç.
+   "Çözmek" üç şeyden biri: turu bitirmek, ortasında bırakmak, ya da kartta
+   Serbest maç seçmek — üçü de aynı soruyu yanıtlıyor. Bu, seçimin (session) ve
+   `missionSeen` bitinin (local) ayrı yerlerde durmasını gerektirdi.
+3. **Harita:** Faz 1–3 mevcut haritalarda kalıyor.
+4. **12. görevin bitişi:** rakip ileri karakolunun yıkılması
+   (`enemy-structure-razed`). Bölgesel zafer bayrağından bağımsız — öğretici
+   turun deneysel bir bayrağa bağlı olmaması, bir hedef türü yazmaktan değerli.
+5. **Anlatı derinliği:** görev başına tek cümlelik `why`. Ayrı hikâye vuruşu yok;
+   `intro` ve `outro` çerçeveyi kuruyor.
+
+## 11. Açık Kalan Sorular
+
+1. **Öğretici preset'i.** `gameplay_proof` çağ atlamayı test etmek için kaynağı
+   bilerek yüksek tutuyor; bu, 2. adımın ("dolu ambar, boş hazine") dersini
+   zayıflatıyor — 5000 yiyecek varken tarlanın 40 birimlik ambarı görünmez.
+   Ayrı bir `tutorial` preset'i mi, yoksa zincir bunu kabul mü etsin?
+2. **`reminderSeconds` eşiği.** İlerleme olmayan kaç saniye sonra kart ikinci
+   satırını açmalı? Adım başına mı, tek genel değer mi?
 
 ---
 
-## 11. İlgili Dokümanlar
+## 12. İlgili Dokümanlar
 
 - `GDD/01_CORE_GAMEPLAY_LOOP.md` — öğretilecek döngünün kaynağı
 - `GDD/05_TERRITORY_LOGISTICS_AND_ROADS.md` — yol/depo/kontrol alanı kuralları

@@ -175,6 +175,7 @@ import { RtsMissionPanel } from "./ui/rtsMissionPanel";
 import { MissionDirector } from "./tutorial/missionDirector";
 import type { MissionWorldSnapshot } from "./tutorial/missionPredicates";
 import type { MissionScript } from "./tutorial/missionScript";
+import type { MissionModeChoice } from "./tutorial/missionModeChoice";
 import type { AiObjectiveWatch } from "./ai/armyManager";
 
 const MAX_PIXEL_RATIO = 2;
@@ -323,6 +324,17 @@ export interface RtsAppOptions {
    * for an ordinary match, which is the default in every route.
    */
   readonly missionScript?: MissionScript;
+  /**
+   * The start card's mode row picked a different match type. Like
+   * {@link onVictoryConditionChange} this is a *boot* concern — the chain has to
+   * be loaded before the app exists — so the host stores it and re-boots.
+   */
+  readonly onMissionModeChange?: (choice: MissionModeChoice) => void;
+  /**
+   * The story offer has been answered: the chain was finished or abandoned. The
+   * host records it so a returning player is not asked again.
+   */
+  readonly onMissionResolved?: () => void;
 }
 
 export class RtsApp {
@@ -438,6 +450,13 @@ export class RtsApp {
   private missionPollTimer = 0;
   /** The chain's opening line is one-shot per match; reset by a restart. */
   private missionIntroPosted = false;
+  /**
+   * Enemy buildings razed this match, by building id — the one mission fact that
+   * cannot be read from the world, because razing something removes it. Tallied
+   * at the single destruction site so it cannot drift from what actually died,
+   * and cleared by a restart so a fresh match never opens with a step pre-cleared.
+   */
+  private razedEnemyBuildings: Record<string, number> = {};
   /**
    * §78.1: what the start card has selected. Seeded from the *resolved* flag so
    * a match booted with `?flags=regionalVictory` opens on the matching row, and
@@ -910,6 +929,13 @@ export class RtsApp {
       ...(this.options.onVictoryConditionChange
         ? { onVictoryCondition: (choice: VictoryConditionChoice) => { this.victoryCondition = choice; } }
         : {}),
+      // Faz 2 mode row. Like the picker above it is only built when the host can
+      // act on it, because the choice changes what the *boot* loads and a running
+      // app cannot start a chain it was never given.
+      ...(this.options.onMissionModeChange
+        ? { onMissionMode: (choice: MissionModeChoice) => { this.options.onMissionModeChange?.(choice); } }
+        : {}),
+      onAbandonMission: () => this.abandonMission(),
     });
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
     if (this.options.levelLoadError) {
@@ -1063,7 +1089,12 @@ export class RtsApp {
     // The runtime is live but the match is not: §51's start screen holds the
     // simulation until the player asks for it. The scene still renders behind
     // the card, so the opening position is something they can look at first.
-    this.matchOverlay.showStart(this.victoryCondition);
+    this.matchOverlay.showStart(
+      this.victoryCondition,
+      // The row reflects the match that actually booted, not a stored preference:
+      // a card claiming "Hikâye turu" over a match with no chain would be lying.
+      this.missions ? "story" : "free",
+    );
     this.frameHandle = requestAnimationFrame(this.onFrame);
   }
 
@@ -1355,6 +1386,9 @@ export class RtsApp {
         });
       } else if (event.kind === "chain-finished") {
         this.notifications.post({ kind: "mission", subject: "outro", text: missions.outro });
+        // Finishing resolves the offer exactly as declining it does: the player
+        // has met the tur, and the next tab should open on a free match.
+        this.options.onMissionResolved?.();
       }
     }
     this.missionPanel?.setState(missions.state());
@@ -1367,14 +1401,48 @@ export class RtsApp {
    * objective and the panel explaining it can never disagree about whether a
    * farm is linked.
    */
+  /** Whether a story chain is live — the only state the escape hatch applies to. */
+  private missionRunning(): boolean {
+    const missions = this.missions;
+    return missions !== null && !missions.state().finished;
+  }
+
+  /**
+   * "Serbest oyuna çevir": end the chain, keep the match. Reports it once so the
+   * card vanishing is explained rather than merely noticed, and tells the host so
+   * the offer is not re-made on the player's next tab.
+   */
+  private abandonMission(): void {
+    if (!this.missions?.abandon()) return;
+    this.missionPanel?.setState(null);
+    this.options.onMissionResolved?.();
+    this.notifications.post({
+      kind: "mission",
+      subject: "abandoned",
+      text: "Görev zinciri kapatıldı. Maç serbest devam ediyor.",
+    });
+  }
+
   private missionWorldSnapshot(): MissionWorldSnapshot {
+    const population = this.playerKingdom.population.snapshot();
     return {
       structures: this.structures.all().map((structure) => ({
         owner: structure.owner,
         buildingId: structure.stats.id,
         complete: structure.construction.complete,
+        // Only asked of a structure that projects control, which is the only
+        // kind the notion means anything for — and the same call the territory
+        // system already makes to decide that structure's radius, so an
+        // objective and the control area on screen can never disagree.
+        ...(structure.stats.territory
+          ? { roadConnected: this.outpostConnectedToMainRoad(structure) }
+          : {}),
       })),
       producers: this.productionLogistics.snapshots(),
+      units: this.units.all().map((unit) => ({ owner: unit.owner, role: unit.role })),
+      tier: this.progression.tierFor(PLAYER_OWNER),
+      populationHeadroom: Math.max(0, population.capacity - population.used),
+      razedEnemyBuildings: this.razedEnemyBuildings,
     };
   }
 
@@ -1856,6 +1924,13 @@ export class RtsApp {
     let territoryChanged = false;
     const destroyed = updateStructureDestruction(this.structures, (structure) => {
       if (structure.stats.territory) territoryChanged = true;
+      // Tallied here rather than by a mission-side observer: this callback is
+      // the one place a depleted structure is removed, so a count taken here
+      // cannot miss a path the way a set of call sites can.
+      if (structure.owner !== PLAYER_OWNER) {
+        const id = structure.stats.id;
+        this.razedEnemyBuildings[id] = (this.razedEnemyBuildings[id] ?? 0) + 1;
+      }
       this.log.info(`${structure.stats.label} destroyed (${structure.owner})`);
     });
     if (destroyed.length === 0) return;
@@ -2243,7 +2318,7 @@ export class RtsApp {
       return;
     }
     if (!this.flow.togglePause()) return;
-    if (this.flow.phase === "paused") this.matchOverlay.showPause();
+    if (this.flow.phase === "paused") this.matchOverlay.showPause(this.missionRunning());
     else this.matchOverlay.hide();
   };
 
@@ -2301,6 +2376,7 @@ export class RtsApp {
     this.missions?.reset();
     this.missionIntroPosted = false;
     this.missionPollTimer = 0;
+    this.razedEnemyBuildings = {};
     this.missionPanel?.setState(null);
     this.attackWatch.reset();
     this.match.reset();

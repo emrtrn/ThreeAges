@@ -15,6 +15,7 @@
  * Types only, so this module stays free of three.js and DOM and can be read by
  * the validator, the director, and `test:engine` alike.
  */
+import type { SettlementAge, UnitRoleId } from "../../data/gameDataTypes";
 
 /**
  * One step of the chain.
@@ -31,6 +32,21 @@ export interface MissionStep {
   readonly title: string;
   readonly why: string;
   readonly goal: MissionGoal;
+  /**
+   * Keep this step cleared once it has cleared, even if its goal stops holding.
+   *
+   * The default (absent) behaviour is the right one for anything the player
+   * still *has*: demolish the depot and "build a depot" re-opens, because it is
+   * work to be done again. It is the wrong behaviour for anything the player
+   * merely *did*. "Train three Guards" is achieved the moment the third one
+   * walks out; three of them dying in a fight later does not un-train them, and
+   * re-opening the step there would read as the game blaming the player for
+   * having used the army it asked them to build.
+   *
+   * The rule of thumb: latch a step whose goal measures an event, leave it open
+   * on a step whose goal measures a state the kingdom is supposed to maintain.
+   */
+  readonly latch?: boolean;
 }
 
 /**
@@ -57,7 +73,34 @@ export type MissionGoal =
    * actually paying you". `resourceId` narrows it to one resource; omitted, any
    * producer counts.
    */
-  | { readonly kind: "producer-linked"; readonly resourceId?: string; readonly count: number };
+  | { readonly kind: "producer-linked"; readonly resourceId?: string; readonly count: number }
+  /**
+   * `count` completed outposts of the player's that are road-connected back to
+   * the Command Centre — the exact condition that swaps an outpost's control
+   * radius for its wider `connectedControlRadius`.
+   *
+   * Stated directly rather than as "the control area now covers marker X", which
+   * is how the plan first framed it. Measuring the rule teaches the rule;
+   * measuring one of its consequences on an authored map marker would tie the
+   * lesson to level content and let a moved marker silently break the step.
+   */
+  | { readonly kind: "outpost-connected"; readonly count: number }
+  /** Spare population capacity of at least `count` (capacity minus used). */
+  | { readonly kind: "population-headroom"; readonly count: number }
+  /** The kingdom's centre-led tier has reached at least this age and level. */
+  | {
+    readonly kind: "tier-reached";
+    readonly age: SettlementAge;
+    readonly level: 1 | 2 | 3;
+  }
+  /** At least `count` living units of one role. Pair with `latch` on a build-up step. */
+  | { readonly kind: "unit-count"; readonly role: UnitRoleId; readonly count: number }
+  /**
+   * `count` enemy buildings of `buildingId` razed this match. A tally rather than
+   * a world query — the thing it counts no longer exists — so a step using it is
+   * inherently one-shot and does not need `latch`.
+   */
+  | { readonly kind: "enemy-structure-razed"; readonly buildingId: string; readonly count: number };
 
 export interface MissionScript {
   readonly id: string;
