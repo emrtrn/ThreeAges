@@ -698,10 +698,11 @@ kez yazmak yerine, Faz B'de kartın tek satırı işi görüyor.
 
 **Faz C — Dünya işareti, "Göster" ve inşa temposu** — **tamamlandı 2026-07-28**
 
-- [x] `missionHintView.ts` (nabız atan halka + salınan ok) — **yalnız oyuncunun
+- [x] `missionHintView.ts` (salınan ok) — **yalnız oyuncunun
       sahip olduğu, tıklaması gereken yapının etrafında**: Pazar, Merkez, Kışla,
-      ya da yolu olmayan üretici. Halka yapının footprint'inin dışına oturacak
-      şekilde ölçüldü (6–8 birimlik binaların içinde kalan halka görünmüyordu).
+      ya da yolu olmayan üretici. Nabız atan yer halkası sonradan kaldırıldı:
+      yapı seçildiğinde zaten sarı bir seçim halkası çiziliyor ve adımın kendisi
+      "bu yapıya tıkla" olduğu için iki halka üst üste binip kalabalık ediyordu.
 - [x] Görev kartına "Göster" butonu → kamerayı işarete taşır. Yalnız işaret
       varken görünür, yani hiçbir zaman boşluğa götüremez. Uçuş değil, ani
       ortalama: kamera oyuncunun.
