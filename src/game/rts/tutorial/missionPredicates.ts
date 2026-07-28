@@ -82,6 +82,14 @@ export interface MissionWorldSnapshot {
    * wood".
    */
   readonly marketPurchases: Readonly<Record<string, number>>;
+  /**
+   * Units the player has trained this match, keyed by role. A tally for the
+   * usual reason — but here the world reading it would replace is not merely
+   * absent, it is *wrong*: living units include the ones the match handed out at
+   * the start, and a step teaching the player to train an army must not be
+   * cleared by the army they were given.
+   */
+  readonly unitsTrained: Readonly<Record<string, number>>;
 }
 
 /**
@@ -153,6 +161,8 @@ export function measureGoal(goal: MissionGoal, world: MissionWorldSnapshot): Mis
       return { current: world.marketTrades, target: goal.count };
     case "market-bought":
       return { current: world.marketPurchases[goal.resourceId] ?? 0, target: goal.count };
+    case "unit-trained":
+      return { current: world.unitsTrained[goal.role] ?? 0, target: goal.count };
   }
 }
 

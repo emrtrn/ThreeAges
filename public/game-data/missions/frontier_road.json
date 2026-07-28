@@ -6,7 +6,7 @@
   "steps": [
     {
       "id": "wood_flowing",
-      "title": "Merkezin yoluna Oduncu Kampı kur",
+      "title": "Oduncu Kampı Kur",
       "why": "Merkez ilk deposun; yoluna değen yapının hasadı hazineye akar.",
       "goal": {
         "kind": "producer-linked",
@@ -22,7 +22,7 @@
     },
     {
       "id": "food_flowing",
-      "title": "Bir Tarla kur",
+      "title": "Tarla Kur",
       "why": "Yiyecek işçi ve asker eğitir; tarla da aynı yola değmeli.",
       "goal": {
         "kind": "producer-linked",
@@ -38,7 +38,7 @@
     },
     {
       "id": "first_depot",
-      "title": "Bir Depo kur",
+      "title": "Depo Kur",
       "why": "Merkezin deposu dolunca teslimat durur; Depo kapasiteyi büyütür.",
       "goal": {
         "kind": "structure-built",
@@ -54,7 +54,7 @@
     },
     {
       "id": "market",
-      "title": "Bir Pazar kur",
+      "title": "Pazar Kur",
       "why": "Pazar 20 odun; elindeki fazlayı ihtiyacın olana çevirir.",
       "goal": {
         "kind": "structure-built",
@@ -70,7 +70,7 @@
     },
     {
       "id": "buy_wood",
-      "title": "Pazar'dan 100 odun al",
+      "title": "Pazar'dan 100 Odun Al",
       "why": "Pazar'ı seç: yiyecek sat, altınla odun al. Komisyon Merkez seviyesiyle düşer.",
       "goal": {
         "kind": "market-bought",
@@ -87,7 +87,7 @@
     },
     {
       "id": "center_lv2",
-      "title": "Merkezi 2. seviyeye çıkar",
+      "title": "Merkezi 2. Seviyeye Çıkar",
       "why": "Yükseltme Merkez'den yapılır ve bütün yapılarına aynı anda işler.",
       "goal": {
         "kind": "tier-reached",
@@ -104,7 +104,7 @@
     },
     {
       "id": "houses",
-      "title": "Nüfusa yer aç",
+      "title": "Ev Kur",
       "why": "Nüfus tavanında ne işçi ne asker üretebilirsin; tavanı Ev yükseltir.",
       "goal": {
         "kind": "population-headroom",
@@ -118,8 +118,57 @@
       }
     },
     {
+      "id": "train_workers",
+      "title": "Dört İşçi Üret",
+      "why": "Üretim yapıları boştaki işçileri kendi tutar; işçin yoksa yapı boş durur.",
+      "goal": {
+        "kind": "unit-trained",
+        "role": "worker",
+        "count": 4
+      },
+      "guide": {
+        "action": {
+          "kind": "structure-action",
+          "buildingId": "command_center",
+          "actionId": "train-worker"
+        }
+      }
+    },
+    {
+      "id": "second_lumber_camp",
+      "title": "İkinci Oduncu Kampı Kur",
+      "why": "Çağ geçişi 500 odun ister; tek kamp bunu doldurmaya yetmez.",
+      "goal": {
+        "kind": "producer-linked",
+        "resourceId": "wood",
+        "count": 2
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "lumber_camp"
+        }
+      }
+    },
+    {
+      "id": "second_farm",
+      "title": "İkinci Tarla Kur",
+      "why": "Aynı şey yiyecekte: tek tarla ne ordu besler ne çağ atlatır.",
+      "goal": {
+        "kind": "producer-linked",
+        "resourceId": "food",
+        "count": 2
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "farm"
+        }
+      }
+    },
+    {
       "id": "outpost",
-      "title": "Karakol kur ve Merkez'e bağla",
+      "title": "Karakol Kur",
       "why": "Kontrol alanını karakol büyütür; yola bağlıysa daha da geniş.",
       "goal": {
         "kind": "outpost-connected",
@@ -134,7 +183,7 @@
     },
     {
       "id": "quarry",
-      "title": "Taş Ocağı kur ve hatta bağla",
+      "title": "Taş Ocağı Kur",
       "why": "Ocak taş yatağının üstüne kurulur; yolu Merkez ağına ulaşmalı.",
       "goal": {
         "kind": "producer-linked",
@@ -150,7 +199,7 @@
     },
     {
       "id": "gold_mine",
-      "title": "Altın Madeni kur ve hatta bağla",
+      "title": "Altın Madeni Kur",
       "why": "Altın en yavaş kaynak: hem Pazar'ın hem çağ geçişinin parası.",
       "goal": {
         "kind": "producer-linked",
@@ -166,7 +215,7 @@
     },
     {
       "id": "barracks",
-      "title": "Kışla kur",
+      "title": "Kışla Kur",
       "why": "Rakip lord da bu vadiyi istiyor; ekonomin büyüdükçe hedef oluyorsun.",
       "goal": {
         "kind": "structure-built",
@@ -182,14 +231,13 @@
     },
     {
       "id": "guards",
-      "title": "Üç muhafız eğit",
+      "title": "Üç Muhafız Eğit",
       "why": "Düşman deponun üstünde durursa, binayı yıkmadan hattını keser.",
       "goal": {
-        "kind": "unit-count",
+        "kind": "unit-trained",
         "role": "guard",
         "count": 3
       },
-      "latch": true,
       "guide": {
         "action": {
           "kind": "structure-action",
@@ -200,7 +248,7 @@
     },
     {
       "id": "town",
-      "title": "Kasaba çağına geç",
+      "title": "Kasaba Çağına Geç",
       "why": "Kasaba yeni yapı ve birlikleri açar; geçiş sırasında zayıf düşersin.",
       "goal": {
         "kind": "tier-reached",
@@ -217,7 +265,7 @@
     },
     {
       "id": "raze",
-      "title": "Rakibin karakolunu yık",
+      "title": "Rakibin Karakolunu Yık",
       "why": "Karakol düşünce rakip kontrol alanını ve üretim verimini kaybeder.",
       "goal": {
         "kind": "enemy-structure-razed",

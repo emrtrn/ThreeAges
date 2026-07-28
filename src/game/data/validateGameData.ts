@@ -1727,7 +1727,7 @@ function validateMissionGoal(
     return { kind, resourceId, count };
   }
 
-  if (kind === "unit-count") {
+  if (kind === "unit-count" || kind === "unit-trained") {
     const role = requireString(obj, "role", where);
     if (!UNIT_ROLES.includes(role as UnitRoleId)) {
       throw new GameDataError(`${where}.role: must be one of ${UNIT_ROLES.join(", ")}`);

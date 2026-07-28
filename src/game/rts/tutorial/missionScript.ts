@@ -142,6 +142,21 @@ export type MissionGoal =
   /** At least `count` living units of one role. Pair with `latch` on a build-up step. */
   | { readonly kind: "unit-count"; readonly role: UnitRoleId; readonly count: number }
   /**
+   * `count` units of one role **trained this match** — a tally, like
+   * {@link MissionGoal} `market-bought`.
+   *
+   * The distinction from `unit-count` is not academic; it is a bug this replaced.
+   * A preset that opens with an army (the shipped one starts with eight Guards)
+   * satisfies "have three Guards" on the first evaluation, so the step cleared
+   * itself before the player had built the Barracks it was teaching. Counting
+   * *living* units is the right measure for "keep a garrison"; counting units
+   * that came out of a building is the right one for "learn to train".
+   *
+   * Inherently one-shot — losing a Guard cannot un-train it — so it needs no
+   * `latch`, which is the same reason the other tallies do not.
+   */
+  | { readonly kind: "unit-trained"; readonly role: UnitRoleId; readonly count: number }
+  /**
    * `count` completed Market trades this match, either direction.
    *
    * A tally like {@link MissionGoal} `enemy-structure-razed`, and for the same

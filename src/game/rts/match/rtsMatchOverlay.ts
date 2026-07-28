@@ -20,6 +20,16 @@ import type { MissionModeChoice } from "../tutorial/missionModeChoice";
 /** RTS exposes the three player-facing profiles; Ultra/custom remain engine APIs. */
 export type RtsGraphicsQuality = "low" | "medium" | "high";
 
+const GRAPHICS_QUALITY_LEVELS: readonly RtsGraphicsQuality[] = ["low", "medium", "high"];
+
+function graphicsQualityLabel(quality: RtsGraphicsQuality): string {
+  return quality === "low" ? "Düşük" : quality === "medium" ? "Orta" : "Yüksek";
+}
+
+function graphicsQualityLevel(quality: RtsGraphicsQuality): number {
+  return GRAPHICS_QUALITY_LEVELS.indexOf(quality);
+}
+
 export interface RtsGraphicsSettings {
   readonly quality: RtsGraphicsQuality;
   readonly adaptiveEnabled: boolean;
@@ -381,19 +391,27 @@ export class RtsMatchOverlay {
     const label = document.createElement("span");
     label.className = "rts-match-setting-label";
     label.textContent = "Grafik kalitesi";
-    const select = document.createElement("select");
-    select.dataset.rtsGraphicsQuality = "";
-    for (const value of ["low", "medium", "high"] as const) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = value === "low" ? "DÃ¼ÅŸÃ¼k" : value === "medium" ? "Orta" : "YÃ¼ksek";
-      select.appendChild(option);
-    }
-    select.value = this.graphicsSettings.quality;
-    select.addEventListener("change", () => {
-      this.applyGraphicsSettings({ ...this.graphicsSettings!, quality: select.value as RtsGraphicsQuality });
+    const control = document.createElement("span");
+    control.className = "rts-match-setting-control";
+    const value = document.createElement("output");
+    value.className = "rts-match-setting-value";
+    value.dataset.rtsGraphicsQualityValue = "";
+    value.textContent = graphicsQualityLabel(this.graphicsSettings.quality);
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = "0";
+    slider.max = String(GRAPHICS_QUALITY_LEVELS.length - 1);
+    slider.step = "1";
+    slider.value = String(graphicsQualityLevel(this.graphicsSettings.quality));
+    slider.dataset.rtsGraphicsQuality = "";
+    slider.setAttribute("aria-valuetext", graphicsQualityLabel(this.graphicsSettings.quality));
+    slider.addEventListener("input", () => {
+      const nextQuality = GRAPHICS_QUALITY_LEVELS[Number(slider.value)];
+      if (!nextQuality) return;
+      this.applyGraphicsSettings({ ...this.graphicsSettings!, quality: nextQuality });
     });
-    quality.append(label, select);
+    control.append(value, slider);
+    quality.append(label, control);
 
     const adaptive = document.createElement("label");
     adaptive.className = "rts-match-setting";
@@ -408,7 +426,13 @@ export class RtsMatchOverlay {
     checkbox.addEventListener("change", () => {
       this.applyGraphicsSettings({ ...this.graphicsSettings!, adaptiveEnabled: checkbox.checked });
     });
-    adaptive.append(adaptiveLabel, checkbox);
+    const checkboxControl = document.createElement("span");
+    checkboxControl.className = "rts-match-checkbox-control";
+    const checkboxMark = document.createElement("span");
+    checkboxMark.className = "rts-match-checkbox-mark";
+    checkboxMark.setAttribute("aria-hidden", "true");
+    checkboxControl.append(checkbox, checkboxMark);
+    adaptive.append(adaptiveLabel, checkboxControl);
     this.settings.append(quality, adaptive);
   }
 
@@ -428,8 +452,13 @@ export class RtsMatchOverlay {
   private applyGraphicsSettings(settings: RtsGraphicsSettings): void {
     if (!this.graphicsSettings) return;
     this.graphicsSettings = settings;
-    const select = this.settings.querySelector<HTMLSelectElement>("[data-rts-graphics-quality]");
-    if (select) select.value = settings.quality;
+    const slider = this.settings.querySelector<HTMLInputElement>("[data-rts-graphics-quality]");
+    if (slider) {
+      slider.value = String(graphicsQualityLevel(settings.quality));
+      slider.setAttribute("aria-valuetext", graphicsQualityLabel(settings.quality));
+    }
+    const value = this.settings.querySelector<HTMLOutputElement>("[data-rts-graphics-quality-value]");
+    if (value) value.textContent = graphicsQualityLabel(settings.quality);
     const checkbox = this.settings.querySelector<HTMLInputElement>("[data-rts-graphics-adaptive]");
     if (checkbox) checkbox.checked = settings.adaptiveEnabled;
     this.handlers.onGraphicsQuality?.(settings.quality);

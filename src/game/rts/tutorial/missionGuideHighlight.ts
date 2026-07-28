@@ -33,6 +33,7 @@
  *    button the player cannot see would be indistinguishable from no hint at
  *    all, and pulsing both at once would be pointing at two different things.
  */
+import { missionBuildQuota } from "./missionBuildPolicy";
 import type { MissionDirectorState } from "./missionDirector";
 
 /** The palette's road tool, whose button is keyed by this id rather than a building. */
@@ -77,7 +78,13 @@ export function missionGuideHighlight(
   const { action } = guide;
   if (action.kind === "build") {
     const measuresConnection = step.goal.kind === "producer-linked" || step.goal.kind === "outpost-connected";
-    return measuresConnection && completedGuideBuildings > 0
+    // The step's *quota*, not merely one: "connect two Lumber Camps" with one
+    // standing wants the second camp, and only once both are up is a missing
+    // road the thing left to explain. Same number the palette refuses on, from
+    // the same function, so the hint can never point somewhere the click is
+    // then turned away from.
+    const quota = missionBuildQuota(step, action.buildingId);
+    return measuresConnection && quota !== null && completedGuideBuildings >= quota
       ? { paletteTarget: ROAD_PALETTE_TARGET, actionId: null, prompt: { kind: "draw-road" } }
       : { paletteTarget: action.buildingId, actionId: null, prompt: null };
   }

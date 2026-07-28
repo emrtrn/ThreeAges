@@ -13,55 +13,6 @@
  * button; it never changes mission or simulation state.
  */
 import type { MissionDirectorState } from "../tutorial/missionDirector";
-import type { MissionGoal } from "../tutorial/missionScript";
-
-const BUILDING_LABELS: Readonly<Record<string, string>> = {
-  lumber_camp: "Oduncu Kampı",
-  depot: "Depo",
-  market: "Pazar",
-  farm: "Tarla",
-  house: "Ev",
-  outpost: "Karakol",
-  quarry: "Taş Ocağı",
-  gold_mine: "Altın Madeni",
-  barracks: "Kışla",
-  command_center: "Merkez",
-};
-
-const RESOURCE_LABELS: Readonly<Record<string, string>> = {
-  wood: "odun",
-  food: "yiyecek",
-  stone: "taş",
-  gold: "altın",
-};
-
-const UNIT_LABELS: Readonly<Record<string, string>> = {
-  worker: "İşçi",
-  guard: "Muhafız",
-  archer: "Okçu",
-};
-
-function progressTargetLabel(goal: MissionGoal): string {
-  switch (goal.kind) {
-    case "structure-built":
-    case "enemy-structure-razed":
-      return BUILDING_LABELS[goal.buildingId] ?? goal.buildingId;
-    case "producer-linked":
-      return goal.resourceId ? `${RESOURCE_LABELS[goal.resourceId] ?? goal.resourceId} bağlantısı` : "bağlantı";
-    case "outpost-connected":
-      return "bağlı Karakol";
-    case "population-headroom":
-      return "boş nüfus";
-    case "tier-reached":
-      return `${goal.age === "town" ? "Kasaba" : "Yerleşim"} Lv${goal.level}`;
-    case "unit-count":
-      return UNIT_LABELS[goal.role] ?? goal.role;
-    case "market-trade":
-      return "Pazar işlemi";
-    case "market-bought":
-      return `${RESOURCE_LABELS[goal.resourceId] ?? goal.resourceId} alındı`;
-  }
-}
 
 export class RtsMissionPanel {
   private readonly root = document.createElement("section");
@@ -71,11 +22,9 @@ export class RtsMissionPanel {
   private readonly content = document.createElement("div");
   private readonly title = document.createElement("strong");
   private readonly why = document.createElement("p");
-  private readonly progress = document.createElement("p");
   private readonly guide = document.createElement("p");
   private readonly show = document.createElement("button");
   private signature = "";
-  private progressText = "";
   /**
    * Open by default (Sürüm 2). While `why` was a three-clause paragraph, hiding
    * it behind a disclosure was the right trade: the card sat above the palette
@@ -112,14 +61,12 @@ export class RtsMissionPanel {
     this.title.className = "rts-mission-title";
     this.title.dataset.rtsMissionTitle = "";
     this.why.className = "rts-mission-why";
-    // Kept outside the collapsible explanation: after the first read, the counter
-    // is the one part of the card the player needs to scan during play.
-    this.progress.className = "rts-mission-progress";
-    this.progress.dataset.rtsMissionProgress = "";
-    // Outside the card's aria-live region: a counter that ticked 1/3 → 2/3 while
-    // the screen reader was mid-sentence on the objective would talk over the
-    // instruction it belongs to.
-    this.progress.setAttribute("aria-hidden", "true");
+    // The "0/1 odun bağlantısı" counter used to sit here, and it is gone: the
+    // chain asks for one of a thing on nearly every step, so it opened as "0/1"
+    // fourteen times and restated the title in the goal's own vocabulary. What
+    // it measured is still on `MissionDirectorState.progress` for a caller that
+    // has a use for it; the card simply is not one.
+    //
     // The one instruction the pulsing button cannot give: a panel action does
     // not exist until its building is selected, so until then the pointer has
     // nothing on screen to sit on and the card has to say where to click.
@@ -137,7 +84,7 @@ export class RtsMissionPanel {
     this.show.hidden = true;
     this.show.addEventListener("click", () => this.onShow?.());
     this.content.append(this.why);
-    this.root.append(this.toggle, this.title, this.progress, this.guide, this.show, this.content);
+    this.root.append(this.toggle, this.title, this.guide, this.show, this.content);
     this.syncCollapsedState();
     this.root.hidden = true;
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
@@ -153,21 +100,9 @@ export class RtsMissionPanel {
     if (!state || !state.step) {
       this.root.hidden = true;
       this.signature = "";
-      this.progressText = "";
       return;
     }
     this.root.hidden = false;
-    // Updated ahead of (and independently of) the signature check: progress moves
-    // while the step does not. It stays visible even for a 1-step objective, so
-    // the card always has the same scan order: objective, progress, details.
-    const progressText = state.progress
-      ? `${Math.min(state.progress.current, state.progress.target)}/${state.progress.target} ${progressTargetLabel(state.step.goal)}`
-      : "";
-    if (progressText !== this.progressText) {
-      this.progressText = progressText;
-      this.progress.textContent = progressText;
-      this.progress.hidden = progressText === "";
-    }
     // Rebuilt only on a real change: this is pushed every frame, and a card that
     // re-created its own DOM sixty times a second would restart the aria-live
     // announcement each time.

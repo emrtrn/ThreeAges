@@ -9,16 +9,16 @@
       {
         "level": 2,
         "cost": {
-          "food": 150,
-          "wood": 150
+          "food": 200,
+          "wood": 200
         },
         "durationSeconds": 45
       },
       {
         "level": 3,
         "cost": {
-          "food": 250,
-          "wood": 250,
+          "food": 200,
+          "wood": 200,
           "gold": 50
         },
         "durationSeconds": 60
@@ -29,12 +29,12 @@
     "id": "town",
     "label": "Kasaba",
     "cost": {
-      "food": 500,
-      "wood": 500,
+      "food": 400,
+      "wood": 400,
       "stone": 200,
       "gold": 100
     },
-    "upgradeSeconds": 105,
+    "upgradeSeconds": 90,
     "requiredBuildingIds": [
       "farm",
       "lumber_camp",
@@ -51,22 +51,22 @@
       {
         "level": 2,
         "cost": {
-          "food": 400,
-          "wood": 400,
-          "stone": 60,
-          "gold": 30
+          "food": 200,
+          "wood": 200,
+          "stone": 100,
+          "gold": 50
         },
-        "durationSeconds": 70
+        "durationSeconds": 60
       },
       {
         "level": 3,
         "cost": {
-          "food": 500,
-          "wood": 500,
-          "stone": 80,
-          "gold": 40
+          "food": 200,
+          "wood": 200,
+          "stone": 100,
+          "gold": 50
         },
-        "durationSeconds": 90
+        "durationSeconds": 60
       }
     ]
   }

@@ -70,7 +70,7 @@ import {
 } from "../src/game/rts/tutorial/missionPredicates";
 import type { MissionGoal, MissionScript } from "../src/game/rts/tutorial/missionScript";
 import { missionGuideHighlight, ROAD_PALETTE_TARGET } from "../src/game/rts/tutorial/missionGuideHighlight";
-import { solveMissionSite } from "../src/game/rts/tutorial/missionSiteSolver";
+import { missionBuildVerdict } from "../src/game/rts/tutorial/missionBuildPolicy";
 import {
   DEFAULT_MISSION_SCRIPT_ID,
   hasSeenMission,
@@ -196,7 +196,10 @@ import { AiExpansionCoordinator, AI_MAX_EXPANSION_PLANS } from "../src/game/rts/
 import { ProductionLogisticsSystem } from "../src/game/rts/economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
-import { ResourceCapacitySystem } from "../src/game/rts/economy/resourceCapacitySystem";
+import {
+  COMMAND_CENTER_STORAGE_CAPACITY,
+  ResourceCapacitySystem,
+} from "../src/game/rts/economy/resourceCapacitySystem";
 import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { KingdomRegistry } from "../src/game/rts/kingdom/kingdomRegistry";
 import { AiController, type AiControllerSnapshot } from "../src/game/rts/ai/aiController";
@@ -235,6 +238,7 @@ import {
   RESCUE_ACTION,
   TRADE_BUY_ACTION_PREFIX,
   TRAIN_ACTION_PREFIX,
+  TRAIN_WORKER_ACTION,
   type CenterDetailView,
   type MarketDetailView,
   type MilitaryDetailView,
@@ -28991,6 +28995,30 @@ check("RTS health clamps damage and healing while exposing current/max/ratio", (
   assert.throws(() => health.setMax(0), RangeError);
 });
 
+/**
+ * **The balance-data rule, for every check below that reads
+ * `public/game-data/balance/*.json`.**
+ *
+ * These tables exist so the numbers can be changed without touching code. A test
+ * that pins a magnitude takes that away again: the next tuning pass turns red,
+ * and what the red build teaches is not "you broke something" but "edit the test
+ * until it agrees" — which is how a suite stops being read.
+ *
+ * So: assert the **contract**, never the **tuning**.
+ *
+ * - Shape — the field exists, is positive, names the right resource, covers
+ *   every tier.
+ * - Relationships — Town outranks Settlement, external deposits beat safe ones,
+ *   a siege gun outranges the archer escorting it. These encode design
+ *   decisions, and a retune that inverts one is a real regression.
+ * - Derivation — where a test needs an amount, compute it from the same table
+ *   (`1200 - lv2Cost.cost.food`), so the arithmetic stays true at any tuning.
+ *
+ * The validators are the other half of this: a value that must never be
+ * nonsensical (a zero-capacity deposit, an arbitrage-positive market) is refused
+ * at load in `validateGameData.ts`, where the failure names the file and the
+ * field rather than a test line number.
+ */
 check("unit balance validates combat stats for stable unit ids", () => {
   const balance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
@@ -29013,7 +29041,10 @@ check("unit balance validates combat stats for stable unit ids", () => {
     balance["siege_placeholder"]!.attackRange > balance["archer_placeholder"]!.attackRange,
     "the gun opens fire from behind the line that escorts it",
   );
-  assert.deepEqual(balance["worker_placeholder"]?.cost, { food: 50 });
+  // A worker is bought with food and nothing else — the claim that makes food a
+  // growth resource rather than a second wood. The amount is tuning.
+  assert.deepEqual(Object.keys(balance["worker_placeholder"]?.cost ?? {}), ["food"]);
+  assert.ok((balance["worker_placeholder"]?.cost.food ?? 0) > 0);
 
   // The Town milestone is the whole gate for the Town-age roster: the Archer opens
   // from a Town-age Range and the artillery from the Barracks the kingdom already
@@ -29131,21 +29162,38 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
-  assert.deepEqual(buildings.house?.footprint, { width: 4, depth: 4 });
-  assert.equal(buildings.barracks?.cost.wood, 140);
-  assert.deepEqual(buildings.farm?.economy, {
-    resourceId: "food",
-    workerCapacity: 3,
-    perWorkerPerMinute: 10,
-    localBufferCapacity: 40,
-  });
-  assert.deepEqual(buildings.outpost?.defense, {
-    attackDamage: 10,
-    attackCooldown: 1.6,
-    attackRange: 12,
-    arrowsPerVolley: 2,
-    damageMultipliers: { light: 1.2, heavy: 0.8, structure: 0.25 },
-  });
+  // Grid alignment is the claim in this check's name, and it is an invariant:
+  // placement snaps to a 2-unit grid, so an odd footprint puts a building's edge
+  // half a cell off every road it ever touches. The *sizes* are balance data and
+  // are not pinned — see the balance-data rule above.
+  for (const [id, stats] of Object.entries(buildings)) {
+    assert.ok(stats.footprint.width > 0 && stats.footprint.depth > 0, `${id} has a real footprint`);
+    assert.equal(stats.footprint.width % 2, 0, `${id} footprint width is grid-aligned`);
+    assert.equal(stats.footprint.depth % 2, 0, `${id} footprint depth is grid-aligned`);
+  }
+  assert.ok((buildings.barracks?.cost.wood ?? 0) > 0, "military production is bought with wood");
+  // Shape, not amounts: a producer names one resource, hires a bounded crew, and
+  // fills a *finite* local buffer — that buffer being finite is what makes the
+  // "full barn, empty treasury" lesson possible at all.
+  assert.equal(buildings.farm?.economy?.resourceId, "food");
+  assert.ok((buildings.farm?.economy?.workerCapacity ?? 0) > 0);
+  assert.ok((buildings.farm?.economy?.perWorkerPerMinute ?? 0) > 0);
+  assert.ok((buildings.farm?.economy?.localBufferCapacity ?? 0) > 0);
+  const defense = buildings.outpost?.defense;
+  assert.ok(defense, "the outpost shoots back");
+  assert.ok(defense!.attackDamage > 0 && defense!.attackCooldown > 0 && defense!.attackRange > 0);
+  assert.ok(defense!.arrowsPerVolley >= 1);
+  // The one relationship worth holding: a tower is anti-infantry, and useless
+  // against buildings. Retuning may move all three numbers; it may not invert
+  // the roles they encode.
+  assert.ok(
+    defense!.damageMultipliers.light > defense!.damageMultipliers.heavy,
+    "arrows favour light targets over armour",
+  );
+  assert.ok(
+    defense!.damageMultipliers.heavy > defense!.damageMultipliers.structure,
+    "a tower is not a siege engine",
+  );
   assert.equal(buildings.house?.icon, "/assets/ui/icons/building-house.png");
   assert.equal(buildings.house?.portrait, undefined, "selection artwork reuses the building icon");
   assert.throws(
@@ -29192,8 +29240,14 @@ check("Faz 6 stone and gold data defines finite safe and richer external deposit
   const resources = validateResourceBalance(
     JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
   );
-  assert.deepEqual(resources.stone?.safeNode, { capacity: 300, perWorkerPerMinute: 6 });
-  assert.deepEqual(resources.gold?.externalNode, { capacity: 700, perWorkerPerMinute: 6 });
+  // Both deposit kinds exist and are finite for both resources; how much they
+  // hold is tuning, and the relationship that matters is asserted below.
+  for (const id of ["stone", "gold"] as const) {
+    for (const kind of ["safeNode", "externalNode"] as const) {
+      const node = resources[id]?.[kind];
+      assert.ok(node && node.capacity > 0 && node.perWorkerPerMinute > 0, `${id}.${kind} is a real deposit`);
+    }
+  }
   for (const resource of Object.values(resources)) {
     assert.ok(resource.externalNode.capacity > resource.safeNode.capacity,
       `${resource.id}: expansion must offer more total material than the safe deposit`);
@@ -29223,12 +29277,24 @@ check("Faz 6 assigns all four resources to distinct core-match decisions", () =>
   const ages = validateAgeBalance(
     JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
   );
-  assert.equal(units.worker_placeholder?.cost.food, 50, "food pays for worker growth");
-  assert.equal(units.guard_placeholder?.cost.wood, 20, "wood contributes to military production");
-  assert.equal(buildings.house?.cost.wood, 50, "wood pays for settlement construction");
-  assert.equal(ages.town.levelUpgrades[0]?.cost.stone, 60, "stone pays for Town-era centre level upgrades");
-  assert.equal(ages.town.cost.gold, 100, "gold is a mandatory Town transition resource");
-  assert.deepEqual(ages.town.cost, { food: 500, wood: 500, stone: 200, gold: 100 });
+  // The claim is that each of the four resources buys something the others do
+  // not — that is the §6 design and it has to survive retuning. The amounts are
+  // balance data and are deliberately *not* pinned here: an exact figure turns
+  // every legitimate pass over the numbers into a red build, which is how a test
+  // teaches people to edit the test instead of thinking about the change.
+  assert.ok((units.worker_placeholder?.cost.food ?? 0) > 0, "food pays for worker growth");
+  assert.ok((units.guard_placeholder?.cost.wood ?? 0) > 0, "wood contributes to military production");
+  assert.ok((buildings.house?.cost.wood ?? 0) > 0, "wood pays for settlement construction");
+  assert.ok(
+    (ages.town.levelUpgrades[0]?.cost.stone ?? 0) > 0,
+    "stone pays for Town-era centre level upgrades",
+  );
+  assert.ok((ages.town.cost.gold ?? 0) > 0, "gold is a mandatory Town transition resource");
+  // All four, and nothing optional about any of them: the Town transition is the
+  // one gate the whole economy has to clear together.
+  for (const resourceId of ["food", "wood", "stone", "gold"] as const) {
+    assert.ok((ages.town.cost[resourceId] ?? 0) > 0, `the Town transition must charge ${resourceId}`);
+  }
 });
 
 /**
@@ -29286,7 +29352,7 @@ check("Faz M1 the Market is buildable and every balance building has art wired",
   assert.ok(market.cost.wood && market.cost.wood > 0, "the market is bought with wood the opening actually has");
   // The trade tuning rides on the building entry so M2's panel has real data to
   // read; the validator already refused it if the no-arbitrage rule were broken.
-  assert.equal(market.market?.lotSize, 100);
+  assert.ok((market.market?.lotSize ?? 0) > 0, "a trade moves a real quantity");
   assert.deepEqual(Object.keys(market.market?.basePrice ?? {}).sort(), ["food", "stone", "wood"]);
   // Both age families and all three levels resolve — the art pack ships all six.
   const catalog = shippedRtsContentCatalog();
@@ -31533,10 +31599,16 @@ check("centre-led progression: level-ups and the Town transition advance the who
   const ages = validateAgeBalance(
     JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
   );
-  assert.deepEqual(ages.town.cost, { food: 500, wood: 500, stone: 200, gold: 100 });
-  assert.equal(ages.town.upgradeSeconds, 105);
-  assert.equal(ages.settlement.commandCenter.controlRadius, 28);
-  assert.deepEqual(ages.town.commandCenter, { controlRadius: 32, workerTrainingSeconds: 9 });
+  // Shape, not amounts (see the §6 resource test): what this check is about is
+  // that the ladder exists and is centre-led, which retuning must not change.
+  assert.ok(ages.town.upgradeSeconds > 0, "the Town transition takes time, so it can be interrupted");
+  // The age *widens* the centre's reach and *shortens* its worker queue — that
+  // is what "advancing" buys. Both radii are tuning; the direction is not.
+  assert.ok(
+    ages.town.commandCenter.controlRadius > ages.settlement.commandCenter.controlRadius,
+    "the Town centre holds more ground than the Settlement one",
+  );
+  assert.ok((ages.town.commandCenter.workerTrainingSeconds ?? 0) > 0);
   assert.deepEqual(ages.settlement.levelUpgrades.map((step) => step.level), [2, 3]);
   assert.deepEqual(ages.town.levelUpgrades.map((step) => step.level), [2, 3]);
   // Centre-led progression removed the per-building upgrade ladder entirely.
@@ -31548,15 +31620,36 @@ check("centre-led progression: level-ups and the Town transition advance the who
   const centers = new CommandCenterSystem();
   const center = centers.spawn("player", 0, 0);
   const navigation = new RtsNavigation();
+  // Funded from the same table the test spends against: this kingdom buys both
+  // Settlement level-ups and the Town transition below, so its purse is that
+  // bill with room to spare. A hard-coded stock quietly became "insufficient
+  // resources" the first time the costs were tuned upward — the failure looked
+  // like a progression bug and was a fixture that had stopped keeping up.
+  const progressionBill = [...ages.settlement.levelUpgrades, ...ages.town.levelUpgrades]
+    .map((step) => step.cost)
+    .concat(ages.town.cost)
+    .reduce<Record<string, number>>((total, cost) => {
+      for (const [resourceId, amount] of Object.entries(cost)) {
+        total[resourceId] = (total[resourceId] ?? 0) + (amount ?? 0);
+      }
+      return total;
+    }, {});
   const kingdoms = new KingdomRegistry(
     ["player"], units, structures,
-    { food: 1200, wood: 1200, stone: 600, gold: 600 }, 20,
+    {
+      food: (progressionBill["food"] ?? 0) * 2,
+      wood: (progressionBill["wood"] ?? 0) * 2,
+      stone: (progressionBill["stone"] ?? 0) * 2,
+      gold: (progressionBill["gold"] ?? 0) * 2,
+    },
+    20,
   );
+  const openingFood = kingdoms.get("player").wallet.amount("food");
   const progression = new KingdomProgressionSystem(["player"], ages, centers, structures, kingdoms);
   // Settlement Lv1 tier is applied to the centre at spawn (the RtsApp init sweep).
   progression.applyToStructure(center);
   assert.deepEqual(progression.tierFor("player"), { age: "settlement", level: 1 });
-  assert.equal(center.controlRadius, 28);
+  assert.equal(center.controlRadius, ages.settlement.commandCenter.controlRadius);
   assert.equal(townUnlocksAvailable(progression.snapshot("player")), false, "Settlement does not expose Town structures");
 
   // A completed building takes the owner's current tier; assertions read the data
@@ -31579,7 +31672,7 @@ check("centre-led progression: level-ups and the Town transition advance the who
   assert.equal(progression.startLevelUpgrade("player"), "started");
   assert.equal(progression.snapshot("player").upgradeKind, "level");
   const lv2Cost = ages.settlement.levelUpgrades[0]!;
-  assert.equal(kingdoms.get("player").wallet.amount("food"), 1200 - (lv2Cost.cost.food ?? 0));
+  assert.equal(kingdoms.get("player").wallet.amount("food"), openingFood - (lv2Cost.cost.food ?? 0));
   assert.deepEqual(progression.update(1), []);
   assert.equal(progression.tierFor("player").level, 1, "not promoted until the timer elapses");
   const lv2Events = progression.update(lv2Cost.durationSeconds);
@@ -31602,7 +31695,13 @@ check("centre-led progression: level-ups and the Town transition advance the who
 
   // At Settlement Lv3 the Town gate opens, but its building list is unmet.
   assert.equal(progression.startTownUpgrade("player"), "missing-requirements");
-  assert.equal(kingdoms.get("player").wallet.amount("stone"), 600, "a failed prerequisite spends nothing");
+  // Nothing so far has cost stone — only the Town transition charges it — so the
+  // purse still holds every last unit of what it opened with.
+  assert.equal(
+    kingdoms.get("player").wallet.amount("stone"),
+    (progressionBill["stone"] ?? 0) * 2,
+    "a failed prerequisite spends nothing",
+  );
   for (const [index, buildingId] of ages.town.requiredBuildingIds.entries()) {
     const stats = buildings[buildingId] ?? assert.fail(`required building ${buildingId} is missing`);
     const structure = structures.place("player", stats, index * 12 + 40, 40);
@@ -31641,8 +31740,11 @@ check("centre-led progression: level-ups and the Town transition advance the who
   // than Settlement Lv3 (the six-tier floor the validator enforces).
   assert.equal(house.health.max, houseTier("town", 1).maxHealth);
   assert.ok(houseTier("town", 1).maxHealth > houseTier("settlement", 3).maxHealth);
-  assert.equal(center.controlRadius, 32);
-  assert.equal(center.workerTrainingSeconds, 9);
+  // Read from the age the centre just entered: what this proves is that the
+  // transition pushed the *data's* Town figures onto the live centre, and that
+  // stays true at any tuning.
+  assert.equal(center.controlRadius, ages.town.commandCenter.controlRadius);
+  assert.equal(center.workerTrainingSeconds, ages.town.commandCenter.workerTrainingSeconds);
 
   // The paused worker resumes now that the transition is done.
   assert.deepEqual(
@@ -31979,15 +32081,28 @@ check("RTS economy producers report income, survive a ten-minute run, and stop a
     production.update(1 / 60);
   }
   let snapshot = production.snapshots()[0] ?? assert.fail("producer snapshot missing");
-  assert.equal(snapshot.assignedWorkers, 3, "T1 farm capacity reserves exactly three workers");
-  assert.equal(snapshot.workingWorkers, 3);
-  assert.equal(snapshot.productionPerMinute, 30, "three workers expose the JSON food-per-minute rate");
+  const farmEconomy = farm.economy ?? assert.fail("farm economy missing");
+  assert.equal(snapshot.assignedWorkers, farmEconomy.workerCapacity, "a farm reserves exactly its crew");
+  assert.equal(snapshot.workingWorkers, farmEconomy.workerCapacity);
+  assert.equal(
+    snapshot.productionPerMinute,
+    farmEconomy.workerCapacity * farmEconomy.perWorkerPerMinute,
+    "the rate on screen is crew × the JSON per-worker rate",
+  );
   for (let second = 0; second < 600; second += 1) production.update(1);
   snapshot = production.snapshots()[0] ?? assert.fail("producer snapshot missing after ten minutes");
   assert.equal(snapshot.status, "buffer-full");
-  assert.equal(snapshot.localBuffer, 40, "unconnected production never exceeds its local buffer");
+  assert.equal(
+    snapshot.localBuffer,
+    farmEconomy.localBufferCapacity,
+    "unconnected production never exceeds its local buffer",
+  );
   assert.equal(snapshot.productionPerMinute, 0, "a full local buffer stops reported income");
-  assert.equal(snapshot.totalProduced, 40, "ten-minute economy run preserves the buffer ceiling");
+  assert.equal(
+    snapshot.totalProduced,
+    farmEconomy.localBufferCapacity,
+    "ten-minute economy run preserves the buffer ceiling",
+  );
   assert.equal(
     units.workersOf("player").filter((worker) => production.stateFor(worker) === "idle").length,
     1,
@@ -32156,7 +32271,7 @@ check("a completed Tapınak mends its own units in range and softens the blows t
   );
   const templeStats = buildings.temple ?? assert.fail("temple definition missing");
   const aura = templeStats.aura ?? assert.fail("temple aura missing");
-  assert.equal(templeStats.cost.wood, 200, "the Tapınak is bought with 200 wood");
+  assert.ok((templeStats.cost.wood ?? 0) > 0, "the Tapınak is bought with wood");
   assert.equal(templeStats.requiredAge, undefined, "the Tapınak is buildable in either age");
 
   const structures = new PlacedStructureSystem();
@@ -32483,6 +32598,7 @@ const missionWorld = (
   razedEnemyBuildings: {},
   marketTrades: 0,
   marketPurchases: {},
+  unitsTrained: {},
   ...extra,
 });
 
@@ -32576,6 +32692,31 @@ check("the Faz 2 mission goals measure the rule they teach", () => {
     isGoalMet(guards, missionWorld([], [], { units: [army("guard"), army("guard"), army("guard", "enemy")] })),
     false,
     "the enemy's army does not fill the player's quota",
+  );
+
+  // The bug that retired `unit-count` from the shipped chain: the preset opens
+  // with eight Guards, so "have three Guards" was true on the first evaluation
+  // and the military step cleared itself before the player had built a Barracks.
+  // Training is an event; a garrison is a state. The chain wanted the event.
+  const trained: MissionGoal = { kind: "unit-trained", role: "guard", count: 3 };
+  const startingArmy = missionWorld([], [], {
+    units: [
+      { owner: "player", role: "guard" },
+      { owner: "player", role: "guard" },
+      { owner: "player", role: "guard" },
+      { owner: "player", role: "guard" },
+    ],
+  });
+  assert.equal(isGoalMet({ kind: "unit-count", role: "guard", count: 3 }, startingArmy), true);
+  assert.equal(isGoalMet(trained, startingArmy), false, "an issued army was never trained by the player");
+  assert.equal(isGoalMet(trained, missionWorld([], [], { unitsTrained: { guard: 2 } })), false);
+  assert.equal(isGoalMet(trained, missionWorld([], [], { unitsTrained: { worker: 9 } })), false, "role narrows");
+  assert.equal(isGoalMet(trained, missionWorld([], [], { unitsTrained: { guard: 3 } })), true);
+  // …and it stays true through a losing fight, which is why it needs no `latch`.
+  assert.equal(
+    isGoalMet(trained, missionWorld([], [], { unitsTrained: { guard: 3 }, units: [] })),
+    true,
+    "three Guards dying does not un-train them",
   );
 
   const razed: MissionGoal = { kind: "enemy-structure-razed", buildingId: "outpost", count: 1 };
@@ -32719,6 +32860,45 @@ check("Sürüm 2: the guide points at one control, and at the building first whe
     "a population step owning one House still wants the next House, not a road",
   );
 
+  // The chain's late economy steps ask for *two* of a producer, so "one is
+  // standing" is not "enough are standing". Pointing at the road here would
+  // send the player to connect a camp they have not built yet.
+  const secondCamp = stateFor(
+    { action: { kind: "build", buildingId: "lumber_camp" } },
+    { kind: "producer-linked", resourceId: "wood", count: 2 },
+  );
+  secondCamp.evaluate(missionWorld([]));
+  assert.equal(
+    missionGuideHighlight(secondCamp.state(), null, 1).paletteTarget,
+    "lumber_camp",
+    "one of two built still wants the palette",
+  );
+  assert.equal(
+    missionGuideHighlight(secondCamp.state(), null, 2).paletteTarget,
+    ROAD_PALETTE_TARGET,
+    "both built and still unlinked is a road problem",
+  );
+  // And the palette agrees, from the same quota: the pointer may never send the
+  // player at a button that is about to refuse them.
+  assert.deepEqual(
+    missionBuildVerdict({
+      buildingId: "lumber_camp",
+      step: secondCamp.state().step,
+      completed: 1,
+      pending: 0,
+    }),
+    { allowed: true },
+  );
+  assert.deepEqual(
+    missionBuildVerdict({
+      buildingId: "lumber_camp",
+      step: secondCamp.state().step,
+      completed: 2,
+      pending: 0,
+    }),
+    { allowed: false, refusal: "step-satisfied" },
+  );
+
   // Everything that means "no live objective" takes the pointer down: no chain,
   // a step that carries no guide, and an abandoned or finished chain. The mode
   // ends by the guidance disappearing, so there is no separate teardown to miss.
@@ -32731,80 +32911,64 @@ check("Sürüm 2: the guide points at one control, and at the building first whe
   assert.deepEqual(missionGuideHighlight(build.state(), "market"), none, "an abandoned chain points at nothing");
 });
 
-check("Faz C: the site hint only ever names ground the placement rules accept", () => {
-  const footprint = { width: 6, depth: 6 };
-  // A validator that refuses everything is the case that matters most: the hint
-  // must go silent rather than invent a spot the click would then be refused at.
-  assert.equal(
-    solveMissionSite({
-      origin: { x: 0, z: 0 },
-      mainRoadCells: [{ x: 8, z: 0 }],
-      footprint,
-      validate: () => ({ x: 0, z: 0, valid: false }),
-    }),
-    null,
-    "no legal ground means no marker",
+check("Sürüm 2 §12.5: the tur paces building, and only ever the player's own palette", () => {
+  const step = (goal: MissionGoal, buildingId: string): MissionScript["steps"][number] => ({
+    id: "s",
+    title: "t",
+    why: "w",
+    goal,
+    guide: { action: { kind: "build", buildingId } },
+  });
+  const farmStep = step({ kind: "producer-linked", resourceId: "food", count: 1 }, "farm");
+
+  // The reported failure, in one line: told to build a Farm, the player puts
+  // down four before the first one finishes and the opening wood is gone.
+  assert.deepEqual(
+    missionBuildVerdict({ buildingId: "farm", step: farmStep, completed: 0, pending: 1 }),
+    { allowed: false, refusal: "already-building" },
+  );
+  assert.deepEqual(
+    missionBuildVerdict({ buildingId: "farm", step: farmStep, completed: 0, pending: 0 }),
+    { allowed: true },
+    "the first one is exactly what the step asked for",
   );
 
-  // Only one legal spot, and it is nowhere near the road: the solver still names
-  // it. "Best" is a ranking among legal answers, never a veto over them.
-  const onlySpot = solveMissionSite({
-    origin: { x: 0, z: 0 },
-    mainRoadCells: [{ x: 8, z: 0 }],
-    footprint,
-    validate: (x, z) => ({ x, z, valid: x === 40 && z === 20 }),
-  });
-  assert.deepEqual(onlySpot, { x: 40, z: 20 });
+  // The step's own quota. A Farm that stands but does not pay leaves this step
+  // open, and a *second* Farm is the mistake the chain has to stop being read as
+  // asking for — what is missing is a road, which is where the pointer moves.
+  assert.deepEqual(
+    missionBuildVerdict({ buildingId: "farm", step: farmStep, completed: 1, pending: 0 }),
+    { allowed: false, refusal: "step-satisfied" },
+  );
 
-  // The ranking itself: among spots the rules accept, the one whose footprint
-  // comes closest to the centre's own road wins — which is the rule the tur is
-  // teaching, so the marker demonstrates it rather than merely obeying it.
-  const nearRoad = solveMissionSite({
-    origin: { x: 0, z: 0 },
-    mainRoadCells: [{ x: 20, z: 0 }],
-    footprint,
-    validate: (x, z) => ({ x, z, valid: (x === 16 && z === 0) || (x === -40 && z === 0) }),
-  });
-  assert.deepEqual(nearRoad, { x: 16, z: 0 }, "the spot touching the network beats the far one");
+  // A goal with no derivable quota is paced but never capped: "make room for
+  // population" needs as many Houses as it needs, and capping it would close a
+  // step the player could then not finish.
+  const houseStep = step({ kind: "population-headroom", count: 5 }, "house");
+  assert.deepEqual(
+    missionBuildVerdict({ buildingId: "house", step: houseStep, completed: 3, pending: 0 }),
+    { allowed: true },
+  );
+  assert.deepEqual(
+    missionBuildVerdict({ buildingId: "house", step: houseStep, completed: 3, pending: 1 }),
+    { allowed: false, refusal: "already-building" },
+    "one at a time still holds where the quota does not",
+  );
 
-  // With no road at all — a centre that has lost its ring — distance to home is
-  // the only ranking left, and it is still the right advice: build near, connect
-  // after. Ties break deterministically on the sweep order, so the hint does not
-  // flicker between two equally good spots frame to frame.
-  const noRoad = solveMissionSite({
-    origin: { x: 0, z: 0 },
-    mainRoadCells: [],
-    footprint,
-    validate: (x, z) => ({ x, z, valid: (x === 12 && z === 0) || (x === -32 && z === 0) }),
-  });
-  assert.deepEqual(noRoad, { x: 12, z: 0 });
+  // A building the step does not name is paced, not quota'd: the player is free
+  // to run their own economy, they just cannot queue five of anything at once.
+  assert.deepEqual(
+    missionBuildVerdict({ buildingId: "depot", step: farmStep, completed: 4, pending: 0 }),
+    { allowed: true },
+  );
 
-  // The marker sits where the building would actually land, not on the sample
-  // point: the validator snaps to the placement grid, and a ring offset from the
-  // footprint it is advertising would be pointing slightly at the wrong ground.
-  const snapped = solveMissionSite({
-    origin: { x: 0, z: 0 },
-    mainRoadCells: [{ x: 6, z: 0 }],
-    footprint,
-    validate: (x, z) => ({ x: x + 1, z: z + 1, valid: x === 0 && z === 0 }),
-  });
-  assert.deepEqual(snapped, { x: 1, z: 1 });
-
-  // Ranking before validating is what keeps this affordable: the expensive
-  // question is asked of the best candidate first and, in the ordinary case,
-  // only once. Pinned because the cheap version and the correct version have to
-  // stay the same version.
-  let asked = 0;
-  solveMissionSite({
-    origin: { x: 0, z: 0 },
-    mainRoadCells: [{ x: 10, z: 0 }],
-    footprint,
-    validate: (x, z) => {
-      asked += 1;
-      return { x, z, valid: true };
-    },
-  });
-  assert.equal(asked, 1, "a field of legal ground costs exactly one validation");
+  // And with no chain — a free match, or a tur that has been finished or handed
+  // back — nothing is paced at all. The mode may guide; it may never become a
+  // rule of the game.
+  assert.deepEqual(
+    missionBuildVerdict({ buildingId: "farm", step: null, completed: 9, pending: 9 }),
+    { allowed: true },
+  );
 });
 
 check("a latched step stays cleared once the player has done it", () => {
@@ -32989,14 +33153,22 @@ check("the shipped mission script validates, and a broken one fails at load", ()
   const finishedValley = missionWorld(
     [
       farm(),
+      farm(),
       depot(),
+      { owner: "player", buildingId: "lumber_camp", complete: true },
       { owner: "player", buildingId: "lumber_camp", complete: true },
       { owner: "player", buildingId: "market", complete: true },
       { owner: "player", buildingId: "outpost", complete: true, roadConnected: true },
       { owner: "player", buildingId: "barracks", complete: true },
     ],
+    // Two of the wood and food lines: the chain's late "second Lumber Camp /
+    // second Farm" steps exist because one of each cannot pay for a Town, and
+    // the fixture has to be a kingdom that could actually afford the age it
+    // ends on.
     [
       linkedFarm(),
+      linkedFarm(),
+      { owner: "player", resourceId: "wood", status: "linked" },
       { owner: "player", resourceId: "wood", status: "linked" },
       { owner: "player", resourceId: "stone", status: "linked" },
       { owner: "player", resourceId: "gold", status: "linked" },
@@ -33012,6 +33184,9 @@ check("the shipped mission script validates, and a broken one fails at load", ()
       razedEnemyBuildings: { outpost: 1 },
       marketTrades: 1,
       marketPurchases: { wood: 100 },
+      // Trained, not merely alive: the shipped preset opens with an army, and
+      // the chain's military step measures what came out of the Barracks.
+      unitsTrained: { guard: 3, worker: 4 },
     },
   );
   const walked = new MissionDirector(script);
@@ -33118,6 +33293,7 @@ check("the shipped mission script validates, and a broken one fails at load", ()
     const known = [
       CENTER_LEVEL_UP_ACTION,
       AGE_UP_ACTION,
+      TRAIN_WORKER_ACTION,
       ...Object.keys(validateUnitBalance(
         JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
       )).map((id) => `${TRAIN_ACTION_PREFIX}${id}`),
@@ -34340,16 +34516,18 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
   // Structural contract only: the presentational `visual` block is live-tuned by
   // designers, so pinning its exact numbers here just makes the suite flap. Its
   // own parsing/shape is covered by the painted-road tests.
+  // cellSize is not tuning: placement, footprints and the road grid all assume
+  // the same 2-unit cell, so changing it is a code change wearing a data hat.
   assert.equal(balance.cellSize, 2);
-  assert.equal(balance.woodCostPerCell, 4);
-  assert.deepEqual(balance.autoConnect, { maxCells: 6 });
+  assert.ok(balance.woodCostPerCell > 0, "a paved cell costs wood");
+  assert.ok((balance.autoConnect?.maxCells ?? 0) > 0, "a building near the network links itself");
   assert.ok(balance.visual && typeof balance.visual.width === "number", "visual tuning still parses");
   const roads = new RoadGraph(balance);
   const blockers = [{ min: [-1, -1, -1], max: [1, 3, 1] }];
   const detour = roads.plan({ x: -6, z: 0 }, { x: 6, z: 0 }, blockers);
   assert.ok(detour, "road graph finds a flank around a blocked cell");
   assert.ok(detour.cells.every((cell) => cell.x !== 0 || cell.z !== 0), "route avoids the occupied road cell");
-  assert.equal(detour.woodCost, detour.newCells.length * 4);
+  assert.equal(detour.woodCost, detour.newCells.length * balance.woodCostPerCell);
   roads.commit(detour);
   assert.equal(roads.connected({ x: -6, z: 0 }, { x: 6, z: 0 }), true);
   assert.ok(roads.all().some((segment) => segment.kind === "corner"), "detour produces corner segments");
@@ -34512,7 +34690,14 @@ check("RTS a road paved on a deposit refuses every quarry centre until the tile 
   assert.equal(roads.all().length, 0, "the erased tile leaves the network");
   const built = construction.build("player", "quarry", 0, 0);
   assert.ok(built.built, "the quarry fits once the road tile is erased");
-  assert.equal(kingdoms.get("player").wallet.amount("wood"), 380, "erasing a road refunds nothing");
+  // The Quarry is the only thing the wallet paid for: the tile above was paved
+  // straight onto the graph, and erasing it refunds nothing — the §44 rule this
+  // whole check exists for. Derived from the table so a retune stays true.
+  assert.equal(
+    kingdoms.get("player").wallet.amount("wood"),
+    500 - (buildings.quarry?.cost.wood ?? 0),
+    "erasing a road refunds nothing",
+  );
 });
 
 check("RTS road erase picks the hovered tile and warns only when losing it splits the network", () => {
@@ -34664,17 +34849,25 @@ check("RTS command-centre road rings form the only active logistics network", ()
   const capacity = new ResourceCapacitySystem(structures, depots);
   assert.equal(depots.snapshots()[0]?.status, "unlinked-main-network");
   assert.equal(production.snapshots()[0]?.status, "unlinked-main-network");
-  assert.equal(capacity.capacityFor("player").food, 500, "an isolated depot cannot add global capacity");
+  // Both figures come from the tables the runtime reads: the centre's own
+  // starter store, and the depot tier the fixture just applied.
+  const centreFood = COMMAND_CENTER_STORAGE_CAPACITY.food ?? 0;
+  const depotFood = depotStats.progression?.settlement[0]?.storageCapacity?.food ?? 0;
+  assert.equal(capacity.capacityFor("player").food, centreFood, "an isolated depot cannot add global capacity");
 
   const connection = roads.plan({ x: 6, z: 0 }, { x: 16, z: 0 }, []);
   assert.ok(connection);
   roads.commit(connection);
   assert.equal(depots.snapshots()[0]?.status, "linked");
   assert.equal(production.snapshots()[0]?.status, "linked", "a producer may deliver through the centre network");
-  assert.equal(capacity.capacityFor("player").food, 1000, "the connected depot adds its tier capacity to the centre store");
+  assert.equal(
+    capacity.capacityFor("player").food,
+    centreFood + depotFood,
+    "the connected depot adds its tier capacity to the centre store",
+  );
   assert.equal(structures.destroy(depot), true);
   assert.equal(production.snapshots()[0]?.status, "linked", "the connected centre remains a delivery endpoint without a depot");
-  assert.equal(capacity.capacityFor("player").food, 500, "the centre retains its own opening storage after a depot is lost");
+  assert.equal(capacity.capacityFor("player").food, centreFood, "the centre retains its own opening storage after a depot is lost");
   structures.clear();
 });
 
@@ -34702,19 +34895,25 @@ check("RTS full storage leaves linked production in its local buffer until capac
   const route = roads.plan({ x: 4, z: 0 }, { x: 4, z: 10 }, []);
   assert.ok(route);
   roads.commit(route);
-  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 999 }, 20);
+  // Opened one unit short of the ceiling the same system computes, so the run
+  // below has exactly one unit of room and everything after it must stay in the
+  // farm's local buffer. Derived, because the ceiling is centre + depot tier and
+  // both are balance data.
+  const storage = new ResourceCapacitySystem(structures);
+  const foodCeiling = storage.capacityFor("player").food ?? 0;
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: foodCeiling - 1 }, 20);
   const transfers = new LogisticsTransferSystem(
     production,
     new ProductionLogisticsSystem(structures, roads, new DepotLogisticsSystem(structures, roads)),
     kingdoms,
-    new ResourceCapacitySystem(structures),
+    storage,
   );
   for (let frame = 0; frame < 900; frame += 1) {
     updateUnitMovement(units.all(), 1 / 60);
     production.update(1 / 60);
     transfers.update();
   }
-  assert.equal(kingdoms.get("player").wallet.amount("food"), 1000, "delivery stops at the depot-backed limit");
+  assert.equal(kingdoms.get("player").wallet.amount("food"), foodCeiling, "delivery stops at the depot-backed limit");
   assert.ok((production.snapshots("player")[0]?.localBuffer ?? 0) > 0, "excess output remains locally buffered");
   structures.clear();
   units.clear();
@@ -35322,7 +35521,15 @@ check("RTS Barracks queues paid Guards by age capacity and trains them at a safe
   const navigation = new RtsNavigation();
   navigation.setBlockers(structures.navigationBlockers());
   const units = new UnitSystem();
-  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 3000, wood: 3000 }, 50);
+  // This check queues 35 Guards across three queue-capacity tiers, so the purse
+  // is that bill with room to spare — read from the unit table rather than
+  // written down, which is what keeps it funded through a balance pass.
+  const guardOrders = 40;
+  const openingFood = (guard.cost.food ?? 0) * guardOrders;
+  const openingWood = (guard.cost.wood ?? 0) * guardOrders;
+  const kingdoms = new KingdomRegistry(
+    ["player", "enemy"], units, structures, { food: openingFood, wood: openingWood }, 50,
+  );
   const wallet = kingdoms.get("player").wallet;
   const population = kingdoms.get("player").population;
   const production = new BarracksProductionSystem(
@@ -35340,7 +35547,11 @@ check("RTS Barracks queues paid Guards by age capacity and trains them at a safe
   for (let index = 0; index < 5; index += 1) assert.equal(production.queueGuard("player"), "queued");
   assert.equal(production.queuedCount("player"), 5);
   assert.equal(production.queueCapacity("player"), 5);
-  assert.equal(wallet.amount("food"), 2800, "every settlement Guard order reserves its food immediately");
+  assert.equal(
+    wallet.amount("food"),
+    openingFood - 5 * (guard.cost.food ?? 0),
+    "every settlement Guard order reserves its food immediately",
+  );
   assert.equal(population.snapshot().reserved, 5, "every queued Guard reserves its population slot");
   assert.equal(production.queueGuard("player"), "queue-full", "Settlement Barracks hold at most five Guard orders");
   for (let index = 0; index < 5; index += 1) assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
@@ -35634,7 +35845,14 @@ check("RTS worker production queues paid worker orders by command-centre age cap
   const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
   const structures = new PlacedStructureSystem();
   const units = new UnitSystem();
-  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 300, wood: 0 }, 20);
+  // Funded from the unit table: this check queues five workers before it tops up
+  // for the larger tiers, so the opening purse is exactly that first batch plus
+  // one spare order — which is what makes the "50 left" assertion below mean
+  // "one order's worth", at any tuning.
+  const workerFood = worker.cost.food ?? 0;
+  const kingdoms = new KingdomRegistry(
+    ["player", "enemy"], units, structures, { food: workerFood * 6, wood: 0 }, 20,
+  );
   const population = kingdoms.get("player").population;
   for (let index = 0; index < 20; index += 1) units.spawn("player", index, 0, RTS_TEST_UNIT_STATS);
   assert.equal(population.reserve(1), null, "base settlement population cap blocks a new queue");
@@ -35665,7 +35883,7 @@ check("RTS worker production queues paid worker orders by command-centre age cap
   assert.equal(workerQueueCapacityForCenterLevel(3), 20);
   for (let index = 0; index < 5; index += 1) assert.equal(production.queueWorker("player"), "queued");
   assert.equal(production.queuedCount("player"), 5);
-  assert.equal(wallet.amount("food"), 50, "every queued worker reserves its food immediately");
+  assert.equal(wallet.amount("food"), workerFood, "every queued worker reserves its food immediately");
   assert.equal(population.snapshot().reserved, 5, "every queued worker reserves its population immediately");
   assert.equal(production.queueWorker("player"), "queue-full", "Settlement centres hold at most five worker orders");
   for (let index = 0; index < 5; index += 1) {
@@ -35688,14 +35906,14 @@ check("RTS worker production queues paid worker orders by command-centre age cap
 
   const center = centers.get("player") ?? assert.fail("worker-production centre missing");
   center.level = 2;
-  wallet.credit("food", 500);
+  wallet.credit("food", workerFood * 10);
   for (let index = 0; index < 10; index += 1) assert.equal(production.queueWorker("player"), "queued");
   assert.equal(production.queueWorker("player"), "queue-full", "Town centres hold at most ten worker orders");
   production.reset();
   assert.equal(population.snapshot().reserved, 0, "reset releases every waiting Town order");
 
   center.level = 3;
-  wallet.credit("food", 1000);
+  wallet.credit("food", workerFood * 20);
   for (let index = 0; index < 20; index += 1) assert.equal(production.queueWorker("player"), "queued");
   assert.equal(production.queueWorker("player"), "queue-full", "third-age centres hold at most twenty worker orders");
   production.reset();

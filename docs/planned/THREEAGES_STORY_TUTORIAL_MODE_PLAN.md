@@ -696,50 +696,139 @@ kendi Level'ını kullanıyor ve bu da ayrı bir değişmezle korunuyor.
 modülü zaten orada doğuyor (`missionHintView.ts`); aynı halkayı iki fazda iki
 kez yazmak yerine, Faz B'de kartın tek satırı işi görüyor.
 
-**Faz C — Zemin işareti ve "Göster"** — **tamamlandı 2026-07-28**
+**Faz C — Dünya işareti, "Göster" ve inşa temposu** — **tamamlandı 2026-07-28**
 
-- [x] `missionSiteSolver.ts` (saf). **`guide.site` alanı yazılmadı ve
-      gerekmiyor** — planın en büyük sadeleşmesi, §12.9'a bakınız.
-- [x] `missionHintView.ts` (nabız atan halka + salınan ok) — Faz B'den devredilen
-      "tıklanacak yapıyı dünyada vurgula" işi de aynı işaretle çözüldü: iki ayrı
-      görsel dil, oyuncuya ikincisini öğretmekten başka bir şey kazandırmıyordu.
+- [x] `missionHintView.ts` (nabız atan halka + salınan ok) — **yalnız oyuncunun
+      sahip olduğu, tıklaması gereken yapının etrafında**: Pazar, Merkez, Kışla,
+      ya da yolu olmayan üretici. Halka yapının footprint'inin dışına oturacak
+      şekilde ölçüldü (6–8 birimlik binaların içinde kalan halka görünmüyordu).
 - [x] Görev kartına "Göster" butonu → kamerayı işarete taşır. Yalnız işaret
       varken görünür, yani hiçbir zaman boşluğa götüremez. Uçuş değil, ani
-      ortalama: kamera oyuncunun, senaryolu bir kaydırma onu süresi boyunca
-      elinden alırdı.
+      ortalama: kamera oyuncunun.
 - [x] Yanlış yere kurulmuşken yol aracını işaret eden hatırlatma. **Veriye yeni
-      alan eklemeden**: kural, aktif adımın hedefi bir *bağlantı* ölçüyorsa
+      alan eklemeden**: aktif adımın hedefi bir *bağlantı* ölçüyorsa
       (`producer-linked` / `outpost-connected`) ve oyuncu o yapıdan zaten bir
-      tane tamamlamışsa işaretin palet butonundan yol aracına geçmesi.
-      `{ kind: "road" }` guide'ı hâlâ yazılmadı — ihtiyacı doğuran şey buydu ve
-      türetilerek çözüldü.
+      tane tamamlamışsa işaret palet butonundan yol aracına geçiyor.
+- [x] **Faz D'den öne alındı:** `missionBuildPolicy.ts` — inşa temposu (aşağıda).
+- [x] ~~`missionSiteSolver.ts` + `guide.site`~~ — yazıldı, oynanışta denendi ve
+      **geri alındı**. §12.9.
 
-### 12.9 Faz C'de planın değiştiği yer: `guide.site` iptal edildi
+### 12.9 Faz C'de geri alınan iş: yerleştirme yeri öneren işaret
 
-Plan, her adım için veri tarafında bir yerleştirme stratejisi öngörüyordu
-(`near-forest`, `stone-node`, `control-edge`…). Kod okununca bunun gereksiz —
-ve aslında tehlikeli — olduğu görüldü:
+Kısa ömürlü bir sürümde, kurulacak yapı için zemin üstünde bir yer öneriliyordu:
+gerçek `StructureConstructionService.validate()`'e sorulmuş, Merkez'in yol ağına
+yakınlığa göre sıralanmış adaylar. Kod tarafı doğru çalışıyordu; **tasarım
+yanlıştı** ve oyun testinde iki şekilde kırıldı (kullanıcı, 2026-07-28):
 
-> **Kurallar zaten biliyor.** `StructureConstructionService.validate()` bir
-> yapının bir yerde durup duramayacağının tek merci: kontrol alanı, footprint
-> boşluğu, Oduncu Kampı'nın yakın ağaçları, Taş Ocağı'nın yatağı, Karakol'un
-> genişleme boşluğu. Bunların herhangi birini çözücüde yeniden kodlamak, tıklama
-> anında hüküm veren merciyle çelişebilecek **ikinci bir görüş** yaratırdı — ve
-> oyunun sonra reddedeceği bir zemini işaret eden ok, hiç ok olmamasından kötü.
+1. **Gösterdiği yer uygun olmuyordu.** "Kurallara uygun ve yola yakın", "iyi yer"
+   ile aynı şey değil. Kurallar bir yerin *yasak olmadığını* söyler; ormanın
+   hangi tarafına kurulacağı, ilerideki taş yatağının önünün kapanıp
+   kapanmayacağı gibi şeyleri söylemez.
+2. **Adım bitmeden bir sonraki yeri göstermeye başlıyordu.** Yapı konunca aday
+   alanı değişiyor, işaret hemen başka bir noktaya atlıyordu — oyuncuya, henüz
+   anlatılmamış bir adımı aceleye getiriyormuş gibi geliyor.
 
-Dolayısıyla çözücü şu: gerçek doğrulayıcıya bir aday alanı sor, kabul ettiklerini
-turun asıl öğrettiği şeye göre sırala — **Merkez'in yol ağına değ**. İçinde tek
-bir binaya özel satır yok; yeni yerleştirme kuralı olan bir bina ekleyen fork
-doğru ipucunu bedavaya alıyor.
+Asıl mesele şu: **nereye kurulacağı, turun öğrettiği kararın ta kendisi.** Onu
+oyuncu yerine vermek, soruyu sormak yerine cevaplamak oluyor. İşaret bu yüzden
+yalnız *zaten var olan* bir yapıyı gösteriyor; hangi yapının kurulacağını palet
+söylüyor, nereye kurulacağını oyuncu.
 
-Performans da bu yüzden sorun değil: sıralama yalnız geometriye bakıyor (yollar
-nerede, ev nerede), yani pahalı soru en iyi adaya **önce** soruluyor ve olağan
-durumda bir kez soruluyor. Bu, "ucuz sürüm" ile "doğru sürüm"ün aynı sürüm
-olması demek ve `test:engine`'de sayaçla pinlendi.
+Silinen: `missionSiteSolver.ts` ve testleri, `RtsApp.solvePlacementSite`, işaret
+önbelleği/zamanlayıcısı. `guide.site` alanı hiç yazılmamıştı.
+
+### 12.11 Oyun testi düzeltmesi: Kasaba adımı bekleme duvarına çarpıyordu
+
+Kullanıcı turu 13. göreve kadar sorunsuz oynadı ve orada durdu (2026-07-28):
+elde 260 yiyecek / 80 odun / 120 taş / 120 altın varken Kasaba Çağı
+**500/500/200/100** istiyor. Kilitlenme değil, **~8 dakikalık boş bekleme** —
+ki turun sonunda oyuncunun "geçemiyorum" diye okuduğu şey tam olarak bu.
+
+Sebep başlangıç stoğu değil, **gelir**. Tek üretici yapıyla (3 işçi dolu,
+Yerleşim) dakikalık gelir: odun 60, yiyecek 30, taş 15, altın 9. Zincir "her
+şeyden bir tane" öğretip ardından bunun iki katı ekonomi isteyen bir çağ geçişi
+istiyordu — eksik olan ders zaten buydu: **bir tane her şeyden, ekonomi
+değildir.**
+
+İki değişiklik:
+
+1. `gameplay_proof` açılış stoğu 400/400/200/200 (kullanıcı kararı). Açılışı
+   rahatlatır; 13. görevi tek başına açmaz ve bu açıkça söylendi.
+2. Kasaba adımından hemen önce **iki yeni adım**: `second_lumber_camp`
+   (`producer-linked: wood 2`) ve `second_farm` (`producer-linked: food 2`).
+   Bekleme odunda ~7 → ~3.5 dk'ya, yiyecekte ~8 → ~4 dk'ya iniyor ve boş durma
+   olmaktan çıkıp yapılacak işe dönüşüyor. Zincir 16 adım.
+
+Bu, işaretçi kuralında bir hatayı da açığa çıkardı: yol ipucu "o yapıdan **bir**
+tane tamamlanmışsa" tetikleniyordu, oysa doğrusu "**adımın istediği kadarı**
+tamamlanmışsa". İki kamp isteyen bir adımda tek kamp varken oyuncuyu yola
+göndermek, henüz kurmadığı bir kampı bağlamaya göndermek olurdu. Kota artık tek
+kaynaktan (`missionBuildQuota`) okunuyor — paletin reddettiği sayı ile işaretin
+karar verdiği sayı aynı sayı, yani kart oyuncuyu paletin geri çevireceği bir
+butona hiçbir zaman gönderemez.
+
+### 12.12 İkinci oyun testi: işçi yok, sıra yanlış, muhafız adımı kendi kendine geçiyor
+
+Aynı turun ikinci oynanışı (2026-07-28) üç şey gösterdi:
+
+**1. İşçi üretimi zincirde hiç yoktu.** Oyuncu ikinci Kampı ve Tarlayı kurdu ama
+onları çalıştıracak işçi üretmemişti; yapılar boş durdu. Üretim yapısının boştaki
+işçiyi kendi tuttuğu kuralı (§2.1) öğretiliyor, ama "işçi biterse ne olur"
+öğretilmiyordu. Yeni adım: **Dört İşçi Üret** (`unit-trained: worker 4`),
+Ev adımından hemen sonra — nüfus tavanı açılmadan işçi üretilemez, o yüzden sıra
+bu.
+
+**2. İkinci üreticiler çok geçti.** Kullanıcının isteği: "biz diğer yapıları
+kurarken üretim yapsınlar." İkinci Kamp ve Tarla 13–14'ten **9–10**'a alındı,
+yani Karakol/Ocak/Maden/Kışla inşa edilirken ikinci hat zaten çalışıyor.
+
+**3. "Üç Muhafız Eğit" hiç muhafız üretmeden geçiyordu.** Hedef `unit-count`
+idi — *yaşayan* muhafızları sayıyor — ve `gameplay_proof` maça **sekiz muhafızla**
+başlıyor. Adım ilk değerlendirmede sağlanıyor, üstelik `latch: true` olduğu için
+kilitleniyordu: Kışla daha ortada yokken askerî ders geçilmiş sayılıyordu.
+
+Bu, bir veri hatası değil **hedef türü hatası**: "üç muhafızın olsun" bir durum,
+"üç muhafız eğit" bir olay. Yeni hedef türü `unit-trained` (rol başına, maç
+içinde eğitilen sayısı) — `market-bought` ve `enemy-structure-razed` ile aynı
+sayaç ailesi. Sayaç iki üretim kuyruğunun da tek çıkış noktasında tutuluyor
+(`RtsApp.tallyTrainedUnit`), yani hem Merkez'in işçisi hem Kışla'nın askeri aynı
+yerden sayılıyor. Doğası gereği tek seferlik olduğu için `latch` kaldırıldı:
+üç muhafızın ölmesi onları eğitilmemiş yapmıyor.
+
+**Denge tabloları elden geçirildi** (kullanıcı): Kasaba 400/400/200/100,
+Yerleşim Lv2 200/200, Lv3 200/200/50. `test:engine`'de bu sayıları birebir
+sabitleyen üç iddia **iddiaya çevrildi** — "dört kaynağın her biri diğerlerinin
+almadığı bir kararı satın alır" korunuyor, rakamların kendisi denge verisi.
+Rakamı sabitleyen test, üzerinde düşünülmüş her ayar geçişini kırmızıya çevirir
+ve insanlara değişikliği değil testi düzenlemeyi öğretir.
+
+Zincir bu haliyle **17 adım**.
+
+### 12.10 İnşa temposu (Faz D'nin ilk maddesi, öne alındı)
+
+Kullanıcının aynı testte gördüğü ikinci sorun: "bir yapı kur" denince oyuncu
+peş peşe üç dört tane kuruyor, açılış odunu bitiyor, zincir ilerleyemiyor.
+`tutorial/missionBuildPolicy.ts` (saf) iki kural koyuyor:
+
+1. **Aynı anda bir tane.** Bir yapı türünden biri inşa hâlindeyken ikincisi
+   başlatılamaz. Bildirilen problem birebir bu.
+2. **Adımın istediğinden fazlası değil.** Guide'ın işaret ettiği yapıdan adımın
+   istediği sayı tamamlandıysa, bir tane daha *cevap değil* — adım başka bir
+   sebeple açık (yolu olmayan Tarla) ve ikinci Tarla hatanın kendisi.
+
+Türetilebilir kotası olmayan hedeflerde (`population-headroom`) yalnız 1. kural
+işliyor: kaç Ev gerektiğini uyduramayız, uydurursak adımı kapatırız.
+
+Sınırlama **yalnız oyuncunun paletinde**: `StructureConstructionService` bunu
+duymuyor, AI duymuyor, serbest maç bunu hiç kurmuyor. Hikâye modu yönlendirir;
+oyunun kuralı hâline gelemez. Ret sessiz değil — palet satırında "Tarla zaten
+inşa ediliyor" / "Bu görev için bir Tarla yeterli" yazıyor, yoksa kural bozuk
+arayüz gibi okunurdu. İki kapı var, çünkü RTS paleti başarılı bir kurulumdan
+sonra silahlı kalır: butonu ilk tıklama **ve** haritaya her onay tıklaması.
 
 **Faz D — Kontrol ve kilitlenmezlik**
 
-- [ ] `missionBuildPolicy.ts` + `RtsApp` yerleştirme girişinde ret + mesaj
+- [x] `missionBuildPolicy.ts` + `RtsApp` yerleştirme girişinde ret + mesaj
+      (Faz C'ye alındı — §12.10)
 - [ ] Tek seferlik kurtarma sevkiyatı + bildirimi
 - [ ] Turun baştan sona tek oturumda oynandığının kullanıcı tarafından
       doğrulanması (görsel kabul kullanıcının çağrısı — CLAUDE.md)

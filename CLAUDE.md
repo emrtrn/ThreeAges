@@ -67,6 +67,22 @@ engine/editor.
   a name collision, a shared skeleton, a dropped field — still get pinned as
   engine tests. `npm run smoke:browser` stays a maintained suite; the rule is
   about not inventing one-off browser proofs.
+- **Balance data is tunable; tests must let it be.** The tables under
+  `public/game-data/balance/` (and the presets beside them) exist so the numbers
+  can change without touching code. A test that pins a magnitude takes that back:
+  the next tuning pass goes red, and what a red build teaches there is "edit the
+  test until it agrees", which is how a suite stops being read. So in
+  `tools/engine-tests.ts`, assert the **contract**, never the **tuning** —
+  shape (the field exists, is positive, names the right resource, covers every
+  tier), relationships (Town outranks Settlement, external deposits beat safe
+  ones, a siege gun outranges its escort), and derivation (compute the expected
+  amount from the same table, so the arithmetic holds at any tuning). Fixtures
+  fund themselves the same way: a wallet literal silently becomes
+  "insufficient-resources" the first time costs go up. Values that must never be
+  nonsensical (a zero-capacity deposit, an arbitrage-positive market, a vision
+  radius past the GDD cap) are refused in `validateGameData.ts`, where the error
+  names the file and field. The check that this still holds: scale every
+  magnitude in those files and run `npm run test:engine` — it must stay green.
 - **CI** (`.github/workflows/ci.yml`) runs `build:verify`
   (`tsc --noEmit` + `vite build` + `test:engine` + `verify:dist --strict`) and
   `check:assets` on every push/PR to `main` — the automated mirror of the local

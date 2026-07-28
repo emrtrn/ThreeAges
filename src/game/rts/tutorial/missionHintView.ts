@@ -1,11 +1,13 @@
 /**
- * The "look here" marker — Hikâye / Öğretici Tur Modu, Sürüm 2 (§12.4).
+ * The "click this building" marker — Hikâye / Öğretici Tur Modu, Sürüm 2 (§12.4).
  *
- * A pulsing ground ring with a bobbing arrow over it, at the one place the
- * active step is asking the player to act: the spot a building should go
- * ({@link solveMissionSite}), or the building whose panel holds the step's
- * button. One marker, not two kinds — both are the same sentence ("here"), and
- * two visual languages for it would only ask the player to learn a second one.
+ * A pulsing ground ring with a bobbing arrow over it, around a building the
+ * player already owns and has to act on: the Market whose panel holds the trade
+ * button, the Centre that carries the level-up, the producer standing without a
+ * road. Never a *suggestion* — an earlier pass also marked proposed build sites
+ * and play-testing retired it (§12.9): where to build is the decision the tur is
+ * teaching, and a ring on ground the player had not chosen was answering the
+ * question instead of asking it.
  *
  * View only, like `strategicPointView.ts`. It renders a position it is handed
  * and decides nothing; a mission that stops feeding it simply stops pointing.
@@ -18,12 +20,17 @@ import { ConeGeometry, Group, Mesh, MeshBasicMaterial, RingGeometry } from "thre
 
 /** The palette's gold, so the ring and the pulsing button read as one instruction. */
 const HINT_COLOR = "#e2b95c";
-const RING_INNER = 3.2;
-const RING_OUTER = 4.0;
+/**
+ * Sized to sit *outside* the buildings this rings, whose footprints run 6–8
+ * units wide. A ring tucked inside the model would be hidden by the very
+ * building it is pointing at.
+ */
+const RING_INNER = 6.0;
+const RING_OUTER = 7.0;
 const ARROW_RADIUS = 1.1;
 const ARROW_HEIGHT = 2.6;
 /** Height the arrow floats at, before the bob. Clears a Settlement building's roof. */
-const ARROW_BASE_HEIGHT = 7;
+const ARROW_BASE_HEIGHT = 9;
 const ARROW_BOB = 0.7;
 const PULSE_SECONDS = 1.4;
 

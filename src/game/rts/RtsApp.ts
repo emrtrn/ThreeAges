@@ -197,9 +197,9 @@ import { formatVisionDebug } from "./vision/formatVisionDebug";
 import { RtsObjectiveTracker } from "./ui/rtsObjectiveTracker";
 import { RtsMissionPanel } from "./ui/rtsMissionPanel";
 import { MissionDirector, type MissionDirectorState } from "./tutorial/missionDirector";
-import { missionGuideHighlight, ROAD_PALETTE_TARGET } from "./tutorial/missionGuideHighlight";
+import { missionGuideHighlight } from "./tutorial/missionGuideHighlight";
 import { MissionHintView } from "./tutorial/missionHintView";
-import { solveMissionSite, type MissionSite } from "./tutorial/missionSiteSolver";
+import { missionBuildVerdict, type MissionBuildRefusal } from "./tutorial/missionBuildPolicy";
 import type { MissionWorldSnapshot } from "./tutorial/missionPredicates";
 import type { MissionScript } from "./tutorial/missionScript";
 import type { MissionModeChoice } from "./tutorial/missionModeChoice";
@@ -215,14 +215,6 @@ const PERFORMANCE_SNAPSHOT_INTERVAL_SECONDS = 0.5;
  * on "go build a depot" and a fraction of the cost of doing it every frame.
  */
 const MISSION_POLL_SECONDS = 0.25;
-/**
- * How often the world marker's suggested build site is re-solved, in real
- * seconds. Far slower than the objective poll because the solve sweeps the
- * placement validator over a field of candidates — and because the answer only
- * moves when the map does. A target *change* re-solves immediately regardless,
- * so a step that has just opened never waits for this.
- */
-const MISSION_SITE_RESOLVE_SECONDS = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
 const MAX_FRAME_SECONDS = 1 / 15;
 const SCENE_BACKGROUND = "#20262b";
@@ -527,14 +519,17 @@ export class RtsApp {
   private readonly missionPanel: RtsMissionPanel | null;
   private readonly missionHint: MissionHintView | null;
   /**
-   * Where the marker currently points, and what it was solved for. Cached
-   * because {@link solveMissionSite} sweeps the validator over a field of
-   * candidates — cheap enough to re-run every couple of seconds while the
-   * world moves under it, far too expensive to run every frame.
+   * Where the ring currently sits, so "Göster" has somewhere to go.
+   *
+   * Only ever a building the player already owns. An earlier pass also proposed
+   * *placement* sites — solved against the placement validator and ranked by
+   * road proximity — and play-testing retired it: a ranked-legal spot is not the
+   * same thing as a sensible one, and the marker jumping to the next suggestion
+   * the moment a building went down read as the game hurrying the player through
+   * a step it had not finished explaining. Where to build is the decision the
+   * tur is teaching, so the tur does not make it.
    */
-  private missionSite: MissionSite | null = null;
-  private missionSiteKey: string | null = null;
-  private missionSiteTimer = 0;
+  private missionMarker: { readonly x: number; readonly z: number } | null = null;
   /**
    * Real seconds since the last mission evaluation. Objectives are polled rather
    * than evented (see {@link MissionDirector}), and the poll rebuilds the
@@ -566,6 +561,13 @@ export class RtsApp {
    * the resource the player sees arrive.
    */
   private playerMarketPurchases: Record<string, number> = {};
+  /**
+   * Units the player has trained this match, by role. Counted where a unit
+   * actually walks out of a building rather than read off the live army, which
+   * would also count the ones the preset handed out at match start — the bug
+   * that let "train three Guards" clear itself before the Barracks existed.
+   */
+  private playerUnitsTrained: Record<string, number> = {};
   /**
    * §78.1: what the start card has selected. Seeded from the *resolved* flag so
    * a match booted with `?flags=regionalVictory` opens on the matching row, and
@@ -835,7 +837,7 @@ export class RtsApp {
       // "Göster" recentres rather than flying: the camera is the player's, and a
       // scripted sweep would take it away from them for as long as it lasted.
       this.missionPanel = new RtsMissionPanel(() => {
-        if (this.missionSite) this.cameraController.setFocus(this.missionSite.x, this.missionSite.z);
+        if (this.missionMarker) this.cameraController.setFocus(this.missionMarker.x, this.missionMarker.z);
       });
       this.missionHint = new MissionHintView();
     } else {
@@ -1101,6 +1103,7 @@ export class RtsApp {
           this.buildPalette.setActionMessage("Okçuluk Alanı Kasaba Çağında açılır.");
           return;
         }
+        if (!this.beginMissionGatedPlacement(id)) return;
         this.roadPlacement.cancel();
         this.syncRoadUi();
         this.placement.begin(id);
@@ -1191,8 +1194,7 @@ export class RtsApp {
           this.syncPlacementUi();
           this.syncRoadUi();
         } else if (this.placement.isActive) {
-          this.placement.confirmAt(x, y);
-          this.syncPlacementUi();
+          this.confirmMissionGatedPlacement(x, y);
         } else {
           this.selection.onSelectClick(x, y, additive);
         }
@@ -1213,8 +1215,7 @@ export class RtsApp {
           this.syncPlacementUi();
           this.syncRoadUi();
         } else if (this.placement.isActive) {
-          this.placement.confirmAt(rect.x1, rect.y1);
-          this.syncPlacementUi();
+          this.confirmMissionGatedPlacement(rect.x1, rect.y1);
         } else {
           this.selection.onSelectCommit(rect, additive);
         }
@@ -1695,7 +1696,7 @@ export class RtsApp {
     // is the *selection*, which moves at pointer speed. A guide resolved on the
     // 4Hz poll would leave the player looking at a freshly selected Market for a
     // quarter second before the button they were told to press lit up.
-    this.syncMissionGuide(missions.state(), dt);
+    this.syncMissionGuide(missions.state());
     this.missionHint?.update(dt);
 
     this.missionPollTimer += dt;
@@ -1734,7 +1735,7 @@ export class RtsApp {
    * abandoned or guide-less step resolves to nulls, which is what clears them —
    * there is no separate "stop pointing" path to forget to call.
    */
-  private syncMissionGuide(state: MissionDirectorState, dt = 0): void {
+  private syncMissionGuide(state: MissionDirectorState): void {
     const guide = state.step?.guide;
     const guideBuildingId = guide?.action.buildingId ?? null;
     const highlight = missionGuideHighlight(
@@ -1751,48 +1752,39 @@ export class RtsApp {
           ? `${this.buildingLabels.get(guideBuildingId ?? "") ?? "Yapı"} kuruldu ama bağlı değil — Yol aracıyla Merkez'in yoluna bağla.`
           : `Önce ${this.buildingLabels.get(highlight.prompt.buildingId) ?? highlight.prompt.buildingId} yapısını seç.`,
     );
-    this.syncMissionMarker(highlight.paletteTarget, guideBuildingId, highlight.prompt !== null, dt);
+    this.syncMissionMarker(highlight.prompt, guideBuildingId);
   }
 
   /**
-   * Move the world marker to whatever the step is asking for, and keep it there.
+   * Ring the building the player has to act on — and nothing else.
    *
-   * Two shapes of answer, one marker (see {@link MissionHintView}):
+   * The ring answers exactly one question: *which* building on the map. That is
+   * a question the panel cannot answer, because the panel is not open yet
+   * ("select your Market") or because the map holds several buildings and only
+   * one of them is missing its road. Both point at something that already
+   * exists; neither is a suggestion about ground.
    *
-   * - **"Build it here":** a spot solved against the real placement validator.
-   *   Re-solved on a timer rather than per frame, and re-solved *immediately*
-   *   when the target changes, so a step that just opened points at once.
-   * - **"Act on this building":** the building the player already owns — the one
-   *   whose panel holds the button, or the one standing unconnected. No search
-   *   needed; it is a thing on the map with a position.
+   * No search, no timer, no cache: the answer is a building's position, so it is
+   * looked up on the frame it is needed.
    */
   private syncMissionMarker(
-    paletteTarget: string | null,
+    prompt: ReturnType<typeof missionGuideHighlight>["prompt"],
     guideBuildingId: string | null,
-    pointAtOwnBuilding: boolean,
-    dt: number,
   ): void {
     if (!this.missionHint) return;
-    const key = pointAtOwnBuilding ? `own:${guideBuildingId}` : `site:${paletteTarget}`;
-    this.missionSiteTimer += dt;
-    const stale = key !== this.missionSiteKey || this.missionSiteTimer >= MISSION_SITE_RESOLVE_SECONDS;
-    if (stale) {
-      this.missionSiteKey = key;
-      this.missionSiteTimer = 0;
-      this.missionSite = pointAtOwnBuilding
-        ? this.playerBuildingPosition(guideBuildingId)
-        // The road tool has no site of its own to solve for: the answer to "draw
-        // a road" is the building that needs one, which the branch above already
-        // covers through the prompt. Anything else is a building to place.
-        : paletteTarget === null || paletteTarget === ROAD_PALETTE_TARGET
-          ? null
-          : this.solvePlacementSite(paletteTarget);
-    }
+    this.missionMarker = prompt === null
+      ? null
+      : this.playerBuildingPosition(prompt.kind === "select-building" ? prompt.buildingId : guideBuildingId);
     this.missionHint.setTarget(
-      this.missionSite,
-      this.missionSite ? this.groundSurface.heightAt(this.missionSite.x, this.missionSite.z) : 0,
+      this.missionMarker,
+      this.missionMarker ? this.groundSurface.heightAt(this.missionMarker.x, this.missionMarker.z) : 0,
     );
-    this.missionPanel?.setShowTargetAvailable(this.missionSite !== null);
+    this.missionPanel?.setShowTargetAvailable(this.missionMarker !== null);
+  }
+
+  /** One place, both queues: the Centre's workers and the Barracks' soldiers. */
+  private tallyTrainedUnit(role: string): void {
+    this.playerUnitsTrained[role] = (this.playerUnitsTrained[role] ?? 0) + 1;
   }
 
   private completedPlayerBuildings(buildingId: string): number {
@@ -1805,7 +1797,7 @@ export class RtsApp {
    * `PlacedStructure` — it has its own system — so it is looked up there, which
    * is also what makes "select your Centre" point at the right thing.
    */
-  private playerBuildingPosition(buildingId: string | null): MissionSite | null {
+  private playerBuildingPosition(buildingId: string | null): { readonly x: number; readonly z: number } | null {
     if (buildingId === null) return null;
     if (buildingId === "command_center") {
       const center = this.centers.get(PLAYER_OWNER);
@@ -1816,21 +1808,57 @@ export class RtsApp {
     return owned ? { x: owned.x, z: owned.z } : null;
   }
 
-  /** Feed the pure solver this match's centre, main road network and validator. */
-  private solvePlacementSite(buildingId: string): MissionSite | null {
-    const stats = this.options.buildingBalance[buildingId];
-    const center = this.centers.get(PLAYER_OWNER);
-    if (!stats || !center) return null;
-    const mainComponentId = this.depotLogistics.mainComponentIds().get(PLAYER_OWNER) ?? null;
-    const mainRoadCells = mainComponentId === null
-      ? []
-      : this.roads.components().find((component) => component.id === mainComponentId)?.cells ?? [];
-    return solveMissionSite({
-      origin: { x: center.position.x, z: center.position.z },
-      mainRoadCells,
-      footprint: stats.footprint,
-      validate: (x, z) => this.structureConstruction.validate(PLAYER_OWNER, buildingId, x, z),
+  /**
+   * The story tur's build pacing (§12.5), applied at the player's palette and
+   * nowhere else. Returns the refusal to show, or null to let the click through.
+   */
+  private missionBuildRefusal(buildingId: string): MissionBuildRefusal | null {
+    const step = this.missions?.state().step ?? null;
+    if (!step) return null;
+    const owned = this.structures.ownedBy(PLAYER_OWNER).filter((structure) => structure.stats.id === buildingId);
+    const verdict = missionBuildVerdict({
+      buildingId,
+      step,
+      completed: owned.filter((structure) => structure.construction.complete).length,
+      pending: owned.filter((structure) => !structure.construction.complete).length,
     });
+    return verdict.allowed ? null : verdict.refusal;
+  }
+
+  /**
+   * Arm or refuse a placement, with the refusal said out loud.
+   *
+   * A silent refusal would be the worst of both: the player clicks the pulsing
+   * button, nothing happens, and the pacing rule reads as a broken UI.
+   */
+  /**
+   * The second gate, and the one that actually catches the reported problem: an
+   * RTS palette stays armed after a successful placement, so without a check
+   * here the player could keep clicking the map and put down four Farms without
+   * ever touching the palette again. Placement mode is also disarmed on refusal,
+   * so the next click selects rather than silently trying again.
+   */
+  private confirmMissionGatedPlacement(x: number, y: number): void {
+    const buildingId = this.placement.state().activeBuildingId;
+    if (buildingId !== null && !this.beginMissionGatedPlacement(buildingId)) {
+      this.placement.cancel();
+      this.syncPlacementUi();
+      return;
+    }
+    this.placement.confirmAt(x, y);
+    this.syncPlacementUi();
+  }
+
+  private beginMissionGatedPlacement(buildingId: string): boolean {
+    const refusal = this.missionBuildRefusal(buildingId);
+    if (refusal === null) return true;
+    const label = this.buildingLabels.get(buildingId) ?? buildingId;
+    this.buildPalette.setActionMessage(
+      refusal === "already-building"
+        ? `${label} zaten inşa ediliyor — bitmesini bekle.`
+        : `Bu görev için bir ${label} yeterli.`,
+    );
+    return false;
   }
 
   /**
@@ -1888,6 +1916,7 @@ export class RtsApp {
       razedEnemyBuildings: this.razedEnemyBuildings,
       marketTrades: this.playerMarketTrades,
       marketPurchases: this.playerMarketPurchases,
+      unitsTrained: this.playerUnitsTrained,
     };
   }
 
@@ -2155,12 +2184,16 @@ export class RtsApp {
     // are surfaced by its decision log in a later slice.
     for (const event of this.workerProduction.update(dt)) {
       if (event.owner !== PLAYER_OWNER) continue;
-      if (event.type === "completed") this.announce("production", "Yeni işçi Merkez'den çıktı.");
-      else this.announce("production", "İşçi çıkışı engelli; Merkez çevresini açın.", "refused");
+      if (event.type === "completed") {
+        this.tallyTrainedUnit("worker");
+        this.announce("production", "Yeni işçi Merkez'den çıktı.");
+      } else this.announce("production", "İşçi çıkışı engelli; Merkez çevresini açın.", "refused");
     }
     for (const event of this.barracksProduction.update(dt)) {
       if (event.structure.owner !== PLAYER_OWNER) continue;
       if (event.type === "completed") {
+        const role = this.options.unitBalance[event.unitId]?.role;
+        if (role) this.tallyTrainedUnit(role);
         this.announce("production", `${event.label} ${event.structure.stats.label}'ndan çıktı.`);
       } else {
         this.announce("production", `${event.label} çıkışı engelli; ${event.structure.stats.label} çevresini açın.`, "refused");
@@ -2896,10 +2929,9 @@ export class RtsApp {
     this.razedEnemyBuildings = {};
     this.playerMarketTrades = 0;
     this.playerMarketPurchases = {};
+    this.playerUnitsTrained = {};
     this.missionPanel?.setState(null);
-    this.missionSite = null;
-    this.missionSiteKey = null;
-    this.missionSiteTimer = 0;
+    this.missionMarker = null;
     if (this.missions) this.syncMissionGuide(this.missions.state());
     this.attackWatch.reset();
     this.match.reset();

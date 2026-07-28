@@ -19,11 +19,13 @@ test("RTS graphics profile and adaptive preference apply and persist", async ({ 
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
   const quality = page.locator("[data-rts-graphics-quality]");
   const adaptive = page.locator("[data-rts-graphics-adaptive]");
-  await expect(quality).toHaveValue("medium");
+  await expect(quality).toHaveAttribute("type", "range");
+  await expect(quality).toHaveValue("1");
+  await expect(page.locator("[data-rts-graphics-quality-value]")).toHaveText("Orta");
   await expect(adaptive).toBeChecked();
 
   const mediumBufferWidth = await page.locator("#game-canvas").evaluate((canvas) => canvas.width);
-  await quality.selectOption("low");
+  await quality.press("Home");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-quality", "low");
   await expect.poll(() => page.locator("#game-canvas").evaluate((canvas) => canvas.width)).toBeLessThan(mediumBufferWidth);
   await adaptive.uncheck();

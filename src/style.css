@@ -365,6 +365,67 @@ body {
   border-radius: 3px;
 }
 
+/* The adaptive toggle is a small game-piece rather than a browser checkbox.
+   Its check deliberately escapes the square, like a stamped confirmation mark. */
+.rts-match-checkbox-control {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 22px;
+}
+
+.rts-match-checkbox-control input[type="checkbox"] {
+  position: absolute;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.rts-match-checkbox-mark {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  background: linear-gradient(135deg, #2a1d10 0%, #100b06 100%);
+  border: 1px solid rgb(226 185 92 / 52%);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 42%), 0 1px 2px rgb(0 0 0 / 55%);
+}
+
+.rts-match-checkbox-mark::after {
+  position: absolute;
+  top: -9px;
+  left: 1px;
+  color: #f3cf6a;
+  font-family: Georgia, serif;
+  font-size: 29px;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 0 2px 1px #40250a, 0 0 5px rgb(255 213 104 / 48%);
+  content: "✓";
+  opacity: 0;
+  transform: rotate(-12deg) scale(0.55);
+  transition: opacity 120ms ease-out, transform 120ms ease-out;
+}
+
+.rts-match-checkbox-control input[type="checkbox"]:checked + .rts-match-checkbox-mark::after {
+  opacity: 1;
+  transform: rotate(-12deg) scale(1);
+}
+
+.rts-match-checkbox-control input[type="checkbox"]:hover + .rts-match-checkbox-mark {
+  border-color: var(--ta-gold);
+  box-shadow: inset 0 0 0 1px rgb(255 225 139 / 24%), 0 0 6px rgb(226 185 92 / 30%);
+}
+
+.rts-match-checkbox-control input[type="checkbox"]:focus-visible + .rts-match-checkbox-mark {
+  outline: 2px solid var(--ta-gold);
+  outline-offset: 3px;
+}
+
 .rts-match-setting input[type="range"] {
   width: 100%;
   height: 16px;
@@ -1220,12 +1281,16 @@ body {
   display: none;
 }
 
+/* The card is three or four short lines, so the space between them is doing the
+   grouping work a longer panel would do with rules and headings. Loosened once
+   the "0/1" counter was dropped: fewer lines, each given more room, reads as
+   deliberate rather than sparse. */
 .rts-mission-title {
   display: -webkit-box;
   overflow: hidden;
-  margin-top: 3px;
+  margin-top: 10px;
   color: var(--ta-gold);
-  font: 700 14px/1.25 Cinzel, Georgia, serif;
+  font: 700 14px/1.35 Cinzel, Georgia, serif;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1236,33 +1301,20 @@ body {
    it at one short sentence, and still collapsible for a player who is done
    reading it. */
 .rts-mission-why {
-  margin: 5px 0 0;
+  margin: 10px 0 0;
   color: var(--ta-ink-muted);
   font-size: 12px;
-  line-height: 1.45;
-}
-
-/* The counter is always present and stays in one place, including on a single
-   target. Gold and tabular make it readable at a glance during play. */
-.rts-mission-progress {
-  margin: 8px 0 0;
-  color: var(--ta-gold);
-  font: 700 13px/1 Cinzel, Georgia, serif;
-  font-variant-numeric: tabular-nums;
-}
-
-.rts-mission-progress[hidden] {
-  display: none;
+  line-height: 1.6;
 }
 
 /* "Önce Merkez yapısını seç." The step's button lives on a panel that is not
    open yet, so for that moment the card carries the pointer instead. Shares the
    pulse's gold to read as the same instruction. */
 .rts-mission-guide {
-  margin: 6px 0 0;
+  margin: 10px 0 0;
   color: var(--ta-gold);
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.5;
 }
 
 .rts-mission-guide[hidden] {
@@ -1272,7 +1324,7 @@ body {
 /* "Göster": recentre on the step's world marker. Shown only while a marker
    exists, so the button can never point at nothing. */
 .rts-mission-show {
-  margin-top: 8px;
+  margin-top: 12px;
   padding: 4px 12px;
   color: var(--ta-ink);
   font: 700 11px/1.2 Cinzel, Georgia, serif;
