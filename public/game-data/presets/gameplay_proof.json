@@ -3,10 +3,10 @@
   "label": "Gameplay Proof (Ürün A)",
   "flags": {},
   "startingResources": {
-    "food": 500,
-    "wood": 500,
-    "stone": 100,
-    "gold": 100
+    "food": 200,
+    "wood": 400,
+    "stone": 120,
+    "gold": 120
   },
   "startingUnits": {
     "guard": 8,

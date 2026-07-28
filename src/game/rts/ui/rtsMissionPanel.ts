@@ -58,6 +58,8 @@ function progressTargetLabel(goal: MissionGoal): string {
       return UNIT_LABELS[goal.role] ?? goal.role;
     case "market-trade":
       return "Pazar işlemi";
+    case "market-bought":
+      return `${RESOURCE_LABELS[goal.resourceId] ?? goal.resourceId} alındı`;
   }
 }
 
@@ -72,7 +74,14 @@ export class RtsMissionPanel {
   private readonly progress = document.createElement("p");
   private signature = "";
   private progressText = "";
-  private collapsed = true;
+  /**
+   * Open by default (Sürüm 2). While `why` was a three-clause paragraph, hiding
+   * it behind a disclosure was the right trade: the card sat above the palette
+   * and would have pushed the buttons off the useful part of the screen. The
+   * §12.2 rewrite caps `why` at one short sentence, so the explanation now costs
+   * a line — and a line the player never opens teaches nothing at all.
+   */
+  private collapsed = false;
 
   constructor() {
     this.root.className = "rts-mission-panel";

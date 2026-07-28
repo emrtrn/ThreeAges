@@ -23,7 +23,24 @@ import {
   type WebGLRenderer,
 } from "three";
 
-import { createSceneRenderer } from "@engine/render-three/renderer";
+import { createSceneRenderer, readRenderMemory, readRenderStats } from "@engine/render-three/renderer";
+import { FrameMetricsMonitor } from "@engine/perf/frameMetrics";
+import { AdaptiveQualityController } from "@engine/perf/adaptiveQuality";
+import { classifyBottleneck } from "@engine/perf/bottleneckClassifier";
+import { evaluatePerfBudget } from "@engine/perf/perfBudget";
+import {
+  applyQualityToPostProcess,
+  effectiveDevicePixelRatio,
+  resolveQualitySettings,
+  type GraphicsPreferences,
+  type QualitySettings,
+} from "@engine/perf/qualityProfiles";
+import {
+  UserSettingsStore,
+  defaultUserSettings,
+  type UserSettings,
+} from "@engine/persistence/userSettingsStore";
+import { createLocalStorageAdapter } from "@engine/persistence/saveGameStore";
 import { logger } from "@/game/core/logger";
 import type {
   AiBalance,
@@ -100,6 +117,7 @@ import { RtsMatchState } from "./match/rtsMatchState";
 import { RtsMatchFlow } from "./match/rtsMatchFlow";
 import { RtsMatchClock, formatMatchDuration } from "./match/rtsMatchClock";
 import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
+import type { RtsGraphicsQuality } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 import { PlacedStructureSystem, type PlacedStructure } from "./structures/placedStructureSystem";
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
@@ -184,6 +202,8 @@ import type { MissionModeChoice } from "./tutorial/missionModeChoice";
 import type { AiObjectiveWatch } from "./ai/armyManager";
 
 const MAX_PIXEL_RATIO = 2;
+const ADAPTIVE_TICK_INTERVAL_SECONDS = 0.5;
+const PERFORMANCE_SNAPSHOT_INTERVAL_SECONDS = 0.5;
 /**
  * How often mission goals are re-checked, in real seconds. Objectives are polled
  * (see `tutorial/missionDirector.ts`) and the poll rebuilds the road/depot graph
@@ -349,10 +369,39 @@ export interface RtsAppOptions {
   readonly onMissionResolved?: () => void;
 }
 
+function createRtsUserSettingsStore(): UserSettingsStore | null {
+  try {
+    return new UserSettingsStore({ storage: createLocalStorageAdapter(window.localStorage) });
+  } catch {
+    // Storage can be disabled (private mode / embedded browser); graphics still
+    // work for the session, they simply cannot be remembered.
+    return null;
+  }
+}
+
+function rtsGraphicsQuality(level: GraphicsPreferences["selectedQualityLevel"]): RtsGraphicsQuality {
+  return level === "low" ? "low" : level === "high" || level === "ultra" ? "high" : "medium";
+}
+
 export class RtsApp {
   private readonly spatial: RtsSpatialLayout;
   private readonly openingFocus: { readonly x: number; readonly z: number };
   private readonly renderer: WebGLRenderer;
+  /** Raw rendered-frame telemetry; drives RTS adaptive quality, never simulation. */
+  private readonly frameMetrics = new FrameMetricsMonitor();
+  private readonly userSettingsStore: UserSettingsStore | null;
+  private userSettings: UserSettings = defaultUserSettings();
+  private qualitySettings: QualitySettings = resolveQualitySettings("medium");
+  private readonly adaptiveQuality: AdaptiveQualityController;
+  private adaptiveTickAccumulator = 0;
+  private performanceSnapshotAccumulator = 0;
+  /** Authored shadow frusta before the active profile scales their coverage. */
+  private readonly shadowCameraExtents = new WeakMap<DirectionalLight, {
+    readonly left: number;
+    readonly right: number;
+    readonly top: number;
+    readonly bottom: number;
+  }>();
   private readonly actorVisuals: RtsActorVisualFactory | null;
   private readonly buildingVisuals: RtsBuildingVisuals;
   private readonly mapArt: RtsMapArt;
@@ -479,6 +528,13 @@ export class RtsApp {
    */
   private playerMarketTrades = 0;
   /**
+   * Units of each resource bought at the Market this match. Counted beside
+   * {@link playerMarketTrades} at the same single call site, in the lot size the
+   * market actually moved rather than in clicks — the objective is written in
+   * the resource the player sees arrive.
+   */
+  private playerMarketPurchases: Record<string, number> = {};
+  /**
    * §78.1: what the start card has selected. Seeded from the *resolved* flag so
    * a match booted with `?flags=regionalVictory` opens on the matching row, and
    * only ever read while the start card is up.
@@ -549,6 +605,12 @@ export class RtsApp {
   private readonly log = logger("System");
   private frameHandle = 0;
   private lastTime = 0;
+  private readonly handleVisibilityChange = (): void => {
+    if (document.visibilityState !== "visible") return;
+    this.frameMetrics.reset();
+    this.adaptiveTickAccumulator = 0;
+    this.lastTime = performance.now();
+  };
   private running = false;
   private disposed = false;
   private simulationSpeed: RtsSimulationSpeed = 1;
@@ -563,6 +625,66 @@ export class RtsApp {
     this.simulationSpeed = speed;
     this.gameSpeedControls.setSpeed(speed);
     this.debugSpeedControls?.setSpeed(speed);
+  }
+
+  /** Player-selected RTS base profile; automatic reductions remain transient. */
+  private setGraphicsQuality(quality: RtsGraphicsQuality): void {
+    const { customSettings: _discardCustomSettings, ...existing } = this.userSettings.graphics;
+    const graphics: GraphicsPreferences = {
+      ...existing,
+      selectedQualityLevel: quality,
+      manuallySelected: true,
+      // RTS exposes the automatic toggle alongside every manual profile.
+      allowAdaptiveFineTuning: true,
+    };
+    this.persistGraphics(graphics);
+    this.adaptiveQuality.setBase(resolveQualitySettings(quality));
+    this.applyQualitySettings(this.adaptiveQuality.currentSettings());
+  }
+
+  /** Records the player's adaptive-opt-in without changing their base profile. */
+  private setGraphicsAdaptive(enabled: boolean): void {
+    this.persistGraphics({ ...this.userSettings.graphics, adaptiveOptimizationEnabled: enabled });
+    this.syncQualityDebug();
+  }
+
+  private persistGraphics(graphics: GraphicsPreferences): void {
+    this.userSettings = { ...this.userSettings, graphics };
+    this.userSettingsStore?.setGraphics(graphics);
+  }
+
+  /** Applies the RTS-supported subset of a shared Forge quality profile. */
+  private applyQualitySettings(settings: QualitySettings): void {
+    this.qualitySettings = settings;
+    this.renderer.shadowMap.enabled = settings.shadowsEnabled;
+    this.scene.traverse((object) => {
+      if (!(object instanceof DirectionalLight) || !object.castShadow) return;
+      const camera = object.shadow.camera;
+      let base = this.shadowCameraExtents.get(object);
+      if (!base) {
+        base = { left: camera.left, right: camera.right, top: camera.top, bottom: camera.bottom };
+        this.shadowCameraExtents.set(object, base);
+      }
+      camera.left = base.left * settings.shadowDistanceScale;
+      camera.right = base.right * settings.shadowDistanceScale;
+      camera.top = base.top * settings.shadowDistanceScale;
+      camera.bottom = base.bottom * settings.shadowDistanceScale;
+      camera.updateProjectionMatrix();
+      if (object.shadow.mapSize.width === settings.shadowMapSize) return;
+      object.shadow.mapSize.set(settings.shadowMapSize, settings.shadowMapSize);
+      object.shadow.map?.dispose();
+      object.shadow.map = null;
+    });
+    this.resize();
+    if (this.options.levelLayout) this.applyAuthoredPostProcess(this.options.levelLayout);
+    this.syncQualityDebug();
+  }
+
+  /** Browser-testable witness of player intent and transient adaptive state. */
+  private syncQualityDebug(): void {
+    this.canvas.dataset.rtsQuality = this.userSettings.graphics.selectedQualityLevel;
+    this.canvas.dataset.rtsAdaptive = String(this.userSettings.graphics.adaptiveOptimizationEnabled);
+    this.canvas.dataset.rtsQualityReductionDepth = String(this.adaptiveQuality.reductionDepth);
   }
 
   constructor(
@@ -597,6 +719,13 @@ export class RtsApp {
       z: this.spatial.playerStart.z * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
     };
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
+    this.userSettingsStore = createRtsUserSettingsStore();
+    this.userSettings = this.userSettingsStore?.read() ?? defaultUserSettings();
+    this.qualitySettings = resolveQualitySettings(
+      this.userSettings.graphics.selectedQualityLevel,
+      this.userSettings.graphics.customSettings,
+    );
+    this.adaptiveQuality = new AdaptiveQualityController(this.qualitySettings);
     this.environment = new AuthoredEnvironment({
       scene: this.scene,
       renderer: this.renderer,
@@ -965,6 +1094,12 @@ export class RtsApp {
       // Applied live while the card is up: §51's pause deliberately keeps the
       // camera running, so the player can judge the dial by moving the map.
       onCameraSettings: (settings) => this.cameraController.setSettings(settings),
+      graphicsSettings: {
+        quality: rtsGraphicsQuality(this.userSettings.graphics.selectedQualityLevel),
+        adaptiveEnabled: this.userSettings.graphics.adaptiveOptimizationEnabled,
+      },
+      onGraphicsQuality: (quality) => this.setGraphicsQuality(quality),
+      onGraphicsAdaptive: (enabled) => this.setGraphicsAdaptive(enabled),
       // Regional victory is a free-match rule. A story chain owns its objective,
       // so the picker is absent there as well as the regional systems being
       // absent from the runtime (the host forces its flag off at boot).
@@ -1086,6 +1221,7 @@ export class RtsApp {
       },
     });
     this.buildScene();
+    this.applyQualitySettings(this.qualitySettings);
     // A completed type-wide research also applies to buildings that finish
     // afterwards; the visual must be created at that inherited level.
     this.structures.setCompletedVisualHandler((structure) => {
@@ -1127,6 +1263,7 @@ export class RtsApp {
     this.running = true;
     this.input.attach();
     this.pointer.attach();
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
     this.resize();
     this.lastTime = performance.now();
     this.log.info(
@@ -1150,6 +1287,7 @@ export class RtsApp {
     delete this.canvas.dataset.rtsCursor;
     if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
     this.frameHandle = 0;
+    document.removeEventListener("visibilitychange", this.handleVisibilityChange);
     this.input.detach();
     this.pointer.detach();
     this.marquee.dispose();
@@ -1308,7 +1446,11 @@ export class RtsApp {
     if (!this.running) return;
     this.frameHandle = requestAnimationFrame(this.onFrame);
 
-    const dt = Math.max(0, Math.min((now - this.lastTime) / 1000, MAX_FRAME_SECONDS));
+    const rawDeltaMs = now - this.lastTime;
+    // Quality observes the raw rAF interval; simulation still clamps stalls so
+    // an alt-tab or breakpoint cannot accelerate an RTS match.
+    this.frameMetrics.record(rawDeltaMs);
+    const dt = Math.max(0, Math.min(rawDeltaMs / 1000, MAX_FRAME_SECONDS));
     this.lastTime = now;
 
     this.resize();
@@ -1393,11 +1535,81 @@ export class RtsApp {
     this.notificationFeed.setNotifications(this.notifications.active());
     // Keep the authored sky/cloud domes centered on the camera and advance clouds.
     this.environment.update(dt);
+    this.tickAdaptiveQuality(dt);
     // Authored Post Process (bloom/SMAA) composits the frame when present; otherwise
     // draw straight through the renderer.
     if (this.postProcessPipeline) this.postProcessPipeline.render(dt);
     else this.renderer.render(this.scene, this.cameraController.camera);
+    this.publishPerformanceSnapshot(dt);
   };
+
+  /**
+   * A debug-route-only performance witness for repeatable browser captures.
+   * It is intentionally sampled (rather than updated every frame) so observing
+   * draw calls and frame percentiles cannot become the performance problem.
+   */
+  private publishPerformanceSnapshot(deltaSeconds: number): void {
+    if (!this.options.debug) return;
+    this.performanceSnapshotAccumulator += deltaSeconds;
+    if (this.performanceSnapshotAccumulator < PERFORMANCE_SNAPSHOT_INTERVAL_SECONDS) return;
+    this.performanceSnapshotAccumulator = 0;
+    const frame = this.frameMetrics.metrics();
+    const spikes = this.frameMetrics.spikeCounts();
+    const render = readRenderStats(this.renderer);
+    const memory = readRenderMemory(this.renderer);
+    this.canvas.dataset.rtsPerf = JSON.stringify({
+      frame: {
+        averageMs: frame.averageFrameTimeMs,
+        p95Ms: frame.p95FrameTimeMs,
+        sampleCount: frame.sampleCount,
+        windowSeconds: frame.sampleWindowSeconds,
+        over33ms: spikes.over33ms,
+        over50ms: spikes.over50ms,
+        over100ms: spikes.over100ms,
+      },
+      render,
+      memory,
+      quality: this.userSettings.graphics.selectedQualityLevel,
+      adaptiveEnabled: this.userSettings.graphics.adaptiveOptimizationEnabled,
+      adaptiveReductionDepth: this.adaptiveQuality.reductionDepth,
+    });
+  }
+
+  /** Applies at most one reversible quality rung from a settled frame-time trend. */
+  private tickAdaptiveQuality(deltaSeconds: number): void {
+    this.adaptiveTickAccumulator += deltaSeconds;
+    if (this.adaptiveTickAccumulator < ADAPTIVE_TICK_INTERVAL_SECONDS) return;
+    const dt = this.adaptiveTickAccumulator;
+    this.adaptiveTickAccumulator = 0;
+    const active =
+      this.match.active &&
+      this.flow.running &&
+      this.userSettings.graphics.adaptiveOptimizationEnabled &&
+      this.userSettings.graphics.allowAdaptiveFineTuning;
+    const update = this.adaptiveQuality.update({
+      metrics: this.frameMetrics.metrics(),
+      preferences: this.userSettings.graphics,
+      deltaSeconds: dt,
+      active,
+      classify: () => this.classifyQualityBottleneck(),
+    });
+    if (update.settings && update.kind !== "none") this.applyQualitySettings(update.settings);
+  }
+
+  private classifyQualityBottleneck() {
+    const render = readRenderStats(this.renderer);
+    const memory = readRenderMemory(this.renderer);
+    return classifyBottleneck({
+      metrics: this.frameMetrics.metrics(),
+      subsystems: null,
+      budget: evaluatePerfBudget({
+        drawCalls: render.drawCalls,
+        triangles: render.triangles,
+        textures: memory.textures,
+      }),
+      targetFrameTimeMs: this.userSettings.graphics.targetFrameRate === 30 ? 33.3 : 16.7,
+    });
+  }
 
   /**
    * Advance the story/tutorial chain — Hikâye / Öğretici Tur Modu, Faz 1.
@@ -1494,6 +1706,7 @@ export class RtsApp {
       populationHeadroom: Math.max(0, population.capacity - population.used),
       razedEnemyBuildings: this.razedEnemyBuildings,
       marketTrades: this.playerMarketTrades,
+      marketPurchases: this.playerMarketPurchases,
     };
   }
 
@@ -2143,6 +2356,10 @@ export class RtsApp {
         this.codeSun.dispose();
         this.codeSun = null;
       }
+      // Authored lights arrive asynchronously, after the initial profile was
+      // applied to the fallback sun. Bring their shadow maps under the same
+      // live profile before the first authored-world frame is shown.
+      this.applyQualitySettings(this.qualitySettings);
       // Editor↔Runtime parity (Faz 1): apply the Level's authored environment
       // singletons through the shared layer so Play matches the editor viewport —
       // the Sky Atmosphere dome, its Sky Light (IBL) bounce, Exponential Height Fog
@@ -2194,7 +2411,8 @@ export class RtsApp {
    */
   private applyAuthoredPostProcess(layout: RoomLayout): void {
     const actor = layout.postProcess ?? null;
-    const resolved = actor ? resolvePostProcess(actor) : null;
+    const authored = actor ? resolvePostProcess(actor) : null;
+    const resolved = authored ? applyQualityToPostProcess(authored, this.qualitySettings) : null;
     applyPostProcessToneMapping(this.renderer, resolved);
     this.environment.applySkyPostProcessExposure(resolved, layout);
     if (!hasPostProcessEffectPasses(resolved)) {
@@ -2217,6 +2435,7 @@ export class RtsApp {
         camera: this.cameraController.camera,
         width,
         height,
+        bloomResolutionScale: this.qualitySettings.bloomResolutionScale,
       }),
     );
     this.postProcessPipeline.setAntialiasPass(
@@ -2493,6 +2712,7 @@ export class RtsApp {
     this.missionPollTimer = 0;
     this.razedEnemyBuildings = {};
     this.playerMarketTrades = 0;
+    this.playerMarketPurchases = {};
     this.missionPanel?.setState(null);
     this.attackWatch.reset();
     this.match.reset();
@@ -2537,12 +2757,15 @@ export class RtsApp {
   private resize(): void {
     const width = this.canvas.clientWidth || window.innerWidth;
     const height = this.canvas.clientHeight || window.innerHeight;
+    const ratio = effectiveDevicePixelRatio(window.devicePixelRatio, this.qualitySettings);
+    // A profile can change while CSS dimensions remain stable. Apply the drawing
+    // buffer ratio before the size early return so Low/High takes effect at once.
+    this.renderer.setPixelRatio(ratio);
+    this.postProcessPipeline?.setPixelRatio(ratio);
     if (width === this.lastW && height === this.lastH) return;
     this.lastW = width;
     this.lastH = height;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     this.renderer.setSize(width, height, false);
-    this.postProcessPipeline?.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     this.postProcessPipeline?.setSize(width, height);
     this.cameraController.setViewport(width, height);
   }
@@ -3385,7 +3608,12 @@ export class RtsApp {
     const result = direction === "buy"
       ? this.marketTrade.buy(PLAYER_OWNER, resourceId)
       : this.marketTrade.sell(PLAYER_OWNER, resourceId);
-    if (result === "traded") this.playerMarketTrades += 1;
+    if (result === "traded") {
+      this.playerMarketTrades += 1;
+      if (direction === "buy") {
+        this.playerMarketPurchases[resourceId] = (this.playerMarketPurchases[resourceId] ?? 0) + lot;
+      }
+    }
     const message: Record<MarketTradeResult, string> = {
       traded: direction === "buy"
         ? `${lot} ${label} alındı (${quote?.buyPrice ?? 0} altın).`

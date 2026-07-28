@@ -321,6 +321,8 @@ test("RTS Phase 9 build tools: categories, the affordability lock, and settings 
   await expect(page.locator(".rts-match-setting").nth(1)).toContainText("Yakınlaştırma yumuşaklığı");
   await expect(page.locator("[data-rts-setting]")).toHaveCount(2);
   await expect(page.locator("[data-rts-setting-value]")).toHaveText(["Normal", "Dengeli"]);
+  await expect(page.locator("[data-rts-graphics-quality]")).toHaveValue("medium");
+  await expect(page.locator("[data-rts-graphics-adaptive]")).toBeChecked();
   await expect(page.getByRole("button", { name: "Varsayılan", exact: true })).toBeVisible();
 
   expect(errors).toEqual([]);

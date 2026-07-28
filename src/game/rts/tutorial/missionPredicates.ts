@@ -74,6 +74,14 @@ export interface MissionWorldSnapshot {
    * leaves nothing behind to read.
    */
   readonly marketTrades: number;
+  /**
+   * Units of each resource the player has *bought* at the Market this match,
+   * keyed by resource id. Kept apart from {@link marketTrades} rather than
+   * derived from it: a sale and a purchase are the same event to a counter and
+   * opposite moves to a player, and only the purchase side answers "buy 100
+   * wood".
+   */
+  readonly marketPurchases: Readonly<Record<string, number>>;
 }
 
 /**
@@ -143,6 +151,8 @@ export function measureGoal(goal: MissionGoal, world: MissionWorldSnapshot): Mis
       return { current: world.razedEnemyBuildings[goal.buildingId] ?? 0, target: goal.count };
     case "market-trade":
       return { current: world.marketTrades, target: goal.count };
+    case "market-bought":
+      return { current: world.marketPurchases[goal.resourceId] ?? 0, target: goal.count };
   }
 }
 

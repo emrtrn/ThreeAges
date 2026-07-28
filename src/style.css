@@ -1231,8 +1231,10 @@ body {
   -webkit-line-clamp: 2;
 }
 
-/* The teaching line is optional detail. It is quieter than the title because it
-   is read once, then deliberately hidden until the player asks for it again. */
+/* The teaching line. Quieter than the title because the title is the
+   instruction and this is its reason; visible by default since Sürüm 2 capped
+   it at one short sentence, and still collapsible for a player who is done
+   reading it. */
 .rts-mission-why {
   margin: 5px 0 0;
   color: var(--ta-ink-muted);

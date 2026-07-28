@@ -105,6 +105,21 @@ export type MissionGoal =
    */
   | { readonly kind: "market-trade"; readonly count: number }
   /**
+   * `count` units of `resourceId` **bought** at the Market this match.
+   *
+   * The measured sibling of {@link MissionGoal} `market-trade`, and a tally for
+   * the same reason: bought wood is indistinguishable from felled wood the
+   * moment it lands in the wallet. What it adds is direction and amount, which
+   * is what makes "buy 100 wood" a teachable objective rather than "press a
+   * button once" — the player has to sell something first to afford it, and the
+   * count is what states how much.
+   *
+   * Counts the lot, not the click: one buy at the shipped `lotSize` of 100 is
+   * the whole goal, and a project that trades in smaller lots gets a step that
+   * asks for several without the data changing.
+   */
+  | { readonly kind: "market-bought"; readonly resourceId: string; readonly count: number }
+  /**
    * `count` enemy buildings of `buildingId` razed this match. A tally rather than
    * a world query — the thing it counts no longer exists — so a step using it is
    * inherently one-shot and does not need `latch`.

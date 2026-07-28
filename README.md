@@ -70,6 +70,33 @@ profile. Keep the browser, viewport and scenario fixed when comparing runs.
 Headless captures are repeatable CI evidence, but only same-machine, visible
 browser captures are suitable for player-facing GPU performance conclusions.
 
+### RTS quality matrix
+
+`npm run perf:rts` exercises the same RTS match under Low, Medium, High and
+Medium-with-adaptive-quality. Every row uses a fixed WASD pan plus wheel-zoom
+sequence after warm-up, then records frame pacing, Chrome main-thread counters,
+draw calls, triangles, GPU resource counts and adaptive-reduction depth. It
+writes a JSON data file, a short Markdown comparison and one DevTools trace per
+profile under `test-results/rts-perf/`.
+
+```bash
+npm run perf:rts
+# Fast local check: five seconds per quality row.
+$env:RTS_PERF_DURATION_MS = "5000"; npm run perf:rts
+# Increase shader/asset warm-up independently when examining first-load effects.
+$env:RTS_PERF_WARMUP_MS = "10000"; npm run perf:rts
+# Run only the sustained-load adaptive row while investigating a reduction.
+$env:RTS_PERF_PROFILES = "adaptive"; npm run perf:rts
+# Optional CI gate: fail if any row exceeds the P95 budget.
+$env:RTS_PERF_MAX_P95_MS = "33.3"; npm run perf:rts
+# Visible Chromium is required for player-facing GPU conclusions.
+$env:RTS_PERF_HEADLESS = "false"; npm run perf:rts
+```
+
+The adaptive row reports whether a real sustained bottleneck caused a temporary
+reduction; it does not manufacture load merely to force a reduction. Keep the
+browser, viewport, map and duration fixed when comparing report files.
+
 ## Product envelope
 
 - **Primary target:** desktop browser; keyboard + mouse (pointer-look) is the

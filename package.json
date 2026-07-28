@@ -14,6 +14,7 @@
     "check:assets": "node tools/run-asset-manifest-health.mjs",
     "perf:assets": "node tools/run-asset-perf-report.mjs",
     "perf:browser": "node tools/browser-perf-report.mjs",
+    "perf:rts": "node tools/rts-perf-report.mjs",
     "dialogue:report": "node tools/dialogue-report.mjs",
     "verify:dist": "node builder/web/verify-dist.mjs",
     "verify:imports": "node builder/web/verify-imports.mjs",

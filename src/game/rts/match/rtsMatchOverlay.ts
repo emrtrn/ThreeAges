@@ -17,6 +17,14 @@ import type { RtsMatchEndReason, RtsMatchOutcome } from "./rtsMatchState";
 import { DEFAULT_VICTORY_CONDITION, type VictoryConditionChoice } from "./victoryConditionChoice";
 import type { MissionModeChoice } from "../tutorial/missionModeChoice";
 
+/** RTS exposes the three player-facing profiles; Ultra/custom remain engine APIs. */
+export type RtsGraphicsQuality = "low" | "medium" | "high";
+
+export interface RtsGraphicsSettings {
+  readonly quality: RtsGraphicsQuality;
+  readonly adaptiveEnabled: boolean;
+}
+
 export interface RtsMatchOverlayHandlers {
   readonly onStart: () => void;
   readonly onResume: () => void;
@@ -24,6 +32,12 @@ export interface RtsMatchOverlayHandlers {
   readonly onSurrender: () => void;
   /** §51 "Minimal ayarlar": camera feel, changed live behind the pause card. */
   readonly onCameraSettings: (settings: RtsCameraSettings) => void;
+  /** Current RTS graphics state, persisted and applied by the runtime. */
+  readonly graphicsSettings?: RtsGraphicsSettings;
+  /** Changes the player's base profile (adaptive reductions never overwrite it). */
+  readonly onGraphicsQuality?: (quality: RtsGraphicsQuality) => void;
+  /** Lets the player opt in/out of runtime quality reductions. */
+  readonly onGraphicsAdaptive?: (enabled: boolean) => void;
   /**
    * §78.1: the victory condition picked while the match is being set up. Absent
    * when the host cannot act on a choice, and then the picker is not built at
@@ -175,6 +189,7 @@ export class RtsMatchOverlay {
   private surrenderArmed = false;
   private readonly settings = document.createElement("div");
   private cameraSettings: RtsCameraSettings = DEFAULT_RTS_CAMERA_SETTINGS;
+  private graphicsSettings: RtsGraphicsSettings | null;
   /** §78.1 match setup; empty and permanently hidden without a choice handler. */
   private readonly setup = document.createElement("div");
   private readonly setupHint = document.createElement("p");
@@ -184,6 +199,7 @@ export class RtsMatchOverlay {
   private missionMode: MissionModeChoice = "story";
 
   constructor(private readonly handlers: RtsMatchOverlayHandlers) {
+    this.graphicsSettings = handlers.graphicsSettings ?? null;
     this.root.className = "rts-match-overlay ui-interactive";
     this.card.className = "rts-match-card";
     this.card.setAttribute("role", "status");
@@ -318,7 +334,10 @@ export class RtsMatchOverlay {
     reset.type = "button";
     reset.className = "rts-match-settings-reset";
     reset.textContent = "Varsayılan";
-    reset.addEventListener("click", () => this.applyCameraSettings(DEFAULT_RTS_CAMERA_SETTINGS));
+    reset.addEventListener("click", () => {
+      this.applyCameraSettings(DEFAULT_RTS_CAMERA_SETTINGS);
+      this.applyGraphicsSettings({ quality: "medium", adaptiveEnabled: true });
+    });
     header.append(heading, reset);
     this.settings.appendChild(header);
     for (const row of CAMERA_SETTING_ROWS) {
@@ -350,6 +369,47 @@ export class RtsMatchOverlay {
       wrapper.append(label, control);
       this.settings.appendChild(wrapper);
     }
+    this.buildGraphicsSettings();
+  }
+
+  /** Builds only when the host owns real graphics settings; no inert controls. */
+  private buildGraphicsSettings(): void {
+    if (!this.graphicsSettings || !this.handlers.onGraphicsQuality || !this.handlers.onGraphicsAdaptive) return;
+    const quality = document.createElement("label");
+    quality.className = "rts-match-setting";
+    quality.title = "GÃ¶rsel kalite; oyunun kural ve hÄ±zÄ±nÄ± deÄŸiÅŸtirmez.";
+    const label = document.createElement("span");
+    label.className = "rts-match-setting-label";
+    label.textContent = "Grafik kalitesi";
+    const select = document.createElement("select");
+    select.dataset.rtsGraphicsQuality = "";
+    for (const value of ["low", "medium", "high"] as const) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value === "low" ? "DÃ¼ÅŸÃ¼k" : value === "medium" ? "Orta" : "YÃ¼ksek";
+      select.appendChild(option);
+    }
+    select.value = this.graphicsSettings.quality;
+    select.addEventListener("change", () => {
+      this.applyGraphicsSettings({ ...this.graphicsSettings!, quality: select.value as RtsGraphicsQuality });
+    });
+    quality.append(label, select);
+
+    const adaptive = document.createElement("label");
+    adaptive.className = "rts-match-setting";
+    adaptive.title = "Uzun sÃ¼ren performans baskÄ±sÄ±nda kaliteyi geÃ§ici olarak azaltÄ±r.";
+    const adaptiveLabel = document.createElement("span");
+    adaptiveLabel.className = "rts-match-setting-label";
+    adaptiveLabel.textContent = "Otomatik optimizasyon";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.dataset.rtsGraphicsAdaptive = "";
+    checkbox.checked = this.graphicsSettings.adaptiveEnabled;
+    checkbox.addEventListener("change", () => {
+      this.applyGraphicsSettings({ ...this.graphicsSettings!, adaptiveEnabled: checkbox.checked });
+    });
+    adaptive.append(adaptiveLabel, checkbox);
+    this.settings.append(quality, adaptive);
   }
 
   /** Keep the live camera, sliders and their human-readable state in lockstep. */
@@ -363,6 +423,17 @@ export class RtsMatchOverlay {
       if (output) output.textContent = row.valueLabel(value);
     }
     this.handlers.onCameraSettings(this.cameraSettings);
+  }
+
+  private applyGraphicsSettings(settings: RtsGraphicsSettings): void {
+    if (!this.graphicsSettings) return;
+    this.graphicsSettings = settings;
+    const select = this.settings.querySelector<HTMLSelectElement>("[data-rts-graphics-quality]");
+    if (select) select.value = settings.quality;
+    const checkbox = this.settings.querySelector<HTMLInputElement>("[data-rts-graphics-adaptive]");
+    if (checkbox) checkbox.checked = settings.adaptiveEnabled;
+    this.handlers.onGraphicsQuality?.(settings.quality);
+    this.handlers.onGraphicsAdaptive?.(settings.adaptiveEnabled);
   }
 
   /**

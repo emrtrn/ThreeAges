@@ -1,98 +1,92 @@
 {
   "id": "frontier_road",
   "label": "Sınır Yolu",
-  "intro": "Kral seni terk edilmiş bir sınır vadisine gönderdi. Burada bir zamanlar işleyen bir krallık vardı; yolları kesildiğinde açlıktan dağıldı. Sağ tuşla birlik gönderir, WASD ile haritayı gezersin. Elindeki her şey odunla kuruluyor — ilk işin odunu akıtmak.",
-  "outro": "Rakip lordun ileri karakolu düştü. Vadi artık senin krallığın — buradan sonrası sana kalmış.",
+  "intro": "Kral seni terk edilmiş bir sınır vadisine gönderdi. Merkez ilk deposun: çevresindeki bedava yola değen her yapı hazineye çalışır. Sağ tık: birlik gönder · WASD: haritayı gez.",
+  "outro": "Rakip lordun ileri karakolu düştü. Vadi artık senin — buradan sonrası sana kalmış.",
   "steps": [
     {
-      "id": "first_axe",
-      "title": "Ormanın yanına bir Oduncu Kampı kur",
-      "why": "Bu vadide ev, depo, yol, kışla — hepsi odunla kuruluyor, ve elindeki odun sayılı. İşçileri sen göndermeyeceksin: tamamlanan kamp, yakındaki boştaki işçileri kendisi işe alır. Senin işin nereye kurulacağına karar vermek.",
-      "goal": { "kind": "structure-built", "buildingId": "lumber_camp", "count": 1 }
-    },
-    {
-      "id": "empty_treasury",
-      "title": "Bir Depo kur",
-      "why": "Kamp odun kesiyor ama hazinen artmıyor. Hasat kampın kendi ambarında birikiyor ve teslim edilecek bir yer arıyor; o yer Depo.",
-      "goal": { "kind": "structure-built", "buildingId": "depot", "count": 1 }
-    },
-    {
-      "id": "connect_the_road",
-      "title": "Oduncu kampını yolla depoya bağla",
-      "why": "Depo tek başına yetmez. Hasat ancak kampa değen bir yol, aynı ağ üzerinden depoya ulaştığında hazineye akar. Kampı seçip lojistik satırını okursan neyin eksik olduğunu her zaman görürsün.",
+      "id": "wood_flowing",
+      "title": "Merkezin yoluna Oduncu Kampı kur",
+      "why": "Merkez ilk deposun; yoluna değen yapının hasadı hazineye akar.",
       "goal": { "kind": "producer-linked", "resourceId": "wood", "count": 1 }
+    },
+    {
+      "id": "food_flowing",
+      "title": "Bir Tarla kur",
+      "why": "Yiyecek işçi ve asker eğitir; tarla da aynı yola değmeli.",
+      "goal": { "kind": "producer-linked", "resourceId": "food", "count": 1 }
+    },
+    {
+      "id": "first_depot",
+      "title": "Bir Depo kur",
+      "why": "Merkezin deposu dolunca teslimat durur; Depo kapasiteyi büyütür.",
+      "goal": { "kind": "structure-built", "buildingId": "depot", "count": 1 }
     },
     {
       "id": "market",
       "title": "Bir Pazar kur",
-      "why": "Pazar 20 oduna kurulur ve elindeki fazlayı işine yarayana çevirir. Başlangıçtaki yiyecek yığını işçi ve asker eğitmekten başka bir işe yaramıyor; Pazar onu altına, altını da odun ya da taşa çevirir. Sıkıştığında açacağın vana budur.",
+      "why": "Pazar 20 odun; elindeki fazlayı ihtiyacın olana çevirir.",
       "goal": { "kind": "structure-built", "buildingId": "market", "count": 1 }
     },
     {
-      "id": "first_trade",
-      "title": "Pazar'da bir alım ya da satım yap",
-      "why": "Pazar'ı seç: yiyecek sat, altın kazan; altınla odun ya da taş satın al. Her işlem fiyatı aleyhine kaydırır ve Pazar komisyon alır — bu yüzden Pazar sonsuz kaynak değil, kendi üretimini kuruncaya kadar dayandığın köprüdür. Komisyon Merkez seviyesi yükseldikçe düşer.",
-      "goal": { "kind": "market-trade", "count": 1 }
+      "id": "buy_wood",
+      "title": "Pazar'dan 100 odun al",
+      "why": "Pazar'ı seç: yiyecek sat, altınla odun al. Komisyon Merkez seviyesiyle düşer.",
+      "goal": { "kind": "market-bought", "resourceId": "wood", "count": 100 }
     },
     {
-      "id": "first_harvest",
-      "title": "Bir Tarla kur ve onu da hatta bağla",
-      "why": "Yiyecek yalnız işçi ve asker eğitirken harcanır — yani ordunun ve nüfusunun büyüme hızı doğrudan tarlalarına bağlı. Tarla da aynı kuralın altında: değen bir yol, aynı ağda bir depo.",
-      "goal": { "kind": "producer-linked", "resourceId": "food", "count": 1 }
-    },
-    {
-      "id": "roof_and_people",
-      "title": "Nüfus için yer aç",
-      "why": "Nüfus tavanına dayandığında hiçbir şey üretemezsin — ne işçi, ne asker. Ev kurmak, üretim yapılarına işçi yetiştirmenin tek yolu.",
-      "goal": { "kind": "population-headroom", "count": 5 }
-    },
-    {
-      "id": "grow_from_the_center",
+      "id": "center_lv2",
       "title": "Merkezi 2. seviyeye çıkar",
-      "why": "Yükseltme binanın kendisinden değil, Merkez'den yapılır. Merkez seviye atlayınca krallığındaki bütün yapılar aynı anda o seviyeye geçer; tek tek bina yükseltmek diye bir şey yok.",
+      "why": "Yükseltme Merkez'den yapılır ve bütün yapılarına aynı anda işler.",
       "goal": { "kind": "tier-reached", "age": "settlement", "level": 2 }
     },
     {
-      "id": "beyond_the_border",
-      "title": "Karakol kur ve yola bağla",
-      "why": "Yapıyı ancak kendi kontrol alanına kurabilirsin; alanı büyüten şey karakoldur. Karakolu Merkez'e yolla bağlarsan kontrol alanı daha da genişler — bağlamazsan dar kalır.",
+      "id": "houses",
+      "title": "Nüfusa yer aç",
+      "why": "Nüfus tavanında ne işçi ne asker üretebilirsin; tavanı Ev yükseltir.",
+      "goal": { "kind": "population-headroom", "count": 5 }
+    },
+    {
+      "id": "outpost",
+      "title": "Karakol kur ve Merkez'e bağla",
+      "why": "Kontrol alanını karakol büyütür; yola bağlıysa daha da geniş.",
       "goal": { "kind": "outpost-connected", "count": 1 }
     },
     {
-      "id": "quarry_linked",
+      "id": "quarry",
       "title": "Taş Ocağı kur ve hatta bağla",
-      "why": "Taş bir taş yatağının üzerine kurulur ve genişledikçe yatak tükenir; bu yüzden yeni ocaklar seni kontrol alanının kenarına doğru iter. Aynı dört koşul burada da geçerli: kontrol alanı, ocağa değen yol, aynı ağda kendi depon, işgal altında olmayan bir depo.",
+      "why": "Ocak taş yatağının üstüne kurulur; yolu Merkez ağına ulaşmalı.",
       "goal": { "kind": "producer-linked", "resourceId": "stone", "count": 1 }
     },
     {
-      "id": "gold_mine_linked",
+      "id": "gold_mine",
       "title": "Altın Madeni kur ve hatta bağla",
-      "why": "Altın hem Pazar'ın hem çağ geçişinin parası ve en yavaş akan kaynak. Madenin yolu uzarsa hat daha kırılgan olur — kısa ve açık yol mu, uzun ve güvenli yol mu, kararı sen verirsin.",
+      "why": "Altın en yavaş kaynak: hem Pazar'ın hem çağ geçişinin parası.",
       "goal": { "kind": "producer-linked", "resourceId": "gold", "count": 1 }
     },
     {
       "id": "barracks",
       "title": "Kışla kur",
-      "why": "Rakip lord da bu vadiyi yerleştirmekle görevli. Ekonomin büyüdükçe görünür bir hedef haline geliyorsun.",
+      "why": "Rakip lord da bu vadiyi istiyor; ekonomin büyüdükçe hedef oluyorsun.",
       "goal": { "kind": "structure-built", "buildingId": "barracks", "count": 1 }
     },
     {
-      "id": "standing_guard",
+      "id": "guards",
       "title": "Üç muhafız eğit",
-      "why": "Karakolun ve yolun, ordunun olmadığı sürece savunmasız hedeflerdir. Düşman deponun üstünde durursa binayı yıkmadan da hattını keser; üretimin o anda durur.",
+      "why": "Düşman deponun üstünde durursa, binayı yıkmadan hattını keser.",
       "goal": { "kind": "unit-count", "role": "guard", "count": 3 },
       "latch": true
     },
     {
       "id": "town",
       "title": "Kasaba çağına geç",
-      "why": "Kasaba yeni yapı ve birlikleri açar; geçiş sırasında hem kaynağın hem savunman zayıflar. Merkez sana hangi yapıların eksik olduğunu söyler — ne zaman geçeceğin maçın en pahalı kararı.",
+      "why": "Kasaba yeni yapı ve birlikleri açar; geçiş sırasında zayıf düşersin.",
       "goal": { "kind": "tier-reached", "age": "town", "level": 1 }
     },
     {
-      "id": "valley_is_yours",
-      "title": "Rakibin ileri karakolunu yık",
-      "why": "Karakol yıkıldığında rakip yalnız bir binayı değil, ona bağlı kontrol alanını ve o alandaki üretimin verimini kaybeder. Vurulacak yer ordunun kendisi değil, ordunun beslendiği hattır.",
+      "id": "raze",
+      "title": "Rakibin karakolunu yık",
+      "why": "Karakol düşünce rakip kontrol alanını ve üretim verimini kaybeder.",
       "goal": { "kind": "enemy-structure-razed", "buildingId": "outpost", "count": 1 }
     }
   ]

@@ -32469,6 +32469,7 @@ const missionWorld = (
   populationHeadroom: 0,
   razedEnemyBuildings: {},
   marketTrades: 0,
+  marketPurchases: {},
   ...extra,
 });
 
@@ -32577,6 +32578,18 @@ check("the Faz 2 mission goals measure the rule they teach", () => {
     "a Market that has never traded teaches nothing",
   );
   assert.equal(isGoalMet(traded, missionWorld([], [], { marketTrades: 1 })), true);
+
+  // Sürüm 2's measured sibling: direction and amount, not clicks. Selling wood
+  // is the opposite move to buying it, so a sale must never fill a buy quota.
+  const bought: MissionGoal = { kind: "market-bought", resourceId: "wood", count: 100 };
+  assert.equal(isGoalMet(bought, missionWorld([], [], { marketTrades: 3 })), false, "a trade is not a purchase");
+  assert.equal(isGoalMet(bought, missionWorld([], [], { marketPurchases: { food: 200 } })), false, "wrong resource");
+  assert.deepEqual(
+    measureGoal(bought, missionWorld([], [], { marketPurchases: { wood: 40 } })),
+    { current: 40, target: 100 },
+    "a smaller lot size reports partial progress rather than nothing",
+  );
+  assert.equal(isGoalMet(bought, missionWorld([], [], { marketPurchases: { wood: 100 } })), true);
 });
 
 check("a mission goal reports how far along it is, not just whether it is done", () => {
@@ -32787,7 +32800,11 @@ check("the shipped mission script validates, and a broken one fails at load", ()
   ));
   const raw = JSON.parse(readFileSync("public/game-data/missions/frontier_road.json", "utf8")) as unknown;
   const script = validateMissionScript(raw, "frontier_road", buildingIds);
-  assert.equal(script.steps[0]!.goal.kind, "structure-built");
+  // Sürüm 2 opens on a *linked* producer rather than a built one: with the centre
+  // acting as the first depot, placing the camp beside the centre's free road
+  // ring and connecting it are the same move, and splitting them would have made
+  // a step out of something the player cannot fail separately.
+  assert.deepEqual(script.steps[0]!.goal, { kind: "producer-linked", resourceId: "wood", count: 1 });
 
   // Every shipped step must be reachable: a goal is only worth writing if some
   // world satisfies it, and the director must be able to walk the whole chain.
@@ -32818,6 +32835,7 @@ check("the shipped mission script validates, and a broken one fails at load", ()
       populationHeadroom: 5,
       razedEnemyBuildings: { outpost: 1 },
       marketTrades: 1,
+      marketPurchases: { wood: 100 },
     },
   );
   const walked = new MissionDirector(script);
@@ -32846,22 +32864,53 @@ check("the shipped mission script validates, and a broken one fails at load", ()
   const woodFlowing = script.steps.findIndex((step) =>
     step.goal.kind === "producer-linked" && step.goal.resourceId === "wood");
   assert.ok(woodFlowing >= 0, "the chain must connect a wood producer at some point");
+  // Counted per goal kind rather than per `structure-built` step: since Sürüm 2
+  // the opening asks for a *linked* producer, and a budget that only knew how to
+  // price "build X" would have read this chain's opening as free.
+  const cheapestProducerCost = (resourceId: string): number => {
+    const costs = Object.values(balance)
+      .filter((stats) => stats.economy?.resourceId === resourceId)
+      .map((stats) => stats.cost["wood"] ?? 0);
+    assert.ok(costs.length > 0, `no building produces "${resourceId}"`);
+    return Math.min(...costs);
+  };
   const openingWoodCost = script.steps.slice(0, woodFlowing + 1)
-    .reduce((total, step) => step.goal.kind === "structure-built"
-      ? total + (balance[step.goal.buildingId]?.cost["wood"] ?? 0) * step.goal.count
-      : total, 0);
-  const leanestStartingWood = 500; // core_match / gameplay_proof both open here.
+    .reduce((total, step) => {
+      if (step.goal.kind === "structure-built") {
+        return total + (balance[step.goal.buildingId]?.cost["wood"] ?? 0) * step.goal.count;
+      }
+      if (step.goal.kind === "producer-linked" && step.goal.resourceId !== undefined) {
+        return total + cheapestProducerCost(step.goal.resourceId) * step.goal.count;
+      }
+      return total;
+    }, 0);
+  // Read from the shipped presets rather than hard-coded: the stockpile is
+  // balance data that moves, and an invariant quoting a number the presets have
+  // left behind protects nothing.
+  const leanestStartingWood = Math.min(...["core_match", "gameplay_proof"].map((id) =>
+    validateGamePreset(readPresetJson(id), id).startingResources?.wood ?? 0));
+  assert.ok(leanestStartingWood > 0, "a shipped preset must open with wood to spend");
   assert.ok(
     openingWoodCost <= leanestStartingWood / 2,
     `the opening spends ${openingWoodCost} wood before any comes in (budget ${leanestStartingWood / 2})`,
   );
 
+  // The user's own note on the first play-through: the cards were paragraphs
+  // restating what the selection panel already says. Short is the design, so it
+  // is a gate rather than a promise — `why` is one sentence, `title` is an
+  // instruction, and neither may grow back one edit at a time.
+  for (const step of script.steps) {
+    assert.ok(step.title.length <= 40, `step "${step.id}" title is ${step.title.length} chars (max 40)`);
+    assert.ok(step.why.length <= 110, `step "${step.id}" why is ${step.why.length} chars (max 110)`);
+  }
+
   // The reference check is the point of passing building ids in: a typo'd
   // building becomes a step nobody can clear, and the player it strands is by
   // definition the one who cannot tell that the game is wrong rather than them.
-  const typo = { ...(raw as Record<string, unknown>) } as { steps: { goal: { buildingId: string } }[] };
-  const broken = JSON.parse(JSON.stringify(typo)) as typeof typo;
-  broken.steps[0]!.goal.buildingId = "farmm";
+  const broken = JSON.parse(JSON.stringify(raw)) as { steps: { goal: { kind: string; buildingId?: string } }[] };
+  const named = broken.steps.findIndex((step) => step.goal.buildingId !== undefined);
+  assert.ok(named >= 0, "the chain must name at least one building for the reference check to bite");
+  broken.steps[named]!.goal.buildingId = "farmm";
   assert.throws(() => validateMissionScript(broken, "frontier_road", buildingIds), /unknown building "farmm"/);
 
   assert.throws(() => validateMissionScript({ ...(raw as object), steps: [] }, "frontier_road"), /non-empty array/);

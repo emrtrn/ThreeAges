@@ -1,7 +1,8 @@
 # ThreeAges Hikâye / Öğretici Tur Modu — Tasarım Çalışması
 
 Oluşturulma tarihi: 2026-07-26
-Durum: Onaylandı — **Faz 1 kodu tamamlandı**, oyuncu doğrulaması bekliyor
+Durum: Onaylandı — Faz 1–2 kodu tamamlandı; **§12 "Sürüm 2" planlandı, kodu
+bekliyor** (merkez-depo ekonomisi + görsel yönlendirme + kontrollü ilerleme)
 Kapsam: Oyuncunun sırayla verilen görevleri yaparak **tek bir tam tur** oynadığı,
 öğretici işlevi de gören yönlendirilmiş maç modu.
 
@@ -475,7 +476,227 @@ territory sistemi karakolun yarıçapını tam olarak ona göre veriyor — yani
 
 ---
 
-## 12. İlgili Dokümanlar
+## 12. Sürüm 2 — Merkez-Depo Ekonomisi, Yönlendirme ve Kontrollü İlerleme
+
+Eklenme tarihi: 2026-07-28. Tetikleyen üç şey: (a) ekonomi kuralı değişti —
+Merkez artık ilk depo ve **her ekonomi yapısı Merkez'in yol ağına bağlanmak
+zorunda**; (b) zincirin `why` metinleri artık oyunun kendi kurallarını değil,
+olmayan kuralları anlatıyor ve fazla uzun; (c) oyun testinde oyuncu "bir yapı
+kur" denince üç dört tane kurup kaynağı bitiriyor ve tur ilerleyemiyor.
+
+### 12.1 Kod tarafında zaten hazır olanlar
+
+Bu bölümün planladığı değişiklikler simülasyona yeni kural eklemiyor; kural
+kodda çoktan var:
+
+| Kural | Yeri |
+| --- | --- |
+| Merkez ilk depo — merkez yol bileşenine değen üretici `linked` sayılır | `productionLogisticsSystem.ts` (`connectedToCenter`) |
+| Merkezin bedava yol halkası | `roads/centerAccessRoad.ts` |
+| Yakına kurulan yapının otomatik bağlanması (≤ 6 hücre) | `roads/autoRoadConnector.ts` + `balance/roads.json` `autoConnect.maxCells` |
+| "Merkez Ağı Yok" durumu ve tam açıklaması | `productionLogisticsSystem.ts` → `rtsSelectionView.ts:364,373` |
+| Merkezin taban kapasitesi (500/500/300/300), Deponun kapasite eklemesi | `resourceCapacitySystem.ts` |
+| Kapasite dolduğunda teslimatın kırpılması | `logisticsTransferSystem.ts:35` |
+
+Yani **eskiyen tek şey görev zinciri**: `frontier_road.json` hâlâ "Depo yoksa
+hasat akmaz" diyor, oysa artık akıyor.
+
+### 12.2 Yeni zincir (14 adım)
+
+Kullanıcının verdiği sıra korunuyor: 1 oduncu, 2 tarla, 3 depo, sonra Pazar ve
+Merkez yükseltmesi. Pazar "kur" ve "100 odun al" iki ayrı adım olduğu için Merkez
+Lv2 altıncı sıraya düşüyor — tek adıma indirmek istenirse "kur" adımı atılabilir,
+alım adımı Pazar'ı zaten zorunlu kılıyor.
+
+| # | id | Başlık | Hedef | Öğrettiği |
+| --- | --- | --- | --- | --- |
+| 1 | `wood_flowing` | Merkezin yoluna değecek şekilde Oduncu Kampı kur | `producer-linked: wood 1` | Merkez ilk depodur; yola değen yapı öder |
+| 2 | `food_flowing` | Bir Tarla kur | `producer-linked: food 1` | Aynı kuralın tekrarı, farklı kaynak |
+| 3 | `first_depot` | Bir Depo kur | `structure-built: depot 1` | Depo bağlantı değil **kapasite** |
+| 4 | `market` | Bir Pazar kur | `structure-built: market 1` | 20 odun; dönüşüm vanası |
+| 5 | `buy_wood` | Pazar'dan 100 odun al | `market-bought: wood 100` (**yeni**) | Yiyecek → altın → odun |
+| 6 | `center_lv2` | Merkezi 2. seviyeye çıkar | `tier-reached: settlement 2` | Yükseltme Merkez'den, krallık geneline |
+| 7 | `houses` | Nüfusa yer aç | `population-headroom 5` | Nüfus tavanı üretimi durdurur |
+| 8 | `outpost` | Karakol kur ve Merkez'e bağla | `outpost-connected 1` | Kontrol alanı ve bağlı yarıçap |
+| 9 | `quarry` | Taş Ocağı kur ve bağla | `producer-linked: stone 1` | Yatak üstüne kurulur, hat uzar |
+| 10 | `gold_mine` | Altın Madeni kur ve bağla | `producer-linked: gold 1` | En yavaş kaynak, çağ parası |
+| 11 | `barracks` | Kışla kur | `structure-built: barracks 1` | Askerî üretim |
+| 12 | `guards` | Üç muhafız eğit | `unit-count: guard 3` (`latch`) | Depo işgali tehdidi |
+| 13 | `town` | Kasaba çağına geç | `tier-reached: town 1` | Çağ geçişi |
+| 14 | `raze` | Rakibin karakolunu yık | `enemy-structure-razed: outpost 1` | Hedef ordu değil, hattın kendisi |
+
+1. ve 2. adımların hedefi bilinçli olarak `structure-built` değil
+`producer-linked`: yeni kuralda "kurmak" ile "bağlanmak" aynı hamle
+(halkanın yanına kurarsan otomatik bağlanır), ayrı adım yapmak turu şişirirdi.
+Yanlış yere kuran oyuncuyu adım tutar ve §13.4'teki ikinci satır sebebi söyler.
+
+**Metin kuralı.** `title` ≤ 40 karakter, `why` **tek kısa cümle** (≤ 110
+karakter). Panelin zaten yazdığı hiçbir şey `why` içinde tekrar edilmez —
+"işçileri sen göndermeyeceksin" gibi satırlar siliniyor, çünkü kamp tamamlanınca
+işçilerin yürüdüğü ekranda görülüyor. Bu iki sınır `test:engine`'de değişmez
+olarak pinlenir; söz değil, kapı olsun.
+
+### 12.3 Yeni hedef türü: `market-bought`
+
+```ts
+| { readonly kind: "market-bought"; readonly resourceId: string; readonly amount: number }
+```
+
+`market-trade` gibi bir sayaç (takas dünyada iz bırakmaz), ama miktarı sayar:
+`RtsApp.trade()` başarılı bir **alımda** `lotSize` kadar ekler. `market.lotSize`
+bugün 100 olduğu için "100 odun al" tam olarak bir alım — kart `0/100 odun`
+gösterir. `market-trade` yerine geçmiyor, yanına ekleniyor.
+
+Doğrulayıcı yükümlülüğü (§4.3'ün aynısı): `validateMissionGoal` içinde yeni dal
++ `resourceId`'nin `resources.json` anahtarlarından biri olması.
+
+### 12.4 Yönlendirme katmanı — "nereye tıklayacağını ve nereye kuracağını göster"
+
+Adım şemasına **tek bir opsiyonel alan** ekleniyor. Zincirin geri kalanı gibi
+veri; kapalı birleşim, çünkü açık uçlu bir "UI seçici" alanı ikinci bir DOM
+sözleşmesi doğururdu.
+
+```ts
+interface MissionGuide {
+  /** Hangi butonun yanıp söneceği. */
+  readonly action:
+    | { kind: "build"; buildingId: string }
+    | { kind: "road" }
+    | { kind: "structure-action"; buildingId: string; actionId: string };
+  /** Zemin işaretinin nereyi önereceği. */
+  readonly site?: "near-center-road" | "near-forest" | "stone-node" | "gold-node" | "control-edge";
+  /** Bu adım açıkken bu yapıdan en çok kaç tane kurulabilir. */
+  readonly limit?: number;
+}
+```
+
+Üç ayrı sunum parçası, üçü de yalnız okur:
+
+1. **Palet vurgusu.** `RtsBuildPalette.setMissionHighlight(id | null)` → butona
+   `is-mission-hint` sınıfı, CSS'te nabız animasyonu (`style.css`), ve gerekiyorsa
+   butonun sekmesi otomatik açılır — kapalı sekmedeki yanıp sönen buton görünmez.
+   `prefers-reduced-motion` altında nabız yerine sabit çerçeve.
+2. **Panel vurgusu.** Merkez yükseltmesi, Pazar alımı ve muhafız eğitimi palette
+   değil seçim panelinde. `structure-action` guide'ı iki aşamalı: yapı seçili
+   değilken **dünyadaki yapı** halkayla vurgulanır ("Merkez'e tıkla"), seçildikten
+   sonra `RtsSelectionPanel.setMissionHighlight(actionId)` ilgili butonu nabızlar.
+   Aksiyon id'leri panelde zaten var (`TRADE_BUY_ACTION_PREFIX` vb.), yani veri
+   DOM'a değil mevcut aksiyon kimliğine bağlanır.
+3. **Zemin işareti.** Yeni `tutorial/missionSiteSolver.ts` (saf) + yeni
+   `tutorial/missionHintView.ts` (three.js): önerilen konuma nabız atan bir halka
+   ve üstünde alçalıp yükselen bir ok. Çözücü, Merkez çevresinde ızgara örnekler,
+   her adayı **mevcut** `StructureConstructionService.validate()` ile geçirir ve
+   `site` stratejisine göre puanlar (ormana yakınlık, merkez halkasına
+   `autoConnect.maxCells` içinde kalma, taş/altın yatağı örtme, kontrol alanı
+   kenarı). Geçerli aday yoksa **hiçbir şey çizilmez** — yanlış yeri gösteren bir
+   ok, hiç ok olmamasından kötüdür. Adım değiştiğinde ve ilgili yapı elde
+   kurulmaya hazırken ~2 sn'de bir yenilenir; adım kapanınca kaybolur.
+
+Görev kartındaki **"Göster"** butonu (Faz 2'den açık kalan madde) burada bedavaya
+geliyor: kameranın pan edeceği bir hedef artık var.
+
+### 12.5 Kontrollü ilerleme — üç yapı kurup kaynağı bitirmenin önü
+
+Üç katman, en yumuşaktan en serte:
+
+1. **`guide.limit` (asıl çözüm).** Adım açıkken, guide'ın işaret ettiği yapı
+   türünden `limit` adetten fazlası **hikâye modunda** kurulamaz (tamamlanan +
+   inşa hâlindeki sayılır). Reddi `RtsApp`'in palet/yerleştirme giriş noktası
+   verir, `StructureConstructionService` değil — kural simülasyona girmez, AI
+   etkilenmez, serbest maç etkilenmez. Refüze mesajı paletin mevcut aksiyon
+   satırında: "Şimdilik bir Oduncu Kampı yeterli."
+   Yeni saf modül: `tutorial/missionBuildPolicy.ts` (adım + sahip olunan sayı →
+   izin/ret + gerekçe), `test:engine` kapsamında.
+   **Sınırlama yalnız işaret edilen türe uygulanır.** Oyuncunun kendi isteğiyle
+   fazladan ev kurması turu bozmuyor; turu bozan, istenen yapının tekrarıydı.
+2. **Hikâye preset'i (§11.1, artık zorunlu).** `gameplay_proof` açılışı
+   food 500 / wood 500 veriyor, Merkez kapasitesi de tam olarak 500/500 — yani
+   **maç deposu dolu başlıyor**, tarlanın çıktısı ilk dakikalarda hiçbir yere
+   gitmiyor ve 3. adımın ("Depo kapasite ekler") sebebi görünmüyor.
+   `presets/story_tour.json`: food 200 / wood 400 / stone 0 / gold 120. Merkez
+   deposunda görünür boşluk, Pazar'da harcanacak altın, 5. adım için gerçek bir
+   sebep. `test:engine`'deki açılış-odun değişmezinin 500 sabiti bu preset'e göre
+   yeniden okunur.
+3. **Tek seferlik kurtarma sevkiyatı (anti-softlock).** Zincir canlıyken, bağlı
+   bir odun üreticisi yokken ve odun aktif adımın yapısını karşılamıyorken, maç
+   başına **bir kez** yetecek kadar odun verilir ve bildirimde söylenir
+   ("Kral'dan acil sevkiyat"). Yönetmenin "hiçbir şeyi değiştirmez"
+   sözleşmesinden bilinçli tek sapma; alternatifi, tanımı gereği kendini
+   kurtaramayacak oyuncuyu kilitli bir maçta bırakmak.
+
+### 12.6 Doğrulama ve test yükümlülükleri
+
+- `validateMissionScript`: `guide` (kapalı `action` birleşimi, `buildingId`
+  referans kontrolü, `limit ≥ 1`, `site` kapalı küme) + `market-bought` dalı.
+- `test:engine`:
+  - Yeni zincir baştan sona tamamlanabilir ve her adım tek tek ulaşılabilir
+    (mevcut testin güncellenmesi).
+  - **Tutarlılık:** `structure-built` / `producer-linked` hedefi olan her adımın
+    guide'ı aynı yapıyı işaret eder — "Tarla kur" derken Depo butonunu nabızlayan
+    bir kart imkânsız olsun.
+  - **Metin sınırları:** `title ≤ 40`, `why ≤ 110` karakter.
+  - **Açılış bütçesi:** odun akmadan önce istenen yapıların toplam odun maliyeti,
+    `story_tour` açılış stoğunun yarısını geçemez (mevcut değişmezin yeni
+    preset'e göre okunması).
+  - `missionBuildPolicy` ve `missionSiteSolver` saf birim testleri.
+
+### 12.7 Fazlar
+
+**Faz A — Zincir ve metin (tek başına oynanabilir)** — **tamamlandı 2026-07-28**
+
+- [x] `market-bought` hedefi: `missionScript.ts`, `missionPredicates.ts`,
+      `RtsApp.trade()` sayacı, `validateMissionGoal` dalı. Miktar alanı `amount`
+      değil **`count`** oldu: kapalı birleşimin geri kalanı zaten bu şekli
+      kullanıyor ve doğrulayıcının ortak "tam sayı ≥ 1" dalı bedavaya geliyor.
+- [x] `frontier_road.json` yeniden yazımı (14 adım, kısa `why`, yeni intro)
+- [x] ~~`presets/story_tour.json`~~ — gerek kalmadı: `gameplay_proof`
+      food 200 / wood 400 / stone 120 / gold 120 olarak güncellendi (kullanıcı,
+      2026-07-28), yani Merkez deposunda görünür boşluk ve Pazar'da harcanacak
+      altın zaten var.
+- [x] Görev kartında `why`'ın varsayılan açık gelmesi (metin kısaldı, katlama
+      bir tık fazlalık)
+- [x] `test:engine`: ulaşılabilirlik, metin sınırları (`title ≤ 40`,
+      `why ≤ 110`), açılış bütçesi (artık `producer-linked` adımlarını da
+      fiyatlıyor ve tavanı preset'lerden okuyor)
+
+Faz A'dan çıkan **açık soru**: varsayılan preset hâlâ `core_match`
+(altın 0, yiyecek tam kapasitede). Hikâye turu `?preset=gameplay_proof` ile
+açılmazsa 5. adım oyuncuyu önce yiyecek satmaya zorlar — ders olarak doğru ama
+sert. Hikâye modu preset seçilmemişken `gameplay_proof`'a düşsün mü?
+
+**Faz B — Buton yönlendirmesi**
+
+- [ ] `MissionGuide` şeması + doğrulayıcı + tutarlılık testi
+- [ ] `RtsBuildPalette.setMissionHighlight` (+ sekme açma, `style.css` nabzı,
+      `prefers-reduced-motion`)
+- [ ] `RtsSelectionPanel.setMissionHighlight` + dünyadaki yapının vurgulanması
+- [ ] `RtsApp` bağlantısı: aktif adımın guide'ını her poll'de sunuma iletmek
+
+**Faz C — Zemin işareti ve "Göster"**
+
+- [ ] `missionSiteSolver.ts` (saf, `validate()` geri çağrısıyla)
+- [ ] `missionHintView.ts` (halka + ok, nabız/salınım)
+- [ ] Görev kartına "Göster" butonu → kamerayı işarete pan
+
+**Faz D — Kontrol ve kilitlenmezlik**
+
+- [ ] `missionBuildPolicy.ts` + `RtsApp` yerleştirme girişinde ret + mesaj
+- [ ] Tek seferlik kurtarma sevkiyatı + bildirimi
+- [ ] Turun baştan sona tek oturumda oynandığının kullanıcı tarafından
+      doğrulanması (görsel kabul kullanıcının çağrısı — CLAUDE.md)
+
+Her faz sonunda: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`.
+
+### 12.8 Açık kalan tek soru
+
+Kullanıcının numaralandırmasında Merkez yükseltmesi "(dört)" olarak geçiyor;
+burada Pazar'ın kurulumu ile alım ayrı adımlar olduğu için 6. sıraya düştü.
+"Pazar kur" adımı silinip alım adımı tek başına bırakılırsa numara dörde iner —
+zincir bunu tek satır değişiklikle kaldırır.
+
+---
+
+## 13. İlgili Dokümanlar
 
 - `GDD/01_CORE_GAMEPLAY_LOOP.md` — öğretilecek döngünün kaynağı
 - `GDD/05_TERRITORY_LOGISTICS_AND_ROADS.md` — yol/depo/kontrol alanı kuralları

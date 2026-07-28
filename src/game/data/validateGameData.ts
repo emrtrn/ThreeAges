@@ -1686,6 +1686,15 @@ function validateMissionGoal(
     return { kind, count };
   }
 
+  if (kind === "market-bought") {
+    // Required here, unlike on `producer-linked`: "buy 100 of something" is not
+    // an objective a player can act on. Still not reference-checked, for the
+    // reason given above — `balance/resources.json` holds deposit profiles, not
+    // the tradable resource list, so wood would fail a check it should pass.
+    const resourceId = requireString(obj, "resourceId", where);
+    return { kind, resourceId, count };
+  }
+
   if (kind === "unit-count") {
     const role = requireString(obj, "role", where);
     if (!UNIT_ROLES.includes(role as UnitRoleId)) {
