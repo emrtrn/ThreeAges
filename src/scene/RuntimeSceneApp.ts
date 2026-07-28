@@ -2294,15 +2294,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Compiles the visible scene's material programs while the loading overlay is
-   * still present, moving first-use shader work out of active gameplay.  The
-   * renderer's compile pass is a best-effort preload: browser/driver failures
-   * must not turn an otherwise valid level boot into a black screen.
+   * Primes the visible scene's material programs while the loading overlay is
+   * still present, moving program setup out of active gameplay. The renderer's
+   * compile pass is a best-effort preload: browser/driver failures must not turn
+   * an otherwise valid level boot into a black screen.
+   *
+   * Do not use Three.js `compileAsync()` here. In r184 its deferred readiness
+   * poll can read `currentProgram` before it exists for a material and throw from
+   * its own timer, outside this method's Promise/catch chain. That leaves the
+   * loading UI permanently on "Warming shaders". `compile()` prepares the same
+   * material programs synchronously and leaves any driver-side parallel work to
+   * the already-running normal render loop, without that unsafe deferred poll.
    */
-  private async warmRuntimeShaders(): Promise<void> {
+  private warmRuntimeShaders(): void {
     this.setLoadingStatus("Warming shaders");
     try {
-      await this.renderer.compileAsync(this.scene, this.camera);
+      this.renderer.compile(this.scene, this.camera);
     } catch (error) {
       console.warn("[runtime] shader warm-up failed; continuing without preload:", describeLoadError(error));
     }

@@ -229,6 +229,7 @@ import { RtsAttackWatch } from "../src/game/rts/ui/rtsAttackWatch";
 import {
   describeSelection,
   RESCUE_ACTION,
+  type CenterDetailView,
   type MarketDetailView,
   type MilitaryDetailView,
   type SelectedUnitView,
@@ -20734,7 +20735,7 @@ check("structurePadsToRectDeforms retains a building's sampled world elevation",
     centerZ: -3,
     halfWidth: 3.5,
     halfDepth: 2.5,
-    falloff: 0.5,
+    falloff: 1,
     targetHeight: 6,
   }]);
 });
@@ -28497,6 +28498,37 @@ check("RTS a restored logistics link clears its cut warning at once and reads as
   assert.equal(notifications.active().find((entry) => entry.kind === "logistics-cut")?.raises, 2, "the re-cut counts as a repeat");
 });
 
+check("RTS command answers keep one line per family and never mute a second press", () => {
+  const notifications = new RtsNotificationCenter();
+
+  // These used to live on the build palette's message line, which put "Muhafız
+  // siparişi iptal edildi" under a panel about placing buildings. Here they are
+  // keyed by command family, so a burst of orders in one family replaces its own
+  // line rather than evicting the feed's other four notices.
+  assert.equal(notifications.post({ kind: "command", subject: "production", text: "Muhafız kuyruğa alındı (1/5)." }), "posted");
+  assert.equal(notifications.post({ kind: "command", subject: "production", text: "Muhafız kuyruğa alındı (2/5)." }), "refreshed");
+  assert.equal(notifications.active().length, 1, "five Üret presses are one line, not five");
+  assert.equal(notifications.active()[0]?.text, "Muhafız kuyruğa alındı (2/5).", "and the line is the latest answer");
+  assert.equal(notifications.active()[0]?.severity, "info");
+
+  // A refusal is its own line and its own colour, so "kuyruk dolu" cannot be
+  // mistaken for a confirmation at a glance.
+  assert.equal(notifications.post({ kind: "command-refused", subject: "production", text: "Kuyruk dolu (5/5)." }), "posted");
+  const refused = notifications.active().find((entry) => entry.kind === "command-refused") ?? assert.fail("refusal missing");
+  assert.equal(refused.severity, "warning");
+
+  // Another family is a different problem and keeps its own line.
+  assert.equal(notifications.post({ kind: "command-refused", subject: "trade", text: "Altın yetersiz." }), "posted");
+  assert.equal(notifications.active().length, 3);
+
+  // No cooldown: an answer the player asked for twice must arrive twice, even
+  // across an expiry — a muted second press would read as a dead button.
+  notifications.advance(10);
+  assert.equal(notifications.active().length, 0, "command answers are short-lived");
+  assert.equal(notifications.post({ kind: "command", subject: "production", text: "Muhafız kuyruğa alındı (1/5)." }), "posted");
+  assert.equal(notifications.active()[0]?.raises, 2, "and the repeat is counted, not swallowed");
+});
+
 check("RTS attack watch reports health losses, not placements or rebuilds (plan §51)", () => {
   const watch = new RtsAttackWatch();
 
@@ -35041,6 +35073,155 @@ check("RTS Barracks queues paid Guards by age capacity and trains them at a safe
   units.clear();
 });
 
+check("a cancelled unit order returns its exact reservation, newest order first", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const barracksStats = buildings.barracks ?? assert.fail("barracks definition missing");
+  const structures = new PlacedStructureSystem();
+  const barracks = structures.place("player", { ...barracksStats, constructionSeconds: 0.1 }, 0, 0);
+  assert.equal(structures.advanceConstruction(barracks, 0.1), true);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const units = new UnitSystem();
+  const kingdoms = new KingdomRegistry(
+    ["player", "enemy"], units, structures,
+    { food: 5000, wood: 5000, stone: 5000, gold: 5000 }, 80,
+  );
+  const wallet = kingdoms.get("player").wallet;
+  const population = kingdoms.get("player").population;
+  barracks.level = 2;
+  let connected = true;
+  // Long training on purpose: the point of a newest-first cancel is what happens
+  // to the order already under way, which a unit that finishes inside one tick
+  // could not show.
+  const balance: UnitBalance = {
+    ...RTS_TEST_UNIT_BALANCE,
+    guard_placeholder: { ...RTS_TEST_UNIT_STATS, trainingSeconds: 5 },
+    siege_placeholder: { ...RTS_TEST_SIEGE_STATS, trainingSeconds: 5 },
+  };
+  const production = new BarracksProductionSystem(
+    units, structures, navigation, balance, kingdoms,
+    undefined, () => 5, () => connected, "guard_placeholder", () => "town",
+  );
+  const opening = wallet.snapshot();
+
+  // A cancel is exact rather than penalised: queueing only *reserves*, and the
+  // reservation is committed when the unit walks out.
+  assert.equal(production.queueUnit("player", "guard_placeholder"), "queued");
+  assert.ok(wallet.amount("food") < opening["food"]!, "the order held its food");
+  assert.deepEqual(
+    production.cancelLatestUnit(barracks),
+    { unitId: "guard_placeholder", label: RTS_TEST_UNIT_STATS.label },
+    "the cancel names what it took, so the message need not re-read a changed queue",
+  );
+  assert.deepEqual(wallet.snapshot(), opening, "cancelling returns precisely what was reserved");
+  assert.equal(population.snapshot().reserved, 0, "and releases the population slot with it");
+  assert.equal(production.queuedCount("player"), 0);
+  assert.equal(
+    production.cancelLatestUnit(barracks),
+    null,
+    "cancelling an empty queue is a stated no-op, not a silent refund",
+  );
+
+  // Newest-first: the order in progress survives while anything sits behind it,
+  // so undoing an overshoot never costs elapsed training.
+  assert.equal(production.queueUnit("player", "guard_placeholder"), "queued");
+  assert.equal(production.queueUnit("player", "siege_placeholder"), "queued");
+  assert.equal(production.queueUnit("player", "guard_placeholder"), "queued");
+  production.update(1);
+  const training = production.queueSnapshot(barracks);
+  assert.equal(training.queued, 3);
+  assert.deepEqual(training.pendingLabels, [RTS_TEST_SIEGE_STATS.label, RTS_TEST_UNIT_STATS.label]);
+  assert.equal(training.trainingRemainingSeconds, 4, "the first order is under way but unfinished");
+  assert.equal(training.trainingDurationSeconds, 5, "and the bar can read a fraction from its own duration");
+  assert.equal(production.cancelLatestUnit(barracks)?.unitId, "guard_placeholder", "the newest order goes first");
+  const afterCancel = production.queueSnapshot(barracks);
+  assert.equal(afterCancel.trainingLabel, RTS_TEST_UNIT_STATS.label, "the Guard in progress kept its place");
+  assert.equal(
+    afterCancel.trainingRemainingSeconds,
+    training.trainingRemainingSeconds,
+    "and kept its progress — the cancel took the queued duplicate instead",
+  );
+  assert.deepEqual(afterCancel.pendingLabels, [RTS_TEST_SIEGE_STATS.label]);
+
+  // Repeated clicks walk the queue back; each one is scoped to the building the
+  // panel is showing, never to a Barracks the player cannot see.
+  const range = structures.place("player", { ...barracksStats, constructionSeconds: 0.1 }, 30, 0);
+  structures.advanceConstruction(range, 0.1);
+  navigation.setBlockers(structures.navigationBlockers());
+  range.level = 2;
+  assert.equal(production.queueUnit("player", "guard_placeholder"), "queued", "the emptier Barracks takes the next order");
+  assert.equal(production.queueSnapshot(range).queued, 1);
+  assert.equal(production.cancelLatestUnit(barracks)?.unitId, "siege_placeholder");
+  assert.equal(production.cancelLatestUnit(barracks)?.unitId, "guard_placeholder", "down to the one in progress");
+  assert.equal(production.queueSnapshot(barracks).queued, 0);
+  assert.equal(production.queueSnapshot(range).queued, 1, "the other Barracks' queue is untouched");
+  assert.equal(production.cancelLatestUnit(barracks), null);
+
+  // The two states that stop training do not stop a refund: this is exactly when
+  // the player wants the reservation back.
+  connected = false;
+  assert.equal(production.queueUnit("player", "guard_placeholder"), "disconnected");
+  assert.ok(production.cancelLatestUnit(range));
+  assert.deepEqual(wallet.snapshot(), opening, "every order placed in this test has been refunded in full");
+  assert.equal(population.snapshot().reserved, 0);
+  production.reset();
+  structures.clear();
+  units.clear();
+});
+
+check("a cancelled worker order returns its reservation and empties on demand", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
+  const structures = new PlacedStructureSystem();
+  const units = new UnitSystem();
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 0);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(centers.navigationBlockers());
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 1000 }, 40);
+  const wallet = kingdoms.get("player").wallet;
+  const population = kingdoms.get("player").population;
+  let upgrading = false;
+  const production = new WorkerProductionSystem(
+    units, centers, navigation, { ...worker, trainingSeconds: 5 }, kingdoms,
+    () => upgrading, undefined, () => 5,
+  );
+  const opening = wallet.snapshot();
+
+  assert.equal(production.cancelWorker("player"), "not-queued", "an idle centre cancels nothing");
+  for (let index = 0; index < 3; index += 1) assert.equal(production.queueWorker("player"), "queued");
+  production.update(1);
+  const inFlight = production.queueSnapshot("player");
+  assert.equal(inFlight.trainingRemainingSeconds, 4);
+  assert.equal(inFlight.trainingDurationSeconds, 5, "the bar reads its fraction from the order's own quote");
+  assert.equal(production.cancelWorker("player"), "cancelled");
+  assert.equal(production.queuedCount("player"), 2);
+  assert.equal(
+    production.queueSnapshot("player").trainingRemainingSeconds,
+    inFlight.trainingRemainingSeconds,
+    "the worker in progress keeps its progress; the newest order is the one dropped",
+  );
+
+  // A paused queue is not a forfeited one: the Town transition stops training but
+  // must not stop the player reclaiming what the queue holds.
+  upgrading = true;
+  assert.equal(production.queueWorker("player"), "center-upgrading");
+  assert.equal(production.cancelWorker("player"), "cancelled");
+  assert.equal(production.cancelWorker("player"), "cancelled", "repeated clicks walk the queue back to empty");
+  assert.equal(production.queuedCount("player"), 0);
+  assert.deepEqual(wallet.snapshot(), opening, "every queued worker's food came back");
+  assert.equal(population.snapshot().reserved, 0, "and so did every population slot");
+  assert.equal(production.cancelWorker("player"), "not-queued");
+  assert.equal(production.queueSnapshot("player").trainingDurationSeconds, null, "an idle centre has no bar to draw");
+  centers.clear();
+  structures.clear();
+  units.clear();
+});
+
 check("Faz 7 separates Archers into the Range and keeps Rams behind Barracks II", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -38390,7 +38571,9 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   const depot = structure({
     kind: "depot", status: "linked", componentId: 3, linkedProducers: 2, occupied: true,
   }, "Depo");
-  assert.match(depot.lines.join(" | "), /Ağ: bileşen #3/);
+  // The panel names the network state in the player's terms; the raw component
+  // id it used to print was a debugging leak, not an answer to "is this working".
+  assert.match(depot.lines.join(" | "), /Yol: Merkez ağına bağlı/);
   assert.match(depot.lines.join(" | "), /Teslim eden yapı: 2/);
   assert.match(depot.lines.join(" | "), /işgali altında/, "an occupied depot says why nothing arrives");
 
@@ -38421,14 +38604,23 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
     roster,
     queue: {
       structureId: 1, queued: 3, capacity: 5,
-      trainingLabel: "Muhafız", trainingRemainingSeconds: 4.2,
+      trainingLabel: "Muhafız", trainingRemainingSeconds: 4.2, trainingDurationSeconds: 8,
       pendingLabels: ["Okçu", "Okçu"],
     },
   }, "Kışla");
   assert.match(barracks.lines.join(" | "), /Kuyruk: 3\/5/);
-  assert.match(barracks.lines.join(" | "), /Üretiliyor: Muhafız — 5 sn/);
-  assert.match(barracks.lines.join(" | "), /Sırada: Okçu, Okçu/);
   assert.match(barracks.lines.join(" | "), /Toplanma noktası: belirlendi/);
+  // What is training and how long it has left is the bar's job now, so the body
+  // must not say it a second time directly above the bar — and the pending
+  // roll-call is gone with it: "Kuyruk: 3/5" already says how much is waiting.
+  assert.ok(!barracks.lines.join(" | ").includes("Üretiliyor"));
+  assert.ok(!barracks.lines.join(" | ").includes("Sırada"));
+  // The queued labels still reach the panel, but only so the ✕ can name what it
+  // would take — the newest order, not the one the bar is showing.
+  assert.match(barracks.progress?.cancel?.label ?? "", /Son siparişi iptal et: Okçu/);
+  assert.equal(barracks.progress?.label, "Muhafız üretiliyor");
+  assert.equal(barracks.progress?.remainingSeconds, 4.2);
+  assert.ok(Math.abs((barracks.progress?.value ?? 0) - 0.475) < 1e-9, "the fill is elapsed over the order's own duration");
   // A healthy Barracks does not carry lines saying nothing is wrong with it.
   assert.ok(!barracks.lines.join(" | ").includes("Kontrol Dışı"));
   assert.ok(!barracks.lines.join(" | ").includes("yükseltmesi sürüyor"));
@@ -38441,13 +38633,15 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
     roster,
     queue: {
       structureId: 1, queued: 0, capacity: 5,
-      trainingLabel: null, trainingRemainingSeconds: null, pendingLabels: [],
+      trainingLabel: null, trainingRemainingSeconds: null, trainingDurationSeconds: null,
+      pendingLabels: [],
     },
   }, "Kışla");
   assert.match(severed.lines.join(" | "), /Üretim yok/);
   assert.match(severed.lines.join(" | "), /Kontrol Dışı/);
   assert.match(severed.lines.join(" | "), /Seviye yükseltmesi sürüyor/);
   assert.match(severed.tooltip ?? "", /alanı geri alın/);
+  assert.equal(severed.progress ?? null, null, "an idle Barracks shows no bar, so there is nothing to cancel");
 });
 
 check("Faz 9 §51: a selection's buttons state their own gate, in the system's order", () => {
@@ -38467,7 +38661,8 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
           ],
           queue: {
             structureId: 1, queued: 0, capacity: 5,
-            trainingLabel: null, trainingRemainingSeconds: null, pendingLabels: [],
+            trainingLabel: null, trainingRemainingSeconds: null, trainingDurationSeconds: null,
+            pendingLabels: [],
           },
           ...detail,
         },
@@ -38501,10 +38696,55 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   const full = militaryPanel({
     queue: {
       structureId: 1, queued: 5, capacity: 5,
-      trainingLabel: "Muhafız", trainingRemainingSeconds: 2, pendingLabels: [],
+      trainingLabel: "Muhafız", trainingRemainingSeconds: 2, trainingDurationSeconds: 8,
+      pendingLabels: ["Muhafız", "Muhafız", "Muhafız", "Okçu"],
     },
   });
   assert.match(action(full, "train:guard_placeholder").reason ?? "", /Kuyruk dolu \(5\/5\)/);
+
+  // The cancel is not a card in the deck — it rides on the training bar, so the
+  // deck keeps exactly the verbs it had before: produce, produce, rally.
+  assert.deepEqual(
+    healthy.actions.map((candidate) => candidate.id),
+    ["train:guard_placeholder", "train:siege_placeholder", "rally", "demolish"],
+  );
+  // It names the order it would take, which is the newest queued one rather than
+  // the one the bar is showing.
+  const cancel = full.progress?.cancel ?? assert.fail("no cancel on the training bar");
+  assert.equal(cancel.id, "cancel-train");
+  assert.match(cancel.label, /Son siparişi iptal et: Okçu/);
+  assert.equal(cancel.enabled, true, "a paid order is always the player's to take back");
+  assert.equal(cancel.cost, null, "a refund quotes no price on a 15px button");
+  assert.equal(healthy.progress ?? null, null, "an idle Barracks has no bar, so no cancel");
+
+  // Cancelling must survive the two states that stop training: that is when the
+  // player most wants the reservation back.
+  const severedQueue = militaryPanel({
+    connected: false,
+    upgrading: true,
+    queue: {
+      structureId: 1, queued: 2, capacity: 5,
+      trainingLabel: "Muhafız", trainingRemainingSeconds: 2, trainingDurationSeconds: 8,
+      pendingLabels: ["Muhafız"],
+    },
+  });
+  assert.equal(severedQueue.progress?.cancel?.enabled, true);
+  assert.equal(
+    action(severedQueue, "train:guard_placeholder").enabled,
+    false,
+    "training is still refused there — only the cancel is unconditional",
+  );
+
+  // With one order queued the bar's label and the cancel's target are the same
+  // unit, and the button must still name it rather than saying "sipariş".
+  const single = militaryPanel({
+    queue: {
+      structureId: 1, queued: 1, capacity: 5,
+      trainingLabel: "Muhafız", trainingRemainingSeconds: 2, trainingDurationSeconds: 8,
+      pendingLabels: [],
+    },
+  });
+  assert.match(single.progress?.cancel?.label ?? "", /Son siparişi iptal et: Muhafız/);
 
   // The centre: its single progression verb (a level-up, or the Town transition
   // at Settlement Lv3) plus worker training, under the centre-led rules.
@@ -38518,6 +38758,7 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
     upgradeKind?: "level" | "town" | null;
     nextAction?: NextAction;
     stock?: Readonly<Record<string, number>>;
+    queue?: CenterDetailView["queue"];
   } = {}): SelectionPanelContent => {
     const age = over.age ?? "settlement";
     const level = over.level ?? 1;
@@ -38546,7 +38787,9 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
         id: 0, label: "Merkez", level, health: 300, maxHealth: 300,
         detail: {
           kind: "center",
-          queue: { queued: 1, capacity: 5, trainingRemainingSeconds: 12.3 },
+          queue: over.queue ?? {
+            queued: 1, capacity: 5, trainingRemainingSeconds: 12.3, trainingDurationSeconds: 20,
+          },
           controlRadius: 28,
           workerStats: RTS_TEST_WORKER_STATS,
           progression,
@@ -38558,7 +38801,9 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   // Settlement Lv1: the next action is the level-up, and worker training is open.
   const lv1 = centerPanel({});
   assert.match(lv1.lines.join(" | "), /Kuyruk: 1\/5/);
-  assert.match(lv1.lines.join(" | "), /Üretiliyor: Test İşçisi — 13 sn/);
+  // The training line moved to the bar (asserted below); the body says it again
+  // only when an upgrade has taken the bar away from the queue.
+  assert.ok(!lv1.lines.join(" | ").includes("Üretiliyor"));
   assert.match(lv1.lines.join(" | "), /Kademe: Yerleşim Lv1/);
   assert.equal(action(lv1, "train-worker").enabled, true);
   const levelBtn = action(lv1, "center-level-up");
@@ -38599,6 +38844,26 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   assert.match(action(townUpgrading, "age-up").reason ?? "", /sürüyor/);
   const levelUpgrading = centerPanel({ upgrading: true, upgradeKind: "level" });
   assert.equal(action(levelUpgrading, "train-worker").enabled, true, "a level-up leaves worker training open");
+
+  // The centre's cancel rides on its worker bar, exactly as the Barracks' does,
+  // and the deck keeps only the two verbs it had.
+  assert.deepEqual(lv1.actions.map((candidate) => candidate.id), ["train-worker", "center-level-up"]);
+  assert.equal(lv1.progress?.cancel?.id, "cancel-worker");
+  assert.match(lv1.progress?.cancel?.label ?? "", /Son siparişi iptal et: Test İşçisi/);
+  assert.equal(lv1.progress?.label, "Test İşçisi üretiliyor");
+  assert.ok(Math.abs((lv1.progress?.value ?? 0) - 0.385) < 1e-9);
+  const idleCenter = centerPanel({
+    queue: { queued: 0, capacity: 5, trainingRemainingSeconds: null, trainingDurationSeconds: null },
+  });
+  assert.equal(idleCenter.progress ?? null, null, "a centre training nothing shows no bar and no ✕");
+  assert.match(idleCenter.lines.join(" | "), /Üretim yok/);
+
+  // One bar, two candidate jobs: an upgrade in flight outranks the worker queue,
+  // so the queue's state falls back to prose for as long as it runs.
+  assert.match(townUpgrading.progress?.label ?? "", /Kasaba Çağı/);
+  assert.equal(townUpgrading.progress?.cancel ?? null, null, "a kingdom upgrade already spent its cost");
+  assert.match(townUpgrading.lines.join(" | "), /Üretiliyor: Test İşçisi — 13 sn/);
+  assert.match(levelUpgrading.progress?.label ?? "", /yükseltmesi/);
 
   // Town Lv3 is the top of the progression: the action is a disabled note.
   const maxed = centerPanel({ age: "town", level: 3, nextAction: null });
@@ -39075,8 +39340,13 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   const healthy = marketPanel();
   // Both rates and the index on one row: the decision the market exists to
   // create ("sell now or wait?") cannot be made from a single price.
-  assert.match(healthy.lines.join(" | "), /Odun: al 138 \/ sat 102 altın · endeks ×1\.20/);
-  assert.match(healthy.lines.join(" | "), /Taş: al 35 \/ sat 25 altın · endeks ×0\.30 \(taban\)/);
+  // Both rates and the index now travel with the card that acts on them rather
+  // than in a prose row above it, but the pairing itself is the invariant: a
+  // price without its index cannot answer "sell now or wait?".
+  assert.match(action(healthy, "trade-buy:wood").hint ?? "", /Odun endeksi ×1\.20/);
+  assert.match(action(healthy, "trade-buy:wood").hint ?? "", /Alım fiyatı: 138 Altın/);
+  assert.match(action(healthy, "trade-sell:wood").hint ?? "", /Satım fiyatı: 102 Altın/);
+  assert.match(action(healthy, "trade-sell:stone").hint ?? "", /Taş endeksi ×0\.30/);
   assert.match(healthy.lines.join(" | "), /Lot: 100 birim · komisyon %15/);
 
   // Two buttons per tradable resource, signed against the player's gold so the

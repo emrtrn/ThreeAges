@@ -37,6 +37,7 @@ export class RtsSelectionPanel {
   private readonly progressLabel = document.createElement("span");
   private readonly progressTime = document.createElement("span");
   private readonly progressFill = document.createElement("div");
+  private readonly progressCancel = document.createElement("button");
   private readonly actionRow = document.createElement("div");
   private readonly actionTray = document.createElement("div");
   private readonly actionButtons = new Map<string, HTMLButtonElement>();
@@ -77,23 +78,41 @@ export class RtsSelectionPanel {
     this.actionTray.className = "rts-selection-action-tray ui-interactive";
     this.actionTray.hidden = true;
     this.hints.className = "rts-selection-hints";
-    // A labelled fill bar for a running timed job (a level-up). Assembled once
-    // and shown/hidden per frame; only the label, seconds and fill width move.
+    // A labelled fill bar for a running timed job (a level-up, or a training
+    // queue). Assembled once and shown/hidden per frame; only the label, seconds
+    // and fill width move.
+    //
+    // It is a row of the panel grid rather than a block stacked under the body:
+    // the panel is a fixed 165px, the body row is ~49px of it, and a bar queued
+    // behind three lines of prose in an `overflow: hidden` column was simply
+    // never drawn. The panel's last row is free in every layout that can carry a
+    // bar, so the bar sits there, full width, and no longer competes with text.
     this.progress.className = "rts-selection-progress";
-    const head = document.createElement("div");
-    head.className = "rts-selection-progress-head";
     this.progressLabel.className = "rts-selection-progress-label";
     this.progressTime.className = "rts-selection-progress-time";
-    head.append(this.progressLabel, this.progressTime);
+    // The bar's own undo. Built once and shown per frame like the bar it belongs
+    // to, and it carries no visible text: the glyph is the whole button, and the
+    // view's label is its accessible name and tooltip.
+    this.progressCancel.type = "button";
+    // `ui-interactive` because the panel root deliberately is not: the overlay is
+    // click-through so the map stays reachable, and only widgets that must take a
+    // pointer opt in — the same rule the action buttons and body follow.
+    this.progressCancel.className = "rts-selection-progress-cancel ui-interactive";
+    this.progressCancel.textContent = "✕";
+    this.progressCancel.hidden = true;
+    this.progressCancel.addEventListener("click", () => {
+      const id = this.progressCancel.dataset.rtsAction;
+      if (id) this.onAction(id);
+    });
     const track = document.createElement("div");
     track.className = "rts-selection-progress-track";
     this.progressFill.className = "rts-selection-progress-fill";
     track.appendChild(this.progressFill);
-    this.progress.append(head, track);
+    this.progress.append(this.progressLabel, track, this.progressTime, this.progressCancel);
     const details = document.createElement("div");
     details.className = "rts-selection-details";
-    details.append(this.body, this.progress);
-    this.root.append(this.portrait, this.header, details, this.actionRow, this.hints);
+    details.append(this.body);
+    this.root.append(this.portrait, this.header, details, this.actionRow, this.progress, this.hints);
     const overlay = document.getElementById("ui-overlay") ?? document.body;
     overlay.append(this.root, this.actionTray);
     this.setSelection({ kind: "none" });
@@ -136,7 +155,10 @@ export class RtsSelectionPanel {
     this.title.textContent = content.title;
     this.summary.textContent = content.summary;
     this.hints.textContent = content.hint;
-    this.hints.hidden = content.hint.length === 0;
+    // The hint row and the progress bar share the panel's last row. Nothing that
+    // runs a timed job also carries a hint today, but the bar wins if that ever
+    // changes: it is live state with a button on it, and the hint is advice.
+    this.hints.hidden = content.hint.length === 0 || (content.progress ?? null) !== null;
     this.renderSlots(content.slots ?? []);
     const portrait = content.portrait ?? null;
     this.portraitImage.hidden = portrait === null;
@@ -197,6 +219,14 @@ export class RtsSelectionPanel {
   private renderProgress(content: SelectionPanelContent): void {
     const progress = content.progress ?? null;
     this.progress.hidden = progress === null;
+    const cancel = progress?.cancel ?? null;
+    this.progressCancel.hidden = cancel === null;
+    if (cancel) {
+      this.progressCancel.dataset.rtsAction = cancel.id;
+      this.progressCancel.disabled = !cancel.enabled;
+      this.progressCancel.setAttribute("aria-label", cancel.label);
+      this.progressCancel.title = cancel.reason ?? cancel.hint ?? cancel.label;
+    } else delete this.progressCancel.dataset.rtsAction;
     if (!progress) return;
     this.progressLabel.textContent = progress.label;
     this.progressTime.textContent = `${Math.ceil(progress.remainingSeconds)} sn`;

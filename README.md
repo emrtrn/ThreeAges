@@ -46,6 +46,30 @@ npm run build:verify # tsc + build + engine tests + strict dist scan
 After editing TypeScript, run `npx tsc --noEmit` — the dev server does not
 type-check.
 
+## Browser performance capture
+
+`npm run perf:browser` runs a repeatable Chromium capture against the game. It
+writes a readable JSON summary and a raw Chrome DevTools Performance trace under
+`test-results/browser-perf/`. The default is an *idle, warmed-runtime* baseline;
+it does not replace a gameplay stress scenario.
+
+```bash
+npm run perf:browser
+# Measure an RTS match instead (the runner starts the match automatically).
+$env:PERF_URL = "http://127.0.0.1:4174/?rts&debug"; npm run perf:browser
+# Measure a production preview or another already-running target.
+$env:PERF_URL = "http://127.0.0.1:4173/?debug"; npm run perf:browser
+# Optional CI gate: fail only when P95 exceeds this frame-time budget.
+$env:PERF_MAX_P95_MS = "33.3"; npm run perf:browser
+# For a hardware/GPU investigation, show Chromium instead of using headless mode.
+$env:PERF_HEADLESS = "false"; npm run perf:browser
+```
+
+Open the reported `*.trace.json` file in Chrome DevTools â†’ Performance â†’ Load
+profile. Keep the browser, viewport and scenario fixed when comparing runs.
+Headless captures are repeatable CI evidence, but only same-machine, visible
+browser captures are suitable for player-facing GPU performance conclusions.
+
 ## Product envelope
 
 - **Primary target:** desktop browser; keyboard + mouse (pointer-look) is the

@@ -251,6 +251,17 @@ export interface SelectionProgress {
   readonly value: number;
   /** Seconds left, shown next to the label. */
   readonly remainingSeconds: number;
+  /**
+   * An undo for the job the bar is showing, drawn as a compact ✕ at the end of
+   * the bar's own row rather than as another card in the command deck.
+   *
+   * It rides on the progress bar because that is the only part of the panel that
+   * *is* the queue: the deck answers "what can I build", and a cancel card there
+   * competed for attention with the produce cards it was meant to correct while
+   * pushing the deck wider. Absent when the job cannot be taken back (a kingdom
+   * upgrade already spent its cost).
+   */
+  readonly cancel?: SelectionAction;
 }
 
 /** What the panel shows. `lines` is the panel's body, one fact per line. */
@@ -300,6 +311,19 @@ export const RESCUE_ACTION = "rescue";
 export const CENTER_LEVEL_UP_ACTION = "center-level-up";
 export const DEMOLISH_ACTION = "demolish";
 export const CANCEL_CONSTRUCTION_ACTION = "cancel-construction";
+/**
+ * Take the newest order back off a queue — the counterpart to
+ * {@link TRAIN_ACTION_PREFIX} and {@link TRAIN_WORKER_ACTION}.
+ *
+ * One verb per queue rather than one per unit type, and always the *newest*
+ * order: the mistake it exists to undo is an overshoot ("three Okçu, I wanted
+ * two"), and the order a player regrets is the one they just added. Repeating
+ * the click walks the queue back as far as they like, which is why there is no
+ * separate "empty the queue" verb — a bulk button would only add a destructive
+ * shortcut, and a confirm step, for something these clicks already do.
+ */
+export const CANCEL_TRAIN_ACTION = "cancel-train";
+export const CANCEL_WORKER_ACTION = "cancel-worker";
 export const TRADE_BUY_ACTION_PREFIX = "trade-buy:";
 export const TRADE_SELL_ACTION_PREFIX = "trade-sell:";
 
@@ -492,7 +516,10 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
   return {
     ...base,
     actions,
-    progress: structure.detail.kind === "center" ? centerProgress(structure.detail.progression) : null,
+    // Whatever the detail decided is timed — a kingdom upgrade on the centre, a
+    // training bar on a producer of units. Deciding it here again would put the
+    // panel back in the business of knowing which buildings train things.
+    progress: base.progress ?? null,
     portrait: structure.icon ?? null,
     selectionCount: 1,
     health: { current: structure.health, max: structure.maxHealth },
@@ -760,9 +787,14 @@ function describeCenter(
     summary,
     lines: [
       `Kuyruk: ${queue.queued}/${queue.capacity}`,
-      queue.trainingRemainingSeconds === null
-        ? "Üretim yok."
-        : `Üretiliyor: ${detail.workerStats.label} — ${Math.ceil(queue.trainingRemainingSeconds)} sn`,
+      // Same rule as the Barracks: the bar below states what is training and for
+      // how long, except while an upgrade owns the bar — then the queue is either
+      // paused or unshown, and the prose has to carry it.
+      ...(queue.trainingRemainingSeconds === null
+        ? ["Üretim yok."]
+        : snapshot.upgrading
+          ? [`Üretiliyor: ${detail.workerStats.label} — ${Math.ceil(queue.trainingRemainingSeconds)} sn`]
+          : []),
       `Kademe: ${tierName(progression, snapshot.age, snapshot.level)}${snapshot.upgrading ? " (yükseltiliyor)" : ""}`,
       `Kontrol yarıçapı: ${detail.controlRadius}`,
     ],
@@ -781,10 +813,30 @@ function describeCenter(
       centerProgressionAction(progression),
     ],
     actionLayout: "compact",
+    // One bar, two candidate jobs. A kingdom upgrade outranks the worker queue
+    // because it is the rarer, longer and unrepeatable one — and while a *Town*
+    // upgrade runs the queue is paused anyway, so a worker bar there would sit
+    // frozen. The cost is that the worker cancel is out of reach for the length
+    // of an upgrade; the orders keep their reservation and the ✕ returns with it.
+    progress: centerProgress(progression) ?? workerTrainingProgress(detail),
     hint: "",
     tooltip: snapshot.upgrading
       ? "Yükseltme tamamlanınca Merkez etkileri tüm yapılara uygulanır."
       : "Merkez işçi üretir, krallığın kademesini yükseltir ve kontrol alanının çekirdeğidir.",
+  };
+}
+
+/** The centre's training bar, carrying the same ✕ the Barracks' bar does. */
+function workerTrainingProgress(detail: CenterDetailView): SelectionProgress | null {
+  const { queue } = detail;
+  const remaining = queue.trainingRemainingSeconds;
+  const duration = queue.trainingDurationSeconds;
+  if (remaining === null || duration === null || !Number.isFinite(duration) || duration <= 0) return null;
+  return {
+    label: `${detail.workerStats.label} üretiliyor`,
+    value: 1 - Math.min(1, Math.max(0, remaining / duration)),
+    remainingSeconds: remaining,
+    cancel: cancelQueueAction(CANCEL_WORKER_ACTION, detail.workerStats.label),
   };
 }
 
@@ -828,10 +880,12 @@ function describeMilitary(
     summary,
     lines: [
       `Kuyruk: ${queue.queued}/${queue.capacity}`,
-      queue.trainingLabel === null
-        ? "Üretim yok."
-        : `Üretiliyor: ${queue.trainingLabel} — ${Math.ceil(queue.trainingRemainingSeconds ?? 0)} sn`,
-      ...(queue.pendingLabels.length > 0 ? [`Sırada: ${queue.pendingLabels.join(", ")}`] : []),
+      // What is training, and how long it has left, is the progress bar's line
+      // now — repeating it as prose directly above the bar said it twice. The
+      // pending roll-call went with it: "Kuyruk: 3/5" already carries how much
+      // is waiting, and naming each order made the longest line in the panel out
+      // of the least actionable fact.
+      ...(queue.trainingLabel === null ? ["Üretim yok."] : []),
       `Toplanma noktası: ${detail.rallySet ? "belirlendi" : "yok"}`,
       // The two things that stop a Barracks silently. Only shown when true: a
       // healthy Barracks does not need a line saying nothing is wrong with it.
@@ -849,6 +903,7 @@ function describeMilitary(
       },
     ],
     actionLayout: "command-deck",
+    progress: trainingProgress(queue),
     hint: "",
     tooltip: !detail.connected
       ? "Kontrol alanı kaybedilen askerî yapı üretim yapamaz; alanı geri alın."
@@ -928,6 +983,47 @@ function tradeAction(
     enabled: connected,
     reason: connected ? null : "Kontrol Dışı: bu Pazar ticaret yapamaz.",
     hint: `${resourceLabel(resourceId)} endeksi ×${index.toFixed(2)}. ${buying ? "Alım" : "Satım"} fiyatı: ${price} ${goldLabel}.`,
+  };
+}
+
+/**
+ * The military building's training bar, with its own undo attached.
+ *
+ * Absent while nothing trains: an idle Barracks has no timed job, and a bar at
+ * zero would read as a stalled one. The bar names the unit *in production*; the
+ * cancel takes the *newest* order, which is usually a different one — so the
+ * button says which, rather than letting the bar's label imply it.
+ */
+function trainingProgress(queue: BarracksQueueSnapshot): SelectionProgress | null {
+  const remaining = queue.trainingRemainingSeconds;
+  const duration = queue.trainingDurationSeconds;
+  if (remaining === null || duration === null || !Number.isFinite(duration) || duration <= 0) return null;
+  const newest = queue.pendingLabels.at(-1) ?? queue.trainingLabel ?? "sipariş";
+  return {
+    // The queue count stays a body line rather than being repeated here: an
+    // upgrade can take this bar away from the queue, and the count must not
+    // vanish with it.
+    label: `${queue.trainingLabel ?? "Birlik"} üretiliyor`,
+    value: 1 - Math.min(1, Math.max(0, remaining / duration)),
+    remainingSeconds: remaining,
+    cancel: cancelQueueAction(CANCEL_TRAIN_ACTION, newest),
+  };
+}
+
+/**
+ * The ✕ beside a training bar. Never disabled, and deliberately not gated on a
+ * lost control area or an in-flight upgrade: those stop *training*, and a player
+ * whose ground was taken mid-queue is exactly who needs their stone back —
+ * refusing the refund because the building is in trouble punishes them twice.
+ */
+function cancelQueueAction(id: string, newestLabel: string): SelectionAction {
+  return {
+    id,
+    label: `Son siparişi iptal et: ${newestLabel}`,
+    cost: null,
+    enabled: true,
+    reason: null,
+    hint: `Kuyruktaki en son siparişi (${newestLabel}) iptal eder; maliyeti tam iade edilir.`,
   };
 }
 

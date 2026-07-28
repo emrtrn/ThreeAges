@@ -114,6 +114,8 @@ import { RtsWorldProgressOverlay, type RtsWorldProgressEntry } from "./ui/rtsWor
 import {
   AGE_UP_ACTION,
   CANCEL_CONSTRUCTION_ACTION,
+  CANCEL_TRAIN_ACTION,
+  CANCEL_WORKER_ACTION,
   DEMOLISH_ACTION,
   RALLY_ACTION,
   RESCUE_ACTION,
@@ -143,7 +145,7 @@ import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import type { UnitOwner } from "./units/unit";
 import { BarracksProductionSystem, unitQueueCapacityForBuildingLevel } from "./structures/barracksProductionSystem";
-import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "./structures/workerProductionSystem";
+import { WorkerProductionSystem, workerQueueCapacityForCenterLevel, type WorkerCancelResult } from "./structures/workerProductionSystem";
 import { RoadGraph } from "./roads/roadGraph";
 import { RoadDebugView } from "./roads/roadDebugView";
 import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
@@ -224,6 +226,13 @@ const OPENING_FOCUS_PULL_TOWARD_CENTER = 0.15;
 /** Faz 5.0: both kingdoms run the same economy; only this one has a UI. */
 const KINGDOM_OWNERS: readonly UnitOwner[] = ["player", "enemy"];
 const PLAYER_OWNER: UnitOwner = "player";
+/**
+ * Command families for {@link RtsApp.announce}. One line per family in the feed:
+ * a family is "orders the player will fire in bursts and only wants the latest
+ * answer to", which is why it is deliberately coarse — five production refusals
+ * in two seconds are one problem, not five notices.
+ */
+type RtsCommandSubject = "production" | "trade" | "structure" | "orders" | "workers" | "progression";
 /** How long a building's health bar stays up after the last hit it took. */
 const HEALTH_BAR_LINGER_SECONDS = 6;
 /**
@@ -1670,12 +1679,15 @@ export class RtsApp {
     const point = this.commands.groundPointAt(x, y);
     this.rallyPointPending = false;
     if (!point) {
+      // Still a mode prompt rather than a result: the click missed the ground, so
+      // the palette line keeps asking for the one it is waiting on.
       this.buildPalette.setActionMessage("Toplanma noktası için harita üzerinde bir konum seçin.");
       return;
     }
     this.barracksProduction.setRallyPoint(PLAYER_OWNER, point);
     this.commandMarkers.spawn(point, "#8fe08f");
-    this.buildPalette.setActionMessage("Toplanma noktası belirlendi.");
+    this.buildPalette.setActionMessage(null);
+    this.announce("orders", "Toplanma noktası belirlendi.");
   }
 
   /** Advance match systems; camera and UI keep the unscaled rendered-frame delta. */
@@ -1725,9 +1737,11 @@ export class RtsApp {
             : `${tierLabel} tamamlandı: tüm yapılarınız gelişti.`,
         });
       }
-      this.buildPalette.setActionMessage(event.type === "completed"
-        ? (event.kind === "town" ? "Kasaba Çağı tamamlandı." : `${tierLabel} tamamlandı.`)
-        : "Merkez yıkıldığı için ilerleme iptal edildi; kaynaklar iade edildi.");
+      // A completed upgrade already has its own `age-upgraded` notice above; only
+      // the cancellation needs saying here, and it is not the player's doing.
+      if (event.type !== "completed") {
+        this.announce("progression", "Merkez yıkıldığı için ilerleme iptal edildi; kaynaklar iade edildi.", "refused");
+      }
     }
     // Acquisition before movement: a unit that picks up a target this tick
     // should start walking toward it on the same tick, not the next one.
@@ -1743,21 +1757,20 @@ export class RtsApp {
     this.economyProduction?.update(dt);
     this.syncForestVisibility();
     this.logisticsTransfers.update();
-    // Only the human kingdom's production narrates into the build palette; the
-    // AI's own queue events are surfaced by its decision log in a later slice.
+    // Only the human kingdom's production is narrated; the AI's own queue events
+    // are surfaced by its decision log in a later slice.
     for (const event of this.workerProduction.update(dt)) {
       if (event.owner !== PLAYER_OWNER) continue;
-      this.buildPalette.setActionMessage(event.type === "completed"
-        ? "Yeni işçi Merkez'den çıktı."
-        : "İşçi çıkışı engelli; Merkez çevresini açın.");
+      if (event.type === "completed") this.announce("production", "Yeni işçi Merkez'den çıktı.");
+      else this.announce("production", "İşçi çıkışı engelli; Merkez çevresini açın.", "refused");
     }
     for (const event of this.barracksProduction.update(dt)) {
       if (event.structure.owner !== PLAYER_OWNER) continue;
-      this.buildPalette.setActionMessage(
-        event.type === "completed"
-          ? `${event.label} ${event.structure.stats.label}'ndan çıktı.`
-          : `${event.label} çıkışı engelli; ${event.structure.stats.label} çevresini açın.`,
-      );
+      if (event.type === "completed") {
+        this.announce("production", `${event.label} ${event.structure.stats.label}'ndan çıktı.`);
+      } else {
+        this.announce("production", `${event.label} çıkışı engelli; ${event.structure.stats.label} çevresini açın.`, "refused");
+      }
     }
     // The AI decides on the same scaled match delta as every other system, so
     // the game-speed control accelerates it too (plan §38 test mode).
@@ -2833,12 +2846,12 @@ export class RtsApp {
     if (!structure || structure.owner !== PLAYER_OWNER) return;
     if (this.demolishArmed !== structure) {
       this.demolishArmed = structure;
-      this.buildPalette.setActionMessage(`${structure.stats.label} yıkılacak. Onaylamak için tekrar basın.`);
+      this.announce("structure", `${structure.stats.label} yıkılacak. Onaylamak için tekrar basın.`, "refused");
       return;
     }
     this.demolishArmed = null;
     structure.health.damage(structure.health.max);
-    this.buildPalette.setActionMessage(`${structure.stats.label} yıkıldı.`);
+    this.announce("structure", `${structure.stats.label} yıkıldı.`);
   }
 
   /** Cancel exactly the selected foundation; a finished building must use demolition instead. */
@@ -2847,13 +2860,13 @@ export class RtsApp {
     if (!structure || structure.owner !== PLAYER_OWNER || structure.construction.complete) return;
     if (this.cancelConstructionArmed !== structure) {
       this.cancelConstructionArmed = structure;
-      this.buildPalette.setActionMessage(`${structure.stats.label} inşaatı iptal edilecek. Onaylamak için tekrar basın.`);
+      this.announce("structure", `${structure.stats.label} inşaatı iptal edilecek. Onaylamak için tekrar basın.`, "refused");
       return;
     }
     this.cancelConstructionArmed = null;
     if (!this.structureConstruction.cancel(PLAYER_OWNER, structure)) return;
     this.selection.reconcileStructures(this.structures.all());
-    this.buildPalette.setActionMessage(`${structure.stats.label} inşaatı iptal edildi; kaynaklar iade edildi.`);
+    this.announce("structure", `${structure.stats.label} inşaatı iptal edildi; kaynaklar iade edildi.`);
   }
 
   private runSelectionAction(id: string): void {
@@ -2882,6 +2895,14 @@ export class RtsApp {
     }
     if (id === CANCEL_CONSTRUCTION_ACTION) {
       this.cancelSelectedConstruction();
+      return;
+    }
+    if (id === CANCEL_WORKER_ACTION) {
+      this.cancelWorkerOrder();
+      return;
+    }
+    if (id === CANCEL_TRAIN_ACTION) {
+      this.cancelLatestUnitOrder();
       return;
     }
     if (id === CENTER_LEVEL_UP_ACTION) {
@@ -2920,7 +2941,7 @@ export class RtsApp {
     const trapped = this.selection.selected()
       .filter((unit) => !this.navigation.isWalkable(unit.position.x, unit.position.z));
     if (trapped.length === 0) {
-      this.buildPalette.setActionMessage("Kurtarılacak sıkışmış birim yok.");
+      this.announce("orders", "Kurtarılacak sıkışmış birim yok.", "refused");
       return;
     }
     let rescued = 0;
@@ -2930,9 +2951,8 @@ export class RtsApp {
       unit.beginRescue(exit.x, exit.z);
       rescued += 1;
     }
-    this.buildPalette.setActionMessage(rescued > 0
-      ? `${rescued} birim boş zemine çıkarılıyor.`
-      : "Yakında boş zemin bulunamadı; birimler kurtarılamadı.");
+    if (rescued > 0) this.announce("orders", `${rescued} birim boş zemine çıkarılıyor.`);
+    else this.announce("orders", "Yakında boş zemin bulunamadı; birimler kurtarılamadı.", "refused");
   }
 
   /**
@@ -2952,25 +2972,23 @@ export class RtsApp {
   private selectIdleWorkers(): void {
     const workers = this.units.workersOf(PLAYER_OWNER).filter((worker) => this.isIdleWorker(worker));
     this.selection.selectUnits(workers);
-    this.buildPalette.setActionMessage(workers.length > 0
-      ? `${workers.length} boşta işçi seçildi.`
-      : "Seçilecek boşta işçi yok.");
+    if (workers.length > 0) this.announce("workers", `${workers.length} boşta işçi seçildi.`);
+    else this.announce("workers", "Seçilecek boşta işçi yok.", "refused");
   }
 
   /** Return selected free workers to the normal construction-then-production queue (R). */
   private assignSelectedIdleWorkers(): void {
     const workers = this.selection.selected().filter((worker) => this.isIdleWorker(worker));
     if (workers.length === 0) {
-      this.buildPalette.setActionMessage("İşe gönderilecek boşta işçi seçili değil.");
+      this.announce("workers", "İşe gönderilecek boşta işçi seçili değil.", "refused");
       return;
     }
     for (const worker of workers) worker.resumeAutomaticWorkerAssignment();
     this.workerConstruction.assignIdleWorkers();
     this.economyProduction?.assignIdleWorkers();
     const assigned = workers.filter((worker) => !this.isIdleWorker(worker)).length;
-    this.buildPalette.setActionMessage(assigned > 0
-      ? `${assigned} işçi uygun işe gönderildi.`
-      : "Şu anda işçi bekleyen uygun bir iş yok.");
+    if (assigned > 0) this.announce("workers", `${assigned} işçi uygun işe gönderildi.`);
+    else this.announce("workers", "Şu anda işçi bekleyen uygun bir iş yok.", "refused");
   }
 
   private isIdleWorker(worker: Unit): boolean {
@@ -3237,12 +3255,10 @@ export class RtsApp {
     const result = this.workerConstruction.assignNearest(structure);
     // Both kingdoms build through this hook, but only the human has a palette:
     // narrating an AI site here would put the AI's problems in the player's HUD.
-    if (structure.owner !== PLAYER_OWNER) return;
-    this.buildPalette.setActionMessage(result.assigned
-      ? null
-      : result.reason === "no-idle-worker"
-        ? "İnşaat bekliyor: boşta işçi yok."
-        : "İnşaat bekliyor: işçi bu yapıya erişemiyor.");
+    if (structure.owner !== PLAYER_OWNER || result.assigned) return;
+    this.announce("workers", result.reason === "no-idle-worker"
+      ? "İnşaat bekliyor: boşta işçi yok."
+      : "İnşaat bekliyor: işçi bu yapıya erişemiyor.", "refused");
   }
 
   /** Handle a selected Karakol's right-click target order. */
@@ -3254,7 +3270,7 @@ export class RtsApp {
       incomplete: "Karakol tamamlanmadan saldırı emri verilemez.",
       "out-of-range": "Hedef Karakol menzilinin dışında.",
     };
-    this.buildPalette.setActionMessage(message[result]);
+    this.announce("orders", message[result], result === "ordered" ? "done" : "refused");
     return true;
   }
 
@@ -3263,20 +3279,24 @@ export class RtsApp {
     if (structure.owner !== PLAYER_OWNER) return false;
     if (!structure.construction.complete) {
       const result = this.workerConstruction.assignWorkers(structure, workers);
-      this.buildPalette.setActionMessage(result.assignedWorkers > 0
-        ? `${result.assignedWorkers} işçi inşaata atandı.`
-        : result.reason === "unreachable"
+      if (result.assignedWorkers > 0) {
+        this.announce("workers", `${result.assignedWorkers} işçi inşaata atandı.`);
+      } else {
+        this.announce("workers", result.reason === "unreachable"
           ? "İşçiler bu inşaata erişemiyor."
-          : "İnşaat için uygun işçi yok.");
+          : "İnşaat için uygun işçi yok.", "refused");
+      }
       return true;
     }
     if (!structure.stats.economy || !this.economyProduction) return false;
     // A direct gathering order transfers workers out of construction first.
     for (const worker of workers) this.workerConstruction.release(worker);
     const result = this.economyProduction.assignWorkers(structure, workers);
-    this.buildPalette.setActionMessage(result.assignedWorkers > 0
-      ? `${result.assignedWorkers} işçi ${structure.stats.label} görevine atandı.`
-      : "Bu yapıda uygun işçi kontenjanı yok.");
+    if (result.assignedWorkers > 0) {
+      this.announce("workers", `${result.assignedWorkers} işçi ${structure.stats.label} görevine atandı.`);
+    } else {
+      this.announce("workers", "Bu yapıda uygun işçi kontenjanı yok.", "refused");
+    }
     return true;
   }
 
@@ -3313,7 +3333,41 @@ export class RtsApp {
       "structure-upgrading": `${buildingLabel} seviye yükseltmesi sürerken ${label} üretimi durur.`,
       disconnected: `${buildingLabel} kontrol alanınızın dışında kaldı; üretim durdu.`,
     };
-    this.buildPalette.setActionMessage(message[result]);
+    this.announce("production", message[result], result === "queued" ? "done" : "refused");
+    this.syncPlacementUi();
+  }
+
+  /**
+   * Take the newest order back off the selected building's queue.
+   *
+   * Scoped to the selection because that is the queue the player is looking at:
+   * the ✕ was drawn on *this* building's progress bar, and cancelling at another
+   * Barracks would refund an order they never saw placed.
+   */
+  private cancelLatestUnitOrder(): void {
+    const structure = this.selection.selectedStructure();
+    if (!structure || structure.owner !== PLAYER_OWNER) return;
+    const cancelled = this.barracksProduction.cancelLatestUnit(structure);
+    const queue = this.barracksProduction.queueSnapshot(structure);
+    if (cancelled) {
+      this.announce("production", `${cancelled.label} siparişi iptal edildi; maliyeti iade edildi (${queue.queued}/${queue.capacity}).`);
+    } else {
+      this.announce("production", `${structure.stats.label} kuyruğunda iptal edilecek sipariş yok.`, "refused");
+    }
+    this.syncPlacementUi();
+  }
+
+  /** The centre's counterpart to {@link cancelLatestUnitOrder}: one worker order back. */
+  private cancelWorkerOrder(): void {
+    const label = this.options.unitBalance["worker_placeholder"]?.label ?? "İşçi";
+    const result = this.workerProduction.cancelWorker(PLAYER_OWNER);
+    const queued = this.workerProduction.queuedCount(PLAYER_OWNER);
+    const capacity = this.workerQueueCapacity(PLAYER_OWNER);
+    const message: Record<WorkerCancelResult, string> = {
+      cancelled: `${label} siparişi iptal edildi; maliyeti iade edildi (${queued}/${capacity}).`,
+      "not-queued": `Merkez kuyruğunda iptal edilecek ${label} siparişi yok.`,
+    };
+    this.announce("production", message[result], result === "cancelled" ? "done" : "refused");
     this.syncPlacementUi();
   }
 
@@ -3343,7 +3397,7 @@ export class RtsApp {
       "insufficient-resources": `Satmak için ${lot} ${label} gerekir.`,
       "storage-full": "Depolama kapasitesi dolu; Depo kurun veya yükseltin.",
     };
-    this.buildPalette.setActionMessage(message[result]);
+    this.announce("trade", message[result], result === "traded" ? "done" : "refused");
     this.syncPlacementUi();
   }
 
@@ -3359,7 +3413,7 @@ export class RtsApp {
       "no-command-center": "İşçi üretmek için Merkez gerekli.",
       "center-upgrading": "Merkez Kasaba Çağına yükselirken işçi üretimi durur.",
     };
-    this.buildPalette.setActionMessage(message[result]);
+    this.announce("production", message[result], result === "queued" ? "done" : "refused");
     this.syncPlacementUi();
   }
 
@@ -3386,7 +3440,7 @@ export class RtsApp {
         ? `${townLabel} Çağı için ${shortfall} daha gerekli (toplam ${formatResourceCost(cost)}).`
         : `${townLabel} Çağı için kaynak yetersiz (${formatResourceCost(cost)}).`,
     };
-    this.buildPalette.setActionMessage(message[result]);
+    this.announce("progression", message[result], result === "started" ? "done" : "refused");
     this.syncAgeUi();
   }
 
@@ -3413,8 +3467,32 @@ export class RtsApp {
         ? `${targetLabel} için ${shortfall} daha gerekli (toplam ${formatResourceCost(cost)}).`
         : `${targetLabel} için kaynak yetersiz.`,
     };
-    this.buildPalette.setActionMessage(message[result]);
+    this.announce("progression", message[result], result === "started" ? "done" : "refused");
     this.syncAgeUi();
+  }
+
+  /**
+   * Answer a player command in the notification feed.
+   *
+   * The build palette's message line used to carry these, which put "Muhafız
+   * siparişi iptal edildi" under a panel about *placing buildings* — and only
+   * while that panel was open. The split is now by what the text is, not by
+   * which panel happened to have a spare row:
+   *
+   * - The palette's line describes the palette's own modal state: what the next
+   *   click will place, and why a pick was refused. It persists because the mode
+   *   persists.
+   * - Everything that reports the *result* of a command comes here, where the
+   *   game's other one-shot news already lives, and expires on its own.
+   *
+   * {@link subject} is the command family, so a burst of orders in one family
+   * (five Üret presses) replaces its own line instead of pushing the feed's four
+   * slots full and evicting a "Merkez saldırı altında". A success also retires a
+   * live refusal from the same family: the player has just proved it stale.
+   */
+  private announce(subject: RtsCommandSubject, text: string, tone: "done" | "refused" = "done"): void {
+    if (tone === "done") this.notifications.dismiss({ kind: "command-refused", subject });
+    this.notifications.post({ kind: tone === "refused" ? "command-refused" : "command", subject, text });
   }
 
   private syncAgeUi(): void {

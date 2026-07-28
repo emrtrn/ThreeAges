@@ -39,7 +39,12 @@ export type RtsNotificationKind =
   | "peace-active"
   | "peace-ending"
   | "peace-ended"
-  | "mission";
+  | "mission"
+  // The direct answer to something the player just clicked: an order accepted, or
+  // refused with its reason. Split in two so the feed can colour a refusal
+  // differently from a confirmation without the poster choosing a severity.
+  | "command"
+  | "command-refused";
 
 /** Drives presentation weight only; the feed never reorders by severity. */
 export type RtsNotificationSeverity = "info" | "warning" | "alert";
@@ -91,6 +96,15 @@ const RULES: Readonly<Record<RtsNotificationKind, NotificationRule>> = {
   // notices because it is prose to be read, not a state to be glanced at — and
   // the card below already carries whatever the player must still act on.
   mission: { severity: "info", displaySeconds: 10, cooldownSeconds: 0 },
+  // Command answers are evented by definition — one post per click — so no
+  // cooldown may apply: a player who presses the same button twice must be
+  // answered twice, and muting the second press would read as a dead button.
+  // Short-lived, because the player is looking at the thing they just changed;
+  // a refusal lingers a little longer since it asks them to do something else.
+  // Keyed by command family (see `RtsApp.announce`), so a burst of orders in one
+  // family replaces its own line instead of pushing the feed's other notices out.
+  command: { severity: "info", displaySeconds: 5, cooldownSeconds: 0 },
+  "command-refused": { severity: "warning", displaySeconds: 7, cooldownSeconds: 0 },
 };
 
 /**

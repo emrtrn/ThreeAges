@@ -33,6 +33,17 @@ export type UnitProductionResult =
 /** Retained for the Faz 5 AI, which still only knows how to ask for Guards. */
 export type GuardProductionResult = UnitProductionResult;
 
+/**
+ * What a cancel took back, so the runtime can name it in the message rather than
+ * re-deriving it from a queue that has already changed. `null` — nothing queued —
+ * is the only failure: a paid order is the player's, and neither a lost control
+ * area nor an in-flight upgrade is a reason to keep holding their resources.
+ */
+export interface CancelledUnitOrder {
+  readonly unitId: string;
+  readonly label: string;
+}
+
 export interface UnitProductionEvent {
   readonly type: "completed" | "exit-blocked";
   readonly structure: PlacedStructure;
@@ -189,6 +200,33 @@ export class BarracksProductionSystem {
   }
 
   /**
+   * Take the newest order back off this building's queue, naming what it was.
+   *
+   * Newest-first, because the mistake this exists to undo is "I pressed Üret
+   * three times and wanted two": the order the player regrets is the one they
+   * just added, and dropping it costs nothing they had already waited for. The
+   * order *in progress* is therefore reached only when it is the last one left,
+   * and then its elapsed training is discarded — the honest outcome, since
+   * nothing was produced.
+   *
+   * Scoped to one building, never the kingdom: the queue is per-Barracks, and a
+   * cancel aimed at the panel in front of the player must not reach a Barracks
+   * across the map whose queue they cannot see.
+   *
+   * Refunds are exact rather than penalised: {@link queueUnit} only *reserves*
+   * cost and population, and the reservation is committed when the unit walks
+   * out ({@link update}). Releasing it returns precisely what was held.
+   */
+  cancelLatestUnit(structure: PlacedStructure): CancelledUnitOrder | null {
+    const queue = this.queues.get(structure.id);
+    const order = queue?.orders.pop();
+    if (!queue || !order) return null;
+    this.refundOrder(queue.structure.owner, order);
+    if (queue.orders.length === 0) this.queues.delete(structure.id);
+    return { unitId: order.unitId, label: order.stats.label };
+  }
+
+  /**
    * Send this kingdom's newly trained units to a gathering point (GDD 06 §18).
    * One point per kingdom keeps the Faz 7 HUD to a single click; per-Barracks
    * rally points are a HUD problem, not a production one.
@@ -257,10 +295,7 @@ export class BarracksProductionSystem {
     for (const [id, queue] of this.queues) {
       const { wallet, population } = this.kingdoms.get(queue.structure.owner);
       if (!this.structures.all().includes(queue.structure) || !queue.structure.construction.complete) {
-        for (const order of queue.orders) {
-          wallet.refund(order.resources);
-          population.release(order.population);
-        }
+        this.refundQueue(queue);
         this.queues.delete(id);
         continue;
       }
@@ -295,15 +330,25 @@ export class BarracksProductionSystem {
   }
 
   reset(): void {
-    for (const queue of this.queues.values()) {
-      const { wallet, population } = this.kingdoms.get(queue.structure.owner);
-      for (const order of queue.orders) {
-        wallet.refund(order.resources);
-        population.release(order.population);
-      }
-    }
+    for (const queue of this.queues.values()) this.refundQueue(queue);
     this.queues.clear();
     this.rallyPoints.clear();
+  }
+
+  /**
+   * The single place an unspawned order's reservation is released. Every exit a
+   * paid order can take — player cancel, razed building, match reset — goes
+   * through here, so none of them can drift into refunding one half of the price
+   * and forgetting the other.
+   */
+  private refundOrder(owner: UnitOwner, order: UnitOrder): void {
+    const { wallet, population } = this.kingdoms.get(owner);
+    wallet.refund(order.resources);
+    population.release(order.population);
+  }
+
+  private refundQueue(queue: BarracksQueue): void {
+    for (const order of queue.orders) this.refundOrder(queue.structure.owner, order);
   }
 
   private isMilitaryBuilding(structure: PlacedStructure): boolean {

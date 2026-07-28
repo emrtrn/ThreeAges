@@ -1699,31 +1699,80 @@ body {
 
 /* Faz 3/4: a level-up in flight reads as a filling bar, not just a disabled
    button. Shown only while the upgrade is running. */
+/* One strip on the panel's last row: name, track, seconds, undo. Horizontal
+   rather than a labelled block, because the row it now lives in is 24px — and
+   because a job's name and its remaining time read as one sentence. */
 .rts-selection-progress {
-  margin-top: 5px;
+  display: flex;
+  grid-row: 3;
+  grid-column: 1 / span 2;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .rts-selection-progress[hidden] {
   display: none;
 }
 
-.rts-selection-progress-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
+.rts-selection-progress-label {
+  flex: 0 0 auto;
+  overflow: hidden;
+  max-width: 45%;
   color: var(--ta-gold);
   font-size: 11px;
   font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .rts-selection-progress-time {
+  flex: 0 0 auto;
   color: var(--ta-gold-soft);
+  font-size: 11px;
   font-weight: 600;
 }
 
+/* The bar's undo: cancels the newest order in the queue the bar belongs to.
+   Sized to the head row's cap height so it reads as part of the bar's line
+   rather than as a card that wandered out of the command deck. */
+.rts-selection-progress-cancel {
+  display: grid;
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  place-items: center;
+  color: var(--ta-gold-soft);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  background: rgb(28 17 11 / 85%);
+  border: 1px solid rgb(120 84 40 / 70%);
+  border-radius: 2px;
+}
+
+.rts-selection-progress-cancel[hidden] {
+  display: none;
+}
+
+.rts-selection-progress-cancel:hover:not(:disabled) {
+  color: #ffe0c2;
+  background: #6d2a1d;
+  border-color: #b6603c;
+}
+
+.rts-selection-progress-cancel:disabled {
+  opacity: 45%;
+  cursor: default;
+}
+
 .rts-selection-progress-track {
-  margin-top: 3px;
+  flex: 1 1 auto;
   box-sizing: border-box;
+  min-width: 0;
   height: 12px;
   overflow: hidden;
   background: #1b110c;

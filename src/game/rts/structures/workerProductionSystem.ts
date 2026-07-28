@@ -14,6 +14,12 @@ import type { CommandCenterSystem } from "./commandCenterSystem";
 export type WorkerProductionResult = "queued" | "queue-full" | "insufficient-resources" | "population-full" | "no-command-center" | "center-upgrading";
 export type WorkerProductionEventType = "completed" | "exit-blocked";
 
+/**
+ * Why a cancel did nothing. As on the military side there is no "refused" case —
+ * an order the player paid for is theirs to take back, even mid-upgrade.
+ */
+export type WorkerCancelResult = "cancelled" | "not-queued";
+
 export interface WorkerProductionEvent {
   readonly owner: UnitOwner;
   readonly type: WorkerProductionEventType;
@@ -22,6 +28,13 @@ export interface WorkerProductionEvent {
 interface WorkerOrder {
   readonly resources: ResourceReservation;
   readonly population: PopulationReservation;
+  /**
+   * What this order was quoted when it was placed. Kept per order rather than
+   * asked of {@link WorkerProductionSystem.trainingSecondsForOwner} at read time:
+   * a centre that levels up mid-order changes that answer, and a progress bar
+   * dividing by the new duration would jump backwards.
+   */
+  readonly durationSeconds: number;
   remainingSeconds: number;
 }
 
@@ -35,6 +48,8 @@ export interface WorkerQueueSnapshot {
   readonly queued: number;
   readonly capacity: number;
   readonly trainingRemainingSeconds: number | null;
+  /** Total duration of the order in progress, so a bar can show a fraction. */
+  readonly trainingDurationSeconds: number | null;
 }
 
 export const WORKER_QUEUE_CAPACITY_BY_CENTER_LEVEL = [5, 10, 20] as const;
@@ -106,10 +121,28 @@ export class WorkerProductionSystem {
     if (!Number.isFinite(trainingSeconds) || trainingSeconds <= 0) {
       throw new RangeError("Worker production duration must be a positive finite number");
     }
-    const order = { resources, population, remainingSeconds: trainingSeconds };
+    const order = { resources, population, durationSeconds: trainingSeconds, remainingSeconds: trainingSeconds };
     if (queue) queue.orders.push(order);
     else this.queues.set(owner, { center, orders: [order] });
     return "queued";
+  }
+
+  /**
+   * Take the newest worker order back off this centre's queue, refunded in full.
+   *
+   * Newest-first for the same reason the Barracks cancel is
+   * ({@link BarracksProductionSystem.cancelUnit}): the order a player regrets is
+   * the one they just added, and dropping it costs them no elapsed training. The
+   * refund is exact because {@link queueWorker} only reserves — the reservation
+   * is committed when the worker walks out.
+   */
+  cancelWorker(owner: UnitOwner): WorkerCancelResult {
+    const queue = this.queues.get(owner);
+    const order = queue?.orders.pop();
+    if (!queue || !order) return "not-queued";
+    this.refundOrder(owner, order);
+    if (queue.orders.length === 0) this.queues.delete(owner);
+    return "cancelled";
   }
 
   /** Number of paid orders, including the worker currently in production. */
@@ -124,6 +157,7 @@ export class WorkerProductionSystem {
       queued: orders.length,
       capacity: this.queueCapacityForOwner(owner),
       trainingRemainingSeconds: orders[0]?.remainingSeconds ?? null,
+      trainingDurationSeconds: orders[0]?.durationSeconds ?? null,
     };
   }
 
@@ -162,15 +196,23 @@ export class WorkerProductionSystem {
     for (const owner of [...this.queues.keys()]) this.cancelQueue(owner);
   }
 
+  /** Drop every order at this centre, refunding each; used when the centre changes or the match resets. */
   private cancelQueue(owner: UnitOwner): void {
     const queue = this.queues.get(owner);
     if (!queue) return;
-    const { wallet, population } = this.kingdoms.get(owner);
-    for (const order of queue.orders) {
-      wallet.refund(order.resources);
-      population.release(order.population);
-    }
+    for (const order of queue.orders) this.refundOrder(owner, order);
     this.queues.delete(owner);
+  }
+
+  /**
+   * The single place an unspawned order's reservation is released, so no exit —
+   * player cancel, a centre that changed under the queue, match reset — can
+   * refund the cost and forget the population slot.
+   */
+  private refundOrder(owner: UnitOwner, order: WorkerOrder): void {
+    const { wallet, population } = this.kingdoms.get(owner);
+    wallet.refund(order.resources);
+    population.release(order.population);
   }
 
   private findSafeExit(center: CommandCenter): Vector3 | null {

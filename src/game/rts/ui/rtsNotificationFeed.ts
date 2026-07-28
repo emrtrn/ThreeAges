@@ -22,6 +22,8 @@ const ICON_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "peace-ending": "⚔",
   "peace-ended": "⚔",
   mission: "✧",
+  command: "✓",
+  "command-refused": "!",
 };
 
 /**
@@ -44,6 +46,11 @@ const ICON_SRC_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "peace-ending": "/assets/ui/icons/notification_peace.png",
   "peace-ended": "/assets/ui/icons/notification_peace.png",
   mission: "/assets/ui/icons/notification_age_up.png",
+  // A command answer has no one subject — it may be a unit, a building or a
+  // trade — so it borrows the two icons that already mean "went through" and
+  // "stopped", rather than inventing a third visual language for orders.
+  command: "/assets/ui/icons/notification_logistics_restored.png",
+  "command-refused": "/assets/ui/icons/notification_logistics_cut.png",
 };
 
 export class RtsNotificationFeed {
