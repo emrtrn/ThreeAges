@@ -696,15 +696,46 @@ kendi Level'ını kullanıyor ve bu da ayrı bir değişmezle korunuyor.
 modülü zaten orada doğuyor (`missionHintView.ts`); aynı halkayı iki fazda iki
 kez yazmak yerine, Faz B'de kartın tek satırı işi görüyor.
 
-**Faz C — Zemin işareti ve "Göster"**
+**Faz C — Zemin işareti ve "Göster"** — **tamamlandı 2026-07-28**
 
-- [ ] `missionSiteSolver.ts` (saf, `validate()` geri çağrısıyla) + `guide.site`
-      alanının şema/doğrulayıcıya eklenmesi
-- [ ] `missionHintView.ts` (halka + ok, nabız/salınım) — **ayrıca** Faz B'den
-      devredilen "tıklanacak yapıyı dünyada vurgula" halkası
-- [ ] Görev kartına "Göster" butonu → kamerayı işarete pan
-- [ ] Yanlış yere kurulmuşken yol aracını işaret eden hatırlatma
-      (`{ kind: "road" }` guide'ı burada doğuyor)
+- [x] `missionSiteSolver.ts` (saf). **`guide.site` alanı yazılmadı ve
+      gerekmiyor** — planın en büyük sadeleşmesi, §12.9'a bakınız.
+- [x] `missionHintView.ts` (nabız atan halka + salınan ok) — Faz B'den devredilen
+      "tıklanacak yapıyı dünyada vurgula" işi de aynı işaretle çözüldü: iki ayrı
+      görsel dil, oyuncuya ikincisini öğretmekten başka bir şey kazandırmıyordu.
+- [x] Görev kartına "Göster" butonu → kamerayı işarete taşır. Yalnız işaret
+      varken görünür, yani hiçbir zaman boşluğa götüremez. Uçuş değil, ani
+      ortalama: kamera oyuncunun, senaryolu bir kaydırma onu süresi boyunca
+      elinden alırdı.
+- [x] Yanlış yere kurulmuşken yol aracını işaret eden hatırlatma. **Veriye yeni
+      alan eklemeden**: kural, aktif adımın hedefi bir *bağlantı* ölçüyorsa
+      (`producer-linked` / `outpost-connected`) ve oyuncu o yapıdan zaten bir
+      tane tamamlamışsa işaretin palet butonundan yol aracına geçmesi.
+      `{ kind: "road" }` guide'ı hâlâ yazılmadı — ihtiyacı doğuran şey buydu ve
+      türetilerek çözüldü.
+
+### 12.9 Faz C'de planın değiştiği yer: `guide.site` iptal edildi
+
+Plan, her adım için veri tarafında bir yerleştirme stratejisi öngörüyordu
+(`near-forest`, `stone-node`, `control-edge`…). Kod okununca bunun gereksiz —
+ve aslında tehlikeli — olduğu görüldü:
+
+> **Kurallar zaten biliyor.** `StructureConstructionService.validate()` bir
+> yapının bir yerde durup duramayacağının tek merci: kontrol alanı, footprint
+> boşluğu, Oduncu Kampı'nın yakın ağaçları, Taş Ocağı'nın yatağı, Karakol'un
+> genişleme boşluğu. Bunların herhangi birini çözücüde yeniden kodlamak, tıklama
+> anında hüküm veren merciyle çelişebilecek **ikinci bir görüş** yaratırdı — ve
+> oyunun sonra reddedeceği bir zemini işaret eden ok, hiç ok olmamasından kötü.
+
+Dolayısıyla çözücü şu: gerçek doğrulayıcıya bir aday alanı sor, kabul ettiklerini
+turun asıl öğrettiği şeye göre sırala — **Merkez'in yol ağına değ**. İçinde tek
+bir binaya özel satır yok; yeni yerleştirme kuralı olan bir bina ekleyen fork
+doğru ipucunu bedavaya alıyor.
+
+Performans da bu yüzden sorun değil: sıralama yalnız geometriye bakıyor (yollar
+nerede, ev nerede), yani pahalı soru en iyi adaya **önce** soruluyor ve olağan
+durumda bir kez soruluyor. Bu, "ucuz sürüm" ile "doğru sürüm"ün aynı sürüm
+olması demek ve `test:engine`'de sayaçla pinlendi.
 
 **Faz D — Kontrol ve kilitlenmezlik**
 

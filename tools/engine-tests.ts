@@ -69,7 +69,8 @@ import {
   type MissionWorldSnapshot,
 } from "../src/game/rts/tutorial/missionPredicates";
 import type { MissionGoal, MissionScript } from "../src/game/rts/tutorial/missionScript";
-import { missionGuideHighlight } from "../src/game/rts/tutorial/missionGuideHighlight";
+import { missionGuideHighlight, ROAD_PALETTE_TARGET } from "../src/game/rts/tutorial/missionGuideHighlight";
+import { solveMissionSite } from "../src/game/rts/tutorial/missionSiteSolver";
 import {
   DEFAULT_MISSION_SCRIPT_ID,
   hasSeenMission,
@@ -32644,18 +32645,15 @@ check("a mission goal reports how far along it is, not just whether it is done",
 });
 
 check("Sürüm 2: the guide points at one control, and at the building first when the button is not open yet", () => {
-  const stateFor = (guide: MissionScript["steps"][number]["guide"]) => new MissionDirector({
+  const stateFor = (
+    guide: MissionScript["steps"][number]["guide"],
+    goal: MissionGoal = { kind: "structure-built", buildingId: "depot", count: 1 },
+  ) => new MissionDirector({
     id: "guide_chain",
     label: "G",
     intro: "i",
     outro: "o",
-    steps: [{
-      id: "s1",
-      title: "t",
-      why: "w",
-      goal: { kind: "structure-built", buildingId: "depot", count: 1 },
-      ...(guide ? { guide } : {}),
-    }],
+    steps: [{ id: "s1", title: "t", why: "w", goal, ...(guide ? { guide } : {}) }],
   });
 
   // A build step names a palette button and nothing else — there is no building
@@ -32663,9 +32661,9 @@ check("Sürüm 2: the guide points at one control, and at the building first whe
   const build = stateFor({ action: { kind: "build", buildingId: "depot" } });
   build.evaluate(missionWorld([]));
   assert.deepEqual(missionGuideHighlight(build.state(), null), {
-    paletteBuildingId: "depot",
+    paletteTarget: "depot",
     actionId: null,
-    selectBuildingId: null,
+    prompt: null,
   });
 
   // A structure action points twice, in order. Pulsing `trade-buy:wood` while no
@@ -32674,32 +32672,139 @@ check("Sürüm 2: the guide points at one control, and at the building first whe
     action: { kind: "structure-action", buildingId: "market", actionId: "trade-buy:wood" },
   });
   trade.evaluate(missionWorld([]));
+  const selectMarket = { kind: "select-building", buildingId: "market" } as const;
   assert.deepEqual(missionGuideHighlight(trade.state(), null), {
-    paletteBuildingId: null,
+    paletteTarget: null,
     actionId: null,
-    selectBuildingId: "market",
+    prompt: selectMarket,
   });
   assert.deepEqual(missionGuideHighlight(trade.state(), "farm"), {
-    paletteBuildingId: null,
+    paletteTarget: null,
     actionId: null,
-    selectBuildingId: "market",
+    prompt: selectMarket,
   }, "the wrong building selected is the same situation as none");
   assert.deepEqual(missionGuideHighlight(trade.state(), "market"), {
-    paletteBuildingId: null,
+    paletteTarget: null,
     actionId: "trade-buy:wood",
-    selectBuildingId: null,
+    prompt: null,
   }, "with the Market selected the pointer moves inside its panel");
+
+  // Faz C, and the case that cost the first play-through its wood: the building
+  // is up but the step is still open, so a second one is not the answer — a road
+  // is. Only on a goal that measures a *connection*, which is what keeps it away
+  // from "make room for population", where a second House really is the answer.
+  const unlinkedFarm = stateFor(
+    { action: { kind: "build", buildingId: "farm" } },
+    { kind: "producer-linked", resourceId: "food", count: 1 },
+  );
+  unlinkedFarm.evaluate(missionWorld([farm()]));
+  assert.deepEqual(missionGuideHighlight(unlinkedFarm.state(), null, 1), {
+    paletteTarget: ROAD_PALETTE_TARGET,
+    actionId: null,
+    prompt: { kind: "draw-road" },
+  });
+  assert.deepEqual(
+    missionGuideHighlight(unlinkedFarm.state(), null, 0).paletteTarget,
+    "farm",
+    "with nothing built yet the palette is still the answer",
+  );
+  const crowdedHouses = stateFor(
+    { action: { kind: "build", buildingId: "house" } },
+    { kind: "population-headroom", count: 5 },
+  );
+  crowdedHouses.evaluate(missionWorld([]));
+  assert.deepEqual(
+    missionGuideHighlight(crowdedHouses.state(), null, 1).paletteTarget,
+    "house",
+    "a population step owning one House still wants the next House, not a road",
+  );
 
   // Everything that means "no live objective" takes the pointer down: no chain,
   // a step that carries no guide, and an abandoned or finished chain. The mode
   // ends by the guidance disappearing, so there is no separate teardown to miss.
-  const none = { paletteBuildingId: null, actionId: null, selectBuildingId: null };
+  const none = { paletteTarget: null, actionId: null, prompt: null };
   assert.deepEqual(missionGuideHighlight(null, "market"), none, "no chain, no pointer");
   const unguided = stateFor(undefined);
   unguided.evaluate(missionWorld([]));
   assert.deepEqual(missionGuideHighlight(unguided.state(), "market"), none, "a step may have no button");
   build.abandon();
   assert.deepEqual(missionGuideHighlight(build.state(), "market"), none, "an abandoned chain points at nothing");
+});
+
+check("Faz C: the site hint only ever names ground the placement rules accept", () => {
+  const footprint = { width: 6, depth: 6 };
+  // A validator that refuses everything is the case that matters most: the hint
+  // must go silent rather than invent a spot the click would then be refused at.
+  assert.equal(
+    solveMissionSite({
+      origin: { x: 0, z: 0 },
+      mainRoadCells: [{ x: 8, z: 0 }],
+      footprint,
+      validate: () => ({ x: 0, z: 0, valid: false }),
+    }),
+    null,
+    "no legal ground means no marker",
+  );
+
+  // Only one legal spot, and it is nowhere near the road: the solver still names
+  // it. "Best" is a ranking among legal answers, never a veto over them.
+  const onlySpot = solveMissionSite({
+    origin: { x: 0, z: 0 },
+    mainRoadCells: [{ x: 8, z: 0 }],
+    footprint,
+    validate: (x, z) => ({ x, z, valid: x === 40 && z === 20 }),
+  });
+  assert.deepEqual(onlySpot, { x: 40, z: 20 });
+
+  // The ranking itself: among spots the rules accept, the one whose footprint
+  // comes closest to the centre's own road wins — which is the rule the tur is
+  // teaching, so the marker demonstrates it rather than merely obeying it.
+  const nearRoad = solveMissionSite({
+    origin: { x: 0, z: 0 },
+    mainRoadCells: [{ x: 20, z: 0 }],
+    footprint,
+    validate: (x, z) => ({ x, z, valid: (x === 16 && z === 0) || (x === -40 && z === 0) }),
+  });
+  assert.deepEqual(nearRoad, { x: 16, z: 0 }, "the spot touching the network beats the far one");
+
+  // With no road at all — a centre that has lost its ring — distance to home is
+  // the only ranking left, and it is still the right advice: build near, connect
+  // after. Ties break deterministically on the sweep order, so the hint does not
+  // flicker between two equally good spots frame to frame.
+  const noRoad = solveMissionSite({
+    origin: { x: 0, z: 0 },
+    mainRoadCells: [],
+    footprint,
+    validate: (x, z) => ({ x, z, valid: (x === 12 && z === 0) || (x === -32 && z === 0) }),
+  });
+  assert.deepEqual(noRoad, { x: 12, z: 0 });
+
+  // The marker sits where the building would actually land, not on the sample
+  // point: the validator snaps to the placement grid, and a ring offset from the
+  // footprint it is advertising would be pointing slightly at the wrong ground.
+  const snapped = solveMissionSite({
+    origin: { x: 0, z: 0 },
+    mainRoadCells: [{ x: 6, z: 0 }],
+    footprint,
+    validate: (x, z) => ({ x: x + 1, z: z + 1, valid: x === 0 && z === 0 }),
+  });
+  assert.deepEqual(snapped, { x: 1, z: 1 });
+
+  // Ranking before validating is what keeps this affordable: the expensive
+  // question is asked of the best candidate first and, in the ordinary case,
+  // only once. Pinned because the cheap version and the correct version have to
+  // stay the same version.
+  let asked = 0;
+  solveMissionSite({
+    origin: { x: 0, z: 0 },
+    mainRoadCells: [{ x: 10, z: 0 }],
+    footprint,
+    validate: (x, z) => {
+      asked += 1;
+      return { x, z, valid: true };
+    },
+  });
+  assert.equal(asked, 1, "a field of legal ground costs exactly one validation");
 });
 
 check("a latched step stays cleared once the player has done it", () => {

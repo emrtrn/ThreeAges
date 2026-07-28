@@ -197,7 +197,9 @@ import { formatVisionDebug } from "./vision/formatVisionDebug";
 import { RtsObjectiveTracker } from "./ui/rtsObjectiveTracker";
 import { RtsMissionPanel } from "./ui/rtsMissionPanel";
 import { MissionDirector, type MissionDirectorState } from "./tutorial/missionDirector";
-import { missionGuideHighlight } from "./tutorial/missionGuideHighlight";
+import { missionGuideHighlight, ROAD_PALETTE_TARGET } from "./tutorial/missionGuideHighlight";
+import { MissionHintView } from "./tutorial/missionHintView";
+import { solveMissionSite, type MissionSite } from "./tutorial/missionSiteSolver";
 import type { MissionWorldSnapshot } from "./tutorial/missionPredicates";
 import type { MissionScript } from "./tutorial/missionScript";
 import type { MissionModeChoice } from "./tutorial/missionModeChoice";
@@ -213,6 +215,14 @@ const PERFORMANCE_SNAPSHOT_INTERVAL_SECONDS = 0.5;
  * on "go build a depot" and a fraction of the cost of doing it every frame.
  */
 const MISSION_POLL_SECONDS = 0.25;
+/**
+ * How often the world marker's suggested build site is re-solved, in real
+ * seconds. Far slower than the objective poll because the solve sweeps the
+ * placement validator over a field of candidates — and because the answer only
+ * moves when the map does. A target *change* re-solves immediately regardless,
+ * so a step that has just opened never waits for this.
+ */
+const MISSION_SITE_RESOLVE_SECONDS = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
 const MAX_FRAME_SECONDS = 1 / 15;
 const SCENE_BACKGROUND = "#20262b";
@@ -515,6 +525,16 @@ export class RtsApp {
    */
   private readonly missions: MissionDirector | null;
   private readonly missionPanel: RtsMissionPanel | null;
+  private readonly missionHint: MissionHintView | null;
+  /**
+   * Where the marker currently points, and what it was solved for. Cached
+   * because {@link solveMissionSite} sweeps the validator over a field of
+   * candidates — cheap enough to re-run every couple of seconds while the
+   * world moves under it, far too expensive to run every frame.
+   */
+  private missionSite: MissionSite | null = null;
+  private missionSiteKey: string | null = null;
+  private missionSiteTimer = 0;
   /**
    * Real seconds since the last mission evaluation. Objectives are polled rather
    * than evented (see {@link MissionDirector}), and the poll rebuilds the
@@ -812,10 +832,16 @@ export class RtsApp {
     // for the mode and can never be changed by it.
     if (this.options.missionScript) {
       this.missions = new MissionDirector(this.options.missionScript);
-      this.missionPanel = new RtsMissionPanel();
+      // "Göster" recentres rather than flying: the camera is the player's, and a
+      // scripted sweep would take it away from them for as long as it lasted.
+      this.missionPanel = new RtsMissionPanel(() => {
+        if (this.missionSite) this.cameraController.setFocus(this.missionSite.x, this.missionSite.z);
+      });
+      this.missionHint = new MissionHintView();
     } else {
       this.missions = null;
       this.missionPanel = null;
+      this.missionHint = null;
     }
     // §59. Same construction rule as §58 above: the flag off means these five
     // are null and nothing downstream ever asks them anything, so a disabled
@@ -1322,6 +1348,7 @@ export class RtsApp {
     this.territory.dispose();
     this.strategicPointView?.dispose();
     this.missionPanel?.dispose();
+    this.missionHint?.dispose();
     // Reveal before disposing: the binder set `visible = false` on live scene
     // objects, and tearing the fog down without undoing that would leave them
     // permanently invisible to whatever renders next.
@@ -1401,6 +1428,7 @@ export class RtsApp {
     // Hidden until a building placement begins; syncPlacementUi() toggles it.
     this.territory.root.visible = false;
     if (this.strategicPointView) this.scene.add(this.strategicPointView.root);
+    if (this.missionHint) this.scene.add(this.missionHint.root);
     // §59, after the ground overlays it has to cover and before the units it
     // must not: fogged units are hidden outright by the visibility binder, not
     // occluded by this plane.
@@ -1667,7 +1695,8 @@ export class RtsApp {
     // is the *selection*, which moves at pointer speed. A guide resolved on the
     // 4Hz poll would leave the player looking at a freshly selected Market for a
     // quarter second before the button they were told to press lit up.
-    this.syncMissionGuide(missions.state());
+    this.syncMissionGuide(missions.state(), dt);
+    this.missionHint?.update(dt);
 
     this.missionPollTimer += dt;
     if (this.missionPollTimer < MISSION_POLL_SECONDS) return;
@@ -1705,15 +1734,103 @@ export class RtsApp {
    * abandoned or guide-less step resolves to nulls, which is what clears them —
    * there is no separate "stop pointing" path to forget to call.
    */
-  private syncMissionGuide(state: MissionDirectorState): void {
-    const highlight = missionGuideHighlight(state, this.selection.selectedStructure()?.stats.id ?? null);
-    this.buildPalette.setMissionHighlight(highlight.paletteBuildingId);
+  private syncMissionGuide(state: MissionDirectorState, dt = 0): void {
+    const guide = state.step?.guide;
+    const guideBuildingId = guide?.action.buildingId ?? null;
+    const highlight = missionGuideHighlight(
+      state,
+      this.selection.selectedStructure()?.stats.id ?? null,
+      guideBuildingId === null ? 0 : this.completedPlayerBuildings(guideBuildingId),
+    );
+    this.buildPalette.setMissionHighlight(highlight.paletteTarget);
     this.selectionPanel.setMissionHighlight(highlight.actionId);
     this.missionPanel?.setGuidePrompt(
-      highlight.selectBuildingId === null
+      highlight.prompt === null
         ? null
-        : `Önce ${this.buildingLabels.get(highlight.selectBuildingId) ?? highlight.selectBuildingId} yapısını seç.`,
+        : highlight.prompt.kind === "draw-road"
+          ? `${this.buildingLabels.get(guideBuildingId ?? "") ?? "Yapı"} kuruldu ama bağlı değil — Yol aracıyla Merkez'in yoluna bağla.`
+          : `Önce ${this.buildingLabels.get(highlight.prompt.buildingId) ?? highlight.prompt.buildingId} yapısını seç.`,
     );
+    this.syncMissionMarker(highlight.paletteTarget, guideBuildingId, highlight.prompt !== null, dt);
+  }
+
+  /**
+   * Move the world marker to whatever the step is asking for, and keep it there.
+   *
+   * Two shapes of answer, one marker (see {@link MissionHintView}):
+   *
+   * - **"Build it here":** a spot solved against the real placement validator.
+   *   Re-solved on a timer rather than per frame, and re-solved *immediately*
+   *   when the target changes, so a step that just opened points at once.
+   * - **"Act on this building":** the building the player already owns — the one
+   *   whose panel holds the button, or the one standing unconnected. No search
+   *   needed; it is a thing on the map with a position.
+   */
+  private syncMissionMarker(
+    paletteTarget: string | null,
+    guideBuildingId: string | null,
+    pointAtOwnBuilding: boolean,
+    dt: number,
+  ): void {
+    if (!this.missionHint) return;
+    const key = pointAtOwnBuilding ? `own:${guideBuildingId}` : `site:${paletteTarget}`;
+    this.missionSiteTimer += dt;
+    const stale = key !== this.missionSiteKey || this.missionSiteTimer >= MISSION_SITE_RESOLVE_SECONDS;
+    if (stale) {
+      this.missionSiteKey = key;
+      this.missionSiteTimer = 0;
+      this.missionSite = pointAtOwnBuilding
+        ? this.playerBuildingPosition(guideBuildingId)
+        // The road tool has no site of its own to solve for: the answer to "draw
+        // a road" is the building that needs one, which the branch above already
+        // covers through the prompt. Anything else is a building to place.
+        : paletteTarget === null || paletteTarget === ROAD_PALETTE_TARGET
+          ? null
+          : this.solvePlacementSite(paletteTarget);
+    }
+    this.missionHint.setTarget(
+      this.missionSite,
+      this.missionSite ? this.groundSurface.heightAt(this.missionSite.x, this.missionSite.z) : 0,
+    );
+    this.missionPanel?.setShowTargetAvailable(this.missionSite !== null);
+  }
+
+  private completedPlayerBuildings(buildingId: string): number {
+    return this.structures.ownedBy(PLAYER_OWNER)
+      .filter((structure) => structure.stats.id === buildingId && structure.construction.complete).length;
+  }
+
+  /**
+   * Where the player's own building of this type stands. The centre is not a
+   * `PlacedStructure` — it has its own system — so it is looked up there, which
+   * is also what makes "select your Centre" point at the right thing.
+   */
+  private playerBuildingPosition(buildingId: string | null): MissionSite | null {
+    if (buildingId === null) return null;
+    if (buildingId === "command_center") {
+      const center = this.centers.get(PLAYER_OWNER);
+      return center ? { x: center.position.x, z: center.position.z } : null;
+    }
+    const owned = this.structures.ownedBy(PLAYER_OWNER)
+      .find((structure) => structure.stats.id === buildingId && structure.construction.complete);
+    return owned ? { x: owned.x, z: owned.z } : null;
+  }
+
+  /** Feed the pure solver this match's centre, main road network and validator. */
+  private solvePlacementSite(buildingId: string): MissionSite | null {
+    const stats = this.options.buildingBalance[buildingId];
+    const center = this.centers.get(PLAYER_OWNER);
+    if (!stats || !center) return null;
+    const mainComponentId = this.depotLogistics.mainComponentIds().get(PLAYER_OWNER) ?? null;
+    const mainRoadCells = mainComponentId === null
+      ? []
+      : this.roads.components().find((component) => component.id === mainComponentId)?.cells ?? [];
+    return solveMissionSite({
+      origin: { x: center.position.x, z: center.position.z },
+      mainRoadCells,
+      footprint: stats.footprint,
+      validate: (x, z) => this.structureConstruction.validate(PLAYER_OWNER, buildingId, x, z),
+    });
   }
 
   /**
@@ -2780,6 +2897,9 @@ export class RtsApp {
     this.playerMarketTrades = 0;
     this.playerMarketPurchases = {};
     this.missionPanel?.setState(null);
+    this.missionSite = null;
+    this.missionSiteKey = null;
+    this.missionSiteTimer = 0;
     if (this.missions) this.syncMissionGuide(this.missions.state());
     this.attackWatch.reset();
     this.match.reset();

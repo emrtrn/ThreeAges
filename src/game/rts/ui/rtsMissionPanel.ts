@@ -73,6 +73,7 @@ export class RtsMissionPanel {
   private readonly why = document.createElement("p");
   private readonly progress = document.createElement("p");
   private readonly guide = document.createElement("p");
+  private readonly show = document.createElement("button");
   private signature = "";
   private progressText = "";
   /**
@@ -84,7 +85,12 @@ export class RtsMissionPanel {
    */
   private collapsed = false;
 
-  constructor() {
+  /**
+   * @param onShow move the camera to the step's marker. Optional: a host that
+   *   passes nothing simply never shows the button, which is the right shape for
+   *   a card that must survive being wired into a smaller runtime.
+   */
+  constructor(private readonly onShow?: () => void) {
     this.root.className = "rts-mission-panel";
     this.root.dataset.rtsMission = "";
     this.root.setAttribute("aria-label", "Görev");
@@ -120,8 +126,18 @@ export class RtsMissionPanel {
     this.guide.className = "rts-mission-guide";
     this.guide.dataset.rtsMissionGuide = "";
     this.guide.hidden = true;
+    // "Göster" earns its place only once there is somewhere to go: it is shown
+    // exactly when the world marker exists, so it can never move the camera to
+    // nothing. `ui-interactive` because, unlike the rest of the card, it takes
+    // the click rather than letting it through to the map.
+    this.show.type = "button";
+    this.show.className = "rts-mission-show ui-interactive";
+    this.show.dataset.rtsMissionShow = "";
+    this.show.textContent = "Göster";
+    this.show.hidden = true;
+    this.show.addEventListener("click", () => this.onShow?.());
     this.content.append(this.why);
-    this.root.append(this.toggle, this.title, this.progress, this.guide, this.content);
+    this.root.append(this.toggle, this.title, this.progress, this.guide, this.show, this.content);
     this.syncCollapsedState();
     this.root.hidden = true;
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
@@ -173,6 +189,13 @@ export class RtsMissionPanel {
     if ((text ?? "") === this.guide.textContent) return;
     this.guide.textContent = text ?? "";
     this.guide.hidden = text === null;
+  }
+
+  /** Offer "Göster" only while the world actually carries a marker to go to. */
+  setShowTargetAvailable(available: boolean): void {
+    const hidden = !available || this.onShow === undefined;
+    if (hidden === this.show.hidden) return;
+    this.show.hidden = hidden;
   }
 
   dispose(): void {

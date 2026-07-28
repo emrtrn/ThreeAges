@@ -1269,6 +1269,32 @@ body {
   display: none;
 }
 
+/* "Göster": recentre on the step's world marker. Shown only while a marker
+   exists, so the button can never point at nothing. */
+.rts-mission-show {
+  margin-top: 8px;
+  padding: 4px 12px;
+  color: var(--ta-ink);
+  font: 700 11px/1.2 Cinzel, Georgia, serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  background: var(--ta-surface-raised);
+  border: 1px solid rgb(226 185 92 / 45%);
+  border-radius: 2px;
+}
+
+.rts-mission-show:hover,
+.rts-mission-show:focus-visible {
+  color: var(--ta-gold);
+  border-color: var(--ta-gold);
+  outline: none;
+}
+
+.rts-mission-show[hidden] {
+  display: none;
+}
+
 /* Faz 11 §58 regional victory readout. Top-right under the speed controls: the
    left edge is the debug overlay's and the bottom-centre belongs to selection,
    so this is the one free anchor that stays visible during a fight. Read-only,

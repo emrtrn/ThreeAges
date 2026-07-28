@@ -343,16 +343,22 @@ export class RtsBuildPalette {
    * who deliberately opens another category to look around is not dragged back
    * every quarter second. They are being pointed at a button, not steered.
    */
-  setMissionHighlight(buildingId: string | null): void {
-    if (buildingId === this.missionHighlightId) return;
-    this.missionHighlightId = buildingId;
+  setMissionHighlight(target: string | null): void {
+    if (target === this.missionHighlightId) return;
+    this.missionHighlightId = target;
     for (const [id, entry] of this.buildButtons) {
-      entry.button.classList.toggle("is-mission-hint", id === buildingId);
+      entry.button.classList.toggle("is-mission-hint", id === target);
     }
-    if (buildingId === null) return;
+    // The road tool is a palette button like any other from the pointer's side,
+    // but it is keyed by mode rather than by building id — and only the *build*
+    // mode is ever pointed at. Sending a player to the eraser would be sending
+    // them to undo the thing the step just asked for.
+    this.roadButtons.get("build")?.classList.toggle("is-mission-hint", target === "road");
+    this.roadButtons.get("erase")?.classList.remove("is-mission-hint");
+    if (target === null) return;
     this.root.hidden = false;
     for (const [category, panel] of this.categoryPanels) {
-      if (panel.querySelector(`[data-rts-building="${CSS.escape(buildingId)}"]`)) {
+      if (panel.querySelector(`[data-rts-building="${CSS.escape(target)}"]`)) {
         this.selectCategory(category);
         return;
       }
