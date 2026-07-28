@@ -21,7 +21,6 @@ Actor, and an Actor never changes them.
 
 ```json
 "barracks": {
-  "constructionActorRef": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json",
   "levels": {
     "1": "assets/.../BP_RTS_Barracks_FirstAge_T1.actor.json",
     "2": "assets/.../BP_RTS_Barracks_FirstAge_T2.actor.json",
@@ -37,10 +36,12 @@ Actor, and an Actor never changes them.
 - `ages` is looked up first, `levels` is the age-agnostic fallback. A building
   whose art does not change with the age can author `levels` alone — the resource
   camps ship one model each and map every level to it.
-- `constructionActorRef` is optional. Without it a site shows the very building
-  being raised (the completed Actor for the same age and level), drawn
-  translucent by the caller. Author one only when the scaffold is genuinely
-  different art.
+- `constructionActorRef` is optional and no building currently authors one.
+  Without it a site shows the very building being raised (the completed Actor for
+  the same age and level), drawn translucent by the caller. Author one only when
+  the scaffold is genuinely different art — and note that it is a *single* Actor
+  for every age and level, so a scaffold that just re-points at one tier's mesh
+  will freeze every site at that tier.
 - The level ceiling comes from age balance (`1 + levelUpgrades.length`), not from
   the art pack. Adding a fourth level to an age fails the coverage test until its
   Actors exist.

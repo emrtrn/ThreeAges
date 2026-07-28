@@ -18,6 +18,7 @@ import type { UnitStance } from "../units/unit";
 import type { Unit } from "../units/unit";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
+import { FLAT_RTS_GROUND, type RtsGroundSurface } from "../world/rtsTerrainSurface";
 
 /** The y = 0 walkable ground the runtime commands against. */
 const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
@@ -41,6 +42,7 @@ export class CommandSystem {
   private readonly hit = new Vector3();
   private pendingGroundOrders: PendingGroundOrder[] = [];
   private readonly destinationReservations = new Map<Unit, DestinationReservation>();
+  private ground: RtsGroundSurface = FLAT_RTS_GROUND;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -55,6 +57,11 @@ export class CommandSystem {
     private readonly onWorkerOrderCancelled: ((workers: readonly Unit[]) => void) | null = null,
     private readonly onStructureAttackCommand: StructureAttackCommand | null = null,
   ) {}
+
+  /** Sets the authored terrain used for command/rally-point projection. */
+  setGroundSurface(ground: RtsGroundSurface): void {
+    this.ground = ground;
+  }
 
   /** Issue the contextual move-or-attack order at a screen position. */
   issueAt(x: number, y: number): void {
@@ -241,8 +248,9 @@ export class CommandSystem {
   private groundPoint(x: number, y: number): Vector3 | null {
     this.setNdc(x, y);
     this.raycaster.setFromCamera(this.ndc, this.camera);
-    const point = this.raycaster.ray.intersectPlane(GROUND_PLANE, this.hit);
-    return point ? point.clone() : null;
+    return this.ground.intersectRay(this.raycaster.ray)
+      ?? this.raycaster.ray.intersectPlane(GROUND_PLANE, this.hit)?.clone()
+      ?? null;
   }
 
   private setNdc(x: number, y: number): void {

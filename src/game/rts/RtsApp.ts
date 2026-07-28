@@ -51,6 +51,7 @@ import { RtsCameraController } from "./camera/rtsCameraController";
 import { RtsInput } from "./input/rtsInput";
 import { RtsPointer } from "./input/rtsPointer";
 import { createRtsGround, RTS_WORLD_HALF_EXTENT } from "./world/rtsGround";
+import { AuthoredRtsGroundSurface, FLAT_RTS_GROUND, type RtsGroundSurface } from "./world/rtsTerrainSurface";
 import { RTS_PLACEMENT_GRID_SIZE } from "./structures/placementGrid";
 import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "./world/rtsMapBlockout";
 import { resolveRtsSpatialLayout, type RtsSpatialLayout } from "./world/rtsSpatialLayout";
@@ -351,6 +352,8 @@ export class RtsApp {
    * fallback). Its presence gates the legacy ridge art and the code sun.
    */
   private authoredWorld: AuthoredWorldHandle | null = null;
+  /** Runtime terrain bridge; stays flat until a Landscape successfully mounts. */
+  private groundSurface: RtsGroundSurface = FLAT_RTS_GROUND;
   /** Whether the Level intends to author a static world (known synchronously). */
   private readonly authoredWorldIntended: boolean;
   /** The code-side sun, kept so an authored directional light can retire it. */
@@ -795,12 +798,14 @@ export class RtsApp {
         this.applyConstructionVisual(structure);
         this.assignWorkerToConstruction(structure);
         this.autoConnectRoad(structure);
+        this.syncStructurePads();
         // Construction reserves every footprint for placement, but farms and
         // lumber camps are intentionally omitted from *unit* navigation.
         this.refreshNavigationBlockers();
       },
       (structure) => {
         this.workerConstruction.cancelStructure(structure);
+        this.syncStructurePads();
         this.refreshNavigationBlockers();
       },
       (stats, x, z) => stats.economy?.requiresResourceNode
@@ -826,6 +831,7 @@ export class RtsApp {
       // buried trees stay harvestable.
       () => [...this.roads.occupancyBlockers(), ...this.forests.liveTreeBlockers()],
       () => this.units.all(),
+      (x, z) => this.groundSurface.heightAt(x, z),
     );
     this.roadConstruction = new RoadConstructionService(
       this.roads,
@@ -1351,6 +1357,7 @@ export class RtsApp {
     this.roadDebugView.refresh();
     // Cheap when nothing was built: two integer compares (see syncStructurePads).
     this.syncStructurePads();
+    this.syncUnitsToGround();
     this.commandMarkers.update(dt);
     this.structures.updateVisualAnimations(dt);
     this.updateHealthBarLinger(dt);
@@ -1991,6 +1998,7 @@ export class RtsApp {
       this.spatial.playerStart.z,
       maxHealth,
       stats,
+      this.groundSurface.heightAt(this.spatial.playerStart.x, this.spatial.playerStart.z),
     );
     const enemyCenter = this.centers.spawn(
       "enemy",
@@ -1998,6 +2006,7 @@ export class RtsApp {
       this.spatial.enemyStart.z,
       maxHealth,
       stats,
+      this.groundSurface.heightAt(this.spatial.enemyStart.x, this.spatial.enemyStart.z),
     );
     // Settlement Lv1 tier values (worker queue capacity today) before any research.
     for (const center of this.centers.all()) this.progression.applyToStructure(center);
@@ -2143,6 +2152,7 @@ export class RtsApp {
       // at y=0 would z-fight. A Landscape-less world (or a failed load) keeps it.
       if (handle.landscapeCount > 0) {
         this.retireFlatGround();
+        this.mountGroundSurface(handle);
         this.setupRoadPainter(handle);
       }
       // The blockout still drew a placeholder ridge box from the marker blocker;
@@ -2248,6 +2258,29 @@ export class RtsApp {
   }
 
   /**
+   * A Landscape can finish loading after the match's centres and opening units
+   * were created. Re-sample their foundation heights once, then hand the same
+   * ground source to every pointer-facing RTS tool.
+   */
+  private mountGroundSurface(handle: AuthoredWorldHandle): void {
+    const terrain = handle.landscapes[0];
+    if (!terrain) return;
+    this.groundSurface = new AuthoredRtsGroundSurface(terrain);
+    this.commands.setGroundSurface(this.groundSurface);
+    this.placement.setGroundSurface(this.groundSurface);
+    this.roadPlacement.setGroundSurface(this.groundSurface);
+    for (const center of this.centers.all()) {
+      center.groundY = this.groundSurface.heightAt(center.position.x, center.position.z);
+      center.object.position.y = center.groundY;
+    }
+    for (const structure of this.structures.all()) {
+      structure.groundY = this.groundSurface.heightAt(structure.x, structure.z);
+      structure.object.position.y = structure.groundY;
+    }
+    this.syncUnitsToGround();
+  }
+
+  /**
    * Building ground pads: the terrain under every standing building is cleared to
    * the pad layer, the same way a road paints its corridor — a building on bare
    * grass reads as dropped onto the field. Presentation only: this mirrors the
@@ -2267,15 +2300,28 @@ export class RtsApp {
         z: center.position.z,
         width: center.stats.footprint.width,
         depth: center.stats.footprint.depth,
+        groundY: center.groundY,
       })),
       ...this.structures.all().map((structure) => ({
         x: structure.x,
         z: structure.z,
         width: structure.stats.footprint.width,
         depth: structure.stats.footprint.depth,
+        groundY: structure.groundY,
       })),
     ]);
     painter.sync(this.roads.all(), this.roads.version);
+  }
+
+  /**
+   * RTS pathfinding deliberately remains X/Z-only; this is the one visual
+   * grounding pass that makes every unit follow the authored heightfield without
+   * changing navigation or the editor-authored blocking-volume contract.
+   */
+  private syncUnitsToGround(): void {
+    for (const unit of this.units.all()) {
+      unit.position.y = this.groundSurface.heightAt(unit.position.x, unit.position.z);
+    }
   }
 
   /**

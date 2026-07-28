@@ -49,6 +49,8 @@ export class CommandCenter implements UpgradableStructure {
    * rather than carrying a hand-written level of its own.
    */
   readonly stats: BuildingBalanceStats;
+  /** Ground elevation sampled when the match's starting foundation is mounted. */
+  groundY: number;
   /**
    * A centre is spawned, not built, so it is complete from its first frame —
    * but the upgrade system asks every candidate this, so it answers.
@@ -103,9 +105,11 @@ export class CommandCenter implements UpgradableStructure {
     z: number,
     maxHealth = COMMAND_CENTER_MAX_HEALTH,
     stats: BuildingBalanceStats | null = null,
+    groundY = 0,
   ) {
     this.object.name = `rts-command-center-${owner}`;
-    this.object.position.set(x, 0, z);
+    this.groundY = groundY;
+    this.object.position.set(x, groundY, z);
     this.health = new HealthComponent(maxHealth);
     this.stats = stats ?? placeholderCenterStats(maxHealth);
     const placeholder = new Group();

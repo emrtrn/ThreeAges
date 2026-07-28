@@ -1,7 +1,8 @@
 /** Pure Level marker -> RTS spatial-data adapter (assetization Faz D). */
 import { resolveActorInstanceVariables, type ResolvedActorClass } from "@engine/scene/actorInstance";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
-import type { LayoutSplineActor } from "@engine/scene/layout";
+import type { LayoutBlockingVolume, LayoutSplineActor } from "@engine/scene/layout";
+import { resolveBlockingVolume } from "@engine/scene/blockingVolume";
 import type { BuildingBalance, ResourceBalance } from "../../data/gameDataTypes";
 import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
 import type { RtsTreeDefinition } from "../economy/forestSystem";
@@ -68,6 +69,7 @@ export function adaptRtsLevel(
   actors: readonly ResolvedActorClass[],
   splines: readonly LayoutSplineActor[],
   balance: { readonly buildings: BuildingBalance; readonly resources: ResourceBalance },
+  blockingVolumes: readonly LayoutBlockingVolume[] = [],
 ): RtsLevelDefinition {
   const starts = new Map<string, RtsMapPoint>();
   const nodes: RtsResourceNodeDefinition[] = [];
@@ -76,6 +78,9 @@ export function adaptRtsLevel(
   const navigationBlockers: NavBlocker[] = [];
   const anchors: RtsLevelBuildAnchor[] = [];
   const expansionMembers = new Map<string, ExpansionMembers>();
+  for (const volume of blockingVolumes) {
+    navigationBlockers.push(blockingVolumeNavigationBlocker(volume));
+  }
   for (const { def, instance } of actors) {
     const values = resolveActorInstanceVariables(def, instance.variableOverrides);
     const point = mapPoint(instance.position, `Actor ${def.name}`);
@@ -177,5 +182,29 @@ export function adaptRtsLevel(
     buildAnchors: anchors,
     expansions,
     routes,
+  };
+}
+
+/**
+ * RTS navigation is a 2D grid, so a Forge Blocking Volume becomes its
+ * conservative horizontal AABB. Upright boxes preserve their authored size;
+ * yawed boxes expand only as much as needed to remain safely blocked. This is a
+ * gameplay adapter, not a replacement collision system: the generic volume
+ * remains authored and rendered by Forge exactly as before.
+ */
+function blockingVolumeNavigationBlocker(volume: LayoutBlockingVolume): NavBlocker {
+  const resolved = resolveBlockingVolume(volume);
+  const scale = typeof volume.scale === "number"
+    ? [volume.scale, volume.scale, volume.scale] as const
+    : volume.scale ?? [1, 1, 1] as const;
+  const halfX = Math.abs(resolved.size[0] * scale[0]) / 2;
+  const halfY = Math.abs(resolved.size[1] * scale[1]) / 2;
+  const halfZ = Math.abs(resolved.size[2] * scale[2]) / 2;
+  const yaw = ((volume.rotation?.[1] ?? 0) * Math.PI) / 180;
+  const horizontalX = Math.abs(Math.cos(yaw)) * halfX + Math.abs(Math.sin(yaw)) * halfZ;
+  const horizontalZ = Math.abs(Math.sin(yaw)) * halfX + Math.abs(Math.cos(yaw)) * halfZ;
+  return {
+    min: [volume.position[0] - horizontalX, volume.position[1] - halfY, volume.position[2] - horizontalZ],
+    max: [volume.position[0] + horizontalX, volume.position[1] + halfY, volume.position[2] + horizontalZ],
   };
 }

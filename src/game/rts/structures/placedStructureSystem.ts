@@ -56,6 +56,8 @@ export interface PlacedStructure {
   readonly stats: BuildingBalanceStats;
   readonly x: number;
   readonly z: number;
+  /** Ground elevation sampled when this foundation was placed. */
+  groundY: number;
   readonly blocker: NavBlocker;
   readonly object: Group;
   readonly construction: ConstructionComponent;
@@ -120,11 +122,11 @@ export class PlacedStructureSystem {
     this.root.name = "rts-placed-structures";
   }
 
-  place(owner: UnitOwner, stats: BuildingBalanceStats, x: number, z: number): PlacedStructure {
+  place(owner: UnitOwner, stats: BuildingBalanceStats, x: number, z: number, groundY = 0): PlacedStructure {
     const object = new Group();
     const id = this.nextId++;
     object.name = `rts-construction-site-${owner}-${id}`;
-    object.position.set(x, 0, z);
+    object.position.set(x, groundY, z);
     // Keep the construction site clickable without rendering the old brown
     // foundation slab underneath every building.
     const pickProxy = new Mesh(
@@ -172,6 +174,7 @@ export class PlacedStructureSystem {
       stats,
       x,
       z,
+      groundY,
       blocker: buildingFootprintBlocker(stats, x, z),
       object,
       construction: new ConstructionComponent(stats.constructionSeconds),

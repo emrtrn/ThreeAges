@@ -43,7 +43,7 @@ export class CommandMarkerSystem {
     });
     const mesh = new Mesh(this.geometry, material);
     mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(point.x, 0.05, point.z);
+    mesh.position.set(point.x, point.y + 0.05, point.z);
     this.root.add(mesh);
     this.markers.push({ mesh, material, age: 0 });
   }

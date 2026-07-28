@@ -267,7 +267,7 @@ import type { RtsStrategicPoint } from "../src/game/rts/world/rtsMapBlockout";
 import { simulationSteps, type RtsSimulationSpeed } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
 import { planAutoRoadConnection } from "../src/game/rts/roads/autoRoadConnector";
-import { roadGraphToLandscapeSpline, RoadPaintSurface, structurePadsToRectPaints } from "../src/game/rts/roads/roadTerrainPainter";
+import { roadGraphToLandscapeSpline, RoadPaintSurface, StructurePadTerrainSurface, structurePadsToRectDeforms, structurePadsToRectPaints } from "../src/game/rts/roads/roadTerrainPainter";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { congestionSeconds, updateUnitMovement } from "../src/game/rts/units/unitMovement";
@@ -436,6 +436,7 @@ import {
   upVectorFromRotation,
 } from "../engine/scene/transform";
 import {
+  applyLandscapeRectDeform,
   applyLandscapeSplineDeform,
   applyLandscapeSplinePaint,
   computeLandscapeSplineMeshInstances,
@@ -20518,6 +20519,28 @@ check("applyLandscapeSplineDeform respects raise/lower direction gating", () => 
   assert.equal(data.heights[highIndex], 5); // lowering is gated off, so kept
 });
 
+check("applyLandscapeRectDeform creates a level building foundation with a soft edge", () => {
+  const data = createFlatLandscapeData("small");
+  const center = 32 * 65 + 32;
+  const edge = 32 * 65 + 35; // local X +3: inside the one-unit falloff
+  const outside = 32 * 65 + 37; // local X +5: clear of the pad
+  data.heights[center] = 1;
+  data.heights[edge] = 1;
+  data.heights[outside] = 1;
+  const result = applyLandscapeRectDeform(data, [{
+    centerX: 0,
+    centerZ: 0,
+    halfWidth: 2,
+    halfDepth: 2,
+    falloff: 2,
+    targetHeight: 5,
+  }]);
+  assert.equal(result.changed, true);
+  assert.equal(data.heights[center], 5, "the foundation core reaches its placement elevation");
+  assert.ok(data.heights[edge]! > 1 && data.heights[edge]! < 5, "the edge blends toward surrounding ground");
+  assert.equal(data.heights[outside], 1, "terrain outside the footprint and falloff is unchanged");
+});
+
 check("applyLandscapeSplinePaint blends the target layer along the corridor", () => {
   const data = createFlatLandscapeData("small");
   const spline = straightSpline({ paint: { enabled: true, layerId: "dirt", strength: 1 } });
@@ -20698,6 +20721,38 @@ check("structurePadsToRectPaints pads a footprint into landscape-local space", (
     strength: 0,
   });
   assert.deepEqual(off, [], "strength 0 is the documented off switch");
+});
+
+check("structurePadsToRectDeforms retains a building's sampled world elevation", () => {
+  const foundations = structurePadsToRectDeforms(
+    [{ x: 4, z: -2, width: 6, depth: 4, groundY: 9 }],
+    [1, 3, 1],
+    BUILDING_PAD_VISUAL,
+  );
+  assert.deepEqual(foundations, [{
+    centerX: 3,
+    centerZ: -3,
+    halfWidth: 3.5,
+    halfDepth: 2.5,
+    falloff: 0.5,
+    targetHeight: 6,
+  }]);
+});
+
+check("StructurePadTerrainSurface restores terrain when a building foundation is removed", () => {
+  const data = createFlatLandscapeData("small");
+  const center = 32 * 65 + 32;
+  data.heights[center] = 2;
+  const surface = new StructurePadTerrainSurface(data);
+  const foundations = structurePadsToRectDeforms(
+    [{ x: 0, z: 0, width: 4, depth: 4, groundY: 6 }],
+    [0, 0, 0],
+    BUILDING_PAD_VISUAL,
+  );
+  assert.ok(surface.rebuild(foundations), "the placed foundation dirties height geometry");
+  assert.equal(data.heights[center], 6);
+  surface.rebuild([]);
+  assert.equal(data.heights[center], 2, "removal restores the authored terrain height");
 });
 
 check("a building pad clears its own ground and razing it leaves no residue", () => {
@@ -29314,6 +29369,23 @@ check("Assetization Faz D: Level marker Actors resolve starts, resources, anchor
   assert.throws(() => adaptRtsLevel([starts[0]!], [], { buildings, resources }), RtsLevelError);
 });
 
+check("RTS maps Forge Blocking Volumes into conservative navigation blockers", () => {
+  const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
+  const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
+  const actor = (owner: "player" | "enemy", position: [number, number, number]) => ({
+    index: 0,
+    instance: { classRef: "start.actor.json", position, variableOverrides: { owner } },
+    def: normalizeActorScriptDef({ name: "BP_RTS_KingdomStart", parentClass: "actor", variables: [{ key: "owner", label: "Owner", type: "select", default: "player" }] }),
+  });
+  const level = adaptRtsLevel(
+    [actor("player", [-10, 0, 10]), actor("enemy", [10, 0, -10])],
+    [],
+    { buildings, resources },
+    [{ id: "ridge", position: [4, 2, 6], rotation: [0, 90, 0], size: [8, 6, 2] }],
+  );
+  assert.deepEqual(level.navigationBlockers, [{ min: [3, -1, 2], max: [5, 5, 10] }]);
+});
+
 check("Assetization Faz D: Expansion markers require all roles and an authored route", () => {
   const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
   const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
@@ -29733,7 +29805,16 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
     context,
   );
   assert.equal(rtsUnitActorRef(catalog, "guard_placeholder"), "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json");
-  assert.equal(rtsBuildingActorRef(catalog, "barracks", "construction", 1), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json");
+  // The Barracks used to author a construction Actor that hard-wired the FirstAge
+  // T1 mesh, so every site — Town, level 2, level 3 — was raised as a level 1
+  // Settlement barracks while the preview and the finished model showed the real
+  // tier. It now takes the same fallback as every other building: the site raises
+  // the model it is becoming.
+  assert.equal(
+    rtsBuildingActorRef(catalog, "barracks", "construction", 3, "town"),
+    "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T3.actor.json",
+    "a barracks site raises the age and level it is becoming",
+  );
   assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 1), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T1.actor.json");
   assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 2), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T2.actor.json");
   assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 3), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T3.actor.json");

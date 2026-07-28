@@ -59,6 +59,8 @@ export class StructureConstructionService {
      * tests build without a unit world.
      */
     private readonly liveUnits: () => readonly Unit[] = () => [],
+    /** Samples the current rendered ground so foundations retain their build elevation. */
+    private readonly groundHeightAt: (x: number, z: number) => number = () => 0,
   ) {}
 
   /**
@@ -111,7 +113,7 @@ export class StructureConstructionService {
     // routes planned after `setBlockers` would be routes out of a wall the unit
     // is already standing inside, and there are none.
     evictUnitsFromFootprint(this.liveUnits(), owner, stats, result.x, result.z, this.navigation);
-    const structure = this.structures.place(owner, stats, result.x, result.z);
+    const structure = this.structures.place(owner, stats, result.x, result.z, this.groundHeightAt(result.x, result.z));
     this.reservations.set(structure.id, reservation);
     this.navigation.setBlockers(this.occupiedBlockers());
     this.onStructurePlaced(structure);

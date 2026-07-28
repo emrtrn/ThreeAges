@@ -25,11 +25,12 @@ export class CommandCenterSystem {
     z: number,
     maxHealth?: number,
     stats: BuildingBalanceStats | null = null,
+    groundY = 0,
   ): CommandCenter {
     if (this.centers.has(owner)) {
       throw new Error(`Command center already exists for ${owner}`);
     }
-    const center = new CommandCenter(owner, x, z, maxHealth, stats);
+    const center = new CommandCenter(owner, x, z, maxHealth, stats, groundY);
     this.centers.set(owner, center);
     this.version += 1;
     this.root.add(center.object);

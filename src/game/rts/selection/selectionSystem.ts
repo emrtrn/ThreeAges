@@ -206,7 +206,7 @@ export class SelectionSystem implements RtsPointerHandler {
     const result: Unit[] = [];
     // Marquee selection is a human-input concern: it never picks AI units.
     for (const unit of this.units.unitsOf("player")) {
-      this.scratch.set(unit.position.x, PROJECT_HEIGHT, unit.position.z);
+      this.scratch.set(unit.position.x, unit.position.y + PROJECT_HEIGHT, unit.position.z);
       this.scratch.project(this.camera);
       // Behind the camera → z outside [-1, 1]; skip.
       if (this.scratch.z < -1 || this.scratch.z > 1) continue;

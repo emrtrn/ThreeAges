@@ -199,8 +199,7 @@
           "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T2.actor.json",
           "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T3.actor.json"
         }
-      },
-      "constructionActorRef": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json"
+      }
     },
     "archery_range": {
       "levels": {

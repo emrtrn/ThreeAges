@@ -968,7 +968,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -54,
+        -49.34,
         0,
         28
       ],
@@ -998,7 +998,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -49.34,
+        -54,
         0,
         26.73
       ],

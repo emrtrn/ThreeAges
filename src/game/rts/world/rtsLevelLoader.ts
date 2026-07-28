@@ -30,7 +30,7 @@ export async function loadRtsLevel(
     instance,
     def: normalizeActorScriptDef(await fetchJson(instance.classRef), instance.classRef),
   })));
-  return { definition: adaptRtsLevel(actors, layout.splines ?? [], balance), layout };
+  return { definition: adaptRtsLevel(actors, layout.splines ?? [], balance, layout.blockingVolumes ?? []), layout };
 }
 
 /** Back-compat: the marker definition only, for callers that ignore the art. */

@@ -1119,6 +1119,22 @@ export interface LandscapeRectPaint {
 }
 
 /**
+ * A rounded rectangular terrain foundation.  Like {@link LandscapeRectPaint},
+ * coordinates are landscape-local; unlike paint it pulls the heightfield toward
+ * one local-space Y level.  Runtime users can rebuild these from a pristine
+ * snapshot when a temporary foundation is removed.
+ */
+export interface LandscapeRectDeform {
+  readonly centerX: number;
+  readonly centerZ: number;
+  readonly halfWidth: number;
+  readonly halfDepth: number;
+  readonly falloff: number;
+  /** Target local-space height after `heightScale` has been applied. */
+  readonly targetHeight: number;
+}
+
+/**
  * Destructively paints rounded-rect pads into landscape paint layers. Unlike the
  * spline pass this only walks each pad's own vertex box, so painting many small
  * pads stays proportional to their area rather than to the whole heightfield.
@@ -1154,6 +1170,50 @@ export function applyLandscapeRectPaint(
         if (influence <= 0) continue;
         const index = z * verticesX + x;
         if (!blendLandscapeLayerWeight(data, index, activeIndex, Math.min(1, influence * rect.strength))) continue;
+        changed = true;
+        bounds = expandBounds(bounds, x, z);
+      }
+    }
+  }
+  return { changed, bounds };
+}
+
+/**
+ * Destructively flattens rounded rectangular pads into a heightfield. The core
+ * reaches the requested height exactly and the edge blends across `falloff`, so
+ * a building foundation meets surrounding terrain without a vertical seam.
+ */
+export function applyLandscapeRectDeform(
+  data: ForgeLandscapeData,
+  rects: readonly LandscapeRectDeform[],
+): LandscapeSplineApplyResult {
+  const { verticesX, verticesZ, spacing, heightScale } = data.size;
+  const { originX, originZ } = landscapeGridOrigin(data.size);
+  const scale = heightScale === 0 ? 1 : heightScale;
+  let changed = false;
+  let bounds: LandscapeSplineApplyBounds | null = null;
+  for (const rect of rects) {
+    const reach = Math.max(0, rect.falloff);
+    const gridX = (local: number): number => (local + originX) / spacing;
+    const gridZ = (local: number): number => (local + originZ) / spacing;
+    const x0 = Math.max(0, Math.floor(gridX(rect.centerX - rect.halfWidth - reach)));
+    const x1 = Math.min(verticesX - 1, Math.ceil(gridX(rect.centerX + rect.halfWidth + reach)));
+    const z0 = Math.max(0, Math.floor(gridZ(rect.centerZ - rect.halfDepth - reach)));
+    const z1 = Math.min(verticesZ - 1, Math.ceil(gridZ(rect.centerZ + rect.halfDepth + reach)));
+    const targetRaw = rect.targetHeight / scale;
+    for (let z = z0; z <= z1; z += 1) {
+      const localZ = z * spacing - originZ;
+      const dz = Math.max(Math.abs(localZ - rect.centerZ) - rect.halfDepth, 0);
+      for (let x = x0; x <= x1; x += 1) {
+        const localX = x * spacing - originX;
+        const dx = Math.max(Math.abs(localX - rect.centerX) - rect.halfWidth, 0);
+        const influence = corridorInfluence(Math.hypot(dx, dz), 0, reach);
+        if (influence <= 0) continue;
+        const index = z * verticesX + x;
+        const current = data.heights[index] ?? 0;
+        const next = Number((current + (targetRaw - current) * influence).toFixed(4));
+        if (next === current) continue;
+        data.heights[index] = next;
         changed = true;
         bounds = expandBounds(bounds, x, z);
       }

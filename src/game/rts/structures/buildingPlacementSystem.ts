@@ -29,6 +29,7 @@ import type { BuildingBalance, BuildingBalanceStats } from "../../data/gameDataT
 import type { UnitOwner } from "../units/unit";
 import type { PlacementResult } from "./placementGrid";
 import type { StructureConstructionService } from "./structureConstructionService";
+import { FLAT_RTS_GROUND, type RtsGroundSurface } from "../world/rtsTerrainSurface";
 
 const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 const VALID_COLOR = new Color("#7dc86d");
@@ -57,6 +58,7 @@ export class BuildingPlacementSystem {
    */
   private territoryPreview: Mesh | null = null;
   private result: PlacementResult | null = null;
+  private ground: RtsGroundSurface = FLAT_RTS_GROUND;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -73,6 +75,11 @@ export class BuildingPlacementSystem {
   setPreviewFactory(factory: (buildingId: string, footprintWidth: number, footprintDepth: number) => Object3D | null): void {
     this.previewFactory = factory;
     if (this.active) this.rebuildGhost(this.active.id, this.active.stats);
+  }
+
+  /** Switch pointer/preview grounding once an authored Landscape has mounted. */
+  setGroundSurface(ground: RtsGroundSurface): void {
+    this.ground = ground;
   }
 
   /** Rebuild an active ghost after its type's researched visual level changes. */
@@ -112,7 +119,7 @@ export class BuildingPlacementSystem {
     if (!point) return this.state();
     this.result = this.construction.validate(this.owner, this.active.id, point.x, point.z);
     if (!this.result) return this.state();
-    this.root.position.set(this.result.x, 0, this.result.z);
+    this.root.position.set(this.result.x, this.ground.heightAt(this.result.x, this.result.z), this.result.z);
     this.setGhostValid(this.result.valid);
     return this.state();
   }
@@ -156,7 +163,9 @@ export class BuildingPlacementSystem {
     const height = this.canvas.clientHeight || window.innerHeight;
     this.ndc.set((screenX / width) * 2 - 1, -(screenY / height) * 2 + 1);
     this.raycaster.setFromCamera(this.ndc, this.camera);
-    return this.raycaster.ray.intersectPlane(GROUND_PLANE, this.hit)?.clone() ?? null;
+    return this.ground.intersectRay(this.raycaster.ray)
+      ?? this.raycaster.ray.intersectPlane(GROUND_PLANE, this.hit)?.clone()
+      ?? null;
   }
 
   private rebuildGhost(buildingId: string, stats: BuildingBalanceStats): void {

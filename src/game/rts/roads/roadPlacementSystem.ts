@@ -16,6 +16,7 @@ import {
 
 import type { UnitOwner } from "../units/unit";
 import type { RoadConstructionService } from "./roadConstructionService";
+import { FLAT_RTS_GROUND, type RtsGroundSurface } from "../world/rtsTerrainSurface";
 import {
   RoadGraph,
   type RoadCell,
@@ -103,6 +104,7 @@ export class RoadPlacementSystem {
    * translucent preview boxes stay — they remain a readable placement affordance.
    */
   private painted = false;
+  private ground: RtsGroundSurface = FLAT_RTS_GROUND;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -146,6 +148,13 @@ export class RoadPlacementSystem {
 
   get isActive(): boolean {
     return this.active;
+  }
+
+  /** Switch route picking and preview elevation to the mounted Landscape. */
+  setGroundSurface(ground: RtsGroundSurface): void {
+    this.ground = ground;
+    this.renderNetwork();
+    this.syncMarkers();
   }
 
   state(): RoadPlacementState {
@@ -302,7 +311,9 @@ export class RoadPlacementSystem {
     const height = this.canvas.clientHeight || window.innerHeight;
     this.ndc.set((screenX / width) * 2 - 1, -(screenY / height) * 2 + 1);
     this.raycaster.setFromCamera(this.ndc, this.camera);
-    return this.raycaster.ray.intersectPlane(GROUND_PLANE, this.hit)?.clone() ?? null;
+    return this.ground.intersectRay(this.raycaster.ray)
+      ?? this.raycaster.ray.intersectPlane(GROUND_PLANE, this.hit)?.clone()
+      ?? null;
   }
 
   private renderPreview(plan: RoadPlan | null, color: Color): void {
@@ -321,20 +332,20 @@ export class RoadPlacementSystem {
   private syncMarkers(): void {
     const building = this.active && this.mode === "build";
     this.hoverMarker.visible = building && this.start === null && this.previewEnd !== null && this.reason === "choose-start";
-    if (this.previewEnd) this.hoverMarker.position.set(this.previewEnd.x, 0.065, this.previewEnd.z);
+    if (this.previewEnd) this.hoverMarker.position.set(this.previewEnd.x, this.ground.heightAt(this.previewEnd.x, this.previewEnd.z) + 0.065, this.previewEnd.z);
 
     this.startMarker.visible = building && this.start !== null;
-    if (this.start) this.startMarker.position.set(this.start.x, 0.065, this.start.z);
+    if (this.start) this.startMarker.position.set(this.start.x, this.ground.heightAt(this.start.x, this.start.z) + 0.065, this.start.z);
 
     const planEnd = this.plan?.cells.at(-1) ?? null;
     this.endMarker.visible = building && planEnd !== null && this.reason === "choose-end";
-    if (planEnd) this.endMarker.position.set(planEnd.x, 0.085, planEnd.z);
+    if (planEnd) this.endMarker.position.set(planEnd.x, this.ground.heightAt(planEnd.x, planEnd.z) + 0.085, planEnd.z);
 
     const invalid = building
       && this.previewEnd !== null
       && (this.reason === "invalid-route" || this.reason === "insufficient-resources");
     this.invalidMarker.visible = invalid;
-    if (this.previewEnd) this.invalidMarker.position.set(this.previewEnd.x, 0, this.previewEnd.z);
+    if (this.previewEnd) this.invalidMarker.position.set(this.previewEnd.x, this.ground.heightAt(this.previewEnd.x, this.previewEnd.z), this.previewEnd.z);
   }
 
   /**
@@ -364,7 +375,7 @@ export class RoadPlacementSystem {
   private createPreviewMesh(cell: RoadCell): Mesh {
     const mesh = new Mesh(this.previewGeometry, this.previewMaterial);
     mesh.name = "rts-road-preview";
-    mesh.position.set(cell.x, 0.045, cell.z);
+    mesh.position.set(cell.x, this.ground.heightAt(cell.x, cell.z) + 0.045, cell.z);
     mesh.receiveShadow = true;
     return mesh;
   }
@@ -373,7 +384,7 @@ export class RoadPlacementSystem {
   private createSegmentMesh(segment: RoadSegment): Group {
     const tile = new Group();
     tile.name = `rts-road-${segment.kind}`;
-    tile.position.set(segment.x, 0, segment.z);
+    tile.position.set(segment.x, this.ground.heightAt(segment.x, segment.z), segment.z);
     const center = new Mesh(this.roadCenterGeometry, this.roadMaterial);
     center.name = "rts-road-center";
     center.position.y = 0.045;

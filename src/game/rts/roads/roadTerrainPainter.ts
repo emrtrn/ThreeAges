@@ -26,8 +26,10 @@
 import type { Vec3 } from "@engine/scene/layout";
 import {
   applyLandscapeRectPaint,
+  applyLandscapeRectDeform,
   applyLandscapeSplinePaint,
   type ForgeLandscapeData,
+  type LandscapeRectDeform,
   type ForgeLandscapeSpline,
   type ForgeLandscapeSplinePoint,
   type ForgeLandscapeSplineSegment,
@@ -218,6 +220,8 @@ export interface StructurePad {
   readonly z: number;
   readonly width: number;
   readonly depth: number;
+  /** The sampled ground level at placement, in world-space Y. Defaults to terrain origin. */
+  readonly groundY?: number;
 }
 
 /**
@@ -240,6 +244,25 @@ export function structurePadsToRectPaints(
     halfDepth: Math.max(0, pad.depth / 2 + visual.padding),
     falloff: visual.falloff,
     strength: visual.strength,
+  }));
+}
+
+/**
+ * Uses the exact same footprint, padding and soft edge as the dirt pad, but
+ * turns it into a level foundation at the structure's placement elevation.
+ */
+export function structurePadsToRectDeforms(
+  pads: readonly StructurePad[],
+  origin: Vec3,
+  visual: BuildingPadVisual,
+): LandscapeRectDeform[] {
+  return pads.map((pad) => ({
+    centerX: pad.x - origin[0],
+    centerZ: pad.z - origin[2],
+    halfWidth: Math.max(0, pad.width / 2 + visual.padding),
+    halfDepth: Math.max(0, pad.depth / 2 + visual.padding),
+    falloff: visual.falloff,
+    targetHeight: (pad.groundY ?? origin[1]) - origin[1],
   }));
 }
 
@@ -313,6 +336,47 @@ export class RoadPaintSurface {
   }
 }
 
+/**
+ * Height counterpart to {@link RoadPaintSurface}. A building foundation is a
+ * runtime presentation of standing structures, not a permanent edit to the
+ * authored level, so each rebuild restores the prior changed region before
+ * flattening the current pads from the mount-time height snapshot.
+ */
+export class StructurePadTerrainSurface {
+  private readonly pristine: number[];
+  private flattenedBounds: LandscapeSplineApplyBounds | null = null;
+
+  constructor(private readonly data: ForgeLandscapeData) {
+    this.pristine = data.heights.slice();
+  }
+
+  rebuild(rects: readonly LandscapeRectDeform[]): LandscapeSplineApplyBounds | null {
+    const restored = this.flattenedBounds;
+    if (restored) this.restore(restored);
+    const flattened = applyLandscapeRectDeform(this.data, rects).bounds;
+    this.flattenedBounds = flattened;
+    return unionBounds(restored, flattened);
+  }
+
+  reset(): LandscapeSplineApplyBounds | null {
+    const restored = this.flattenedBounds;
+    if (restored) this.restore(restored);
+    this.flattenedBounds = null;
+    return restored;
+  }
+
+  private restore(bounds: LandscapeSplineApplyBounds): void {
+    const { verticesX } = this.data.size;
+    for (let z = bounds.z0; z <= bounds.z1; z += 1) {
+      const row = z * verticesX;
+      for (let x = bounds.x0; x <= bounds.x1; x += 1) {
+        const index = row + x;
+        this.data.heights[index] = this.pristine[index]!;
+      }
+    }
+  }
+}
+
 /** A mounted terrain the painter drives (matches `AuthoredWorldHandle` entries). */
 export interface RoadTerrainPainterTarget {
   readonly data: ForgeLandscapeData;
@@ -329,6 +393,7 @@ export interface RoadTerrainPainterTarget {
  */
 export class RoadTerrainPainter {
   private readonly surface: RoadPaintSurface;
+  private readonly foundationSurface: StructurePadTerrainSurface;
   private lastVersion = -1;
   /** Set by every input change; cleared by the {@link sync} that consumes it. */
   private dirty = true;
@@ -346,6 +411,7 @@ export class RoadTerrainPainter {
     private readonly padVisual: BuildingPadVisual,
   ) {
     this.surface = new RoadPaintSurface(target.data);
+    this.foundationSurface = new StructurePadTerrainSurface(target.data);
     this.activeLayerId = visual.layerId;
   }
 
@@ -387,7 +453,11 @@ export class RoadTerrainPainter {
       visual: { ...this.visual, layerId: this.activeLayerId },
     });
     const rects = structurePadsToRectPaints(this.pads, this.target.position, this.padVisual);
-    this.refreshGeometry(this.surface.repaint(spline, rects));
+    const foundations = structurePadsToRectDeforms(this.pads, this.target.position, this.padVisual);
+    this.refreshGeometry(unionBounds(
+      this.surface.repaint(spline, rects),
+      this.foundationSurface.rebuild(foundations),
+    ));
   }
 
   /** Drop all road/pad paint back to the mount-time snapshot (match restart/dispose). */
@@ -397,7 +467,7 @@ export class RoadTerrainPainter {
     this.pads = [];
     this.dirty = true;
     this.activeLayerId = this.visual.layerId;
-    this.refreshGeometry(this.surface.reset());
+    this.refreshGeometry(unionBounds(this.surface.reset(), this.foundationSurface.reset()));
   }
 
   private refreshGeometry(dirty: LandscapeSplineApplyBounds | null): void {
