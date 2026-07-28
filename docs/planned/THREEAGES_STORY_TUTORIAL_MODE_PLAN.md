@@ -659,24 +659,52 @@ geliyor: kameranın pan edeceği bir hedef artık var.
       `why ≤ 110`), açılış bütçesi (artık `producer-linked` adımlarını da
       fiyatlıyor ve tavanı preset'lerden okuyor)
 
-Faz A'dan çıkan **açık soru**: varsayılan preset hâlâ `core_match`
-(altın 0, yiyecek tam kapasitede). Hikâye turu `?preset=gameplay_proof` ile
-açılmazsa 5. adım oyuncuyu önce yiyecek satmaya zorlar — ders olarak doğru ama
-sert. Hikâye modu preset seçilmemişken `gameplay_proof`'a düşsün mü?
+Faz A'dan çıkan açık soru **kapandı** (kullanıcı kararı, 2026-07-28):
+`core_match` preset'i tamamen kaldırıldı ve varsayılan `gameplay_proof` oldu.
+Yani her `/?rts` açılışı turun dengelendiği stokla başlıyor; ayrı bir hikâye
+preset'i konusu bir daha açılmıyor.
 
-**Faz B — Buton yönlendirmesi**
+`RTS_CoreMatch.level.json` **durmaya devam ediyor** ve silinemez: preset değil,
+`RTS_BLOCKOUT_MAP`'in birebir aynası olarak `test:engine` tarafından pinlenmiş
+test verisi. Editörden o dosyanın üzerine yazmak hâlâ yasak — `gameplay_proof`
+kendi Level'ını kullanıyor ve bu da ayrı bir değişmezle korunuyor.
 
-- [ ] `MissionGuide` şeması + doğrulayıcı + tutarlılık testi
-- [ ] `RtsBuildPalette.setMissionHighlight` (+ sekme açma, `style.css` nabzı,
-      `prefers-reduced-motion`)
-- [ ] `RtsSelectionPanel.setMissionHighlight` + dünyadaki yapının vurgulanması
-- [ ] `RtsApp` bağlantısı: aktif adımın guide'ını her poll'de sunuma iletmek
+**Faz B — Buton yönlendirmesi** — **tamamlandı 2026-07-28**
+
+- [x] `MissionGuide` şeması + doğrulayıcı + tutarlılık testi. Faz B yalnız
+      `action` alanını tanıyor; `site` Faz C'de, `limit` Faz D'de kendi
+      doğrulamasıyla ekleniyor (tanınmayan alan zaten sessizce düşer).
+      `{ kind: "road" }` de bilinçli olarak yok: onu isteyen ilk şey Faz C'nin
+      hatırlatma satırı, yani kullanan kod gelene kadar yazılmadı.
+- [x] Kararın kendisi saf bir fonksiyona alındı:
+      `tutorial/missionGuideHighlight.ts`. "Hangi butonu göstereceğiz" sorusunun
+      üç kuralı (zincir yoksa gösterme; inşa adımı palete; panel aksiyonu önce
+      **yapıya**, seçildikten sonra butona) tarayıcı olmadan test ediliyor.
+- [x] `RtsBuildPalette.setMissionHighlight` — nabız + hedef değiştiğinde ilgili
+      sekmeyi öne alma (her poll'de değil: oyuncu başka sekmeye bakmak isterse
+      geri sürüklenmesin).
+- [x] `RtsSelectionPanel.setMissionHighlight` — `renderActions` butonları
+      yeniden kurduğunda sınıfı geri koyan `syncMissionHighlight` ile.
+- [x] `style.css`: `outline` tabanlı nabız (armed parıltısıyla çakışmasın diye
+      `box-shadow` değil) + `prefers-reduced-motion` altında sabit çerçeve.
+- [x] `RtsApp` bağlantısı — **her karede**, poll'de değil: işaretçinin cevap
+      verdiği şey seçim, ve seçim işaretçi hızında değişiyor.
+- [x] Panel aksiyonu henüz açık değilken görev kartında tek satır:
+      "Önce Merkez yapısını seç."
+
+**Dünyadaki yapının halkayla vurgulanması Faz C'ye taşındı.** Üç.js görünüm
+modülü zaten orada doğuyor (`missionHintView.ts`); aynı halkayı iki fazda iki
+kez yazmak yerine, Faz B'de kartın tek satırı işi görüyor.
 
 **Faz C — Zemin işareti ve "Göster"**
 
-- [ ] `missionSiteSolver.ts` (saf, `validate()` geri çağrısıyla)
-- [ ] `missionHintView.ts` (halka + ok, nabız/salınım)
+- [ ] `missionSiteSolver.ts` (saf, `validate()` geri çağrısıyla) + `guide.site`
+      alanının şema/doğrulayıcıya eklenmesi
+- [ ] `missionHintView.ts` (halka + ok, nabız/salınım) — **ayrıca** Faz B'den
+      devredilen "tıklanacak yapıyı dünyada vurgula" halkası
 - [ ] Görev kartına "Göster" butonu → kamerayı işarete pan
+- [ ] Yanlış yere kurulmuşken yol aracını işaret eden hatırlatma
+      (`{ kind: "road" }` guide'ı burada doğuyor)
 
 **Faz D — Kontrol ve kilitlenmezlik**
 

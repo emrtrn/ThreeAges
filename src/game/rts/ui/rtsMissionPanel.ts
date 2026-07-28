@@ -72,6 +72,7 @@ export class RtsMissionPanel {
   private readonly title = document.createElement("strong");
   private readonly why = document.createElement("p");
   private readonly progress = document.createElement("p");
+  private readonly guide = document.createElement("p");
   private signature = "";
   private progressText = "";
   /**
@@ -113,8 +114,14 @@ export class RtsMissionPanel {
     // the screen reader was mid-sentence on the objective would talk over the
     // instruction it belongs to.
     this.progress.setAttribute("aria-hidden", "true");
+    // The one instruction the pulsing button cannot give: a panel action does
+    // not exist until its building is selected, so until then the pointer has
+    // nothing on screen to sit on and the card has to say where to click.
+    this.guide.className = "rts-mission-guide";
+    this.guide.dataset.rtsMissionGuide = "";
+    this.guide.hidden = true;
     this.content.append(this.why);
-    this.root.append(this.toggle, this.title, this.progress, this.content);
+    this.root.append(this.toggle, this.title, this.progress, this.guide, this.content);
     this.syncCollapsedState();
     this.root.hidden = true;
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
@@ -155,6 +162,17 @@ export class RtsMissionPanel {
     this.title.textContent = state.step.title;
     this.why.textContent = state.step.why;
     this.syncCollapsedState();
+  }
+
+  /**
+   * "Önce Merkez yapısını seç" — shown only while the step's button is behind a
+   * selection the player has not made yet. Pushed every frame, so it is written
+   * as a plain replace and guarded on change.
+   */
+  setGuidePrompt(text: string | null): void {
+    if ((text ?? "") === this.guide.textContent) return;
+    this.guide.textContent = text ?? "";
+    this.guide.hidden = text === null;
   }
 
   dispose(): void {

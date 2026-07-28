@@ -9,7 +9,7 @@
  */
 import { isFeatureFlag } from "../core/featureFlags";
 import { AI_TARGET_WEIGHTS, MAX_AURA_DAMAGE_RESISTANCE } from "./gameDataTypes";
-import type { MissionGoal, MissionScript, MissionStep } from "../rts/tutorial/missionScript";
+import type { MissionGoal, MissionGuide, MissionScript, MissionStep } from "../rts/tutorial/missionScript";
 
 /**
  * Mirrors `RTS_WORLD_HALF_EXTENT` (`rts/world/rtsGround.ts`), duplicated rather
@@ -1616,12 +1616,16 @@ export function validateMissionScript(
     if (latch !== undefined && typeof latch !== "boolean") {
       throw new GameDataError(`${scope}.latch: must be a boolean when present`);
     }
+    const guide = step["guide"] === undefined
+      ? undefined
+      : validateMissionGuide(step["guide"], `${scope}.guide`, knownBuildingIds);
     return {
       id: stepId,
       title: requireString(step, "title", scope),
       why: requireString(step, "why", scope),
       goal: validateMissionGoal(step["goal"], `${scope}.goal`, knownBuildingIds),
       ...(latch === undefined ? {} : { latch }),
+      ...(guide === undefined ? {} : { guide }),
     } satisfies MissionStep;
   });
 
@@ -1632,6 +1636,34 @@ export function validateMissionScript(
     outro: requireString(obj, "outro", where),
     steps,
   };
+}
+
+/**
+ * The step's UI pointer — Sürüm 2 §12.4.
+ *
+ * `buildingId` is reference-checked on both action kinds for the reason the goal
+ * ids are: a typo produces a pointer at a button that does not exist, and the
+ * player who needs the pointer is the one who cannot tell that the game is at
+ * fault. `actionId` deliberately is not — see {@link MissionGuideAction}.
+ */
+function validateMissionGuide(
+  value: unknown,
+  where: string,
+  knownBuildingIds?: ReadonlySet<string>,
+): MissionGuide {
+  const obj = asObject(value, where);
+  const action = asObject(obj["action"], `${where}.action`);
+  const kind = requireString(action, "kind", `${where}.action`);
+  if (kind !== "build" && kind !== "structure-action") {
+    throw new GameDataError(`${where}.action.kind: unknown mission guide "${kind}"`);
+  }
+  const buildingId = requireString(action, "buildingId", `${where}.action`);
+  if (knownBuildingIds && !knownBuildingIds.has(buildingId)) {
+    throw new GameDataError(`${where}.action.buildingId: unknown building "${buildingId}"`);
+  }
+  return kind === "build"
+    ? { action: { kind, buildingId } }
+    : { action: { kind, buildingId, actionId: requireString(action, "actionId", `${where}.action`) } };
 }
 
 function validateMissionGoal(

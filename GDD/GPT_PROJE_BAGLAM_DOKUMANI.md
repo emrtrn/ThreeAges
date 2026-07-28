@@ -588,7 +588,7 @@ tehdidine cevap verebilir.
 Etkinleştirme örneği:
 
 ```text
-?rts&preset=core_match&flags=regionalVictory
+?rts&preset=gameplay_proof&flags=regionalVictory
 ```
 
 ### 15.3 Fog of war
@@ -605,7 +605,7 @@ Fog sistemi de uygulanmış fakat varsayılan maçta koşullu flag arkasındadı
 Etkinleştirme örneği:
 
 ```text
-?rts&preset=core_match&flags=fogOfWar
+?rts&preset=gameplay_proof&flags=fogOfWar
 ```
 
 ### 15.4 Minimap kararı
@@ -757,7 +757,7 @@ Ana sınırlar:
 ### 18.2 Runtime rotaları
 
 ```text
-/?rts&preset=core_match
+/?rts&preset=gameplay_proof
 ```
 
 Güncel çekirdek RTS maçını açar.
@@ -775,7 +775,7 @@ Authored oynanış kanıtı level’ını açar.
 Kasaba Lv1 ve Topçu odaklı test senaryosunu açar.
 
 ```text
-/?rts&preset=core_match&debug
+/?rts&preset=gameplay_proof&debug
 ```
 
 RTS debug panelleriyle maçı açar.

@@ -48,6 +48,8 @@ export class RtsSelectionPanel {
    * `setSelection` a no-op and leave the panel visible and blank at boot.
    */
   private signature = " ";
+  /** The action id the story chain is pointing at, if any (Sürüm 2 §12.4). */
+  private missionHighlightId: string | null = null;
 
   constructor(private readonly onAction: (id: string) => void) {
     // Deliberately *not* `ui-interactive`. The panel is a readout sitting in the
@@ -130,9 +132,33 @@ export class RtsSelectionPanel {
     else this.render(content);
   }
 
+  /**
+   * Point at the button the active story step is asking for (Sürüm 2 §12.4).
+   *
+   * The panel half of {@link missionGuideHighlight}: the palette can point at a
+   * building the player does not own yet, but a Market trade or the centre's
+   * level-up only exists once that building is selected — so by the time this is
+   * called with a non-null id, the button is on screen or about to be.
+   *
+   * Stored rather than applied once, because `renderActions` rebuilds these
+   * buttons whenever the action *set* changes, which would drop a class applied
+   * from outside.
+   */
+  setMissionHighlight(actionId: string | null): void {
+    if (actionId === this.missionHighlightId) return;
+    this.missionHighlightId = actionId;
+    this.syncMissionHighlight();
+  }
+
   dispose(): void {
     this.root.remove();
     this.actionTray.remove();
+  }
+
+  private syncMissionHighlight(): void {
+    for (const [id, button] of this.actionButtons) {
+      button.classList.toggle("is-mission-hint", id === this.missionHighlightId);
+    }
   }
 
   private render(content: SelectionPanelContent): void {
@@ -306,5 +332,7 @@ export class RtsSelectionPanel {
       // place the player can read it before committing to the click.
       button.title = action.reason ?? action.hint ?? "";
     }
+    // After the rebuild branch above, which drops every class the buttons carried.
+    this.syncMissionHighlight();
   }
 }

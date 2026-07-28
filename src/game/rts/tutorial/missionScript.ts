@@ -47,6 +47,52 @@ export interface MissionStep {
    * on a step whose goal measures a state the kingdom is supposed to maintain.
    */
   readonly latch?: boolean;
+  /**
+   * Which control answers this step, so the UI can point at it (Sürüm 2).
+   *
+   * Optional, and a step without one is not broken: the last step of the shipped
+   * chain is "raze the enemy outpost", which is an army order rather than a
+   * button, and inventing a control for it would be pointing at the wrong thing.
+   */
+  readonly guide?: MissionGuide;
+}
+
+/**
+ * The control a step wants pressed — §12.4 of the plan.
+ *
+ * Authored rather than derived from the goal, even though most steps could be
+ * derived: `producer-linked: stone` does imply the Quarry today, but only
+ * because this project happens to ship one stone producer. The moment a fork
+ * ships two, a derived pointer starts guessing, and the guess is invisible in
+ * the data. Naming it costs one line per step and can be read.
+ */
+export type MissionGuideAction =
+  /** A build-palette button, by building id. */
+  | { readonly kind: "build"; readonly buildingId: string }
+  /**
+   * A button on the selection panel of a particular building — the centre's
+   * level-up, a Market trade, a Barracks order. Two-stage by nature: the player
+   * has to select `buildingId` before `actionId` exists on screen at all, which
+   * is a fact the presentation layer handles rather than the data.
+   */
+  | {
+    readonly kind: "structure-action";
+    readonly buildingId: string;
+    /**
+     * A `SelectionAction` id (`rtsSelectionView.ts`) — `center-level-up`,
+     * `trade-buy:wood`, `train:guard_placeholder`.
+     *
+     * Not reference-checked at load: the ids live in the view layer, and
+     * importing that into the data validator would drag the UI into every
+     * validation path. An engine test pins the shipped chain's ids against the
+     * real constants instead. The cost of getting one wrong is a missing pulse,
+     * not a stuck step — the objective itself never depends on it.
+     */
+    readonly actionId: string;
+  };
+
+export interface MissionGuide {
+  readonly action: MissionGuideAction;
 }
 
 /**

@@ -225,6 +225,13 @@ async function configureMatch(page, scenario) {
     return canvas?.getAttribute("data-rts-quality") === quality
       && canvas?.getAttribute("data-rts-adaptive") === String(adaptiveEnabled);
   }, { quality: scenario.quality, adaptiveEnabled: scenario.adaptiveEnabled }, { timeout: READY_TIMEOUT_MS });
+  // Map art (notably the forest) mounts asynchronously. Measuring before it is
+  // ready would compare shader/model loading rather than the same RTS scene.
+  await page.waitForFunction(() => document.querySelector("#game-canvas")?.getAttribute("data-rts-map-art") === "ready", undefined, { timeout: READY_TIMEOUT_MS });
+  // Actor presentations load independently from map art. These high-poly unit
+  // meshes are part of the scenario, so every profile must begin after the same
+  // pack is live rather than while a fallback body or a GLTF parse is in flight.
+  await page.waitForFunction(() => document.querySelector("#game-canvas")?.getAttribute("data-rts-content-assets") === "ready", undefined, { timeout: READY_TIMEOUT_MS });
   await page.locator("[data-rts-match-action='start']").click();
   await page.locator(".rts-match-overlay").waitFor({ state: "hidden", timeout: READY_TIMEOUT_MS });
   await canvas.waitFor({ state: "visible", timeout: READY_TIMEOUT_MS });

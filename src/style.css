@@ -1255,6 +1255,20 @@ body {
   display: none;
 }
 
+/* "Önce Merkez yapısını seç." The step's button lives on a panel that is not
+   open yet, so for that moment the card carries the pointer instead. Shares the
+   pulse's gold to read as the same instruction. */
+.rts-mission-guide {
+  margin: 6px 0 0;
+  color: var(--ta-gold);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.rts-mission-guide[hidden] {
+  display: none;
+}
+
 /* Faz 11 §58 regional victory readout. Top-right under the speed controls: the
    left edge is the debug overlay's and the bottom-centre belongs to selection,
    so this is the one free anchor that stays visible during a fight. Read-only,
@@ -2180,6 +2194,40 @@ body {
   text-shadow: 0 1px 3px rgb(0 0 0 / 95%);
   content: "◆";
   pointer-events: none;
+}
+
+/* Story tur pointer (Sürüm 2 §12.4): the button the active step is asking for.
+   An outline rather than a box-shadow so it can sit on top of the armed glow
+   without either state having to win — the pulse says "this is the one", the
+   glow says "it is already in your hand", and both can be true at once. Drawn
+   outside the border box, so the card's own `overflow: hidden` cannot clip it. */
+.rts-build-category-panel .rts-build-choice.is-mission-hint,
+.rts-selection-action.is-mission-hint {
+  outline: 2px solid var(--ta-gold);
+  outline-offset: 2px;
+  animation: rts-mission-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes rts-mission-pulse {
+  0%,
+  100% {
+    outline-color: rgb(226 185 92 / 25%);
+  }
+
+  50% {
+    outline-color: rgb(226 185 92 / 100%);
+  }
+}
+
+/* The pointer still has to point when motion is off: the pulse goes, the mark
+   stays. A hint that vanished under this setting would take the whole feature
+   away from the players most likely to need it. */
+@media (prefers-reduced-motion: reduce) {
+  .rts-build-category-panel .rts-build-choice.is-mission-hint,
+  .rts-selection-action.is-mission-hint {
+    animation: none;
+    outline-color: var(--ta-gold);
+  }
 }
 
 /* Affordable is the default; the lock is what needs saying. Kept legible rather

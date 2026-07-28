@@ -69,6 +69,7 @@ import {
   type MissionWorldSnapshot,
 } from "../src/game/rts/tutorial/missionPredicates";
 import type { MissionGoal, MissionScript } from "../src/game/rts/tutorial/missionScript";
+import { missionGuideHighlight } from "../src/game/rts/tutorial/missionGuideHighlight";
 import {
   DEFAULT_MISSION_SCRIPT_ID,
   hasSeenMission,
@@ -228,7 +229,11 @@ import { RtsNotificationCenter, MAX_ACTIVE_NOTIFICATIONS } from "../src/game/rts
 import { RtsAttackWatch } from "../src/game/rts/ui/rtsAttackWatch";
 import {
   describeSelection,
+  AGE_UP_ACTION,
+  CENTER_LEVEL_UP_ACTION,
   RESCUE_ACTION,
+  TRADE_BUY_ACTION_PREFIX,
+  TRAIN_ACTION_PREFIX,
   type CenterDetailView,
   type MarketDetailView,
   type MilitaryDetailView,
@@ -28564,11 +28569,13 @@ check("RTS attack watch reports health losses, not placements or rebuilds (plan 
 check("game-data presets load and debug_fast is faster", () => {
   const proof = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
   const fast = validateGamePreset(readPresetJson("debug_fast"), "debug_fast");
-  const coreMatch = validateGamePreset(readPresetJson("core_match"), "core_match");
   assert.equal(proof.id, "gameplay_proof");
   assert.equal(fast.id, "debug_fast");
-  assert.equal(coreMatch.flags.prosperity, false, "the core match keeps optional prosperity disabled");
-  assert.deepEqual(coreMatch.startingResources, { food: 500, wood: 500, stone: 0, gold: 0 });
+  // The shipped default since `core_match` was retired, so its opening stockpile
+  // is what every unqualified `/?rts` boot plays — and what the story tur's own
+  // budget invariant is measured against.
+  assert.equal(proof.flags.prosperity ?? false, false, "the shipped default keeps optional prosperity disabled");
+  assert.ok((proof.startingResources?.gold ?? 0) > 0, "the tur's Market step needs gold to trade with");
   // debug_fast exists to raise the sim speed (plan §19 acceptance criterion).
   assert.ok(fast.gameSpeed > proof.gameSpeed);
 
@@ -28578,7 +28585,6 @@ check("game-data presets load and debug_fast is faster", () => {
   assert.deepEqual(siege.startingTier, { age: "town", level: 1 });
   // A shipped balance preset must never carry the handicap.
   assert.equal(proof.startingTier, undefined);
-  assert.equal(coreMatch.startingTier, undefined);
 
   assert.throws(
     () => validateGamePreset({ ...readPresetJson("siege_test") as object, startingTier: { age: "town" } }),
@@ -29326,7 +29332,7 @@ check("Actor presentation Faz 5: the contentAssets flag is gone, and an old URL 
   // A *preset* is the one place it must fail loudly: a checked-in file naming a
   // flag that no longer exists is a stale file, not a runtime nicety.
   assert.throws(
-    () => validateGamePreset({ ...readPresetJson("core_match"), flags: { contentAssets: true } }, "core_match"),
+    () => validateGamePreset({ ...readPresetJson("gameplay_proof"), flags: { contentAssets: true } }, "gameplay_proof"),
     GameDataError,
     "a preset naming the removed flag is rejected",
   );
@@ -29501,18 +29507,24 @@ check("Assetization Faz D: shipped RTS Core Match Level reproduces the full lega
   );
 });
 
-check("Landscape Faz 1: gameplay_proof opts into its own separate Level, not core_match's file", () => {
+check("Landscape Faz 1: gameplay_proof opts into its own separate Level, not the pinned blockout mirror", () => {
   const proof = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
-  const core = validateGamePreset(readPresetJson("core_match"), "core_match");
   assert.equal(
     proof.levelRef,
     "assets/ThreeAges/Levels/RTS_GameplayProof.level.json",
     "the preset carries a levelRef so ?flags=levelAssets resolves the authored Level",
   );
   // The whole point of the separate asset (plan Risk §8): editor-save on the
-  // gameplay proof must never overwrite the core_match scenario, so they cannot
-  // share one file.
-  assert.notEqual(proof.levelRef, core.levelRef, "gameplay_proof and core_match must not share a Level file");
+  // gameplay proof must never overwrite RTS_CoreMatch, which the checks above
+  // pin as the exact mirror of RTS_BLOCKOUT_MAP. The `core_match` *preset* is
+  // gone; its Level file stays, as test data, and is exactly what must not be
+  // written through. Compared against the literal path rather than a preset's
+  // field, because there is no longer a preset holding that reference.
+  assert.notEqual(
+    proof.levelRef,
+    "assets/ThreeAges/Levels/RTS_CoreMatch.level.json",
+    "the authoring canvas must not share a file with the pinned blockout mirror",
+  );
 });
 
 check("Landscape: the gameplay proof Level stays structurally playable as it is authored", () => {
@@ -32631,6 +32643,65 @@ check("a mission goal reports how far along it is, not just whether it is done",
   assert.equal(director.state().progress, null, "a finished chain has nothing to count");
 });
 
+check("Sürüm 2: the guide points at one control, and at the building first when the button is not open yet", () => {
+  const stateFor = (guide: MissionScript["steps"][number]["guide"]) => new MissionDirector({
+    id: "guide_chain",
+    label: "G",
+    intro: "i",
+    outro: "o",
+    steps: [{
+      id: "s1",
+      title: "t",
+      why: "w",
+      goal: { kind: "structure-built", buildingId: "depot", count: 1 },
+      ...(guide ? { guide } : {}),
+    }],
+  });
+
+  // A build step names a palette button and nothing else — there is no building
+  // to select, which is the whole reason the player is being sent to the palette.
+  const build = stateFor({ action: { kind: "build", buildingId: "depot" } });
+  build.evaluate(missionWorld([]));
+  assert.deepEqual(missionGuideHighlight(build.state(), null), {
+    paletteBuildingId: "depot",
+    actionId: null,
+    selectBuildingId: null,
+  });
+
+  // A structure action points twice, in order. Pulsing `trade-buy:wood` while no
+  // Market is selected would be pulsing a button that is not on screen.
+  const trade = stateFor({
+    action: { kind: "structure-action", buildingId: "market", actionId: "trade-buy:wood" },
+  });
+  trade.evaluate(missionWorld([]));
+  assert.deepEqual(missionGuideHighlight(trade.state(), null), {
+    paletteBuildingId: null,
+    actionId: null,
+    selectBuildingId: "market",
+  });
+  assert.deepEqual(missionGuideHighlight(trade.state(), "farm"), {
+    paletteBuildingId: null,
+    actionId: null,
+    selectBuildingId: "market",
+  }, "the wrong building selected is the same situation as none");
+  assert.deepEqual(missionGuideHighlight(trade.state(), "market"), {
+    paletteBuildingId: null,
+    actionId: "trade-buy:wood",
+    selectBuildingId: null,
+  }, "with the Market selected the pointer moves inside its panel");
+
+  // Everything that means "no live objective" takes the pointer down: no chain,
+  // a step that carries no guide, and an abandoned or finished chain. The mode
+  // ends by the guidance disappearing, so there is no separate teardown to miss.
+  const none = { paletteBuildingId: null, actionId: null, selectBuildingId: null };
+  assert.deepEqual(missionGuideHighlight(null, "market"), none, "no chain, no pointer");
+  const unguided = stateFor(undefined);
+  unguided.evaluate(missionWorld([]));
+  assert.deepEqual(missionGuideHighlight(unguided.state(), "market"), none, "a step may have no button");
+  build.abandon();
+  assert.deepEqual(missionGuideHighlight(build.state(), "market"), none, "an abandoned chain points at nothing");
+});
+
 check("a latched step stays cleared once the player has done it", () => {
   // The distinction the flag exists for: a depot is something you *have* (lose it
   // and the work is real again), three trained guards are something you *did*.
@@ -32886,9 +32957,16 @@ check("the shipped mission script validates, and a broken one fails at load", ()
     }, 0);
   // Read from the shipped presets rather than hard-coded: the stockpile is
   // balance data that moves, and an invariant quoting a number the presets have
-  // left behind protects nothing.
-  const leanestStartingWood = Math.min(...["core_match", "gameplay_proof"].map((id) =>
-    validateGamePreset(readPresetJson(id), id).startingResources?.wood ?? 0));
+  // left behind protects nothing. Every preset that opens on Settlement counts —
+  // the tur can be launched on any of them, and the leanest is the one that
+  // decides whether its opening is affordable. `siege_test` is excluded because
+  // it starts the match in Town, past everything this budget is about.
+  const leanestStartingWood = Math.min(...readdirSync("public/game-data/presets")
+    .filter((file) => file.endsWith(".json"))
+    .map((file) => file.slice(0, -".json".length))
+    .map((id) => validateGamePreset(readPresetJson(id), id))
+    .filter((preset) => preset.startingTier === undefined)
+    .map((preset) => preset.startingResources?.wood ?? 0));
   assert.ok(leanestStartingWood > 0, "a shipped preset must open with wood to spend");
   assert.ok(
     openingWoodCost <= leanestStartingWood / 2,
@@ -32902,6 +32980,48 @@ check("the shipped mission script validates, and a broken one fails at load", ()
   for (const step of script.steps) {
     assert.ok(step.title.length <= 40, `step "${step.id}" title is ${step.title.length} chars (max 40)`);
     assert.ok(step.why.length <= 110, `step "${step.id}" why is ${step.why.length} chars (max 110)`);
+  }
+
+  // Sürüm 2 §12.6: the card and the pulsing button must be talking about the
+  // same thing. A step that says "build a Farm" while the palette pulses the
+  // Depot is worse than no pointer at all — it sends the player to spend wood on
+  // a building the chain never asked for, which is the exact failure the guide
+  // exists to prevent.
+  const producersOf = (resourceId: string): readonly string[] => Object.entries(balance)
+    .filter(([, stats]) => stats.economy?.resourceId === resourceId)
+    .map(([id]) => id);
+  for (const step of script.steps) {
+    const action = step.guide?.action;
+    if (!action) continue;
+    if (step.goal.kind === "structure-built") {
+      assert.equal(
+        action.kind === "build" ? action.buildingId : null,
+        step.goal.buildingId,
+        `step "${step.id}" asks for a ${step.goal.buildingId} but points elsewhere`,
+      );
+    }
+    if (step.goal.kind === "producer-linked" && step.goal.resourceId !== undefined) {
+      assert.ok(
+        action.kind === "build" && producersOf(step.goal.resourceId).includes(action.buildingId),
+        `step "${step.id}" points at a building that does not produce ${step.goal.resourceId}`,
+      );
+    }
+    if (action.kind !== "structure-action") continue;
+    // The action ids the validator deliberately does not check (they live in the
+    // view layer), pinned here against the real constants instead. A typo costs
+    // a missing pulse rather than a stuck step, but it is still a silent one.
+    const known = [
+      CENTER_LEVEL_UP_ACTION,
+      AGE_UP_ACTION,
+      ...Object.keys(validateUnitBalance(
+        JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+      )).map((id) => `${TRAIN_ACTION_PREFIX}${id}`),
+      ...["food", "wood", "stone", "gold"].map((id) => `${TRADE_BUY_ACTION_PREFIX}${id}`),
+    ];
+    assert.ok(
+      known.includes(action.actionId),
+      `step "${step.id}" points at "${action.actionId}", which no selection panel emits`,
+    );
   }
 
   // The reference check is the point of passing building ids in: a typo'd
@@ -32931,6 +33051,24 @@ check("the shipped mission script validates, and a broken one fails at load", ()
   const unknownKind = JSON.parse(JSON.stringify(raw)) as { steps: { goal: { kind: string } }[] };
   unknownKind.steps[0]!.goal.kind = "vibes";
   assert.throws(() => validateMissionScript(unknownKind, "frontier_road"), /unknown mission goal "vibes"/);
+
+  // The guide is reference-checked on the same grounds as the goal: a pointer at
+  // a building that does not exist is a hint that silently never appears.
+  type GuidedSteps = { steps: { guide?: { action: { kind: string; buildingId: string } } }[] };
+  const guided = (script.steps.findIndex((step) => step.guide !== undefined));
+  assert.ok(guided >= 0, "the shipped chain must carry guides for this check to bite");
+  const badBuilding = JSON.parse(JSON.stringify(raw)) as GuidedSteps;
+  badBuilding.steps[guided]!.guide!.action.buildingId = "depoo";
+  assert.throws(
+    () => validateMissionScript(badBuilding, "frontier_road", buildingIds),
+    /unknown building "depoo"/,
+  );
+  const badKind = JSON.parse(JSON.stringify(raw)) as GuidedSteps;
+  badKind.steps[guided]!.guide!.action.kind = "wave-at-it";
+  assert.throws(
+    () => validateMissionScript(badKind, "frontier_road", buildingIds),
+    /unknown mission guide "wave-at-it"/,
+  );
 });
 
 /**

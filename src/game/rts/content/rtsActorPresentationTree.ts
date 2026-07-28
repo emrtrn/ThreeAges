@@ -7,7 +7,7 @@
  * makes "a second StaticMeshComponent really is a second node, at its authored
  * local transform" a unit test rather than a screenshot.
  */
-import { Box3, Color, Group, Mesh, type Material, type Object3D } from "three";
+import { Box3, Color, Group, Mesh, SkinnedMesh, type Material, type Object3D } from "three";
 import { clone as cloneSkeletonHierarchy } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { isMeshComponentKind, type ActorScriptDef } from "@engine/scene/actorScript";
 
@@ -148,7 +148,10 @@ export function buildActorPresentationTree(
     model.userData.rtsActorMeshAssetId = assetId;
     model.traverse((child) => {
       if (child instanceof Mesh) {
-        child.castShadow = true;
+        // High-poly skinned units are numerous and animated every frame. At the
+        // RTS camera distance their self-shadow detail is not legible, whereas
+        // static building meshes remain shadow casters for strategic readability.
+        child.castShadow = !(child instanceof SkinnedMesh);
         child.receiveShadow = true;
       }
     });

@@ -106,7 +106,12 @@ async function bootFoundation(): Promise<BootFoundationResult> {
   setLogLevel(isDev ? "debug" : "warn");
 
   const params = new URLSearchParams(location.search);
-  const presetId = params.get("preset") ?? "core_match";
+  // `gameplay_proof` is the shipped scenario: the authored Landscape, the river,
+  // and the stockpile the story tur is balanced against. It replaced `core_match`
+  // as the default (and as a file) once the flat blockout scenario stopped being
+  // played — the blockout itself is still the fallback map and still pinned by
+  // `RTS_CoreMatch.level.json`, which is code-mirror test data, not a preset.
+  const presetId = params.get("preset") ?? "gameplay_proof";
   const log = logger("System");
 
   let preset: GamePreset | null = null;

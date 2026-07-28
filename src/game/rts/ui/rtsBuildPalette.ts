@@ -96,6 +96,8 @@ export class RtsBuildPalette {
   private readonly roadButtons = new Map<"build" | "erase", HTMLButtonElement>();
   private armedBuildingId: string | null = null;
   private armedRoadMode: "build" | "erase" | null = null;
+  /** The building the story chain is currently pointing at, if any. */
+  private missionHighlightId: string | null = null;
 
   constructor(
     buildings: BuildingBalance,
@@ -324,6 +326,36 @@ export class RtsBuildPalette {
       entry.button.classList.toggle("is-unaffordable", !affordable);
       entry.cost.classList.toggle("is-unaffordable", !affordable);
       entry.button.title = affordable ? "" : `Kaynak yetersiz: ${formatResourceCost(entry.price)} gerekir.`;
+    }
+  }
+
+  /**
+   * Point at the button the active story step is asking for (Sürüm 2 §12.4).
+   *
+   * Two things happen, and only on a *change* of target — this is pushed on
+   * every mission poll:
+   *
+   * - the button gets a pulsing marker;
+   * - its category tab is brought to the front, because the palette shows one
+   *   category at a time and a pulse on a hidden panel is not a hint.
+   *
+   * The tab is switched once per target rather than continuously, so a player
+   * who deliberately opens another category to look around is not dragged back
+   * every quarter second. They are being pointed at a button, not steered.
+   */
+  setMissionHighlight(buildingId: string | null): void {
+    if (buildingId === this.missionHighlightId) return;
+    this.missionHighlightId = buildingId;
+    for (const [id, entry] of this.buildButtons) {
+      entry.button.classList.toggle("is-mission-hint", id === buildingId);
+    }
+    if (buildingId === null) return;
+    this.root.hidden = false;
+    for (const [category, panel] of this.categoryPanels) {
+      if (panel.querySelector(`[data-rts-building="${CSS.escape(buildingId)}"]`)) {
+        this.selectCategory(category);
+        return;
+      }
     }
   }
 

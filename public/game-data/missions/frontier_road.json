@@ -8,86 +8,222 @@
       "id": "wood_flowing",
       "title": "Merkezin yoluna Oduncu Kampı kur",
       "why": "Merkez ilk deposun; yoluna değen yapının hasadı hazineye akar.",
-      "goal": { "kind": "producer-linked", "resourceId": "wood", "count": 1 }
+      "goal": {
+        "kind": "producer-linked",
+        "resourceId": "wood",
+        "count": 1
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "lumber_camp"
+        }
+      }
     },
     {
       "id": "food_flowing",
       "title": "Bir Tarla kur",
       "why": "Yiyecek işçi ve asker eğitir; tarla da aynı yola değmeli.",
-      "goal": { "kind": "producer-linked", "resourceId": "food", "count": 1 }
+      "goal": {
+        "kind": "producer-linked",
+        "resourceId": "food",
+        "count": 1
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "farm"
+        }
+      }
     },
     {
       "id": "first_depot",
       "title": "Bir Depo kur",
       "why": "Merkezin deposu dolunca teslimat durur; Depo kapasiteyi büyütür.",
-      "goal": { "kind": "structure-built", "buildingId": "depot", "count": 1 }
+      "goal": {
+        "kind": "structure-built",
+        "buildingId": "depot",
+        "count": 1
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "depot"
+        }
+      }
     },
     {
       "id": "market",
       "title": "Bir Pazar kur",
       "why": "Pazar 20 odun; elindeki fazlayı ihtiyacın olana çevirir.",
-      "goal": { "kind": "structure-built", "buildingId": "market", "count": 1 }
+      "goal": {
+        "kind": "structure-built",
+        "buildingId": "market",
+        "count": 1
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "market"
+        }
+      }
     },
     {
       "id": "buy_wood",
       "title": "Pazar'dan 100 odun al",
       "why": "Pazar'ı seç: yiyecek sat, altınla odun al. Komisyon Merkez seviyesiyle düşer.",
-      "goal": { "kind": "market-bought", "resourceId": "wood", "count": 100 }
+      "goal": {
+        "kind": "market-bought",
+        "resourceId": "wood",
+        "count": 100
+      },
+      "guide": {
+        "action": {
+          "kind": "structure-action",
+          "buildingId": "market",
+          "actionId": "trade-buy:wood"
+        }
+      }
     },
     {
       "id": "center_lv2",
       "title": "Merkezi 2. seviyeye çıkar",
       "why": "Yükseltme Merkez'den yapılır ve bütün yapılarına aynı anda işler.",
-      "goal": { "kind": "tier-reached", "age": "settlement", "level": 2 }
+      "goal": {
+        "kind": "tier-reached",
+        "age": "settlement",
+        "level": 2
+      },
+      "guide": {
+        "action": {
+          "kind": "structure-action",
+          "buildingId": "command_center",
+          "actionId": "center-level-up"
+        }
+      }
     },
     {
       "id": "houses",
       "title": "Nüfusa yer aç",
       "why": "Nüfus tavanında ne işçi ne asker üretebilirsin; tavanı Ev yükseltir.",
-      "goal": { "kind": "population-headroom", "count": 5 }
+      "goal": {
+        "kind": "population-headroom",
+        "count": 5
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "house"
+        }
+      }
     },
     {
       "id": "outpost",
       "title": "Karakol kur ve Merkez'e bağla",
       "why": "Kontrol alanını karakol büyütür; yola bağlıysa daha da geniş.",
-      "goal": { "kind": "outpost-connected", "count": 1 }
+      "goal": {
+        "kind": "outpost-connected",
+        "count": 1
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "outpost"
+        }
+      }
     },
     {
       "id": "quarry",
       "title": "Taş Ocağı kur ve hatta bağla",
       "why": "Ocak taş yatağının üstüne kurulur; yolu Merkez ağına ulaşmalı.",
-      "goal": { "kind": "producer-linked", "resourceId": "stone", "count": 1 }
+      "goal": {
+        "kind": "producer-linked",
+        "resourceId": "stone",
+        "count": 1
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "quarry"
+        }
+      }
     },
     {
       "id": "gold_mine",
       "title": "Altın Madeni kur ve hatta bağla",
       "why": "Altın en yavaş kaynak: hem Pazar'ın hem çağ geçişinin parası.",
-      "goal": { "kind": "producer-linked", "resourceId": "gold", "count": 1 }
+      "goal": {
+        "kind": "producer-linked",
+        "resourceId": "gold",
+        "count": 1
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "gold_mine"
+        }
+      }
     },
     {
       "id": "barracks",
       "title": "Kışla kur",
       "why": "Rakip lord da bu vadiyi istiyor; ekonomin büyüdükçe hedef oluyorsun.",
-      "goal": { "kind": "structure-built", "buildingId": "barracks", "count": 1 }
+      "goal": {
+        "kind": "structure-built",
+        "buildingId": "barracks",
+        "count": 1
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "barracks"
+        }
+      }
     },
     {
       "id": "guards",
       "title": "Üç muhafız eğit",
       "why": "Düşman deponun üstünde durursa, binayı yıkmadan hattını keser.",
-      "goal": { "kind": "unit-count", "role": "guard", "count": 3 },
-      "latch": true
+      "goal": {
+        "kind": "unit-count",
+        "role": "guard",
+        "count": 3
+      },
+      "latch": true,
+      "guide": {
+        "action": {
+          "kind": "structure-action",
+          "buildingId": "barracks",
+          "actionId": "train:guard_placeholder"
+        }
+      }
     },
     {
       "id": "town",
       "title": "Kasaba çağına geç",
       "why": "Kasaba yeni yapı ve birlikleri açar; geçiş sırasında zayıf düşersin.",
-      "goal": { "kind": "tier-reached", "age": "town", "level": 1 }
+      "goal": {
+        "kind": "tier-reached",
+        "age": "town",
+        "level": 1
+      },
+      "guide": {
+        "action": {
+          "kind": "structure-action",
+          "buildingId": "command_center",
+          "actionId": "age-up"
+        }
+      }
     },
     {
       "id": "raze",
       "title": "Rakibin karakolunu yık",
       "why": "Karakol düşünce rakip kontrol alanını ve üretim verimini kaybeder.",
-      "goal": { "kind": "enemy-structure-razed", "buildingId": "outpost", "count": 1 }
+      "goal": {
+        "kind": "enemy-structure-razed",
+        "buildingId": "outpost",
+        "count": 1
+      }
     }
   ]
 }

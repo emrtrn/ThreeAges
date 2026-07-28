@@ -19,6 +19,7 @@ import {
   GridHelper,
   Group,
   Mesh,
+  type Object3D,
   Scene,
   type WebGLRenderer,
 } from "three";
@@ -195,7 +196,8 @@ import { VisionSystemAiFilter } from "./ai/aiVisionFilter";
 import { formatVisionDebug } from "./vision/formatVisionDebug";
 import { RtsObjectiveTracker } from "./ui/rtsObjectiveTracker";
 import { RtsMissionPanel } from "./ui/rtsMissionPanel";
-import { MissionDirector } from "./tutorial/missionDirector";
+import { MissionDirector, type MissionDirectorState } from "./tutorial/missionDirector";
+import { missionGuideHighlight } from "./tutorial/missionGuideHighlight";
 import type { MissionWorldSnapshot } from "./tutorial/missionPredicates";
 import type { MissionScript } from "./tutorial/missionScript";
 import type { MissionModeChoice } from "./tutorial/missionModeChoice";
@@ -381,6 +383,16 @@ function createRtsUserSettingsStore(): UserSettingsStore | null {
 
 function rtsGraphicsQuality(level: GraphicsPreferences["selectedQualityLevel"]): RtsGraphicsQuality {
   return level === "low" ? "low" : level === "high" || level === "ultra" ? "high" : "medium";
+}
+
+type ShadowCasterCategory = "actors" | "mapArt" | "other";
+
+function shadowCasterCategory(object: Object3D): ShadowCasterCategory {
+  for (let current: Object3D | null = object; current; current = current.parent) {
+    if (current.userData.rtsActorPresentation) return "actors";
+    if (current.name.startsWith("rts-map-model-")) return "mapArt";
+  }
+  return "other";
 }
 
 export class RtsApp {
@@ -1367,6 +1379,7 @@ export class RtsApp {
     this.canvas.dataset.rtsGround = "flat";
     const blockout = createRtsMapBlockout();
     this.scene.add(blockout);
+    this.canvas.dataset.rtsMapArt = "loading";
     void this.loadMapArt(blockout);
     // Faz E: mount the Level's static world in parallel with the map art. The
     // ridge gate below (loadMapArt) already skipped the legacy ridge art when this
@@ -1569,10 +1582,29 @@ export class RtsApp {
       },
       render,
       memory,
+      shadowCasters: this.shadowCasterStats(),
       quality: this.userSettings.graphics.selectedQualityLevel,
       adaptiveEnabled: this.userSettings.graphics.adaptiveOptimizationEnabled,
       adaptiveReductionDepth: this.adaptiveQuality.reductionDepth,
     });
+  }
+
+  /** Shadow-caster inventory for a debug performance report, sampled not hot-path. */
+  private shadowCasterStats(): Record<ShadowCasterCategory, { meshes: number; triangles: number }> {
+    const out: Record<ShadowCasterCategory, { meshes: number; triangles: number }> = {
+      actors: { meshes: 0, triangles: 0 },
+      mapArt: { meshes: 0, triangles: 0 },
+      other: { meshes: 0, triangles: 0 },
+    };
+    this.scene.traverse((object) => {
+      if (!(object instanceof Mesh) || !object.castShadow || !object.visible) return;
+      const geometry = object.geometry;
+      const vertexCount = geometry.index?.count ?? geometry.getAttribute("position")?.count ?? 0;
+      const bucket = out[shadowCasterCategory(object)];
+      bucket.meshes += 1;
+      bucket.triangles += Math.floor(vertexCount / 3);
+    });
+    return out;
   }
 
   /** Applies at most one reversible quality rung from a settled frame-time trend. */
@@ -1631,6 +1663,12 @@ export class RtsApp {
       this.notifications.post({ kind: "mission", subject: "intro", text: missions.intro });
     }
 
+    // Every frame, unlike the objectives themselves: what the pointer answers to
+    // is the *selection*, which moves at pointer speed. A guide resolved on the
+    // 4Hz poll would leave the player looking at a freshly selected Market for a
+    // quarter second before the button they were told to press lit up.
+    this.syncMissionGuide(missions.state());
+
     this.missionPollTimer += dt;
     if (this.missionPollTimer < MISSION_POLL_SECONDS) return;
     this.missionPollTimer = 0;
@@ -1654,6 +1692,28 @@ export class RtsApp {
       }
     }
     this.missionPanel?.setState(missions.state());
+    // Again after the chain may have moved: a step that just cleared must not
+    // leave the previous step's button pulsing until the next frame.
+    this.syncMissionGuide(missions.state());
+  }
+
+  /**
+   * Point the UI at whatever the active step is asking for — Sürüm 2 §12.4.
+   *
+   * The decision is {@link missionGuideHighlight}'s, and it is pure; this only
+   * hands the answer to the three surfaces that can show it. A finished,
+   * abandoned or guide-less step resolves to nulls, which is what clears them —
+   * there is no separate "stop pointing" path to forget to call.
+   */
+  private syncMissionGuide(state: MissionDirectorState): void {
+    const highlight = missionGuideHighlight(state, this.selection.selectedStructure()?.stats.id ?? null);
+    this.buildPalette.setMissionHighlight(highlight.paletteBuildingId);
+    this.selectionPanel.setMissionHighlight(highlight.actionId);
+    this.missionPanel?.setGuidePrompt(
+      highlight.selectBuildingId === null
+        ? null
+        : `Önce ${this.buildingLabels.get(highlight.selectBuildingId) ?? highlight.selectBuildingId} yapısını seç.`,
+    );
   }
 
   /**
@@ -1677,6 +1737,10 @@ export class RtsApp {
   private abandonMission(): void {
     if (!this.missions?.abandon()) return;
     this.missionPanel?.setState(null);
+    // Abandoning happens from the pause menu, where `updateMissions` has already
+    // returned early — so the pointers have to be taken down here rather than
+    // waiting for a frame that will not come until the player unpauses.
+    this.syncMissionGuide(this.missions.state());
     this.options.onMissionResolved?.();
     this.notifications.post({
       kind: "mission",
@@ -2323,8 +2387,10 @@ export class RtsApp {
       // until the player pressed "Maçı Başlat".
       this.updateFogOfWar();
       this.syncForestVisibility();
+      this.canvas.dataset.rtsMapArt = "ready";
     } catch (error) {
       this.log.warn("RTS map art could not be loaded", error);
+      this.canvas.dataset.rtsMapArt = "fallback";
     }
   }
 
@@ -2714,6 +2780,7 @@ export class RtsApp {
     this.playerMarketTrades = 0;
     this.playerMarketPurchases = {};
     this.missionPanel?.setState(null);
+    if (this.missions) this.syncMissionGuide(this.missions.state());
     this.attackWatch.reset();
     this.match.reset();
     this.clock.reset();

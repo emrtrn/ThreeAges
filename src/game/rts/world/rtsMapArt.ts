@@ -117,7 +117,10 @@ export class RtsMapArt {
     root.name = "rts-individual-tree-art";
     for (const tree of forests.snapshots()) {
       const modelId: MapModelId = tree.variant === "pine" ? "treePine" : tree.variant;
-      const object = this.model(modelId, tree.x, tree.z, 1.55, 1.55);
+      // A forest can contribute dozens of repeated meshes to every directional
+      // shadow pass. Its tiny moving-detail shadows are not readable at the RTS
+      // camera distance, while buildings, ridge and resources remain casters.
+      const object = this.model(modelId, tree.x, tree.z, 1.55, 1.55, false);
       object.name = `rts-tree-${tree.id}`;
       object.visible = !tree.depleted;
       object.userData.treeId = tree.id;
@@ -127,7 +130,14 @@ export class RtsMapArt {
     return root;
   }
 
-  private model(id: MapModelId, x: number, z: number, width: number, depth: number): Group {
+  private model(
+    id: MapModelId,
+    x: number,
+    z: number,
+    width: number,
+    depth: number,
+    castShadow = true,
+  ): Group {
     const template = this.templates.get(id);
     if (!template) throw new Error(`Missing loaded RTS map model "${id}"`);
     const root = new Group();
@@ -138,7 +148,7 @@ export class RtsMapArt {
     root.position.set(x, 0, z);
     model.traverse((child) => {
       if (!(child instanceof Mesh)) return;
-      child.castShadow = true;
+      child.castShadow = castShadow;
       child.receiveShadow = true;
     });
     return root;
