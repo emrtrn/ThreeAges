@@ -34,8 +34,10 @@ import { loadForgeMaterialLayer } from "./materialAssets";
 import {
   buildSceneInstancedModel,
   buildSceneLightObject,
+  buildSplineInstanceGeneratorGroup,
   computeModelLocalBounds,
   computeSceneRoomBounds,
+  disposeSplineGeneratedGroup,
   fitDirectionalShadowToBounds,
   registerSceneShapeModels,
   resolveSceneWorldSettings,
@@ -230,6 +232,28 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     instancedMeshes.push(...built.meshes);
   }
 
+  // Procedural spline generator output (instances / rigid segments / deform mesh).
+  // `sceneModelAssetIds` already declared these meshes, so the models are loaded;
+  // without this the authored world silently drops every generator the editor
+  // previews — a spline-scattered rock wall would exist only in the editor.
+  const splineGeneratedGroups: Group[] = [];
+  for (const actor of layout.splines ?? []) {
+    const built = buildSplineInstanceGeneratorGroup({
+      actor,
+      mode: "runtime",
+      models,
+      castShadow: settings.staticObjectsCastShadow,
+      receiveShadow: settings.staticObjectsReceiveShadow,
+    });
+    if (built?.missingAssetIds.length) {
+      warn(`Authored-world spline generator mesh missing: ${built.missingAssetIds.join(", ")}`);
+    }
+    if (!built?.group) continue;
+    root.add(built.group);
+    splineGeneratedGroups.push(built.group);
+    instancedMeshes.push(...built.meshes);
+  }
+
   // Landscape terrains (heightfield). Mounted from the same `*.landscape.json`
   // sidecar the editor viewport and RuntimeSceneApp render, so an authored,
   // sculpted/painted terrain reaches the runtime without a bespoke loader. Layer
@@ -413,6 +437,9 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     for (const texture of landscapeLayerTextures) texture.dispose();
     for (const texture of riverWaterTextures) texture.dispose();
     for (const river of riverWaterObjects) disposeRiverWaterObject(river);
+    // Deform-mesh generators build geometry per spline (not shared with a glTF
+    // template), and plugin generators register their own disposals.
+    for (const group of splineGeneratedGroups) disposeSplineGeneratedGroup(group);
     for (const source of riverReflectionSources) source.dispose();
     for (const record of lightRecords) {
       const light = record.light as { dispose?: () => void };

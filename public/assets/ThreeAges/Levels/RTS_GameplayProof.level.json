@@ -608,6 +608,97 @@
           "rts.route:enemy:enemy_east:1"
         ]
       }
+    },
+    {
+      "id": "spline-1",
+      "position": [
+        -5.42,
+        -0.51,
+        1.04
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "spline-point-1",
+            "position": [
+              -0.32,
+              0,
+              -0.64
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-2",
+            "position": [
+              9.17,
+              0,
+              -0.46
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-3",
+            "position": [
+              15.86,
+              0,
+              -0.64
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "Spline",
+      "rotation": [
+        0,
+        -61,
+        0
+      ],
+      "scale": 1,
+      "generators": [
+        {
+          "id": "instances",
+          "type": "instances",
+          "meshAsset": "rock",
+          "spacing": 0.6,
+          "enabled": true,
+          "previewEnabled": true,
+          "runtimeEnabled": true,
+          "alignToSpline": true,
+          "lateralOffset": 0,
+          "verticalOffset": -0.5,
+          "seed": 1,
+          "placementMode": "distance",
+          "random": {
+            "scaleMin": 4,
+            "scaleMax": 5
+          }
+        },
+        {
+          "id": "instances-2",
+          "type": "instances",
+          "meshAsset": "rock",
+          "spacing": 1,
+          "lateralOffset": -0.5,
+          "seed": 2,
+          "random": {
+            "scaleMin": 4,
+            "scaleMax": 5
+          }
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "color": "#ffffff",
+        "resolution": 16
+      }
     }
   ],
   "landscapes": [

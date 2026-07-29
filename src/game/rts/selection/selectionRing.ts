@@ -41,7 +41,7 @@ export const SELECTION_RING_Y = 0.05;
 export const SELECTION_RING_THICKNESS = 0.05;
 const RING_SEGMENTS = 48;
 /** How far each halo layer bleeds past the previous one, as a multiple of thickness. */
-const HALO_SPREAD = 0.5;
+const HALO_SPREAD = 1;
 /** Full bright/dim cycles per second. Slow: this is ambient state, not an alarm. */
 const PULSE_HZ = 0.55;
 const EMISSIVE_MIN = 0.5;
