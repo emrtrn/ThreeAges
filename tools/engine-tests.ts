@@ -135,14 +135,19 @@ import {
 } from "../src/game/rts/content/rtsUnitPresentation";
 import {
   advanceRtsAction,
+  advanceRtsWorkMontage,
   classifyRtsAnimation,
   resolveRtsAnimationRole,
+  resolveRtsWorkMontage,
   rtsActionClip,
   rtsLocomotionTuning,
   rtsPlaybackRate,
+  rtsWorkMontageSection,
   selectRtsAnimation,
   RTS_ACTION_NONE,
+  RTS_WORK_MONTAGE_NONE,
   type RtsAnimationInput,
+  type RtsMontageSource,
 } from "../src/game/rts/units/rtsUnitAnimation";
 import {
   formatRtsActorPresentationDebug,
@@ -17568,8 +17573,8 @@ check("skeleton save payload requires a .skeleton.json path and canonical metada
   });
   assert.equal(payload.skeleton.upperBodyBone, "torso");
   assert.deepEqual(payload.skeleton.montages, [
-    { name: "fire", clip: "holding-both-shoot", slot: "upperBody", loop: false, blendInSeconds: 0.08, blendOutSeconds: 0.2 },
-    { name: "aim", clip: "holding-both", slot: "upperBody", loop: true, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
+    { name: "fire", clip: "holding-both-shoot", slot: "upperBody", loop: false, blendInSeconds: 0.08, blendOutSeconds: 0.2, sections: [] },
+    { name: "aim", clip: "holding-both", slot: "upperBody", loop: true, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
   ]);
   assert.deepEqual(payload.skeleton.rootMotion, [
     { clip: "Run", mode: "lockXZ", rootNode: "Hips" },
@@ -17664,8 +17669,8 @@ check("skeleton save payload requires a .skeleton.json path and canonical metada
     },
   });
   assert.deepEqual(validated.skeleton.montages, [
-    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
-    { name: "block", clip: "guard", slot: "upperBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2 },
+    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
+    { name: "block", clip: "guard", slot: "upperBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2, sections: [] },
   ]);
 });
 
@@ -17681,8 +17686,8 @@ check("asset skeleton montages normalize and ignore legacy trigger fields", () =
   });
   // Empty name and duplicate name drop; the legacy trigger field is stripped.
   assert.deepEqual(skeleton.montages, [
-    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
-    { name: "guard", clip: "block", slot: "fullBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2 },
+    { name: "emote1", clip: "wave", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
+    { name: "guard", clip: "block", slot: "fullBody", loop: true, blendInSeconds: 0.3, blendOutSeconds: 0.2, sections: [] },
   ]);
 });
 
@@ -18272,8 +18277,8 @@ check("asset skeleton sidecar normalizes animation metadata", () => {
   assert.equal(skeleton.upperBodyBone, "torso");
   // Montages: duplicate name + empty clip dropped; defaults filled; blend clamped.
   assert.deepEqual(skeleton.montages, [
-    { name: "fire", clip: "Shoot", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
-    { name: "aim", clip: "Hold", slot: "upperBody", loop: true, blendInSeconds: 0.25, blendOutSeconds: 4 },
+    { name: "fire", clip: "Shoot", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2, sections: [] },
+    { name: "aim", clip: "Hold", slot: "upperBody", loop: true, blendInSeconds: 0.25, blendOutSeconds: 4, sections: [] },
   ]);
   assert.equal(skeleton.blendSpaces.length, 1);
   const blend = skeleton.blendSpaces[0]!;
@@ -28841,6 +28846,46 @@ check("RTS contextual right-click routes selected workers to a friendly structur
   structures.clear();
 });
 
+check("RTS a building is selected through the gaps in its own model", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const structures = new PlacedStructureSystem();
+  const site = structures.place("player", house, 0, 0);
+  structures.advanceConstruction(site, house.constructionSeconds);
+  // A model with a hole straight through the middle: two walls, open centre —
+  // the courtyard/archway case a mesh-only raycast misses.
+  const model = new Group();
+  for (const offset of [-1.5, 1.5]) {
+    const wall = new Mesh(new BoxGeometry(0.4, 4, house.footprint.depth), new MeshStandardMaterial());
+    wall.position.set(offset, 2, 0);
+    model.add(wall);
+  }
+  structures.setCompletedVisual(site, model);
+  structures.root.updateMatrixWorld(true);
+
+  // Straight overhead, so the centre pixel looks down through the open middle.
+  const camera = new PerspectiveCamera(60, 1, 0.1, 200);
+  camera.position.set(0, 30, 0.001);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const canvas = { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement;
+  const marquee = { show: () => {}, hide: () => {} } as unknown as MarqueeOverlay;
+  const selection = new SelectionSystem(
+    canvas,
+    camera,
+    new UnitSystem(),
+    marquee,
+    structures,
+    new CommandCenterSystem(),
+  );
+
+  selection.onSelectClick(50, 50, false);
+  assert.equal(selection.selectedStructure(), site, "the centre of a hollow building is still clickable");
+  structures.clear();
+});
+
 check("RTS contextual right-click directs a selected Karakol at an enemy", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -31012,6 +31057,134 @@ check("Skeletal animasyon Faz D: tek atimlik saldiri her darbede bir kez, olum i
   );
 });
 
+check("Isci is montaji: bir kez egilir, insaat boyunca egik kalir, bitince bir kez kalkar", () => {
+  const tuning = rtsLocomotionTuning(4);
+  const input = (over: Partial<RtsAnimationInput> = {}): RtsAnimationInput => ({
+    planarSpeed: 0,
+    attacking: false,
+    dying: false,
+    working: false,
+    attackCount: 0,
+    ...over,
+  });
+  const montages: RtsMontageSource[] = [
+    {
+      name: "work",
+      clip: "Fixing_Kneeling",
+      sections: [
+        { name: "enter", startSeconds: 0, endSeconds: 1.2, loop: false },
+        { name: "loop", startSeconds: 1.2, endSeconds: 4, loop: true },
+        { name: "exit", startSeconds: 4, endSeconds: 5.2, loop: false },
+      ],
+    },
+  ];
+  const montage = resolveRtsWorkMontage(montages, new Set(["Fixing_Kneeling", "Idle_Loop"]));
+  assert.ok(montage, "the sidecar's work montage resolves");
+  // Sections are read from the data, so re-timing the kneel in the asset moves
+  // the phase boundaries with it rather than needing a code change here.
+  assert.equal(montage!.enter!.endSeconds, montages[0]!.sections[0]!.endSeconds);
+  assert.equal(montage!.loop.startSeconds, montages[0]!.sections[1]!.startSeconds);
+
+  const enterSeconds = montage!.enter!.endSeconds - montage!.enter!.startSeconds;
+  const exitSeconds = montage!.exit!.endSeconds - montage!.exit!.startSeconds;
+
+  // Arrival: the wind-up plays exactly once, taking its authored length.
+  let state = advanceRtsWorkMontage(RTS_WORK_MONTAGE_NONE, input({ working: true }), montage, tuning, 0.1);
+  assert.equal(state.phase, "enter");
+  assert.equal(state.remainingSeconds, enterSeconds);
+  state = advanceRtsWorkMontage(state, input({ working: true }), montage, tuning, enterSeconds - 0.1);
+  assert.equal(state.phase, "enter", "the kneel is not cut short");
+  state = advanceRtsWorkMontage(state, input({ working: true }), montage, tuning, 0.2);
+  assert.equal(state.phase, "loop");
+
+  // The whole point: however long the site takes, the builder stays down. This
+  // is the regression — looping the whole clip stood it up and knelt it again.
+  for (let i = 0; i < 400; i += 1) {
+    state = advanceRtsWorkMontage(state, input({ working: true }), montage, tuning, 0.1);
+    assert.equal(state.phase, "loop");
+  }
+  const held = rtsWorkMontageSection(state, montage);
+  assert.equal(held!.loop, true, "the held section repeats rather than running on into the stand-up");
+  assert.equal(held!.section.endSeconds, montage!.loop.endSeconds);
+
+  // Construction finished — nothing schedules the stand-up, `working` going
+  // false is the notification — and it plays through once back to locomotion.
+  state = advanceRtsWorkMontage(state, input(), montage, tuning, 0.1);
+  assert.equal(state.phase, "exit");
+  assert.equal(state.remainingSeconds, exitSeconds);
+  assert.equal(rtsWorkMontageSection(state, montage)!.loop, false);
+  state = advanceRtsWorkMontage(state, input(), montage, tuning, exitSeconds);
+  assert.equal(state.phase, "none", "the body is handed back once the builder is on its feet");
+  assert.equal(rtsWorkMontageSection(state, montage), null);
+
+  // Being shot, attacked or ordered away cancels outright: those channels own
+  // the whole body, and a builder does not finish standing up first.
+  const working = advanceRtsWorkMontage(
+    { phase: "loop", remainingSeconds: 0 },
+    input({ working: true }),
+    montage,
+    tuning,
+    0.1,
+  );
+  assert.equal(working.phase, "loop");
+  for (const over of [{ dying: true }, { attacking: true }, { planarSpeed: 3 }]) {
+    assert.equal(
+      advanceRtsWorkMontage(working, input({ working: true, ...over }), montage, tuning, 0.1).phase,
+      "none",
+      `${JSON.stringify(over)} cancels the montage`,
+    );
+  }
+
+  // An asset with no work montage — or one naming a clip it does not ship, or
+  // omitting the held section — never enters the machine, and keeps the plain
+  // looping `work` role it had before montages existed.
+  assert.equal(resolveRtsWorkMontage(montages, new Set(["Idle_Loop"])), null);
+  assert.equal(resolveRtsWorkMontage([{ ...montages[0]!, sections: [] }], new Set(["Fixing_Kneeling"])), null);
+  assert.equal(advanceRtsWorkMontage(RTS_WORK_MONTAGE_NONE, input({ working: true }), null, tuning, 0.1).phase, "none");
+
+  // Sections are optional individually: an asset that kneels with no wind-up
+  // drops straight into the held part instead of standing still.
+  const noEnter = resolveRtsWorkMontage(
+    [{ ...montages[0]!, sections: montages[0]!.sections.filter((s) => s.name !== "enter") }],
+    new Set(["Fixing_Kneeling"]),
+  );
+  assert.equal(advanceRtsWorkMontage(RTS_WORK_MONTAGE_NONE, input({ working: true }), noEnter, tuning, 0.1).phase, "loop");
+});
+
+check("Isci is montaji: bolumler editor kaydinda hayatta kalir", () => {
+  // Same allowlist hazard as the animation-set roles: sections the loader knows
+  // but the validator does not are dropped the first time the asset is saved,
+  // and the builder silently goes back to looping its whole clip.
+  const saved = validateAssetSkeletonDef({
+    schema: 1,
+    montages: [
+      {
+        name: "work",
+        clip: "Fixing_Kneeling",
+        slot: "fullBody",
+        loop: true,
+        sections: [
+          { name: "enter", startSeconds: 0, endSeconds: 1.2, loop: false },
+          { name: "loop", startSeconds: 1.2, endSeconds: 4, loop: true },
+        ],
+      },
+    ],
+  }) as { montages: { sections: { name: string; startSeconds: number; endSeconds: number; loop: boolean }[] }[] };
+  assert.equal(saved.montages[0]!.sections.length, 2);
+  assert.equal(saved.montages[0]!.sections[1]!.loop, true);
+  assert.equal(saved.montages[0]!.sections[0]!.endSeconds, 1.2);
+  // A reversed range would loop a single frame, which reads as a frozen unit —
+  // refused at the save boundary rather than shipped into the runtime.
+  assert.throws(() =>
+    validateAssetSkeletonDef({
+      schema: 1,
+      montages: [
+        { name: "work", clip: "c", sections: [{ name: "loop", startSeconds: 2, endSeconds: 1, loop: true }] },
+      ],
+    }),
+  );
+});
+
 check("Skeletal animasyon Faz D: attack/death rolleri editor kaydinda hayatta kalir", () => {
   // The second allowlist surface (CLAUDE.md): the loader and the save validator
   // define the role vocabulary twice, and a role only the loader knows is
@@ -32108,6 +32281,54 @@ check("RTS economy producers report income, survive a ten-minute run, and stop a
     1,
     "one worker remains available after the T1 capacity is filled",
   );
+  production.reset();
+  structures.clear();
+  units.clear();
+});
+
+check("Tarladaki isci calisma pozunu takar, birakildiginda birakir", () => {
+  // The bug this pins: gathering never wrote the flag the animation reads, so a
+  // farm crew stood to attention while it earned. It is presentation-only, but
+  // it is written by the simulation, so it can only be pinned from here.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const farm = buildings.farm ?? assert.fail("farm definition missing");
+  const farmEconomy = farm.economy ?? assert.fail("farm economy missing");
+  const units = new UnitSystem();
+  const worker = units.spawn("player", -8, 0, RTS_TEST_WORKER_STATS);
+  const structures = new PlacedStructureSystem();
+  const site = structures.place("player", farm, 8, 0);
+  structures.advanceConstruction(site, farm.constructionSeconds);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+
+  production.update(1 / 60);
+  assert.equal(worker.isWorking, false, "a worker still walking to the field is not working it");
+  for (let frame = 0; frame < 600; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    production.update(1 / 60);
+  }
+  assert.equal(production.stateFor(worker), "producing");
+  assert.equal(worker.isWorking, true, "a worker at the field is working it");
+
+  // A full buffer is a stopped producer: the crew stands up rather than miming
+  // work that is earning nothing.
+  for (let second = 0; second < 600; second += 1) production.update(1);
+  const snapshot = production.snapshots()[0] ?? assert.fail("producer snapshot missing");
+  assert.equal(snapshot.status, "buffer-full");
+  assert.equal(snapshot.localBuffer, farmEconomy.localBufferCapacity);
+  assert.equal(worker.isWorking, false, "a producer that has stopped earning stops working on screen too");
+
+  // Every exit path goes through release(), which is the one place the pose is
+  // dropped — without it a reassigned worker keeps the job's pose forever.
+  production.withdrawBuffered(site.id);
+  production.update(1 / 60);
+  assert.equal(worker.isWorking, true, "emptying the buffer puts the crew back to work");
+  assert.equal(production.release(worker), true);
+  assert.equal(worker.isWorking, false, "a released worker drops the pose with the job");
+
   production.reset();
   structures.clear();
   units.clear();

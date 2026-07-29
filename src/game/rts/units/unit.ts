@@ -348,13 +348,19 @@ export class Unit {
   /**
    * Mark the unit as performing (or having stopped) an in-place job.
    *
-   * Presentation-only, and owned by whichever system runs the job — construction
-   * today. It is stored on the unit rather than queried from that system because
-   * the presentation snapshot is assembled here and must stay a plain read of
-   * unit state; nothing in movement, combat or death consults it.
+   * Presentation-only, and owned by whichever system runs the job — building a
+   * site, or gathering at a farm/mine/forest. It is stored on the unit rather
+   * than queried from those systems because the presentation snapshot is
+   * assembled here and must stay a plain read of unit state; nothing in
+   * movement, combat or death consults it.
    */
   setWorking(working: boolean): void {
     this.working = working;
+  }
+
+  /** Whether an in-place job is running; see {@link setWorking}. */
+  get isWorking(): boolean {
+    return this.working;
   }
 
   /**

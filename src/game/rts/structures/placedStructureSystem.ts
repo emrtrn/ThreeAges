@@ -13,7 +13,6 @@ import {
   Color,
   Group,
   Mesh,
-  MeshBasicMaterial,
   MeshStandardMaterial,
   RingGeometry,
   type Object3D,
@@ -27,6 +26,7 @@ import { HealthComponent } from "../units/health";
 import { createTeamRing } from "../team/teamColors";
 import { buildingFootprintBlocker } from "./placementGrid";
 import { ConstructionComponent } from "./constructionComponent";
+import { createPickVolume, fitPickVolumeToVisual, footprintPickHeight } from "./pickVolume";
 
 /** Completed-building tint per kingdom; outposts stay lighter to read as territory. */
 const COMPLETED_COLOR: Record<UnitOwner, { readonly territory: string; readonly plain: string }> = {
@@ -100,6 +100,8 @@ export class PlacedStructureSystem {
   private readonly structures: PlacedStructure[] = [];
   private readonly structureByPickObjectId = new Map<number, PlacedStructure>();
   private readonly pickObjects = new Map<number, Object3D>();
+  /** Each structure's click collision box, resized when its model swaps in. */
+  private readonly pickVolumes = new Map<PlacedStructure, Mesh>();
   private nextId = 1;
   private completedVisualHandler: ((structure: PlacedStructure) => void) | null = null;
   private readonly dropAnimations = new Map<PlacedStructure, { readonly visual: Object3D; elapsed: number }>();
@@ -127,15 +129,15 @@ export class PlacedStructureSystem {
     const id = this.nextId++;
     object.name = `rts-construction-site-${owner}-${id}`;
     object.position.set(x, groundY, z);
-    // Keep the construction site clickable without rendering the old brown
-    // foundation slab underneath every building.
-    const pickProxy = new Mesh(
-      new BoxGeometry(stats.footprint.width, 0.3, stats.footprint.depth),
-      new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+    // The building's click collision, in place from the first frame of
+    // construction and never removed with a visual: clicking a courtyard, an
+    // archway or the gap under a raised model still selects the building.
+    const pickVolume = createPickVolume(
+      stats.footprint.width,
+      stats.footprint.depth,
+      footprintPickHeight(stats.footprint.width, stats.footprint.depth),
     );
-    pickProxy.name = "rts-construction-pick-proxy";
-    pickProxy.position.y = 0.15;
-    object.add(pickProxy);
+    object.add(pickVolume);
     const progressFill = new Mesh(
       new BoxGeometry(stats.footprint.width - 0.4, 0.12, 0.36),
       new MeshStandardMaterial({ color: "#d8d05c", emissive: "#59520e", roughness: 0.7 }),
@@ -201,7 +203,8 @@ export class PlacedStructureSystem {
     this.structures.push(structure);
     this.version += 1;
     this.registerPickTargets(structure, progressFill);
-    this.registerPickTargets(structure, pickProxy);
+    this.registerPickTargets(structure, pickVolume);
+    this.pickVolumes.set(structure, pickVolume);
     return structure;
   }
 
@@ -289,6 +292,7 @@ export class PlacedStructureSystem {
     visual.name = "rts-complete-building-model";
     structure.object.add(visual);
     this.registerPickTargets(structure, visual);
+    this.fitPickVolume(structure, visual);
   }
 
   /** Show the finished model as a translucent in-progress construction site. */
@@ -298,6 +302,7 @@ export class PlacedStructureSystem {
     setObjectOpacity(visual, CONSTRUCTION_OPACITY);
     structure.object.add(visual);
     this.registerPickTargets(structure, visual);
+    this.fitPickVolume(structure, visual);
   }
 
   /** Replace the construction placeholder and begin the short landing animation. */
@@ -376,6 +381,7 @@ export class PlacedStructureSystem {
   private beginCollapse(structure: PlacedStructure): void {
     this.unregisterPickTargets(structure.object);
     this.dropAnimations.delete(structure);
+    this.pickVolumes.delete(structure);
     structure.selectionRing.visible = false;
     // Completed models share materials with every other building of their type,
     // so the husk needs its own copies before anything fades them. This clones
@@ -388,6 +394,7 @@ export class PlacedStructureSystem {
     this.unregisterPickTargets(structure.object);
     this.root.remove(structure.object);
     this.dropAnimations.delete(structure);
+    this.pickVolumes.delete(structure);
     structure.object.traverse((child) => {
       if (!(child instanceof Mesh) || isSharedModelMesh(child)) return;
       child.geometry.dispose();
@@ -418,7 +425,20 @@ export class PlacedStructureSystem {
     completed.receiveShadow = true;
     structure.object.add(completed);
     this.registerPickTargets(structure, completed);
+    this.fitPickVolume(structure, completed);
     this.completedVisualHandler?.(structure);
+  }
+
+  /**
+   * Grow the click collision to the model that just arrived. The volume itself
+   * is excluded from the measurement — it is a child of the same object, so
+   * measuring the whole structure would feed the box its own bounds and let it
+   * ratchet upward on every visual swap.
+   */
+  private fitPickVolume(structure: PlacedStructure, visual: Object3D): void {
+    const volume = this.pickVolumes.get(structure);
+    if (!volume) return;
+    fitPickVolumeToVisual(volume, visual, structure.object.position.y);
   }
 
   private registerPickTargets(structure: PlacedStructure, object: Object3D): void {

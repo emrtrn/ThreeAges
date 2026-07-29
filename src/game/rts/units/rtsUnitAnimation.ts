@@ -312,3 +312,169 @@ export function rtsActionClip(
   const clip = animationSet[state.kind];
   return clip && available.has(clip) ? clip : null;
 }
+
+/* ------------------------------------------------------------------------- *
+ * The work montage
+ *
+ * A job is neither a loop nor a one-shot. Looping the whole `work` clip made a
+ * builder kneel, work, stand up and kneel again for as long as the site took —
+ * the bob of an animation repeating where the fiction has one continuous action.
+ * What the pose actually wants is Unreal's montage shape: kneel once on arrival
+ * (`enter`), hold the working part for however long the site takes (`loop`), and
+ * stand up once when the finish notification lands (`exit`).
+ *
+ * The sections are authored data (`AssetSkeletonMontageDef.sections`), because
+ * only the asset knows where in its clip the kneel ends. An asset that authors
+ * none keeps the old looping behaviour, which is still the right fallback for a
+ * clip that is nothing but the working part.
+ * ------------------------------------------------------------------------- */
+
+/** Which part of the work montage is playing. */
+export type RtsWorkPhase = "none" | "enter" | "loop" | "exit";
+
+/** One authored section of the montage clip, in seconds from the clip start. */
+export interface RtsMontageSection {
+  readonly startSeconds: number;
+  readonly endSeconds: number;
+}
+
+/**
+ * The three sections the work montage is built from. Only `loop` is required:
+ * an asset may kneel with no wind-up or stand with no wind-down, and each
+ * missing section simply means that transition is instant.
+ */
+export interface RtsWorkMontage {
+  readonly clip: string;
+  readonly enter: RtsMontageSection | null;
+  readonly loop: RtsMontageSection;
+  readonly exit: RtsMontageSection | null;
+}
+
+/** Structural view of the sidecar's montage list; `AssetSkeletonDef` satisfies it. */
+export interface RtsMontageSource {
+  readonly name: string;
+  readonly clip: string;
+  readonly sections: readonly {
+    readonly name: string;
+    readonly startSeconds: number;
+    readonly endSeconds: number;
+    readonly loop: boolean;
+  }[];
+}
+
+/** Montage name an asset uses to declare its in-place job animation. */
+export const RTS_WORK_MONTAGE_NAME = "work";
+
+/**
+ * Reads the `work` montage out of an asset's sidecar, or null when it authors
+ * none, names a clip the model does not carry, or omits the held section — in
+ * every one of those cases the caller falls back to the looping `work` role,
+ * which is exactly the behaviour the asset had before montages existed.
+ *
+ * `loop` is taken from the section flagged `loop: true` rather than from its
+ * name, so the phase machine and the animator agree on which part is held; the
+ * wind-up/wind-down are matched by name because there is nothing else to
+ * distinguish them by.
+ */
+export function resolveRtsWorkMontage(
+  montages: readonly RtsMontageSource[],
+  available: ReadonlySet<string>,
+): RtsWorkMontage | null {
+  const montage = montages.find((entry) => entry.name === RTS_WORK_MONTAGE_NAME);
+  if (!montage || !available.has(montage.clip)) return null;
+  const held = montage.sections.find((section) => section.loop);
+  if (!held) return null;
+  const named = (name: string): RtsMontageSection | null => {
+    const section = montage.sections.find((entry) => entry.name === name && !entry.loop);
+    return section ? { startSeconds: section.startSeconds, endSeconds: section.endSeconds } : null;
+  };
+  return {
+    clip: montage.clip,
+    enter: named("enter"),
+    loop: { startSeconds: held.startSeconds, endSeconds: held.endSeconds },
+    exit: named("exit"),
+  };
+}
+
+/** Where the montage is, and how much of a timed section is left. */
+export interface RtsWorkMontageState {
+  readonly phase: RtsWorkPhase;
+  /** Seconds left of `enter`/`exit`. Always 0 for `none` and the held `loop`. */
+  readonly remainingSeconds: number;
+}
+
+/** A unit that is not at a job. */
+export const RTS_WORK_MONTAGE_NONE: RtsWorkMontageState = { phase: "none", remainingSeconds: 0 };
+
+/** Length of a section, in seconds. */
+function sectionSeconds(section: RtsMontageSection | null): number {
+  return section ? Math.max(0, section.endSeconds - section.startSeconds) : 0;
+}
+
+/**
+ * Advances the work montage by one frame.
+ *
+ * Rules, in order:
+ *  1. **Dying, fighting or moving cancels it outright** — with no wind-down.
+ *     A builder that is shot, attacked or ordered away is not going to finish
+ *     standing up politely first, and those channels own the whole body.
+ *  2. **Work starts the wind-up**, then falls through to the held section,
+ *     which stays there for as many frames as the site takes.
+ *  3. **Work ending starts the wind-down**, which runs to its end and releases
+ *     the body back to locomotion. This is the "construction finished" edge:
+ *     nothing schedules it, it is simply `working` going false.
+ *
+ * A site that resumes mid-stand rewinds to the wind-up, because the body is
+ * halfway to its feet and the kneel is what gets it back down.
+ */
+export function advanceRtsWorkMontage(
+  state: RtsWorkMontageState,
+  input: RtsAnimationInput,
+  montage: RtsWorkMontage | null,
+  tuning: RtsLocomotionTuning,
+  deltaSeconds: number,
+): RtsWorkMontageState {
+  if (!montage) return RTS_WORK_MONTAGE_NONE;
+  const interrupted = input.dying || input.attacking || input.planarSpeed > tuning.walkSpeed;
+  if (interrupted) return RTS_WORK_MONTAGE_NONE;
+  const dt = Math.max(0, deltaSeconds);
+
+  if (input.working) {
+    if (state.phase === "loop") return state;
+    if (state.phase === "enter") {
+      const remaining = state.remainingSeconds - dt;
+      if (remaining > 0) return { phase: "enter", remainingSeconds: remaining };
+      return { phase: "loop", remainingSeconds: 0 };
+    }
+    const enterSeconds = sectionSeconds(montage.enter);
+    if (enterSeconds <= 0) return { phase: "loop", remainingSeconds: 0 };
+    return { phase: "enter", remainingSeconds: enterSeconds };
+  }
+
+  if (state.phase === "exit") {
+    const remaining = state.remainingSeconds - dt;
+    return remaining > 0 ? { phase: "exit", remainingSeconds: remaining } : RTS_WORK_MONTAGE_NONE;
+  }
+  if (state.phase === "none") return RTS_WORK_MONTAGE_NONE;
+  const exitSeconds = sectionSeconds(montage.exit);
+  if (exitSeconds <= 0) return RTS_WORK_MONTAGE_NONE;
+  return { phase: "exit", remainingSeconds: exitSeconds };
+}
+
+/** The section a phase should be playing, or null when locomotion owns the pose. */
+export function rtsWorkMontageSection(
+  state: RtsWorkMontageState,
+  montage: RtsWorkMontage | null,
+): { readonly section: RtsMontageSection; readonly loop: boolean } | null {
+  if (!montage) return null;
+  switch (state.phase) {
+    case "enter":
+      return montage.enter ? { section: montage.enter, loop: false } : null;
+    case "loop":
+      return { section: montage.loop, loop: true };
+    case "exit":
+      return montage.exit ? { section: montage.exit, loop: false } : null;
+    default:
+      return null;
+  }
+}

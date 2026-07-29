@@ -27,12 +27,15 @@ import type {
 import { HealthComponent } from "../units/health";
 import type { UpgradableStructure } from "../progression/kingdomProgressionSystem";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
+import { createPickVolume, fitPickVolumeToVisual } from "./pickVolume";
 
 /** Temporary Faz 1 centre durability; building balance data arrives in Faz 2. */
 export const COMMAND_CENTER_MAX_HEALTH = 300;
 /** Initial buildable territory around a newly placed command centre. */
 export const COMMAND_CENTER_CONTROL_RADIUS = 28;
 const COMMAND_CENTER_FOOTPRINT = 7;
+/** Top of the Faz 1 primitive tower; the pick volume's height until a model loads. */
+const COMMAND_CENTER_PLACEHOLDER_HEIGHT = 7;
 /**
  * The single child slot the centre's building model occupies. Whatever art is
  * current lives under this name, so replacing it is "remove the slot, add the
@@ -64,6 +67,12 @@ export class CommandCenter implements UpgradableStructure {
    * ring living in there would be disposed with it.
    */
   private readonly selectionRing: Mesh;
+  /**
+   * The centre's click collision, held here for the same reason as the ring:
+   * {@link setVisual} disposes whatever visual it replaces, and a pick box
+   * living inside one would leave the centre unselectable after a re-skin.
+   */
+  private readonly pickVolume: Mesh;
   /** Global tier level (1..3), owned by `KingdomProgressionSystem` like every building. */
   level = 1;
   controlRadius = COMMAND_CENTER_CONTROL_RADIUS;
@@ -164,6 +173,14 @@ export class CommandCenter implements UpgradableStructure {
     // placeholder when the loaded model arrives, and a ring inside it would go
     // with it — the same reason the selection ring lives out here.
     this.object.add(createTeamRing(owner, ringRadius - 0.35));
+    // Footprint-wide click collision, so clicking the middle of a gate or an
+    // open courtyard selects the centre instead of falling through to ground.
+    this.pickVolume = createPickVolume(
+      COMMAND_CENTER_FOOTPRINT,
+      COMMAND_CENTER_FOOTPRINT,
+      COMMAND_CENTER_PLACEHOLDER_HEIGHT,
+    );
+    this.object.add(this.pickVolume);
   }
 
   get position() {
@@ -200,6 +217,7 @@ export class CommandCenter implements UpgradableStructure {
     }
     visual.name = COMMAND_CENTER_MODEL_SLOT;
     this.object.add(visual);
+    fitPickVolumeToVisual(this.pickVolume, visual, this.object.position.y);
   }
 
   /** Static footprint used by Phase 2 placement validation and infantry nav. */

@@ -163,6 +163,35 @@ export interface AssetSkeletonMontageDef {
   blendInSeconds: number;
   /** Crossfade-out seconds when it ends/returns to base. */
   blendOutSeconds: number;
+  /**
+   * Named time ranges carved out of {@link clip} — the data form of Unreal's
+   * montage sections. Empty means the montage is the whole clip, which is what
+   * every montage authored before sections existed still is.
+   *
+   * The point of sections is a held action whose *middle* loops for as long as
+   * the game says, rather than the whole clip repeating: a builder kneels down
+   * once (`enter`), stays down working (`loop`) however long the site takes, and
+   * stands up once (`exit`) when it is finished.
+   */
+  sections: AssetSkeletonMontageSectionDef[];
+}
+
+/**
+ * One named slice of a montage's clip, in seconds from the clip start.
+ *
+ * `loop` marks the slice that is held — playback wraps back to `startSeconds`
+ * instead of advancing to the next section — and is what makes the section list
+ * a state machine rather than a playlist.
+ */
+export interface AssetSkeletonMontageSectionDef {
+  /** Unique within the montage. Game code triggers/looks up by this name. */
+  name: string;
+  /** Section start, in seconds from the clip start. */
+  startSeconds: number;
+  /** Section end, in seconds from the clip start; must exceed `startSeconds`. */
+  endSeconds: number;
+  /** Repeat this section until the game asks for the next one. */
+  loop: boolean;
 }
 
 export const ROOT_MOTION_MODES = ["preserve", "lockXZ", "lockXYZ"] as const;
@@ -302,8 +331,34 @@ function normalizeMontages(value: unknown): AssetSkeletonMontageDef[] {
       loop: input.loop === true,
       blendInSeconds: normalizeBlendSeconds(input.blendInSeconds, 0.12),
       blendOutSeconds: normalizeBlendSeconds(input.blendOutSeconds, 0.2),
+      sections: normalizeMontageSections(input.sections),
     };
     result.push(montage);
+  }
+  return result;
+}
+
+/**
+ * Keeps only well-formed, non-empty, uniquely named ranges. A malformed section
+ * is dropped rather than repaired: a zero-length or reversed range would leave
+ * the runtime looping a single frame, which reads as a frozen unit and is far
+ * harder to diagnose than a montage that simply plays its whole clip.
+ */
+function normalizeMontageSections(value: unknown): AssetSkeletonMontageSectionDef[] {
+  if (!Array.isArray(value)) return [];
+  const result: AssetSkeletonMontageSectionDef[] = [];
+  const names = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const input = item as Record<string, unknown>;
+    if (typeof input.name !== "string" || input.name.length === 0) continue;
+    if (names.has(input.name)) continue;
+    const start = typeof input.startSeconds === "number" ? input.startSeconds : Number.NaN;
+    const end = typeof input.endSeconds === "number" ? input.endSeconds : Number.NaN;
+    if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+    if (start < 0 || end <= start) continue;
+    names.add(input.name);
+    result.push({ name: input.name, startSeconds: start, endSeconds: end, loop: input.loop === true });
   }
   return result;
 }

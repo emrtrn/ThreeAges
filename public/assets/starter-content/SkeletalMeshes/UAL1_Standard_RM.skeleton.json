@@ -26,6 +26,19 @@
   "notifies": [],
   "montages": [
     {
+      "name": "work",
+      "clip": "Fixing_Kneeling",
+      "slot": "fullBody",
+      "loop": true,
+      "blendInSeconds": 0.18,
+      "blendOutSeconds": 0.18,
+      "sections": [
+        { "name": "enter", "startSeconds": 0, "endSeconds": 1.2, "loop": false },
+        { "name": "loop", "startSeconds": 1.2, "endSeconds": 4, "loop": true },
+        { "name": "exit", "startSeconds": 4, "endSeconds": 5.2, "loop": false }
+      ]
+    },
+    {
       "name": "montage",
       "clip": "A_TPose",
       "slot": "upperBody",

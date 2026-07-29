@@ -19,6 +19,17 @@ export interface AnimatorBlendWeight {
  *
  * Three-touching, so it lives in `engine/render-three`, not `engine/core`.
  */
+/**
+ * A named time window inside a clip — one montage section (see
+ * {@link CrossfadeAnimator.playRange}), in seconds from the clip start.
+ */
+export interface AnimatorClipRange {
+  readonly startSeconds: number;
+  readonly endSeconds: number;
+  /** Wrap back to `startSeconds` at the end, instead of holding the last pose. */
+  readonly loop: boolean;
+}
+
 export class CrossfadeAnimator {
   readonly mixer: AnimationMixer;
   /** Names of the clips this animator can play. */
@@ -27,6 +38,12 @@ export class CrossfadeAnimator {
   private current: string | null = null;
   /** Clips actively contributing to the current weighted blend (empty in clip mode). */
   private readonly blendActions = new Map<string, AnimationAction>();
+  /** The sub-clip window {@link playRange} is confining the playhead to, if any. */
+  private range: AnimatorClipRange | null = null;
+  /** True once a non-looping range has reached its end and is holding that pose. */
+  private rangeDone = false;
+  /** Last playhead seen inside a range, so a whole-clip wrap can be recognised. */
+  private rangeLastTime = 0;
 
   constructor(
     root: Object3D,
@@ -70,18 +87,107 @@ export class CrossfadeAnimator {
    */
   play(name: string, duration = 0.2): void {
     if (this.blendActions.size > 0) this.stopBlend();
-    if (name === this.current) return;
+    // A ranged playback of this same clip is *not* the same thing as looping it
+    // whole, so leaving a range always re-issues the action even when the clip
+    // name is unchanged — otherwise a builder that stood up would stay penned
+    // inside the section it just left.
+    const leavingRange = this.range !== null;
+    this.range = null;
+    this.rangeDone = false;
+    if (name === this.current && !leavingRange) return;
     const next = this.actions.get(name);
     if (!next) return;
     next.reset();
     next.enabled = true;
+    next.setLoop(LoopRepeat, Infinity);
+    next.clampWhenFinished = false;
     next.setEffectiveTimeScale(1);
     next.setEffectiveWeight(1);
     next.play();
-    const prev = this.current ? this.actions.get(this.current) : undefined;
+    const prev = this.current && this.current !== name ? this.actions.get(this.current) : undefined;
     if (prev && duration > 0) prev.crossFadeTo(next, duration, false);
     else if (prev) prev.stop();
     this.current = name;
+  }
+
+  /**
+   * Plays only `range` of `name` — one montage section — either held on a loop
+   * or once, clamped on its last pose.
+   *
+   * Three has no notion of a sub-clip, so the window is enforced by
+   * {@link update}: the action itself loops the whole clip and the playhead is
+   * wrapped (or clamped) at the section boundary each tick. That is why callers
+   * driving ranges must tick through `update` rather than `mixer.update`.
+   *
+   * Re-issuing the same clip with the same window is a no-op, so a caller can
+   * call it every frame while the section is held; a different window restarts
+   * from its start.
+   */
+  playRange(name: string, range: AnimatorClipRange, fadeSeconds = 0.15): void {
+    if (this.blendActions.size > 0) this.stopBlend();
+    const next = this.actions.get(name);
+    if (!next) return;
+    if (
+      name === this.current &&
+      this.range &&
+      this.range.startSeconds === range.startSeconds &&
+      this.range.endSeconds === range.endSeconds &&
+      this.range.loop === range.loop
+    ) {
+      return;
+    }
+    const prev = this.current && this.current !== name ? this.actions.get(this.current) : undefined;
+    next.reset();
+    next.enabled = true;
+    next.setLoop(LoopRepeat, Infinity);
+    next.clampWhenFinished = false;
+    next.setEffectiveTimeScale(1);
+    next.setEffectiveWeight(1);
+    next.time = range.startSeconds;
+    next.play();
+    if (prev && fadeSeconds > 0) prev.crossFadeTo(next, fadeSeconds, false);
+    else if (prev) prev.stop();
+    this.current = name;
+    this.range = range;
+    this.rangeDone = false;
+    this.rangeLastTime = range.startSeconds;
+  }
+
+  /** True once a non-looping {@link playRange} section has played through. */
+  get rangeFinished(): boolean {
+    return this.rangeDone;
+  }
+
+  /**
+   * Advances the mixer by `deltaSeconds` and keeps a {@link playRange} playhead
+   * inside its section. Equivalent to `mixer.update` when no range is active.
+   */
+  update(deltaSeconds: number): void {
+    this.mixer.update(deltaSeconds);
+    const range = this.range;
+    const action = this.current ? this.actions.get(this.current) : undefined;
+    if (!range || !action) return;
+    const span = range.endSeconds - range.startSeconds;
+    if (span <= 0) return;
+    // A section that reaches the clip's own end is wrapped by the mixer before
+    // this runs, so the raw playhead alone cannot say whether the section ended.
+    // Linearising against the previous frame's time catches both cases with the
+    // same comparison.
+    const duration = action.getClip().duration;
+    const raw = action.time;
+    const linear = raw < this.rangeLastTime - 1e-6 ? raw + duration : raw;
+    if (linear < range.endSeconds) {
+      this.rangeLastTime = raw < range.startSeconds ? range.startSeconds : raw;
+      if (raw < range.startSeconds) action.time = range.startSeconds;
+      return;
+    }
+    if (range.loop) {
+      action.time = range.startSeconds + ((linear - range.startSeconds) % span);
+    } else {
+      action.time = range.endSeconds;
+      this.rangeDone = true;
+    }
+    this.rangeLastTime = action.time;
   }
 
   /** Authored length of a clip in seconds, or null when this animator lacks it. */
@@ -104,6 +210,8 @@ export class CrossfadeAnimator {
     if (this.blendActions.size > 0) this.stopBlend();
     const next = this.actions.get(name);
     if (!next) return;
+    this.range = null;
+    this.rangeDone = false;
     next.reset();
     next.enabled = true;
     next.setLoop(LoopOnce, 1);
@@ -149,6 +257,8 @@ export class CrossfadeAnimator {
       this.actions.get(this.current)?.stop();
       this.current = null;
     }
+    this.range = null;
+    this.rangeDone = false;
     const phase = this.blendPhase();
     let refDuration = 0;
     for (const entry of valid) {

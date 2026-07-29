@@ -2833,6 +2833,9 @@ export class SkeletalMeshEditor {
       loop: false,
       blendInSeconds: 0.12,
       blendOutSeconds: 0.2,
+      // Sectionless: the montage is its whole clip until an asset carves it up
+      // by hand in the sidecar. Section authoring has no editor UI yet.
+      sections: [],
     };
     this.skeleton = { ...this.skeleton, montages: [...this.skeleton.montages, montage] };
     this.selectedMontageName = name;

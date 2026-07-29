@@ -167,6 +167,10 @@ export class EconomyProductionSystem {
     this.assignmentByWorker.delete(worker.id);
     this.forests?.releaseReservation(worker.id);
     worker.stop();
+    // Presentation only: a released gatherer must not keep working a field it no
+    // longer belongs to. Cleared on every exit path — player order, reassignment,
+    // producer loss, death — the same way the construction system does it.
+    worker.setWorking(false);
     return true;
   }
 
@@ -279,6 +283,10 @@ export class EconomyProductionSystem {
     if (producer.localBuffer >= economy.localBufferCapacity) {
       producer.localBuffer = economy.localBufferCapacity;
       producer.status = "buffer-full";
+      // A full buffer is a stopped producer, and the pose says so: the crew
+      // stands up and waits. Leaving them bent over their work would make a
+      // farm that has stopped earning look exactly like one that is earning.
+      this.setProducerWorking(producer, false);
       return;
     }
     this.assignIdleWorkersToProducer(producer);
@@ -297,6 +305,10 @@ export class EconomyProductionSystem {
         assignment.worker.stop();
         assignment.state = "producing";
       }
+      // Presentation only, and read straight off the assignment's own state, so
+      // the working pose starts the frame the worker settles at the farm and
+      // stops the frame it is released — no second timer to drift out of step.
+      assignment.worker.setWorking(assignment.state === "producing");
       if (assignment.state === "producing") workingWorkers += 1;
     }
     if (workingWorkers === 0) {
@@ -331,6 +343,9 @@ export class EconomyProductionSystem {
     const economy = producer.structure.economy;
     if (!economy?.requiresForest || !this.forests || economy.gatherRadius === undefined || economy.carryCapacity === undefined) {
       producer.status = "missing-forest";
+      // Same reason as a full buffer: a camp that cannot gather must not leave
+      // its crew frozen mid-swing at a forest that is no longer there.
+      this.setProducerWorking(producer, false);
       return;
     }
     const hasLiveTree = this.forests.hasLiveTreeNear(
@@ -341,6 +356,7 @@ export class EconomyProductionSystem {
     );
     if (!hasLiveTree && producer.assignments.size === 0) {
       producer.status = "source-depleted";
+      this.setProducerWorking(producer, false);
       return;
     }
     this.assignIdleWorkersToProducer(producer);
@@ -348,6 +364,12 @@ export class EconomyProductionSystem {
     let movingWorkers = 0;
     let delivered = 0;
     for (const assignment of [...producer.assignments.values()]) {
+      // Cleared up front and re-raised only by the felling branch below: a
+      // lumberjack's cycle walks, chops, walks back and unloads, and only the
+      // chopping half is performed from a standstill. Unloading is deliberately
+      // left out — it is shorter than the animation's kneel, so the pose would
+      // be cut off part-way down and read as a twitch.
+      assignment.worker.setWorking(false);
       if (assignment.state === "moving-to-tree") {
         if (assignment.worker.position.distanceTo(assignment.approach) > WORK_RANGE) {
           if (!this.replanApproach(assignment)) {
@@ -369,6 +391,7 @@ export class EconomyProductionSystem {
           }
           continue;
         }
+        assignment.worker.setWorking(true);
         const harvested = this.forests.harvest(
           assignment.worker.id,
           Math.min((economy.perWorkerPerMinute * deltaSeconds) / 60, economy.carryCapacity - assignment.cargoAmount),
@@ -446,9 +469,15 @@ export class EconomyProductionSystem {
     }
   }
 
+  /** Drops (or raises) the working pose for every worker at this producer at once. */
+  private setProducerWorking(producer: ProducerRecord, working: boolean): void {
+    for (const assignment of producer.assignments.values()) assignment.worker.setWorking(working);
+  }
+
   private dropInvalidAssignments(producer: ProducerRecord): void {
     for (const [workerId, assignment] of producer.assignments) {
       if (!assignment.worker.health.depleted && this.units.all().includes(assignment.worker)) continue;
+      assignment.worker.setWorking(false);
       this.forests?.releaseReservation(workerId);
       producer.assignments.delete(workerId);
       this.assignmentByWorker.delete(workerId);
@@ -458,6 +487,7 @@ export class EconomyProductionSystem {
   private releaseProducer(producer: ProducerRecord): void {
     for (const assignment of producer.assignments.values()) {
       assignment.worker.stop();
+      assignment.worker.setWorking(false);
       this.forests?.releaseReservation(assignment.worker.id);
       this.assignmentByWorker.delete(assignment.worker.id);
     }

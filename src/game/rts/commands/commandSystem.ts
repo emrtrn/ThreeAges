@@ -5,7 +5,7 @@
  * move order for the current selection. It owns input-space raycasts and order
  * issuance only; movement and combat execution remain in the unit systems.
  */
-import { Plane, Raycaster, Vector2, Vector3, type PerspectiveCamera } from "three";
+import { Plane, Raycaster, Vector2, Vector3, type Intersection, type PerspectiveCamera } from "three";
 
 import type { SelectionSystem } from "../selection/selectionSystem";
 import type { CommandMarkerSystem } from "./commandMarker";
@@ -19,6 +19,7 @@ import type { Unit } from "../units/unit";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
 import { FLAT_RTS_GROUND, type RtsGroundSurface } from "../world/rtsTerrainSurface";
+import { STRUCTURE_PICK_VOLUME_NAME } from "../structures/pickVolume";
 
 /** The y = 0 walkable ground the runtime commands against. */
 const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
@@ -205,12 +206,34 @@ export class CommandSystem {
       ...this.centers.targetMeshes(),
       ...(this.structures ? this.structures.targetMeshes() : []),
     ];
-    const hit = this.raycaster.intersectObjects(targets, true)[0];
+    const hit = this.pickTargetHit(this.raycaster.intersectObjects(targets, true));
     if (!hit) return null;
     return this.units.unitForObject(hit.object)
       ?? this.centers.centerForObject(hit.object)
       ?? this.structures?.structureForObject(hit.object)
       ?? null;
+  }
+
+  /**
+   * Choose a combat target from a sorted hit list, preferring real geometry over
+   * a building's click collision box.
+   *
+   * The box spans the whole footprint, so a worker standing inside an open plan
+   * (a farm, a lumber camp) sits *behind* its front face. Taking hit[0] blindly
+   * would let the box occlude that worker and turn a right-click on him into a
+   * command against the building he is standing in. The box is still the answer
+   * when nothing solid was hit — that is the archway case it exists for.
+   */
+  private pickTargetHit(hits: readonly Intersection[]): Intersection | null {
+    let volumeHit: Intersection | null = null;
+    for (const hit of hits) {
+      if (hit.object.name === STRUCTURE_PICK_VOLUME_NAME) {
+        volumeHit ??= hit;
+        continue;
+      }
+      return hit;
+    }
+    return volumeHit;
   }
 
   /** Raycast friendly construction/economy sites separately from combat targets. */

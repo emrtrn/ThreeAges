@@ -26,14 +26,20 @@ import {
 import type { AssetSkeletonDef } from "@/scene/assetSkeletonLoader";
 import {
   advanceRtsAction,
+  advanceRtsWorkMontage,
+  resolveRtsWorkMontage,
   rtsActionClip,
   rtsLocomotionTuning,
+  rtsWorkMontageSection,
   selectRtsAnimation,
   RTS_ACTION_NONE,
+  RTS_WORK_MONTAGE_NONE,
   type RtsActionDurations,
   type RtsActionState,
   type RtsAnimationSet,
   type RtsLocomotionTuning,
+  type RtsWorkMontage,
+  type RtsWorkMontageState,
 } from "../units/rtsUnitAnimation";
 import type { RtsPresentationHandle, RtsPresentationUpdate } from "../units/unit";
 import { advanceRtsWheelSpins, type RtsWheelSpinBinding } from "./rtsPresentationMotion";
@@ -109,6 +115,10 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private startedAction: RtsActionState = RTS_ACTION_NONE;
   /** See {@link RtsPresentationHandle.deathSeconds}: undefined when unauthored. */
   readonly deathSeconds: number | undefined = undefined;
+  /** Authored kneel/hold/stand sections of the job animation, or null when unauthored. */
+  private workMontage: RtsWorkMontage | null = null;
+  /** Which part of that montage is playing, owned by the pure state machine. */
+  private workState: RtsWorkMontageState = RTS_WORK_MONTAGE_NONE;
   /** Render time a far unit has banked since its last mixer update (Faz F). */
   private pendingSeconds = 0;
   /** Authored wheel pivots, turned by measured travel rather than by a clip. */
@@ -139,6 +149,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       death: this.durationOfRole("death"),
     };
     this.deathSeconds = this.actionDurations.death ?? undefined;
+    this.workMontage = resolveRtsWorkMontage(animation.skeleton.montages, this.animator.clips);
     // Snapped in rather than faded, so the unit stands correctly on the frame it
     // spawns instead of blending out of its bind pose. An asset with no authored
     // idle is left in its bind pose on purpose — falling back to "some clip"
@@ -185,6 +196,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     this.pendingSeconds = 0;
 
     this.action = advanceRtsAction(this.action, state, this.actionDurations, deltaSeconds);
+    this.workState = advanceRtsWorkMontage(this.workState, state, this.workMontage, this.tuning, deltaSeconds);
     const actionClip = rtsActionClip(this.action, this.animationSet, animator.clips);
     if (actionClip) {
       // Restarted only when the state machine says a *new* one-shot began.
@@ -194,10 +206,30 @@ class RtsUnitPresentation implements RtsPresentationHandle {
         animator.playOnce(actionClip, ACTION_FADE_SECONDS);
         this.startedAction = this.action;
       }
-      animator.mixer.update(deltaSeconds);
+      animator.update(deltaSeconds);
       return;
     }
     this.startedAction = RTS_ACTION_NONE;
+
+    // The work montage sits between the one-shots and locomotion: it owns the
+    // body only while the unit is standing at its job (or winding down out of
+    // it), and cancels itself the moment the unit moves or fights. Re-issuing
+    // the same section every frame is a no-op inside the animator, so the held
+    // part stays put instead of restarting.
+    const workSection = rtsWorkMontageSection(this.workState, this.workMontage);
+    if (workSection && this.workMontage) {
+      animator.playRange(
+        this.workMontage.clip,
+        {
+          startSeconds: workSection.section.startSeconds,
+          endSeconds: workSection.section.endSeconds,
+          loop: workSection.loop,
+        },
+        LOCOMOTION_FADE_SECONDS,
+      );
+      animator.update(deltaSeconds);
+      return;
+    }
 
     // A null selection means the asset has no clip for this state; the current
     // pose is held rather than replaced with an arbitrary one.
@@ -208,7 +240,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       // a crowd from skating, since its feet then cycle at the speed it moves.
       animator.setPlaybackRate(selection.playbackRate);
     }
-    animator.mixer.update(deltaSeconds);
+    animator.update(deltaSeconds);
   }
 
   /** Authored length of the clip a semantic role names, or null when unauthored. */
