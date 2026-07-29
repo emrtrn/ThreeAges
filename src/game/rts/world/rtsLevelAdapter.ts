@@ -9,6 +9,7 @@ import type { RtsTreeDefinition } from "../economy/forestSystem";
 import type { RtsBuildAnchor, RtsExpansionRegion, RtsMapPoint, RtsStrategicPoint } from "./rtsMapBlockout";
 import { RTS_WORLD_HALF_EXTENT } from "./rtsGround";
 import type { UnitOwner } from "../units/unit";
+import type { RtsWalkableDeck } from "./rtsTerrainSurface";
 
 export class RtsLevelError extends Error {
   constructor(message: string) { super(message); this.name = "RtsLevelError"; }
@@ -21,6 +22,8 @@ export interface RtsLevelDefinition {
   readonly trees: readonly RtsTreeDefinition[];
   readonly strategicPoints: readonly RtsStrategicPoint[];
   readonly navigationBlockers: readonly NavBlocker[];
+  /** Horizontal walkable floors, such as bridge decks, that raise unit visuals. */
+  readonly walkableDecks: readonly RtsWalkableDeck[];
   readonly buildAnchors: readonly RtsLevelBuildAnchor[];
   readonly expansions: readonly RtsExpansionRegion[];
   readonly routes: ReadonlyMap<string, readonly RtsMapPoint[]>;
@@ -76,10 +79,15 @@ export function adaptRtsLevel(
   const trees: RtsTreeDefinition[] = [];
   const strategicPoints: RtsStrategicPoint[] = [];
   const navigationBlockers: NavBlocker[] = [];
+  const walkableDecks: RtsWalkableDeck[] = [];
   const anchors: RtsLevelBuildAnchor[] = [];
   const expansionMembers = new Map<string, ExpansionMembers>();
   for (const volume of blockingVolumes) {
-    navigationBlockers.push(blockingVolumeNavigationBlocker(volume));
+    const deck = blockingVolumeWalkableDeck(volume);
+    if (deck) walkableDecks.push(deck);
+    else if (resolveBlockingVolume(volume).navigationRole !== "ignored") {
+      navigationBlockers.push(blockingVolumeNavigationBlocker(volume));
+    }
   }
   for (const { def, instance } of actors) {
     const values = resolveActorInstanceVariables(def, instance.variableOverrides);
@@ -179,6 +187,7 @@ export function adaptRtsLevel(
     trees,
     strategicPoints,
     navigationBlockers,
+    walkableDecks,
     buildAnchors: anchors,
     expansions,
     routes,
@@ -206,5 +215,32 @@ function blockingVolumeNavigationBlocker(volume: LayoutBlockingVolume): NavBlock
   return {
     min: [volume.position[0] - horizontalX, volume.position[1] - halfY, volume.position[2] - horizontalZ],
     max: [volume.position[0] + horizontalX, volume.position[1] + halfY, volume.position[2] + horizontalZ],
+  };
+}
+
+/**
+ * Converts a `Walkable Deck` box volume into the top surface an RTS unit stands
+ * on. It deliberately accepts only horizontal boxes: cylinders/cones/spheres
+ * do not represent a predictable bridge floor, and tilted floors need a future
+ * slope-aware navigation slice rather than a misleading flat height.
+ */
+function blockingVolumeWalkableDeck(volume: LayoutBlockingVolume): RtsWalkableDeck | null {
+  const resolved = resolveBlockingVolume(volume);
+  if (resolved.navigationRole !== "walkable" || resolved.brushShape !== "box") return null;
+  const rotation = volume.rotation ?? [0, 0, 0];
+  if (Math.abs(rotation[0]) > 0.001 || Math.abs(rotation[2]) > 0.001) return null;
+  const scale = typeof volume.scale === "number"
+    ? [volume.scale, volume.scale, volume.scale] as const
+    : volume.scale ?? [1, 1, 1] as const;
+  const halfWidth = Math.abs(resolved.size[0] * scale[0]) / 2;
+  const halfHeight = Math.abs(resolved.size[1] * scale[1]) / 2;
+  const halfDepth = Math.abs(resolved.size[2] * scale[2]) / 2;
+  return {
+    x: volume.position[0],
+    y: volume.position[1] + halfHeight,
+    z: volume.position[2],
+    halfWidth,
+    halfDepth,
+    yawDeg: rotation[1],
   };
 }

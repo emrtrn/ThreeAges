@@ -343,6 +343,7 @@ export function cloneBlockingVolume(volume: LayoutBlockingVolume): LayoutBlockin
   if (volume.brushSides !== undefined) clone.brushSides = volume.brushSides;
   if (volume.renderInGame !== undefined) clone.renderInGame = volume.renderInGame;
   if (volume.color !== undefined) clone.color = volume.color;
+  if (volume.navigationRole !== undefined) clone.navigationRole = volume.navigationRole;
   return clone;
 }
 

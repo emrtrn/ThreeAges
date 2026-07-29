@@ -10,11 +10,9 @@
  */
 import {
   BoxGeometry,
-  Color,
   Group,
   Mesh,
   MeshStandardMaterial,
-  RingGeometry,
   type Object3D,
   type Vector3,
 } from "three";
@@ -24,6 +22,7 @@ import type { BuildingBalanceStats, EconomyProductionBalance, StartingResources 
 import type { UnitOwner } from "../units/unit";
 import { HealthComponent } from "../units/health";
 import { createTeamRing } from "../team/teamColors";
+import { createSelectionRing } from "../selection/selectionRing";
 import { buildingFootprintBlocker } from "./placementGrid";
 import { ConstructionComponent } from "./constructionComponent";
 import { createPickVolume, fitPickVolumeToVisual, footprintPickHeight } from "./pickVolume";
@@ -153,18 +152,7 @@ export class PlacedStructureSystem {
     // say *which* building is selected, and a 6x6 depot and a 2x2 house cannot
     // share one radius without the ring reading as a different building's.
     const ringRadius = Math.max(stats.footprint.width, stats.footprint.depth) / 2 + 0.35;
-    const selectionRing = new Mesh(
-      new RingGeometry(ringRadius, ringRadius + 0.3, 32),
-      new MeshStandardMaterial({
-        color: new Color("#f2f27a"),
-        emissive: new Color("#8f8f20"),
-        roughness: 0.5,
-      }),
-    );
-    selectionRing.name = "rts-structure-selection-ring";
-    selectionRing.rotation.x = -Math.PI / 2;
-    selectionRing.position.y = 0.05;
-    selectionRing.visible = false;
+    const selectionRing = createSelectionRing(ringRadius, { name: "rts-structure-selection-ring" });
     object.add(selectionRing);
     // Team ring sits just inside the selection ring, on the same footprint-derived
     // radius, so ownership reads at camera distance without a model tint.

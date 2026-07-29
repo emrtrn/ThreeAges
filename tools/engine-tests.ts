@@ -278,7 +278,11 @@ import {
 } from "../src/game/rts/vision/enemyMemorySystem";
 import { VisionSystemAiFilter } from "../src/game/rts/ai/aiVisionFilter";
 import { FogVisibilityBinder } from "../src/game/rts/vision/fogVisibilityBinder";
-import { isTreeVisible } from "../src/game/rts/world/rtsMapArt";
+import {
+  isResourceNodeVisible,
+  isTreeVisible,
+  resourceNodeStageIndex,
+} from "../src/game/rts/world/rtsMapArt";
 import type { RtsStrategicPoint } from "../src/game/rts/world/rtsMapBlockout";
 import { simulationSteps, type RtsSimulationSpeed } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
@@ -29536,6 +29540,30 @@ check("RTS maps Forge Blocking Volumes into conservative navigation blockers", (
   assert.deepEqual(level.navigationBlockers, [{ min: [3, -1, 2], max: [5, 5, 10] }]);
 });
 
+check("RTS Walkable Deck volumes raise units without blocking their bridge corridor", () => {
+  const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
+  const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
+  const actor = (owner: "player" | "enemy", position: [number, number, number]) => ({
+    index: 0,
+    instance: { classRef: "start.actor.json", position, variableOverrides: { owner } },
+    def: normalizeActorScriptDef({ name: "BP_RTS_KingdomStart", parentClass: "actor", variables: [{ key: "owner", label: "Owner", type: "select", default: "player" }] }),
+  });
+  const level = adaptRtsLevel(
+    [actor("player", [-10, 0, 10]), actor("enemy", [10, 0, -10])],
+    [],
+    { buildings, resources },
+    [{
+      id: "bridge-deck",
+      position: [4, 2, 6],
+      rotation: [0, 90, 0],
+      size: [8, 0.4, 2],
+      navigationRole: "walkable",
+    }],
+  );
+  assert.deepEqual(level.navigationBlockers, []);
+  assert.deepEqual(level.walkableDecks, [{ x: 4, y: 2.2, z: 6, halfWidth: 4, halfDepth: 1, yawDeg: 90 }]);
+});
+
 check("Assetization Faz D: Expansion markers require all roles and an authored route", () => {
   const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
   const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
@@ -29748,19 +29776,34 @@ check("Landscape Faz 2: moving a Level marker moves the runtime behaviour it dri
   // 2) The resource node marker decides where a matching extractor may draw. The
   // node's authored position is read from the Level so moving it in the editor
   // does not break this proof.
-  const { width, depth } = buildings["quarry"]!.footprint;
+  const quarry = buildings["quarry"]!;
+  const quarryReach = quarry.economy!.gatherRadius!;
+  // A quarry stands *beside* its deposit, so the proof queries from a legal
+  // site: clear of the footprint, inside the reach. Derived from the same
+  // balance entry the game reads, so retuning either number keeps it honest.
+  const besideOffset = quarry.footprint.width / 2 + 2;
+  assert.ok(besideOffset <= quarryReach, "a quarry's reach must cover ground just outside its own footprint");
   const authoredStone = baseline.resourceNodes.find((n) => n.id === "player_safe_stone");
   assert.ok(authoredStone, "the Level authors the player safe stone node");
+  const canWork = (nodes: ResourceNodeSystem, x: number, z: number): boolean =>
+    nodes.canExtractAt("stone", x + besideOffset, z, quarryReach, quarry.footprint);
   const oldNodes = new ResourceNodeSystem(resources, baseline.resourceNodes);
-  assert.equal(oldNodes.canExtractAt("stone", authoredStone!.x, authoredStone!.z, width, depth), true, "baseline: a quarry over the authored stone node extracts");
+  assert.equal(canWork(oldNodes, authoredStone!.x, authoredStone!.z), true, "baseline: a quarry beside the authored stone node extracts");
   const movedNode = resolveRtsSpatialLayout(adapt((actors) => {
     const node = actors.find((a) => a.variableOverrides?.nodeId === "player_safe_stone");
     assert.ok(node, "the Level authors the player safe stone node to move");
     node!.position = [authoredStone!.x + 40, 0, authoredStone!.z - 40];
   }));
   const newNodes = new ResourceNodeSystem(resources, movedNode.resourceNodes);
-  assert.equal(newNodes.canExtractAt("stone", authoredStone!.x, authoredStone!.z, width, depth), false, "the stone node's old spot no longer extracts once its marker moved");
-  assert.equal(newNodes.canExtractAt("stone", authoredStone!.x + 40, authoredStone!.z - 40, width, depth), true, "extraction is now legal where the marker was moved to");
+  assert.equal(canWork(newNodes, authoredStone!.x, authoredStone!.z), false, "the stone node's old spot no longer extracts once its marker moved");
+  assert.equal(canWork(newNodes, authoredStone!.x + 40, authoredStone!.z - 40), true, "extraction is now legal where the marker was moved to");
+  // The deposit itself is not build space: a quarry centred on it is refused,
+  // which is what keeps its shrinking mesh in view while it is worked.
+  assert.equal(
+    oldNodes.canExtractAt("stone", authoredStone!.x, authoredStone!.z, quarryReach, quarry.footprint),
+    false,
+    "a quarry sitting on the deposit cannot work it",
+  );
 
   // 3) The strategic point marker decides where a regional-victory hold is contested.
   const held = () => "player" as const;
@@ -32075,17 +32118,26 @@ check("Faz 6 quarry uses its finite stone node and cannot be placed away from on
     () => {},
     () => {},
     (stats, x, z) => stats.economy?.requiresResourceNode
-      && !nodes.canExtractAt(stats.economy.resourceId, x, z, stats.footprint.width, stats.footprint.depth)
+      && !nodes.canExtractAt(stats.economy.resourceId, x, z, stats.economy.gatherRadius ?? 0, stats.footprint)
       ? "missing-resource-node"
       : null,
+    // Live deposits reserve build space exactly as standing trees do, so the
+    // rule under test is the one the game wires up.
+    () => nodes.liveNodeBlockers(),
   );
-  assert.equal(construction.validate("player", "quarry", 4, 0)?.reason, "missing-resource-node");
-  const built = construction.build("player", "quarry", 0, 0);
-  assert.ok(built.built, "the same quarry is legal when it covers matching stone");
+  // Out of reach: there is stone in the world, just not this one's.
+  assert.equal(construction.validate("player", "quarry", 20, 0)?.reason, "missing-resource-node");
+  // On top of the deposit: refused as occupied ground, the same answer a lumber
+  // camp gets on a trunk. Burying the deposit would hide the depletion stages
+  // that tell the player how much is left.
+  assert.equal(construction.validate("player", "quarry", 0, 0)?.reason, "blocked");
+  const built = construction.build("player", "quarry", 4, 0);
+  assert.ok(built.built, "the same quarry is legal built beside matching stone");
   if (!built.built) return assert.fail("quarry construction unexpectedly failed");
   structures.advanceConstruction(built.structure, quarry.constructionSeconds);
 
-  const worker = units.spawn("player", 5, 0, RTS_TEST_WORKER_STATS);
+  // Clear of the quarry's own footprint, which now sits at x 1..7.
+  const worker = units.spawn("player", 9, 0, RTS_TEST_WORKER_STATS);
   const production = new EconomyProductionSystem(units, structures, navigation, () => false, nodes);
   let withdrawn = 0;
   for (let tick = 0; tick < 80; tick += 1) {
@@ -32155,6 +32207,79 @@ check("RTS lumber camps require individual trees and workers carry wood back to 
   assert.equal(snapshot.status, "source-depleted");
   assert.equal(production.isAssigned(worker), false, "a worker is released after its grove is exhausted");
   territory.dispose();
+});
+
+check("RTS miners walk to the deposit, cut a load there, and carry it back to the mine", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const quarry = buildings.quarry ?? assert.fail("quarry balance missing");
+  const economy = quarry.economy ?? assert.fail("quarry economy missing");
+  assert.equal(economy.requiresResourceNode, true);
+  // Reach and load size are what make the cycle a round trip rather than a
+  // building that drains a pile from a distance; both must be authored.
+  assert.ok((economy.gatherRadius ?? 0) > 0 && (economy.carryCapacity ?? 0) > 0);
+
+  const resourceBalance = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  // A small deposit so the whole cycle — several trips, then depletion — fits in
+  // a headless run. Sized from the load itself so it stays several trips at any
+  // tuning of either number.
+  const trips = 3;
+  const capacity = economy.carryCapacity! * trips;
+  const nodes = new ResourceNodeSystem({
+    ...resourceBalance,
+    stone: { ...resourceBalance.stone!, safeNode: { capacity, perWorkerPerMinute: economy.perWorkerPerMinute } },
+  }, [{ id: "test-stone", resourceId: "stone", kind: "safe", x: 8, z: 0 }]);
+
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const navigation = new RtsNavigation();
+  const mine = structures.place("player", quarry, 0, 0);
+  structures.advanceConstruction(mine, quarry.constructionSeconds);
+  navigation.setBlockers(structures.unitNavigationBlockers());
+  const worker = units.spawn("player", -4, 0, RTS_TEST_WORKER_STATS);
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false, nodes);
+
+  const seen = new Set<string>();
+  let workedAtDeposit = false;
+  let carriedHome = false;
+  for (let tick = 0; tick < 4000; tick += 1) {
+    updateUnitMovement(units.all(), 0.25);
+    production.update(0.25);
+    const state = production.stateFor(worker);
+    seen.add(state);
+    // The kneel happens at the pile and the walk home happens with a load: those
+    // two facts are the round trip, and neither is visible from the state alone.
+    if (state === "gathering") {
+      workedAtDeposit ||= Math.hypot(worker.position.x - 8, worker.position.z) < 1.5;
+      // The montage owns the kneel: gameplay only asserts the worker is posed as
+      // working for the whole cut, which is what keeps it from standing early.
+      assert.equal(worker.isWorking, true, "a miner at the deposit is posed as working");
+    }
+    if (state === "returning") carriedHome ||= worker.position.x < 8;
+  }
+
+  assert.ok(seen.has("moving-to-source"), "the miner walks out to the deposit");
+  assert.ok(workedAtDeposit, "and cuts at the deposit, not at the mine door");
+  assert.ok(seen.has("returning") && carriedHome, "then carries the load back to the mine");
+  // `unloading` is deliberately not asserted: arriving, emptying the load and
+  // setting off again all happen inside one update, so the state is never
+  // observable from outside. The delivered total below is the proof it ran.
+
+  const snapshot = production.snapshots("player")[0] ?? assert.fail("mine producer missing");
+  // Derived from the deposit, so the arithmetic holds at any tuning: everything
+  // the pile held reached the building, and nothing more.
+  assert.ok(Math.abs(snapshot.totalProduced - capacity) < 0.0001, "every gram the deposit held was carried in");
+  assert.equal(nodes.snapshots()[0]?.remaining, 0, "and the deposit itself is spent");
+  assert.equal(snapshot.status, "source-depleted");
+  assert.equal(production.isAssigned(worker), false, "the miner is released once its deposit is empty");
+  assert.equal(worker.isWorking, false, "and stands up when there is nothing left to cut");
+
+  production.reset();
+  structures.clear();
+  units.clear();
 });
 
 check("RTS a live tree blocks a building footprint until it is harvested away", () => {
@@ -32373,10 +32498,13 @@ check("Tarla ekibi tarlanin icinde calisir, maden ekibi kapisinda durur", () => 
     }
   }
 
-  // A quarry is a building, not a field: its crew keeps the door approach, so
-  // nobody is left standing inside the rock face.
+  // A miner does not stand at the quarry door either: it walks out to the
+  // deposit, kneels there, and carries the load back.
   production.reset();
   units.clear();
+  // The farm goes too: left standing it is a second producer with no source
+  // requirement, and the miner would be staffed onto whichever is nearer.
+  structures.clear();
   const miner = units.spawn("player", -14, 0, RTS_TEST_WORKER_STATS);
   const pit = structures.place("player", quarry, -8, 0);
   structures.advanceConstruction(pit, quarry.constructionSeconds);
@@ -32384,19 +32512,24 @@ check("Tarla ekibi tarlanin icinde calisir, maden ekibi kapisinda durur", () => 
   const resourceBalance = validateResourceBalance(
     JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
   );
+  const deposit = { x: -8 + quarry.footprint.width / 2 + 2, z: 0 };
   const nodes = new ResourceNodeSystem(resourceBalance, [
-    { id: "test-stone", resourceId: "stone", kind: "safe", x: -8, z: 0 },
+    { id: "test-stone", resourceId: "stone", kind: "safe", x: deposit.x, z: deposit.z },
   ]);
   const mining = new EconomyProductionSystem(units, structures, navigation, () => false, nodes);
   for (let frame = 0; frame < 900; frame += 1) {
     updateUnitMovement(units.all(), 1 / 60);
     mining.update(1 / 60);
   }
-  assert.equal(mining.stateFor(miner), "producing");
+  assert.equal(mining.stateFor(miner), "gathering", "the miner is at the deposit, not at the door");
+  assert.ok(
+    miner.position.distanceTo(new Vector3(deposit.x, miner.position.y, deposit.z)) < 1.5,
+    "a miner works at the deposit it is cutting",
+  );
   assert.ok(
     Math.abs(miner.position.x - pit.x) > quarry.footprint.width / 2
     || Math.abs(miner.position.z - pit.z) > quarry.footprint.depth / 2,
-    "a miner stands outside the pit's footprint",
+    "and never inside the quarry's own footprint",
   );
 
   mining.reset();
@@ -33846,6 +33979,61 @@ check("§59: an unscouted forest is hidden, and stays drawn once explored", () =
   assert.equal(isTreeVisible(stump, undefined), false);
 });
 
+check("a deposit's landmark follows its own node state, not a hand-placed mesh", () => {
+  // Deposit art is now one object per authored node, so isResourceNodeVisible is
+  // the rule syncResourceNodes loops over — the same contract as isTreeVisible.
+  let sources: VisionSource[] = [{ owner: "player", x: -30, z: -30, radius: 8 }];
+  const vision = new VisionSystem(() => sources, { cellSize: 2, worldHalfExtent: 40 });
+  vision.refresh();
+  const revealed = (x: number, z: number): boolean => vision.isExplored("player", x, z);
+
+  const scouted = { x: -30, z: -30, depleted: false };
+  const unknown = { x: 30, z: 30, depleted: false };
+  const spent = { x: -30, z: -28, depleted: true };
+
+  assert.equal(isResourceNodeVisible(scouted, revealed), true, "a scouted deposit is drawn");
+  assert.equal(isResourceNodeVisible(unknown, revealed), false, "an unscouted deposit is not on the map");
+  // The whole point of deriving the art from node state: a mined-out deposit
+  // stops being a landmark instead of leaving a rock sitting on empty ground.
+  assert.equal(isResourceNodeVisible(spent, revealed), false, "a depleted deposit leaves no landmark");
+
+  sources = [];
+  vision.refresh();
+  assert.equal(isResourceNodeVisible(scouted, revealed), true, "explored deposits survive the scout leaving");
+
+  assert.equal(isResourceNodeVisible(unknown, undefined), true, "no fog means every live deposit is drawn");
+  assert.equal(isResourceNodeVisible(spent, undefined), false);
+});
+
+check("a deposit's mesh stage reads its remaining share, at any tuning", () => {
+  // Derived from the balance table rather than pinned to a magnitude, so
+  // retuning resources.json cannot turn this red.
+  const resources = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  const capacity = resources.stone!.externalNode.capacity;
+  const stageAt = (share: number): number =>
+    resourceNodeStageIndex(capacity * share, capacity, 3);
+
+  assert.equal(stageAt(1), 0, "an untouched deposit shows the full mesh");
+  assert.equal(stageAt(0.8), 0, "and still does well above the first threshold");
+  assert.equal(stageAt(0.5), 1, "under 60% it reads as worked");
+  assert.equal(stageAt(0.2), 2, "under 30% it reads as nearly spent");
+  assert.equal(stageAt(0), 2, "an empty deposit resolves to the last stage");
+
+  // The boundaries themselves: 0.6 and 0.3 belong to the *lower* stage, so a
+  // deposit only looks fuller than it is on the way in, never on the way out.
+  assert.equal(stageAt(0.6), 1);
+  assert.equal(stageAt(0.3), 2);
+
+  // Stage lists shorter or longer than the threshold count must clamp, not
+  // index past their meshes — mapping a different number of stages is data.
+  assert.equal(resourceNodeStageIndex(capacity, capacity, 1), 0, "a single-stage deposit never switches");
+  assert.equal(resourceNodeStageIndex(0, capacity, 2), 1, "two stages clamp to the last");
+  assert.equal(resourceNodeStageIndex(0, capacity, 4), 2, "a fourth stage is unreached, not a crash");
+  assert.equal(resourceNodeStageIndex(0, 0, 3), 2, "a capacity-less deposit is treated as spent");
+});
+
 check("§59: a fogged unit is not selectable or attackable", () => {
   const units = new UnitSystem();
   const mine = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
@@ -34897,16 +35085,16 @@ check("RTS a road bends around a live stone deposit and paves straight through a
   const detour = construction.plan({ x: -6, z: 0 }, { x: 6, z: 0 });
   assert.ok(detour, "a road still connects past a deposit");
   assert.ok(detour.cells.every((cell) => cell.x !== 0 || cell.z !== 0), "the route bends around the deposit tile");
-  // The reserve is deliberately one tile wide: a road pushed further out could no
-  // longer touch the extractor's footprint, trading the deadlock for a permanent
-  // `unlinked-road`. Neighbouring tiles must stay pavable.
+  // The reserve is deliberately one tile wide, matching a tree's: the extractor
+  // stands beside the deposit, so its footprint and the road that serves it both
+  // need the neighbouring tiles to stay pavable.
   assert.ok(
     detour.cells.some((cell) => Math.abs(cell.x) <= 2 && Math.abs(cell.z) <= 2),
-    "the road still runs within touching distance of a quarry built on the deposit",
+    "the road still runs within touching distance of a quarry built beside the deposit",
   );
 
-  // Mine the deposit dry; like a felled tree, it stops reserving its tile.
-  assert.equal(nodes.extract("stone", 0, 0, 2, 2, 10), 10);
+  // Mine the deposit dry from beside it; like a felled tree, it stops reserving.
+  assert.equal(nodes.extract("stone", 6, 0, 8, undefined, 10), 10);
   const through = construction.plan({ x: -6, z: 0 }, { x: 6, z: 0 });
   assert.ok(through, "a road plans across the emptied deposit");
   assert.ok(
@@ -34915,7 +35103,7 @@ check("RTS a road bends around a live stone deposit and paves straight through a
   );
 });
 
-check("RTS a road paved on a deposit refuses every quarry centre until the tile is erased", () => {
+check("RTS a quarry is built beside its deposit, never on it, and an old road cannot strand it", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
@@ -34953,34 +35141,36 @@ check("RTS a road paved on a deposit refuses every quarry centre until the tile 
     () => {},
     () => {},
     (stats, x, z) => stats.economy?.requiresResourceNode
-      && !nodes.canExtractAt(stats.economy.resourceId, x, z, stats.footprint.width, stats.footprint.depth)
+      && !nodes.canExtractAt(stats.economy.resourceId, x, z, stats.economy.gatherRadius ?? 0, stats.footprint)
       ? "missing-resource-node"
       : null,
-    () => roads.occupancyBlockers(),
+    // Roads and live deposits both reserve build space, exactly as the game
+    // wires them.
+    () => [...roads.occupancyBlockers(), ...nodes.liveNodeBlockers()],
   );
 
-  // Pave the deposit's own tile — the shape the router now refuses to produce,
-  // but which older saves and hand-drawn routes already contain.
+  // The deposit itself is not build space: a quarry centred on it is refused as
+  // occupied ground, the same answer a lumber camp gets on a trunk. That is the
+  // whole rule — nothing is ever built over a deposit, so nothing can bury one
+  // or hide the depletion stages that show how much is left.
+  assert.equal(construction.validate("player", "quarry", 0, 0)?.reason, "blocked");
+
+  // Pave the deposit's own tile — the shape the router refuses to produce, but
+  // which older saves and hand-drawn routes already contain. It used to strand
+  // the deposit for good, because the extractor had to *contain* the point it
+  // covered. Built beside instead, the quarry no longer cares.
   const onDeposit = roads.plan({ x: 0, z: 0 }, { x: 0, z: 0 }, []);
   assert.ok(onDeposit);
   roads.commit(onDeposit);
-  // A 6x6 extractor must *contain* the deposit point, so its legal centres are the
-  // nine grid cells within three units of it — and one road tile overlaps all nine.
-  const centres: Array<readonly [number, number]> = [];
-  for (const x of [-2, 0, 2]) for (const z of [-2, 0, 2]) centres.push([x, z]);
-  for (const [x, z] of centres) {
-    assert.equal(
-      construction.validate("player", "quarry", x, z)?.reason,
-      "blocked",
-      `a road on the deposit refuses the quarry centred at ${x},${z}`,
-    );
-  }
+  const beside = construction.validate("player", "quarry", 6, 0);
+  assert.equal(beside?.reason, null, "a quarry beside the deposit is legal with the road still paved");
 
-  // §44 Yol Silme is the way back out: unpave the tile and the ground is buildable.
+  // §44 Yol Silme still erases without refund, and the ground it frees is
+  // buildable — the tile is ordinary ground, not the deposit's.
   assert.equal(roadConstruction.demolish([{ x: 0, z: 0 }]), 1);
   assert.equal(roads.all().length, 0, "the erased tile leaves the network");
-  const built = construction.build("player", "quarry", 0, 0);
-  assert.ok(built.built, "the quarry fits once the road tile is erased");
+  const built = construction.build("player", "quarry", 6, 0);
+  assert.ok(built.built, "the quarry is built beside its deposit");
   // The Quarry is the only thing the wallet paid for: the tile above was paved
   // straight onto the graph, and erasing it refunds nothing — the §44 rule this
   // whole check exists for. Derived from the table so a retune stays true.
@@ -36633,7 +36823,7 @@ function aiTestWorld(
     (structure) => workerConstruction.cancelStructure(structure),
     // As in RtsApp: an extractor must cover a live deposit.
     (stats, x, z) => stats.economy?.requiresResourceNode
-      && !resourceNodes.canExtractAt(stats.economy.resourceId, x, z, stats.footprint.width, stats.footprint.depth)
+      && !resourceNodes.canExtractAt(stats.economy.resourceId, x, z, stats.economy.gatherRadius ?? 0, stats.footprint)
       ? "missing-resource-node"
       // As in RtsApp: a camp must stand beside a live grove, so an anchor that has
       // drifted off the trees fails here rather than standing idle forever.
@@ -36641,11 +36831,12 @@ function aiTestWorld(
         && !forests.hasLiveTreeNear(x, z, stats.economy.gatherRadius ?? 0, stats.footprint)
         ? "missing-forest"
         : null,
-    // As in RtsApp: roads and standing trees reserve build space without blocking
-    // navigation, so a camp is placed beside a grove and never on top of it. This
-    // is also the blocker set that makes the authored-anchor test honest — without
-    // it a slot sitting on a tree would read as placeable here and fail in game.
-    () => [...roads.occupancyBlockers(), ...forests.liveTreeBlockers()],
+    // As in RtsApp: roads, standing trees and live deposits reserve build space
+    // without blocking navigation, so a camp is placed beside a grove and a mine
+    // beside a deposit, never on top. This is also the blocker set that makes the
+    // authored-anchor test honest — without it a slot sitting on a tree or a
+    // deposit would read as placeable here and fail in game.
+    () => [...roads.occupancyBlockers(), ...forests.liveTreeBlockers(), ...resourceNodes.liveNodeBlockers()],
   );
   const roadConstruction = new RoadConstructionService(
     roads,
@@ -36732,7 +36923,7 @@ function aiTestWorld(
   };
   return {
     units, structures, centers, kingdoms, ai, workerConstruction, territory, roads, progression,
-    production, resourceNodes, step,
+    production, resourceNodes, construction, step,
   };
 }
 

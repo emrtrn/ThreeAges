@@ -13,132 +13,27 @@
     },
     {
       "assetId": "resource-gold-1",
-      "placements": [
-        {
-          "position": [
-            -62.08,
-            0.01,
-            51.37
-          ],
-          "scaleLocked": true,
-          "groupId": "group-mrzfsrd2-1vf",
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "resource-gold-2",
-      "placements": [
-        {
-          "position": [
-            -62.81,
-            0.01,
-            52.84
-          ],
-          "scaleLocked": true,
-          "groupId": "group-mrzfsrd2-1vf",
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "resource-gold-3",
-      "placements": [
-        {
-          "position": [
-            -61.49,
-            0,
-            52.92
-          ],
-          "scaleLocked": true,
-          "groupId": "group-mrzfsrd2-1vf",
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "resource-rock-1",
-      "placements": [
-        {
-          "position": [
-            -43,
-            0.02,
-            50.96
-          ],
-          "scaleLocked": true,
-          "groupId": "group-mrzfsd39-k0",
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -33.91,
-            0.02,
-            15.53
-          ],
-          "scaleLocked": true,
-          "groupId": "group-mrzfsvqu-3mt",
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "resource-rock-2",
-      "placements": [
-        {
-          "position": [
-            -43.39,
-            0.01,
-            52.04
-          ],
-          "scaleLocked": true,
-          "groupId": "group-mrzfsd39-k0",
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -34.8,
-            0.01,
-            16.53
-          ],
-          "scaleLocked": true,
-          "groupId": "group-mrzfsvqu-3mt",
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "resource-rock-3",
-      "placements": [
-        {
-          "position": [
-            -42.15,
-            0,
-            52.05
-          ],
-          "scaleLocked": true,
-          "groupId": "group-mrzfsd39-k0",
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -33.79,
-            0,
-            16.95
-          ],
-          "scaleLocked": true,
-          "groupId": "group-mrzfsvqu-3mt",
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "mountain-group-2",
@@ -257,12 +152,21 @@
       "placements": [
         {
           "position": [
-            -1.13,
-            -1.64,
-            2.47
+            -2.13,
+            -0.49,
+            -4.48
           ],
           "rotationYDeg": 0,
-          "scale": 1
+          "rotation": [
+            0,
+            -55,
+            0
+          ],
+          "scale": [
+            8,
+            8,
+            10
+          ]
         }
       ]
     },
@@ -326,7 +230,29 @@
     }
   ],
   "reflectiveSurfaces": [],
-  "blockingVolumes": [],
+  "blockingVolumes": [
+    {
+      "id": "blocking-volume-1",
+      "position": [
+        -2.27,
+        -0.35,
+        -4.41
+      ],
+      "name": "Blocking Volume",
+      "rotation": [
+        0,
+        -55,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        4,
+        1,
+        12
+      ],
+      "navigationRole": "walkable"
+    }
+  ],
   "splines": [
     {
       "id": "enemy-base-route",
@@ -799,7 +725,7 @@
       "position": [
         34,
         0,
-        -26
+        -20
       ],
       "name": "Resource enemy_safe_stone",
       "variableOverrides": {
@@ -813,7 +739,7 @@
       "position": [
         42,
         0,
-        -26
+        -20
       ],
       "name": "Resource enemy_safe_gold",
       "variableOverrides": {

@@ -101,6 +101,10 @@ import {
   renderComponentsSection,
 } from "./panels/details/componentDetails";
 import {
+  bindActorVariableInputs,
+  renderActorVariableSection,
+} from "./panels/details/actorVariableDetails";
+import {
   bindMetadataInputs,
   renderMetadataSections,
 } from "./panels/details/metadataDetails";
@@ -818,7 +822,7 @@ export class EditorUi {
   }
 
   private renderActorPatrolRouteSection(selection: EditableSelection): string {
-    if (selection.kind !== "actor") return "";
+    if (selection.kind !== "actor" || !this.app.selectedActorSupportsPatrolRoute()) return "";
     const route = this.app.getSelectedActorPatrolRoute();
     const source = route?.source ?? "targetPoints";
     const splines = this.app.getSplineReferences();
@@ -4221,7 +4225,9 @@ export class EditorUi {
           complexAsSimple: this.app.assetCollisionComplexity(selection.assetId) === "complexAsSimple",
         }),
         components:
-          renderComponentsSection(selection, this.editableAssets) + this.renderActorPatrolRouteSection(selection),
+          renderComponentsSection(selection, this.editableAssets)
+          + renderActorVariableSection(this.app.getSelectedActorVariables(), selection.locked)
+          + this.renderActorPatrolRouteSection(selection),
         metadata: renderMetadataSections(selection, this.metadataSchema),
       },
     });
@@ -4272,7 +4278,15 @@ export class EditorUi {
           setSelectionInteraction: (interaction) => this.app.setSelectionInteraction(interaction),
           setSelectionMovingPlatform: (platform) => this.app.setSelectionMovingPlatform(platform),
         }),
-      bindActorPatrolRouteInputs: () => this.bindActorPatrolRouteInputs(selection),
+      bindActorPatrolRouteInputs: () => {
+        bindActorVariableInputs({
+          body: this.detailsBody,
+          locked: selection.locked,
+          variables: () => this.app.getSelectedActorVariables(),
+          setVariable: (key, value) => this.app.setSelectedActorVariable(key, value),
+        });
+        this.bindActorPatrolRouteInputs(selection);
+      },
       bindMetadataInputs: () =>
         bindMetadataInputs({
           body: this.detailsBody,

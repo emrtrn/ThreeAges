@@ -537,12 +537,24 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       if (forestSettings && (forestSettings.gatherRadius <= 0 || forestSettings.carryCapacity <= 0)) {
         throw new GameDataError(`${economyWhere}: forest gatherRadius and carryCapacity must be > 0`);
       }
+      // An extractor is built beside its deposit, never on it, and its workers
+      // walk out to cut and carry the load back — so it needs a reach and a load
+      // size for exactly the reasons a lumber camp does. Missing or zero either
+      // way, every deposit would be unworkable while the building still read as
+      // valid.
+      const nodeSettings = requiresResourceNode === true ? {
+        gatherRadius: requireFiniteNumber(economyData, "gatherRadius", economyWhere),
+        carryCapacity: requireFiniteNumber(economyData, "carryCapacity", economyWhere),
+      } : null;
+      if (nodeSettings && (nodeSettings.gatherRadius <= 0 || nodeSettings.carryCapacity <= 0)) {
+        throw new GameDataError(`${economyWhere}: resource node gatherRadius and carryCapacity must be > 0`);
+      }
       economy = {
         resourceId,
         workerCapacity,
         perWorkerPerMinute,
         localBufferCapacity,
-        ...(requiresResourceNode === true ? { requiresResourceNode: true } : {}),
+        ...(nodeSettings ? { requiresResourceNode: true, ...nodeSettings } : {}),
         ...(forestSettings ? { requiresForest: true, ...forestSettings } : {}),
       };
     }

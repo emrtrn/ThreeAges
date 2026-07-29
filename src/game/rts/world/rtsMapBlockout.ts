@@ -140,6 +140,8 @@ export interface RtsMapBlockout {
   readonly trees: readonly RtsTreeDefinition[];
   /** Static obstacle footprints consumed by `RtsNavigation`. */
   readonly navigationBlockers: readonly NavBlocker[];
+  /** Horizontal authored floors that raise units (empty in the code blockout). */
+  readonly walkableDecks: readonly import("./rtsTerrainSurface").RtsWalkableDeck[];
 }
 
 /**
@@ -198,10 +200,13 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
   enemyBaseAnchors: [
     { buildingId: "farm", ...atEnemyBase(-12, 0) },
     { buildingId: "lumber_camp", ...atEnemyBase(12, 0) },
-    // Faz 8: the Town age requires a quarry and a gold mine, and both must cover
-    // a live deposit. The two enemy-side safe nodes sit at (-4,-14) and (4,-14),
-    // so these are the only two slots on this map that can ever satisfy it — the
-    // 6-wide footprint reaches a node up to 3 units off centre.
+    // Faz 8: the Town age requires a quarry and a gold mine, and each is built
+    // *beside* a live deposit, never on it — a building on the deposit would
+    // bury a source nothing demolishes and hide the shrinking mesh that shows
+    // how much is left. The two enemy-side safe nodes therefore sit one row
+    // north, at (-4,18) and (4,18): 6 units from these slots, inside the
+    // extractor's reach and clear of both the 6-wide footprint and the deposit's
+    // own reserve. The slots themselves stay on the row the base spine serves.
     { buildingId: "quarry", ...atEnemyBase(-6, 12) },
     { buildingId: "gold_mine", ...atEnemyBase(6, 12) },
     // The base depot sits in the gap the two extractors leave, where the spine
@@ -327,8 +332,8 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
   resourceNodes: [
     { id: "player_safe_stone", resourceId: "stone", kind: "safe", x: -42, z: 26 },
     { id: "player_safe_gold", resourceId: "gold", kind: "safe", x: -34, z: 26 },
-    { id: "enemy_safe_stone", resourceId: "stone", kind: "safe", x: 34, z: -26 },
-    { id: "enemy_safe_gold", resourceId: "gold", kind: "safe", x: 42, z: -26 },
+    { id: "enemy_safe_stone", resourceId: "stone", kind: "safe", x: 34, z: -20 },
+    { id: "enemy_safe_gold", resourceId: "gold", kind: "safe", x: 42, z: -20 },
     { id: "external_stone", resourceId: "stone", kind: "external", x: -34, z: 16 },
     { id: "external_gold", resourceId: "gold", kind: "external", x: 34, z: 16 },
   ],
@@ -415,6 +420,7 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
   navigationBlockers: [
     { min: [-12, -1, -4], max: [12, 4, 4] },
   ],
+  walkableDecks: [],
 };
 
 /** Creates the non-interactive blockout landmarks for the Phase 2 field. */

@@ -69,9 +69,9 @@ import { RtsCameraController } from "./camera/rtsCameraController";
 import { RtsInput } from "./input/rtsInput";
 import { RtsPointer } from "./input/rtsPointer";
 import { createRtsGround, RTS_WORLD_HALF_EXTENT } from "./world/rtsGround";
-import { AuthoredRtsGroundSurface, FLAT_RTS_GROUND, type RtsGroundSurface } from "./world/rtsTerrainSurface";
+import { AuthoredRtsGroundSurface, FLAT_RTS_GROUND, RtsDeckGroundSurface, type RtsGroundSurface } from "./world/rtsTerrainSurface";
 import { RTS_PLACEMENT_GRID_SIZE } from "./structures/placementGrid";
-import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "./world/rtsMapBlockout";
+import { createRtsMapBlockout } from "./world/rtsMapBlockout";
 import { resolveRtsSpatialLayout, type RtsSpatialLayout } from "./world/rtsSpatialLayout";
 import type { RtsLevelDefinition } from "./world/rtsLevelAdapter";
 import { RtsMapArt, collectWorldProps } from "./world/rtsMapArt";
@@ -108,6 +108,7 @@ import { combatImpactPoint, structureImpactPoint, type CombatTarget } from "./co
 import { RtsNavigation } from "./navigation/rtsNavigation";
 import { MarqueeOverlay } from "./selection/marqueeOverlay";
 import { SelectionSystem } from "./selection/selectionSystem";
+import { updateSelectionRingPulse } from "./selection/selectionRing";
 import { CommandMarkerSystem } from "./commands/commandMarker";
 import { CommandSystem } from "./commands/commandSystem";
 import { CommandCenterSystem } from "./structures/commandCenterSystem";
@@ -726,6 +727,7 @@ export class RtsApp {
     private readonly options: RtsAppOptions,
   ) {
     this.spatial = resolveRtsSpatialLayout(this.options.level);
+    this.groundSurface = new RtsDeckGroundSurface(FLAT_RTS_GROUND, this.spatial.walkableDecks);
     // Browser-visible witness of which spatial authority the match resolved:
     // the authored Level (Faz D opt-in) or the legacy rtsMapBlockout fallback.
     this.canvas.dataset.rtsLevel = this.options.levelLoadError
@@ -991,8 +993,8 @@ export class RtsApp {
           stats.economy.resourceId,
           x,
           z,
-          stats.footprint.width,
-          stats.footprint.depth,
+          stats.economy.gatherRadius ?? 0,
+          stats.footprint,
         )
         ? "missing-resource-node"
         : stats.economy?.requiresForest
@@ -1004,10 +1006,15 @@ export class RtsApp {
           )
           ? "missing-forest"
           : null,
-      // Roads and standing trees both reserve build space without blocking
-      // navigation: a camp is placed beside a grove, never on it, so its
-      // buried trees stay harvestable.
-      () => [...this.roads.occupancyBlockers(), ...this.forests.liveTreeBlockers()],
+      // Roads, standing trees and live deposits all reserve build space without
+      // blocking navigation: a camp is placed beside a grove and a mine beside a
+      // deposit, never on top, so the buried source stays harvestable — and its
+      // shrinking mesh stays visible as it is worked out.
+      () => [
+        ...this.roads.occupancyBlockers(),
+        ...this.forests.liveTreeBlockers(),
+        ...this.resourceNodes.liveNodeBlockers(),
+      ],
       () => this.units.all(),
       (x, z) => this.groundSurface.heightAt(x, z),
     );
@@ -1552,6 +1559,9 @@ export class RtsApp {
     this.syncStructurePads();
     this.syncUnitsToGround();
     this.commandMarkers.update(dt);
+    // One shared phase for every selected unit and building, on the rendered
+    // delta: the rings must breathe together and at the same rate at any game speed.
+    updateSelectionRingPulse(dt);
     this.structures.updateVisualAnimations(dt);
     this.updateHealthBarLinger(dt);
     this.updateWorldProgressOverlay();
@@ -2523,7 +2533,7 @@ export class RtsApp {
       // Faz E ridge gate: when the Level authors its own static world, the ridge
       // comes from that (mounted by loadAuthoredWorld). Map art still owns the
       // forest and the external-resource landmark, so only the ridge steps aside.
-      await this.mapArt.apply(blockout, RTS_BLOCKOUT_MAP, this.forests, {
+      await this.mapArt.apply(blockout, this.forests, this.resourceNodes, {
         includeRidge: !this.authoredWorldIntended,
       });
       // §59/GDD 08 §39: resource deposits, ridges and trees must not be readable
@@ -2713,7 +2723,10 @@ export class RtsApp {
   private mountGroundSurface(handle: AuthoredWorldHandle): void {
     const terrain = handle.landscapes[0];
     if (!terrain) return;
-    this.groundSurface = new AuthoredRtsGroundSurface(terrain);
+    this.groundSurface = new RtsDeckGroundSurface(
+      new AuthoredRtsGroundSurface(terrain),
+      this.spatial.walkableDecks,
+    );
     this.commands.setGroundSurface(this.groundSurface);
     this.placement.setGroundSurface(this.groundSurface);
     this.roadPlacement.setGroundSurface(this.groundSurface);
@@ -2803,10 +2816,13 @@ export class RtsApp {
    * what keeps a fogless build's forest exactly as it was.
    */
   private syncForestVisibility(): void {
-    this.mapArt.syncForest(
-      this.forests,
-      this.vision ? (x, z) => this.vision!.isExplored(PLAYER_OWNER, x, z) : undefined,
-    );
+    const isExplored = this.vision
+      ? (x: number, z: number) => this.vision!.isExplored(PLAYER_OWNER, x, z)
+      : undefined;
+    this.mapArt.syncForest(this.forests, isExplored);
+    // Deposits follow the identical rule (depleted or unscouted), so they are
+    // refreshed by the same three callers rather than a parallel schedule.
+    this.mapArt.syncResourceNodes(this.resourceNodes, isExplored);
   }
 
   /** §51: leave the start screen and let the simulation run. */
@@ -3406,7 +3422,10 @@ export class RtsApp {
    */
   private workerJob(worker: Unit): WorkerJob {
     if (this.economyProduction?.isAssigned(worker)) {
-      return this.economyProduction.stateFor(worker) === "producing" ? "producing" : "moving";
+      // "gathering" is a worker kneeling at a tree or a deposit: as much at work
+      // as one standing in a field, and the panel must not call it "moving".
+      const state = this.economyProduction.stateFor(worker);
+      return state === "producing" || state === "gathering" ? "producing" : "moving";
     }
     return this.workerConstruction.stateFor(worker);
   }

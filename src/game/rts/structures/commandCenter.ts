@@ -13,12 +13,12 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
-  RingGeometry,
   type Object3D,
 } from "three";
 
 import type { UnitOwner } from "../units/unit";
 import { TEAM_COLOR, createTeamRing } from "../team/teamColors";
+import { createSelectionRing } from "../selection/selectionRing";
 import type {
   BuildingBalanceStats,
   EconomyProductionBalance,
@@ -156,18 +156,9 @@ export class CommandCenter implements UpgradableStructure {
     this.object.add(placeholder);
 
     const ringRadius = COMMAND_CENTER_FOOTPRINT / 2 + 0.35;
-    this.selectionRing = new Mesh(
-      new RingGeometry(ringRadius, ringRadius + 0.3, 32),
-      new MeshStandardMaterial({
-        color: new Color("#f2f27a"),
-        emissive: new Color("#8f8f20"),
-        roughness: 0.5,
-      }),
-    );
-    this.selectionRing.name = "rts-command-center-selection-ring";
-    this.selectionRing.rotation.x = -Math.PI / 2;
-    this.selectionRing.position.y = 0.05;
-    this.selectionRing.visible = false;
+    this.selectionRing = createSelectionRing(ringRadius, {
+      name: "rts-command-center-selection-ring",
+    });
     this.object.add(this.selectionRing);
     // Added to `object`, not to the placeholder: `setVisual` disposes the
     // placeholder when the loaded model arrives, and a ring inside it would go

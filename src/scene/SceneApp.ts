@@ -501,9 +501,20 @@ import { readRenderableMeshComponent } from "@engine/scene/components";
 import type { AiPatrolRoute, TransformComponent } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
-import { actorInstanceToEntity } from "@engine/scene/actorInstance";
+import { actorInstanceToEntity, resolveActorInstanceVariables } from "@engine/scene/actorInstance";
 import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
-import type { MetadataSchema } from "@engine/scene/metadataSchema";
+import type { MetadataFieldDef, MetadataSchema } from "@engine/scene/metadataSchema";
+
+/**
+ * One class-declared actor variable as the Details panel needs it: the field
+ * definition to draw, the value this placement resolves to, and whether that
+ * came from an instance override (so the panel can offer a reset).
+ */
+export interface ActorVariableView {
+  readonly field: MetadataFieldDef;
+  readonly value: MetadataValue | undefined;
+  readonly overridden: boolean;
+}
 import {
   cloneActorInstance,
   cloneAiNavigationVolume,
@@ -4735,7 +4746,8 @@ export class SceneApp {
   }
 
   /**
-   * Applies a partial brush-settings edit (shape/size/renderInGame/color) to a
+   * Applies a partial brush-settings edit (shape/size/renderInGame/color/navigation)
+   * to a
    * blocking volume as one undoable command. Shape/size/color are baked into the
    * geometry, so they rebuild the object; `renderInGame` only affects Play and
    * needs no editor re-sync. Transform/name/hidden flow through the generic
@@ -4749,6 +4761,7 @@ export class SceneApp {
       brushSides?: number;
       renderInGame?: boolean;
       color?: string;
+      navigationRole?: NavigationRole;
     },
     label = "Edit Blocking Volume",
   ): void {
@@ -4761,6 +4774,7 @@ export class SceneApp {
     if (patch.brushSides !== undefined) next.brushSides = clampBrushSides(patch.brushSides);
     if (patch.renderInGame !== undefined) next.renderInGame = patch.renderInGame;
     if (patch.color !== undefined) next.color = patch.color;
+    if (patch.navigationRole !== undefined) next.navigationRole = patch.navigationRole;
 
     // Keep `size` canonical for its shape so the brush and its collider (both read
     // `size`) stay consistent — a shape switch reinterprets the existing extents.
@@ -4807,6 +4821,7 @@ export class SceneApp {
     brushSides?: number;
     renderInGame?: boolean;
     color?: string;
+    navigationRole?: NavigationRole;
   }): void {
     if (this.selection?.kind !== "blockingVolume") return;
     this.setBlockingVolume(this.selection.index, patch);
@@ -5923,6 +5938,98 @@ export class SceneApp {
       id: spline.id,
       name: spline.name ?? spline.id,
     }));
+  }
+
+  /**
+   * The selected actor's class variables, each paired with the value this
+   * placement currently resolves to and whether that value is an instance
+   * override or the class default. Returns an empty list when the selection is
+   * not an actor or its class declares no variables.
+   *
+   * The class is read from `actorClassCache`, which is populated before any
+   * placement command runs; an unresolved class simply has no variables to show
+   * rather than blocking the rest of the Details panel.
+   */
+  getSelectedActorVariables(): ActorVariableView[] {
+    if (!this.selection || this.selection.kind !== "actor") return [];
+    const instance = this.layout?.actors?.[this.selection.index];
+    if (!instance) return [];
+    const def = this.actorClassCache.get(instance.classRef);
+    if (!def || def.variables.length === 0) return [];
+    const resolved = resolveActorInstanceVariables(def, instance.variableOverrides);
+    return def.variables.map((field) => ({
+      field,
+      value: resolved[field.key],
+      overridden: instance.variableOverrides?.[field.key] !== undefined,
+    }));
+  }
+
+  /**
+   * Writes one instance variable override on the selected actor with undo/redo.
+   *
+   * `undefined` clears the override so the placement falls back to the class
+   * default — the same "save only meaningful deviations" contract
+   * {@link setSelectionMetadata} follows. The actor entity is rebuilt so the
+   * flattened `ScriptActor.variables` the runtime reads stay in step with what
+   * the panel shows.
+   */
+  setSelectedActorVariable(key: string, value: MetadataValue | undefined): void {
+    if (!this.layout || !this.selection || this.selection.kind !== "actor") return;
+    const index = this.selection.index;
+    const actor = this.layout.actors?.[index];
+    if (!actor || actor.locked) return;
+    const before = cloneActorInstance(actor);
+    const after = cloneActorInstance(actor);
+    const overrides = { ...(after.variableOverrides ?? {}) };
+    if (value === undefined) delete overrides[key];
+    else overrides[key] = value;
+    if (Object.keys(overrides).length > 0) after.variableOverrides = overrides;
+    else delete after.variableOverrides;
+    const apply = (next: LayoutActorInstance): void => {
+      if (!this.layout?.actors) return;
+      this.layout.actors[index] = cloneActorInstance(next);
+      this.rebuildActorObject(index);
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: `Set ${key}`,
+      redo: () => apply(after),
+      undo: () => apply(before),
+    });
+  }
+
+  /** Re-flattens one placed actor so its render object matches the layout entry. */
+  private rebuildActorObject(index: number): void {
+    const instance = this.layout?.actors?.[index];
+    if (!instance) return;
+    const def =
+      this.actorClassCache.get(instance.classRef) ??
+      normalizeActorScriptDef({}, instance.classRef);
+    const previous = this.actorObjects[index];
+    const object = this.buildActorObject(actorInstanceToEntity(def, instance, index));
+    object.userData.actorIndex = index;
+    this.applyWireframeToLevelObject(object);
+    if (previous) previous.removeFromParent();
+    this.actorObjects[index] = object;
+    this.scene.add(object);
+  }
+
+  /**
+   * Whether the selected actor can actually patrol: its class declares an
+   * `AIController` component (the one `actorInstanceToEntity` writes the route
+   * into), or this placement already carries a saved route that must stay
+   * editable. Without this test the panel offered patrol settings on every
+   * actor, including inert markers where they did nothing.
+   */
+  selectedActorSupportsPatrolRoute(): boolean {
+    if (!this.selection || this.selection.kind !== "actor") return false;
+    const instance = this.layout?.actors?.[this.selection.index];
+    if (!instance) return false;
+    if (instance.patrolRoute) return true;
+    const def = this.actorClassCache.get(instance.classRef);
+    return def?.components.some((node) => node.component === "AIController") ?? false;
   }
 
   getSelectedActorPatrolRoute(): AiPatrolRoute | undefined {

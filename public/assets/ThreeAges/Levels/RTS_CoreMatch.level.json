@@ -523,7 +523,7 @@
       "position": [
         34,
         0,
-        -26
+        -20
       ],
       "name": "Resource enemy_safe_stone",
       "variableOverrides": {
@@ -537,7 +537,7 @@
       "position": [
         42,
         0,
-        -26
+        -20
       ],
       "name": "Resource enemy_safe_gold",
       "variableOverrides": {

@@ -147,6 +147,7 @@ export interface EditableBlockingVolume {
   brushSides: number;
   renderInGame: boolean;
   color: string;
+  navigationRole: NavigationRole;
 }
 
 /**

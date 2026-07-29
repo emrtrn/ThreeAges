@@ -467,7 +467,9 @@
       "workerCapacity": 3,
       "perWorkerPerMinute": 5,
       "localBufferCapacity": 40,
-      "requiresResourceNode": true
+      "requiresResourceNode": true,
+      "gatherRadius": 8,
+      "carryCapacity": 5
     },
     "progression": {
       "settlement": [
@@ -548,7 +550,9 @@
       "workerCapacity": 3,
       "perWorkerPerMinute": 3,
       "localBufferCapacity": 40,
-      "requiresResourceNode": true
+      "requiresResourceNode": true,
+      "gatherRadius": 8,
+      "carryCapacity": 3
     },
     "progression": {
       "settlement": [

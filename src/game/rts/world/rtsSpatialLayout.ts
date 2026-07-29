@@ -5,6 +5,7 @@ import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
 import type { RtsTreeDefinition } from "../economy/forestSystem";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import { RtsLevelError, type RtsLevelDefinition } from "./rtsLevelAdapter";
+import type { RtsWalkableDeck } from "./rtsTerrainSurface";
 
 export interface RtsSpatialLayout {
   readonly playerStart: RtsMapPoint;
@@ -16,6 +17,7 @@ export interface RtsSpatialLayout {
   readonly enemyBaseRoute: readonly RtsMapPoint[];
   readonly enemyExpansions: readonly RtsExpansionRegion[];
   readonly navigationBlockers: readonly NavBlocker[];
+  readonly walkableDecks: readonly RtsWalkableDeck[];
 }
 
 /**
@@ -39,5 +41,6 @@ export function resolveRtsSpatialLayout(level?: RtsLevelDefinition): RtsSpatialL
     enemyBaseRoute,
     enemyExpansions: level.expansions,
     navigationBlockers: level.navigationBlockers,
+    walkableDecks: level.walkableDecks,
   };
 }

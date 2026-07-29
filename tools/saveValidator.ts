@@ -1541,6 +1541,10 @@ export function validateBlockingVolume(value: unknown): Record<string, unknown> 
   if (typeof input.color === "string" && /^#[0-9a-fA-F]{6}$/.test(input.color)) {
     volume.color = input.color;
   }
+  if (input.navigationRole !== undefined) {
+    if (!isNavigationRole(input.navigationRole)) throw new Error("invalid blocking volume navigationRole");
+    if (input.navigationRole !== "auto") volume.navigationRole = input.navigationRole;
+  }
   return volume;
 }
 

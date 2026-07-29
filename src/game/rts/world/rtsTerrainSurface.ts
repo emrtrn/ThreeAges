@@ -15,6 +15,48 @@ export interface RtsGroundSurface {
   heightAt(x: number, z: number): number;
 }
 
+/** A horizontal authored floor that raises RTS units above the terrain. */
+export interface RtsWalkableDeck {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly halfWidth: number;
+  readonly halfDepth: number;
+  /** Clockwise yaw in degrees, matching a layout actor's Y rotation. */
+  readonly yawDeg: number;
+}
+
+/**
+ * Adds authored bridge decks over any base ground sampler. Navigation remains
+ * X/Z-only; the deck merely supplies the rendered standing height once a unit
+ * enters its already-authorized route corridor.
+ */
+export class RtsDeckGroundSurface implements RtsGroundSurface {
+  constructor(
+    private readonly base: RtsGroundSurface,
+    private readonly decks: readonly RtsWalkableDeck[],
+  ) {}
+
+  intersectRay(ray: Ray): Vector3 | null {
+    return this.base.intersectRay(ray);
+  }
+
+  heightAt(x: number, z: number): number {
+    let height = this.base.heightAt(x, z);
+    for (const deck of this.decks) {
+      const radians = (deck.yawDeg * Math.PI) / 180;
+      const dx = x - deck.x;
+      const dz = z - deck.z;
+      const localX = Math.cos(radians) * dx - Math.sin(radians) * dz;
+      const localZ = Math.sin(radians) * dx + Math.cos(radians) * dz;
+      if (Math.abs(localX) <= deck.halfWidth && Math.abs(localZ) <= deck.halfDepth) {
+        height = Math.max(height, deck.y);
+      }
+    }
+    return height;
+  }
+}
+
 /** The original RTS field contract, retained when no Landscape is authored. */
 export const FLAT_RTS_GROUND: RtsGroundSurface = {
   intersectRay: () => null,

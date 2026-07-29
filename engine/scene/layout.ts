@@ -732,6 +732,11 @@ export interface LayoutBlockingVolume {
   renderInGame?: boolean;
   /** Editor brush tint (hex `#rrggbb`). */
   color?: string;
+  /**
+   * AI navigation interpretation. `walkable` turns a horizontal box into a
+   * walkable deck instead of an obstacle (for example, beneath a bridge).
+   */
+  navigationRole?: import("./collision").NavigationRole;
 }
 
 /**

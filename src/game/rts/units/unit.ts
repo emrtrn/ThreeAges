@@ -29,6 +29,7 @@ import { combatDistance, type CombatTarget } from "../combat/combatTarget";
 // Body tint and the ground ring read from one source, so a unit can never wear
 // one team's colour on its body and another's underneath it.
 import { TEAM_COLOR, createTeamRing } from "../team/teamColors";
+import { createSelectionRing } from "../selection/selectionRing";
 import { AttackComponent } from "./attackComponent";
 import { HealthComponent } from "./health";
 import { HealthBar } from "./healthBar";
@@ -252,17 +253,10 @@ export class Unit {
     // so both can be visible at once without reading as one thick band.
     this.object.add(createTeamRing(owner, UNIT_RADIUS * 0.75));
 
-    this.ring = new Mesh(
-      new RingGeometry(UNIT_RADIUS * 1.25, UNIT_RADIUS * 1.55, 24),
-      new MeshStandardMaterial({
-        color: new Color("#f2f27a"),
-        emissive: new Color("#8f8f20"),
-        roughness: 0.5,
-      }),
-    );
-    this.ring.rotation.x = -Math.PI / 2;
-    this.ring.position.y = 0.03;
-    this.ring.visible = false;
+    this.ring = createSelectionRing(UNIT_RADIUS * 1.25, {
+      y: 0.03,
+      name: "rts-unit-selection-ring",
+    });
     this.object.add(this.ring);
 
     // Separate from the local selection ring: this is visible on an enemy while
