@@ -7,11 +7,12 @@
  * replace or add sources without teaching placement about individual buildings.
  */
 import {
+  BufferAttribute,
+  BufferGeometry,
   Color,
   Group,
   Mesh,
   MeshBasicMaterial,
-  PlaneGeometry,
 } from "three";
 
 import type { UnitOwner } from "../units/unit";
@@ -45,11 +46,16 @@ const OVERLAY_COLOR: Record<UnitOwner, Color> = {
 /** Default phase-four starting territory radius, measured in world units. */
 export const COMMAND_CENTER_CONTROL_RADIUS = 28;
 
+/** Ground clearance for the overlay quads, in world units. */
+const OVERLAY_LIFT = 0.022;
+
 export class TerritoryControlSystem {
   readonly root = new Group();
   private readonly ownership = new Map<string, TerritoryOwner>();
-  private readonly cellGeometry: PlaneGeometry;
   private readonly materials: Record<UnitOwner, MeshBasicMaterial>;
+  private readonly meshes: Record<UnitOwner, Mesh<BufferGeometry, MeshBasicMaterial>>;
+  /** Rendered ground height at a world X/Z; flat-field fallback keeps Y at zero. */
+  private groundHeightAt: (x: number, z: number) => number = () => 0;
 
   constructor(
     private readonly sources: () => readonly TerritorySource[],
@@ -59,32 +65,44 @@ export class TerritoryControlSystem {
       throw new RangeError("Territory cell size must be a positive finite number");
     }
     this.root.name = "rts-territory-overlay";
-    this.cellGeometry = new PlaneGeometry(options.cellSize - 0.08, options.cellSize - 0.08);
-    this.cellGeometry.rotateX(-Math.PI / 2);
     this.materials = {
       player: new MeshBasicMaterial({ color: OVERLAY_COLOR.player, transparent: true, opacity: 0.18, depthWrite: false }),
       enemy: new MeshBasicMaterial({ color: OVERLAY_COLOR.enemy, transparent: true, opacity: 0.14, depthWrite: false }),
     };
+    this.meshes = {
+      player: this.createOverlayMesh("player"),
+      enemy: this.createOverlayMesh("enemy"),
+    };
+    this.root.add(this.meshes.player, this.meshes.enemy);
+  }
+
+  /**
+   * Terrain source for the overlay. Without it the quads sit on the flat field;
+   * with it every corner is sampled so the overlay follows slopes instead of
+   * disappearing under raised ground.
+   */
+  setGroundHeightSampler(sample: (x: number, z: number) => number): void {
+    this.groundHeightAt = sample;
+    this.refresh();
   }
 
   /** Recompute all ownership cells and their lightweight ground overlay. */
   refresh(): void {
     this.ownership.clear();
-    this.root.clear();
     const extent = this.options.worldHalfExtent;
     const step = this.options.cellSize;
+    const half = (step - 0.08) / 2;
+    const corners: Record<UnitOwner, number[]> = { player: [], enemy: [] };
     for (let x = -extent; x <= extent; x += step) {
       for (let z = -extent; z <= extent; z += step) {
         const owner = this.resolveOwner(x, z);
         this.ownership.set(this.key(x, z), owner);
         if (owner === "neutral") continue;
-        const cell = new Mesh(this.cellGeometry, this.materials[owner]);
-        cell.name = `rts-territory-cell-${owner}`;
-        cell.position.set(x, 0.022, z);
-        cell.renderOrder = 1;
-        this.root.add(cell);
+        this.pushCell(corners[owner], x, z, half);
       }
     }
+    this.uploadOverlay("player", corners.player);
+    this.uploadOverlay("enemy", corners.enemy);
   }
 
   /** Returns the stored owner of the placement cell containing this point. */
@@ -141,9 +159,47 @@ export class TerritoryControlSystem {
 
   dispose(): void {
     this.root.clear();
-    this.cellGeometry.dispose();
+    this.meshes.player.geometry.dispose();
+    this.meshes.enemy.geometry.dispose();
     this.materials.player.dispose();
     this.materials.enemy.dispose();
+  }
+
+  private createOverlayMesh(owner: UnitOwner): Mesh<BufferGeometry, MeshBasicMaterial> {
+    const mesh = new Mesh(new BufferGeometry(), this.materials[owner]);
+    mesh.name = `rts-territory-cells-${owner}`;
+    mesh.renderOrder = 1;
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    return mesh;
+  }
+
+  /**
+   * Two triangles for one cell, each corner lifted to its own terrain height so
+   * the quad tilts with the slope it covers rather than cutting into it.
+   */
+  private pushCell(target: number[], x: number, z: number, half: number): void {
+    const x0 = x - half;
+    const x1 = x + half;
+    const z0 = z - half;
+    const z1 = z + half;
+    const y00 = this.groundHeightAt(x0, z0) + OVERLAY_LIFT;
+    const y10 = this.groundHeightAt(x1, z0) + OVERLAY_LIFT;
+    const y01 = this.groundHeightAt(x0, z1) + OVERLAY_LIFT;
+    const y11 = this.groundHeightAt(x1, z1) + OVERLAY_LIFT;
+    target.push(
+      x0, y00, z0, x0, y01, z1, x1, y11, z1,
+      x0, y00, z0, x1, y11, z1, x1, y10, z0,
+    );
+  }
+
+  private uploadOverlay(owner: UnitOwner, positions: readonly number[]): void {
+    const mesh = this.meshes[owner];
+    mesh.geometry.dispose();
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new BufferAttribute(new Float32Array(positions), 3));
+    mesh.geometry = geometry;
+    mesh.visible = positions.length > 0;
   }
 
   private resolveOwner(x: number, z: number): TerritoryOwner {

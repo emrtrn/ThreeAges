@@ -2717,6 +2717,7 @@ export class RtsApp {
     this.commands.setGroundSurface(this.groundSurface);
     this.placement.setGroundSurface(this.groundSurface);
     this.roadPlacement.setGroundSurface(this.groundSurface);
+    this.territory.setGroundHeightSampler((x, z) => this.groundSurface.heightAt(x, z));
     for (const center of this.centers.all()) {
       center.groundY = this.groundSurface.heightAt(center.position.x, center.position.z);
       center.object.position.y = center.groundY;
