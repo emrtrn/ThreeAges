@@ -223,6 +223,16 @@ export class PlacedStructureSystem {
       .map((structure) => structure.blocker);
   }
 
+  /**
+   * Whether units may stand on this structure's footprint — the same rule
+   * {@link unitNavigationBlockers} filters on, exposed because a farm being
+   * walkable ground is also what lets its crew work *in* the field rather than
+   * beside it. One set, so the two can never disagree.
+   */
+  static isUnitPassThrough(structure: PlacedStructure): boolean {
+    return UNIT_PASS_THROUGH_STRUCTURE_IDS.has(structure.stats.id);
+  }
+
   /** Apply active worker-seconds and promote the site visual when it completes. */
   advanceConstruction(structure: PlacedStructure, deltaSeconds: number, workerCount = 1): boolean {
     const justCompleted = structure.construction.advance(deltaSeconds, workerCount);

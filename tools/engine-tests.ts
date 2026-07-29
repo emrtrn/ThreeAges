@@ -32334,6 +32334,76 @@ check("Tarladaki isci calisma pozunu takar, birakildiginda birakir", () => {
   units.clear();
 });
 
+check("Tarla ekibi tarlanin icinde calisir, maden ekibi kapisinda durur", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const farm = buildings.farm ?? assert.fail("farm definition missing");
+  const quarry = buildings.quarry ?? assert.fail("quarry definition missing");
+  const units = new UnitSystem();
+  for (let index = 0; index < 3; index += 1) units.spawn("player", -14 + index * 1.5, 0, RTS_TEST_WORKER_STATS);
+  const structures = new PlacedStructureSystem();
+  const field = structures.place("player", farm, 8, 0);
+  structures.advanceConstruction(field, farm.constructionSeconds);
+  const navigation = new RtsNavigation();
+  // The unit blocker set, which is what the running game uses: a farm's
+  // footprint is walkable ground, and that is precisely what lets its crew
+  // stand in the crop instead of along the fence.
+  navigation.setBlockers(structures.unitNavigationBlockers());
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+  for (let frame = 0; frame < 900; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    production.update(1 / 60);
+  }
+
+  const crew = units.workersOf("player").filter((worker) => production.stateFor(worker) === "producing");
+  assert.equal(crew.length, farm.economy?.workerCapacity ?? 0, "the whole crew reached its post");
+  const halfW = farm.footprint.width / 2;
+  const halfD = farm.footprint.depth / 2;
+  for (const worker of crew) {
+    assert.ok(
+      Math.abs(worker.position.x - field.x) < halfW && Math.abs(worker.position.z - field.z) < halfD,
+      "a farmhand works inside the field, not beside it",
+    );
+  }
+  // Distinct posts, or the crew spends the match shoving each other off one.
+  for (let a = 0; a < crew.length; a += 1) {
+    for (let b = a + 1; b < crew.length; b += 1) {
+      assert.ok(crew[a]!.position.distanceTo(crew[b]!.position) > 1, "each farmhand gets its own post");
+    }
+  }
+
+  // A quarry is a building, not a field: its crew keeps the door approach, so
+  // nobody is left standing inside the rock face.
+  production.reset();
+  units.clear();
+  const miner = units.spawn("player", -14, 0, RTS_TEST_WORKER_STATS);
+  const pit = structures.place("player", quarry, -8, 0);
+  structures.advanceConstruction(pit, quarry.constructionSeconds);
+  navigation.setBlockers(structures.unitNavigationBlockers());
+  const resourceBalance = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  const nodes = new ResourceNodeSystem(resourceBalance, [
+    { id: "test-stone", resourceId: "stone", kind: "safe", x: -8, z: 0 },
+  ]);
+  const mining = new EconomyProductionSystem(units, structures, navigation, () => false, nodes);
+  for (let frame = 0; frame < 900; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    mining.update(1 / 60);
+  }
+  assert.equal(mining.stateFor(miner), "producing");
+  assert.ok(
+    Math.abs(miner.position.x - pit.x) > quarry.footprint.width / 2
+    || Math.abs(miner.position.z - pit.z) > quarry.footprint.depth / 2,
+    "a miner stands outside the pit's footprint",
+  );
+
+  mining.reset();
+  structures.clear();
+  units.clear();
+});
+
 check("RTS resource reservations are atomic and refund at most once", () => {
   const wallet = new ResourceWallet({ food: 200, wood: 200 });
   const barracks = wallet.reserve({ wood: 160 });

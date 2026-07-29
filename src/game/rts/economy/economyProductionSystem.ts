@@ -7,7 +7,8 @@
 import { Vector3 } from "three";
 
 import type { RtsNavigation } from "../navigation/rtsNavigation";
-import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
+import { PlacedStructureSystem } from "../structures/placedStructureSystem";
+import type { PlacedStructure } from "../structures/placedStructureSystem";
 import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { ResourceNodeSystem } from "./resourceNodeSystem";
@@ -57,6 +58,12 @@ interface ProducerRecord {
 }
 
 const WORK_RANGE = 1.25;
+/**
+ * How far into a walkable footprint a work post sits, as a fraction of its half
+ * extent. Well inside the crop so the pose reads as working the field, but off
+ * the middle, where the farm's own building stands.
+ */
+const FIELD_POST_INSET = 0.62;
 
 export interface ManualEconomyAssignmentResult {
   readonly assignedWorkers: number;
@@ -518,7 +525,10 @@ export class EconomyProductionSystem {
       this.assignmentByWorker.set(worker.id, producer);
       return true;
     }
-    const approach = this.findReachableApproach(worker, producer.structure);
+    const approach = this.findReachableApproach(worker, producer.structure, {
+      workPost: true,
+      taken: [...producer.assignments.values()].map((assignment) => assignment.approach),
+    });
     if (!approach) return false;
     const path = this.navigation.plan(worker.position, approach);
     if (!path) return false;
@@ -624,17 +634,54 @@ export class EconomyProductionSystem {
     }
   }
 
-  private findReachableApproach(worker: Unit, structure: PlacedStructure): Vector3 | null {
+  /**
+   * Where a worker stands to do the job.
+   *
+   * `workPost` asks for a spot *inside* the footprint, which is only offered by
+   * structures units may walk on (a farm's field). A farmhand belongs among the
+   * crop, not lined up along the fence looking at it — and since the field is
+   * already pass-through ground for pathfinding, standing in it needs no new
+   * navigation rule. Everything else — a quarry, a mine, and a lumberjack
+   * dropping his load at the camp — keeps the edge approach, because there is a
+   * building in the way and the job is done at its door.
+   *
+   * `taken` spreads a crew out: without it three farmhands share one post and
+   * spend the match shoving each other off it.
+   */
+  private findReachableApproach(
+    worker: Unit,
+    structure: PlacedStructure,
+    options: { readonly workPost?: boolean; readonly taken?: readonly Vector3[] } = {},
+  ): Vector3 | null {
     const halfW = structure.stats.footprint.width / 2;
     const halfD = structure.stats.footprint.depth / 2;
     const gap = WORK_RANGE * 0.7;
-    const candidates = [
+    const edges = [
       new Vector3(structure.x + halfW + gap, 0, structure.z),
       new Vector3(structure.x - halfW - gap, 0, structure.z),
       new Vector3(structure.x, 0, structure.z + halfD + gap),
       new Vector3(structure.x, 0, structure.z - halfD - gap),
     ];
-    candidates.sort((a, b) => worker.position.distanceToSquared(a) - worker.position.distanceToSquared(b));
-    return candidates.find((point) => this.navigation.plan(worker.position, point) !== null) ?? null;
+    const interior = options.workPost && PlacedStructureSystem.isUnitPassThrough(structure)
+      ? [
+        new Vector3(structure.x + halfW * FIELD_POST_INSET, 0, structure.z + halfD * FIELD_POST_INSET),
+        new Vector3(structure.x - halfW * FIELD_POST_INSET, 0, structure.z - halfD * FIELD_POST_INSET),
+        new Vector3(structure.x + halfW * FIELD_POST_INSET, 0, structure.z - halfD * FIELD_POST_INSET),
+        new Vector3(structure.x - halfW * FIELD_POST_INSET, 0, structure.z + halfD * FIELD_POST_INSET),
+      ]
+      : [];
+    const taken = options.taken ?? [];
+    const free = (point: Vector3): boolean =>
+      !taken.some((claimed) => claimed.distanceTo(point) < WORK_RANGE * 2);
+    const byDistance = (a: Vector3, b: Vector3): number =>
+      worker.position.distanceToSquared(a) - worker.position.distanceToSquared(b);
+    // Interior posts first and unclaimed ones before claimed: the fallbacks
+    // matter as much as the preference, since a crowded or unreachable field
+    // must still produce a usable post rather than refusing the assignment.
+    for (const tier of [interior.filter(free), interior, edges.filter(free), edges]) {
+      const point = [...tier].sort(byDistance).find((candidate) => this.navigation.plan(worker.position, candidate) !== null);
+      if (point) return point;
+    }
+    return null;
   }
 }
