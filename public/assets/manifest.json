@@ -25171,29 +25171,6 @@
       "license": "Unknown"
     },
     {
-      "id": "testlevel-level",
-      "name": "Test Level.Level",
-      "assetType": "level",
-      "category": "Levels",
-      "path": "assets/ThreeAges/Levels/TestLevel.level.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Levels",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 100
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "rts-core-match-level",
       "name": "RTS Core Match Markers.Level",
       "assetType": "level",

@@ -107,6 +107,86 @@
             0
           ],
           "scale": 10.27
+        },
+        {
+          "position": [
+            -69.4,
+            0.13,
+            -36.6
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 20
+        },
+        {
+          "position": [
+            -68.14,
+            0.13,
+            -46.09
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 20
+        },
+        {
+          "position": [
+            -68.54,
+            0.13,
+            -39.62
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            60,
+            0
+          ],
+          "scale": 30
+        },
+        {
+          "position": [
+            -67.28,
+            0.13,
+            -49.11
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            60,
+            0
+          ],
+          "scale": 30
+        },
+        {
+          "position": [
+            -67.65,
+            0.13,
+            -42.88
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            30,
+            0
+          ],
+          "scale": 25
+        },
+        {
+          "position": [
+            -66.39,
+            0.13,
+            -52.37
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            30,
+            0
+          ],
+          "scale": 25
         }
       ]
     },
@@ -759,7 +839,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json",
       "position": [
-        -46.64,
+        -39.21,
         0,
         37.84
       ],
@@ -784,9 +864,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
       "position": [
-        -43.05,
+        -22.93,
         0,
-        51.37
+        40.76
       ],
       "name": "Resource player_safe_stone",
       "scale": 1,
@@ -799,9 +879,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
       "position": [
-        -61.62,
+        -49.39,
         0,
-        52.35
+        48.22
       ],
       "name": "Resource player_safe_gold",
       "scale": 1,
