@@ -179,8 +179,8 @@ function validateStartingResources(
 
 function validateStartingUnits(value: unknown, where: string): StartingUnits {
   const obj = asObject(value, `${where}.startingUnits`);
-  const out: { guard?: number; worker?: number } = {};
-  for (const key of ["guard", "worker"] as const) {
+  const out: { guard?: number; worker?: number; siege?: number } = {};
+  for (const key of ["guard", "worker", "siege"] as const) {
     const raw = obj[key];
     if (raw === undefined) continue;
     if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) {

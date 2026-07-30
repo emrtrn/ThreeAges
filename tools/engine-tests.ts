@@ -28710,6 +28710,36 @@ check("game-data presets load and debug_fast is faster", () => {
   );
 });
 
+check("preset startingUnits carries the siege count through validation", () => {
+  // `validateStartingUnits` copies an allowlist of keys, so an opening-force
+  // role it does not name is dropped without a word — the preset would boot
+  // looking correct and simply field no artillery. Pin the whole roster, not
+  // any one preset's magnitude, so tuning stays free.
+  const base = readPresetJson("gameplay_proof") as object;
+  const parsed = validateGamePreset(
+    { ...base, startingUnits: { guard: 1, worker: 1, siege: 1 } },
+    "gameplay_proof",
+  );
+  assert.deepEqual(
+    parsed.startingUnits,
+    { guard: 1, worker: 1, siege: 1 },
+    "every opening-force role survives validation",
+  );
+
+  // Absent means "none", which is what keeps a preset that never mentions siege
+  // from inheriting artillery.
+  const none = validateGamePreset({ ...base, startingUnits: { guard: 1 } }, "gameplay_proof");
+  assert.equal(none.startingUnits.siege, undefined);
+
+  for (const bad of [-1, 1.5, "2"]) {
+    assert.throws(
+      () => validateGamePreset({ ...base, startingUnits: { siege: bad } }, "gameplay_proof"),
+      GameDataError,
+      `a siege count of ${JSON.stringify(bad)} must be refused, not rounded`,
+    );
+  }
+});
+
 check("Faz 6 prosperity is opt-in debug information, not a default gameplay flag", () => {
   assert.equal(resolveFeatureFlags().prosperity, false);
   assert.equal(resolveFeatureFlags({ prosperity: false }, "prosperity").prosperity, true);

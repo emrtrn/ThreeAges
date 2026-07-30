@@ -1,0 +1,54 @@
+{
+  "schema": 2,
+  "type": "particleEffect",
+  "name": "RTS Collapse Dust",
+  "category": "RTS Damage",
+  "tags": ["rts", "damage", "dust", "collapse"],
+  "system": {
+    "enabled": true,
+    "loop": false,
+    "duration": 0.4,
+    "seed": null,
+    "maxParticles": 72,
+    "bounds": { "mode": "fixed", "min": [-4, 0, -4], "max": [4, 3, 4], "showInPreview": true }
+  },
+  "spawn": {
+    "mode": "burst",
+    "rate": 0,
+    "count": 36,
+    "delay": 0,
+    "interval": 0,
+    "shape": "circle",
+    "radius": 1.1,
+    "boxSize": [0, 0, 0]
+  },
+  "initialize": {
+    "lifetime": [0.55, 1.1],
+    "startSize": [0.12, 0.22],
+    "startColor": "#b8a486",
+    "startOpacity": 0.72,
+    "direction": [0, 1, 0],
+    "speed": [0.7, 1.7],
+    "spreadAngleDeg": 74,
+    "rotation": [0, 360],
+    "angularVelocity": [-45, 45]
+  },
+  "update": {
+    "gravityScale": 0.08,
+    "drag": 1.1,
+    "acceleration": [0, 0, 0],
+    "endSize": [0.65, 1.1],
+    "endColor": "#786a58",
+    "endOpacity": 0,
+    "fadeInTime": 0.03,
+    "fadeOutTime": 0.28
+  },
+  "renderer": {
+    "type": "sprite",
+    "blendMode": "alpha",
+    "softness": 0.7,
+    "sortMode": "none",
+    "texture": null,
+    "subUV": { "cols": 1, "rows": 1 }
+  }
+}

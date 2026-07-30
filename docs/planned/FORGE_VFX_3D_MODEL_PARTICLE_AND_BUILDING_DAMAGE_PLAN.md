@@ -106,6 +106,7 @@ Uygulama kararı (2026-07-30): mesh renderer, her kaynak GLTF içindeki render e
 ### Faz 4 — Hasar efekt presetleri ve bina entegrasyonu
 
 - [ ] Genel VFX presetlerine en az `debris-stone`, `debris-wood`, `debris-tile` ve `collapse-dust` ekle; bunlar proje asset id'si yerine genel sözleşme örneği veya proje tarafındaki somut preset olarak konumlandırılsın.
+- Uygulama notu (2026-07-30): Content Drawer'a `rts-fx-debris-stone`, `rts-fx-debris-wood` ve `rts-fx-collapse-dust` eklendi. Projede ayrı bir çatı-kiremit mesh'i bulunmadığı için `debris-tile` bilerek açık bırakıldı; uygun mesh geldiğinde aynı şemayla eklenecek.
 - [x] Oyun data/runtime'ında sağlık eşiklerini tanımla: normal (%100–66), hafif hasar (%65–31), ağır hasar (%30–1), çöküş (%0).
 - [x] Hafif/ağır hasar girişinde dumanı başlat/durdur, materyal/decal/hasarlı modül kararlarını oyun sunum katmanına bağla.
 - [ ] Hafif titreşim ve seyrek debris tetiklerini efekt assetlerinden ayarlanabilir kıl; sürekli olarak her kare yeni efekt oluşturmaktan kaçın.

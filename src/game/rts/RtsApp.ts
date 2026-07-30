@@ -25,6 +25,7 @@ import {
 } from "three";
 
 import { createSceneRenderer, readRenderMemory, readRenderStats } from "@engine/render-three/renderer";
+import { GltfModelLoader } from "@engine/render-three/gltfModelLoader";
 import { VfxSubsystem } from "@engine/render-three/vfxSubsystem";
 import { FrameMetricsMonitor } from "@engine/perf/frameMetrics";
 import { AdaptiveQualityController } from "@engine/perf/adaptiveQuality";
@@ -228,8 +229,14 @@ const MAX_FRAME_SECONDS = 1 / 15;
 const SCENE_BACKGROUND = "#20262b";
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
 const PLACEHOLDER_WORKER_ID = "worker_placeholder";
+const PLACEHOLDER_SIEGE_ID = "siege_placeholder";
 /** Both camps open with equal standing defence. */
 const STARTING_GUARD_COUNT = 3;
+/**
+ * No artillery in a normal opening: siege unlocks at Town tier and must be paid
+ * for at a Barracks. Only a preset that explicitly asks for it starts with any.
+ */
+const STARTING_SIEGE_COUNT = 0;
 /**
  * Both kingdoms start with the same workers: the AI cannot run the economy
  * (AI design §34/§35) without them, and §39 requires it to earn everything else
@@ -270,8 +277,21 @@ const HEALTH_BAR_LINGER_SECONDS = 6;
 /** Content Drawer effect assets used by the first RTS damage presentation pass. */
 const STRUCTURE_DAMAGE_EFFECT_URLS: Readonly<Record<string, string>> = {
   "starter-fx-smoke-puff": "assets/starter-content/Effects/FX_Smoke_Puff.effect.json",
+  "rts-fx-debris-stone": "assets/ThreeAges/Effects/FX_RTS_Debris_Stone.effect.json",
+  "rts-fx-debris-wood": "assets/ThreeAges/Effects/FX_RTS_Debris_Wood.effect.json",
+  "rts-fx-collapse-dust": "assets/ThreeAges/Effects/FX_RTS_Collapse_Dust.effect.json",
+};
+/** Explicit manifest-backed source map: VFX assets never supply arbitrary model URLs. */
+const STRUCTURE_DAMAGE_MODEL_URLS: Readonly<Record<string, string>> = {
+  rock: "assets/ThreeAges/StaticMeshes/Rock.gltf",
+  logs: "assets/ThreeAges/StaticMeshes/Logs.gltf",
 };
 const STRUCTURE_DAMAGE_SMOKE_EFFECT = "starter-fx-smoke-puff";
+const STRUCTURE_COLLAPSE_EFFECTS = [
+  "rts-fx-collapse-dust",
+  "rts-fx-debris-stone",
+  "rts-fx-debris-wood",
+] as const;
 const LIGHT_DAMAGE_SMOKE_INTERVAL_SECONDS = 1.35;
 const HEAVY_DAMAGE_SMOKE_INTERVAL_SECONDS = 0.65;
 /**
@@ -474,12 +494,14 @@ export class RtsApp {
   private readonly units = new UnitSystem();
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
+  private readonly structureDamageModelLoader: GltfModelLoader;
   /** RTS-owned use of the general Forge VFX runtime; effect assets stay editable. */
   private readonly structureDamageVfx = new VfxSubsystem({
     resolveEffectUrl: (effectId) => {
       const path = STRUCTURE_DAMAGE_EFFECT_URLS[effectId];
       return path ? projectFileUrl(path) : null;
     },
+    loadMeshModels: (modelIds) => this.loadStructureDamageModels(modelIds),
   });
   /** Real-time accumulator per damaged building; avoids a new smoke effect every frame. */
   private readonly structureSmokeElapsed = new Map<number, number>();
@@ -779,6 +801,7 @@ export class RtsApp {
       z: this.spatial.playerStart.z * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
     };
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
+    this.structureDamageModelLoader = new GltfModelLoader(this.renderer);
     this.userSettingsStore = createRtsUserSettingsStore();
     this.userSettings = this.userSettingsStore?.read() ?? defaultUserSettings();
     this.qualitySettings = resolveQualitySettings(
@@ -1304,7 +1327,10 @@ export class RtsApp {
     });
     // Warm at match boot. The calls below still retry safely if a project has
     // removed this optional starter asset from its manifest.
-    void this.structureDamageVfx.warm(STRUCTURE_DAMAGE_SMOKE_EFFECT);
+    void Promise.all([
+      this.structureDamageVfx.warm(STRUCTURE_DAMAGE_SMOKE_EFFECT),
+      ...STRUCTURE_COLLAPSE_EFFECTS.map((effectId) => this.structureDamageVfx.warm(effectId)),
+    ]);
     void this.loadActorVisuals();
     this.spawnStartingUnits();
     // §59: one fog pass before the first frame is drawn.
@@ -1497,6 +1523,14 @@ export class RtsApp {
     }
     const player = this.options.startingUnits ?? {};
     const enemy = this.options.enemyStartingUnits ?? player;
+    // Only resolved when a preset actually opens with artillery, so a project
+    // that drops the siege unit entirely still boots on the default presets.
+    const siegeRequested =
+      (player.siege ?? STARTING_SIEGE_COUNT) > 0 || (enemy.siege ?? STARTING_SIEGE_COUNT) > 0;
+    const siege = this.options.unitBalance[PLACEHOLDER_SIEGE_ID];
+    if (siegeRequested && !siege) {
+      throw new Error(`Missing unit balance definition "${PLACEHOLDER_SIEGE_ID}"`);
+    }
     // Rows of `cols`, so a preset with a wide opening does not string units out
     // in one long line across the map.
     const cols = 5;
@@ -1518,6 +1552,16 @@ export class RtsApp {
         const x = center.x - 4 + (i % cols) * 2;
         const z = center.z - facing * (8 + Math.floor(i / cols) * 2);
         this.units.spawn(owner, x, z, worker);
+      }
+      const siegeCount = counts.siege ?? STARTING_SIEGE_COUNT;
+      if (siege) {
+        // Between the camp and the guard line: artillery is slow and fragile in
+        // melee, so it opens behind the screen it is meant to shoot past.
+        for (let i = 0; i < siegeCount; i++) {
+          const x = center.x - 6 + (i % cols) * 3;
+          const z = center.z + facing * (4 - Math.floor(i / cols) * 3);
+          this.units.spawn(owner, x, z, siege);
+        }
       }
     };
     spawnSide("player", player, this.spatial.playerStart, 1);
@@ -2022,9 +2066,12 @@ export class RtsApp {
   /** A collapse has already left gameplay; this is presentation only. */
   private onStructureCollapse(structure: PlacedStructure): void {
     this.structureSmokeElapsed.delete(structure.id);
-    // The existing editable smoke asset stands in for collapse dust until the
-    // project adds its dedicated dust/debris presets in the Content Drawer.
     this.playStructureSmoke(structure, true);
+    const ground = this.structureDamageVfxPosition(structure, true);
+    const roof = this.structureDamageVfxPosition(structure, false);
+    this.playStructureEffect("rts-fx-collapse-dust", ground);
+    this.playStructureEffect("rts-fx-debris-stone", roof);
+    this.playStructureEffect("rts-fx-debris-wood", roof);
   }
 
   /** Keeps damaged-building smoke sparse and frame-rate independent. */
@@ -2054,14 +2101,33 @@ export class RtsApp {
 
   private playStructureSmoke(structure: PlacedStructure, atGround = false): void {
     const position = this.structureDamageVfxPosition(structure, atGround);
-    if (this.structureDamageVfx.play(STRUCTURE_DAMAGE_SMOKE_EFFECT, { position }) !== null) return;
+    this.playStructureEffect(STRUCTURE_DAMAGE_SMOKE_EFFECT, position);
+  }
+
+  /** Plays a warmed effect without ever making a damage event wait on IO. */
+  private playStructureEffect(effectId: string, position: [number, number, number]): void {
+    if (this.structureDamageVfx.play(effectId, { position }) !== null) return;
     // An early hit before the match-start warm finished should still be visible;
     // retry once the cached definition settles, without blocking the frame.
-    void this.structureDamageVfx.warm(STRUCTURE_DAMAGE_SMOKE_EFFECT).then((definition) => {
+    void this.structureDamageVfx.warm(effectId).then((definition) => {
       if (definition && !this.disposed) {
-        this.structureDamageVfx.play(STRUCTURE_DAMAGE_SMOKE_EFFECT, { position });
+        this.structureDamageVfx.play(effectId, { position });
       }
     });
+  }
+
+  /** Loads only the two explicitly allowed debris models declared above. */
+  private async loadStructureDamageModels(modelIds: readonly string[]): Promise<readonly Object3D[]> {
+    const models = await Promise.all(modelIds.map(async (id): Promise<Object3D | null> => {
+      const path = STRUCTURE_DAMAGE_MODEL_URLS[id];
+      if (!path) return null;
+      try {
+        return (await this.structureDamageModelLoader.load(id, projectFileUrl(path))).scene;
+      } catch {
+        return null;
+      }
+    }));
+    return models.filter((model): model is Object3D => model !== null);
   }
 
   private structureDamageVfxPosition(

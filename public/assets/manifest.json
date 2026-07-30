@@ -25317,6 +25317,92 @@
       "license": "Unknown"
     },
     {
+      "id": "rts-fx-debris-stone",
+      "name": "RTS Debris Stone",
+      "assetType": "effect",
+      "category": "RTS Damage",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Debris_Stone.effect.json",
+      "tags": [
+        "rts",
+        "damage",
+        "debris",
+        "stone",
+        "collapse"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "RTS Damage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1213
+      },
+      "license": "Project-local RTS effect"
+    },
+    {
+      "id": "rts-fx-debris-wood",
+      "name": "RTS Debris Wood",
+      "assetType": "effect",
+      "category": "RTS Damage",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Debris_Wood.effect.json",
+      "tags": [
+        "rts",
+        "damage",
+        "debris",
+        "wood",
+        "collapse"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "RTS Damage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1207
+      },
+      "license": "Project-local RTS effect"
+    },
+    {
+      "id": "rts-fx-collapse-dust",
+      "name": "RTS Collapse Dust",
+      "assetType": "effect",
+      "category": "RTS Damage",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Collapse_Dust.effect.json",
+      "tags": [
+        "rts",
+        "damage",
+        "dust",
+        "collapse"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "RTS Damage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1210
+      },
+      "license": "Project-local RTS effect"
+    },
+    {
       "id": "m-cobblestonerough-material",
       "name": "M Cobble Stone Rough.Material",
       "assetType": "material",
