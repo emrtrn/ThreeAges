@@ -292,8 +292,14 @@ const STRUCTURE_COLLAPSE_EFFECTS = [
   "rts-fx-debris-stone",
   "rts-fx-debris-wood",
 ] as const;
+const STRUCTURE_DAMAGE_DEBRIS_EFFECTS = [
+  "rts-fx-debris-stone",
+  "rts-fx-debris-wood",
+] as const;
 const LIGHT_DAMAGE_SMOKE_INTERVAL_SECONDS = 1.35;
 const HEAVY_DAMAGE_SMOKE_INTERVAL_SECONDS = 0.65;
+/** A critical building occasionally sheds authored debris, never once per frame. */
+const HEAVY_DAMAGE_DEBRIS_INTERVAL_SECONDS = 2.4;
 /**
  * Linger key for the command centre. Negative because {@link PlacedStructureSystem}
  * hands out positive ids, so the centre can share the map without colliding with
@@ -505,6 +511,8 @@ export class RtsApp {
   });
   /** Real-time accumulator per damaged building; avoids a new smoke effect every frame. */
   private readonly structureSmokeElapsed = new Map<number, number>();
+  /** Separate, deliberately slower budget for the heavy-damage debris bursts. */
+  private readonly structureDebrisElapsed = new Map<number, number>();
   private readonly roads: RoadGraph;
   private readonly roadDebugView: RoadDebugView;
   private readonly territory = new TerritoryControlSystem(() => this.centers.all().map((center) => ({
@@ -2057,15 +2065,23 @@ export class RtsApp {
   private onStructureDamageStageChanged(structure: PlacedStructure, stage: StructureDamageStage): void {
     if (!structure.construction.complete || (stage !== "light" && stage !== "heavy")) {
       this.structureSmokeElapsed.delete(structure.id);
+      this.structureDebrisElapsed.delete(structure.id);
       return;
     }
     this.structureSmokeElapsed.set(structure.id, 0);
     this.playStructureSmoke(structure);
+    if (stage === "heavy") {
+      this.structureDebrisElapsed.set(structure.id, 0);
+      this.playStructureDamageDebris(structure);
+    } else {
+      this.structureDebrisElapsed.delete(structure.id);
+    }
   }
 
   /** A collapse has already left gameplay; this is presentation only. */
   private onStructureCollapse(structure: PlacedStructure): void {
     this.structureSmokeElapsed.delete(structure.id);
+    this.structureDebrisElapsed.delete(structure.id);
     this.playStructureSmoke(structure, true);
     const ground = this.structureDamageVfxPosition(structure, true);
     const roof = this.structureDamageVfxPosition(structure, false);
@@ -2078,6 +2094,7 @@ export class RtsApp {
   private updateStructureDamageVfx(dt: number): void {
     this.structureDamageVfx.advance(dt);
     const active = new Set<number>();
+    const heavy = new Set<number>();
     for (const structure of this.structures.all()) {
       if (!structure.construction.complete) continue;
       const stage = structureDamageStage(structure.health.ratio);
@@ -2093,15 +2110,36 @@ export class RtsApp {
       } else {
         this.structureSmokeElapsed.set(structure.id, elapsed);
       }
+      if (stage !== "heavy") continue;
+      heavy.add(structure.id);
+      const debrisElapsed = (this.structureDebrisElapsed.get(structure.id) ?? 0) + Math.max(0, dt);
+      if (debrisElapsed >= HEAVY_DAMAGE_DEBRIS_INTERVAL_SECONDS) {
+        this.playStructureDamageDebris(structure);
+        this.structureDebrisElapsed.set(structure.id, debrisElapsed % HEAVY_DAMAGE_DEBRIS_INTERVAL_SECONDS);
+      } else {
+        this.structureDebrisElapsed.set(structure.id, debrisElapsed);
+      }
     }
     for (const id of this.structureSmokeElapsed.keys()) {
       if (!active.has(id)) this.structureSmokeElapsed.delete(id);
+    }
+    for (const id of this.structureDebrisElapsed.keys()) {
+      if (!heavy.has(id)) this.structureDebrisElapsed.delete(id);
     }
   }
 
   private playStructureSmoke(structure: PlacedStructure, atGround = false): void {
     const position = this.structureDamageVfxPosition(structure, atGround);
     this.playStructureEffect(STRUCTURE_DAMAGE_SMOKE_EFFECT, position);
+  }
+
+  /** Alternates the two Content Drawer debris presets without runtime randomness. */
+  private playStructureDamageDebris(structure: PlacedStructure): void {
+    const effectId = STRUCTURE_DAMAGE_DEBRIS_EFFECTS[
+      structure.id % STRUCTURE_DAMAGE_DEBRIS_EFFECTS.length
+    ];
+    if (!effectId) return;
+    this.playStructureEffect(effectId, this.structureDamageVfxPosition(structure, false));
   }
 
   /** Plays a warmed effect without ever making a damage event wait on IO. */

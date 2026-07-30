@@ -29206,6 +29206,26 @@ check("RTS structure damage presentation emits each health transition once and s
   structures.clear();
 });
 
+check("RTS structure collapse keeps an opaque, non-blocking ruin after the fall", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house balance missing");
+  const structures = new PlacedStructureSystem();
+  const structure = structures.place("player", house, 0, 0);
+  structures.advanceConstruction(structure, house.constructionSeconds);
+
+  assert.equal(structures.destroy(structure), true);
+  assert.equal(structures.all().includes(structure), false, "gameplay releases the structure immediately");
+  structures.updateVisualAnimations(1);
+
+  assert.equal(structure.object.parent, structures.root, "the fallen visual remains as a ruin");
+  assert.equal(structure.object.position.y, 0, "the ruin does not sink beneath the ground");
+  assert.ok(Math.abs(structure.object.rotation.z) > 0.1, "the shared collapse leaves a visible tilt");
+  structures.clear();
+  assert.equal(structure.object.parent, null, "match cleanup disposes the presentation-only ruin");
+});
+
 /**
  * **The balance-data rule, for every check below that reads
  * `public/game-data/balance/*.json`.**

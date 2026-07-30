@@ -109,9 +109,11 @@ Uygulama kararı (2026-07-30): mesh renderer, her kaynak GLTF içindeki render e
 - Uygulama notu (2026-07-30): Content Drawer'a `rts-fx-debris-stone`, `rts-fx-debris-wood` ve `rts-fx-collapse-dust` eklendi. Projede ayrı bir çatı-kiremit mesh'i bulunmadığı için `debris-tile` bilerek açık bırakıldı; uygun mesh geldiğinde aynı şemayla eklenecek.
 - [x] Oyun data/runtime'ında sağlık eşiklerini tanımla: normal (%100–66), hafif hasar (%65–31), ağır hasar (%30–1), çöküş (%0).
 - [x] Hafif/ağır hasar girişinde dumanı başlat/durdur, materyal/decal/hasarlı modül kararlarını oyun sunum katmanına bağla.
-- [ ] Hafif titreşim ve seyrek debris tetiklerini efekt assetlerinden ayarlanabilir kıl; sürekli olarak her kare yeni efekt oluşturmaktan kaçın.
-- [ ] %0 olayında ortak kontrollü çöküş zaman çizelgesini çalıştır: kısa titreme, alçalma/eğilme, burst debris + dust, yıkıntı sunumu ve gameplay collider/state geçişi.
-- [ ] Birim/yapı için aynı VFX'in istemsizce üst üste çoğalmasını engelleyecek lifecycle/cleanup kurallarını ekle.
+- [x] Hafif titreşim ve seyrek debris tetiklerini efekt assetlerinden ayarlanabilir kıl; sürekli olarak her kare yeni efekt oluşturmaktan kaçın.
+- [x] %0 olayında ortak kontrollü çöküş zaman çizelgesini çalıştır: kısa titreme, alçalma/eğilme, burst debris + dust, yıkıntı sunumu ve gameplay collider/state geçişi.
+- [x] Birim/yapı için aynı VFX'in istemsizce üst üste çoğalmasını engelleyecek lifecycle/cleanup kurallarını ekle.
+- Uygulama notu (2026-07-30): yıkıntı görseli gameplay kaydı kaldırıldıktan sonra 14 saniye opak kalır; aynı anda en fazla 10 yıkıntı tutulur. Eşik geçişleri tek seferliktir, duman seyrek zamanlayıcıyla üretilir ve çöküş VFX'i yalnızca tek olaydan doğar.
+- Uygulama notu (2026-07-30): ağır hasar, girişte ve sonrasında her 2,4 saniyede bir taş/ahşap debris presetini dönüşümlü çalıştırır. Particle sayısı, ömür, hız, renk ve model seçimi ilgili Content Drawer efekt assetinde düzenlenir.
 
 Çıkış kriteri: bir referans binada dört sağlık durumu görünür biçimde ayrılır; çöküş, opaklığı azaltıp zemine gömme yerine kontrollü bir olay olarak okunur.
 

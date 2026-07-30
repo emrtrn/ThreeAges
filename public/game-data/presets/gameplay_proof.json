@@ -20,7 +20,7 @@
     "gold": 100
   },
   "enemyStartingUnits": {
-    "guard": 2,
+    "guard": 0,
     "worker": 8
   },
   "gameSpeed": 1,

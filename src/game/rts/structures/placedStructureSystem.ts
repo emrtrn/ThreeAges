@@ -38,7 +38,7 @@ const CONSTRUCTION_OPACITY = 0.5;
 const COMPLETION_DROP_DURATION = 0.2;
 const COMPLETION_DROP_HEIGHT = 2.5;
 /**
- * How long a razed building's husk falls and fades for. Presentation only: the
+ * How long a razed building's husk takes to shake and fall. Presentation only: the
  * structure leaves the simulation on the frame its health runs out, so its
  * footprint stops blocking navigation and its territory is recomputed
  * immediately. Letting the husk outlive the record is the whole point — a
@@ -46,7 +46,9 @@ const COMPLETION_DROP_HEIGHT = 2.5;
  * than as the thing the player just lost.
  */
 const COLLAPSE_DURATION = 0.9;
-const COLLAPSE_SINK_DEPTH = 0.65;
+/** Keep the readable ruin briefly, but never grow an unbounded scenery list. */
+const RUIN_DURATION = 14;
+const MAX_RUINS = 10;
 /** Economy scenery that reserves build space but units may walk through. */
 const UNIT_PASS_THROUGH_STRUCTURE_IDS = new Set(["farm", "lumber_camp"]);
 
@@ -84,6 +86,12 @@ interface CollapseAnimation {
   readonly originY: number;
   readonly originRotationZ: number;
   readonly fallDirection: number;
+  elapsed: number;
+}
+
+/** A non-gameplay, non-pickable remnant left after the common collapse motion. */
+interface RuinPresentation {
+  readonly object: Object3D;
   elapsed: number;
 }
 
@@ -162,6 +170,8 @@ export class PlacedStructureSystem {
    * building that no longer exists.
    */
   private readonly collapses: CollapseAnimation[] = [];
+  /** Opaque, short-lived remnants; gameplay has already released these cells. */
+  private readonly ruins: RuinPresentation[] = [];
   /** Per-building copies keep health tinting from mutating shared GLTF materials. */
   private readonly damagePresentations = new Map<PlacedStructure, DamagePresentation>();
   /** Last announced health state; prevents presentation events from repeating per frame. */
@@ -303,17 +313,28 @@ export class PlacedStructureSystem {
       if (!collapse) continue;
       collapse.elapsed = Math.min(COLLAPSE_DURATION, collapse.elapsed + Math.max(0, deltaSeconds));
       const progress = collapse.elapsed / COLLAPSE_DURATION;
-      // A late, biased rotation reads as a fall; the short ground settle avoids
-      // the old transparent-elevator effect while retaining a bounded cleanup.
-      const fall = progress * progress;
-      collapse.object.rotation.z = collapse.originRotationZ + collapse.fallDirection * 0.55 * fall;
-      collapse.object.position.y = collapse.originY - COLLAPSE_SINK_DEPTH * fall;
-      fadeObject(collapse.object, 1 - Math.max(0, (progress - 0.55) / 0.45));
+      // A short unstable beat followed by a late, biased fall is generic enough
+      // for every building tier. Keeping the root at ground level deliberately
+      // avoids the former transparent, sinking-building failure mode.
+      const shake = progress < 0.18
+        ? Math.sin(progress * Math.PI * 12) * 0.035 * (1 - progress / 0.18)
+        : 0;
+      const fallProgress = Math.max(0, (progress - 0.14) / 0.86);
+      const fall = fallProgress * fallProgress;
+      collapse.object.rotation.z = collapse.originRotationZ + shake + collapse.fallDirection * 0.55 * fall;
+      collapse.object.position.y = collapse.originY;
       if (progress >= 1) {
-        this.root.remove(collapse.object);
-        disposeObjectMeshes(collapse.object);
         this.collapses.splice(i, 1);
+        this.ruins.push({ object: collapse.object, elapsed: 0 });
+        this.trimRuins();
       }
+    }
+    for (let i = this.ruins.length - 1; i >= 0; i -= 1) {
+      const ruin = this.ruins[i];
+      if (!ruin) continue;
+      ruin.elapsed += Math.max(0, deltaSeconds);
+      if (ruin.elapsed < RUIN_DURATION) continue;
+      this.removeRuinAt(i);
     }
   }
 
@@ -412,7 +433,8 @@ export class PlacedStructureSystem {
    * Remove a completed or unfinished structure; combat and player demolition use
    * this hook. The record leaves the simulation now — callers that rebuild
    * navigation and territory from `all()` are correct on the very next frame —
-   * while the visual husk sinks out of the world over {@link COLLAPSE_DURATION}.
+   * while the visual husk falls into a short-lived, non-blocking ruin over
+   * {@link COLLAPSE_DURATION}.
    */
   destroy(structure: PlacedStructure): boolean {
     const index = this.structures.indexOf(structure);
@@ -435,6 +457,7 @@ export class PlacedStructureSystem {
       disposeObjectMeshes(collapse.object);
     }
     this.collapses.length = 0;
+    for (let i = this.ruins.length - 1; i >= 0; i -= 1) this.removeRuinAt(i);
     this.damageStages.clear();
   }
 
@@ -442,7 +465,7 @@ export class PlacedStructureSystem {
    * Hand a razed building's object over to the husk list. It stops being
    * pickable and selectable at once — a building the player can still click
    * after losing it is worse than one that disappears — but keeps its place in
-   * the scene so the collapse is visible.
+   * the scene through the collapse and a brief, non-blocking ruin.
    */
   private beginCollapse(structure: PlacedStructure): void {
     this.clearDamagePresentation(structure);
@@ -453,9 +476,9 @@ export class PlacedStructureSystem {
     this.pickVolumes.delete(structure);
     structure.selectionRing.visible = false;
     // Completed models share materials with every other building of their type,
-    // so the husk needs its own copies before anything fades them. This clones
-    // once; the per-frame fade then mutates those copies in place.
-    setObjectOpacity(structure.object, 1);
+    // so the husk needs its own opaque copies before it becomes an independent
+    // ruin. No per-frame opacity mutation is used for the collapse.
+    makeObjectMaterialsPrivate(structure.object);
     this.collapses.push({
       object: structure.object,
       originY: structure.object.position.y,
@@ -464,6 +487,18 @@ export class PlacedStructureSystem {
       fallDirection: structure.id % 2 === 0 ? 1 : -1,
       elapsed: 0,
     });
+  }
+
+  private trimRuins(): void {
+    while (this.ruins.length > MAX_RUINS) this.removeRuinAt(0);
+  }
+
+  private removeRuinAt(index: number): void {
+    const ruin = this.ruins[index];
+    if (!ruin) return;
+    this.root.remove(ruin.object);
+    disposeObjectMeshes(ruin.object);
+    this.ruins.splice(index, 1);
   }
 
   private disposeStructure(structure: PlacedStructure): void {
@@ -662,16 +697,18 @@ function setObjectOpacity(root: Object3D, opacity: number): void {
   });
 }
 
-/**
- * Set opacity on materials {@link setObjectOpacity} has already cloned. Separate
- * because cloning per frame would leak a material set per frame; this only
- * mutates what the husk already owns.
- */
-function fadeObject(root: Object3D, opacity: number): void {
+/** Clone shared model materials once without changing their opaque render mode. */
+function makeObjectMaterialsPrivate(root: Object3D): void {
   root.traverse((child) => {
     if (!(child instanceof Mesh)) return;
-    const materials = Array.isArray(child.material) ? child.material : [child.material];
-    for (const material of materials) material.opacity = opacity;
+    const clone = (material: import("three").Material): import("three").Material => {
+      const copy = material.clone();
+      copy.userData.rtsOwnedByStructure = true;
+      return copy;
+    };
+    child.material = Array.isArray(child.material)
+      ? child.material.map(clone)
+      : clone(child.material);
   });
 }
 
