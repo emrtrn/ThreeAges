@@ -40161,21 +40161,53 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
     "an empty unit selection is the same placeholder as no selection",
   );
 
-  const army = describeSelection({ kind: "units", units: [guard(1), guard(2)] })
-    ?? assert.fail("an army selection has a panel");
-  assert.equal(army.title, "Test Muhafızı");
-  assert.equal(army.portrait, RTS_TEST_UNIT_STATS.icon, "the enlarged selection visual comes from the unit icon");
-  assert.equal(army.summary, "Can: 160/200");
+  // ONE unit: the detailed face. Health, stance, live order and the §33 matchup
+  // are all statements about *this* unit, and a single selection is the only
+  // shape in which every one of them is true.
+  const one = describeSelection({ kind: "units", units: [guard(1)] })
+    ?? assert.fail("a unit selection has a panel");
+  assert.equal(one.title, "Test Muhafızı");
+  assert.equal(one.portrait, RTS_TEST_UNIT_STATS.icon, "the enlarged selection visual comes from the unit icon");
+  assert.equal(one.summary, "Can: 80/100");
+  assert.equal(one.selectionCount, 1);
   // §33: the matchup line is read off the same multipliers combat resolves
   // against, so the panel cannot advertise a matchup the data does not give.
-  assert.match(army.lines.join(" | "), /Güçlü: ağır birim/);
-  assert.match(army.lines.join(" | "), /Duruş: Serbest/);
-  assert.match(army.lines.join(" | "), /Komut: Bekliyor/);
-  assert.match(army.hint, /F: Saldırı-Hareket/);
+  assert.match(one.lines.join(" | "), /Güçlü: ağır birim/);
+  assert.match(one.lines.join(" | "), /Duruş: Serbest/);
+  assert.match(one.lines.join(" | "), /Komut: Bekliyor/);
+  assert.match(one.hint, /F: Saldırı-Hareket/);
+  assert.equal(one.cards, undefined, "one unit is not a group");
 
+  // MORE THAN ONE: the panel changes shape rather than aggregating. Every
+  // per-unit fact above would become a claim about a group — one health bar for
+  // two bodies, one stance for units that may disagree — so the frame is
+  // replaced by a card per type and nothing else.
+  const army = describeSelection({ kind: "units", units: [guard(1), guard(2)] })
+    ?? assert.fail("an army selection has a panel");
+  assert.deepEqual(
+    army.cards?.map((card) => [card.typeId, card.label, card.count]),
+    [["guard_placeholder", "Test Muhafızı", 2]],
+    "one card per type, carrying its own name and count",
+  );
+  assert.equal(army.cards?.[0]?.icon, RTS_TEST_UNIT_STATS.icon);
+  assert.deepEqual(army.lines, [], "no per-unit facts survive into a group");
+  assert.equal(army.summary, "", "and no aggregate health line either");
+  assert.equal(army.health ?? null, null);
+  assert.equal(army.portrait ?? null, null, "the cards are the portraits now");
+  assert.equal(army.title, "");
+  // Not even the keyboard legend: the cards are the whole panel, and a group
+  // selection that still carried a row of text would be the wall this shape
+  // exists to replace. A single selection still teaches the verbs.
+  assert.equal(army.hint, "", "a group panel is cards and nothing else");
+  assert.match(one.hint, /F: Saldırı-Hareket/, "the verbs are still taught on a single selection");
+
+  // Two units that disagree used to force a "Duruş: Karışık" line. There is no
+  // stance row in a group panel at all now, which is the point — the panel does
+  // not answer a question it cannot answer for every unit in the selection.
   const mixedStance = describeSelection({ kind: "units", units: [guard(1), guard(2, "hold")] })
     ?? assert.fail("panel missing");
-  assert.match(mixedStance.lines.join(" | "), /Duruş: Karışık/);
+  assert.deepEqual(mixedStance.lines, []);
+  assert.deepEqual(mixedStance.cards?.map((card) => card.count), [2]);
 
   // A mixed box-drag is a question about the army: five workers must not
   // outvote four Guards and answer "İşçi".
@@ -40183,16 +40215,15 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
     kind: "units",
     units: [worker(1, "idle"), worker(2, "idle"), worker(3, "idle"), guard(4), guard(5)],
   }) ?? assert.fail("panel missing");
-  assert.equal(mixed.title, "Test Muhafızı", "the dominant combat type labels a mixed group");
   assert.deepEqual(
-    mixed.slots?.map((slot) => [slot.label, slot.count]),
+    mixed.cards?.map((card) => [card.label, card.count]),
     [["Test İşçisi", 3], ["Test Muhafızı", 2]],
-    "the composition strip reads in roster order, not in the order the box swept them up",
+    "cards read left to right in roster order, not in the order the box swept them up",
   );
 
   // Composition is counted per unit *type*, not per role. Two units sharing
-  // `role: "guard"` are two rows here for the same reason they are two chips in
-  // the HUD strip — and the panel must not answer differently from the strip
+  // `role: "guard"` are two cards here for the same reason they are two chips
+  // in the HUD strip — and the panel must not answer differently from the strip
   // directly above it.
   const heavy = (id: number): SelectedUnitView => ({
     ...guard(id),
@@ -40203,31 +40234,50 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
     units: [guard(1), guard(2), heavy(3)],
   }) ?? assert.fail("panel missing");
   assert.deepEqual(
-    twoGuardTypes.slots?.map((slot) => [slot.label, slot.count]),
+    twoGuardTypes.cards?.map((card) => [card.label, card.count]),
     [["Ağır Muhafız", 1], ["Test Muhafızı", 2]],
-    "a second Guard-role unit is its own row, under its own name",
+    "a second Guard-role unit is its own card, under its own name",
   );
-  assert.equal(twoGuardTypes.title, "Test Muhafızı", "the more numerous type names the group");
-  assert.equal(twoGuardTypes.selectionCount, 3);
+
+  // The report that produced this shape: one worker and one Guard. Every count
+  // on screen is now a count of the portrait it sits on, so there is no ×2 to
+  // misread as "two Guards".
+  const oneEach = describeSelection({
+    kind: "units",
+    units: [worker(1, "idle"), guard(2)],
+  }) ?? assert.fail("panel missing");
+  assert.deepEqual(
+    oneEach.cards?.map((card) => [card.label, card.count]),
+    [["Test İşçisi", 1], ["Test Muhafızı", 1]],
+  );
+  assert.equal(oneEach.selectionCount ?? null, null, "no group-wide count competes with the per-card ones");
 
   // §51 lists the worker panel separately: a Worker has no matchup and no
   // stance, and the army panel has no answer for what it is doing instead.
-  const workers = describeSelection({
+  const workers = describeSelection({ kind: "units", units: [worker(1, "building")] })
+    ?? assert.fail("panel missing");
+  assert.equal(workers.title, "İşçi");
+  assert.equal(workers.lines[0], "Görev: 1 inşaatta");
+  assert.ok(!workers.lines.join(" | ").includes("Duruş"), "a worker has no stance to report");
+
+  // A worker *group* takes the same card shape as an army group. Note what this
+  // costs: the job breakdown ("2 inşaatta · 1 üretimde") is a group fact the
+  // card face has no room for, so selecting a work gang no longer reports what
+  // the gang is doing. That is the deliberate trade of a portrait-only group
+  // panel, and the place to undo it if it turns out to matter is here.
+  const workerGang = describeSelection({
     kind: "units",
     units: [worker(1, "idle"), worker(2, "building"), worker(3, "producing"), worker(4, "building")],
   }) ?? assert.fail("panel missing");
-  assert.equal(workers.title, "İşçi");
-  assert.equal(
-    workers.lines[0],
-    "Görev: 1 boşta · 2 inşaatta · 1 üretimde",
-    "the breakdown reads in a fixed order, whatever order the workers arrived in",
-  );
-  assert.ok(!workers.lines.join(" | ").includes("Duruş"), "a worker has no stance to report");
+  assert.deepEqual(workerGang.cards?.map((card) => [card.label, card.count]), [["Test İşçisi", 4]]);
+  assert.deepEqual(workerGang.lines, []);
+  assert.equal(workerGang.hint, "");
+  assert.match(workers.hint, /Sağ tık/, "a single worker still explains how it is put to work");
 
-  // The rescue button is not a standing verb: a healthy selection — army or
-  // workers — offers no buttons at all, because a unit's commands are world
+  // The rescue button is not a standing verb: a healthy selection — one unit or
+  // a group — offers no buttons at all, because a unit's commands are world
   // gestures and there is nothing to dig out.
-  assert.deepEqual(army.actions, [], "a healthy army panel has no buttons");
+  assert.deepEqual(army.actions, [], "a healthy group panel has no buttons");
   assert.deepEqual(workers.actions, [], "a healthy worker panel has no buttons");
 
   // One trapped unit turns it on, on either panel, and its hint counts exactly

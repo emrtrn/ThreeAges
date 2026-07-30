@@ -281,8 +281,24 @@ export interface SelectionPanelContent {
   readonly portrait?: string | null;
   readonly selectionCount?: number;
   readonly health?: { readonly current: number; readonly max: number } | null;
-  /** Collapsed role list for multi-unit selections; layout, not game state. */
+  /** Collapsed type list shown beside a single portrait; layout, not game state. */
   readonly slots?: readonly SelectionSlot[];
+  /**
+   * A multi-unit selection, as one card per unit type.
+   *
+   * Present *instead of* the portrait/health/lines frame rather than beside it:
+   * a group selection is a different question from a unit selection. One unit
+   * asks "what is this and what is it doing", and the panel answers with health,
+   * stance and matchup. Several units ask "what did I just grab", and every
+   * per-unit fact in that frame becomes a lie the moment the selection is mixed
+   * — one health bar for eleven bodies, one stance for two of them, one
+   * matchup read off whichever type happened to be most numerous.
+   *
+   * So the panel switches shape. `RtsSelectionPanel` renders these left to
+   * right at portrait size and hides the single-unit frame; see
+   * `[data-rts-panel-mode="roster"]`.
+   */
+  readonly cards?: readonly SelectionUnitCard[];
   /** A running timed job (e.g. a level-up), or null/absent when nothing is timed. */
   readonly progress?: SelectionProgress | null;
 }
@@ -291,6 +307,11 @@ export interface SelectionSlot {
   readonly label: string;
   readonly icon: string | null;
   readonly count: number;
+}
+
+/** One unit type in a group selection: a portrait, its name, and how many. */
+export interface SelectionUnitCard extends SelectionSlot {
+  readonly typeId: string;
 }
 
 /**
@@ -432,6 +453,35 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
   const health = units.reduce((total, unit) => total + unit.health, 0);
   const maxHealth = units.reduce((total, unit) => total + unit.maxHealth, 0);
   const summary = `Can: ${Math.ceil(health)}/${Math.ceil(maxHealth)}`;
+  const workersOnly = units.every((unit) => unit.role === "worker");
+
+  // More than one unit: answer "what did I just grab" with a card per type and
+  // nothing else. See {@link SelectionPanelContent.cards} for why the per-unit
+  // facts are dropped rather than aggregated.
+  //
+  // No hint row either: the cards *are* the panel, and a keyboard legend under
+  // them turns a clean answer back into a wall of text. The verbs it taught are
+  // unchanged and still listed under a single selection. The rescue button
+  // stays, because it is a verb rather than a fact — a body trapped in a
+  // footprint still needs digging out whether it was grabbed alone or in a
+  // crowd, and no other surface offers that.
+  if (units.length > 1) {
+    return {
+      title: "",
+      summary: "",
+      lines: [],
+      actions: rescueActions(units),
+      hint: "",
+      tooltip: null,
+      cards: roster.entries.map((entry) => ({
+        typeId: entry.typeId,
+        label: entry.label,
+        icon: entry.icon,
+        count: entry.count,
+      })),
+    };
+  }
+
   // The portrait already identifies a single-type selection and carries its
   // count. Keep this compact strip only when a box selection mixes types, where
   // it is the only short way to explain the group composition.
@@ -439,11 +489,31 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
     ? roster.entries.map((entry) => ({ label: entry.label, icon: entry.icon, count: entry.count }))
     : [];
 
+  // Which single type the portrait shows. The most numerous *combat* type:
+  // workers only describe the selection when it is purely economic, because
+  // dragging a box over a mixed group is a question about the army, and
+  // answering "İşçi" because five labourers outnumbered four Guards tells the
+  // player nothing they wanted. A worker-only selection falls through to the
+  // most numerous worker type.
+  //
+  // Ties fall back to roster order rather than to whichever unit the marquee
+  // happened to sweep first — `sort` is stable, so an equal split between two
+  // types names the same one every time the player reselects the group.
+  const ranked = [...roster.entries].sort((left, right) => right.count - left.count);
+  const dominant = ranked.find((entry) => entry.role !== "worker") ?? ranked[0]!;
+  const sample = units.find((unit) => unit.stats.id === dominant.typeId)!;
+
+  // The count badge is pinned to the portrait, so it counts what the portrait
+  // shows — not the whole selection. Boxing one worker and one Guard used to
+  // put a bold "×2" on a Guard portrait, which reads as "two Guards" however
+  // carefully the strip below it disagrees. Nothing is lost by scoping it: a
+  // single-type selection is unchanged (its type *is* the whole selection), and
+  // a mixed one has {@link slots}, which names every type with its own count.
+  const selectionCount = dominant.count;
+
   // A selection of nothing but workers is an economy question, and the army
   // panel has no answer to it: a Worker has no matchup and no stance. §51 lists
   // the worker panel separately for exactly this reason.
-  const workersOnly = units.every((unit) => unit.role === "worker");
-  const first = units[0]!;
   if (workersOnly) {
     return {
       title: "İşçi",
@@ -455,25 +525,13 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
       actions: rescueActions(units),
       hint: WORKER_HINT,
       tooltip: "Boşta bir işçi, oyuncunun oyuna borçlu olduğu bir karardır.",
-      portrait: first.stats.icon ?? null,
-      selectionCount: units.length,
+      portrait: sample.stats.icon ?? null,
+      selectionCount,
       health: { current: health, max: maxHealth },
       slots,
     };
   }
 
-  // The unit shown is the most numerous *combat* type. Workers only describe
-  // the selection when it is purely economic (handled above): dragging a box
-  // over a mixed group is a question about the army, and answering "İşçi"
-  // because five labourers outnumbered four Guards tells the player nothing
-  // they wanted.
-  //
-  // Ties fall back to roster order rather than to whichever unit the marquee
-  // happened to sweep first — `sort` is stable, so an equal split between two
-  // types names the same one every time the player reselects the group.
-  const ranked = [...roster.entries].sort((left, right) => right.count - left.count);
-  const dominant = ranked.find((entry) => entry.role !== "worker") ?? ranked[0]!;
-  const sample = units.find((unit) => unit.stats.id === dominant.typeId)!;
   const stances = new Set(units.map((unit) => unit.stance));
   return {
     title: sample.stats.label,
@@ -494,7 +552,7 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
     hint: ARMY_HINT,
     tooltip: null,
     portrait: sample.stats.icon ?? null,
-    selectionCount: units.length,
+    selectionCount,
     health: { current: health, max: maxHealth },
     slots,
   };

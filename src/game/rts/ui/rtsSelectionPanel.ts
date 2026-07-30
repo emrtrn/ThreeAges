@@ -18,6 +18,7 @@ import {
   type RtsSelectionView,
   type SelectionAction,
   type SelectionPanelContent,
+  type SelectionUnitCard,
 } from "./rtsSelectionView";
 
 export class RtsSelectionPanel {
@@ -31,6 +32,8 @@ export class RtsSelectionPanel {
   private readonly health = document.createElement("div");
   private readonly healthFill = document.createElement("div");
   private readonly slots = document.createElement("div");
+  /** The group-selection face: one card per unit type, in place of the frame above. */
+  private readonly cards = document.createElement("div");
   private readonly body = document.createElement("div");
   private readonly lines: HTMLParagraphElement[] = [];
   private readonly progress = document.createElement("div");
@@ -114,7 +117,12 @@ export class RtsSelectionPanel {
     const details = document.createElement("div");
     details.className = "rts-selection-details";
     details.append(this.body);
-    this.root.append(this.portrait, this.header, details, this.actionRow, this.progress, this.hints);
+    // Scrolls rather than shrinks: a project that ships eight unit types must
+    // not squeeze eight portraits into unreadable slivers, and the panel's
+    // height is fixed by the frame it lives in.
+    this.cards.className = "rts-selection-cards ui-interactive";
+    this.cards.hidden = true;
+    this.root.append(this.portrait, this.header, details, this.cards, this.actionRow, this.progress, this.hints);
     const overlay = document.getElementById("ui-overlay") ?? document.body;
     overlay.append(this.root, this.actionTray);
     this.setSelection({ kind: "none" });
@@ -178,6 +186,11 @@ export class RtsSelectionPanel {
           ? "single"
           : "wide";
     this.actionTray.dataset.rtsActionLayout = content.actionLayout ?? "";
+    // A group selection replaces the single-unit frame instead of adding to it,
+    // so the mode is an attribute on the root: CSS hides the portrait, header
+    // and body wholesale rather than every one of them being toggled here.
+    this.root.dataset.rtsPanelMode = content.cards ? "roster" : "unit";
+    this.renderCards(content.cards ?? []);
     this.title.textContent = content.title;
     this.summary.textContent = content.summary;
     this.hints.textContent = content.hint;
@@ -237,6 +250,50 @@ export class RtsSelectionPanel {
       const count = document.createElement("b");
       count.textContent = `×${slot.count}`;
       entry.appendChild(count);
+      return entry;
+    }));
+  }
+
+  /**
+   * Draw the group-selection cards: a portrait per unit type, its count pinned
+   * to the portrait's corner, its name underneath.
+   *
+   * Rebuilt whole rather than diffed per card. The signature guard makes that
+   * cheap — a group's composition only changes when the selection or a unit's
+   * life does — and the alternative is a reconcile loop for a row that is
+   * usually one to four elements long.
+   */
+  private renderCards(cards: readonly SelectionUnitCard[]): void {
+    const signature = cards.map((card) => `${card.typeId}|${card.count}`).join(";");
+    if (this.cards.dataset.rtsCards === signature) return;
+    this.cards.dataset.rtsCards = signature;
+    this.cards.hidden = cards.length === 0;
+    this.cards.replaceChildren(...cards.map((card) => {
+      const entry = document.createElement("div");
+      entry.className = "rts-selection-card";
+      entry.title = `${card.count} ${card.label}`;
+
+      const frame = document.createElement("div");
+      frame.className = "rts-selection-card-portrait";
+      if (card.icon) {
+        const icon = document.createElement("img");
+        icon.className = "rts-selection-card-image";
+        icon.src = card.icon;
+        // The name sits right below in its own element, so the artwork is
+        // decoration here and a repeated alt would double every card.
+        icon.alt = "";
+        frame.appendChild(icon);
+      }
+      const count = document.createElement("span");
+      count.className = "rts-selection-card-count";
+      count.textContent = `×${card.count}`;
+      frame.appendChild(count);
+
+      const label = document.createElement("span");
+      label.className = "rts-selection-card-label";
+      label.textContent = card.label;
+
+      entry.append(frame, label);
       return entry;
     }));
   }

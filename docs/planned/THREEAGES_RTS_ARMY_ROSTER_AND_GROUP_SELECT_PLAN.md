@@ -269,9 +269,19 @@ ikonunu ikisi için gösterecekti — HUD doğru sayarken panelin yanlış sayma
   gereksizdi ve birbiriyle çelişebilecek ikinci bir alan demekti. Yan etkisi
   iyi — `SelectedUnitView` artık `RosterUnit`'i olduğu gibi karşılıyor.
 
+**Portre sayacı artık portrenin kendi tipini sayıyor.** Oyun testinde çıkan
+kusur: bir işçi + bir muhafız kutuyla seçilince panel bir Muhafız portresinin
+üstüne kalın altın `×2` basıyordu. Rozet portreye tutturulmuş olduğu için göz
+onu "iki muhafız" diye okuyor — altındaki kompozisyon şeridi ne derse desin.
+`selectionCount` artık `dominant.count`. Kaybedilen bir şey yok: tek tipli
+seçimde tip zaten seçimin tamamı (davranış aynı), karışık seçimde ise `slots`
+her tipi kendi sayısıyla adlandırıyor. Bu, Faz 2'den önce de var olan bir
+kusurdu; tip bazlı gruplama onu görünür hâle getirdi.
+
 **Testler:** çift tıklama testine ikinci bir `role: "guard"` tipi eklendi ve
 sadece kendi tipini seçtiği pinlendi; seçim paneli testine tip bazlı
-kompozisyon şeridi ve eşitlik-kararlılığı eklendi.
+kompozisyon şeridi, eşitlik-kararlılığı, ve rozetin üç hâli eklendi — tek tip
+(toplam), iki muhafız tipi, ve raporlanan bir işçi + bir muhafız durumu.
 
 **Yolda bulunan bir hata:** `tools/engine-tests.ts` içindeki
 `new SelectionSystem(canvas, camera, units, marquee)` çağrısı altı parametreli
@@ -279,6 +289,57 @@ ctor'a dört argüman veriyordu; `structures` ve `centers` çalışma zamanında
 `undefined` kalıyordu. Test yalnız şanstan geçiyordu (tıklamalar hep bir birime
 isabet ettiği için `raycastStructure` hiç çağrılmıyordu). Düzeltildi — sebebi
 için bkz. §10.
+
+## 4c. Çoklu seçim paneli: ayrı bir yüz — **TAMAMLANDI**
+
+Portre rozetini düzeltmek semptomu aldı, sebebi bırakmıştı: tek birim paneli
+bir grubu anlatmak için kullanılıyordu. Bir grup, tek birimden **farklı bir
+soru** sorar.
+
+- Tek birim: "bu nedir ve ne yapıyor" → can, duruş, canlı emir, §33 eşleşmesi.
+  Hepsi bu birim hakkında doğru.
+- Çok birim: "az önce neyi kaptım" → o çerçevedeki her birim-başı gerçek, seçim
+  karışır karışmaz yalana dönüyor: iki gövde için tek can barı, anlaşmayan
+  birimler için tek duruş, en kalabalık tipe göre okunmuş tek eşleşme tablosu.
+
+Bu yüzden panel **şekil değiştiriyor**. `units.length > 1` olduğunda
+`describeUnits`, tip başına bir kart döndürüyor (`SelectionPanelContent.cards`)
+ve tek-birim çerçevesi hiç doldurulmuyor. Kart: portre + sağ altta `×sayı` +
+altında tip adı, soldan sağa, tek birimin aldığı portre boyutuyla.
+
+`RtsSelectionPanel` bunu kökteki `data-rts-panel-mode="roster"` ile ayırıyor —
+portre/başlık/gövde CSS'te toptan gizleniyor, her biri tek tek koda
+bağlanmıyor. Kartlar sığmazsa satır kayıyor (`overflow-x`), küçülmüyor: sekiz
+birim tipi sekiz okunmaz dilime dönüşmemeli.
+
+**Kart portresi tek-birim portresiyle birebir:** 88×103px (panel gridinin 1. ve
+2. satırı artı aradaki boşluk: 48 + 6 + 49) ve aynı kırpma. Görsel kuralı tek
+bir seçiciye bağlı (`.rts-selection-portrait-image, .rts-selection-card-image`):
+ikisi aynı görseli aynı kutuda gösterdiği için aynı kırpmalıdır, ve tekinin
+çerçeveyi doldurup diğerinin boşluk bırakması kartı "aynı birim, sayılmış"
+yerine "daha küçük, başka bir şey" gibi okutur. Çerçeveleme değişirse ikisi
+birden değişsin diye ortak seçici.
+
+> İlk denemede kart `contain` ile yerleştirilmişti (hiç kırpma yok). Gerekçe
+> kart-içi okunabilirlikti ama yanlıştı: iki yüzey arasındaki **tutarlılık**
+> daha ağır basıyor, ve kırpılmamış görsel kutu içinde küçük duruyordu.
+
+`×sayı` rozeti kendi koyu zeminini taşıyor. Metin gölgesi bu illüstrasyonların
+parlak bölgelerinde (işçinin çuvalı, kalkanın göbeği) kayboluyordu; bazı
+birimlerde görünüp bazılarında kaybolan bir sayaç, hiç sayaç olmamasından kötü.
+
+**Kalan tek şey Kurtar düğmesi:** bir *fiil*, gerçek değil — ayak altında
+sıkışmış gövde kalabalıkta da kazılmayı bekliyor ve bunu sunan başka yüzey yok.
+Klavye ipucu satırı (`F: Saldırı-Hareket · …`) grup panelinden kaldırıldı;
+kartlar panelin tamamı, altına bir metin şeridi eklemek bu şeklin yerine
+geçtiği duvarı geri getirirdi. Fiiller tek birim seçiminde öğretilmeye devam
+ediyor.
+
+**Bilinçli kayıp:** işçi grubu seçildiğinde iş kırılımı
+(`Görev: 1 boşta · 2 inşaatta · 1 üretimde`) artık gösterilmiyor — kart
+yüzünde yeri yok. Portre-yalnız grup panelinin bedeli bu; geri istenirse
+dönülecek yer `describeUnits`'in `units.length > 1` dalı. Testte de böyle
+işaretlendi.
 
 ## 5. Faz 3 — Nüfus kırılım paneli
 

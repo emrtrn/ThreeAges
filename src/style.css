@@ -1790,7 +1790,15 @@ body {
   border-radius: 4px;
 }
 
-.rts-selection-portrait-image {
+/*
+ * One rule for both portrait faces on purpose. A group card and a single
+ * selection show the same artwork in the same size box, so they must crop it
+ * identically — a card that letterboxed where the single portrait fills reads
+ * as a smaller, different-looking unit rather than the same one counted. Change
+ * the framing here and both follow; that is the point of the shared selector.
+ */
+.rts-selection-portrait-image,
+.rts-selection-card-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1807,6 +1815,114 @@ body {
   font-size: 16px;
   font-weight: 800;
   text-shadow: 0 1px 2px #000;
+}
+
+/*
+ * Group-selection face. A selection of several units answers a different
+ * question from a selection of one, so the panel changes shape rather than
+ * aggregating facts that stop being true across a mixed group: one card per
+ * unit type, left to right, at the same portrait size a single unit gets.
+ *
+ * These rules carry two attributes so they outrank the single-unit
+ * `[data-rts-action-layout]` grid above, whatever action layout is active.
+ */
+.rts-selection-panel[data-rts-panel-mode="roster"],
+.rts-selection-panel[data-rts-action-layout="wide"][data-rts-panel-mode="roster"],
+.rts-selection-panel[data-rts-action-layout="single"][data-rts-panel-mode="roster"] {
+  grid-template-columns: minmax(0, 1fr) 104px;
+  /* One row: the cards are the whole panel. The single-unit layout's third row
+     carried the keyboard legend, which a group selection no longer shows. */
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.rts-selection-panel[data-rts-panel-mode="roster"] :is(
+  .rts-selection-portrait,
+  .rts-selection-header,
+  .rts-selection-details,
+  .rts-selection-hints
+) {
+  display: none;
+}
+
+.rts-selection-cards {
+  grid-row: 1;
+  grid-column: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  /* Scroll rather than shrink: eight unit types must not become eight
+     unreadable slivers, and the panel's height is fixed by its frame. */
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.rts-selection-cards[hidden] {
+  display: none;
+}
+
+/* The rescue button is the only verb a unit selection can carry; give it the
+   right-hand column instead of the row the single-unit layout puts it in. */
+.rts-selection-panel[data-rts-panel-mode="roster"] .rts-selection-actions {
+  grid-row: 1;
+  grid-column: 2;
+  align-content: start;
+}
+
+.rts-selection-card {
+  display: flex;
+  flex: 0 0 88px;
+  flex-direction: column;
+  gap: 3px;
+  width: 88px;
+}
+
+/*
+ * Exactly the single-unit portrait's box: 88px wide, and as tall as that
+ * portrait's two-row span works out to — rows 1 and 2 of the panel grid plus
+ * the gap between them (48 + 6 + 49). A group's portrait must not read as a
+ * shrunken version of a single unit's.
+ */
+.rts-selection-card-portrait {
+  position: relative;
+  height: 103px;
+  overflow: hidden;
+  background: rgb(28 19 12 / 82%);
+  border: 1px solid var(--ta-border);
+  border-radius: 4px;
+}
+
+/*
+ * Pinned to the portrait, and counting that portrait's own type — the badge is
+ * read as "how many of this", so it must never carry a group total.
+ *
+ * It carries its own backdrop rather than relying on a text shadow: a shadow
+ * disappears against the bright patches these illustrations have (a worker's
+ * sack, a shield boss), and a count that vanishes on some units and not others
+ * is worse than no count at all.
+ */
+.rts-selection-card-count {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  padding: 0 4px;
+  color: var(--ta-gold);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+  background: rgb(12 8 5 / 78%);
+  border-radius: 3px;
+}
+
+.rts-selection-card-label {
+  overflow: hidden;
+  color: var(--ta-ink);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .rts-selection-header {
