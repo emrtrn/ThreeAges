@@ -26,7 +26,10 @@ import type {
   ParticleBounds,
   ParticleEffectDefinition,
   ParticleInitializeBlock,
+  ParticleMeshMaterialMode,
+  ParticleMeshRendererBlock,
   ParticleRendererBlock,
+  ParticleSpriteRendererBlock,
   ParticleSpawnBlock,
   ParticleSystemBlock,
   ParticleUpdateBlock,
@@ -46,7 +49,10 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const SPAWN_MODES: readonly SpawnMode[] = ["rate", "burst"];
 const SPAWN_SHAPES: readonly SpawnShape[] = ["point", "sphere", "box", "circle"];
 const BLEND_MODES: readonly ParticleBlendMode[] = ["alpha", "additive"];
+const MESH_MATERIAL_MODES: readonly ParticleMeshMaterialMode[] = ["source", "tint"];
 const SORT_MODES: readonly SortMode[] = ["none", "distance"];
+const MAX_MESH_MODEL_IDS = 8;
+const MAX_MODEL_PARTICLES = 256;
 
 function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -195,8 +201,20 @@ function readSubUV(value: unknown): SubUVGrid {
   return { cols: axis(data.cols), rows: axis(data.rows) };
 }
 
-function normalizeRenderer(value: unknown): ParticleRendererBlock {
-  const data = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+function normalizeModelIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const unique = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "string") continue;
+    const id = raw.trim();
+    if (!id || unique.has(id)) continue;
+    unique.add(id);
+    if (unique.size >= MAX_MESH_MODEL_IDS) break;
+  }
+  return [...unique];
+}
+
+function normalizeSpriteRenderer(data: Record<string, unknown>): ParticleSpriteRendererBlock {
   return {
     type: "sprite",
     blendMode: readEnum(data.blendMode, BLEND_MODES, "alpha"),
@@ -205,6 +223,25 @@ function normalizeRenderer(value: unknown): ParticleRendererBlock {
     texture: readTextureRef(data.texture),
     subUV: readSubUV(data.subUV),
   };
+}
+
+function normalizeMeshRenderer(data: Record<string, unknown>): ParticleMeshRendererBlock {
+  return {
+    type: "mesh",
+    modelIds: normalizeModelIds(data.modelIds),
+    materialMode: readEnum(data.materialMode, MESH_MATERIAL_MODES, "source"),
+    castShadow: readBool(data.castShadow, false),
+    receiveShadow: readBool(data.receiveShadow, true),
+    maxModelParticles: Math.min(
+      MAX_MODEL_PARTICLES,
+      Math.round(clampMin(finiteNumber(data.maxModelParticles, 64), 1)),
+    ),
+  };
+}
+
+function normalizeRenderer(value: unknown): ParticleRendererBlock {
+  const data = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return data.type === "mesh" ? normalizeMeshRenderer(data) : normalizeSpriteRenderer(data);
 }
 
 function readTags(value: unknown): string[] {
@@ -318,7 +355,7 @@ function normalizeSchema1(data: Record<string, unknown>): ParticleEffectDefiniti
 export function normalizeEffectDefinition(value: unknown): ParticleEffectDefinition | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const data = value as Record<string, unknown>;
-  if (data.schema === 2) return normalizeSchema2(data);
+  if (data.schema === 2 || data.schema === 3) return normalizeSchema2(data);
   if (data.schema === 1) return normalizeSchema1(data);
   return null;
 }
@@ -340,19 +377,39 @@ export function toRuntimeParticleEffect(def: ParticleEffectDefinition): RuntimeP
       : def.spawn.count / Math.max(0.05, lifetimeMid);
   return {
     ...(def.name ? { name: def.name } : {}),
+    ...(def.renderer.type === "mesh" ? { rendererType: "mesh" as const } : {}),
     loop: def.system.loop,
     rate,
     lifetime: clampMin(lifetimeMid, 0.01),
+    ...(def.renderer.type === "mesh" ? { maxParticles: def.system.maxParticles } : {}),
     startSize: rangeMid(def.initialize.startSize),
     endSize: rangeMid(def.update.endSize),
     velocity: [dir[0] * speedMid, dir[1] * speedMid, dir[2] * speedMid],
     spread: def.initialize.spreadAngleDeg / SPREAD_SCALE,
-    materialMode: def.renderer.blendMode,
+    // `ParticleEffect` currently consumes these sprite-compatible fields. Mesh
+    // fields below carry the complete renderer contract for the instanced path.
+    materialMode: def.renderer.type === "sprite" ? def.renderer.blendMode : "alpha",
     color: def.initialize.startColor,
-    ...(def.renderer.texture ? { texture: def.renderer.texture } : {}),
+    ...(def.renderer.type === "sprite" && def.renderer.texture
+      ? { texture: def.renderer.texture }
+      : {}),
     // Emit the flipbook grid only when it actually animates (frames > 1).
-    ...(def.renderer.subUV.cols * def.renderer.subUV.rows > 1
+    ...(def.renderer.type === "sprite" && def.renderer.subUV.cols * def.renderer.subUV.rows > 1
       ? { subUV: { cols: def.renderer.subUV.cols, rows: def.renderer.subUV.rows } }
+      : {}),
+    ...(def.renderer.type === "mesh"
+      ? {
+          modelIds: [...def.renderer.modelIds],
+          meshMaterialMode: def.renderer.materialMode,
+          castShadow: def.renderer.castShadow,
+          receiveShadow: def.renderer.receiveShadow,
+          maxModelParticles: def.renderer.maxModelParticles,
+          gravityScale: def.update.gravityScale,
+          drag: def.update.drag,
+          acceleration: [...def.update.acceleration],
+          rotation: [...def.initialize.rotation],
+          angularVelocity: [...def.initialize.angularVelocity],
+        }
       : {}),
   };
 }

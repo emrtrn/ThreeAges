@@ -3483,8 +3483,8 @@ export function validateSaveGameDataPayload(value: unknown): {
 // this reuses) or it is silently dropped on save.
 
 /**
- * Validates + canonicalizes a schema-2 particle effect asset body. Gates on the
- * `{ schema: 2, type: "particleEffect" }` envelope, then runs it through the vfx
+ * Validates + canonicalizes a schema-2/3 particle effect asset body. Gates on the
+ * `{ schema, type: "particleEffect" }` envelope, then runs it through the vfx
  * normalizer and re-attaches the envelope so the saved file round-trips on load.
  */
 export function validateEffectAsset(value: unknown): Record<string, unknown> {
@@ -3492,11 +3492,15 @@ export function validateEffectAsset(value: unknown): Record<string, unknown> {
     throw new Error("effect must be an object");
   }
   const input = value as Record<string, unknown>;
-  if (input.schema !== 2) throw new Error("effect.schema must be 2");
+  if (input.schema !== 2 && input.schema !== 3) throw new Error("effect.schema must be 2 or 3");
   if (input.type !== "particleEffect") throw new Error('effect.type must be "particleEffect"');
   const def = normalizeEffectDefinition(input);
   if (!def) throw new Error("effect body is not a valid particle effect");
-  return { schema: 2, type: "particleEffect", ...def } as unknown as Record<string, unknown>;
+  if (def.renderer.type === "mesh" && def.renderer.modelIds.length === 0) {
+    throw new Error("mesh effect renderer requires at least one model id");
+  }
+  const schema = def.renderer.type === "mesh" ? 3 : 2;
+  return { schema, type: "particleEffect", ...def } as unknown as Record<string, unknown>;
 }
 
 export function validateSaveEffectPayload(value: unknown): {

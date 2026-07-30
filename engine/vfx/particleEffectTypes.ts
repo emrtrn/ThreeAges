@@ -26,8 +26,9 @@ export type NumberRange = [number, number];
 
 export type SpawnMode = "rate" | "burst";
 export type SpawnShape = "point" | "sphere" | "box" | "circle";
-export type RendererType = "sprite";
+export type RendererType = "sprite" | "mesh";
 export type ParticleBlendMode = "alpha" | "additive";
+export type ParticleMeshMaterialMode = "source" | "tint";
 export type SortMode = "none" | "distance";
 export type BoundsMode = "fixed" | "autoPreview";
 
@@ -96,8 +97,8 @@ export interface SubUVGrid {
   rows: number;
 }
 
-export interface ParticleRendererBlock {
-  type: RendererType;
+export interface ParticleSpriteRendererBlock {
+  type: "sprite";
   blendMode: ParticleBlendMode;
   softness: number;
   sortMode: SortMode;
@@ -111,6 +112,25 @@ export interface ParticleRendererBlock {
   /** Flipbook grid for the sprite texture; `{1,1}` = no animation (Faz 6b). */
   subUV: SubUVGrid;
 }
+
+/**
+ * Renders each live particle as a shared, manifest-backed static-model instance.
+ * `modelIds` never stores a URL/path: host code resolves these ids against its
+ * asset manifest before it allows a GLTF load.
+ */
+export interface ParticleMeshRendererBlock {
+  type: "mesh";
+  /** One or more manifest static-mesh ids selected by the emitter on spawn. */
+  modelIds: string[];
+  /** Keep source materials or permit the renderer's future per-instance tint path. */
+  materialMode: ParticleMeshMaterialMode;
+  castShadow: boolean;
+  receiveShadow: boolean;
+  /** Per-effect upper bound, applied in addition to `system.maxParticles`. */
+  maxModelParticles: number;
+}
+
+export type ParticleRendererBlock = ParticleSpriteRendererBlock | ParticleMeshRendererBlock;
 
 /** The normalized, fully-defaulted authoring form (schema-2 shaped). */
 export interface ParticleEffectDefinition {
@@ -130,11 +150,15 @@ export interface ParticleEffectDefinition {
  */
 export interface RuntimeParticleEffect {
   name?: string;
+  /** Renderer selected by the authored asset; absent means legacy sprite. */
+  rendererType?: RendererType;
   loop: boolean;
   /** Particles spawned per second. */
   rate: number;
   /** Particle lifetime in seconds. */
   lifetime: number;
+  /** Authored upper bound for live particles; renderers must never exceed it. */
+  maxParticles?: number;
   startSize: number;
   endSize: number;
   velocity: Vec3;
@@ -147,4 +171,16 @@ export interface RuntimeParticleEffect {
   texture?: string;
   /** Flipbook grid; present only when animating (`cols*rows > 1`), Faz 6b. */
   subUV?: SubUVGrid;
+  /** Manifest static-mesh ids; populated only for `rendererType: "mesh"`. */
+  modelIds?: string[];
+  /** Mesh renderer material policy; populated only for mesh effects. */
+  meshMaterialMode?: ParticleMeshMaterialMode;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  maxModelParticles?: number;
+  gravityScale?: number;
+  drag?: number;
+  acceleration?: Vec3;
+  rotation?: NumberRange;
+  angularVelocity?: NumberRange;
 }

@@ -713,6 +713,7 @@ import {
   toRuntimeParticleEffect,
 } from "../engine/vfx/particleEffectParser";
 import { ParticleEffect } from "../engine/render-three/particleEffect";
+import { MeshParticleEffect } from "../engine/render-three/meshParticleEffect";
 import { VfxSubsystem } from "../engine/render-three/vfxSubsystem";
 import type { RuntimeParticleEffect } from "../engine/vfx/particleEffectTypes";
 import {
@@ -16173,7 +16174,7 @@ check("parseRuntimeParticleEffect collapses a schema-1 effect and rejects bad in
   );
   // Non-object, unknown schema, or empty schema-1 effectId â†’ null.
   assert.equal(parseRuntimeParticleEffect(null), null);
-  assert.equal(parseRuntimeParticleEffect({ schema: 3 }), null);
+  assert.equal(parseRuntimeParticleEffect({ schema: 4 }), null);
   assert.equal(parseRuntimeParticleEffect({ schema: 1, effectId: "" }), null);
   // Unknown materialMode falls back to alpha; a malformed color falls back to white.
   const fallback = parseRuntimeParticleEffect({
@@ -16305,6 +16306,43 @@ check("renderer.subUV flipbook (VFX Lite Faz 6b) normalizes, clamps, and collaps
   assert.deepEqual(canonical.renderer.subUV, { cols: 6, rows: 6 });
 });
 
+check("schema-3 mesh renderer normalizes, caps, and round-trips through the save validator", () => {
+  const def = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: {
+      type: "mesh",
+      modelIds: [" debris.stone ", "debris.wood", "debris.stone", "", 42],
+      materialMode: "tint",
+      castShadow: true,
+      receiveShadow: false,
+      maxModelParticles: 999,
+    },
+  });
+  assert.ok(def);
+  assert.equal(def.renderer.type, "mesh");
+  if (def.renderer.type !== "mesh") assert.fail("expected mesh renderer");
+  assert.deepEqual(def.renderer.modelIds, ["debris.stone", "debris.wood"]);
+  assert.equal(def.renderer.materialMode, "tint");
+  assert.equal(def.renderer.maxModelParticles, 256);
+
+  const runtime = toRuntimeParticleEffect(def);
+  assert.equal(runtime.rendererType, "mesh");
+  assert.deepEqual(runtime.modelIds, ["debris.stone", "debris.wood"]);
+
+  const canonical = validateEffectAsset({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["debris.stone"] },
+  }) as { schema: number; renderer: { type: string; modelIds: string[] } };
+  assert.equal(canonical.schema, 3);
+  assert.equal(canonical.renderer.type, "mesh");
+  assert.deepEqual(canonical.renderer.modelIds, ["debris.stone"]);
+  assert.throws(() =>
+    validateEffectAsset({ schema: 3, type: "particleEffect", renderer: { type: "mesh" } }),
+  );
+});
+
 check("schema-1 and its hand-converted schema-2 starter collapse identically", () => {
   // The Faz 1 starter conversion is mechanical: the schema-2 files are authored
   // so the normalize→collapse pipeline reproduces the original schema-1 runtime
@@ -16429,6 +16467,33 @@ check("ParticleEffect one-shot drains to zero alive and reports finished", () =>
   fx.dispose(); // dispose after a full lifecycle must not throw
 });
 
+check("MeshParticleEffect instances shared source geometry within its authored cap", () => {
+  const source = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
+  const effect = new MeshParticleEffect(
+    runtimeFx({
+      rendererType: "mesh",
+      modelIds: ["debris.stone"],
+      maxParticles: 3,
+      maxModelParticles: 8,
+      loop: true,
+      rate: 20,
+      lifetime: 1,
+      gravityScale: 1,
+      rotation: [0, 10],
+      angularVelocity: [20, 40],
+    }),
+    [source],
+  );
+  assert.equal(effect.maxCapacity, 3);
+  assert.equal(effect.object3D.children.length, 1);
+  effect.update(0.2);
+  assert.equal(effect.aliveCount(), 3);
+  effect.setDensityScale(0);
+  effect.update(0.2);
+  assert.equal(effect.aliveCount(), 3);
+  effect.dispose();
+});
+
 check("ParticleEffect dispose is safe and instances hold independent buffers", () => {
   const a = new ParticleEffect(runtimeFx({ loop: true, rate: 30, lifetime: 1 }));
   const b = new ParticleEffect(runtimeFx({ loop: true, rate: 30, lifetime: 1 }));
@@ -16525,6 +16590,31 @@ await checkAsync("VfxSubsystem warms, plays, advances and recycles a one-shot in
   assert.equal(snap.activeInstances, 0);
   assert.equal(vfx.root.children.length, 0);
   assert.equal(snap.pooledInstances, 1);
+  vfx.dispose();
+});
+
+await checkAsync("VfxSubsystem warms manifest-resolved mesh sources before it plays a mesh effect", async () => {
+  const modelRequests: string[][] = [];
+  const vfx = new VfxSubsystem({
+    resolveEffectUrl: () => "mem://mesh",
+    loadDefinition: async () =>
+      runtimeFx({
+        rendererType: "mesh",
+        modelIds: ["debris.stone"],
+        maxParticles: 4,
+        maxModelParticles: 4,
+        loop: true,
+      }),
+    loadMeshModels: async (ids) => {
+      modelRequests.push([...ids]);
+      return [new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial())];
+    },
+  });
+  assert.ok(await vfx.warm("fx"));
+  assert.deepEqual(modelRequests, [["debris.stone"]]);
+  assert.ok(vfx.play("fx") !== null);
+  vfx.advance(0.2);
+  assert.ok(vfx.getDebugSnapshot().aliveParticles > 0);
   vfx.dispose();
 });
 

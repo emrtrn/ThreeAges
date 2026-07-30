@@ -28,7 +28,7 @@ import { projectFileUrl } from "@/project/ProjectSystem";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
-/** Minimal asset record the editor needs to populate the sprite-texture picker. */
+/** Minimal asset record the editor needs to populate renderer asset pickers. */
 export interface ParticleEffectEditorAsset {
   id: string;
   name: string;
@@ -39,7 +39,7 @@ export interface ParticleEffectEditorAsset {
 export interface ParticleEffectEditorOptions {
   path: string;
   label: string;
-  /** Project asset records (for the Renderer sprite-texture picker); optional. */
+  /** Project asset records (for renderer texture and static-mesh pickers); optional. */
   assets?: ParticleEffectEditorAsset[];
   hideDevelopmentContent?: boolean;
   onStatus?: (message: string, tone?: StatusTone) => void;
@@ -260,6 +260,7 @@ export class ParticleEffectEditor {
       this.dirty = false;
       this.preview = new ParticleEffectPreviewViewport(this.previewHost, (id) =>
         this.resolveTextureUrl(id),
+        (id) => this.resolveModelUrl(id),
       );
       this.preview.setDefinition(this.def);
       this.statsTimer = window.setInterval(() => this.updateHud(), 150);
@@ -380,16 +381,28 @@ export class ParticleEffectEditor {
     html.push(this.groupClose());
 
     html.push(this.groupOpen("renderer", "Renderer"));
-    html.push(this.roRow("Type", "sprite"));
-    html.push(this.textureRow("Texture", "renderer.texture", d.renderer.texture));
-    if (d.renderer.texture) {
-      // Flipbook (SubUV) only applies to a texture; 1×1 = whole texture (no animation).
-      html.push(this.numRow("Flipbook Cols", "renderer.subUV.cols", d.renderer.subUV.cols, 1, 32, 1));
-      html.push(this.numRow("Flipbook Rows", "renderer.subUV.rows", d.renderer.subUV.rows, 1, 32, 1));
+    html.push(this.enumRow("Type", "renderer.type", d.renderer.type, ["sprite", "mesh"]));
+    if (d.renderer.type === "sprite") {
+      html.push(this.textureRow("Texture", "renderer.texture", d.renderer.texture));
+      if (d.renderer.texture) {
+        // Flipbook (SubUV) only applies to a texture; 1×1 = whole texture (no animation).
+        html.push(this.numRow("Flipbook Cols", "renderer.subUV.cols", d.renderer.subUV.cols, 1, 32, 1));
+        html.push(this.numRow("Flipbook Rows", "renderer.subUV.rows", d.renderer.subUV.rows, 1, 32, 1));
+      }
+      html.push(this.enumRow("Blend Mode", "renderer.blendMode", d.renderer.blendMode, BLEND_MODES));
+      html.push(this.numRow("Softness", "renderer.softness", d.renderer.softness, 0, 1, 0.05));
+      html.push(this.enumRow("Sort Mode", "renderer.sortMode", d.renderer.sortMode, SORT_MODES));
+    } else {
+      const modelIds = d.renderer.modelIds.length > 0 ? d.renderer.modelIds : [""];
+      modelIds.forEach((modelId, index) => {
+        html.push(this.modelRow(`Model ${index + 1}`, `renderer.modelIds.${index}`, modelId, index));
+      });
+      html.push(`<div class="pfx-row"><span class="pfx-row-label">Sources</span><button class="pfx-button" type="button" data-pfx-add-model>Add model</button></div>`);
+      html.push(this.enumRow("Material", "renderer.materialMode", d.renderer.materialMode, ["source", "tint"]));
+      html.push(this.boolRow("Cast Shadow", "renderer.castShadow", d.renderer.castShadow));
+      html.push(this.boolRow("Receive Shadow", "renderer.receiveShadow", d.renderer.receiveShadow));
+      html.push(this.numRow("Mesh Particle Cap", "renderer.maxModelParticles", d.renderer.maxModelParticles, 1, 256, 1));
     }
-    html.push(this.enumRow("Blend Mode", "renderer.blendMode", d.renderer.blendMode, BLEND_MODES));
-    html.push(this.numRow("Softness", "renderer.softness", d.renderer.softness, 0, 1, 0.05));
-    html.push(this.enumRow("Sort Mode", "renderer.sortMode", d.renderer.sortMode, SORT_MODES));
     html.push(this.groupClose());
 
     html.push(this.groupOpen("bounds", "Bounds"));
@@ -417,10 +430,6 @@ export class ParticleEffectEditor {
 
   private textRow(label: string, path: string, value: string): string {
     return this.row(label, `<input type="text" class="pfx-input" data-path="${esc(path)}" data-kind="text" value="${esc(value)}">`);
-  }
-
-  private roRow(label: string, value: string): string {
-    return this.row(label, `<input type="text" class="pfx-input" value="${esc(value)}" disabled>`);
   }
 
   private numRow(label: string, path: string, value: number, min: number, max: number, step: number): string {
@@ -480,6 +489,21 @@ export class ParticleEffectEditor {
     );
   }
 
+  /** Static-mesh picker for one mesh renderer source slot. */
+  private modelRow(label: string, path: string, value: string | undefined, index: number): string {
+    const none = `<option value=""${value ? "" : " selected"}>&lt;select static mesh&gt;</option>`;
+    const opts = this.modelAssets(value)
+      .map(
+        (asset) =>
+          `<option value="${esc(asset.id)}"${asset.id === value ? " selected" : ""}>${esc(asset.name)}</option>`,
+      )
+      .join("");
+    return this.row(
+      label,
+      `<select class="pfx-input" data-path="${esc(path)}" data-kind="model">${none}${opts}</select><button class="pfx-row-remove" type="button" data-pfx-remove-model="${index}" aria-label="Remove model">×</button>`,
+    );
+  }
+
   /** The project's texture assets, sorted by display name for the picker. */
   private textureAssets(currentTextureId?: string | null): ParticleEffectEditorAsset[] {
     return this.assets
@@ -494,9 +518,29 @@ export class ParticleEffectEditor {
       .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   }
 
+  /** Static model assets, filtered in the same way as the sprite texture picker. */
+  private modelAssets(currentModelId?: string): ParticleEffectEditorAsset[] {
+    return this.assets
+      .filter((asset) => asset.assetType === "staticMesh")
+      .filter(
+        (asset) =>
+          !this.options.hideDevelopmentContent ||
+          asset.id === currentModelId ||
+          !isDevelopmentContentPath(asset.path),
+      )
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  }
+
   /** Resolves a texture asset id to a fetchable image URL for the preview. */
   private resolveTextureUrl(textureId: string): string | null {
     const asset = this.assets.find((a) => a.id === textureId && a.assetType === "texture");
+    return asset ? projectFileUrl(asset.path) : null;
+  }
+
+  /** Resolves an editor-selected static mesh id for the live preview. */
+  private resolveModelUrl(modelId: string): string | null {
+    const asset = this.assets.find((a) => a.id === modelId && a.assetType === "staticMesh");
     return asset ? projectFileUrl(asset.path) : null;
   }
 
@@ -512,6 +556,12 @@ export class ParticleEffectEditor {
         // Enum / bool commit immediately (may re-render gated fields).
         el.addEventListener("change", () => this.onFieldToggle(path, kind, el));
       }
+    }
+    for (const button of this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-pfx-add-model]")) {
+      button.addEventListener("click", () => this.addModelSlot());
+    }
+    for (const button of this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-pfx-remove-model]")) {
+      button.addEventListener("click", () => this.removeModelSlot(Number(button.dataset.pfxRemoveModel)));
     }
   }
 
@@ -543,7 +593,27 @@ export class ParticleEffectEditor {
 
   private onFieldToggle(path: string, kind: string, el: HTMLElement): void {
     this.beginEdit();
-    if (kind === "bool") {
+    if (path === "renderer.type") {
+      const type = (el as HTMLSelectElement).value;
+      this.def.renderer =
+        type === "mesh"
+          ? {
+              type: "mesh",
+              modelIds: [],
+              materialMode: "source",
+              castShadow: false,
+              receiveShadow: true,
+              maxModelParticles: 64,
+            }
+          : {
+              type: "sprite",
+              blendMode: "alpha",
+              softness: 0.5,
+              sortMode: "none",
+              texture: null,
+              subUV: { cols: 1, rows: 1 },
+            };
+    } else if (kind === "bool") {
       setPath(this.def as unknown as Record<string, unknown>, path, (el as HTMLInputElement).checked);
     } else if (kind === "texture") {
       // Empty option = "<none>" → store null so the renderer keeps its procedural sprite.
@@ -558,6 +628,25 @@ export class ParticleEffectEditor {
     this.renderDetails();
     this.renderDiagnostics();
     this.updateFooter();
+  }
+
+  private addModelSlot(): void {
+    if (this.def.renderer.type !== "mesh") return;
+    this.beginEdit();
+    const firstAvailable = this.modelAssets()[0]?.id ?? "";
+    this.def.renderer.modelIds.push(firstAvailable);
+    this.commit();
+    this.refreshPreview();
+    this.renderAll();
+  }
+
+  private removeModelSlot(index: number): void {
+    if (this.def.renderer.type !== "mesh" || !Number.isInteger(index) || index < 0) return;
+    this.beginEdit();
+    this.def.renderer.modelIds.splice(index, 1);
+    this.commit();
+    this.refreshPreview();
+    this.renderAll();
   }
 
   private commit(): void {
@@ -616,10 +705,11 @@ export class ParticleEffectEditor {
     if (d.spawn.mode === "rate" && !d.system.loop && d.system.duration <= 0) {
       out.push("duration is zero but rate mode is selected");
     }
-    if (d.renderer.blendMode === "alpha" && d.update.fadeOutTime <= 0 && d.update.endOpacity > 0) {
+    if (d.renderer.type === "sprite" && d.renderer.blendMode === "alpha" && d.update.fadeOutTime <= 0 && d.update.endOpacity > 0) {
       out.push("alpha blend with no fade-out may look harsh");
     }
     if (
+      d.renderer.type === "sprite" &&
       d.renderer.blendMode === "additive" &&
       hexLuminance(d.initialize.startColor) < 0.12 &&
       hexLuminance(d.update.endColor) < 0.12
@@ -631,6 +721,9 @@ export class ParticleEffectEditor {
     }
     if (this.boundsMayClip()) {
       out.push("fixed bounds may clip the effect");
+    }
+    if (d.renderer.type === "mesh" && d.renderer.modelIds.every((id) => id.trim().length === 0)) {
+      out.push("mesh renderer needs at least one static mesh source");
     }
     return out;
   }
@@ -685,7 +778,7 @@ export class ParticleEffectEditor {
     const spawn = d.spawn.mode === "rate" ? `rate ${d.spawn.rate}/s` : `burst ${d.spawn.count}`;
     const loop = d.system.loop ? "loop" : "one-shot";
     this.setStatus(
-      `Spawn: ${spawn} · Cap ${d.system.maxParticles} · ${d.renderer.blendMode} · ${loop}`,
+      `Spawn: ${spawn} · Cap ${d.system.maxParticles} · ${d.renderer.type} · ${loop}`,
       "info",
     );
   }

@@ -24,6 +24,7 @@ import {
   Color,
   Mesh,
   MeshBasicMaterial,
+  Object3D,
   PerspectiveCamera,
   Scene,
   SphereGeometry,
@@ -33,6 +34,8 @@ import {
 } from "three";
 
 import { ParticleEffect, toRuntimeParticleEffect } from "@engine/render-three/particleEffect";
+import { MeshParticleEffect } from "@engine/render-three/meshParticleEffect";
+import { GltfModelLoader } from "@engine/render-three/gltfModelLoader";
 import type { ParticleEffectDefinition } from "@engine/vfx/particleEffectTypes";
 import { OrbitViewportCamera, createAssetViewportRig } from "@/editor/assetViewportCamera";
 
@@ -45,8 +48,11 @@ export interface PreviewStats {
   capacity: number;
 }
 
+type PreviewParticleEffect = ParticleEffect | MeshParticleEffect;
+
 export class ParticleEffectPreviewViewport {
   private readonly renderer: WebGLRenderer;
+  private readonly modelLoader: GltfModelLoader;
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(45, 1, 0.01, 200);
   private readonly orbit: OrbitViewportCamera;
@@ -59,7 +65,8 @@ export class ParticleEffectPreviewViewport {
   private boundsHelper: Box3Helper | null = null;
 
   private definition: ParticleEffectDefinition | null = null;
-  private effect: ParticleEffect | null = null;
+  private effect: PreviewParticleEffect | null = null;
+  private effectRevision = 0;
   private rafId = 0;
   private lastTime = 0;
   private playing = true;
@@ -76,8 +83,10 @@ export class ParticleEffectPreviewViewport {
   constructor(
     private readonly host: HTMLElement,
     private readonly resolveTextureUrl?: (textureId: string) => string | null,
+    private readonly resolveModelUrl?: (modelId: string) => string | null,
   ) {
     this.renderer = new WebGLRenderer({ antialias: true });
+    this.modelLoader = new GltfModelLoader(this.renderer);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     host.append(this.renderer.domElement);
 
@@ -158,6 +167,7 @@ export class ParticleEffectPreviewViewport {
   }
 
   private rebuildEffect(): void {
+    const revision = ++this.effectRevision;
     if (this.effect) {
       this.scene.remove(this.effect.object3D);
       this.effect.dispose();
@@ -165,11 +175,41 @@ export class ParticleEffectPreviewViewport {
     }
     if (!this.definition) return;
     const runtime = toRuntimeParticleEffect(this.definition);
+    if (runtime.rendererType === "mesh") {
+      void this.buildMeshEffect(runtime, revision);
+      return;
+    }
     const textureUrl =
       runtime.texture && this.resolveTextureUrl ? this.resolveTextureUrl(runtime.texture) : null;
     this.effect = new ParticleEffect(runtime, undefined, textureUrl);
     this.effect.setOrigin(0, 0, 0);
     this.scene.add(this.effect.object3D);
+  }
+
+  private async buildMeshEffect(
+    runtime: ReturnType<typeof toRuntimeParticleEffect>,
+    revision: number,
+  ): Promise<void> {
+    const modelIds = runtime.modelIds ?? [];
+    if (!this.resolveModelUrl || modelIds.length === 0) return;
+    const roots = (
+      await Promise.all(
+        modelIds.map(async (id): Promise<Object3D | null> => {
+          const url = this.resolveModelUrl?.(id);
+          if (!url) return null;
+          try {
+            return (await this.modelLoader.load(id, url)).scene;
+          } catch {
+            return null;
+          }
+        }),
+      )
+    ).filter((root): root is Object3D => root !== null);
+    if (this.disposed || revision !== this.effectRevision || roots.length === 0) return;
+    const effect = new MeshParticleEffect(runtime, roots);
+    effect.setOrigin(0, 0, 0);
+    this.effect = effect;
+    this.scene.add(effect.object3D);
   }
 
   /** Rebuilds the fixed-bounds wireframe from `system.bounds` (or hides it). */

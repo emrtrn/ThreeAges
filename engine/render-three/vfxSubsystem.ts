@@ -11,12 +11,13 @@
  * `render-three/` next to {@link ParticleEffect} rather than in the DOM/Three-free
  * `engine/vfx/`.
  */
-import { Group } from "three";
+import { Group, type Object3D } from "three";
 
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import { parseRuntimeParticleEffect } from "../vfx/particleEffectParser";
 import type { RuntimeParticleEffect, Vec3 } from "../vfx/particleEffectTypes";
 import { ParticleEffect, type ParticleEffectOverrides } from "./particleEffect";
+import { MeshParticleEffect } from "./meshParticleEffect";
 
 export const VFX_SUBSYSTEM_ID = "vfx";
 
@@ -60,6 +61,8 @@ export interface VfxSubsystemOptions {
    * manifest-agnostic; absent/returning null keeps the procedural sprite.
    */
   resolveTextureUrl?: (textureId: string) => string | null;
+  /** Resolves manifest-validated static mesh ids to loaded GLTF scene roots. */
+  loadMeshModels?: (modelIds: readonly string[]) => Promise<readonly Object3D[]>;
   /**
    * Loads + parses a definition from a resolved URL. Defaults to `fetch` + JSON +
    * {@link parseRuntimeParticleEffect}; tests inject a synchronous fixture loader.
@@ -67,10 +70,12 @@ export interface VfxSubsystemOptions {
   loadDefinition?: (url: string) => Promise<RuntimeParticleEffect | null>;
 }
 
+type LiveParticleEffect = ParticleEffect | MeshParticleEffect;
+
 interface VfxInstance {
   readonly id: VfxInstanceId;
   readonly effectId: string;
-  readonly effect: ParticleEffect;
+  readonly effect: LiveParticleEffect;
   enabled: boolean;
 }
 
@@ -89,13 +94,16 @@ export class VfxSubsystem implements Subsystem {
   readonly root = new Group();
   private readonly resolveEffectUrl: (effectId: string) => string | null;
   private readonly resolveTextureUrl: (textureId: string) => string | null;
+  private readonly loadMeshModels: (modelIds: readonly string[]) => Promise<readonly Object3D[]>;
   private readonly loadDefinition: (url: string) => Promise<RuntimeParticleEffect | null>;
   /** Parsed definitions keyed by effectId; a cached `null` marks a known miss. */
   private readonly definitions = new Map<string, RuntimeParticleEffect | null>();
   /** In-flight definition loads, so concurrent warms fetch the file once. */
   private readonly loading = new Map<string, Promise<RuntimeParticleEffect | null>>();
+  /** Mesh source roots warmed with their definition and shared across instances. */
+  private readonly meshModels = new Map<string, readonly Object3D[]>();
   /** Retired one-shot effects keyed by effectId, reused on the next matching play. */
-  private readonly pool = new Map<string, ParticleEffect[]>();
+  private readonly pool = new Map<string, LiveParticleEffect[]>();
   private readonly instances = new Map<VfxInstanceId, VfxInstance>();
   private nextId = 1;
   /** Global density multiplier applied to every effect's spawn rate (quality). */
@@ -105,6 +113,7 @@ export class VfxSubsystem implements Subsystem {
     this.root.name = "vfx-root";
     this.resolveEffectUrl = options.resolveEffectUrl ?? (() => null);
     this.resolveTextureUrl = options.resolveTextureUrl ?? (() => null);
+    this.loadMeshModels = options.loadMeshModels ?? (async () => []);
     this.loadDefinition = options.loadDefinition ?? fetchDefinition;
   }
 
@@ -126,7 +135,12 @@ export class VfxSubsystem implements Subsystem {
     }
     const pending = this.loadDefinition(url)
       .catch(() => null)
-      .then((definition) => {
+      .then(async (definition) => {
+        if (definition?.rendererType === "mesh") {
+          const models = await this.loadMeshModels(definition.modelIds ?? []).catch(() => []);
+          if (models.length === 0) definition = null;
+          else this.meshModels.set(effectId, models);
+        }
         this.definitions.set(effectId, definition);
         this.loading.delete(effectId);
         return definition;
@@ -149,6 +163,7 @@ export class VfxSubsystem implements Subsystem {
       return null;
     }
     const effect = this.acquire(effectId, definition, options);
+    if (!effect) return null;
     const p = options.position;
     effect.setOrigin(p ? p[0] : 0, p ? p[1] : 0, p ? p[2] : 0);
     this.root.add(effect.object3D);
@@ -256,6 +271,7 @@ export class VfxSubsystem implements Subsystem {
     this.pool.clear();
     this.definitions.clear();
     this.loading.clear();
+    this.meshModels.clear();
   }
 
   /** Reuses a pooled effect (reset with the new overrides) or allocates a fresh one. */
@@ -263,17 +279,27 @@ export class VfxSubsystem implements Subsystem {
     effectId: string,
     definition: RuntimeParticleEffect,
     overrides: ParticleEffectOverrides,
-  ): ParticleEffect {
+  ): LiveParticleEffect | null {
     const pooled = this.pool.get(effectId)?.pop();
     if (pooled) {
       pooled.reset(overrides);
       pooled.setDensityScale(this.globalDensity);
       return pooled;
     }
-    // Same effectId always resolves to the same texture, so a pooled instance
-    // (built with it once) needs no texture re-resolution on reuse.
-    const textureUrl = definition.texture ? this.resolveTextureUrl(definition.texture) : null;
-    const effect = new ParticleEffect(definition, overrides, textureUrl);
+    const effect =
+      definition.rendererType === "mesh"
+        ? (() => {
+            const models = this.meshModels.get(effectId);
+            return models && models.length > 0
+              ? new MeshParticleEffect(definition, models, overrides)
+              : null;
+          })()
+        : new ParticleEffect(
+            definition,
+            overrides,
+            definition.texture ? this.resolveTextureUrl(definition.texture) : null,
+          );
+    if (!effect) return null;
     effect.setDensityScale(this.globalDensity);
     return effect;
   }

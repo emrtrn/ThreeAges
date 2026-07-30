@@ -672,6 +672,21 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly vfxSubsystem = new VfxSubsystem({
     resolveEffectUrl: (effectId) => this.effectUrlById.get(effectId) ?? null,
     resolveTextureUrl: (textureId) => this.textureUrlById.get(textureId) ?? null,
+    // AssetLoader checks the manifest type before it reaches GLTFLoader; an
+    // effect asset can therefore reference ids, never a path or arbitrary URL.
+    loadMeshModels: async (modelIds) => {
+      if (!this.assetLoader) return [];
+      const models = await Promise.all(
+        modelIds.map(async (id) => {
+          try {
+            return (await this.assetLoader!.loadModel(id)).scene;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      return models.filter((model): model is Group => model !== null);
+    },
   });
   private readonly audioSubsystem = new AudioSubsystem({
     backend: "web-audio",
