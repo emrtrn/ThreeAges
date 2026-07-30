@@ -97,7 +97,7 @@ Uygulama kararı (2026-07-30): mesh renderer, her kaynak GLTF içindeki render e
 - [x] Renderer Type seçicisi (`Sprite` / `3D Model`) ekle.
 - [ ] `3D Model` seçildiğinde Content Drawer uyumlu modelleri filtreleyen asset picker, seçili modeller listesi, kaldırma ve sıra/random seçim denetimleri ekle.
 - [x] Mesh'e özgü alanları göster; sprite'a özgü texture/subUV/softness alanlarını bağlama göre gizle veya devre dışı bırak.
-- [ ] Mevcut canlı preview'ı seçilen gerçek modelle güncelle; model yüklenirken belirgin loading/invalid durumları göster.
+- [x] Mevcut canlı preview'ı seçilen gerçek modelle güncelle; model yüklenirken belirgin loading/invalid durumları göster.
 - [ ] Undo/redo, dirty state, save/reload ve klavye ile erişilebilir alanların tüm yeni kontrolleri kapsadığını doğrula.
 - [ ] İçerik browser'ında mesh VFX asseti için net bir ikon/özet oluştur.
 
@@ -106,8 +106,8 @@ Uygulama kararı (2026-07-30): mesh renderer, her kaynak GLTF içindeki render e
 ### Faz 4 — Hasar efekt presetleri ve bina entegrasyonu
 
 - [ ] Genel VFX presetlerine en az `debris-stone`, `debris-wood`, `debris-tile` ve `collapse-dust` ekle; bunlar proje asset id'si yerine genel sözleşme örneği veya proje tarafındaki somut preset olarak konumlandırılsın.
-- [ ] Oyun data/runtime'ında sağlık eşiklerini tanımla: normal (%100–66), hafif hasar (%65–31), ağır hasar (%30–1), çöküş (%0).
-- [ ] Hafif/ağır hasar girişinde dumanı başlat/durdur, materyal/decal/hasarlı modül kararlarını oyun sunum katmanına bağla.
+- [x] Oyun data/runtime'ında sağlık eşiklerini tanımla: normal (%100–66), hafif hasar (%65–31), ağır hasar (%30–1), çöküş (%0).
+- [x] Hafif/ağır hasar girişinde dumanı başlat/durdur, materyal/decal/hasarlı modül kararlarını oyun sunum katmanına bağla.
 - [ ] Hafif titreşim ve seyrek debris tetiklerini efekt assetlerinden ayarlanabilir kıl; sürekli olarak her kare yeni efekt oluşturmaktan kaçın.
 - [ ] %0 olayında ortak kontrollü çöküş zaman çizelgesini çalıştır: kısa titreme, alçalma/eğilme, burst debris + dust, yıkıntı sunumu ve gameplay collider/state geçişi.
 - [ ] Birim/yapı için aynı VFX'in istemsizce üst üste çoğalmasını engelleyecek lifecycle/cleanup kurallarını ekle.
@@ -116,7 +116,7 @@ Uygulama kararı (2026-07-30): mesh renderer, her kaynak GLTF içindeki render e
 
 ### Faz 5 — Kalite, performans ve içerik üretim rehberi
 
-- [ ] `particleDensity` kalite ayarının hem sprite hem mesh spawn/adet sınırına nasıl uygulanacağını tanımla ve uygula.
+- [x] `particleDensity` kalite ayarının hem sprite hem mesh spawn/adet sınırına nasıl uygulanacağını tanımla ve uygula.
 - [ ] Uzak mesafe, görünmez emitter ve eşzamanlı yıkım için culling/limit davranışını ölç.
 - [ ] RTS performans senaryosuna birden fazla hasarlı/yıkılan bina örneği ekle; draw call, üçgen, aktif instance ve frame-time telemetrisi kaydet.
 - [ ] Orta/düşük kalite profillerinde beklenen görsel azaltmayı doğrula; gameplay olayları aynı kalmalı, yalnızca efekt yoğunluğu azalmalı.

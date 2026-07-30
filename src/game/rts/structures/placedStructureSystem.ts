@@ -10,9 +10,11 @@
  */
 import {
   BoxGeometry,
+  Color,
   Group,
   Mesh,
   MeshStandardMaterial,
+  type Material,
   type Object3D,
   type Vector3,
 } from "three";
@@ -36,7 +38,7 @@ const CONSTRUCTION_OPACITY = 0.5;
 const COMPLETION_DROP_DURATION = 0.2;
 const COMPLETION_DROP_HEIGHT = 2.5;
 /**
- * How long a razed building's husk sinks and fades for. Presentation only: the
+ * How long a razed building's husk falls and fades for. Presentation only: the
  * structure leaves the simulation on the frame its health runs out, so its
  * footprint stops blocking navigation and its territory is recomputed
  * immediately. Letting the husk outlive the record is the whole point — a
@@ -44,9 +46,58 @@ const COMPLETION_DROP_HEIGHT = 2.5;
  * than as the thing the player just lost.
  */
 const COLLAPSE_DURATION = 0.9;
-const COLLAPSE_SINK_DEPTH = 2.2;
+const COLLAPSE_SINK_DEPTH = 0.65;
 /** Economy scenery that reserves build space but units may walk through. */
 const UNIT_PASS_THROUGH_STRUCTURE_IDS = new Set(["farm", "lumber_camp"]);
+
+/** Health-driven presentation stages shared by every placed structure. */
+export type StructureDamageStage = "normal" | "light" | "heavy" | "destroyed";
+
+/**
+ * Keep the visual thresholds in one authoritative place. The inclusive bounds
+ * intentionally read as 100–66, 65–31, 30–1, then 0 in the authoring plan.
+ */
+export function structureDamageStage(healthRatio: number): StructureDamageStage {
+  if (healthRatio <= 0) return "destroyed";
+  if (healthRatio <= 0.3) return "heavy";
+  if (healthRatio < 0.66) return "light";
+  return "normal";
+}
+
+interface DamageMaterialOverride {
+  readonly mesh: Mesh;
+  readonly original: Material | Material[];
+  replacement: Material | Material[];
+}
+
+interface DamagePresentation {
+  readonly visual: Object3D;
+  readonly materials: readonly DamageMaterialOverride[];
+  readonly baseRotationX: number;
+  readonly baseRotationZ: number;
+  stage: Exclude<StructureDamageStage, "normal" | "destroyed">;
+  elapsed: number;
+}
+
+interface CollapseAnimation {
+  readonly object: Object3D;
+  readonly originY: number;
+  readonly originRotationZ: number;
+  readonly fallDirection: number;
+  elapsed: number;
+}
+
+/** Game-presentation events, kept separate from combat and removal rules. */
+export interface StructureDamagePresentationHandler {
+  /** Fires once on a health-stage transition for a completed structure. */
+  onDamageStageChanged?(
+    structure: PlacedStructure,
+    previous: StructureDamageStage,
+    next: StructureDamageStage,
+  ): void;
+  /** Fires once when the record leaves gameplay and its visible collapse begins. */
+  onCollapse?(structure: PlacedStructure): void;
+}
 
 export interface PlacedStructure {
   readonly id: number;
@@ -110,7 +161,12 @@ export class PlacedStructureSystem {
    * is gone by the time these animate — nothing may resolve a husk back to a
    * building that no longer exists.
    */
-  private readonly collapses: { readonly object: Object3D; elapsed: number }[] = [];
+  private readonly collapses: CollapseAnimation[] = [];
+  /** Per-building copies keep health tinting from mutating shared GLTF materials. */
+  private readonly damagePresentations = new Map<PlacedStructure, DamagePresentation>();
+  /** Last announced health state; prevents presentation events from repeating per frame. */
+  private readonly damageStages = new Map<PlacedStructure, StructureDamageStage>();
+  private damagePresentationHandler: StructureDamagePresentationHandler | null = null;
   /**
    * Monotonic counter of every membership change (place/cancel/destroy/clear).
    * Presentation that mirrors the standing set — the terrain's building ground
@@ -231,6 +287,7 @@ export class PlacedStructureSystem {
 
   /** Advance the presentation-only completion drop using real rendered time. */
   updateVisualAnimations(deltaSeconds: number): void {
+    for (const structure of this.structures) this.updateDamagePresentation(structure, deltaSeconds);
     for (const [structure, animation] of this.dropAnimations) {
       if (!this.structures.includes(structure) || animation.visual.parent !== structure.object) {
         this.dropAnimations.delete(structure);
@@ -246,10 +303,12 @@ export class PlacedStructureSystem {
       if (!collapse) continue;
       collapse.elapsed = Math.min(COLLAPSE_DURATION, collapse.elapsed + Math.max(0, deltaSeconds));
       const progress = collapse.elapsed / COLLAPSE_DURATION;
-      // Eased so the building hesitates before it goes: a linear sink reads as
-      // an elevator, not a collapse.
-      collapse.object.position.y = -COLLAPSE_SINK_DEPTH * progress * progress;
-      fadeObject(collapse.object, 1 - progress);
+      // A late, biased rotation reads as a fall; the short ground settle avoids
+      // the old transparent-elevator effect while retaining a bounded cleanup.
+      const fall = progress * progress;
+      collapse.object.rotation.z = collapse.originRotationZ + collapse.fallDirection * 0.55 * fall;
+      collapse.object.position.y = collapse.originY - COLLAPSE_SINK_DEPTH * fall;
+      fadeObject(collapse.object, 1 - Math.max(0, (progress - 0.55) / 0.45));
       if (progress >= 1) {
         this.root.remove(collapse.object);
         disposeObjectMeshes(collapse.object);
@@ -281,8 +340,14 @@ export class PlacedStructureSystem {
     this.completedVisualHandler = handler;
   }
 
+  /** Opt-in bridge for smoke/debris or other game-owned damage presentation. */
+  setDamagePresentationHandler(handler: StructureDamagePresentationHandler | null): void {
+    this.damagePresentationHandler = handler;
+  }
+
   /** Swap a completed box for an externally loaded building model. */
   setCompletedVisual(structure: PlacedStructure, visual: Object3D): void {
+    this.clearDamagePresentation(structure);
     this.removeVisual(structure, "rts-complete-building-placeholder");
     this.removeVisual(structure, "rts-complete-building-model");
     this.removeVisual(structure, "rts-construction-building-model");
@@ -295,6 +360,7 @@ export class PlacedStructureSystem {
 
   /** Show the finished model as a translucent in-progress construction site. */
   setConstructionVisual(structure: PlacedStructure, visual: Object3D): void {
+    this.clearDamagePresentation(structure);
     this.removeVisual(structure, "rts-construction-building-model");
     visual.name = "rts-construction-building-model";
     setObjectOpacity(visual, CONSTRUCTION_OPACITY);
@@ -358,6 +424,7 @@ export class PlacedStructureSystem {
   }
 
   clear(): void {
+    for (const structure of this.damagePresentations.keys()) this.clearDamagePresentation(structure);
     for (const structure of this.structures) this.disposeStructure(structure);
     this.structures.length = 0;
     this.version += 1;
@@ -368,6 +435,7 @@ export class PlacedStructureSystem {
       disposeObjectMeshes(collapse.object);
     }
     this.collapses.length = 0;
+    this.damageStages.clear();
   }
 
   /**
@@ -377,6 +445,9 @@ export class PlacedStructureSystem {
    * the scene so the collapse is visible.
    */
   private beginCollapse(structure: PlacedStructure): void {
+    this.clearDamagePresentation(structure);
+    this.damageStages.delete(structure);
+    this.damagePresentationHandler?.onCollapse?.(structure);
     this.unregisterPickTargets(structure.object);
     this.dropAnimations.delete(structure);
     this.pickVolumes.delete(structure);
@@ -385,10 +456,19 @@ export class PlacedStructureSystem {
     // so the husk needs its own copies before anything fades them. This clones
     // once; the per-frame fade then mutates those copies in place.
     setObjectOpacity(structure.object, 1);
-    this.collapses.push({ object: structure.object, elapsed: 0 });
+    this.collapses.push({
+      object: structure.object,
+      originY: structure.object.position.y,
+      originRotationZ: structure.object.rotation.z,
+      // Stable per structure: repeated previews do not flip a building randomly.
+      fallDirection: structure.id % 2 === 0 ? 1 : -1,
+      elapsed: 0,
+    });
   }
 
   private disposeStructure(structure: PlacedStructure): void {
+    this.clearDamagePresentation(structure);
+    this.damageStages.delete(structure);
     this.unregisterPickTargets(structure.object);
     this.root.remove(structure.object);
     this.dropAnimations.delete(structure);
@@ -425,6 +505,87 @@ export class PlacedStructureSystem {
     this.registerPickTargets(structure, completed);
     this.fitPickVolume(structure, completed);
     this.completedVisualHandler?.(structure);
+  }
+
+  /** Applies the low-cost, data-independent part of the damage presentation. */
+  private updateDamagePresentation(structure: PlacedStructure, deltaSeconds: number): void {
+    const stage = structure.construction.complete ? structureDamageStage(structure.health.ratio) : "normal";
+    const previous = this.damageStages.get(structure) ?? "normal";
+    if (stage !== previous) {
+      this.damageStages.set(structure, stage);
+      this.damagePresentationHandler?.onDamageStageChanged?.(structure, previous, stage);
+    } else if (!this.damageStages.has(structure)) {
+      this.damageStages.set(structure, stage);
+    }
+    if (!structure.construction.complete) {
+      this.clearDamagePresentation(structure);
+      return;
+    }
+    if (stage === "normal" || stage === "destroyed") {
+      this.clearDamagePresentation(structure);
+      return;
+    }
+    const visual = this.completedVisual(structure);
+    if (!visual) return;
+    let presentation = this.damagePresentations.get(structure);
+    if (presentation?.visual !== visual) {
+      this.clearDamagePresentation(structure);
+      presentation = this.createDamagePresentation(visual, stage);
+      this.damagePresentations.set(structure, presentation);
+    } else if (presentation.stage !== stage) {
+      presentation.stage = stage;
+      for (const entry of presentation.materials) {
+        disposeMaterials(entry.replacement);
+        entry.replacement = createDamagedMaterials(entry.original, stage);
+        entry.mesh.material = entry.replacement;
+      }
+    }
+    presentation.elapsed += Math.max(0, deltaSeconds);
+    const intensity = stage === "heavy" ? 1 : 0.28;
+    // Imperceptible at rest, but enough irregularity that a critically damaged
+    // building reads as unstable before it reaches zero health.
+    visual.rotation.x = presentation.baseRotationX + Math.sin(presentation.elapsed * 10.7) * 0.006 * intensity;
+    visual.rotation.z = presentation.baseRotationZ + Math.sin(presentation.elapsed * 7.3 + structure.id) * 0.011 * intensity;
+  }
+
+  private completedVisual(structure: PlacedStructure): Object3D | null {
+    return structure.object.getObjectByName("rts-complete-building-model")
+      ?? structure.object.getObjectByName("rts-complete-building-placeholder")
+      ?? null;
+  }
+
+  private createDamagePresentation(
+    visual: Object3D,
+    stage: Exclude<StructureDamageStage, "normal" | "destroyed">,
+  ): DamagePresentation {
+    const materials: DamageMaterialOverride[] = [];
+    visual.traverse((child) => {
+      if (!(child instanceof Mesh)) return;
+      const original = child.material;
+      const replacement = createDamagedMaterials(original, stage);
+      child.material = replacement;
+      materials.push({ mesh: child, original, replacement });
+    });
+    return {
+      visual,
+      materials,
+      baseRotationX: visual.rotation.x,
+      baseRotationZ: visual.rotation.z,
+      stage,
+      elapsed: 0,
+    };
+  }
+
+  private clearDamagePresentation(structure: PlacedStructure): void {
+    const presentation = this.damagePresentations.get(structure);
+    if (!presentation) return;
+    for (const entry of presentation.materials) {
+      entry.mesh.material = entry.original;
+      disposeMaterials(entry.replacement);
+    }
+    presentation.visual.rotation.x = presentation.baseRotationX;
+    presentation.visual.rotation.z = presentation.baseRotationZ;
+    this.damagePresentations.delete(structure);
   }
 
   /**
@@ -512,6 +673,30 @@ function fadeObject(root: Object3D, opacity: number): void {
     const materials = Array.isArray(child.material) ? child.material : [child.material];
     for (const material of materials) material.opacity = opacity;
   });
+}
+
+function createDamagedMaterials(
+  source: Material | Material[],
+  stage: Exclude<StructureDamageStage, "normal" | "destroyed">,
+): Material | Material[] {
+  const apply = (material: Material): Material => {
+    const copy = material.clone();
+    copy.userData.rtsOwnedByStructure = true;
+    const colorMaterial = copy as Material & { color?: Color; emissive?: Color };
+    if (colorMaterial.color) {
+      // Colour is deliberately restrained: damage must be readable without
+      // repainting the kingdom/age palette underneath the building model.
+      colorMaterial.color.lerp(new Color("#302c29"), stage === "heavy" ? 0.5 : 0.23);
+      colorMaterial.color.multiplyScalar(stage === "heavy" ? 0.82 : 0.92);
+    }
+    if (colorMaterial.emissive) colorMaterial.emissive.multiplyScalar(stage === "heavy" ? 0.45 : 0.75);
+    return copy;
+  };
+  return Array.isArray(source) ? source.map(apply) : apply(source);
+}
+
+function disposeMaterials(materials: Material | Material[]): void {
+  for (const material of Array.isArray(materials) ? materials : [materials]) material.dispose();
 }
 
 function isSharedModelMesh(object: Object3D): boolean {

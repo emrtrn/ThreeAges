@@ -725,6 +725,13 @@ export class ParticleEffectEditor {
     if (d.renderer.type === "mesh" && d.renderer.modelIds.every((id) => id.trim().length === 0)) {
       out.push("mesh renderer needs at least one static mesh source");
     }
+    if (d.renderer.type === "mesh") {
+      const knownModelIds = new Set(
+        this.assets.filter((asset) => asset.assetType === "staticMesh").map((asset) => asset.id),
+      );
+      const missing = d.renderer.modelIds.filter((id) => id.trim().length > 0 && !knownModelIds.has(id));
+      if (missing.length > 0) out.push(`mesh source is missing from the Content Drawer: ${missing[0]}`);
+    }
     return out;
   }
 
@@ -813,6 +820,11 @@ export class ParticleEffectEditor {
   /** Live alive/capacity readout, polled while the editor is open. */
   private updateHud(): void {
     if (!this.preview) return;
+    const status = this.preview.getStatus();
+    if (status) {
+      this.hudEl.textContent = status;
+      return;
+    }
     const { alive, capacity } = this.preview.getStats();
     this.hudEl.textContent = `Alive ${alive} / ${capacity}`;
   }

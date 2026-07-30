@@ -25,6 +25,7 @@ import {
 } from "three";
 
 import { createSceneRenderer, readRenderMemory, readRenderStats } from "@engine/render-three/renderer";
+import { VfxSubsystem } from "@engine/render-three/vfxSubsystem";
 import { FrameMetricsMonitor } from "@engine/perf/frameMetrics";
 import { AdaptiveQualityController } from "@engine/perf/adaptiveQuality";
 import { classifyBottleneck } from "@engine/perf/bottleneckClassifier";
@@ -43,6 +44,7 @@ import {
 } from "@engine/persistence/userSettingsStore";
 import { createLocalStorageAdapter } from "@engine/persistence/saveGameStore";
 import { logger } from "@/game/core/logger";
+import { projectFileUrl } from "@/project/ProjectSystem";
 import type {
   AiBalance,
   AgeBalance,
@@ -121,7 +123,12 @@ import { RtsMatchClock, formatMatchDuration } from "./match/rtsMatchClock";
 import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
 import type { RtsGraphicsQuality } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
-import { PlacedStructureSystem, type PlacedStructure } from "./structures/placedStructureSystem";
+import {
+  PlacedStructureSystem,
+  structureDamageStage,
+  type PlacedStructure,
+  type StructureDamageStage,
+} from "./structures/placedStructureSystem";
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { StructureConstructionService } from "./structures/structureConstructionService";
 import { KingdomRegistry } from "./kingdom/kingdomRegistry";
@@ -260,6 +267,13 @@ const PLAYER_OWNER: UnitOwner = "player";
 type RtsCommandSubject = "production" | "trade" | "structure" | "orders" | "workers" | "progression";
 /** How long a building's health bar stays up after the last hit it took. */
 const HEALTH_BAR_LINGER_SECONDS = 6;
+/** Content Drawer effect assets used by the first RTS damage presentation pass. */
+const STRUCTURE_DAMAGE_EFFECT_URLS: Readonly<Record<string, string>> = {
+  "starter-fx-smoke-puff": "assets/starter-content/Effects/FX_Smoke_Puff.effect.json",
+};
+const STRUCTURE_DAMAGE_SMOKE_EFFECT = "starter-fx-smoke-puff";
+const LIGHT_DAMAGE_SMOKE_INTERVAL_SECONDS = 1.35;
+const HEAVY_DAMAGE_SMOKE_INTERVAL_SECONDS = 0.65;
 /**
  * Linger key for the command centre. Negative because {@link PlacedStructureSystem}
  * hands out positive ids, so the centre can share the map without colliding with
@@ -460,6 +474,15 @@ export class RtsApp {
   private readonly units = new UnitSystem();
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
+  /** RTS-owned use of the general Forge VFX runtime; effect assets stay editable. */
+  private readonly structureDamageVfx = new VfxSubsystem({
+    resolveEffectUrl: (effectId) => {
+      const path = STRUCTURE_DAMAGE_EFFECT_URLS[effectId];
+      return path ? projectFileUrl(path) : null;
+    },
+  });
+  /** Real-time accumulator per damaged building; avoids a new smoke effect every frame. */
+  private readonly structureSmokeElapsed = new Map<number, number>();
   private readonly roads: RoadGraph;
   private readonly roadDebugView: RoadDebugView;
   private readonly territory = new TerritoryControlSystem(() => this.centers.all().map((center) => ({
@@ -691,6 +714,7 @@ export class RtsApp {
   /** Applies the RTS-supported subset of a shared Forge quality profile. */
   private applyQualitySettings(settings: QualitySettings): void {
     this.qualitySettings = settings;
+    this.structureDamageVfx.setGlobalDensity(settings.particleDensity);
     this.renderer.shadowMap.enabled = settings.shadowsEnabled;
     this.scene.traverse((object) => {
       if (!(object instanceof DirectionalLight) || !object.castShadow) return;
@@ -1274,6 +1298,13 @@ export class RtsApp {
       this.progression.applyToStructure(structure);
       this.applyStructureVisual(structure, true);
     });
+    this.structures.setDamagePresentationHandler({
+      onDamageStageChanged: (structure, _previous, next) => this.onStructureDamageStageChanged(structure, next),
+      onCollapse: (structure) => this.onStructureCollapse(structure),
+    });
+    // Warm at match boot. The calls below still retry safely if a project has
+    // removed this optional starter asset from its manifest.
+    void this.structureDamageVfx.warm(STRUCTURE_DAMAGE_SMOKE_EFFECT);
     void this.loadActorVisuals();
     this.spawnStartingUnits();
     // §59: one fog pass before the first frame is drawn.
@@ -1347,6 +1378,7 @@ export class RtsApp {
     this.projectiles.dispose();
     this.firebrands.dispose();
     this.cannonballs.dispose();
+    this.structureDamageVfx.dispose();
     this.hudBar.dispose();
     this.notificationFeed.dispose();
     this.gameSpeedControls.dispose();
@@ -1429,6 +1461,7 @@ export class RtsApp {
     this.refreshNavigationBlockers();
     this.scene.add(this.centers.root);
     this.scene.add(this.structures.root);
+    this.scene.add(this.structureDamageVfx.root);
     this.scene.add(this.placement.root);
     this.scene.add(this.roadPlacement.root);
     this.scene.add(this.roadDebugView.root);
@@ -1563,6 +1596,7 @@ export class RtsApp {
     // delta: the rings must breathe together and at the same rate at any game speed.
     updateSelectionRingPulse(dt);
     this.structures.updateVisualAnimations(dt);
+    this.updateStructureDamageVfx(dt);
     this.updateHealthBarLinger(dt);
     this.updateWorldProgressOverlay();
     // Presentation runs on the rendered-frame delta, not the simulation's: a
@@ -1973,6 +2007,72 @@ export class RtsApp {
   /** True while a building was hit recently enough to still warrant a bar. */
   private healthBarVisible(key: number): boolean {
     return (this.healthBarLinger.get(key)?.remaining ?? 0) > 0;
+  }
+
+  /** Starts a smoke puff immediately when a completed building crosses a health threshold. */
+  private onStructureDamageStageChanged(structure: PlacedStructure, stage: StructureDamageStage): void {
+    if (!structure.construction.complete || (stage !== "light" && stage !== "heavy")) {
+      this.structureSmokeElapsed.delete(structure.id);
+      return;
+    }
+    this.structureSmokeElapsed.set(structure.id, 0);
+    this.playStructureSmoke(structure);
+  }
+
+  /** A collapse has already left gameplay; this is presentation only. */
+  private onStructureCollapse(structure: PlacedStructure): void {
+    this.structureSmokeElapsed.delete(structure.id);
+    // The existing editable smoke asset stands in for collapse dust until the
+    // project adds its dedicated dust/debris presets in the Content Drawer.
+    this.playStructureSmoke(structure, true);
+  }
+
+  /** Keeps damaged-building smoke sparse and frame-rate independent. */
+  private updateStructureDamageVfx(dt: number): void {
+    this.structureDamageVfx.advance(dt);
+    const active = new Set<number>();
+    for (const structure of this.structures.all()) {
+      if (!structure.construction.complete) continue;
+      const stage = structureDamageStage(structure.health.ratio);
+      if (stage !== "light" && stage !== "heavy") continue;
+      active.add(structure.id);
+      const interval = stage === "heavy"
+        ? HEAVY_DAMAGE_SMOKE_INTERVAL_SECONDS
+        : LIGHT_DAMAGE_SMOKE_INTERVAL_SECONDS;
+      const elapsed = (this.structureSmokeElapsed.get(structure.id) ?? 0) + Math.max(0, dt);
+      if (elapsed >= interval) {
+        this.playStructureSmoke(structure);
+        this.structureSmokeElapsed.set(structure.id, elapsed % interval);
+      } else {
+        this.structureSmokeElapsed.set(structure.id, elapsed);
+      }
+    }
+    for (const id of this.structureSmokeElapsed.keys()) {
+      if (!active.has(id)) this.structureSmokeElapsed.delete(id);
+    }
+  }
+
+  private playStructureSmoke(structure: PlacedStructure, atGround = false): void {
+    const position = this.structureDamageVfxPosition(structure, atGround);
+    if (this.structureDamageVfx.play(STRUCTURE_DAMAGE_SMOKE_EFFECT, { position }) !== null) return;
+    // An early hit before the match-start warm finished should still be visible;
+    // retry once the cached definition settles, without blocking the frame.
+    void this.structureDamageVfx.warm(STRUCTURE_DAMAGE_SMOKE_EFFECT).then((definition) => {
+      if (definition && !this.disposed) {
+        this.structureDamageVfx.play(STRUCTURE_DAMAGE_SMOKE_EFFECT, { position });
+      }
+    });
+  }
+
+  private structureDamageVfxPosition(
+    structure: PlacedStructure,
+    atGround: boolean,
+  ): [number, number, number] {
+    const roofHeight = Math.max(
+      1.2,
+      Math.min(4, Math.max(structure.stats.footprint.width, structure.stats.footprint.depth) * 0.42),
+    );
+    return [structure.x, structure.groundY + (atGround ? 0.15 : roofHeight), structure.z];
   }
 
   private updateWorldProgressOverlay(): void {

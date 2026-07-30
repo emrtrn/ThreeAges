@@ -184,7 +184,10 @@ import {
   snapToPlacementGrid,
   validateBuildingPlacement,
 } from "../src/game/rts/structures/placementGrid";
-import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
+import {
+  PlacedStructureSystem,
+  structureDamageStage,
+} from "../src/game/rts/structures/placedStructureSystem";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { MarketPrices } from "../src/game/rts/economy/marketPricing";
 import { MarketTradeSystem } from "../src/game/rts/economy/marketTradeSystem";
@@ -29132,6 +29135,45 @@ check("RTS health clamps damage and healing while exposing current/max/ratio", (
   health.setMax(120);
   assert.deepEqual([health.current, health.max], [50, 120], "raising the ceiling again does not heal");
   assert.throws(() => health.setMax(0), RangeError);
+});
+
+check("RTS structure damage presentation uses the authored 66/31/0 health thresholds", () => {
+  assert.equal(structureDamageStage(1), "normal");
+  assert.equal(structureDamageStage(0.66), "normal", "66% remains normal");
+  assert.equal(structureDamageStage(0.659), "light", "65% enters light damage");
+  assert.equal(structureDamageStage(0.31), "light", "31% remains light damage");
+  assert.equal(structureDamageStage(0.3), "heavy", "30% enters heavy damage");
+  assert.equal(structureDamageStage(0.001), "heavy");
+  assert.equal(structureDamageStage(0), "destroyed");
+});
+
+check("RTS structure damage presentation emits each health transition once and signals collapse", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house balance missing");
+  const structures = new PlacedStructureSystem();
+  const structure = structures.place("player", house, 0, 0);
+  structures.advanceConstruction(structure, house.constructionSeconds);
+  const stages: string[] = [];
+  let collapseCount = 0;
+  structures.setDamagePresentationHandler({
+    onDamageStageChanged: (_structure, previous, next) => stages.push(`${previous}->${next}`),
+    onCollapse: () => { collapseCount += 1; },
+  });
+
+  structures.updateVisualAnimations(0);
+  structure.health.damage(structure.health.max * 0.35);
+  structures.updateVisualAnimations(0.1);
+  structures.updateVisualAnimations(0.1);
+  structure.health.damage(structure.health.max * 0.35);
+  structures.updateVisualAnimations(0.1);
+  assert.deepEqual(stages, ["normal->light", "light->heavy"]);
+
+  structure.health.damage(structure.health.max);
+  updateStructureDestruction(structures);
+  assert.equal(collapseCount, 1, "the visual collapse is announced exactly once");
+  structures.clear();
 });
 
 /**

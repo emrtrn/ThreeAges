@@ -73,6 +73,8 @@ export class ParticleEffectPreviewViewport {
   private speed = 1;
   private loopPreview = true;
   private replayCooldown = 0;
+  /** Short author-facing feedback for asynchronous mesh-source loading. */
+  private previewMessage: string | null = null;
   private disposed = false;
 
   /**
@@ -166,8 +168,14 @@ export class ParticleEffectPreviewViewport {
     return { alive: this.effect.aliveCount(), capacity: this.effect.maxCapacity };
   }
 
+  /** Non-null while a mesh preview is loading or its selected sources are unusable. */
+  getStatus(): string | null {
+    return this.previewMessage;
+  }
+
   private rebuildEffect(): void {
     const revision = ++this.effectRevision;
+    this.previewMessage = null;
     if (this.effect) {
       this.scene.remove(this.effect.object3D);
       this.effect.dispose();
@@ -190,8 +198,12 @@ export class ParticleEffectPreviewViewport {
     runtime: ReturnType<typeof toRuntimeParticleEffect>,
     revision: number,
   ): Promise<void> {
-    const modelIds = runtime.modelIds ?? [];
-    if (!this.resolveModelUrl || modelIds.length === 0) return;
+    const modelIds = (runtime.modelIds ?? []).filter((id) => id.trim().length > 0);
+    if (!this.resolveModelUrl || modelIds.length === 0) {
+      this.setPreviewMessage(revision, "Select at least one static mesh source.");
+      return;
+    }
+    this.setPreviewMessage(revision, `Loading ${modelIds.length} mesh source${modelIds.length === 1 ? "" : "s"}…`);
     const roots = (
       await Promise.all(
         modelIds.map(async (id): Promise<Object3D | null> => {
@@ -205,11 +217,20 @@ export class ParticleEffectPreviewViewport {
         }),
       )
     ).filter((root): root is Object3D => root !== null);
-    if (this.disposed || revision !== this.effectRevision || roots.length === 0) return;
+    if (this.disposed || revision !== this.effectRevision) return;
+    if (roots.length === 0) {
+      this.previewMessage = "No valid static mesh source could be loaded.";
+      return;
+    }
     const effect = new MeshParticleEffect(runtime, roots);
     effect.setOrigin(0, 0, 0);
     this.effect = effect;
     this.scene.add(effect.object3D);
+    this.previewMessage = null;
+  }
+
+  private setPreviewMessage(revision: number, message: string): void {
+    if (!this.disposed && revision === this.effectRevision) this.previewMessage = message;
   }
 
   /** Rebuilds the fixed-bounds wireframe from `system.bounds` (or hides it). */

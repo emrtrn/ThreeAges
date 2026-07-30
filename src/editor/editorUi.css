@@ -5375,6 +5375,21 @@
 }
 .pfx-row-label { font-size: 11px; color: #aeb7bf; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.pfx-button,
+.pfx-row-remove {
+  height: 24px;
+  border: 1px solid var(--forge-border-mid);
+  border-radius: 4px;
+  background: #24282e;
+  color: #e6ebee;
+  font-size: 11px;
+  cursor: pointer;
+}
+.pfx-button { justify-self: start; padding: 0 8px; }
+.pfx-row-remove { width: 24px; padding: 0; color: #e7a29a; }
+.pfx-button:hover,
+.pfx-row-remove:hover { background: #30363d; border-color: var(--forge-warning); }
+
 .pfx-input {
   width: 100%;
   min-width: 0;
