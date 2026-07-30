@@ -16,11 +16,24 @@
  * slice — the RTS keeps its nav authority in markers/balance, not in level art.
  * Landscape, atmosphere and post-process are future extensions of this same host.
  */
-import { Box3, Group, Mesh, RepeatWrapping, TextureLoader, type DirectionalLight, type Material, type Object3D, type Texture, type WebGLRenderer } from "three";
+import { Box3, Group, Mesh, RepeatWrapping, TextureLoader, Vector3, type DirectionalLight, type Material, type Object3D, type Texture, type WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { InstancedMesh } from "three";
 
+import { assetPath, assetRecordById } from "@engine/assets/manifest";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
+import { FoliageRenderBinding, foliageInstanceFromRoll } from "@engine/render-three/foliage";
+import {
+  foliageDataPath,
+  normalizeFoliageData,
+  normalizeFoliageType,
+  type ForgeFoliageTypeDef,
+  type LayoutFoliageData,
+  type LayoutFoliageGroup,
+} from "@engine/scene/foliage";
+import { generateLandscapeFoliageSamples } from "@engine/scene/landscapeFoliage";
+import { makeFoliageRng, rollFoliageInstance } from "@engine/scene/foliagePaint";
+import { readRotation } from "@engine/scene/transform";
 import { createLandscapeObject, type LandscapeLayerColors, type LandscapeLayerTexture, type LandscapeObject, type LandscapeRenderItem } from "@engine/render-three/landscape";
 import { createRiverWaterObject, disposeRiverWaterObject, resolveRiverWater, type RiverWaterObjectLike, type RiverWaterRenderItem } from "@engine/render-three/riverWater";
 import { riverWaterReflectionGroupKey } from "@engine/scene/riverWater";
@@ -84,6 +97,16 @@ export interface AuthoredWorldHandle {
    * `landscapeCount` is 0. Ordered as the layout's `landscapes` are.
    */
   readonly landscapes: readonly MountedLandscape[];
+  /** How many foliage instances this world mounted (0 when the Level paints none). */
+  readonly foliageInstanceCount: number;
+  /**
+   * Advances the foliage distance cull for a rendered frame. A no-op when the
+   * Level paints no foliage, or when every Foliage Type disables distance
+   * culling, so a shell can call it unconditionally from its frame loop.
+   * `cullDistanceScale` is the runtime quality knob (see
+   * {@link QualitySettings.foliageCullDistanceScale}).
+   */
+  updateFoliageCulling(cameraPosition: Vector3, cullDistanceScale?: number): void;
   /** Detach from the scene and release every GPU resource this handle created. */
   dispose(): void;
 }
@@ -95,6 +118,13 @@ export interface AuthoredWorldOptions {
   readonly renderer: WebGLRenderer;
   /** Resolves a public-root-relative asset path to a fetchable URL. */
   readonly resolveUrl: (path: string) => string;
+  /**
+   * Public-root-relative path of the Level this layout came from. Only the
+   * *sidecars* keyed off the Level file need it — currently the painted foliage
+   * (`<level>.foliage.json`), which the layout itself does not carry. Omitted
+   * (or pointing at a Level with no sidecar) simply mounts no foliage.
+   */
+  readonly levelPath?: string;
   /**
    * Bounds a directional light's shadow frustum is fitted to. A large top-down
    * world (the RTS field is ~140 units wide) needs a far wider ortho frustum than
@@ -178,6 +208,52 @@ async function resolveLandscapeLayerTextures(
       } satisfies LandscapeLayerTexture;
     }),
   );
+}
+
+/**
+ * Loads a Level's painted-foliage sidecar (`<level>.foliage.json`) plus every
+ * Foliage Type asset its groups/rules reference, resolved id → path through the
+ * manifest. Mirrors {@link ./foliageLoader} but fetches through this host's
+ * `resolveUrl` (the same reason the manifest fetch is inlined above), so a fork
+ * that serves its project files from elsewhere keeps one URL policy. A missing
+ * sidecar is the normal "this Level paints no foliage" case, not a failure.
+ */
+async function fetchAuthoredFoliage(
+  levelPath: string,
+  manifest: AssetManifest,
+  resolveUrl: (path: string) => string,
+  warn: (message: string, error?: unknown) => void,
+): Promise<{ data: LayoutFoliageData; types: Map<string, ForgeFoliageTypeDef> } | null> {
+  let data: LayoutFoliageData;
+  try {
+    const response = await fetch(resolveUrl(foliageDataPath(levelPath)), { cache: "no-cache" });
+    if (!response.ok) return null; // no sidecar = no painted foliage
+    data = normalizeFoliageData(await response.json());
+  } catch (error) {
+    warn(`Authored-world foliage sidecar failed to load: ${foliageDataPath(levelPath)}`, error);
+    return null;
+  }
+  if (data.groups.length === 0 && (data.landscapeRules?.length ?? 0) === 0) return null;
+  const typeIds = new Set([
+    ...data.groups.map((group) => group.foliageTypeId),
+    ...(data.landscapeRules ?? []).map((rule) => rule.foliageTypeId),
+  ]);
+  const types = new Map<string, ForgeFoliageTypeDef>();
+  await Promise.all([...typeIds].map(async (id) => {
+    const record = assetRecordById(manifest, id);
+    if (!record) {
+      warn(`Authored-world Foliage Type is not in the manifest: ${id}`);
+      return;
+    }
+    try {
+      const response = await fetch(resolveUrl(assetPath(record)), { cache: "no-cache" });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      types.set(id, normalizeFoliageType(await response.json()));
+    } catch (error) {
+      warn(`Authored-world Foliage Type failed to load: ${id}`, error);
+    }
+  }));
+  return types.size > 0 ? { data, types } : null;
 }
 
 /**
@@ -390,6 +466,74 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     riverWaterObjects.push(object);
   }
 
+  // Painted foliage. It lives in a `<level>.foliage.json` sidecar rather than in
+  // the layout, so without this block a Level's foliage exists only in the editor
+  // viewport and in `RuntimeSceneApp` — a shell mounting its world through this
+  // host would silently drop every painted tree. Decorative only (no collision,
+  // no nav), matching the runtime path; a broken sidecar/type/mesh degrades to
+  // "no foliage" instead of failing the whole world.
+  let foliageBinding: FoliageRenderBinding | null = null;
+  let foliageInstanceCount = 0;
+  const foliage = options.levelPath
+    ? await fetchAuthoredFoliage(options.levelPath, assetManifest, resolveUrl, warn)
+    : null;
+  if (foliage) {
+    // Foliage meshes are not layout instances, so `sceneModelAssetIds` never
+    // declared them — load whichever ones the world does not already hold.
+    await Promise.all([...new Set(
+      [...foliage.types.values()].map((type) => type.meshAssetId).filter((id) => id && !models.has(id)),
+    )].map(async (assetId) => {
+      const entry = modelEntries.get(assetId);
+      if (!entry) {
+        warn(`Authored-world foliage mesh is not in the manifest: ${assetId}`);
+        return;
+      }
+      try {
+        models.set(assetId, await loader.loadAsync(resolveUrl(entry.path)));
+      } catch (error) {
+        warn(`Authored-world foliage mesh failed to load: ${assetId}`, error);
+      }
+    }));
+    // Landscape-rule foliage is transient render data: the sidecar stores the
+    // rule, and the instances are re-derived here from the same seeded sampler
+    // the editor previews with, so Play matches the viewport scatter exactly.
+    const generated: LayoutFoliageGroup[] = [];
+    for (const rule of foliage.data.landscapeRules ?? []) {
+      const index = landscapes.findIndex((entry) => entry.id === rule.landscapeId);
+      const actor = index >= 0 ? landscapes[index]! : null;
+      const type = foliage.types.get(rule.foliageTypeId);
+      if (!actor || !type) continue;
+      const instances = generateLandscapeFoliageSamples(rule, {
+        id: actor.id,
+        position: [...actor.position],
+        rotation: readRotation(actor),
+        data: mountedLandscapes[index]!.data,
+      }).map((sample) =>
+        foliageInstanceFromRoll(type, rollFoliageInstance(type, sample, makeFoliageRng(sample.seed))),
+      );
+      if (instances.length === 0) continue;
+      generated.push({
+        id: `generated-${rule.id}`,
+        foliageTypeId: rule.foliageTypeId,
+        target: { kind: "landscape", id: rule.landscapeId },
+        instances,
+      });
+    }
+    const renderData: LayoutFoliageData = {
+      schema: 1,
+      type: "foliage",
+      groups: [...foliage.data.groups, ...generated],
+    };
+    const binding = new FoliageRenderBinding();
+    binding.rebuild(renderData, {
+      getType: (id) => foliage.types.get(id) ?? null,
+      getModel: (assetId) => models.get(assetId) ?? null,
+    });
+    root.add(binding.root);
+    foliageBinding = binding;
+    for (const group of renderData.groups) foliageInstanceCount += group.instances.length;
+  }
+
   const shadowBounds = options.shadowBounds ?? computeSceneRoomBounds(layout, localBounds);
   const lightRecords: LightObjectRecord[] = [];
   const directionalLights: DirectionalLight[] = [];
@@ -440,6 +584,9 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     // Deform-mesh generators build geometry per spline (not shared with a glTF
     // template), and plugin generators register their own disposals.
     for (const group of splineGeneratedGroups) disposeSplineGeneratedGroup(group);
+    // Foliage batches instance the glTF templates collected above, so this only
+    // has to free the InstancedMeshes themselves.
+    foliageBinding?.dispose();
     for (const source of riverReflectionSources) source.dispose();
     for (const record of lightRecords) {
       const light = record.light as { dispose?: () => void };
@@ -454,6 +601,10 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     directionalLights,
     landscapeCount: landscapeObjects.length,
     landscapes: mountedLandscapes,
+    foliageInstanceCount,
+    updateFoliageCulling: (cameraPosition, cullDistanceScale = 1) => {
+      foliageBinding?.updateCulling(cameraPosition, cullDistanceScale);
+    },
     dispose,
   };
 }

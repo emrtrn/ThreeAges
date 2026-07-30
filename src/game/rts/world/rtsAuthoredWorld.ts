@@ -48,11 +48,18 @@ export function levelAuthoredSun(layout: RoomLayout): LayoutLightActor | null {
   return (layout.lights ?? []).find((light) => light.type === "directional") ?? null;
 }
 
-/** Builds the RTS field's authored static world from a resolved Level layout. */
+/**
+ * Builds the RTS field's authored static world from a resolved Level layout.
+ *
+ * `levelPath` is the Level's public-relative path — it is what lets the host find
+ * the sidecars keyed off the Level file (the painted `<level>.foliage.json`),
+ * which the layout alone does not name. Omitting it mounts the world without them.
+ */
 export function loadRtsAuthoredWorld(
   layout: RoomLayout,
   renderer: WebGLRenderer,
   onWarn?: (message: string, error?: unknown) => void,
+  levelPath?: string,
 ): Promise<AuthoredWorldHandle> {
   return buildAuthoredWorld({
     layout,
@@ -60,5 +67,6 @@ export function loadRtsAuthoredWorld(
     resolveUrl: (path) => projectFileUrl(path),
     shadowBounds: RTS_SHADOW_BOUNDS,
     ...(onWarn ? { onWarn } : {}),
+    ...(levelPath ? { levelPath } : {}),
   });
 }

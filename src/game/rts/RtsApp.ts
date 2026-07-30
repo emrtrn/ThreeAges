@@ -1680,6 +1680,12 @@ export class RtsApp {
     this.notificationFeed.setNotifications(this.notifications.active());
     // Keep the authored sky/cloud domes centered on the camera and advance clouds.
     this.environment.update(dt);
+    // Painted foliage culls per rendered frame against the live quality knob; a
+    // no-op for a Level with no foliage or with distance culling disabled.
+    this.authoredWorld?.updateFoliageCulling(
+      this.cameraController.camera.position,
+      this.qualitySettings.foliageCullDistanceScale,
+    );
     this.tickAdaptiveQuality(dt);
     // Authored Post Process (bloom/SMAA) composits the frame when present; otherwise
     // draw straight through the renderer.
@@ -2780,6 +2786,7 @@ export class RtsApp {
         layout,
         this.renderer,
         (message, error) => this.log.warn(message, error),
+        this.options.levelRef,
       );
       if (this.disposed) {
         handle.dispose();
