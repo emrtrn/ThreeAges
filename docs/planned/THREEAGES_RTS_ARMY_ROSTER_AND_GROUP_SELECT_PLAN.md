@@ -1,6 +1,6 @@
 # ThreeAges RTS Ordu Listesi ve Toplu Seçim Planı
 
-> **Durum:** Faz 1 tamam; Faz 2–5 planlandı
+> **Durum:** Faz 1–2 tamam; Faz 3–5 planlandı
 > **Tarih:** 2026-07-30
 > **Amaç:** Oyuncunun "neyim var?" sorusunu haritadan ayrılmadan yanıtlaması ve
 > aynı yerden "hepsini seç" diyebilmesi. Asker çeşitliliği arttıkça UI'ın
@@ -164,9 +164,13 @@ yeşil, `npm run build:verify` (tsc + vite build + test:engine +
 
 ---
 
-## 4. Faz 2 — HUD ordu şeridi
+## 4. Faz 2 — HUD ordu şeridi — **TAMAMLANDI**
 
 **Öncelik:** Yüksek. Oyuncunun asıl istediği bu.
+
+**Dosyalar:** `ui/rtsArmyRosterStrip.ts` (yeni), `ui/rtsHudBar.ts`
+(`mountStatusControl`), `selection/selectionSystem.ts` (`addUnits`),
+`RtsApp.ts` (`syncArmyRoster`, `selectUnitsOfType`), `style.css`.
 
 ### Yerleşim
 
@@ -191,9 +195,14 @@ ve boşta olan varsa küçük rozet. Erişilebilir ad: `"12 İşçi — hepsini 
 | Girdi                 | Davranış                                                    |
 | --------------------- | ----------------------------------------------------------- |
 | Tıklama               | Haritadaki **tüm** bu tip birimleri seç (`selection.selectUnits`). |
-| `Shift` + tıklama     | Mevcut seçime ekle.                                          |
+| `Shift` + tıklama     | Mevcut seçime ekle (`selection.addUnits`); kamera oynamaz.   |
 | Aynı çipe tekrar tıkla | Kamerayı bu tipten bir sonraki birime taşı (döngüsel).       |
 | Boş liste             | Çip hiç çizilmez (0 gösterilmez).                            |
+
+Kamera turu neden ilk tıklamada değil: ilk basış "bunları seç", ikinci basış
+"peki neredeler" — farklı iki niyet. Tur imleci (`rosterTourTypeId`) başka bir
+çipe basılınca ve maç yeniden başlayınca sıfırlanır. `unitsOf` spawn sırasında
+döndüğü için tur, basışlar arasında yeniden karılmayan kararlı bir sıra izler.
 
 Çift tıklamayla rol seçimi ([selectionSystem.ts:137](../../src/game/rts/selection/selectionSystem.ts#L137))
 **kalır**; çip onun keşfedilebilir karşılığıdır. İkisi de `selectUnits` üzerinden
@@ -201,12 +210,16 @@ gider, yani seçim kuralları tek yerde.
 
 ### Performans
 
-`syncHudBar` her karede çağrılıyor. Kural:
+`syncHudBar` her karede çağrılıyor. İki kademeli kapı uygulandı:
 
-- Çip DOM'u yalnız **tip kümesi** değişince yeniden kurulur.
-- Sayı/rozet metni mevcut hücre-diff kuralıyla güncellenir
-  (`if (cell.textContent !== text)`) — `RtsHudBar`'ın zaten uyduğu kural.
-- Roster tek geçişte kurulur (`unitsOf(player)` üzerinde bir `for`).
+1. **İmza** (`armyRosterSignature`) her şeyi kapatır — bir satırın çizdiği
+   herhangi bir sayı değişmediyse hiçbir DOM'a dokunulmaz.
+2. **Düzen** (tip kimliği listesi) yalnız düğmelerin yeniden kurulmasını
+   kapatır. Sayı birim üretildikçe/öldükçe sürekli oynar; tip kümesi bir maçta
+   birkaç kez değişir, ve yeni DOM yalnız onun için gerekir.
+
+Sayı/rozet metni mevcut hücre-diff kuralıyla güncellenir
+(`if (cell.textContent !== text)`) — `RtsHudBar`'ın zaten uyduğu kural.
 
 ### Erişilebilirlik
 
@@ -214,7 +227,58 @@ gider, yani seçim kuralları tek yerde.
 sürekli böler. `aria-label` + `title` güncellenir, bu kadar. (HUD'daki lojistik
 uyarısının `polite` olması bilinçliydi; bu farklı bir okuma.)
 
+Erişilebilir ad sayıyı **adlandırır**: `"12 İşçi, 3 boşta — hepsini seç"`.
+Yalnız `12` bir isim değildir, ve dar ekranda ikon gizlendiği için ekranda
+kalan tek şey odur.
+
+### Dar ekran
+
+- `≤1400px`: çip küçülür, ikon 16px.
+- `≤1180px`: ikon gizlenir, sayı kalır — kaynak hücrelerinin aynı kararı
+  (miktar kalır, etiket/gelir gider). Düğme düğme olarak kalır.
+
+### Testler
+
+`check("a roster chip's bulk select replaces, and its Shift half adds")`:
+sade tıklama değiştirir, Shift ekler, düşman/ölü birim toplu eklemeye giremez,
+boş ekleme seçimi silmez (son birimi ölen bir çipin tıklaması), yapı seçimi
+orduya geçince düşer, ve roster'ın `selected` sütunu seçim sistemiyle uyuşur.
+
+Şeridin kendisi DOM olduğu için engine testlerinin kapsamı dışında; test edilen
+şey onu besleyen model ve arkasındaki seçim fiili.
+
 ---
+
+## 4b. Seçim panelini aynı dile getirme — **TAMAMLANDI**
+
+Faz 2 bittiğinde HUD tipe göre sayıyordu ama seçim paneli hâlâ **role** göre
+grupluyordu (`describeUnits`, `new Map<UnitRoleId, number>()`). İkinci bir
+muhafız tipi eklendiği gün panel ikisini tek satırda birleştirip birinin
+ikonunu ikisi için gösterecekti — HUD doğru sayarken panelin yanlış sayması.
+
+- `describeUnits` artık `describeArmyRoster`'ı kullanıyor. Paylaşılan model,
+  paylaşılan sıra: kompozisyon şeridi ile HUD şeridi aynı düzende okunuyor,
+  oyuncu tek bir "bu grup nedir" okuması öğreniyor.
+- Başlık, en kalabalık **savaş tipini** adlandırıyor (eskiden rol). Eşitlik
+  roster sırasına düşüyor, marquee'nin ilk süpürdüğü birime değil — aynı grubu
+  yeniden seçmek artık her seferinde aynı başlığı veriyor.
+- `onSelectDoubleClick` de tipe geçti. Çift tıklama, o birimin HUD çipine
+  tıklamanın dünyadaki ikizi; ikisinin farklı cevap vermesi birini tuzağa
+  çevirirdi.
+- `RosterUnit` sadeleşti: `{ stats }`. `typeId` alanı `stats.id` ile
+  gereksizdi ve birbiriyle çelişebilecek ikinci bir alan demekti. Yan etkisi
+  iyi — `SelectedUnitView` artık `RosterUnit`'i olduğu gibi karşılıyor.
+
+**Testler:** çift tıklama testine ikinci bir `role: "guard"` tipi eklendi ve
+sadece kendi tipini seçtiği pinlendi; seçim paneli testine tip bazlı
+kompozisyon şeridi ve eşitlik-kararlılığı eklendi.
+
+**Yolda bulunan bir hata:** `tools/engine-tests.ts` içindeki
+`new SelectionSystem(canvas, camera, units, marquee)` çağrısı altı parametreli
+ctor'a dört argüman veriyordu; `structures` ve `centers` çalışma zamanında
+`undefined` kalıyordu. Test yalnız şanstan geçiyordu (tıklamalar hep bir birime
+isabet ettiği için `raycastStructure` hiç çağrılmıyordu). Düzeltildi — sebebi
+için bkz. §10.
 
 ## 5. Faz 3 — Nüfus kırılım paneli
 
@@ -308,7 +372,7 @@ Bunlar şimdi **yazılmaz**, ama Faz 1–2 bunları mümkün kılacak şekilde y
 
 - [x] **Faz 1** — `UnitBalanceStats.id` + `Unit.typeId`, `describeArmyRoster`,
       engine testleri. *(2026-07-30)*
-- [ ] **Faz 2** — HUD ordu şeridi + tıkla-seç.
+- [x] **Faz 2** — HUD ordu şeridi + tıkla-seç. *(2026-07-31)*
 - [ ] **Faz 3** — Nüfus kırılım paneli; işçi kümesi oraya taşınır.
 - [ ] **Faz 4** — Kontrol grupları (önce kısayol çakışması kararı).
 - [ ] **Faz 5** — Büyüme kancaları, ihtiyaç doğdukça.
@@ -316,3 +380,23 @@ Bunlar şimdi **yazılmaz**, ama Faz 1–2 bunları mümkün kılacak şekilde y
 Her fazdan sonra: `npx tsc --noEmit`, `npm run test:engine`,
 ve görsel kabul için oyunu açıp kullanıcıya sormak
 (CLAUDE.md: *Visual acceptance is the user's call*).
+
+---
+
+## 10. Bu planın dışında kalan bir bulgu: `tools/` tip denetiminde değil
+
+`tsconfig.json`'daki `include` listesi `["src", "engine", "editor", "builder",
+"game", "project", "vite.config.ts"]` — **`tools` yok**. `npm run test:engine`
+ise esbuild ile paketliyor, ve esbuild tip denetimi yapmaz, sadece tipleri
+söker. Sonuç: `tools/engine-tests.ts` (40 bin satır, projenin tek test yüzeyi)
+hiçbir kapıda tip denetiminden geçmiyor.
+
+§4b'deki dört argümanlı ctor çağrısı bunun ürünü. Aynı sınıftan başkaları da
+olabilir: `include`'a `tools` eklenince **221 hata** çıkıyor. Çoğu mekanik —
+aynı three.js sembolleri iki ayrı `import` bloğunda, kullanılmayan bir import —
+ama içlerinde gerçek olanlar da var (`Property 'skeleton' does not exist on
+type 'never'`).
+
+Bu, roster planının parçası değil ve buraya sığmaz; ayrı bir temizlik işi
+olarak ele alınmalı. Not burada duruyor çünkü bulunduğu yer burasıydı:
+**bu depoda bir testin derlendiği tek an, çalıştığı andır.**

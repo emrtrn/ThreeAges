@@ -98,7 +98,7 @@ export const DEFAULT_RTS_CAMERA_CONFIG: RtsCameraConfig = {
   panReferenceDistance: 34,
   zoomStep: 0.15,
   zoomLerpRate: 12,
-  bounds: { minX: -32, maxX: 32, minZ: -40, maxZ: 45 },
+  bounds: { minX: -60, maxX: 60, minZ: -60, maxZ: 60 },
   edgeScroll: { enabled: false, marginPx: 12 },
   fovDeg: 50,
 };

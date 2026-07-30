@@ -29138,6 +29138,77 @@ check("RTS a building is selected through the gaps in its own model", () => {
   structures.clear();
 });
 
+check("a roster chip's bulk select replaces, and its Shift half adds", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const structures = new PlacedStructureSystem();
+  const units = new UnitSystem();
+  const selection = new SelectionSystem(
+    { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement,
+    new PerspectiveCamera(60, 1, 0.1, 200),
+    units,
+    { show: () => {}, hide: () => {} } as unknown as MarqueeOverlay,
+    structures,
+    new CommandCenterSystem(),
+  );
+
+  const guards = [units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS), units.spawn("player", 2, 0, RTS_TEST_UNIT_STATS)];
+  const archers = [units.spawn("player", 4, 0, RTS_TEST_ARCHER_STATS), units.spawn("player", 6, 0, RTS_TEST_ARCHER_STATS)];
+
+  // A plain chip click answers "these, and only these".
+  selection.selectUnits(guards);
+  assert.deepEqual(selection.selected().map((unit) => unit.id).sort(), guards.map((unit) => unit.id).sort());
+  selection.selectUnits(archers);
+  assert.deepEqual(
+    selection.selected().map((unit) => unit.id).sort(),
+    archers.map((unit) => unit.id).sort(),
+    "a second chip click replaces rather than accumulating",
+  );
+
+  // Shift is how a player assembles a mixed group out of two chips.
+  selection.addUnits(guards);
+  assert.equal(selection.selected().length, 4, "Shift keeps what was already selected");
+  for (const unit of [...guards, ...archers]) assert.ok(unit.selected, `unit ${unit.id} wears its ring`);
+
+  // The roster's own `selected` column is what makes a chip double as a
+  // subgroup readout, so it has to agree with the system that owns selection.
+  const live = new Set(selection.selected());
+  const mixed = describeArmyRoster(units.unitsOf("player"), { isSelected: (unit) => live.has(unit) });
+  assert.deepEqual(
+    mixed.entries.map((entry) => [entry.typeId, entry.selected]),
+    [["guard_placeholder", 2], ["archer_placeholder", 2]],
+  );
+
+  // Nothing the player cannot command may ride in on a bulk add.
+  const enemy = units.spawn("enemy", 8, 0, RTS_TEST_UNIT_STATS);
+  const fallen = units.spawn("player", 10, 0, RTS_TEST_UNIT_STATS);
+  fallen.health.damage(fallen.health.max);
+  selection.addUnits([enemy, fallen]);
+  assert.equal(selection.selected().length, 4, "an enemy or a dead unit is not addable");
+  assert.equal(enemy.selected, false);
+
+  // A building and an army are not one answer: adding units drops the building,
+  // the same rule shift-clicking a unit already follows.
+  const site = structures.place("player", house, 20, 20);
+  structures.advanceConstruction(site, house.constructionSeconds);
+  const model = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
+  structures.setCompletedVisual(site, model);
+  structures.root.updateMatrixWorld(true);
+  selection.selectUnits([]);
+  assert.equal(selection.selected().length, 0);
+
+  // An empty add is a no-op, not a clear: a chip whose last unit died between
+  // the frame that drew it and the click must not wipe the live selection.
+  selection.selectUnits(guards);
+  selection.addUnits([]);
+  assert.equal(selection.selected().length, 2, "an empty bulk add leaves the selection alone");
+
+  units.clear();
+  structures.clear();
+});
+
 check("RTS contextual right-click directs a selected Karakol at an enemy", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -29211,11 +29282,19 @@ check("RTS test-force layout supports the Phase 1 twenty-unit selection target",
   assert.equal(units.unitsOf("player").length, 20);
 });
 
-check("RTS single-click selects one unit and double-click selects every matching role", () => {
+check("RTS single-click selects one unit and double-click selects every matching type", () => {
   const units = new UnitSystem();
   const guards = [
     units.spawn("player", -3, 0, RTS_TEST_UNIT_STATS),
     units.spawn("player", -1, 0, RTS_TEST_UNIT_STATS),
+  ];
+  // A second unit sharing `role: "guard"`. Double-click must not sweep it up
+  // with the plain Guards: the gesture is the in-world twin of clicking that
+  // unit's HUD chip, and the two disagreeing would make one of them a trap.
+  const heavyGuardStats = { ...RTS_TEST_UNIT_STATS, id: "heavy_guard", label: "Ağır Muhafız" } as const;
+  const heavyGuards = [
+    units.spawn("player", -3, 6, heavyGuardStats),
+    units.spawn("player", -1, 6, heavyGuardStats),
   ];
   const archers = [
     units.spawn("player", 1, 0, RTS_TEST_ARCHER_STATS),
@@ -29238,16 +29317,27 @@ check("RTS single-click selects one unit and double-click selects every matching
   camera.updateMatrixWorld(true);
   const canvas = { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement;
   const marquee = { show: () => {}, hide: () => {} } as unknown as MarqueeOverlay;
-  const selection = new SelectionSystem(canvas, camera, units, marquee);
+  const selection = new SelectionSystem(
+    canvas,
+    camera,
+    units,
+    marquee,
+    new PlacedStructureSystem(),
+    new CommandCenterSystem(),
+  );
   const screenPointFor = (unit: Unit) => {
     const projected = new Vector3(unit.position.x, 1, unit.position.z).project(camera);
     return { x: (projected.x * 0.5 + 0.5) * 100, y: (-projected.y * 0.5 + 0.5) * 100 };
   };
 
-  for (const group of [guards, archers, rams]) {
+  for (const group of [guards, archers, rams, heavyGuards]) {
     const point = screenPointFor(group[0]!);
     selection.onSelectDoubleClick(point.x, point.y, false);
-    assert.deepEqual(new Set(selection.selected()), new Set(group));
+    assert.deepEqual(
+      new Set(selection.selected()),
+      new Set(group),
+      "a double-click selects that unit's type and stops there",
+    );
   }
 
   const workerPoint = screenPointFor(workers[0]!);
@@ -39936,7 +40026,7 @@ check("Faz 9 §51: surrender is a defeat with its own reason (plan §51)", () =>
 
 check("the army roster counts unit types, not roles, and orders them from data", () => {
   const of = (stats: UnitBalanceStats, count: number): RosterUnit[] =>
-    Array.from({ length: count }, () => ({ typeId: stats.id, stats }));
+    Array.from({ length: count }, () => ({ stats }));
 
   // The reason this model exists. `UnitRoleId` has four values and will not
   // grow with the roster; variety arrives *inside* a role. A second Guard-role
@@ -40093,7 +40183,32 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
     kind: "units",
     units: [worker(1, "idle"), worker(2, "idle"), worker(3, "idle"), guard(4), guard(5)],
   }) ?? assert.fail("panel missing");
-  assert.equal(mixed.title, "Test Muhafızı", "the dominant combat role labels a mixed group");
+  assert.equal(mixed.title, "Test Muhafızı", "the dominant combat type labels a mixed group");
+  assert.deepEqual(
+    mixed.slots?.map((slot) => [slot.label, slot.count]),
+    [["Test İşçisi", 3], ["Test Muhafızı", 2]],
+    "the composition strip reads in roster order, not in the order the box swept them up",
+  );
+
+  // Composition is counted per unit *type*, not per role. Two units sharing
+  // `role: "guard"` are two rows here for the same reason they are two chips in
+  // the HUD strip — and the panel must not answer differently from the strip
+  // directly above it.
+  const heavy = (id: number): SelectedUnitView => ({
+    ...guard(id),
+    stats: { ...RTS_TEST_UNIT_STATS, id: "heavy_guard", label: "Ağır Muhafız" },
+  });
+  const twoGuardTypes = describeSelection({
+    kind: "units",
+    units: [guard(1), guard(2), heavy(3)],
+  }) ?? assert.fail("panel missing");
+  assert.deepEqual(
+    twoGuardTypes.slots?.map((slot) => [slot.label, slot.count]),
+    [["Ağır Muhafız", 1], ["Test Muhafızı", 2]],
+    "a second Guard-role unit is its own row, under its own name",
+  );
+  assert.equal(twoGuardTypes.title, "Test Muhafızı", "the more numerous type names the group");
+  assert.equal(twoGuardTypes.selectionCount, 3);
 
   // §51 lists the worker panel separately: a Worker has no matchup and no
   // stance, and the army panel has no answer for what it is doing instead.

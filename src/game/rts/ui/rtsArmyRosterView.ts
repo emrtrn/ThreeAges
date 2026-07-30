@@ -26,11 +26,15 @@ import type { SettlementAge, UnitBalanceStats, UnitRoleId } from "../../data/gam
 
 /**
  * The part of a `Unit` this model reads. Structural rather than the class, so
- * the roster stays testable without a scene and cannot reach into movement,
- * combat or presentation state by accident.
+ * the roster stays testable without a scene, cannot reach into movement, combat
+ * or presentation state by accident, and can describe anything that carries
+ * unit stats — `Unit` itself and the selection panel's `SelectedUnitView` both
+ * satisfy it as they stand.
+ *
+ * Just the stats: the type id is `stats.id`, and holding a second copy beside
+ * it would be one more pair of fields that can disagree.
  */
 export interface RosterUnit {
-  readonly typeId: string;
   readonly stats: UnitBalanceStats;
 }
 
@@ -58,7 +62,12 @@ export interface ArmyRosterView {
   readonly totalPopulation: number;
 }
 
-export interface ArmyRosterOptions {
+/**
+ * Generic in the unit type so a caller passing real `Unit`s gets `Unit` back in
+ * its own predicates. Without it every call site would cast to reach the
+ * gameplay state its "is this idle" answer is made of.
+ */
+export interface ArmyRosterOptions<T extends RosterUnit = RosterUnit> {
   /**
    * Whether a unit is free right now.
    *
@@ -68,9 +77,9 @@ export interface ArmyRosterOptions {
    * Defaults to "nothing is idle", which is what a caller with no such systems
    * (a headless fixture) should get.
    */
-  readonly isIdle?: (unit: RosterUnit) => boolean;
+  readonly isIdle?: (unit: T) => boolean;
   /** Whether a unit is in the live selection. Defaults to "nothing is selected". */
-  readonly isSelected?: (unit: RosterUnit) => boolean;
+  readonly isSelected?: (unit: T) => boolean;
 }
 
 /**
@@ -105,9 +114,9 @@ const AGE_ORDER: Record<SettlementAge, number> = {
  * The contract is role → unlock age → label (Turkish collation) → type id, the
  * last purely so two identically labelled types can never swap places.
  */
-export function describeArmyRoster(
-  units: readonly RosterUnit[],
-  options: ArmyRosterOptions = {},
+export function describeArmyRoster<T extends RosterUnit>(
+  units: readonly T[],
+  options: ArmyRosterOptions<T> = {},
 ): ArmyRosterView {
   const isIdle = options.isIdle ?? (() => false);
   const isSelected = options.isSelected ?? (() => false);
@@ -121,10 +130,10 @@ export function describeArmyRoster(
     selected: number;
   }>();
   for (const unit of units) {
-    let group = groups.get(unit.typeId);
+    let group = groups.get(unit.stats.id);
     if (!group) {
       group = { stats: unit.stats, count: 0, idle: 0, selected: 0 };
-      groups.set(unit.typeId, group);
+      groups.set(unit.stats.id, group);
     }
     group.count += 1;
     if (isIdle(unit)) group.idle += 1;

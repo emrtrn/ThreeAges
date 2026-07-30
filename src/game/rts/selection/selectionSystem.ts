@@ -76,6 +76,24 @@ export class SelectionSystem implements RtsPointerHandler {
     this.replaceWith(units.filter((unit) => unit.owner === "player" && !unit.health.depleted));
   }
 
+  /**
+   * Add player units to the live selection, keeping what is already in it.
+   *
+   * The Shift half of a HUD command, and the same gesture the marquee's
+   * `additive` commit performs — so it clears a selected structure for the same
+   * reason: the moment the answer becomes an army, the building is not part of
+   * it.
+   */
+  addUnits(units: readonly Unit[]): void {
+    const additions = units.filter((unit) => unit.owner === "player" && !unit.health.depleted);
+    if (additions.length === 0) return;
+    this.clearStructure();
+    for (const unit of additions) {
+      this.selectedUnits.add(unit);
+      unit.setSelected(true);
+    }
+  }
+
   /** Remove a unit that died or otherwise left the field from the live selection. */
   remove(unit: Unit): void {
     if (!this.selectedUnits.delete(unit)) return;
@@ -132,12 +150,19 @@ export class SelectionSystem implements RtsPointerHandler {
   }
 
   /**
-   * Double-clicking a unit selects every live player unit of its role.
+   * Double-clicking a unit selects every live player unit of its *type*.
+   *
+   * Type, not role: this is the in-world twin of clicking that unit's chip in
+   * the HUD army strip, and the two gestures answering differently — the chip
+   * giving you 5 Muhafız, the double-click giving you 5 Muhafız and 3 Ağır
+   * Muhafız because both are `role: "guard"` — would make one of them a trap.
+   * It is also what the convention means everywhere else: a double-click
+   * selects more of *this*.
    */
   onSelectDoubleClick(x: number, y: number, additive: boolean): void {
     const unit = this.raycastUnit(x, y);
     if (!unit || unit.owner !== "player") return;
-    const matching = this.units.unitsOf("player").filter((candidate) => candidate.role === unit.role);
+    const matching = this.units.unitsOf("player").filter((candidate) => candidate.typeId === unit.typeId);
     if (!additive) {
       this.replaceWith(matching);
       return;

@@ -180,6 +180,8 @@ import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
 import { RoadTerrainPainter } from "./roads/roadTerrainPainter";
 import { simulationSteps, type RtsSimulationSpeed } from "./simulation/simulationSpeed";
 import { RtsHudBar } from "./ui/rtsHudBar";
+import { RtsArmyRosterStrip } from "./ui/rtsArmyRosterStrip";
+import { describeArmyRoster } from "./ui/rtsArmyRosterView";
 import { RtsNotificationCenter } from "./ui/rtsNotifications";
 import { RtsNotificationFeed } from "./ui/rtsNotificationFeed";
 import { RtsAttackWatch } from "./ui/rtsAttackWatch";
@@ -669,6 +671,21 @@ export class RtsApp {
     () => this.assignSelectedIdleWorkers(),
     () => this.togglePause(),
   );
+  /**
+   * The §51 population breakdown: one chip per unit type the player owns, each
+   * a bulk-select for its type. Mounted into the HUD's status cluster below.
+   */
+  private readonly armyRoster = new RtsArmyRosterStrip(
+    (typeId, additive) => this.selectUnitsOfType(typeId, additive),
+  );
+  /**
+   * Which type the last roster click selected, and how far the camera has
+   * walked through it. Repeat clicks on one chip tour that type's units;
+   * clicking a different chip starts over, because the cursor only means
+   * anything for the type it was counted against.
+   */
+  private rosterTourTypeId: string | null = null;
+  private rosterTourIndex = 0;
   private readonly notifications = new RtsNotificationCenter();
   private readonly notificationFeed = new RtsNotificationFeed();
   /**
@@ -1192,6 +1209,7 @@ export class RtsApp {
       mode: "player",
     });
     this.hudBar.mountUtilityControl(this.gameSpeedControls);
+    this.hudBar.mountStatusControl(this.armyRoster);
     this.matchOverlay = new RtsMatchOverlay({
       onStart: this.beginMatch,
       onResume: this.resumeMatch,
@@ -1423,6 +1441,7 @@ export class RtsApp {
     this.hudBar.dispose();
     this.notificationFeed.dispose();
     this.gameSpeedControls.dispose();
+    this.armyRoster.dispose();
     this.placement.dispose();
     this.roadPlacement.dispose();
     this.roadDebugView.dispose();
@@ -3116,6 +3135,10 @@ export class RtsApp {
   /** Restore all Faz 1 match-owned systems without reloading the browser route. */
   private readonly restartMatch = (): void => {
     this.selection.reset();
+    // The tour counted units that no longer exist; a stale cursor would send
+    // the camera to a position in a list the new match never had.
+    this.rosterTourTypeId = null;
+    this.rosterTourIndex = 0;
     this.economyProduction?.reset();
     this.logisticsOccupation.reset();
     this.logisticsTransfers.reset();
@@ -3310,6 +3333,7 @@ export class RtsApp {
     this.hudBar.setIdleWorkerCount(this.workerConstruction.idleWorkerCount(PLAYER_OWNER));
     const population = this.playerKingdom.population.snapshot();
     this.hudBar.setPopulation(population.used, population.capacity);
+    this.syncArmyRoster();
     this.hudBar.setAge(this.progression.snapshot(PLAYER_OWNER), this.options.ageBalance);
     this.hudBar.setMatchDuration(this.clock.seconds);
   }
@@ -3646,6 +3670,61 @@ export class RtsApp {
       return state === "producing" || state === "gathering" ? "producing" : "moving";
     }
     return this.workerConstruction.stateFor(worker);
+  }
+
+  /**
+   * Push the per-type census behind the HUD's army strip.
+   *
+   * Only workers can report as idle here, because {@link isIdleWorker} is the
+   * only "free for work" rule the game currently owns — a soldier standing
+   * still is between orders, not unemployed, and badging it would turn a
+   * decision prompt into noise. The roster takes the predicate rather than the
+   * rule, so giving soldiers their own idleness later is a change here and
+   * nowhere else.
+   */
+  private syncArmyRoster(): void {
+    const selected = new Set(this.selection.selected());
+    this.armyRoster.setRoster(describeArmyRoster(this.units.unitsOf(PLAYER_OWNER), {
+      isIdle: (unit) => this.isIdleWorker(unit),
+      isSelected: (unit) => selected.has(unit),
+    }));
+  }
+
+  /**
+   * Select every live player unit of one type (a roster chip click).
+   *
+   * Repeating the click tours the type instead of re-selecting it: the second
+   * press is a player who has the units and now wants to *find* them, which is
+   * the question the strip otherwise cannot answer. Shift adds to the selection
+   * and never moves the camera — assembling a mixed group is a different intent
+   * from inspecting one type.
+   */
+  private selectUnitsOfType(typeId: string, additive: boolean): void {
+    // `unitsOf` is in spawn order, so the tour visits a type in a stable order
+    // rather than reshuffling under the player between presses.
+    const matching = this.units.unitsOf(PLAYER_OWNER).filter((unit) => unit.typeId === typeId);
+    // The chip only exists while the type has live units, but a unit can die
+    // between the frame that drew it and the click that arrives.
+    const sample = matching[0];
+    if (!sample) return;
+
+    if (additive) {
+      this.selection.addUnits(matching);
+      this.rosterTourTypeId = null;
+      this.announce("orders", `${matching.length} ${sample.stats.label} seçime eklendi.`);
+      return;
+    }
+
+    this.selection.selectUnits(matching);
+    if (this.rosterTourTypeId === typeId) {
+      this.rosterTourIndex = (this.rosterTourIndex + 1) % matching.length;
+      const target = matching[this.rosterTourIndex]!;
+      this.cameraController.setFocus(target.position.x, target.position.z);
+    } else {
+      this.rosterTourTypeId = typeId;
+      this.rosterTourIndex = 0;
+    }
+    this.announce("orders", `${matching.length} ${sample.stats.label} seçildi.`);
   }
 
   /** Select every player worker that is free for automatic staffing (I). */

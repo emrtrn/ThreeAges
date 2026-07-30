@@ -43,6 +43,7 @@ export class RtsHudBar {
   private readonly warning = document.createElement("p");
   private readonly selectIdleWorkers = document.createElement("button");
   private readonly assignIdleWorkers = document.createElement("button");
+  private readonly status = document.createElement("div");
   private readonly utilityControls = document.createElement("div");
 
   constructor(
@@ -105,7 +106,7 @@ export class RtsHudBar {
     this.warning.hidden = true;
     this.root.appendChild(this.warning);
 
-    const status = document.createElement("div");
+    const status = this.status;
     status.className = "rts-hud-status";
     this.population.className = "rts-hud-population";
     this.idleWorkers.className = "rts-hud-idle-workers";
@@ -200,6 +201,19 @@ export class RtsHudBar {
   /** Places a stateful control in the HUD without making the bar own its rules. */
   mountUtilityControl(control: { mount(parent: HTMLElement): void }): void {
     control.mount(this.utilityControls);
+  }
+
+  /**
+   * Places a stateful control in the status cluster, after the readouts.
+   *
+   * Separate from {@link mountUtilityControl} because the two ends of the bar
+   * mean different things: utilities are global controls that belong to the
+   * session (pause, speed), while this side answers "what state is my kingdom
+   * in". The army strip is a breakdown of the population readout it lands
+   * beside, not a control.
+   */
+  mountStatusControl(control: { mount(parent: HTMLElement): void }): void {
+    control.mount(this.status);
   }
 
   /**

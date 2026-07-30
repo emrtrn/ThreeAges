@@ -28,6 +28,7 @@ import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
 import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
 import { formatCostShortfall, formatResourceCost, resourceLabel } from "./resourceLabels";
+import { describeArmyRoster } from "./rtsArmyRosterView";
 
 /**
  * A button the selected thing offers. Declarative on purpose: the panel maps
@@ -421,18 +422,22 @@ function rescueActions(units: readonly SelectedUnitView[]): SelectionAction[] {
 }
 
 function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelContent {
-  const counts = new Map<UnitRoleId, number>();
-  for (const unit of units) counts.set(unit.role, (counts.get(unit.role) ?? 0) + 1);
+  // Composition is counted per unit *type*, through the same model the HUD army
+  // strip is built from. Two reasons it is not the role it used to be: a role
+  // is a fixed four-value enum that a second Guard unit would collapse into the
+  // first one's row under the first one's icon, and the panel would then be
+  // counting something different from the strip six inches above it. Shared
+  // model, shared order — the player learns one reading of "what is this group".
+  const roster = describeArmyRoster(units);
   const health = units.reduce((total, unit) => total + unit.health, 0);
   const maxHealth = units.reduce((total, unit) => total + unit.maxHealth, 0);
   const summary = `Can: ${Math.ceil(health)}/${Math.ceil(maxHealth)}`;
-  // The portrait already identifies a one-role selection and carries its count.
-  // Keep this compact role strip only when a box selection mixes roles, where it
-  // is the only short way to explain the group composition.
-  const slots = counts.size > 1 ? [...counts].map(([role, count]) => {
-    const sample = units.find((unit) => unit.role === role)!;
-    return { label: sample.stats.label, icon: sample.stats.icon ?? null, count };
-  }) : [];
+  // The portrait already identifies a single-type selection and carries its
+  // count. Keep this compact strip only when a box selection mixes types, where
+  // it is the only short way to explain the group composition.
+  const slots = roster.entries.length > 1
+    ? roster.entries.map((entry) => ({ label: entry.label, icon: entry.icon, count: entry.count }))
+    : [];
 
   // A selection of nothing but workers is an economy question, and the army
   // panel has no answer to it: a Worker has no matchup and no stance. §51 lists
@@ -457,13 +462,18 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
     };
   }
 
-  // The role shown is the most numerous *combat* role. Workers only describe the
-  // selection when it is purely economic (handled above): dragging a box over a
-  // mixed group is a question about the army, and answering "İşçi" because five
-  // labourers outnumbered four Guards tells the player nothing they wanted.
-  const ranked = [...counts].sort((left, right) => right[1] - left[1]);
-  const [dominantRole] = ranked.find(([role]) => role !== "worker") ?? ranked[0]!;
-  const sample = units.find((unit) => unit.role === dominantRole)!;
+  // The unit shown is the most numerous *combat* type. Workers only describe
+  // the selection when it is purely economic (handled above): dragging a box
+  // over a mixed group is a question about the army, and answering "İşçi"
+  // because five labourers outnumbered four Guards tells the player nothing
+  // they wanted.
+  //
+  // Ties fall back to roster order rather than to whichever unit the marquee
+  // happened to sweep first — `sort` is stable, so an equal split between two
+  // types names the same one every time the player reselects the group.
+  const ranked = [...roster.entries].sort((left, right) => right.count - left.count);
+  const dominant = ranked.find((entry) => entry.role !== "worker") ?? ranked[0]!;
+  const sample = units.find((unit) => unit.stats.id === dominant.typeId)!;
   const stances = new Set(units.map((unit) => unit.stance));
   return {
     title: sample.stats.label,
