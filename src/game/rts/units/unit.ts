@@ -139,6 +139,16 @@ export class Unit {
   readonly id: number;
   readonly owner: UnitOwner;
   readonly object: Group;
+  /**
+   * Which `balance/units.json` definition this unit is, mirrored off
+   * {@link stats} exactly as {@link role} and {@link speed} are.
+   *
+   * The role is the *kind of job* a unit does and there are four of them; the
+   * type id is the unit itself, and there is no ceiling on how many a project
+   * adds. Two Guard units share `role: "guard"` and differ only here, so every
+   * "how many of these do I have" and "select all of these" answer keys on this.
+   */
+  readonly typeId: string;
   readonly role: UnitRoleId;
   /** Ground speed in world units/s, from `balance/units.json`. */
   readonly speed: number;
@@ -230,6 +240,7 @@ export class Unit {
   ) {
     this.id = nextUnitId++;
     this.owner = owner;
+    this.typeId = stats.id;
     this.role = stats.role;
     this.speed = stats.moveSpeed;
     this.armorClass = stats.armorClass;

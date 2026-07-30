@@ -133,6 +133,17 @@ export type UnitDamageMultipliers = Readonly<Record<UnitArmorClass, number>>;
 
 /** Balance stats shared by a unit definition (GDD 12 §5). */
 export interface UnitBalanceStats {
+  /**
+   * The `units.json` key this definition was loaded under.
+   *
+   * Stamped by the validator from the key rather than authored in the body, so
+   * it can never disagree with the map it lives in. It exists because
+   * {@link UnitRoleId} is a fixed four-value enum while unit *variety* grows
+   * inside a role: two different Guard units are both `role: "guard"` and only
+   * their ids tell them apart. Anything that counts, groups or bulk-selects
+   * "units of this kind" must key on this, not on the role.
+   */
+  readonly id: string;
   /** Player-facing name; the HUD never invents a label for a unit id. */
   readonly label: string;
   /**

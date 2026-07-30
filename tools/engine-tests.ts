@@ -243,6 +243,11 @@ import {
 import { RtsNotificationCenter, MAX_ACTIVE_NOTIFICATIONS } from "../src/game/rts/ui/rtsNotifications";
 import { RtsAttackWatch } from "../src/game/rts/ui/rtsAttackWatch";
 import {
+  armyRosterSignature,
+  describeArmyRoster,
+  type RosterUnit,
+} from "../src/game/rts/ui/rtsArmyRosterView";
+import {
   describeSelection,
   AGE_UP_ACTION,
   CENTER_LEVEL_UP_ACTION,
@@ -1242,6 +1247,7 @@ let checks = 0;
  * live balance table would make every tuning pass a test failure.
  */
 const RTS_TEST_UNIT_STATS = {
+  id: "guard_placeholder",
   label: "Test Muhafızı",
   icon: "/assets/ui/icons/unit-guard.png",
   role: "guard",
@@ -1267,6 +1273,7 @@ const RTS_TEST_UNIT_STATS = {
 /** Workers never fight: a zero acquisition range is what opts them out. */
 const RTS_TEST_WORKER_STATS = {
   ...RTS_TEST_UNIT_STATS,
+  id: "worker_placeholder",
   productionBuildingId: "command_center",
   label: "Test İşçisi",
   role: "worker",
@@ -1279,6 +1286,7 @@ const RTS_TEST_WORKER_STATS = {
 
 const RTS_TEST_ARCHER_STATS = {
   ...RTS_TEST_UNIT_STATS,
+  id: "archer_placeholder",
   label: "Test Okçusu",
   role: "archer",
   armorClass: "light",
@@ -1296,6 +1304,7 @@ const RTS_TEST_ARCHER_STATS = {
 
 const RTS_TEST_SIEGE_STATS = {
   ...RTS_TEST_UNIT_STATS,
+  id: "siege_placeholder",
   label: "Test Topçu",
   role: "siege",
   armorClass: "heavy",
@@ -29377,6 +29386,12 @@ check("unit balance validates combat stats for stable unit ids", () => {
     ["archer_placeholder", "guard_placeholder", "siege_placeholder", "worker_placeholder"],
     "Faz 7 ships the Guard/Archer/Siege core roster plus the worker",
   );
+  // Every definition carries its own key back out. Nothing authors this in the
+  // file body; it is stamped from the key so the id a unit is grouped and
+  // bulk-selected by cannot drift from the id it is trained by.
+  for (const [id, stats] of Object.entries(balance)) {
+    assert.equal(stats.id, id, `"${id}" carries its key as its id`);
+  }
   assert.equal(balance["guard_placeholder"]?.role, "guard");
   assert.equal(balance["archer_placeholder"]?.attackType, "ranged");
   assert.equal(balance["siege_placeholder"]?.role, "siege");
@@ -29481,6 +29496,16 @@ check("unit balance validates combat stats for stable unit ids", () => {
     "a unit that sees less far than it shoots could never open fire",
   );
   assert.throws(() => validateUnitBalance({ "Guard Placeholder": RTS_TEST_UNIT_STATS }), GameDataError);
+  assert.throws(
+    () => validateUnitBalance({ archer_placeholder: RTS_TEST_UNIT_STATS }),
+    GameDataError,
+    "a body id that disagrees with its key is a half-finished rename, not a second name",
+  );
+  assert.equal(
+    validateUnitBalance({ heavy_guard: { ...RTS_TEST_UNIT_STATS, id: undefined } })["heavy_guard"]?.id,
+    "heavy_guard",
+    "an unauthored id is stamped from the key",
+  );
 });
 
 check("the Topçu shells a defended building from outside the building's own reach", () => {
@@ -30797,9 +30822,9 @@ check("Unit Actors Faz 2: all eight shipped unit Actors still present as one sel
   const roles = ["Guard", "Worker", "Archer", "Siege"] as const;
   const statsFor: Record<string, UnitBalanceStats> = {
     Guard: RTS_TEST_UNIT_STATS,
-    Worker: { ...RTS_TEST_UNIT_STATS, role: "worker" },
-    Archer: { ...RTS_TEST_UNIT_STATS, role: "archer" },
-    Siege: { ...RTS_TEST_UNIT_STATS, role: "siege" },
+    Worker: { ...RTS_TEST_UNIT_STATS, id: "worker_placeholder", role: "worker" },
+    Archer: { ...RTS_TEST_UNIT_STATS, id: "archer_placeholder", role: "archer" },
+    Siege: { ...RTS_TEST_UNIT_STATS, id: "siege_placeholder", role: "siege" },
   };
 
   for (const role of roles) {
@@ -39907,6 +39932,116 @@ check("Faz 9 §51: surrender is a defeat with its own reason (plan §51)", () =>
   match.reset();
   assert.equal(match.outcome, "active");
   assert.equal(match.reason, null, "a restart carries no reason from the last match");
+});
+
+check("the army roster counts unit types, not roles, and orders them from data", () => {
+  const of = (stats: UnitBalanceStats, count: number): RosterUnit[] =>
+    Array.from({ length: count }, () => ({ typeId: stats.id, stats }));
+
+  // The reason this model exists. `UnitRoleId` has four values and will not
+  // grow with the roster; variety arrives *inside* a role. A second Guard-role
+  // unit must be its own row — merged into the first one it would be
+  // uncountable and, once the HUD hangs a "select all" off a row, unselectable
+  // as itself.
+  const heavyGuard = { ...RTS_TEST_UNIT_STATS, id: "heavy_guard", label: "Ağır Muhafız" } as const;
+  const twoGuardTypes = describeArmyRoster([...of(RTS_TEST_UNIT_STATS, 3), ...of(heavyGuard, 2)]);
+  assert.deepEqual(
+    twoGuardTypes.entries.map((entry) => [entry.typeId, entry.count]),
+    [["heavy_guard", 2], ["guard_placeholder", 3]],
+    "two units sharing role \"guard\" are two rows, not one",
+  );
+  assert.equal(twoGuardTypes.totalCount, 5);
+
+  // Every shipped definition reaches the roster. This is the check that fails
+  // when a project adds a unit to units.json and the UI silently drops it.
+  const balance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const live = describeArmyRoster(Object.values(balance).flatMap((stats) => of(stats, 1)));
+  assert.deepEqual(
+    [...live.entries].map((entry) => entry.typeId).sort(),
+    Object.keys(balance).sort(),
+    "one roster row per shipped unit definition, no more and no fewer",
+  );
+  for (const entry of live.entries) {
+    assert.equal(entry.label, balance[entry.typeId]!.label, "the row's name comes from its own stats");
+  }
+
+  // Ordering is derived (role -> unlock age -> label), so neither the order
+  // units.json happens to be written in nor the order units happened to spawn
+  // in can reshuffle a strip the player reads by position.
+  const shipped = [...live.entries].map((entry) => entry.typeId);
+  const reversed = describeArmyRoster(
+    Object.values(balance).reverse().flatMap((stats) => of(stats, 1)),
+  );
+  assert.deepEqual(reversed.entries.map((entry) => entry.typeId), shipped, "spawn/key order does not leak into the roster");
+  assert.deepEqual(
+    shipped,
+    ["worker_placeholder", "guard_placeholder", "archer_placeholder", "siege_placeholder"],
+    "the economy leads, then the line that protects it, then the specialists",
+  );
+
+  // Population is derived from the same field the population system spends, so
+  // this holds at any tuning rather than pinning today's numbers.
+  const mixed = describeArmyRoster([
+    ...of(RTS_TEST_WORKER_STATS, 4),
+    ...of(RTS_TEST_SIEGE_STATS, 2),
+  ]);
+  assert.equal(
+    mixed.totalPopulation,
+    4 * RTS_TEST_WORKER_STATS.populationCost + 2 * RTS_TEST_SIEGE_STATS.populationCost,
+  );
+  assert.equal(
+    mixed.entries.find((entry) => entry.typeId === "siege_placeholder")?.population,
+    2 * RTS_TEST_SIEGE_STATS.populationCost,
+    "a Topçu row explains its own share of a population bar the player cannot otherwise read",
+  );
+
+  // "Idle" and "selected" are the caller's rules — a worker's idleness is
+  // answered by systems this model must not know about — so they arrive as
+  // predicates and are counted per row.
+  const workers = of(RTS_TEST_WORKER_STATS, 5);
+  const guards = of(RTS_TEST_UNIT_STATS, 2);
+  const idleWorkers = new Set<RosterUnit>(workers.slice(0, 3));
+  const counted = describeArmyRoster([...workers, ...guards], {
+    isIdle: (unit) => idleWorkers.has(unit),
+    isSelected: (unit) => unit === guards[0],
+  });
+  assert.deepEqual(
+    counted.entries.map((entry) => [entry.typeId, entry.idle, entry.selected]),
+    [["worker_placeholder", 3, 0], ["guard_placeholder", 0, 1]],
+  );
+  assert.equal(counted.totalIdle, 3);
+  assert.equal(
+    describeArmyRoster([...workers, ...guards]).totalIdle,
+    0,
+    "with no predicate nothing is idle: a headless caller owning no job systems gets the honest answer",
+  );
+
+  // A census, not a catalogue: a type nobody owns has no row at all, which is
+  // what keeps a zero off the HUD strip.
+  const empty = describeArmyRoster([]);
+  assert.deepEqual(empty.entries, []);
+  assert.equal(empty.totalCount, 0);
+  assert.equal(empty.totalPopulation, 0);
+
+  // The signature is the HUD's "did anything move" test before it touches the
+  // DOM, so it has to move for every field a row renders — and stay put when
+  // only the array identity changed.
+  assert.equal(
+    armyRosterSignature(describeArmyRoster([...workers, ...guards])),
+    armyRosterSignature(describeArmyRoster([...guards, ...workers])),
+    "the signature follows the sorted roster, not the input order",
+  );
+  assert.notEqual(
+    armyRosterSignature(describeArmyRoster([...workers, ...guards])),
+    armyRosterSignature(counted),
+    "a change in idle or selected counts is a change the strip must redraw",
+  );
+  assert.notEqual(
+    armyRosterSignature(describeArmyRoster(workers)),
+    armyRosterSignature(describeArmyRoster([...workers, ...guards])),
+  );
 });
 
 check("Faz 9 §51: the selection panel answers for an army, and for workers separately", () => {

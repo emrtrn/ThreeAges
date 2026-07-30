@@ -55,9 +55,9 @@
       "depth": 4
     },
     "cost": {
-      "wood": 50
+      "wood": 40
     },
-    "constructionSeconds": 25,
+    "constructionSeconds": 20,
     "maxHealth": 100,
     "visionRadius": 8,
     "populationCapacity": 5,
@@ -108,7 +108,7 @@
     "cost": {
       "wood": 60
     },
-    "constructionSeconds": 45,
+    "constructionSeconds": 30,
     "maxHealth": 100,
     "visionRadius": 10,
     "progression": {
@@ -127,20 +127,20 @@
           "level": 2,
           "maxHealth": 110,
           "storageCapacity": {
-            "food": 750,
-            "wood": 750,
-            "stone": 450,
-            "gold": 450
+            "food": 600,
+            "wood": 600,
+            "stone": 400,
+            "gold": 400
           }
         },
         {
           "level": 3,
           "maxHealth": 120,
           "storageCapacity": {
-            "food": 1000,
-            "wood": 1000,
-            "stone": 600,
-            "gold": 600
+            "food": 800,
+            "wood": 800,
+            "stone": 500,
+            "gold": 500
           }
         }
       ],
@@ -149,30 +149,30 @@
           "level": 1,
           "maxHealth": 130,
           "storageCapacity": {
-            "food": 1400,
-            "wood": 1400,
-            "stone": 900,
-            "gold": 900
+            "food": 1000,
+            "wood": 1000,
+            "stone": 600,
+            "gold": 600
           }
         },
         {
           "level": 2,
           "maxHealth": 140,
           "storageCapacity": {
-            "food": 1800,
-            "wood": 1800,
-            "stone": 1200,
-            "gold": 1200
+            "food": 1200,
+            "wood": 1200,
+            "stone": 800,
+            "gold": 800
           }
         },
         {
           "level": 3,
           "maxHealth": 150,
           "storageCapacity": {
-            "food": 2400,
-            "wood": 2400,
-            "stone": 1600,
-            "gold": 1600
+            "food": 1400,
+            "wood": 1400,
+            "stone": 1000,
+            "gold": 1000
           }
         }
       ]
@@ -188,7 +188,7 @@
     "cost": {
       "wood": 100
     },
-    "constructionSeconds": 45,
+    "constructionSeconds": 30,
     "maxHealth": 500,
     "visionRadius": 30,
     "territory": {
@@ -290,13 +290,13 @@
     "cost": {
       "wood": 40
     },
-    "constructionSeconds": 35,
+    "constructionSeconds": 20,
     "maxHealth": 100,
     "visionRadius": 8,
     "economy": {
       "resourceId": "food",
       "workerCapacity": 3,
-      "perWorkerPerMinute": 10,
+      "perWorkerPerMinute": 20,
       "localBufferCapacity": 40
     },
     "progression": {
@@ -306,7 +306,7 @@
           "maxHealth": 100,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 10,
+            "perWorkerPerMinute": 20,
             "localBufferCapacity": 40
           }
         },
@@ -315,7 +315,7 @@
           "maxHealth": 110,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 12,
+            "perWorkerPerMinute": 24,
             "localBufferCapacity": 50
           }
         },
@@ -324,7 +324,7 @@
           "maxHealth": 120,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 14,
+            "perWorkerPerMinute": 28,
             "localBufferCapacity": 60
           }
         }
@@ -335,7 +335,7 @@
           "maxHealth": 130,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 16,
+            "perWorkerPerMinute": 40,
             "localBufferCapacity": 80
           }
         },
@@ -344,7 +344,7 @@
           "maxHealth": 140,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 18,
+            "perWorkerPerMinute": 50,
             "localBufferCapacity": 100
           }
         },
@@ -353,7 +353,7 @@
           "maxHealth": 150,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 20,
+            "perWorkerPerMinute": 60,
             "localBufferCapacity": 120
           }
         }
@@ -376,11 +376,11 @@
     "economy": {
       "resourceId": "wood",
       "workerCapacity": 3,
-      "perWorkerPerMinute": 20,
+      "perWorkerPerMinute": 30,
       "localBufferCapacity": 40,
       "requiresForest": true,
       "gatherRadius": 20,
-      "carryCapacity": 20
+      "carryCapacity": 30
     },
     "progression": {
       "settlement": [
@@ -389,9 +389,9 @@
           "maxHealth": 100,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 20,
+            "perWorkerPerMinute": 30,
             "localBufferCapacity": 60,
-            "carryCapacity": 20
+            "carryCapacity": 30
           }
         },
         {
@@ -399,9 +399,9 @@
           "maxHealth": 110,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 30,
+            "perWorkerPerMinute": 40,
             "localBufferCapacity": 90,
-            "carryCapacity": 30
+            "carryCapacity": 40
           }
         },
         {
@@ -409,9 +409,9 @@
           "maxHealth": 118,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 40,
+            "perWorkerPerMinute": 50,
             "localBufferCapacity": 120,
-            "carryCapacity": 40
+            "carryCapacity": 50
           }
         }
       ],
@@ -421,9 +421,9 @@
           "maxHealth": 130,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 50,
+            "perWorkerPerMinute": 80,
             "localBufferCapacity": 150,
-            "carryCapacity": 50
+            "carryCapacity": 80
           }
         },
         {
@@ -431,9 +431,9 @@
           "maxHealth": 140,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 60,
+            "perWorkerPerMinute": 90,
             "localBufferCapacity": 180,
-            "carryCapacity": 60
+            "carryCapacity": 90
           }
         },
         {
@@ -441,9 +441,9 @@
           "maxHealth": 960,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 70,
+            "perWorkerPerMinute": 100,
             "localBufferCapacity": 210,
-            "carryCapacity": 70
+            "carryCapacity": 100
           }
         }
       ]

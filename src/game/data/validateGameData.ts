@@ -326,6 +326,16 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     }
     const statsWhere = `${where}."${id}"`;
     const stats = asObject(raw, statsWhere);
+    // The id is stamped from the key below, so a body that also carries one is
+    // redundant — but a body that carries a *different* one is a rename that
+    // only half landed, and the half the UI groups and bulk-selects by is the
+    // key. Refuse the disagreement rather than silently picking a winner.
+    const authoredId = stats["id"];
+    if (authoredId !== undefined && authoredId !== id) {
+      throw new GameDataError(
+        `${statsWhere}.id: "${String(authoredId)}" does not match its key "${id}"`,
+      );
+    }
     const role = requireString(stats, "role", statsWhere);
     if (!UNIT_ROLES.includes(role as UnitRoleId)) {
       throw new GameDataError(`${statsWhere}.role: "${role}" is not one of ${UNIT_ROLES.join(", ")}`);
@@ -421,6 +431,7 @@ export function validateUnitBalance(value: unknown): UnitBalance {
       );
     }
     units[id] = {
+      id,
       label: requireString(stats, "label", statsWhere),
       ...(icon ? { icon } : {}),
       role: role as UnitRoleId,
