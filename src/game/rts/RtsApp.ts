@@ -1314,6 +1314,10 @@ export class RtsApp {
         }
         this.commands.issueAt(x, y);
       },
+      // A right *drag* is the camera, not a command — the pointer only reports
+      // it past its drag threshold, and suppresses the command click that would
+      // otherwise land when the button comes back up.
+      onCameraDrag: (dx, dy) => this.input.pushDragPan(dx, dy),
       onPointerHover: (x, y) => {
         if (this.roadPlacement.isActive) {
           this.roadPlacement.previewAt(x, y);

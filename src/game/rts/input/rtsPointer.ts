@@ -3,7 +3,7 @@
  *
  * Translates raw canvas pointer events into high-level intents: a left click vs.
  * a left box-drag (selection), and a right click (a contextual move/attack
- * command). All coordinates are canvas-relative CSS pixels; the
+ * command) vs. a right drag (camera pan). All coordinates are canvas-relative CSS pixels; the
  * gameplay meaning (raycast, rect test) lives in the systems that consume these
  * callbacks, keeping this module free of scene logic (plan §14).
  */
@@ -28,6 +28,12 @@ export interface RtsPointerHandler {
   onSelectCancel(): void;
   /** Right button released as a click (move/attack command). */
   onCommandClick?(x: number, y: number): void;
+  /**
+   * Right drag crossed the threshold — camera pan step, in canvas CSS pixels
+   * since the previous move (+x = right, +y = down). Fires often; the release
+   * that ends such a drag issues no {@link onCommandClick}.
+   */
+  onCameraDrag?(dx: number, dy: number): void;
   /** Pointer moved over the field; used by the Phase 2 build ghost. */
   onPointerHover?(x: number, y: number): void;
 }
@@ -41,6 +47,18 @@ export class RtsPointer {
   private dragging = false;
   private startX = 0;
   private startY = 0;
+  /**
+   * Right-button state. The same button issues unit commands, so a press only
+   * becomes a camera pan once it travels past {@link DRAG_THRESHOLD_PX} — until
+   * then it is still a click, and a player ordering a move with a slightly shaky
+   * hand must not have the order eaten by the camera.
+   */
+  private rightDown = false;
+  private rightDragging = false;
+  private rightStartX = 0;
+  private rightStartY = 0;
+  private rightLastX = 0;
+  private rightLastY = 0;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -83,12 +101,36 @@ export class RtsPointer {
       this.startX = x;
       this.startY = y;
       this.canvas.setPointerCapture(event.pointerId);
+      return;
+    }
+    if (event.button === 2) {
+      const { x, y } = this.local(event);
+      this.rightDown = true;
+      this.rightDragging = false;
+      this.rightStartX = x;
+      this.rightStartY = y;
+      this.rightLastX = x;
+      this.rightLastY = y;
+      // Capture so a pan that runs off the canvas keeps tracking and still ends
+      // on our own pointerup rather than leaving the button stuck down.
+      this.canvas.setPointerCapture(event.pointerId);
     }
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
     const { x, y } = this.local(event);
     this.handler.onPointerHover?.(x, y);
+    if (this.rightDown) {
+      const dx = x - this.rightLastX;
+      const dy = y - this.rightLastY;
+      this.rightLastX = x;
+      this.rightLastY = y;
+      if (!this.rightDragging) {
+        const moved = Math.hypot(x - this.rightStartX, y - this.rightStartY);
+        if (moved >= DRAG_THRESHOLD_PX) this.rightDragging = true;
+      }
+      if (this.rightDragging && (dx !== 0 || dy !== 0)) this.handler.onCameraDrag?.(dx, dy);
+    }
     if (!this.leftDown) return;
     if (!this.dragging) {
       const moved = Math.hypot(x - this.startX, y - this.startY);
@@ -112,6 +154,13 @@ export class RtsPointer {
       return;
     }
     if (event.button === 2) {
+      const panned = this.rightDragging;
+      this.rightDown = false;
+      this.rightDragging = false;
+      // The release that ends a camera pan is not a command: a player who drags
+      // the view must not also send their army wherever the drag happened to
+      // stop, nor cancel a build placement they were lining up.
+      if (panned) return;
       const { x, y } = this.local(event);
       this.handler.onCommandClick?.(x, y);
     }
@@ -132,6 +181,8 @@ export class RtsPointer {
     if (this.leftDown || this.dragging) this.handler.onSelectCancel();
     this.leftDown = false;
     this.dragging = false;
+    this.rightDown = false;
+    this.rightDragging = false;
   };
 
   private rect(x: number, y: number): RtsPointerRect {

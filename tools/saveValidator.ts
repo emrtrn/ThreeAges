@@ -3475,12 +3475,18 @@ export function validateSaveGameDataPayload(value: unknown): {
 // ─── VFX Lite particle effect (VFX Faz 1 editor save) ────────────────────────
 //
 // THIRD save-validator allowlist surface (after layout placements and skeleton
-// sidecars — see CLAUDE.md). A `*.effect.json` schema-2 body is normalized by
+// sidecars — see CLAUDE.md). A `*.effect.json` schema-2/3 body is normalized by
 // engine/vfx/particleEffectParser (the single source of field shape: unknown
 // fields are dropped, numbers are clamped/finite-guarded, enums fall back to a
 // valid value, ranges are ordered min<=max, bounds default). Any new
 // ParticleEffectDefinition field must be added to the parser's normalize* (which
 // this reuses) or it is silently dropped on save.
+//
+// Schema 3 adds the mesh renderer. Its `modelIds` are *manifest asset ids only*
+// — the parser's `isModelAssetId` rejects anything path- or URL-shaped, so this
+// validator and the runtime resolver gate on one shared rule, and a mesh effect
+// whose whole list is rejected fails the save loudly instead of writing an
+// emitter that can never render.
 
 /**
  * Validates + canonicalizes a schema-2/3 particle effect asset body. Gates on the
@@ -3497,7 +3503,16 @@ export function validateEffectAsset(value: unknown): Record<string, unknown> {
   const def = normalizeEffectDefinition(input);
   if (!def) throw new Error("effect body is not a valid particle effect");
   if (def.renderer.type === "mesh" && def.renderer.modelIds.length === 0) {
-    throw new Error("mesh effect renderer requires at least one model id");
+    // The normalizer drops path/URL-shaped and duplicate references, so an
+    // incoming list can normalize to empty. Refuse the save (per the plan's
+    // "no silent save" decision) and say which half failed.
+    const authored = (input.renderer as { modelIds?: unknown } | undefined)?.modelIds;
+    const hadEntries = Array.isArray(authored) && authored.length > 0;
+    throw new Error(
+      hadEntries
+        ? "mesh effect renderer model ids must be manifest asset ids (no path, URL or duplicate)"
+        : "mesh effect renderer requires at least one model id",
+    );
   }
   const schema = def.renderer.type === "mesh" ? 3 : 2;
   return { schema, type: "particleEffect", ...def } as unknown as Record<string, unknown>;

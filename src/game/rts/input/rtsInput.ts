@@ -69,6 +69,9 @@ export class RtsInput {
   private readonly held = new Set<string>();
   /** Accumulated, unconsumed wheel delta (positive = zoom out). */
   private wheelDelta = 0;
+  /** Accumulated, unconsumed right-drag pan in canvas CSS pixels. */
+  private dragPanX = 0;
+  private dragPanY = 0;
   /** One-shot edge-triggered commands, drained once per frame. */
   private readonly commands = new Set<RtsCommandKey>();
   /** Pointer position in CSS pixels relative to the canvas, or null when outside. */
@@ -126,6 +129,28 @@ export class RtsInput {
     return delta;
   }
 
+  /**
+   * Feed a right-drag pan step, in canvas CSS pixels (+x = right, +y = down).
+   *
+   * Button semantics live in {@link RtsPointer} — right-click is also the unit
+   * command, and only that module can tell a click from a drag — so the drag
+   * arrives here from outside rather than from a listener of our own. Keeping it
+   * in the snapshot means the camera still reads one input source per frame.
+   */
+  pushDragPan(dx: number, dy: number): void {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    this.dragPanX += dx;
+    this.dragPanY += dy;
+  }
+
+  /** Take and clear the accumulated right-drag pan (canvas CSS pixels). */
+  consumeDragPan(): { x: number; y: number } {
+    const pan = { x: this.dragPanX, y: this.dragPanY };
+    this.dragPanX = 0;
+    this.dragPanY = 0;
+    return pan;
+  }
+
   /** Take and clear a one-shot selected-unit stop request. */
   consumeStopRequest(): boolean {
     return this.consumeCommand("stop");
@@ -147,6 +172,8 @@ export class RtsInput {
   reset(): void {
     this.held.clear();
     this.wheelDelta = 0;
+    this.dragPanX = 0;
+    this.dragPanY = 0;
     this.commands.clear();
   }
 

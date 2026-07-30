@@ -71,6 +71,7 @@ import {
   PARTICLE_PRESET_LABELS,
   type ParticleEffectPreset,
 } from "@engine/vfx/particleEffectPresets";
+import { normalizeEffectDefinition } from "@engine/vfx/particleEffectParser";
 import {
   nextTransformTool,
   type CameraView,
@@ -148,6 +149,7 @@ import {
   renderContentFilterOptions,
   type BrowserAssetItem,
   type BrowserFolderItem,
+  type ContentEffectSummary,
   type ContentTypeFilter,
 } from "./panels/content/contentPanel";
 
@@ -362,6 +364,8 @@ export class EditorUi {
   private readonly thumbnailRenderer = new ThumbnailRenderer();
   private readonly materialPreviewCache = new Map<string, Promise<ThumbnailMaterialPreview | undefined>>();
   private readonly modelMaterialPreviewCache = new Map<string, Promise<ThumbnailMaterialPreview | undefined>>();
+  /** `*.effect.json` path -> renderer summary for the Content Browser card. */
+  private readonly effectSummaryCache = new Map<string, Promise<ContentEffectSummary | null>>();
   private activeTool: EditorTool = "move";
   private projectInfo: EditorProjectInfo | null = null;
   private metadataSchema: MetadataSchema | null = null;
@@ -1773,6 +1777,7 @@ export class EditorUi {
         renderAssetThumbnail: (item, thumb) => this.renderAssetThumbnail(item, thumb),
         renderMaterialThumbnail: (item, thumb) => this.renderMaterialThumbnail(item, thumb),
         renderTextureThumbnail: (item, thumb) => this.renderTextureThumbnail(item, thumb),
+        describeEffectAsset: (item) => this.describeEffectAsset(item),
         beginAssetDragPreview: (assetId) => this.app.beginAssetDragPreview(assetId),
         endAssetDragPreview: () => this.handleAssetDragEnd(),
         setStatus: (message, tone) => this.setStatus(message, tone),
@@ -1829,6 +1834,7 @@ export class EditorUi {
       renderAssetThumbnail: (item, thumb) => this.renderAssetThumbnail(item, thumb),
       renderMaterialThumbnail: (item, thumb) => this.renderMaterialThumbnail(item, thumb),
       renderTextureThumbnail: (item, thumb) => this.renderTextureThumbnail(item, thumb),
+      describeEffectAsset: (item) => this.describeEffectAsset(item),
       beginAssetDragPreview: (assetId) => this.app.beginAssetDragPreview(assetId),
       endAssetDragPreview: () => this.handleAssetDragEnd(),
       setStatus: (message, tone) => this.setStatus(message, tone),
@@ -2723,6 +2729,34 @@ export class EditorUi {
     }
   }
 
+  /**
+   * Renderer summary for a particle effect card (sprite vs 3D model + source
+   * count), cached per path so scrolling the Content Browser does not re-fetch.
+   * Invalidated when the Particle Effect editor saves that asset.
+   */
+  private describeEffectAsset(item: BrowserAssetItem): Promise<ContentEffectSummary | null> {
+    let cached = this.effectSummaryCache.get(item.path);
+    if (!cached) {
+      cached = this.describeEffectAssetUncached(item.path);
+      this.effectSummaryCache.set(item.path, cached);
+    }
+    return cached;
+  }
+
+  private async describeEffectAssetUncached(path: string): Promise<ContentEffectSummary | null> {
+    try {
+      const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
+      if (!response.ok) return null;
+      const def = normalizeEffectDefinition((await response.json()) as unknown);
+      if (!def) return null;
+      return def.renderer.type === "mesh"
+        ? { renderer: "mesh", modelCount: def.renderer.modelIds.length }
+        : { renderer: "sprite", modelCount: 0 };
+    } catch {
+      return null;
+    }
+  }
+
   private renderTextureThumbnail(item: BrowserAssetItem, thumb: HTMLElement): void {
     thumb.replaceChildren();
     const image = document.createElement("img");
@@ -3116,7 +3150,12 @@ export class EditorUi {
         })),
         hideDevelopmentContent: !this.showDevelopmentContent,
         onStatus: (message, tone) => this.setStatus(message, tone),
-        onSaved: () => this.renderContentAssets(),
+        onSaved: () => {
+          // The card's renderer summary is read from the file, so drop it before
+          // re-rendering — a sprite→3D model switch must show up immediately.
+          this.effectSummaryCache.delete(item.path);
+          this.renderContentAssets();
+        },
       });
     } catch (error) {
       this.setStatus(

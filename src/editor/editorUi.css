@@ -3841,6 +3841,11 @@
 
 .asset-card.is-actor-script .asset-thumb { color: var(--forge-success-text); }
 
+/* Particle effects: a sprite emitter and a 3D-model (mesh) one are different
+   authoring beasts, so the card glyph says which without opening the editor. */
+.asset-card.is-effect .asset-thumb { color: #7fc7ff; letter-spacing: 0.5px; }
+.asset-card.is-mesh-effect .asset-thumb { color: #f0b45a; }
+
 /* ---------------------------------------------------------------------------
    Material editor (form-based PBR asset editor)
 --------------------------------------------------------------------------- */
@@ -5376,6 +5381,7 @@
 .pfx-row-label { font-size: 11px; color: #aeb7bf; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .pfx-button,
+.pfx-row-move,
 .pfx-row-remove {
   height: 24px;
   border: 1px solid var(--forge-border-mid);
@@ -5386,9 +5392,16 @@
   cursor: pointer;
 }
 .pfx-button { justify-self: start; padding: 0 8px; }
+.pfx-row-move { width: 22px; padding: 0; }
 .pfx-row-remove { width: 24px; padding: 0; color: #e7a29a; }
 .pfx-button:hover,
+.pfx-row-move:hover:not(:disabled),
 .pfx-row-remove:hover { background: #30363d; border-color: var(--forge-warning); }
+.pfx-button:disabled,
+.pfx-row-move:disabled { color: #6b757d; cursor: default; }
+
+/* Mesh renderer source slot: picker + reorder/remove controls in one cell. */
+.pfx-model-slot { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 4px; min-width: 0; }
 
 .pfx-input {
   width: 100%;

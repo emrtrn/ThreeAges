@@ -166,6 +166,9 @@ import {
   DEFAULT_RTS_CAMERA_CONFIG,
   DEFAULT_RTS_CAMERA_SETTINGS,
 } from "../src/game/rts/camera/rtsCameraConfig";
+import { RtsCameraController } from "../src/game/rts/camera/rtsCameraController";
+import { RtsInput } from "../src/game/rts/input/rtsInput";
+import { RtsPointer } from "../src/game/rts/input/rtsPointer";
 import { HealthComponent } from "../src/game/rts/units/health";
 import { RtsNavigation } from "../src/game/rts/navigation/rtsNavigation";
 import { RTS_WORLD_HALF_EXTENT } from "../src/game/rts/world/rtsGround";
@@ -16344,6 +16347,101 @@ check("schema-3 mesh renderer normalizes, caps, and round-trips through the save
   assert.throws(() =>
     validateEffectAsset({ schema: 3, type: "particleEffect", renderer: { type: "mesh" } }),
   );
+});
+
+check("mesh renderer model refs accept manifest ids only — never a path or URL", () => {
+  // The host resolves ids against its manifest before any GLTF load; this is the
+  // parser-side half of the same contract, so a hand-edited asset cannot smuggle
+  // a path past a lenient resolver. Rejected refs are dropped, not repaired.
+  const hostile = [
+    "../../secret.glb",
+    "assets/Meshes/rock.glb",
+    "C:\\models\\rock.glb",
+    "https://evil.example/rock.glb",
+    "debris stone",
+    "-leading-dash",
+    `${"x".repeat(129)}`,
+  ];
+  const def = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: [...hostile, "debris.stone", "rts:debris_wood-01"] },
+  });
+  assert.ok(def);
+  if (def.renderer.type !== "mesh") assert.fail("expected mesh renderer");
+  assert.deepEqual(def.renderer.modelIds, ["debris.stone", "rts:debris_wood-01"]);
+
+  // A list that is *entirely* rejected must fail the save loudly (no silent save),
+  // and the message must say which half failed.
+  assert.throws(
+    () =>
+      validateEffectAsset({
+        schema: 3,
+        type: "particleEffect",
+        renderer: { type: "mesh", modelIds: hostile },
+      }),
+    /manifest asset ids/,
+  );
+});
+
+check("mesh model selection normalizes, round-trips, and drives source pick order", () => {
+  const def = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["a", "b"], modelSelection: "sequence" },
+  });
+  assert.ok(def);
+  if (def.renderer.type !== "mesh") assert.fail("expected mesh renderer");
+  assert.equal(def.renderer.modelSelection, "sequence");
+  assert.equal(toRuntimeParticleEffect(def).meshModelSelection, "sequence");
+
+  // Unknown / missing values fall back to the documented default.
+  const fallback = normalizeEffectDefinition({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["a"], modelSelection: "round-robin" },
+  });
+  assert.equal(fallback?.renderer.type === "mesh" && fallback.renderer.modelSelection, "random");
+
+  const canonical = validateEffectAsset({
+    schema: 3,
+    type: "particleEffect",
+    renderer: { type: "mesh", modelIds: ["a", "b"], modelSelection: "sequence" },
+  }) as { renderer: { modelSelection: string } };
+  assert.equal(canonical.renderer.modelSelection, "sequence");
+
+  // Runtime: `sequence` cycles the sources in authored order, so two sources and
+  // four spawns land 2/2 rather than at the mercy of Math.random.
+  const sources = [
+    new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()),
+    new Mesh(new BoxGeometry(2, 2, 2), new MeshBasicMaterial()),
+  ];
+  const effect = new MeshParticleEffect(
+    runtimeFx({
+      rendererType: "mesh",
+      modelIds: ["a", "b"],
+      meshModelSelection: "sequence",
+      maxParticles: 4,
+      maxModelParticles: 4,
+      loop: true,
+      rate: 100,
+      lifetime: 10,
+    }),
+    sources,
+  );
+  effect.update(0.05);
+  assert.equal(effect.aliveCount(), 4);
+  const visible = effect.object3D.children.map((child) => {
+    const mesh = child as unknown as { count: number; instanceMatrix: { array: Float32Array } };
+    let shown = 0;
+    for (let i = 0; i < mesh.count; i += 1) {
+      // A hidden slot is the zero-scale matrix; a live one has a non-zero column.
+      if (mesh.instanceMatrix.array[i * 16] !== 0) shown += 1;
+    }
+    return shown;
+  });
+  assert.deepEqual(visible, [2, 2]);
+  effect.dispose();
 });
 
 check("schema-1 and its hand-converted schema-2 starter collapse identically", () => {
@@ -39428,6 +39526,187 @@ check("Faz 9 §51: the build lock agrees with the wallet that takes the money", 
   // would make the bar and the palette disagree in front of them.
   assert.equal(canAffordCost({ wood: 80 }, { wood: 79.999 }), false);
   assert.equal(canAffordCost({ wood: 80 }, { wood: 80.4 }), true);
+});
+
+// §21 Kamera: right-button drag pans the camera. The button is also the unit
+// command, so these two checks cover the seam — the pointer must tell a click
+// from a drag, and the controller must move the ground the way the hand did.
+const rtsDragInput = (): RtsInput => new RtsInput(null as unknown as HTMLCanvasElement);
+
+/**
+ * A canvas stand-in for {@link RtsPointer}: collects its listeners so a test can
+ * fire synthetic pointer events, and installs the `window` the module attaches
+ * its blur handler to. No DOM/jsdom needed, like the keyboard-source fake above.
+ */
+function fakePointerCanvas(): {
+  element: HTMLCanvasElement;
+  fire: (type: string, event: Record<string, unknown>) => void;
+  /** Uninstall the `window` stub so later checks see the same globals as before. */
+  restore: () => void;
+} {
+  const listeners = new Map<string, Array<(event: unknown) => void>>();
+  const add = (type: string, fn: (event: unknown) => void): void => {
+    const bucket = listeners.get(type) ?? [];
+    bucket.push(fn);
+    listeners.set(type, bucket);
+  };
+  const element = {
+    addEventListener: add,
+    removeEventListener: (type: string, fn: (event: unknown) => void) => {
+      listeners.set(type, (listeners.get(type) ?? []).filter((entry) => entry !== fn));
+    },
+    // Canvas at the viewport origin, so client coordinates are canvas-local.
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1600, height: 900 }),
+    setPointerCapture: () => {},
+    releasePointerCapture: () => {},
+  } as unknown as HTMLCanvasElement;
+  const globals = globalThis as { window?: unknown };
+  const hadWindow = "window" in globals;
+  if (!hadWindow) globals.window = { addEventListener: () => {}, removeEventListener: () => {} };
+  return {
+    element,
+    fire: (type, event) => {
+      for (const listener of listeners.get(type) ?? []) listener(event);
+    },
+    restore: () => {
+      if (!hadWindow) delete globals.window;
+    },
+  };
+}
+
+check("§21: a right-drag grabs the ground and pulls it with the cursor", () => {
+  const controller = new RtsCameraController();
+  const input = rtsDragInput();
+  controller.setViewport(1600, 900);
+  controller.setFocus(0, 0);
+  const start = controller.camera.position.clone();
+
+  // Drag right and down: the ground follows the cursor, so the camera travels
+  // the other way (-X, and forward = -Z). Getting this backwards is the whole
+  // failure mode of a drag-pan, and it reads identically in code either way.
+  input.pushDragPan(120, 60);
+  controller.update(1 / 60, input);
+  assert.ok(
+    controller.camera.position.x < start.x,
+    "dragging right pulls the map right, so the camera goes left",
+  );
+  assert.ok(
+    controller.camera.position.z < start.z,
+    "dragging down pulls the map down, so the camera goes forward",
+  );
+
+  // 1:1 with the ground, not with the frame: the same gesture must land in the
+  // same place whether it arrived in one step or several, on a long frame or a
+  // short one. A dt-scaled grab slides out from under the pointer.
+  const afterOneStep = controller.camera.position.clone();
+  controller.setFocus(0, 0);
+  for (let i = 0; i < 4; i += 1) input.pushDragPan(30, 15);
+  controller.update(1 / 240, input);
+  assertDragPose(controller, afterOneStep, "drag pan is frame-rate independent");
+
+  // Consumed once — a drag that stopped must not keep sliding the camera.
+  controller.update(1 / 60, input);
+  assertDragPose(controller, afterOneStep, "the drag delta is drained, not replayed");
+
+  // The grab scales with zoom, because one pixel covers more ground when the
+  // camera is further out; a fixed pixel→world rate would peel the map off the
+  // cursor at every distance but one.
+  assert.ok(
+    dragShiftAtDistance(DEFAULT_RTS_CAMERA_CONFIG.maxDistance) >
+      dragShiftAtDistance(DEFAULT_RTS_CAMERA_CONFIG.minDistance),
+    "a zoomed-out drag covers more ground per pixel",
+  );
+
+  // Bounds still win: a drag is not a way out of the authored map extent.
+  const escapee = new RtsCameraController();
+  escapee.setViewport(1600, 900);
+  escapee.setFocus(0, 0);
+  const runaway = rtsDragInput();
+  runaway.pushDragPan(-100000, -100000);
+  escapee.update(1 / 60, runaway);
+  const bounds = DEFAULT_RTS_CAMERA_CONFIG.bounds;
+  assert.ok(escapee.camera.position.x <= bounds.maxX + 1e-6, "drag pan clamps to the map bounds");
+
+  function assertDragPose(actual: RtsCameraController, expected: Vector3, message: string): void {
+    assert.ok(actual.camera.position.distanceTo(expected) < 1e-6, message);
+  }
+
+  /** Camera travel from a fixed 100 px horizontal drag at a given zoom. */
+  function dragShiftAtDistance(startDistance: number): number {
+    const zoomed = new RtsCameraController({ ...DEFAULT_RTS_CAMERA_CONFIG, startDistance });
+    const drag = rtsDragInput();
+    zoomed.setViewport(1600, 900);
+    zoomed.setFocus(0, 0);
+    const before = zoomed.camera.position.x;
+    drag.pushDragPan(100, 0);
+    zoomed.update(1 / 60, drag);
+    return Math.abs(zoomed.camera.position.x - before);
+  }
+});
+
+check("§21: a right-drag pans instead of commanding, a right-click still commands", () => {
+  const canvas = fakePointerCanvas();
+  const commands: Array<{ x: number; y: number }> = [];
+  const pans: Array<{ dx: number; dy: number }> = [];
+  const pointer = new RtsPointer(canvas.element, {
+    onSelectClick: () => {},
+    onSelectDrag: () => {},
+    onSelectCommit: () => {},
+    onSelectCancel: () => {},
+    onCommandClick: (x, y) => commands.push({ x, y }),
+    onCameraDrag: (dx, dy) => pans.push({ dx, dy }),
+  });
+  pointer.attach();
+
+  // A right-click that never moves is still a move/attack order.
+  canvas.fire("pointerdown", { button: 2, clientX: 100, clientY: 100, pointerId: 1 });
+  canvas.fire("pointerup", { button: 2, clientX: 100, clientY: 100, pointerId: 1 });
+  assert.deepEqual(commands, [{ x: 100, y: 100 }], "a stationary right-click commands");
+  assert.equal(pans.length, 0);
+
+  // Neither does a hand that shakes a pixel or two while ordering.
+  canvas.fire("pointerdown", { button: 2, clientX: 200, clientY: 200, pointerId: 1 });
+  canvas.fire("pointermove", { button: 2, clientX: 202, clientY: 201, pointerId: 1 });
+  canvas.fire("pointerup", { button: 2, clientX: 202, clientY: 201, pointerId: 1 });
+  assert.equal(commands.length, 2, "a sub-threshold wobble is still a command, not a pan");
+  assert.equal(pans.length, 0);
+
+  // Past the threshold it becomes a camera pan, reported as per-move deltas...
+  canvas.fire("pointerdown", { button: 2, clientX: 300, clientY: 300, pointerId: 1 });
+  canvas.fire("pointermove", { button: 2, clientX: 340, clientY: 320, pointerId: 1 });
+  canvas.fire("pointermove", { button: 2, clientX: 350, clientY: 315, pointerId: 1 });
+  assert.deepEqual(pans, [
+    { dx: 40, dy: 20 },
+    { dx: 10, dy: -5 },
+  ]);
+
+  // ...and the release that ends it issues no order. Otherwise every pan would
+  // also send the selected army wherever the drag happened to stop.
+  canvas.fire("pointerup", { button: 2, clientX: 350, clientY: 315, pointerId: 1 });
+  assert.equal(commands.length, 2, "the release that ends a pan is not a command");
+
+  // The next right-click commands again — the pan state does not leak forward.
+  canvas.fire("pointerdown", { button: 2, clientX: 400, clientY: 400, pointerId: 1 });
+  canvas.fire("pointerup", { button: 2, clientX: 400, clientY: 400, pointerId: 1 });
+  assert.equal(commands.length, 3);
+
+  pointer.detach();
+  canvas.restore();
+});
+
+check("§21: the camera drag accumulator survives noise and focus loss", () => {
+  const input = rtsDragInput();
+
+  // A non-finite delta is dropped whole rather than poisoning the focus with
+  // NaN, which would blank the camera for the rest of the match.
+  input.pushDragPan(Number.NaN, 5);
+  input.pushDragPan(3, Number.POSITIVE_INFINITY);
+  assert.deepEqual(input.consumeDragPan(), { x: 0, y: 0 }, "a broken delta is dropped whole");
+
+  // Focus loss drops a pan in progress, exactly like held keys (§21).
+  input.pushDragPan(40, 20);
+  input.reset();
+  assert.deepEqual(input.consumeDragPan(), { x: 0, y: 0 });
 });
 
 check("Faz 9 §51: the camera dials map to a usable camera at every value", () => {

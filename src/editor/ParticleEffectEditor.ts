@@ -69,6 +69,9 @@ const SPAWN_MODES = ["rate", "burst"] as const;
 const BLEND_MODES = ["alpha", "additive"] as const;
 const SORT_MODES = ["none", "distance"] as const;
 const BOUNDS_MODES = ["fixed", "autoPreview"] as const;
+const MESH_SELECTION_MODES = ["random", "sequence"] as const;
+/** Mirrors the parser's `MAX_MESH_MODEL_IDS`: extra slots would be dropped on save. */
+const MAX_MESH_MODEL_SLOTS = 8;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -395,9 +398,21 @@ export class ParticleEffectEditor {
     } else {
       const modelIds = d.renderer.modelIds.length > 0 ? d.renderer.modelIds : [""];
       modelIds.forEach((modelId, index) => {
-        html.push(this.modelRow(`Model ${index + 1}`, `renderer.modelIds.${index}`, modelId, index));
+        html.push(
+          this.modelRow(
+            `Model ${index + 1}`,
+            `renderer.modelIds.${index}`,
+            modelId,
+            index,
+            modelIds.length,
+          ),
+        );
       });
-      html.push(`<div class="pfx-row"><span class="pfx-row-label">Sources</span><button class="pfx-button" type="button" data-pfx-add-model>Add model</button></div>`);
+      const atCap = d.renderer.modelIds.length >= MAX_MESH_MODEL_SLOTS;
+      html.push(
+        `<div class="pfx-row"><span class="pfx-row-label">Sources</span><button class="pfx-button" type="button" data-pfx-add-model${atCap ? " disabled" : ""}>Add model</button></div>`,
+      );
+      html.push(this.enumRow("Pick Order", "renderer.modelSelection", d.renderer.modelSelection, MESH_SELECTION_MODES));
       html.push(this.enumRow("Material", "renderer.materialMode", d.renderer.materialMode, ["source", "tint"]));
       html.push(this.boolRow("Cast Shadow", "renderer.castShadow", d.renderer.castShadow));
       html.push(this.boolRow("Receive Shadow", "renderer.receiveShadow", d.renderer.receiveShadow));
@@ -489,8 +504,19 @@ export class ParticleEffectEditor {
     );
   }
 
-  /** Static-mesh picker for one mesh renderer source slot. */
-  private modelRow(label: string, path: string, value: string | undefined, index: number): string {
+  /**
+   * Static-mesh picker for one mesh renderer source slot, with the list controls
+   * the slot needs: reorder (which matters under `Pick Order: sequence`) and
+   * remove. All three are real `<button>`/`<select>` elements inside the row's
+   * label, so the whole list is reachable and operable from the keyboard.
+   */
+  private modelRow(
+    label: string,
+    path: string,
+    value: string | undefined,
+    index: number,
+    count: number,
+  ): string {
     const none = `<option value=""${value ? "" : " selected"}>&lt;select static mesh&gt;</option>`;
     const opts = this.modelAssets(value)
       .map(
@@ -498,9 +524,18 @@ export class ParticleEffectEditor {
           `<option value="${esc(asset.id)}"${asset.id === value ? " selected" : ""}>${esc(asset.name)}</option>`,
       )
       .join("");
+    const move = (delta: number, glyph: string, name: string, disabled: boolean): string =>
+      `<button class="pfx-row-move" type="button" data-pfx-move-model="${index}" data-pfx-move-delta="${delta}" title="${name} (slot ${index + 1})" aria-label="${name} — model slot ${index + 1}"${disabled ? " disabled" : ""}>${glyph}</button>`;
+    // One grid cell holds the picker + its controls, so the row keeps the same
+    // two-column shape as every other property row.
     return this.row(
       label,
-      `<select class="pfx-input" data-path="${esc(path)}" data-kind="model">${none}${opts}</select><button class="pfx-row-remove" type="button" data-pfx-remove-model="${index}" aria-label="Remove model">×</button>`,
+      `<span class="pfx-model-slot">` +
+        `<select class="pfx-input" data-path="${esc(path)}" data-kind="model" aria-label="Model slot ${index + 1} source">${none}${opts}</select>` +
+        move(-1, "↑", "Move up", index === 0) +
+        move(1, "↓", "Move down", index >= count - 1) +
+        `<button class="pfx-row-remove" type="button" data-pfx-remove-model="${index}" title="Remove model slot ${index + 1}" aria-label="Remove model slot ${index + 1}">×</button>` +
+        `</span>`,
     );
   }
 
@@ -563,6 +598,11 @@ export class ParticleEffectEditor {
     for (const button of this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-pfx-remove-model]")) {
       button.addEventListener("click", () => this.removeModelSlot(Number(button.dataset.pfxRemoveModel)));
     }
+    for (const button of this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-pfx-move-model]")) {
+      button.addEventListener("click", () =>
+        this.moveModelSlot(Number(button.dataset.pfxMoveModel), Number(button.dataset.pfxMoveDelta)),
+      );
+    }
   }
 
   // ─── Edits + undo/redo ─────────────────────────────────────────────────────
@@ -600,6 +640,7 @@ export class ParticleEffectEditor {
           ? {
               type: "mesh",
               modelIds: [],
+              modelSelection: "random",
               materialMode: "source",
               castShadow: false,
               receiveShadow: true,
@@ -632,12 +673,54 @@ export class ParticleEffectEditor {
 
   private addModelSlot(): void {
     if (this.def.renderer.type !== "mesh") return;
+    // The parser keeps at most MAX_MESH_MODEL_SLOTS ids, so a 9th slot would be
+    // dropped on save — refuse it here instead, where the author can see why.
+    if (this.def.renderer.modelIds.length >= MAX_MESH_MODEL_SLOTS) {
+      this.setStatus(`A mesh effect can reference at most ${MAX_MESH_MODEL_SLOTS} models.`, "warning");
+      return;
+    }
     this.beginEdit();
     const firstAvailable = this.modelAssets()[0]?.id ?? "";
-    this.def.renderer.modelIds.push(firstAvailable);
+    const index = this.def.renderer.modelIds.push(firstAvailable) - 1;
     this.commit();
     this.refreshPreview();
     this.renderAll();
+    // Land on the new slot's picker: the next thing the author wants to set.
+    this.detailsHost
+      .querySelector<HTMLSelectElement>(`select[data-path="renderer.modelIds.${index}"]`)
+      ?.focus();
+  }
+
+  /** Moves a model slot one place up/down; `Pick Order: sequence` follows this order. */
+  private moveModelSlot(index: number, delta: number): void {
+    if (this.def.renderer.type !== "mesh") return;
+    const ids = this.def.renderer.modelIds;
+    const target = index + delta;
+    if (!Number.isInteger(index) || !Number.isInteger(delta)) return;
+    if (index < 0 || index >= ids.length || target < 0 || target >= ids.length) return;
+    this.beginEdit();
+    const [moved] = ids.splice(index, 1);
+    ids.splice(target, 0, moved!);
+    this.commit();
+    this.refreshPreview();
+    this.renderAll();
+    // The details form is re-rendered from scratch, which would drop focus to the
+    // document — follow the row that moved so repeated keyboard presses work.
+    this.focusModelControl(`[data-pfx-move-model="${target}"][data-pfx-move-delta="${delta}"]`);
+  }
+
+  /**
+   * Restores keyboard focus after a details re-render. Falls back to the moved
+   * row's picker when the requested button is now disabled (the slot reached an
+   * end of the list), so focus never vanishes mid-gesture.
+   */
+  private focusModelControl(selector: string): void {
+    const button = this.detailsHost.querySelector<HTMLButtonElement>(selector);
+    if (button && !button.disabled) {
+      button.focus();
+      return;
+    }
+    button?.closest(".pfx-model-slot")?.querySelector<HTMLSelectElement>("select")?.focus();
   }
 
   private removeModelSlot(index: number): void {
@@ -647,6 +730,16 @@ export class ParticleEffectEditor {
     this.commit();
     this.refreshPreview();
     this.renderAll();
+    // Keep the cursor in the list: the row that shifted up into this slot, or
+    // Add model once the last slot is gone.
+    const remaining = this.def.renderer.modelIds.length;
+    const next = Math.min(index, remaining - 1);
+    const fallback = this.detailsHost.querySelector<HTMLButtonElement>("[data-pfx-add-model]");
+    const nextRemove =
+      next >= 0
+        ? this.detailsHost.querySelector<HTMLButtonElement>(`[data-pfx-remove-model="${next}"]`)
+        : null;
+    (nextRemove ?? fallback)?.focus();
   }
 
   private commit(): void {
@@ -731,6 +824,11 @@ export class ParticleEffectEditor {
       );
       const missing = d.renderer.modelIds.filter((id) => id.trim().length > 0 && !knownModelIds.has(id));
       if (missing.length > 0) out.push(`mesh source is missing from the Content Drawer: ${missing[0]}`);
+      // Saving de-duplicates, so a repeated slot would quietly disappear.
+      const filled = d.renderer.modelIds.filter((id) => id.trim().length > 0);
+      if (new Set(filled).size < filled.length) {
+        out.push("duplicate mesh source — repeated slots are dropped on save");
+      }
     }
     return out;
   }
@@ -784,8 +882,12 @@ export class ParticleEffectEditor {
     const d = this.def;
     const spawn = d.spawn.mode === "rate" ? `rate ${d.spawn.rate}/s` : `burst ${d.spawn.count}`;
     const loop = d.system.loop ? "loop" : "one-shot";
+    const renderer =
+      d.renderer.type === "mesh"
+        ? `3D model ×${d.renderer.modelIds.filter((id) => id.trim().length > 0).length} (${d.renderer.modelSelection})`
+        : "sprite";
     this.setStatus(
-      `Spawn: ${spawn} · Cap ${d.system.maxParticles} · ${d.renderer.type} · ${loop}`,
+      `Spawn: ${spawn} · Cap ${d.system.maxParticles} · ${renderer} · ${loop}`,
       "info",
     );
   }

@@ -645,6 +645,8 @@ Boş test sahnesinde oyuncunun kamera, seçim, hareket ve basit saldırı ile bi
 
 - [x] Üstten eğimli RTS kamera ekle. (`src/game/rts/camera/rtsCameraController.ts`)
 - [x] WASD hareketi ekle. (`src/game/rts/input/rtsInput.ts` → kamera pan)
+- [x] Sağ tık sürükleme ile kamera kaydırma ekle. (`RtsPointer` eşik üstü sağ
+  sürüklemeyi komut yerine kameraya verir; zemin imleçle 1:1 gelir)
 - [x] Fare tekerleği zoom ekle. (yumuşatmalı + clamp; `rtsCameraController`)
 - [x] Kamera sınırları ekle. (`rtsCameraConfig.bounds` odak kırpma)
 - [x] Pencere odağı kaybında input sıfırla. (`RtsInput` blur/visibility → reset)

@@ -29,6 +29,8 @@ export type SpawnShape = "point" | "sphere" | "box" | "circle";
 export type RendererType = "sprite" | "mesh";
 export type ParticleBlendMode = "alpha" | "additive";
 export type ParticleMeshMaterialMode = "source" | "tint";
+/** How a mesh emitter picks a source among its models on each spawn. */
+export type ParticleMeshSelectionMode = "random" | "sequence";
 export type SortMode = "none" | "distance";
 export type BoundsMode = "fixed" | "autoPreview";
 
@@ -116,12 +118,16 @@ export interface ParticleSpriteRendererBlock {
 /**
  * Renders each live particle as a shared, manifest-backed static-model instance.
  * `modelIds` never stores a URL/path: host code resolves these ids against its
- * asset manifest before it allows a GLTF load.
+ * asset manifest before it allows a GLTF load, and the normalizer additionally
+ * refuses anything that *looks* like a path or URL (see `isModelAssetId`), so a
+ * hand-edited asset cannot smuggle one past a lenient host resolver.
  */
 export interface ParticleMeshRendererBlock {
   type: "mesh";
   /** One or more manifest static-mesh ids selected by the emitter on spawn. */
   modelIds: string[];
+  /** `random` picks any source per particle; `sequence` cycles them in list order. */
+  modelSelection: ParticleMeshSelectionMode;
   /** Keep source materials or permit the renderer's future per-instance tint path. */
   materialMode: ParticleMeshMaterialMode;
   castShadow: boolean;
@@ -173,6 +179,8 @@ export interface RuntimeParticleEffect {
   subUV?: SubUVGrid;
   /** Manifest static-mesh ids; populated only for `rendererType: "mesh"`. */
   modelIds?: string[];
+  /** Per-spawn source pick policy for mesh effects (default `random`). */
+  meshModelSelection?: ParticleMeshSelectionMode;
   /** Mesh renderer material policy; populated only for mesh effects. */
   meshMaterialMode?: ParticleMeshMaterialMode;
   castShadow?: boolean;

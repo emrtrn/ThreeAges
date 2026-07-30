@@ -73,10 +73,19 @@ Karar kaydı (2026-07-30): sprite effect assetleri schema 2 olarak kalır. 3D mo
 - [x] `ParticleRendererBlock`ı ayırt edici union'a dönüştür; sprite varsayılanı ve mevcut schema 2 okumasını koru.
 - [x] `normalizeEffectDefinition`a schema 3 normalizasyonu, sınırlar ve güvenli varsayılanları ekle.
 - [x] Preset klonlama, eşitlik, load/save ve runtime dönüşümlerini yeni renderer türü için güncelle.
-- [ ] `tools/saveValidator.ts` içinde yeni alanları allowlist et ve model id doğrulamasını parser ile aynı sözleşmede uygula.
+- [x] `tools/saveValidator.ts` içinde yeni alanları allowlist et ve model id doğrulamasını parser ile aynı sözleşmede uygula.
 - [x] Geçersiz veri, boş dizi, tekrar eden id, aşırı parça limiti ve eski schema için birim testleri yaz.
 
 Çıkış kriteri: sprite assetleri işlev düzeyinde geriye uyumlu, mesh asseti kaydedilip tekrar açıldığında kayıp alan olmadan normalize edilebilmeli.
+
+Uygulama notu (2026-07-30): model referansı sözleşmesi tek yerde tanımlı —
+`engine/vfx/particleEffectParser.ts` içindeki `isModelAssetId`. Yalnızca manifest
+asset id biçimi (`[A-Za-z0-9]` ile başlayan, `. _ : -` ayraçlı, en fazla 128
+karakter) kabul edilir; path, `..`, ters bölü, URL şeması ve boşluk içeren
+referanslar düşürülür. `validateEffectAsset` aynı normalizer'ı kullanır, bu yüzden
+save ve load tek kurala bakar; mesh renderer'ın tüm listesi elenirse kaydetme
+sessizce boş emitter yazmak yerine "manifest asset ids" hatasıyla reddedilir.
+Editör artık sprite için schema 2, mesh için schema 3 yazar.
 
 ### Faz 2 — Three.js instanced mesh parçacık runtime'ı
 
@@ -95,13 +104,25 @@ Uygulama kararı (2026-07-30): mesh renderer, her kaynak GLTF içindeki render e
 ### Faz 3 — VFX editörü ve Content Drawer iş akışı
 
 - [x] Renderer Type seçicisi (`Sprite` / `3D Model`) ekle.
-- [ ] `3D Model` seçildiğinde Content Drawer uyumlu modelleri filtreleyen asset picker, seçili modeller listesi, kaldırma ve sıra/random seçim denetimleri ekle.
+- [x] `3D Model` seçildiğinde Content Drawer uyumlu modelleri filtreleyen asset picker, seçili modeller listesi, kaldırma ve sıra/random seçim denetimleri ekle.
 - [x] Mesh'e özgü alanları göster; sprite'a özgü texture/subUV/softness alanlarını bağlama göre gizle veya devre dışı bırak.
 - [x] Mevcut canlı preview'ı seçilen gerçek modelle güncelle; model yüklenirken belirgin loading/invalid durumları göster.
-- [ ] Undo/redo, dirty state, save/reload ve klavye ile erişilebilir alanların tüm yeni kontrolleri kapsadığını doğrula.
-- [ ] İçerik browser'ında mesh VFX asseti için net bir ikon/özet oluştur.
+- [x] Undo/redo, dirty state, save/reload ve klavye ile erişilebilir alanların tüm yeni kontrolleri kapsadığını doğrula.
+- [x] İçerik browser'ında mesh VFX asseti için net bir ikon/özet oluştur.
 
 Çıkış kriteri: kod düzenlemeden Content Drawer'dan bir model seçilip debris efekti oluşturulabilir, preview edilebilir, kaydedilip yeniden düzenlenebilir.
+
+Uygulama notu (2026-07-30): model listesi artık slot başına yukarı/aşağı taşıma ve
+kaldırma düğmeleriyle sıralanabiliyor; yeni `renderer.modelSelection` alanı
+(`random` | `sequence`) hangi kaynağın seçileceğini belirliyor — `sequence`
+listedeki sırayı döngüsel kullanır, bu yüzden sıralama görsel bir karar hâline
+gelir. Slot sayısı parser'ın 8'lik sınırında durur (dolduğunda "Add model" pasif),
+tekrar eden seçim kaydetmede düşeceği için uyarı üretir. Tüm liste işlemleri aynı
+`beginEdit`/`commit` anlık görüntü yolundan geçtiği için undo/redo ve dirty state
+otomatik kapsanır; her denetim gerçek `<button>`/`<select>` ve `aria-label`'lı,
+re-render sonrası odak taşınan satırı takip eder. Content Browser'da efekt kartı
+`FX` / `FX3D` glifi ve "Particle Effect · 3D Model ×N" özeti gösterir (kayıt
+sonrası önbellek düşürülür).
 
 ### Faz 4 — Hasar efekt presetleri ve bina entegrasyonu
 
@@ -148,11 +169,11 @@ Content Drawer → VFX asset → model asset id'leri
 
 ### Veri ve güvenlik
 
-- [ ] Eski schema 1 ve schema 2 sprite assetleri aynı şekilde yüklenir.
-- [ ] Schema 3 mesh asseti normalize edilir, save sonrası alan kaybetmez.
-- [ ] Save validator yeni renderer ve mesh alanlarını kabul eder; bilinmeyen, bozuk veya allowlist dışı model referansını güvenli biçimde reddeder/temizler.
-- [ ] Manifest dışı URL/path ile model yükleme mümkün değildir.
-- [ ] Aşırı `maxParticles`, model sayısı ve sayısal değerler limitlenir.
+- [x] Eski schema 1 ve schema 2 sprite assetleri aynı şekilde yüklenir.
+- [x] Schema 3 mesh asseti normalize edilir, save sonrası alan kaybetmez.
+- [x] Save validator yeni renderer ve mesh alanlarını kabul eder; bilinmeyen, bozuk veya allowlist dışı model referansını güvenli biçimde reddeder/temizler.
+- [x] Manifest dışı URL/path ile model yükleme mümkün değildir.
+- [x] Aşırı `maxParticles`, model sayısı ve sayısal değerler limitlenir.
 
 ### Runtime
 

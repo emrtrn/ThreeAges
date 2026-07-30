@@ -28,6 +28,7 @@ import type {
   ParticleInitializeBlock,
   ParticleMeshMaterialMode,
   ParticleMeshRendererBlock,
+  ParticleMeshSelectionMode,
   ParticleRendererBlock,
   ParticleSpriteRendererBlock,
   ParticleSpawnBlock,
@@ -50,9 +51,22 @@ const SPAWN_MODES: readonly SpawnMode[] = ["rate", "burst"];
 const SPAWN_SHAPES: readonly SpawnShape[] = ["point", "sphere", "box", "circle"];
 const BLEND_MODES: readonly ParticleBlendMode[] = ["alpha", "additive"];
 const MESH_MATERIAL_MODES: readonly ParticleMeshMaterialMode[] = ["source", "tint"];
+const MESH_SELECTION_MODES: readonly ParticleMeshSelectionMode[] = ["random", "sequence"];
 const SORT_MODES: readonly SortMode[] = ["none", "distance"];
 const MAX_MESH_MODEL_IDS = 8;
 const MAX_MODEL_PARTICLES = 256;
+/** Upper bound on a manifest asset id; longer strings are not ids. */
+const MAX_MODEL_ID_LENGTH = 128;
+/**
+ * The shape a mesh renderer accepts as a model reference: a manifest asset id,
+ * i.e. letters/digits plus `-`, `_`, `.` and `:` separators. Deliberately narrow
+ * so a hand-edited (or hostile) asset cannot express a path or URL — no slashes,
+ * no backslashes, no scheme colon-slash-slash, no `..` traversal, no whitespace.
+ * The host still resolves the id against its manifest before any GLTF load; this
+ * is the parser-side half of the same contract, which `tools/saveValidator.ts`
+ * reuses so save and load agree on exactly one rule.
+ */
+const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
 function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -201,13 +215,34 @@ function readSubUV(value: unknown): SubUVGrid {
   return { cols: axis(data.cols), rows: axis(data.rows) };
 }
 
+/**
+ * True when `value` is a usable manifest model reference (see
+ * {@link MODEL_ID_PATTERN}). Exported so the save validator and any host-side
+ * resolver can gate on the identical rule instead of re-deriving one.
+ */
+export function isModelAssetId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_MODEL_ID_LENGTH &&
+    MODEL_ID_PATTERN.test(value) &&
+    !value.includes("..")
+  );
+}
+
+/**
+ * Keeps up to {@link MAX_MESH_MODEL_IDS} distinct, id-shaped references in
+ * authored order. Non-strings, path/URL-shaped entries and duplicates are
+ * dropped rather than repaired — a rejected reference must not silently become a
+ * different model.
+ */
 function normalizeModelIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const unique = new Set<string>();
   for (const raw of value) {
     if (typeof raw !== "string") continue;
     const id = raw.trim();
-    if (!id || unique.has(id)) continue;
+    if (!isModelAssetId(id) || unique.has(id)) continue;
     unique.add(id);
     if (unique.size >= MAX_MESH_MODEL_IDS) break;
   }
@@ -229,6 +264,7 @@ function normalizeMeshRenderer(data: Record<string, unknown>): ParticleMeshRende
   return {
     type: "mesh",
     modelIds: normalizeModelIds(data.modelIds),
+    modelSelection: readEnum(data.modelSelection, MESH_SELECTION_MODES, "random"),
     materialMode: readEnum(data.materialMode, MESH_MATERIAL_MODES, "source"),
     castShadow: readBool(data.castShadow, false),
     receiveShadow: readBool(data.receiveShadow, true),
@@ -400,6 +436,7 @@ export function toRuntimeParticleEffect(def: ParticleEffectDefinition): RuntimeP
     ...(def.renderer.type === "mesh"
       ? {
           modelIds: [...def.renderer.modelIds],
+          meshModelSelection: def.renderer.modelSelection,
           meshMaterialMode: def.renderer.materialMode,
           castShadow: def.renderer.castShadow,
           receiveShadow: def.renderer.receiveShadow,

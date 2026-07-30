@@ -3,7 +3,8 @@
  *
  * A tilted top-down camera modelled as a ground focus point plus a zoom
  * distance and a fixed downward pitch. WASD/arrows pan the focus (screen-
- * relative, zoom-scaled), the wheel changes distance (smoothed + clamped), the
+ * relative, zoom-scaled), a right-button drag grabs the ground and pulls it with
+ * the cursor, the wheel changes distance (smoothed + clamped), the
  * focus is clamped to authored bounds, and an optional screen-edge scroll sits
  * behind a config flag. Yaw is fixed (no rotation in Ürün A), so screen X maps
  * to world +X and screen forward to world -Z.
@@ -105,7 +106,38 @@ export class RtsCameraController {
       this.clampFocus();
     }
 
+    // Right-drag pan: the ground follows the cursor 1:1, so it is deliberately
+    // independent of `panSpeed` and of `dt` — the gesture *is* the distance, and
+    // a frame-rate-scaled grab would slide out from under the pointer.
+    const drag = input.consumeDragPan();
+    if (drag.x !== 0 || drag.y !== 0) {
+      const ground = this.groundUnitsPerPixel();
+      this.focus.x -= drag.x * ground.x;
+      this.focus.z -= drag.y * ground.z;
+      this.clampFocus();
+    }
+
     this.applyTransform();
+  }
+
+  /**
+   * World ground units covered by one CSS pixel of drag at the focus point.
+   *
+   * One pixel spans `2 * distance * tan(fov/2) / viewportH` on the view plane
+   * through the focus. Horizontally that is already a world-X distance (yaw is
+   * fixed). Vertically the ray meets the ground at the camera tilt, so the same
+   * span stretches into `1 / sin(pitch)` as much ground along Z — exact at the
+   * focus, which is where the eye judges whether the map is sticking to the
+   * cursor.
+   */
+  private groundUnitsPerPixel(): { x: number; z: number } {
+    const perPixel =
+      (2 * this.distance * Math.tan(MathUtils.degToRad(this.config.fovDeg) / 2)) / this.viewportH;
+    const pitch = MathUtils.degToRad(this.config.pitchDeg);
+    // A pitch of 0 would look along the ground and never meet it; clamp the
+    // divisor so an authored config can never produce an infinite pan.
+    const sinPitch = Math.max(0.1, Math.sin(pitch));
+    return { x: perPixel, z: perPixel / sinPitch };
   }
 
   /** Screen-edge scroll contribution when the pointer sits in an edge hot zone. */

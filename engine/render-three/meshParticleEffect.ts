@@ -61,6 +61,8 @@ export class MeshParticleEffect {
   private elapsed = 0;
   private spawnAccumulator = 0;
   private densityScale = 1;
+  /** Round-robin cursor for `modelSelection: "sequence"`; unused when random. */
+  private nextSourceIndex = 0;
 
   constructor(
     private readonly definition: RuntimeParticleEffect,
@@ -143,6 +145,8 @@ export class MeshParticleEffect {
     this.applyOverrides(overrides);
     this.elapsed = 0;
     this.spawnAccumulator = 0;
+    // A pooled effect restarts its sequence, so every play reads the same way.
+    this.nextSourceIndex = 0;
     this.positions.fill(0);
     this.velocities.fill(0);
     this.rotations.fill(0);
@@ -264,7 +268,7 @@ export class MeshParticleEffect {
     const jitter = (): number => (Math.random() * 2 - 1) * this.spread;
     const base = slot * 3;
     this.ages[slot] = 0;
-    this.sourceIndices[slot] = Math.floor(Math.random() * this.sources.length);
+    this.sourceIndices[slot] = this.pickSourceIndex();
     this.positions[base] = this.origin[0] + jitter() * 0.2;
     this.positions[base + 1] = this.origin[1];
     this.positions[base + 2] = this.origin[2] + jitter() * 0.2;
@@ -279,6 +283,21 @@ export class MeshParticleEffect {
     this.angularVelocities[base + 2] = randomRange(this.angularVelocityRange) * (Math.PI / 180);
     this.scales[slot] = this.startSize;
     this.writeMatrix(slot);
+  }
+
+  /**
+   * Chooses which instanced source the next particle uses. `sequence` cycles the
+   * sources in authored order (an even, readable mix for a small debris set);
+   * the default `random` picks freely. Sources are per renderable primitive, per
+   * the Faz 2 decision — a multi-primitive model contributes one source each.
+   */
+  private pickSourceIndex(): number {
+    if (this.definition.meshModelSelection !== "sequence") {
+      return Math.floor(Math.random() * this.sources.length);
+    }
+    const index = this.nextSourceIndex % this.sources.length;
+    this.nextSourceIndex = (this.nextSourceIndex + 1) % this.sources.length;
+    return index;
   }
 
   private hide(index: number): void {
