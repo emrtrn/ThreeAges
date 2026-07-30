@@ -126,6 +126,8 @@ Uygulama kararı (2026-07-30): mesh renderer, her kaynak GLTF içindeki render e
 - [ ] Sanat üretim kılavuzu ekle: düşük poligon, ortak materyal, pivot/orijin, ölçek, gölge, maksimum alt mesh ve isimlendirme kuralları.
 - [ ] Gerekirse performans ölçümüne dayanarak model parçacığına özel global budget/cap ekle.
 
+Uygulama notu (2026-07-30): `VfxSubsystem` artık host'un isteğe bağlı aktif-instance bütçesini destekler. RTS bu limiti `48 × particleDensity` olarak uygular; limit dolduğunda yalnızca yeni efektler atlanır, çalışan efektler kesilmez. Ölçümlü kabul senaryosu hâlâ bekliyor.
+
 Çıkış kriteri: kabul sahnesi hedef bütçede çalışır; çoklu çöküşte frame-time veya draw-call regresyonu ölçülmüş ve kabul edilmiş sınırlar içindedir.
 
 ## 5. Mimari akış

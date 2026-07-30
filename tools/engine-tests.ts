@@ -16596,6 +16596,24 @@ await checkAsync("VfxSubsystem warms, plays, advances and recycles a one-shot in
   vfx.dispose();
 });
 
+await checkAsync("VfxSubsystem can bound concurrent effects without stopping live ones", async () => {
+  const vfx = new VfxSubsystem({
+    maxActiveInstances: 1,
+    resolveEffectUrl: () => "mem://fx",
+    loadDefinition: async () => runtimeFx({ loop: true, rate: 10, lifetime: 1 }),
+  });
+  assert.ok(await vfx.warm("fx"));
+  assert.ok(vfx.play("fx") !== null);
+  assert.equal(vfx.play("fx"), null, "the second burst is dropped at the active cap");
+  assert.equal(vfx.getDebugSnapshot().activeInstances, 1);
+  vfx.setMaxActiveInstances(2);
+  assert.ok(vfx.play("fx") !== null, "raising the cap admits a later play");
+  vfx.setMaxActiveInstances(0);
+  assert.equal(vfx.play("fx"), null, "zero cleanly suppresses future effects");
+  assert.equal(vfx.getDebugSnapshot().activeInstances, 2, "the cap never interrupts live effects");
+  vfx.dispose();
+});
+
 await checkAsync("VfxSubsystem warms manifest-resolved mesh sources before it plays a mesh effect", async () => {
   const modelRequests: string[][] = [];
   const vfx = new VfxSubsystem({

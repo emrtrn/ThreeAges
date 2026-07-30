@@ -745,6 +745,9 @@ export class RtsApp {
   private applyQualitySettings(settings: QualitySettings): void {
     this.qualitySettings = settings;
     this.structureDamageVfx.setGlobalDensity(settings.particleDensity);
+    // Effect density controls particles within each emitter; this companion cap
+    // protects the match when many structures take damage on the same frame.
+    this.structureDamageVfx.setMaxActiveInstances(Math.round(48 * settings.particleDensity));
     this.renderer.shadowMap.enabled = settings.shadowsEnabled;
     this.scene.traverse((object) => {
       if (!(object instanceof DirectionalLight) || !object.castShadow) return;

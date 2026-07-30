@@ -68,6 +68,11 @@ export interface VfxSubsystemOptions {
    * {@link parseRuntimeParticleEffect}; tests inject a synchronous fixture loader.
    */
   loadDefinition?: (url: string) => Promise<RuntimeParticleEffect | null>;
+  /**
+   * Optional live-instance budget. Once full, new plays are silently skipped;
+   * existing effects finish normally. Omit for the legacy unbounded behaviour.
+   */
+  maxActiveInstances?: number;
 }
 
 type LiveParticleEffect = ParticleEffect | MeshParticleEffect;
@@ -108,6 +113,8 @@ export class VfxSubsystem implements Subsystem {
   private nextId = 1;
   /** Global density multiplier applied to every effect's spawn rate (quality). */
   private globalDensity = 1;
+  /** Optional host-owned guard against a burst of simultaneous one-shots. */
+  private maxActiveInstances = Number.POSITIVE_INFINITY;
 
   constructor(options: VfxSubsystemOptions = {}) {
     this.root.name = "vfx-root";
@@ -115,6 +122,7 @@ export class VfxSubsystem implements Subsystem {
     this.resolveTextureUrl = options.resolveTextureUrl ?? (() => null);
     this.loadMeshModels = options.loadMeshModels ?? (async () => []);
     this.loadDefinition = options.loadDefinition ?? fetchDefinition;
+    this.setMaxActiveInstances(options.maxActiveInstances);
   }
 
   /**
@@ -162,6 +170,7 @@ export class VfxSubsystem implements Subsystem {
       if (definition === undefined) void this.warm(effectId);
       return null;
     }
+    if (this.instances.size >= this.maxActiveInstances) return null;
     const effect = this.acquire(effectId, definition, options);
     if (!effect) return null;
     const p = options.position;
@@ -202,6 +211,16 @@ export class VfxSubsystem implements Subsystem {
     for (const bucket of this.pool.values()) {
       for (const effect of bucket) effect.setDensityScale(this.globalDensity);
     }
+  }
+
+  /**
+   * Updates the host's active-instance budget without interrupting existing
+   * effects. Non-finite or negative input restores the unlimited default.
+   */
+  setMaxActiveInstances(limit: number | undefined): void {
+    this.maxActiveInstances = typeof limit === "number" && Number.isFinite(limit) && limit >= 0
+      ? Math.floor(limit)
+      : Number.POSITIVE_INFINITY;
   }
 
   update(context: EngineUpdateContext): void {
