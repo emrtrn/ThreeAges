@@ -146,6 +146,7 @@ import {
   CANCEL_WORKER_ACTION,
   DEMOLISH_ACTION,
   RALLY_ACTION,
+  REPAIR_ACTION,
   RESCUE_ACTION,
   TRADE_BUY_ACTION_PREFIX,
   TRADE_SELL_ACTION_PREFIX,
@@ -155,6 +156,7 @@ import {
   type RtsSelectionView,
   type StructureDetailView,
   type CenterProgressionView,
+  type StructureRepairView,
   type WorkerJob,
 } from "./ui/rtsSelectionView";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
@@ -171,6 +173,7 @@ import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
 import { ResourceCapacitySystem } from "./economy/resourceCapacitySystem";
 import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
+import { StructureRepairSystem } from "./structures/structureRepairSystem";
 import type { UnitOwner } from "./units/unit";
 import { BarracksProductionSystem, unitQueueCapacityForBuildingLevel } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel, type WorkerCancelResult } from "./structures/workerProductionSystem";
@@ -274,8 +277,6 @@ const PLAYER_OWNER: UnitOwner = "player";
  * in two seconds are one problem, not five notices.
  */
 type RtsCommandSubject = "production" | "trade" | "structure" | "orders" | "workers" | "progression";
-/** How long a building's health bar stays up after the last hit it took. */
-const HEALTH_BAR_LINGER_SECONDS = 6;
 /** Content Drawer effect assets used by the first RTS damage presentation pass. */
 const STRUCTURE_DAMAGE_EFFECT_URLS: Readonly<Record<string, string>> = {
   "starter-fx-smoke-puff": "assets/starter-content/Effects/FX_Smoke_Puff.effect.json",
@@ -302,12 +303,6 @@ const LIGHT_DAMAGE_SMOKE_INTERVAL_SECONDS = 1.35;
 const HEAVY_DAMAGE_SMOKE_INTERVAL_SECONDS = 0.65;
 /** A critical building occasionally sheds authored debris, never once per frame. */
 const HEAVY_DAMAGE_DEBRIS_INTERVAL_SECONDS = 2.4;
-/**
- * Linger key for the command centre. Negative because {@link PlacedStructureSystem}
- * hands out positive ids, so the centre can share the map without colliding with
- * a building.
- */
-const CENTER_HEALTH_BAR_KEY = -1;
 /** Faz 5: the kingdom the AI opponent plays (plan §37). */
 const AI_OWNER: UnitOwner = "enemy";
 /**
@@ -538,6 +533,8 @@ export class RtsApp {
   private readonly structureConstruction: StructureConstructionService;
   private readonly roadConstruction: RoadConstructionService;
   private readonly workerConstruction: WorkerConstructionSystem;
+  /** Owns what a repair costs and how fast it heals; the worker system staffs it. */
+  private readonly structureRepair: StructureRepairSystem;
   private economyProduction: EconomyProductionSystem | null = null;
   private readonly resourceNodes: ResourceNodeSystem;
   private readonly forests: ForestSystem;
@@ -657,8 +654,6 @@ export class RtsApp {
   private demolishArmed: PlacedStructure | null = null;
   /** The unfinished site whose cancellation is armed and awaiting its confirm click. */
   private cancelConstructionArmed: PlacedStructure | null = null;
-  /** Per-building last-seen health and how long its bar still has to live. */
-  private readonly healthBarLinger = new Map<number, { health: number; remaining: number }>();
   private readonly worldProgressOverlay = new RtsWorldProgressOverlay();
   private buildingLabelCache: ReadonlyMap<string, string> | null = null;
   private readonly projectiles = new ProjectileSystem();
@@ -970,6 +965,7 @@ export class RtsApp {
       (workers) => this.releaseWorkerTasks(workers),
       (structure, target) => this.orderStructureAttack(structure, target),
     );
+    this.structureRepair = new StructureRepairSystem(this.kingdoms);
     this.workerConstruction = new WorkerConstructionSystem(
       this.units,
       this.structures,
@@ -985,6 +981,7 @@ export class RtsApp {
       // more builders per foundation was busywork the player always did anyway.
       // The AI's build/economy managers stay on the tuned single-builder rule.
       (structure) => structure.owner === PLAYER_OWNER,
+      (structure, deltaSeconds, workerCount) => this.structureRepair.advance(structure, deltaSeconds, workerCount),
     );
     this.economyProduction = new EconomyProductionSystem(
       this.units,
@@ -1457,6 +1454,7 @@ export class RtsApp {
     this.ghostStructures?.dispose();
     this.objectiveTracker?.dispose();
     this.workerConstruction.reset();
+    this.structureRepair.reset();
     this.barracksProduction.reset();
     this.workerProduction.reset();
     this.structures.clear();
@@ -1675,7 +1673,6 @@ export class RtsApp {
     updateSelectionRingPulse(dt);
     this.structures.updateVisualAnimations(dt);
     this.updateStructureDamageVfx(dt);
-    this.updateHealthBarLinger(dt);
     this.updateWorldProgressOverlay();
     // Presentation runs on the rendered-frame delta, not the simulation's: a
     // tracer and a health bar should look the same at any game speed.
@@ -2048,51 +2045,6 @@ export class RtsApp {
     };
   }
 
-  /** Present player construction, training, and damaged-building health above all world geometry. */
-  /**
-   * Keep a building's health bar up for a few seconds after it is hit, then let
-   * it go (plan §64 "seçim ve sağlık göstergeleri").
-   *
-   * Bars used to stay up for as long as a building was below full health, on the
-   * reasoning that buildings do not regenerate so the information stays true.
-   * True, but it made a besieged base indistinguishable from one that took a
-   * stray arrow an hour ago: a dozen permanent bars, none of them urgent. A bar
-   * that appears when a building is *being hit* is the thing the player has to
-   * react to, and the standing health figure is still one click away in the
-   * selection panel.
-   *
-   * Damage is detected by watching health fall rather than by a combat hook,
-   * because every source that can hurt a building — siege, defence fire, a razed
-   * neighbour — already lands on the same value, and one observer cannot miss a
-   * path the way a set of call sites can. Real seconds, not simulation ones, for
-   * the reason the surrounding presentation code gives: at 8x a warning that
-   * expired eight times faster would be unreadable when it matters most.
-   */
-  private updateHealthBarLinger(dt: number): void {
-    const seen = new Set<number>();
-    const observe = (key: number, current: number): void => {
-      seen.add(key);
-      const previous = this.healthBarLinger.get(key);
-      const remaining = previous && current < previous.health
-        ? HEALTH_BAR_LINGER_SECONDS
-        : Math.max(0, (previous?.remaining ?? 0) - dt);
-      this.healthBarLinger.set(key, { health: current, remaining });
-    };
-    for (const structure of this.structures.all()) observe(structure.id, structure.health.current);
-    const center = this.centers.get(PLAYER_OWNER);
-    if (center) observe(CENTER_HEALTH_BAR_KEY, center.health.current);
-    // Drop razed buildings so a rebuilt one on a recycled id cannot inherit a
-    // stale bar — and so the map does not grow for a whole match.
-    for (const key of [...this.healthBarLinger.keys()]) {
-      if (!seen.has(key)) this.healthBarLinger.delete(key);
-    }
-  }
-
-  /** True while a building was hit recently enough to still warrant a bar. */
-  private healthBarVisible(key: number): boolean {
-    return (this.healthBarLinger.get(key)?.remaining ?? 0) > 0;
-  }
-
   /** Starts a smoke puff immediately when a completed building crosses a health threshold. */
   private onStructureDamageStageChanged(structure: PlacedStructure, stage: StructureDamageStage): void {
     if (!structure.construction.complete || (stage !== "light" && stage !== "heavy")) {
@@ -2269,7 +2221,13 @@ export class RtsApp {
       // Centre-led progression has no per-building upgrade bar: the level and age
       // ladder is the kingdom's, shown once on the centre below, not on each
       // building (plan §5 — the world progress bar lives only on the Merkez).
-      if (!structure.health.depleted && structure.health.ratio < 1 && this.healthBarVisible(structure.id)) {
+      // Below full health, the bar is up — the rule units already live under
+      // (`HealthBar.set` hides itself at ratio 1). It used to expire a few
+      // seconds after the last hit, so a besieged base could not be told from
+      // one that took a stray arrow an hour ago. Repair is what changed the
+      // answer: a damaged building is now a standing job with a price on it, and
+      // the bar is how the player finds the ones still waiting for a crew.
+      if (!structure.health.depleted && structure.health.ratio < 1) {
         entries.push({
           id: `structure-health-${structure.id}`,
           x: structure.x,
@@ -2282,7 +2240,7 @@ export class RtsApp {
         });
       }
     }
-    if (center && !center.health.depleted && center.health.ratio < 1 && this.healthBarVisible(CENTER_HEALTH_BAR_KEY)) {
+    if (center && !center.health.depleted && center.health.ratio < 1) {
       entries.push({
         id: "player-command-center-health",
         x: center.position.x,
@@ -2423,6 +2381,9 @@ export class RtsApp {
     // idle overlap once instead of continuously pushing the whole stopped group.
     settleStoppedUnitOverlaps(this.units.all(), this.navigation);
     this.workerConstruction.update(dt);
+    // Settle repair jobs whose building was razed or demolished since the last
+    // tick; an untouched job is refunded here exactly as a cancelled one is.
+    this.structureRepair.update(this.structures.all());
     this.economyProduction?.update(dt);
     this.syncForestVisibility();
     this.logisticsTransfers.update();
@@ -3143,6 +3104,10 @@ export class RtsApp {
     this.logisticsOccupation.reset();
     this.logisticsTransfers.reset();
     this.workerConstruction.reset();
+    // Dropped rather than refunded: `kingdoms.reset()` below restores every
+    // wallet to its match-start stockpile, so a refund here would be paid into
+    // an account that is about to be replaced.
+    this.structureRepair.reset();
     this.barracksProduction.reset();
     this.progression.reset();
     this.workerProduction.reset();
@@ -3475,6 +3440,7 @@ export class RtsApp {
           maxHealth: structure.health.max,
           demolishArmed: this.demolishArmed === structure,
           cancelConstructionArmed: this.cancelConstructionArmed === structure,
+          repair: this.structureRepairView(structure),
           detail: this.structureDetail(structure),
         },
       };
@@ -3501,6 +3467,32 @@ export class RtsApp {
           progression: this.centerProgressionView(PLAYER_OWNER),
         },
       },
+    };
+  }
+
+  /**
+   * The repair verb's state for the §51 panel, or null when there is nothing to
+   * offer: an enemy building, an unfinished foundation, or one at full health
+   * with no crew already on it.
+   *
+   * The running case is checked before the damage case on purpose — a crew that
+   * has just finished the last hit point is still worth showing until the job
+   * closes, and the panel needs the "Tamiri Durdur" button to stay put rather
+   * than vanish under the cursor mid-repair.
+   */
+  private structureRepairView(structure: PlacedStructure): StructureRepairView | null {
+    if (structure.owner !== PLAYER_OWNER || !structure.construction.complete) return null;
+    const job = this.structureRepair.snapshot(structure);
+    const quote = this.structureRepair.quote(structure);
+    if (!job && !quote) return null;
+    return {
+      missingHealth: quote?.missingHealth ?? 0,
+      cost: quote?.cost ?? {},
+      workerSeconds: quote?.workerSeconds ?? 0,
+      active: job !== null,
+      progress: job?.progress ?? 0,
+      workers: this.workerConstruction.assignedRepairWorkers(structure),
+      stock: this.kingdoms.get(PLAYER_OWNER).wallet.snapshot(),
     };
   }
 
@@ -3555,6 +3547,73 @@ export class RtsApp {
     this.announce("structure", `${structure.stats.label} yıkıldı.`);
   }
 
+  /**
+   * Order — or call off — the repair of the selected building (the "Tamir Et"
+   * button, and the same path a right-click with workers takes).
+   *
+   * Payment happens first and staffing second, then the order is *undone* if no
+   * worker could be sent. The other order — find a worker, then charge — would
+   * leave a crew walking toward a job the kingdom turned out not to be able to
+   * afford, and the player watching workers abandon a building for no stated
+   * reason. Refunding an unstarted job is exactly what `cancel` already does.
+   */
+  private repairSelectedStructure(workers: readonly Unit[] = []): void {
+    const structure = this.selection.selectedStructure();
+    if (!structure || structure.owner !== PLAYER_OWNER) return;
+    this.orderStructureRepair(structure, workers);
+  }
+
+  /** Shared by the panel button and the contextual worker order. */
+  private orderStructureRepair(structure: PlacedStructure, workers: readonly Unit[]): boolean {
+    if (structure.owner !== PLAYER_OWNER) return false;
+    if (this.structureRepair.isRepairing(structure)) {
+      // Adding workers to a running repair is not a cancel: the player pointing
+      // more hands at a job they already ordered means "faster", and only the
+      // button — which carries no crew — can mean "stop".
+      if (workers.length > 0) {
+        if (!this.staffStructureRepair(structure, workers)) {
+          this.announce("structure", "Tamir ekibi dolu; daha fazla işçi eklenemedi.", "refused");
+        }
+        return true;
+      }
+      this.workerConstruction.cancelRepair(structure);
+      this.structureRepair.cancel(structure);
+      this.announce("structure", `${structure.stats.label} tamiri durduruldu.`, "refused");
+      return true;
+    }
+    const quote = this.structureRepair.quote(structure);
+    const result = this.structureRepair.begin(structure);
+    if (result !== "started") {
+      const message: Record<typeof result, string> = {
+        "not-repairable": "Yalnız tamamlanmış yapılar tamir edilebilir.",
+        undamaged: `${structure.stats.label} zaten tam canda.`,
+        "already-repairing": `${structure.stats.label} zaten tamir ediliyor.`,
+        "insufficient-resources": quote
+          ? `${structure.stats.label} tamiri için kaynak yetersiz (${formatResourceCost(quote.cost)}).`
+          : `${structure.stats.label} tamiri için kaynak yetersiz.`,
+      };
+      this.announce("structure", message[result], "refused");
+      return true;
+    }
+    if (this.staffStructureRepair(structure, workers)) return true;
+    // Nobody could be sent, so the order never happened: unwind it in full.
+    this.structureRepair.cancel(structure);
+    this.announce("structure", "Tamir için uygun işçi yok.", "refused");
+    return true;
+  }
+
+  /** Send the given workers — or the nearest free ones — to an open repair job. */
+  private staffStructureRepair(structure: PlacedStructure, workers: readonly Unit[]): boolean {
+    const assigned = workers.length > 0
+      ? this.workerConstruction.assignRepairWorkers(structure, workers).assignedWorkers
+      : this.workerConstruction.assignNearestForRepair(structure).assigned
+        ? this.workerConstruction.assignedRepairWorkers(structure)
+        : 0;
+    if (assigned === 0) return false;
+    this.announce("structure", `${assigned} işçi ${structure.stats.label} tamirine gönderildi.`);
+    return true;
+  }
+
   /** Cancel exactly the selected foundation; a finished building must use demolition instead. */
   private cancelSelectedConstruction(): void {
     const structure = this.selection.selectedStructure();
@@ -3592,6 +3651,10 @@ export class RtsApp {
     }
     if (id === DEMOLISH_ACTION) {
       this.demolishSelectedStructure();
+      return;
+    }
+    if (id === REPAIR_ACTION) {
+      this.repairSelectedStructure();
       return;
     }
     if (id === CANCEL_CONSTRUCTION_ACTION) {
@@ -4046,6 +4109,17 @@ export class RtsApp {
           : "İnşaat için uygun işçi yok.", "refused");
       }
       return true;
+    }
+    // A damaged building the worker has nothing else to do at is a repair order.
+    // The two gestures cannot both be the right-click, so the tie is broken by
+    // what the worker could otherwise be there for: a Farm or a Camp keeps
+    // meaning "go and gather" even while damaged (its repair is one click away on
+    // the panel), and a House, a Barracks or a wall — where gathering is not a
+    // thing — means the only work there is. A repair already running always wins:
+    // pointing more workers at it is the player reinforcing their own order.
+    if (this.structureRepair.isRepairing(structure)
+      || (structure.health.ratio < 1 && !structure.stats.economy)) {
+      return this.orderStructureRepair(structure, workers);
     }
     if (!structure.stats.economy || !this.economyProduction) return false;
     // A direct gathering order transfers workers out of construction first.

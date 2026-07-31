@@ -832,7 +832,9 @@
           "intensity": 0.7
         }
       ],
-      "reflectionQuality": "high"
+      "reflectionMode": "sharedPlanar",
+      "reflectionQuality": "high",
+      "reflectionStrength": 0.9
     }
   ],
   "actors": [

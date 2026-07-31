@@ -34,6 +34,7 @@ export interface ResolvedRiverWater {
   reflectionMode: "off" | "sharedPlanar";
   reflectionGroup: string | null;
   reflectionQuality: "low" | "medium" | "high";
+  reflectionStrength: number;
 }
 
 export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
@@ -67,6 +68,10 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   reflectionMode: "off",
   reflectionGroup: null,
   reflectionQuality: "medium",
+  // Subtle by default: the shader multiplies this by a depth term (<= 0.35) and
+  // fades it under foam, so a full-strength mirror is never what an author gets
+  // by only switching Mode on. Raise it per body when the reflection should read.
+  reflectionStrength: 0.34,
 };
 
 /** Fills optional River Water Body presentation fields without inspecting the spline. */
@@ -107,6 +112,7 @@ export function resolveRiverWater(actor: LayoutRiverWater | null | undefined): R
     reflectionQuality: actor?.reflectionQuality === "low" || actor?.reflectionQuality === "high"
       ? actor.reflectionQuality
       : defaults.reflectionQuality,
+    reflectionStrength: actor?.reflectionStrength ?? defaults.reflectionStrength,
   };
 }
 

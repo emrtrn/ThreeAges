@@ -21,11 +21,14 @@ export function planarReflectionLayerMask(mask: number): number {
   return mask & ~(1 << PLANAR_REFLECTION_EXCLUDED_LAYER);
 }
 
-/** The one reflection texture/matrix a family of coplanar consumers samples. */
+/**
+ * The one reflection texture/matrix a family of coplanar consumers samples. How
+ * much of it a consumer blends in is deliberately not here: coplanar bodies share
+ * the capture but each authors its own strength.
+ */
 export interface PlanarReflectionBinding {
   readonly texture: Texture;
   readonly textureMatrix: Matrix4;
-  readonly strength: number;
 }
 
 export type PlanarReflectionQuality = "medium" | "high";
@@ -52,7 +55,7 @@ export class PlanarReflectionSource {
   private lastUpdateAt = -Infinity;
   private rendering = false;
 
-  constructor(planeY: number, quality: PlanarReflectionQuality, strength = 0.34) {
+  constructor(planeY: number, quality: PlanarReflectionQuality) {
     const settings = QUALITY_SETTINGS[quality];
     this.planeY = planeY;
     this.minUpdateMs = settings.minUpdateMs;
@@ -63,7 +66,6 @@ export class PlanarReflectionSource {
     this.binding = {
       texture: this.renderTarget.texture,
       textureMatrix: this.textureMatrix,
-      strength,
     };
   }
 

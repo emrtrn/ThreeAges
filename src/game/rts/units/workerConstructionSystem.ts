@@ -1,10 +1,20 @@
 /**
- * Worker construction assignments for the settlement loop.
+ * Worker site work for the settlement loop: raising foundations, and repairing
+ * the damaged buildings they became.
  *
  * Foundations pull in every idle worker, up to the approach-point cap below,
  * and — only when no idle worker exists — take a single gatherer off its job so
  * the economy cannot deadlock. The player can still add selected workers
  * explicitly; every active builder contributes one worker-second of progress.
+ *
+ * Repair rides on the same machinery rather than a system of its own. The
+ * logistics question is identical — which workers, walking to which footprint
+ * edge, how many may crowd one building — and a separate system would have to
+ * be cross-checked by the economy, the AI's idle test and this one before any of
+ * them could call a worker free. Only the *work* differs, and that is delegated
+ * to `StructureRepairSystem` through the `advanceRepair` hook: repair is never
+ * staffed automatically, because it spends resources and the player has to have
+ * asked for it.
  */
 import { Vector3 } from "three";
 
@@ -13,7 +23,7 @@ import type { PlacedStructure, PlacedStructureSystem } from "../structures/place
 import type { Unit, UnitOwner } from "./unit";
 import type { UnitSystem } from "./unitSystem";
 
-export type WorkerConstructionState = "idle" | "moving" | "building" | "unreachable";
+export type WorkerConstructionState = "idle" | "moving" | "building" | "repairing" | "unreachable";
 export type WorkerAssignmentFailure = "no-idle-worker" | "unreachable";
 export type WorkerAssignmentResult =
   | { readonly assigned: true }
@@ -26,12 +36,18 @@ export interface ManualConstructionAssignmentResult {
 }
 
 type AssignmentSource = "automatic" | "manual";
+/** What a worker at a site is there to do. */
+export type WorkerSiteJob = "build" | "repair";
+/** The tick result `StructureRepairSystem.advance` answers with. */
+export type RepairAdvanceResult = "repairing" | "done";
 
 interface WorkerAssignment {
   readonly worker: Unit;
   readonly structure: PlacedStructure;
   readonly approach: Vector3;
   readonly source: AssignmentSource;
+  readonly job: WorkerSiteJob;
+  /** "building" and "repairing" are both "settled and working", per job. */
   state: Exclude<WorkerConstructionState, "idle">;
 }
 
@@ -58,6 +74,16 @@ export class WorkerConstructionSystem {
      * managers are tuned around — flooding its own sites cost it buildings.
      */
     private readonly autoStaffsToCapacity: (structure: PlacedStructure) => boolean = () => false,
+    /**
+     * One tick of repair work, delegated to whoever owns the repair economics.
+     * The default answers "done", so a runtime built without a repair system
+     * simply has no repair rather than an unpaid, infinite one.
+     */
+    private readonly advanceRepair: (
+      structure: PlacedStructure,
+      deltaSeconds: number,
+      workerCount: number,
+    ) => RepairAdvanceResult = () => "done",
   ) {}
 
   /**
@@ -75,7 +101,7 @@ export class WorkerConstructionSystem {
     let assignedAny = false;
     for (const worker of free) {
       if (this.assignmentCount(structure) >= MAX_BUILDERS_PER_SITE) break;
-      if (!this.tryAssign([worker], structure, "automatic")) continue;
+      if (!this.tryAssign([worker], structure, "automatic", "build")) continue;
       assignedAny = true;
       if (!toCapacity) break;
     }
@@ -87,7 +113,7 @@ export class WorkerConstructionSystem {
     const gathering = this.candidatesFor(structure, (worker) => this.isReservedForOtherWork(worker));
     for (const worker of gathering) {
       if (!this.releaseFromOtherWork(worker, "automatic")) continue;
-      if (this.tryAssign([worker], structure, "automatic")) return { assigned: true };
+      if (this.tryAssign([worker], structure, "automatic", "build")) return { assigned: true };
     }
     return {
       assigned: false,
@@ -103,6 +129,50 @@ export class WorkerConstructionSystem {
     if (structure.construction.complete) {
       return { assignedWorkers: 0, rejectedWorkers: workers.length, reason: "unreachable" };
     }
+    return this.assignManually(structure, workers, "build");
+  }
+
+  /**
+   * Send these workers to repair a standing building. The caller has already
+   * opened and paid for the job (`StructureRepairSystem.begin`); this only staffs
+   * it, under exactly the construction rules — same cap, same right to take a
+   * worker off gathering, because the player asked for it by name.
+   */
+  assignRepairWorkers(structure: PlacedStructure, workers: readonly Unit[]): ManualConstructionAssignmentResult {
+    if (!structure.construction.complete) {
+      return { assignedWorkers: 0, rejectedWorkers: workers.length, reason: "unreachable" };
+    }
+    return this.assignManually(structure, workers, "repair");
+  }
+
+  /**
+   * Staff a paid repair from whoever is free, nearest first — the repair
+   * counterpart of {@link assignNearest}.
+   *
+   * Genuinely idle workers only: construction may preempt a gatherer to keep the
+   * build order from deadlocking, and repair has no such deadlock to break. A
+   * repair that finds nobody free is a refusal the player can answer by freeing
+   * someone, not a reason to stop their economy behind their back.
+   */
+  assignNearestForRepair(structure: PlacedStructure): WorkerAssignmentResult {
+    if (!structure.construction.complete || this.assignmentCount(structure) >= MAX_BUILDERS_PER_SITE) {
+      return { assigned: false, reason: "no-idle-worker" };
+    }
+    const free = this.candidatesFor(structure, (worker) => !this.isReservedForOtherWork(worker));
+    let assignedAny = false;
+    for (const worker of free) {
+      if (this.assignmentCount(structure) >= MAX_BUILDERS_PER_SITE) break;
+      if (this.tryAssign([worker], structure, "automatic", "repair")) assignedAny = true;
+    }
+    if (assignedAny) return { assigned: true };
+    return { assigned: false, reason: free.length === 0 ? "no-idle-worker" : "unreachable" };
+  }
+
+  private assignManually(
+    structure: PlacedStructure,
+    workers: readonly Unit[],
+    job: WorkerSiteJob,
+  ): ManualConstructionAssignmentResult {
     let assignedWorkers = 0;
     let rejectedWorkers = 0;
     let sawReachableCandidate = false;
@@ -112,7 +182,7 @@ export class WorkerConstructionSystem {
         continue;
       }
       const existing = this.assignments.get(worker.id);
-      if (existing?.structure === structure) {
+      if (existing?.structure === structure && existing.job === job) {
         assignedWorkers += 1;
         continue;
       }
@@ -125,7 +195,7 @@ export class WorkerConstructionSystem {
         rejectedWorkers += 1;
         continue;
       }
-      const assigned = this.tryAssign([worker], structure, "manual");
+      const assigned = this.tryAssign([worker], structure, "manual", job);
       if (assigned) {
         assignedWorkers += 1;
         sawReachableCandidate = true;
@@ -160,7 +230,12 @@ export class WorkerConstructionSystem {
         - b.position.distanceToSquared(structure.object.position));
   }
 
-  private tryAssign(candidates: readonly Unit[], structure: PlacedStructure, source: AssignmentSource): boolean {
+  private tryAssign(
+    candidates: readonly Unit[],
+    structure: PlacedStructure,
+    source: AssignmentSource,
+    job: WorkerSiteJob,
+  ): boolean {
     for (const worker of candidates) {
       if (this.assignmentCount(structure) >= MAX_BUILDERS_PER_SITE) return false;
       const approach = this.findReachableApproach(worker, structure, this.approachesFor(structure));
@@ -168,7 +243,7 @@ export class WorkerConstructionSystem {
       const path = this.navigation.plan(worker.position, approach);
       if (!path) continue;
       worker.setMovePath(path);
-      this.assignments.set(worker.id, { worker, structure, approach, source, state: "moving" });
+      this.assignments.set(worker.id, { worker, structure, approach, source, job, state: "moving" });
       return true;
     }
     return false;
@@ -176,9 +251,12 @@ export class WorkerConstructionSystem {
 
   /** Remove a cancelled site's assignments, restoring its workers to idle. */
   cancelStructure(structure: PlacedStructure): void {
-    for (const assignment of [...this.assignments.values()]) {
-      if (assignment.structure === structure) this.release(assignment.worker);
-    }
+    this.releaseCrew(structure);
+  }
+
+  /** Send home only the crew repairing this building (a cancelled repair order). */
+  cancelRepair(structure: PlacedStructure): void {
+    this.releaseCrew(structure, "repair");
   }
 
   update(deltaSeconds: number): void {
@@ -194,12 +272,13 @@ export class WorkerConstructionSystem {
       }
       // The builder pose follows the assignment's own state, so it starts the
       // frame the worker settles on its approach point and stops the frame the
-      // site is finished — no separate timer to drift out of step with.
-      worker.setWorking(assignment.state === "building");
+      // site is finished — no separate timer to drift out of step with. A
+      // repairer swings the same hammer, so both settled states pose alike.
+      worker.setWorking(assignment.state === "building" || assignment.state === "repairing");
       if (assignment.state !== "moving") continue;
       if (worker.position.distanceTo(assignment.approach) <= BUILD_RANGE) {
         worker.stop();
-        assignment.state = "building";
+        assignment.state = assignment.job === "repair" ? "repairing" : "building";
         worker.setWorking(true);
         continue;
       }
@@ -213,16 +292,34 @@ export class WorkerConstructionSystem {
     }
 
     const activeBuilders = new Map<PlacedStructure, number>();
+    const activeRepairers = new Map<PlacedStructure, number>();
     for (const assignment of this.assignments.values()) {
-      if (assignment.state !== "building") continue;
-      activeBuilders.set(assignment.structure, (activeBuilders.get(assignment.structure) ?? 0) + 1);
+      const crew = assignment.state === "building"
+        ? activeBuilders
+        : assignment.state === "repairing" ? activeRepairers : null;
+      if (!crew) continue;
+      crew.set(assignment.structure, (crew.get(assignment.structure) ?? 0) + 1);
     }
     for (const [structure, workerCount] of activeBuilders) {
       if (!this.structures.advanceConstruction(structure, deltaSeconds, workerCount)) continue;
-      for (const assignment of [...this.assignments.values()]) {
-        if (assignment.structure === structure) this.release(assignment.worker);
-      }
+      this.releaseCrew(structure);
       this.onConstructionComplete(structure);
+    }
+    // A finished repair frees its crew the same way a finished foundation does.
+    // "done" also covers a job that was never open — a worker cannot be left
+    // hammering a building nobody is paying for.
+    for (const [structure, workerCount] of activeRepairers) {
+      if (this.advanceRepair(structure, deltaSeconds, workerCount) !== "done") continue;
+      this.releaseCrew(structure, "repair");
+    }
+  }
+
+  /** Send one site's workers home; `job` narrows it to a single kind of crew. */
+  private releaseCrew(structure: PlacedStructure, job?: WorkerSiteJob): void {
+    for (const assignment of [...this.assignments.values()]) {
+      if (assignment.structure !== structure) continue;
+      if (job !== undefined && assignment.job !== job) continue;
+      this.release(assignment.worker);
     }
   }
 
@@ -250,6 +347,12 @@ export class WorkerConstructionSystem {
   /** Builders on one site, for the §51 panel opened by selecting a foundation. */
   assignedWorkers(structure: PlacedStructure): number {
     return this.assignmentCount(structure);
+  }
+
+  /** Workers currently sent to repair this building, walking or already at work. */
+  assignedRepairWorkers(structure: PlacedStructure): number {
+    return [...this.assignments.values()]
+      .filter((assignment) => assignment.structure === structure && assignment.job === "repair").length;
   }
 
   idleWorkerCount(owner: UnitOwner): number {

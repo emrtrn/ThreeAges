@@ -251,6 +251,7 @@ import {
   describeSelection,
   AGE_UP_ACTION,
   CENTER_LEVEL_UP_ACTION,
+  REPAIR_ACTION,
   RESCUE_ACTION,
   TRADE_BUY_ACTION_PREFIX,
   TRAIN_ACTION_PREFIX,
@@ -258,6 +259,7 @@ import {
   type CenterDetailView,
   type MarketDetailView,
   type MilitaryDetailView,
+  type SelectedStructureView,
   type SelectedUnitView,
   type SelectionAction,
   type SelectionPanelContent,
@@ -265,6 +267,12 @@ import {
   type CenterProgressionView,
   type WorkerJob,
 } from "../src/game/rts/ui/rtsSelectionView";
+import {
+  REPAIR_FRACTION_OF_BUILD,
+  StructureRepairSystem,
+  healthPerWorkerSecond,
+  quoteStructureRepair,
+} from "../src/game/rts/structures/structureRepairSystem";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
 import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
@@ -311,7 +319,7 @@ import { ProjectileSystem } from "../src/game/rts/combat/projectileSystem";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
 import { SupportAuraSystem } from "../src/game/rts/structures/supportAuraSystem";
 import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
-import type { GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
+import type { BuildingBalanceStats, GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import { Unit, UNIT_DEATH_SECONDS, type RtsPresentationHandle } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import { SelectionSystem } from "../src/game/rts/selection/selectionSystem";
@@ -36159,6 +36167,266 @@ check("RTS selected workers add linear construction speed at separate work point
   structures.clear();
 });
 
+/**
+ * A completed house from the live balance table, damaged by `missingRatio` of its
+ * durability — the fixture every repair check below starts from. Derived from the
+ * data rather than written out, so retuning the house cannot make these tests
+ * assert a price nobody charges.
+ */
+function damagedRtsHouse(missingRatio: number): {
+  structures: PlacedStructureSystem;
+  site: ReturnType<PlacedStructureSystem["place"]>;
+  house: BuildingBalanceStats;
+} {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const structures = new PlacedStructureSystem();
+  const site = structures.place("player", house, 0, 0);
+  structures.advanceConstruction(site, house.constructionSeconds);
+  assert.equal(site.construction.complete, true, "the fixture is a finished building, not a site");
+  if (missingRatio > 0) site.health.damage(site.health.max * missingRatio);
+  return { structures, site, house };
+}
+
+/** Floats reach the same magnitude by different routes; compare at that precision. */
+function assertClose(actual: number, expected: number, message: string): void {
+  assert.ok(Math.abs(actual - expected) < 1e-9, `${message} (${actual} vs ${expected})`);
+}
+
+check("Yapı tamiri: fiyat ve süre, inşaatın yarısının hasar oranıyla ölçeklenmişi", () => {
+  // The rule, and the only thing pinned here: a repair is REPAIR_FRACTION_OF_BUILD
+  // of the build in both currencies, scaled to how much of the building is
+  // actually missing. Every magnitude is recomputed from the same table, so
+  // retuning the house's cost, duration or durability keeps this green.
+  // GDD 12 §40 "Onarım": the total repair bill is 40–60% of the original build
+  // price, scaled by the missing health fraction. The ratio is tunable inside
+  // that band; leaving it is a design change, not a retuning.
+  assert.ok(
+    REPAIR_FRACTION_OF_BUILD >= 0.4 && REPAIR_FRACTION_OF_BUILD <= 0.6,
+    "the repair fraction stays inside the band GDD 12 §40 asks for",
+  );
+
+  const { structures, site, house } = damagedRtsHouse(0.4);
+  const missing = site.health.max - site.health.current;
+  const missingRatio = missing / site.health.max;
+  const quote = quoteStructureRepair(site) ?? assert.fail("a damaged building must quote a repair");
+
+  assert.equal(quote.missingHealth, missing);
+  assertClose(
+    quote.workerSeconds,
+    house.constructionSeconds * REPAIR_FRACTION_OF_BUILD * missingRatio,
+    "repairing 40% of a house takes 40% of half its build time",
+  );
+  for (const [resourceId, amount] of Object.entries(house.cost)) {
+    assert.equal(
+      quote.cost[resourceId],
+      Math.ceil(amount * REPAIR_FRACTION_OF_BUILD * missingRatio),
+      `${resourceId} is charged at the repair fraction of its build price, rounded up`,
+    );
+  }
+
+  // The relationship the player is promised, at the worst case a repair can face:
+  // even a near-dead building is cheaper and quicker to save than to rebuild.
+  const wreck = damagedRtsHouse(0.99);
+  const wreckQuote = quoteStructureRepair(wreck.site) ?? assert.fail("a wreck must quote a repair");
+  assert.ok(
+    wreckQuote.workerSeconds < house.constructionSeconds,
+    "a full repair is strictly faster than raising the building again",
+  );
+  for (const [resourceId, amount] of Object.entries(house.cost)) {
+    assert.ok(
+      (wreckQuote.cost[resourceId] ?? 0) < amount,
+      `${resourceId}: a full repair is strictly cheaper than the build price`,
+    );
+  }
+
+  // An intact building has nothing to quote, and neither does a foundation —
+  // which is built, not repaired, however much health it is missing.
+  assert.equal(quoteStructureRepair(damagedRtsHouse(0).site), null, "an intact building offers no repair");
+  const fresh = new PlacedStructureSystem();
+  const foundation = fresh.place("player", house, 0, 0);
+  foundation.health.damage(foundation.health.max * 0.5);
+  assert.equal(quoteStructureRepair(foundation), null, "an unfinished site is built, not repaired");
+
+  structures.clear();
+  wreck.structures.clear();
+  fresh.clear();
+});
+
+check("Yapı tamiri: peşin ödenir, işçi-saniye başına yarım inşaat hızıyla iyileşir", () => {
+  const { structures, site, house } = damagedRtsHouse(0.4);
+  const units = new UnitSystem();
+  const kingdoms = new KingdomRegistry(
+    ["player"],
+    units,
+    structures,
+    { food: 500, wood: 500, stone: 500, gold: 500 },
+    20,
+  );
+  const repair = new StructureRepairSystem(kingdoms);
+  const construction = new WorkerConstructionSystem(
+    units,
+    structures,
+    new RtsNavigation(),
+    () => false,
+    () => undefined,
+    () => false,
+    () => false,
+    (structure, deltaSeconds, workerCount) => repair.advance(structure, deltaSeconds, workerCount),
+  );
+  // Spawned on the +x footprint edge, so it is already inside build range of the
+  // approach point it will be given and settles on the first update.
+  const worker = units.spawn("player", house.footprint.width / 2 + 0.875, 0, RTS_TEST_WORKER_STATS);
+  const wallet = kingdoms.get("player").wallet;
+  const stockBefore = wallet.snapshot();
+  const quote = repair.quote(site) ?? assert.fail("the fixture must be repairable");
+
+  assert.equal(repair.begin(site), "started");
+  for (const [resourceId, amount] of Object.entries(quote.cost)) {
+    assert.equal(
+      wallet.amount(resourceId),
+      (stockBefore[resourceId] ?? 0) - amount,
+      `${resourceId}: the whole quoted price is taken when the order is placed`,
+    );
+  }
+
+  assert.deepEqual(construction.assignRepairWorkers(site, [worker]), {
+    assignedWorkers: 1,
+    rejectedWorkers: 0,
+    reason: null,
+  });
+  construction.update(0);
+  assert.equal(construction.stateFor(worker), "repairing", "a settled repairer is not reported as a builder");
+
+  const healthBefore = site.health.current;
+  construction.update(1);
+  assertClose(
+    site.health.current - healthBefore,
+    healthPerWorkerSecond(site),
+    "one worker-second restores the building's whole durability divided by its repair time",
+  );
+
+  for (let frame = 0; frame < 600 && repair.isRepairing(site); frame += 1) construction.update(1 / 60);
+  assert.equal(site.health.current, site.health.max, "the paid repair runs to full health");
+  assert.equal(repair.isRepairing(site), false, "and then closes its job");
+  // The crew goes home exactly as a finished foundation's does: a worker still
+  // kneeling at an intact building is the visible form of a leaked assignment.
+  assert.equal(construction.stateFor(worker), "idle");
+  assert.equal(construction.assignedRepairWorkers(site), 0);
+
+  structures.clear();
+  units.clear();
+});
+
+check("Yapı tamiri: iş başlamadan iptal tam iade eder, başladıktan sonra etmez", () => {
+  const untouched = damagedRtsHouse(0.5);
+  const units = new UnitSystem();
+  const kingdoms = new KingdomRegistry(
+    ["player"],
+    units,
+    untouched.structures,
+    { food: 500, wood: 500, stone: 500, gold: 500 },
+    20,
+  );
+  const repair = new StructureRepairSystem(kingdoms);
+  const wallet = kingdoms.get("player").wallet;
+  const before = wallet.snapshot();
+
+  // Called off before a hammer landed: the kingdom never received the order.
+  assert.equal(repair.begin(untouched.site), "started");
+  assert.notDeepEqual(wallet.snapshot(), before, "the order was actually paid for");
+  assert.equal(repair.cancel(untouched.site), true);
+  assert.deepEqual(wallet.snapshot(), before, "an unstarted repair is refunded in full");
+
+  // Once health has been delivered the payment stands, or "repair, then cancel"
+  // would be the cheapest repair in the game.
+  assert.equal(repair.begin(untouched.site), "started");
+  const paid = wallet.snapshot();
+  assert.equal(repair.advance(untouched.site, 0.25, 1), "repairing");
+  assert.ok(untouched.site.health.current > untouched.site.health.max * 0.5, "work actually landed");
+  assert.equal(repair.cancel(untouched.site), true);
+  assert.deepEqual(wallet.snapshot(), paid, "a part-finished repair keeps what it bought");
+
+  // A razed building settles its own books from the live list, so a job cannot
+  // outlive the thing it was repairing.
+  const razed = damagedRtsHouse(0.5);
+  const razedKingdoms = new KingdomRegistry(["player"], units, razed.structures, { food: 500, wood: 500 }, 20);
+  const razedRepair = new StructureRepairSystem(razedKingdoms);
+  const razedWallet = razedKingdoms.get("player").wallet;
+  const razedBefore = razedWallet.snapshot();
+  assert.equal(razedRepair.begin(razed.site), "started");
+  razed.site.health.damage(razed.site.health.max);
+  assert.deepEqual(updateStructureDestruction(razed.structures), [razed.site]);
+  razedRepair.update(razed.structures.all());
+  assert.equal(razedRepair.isRepairing(razed.site), false, "the job does not outlive its building");
+  assert.deepEqual(razedWallet.snapshot(), razedBefore, "and its untouched payment comes back");
+
+  untouched.structures.clear();
+  razed.structures.clear();
+  units.clear();
+});
+
+check("Yapı tamiri: buton yalnız hasar varken çıkar, çalışırken kendi iptaline döner", () => {
+  const panel = (repair: SelectedStructureView["repair"], health: number): SelectionPanelContent =>
+    describeSelection({
+      kind: "structure",
+      structure: {
+        id: 1,
+        label: "Ev",
+        level: 1,
+        health,
+        maxHealth: 200,
+        repair,
+        detail: { kind: "passive", populationCapacity: 5 },
+      },
+    });
+  const action = (content: SelectionPanelContent): SelectionAction | undefined =>
+    content.actions.find((candidate) => candidate.id === REPAIR_ACTION);
+
+  // An intact building offers no repair: a permanently visible button on a
+  // healthy base is a dead control, not an affordance.
+  assert.equal(action(panel(null, 200)), undefined);
+  assert.equal(action(panel({
+    missingHealth: 0, cost: {}, workerSeconds: 0, active: false, progress: 0, workers: 0, stock: { wood: 100 },
+  }, 200)), undefined);
+
+  const affordable = action(panel({
+    missingHealth: 80, cost: { wood: 8 }, workerSeconds: 4, active: false, progress: 0, workers: 0, stock: { wood: 100 },
+  }, 120)) ?? assert.fail("a damaged building must offer a repair");
+  assert.equal(affordable.enabled, true);
+  assert.equal(affordable.reason, null, "a legal action carries no excuse");
+  assert.match(affordable.cost ?? "", /8 Odun/);
+  assert.match(affordable.hint ?? "", /80 can onarılır/);
+  assert.match(affordable.hint ?? "", /4 sn/);
+
+  // A price the wallet cannot meet is named, not merely refused — the same
+  // contract every other costed button in the panel lives under.
+  const broke = action(panel({
+    missingHealth: 80, cost: { wood: 8 }, workerSeconds: 4, active: false, progress: 0, workers: 0, stock: { wood: 3 },
+  }, 120)) ?? assert.fail("an unaffordable repair is still offered, and refused with a number");
+  assert.equal(broke.enabled, false);
+  assert.match(broke.reason ?? "", /5 Odun/);
+
+  const running = panel({
+    missingHealth: 40, cost: { wood: 4 }, workerSeconds: 2, active: true, progress: 0.5, workers: 2, stock: { wood: 100 },
+  }, 160);
+  const stop = action(running) ?? assert.fail("a running repair must be cancellable");
+  assert.equal(stop.label, "Tamiri Durdur");
+  assert.equal(stop.enabled, true);
+  assert.equal(stop.active, true);
+  assert.match(running.lines.join(" | "), /Tamir %50 · 2 işçi/);
+
+  // Ordered but not yet staffed reads differently: the player has paid and is
+  // waiting on a worker, which is a thing they can go and fix.
+  const waiting = panel({
+    missingHealth: 40, cost: { wood: 4 }, workerSeconds: 2, active: true, progress: 0, workers: 0, stock: { wood: 100 },
+  }, 160);
+  assert.match(waiting.lines.join(" | "), /işçi bekliyor/);
+  assert.match(action(waiting)?.hint ?? "", /tam iade/);
+});
+
 check("RTS a player foundation staffs itself to capacity, and preempts only one gatherer", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -41219,6 +41487,7 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     reflectionMode: "off",
     reflectionGroup: null,
     reflectionQuality: "medium",
+    reflectionStrength: 0.34,
   });
   assert.deepEqual(validateRiverWater({
     id: "river-1",
@@ -41250,6 +41519,7 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     reflectionMode: "sharedPlanar",
     reflectionGroup: "river-a",
     reflectionQuality: "high",
+    reflectionStrength: 0.85,
     ignoredCollision: true,
   }), {
     id: "river-1",
@@ -41281,7 +41551,29 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     reflectionMode: "sharedPlanar",
     reflectionGroup: "river-a",
     reflectionQuality: "high",
+    reflectionStrength: 0.85,
   });
+  // Strength is the visible-amount control and is authored per body, so it must
+  // survive the save round trip and stay inside the 0..1 the shader blends with.
+  assert.throws(() => validateRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    reflectionStrength: 1.5,
+  }));
+  assert.equal(resolveRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    reflectionMode: "sharedPlanar",
+    reflectionStrength: 0.9,
+  }).reflectionStrength, 0.9);
+  // Quality picks a capture budget, never how much of it reaches the surface —
+  // two bodies that differ only in quality must resolve the same strength.
+  assert.equal(
+    resolveRiverWater({ id: "a", landscapeRef: "l", splineRef: "s", reflectionQuality: "high" }).reflectionStrength,
+    resolveRiverWater({ id: "b", landscapeRef: "l", splineRef: "s", reflectionQuality: "medium" }).reflectionStrength,
+  );
   assert.throws(() => validateRiverWater({ id: "river-1", landscapeRef: "landscape-1" }));
   assert.throws(() => validateRiverWater({
     id: "river-1",

@@ -1223,6 +1223,13 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   } else if (input.reflectionQuality !== undefined && input.reflectionQuality !== null) {
     throw new Error("river water reflectionQuality must be low, medium, high, null, or omitted");
   }
+  const reflectionStrength = validateOptionalNumber(
+    input.reflectionStrength,
+    "river water reflectionStrength",
+    0,
+    1,
+  );
+  if (reflectionStrength !== undefined) water.reflectionStrength = Number(reflectionStrength.toFixed(3));
   return water;
 }
 

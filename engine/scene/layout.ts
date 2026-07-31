@@ -954,6 +954,12 @@ export interface LayoutRiverWater {
   reflectionGroup?: string;
   /** Low disables planar reflection; Medium/High select its target/update budget. */
   reflectionQuality?: "low" | "medium" | "high";
+  /**
+   * How much of the planar-reflection capture reaches the surface, 0..1. Quality
+   * only buys resolution and update rate, so this is the one knob that changes
+   * how visible a reflection is; the shader still attenuates it by depth and foam.
+   */
+  reflectionStrength?: number;
 }
 
 export interface RoomLayout {

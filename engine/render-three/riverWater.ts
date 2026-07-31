@@ -399,7 +399,9 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         hasFoamNoiseMap: { value: item.foamNoiseMap ? 1 : 0 },
         reflectionTexture: { value: item.reflectionSource?.binding.texture ?? null },
         reflectionTextureMatrix: { value: item.reflectionSource?.binding.textureMatrix ?? new Matrix4() },
-        reflectionStrength: { value: item.reflectionSource?.binding.strength ?? 0 },
+        // Per-body, not per-source: bodies may share one reflection capture and
+        // still want different amounts of it, so strength stays on the consumer.
+        reflectionStrength: { value: item.reflectionSource ? item.reflectionStrength : 0 },
       },
       transparent: true,
       depthWrite: false,

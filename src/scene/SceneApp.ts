@@ -793,6 +793,7 @@ export interface RiverWaterDetailsView {
   reflectionMode: "off" | "sharedPlanar";
   reflectionGroup: string;
   reflectionQuality: "low" | "medium" | "high";
+  reflectionStrength: number;
   foamStamps: LayoutRiverWaterFoamStamp[];
   segmentProfiles: LayoutRiverWaterSegmentProfile[];
   splineSegments: Array<{ id: string; startPointId: string; endPointId: string }>;
@@ -820,6 +821,7 @@ export type RiverWaterDetailsPatch = Partial<Pick<
   | "reflectionMode"
   | "reflectionGroup"
   | "reflectionQuality"
+  | "reflectionStrength"
   | "foamStamps"
   | "segmentProfiles"
 >>;
@@ -8964,6 +8966,7 @@ export class SceneApp {
           reflectionMode: resolved.reflectionMode,
           reflectionGroup: resolved.reflectionGroup ?? "",
           reflectionQuality: resolved.reflectionQuality,
+          reflectionStrength: resolved.reflectionStrength,
           foamStamps: resolved.foamStamps.map((stamp) => ({
             ...stamp,
             position: [...stamp.position] as Vec3,
@@ -9017,6 +9020,9 @@ export class SceneApp {
       next.reflectionQuality = patch.reflectionQuality === "low" || patch.reflectionQuality === "high"
         ? patch.reflectionQuality
         : "medium";
+    }
+    if (patch.reflectionStrength !== undefined) {
+      next.reflectionStrength = Number(clamp(patch.reflectionStrength, 0, 1).toFixed(3));
     }
     if (patch.foamStamps !== undefined) {
       next.foamStamps = patch.foamStamps.map((stamp) => ({

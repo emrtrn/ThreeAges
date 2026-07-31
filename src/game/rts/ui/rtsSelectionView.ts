@@ -66,7 +66,7 @@ export interface SelectionAction {
 }
 
 /** What a selected worker is doing; the union of the two systems that own workers. */
-export type WorkerJob = "idle" | "moving" | "building" | "producing" | "unreachable";
+export type WorkerJob = "idle" | "moving" | "building" | "repairing" | "producing" | "unreachable";
 
 export interface SelectedUnitView {
   readonly id: number;
@@ -222,6 +222,32 @@ export type StructureDetailView =
   | PassiveDetailView
   | CenterDetailView;
 
+/**
+ * The repair verb's whole state for one building — what it would cost, whether
+ * it is already running, and the stock that decides if the player can pay.
+ *
+ * Held beside `detail` rather than inside it because repair is a property of
+ * *being damaged*, not of being a Farm or a Barracks: every completed building
+ * offers it under the same rule, and putting it in each detail kind would be the
+ * same block written eight times.
+ */
+export interface StructureRepairView {
+  /** Hit points missing right now; the button is absent when this is zero. */
+  readonly missingHealth: number;
+  /** Price of putting it back, already rounded to whole resources. */
+  readonly cost: Readonly<Record<string, number>>;
+  /** Worker-seconds of work; a second builder halves the wall-clock time. */
+  readonly workerSeconds: number;
+  /** True while a paid repair job is open on this building. */
+  readonly active: boolean;
+  /** 0..1 of the running job's paid-for work; 0 when nothing is running. */
+  readonly progress: number;
+  /** Workers sent to it, walking or already hammering. */
+  readonly workers: number;
+  /** The owner's live stock, so a refusal can name what it is short of. */
+  readonly stock: Readonly<Record<string, number>>;
+}
+
 export interface SelectedStructureView {
   readonly id: number;
   readonly label: string;
@@ -236,6 +262,12 @@ export interface SelectedStructureView {
   readonly demolishArmed?: boolean;
   /** True once the player has clicked "İnşaatı İptal Et" on this site. */
   readonly cancelConstructionArmed?: boolean;
+  /**
+   * Damage repair state. Absent/null for anything that cannot be repaired — an
+   * unfinished foundation, an enemy building, or the command centre, which was
+   * never bought and so has no build price to charge half of.
+   */
+  readonly repair?: StructureRepairView | null;
   readonly detail: StructureDetailView;
 }
 
@@ -332,6 +364,13 @@ export const RESCUE_ACTION = "rescue";
 /** The centre's in-age level-up (Lv1→2 / Lv2→3); the Town step uses {@link AGE_UP_ACTION}. */
 export const CENTER_LEVEL_UP_ACTION = "center-level-up";
 export const DEMOLISH_ACTION = "demolish";
+/**
+ * Send workers to repair a damaged building. Offered only while there is damage
+ * to undo, and it toggles: pressing it again while a crew is at work calls the
+ * order off. Unlike demolish it needs no confirm step — the mistake it can cause
+ * is a refundable payment, not a lost building.
+ */
+export const REPAIR_ACTION = "repair";
 export const CANCEL_CONSTRUCTION_ACTION = "cancel-construction";
 /**
  * Take the newest order back off a queue — the counterpart to
@@ -364,6 +403,7 @@ const WORKER_JOB_LABEL: Record<WorkerJob, string> = {
   idle: "boşta",
   moving: "yolda",
   building: "inşaatta",
+  repairing: "tamirde",
   producing: "üretimde",
   unreachable: "erişemiyor",
 };
@@ -577,12 +617,18 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
   // Demolish sits last on every building panel. The centre reaches here wrapped
   // as a structure (`detail.kind === "center"`), so it is excluded on the detail:
   // razing your own centre is the defeat condition, a thing you lose, not order.
+  // Repair sits before demolish: they are the two ends of the same decision
+  // ("this building is hurt — save it or clear it"), and the constructive answer
+  // should be the one under the player's cursor first.
+  const repair = repairAction(structure);
   const actions = [
     ...base.actions,
+    ...(repair ? [repair] : []),
     ...(structure.detail.kind === "center" ? [] : [demolishAction(structure)]),
   ];
   return {
     ...base,
+    lines: [...base.lines, ...repairLines(structure)],
     actions,
     // Whatever the detail decided is timed — a kingdom upgrade on the centre, a
     // training bar on a producer of units. Deciding it here again would put the
@@ -614,6 +660,59 @@ function cancelConstructionAction(structure: SelectedStructureView): SelectionAc
     reason: null,
     hint: "Şantiyeyi kaldırır ve harcanan kaynakları tam iade eder. Onay ister.",
   };
+}
+
+/**
+ * "Tamir Et", or nothing at all.
+ *
+ * Nothing is the right answer for an intact building: a permanently visible
+ * repair button on a full-health base is a row of dead controls, and the verb
+ * only becomes meaningful the moment there is damage to undo — the same moment
+ * the world health bar appears over it.
+ *
+ * While a crew is at work the button turns into its own undo. The refusal it can
+ * carry is a price, never a rule: repair is legal on any damaged building the
+ * player owns, so the only thing that can stop it is an empty stockpile, and the
+ * button says exactly how empty.
+ */
+function repairAction(structure: SelectedStructureView): SelectionAction | null {
+  const repair = structure.repair ?? null;
+  if (!repair) return null;
+  if (repair.active) {
+    return {
+      id: REPAIR_ACTION,
+      label: "Tamiri Durdur",
+      cost: null,
+      enabled: true,
+      active: true,
+      reason: null,
+      hint: repair.progress > 0
+        ? "Tamir sürüyor. Durdurursanız şu ana kadarki onarım kalır; ödeme geri gelmez."
+        : "İşçiler henüz gelmedi; şimdi durdurursanız ödeme tam iade edilir.",
+    };
+  }
+  if (repair.missingHealth <= 0) return null;
+  const cost = formatResourceCost(repair.cost);
+  const shortfall = formatCostShortfall(repair.cost, repair.stock);
+  return {
+    id: REPAIR_ACTION,
+    label: "Tamir Et",
+    cost,
+    enabled: shortfall === null,
+    reason: shortfall === null ? null : `Kaynak yetersiz: ${shortfall} gerekli.`,
+    // Quoted as one worker's time, because that is the number the player can
+    // check against the crew they are about to send: two workers halve it.
+    hint: `${Math.ceil(repair.missingHealth)} can onarılır · tek işçiyle ${Math.ceil(repair.workerSeconds)} sn.`,
+  };
+}
+
+/** The running repair as a body line, so the panel says it even without the button. */
+function repairLines(structure: SelectedStructureView): string[] {
+  const repair = structure.repair ?? null;
+  if (!repair?.active) return [];
+  return [repair.workers === 0
+    ? `Tamir %${Math.floor(repair.progress * 100)} — işçi bekliyor.`
+    : `Tamir %${Math.floor(repair.progress * 100)} · ${repair.workers} işçi çalışıyor.`];
 }
 
 /**
@@ -1135,7 +1234,7 @@ function jobBreakdown(units: readonly SelectedUnitView[]): string {
   }
   // Fixed order, not insertion order: the same selection must read the same way
   // twice, and a breakdown that reshuffles as workers change job is unreadable.
-  const order: readonly WorkerJob[] = ["idle", "moving", "building", "producing", "unreachable"];
+  const order: readonly WorkerJob[] = ["idle", "moving", "building", "repairing", "producing", "unreachable"];
   return order
     .filter((job) => (counts.get(job) ?? 0) > 0)
     .map((job) => `${counts.get(job)} ${WORKER_JOB_LABEL[job]}`)

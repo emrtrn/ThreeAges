@@ -234,6 +234,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         <label class="detail-row"><span>Mode</span><select data-river-water-reflection="reflectionMode" ${lockedAttr}><option value="off" ${activeRiverWater.reflectionMode === "off" ? "selected" : ""}>Off</option><option value="sharedPlanar" ${activeRiverWater.reflectionMode === "sharedPlanar" ? "selected" : ""}>Shared Planar</option></select></label>
         <label class="detail-row"><span>Group</span><input data-river-water-reflection="reflectionGroup" type="text" value="${escapeHtml(activeRiverWater.reflectionGroup)}" placeholder="river" ${lockedAttr} /></label>
         <label class="detail-row"><span>Quality</span><select data-river-water-reflection="reflectionQuality" ${lockedAttr}>${["low", "medium", "high"].map((quality) => `<option value="${quality}" ${activeRiverWater.reflectionQuality === quality ? "selected" : ""}>${quality}</option>`).join("")}</select></label>
+        <label class="detail-row"><span>Strength</span><input data-river-water-number="reflectionStrength" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.reflectionStrength}" ${lockedAttr} /></label>
+        <div class="detail-hint">Quality only buys resolution and update rate. Strength is what makes the reflection visible; the surface still fades it in shallow water and under foam.</div>
       </div>`
     : `<div class="detail-section"><div class="detail-section-title">River Water</div><div class="detail-hint">Create a River Water Body from a completed Landscape spline. It will immediately use the spline's width and first control point height.</div></div>`;
   const riverWaterCreateMarkup = `<div class="detail-section">
@@ -713,7 +715,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   body.querySelectorAll<HTMLInputElement>("[data-river-water-number]").forEach((input) => {
     input.addEventListener("change", () => {
       const water = selectedRiverWater();
-      const key = input.dataset.riverWaterNumber as keyof Pick<RiverWaterDetailsPatch, "surfaceLevel" | "widthScale" | "flowSpeed" | "normalScale" | "opacity" | "bedVisibility" | "absorptionDistance" | "waveAmplitude" | "waveLength" | "foamOpacity" | "shoreWaveSpacing" | "shoreWaveSpeed" | "shoreWaveReach" | "shoreWaveBreakupScale"> | undefined;
+      const key = input.dataset.riverWaterNumber as keyof Pick<RiverWaterDetailsPatch, "surfaceLevel" | "widthScale" | "flowSpeed" | "normalScale" | "opacity" | "bedVisibility" | "absorptionDistance" | "waveAmplitude" | "waveLength" | "foamOpacity" | "shoreWaveSpacing" | "shoreWaveSpeed" | "shoreWaveReach" | "shoreWaveBreakupScale" | "reflectionStrength"> | undefined;
       const value = Number(input.value);
       if (!water || !key || !Number.isFinite(value)) return;
       options.setSelectedLandscapeRiverWater(water.id, { [key]: value } as RiverWaterDetailsPatch);
