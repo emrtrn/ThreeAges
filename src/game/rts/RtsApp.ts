@@ -174,6 +174,7 @@ import { ResourceCapacitySystem } from "./economy/resourceCapacitySystem";
 import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { StructureRepairSystem } from "./structures/structureRepairSystem";
+import type { HealthComponent } from "./units/health";
 import type { UnitOwner } from "./units/unit";
 import { BarracksProductionSystem, unitQueueCapacityForBuildingLevel } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel, type WorkerCancelResult } from "./structures/workerProductionSystem";
@@ -2202,55 +2203,54 @@ export class RtsApp {
       });
     }
     for (const structure of this.structures.all()) {
-      // The overlay is screen-space, so it must keep the same ownership boundary
-      // as construction progress: enemy damage or production cannot be read
-      // through fog merely because its DOM node is not occluded by the world.
-      if (structure.owner !== PLAYER_OWNER) continue;
-
-      const queue = this.barracksProduction.queueSnapshot(structure);
-      if (structure.construction.complete && queue.trainingRemainingSeconds !== null && queue.trainingDurationSeconds !== null) {
-        entries.push({
-          id: `military-production-${structure.id}`,
-          x: structure.x,
-          y: 8.5,
-          z: structure.z,
-          progress: 1 - Math.min(1, queue.trainingRemainingSeconds / queue.trainingDurationSeconds),
-          label: `${queue.trainingLabel ?? "Asker"} üretiliyor · ${queue.queued}/${queue.capacity}`,
-        });
+      // Production is the player's own business: what the enemy is training and
+      // how far along it is stays behind the same ownership boundary construction
+      // progress does, because the overlay is screen-space DOM and hiding the
+      // building's scene object does nothing to a label floating above it.
+      if (structure.owner === PLAYER_OWNER) {
+        const queue = this.barracksProduction.queueSnapshot(structure);
+        if (structure.construction.complete && queue.trainingRemainingSeconds !== null && queue.trainingDurationSeconds !== null) {
+          entries.push({
+            id: `military-production-${structure.id}`,
+            x: structure.x,
+            y: 8.5,
+            z: structure.z,
+            progress: 1 - Math.min(1, queue.trainingRemainingSeconds / queue.trainingDurationSeconds),
+            label: `${queue.trainingLabel ?? "Asker"} üretiliyor · ${queue.queued}/${queue.capacity}`,
+          });
+        }
       }
       // Centre-led progression has no per-building upgrade bar: the level and age
       // ladder is the kingdom's, shown once on the centre below, not on each
       // building (plan §5 — the world progress bar lives only on the Merkez).
-      // Below full health, the bar is up — the rule units already live under
-      // (`HealthBar.set` hides itself at ratio 1). It used to expire a few
-      // seconds after the last hit, so a besieged base could not be told from
-      // one that took a stray arrow an hour ago. Repair is what changed the
-      // answer: a damaged building is now a standing job with a price on it, and
-      // the bar is how the player finds the ones still waiting for a crew.
-      if (!structure.health.depleted && structure.health.ratio < 1) {
-        entries.push({
-          id: `structure-health-${structure.id}`,
-          x: structure.x,
-          y: queue.trainingRemainingSeconds !== null ? 7 : 8.5,
-          z: structure.z,
-          progress: structure.health.ratio,
-          label: `Can ${Math.ceil(structure.health.current)}/${Math.ceil(structure.health.max)}`,
-          variant: "health",
-          healthTone: structure.health.ratio >= 0.6 ? "healthy" : structure.health.ratio >= 0.3 ? "warning" : "critical",
-        });
-      }
+      //
+      // Health is the one bar that is *not* an ownership question. Below full
+      // health it is up — the rule units already live under (`HealthBar.set`
+      // hides itself at ratio 1) — for whoever the player can currently see.
+      // On their own buildings it says which ones are waiting for a repair crew;
+      // on the enemy's it answers the question an attack is actually asking,
+      // "will this wall fall before my ram dies". Gated on live visibility rather
+      // than ownership, so it leaks nothing the player is not already looking at.
+      const health = this.structureHealthEntry(
+        structure,
+        `structure-health-${structure.id}`,
+        structure.x,
+        8.5,
+        structure.z,
+      );
+      if (health) entries.push(health);
     }
-    if (center && !center.health.depleted && center.health.ratio < 1) {
-      entries.push({
-        id: "player-command-center-health",
-        x: center.position.x,
-        y: age.upgrading ? 7 : queue.trainingRemainingSeconds !== null ? 7.5 : 9,
-        z: center.position.z,
-        progress: center.health.ratio,
-        label: `Can ${Math.ceil(center.health.current)}/${Math.ceil(center.health.max)}`,
-        variant: "health",
-        healthTone: center.health.ratio >= 0.6 ? "healthy" : center.health.ratio >= 0.3 ? "warning" : "critical",
-      });
+    for (const other of this.centers.all()) {
+      const centerHealth = this.structureHealthEntry(
+        other,
+        `command-center-health-${other.owner}`,
+        other.position.x,
+        // The player's own centre shares its airspace with the worker queue and
+        // the progression bar; the enemy's has neither above it.
+        other.owner !== PLAYER_OWNER ? 9 : age.upgrading ? 7 : queue.trainingRemainingSeconds !== null ? 7.5 : 9,
+        other.position.z,
+      );
+      if (centerHealth) entries.push(centerHealth);
     }
     // Centre-led progression is the longest thing the player ever waits on and
     // the only one with no field presence but the selection panel — which is
@@ -2271,6 +2271,44 @@ export class RtsApp {
       });
     }
     this.worldProgressOverlay.update(this.cameraController.camera, this.canvas.clientWidth, this.canvas.clientHeight, entries);
+  }
+
+  /**
+   * One damaged building's world health bar, or null when it does not warrant
+   * one. Shared by placed structures and command centres, which live in separate
+   * registries but are the same thing to a player watching a wall come down.
+   *
+   * The hostile case carries a "Düşman" prefix instead of a colour of its own:
+   * the fill already encodes *how hurt* the building is (healthy/warning/
+   * critical), and overloading that same fill with *whose* it is would cost the
+   * reading the tone exists for. During a siege both sets of bars are on screen
+   * at once, so which is which has to be legible without decoding a hue.
+   */
+  private structureHealthEntry(
+    target: { readonly owner: UnitOwner; readonly health: HealthComponent },
+    id: string,
+    x: number,
+    y: number,
+    z: number,
+  ): RtsWorldProgressEntry | null {
+    const { health, owner } = target;
+    if (health.depleted || health.ratio >= 1) return null;
+    // An enemy building is shown only while the player can actually see it. Own
+    // buildings never consult vision: they carry their own sight, and a fog bug
+    // must not be able to blind the player to their own base being razed.
+    if (owner !== PLAYER_OWNER && !(this.vision?.isVisible(PLAYER_OWNER, x, z) ?? true)) return null;
+    const current = Math.ceil(health.current);
+    const max = Math.ceil(health.max);
+    return {
+      id,
+      x,
+      y,
+      z,
+      progress: health.ratio,
+      label: owner === PLAYER_OWNER ? `Can ${current}/${max}` : `Düşman · ${current}/${max}`,
+      variant: "health",
+      healthTone: health.ratio >= 0.6 ? "healthy" : health.ratio >= 0.3 ? "warning" : "critical",
+    };
   }
 
 
