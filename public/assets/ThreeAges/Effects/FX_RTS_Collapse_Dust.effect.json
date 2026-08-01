@@ -24,7 +24,7 @@
       ],
       "max": [
         4,
-        3,
+        4,
         4
       ],
       "showInPreview": true
@@ -50,8 +50,8 @@
       3
     ],
     "startSize": [
-      5,
-      8
+      10,
+      30
     ],
     "startColor": "#b8a486",
     "startOpacity": 0.72,
@@ -61,8 +61,8 @@
       0
     ],
     "speed": [
-      0.7,
-      1.7
+      5,
+      10
     ],
     "spreadAngleDeg": 74,
     "rotation": [
@@ -75,16 +75,16 @@
     ]
   },
   "update": {
-    "gravityScale": 0.08,
-    "drag": 1.1,
+    "gravityScale": -1,
+    "drag": 2,
     "acceleration": [
       0,
       0,
       0
     ],
     "endSize": [
-      3,
-      5
+      5,
+      10
     ],
     "endColor": "#786a58",
     "endOpacity": 0.1,

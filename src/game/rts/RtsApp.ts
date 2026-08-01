@@ -291,14 +291,18 @@ const PLAYER_OWNER: UnitOwner = "player";
  */
 type RtsCommandSubject = "production" | "trade" | "structure" | "orders" | "workers" | "progression";
 /**
- * Which damage slot each health stage drives. `heavyDebris` rides alongside
- * `heavySmoke` rather than replacing it — a critical building both smokes and
- * sheds. Every timing, effect and spawn point behind these names is authored in
- * `rts-content.json`; nothing about the damage presentation is written here.
+ * Which *repeating* damage slot each health stage drives.
+ *
+ * Only smoke belongs on a timer: a burning building keeps burning whether or not
+ * anything is hitting it. Debris used to sit here too, which meant a wounded
+ * building shed masonry forever while standing untouched in the middle of the
+ * map — it now fires from `impactDebris`, on the blow. Every timing, effect and
+ * spawn point behind these names is authored in `rts-content.json`; nothing
+ * about the damage presentation is written here.
  */
 const STAGE_SLOTS: Readonly<Record<"light" | "heavy", readonly RtsDamageSlotName[]>> = {
   light: ["lightSmoke"],
-  heavy: ["heavySmoke", "heavyDebris"],
+  heavy: ["heavySmoke"],
 };
 /** Faz 5: the kingdom the AI opponent plays (plan §37). */
 const AI_OWNER: UnitOwner = "enemy";
@@ -522,6 +526,15 @@ export class RtsApp {
     readonly rotationKey: number;
     elapsed: number;
   }>();
+  /**
+   * Monotonic clock for the damage VFX, in real seconds. Impact debris throttles
+   * against this rather than against an accumulator per building: an impact is
+   * an event with no tick of its own, so "how long since the last one" needs a
+   * shared reading of now, not a countdown somebody has to remember to advance.
+   */
+  private structureVfxClock = 0;
+  /** {@link structureVfxClock} reading at each building's last impact burst. */
+  private readonly structureImpactAt = new Map<number, number>();
   private readonly roads: RoadGraph;
   private readonly roadDebugView: RoadDebugView;
   private readonly territory = new TerritoryControlSystem(() => this.centers.all().map((center) => ({
@@ -1367,8 +1380,14 @@ export class RtsApp {
       onDamageStageChanged: (structure, _previous, next) => this.onStructureDamageStageChanged(structure, next),
       onCollapse: (structure) => this.onStructureCollapse(structure),
       onRuinCleared: (structureId) => this.structureRuinSmoke.delete(structureId),
+      onDamaged: (structure) => this.onStructureImpact(structure),
       collapsesInPlace: (structure) =>
         this.structureDamagePresentation(structure)?.collapseStyle === "inPlace",
+      // Undefined where the catalog has nothing to say, so the structure system
+      // keeps its own default rather than having one restated here.
+      ruinSeconds: (structure) => this.structureDamagePresentation(structure)?.ruinSeconds,
+      collapseDeformation: (structure) => this.structureDamagePresentation(structure)?.collapseDeformation,
+      heavyDeformation: (structure) => this.structureDamagePresentation(structure)?.heavyDeformation,
     });
     // Damage effects are warmed inside `loadActorVisuals`, which is where the
     // manifest that resolves their ids becomes readable.
@@ -2110,6 +2129,26 @@ export class RtsApp {
     }
   }
 
+  /**
+   * Shed debris because something hit this building.
+   *
+   * Throttled on the authored `minIntervalSeconds` floor rather than played per
+   * blow: a building under fire from a whole army takes a hit every few frames,
+   * and one burst per hit would drown the effect budget in debris the player
+   * cannot read as individual impacts anyway.
+   */
+  private onStructureImpact(structure: PlacedStructure): void {
+    const presentation = this.structureDamagePresentation(structure);
+    if (!presentation) return;
+    const slot = presentation.slots.impactDebris;
+    if (slot.effects.length === 0) return;
+    const last = this.structureImpactAt.get(structure.id);
+    const floor = slot.minIntervalSeconds ?? 0;
+    if (last !== undefined && this.structureVfxClock - last < floor) return;
+    this.structureImpactAt.set(structure.id, this.structureVfxClock);
+    this.playSlotRotation(structure, slot, structure.id);
+  }
+
   /** A collapse has already left gameplay; this is presentation only. */
   private onStructureCollapse(structure: PlacedStructure): void {
     for (const slot of RTS_DAMAGE_SLOTS) this.structureSlotElapsed.delete(slotTimerKey(structure.id, slot));
@@ -2135,8 +2174,13 @@ export class RtsApp {
   /** Keeps damage VFX sparse and frame-rate independent, at the authored intervals. */
   private updateStructureDamageVfx(dt: number): void {
     this.structureDamageVfx.advance(dt);
+    this.structureVfxClock += Math.max(0, dt);
     const live = new Set<string>();
+    const liveIds = new Set<number>();
     for (const structure of this.structures.all()) {
+      // Collected before the filters below: an impact throttle belongs to a
+      // building that exists, not to one that happens to be damaged right now.
+      liveIds.add(structure.id);
       if (!structure.construction.complete) continue;
       const stage = structureDamageStage(structure.health.ratio);
       if (stage !== "light" && stage !== "heavy") continue;
@@ -2159,6 +2203,11 @@ export class RtsApp {
     }
     for (const key of this.structureSlotElapsed.keys()) {
       if (!live.has(key)) this.structureSlotElapsed.delete(key);
+    }
+    // A match reset drops live buildings without a collapse, so `onRuinCleared`
+    // cannot be the only thing that ends an impact throttle.
+    for (const id of this.structureImpactAt.keys()) {
+      if (!liveIds.has(id)) this.structureImpactAt.delete(id);
     }
     // Not reconciled against `structures.all()` like the loop above: these
     // buildings are gone from the simulation by definition. `onRuinCleared` is

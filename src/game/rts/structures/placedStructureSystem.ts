@@ -28,6 +28,11 @@ import { createSelectionRing } from "../selection/selectionRing";
 import { buildingFootprintBlocker } from "./placementGrid";
 import { ConstructionComponent } from "./constructionComponent";
 import { createPickVolume, fitPickVolumeToVisual, footprintPickHeight } from "./pickVolume";
+import {
+  applyStructureDeformation,
+  type StructureDeformation,
+  type StructureDeformationTuning,
+} from "./structureDeformation";
 
 /** Completed-building tint per kingdom; outposts stay lighter to read as territory. */
 const COMPLETED_COLOR: Record<UnitOwner, { readonly territory: string; readonly plain: string }> = {
@@ -46,13 +51,35 @@ const COMPLETION_DROP_HEIGHT = 2.5;
  * than as the thing the player just lost.
  */
 const COLLAPSE_DURATION = 0.9;
-/** Keep the readable ruin briefly, but never grow an unbounded scenery list. */
-const RUIN_DURATION = 14;
+/**
+ * Ruin lifetime when the game layer names none — a fork with no damage table
+ * still gets a readable ruin rather than a husk that never leaves. The authored
+ * value comes through {@link StructureDamagePresentationHandler.ruinSeconds}.
+ */
+export const DEFAULT_RUIN_SECONDS = 14;
+/** Never grow an unbounded scenery list, whatever the authored lifetime says. */
 const MAX_RUINS = 10;
 /** Economy scenery that reserves build space but units may walk through. */
 const UNIT_PASS_THROUGH_STRUCTURE_IDS = new Set(["farm", "lumber_camp"]);
 /** How far the husk's own materials move toward soot when it collapses in place. */
 const CHARRED_COLOR = new Color("#241f1b");
+/**
+ * How far a toppling husk's geometry gives way as it falls. Modest, because the
+ * fall already carries the motion — this only has to stop the building reading
+ * as a solid prop being tipped over.
+ */
+const TOPPLE_DEFORMATION: StructureDeformationTuning = { squash: 0.34, splay: 0.16, buckle: 0.05 };
+/**
+ * A {@link collapsesInPlace} worksite has no fall to carry it, so the shape
+ * change *is* the animation: it pancakes considerably harder.
+ */
+const IN_PLACE_DEFORMATION: StructureDeformationTuning = { squash: 0.58, splay: 0.26, buckle: 0.04 };
+/**
+ * Heavy damage only buckles — no squash, no splay. A building the player can
+ * still repair must stay the same building, at the same height, on the same
+ * footprint; what changes is that its walls stop being straight.
+ */
+const HEAVY_DAMAGE_DEFORMATION: StructureDeformationTuning = { squash: 0, splay: 0, buckle: 0.035 };
 
 /** Health-driven presentation stages shared by every placed structure. */
 export type StructureDamageStage = "normal" | "light" | "heavy" | "destroyed";
@@ -80,6 +107,12 @@ interface DamagePresentation {
   readonly baseRotationX: number;
   readonly baseRotationZ: number;
   stage: Exclude<StructureDamageStage, "normal" | "destroyed">;
+  /**
+   * Buckling patch over {@link materials}, or null below the heavy stage. Held
+   * so a stage change or a repair can drop it — it is bound to those exact
+   * material clones and must not outlive them.
+   */
+  deformation: StructureDeformation | null;
   elapsed: number;
 }
 
@@ -91,6 +124,10 @@ interface CollapseAnimation {
   readonly originRotationZ: number;
   /** Zero for {@link collapsesInPlace} buildings, which shake but never topple. */
   readonly fallDirection: number;
+  /** Vertex deformation driven alongside the fall; null if there was no model to deform. */
+  readonly deformation: StructureDeformation | null;
+  /** Captured at collapse: nothing can resolve the id back to a building later. */
+  readonly ruinSeconds: number;
   elapsed: number;
 }
 
@@ -98,6 +135,14 @@ interface CollapseAnimation {
 interface RuinPresentation {
   readonly object: Object3D;
   readonly structureId: number;
+  /**
+   * Carried over from the collapse and left at full progress: the ruin is the
+   * flattened shape the fall produced, so releasing the patch here would pop the
+   * husk back to an intact building for the rest of its stay.
+   */
+  readonly deformation: StructureDeformation | null;
+  /** Authored lifetime, carried over from the collapse that produced this ruin. */
+  readonly ruinSeconds: number;
   elapsed: number;
 }
 
@@ -127,6 +172,28 @@ export interface StructureDamagePresentationHandler {
    * fork with no content catalog rendering something sensible.
    */
   collapsesInPlace?(structure: PlacedStructure): boolean;
+  /**
+   * How long this building's husk stays on the field after its fall, in seconds.
+   * A query for the same reason {@link collapsesInPlace} is: how long a ruin is
+   * worth looking at is a content decision. Absent falls back to
+   * {@link DEFAULT_RUIN_SECONDS}.
+   */
+  ruinSeconds?(structure: PlacedStructure): number | undefined;
+  /** Shape this building loses as it comes down; absent uses the code defaults. */
+  collapseDeformation?(structure: PlacedStructure): StructureDeformationTuning | undefined;
+  /** Shape a heavily damaged, still-standing building holds; absent uses the code default. */
+  heavyDeformation?(structure: PlacedStructure): StructureDeformationTuning | undefined;
+  /**
+   * Fires on any frame a completed building's health fell.
+   *
+   * Detected here, by comparing against last frame, rather than reported from
+   * the combat systems: every damage source — a unit's blow, a tower's arrow,
+   * whatever lands next — passes through the same health component, so one check
+   * covers all of them and no future weapon can forget to announce itself. The
+   * cost of the approach is that simultaneous blows in one frame arrive as a
+   * single event, which is the right granularity for presentation anyway.
+   */
+  onDamaged?(structure: PlacedStructure, amount: number): void;
 }
 
 export interface PlacedStructure {
@@ -198,6 +265,8 @@ export class PlacedStructureSystem {
   private readonly damagePresentations = new Map<PlacedStructure, DamagePresentation>();
   /** Last announced health state; prevents presentation events from repeating per frame. */
   private readonly damageStages = new Map<PlacedStructure, StructureDamageStage>();
+  /** Last frame's health, so a drop can be reported as an impact. See `onDamaged`. */
+  private readonly lastHealth = new Map<PlacedStructure, number>();
   private damagePresentationHandler: StructureDamagePresentationHandler | null = null;
   /**
    * Monotonic counter of every membership change (place/cancel/destroy/clear).
@@ -345,9 +414,19 @@ export class PlacedStructureSystem {
       const fall = fallProgress * fallProgress;
       collapse.object.rotation.z = collapse.originRotationZ + shake + collapse.fallDirection * 0.55 * fall;
       collapse.object.position.y = collapse.originY;
+      // The shape gives way on the same curve as the fall, so the building is
+      // already losing its silhouette while it goes over rather than deforming
+      // as a separate beat afterwards.
+      collapse.deformation?.setProgress(fall);
       if (progress >= 1) {
         this.collapses.splice(i, 1);
-        this.ruins.push({ object: collapse.object, structureId: collapse.structureId, elapsed: 0 });
+        this.ruins.push({
+          object: collapse.object,
+          structureId: collapse.structureId,
+          deformation: collapse.deformation,
+          ruinSeconds: collapse.ruinSeconds,
+          elapsed: 0,
+        });
         this.trimRuins();
       }
     }
@@ -355,7 +434,7 @@ export class PlacedStructureSystem {
       const ruin = this.ruins[i];
       if (!ruin) continue;
       ruin.elapsed += Math.max(0, deltaSeconds);
-      if (ruin.elapsed < RUIN_DURATION) continue;
+      if (ruin.elapsed < ruin.ruinSeconds) continue;
       this.removeRuinAt(i);
     }
   }
@@ -478,12 +557,14 @@ export class PlacedStructureSystem {
     // smoke a worksite was venting would outlive the match that spawned it.
     for (const collapse of this.collapses) {
       this.root.remove(collapse.object);
+      collapse.deformation?.dispose();
       disposeObjectMeshes(collapse.object);
       this.damagePresentationHandler?.onRuinCleared?.(collapse.structureId);
     }
     this.collapses.length = 0;
     for (let i = this.ruins.length - 1; i >= 0; i -= 1) this.removeRuinAt(i);
     this.damageStages.clear();
+    this.lastHealth.clear();
   }
 
   /**
@@ -495,6 +576,7 @@ export class PlacedStructureSystem {
   private beginCollapse(structure: PlacedStructure): void {
     this.clearDamagePresentation(structure);
     this.damageStages.delete(structure);
+    this.lastHealth.delete(structure);
     this.damagePresentationHandler?.onCollapse?.(structure);
     this.unregisterPickTargets(structure.object);
     this.dropAnimations.delete(structure);
@@ -509,6 +591,11 @@ export class PlacedStructureSystem {
     // never topples needs this: without it the husk would sit in its original
     // colours for the whole ruin window and read as an undamaged building.
     if (inPlace) charCollapsedMaterials(structure.object);
+    // The model only — never `structure.object`, which also carries the pick
+    // volume. That box is deliberately `visible` (three skips invisible objects
+    // when raycasting), so deforming the whole structure would bend the
+    // collision primitive along with the building.
+    const visual = this.completedVisual(structure);
     this.collapses.push({
       object: structure.object,
       structureId: structure.id,
@@ -516,6 +603,22 @@ export class PlacedStructureSystem {
       originRotationZ: structure.object.rotation.z,
       // Stable per structure: repeated previews do not flip a building randomly.
       fallDirection: inPlace ? 0 : structure.id % 2 === 0 ? 1 : -1,
+      // Applied after `makeObjectMaterialsPrivate` above: the patch mutates the
+      // materials it is given, and the shared GLTF originals would carry this
+      // husk's collapse onto every standing building of the same type.
+      deformation: visual
+        ? applyStructureDeformation(
+            visual,
+            // Authored per building; the code fallback keeps a catalog-less fork
+            // rendering the same two shapes the collapse styles imply.
+            this.damagePresentationHandler?.collapseDeformation?.(structure)
+              ?? (inPlace ? IN_PLACE_DEFORMATION : TOPPLE_DEFORMATION),
+            // Seeded like the fall direction, for the same reason: a building
+            // buckles the same way every time it dies.
+            structure.id,
+          )
+        : null,
+      ruinSeconds: this.damagePresentationHandler?.ruinSeconds?.(structure) ?? DEFAULT_RUIN_SECONDS,
       elapsed: 0,
     });
   }
@@ -528,6 +631,7 @@ export class PlacedStructureSystem {
     const ruin = this.ruins[index];
     if (!ruin) return;
     this.root.remove(ruin.object);
+    ruin.deformation?.dispose();
     disposeObjectMeshes(ruin.object);
     this.ruins.splice(index, 1);
     this.damagePresentationHandler?.onRuinCleared?.(ruin.structureId);
@@ -536,6 +640,7 @@ export class PlacedStructureSystem {
   private disposeStructure(structure: PlacedStructure): void {
     this.clearDamagePresentation(structure);
     this.damageStages.delete(structure);
+    this.lastHealth.delete(structure);
     this.unregisterPickTargets(structure.object);
     this.root.remove(structure.object);
     this.dropAnimations.delete(structure);
@@ -576,6 +681,7 @@ export class PlacedStructureSystem {
 
   /** Applies the low-cost, data-independent part of the damage presentation. */
   private updateDamagePresentation(structure: PlacedStructure, deltaSeconds: number): void {
+    this.reportImpact(structure);
     const stage = structure.construction.complete ? structureDamageStage(structure.health.ratio) : "normal";
     const previous = this.damageStages.get(structure) ?? "normal";
     if (stage !== previous) {
@@ -597,15 +703,20 @@ export class PlacedStructureSystem {
     let presentation = this.damagePresentations.get(structure);
     if (presentation?.visual !== visual) {
       this.clearDamagePresentation(structure);
-      presentation = this.createDamagePresentation(visual, stage);
+      presentation = this.createDamagePresentation(visual, stage, structure.id, this.heavyTuning(structure));
       this.damagePresentations.set(structure, presentation);
     } else if (presentation.stage !== stage) {
       presentation.stage = stage;
+      // The deformation is a patch over these exact material objects, so it has
+      // to go before they are disposed and be rebuilt over the replacements.
+      presentation.deformation?.dispose();
+      presentation.deformation = null;
       for (const entry of presentation.materials) {
         disposeMaterials(entry.replacement);
         entry.replacement = createDamagedMaterials(entry.original, stage);
         entry.mesh.material = entry.replacement;
       }
+      presentation.deformation = createDamageDeformation(visual, stage, structure.id, this.heavyTuning(structure));
     }
     presentation.elapsed += Math.max(0, deltaSeconds);
     const intensity = stage === "heavy" ? 1 : 0.28;
@@ -615,15 +726,38 @@ export class PlacedStructureSystem {
     visual.rotation.z = presentation.baseRotationZ + Math.sin(presentation.elapsed * 7.3 + structure.id) * 0.011 * intensity;
   }
 
+  /**
+   * Announce a health drop as an impact, once per frame at most.
+   *
+   * A foundation is deliberately silent: it has no masonry to shed, and debris
+   * coming off a half-built frame reads as a bug. The baseline is still tracked
+   * while it builds, so the first blow after it completes is not misreported as
+   * a fresh one.
+   */
+  private reportImpact(structure: PlacedStructure): void {
+    const previous = this.lastHealth.get(structure);
+    this.lastHealth.set(structure, structure.health.current);
+    if (previous === undefined || structure.health.current >= previous) return;
+    if (!structure.construction.complete) return;
+    this.damagePresentationHandler?.onDamaged?.(structure, previous - structure.health.current);
+  }
+
   private completedVisual(structure: PlacedStructure): Object3D | null {
     return structure.object.getObjectByName("rts-complete-building-model")
       ?? structure.object.getObjectByName("rts-complete-building-placeholder")
       ?? null;
   }
 
+  /** Authored heavy-damage shape, or the code default for a catalog-less fork. */
+  private heavyTuning(structure: PlacedStructure): StructureDeformationTuning {
+    return this.damagePresentationHandler?.heavyDeformation?.(structure) ?? HEAVY_DAMAGE_DEFORMATION;
+  }
+
   private createDamagePresentation(
     visual: Object3D,
     stage: Exclude<StructureDamageStage, "normal" | "destroyed">,
+    seed: number,
+    tuning: StructureDeformationTuning,
   ): DamagePresentation {
     const materials: DamageMaterialOverride[] = [];
     visual.traverse((child) => {
@@ -639,6 +773,9 @@ export class PlacedStructureSystem {
       baseRotationX: visual.rotation.x,
       baseRotationZ: visual.rotation.z,
       stage,
+      // After the swap above, so the patch lands on this structure's own copies
+      // rather than on the shared GLTF materials every building of the type uses.
+      deformation: createDamageDeformation(visual, stage, seed, tuning),
       elapsed: 0,
     };
   }
@@ -646,6 +783,11 @@ export class PlacedStructureSystem {
   private clearDamagePresentation(structure: PlacedStructure): void {
     const presentation = this.damagePresentations.get(structure);
     if (!presentation) return;
+    // Before the materials go: the patch holds them, and a repaired building has
+    // to come back straight. This is why the deformation is a uniform rather
+    // than an edit to the vertex buffer — undoing it is dropping the clone.
+    presentation.deformation?.dispose();
+    presentation.deformation = null;
     for (const entry of presentation.materials) {
       entry.mesh.material = entry.original;
       disposeMaterials(entry.replacement);
@@ -781,6 +923,28 @@ function createDamagedMaterials(
     return copy;
   };
   return Array.isArray(source) ? source.map(apply) : apply(source);
+}
+
+/**
+ * Buckle a building that is nearly down, and only then.
+ *
+ * Light damage stays perfectly straight on purpose: the stage already reads
+ * through colour, and a building that visibly bends the moment it is scratched
+ * would make every skirmish look like a siege. The caller must have privatised
+ * `visual`'s materials first — see {@link applyStructureDeformation}.
+ */
+function createDamageDeformation(
+  visual: Object3D,
+  stage: Exclude<StructureDamageStage, "normal" | "destroyed">,
+  seed: number,
+  tuning: StructureDeformationTuning,
+): StructureDeformation | null {
+  if (stage !== "heavy") return null;
+  const deformation = applyStructureDeformation(visual, tuning, seed);
+  // A held state, not an animation: the building stays bent until it is repaired
+  // or it dies, so the progress is set once and never advanced.
+  deformation?.setProgress(1);
+  return deformation;
 }
 
 function disposeMaterials(materials: Material | Material[]): void {

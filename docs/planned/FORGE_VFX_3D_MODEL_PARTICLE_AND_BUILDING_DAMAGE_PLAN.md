@@ -171,6 +171,32 @@ sonrası önbellek düşürülür).
   çünkü bölümün tek çapraz referansı belgenin kendi `buildings` anahtarlarıdır.
 - Kalan: adım 4 — debris GLTF import + atama (senin işin).
 
+- [x] Çöküşte ve ağır hasarda geometriyi vertex shader ile deforme et; husk'ın rijit bir prop gibi devrilmesini bitir.
+- Uygulama notu (2026-08-01): vertex deformasyonu **CPU'da değil, vertex
+  shader'da** yapılıyor (`src/game/rts/structures/structureDeformation.ts`).
+  Seçimin nedeni ölçüldü: bina geometrisi paylaşımlı (`SkeletonUtils.clone`
+  node'ları kopyalar, `BufferGeometry`'yi paylaştırır) ve modeller 2.5k–17.3k
+  vertex arasında; CPU tarafında deforme etmek çöküş başına bir geometri klonu ve
+  her kare yeniden yükleme demekti. Uniform'un ikisi de yok. Materyaller çöküşte
+  (`makeObjectMaterialsPrivate`) ve hasar kademesinde (`createDamagedMaterials`)
+  zaten kopyalandığı için patch, sistemin hâlihazırda yaptığı gizlilik işine
+  biniyor — ek maliyet yok.
+  - Çöküş: dikey ezilme + tabanda dışa yayılma + hafif bükülme, düşüşle aynı
+    eğride sürülüyor. `collapseStyle: "inPlace"` yapıları devrilmediği için daha
+    sert pancake ediyor.
+  - Kademeli çöküş, modellerin materyal isimlerinden (`Wood*` → timber,
+    `Stone*`/`Walls*` → masonry, diğerleri → fitting) türetiliyor: ahşap önce ve
+    daha çok, taş sonra ve daha az veriyor. 128 GLTF'i yeniden authoring
+    etmeden elde edilebilecek tek yapısal okuma bu.
+  - Ağır hasar yalnızca **bükülüyor** (ezilme/yayılma yok): bina aynı yükseklikte
+    ve aynı ayak izinde kalmalı, çünkü onarılabiliyor. Onarım patch'i düşürüyor —
+    tersine çevrilebilirlik, vertex buffer'ı düzenlemek yerine uniform kullanmanın
+    asıl gerekçesi.
+  - Gölge geçişi ayrı materyalden render edildiği için `customDepthMaterial` de
+    aynı patch'le kuruluyor; yoksa çöken bina dimdik gölge düşürüyordu.
+  - Açamadığı şeyler: delik, kopan parça, ayrı düşen çatı. Bunlar geometri
+    seviyesi authoring gerektiriyor — §7'deki ön-kırılmış mesh maddesine bakın.
+
 Çıkış kriteri: bir referans binada dört sağlık durumu görünür biçimde ayrılır; çöküş, opaklığı azaltıp zemine gömme yerine kontrollü bir olay olarak okunur.
 
 ### Faz 5 — Kalite, performans ve içerik üretim rehberi
@@ -256,6 +282,30 @@ git diff --check
 - Model başına farklı materyal parametresini particle sırasında ayrıntılı animasyon.
 
 Bu özellikler ancak Faz 5 ölçümü ve gerçek içerik ihtiyacı gösterirse ayrı plan olarak değerlendirilir.
+
+### Kenarda tutulan: ön-kırılmış mesh (pre-fractured) varyantları
+
+Vertex deformasyonunun tavanı bellidir — vertex'leri yerinden oynatır, yenisini
+üretmez: delik açamaz, çatıyı ayrı bir parça olarak düşüremez, gerçek moloz
+kopartamaz. Bunları isteyen tek yaklaşım, oyunlarda fiilen standart olan
+ön-kırılmış varyanttır: bina için elde kırılmış bir model authoring edilir ve
+çöküşte swap edilir. Runtime maliyeti çalışma anı fracture'dan (Voronoi + rigid
+body) kat kat düşüktür, çünkü hiçbir şey hesaplanmaz.
+
+Şimdi yapılmamasının tek sebebi runtime değil, **authoring hacmi**:
+`public/assets/ThreeAges/StaticMeshes/` altında 128 bina modeli var (yapı × çağ ×
+3 seviye). Kırık varyantı bunların tamamı için üretmek, deformasyonun sıfır asset
+maliyetiyle elde ettiği okunurluğun yanında orantısız.
+
+Tekrar açılma koşulu ve önerilen kapsam:
+
+- Faz 5 ölçümü deformasyonun yeterli olmadığını gösterirse **veya** yıkım anı
+  oyunun tanıtım görselinde öne çıkacaksa.
+- Tümü değil, 2–3 amiral yapı (Command Center, Barracks, Temple) — en çok
+  bakılan siluetler. Diğerleri deformasyonla kalır; iki sunum yan yana yaşayabilir,
+  çünkü seçim `beginCollapse` içinde tek bir dallanmadır.
+- Ayrı plan dokümanı gerektirir: mesh isimlendirme, pivot/orijin kuralı, manifest
+  girdisi ve save validator allowlist yüzeyi bu planın kapsamında tarif edilmedi.
 
 ## 8. Başlangıç sırası
 

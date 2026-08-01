@@ -102,6 +102,7 @@ import {
 } from "../src/game/data/validateGameData";
 import {
   RtsContentCatalogError,
+  type RtsCollapseStyle,
   rtsBuildingActorRef,
   rtsUnitActorRef,
   rtsUnitOwnerActorRefIsAuthored,
@@ -192,9 +193,11 @@ import {
   validateBuildingPlacement,
 } from "../src/game/rts/structures/placementGrid";
 import {
+  DEFAULT_RUIN_SECONDS,
   PlacedStructureSystem,
   structureDamageStage,
 } from "../src/game/rts/structures/placedStructureSystem";
+import { structureMaterialGroup } from "../src/game/rts/structures/structureDeformation";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { MarketPrices } from "../src/game/rts/economy/marketPricing";
 import { MarketTradeSystem } from "../src/game/rts/economy/marketTradeSystem";
@@ -29474,15 +29477,20 @@ check("RTS collapse style comes from the damage table, not from the structure sy
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
-  const catalog = shippedRtsContentCatalog();
   const farm = buildings.farm ?? assert.fail("farm balance missing");
   const outpost = buildings.outpost ?? assert.fail("outpost balance missing");
   const structures = new PlacedStructureSystem();
-  // Wired exactly as the runtime wires it, so this exercises the authored data
-  // reaching the husk rather than a rule re-stated in the test.
+  // Authored here rather than read out of `rts-content.json`. The contract is
+  // that the *table* decides the husk's motion, and the table is meant to be
+  // retuned — pinning which shipped building is currently authored `inPlace`
+  // would turn an ordinary authoring pass into a red build. The style→motion
+  // wiring is the invariant; the assignment is content.
+  const authoredStyle: Readonly<Record<string, RtsCollapseStyle>> = {
+    [farm.id]: "inPlace",
+    [outpost.id]: "topple",
+  };
   structures.setDamagePresentationHandler({
-    collapsesInPlace: (structure) =>
-      rtsBuildingDamagePresentation(catalog, structure.stats.id).collapseStyle === "inPlace",
+    collapsesInPlace: (structure) => authoredStyle[structure.stats.id] === "inPlace",
   });
 
   const field = structures.place("player", farm, 0, 0);
@@ -29513,6 +29521,300 @@ check("RTS collapse style comes from the damage table, not from the structure sy
   bare.updateVisualAnimations(1);
   assert.ok(Math.abs(unmanaged.object.rotation.z) > 0.1, "the default is to topple");
   bare.clear();
+});
+
+/**
+ * Run a material's `onBeforeCompile` against a stub of three's shader object, so
+ * the deformation patch's uniforms can be inspected without a GL context. An
+ * unpatched material runs the prototype no-op and leaves the stub empty, which
+ * is what makes "this material is not patched" assertable.
+ */
+function compileStructureDeformPatch(material: Material): {
+  uniforms: Record<string, unknown>;
+  vertexShader: string;
+} {
+  const shader = {
+    uniforms: {} as Record<string, unknown>,
+    vertexShader: ["void main() {", "#include <beginnormal_vertex>", "#include <begin_vertex>", "}"].join("\n"),
+    fragmentShader: "void main() {}",
+  };
+  (material.onBeforeCompile as unknown as (s: unknown, r: unknown) => void)(shader, undefined);
+  return shader;
+}
+
+/** Every mesh material under an object, flattened, in traversal order. */
+function structureVisualMaterials(root: Object3D): Material[] {
+  const materials: Material[] = [];
+  root.traverse((child) => {
+    if (!(child instanceof Mesh)) return;
+    for (const material of Array.isArray(child.material) ? child.material : [child.material]) {
+      materials.push(material);
+    }
+  });
+  return materials;
+}
+
+check("RTS structure material groups classify the materials the shipped building models actually use", () => {
+  // Read off the content rather than retyped here: the collapse staggers by
+  // material name, so a model re-exported with different names is exactly the
+  // regression this has to catch.
+  const model = JSON.parse(
+    readFileSync("public/assets/ThreeAges/StaticMeshes/Barracks_FirstAge_Level1.gltf", "utf8"),
+  ) as { materials?: { name?: string }[] };
+  const names = (model.materials ?? []).map((material) => material.name ?? "");
+  assert.ok(names.length > 0, "the reference building model declares materials");
+  const groups = new Set(names.map((name) => structureMaterialGroup(name)));
+  assert.ok(groups.has("timber"), "the models' Wood* materials read as timber");
+  assert.ok(groups.has("masonry"), "the models' Stone* materials read as masonry");
+
+  // The rule: substance prefix wins, a lighting variant stays in its substance's
+  // group, and an unrecognised material lands in the middle rather than at an
+  // extreme — a material nobody has classified must not be the one that
+  // flattens hardest.
+  assert.equal(structureMaterialGroup("Wood"), "timber");
+  assert.equal(structureMaterialGroup("Wood_Light"), "timber");
+  assert.equal(structureMaterialGroup("Stone"), "masonry");
+  assert.equal(structureMaterialGroup("Stone_Light"), "masonry");
+  assert.equal(structureMaterialGroup("Walls"), "masonry");
+  assert.equal(structureMaterialGroup("Gold"), "fitting");
+  assert.equal(structureMaterialGroup("SomethingNobodyHasAuthoredYet"), "fitting");
+});
+
+check("RTS collapse deformation patches the husk's own materials, never the ones it was cloned from", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house balance missing");
+  const structures = new PlacedStructureSystem();
+  const structure = structures.place("player", house, 0, 0);
+  structures.advanceConstruction(structure, house.constructionSeconds);
+  const visual = structure.object.getObjectByName("rts-complete-building-placeholder")
+    ?? assert.fail("the completed visual is missing");
+
+  const standing = structureVisualMaterials(visual)[0] ?? assert.fail("the completed visual has no material");
+  structures.destroy(structure);
+  const husk = structureVisualMaterials(visual)[0] ?? assert.fail("the husk lost its material");
+
+  // The ordering that makes the whole approach safe: the husk is deformed only
+  // after its materials are privatised, so a collapse can never bend every other
+  // standing building that shares the model's materials.
+  assert.notEqual(husk, standing, "the husk collapses on its own material copies");
+  assert.deepEqual(
+    compileStructureDeformPatch(standing).uniforms,
+    {},
+    "the material the copy was taken from is left unpatched",
+  );
+  const patched = compileStructureDeformPatch(husk);
+  assert.ok("rtsDeformProgress" in patched.uniforms, "the husk's own copy carries the deformation");
+  assert.ok(
+    patched.vertexShader.includes("transformed = rtsDeformPosition("),
+    "the patch displaces the vertex three is about to transform",
+  );
+  assert.ok(
+    patched.vertexShader.includes("objectNormal = rtsDeformNormal("),
+    "and corrects the normal, so a squashed face does not light as if it were still pitched",
+  );
+  structures.clear();
+});
+
+check("RTS collapse deformation gives every husk its own progress and drives it to exactly 1", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house balance missing");
+  const structures = new PlacedStructureSystem();
+  const first = structures.place("player", house, 0, 0);
+  const second = structures.place("player", house, 20, 0);
+  structures.advanceConstruction(first, house.constructionSeconds);
+  structures.advanceConstruction(second, house.constructionSeconds);
+  const firstVisual = first.object.getObjectByName("rts-complete-building-placeholder")
+    ?? assert.fail("the first completed visual is missing");
+  const secondVisual = second.object.getObjectByName("rts-complete-building-placeholder")
+    ?? assert.fail("the second completed visual is missing");
+
+  structures.destroy(first);
+  structures.destroy(second);
+  const firstMaterial = structureVisualMaterials(firstVisual)[0] ?? assert.fail("no husk material");
+  const secondMaterial = structureVisualMaterials(secondVisual)[0] ?? assert.fail("no husk material");
+  const firstProgress = compileStructureDeformPatch(firstMaterial).uniforms.rtsDeformProgress;
+  const secondProgress = compileStructureDeformPatch(secondMaterial).uniforms.rtsDeformProgress;
+
+  // The classic failure of a uniform-driven effect: two husks handed the same
+  // `{ value }` box collapse in lockstep, and one clearing resets the other.
+  assert.notEqual(firstProgress, secondProgress, "two husks never share one progress box");
+  assert.equal(
+    compileStructureDeformPatch(firstMaterial).uniforms.rtsDeformProgress,
+    firstProgress,
+    "recompiling a material rebinds the box it already had, rather than making a second one",
+  );
+
+  const progress = firstProgress as { value: number };
+  assert.equal(progress.value, 0, "a husk that has not started falling is undeformed");
+  structures.updateVisualAnimations(0.45);
+  assert.ok(progress.value > 0 && progress.value < 1, "the shape gives way while the building goes over");
+  structures.updateVisualAnimations(5);
+  assert.equal(progress.value, 1, "the fall ends fully deformed, and the ruin holds that shape");
+  structures.clear();
+});
+
+check("RTS heavy damage buckles a building, light damage does not, and repair puts the shape back", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house balance missing");
+  const structures = new PlacedStructureSystem();
+  const structure = structures.place("player", house, 0, 0);
+  structures.advanceConstruction(structure, house.constructionSeconds);
+  const visual = structure.object.getObjectByName("rts-complete-building-placeholder")
+    ?? assert.fail("the completed visual is missing");
+  const mesh = visual instanceof Mesh ? visual : assert.fail("the completed placeholder is a mesh");
+  const intact = mesh.material;
+  assert.equal(mesh.castShadow, true, "buildings cast shadows, so the shadow pass has to follow the deformation");
+
+  // Light damage reads through colour alone. A building that visibly bends the
+  // moment it is scratched would make every skirmish look like a siege.
+  structure.health.damage(structure.health.max * 0.5);
+  structures.updateVisualAnimations(0.1);
+  assert.deepEqual(
+    compileStructureDeformPatch(structureVisualMaterials(visual)[0] ?? assert.fail("no material")).uniforms,
+    {},
+    "light damage leaves the geometry straight",
+  );
+  assert.equal(mesh.customDepthMaterial, undefined, "and installs no shadow override");
+
+  structure.health.damage(structure.health.max * 0.25);
+  structures.updateVisualAnimations(0.1);
+  const heavy = compileStructureDeformPatch(
+    structureVisualMaterials(visual)[0] ?? assert.fail("no material"),
+  ).uniforms;
+  assert.equal(
+    (heavy.rtsDeformProgress as { value: number }).value,
+    1,
+    "heavy damage is a held state, not an animation that has to be ticked",
+  );
+  assert.ok(mesh.customDepthMaterial, "the shadow pass deforms with the building");
+
+  // Repair is the reason this is a uniform rather than an edited vertex buffer:
+  // undoing it is dropping the material clone the patch lived on.
+  structure.health.heal(structure.health.max);
+  structures.updateVisualAnimations(0.1);
+  assert.equal(mesh.material, intact, "a repaired building is back on its original material");
+  assert.equal(mesh.customDepthMaterial, undefined, "and casts its original, upright shadow again");
+  structures.clear();
+});
+
+check("RTS ruin lifetime is authored per building, not fixed in the collapse code", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house balance missing");
+  const raze = (system: PlacedStructureSystem): PlacedStructure => {
+    const structure = system.place("player", house, 0, 0);
+    system.advanceConstruction(structure, house.constructionSeconds);
+    system.destroy(structure);
+    // Two steps, not one: a ruin created mid-frame is still swept by that same
+    // frame's ruin pass, so finishing the fall on a large step would start its
+    // clock at that step. The sliver leaves the ruin window effectively at zero.
+    system.updateVisualAnimations(0.89);
+    system.updateVisualAnimations(0.01);
+    return structure;
+  };
+
+  const authored = new PlacedStructureSystem();
+  authored.setDamagePresentationHandler({ ruinSeconds: () => 3 });
+  const short = raze(authored);
+  authored.updateVisualAnimations(2.9);
+  assert.equal(short.object.parent, authored.root, "the ruin stands for the window the table authored");
+  authored.updateVisualAnimations(0.2);
+  assert.equal(short.object.parent, null, "and leaves when that window closes");
+  authored.clear();
+
+  // A fork with no damage table still gets a readable ruin rather than a husk
+  // that never leaves. Derived from the exported constant, so retuning it here
+  // cannot leave this test asserting a number the code no longer uses.
+  const bare = new PlacedStructureSystem();
+  const standard = raze(bare);
+  bare.updateVisualAnimations(DEFAULT_RUIN_SECONDS - 0.5);
+  assert.equal(standard.object.parent, bare.root, "the default window is the exported one");
+  bare.updateVisualAnimations(1);
+  assert.equal(standard.object.parent, null);
+  bare.clear();
+});
+
+check("RTS deformation amounts are authored in the damage table, not hard-coded in the husk", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house balance missing");
+  const squashUniform = (squash: number): { x: number; y: number; z: number } => {
+    const structures = new PlacedStructureSystem();
+    structures.setDamagePresentationHandler({
+      collapseDeformation: () => ({ squash, splay: 0.2, buckle: 0 }),
+    });
+    const structure = structures.place("player", house, 0, 0);
+    structures.advanceConstruction(structure, house.constructionSeconds);
+    const visual = structure.object.getObjectByName("rts-complete-building-placeholder")
+      ?? assert.fail("the completed visual is missing");
+    structures.destroy(structure);
+    const material = structureVisualMaterials(visual)[0] ?? assert.fail("the husk lost its material");
+    const amount = compileStructureDeformPatch(material).uniforms.rtsDeformAmount as {
+      value: { x: number; y: number; z: number };
+    };
+    structures.clear();
+    return amount.value;
+  };
+
+  const single = squashUniform(0.3);
+  const double = squashUniform(0.6);
+  // Proportionality, not a magnitude: the authored number is scaled by the
+  // mesh's material group on the way to the shader, so pinning the product here
+  // would make retuning that table a red build for no reason.
+  assert.ok(single.x > 0, "an authored squash reaches the shader");
+  assert.ok(Math.abs(double.x / single.x - 2) < 1e-9, "doubling the authored squash doubles what the shader gets");
+  assert.equal(single.z, 0, "an authored zero stays zero — buckle is opt-out from the table");
+  assert.ok(single.y > 0, "and splay travels the same path");
+});
+
+check("RTS structure impacts are reported per blow, so debris cannot fire on a timer", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house balance missing");
+  const structures = new PlacedStructureSystem();
+  const impacts: number[] = [];
+  structures.setDamagePresentationHandler({ onDamaged: (_structure, amount) => impacts.push(amount) });
+
+  const structure = structures.place("player", house, 0, 0);
+  structures.advanceConstruction(structure, house.constructionSeconds);
+  structures.updateVisualAnimations(0.1);
+  assert.deepEqual(impacts, [], "a building nobody is hitting sheds nothing");
+
+  const blow = structure.health.max * 0.2;
+  structure.health.damage(blow);
+  structures.updateVisualAnimations(0.1);
+  assert.deepEqual(impacts, [blow], "a blow is reported once, with the health it took");
+
+  // The regression this replaces: debris used to be a repeating slot, so a
+  // wounded building shed masonry forever while standing untouched.
+  for (let i = 0; i < 30; i += 1) structures.updateVisualAnimations(0.5);
+  assert.deepEqual(impacts, [blow], "and fifteen seconds of standing there damaged reports nothing further");
+
+  structure.health.damage(blow);
+  structures.updateVisualAnimations(0.1);
+  assert.deepEqual(impacts, [blow, blow], "the next blow is a new impact");
+
+  structure.health.heal(structure.health.max);
+  structures.updateVisualAnimations(0.1);
+  assert.deepEqual(impacts, [blow, blow], "repairing a building is not an impact");
+
+  // A foundation has no masonry to shed; debris off a half-built frame reads as
+  // a bug rather than as damage.
+  const site = structures.place("player", house, 20, 0);
+  structures.updateVisualAnimations(0.1);
+  site.health.damage(site.health.max * 0.3);
+  structures.updateVisualAnimations(0.1);
+  assert.deepEqual(impacts, [blow, blow], "an unfinished site takes damage silently");
+  structures.clear();
 });
 
 check("RTS ruin clearing is announced so trailing husk VFX cannot outlive the husk", () => {
@@ -30686,11 +30988,14 @@ function minimalDamageSection(): unknown {
   return {
     defaults: {
       collapseStyle: "topple",
+      ruinSeconds: 10,
+      collapseDeformation: { squash: 0.3, splay: 0.1, buckle: 0.05 },
+      heavyDeformation: { squash: 0, splay: 0, buckle: 0.03 },
       slots: {
         lightSmoke: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 1 },
         heavySmoke: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 1 },
-        heavyDebris: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 1 },
         ruinSmoke: { effects: [], anchor: { mode: "ground", offset: [0, 0, 0] }, intervalSeconds: 1 },
+        impactDebris: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] }, minIntervalSeconds: 0.5 },
         collapseDust: { effects: [], anchor: { mode: "ground", offset: [0, 0, 0] } },
         collapseDebris: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] } },
       },
@@ -30718,11 +31023,14 @@ function damageCatalogFixture(overrides: {
     damage: {
       defaults: {
         collapseStyle: "topple",
+        ruinSeconds: 12,
+        collapseDeformation: { squash: 0.3, splay: 0.1, buckle: 0.05 },
+        heavyDeformation: { squash: 0, splay: 0, buckle: 0.03 },
         slots: {
           lightSmoke: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 1, 0] }, intervalSeconds: 2 },
           heavySmoke: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 1 },
-          heavyDebris: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 3 },
           ruinSmoke: { effects: [], anchor: { mode: "ground", offset: [0, 0, 0] }, intervalSeconds: 1 },
+          impactDebris: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 0, 0] }, minIntervalSeconds: 3 },
           collapseDust: { effects: ["fx.a"], anchor: { mode: "ground", offset: [0, 0, 0] } },
           collapseDebris: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 0, 0] } },
         },
@@ -30744,7 +31052,7 @@ check("RTS damage table resolves defaults → material class → building, field
   const catalog = validateRtsContentCatalog(
     damageCatalogFixture({
       materials: {
-        stone: { slots: { heavyDebris: { effects: ["fx.stone"] } } },
+        stone: { slots: { impactDebris: { effects: ["fx.stone"] } } },
       },
       buildings: { house: { levels }, barracks: { levels }, outpost: { levels } },
       damageBuildings: {
@@ -30755,7 +31063,10 @@ check("RTS damage table resolves defaults → material class → building, field
         outpost: {
           material: "stone",
           collapseStyle: "inPlace",
-          slots: { heavyDebris: { effects: ["fx.tile"], anchor: { offset: [0, 4, 0] } } },
+          ruinSeconds: 4,
+          // A partial deformation: the fields it names win, the rest inherit.
+          collapseDeformation: { squash: 0.6 },
+          slots: { impactDebris: { effects: ["fx.tile"], anchor: { offset: [0, 4, 0] } } },
         },
       },
     }),
@@ -30764,19 +31075,27 @@ check("RTS damage table resolves defaults → material class → building, field
 
   const plain = rtsBuildingDamagePresentation(catalog, "house");
   assert.equal(plain.collapseStyle, "topple", "an unauthored building is the default, not a gap");
-  assert.deepEqual(plain.slots.heavyDebris.effects, ["fx.a"]);
+  assert.deepEqual(plain.slots.impactDebris.effects, ["fx.a"]);
+  assert.equal(plain.ruinSeconds, 12, "and inherits the default ruin lifetime");
+  assert.deepEqual(plain.collapseDeformation, { squash: 0.3, splay: 0.1, buckle: 0.05 });
 
   const classed = rtsBuildingDamagePresentation(catalog, "barracks");
-  assert.deepEqual(classed.slots.heavyDebris.effects, ["fx.stone"], "the material class replaces the effects");
-  assert.equal(classed.slots.heavyDebris.anchor.mode, "roof", "and inherits every field it does not name");
-  assert.equal(classed.slots.heavyDebris.intervalSeconds, 3);
+  assert.deepEqual(classed.slots.impactDebris.effects, ["fx.stone"], "the material class replaces the effects");
+  assert.equal(classed.slots.impactDebris.anchor.mode, "roof", "and inherits every field it does not name");
+  assert.equal(classed.slots.impactDebris.minIntervalSeconds, 3);
   assert.deepEqual(classed.slots.lightSmoke.effects, ["fx.a"], "a slot the class ignores stays at the default");
 
   const own = rtsBuildingDamagePresentation(catalog, "outpost");
-  assert.deepEqual(own.slots.heavyDebris.effects, ["fx.tile"], "the building's own layer outranks its class");
+  assert.deepEqual(own.slots.impactDebris.effects, ["fx.tile"], "the building's own layer outranks its class");
   assert.equal(own.collapseStyle, "inPlace");
-  assert.deepEqual(own.slots.heavyDebris.anchor.offset, [0, 4, 0], "the offset override applies");
-  assert.equal(own.slots.heavyDebris.anchor.mode, "roof", "and does not drag the mode along with it");
+  assert.equal(own.ruinSeconds, 4, "a building may outlive or undercut the default ruin window");
+  assert.deepEqual(
+    own.collapseDeformation,
+    { squash: 0.6, splay: 0.1, buckle: 0.05 },
+    "a deformation override merges field by field rather than replacing the whole shape",
+  );
+  assert.deepEqual(own.slots.impactDebris.anchor.offset, [0, 4, 0], "the offset override applies");
+  assert.equal(own.slots.impactDebris.anchor.mode, "roof", "and does not drag the mode along with it");
 
   // Totality: the resolver must answer for every playable building, so nothing
   // downstream needs a null branch at collapse time.
@@ -30806,9 +31125,25 @@ check("RTS damage table refuses data the runtime would have to guess about", () 
   refuses((d) => { d.damage.defaults.slots.heavySmoke.intervalSeconds = 0; }, "a zero interval would spawn per frame");
   refuses((d) => { d.damage.defaults.slots.heavySmoke.anchor.mode = "sky"; }, "anchor mode is a closed set");
   refuses((d) => { d.damage.defaults.slots.heavySmoke.anchor.offset = [0, 999, 0]; }, "an offset has bounds");
-  refuses((d) => { d.damage.defaults.slots.heavyDebris.effects = ["fx.a", "fx.a"]; }, "a duplicate would bias the rotation");
-  refuses((d) => { d.damage.defaults.slots.heavyDebris.effects = ["../evil.json"]; }, "effects are manifest ids, not paths");
+  refuses((d) => { d.damage.defaults.slots.impactDebris.effects = ["fx.a", "fx.a"]; }, "a duplicate would bias the rotation");
+  refuses((d) => { d.damage.defaults.slots.impactDebris.effects = ["../evil.json"]; }, "effects are manifest ids, not paths");
   refuses((d) => { d.damage.defaults.collapseStyle = "explode"; }, "collapse style is a closed set");
+  // The three slot kinds each carry exactly their own timing field, so a slot
+  // authored with the wrong one is named rather than silently ignored.
+  refuses((d) => { delete d.damage.defaults.slots.impactDebris.minIntervalSeconds; }, "an impact slot needs its floor");
+  refuses((d) => { d.damage.defaults.slots.impactDebris.intervalSeconds = 2; }, "an impact slot does not repeat");
+  refuses((d) => { d.damage.defaults.slots.heavySmoke.minIntervalSeconds = 2; }, "a repeating slot has no impact floor");
+  refuses((d) => { d.damage.defaults.slots.collapseDust.minIntervalSeconds = 2; }, "a one-shot slot has neither");
+  // Ruin lifetime and deformation are authored numbers with a physical meaning;
+  // the bounds are what stop a typo from producing an unreadable husk.
+  refuses((d) => { delete d.damage.defaults.ruinSeconds; }, "defaults must state the ruin lifetime");
+  refuses((d) => { d.damage.defaults.ruinSeconds = -1; }, "a ruin cannot linger for negative time");
+  refuses((d) => { d.damage.defaults.ruinSeconds = 600; }, "a ten-minute ruin is a typo, not an intent");
+  refuses((d) => { delete d.damage.defaults.collapseDeformation; }, "defaults must state the collapse shape");
+  refuses((d) => { delete d.damage.defaults.heavyDeformation.buckle; }, "the default deformation is complete");
+  refuses((d) => { d.damage.defaults.collapseDeformation.squash = 1; }, "a building squashed to nothing is not a ruin");
+  refuses((d) => { d.damage.defaults.collapseDeformation.splay = -0.2; }, "a negative splay is an inside-out building");
+  refuses((d) => { d.damage.defaults.collapseDeformation.lean = 1; }, "an unknown deformation field is a typo");
   refuses((d) => { d.damage.defaults.slots.heavySmoke.wobble = 1; }, "an unknown field is a typo, not an extension");
   refuses(
     (d) => {
@@ -30853,10 +31188,13 @@ check("RTS shipped damage table names only real effects and preserves today's co
       `${buildingId} is a ground-hugging worksite`,
     );
   }
-  assert.ok(
-    buildingIds.some((id) => rtsBuildingDamagePresentation(catalog, id).collapseStyle === "topple"),
-    "and the table still authors the toppling style at all",
-  );
+  // Deliberately *not* asserted here: that some building still resolves to
+  // `topple`. Which style a building takes — including the table-wide default —
+  // is an authoring decision the damage table exists to make changeable, and a
+  // designer who pancakes everything for a look must not get a red build for it.
+  // That the style actually reaches the husk is pinned against a fixture in
+  // "RTS collapse style comes from the damage table", where retuning cannot
+  // reach it.
 });
 
 check("RTS damage tables are editable and their save gate refuses what the game would reject", () => {

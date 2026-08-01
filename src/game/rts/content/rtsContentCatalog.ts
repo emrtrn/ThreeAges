@@ -68,14 +68,27 @@ export const RTS_DAMAGE_ANCHOR_MODES = ["ground", "center", "roof"] as const;
 export type RtsDamageAnchorMode = (typeof RTS_DAMAGE_ANCHOR_MODES)[number];
 
 /**
- * The presentation moments a building may author. Repeating slots re-trigger a
- * one-shot emitter on their interval; one-shot slots fire once at collapse.
+ * The presentation moments a building may author, in three kinds.
+ *
+ * - **Repeating** slots re-trigger on their `intervalSeconds` for as long as the
+ *   condition holds. Smoke belongs here: a burning building keeps burning.
+ * - **Impact** slots fire on an event — a blow landing — and carry a
+ *   `minIntervalSeconds` floor rather than a period, so a building under fire
+ *   from twenty units does not spawn twenty bursts a second. Debris belongs
+ *   here: masonry comes off when something hits it, not on a timer.
+ * - **One-shot** slots fire exactly once, at collapse.
+ *
  * Splitting dust from debris is what lets the two sit at different anchors —
  * dust on the ground, masonry off the roof.
  */
-export const RTS_DAMAGE_REPEATING_SLOTS = ["lightSmoke", "heavySmoke", "heavyDebris", "ruinSmoke"] as const;
+export const RTS_DAMAGE_REPEATING_SLOTS = ["lightSmoke", "heavySmoke", "ruinSmoke"] as const;
+export const RTS_DAMAGE_IMPACT_SLOTS = ["impactDebris"] as const;
 export const RTS_DAMAGE_ONE_SHOT_SLOTS = ["collapseDust", "collapseDebris"] as const;
-export const RTS_DAMAGE_SLOTS = [...RTS_DAMAGE_REPEATING_SLOTS, ...RTS_DAMAGE_ONE_SHOT_SLOTS] as const;
+export const RTS_DAMAGE_SLOTS = [
+  ...RTS_DAMAGE_REPEATING_SLOTS,
+  ...RTS_DAMAGE_IMPACT_SLOTS,
+  ...RTS_DAMAGE_ONE_SHOT_SLOTS,
+] as const;
 export type RtsDamageSlotName = (typeof RTS_DAMAGE_SLOTS)[number];
 
 /** Largest authored spawn offset, in world units, in any axis. */
@@ -85,6 +98,21 @@ const MIN_INTERVAL_SECONDS = 0.05;
 const MAX_INTERVAL_SECONDS = 60;
 /** Matches the parser's per-effect model cap; a rotation longer than this is noise. */
 const MAX_SLOT_EFFECTS = 8;
+/**
+ * How long a husk may linger after its building is gone. The ruin is pure
+ * scenery — gameplay released the ground on the frame the building died — so
+ * `0` (clear as soon as the fall ends) is a legitimate authoring choice, while
+ * anything past a couple of minutes is a typo rather than an intent.
+ */
+const MAX_RUIN_SECONDS = 120;
+/**
+ * Deformation bounds. `squash` stops short of `1` because a building compressed
+ * to zero height is a degenerate, unlit sliver rather than a ruin; the other two
+ * are capped where the shape stops reading as the building it was.
+ */
+const MAX_DEFORM_SQUASH = 0.9;
+const MAX_DEFORM_SPLAY = 1;
+const MAX_DEFORM_BUCKLE = 0.5;
 
 export interface RtsDamageAnchor {
   readonly mode: RtsDamageAnchorMode;
@@ -103,11 +131,42 @@ export interface RtsDamageSlot {
   readonly anchor: RtsDamageAnchor;
   /** Present exactly on {@link RTS_DAMAGE_REPEATING_SLOTS}. */
   readonly intervalSeconds?: number;
+  /**
+   * Present exactly on {@link RTS_DAMAGE_IMPACT_SLOTS}: the shortest gap two
+   * bursts may be played at. A floor, not a period — nothing fires without an
+   * impact to fire it.
+   */
+  readonly minIntervalSeconds?: number;
+}
+
+/**
+ * How far a building's geometry gives way, as fractions of its own bounding box.
+ * Consumed by the vertex-shader deformation, which is why these are pure shape
+ * numbers with no units: they scale with whatever model the building resolves to.
+ */
+export interface RtsDamageDeformation {
+  /** Fraction of total height removed at full progress. */
+  readonly squash: number;
+  /** Fraction of footprint pushed outward, strongest at the base. */
+  readonly splay: number;
+  /** Peak per-vertex horizontal wander, strongest at the top. */
+  readonly buckle: number;
 }
 
 /** A building's fully resolved presentation: no optional fields, no lookups left. */
 export interface RtsDamagePresentation {
   readonly collapseStyle: RtsCollapseStyle;
+  /** How long the husk stays as visible scenery after the fall finishes. */
+  readonly ruinSeconds: number;
+  /** Shape the building loses as it comes down. */
+  readonly collapseDeformation: RtsDamageDeformation;
+  /**
+   * Shape a still-standing, heavily damaged building loses. Held while it is
+   * damaged and released on repair, so authoring a squash here would make a
+   * repairable building permanently shorter until it was fixed — buckle alone is
+   * the honest setting, and the bounds allow the rest only deliberately.
+   */
+  readonly heavyDeformation: RtsDamageDeformation;
   readonly slots: Readonly<Record<RtsDamageSlotName, RtsDamageSlot>>;
 }
 
@@ -116,10 +175,14 @@ export interface RtsDamageSlotOverride {
   readonly effects?: readonly string[];
   readonly anchor?: { readonly mode?: RtsDamageAnchorMode; readonly offset?: readonly [number, number, number] };
   readonly intervalSeconds?: number;
+  readonly minIntervalSeconds?: number;
 }
 
 export interface RtsDamageOverride {
   readonly collapseStyle?: RtsCollapseStyle;
+  readonly ruinSeconds?: number;
+  readonly collapseDeformation?: Partial<RtsDamageDeformation>;
+  readonly heavyDeformation?: Partial<RtsDamageDeformation>;
   readonly slots?: Readonly<Partial<Record<RtsDamageSlotName, RtsDamageSlotOverride>>>;
 }
 
@@ -219,6 +282,22 @@ function isRepeatingSlot(slot: RtsDamageSlotName): boolean {
   return (RTS_DAMAGE_REPEATING_SLOTS as readonly string[]).includes(slot);
 }
 
+function isImpactSlot(slot: RtsDamageSlotName): boolean {
+  return (RTS_DAMAGE_IMPACT_SLOTS as readonly string[]).includes(slot);
+}
+
+function applyDeformationOverride(
+  base: RtsDamageDeformation,
+  override: Partial<RtsDamageDeformation> | undefined,
+): RtsDamageDeformation {
+  if (!override) return base;
+  return {
+    squash: override.squash ?? base.squash,
+    splay: override.splay ?? base.splay,
+    buckle: override.buckle ?? base.buckle,
+  };
+}
+
 function applySlotOverride(base: RtsDamageSlot, override: RtsDamageSlotOverride | undefined): RtsDamageSlot {
   if (!override) return base;
   return {
@@ -230,6 +309,9 @@ function applySlotOverride(base: RtsDamageSlot, override: RtsDamageSlotOverride 
     ...(base.intervalSeconds === undefined
       ? {}
       : { intervalSeconds: override.intervalSeconds ?? base.intervalSeconds }),
+    ...(base.minIntervalSeconds === undefined
+      ? {}
+      : { minIntervalSeconds: override.minIntervalSeconds ?? base.minIntervalSeconds }),
   };
 }
 
@@ -239,7 +321,13 @@ function applyDamageOverride(base: RtsDamagePresentation, override: RtsDamageOve
   for (const slot of RTS_DAMAGE_SLOTS) {
     slots[slot] = applySlotOverride(base.slots[slot], override.slots?.[slot]);
   }
-  return { collapseStyle: override.collapseStyle ?? base.collapseStyle, slots };
+  return {
+    collapseStyle: override.collapseStyle ?? base.collapseStyle,
+    ruinSeconds: override.ruinSeconds ?? base.ruinSeconds,
+    collapseDeformation: applyDeformationOverride(base.collapseDeformation, override.collapseDeformation),
+    heavyDeformation: applyDeformationOverride(base.heavyDeformation, override.heavyDeformation),
+    slots,
+  };
 }
 
 /**
@@ -464,16 +552,25 @@ function validateIntervalSeconds(value: unknown, where: string): number {
 /** The complete form, used only by `damage.defaults`. */
 function validateDamageSlot(value: unknown, slot: RtsDamageSlotName, where: string): RtsDamageSlot {
   const raw = asObject(value, where);
-  requireExactKeys(raw, ["effects", "anchor", "intervalSeconds"], where);
+  requireExactKeys(raw, ["effects", "anchor", "intervalSeconds", "minIntervalSeconds"], where);
   const anchorWhere = `${where}.anchor`;
   const anchor = asObject(raw["anchor"], anchorWhere);
   requireExactKeys(anchor, ["mode", "offset"], anchorWhere);
   const repeating = isRepeatingSlot(slot);
+  const impact = isImpactSlot(slot);
   if (repeating && raw["intervalSeconds"] === undefined) {
     throw new RtsContentCatalogError(`${where}.intervalSeconds: required for repeating slot "${slot}"`);
   }
   if (!repeating && raw["intervalSeconds"] !== undefined) {
-    throw new RtsContentCatalogError(`${where}.intervalSeconds: "${slot}" fires once and has no interval`);
+    throw new RtsContentCatalogError(`${where}.intervalSeconds: "${slot}" does not repeat, so it has no interval`);
+  }
+  if (impact && raw["minIntervalSeconds"] === undefined) {
+    throw new RtsContentCatalogError(`${where}.minIntervalSeconds: required for impact slot "${slot}"`);
+  }
+  if (!impact && raw["minIntervalSeconds"] !== undefined) {
+    throw new RtsContentCatalogError(
+      `${where}.minIntervalSeconds: only impact slots throttle; "${slot}" is not one`,
+    );
   }
   return {
     effects: validateSlotEffects(raw["effects"], `${where}.effects`),
@@ -482,15 +579,23 @@ function validateDamageSlot(value: unknown, slot: RtsDamageSlotName, where: stri
       offset: validateAnchorOffset(anchor["offset"], `${anchorWhere}.offset`),
     },
     ...(repeating ? { intervalSeconds: validateIntervalSeconds(raw["intervalSeconds"], `${where}.intervalSeconds`) } : {}),
+    ...(impact
+      ? { minIntervalSeconds: validateIntervalSeconds(raw["minIntervalSeconds"], `${where}.minIntervalSeconds`) }
+      : {}),
   };
 }
 
 /** The partial form, used by material classes and per-building overrides. */
 function validateDamageSlotOverride(value: unknown, slot: RtsDamageSlotName, where: string): RtsDamageSlotOverride {
   const raw = asObject(value, where);
-  requireExactKeys(raw, ["effects", "anchor", "intervalSeconds"], where);
+  requireExactKeys(raw, ["effects", "anchor", "intervalSeconds", "minIntervalSeconds"], where);
   if (!isRepeatingSlot(slot) && raw["intervalSeconds"] !== undefined) {
-    throw new RtsContentCatalogError(`${where}.intervalSeconds: "${slot}" fires once and has no interval`);
+    throw new RtsContentCatalogError(`${where}.intervalSeconds: "${slot}" does not repeat, so it has no interval`);
+  }
+  if (!isImpactSlot(slot) && raw["minIntervalSeconds"] !== undefined) {
+    throw new RtsContentCatalogError(
+      `${where}.minIntervalSeconds: only impact slots throttle; "${slot}" is not one`,
+    );
   }
   let anchor: RtsDamageSlotOverride["anchor"];
   if (raw["anchor"] !== undefined) {
@@ -510,6 +615,9 @@ function validateDamageSlotOverride(value: unknown, slot: RtsDamageSlotName, whe
     ...(raw["intervalSeconds"] === undefined
       ? {}
       : { intervalSeconds: validateIntervalSeconds(raw["intervalSeconds"], `${where}.intervalSeconds`) }),
+    ...(raw["minIntervalSeconds"] === undefined
+      ? {}
+      : { minIntervalSeconds: validateIntervalSeconds(raw["minIntervalSeconds"], `${where}.minIntervalSeconds`) }),
   };
 }
 
@@ -520,9 +628,66 @@ function validateCollapseStyle(value: unknown, where: string): RtsCollapseStyle 
   return value as RtsCollapseStyle;
 }
 
+function validateRuinSeconds(value: unknown, where: string): number {
+  const seconds = requireFiniteNumber(value, where);
+  if (seconds < 0 || seconds > MAX_RUIN_SECONDS) {
+    throw new RtsContentCatalogError(`${where}: must be between 0 and ${MAX_RUIN_SECONDS} seconds`);
+  }
+  return seconds;
+}
+
+function validateDeformAmount(value: unknown, where: string, max: number): number {
+  const amount = requireFiniteNumber(value, where);
+  // Negative is refused rather than clamped: it is not a weaker deformation, it
+  // is an inside-out building, and silently flipping it would hide the typo.
+  if (amount < 0 || amount > max) {
+    throw new RtsContentCatalogError(`${where}: must be between 0 and ${max}`);
+  }
+  return amount;
+}
+
+/** The complete form; every field required, used only by `damage.defaults`. */
+function validateDeformation(value: unknown, where: string): RtsDamageDeformation {
+  const raw = asObject(value, where);
+  requireExactKeys(raw, ["squash", "splay", "buckle"], where);
+  for (const key of ["squash", "splay", "buckle"] as const) {
+    if (raw[key] === undefined) throw new RtsContentCatalogError(`${where}.${key}: required`);
+  }
+  return {
+    squash: validateDeformAmount(raw["squash"], `${where}.squash`, MAX_DEFORM_SQUASH),
+    splay: validateDeformAmount(raw["splay"], `${where}.splay`, MAX_DEFORM_SPLAY),
+    buckle: validateDeformAmount(raw["buckle"], `${where}.buckle`, MAX_DEFORM_BUCKLE),
+  };
+}
+
+/** The partial form, used by material classes and per-building overrides. */
+function validateDeformationOverride(value: unknown, where: string): Partial<RtsDamageDeformation> {
+  const raw = asObject(value, where);
+  requireExactKeys(raw, ["squash", "splay", "buckle"], where);
+  return {
+    ...(raw["squash"] === undefined
+      ? {}
+      : { squash: validateDeformAmount(raw["squash"], `${where}.squash`, MAX_DEFORM_SQUASH) }),
+    ...(raw["splay"] === undefined
+      ? {}
+      : { splay: validateDeformAmount(raw["splay"], `${where}.splay`, MAX_DEFORM_SPLAY) }),
+    ...(raw["buckle"] === undefined
+      ? {}
+      : { buckle: validateDeformAmount(raw["buckle"], `${where}.buckle`, MAX_DEFORM_BUCKLE) }),
+  };
+}
+
+const DAMAGE_OVERRIDE_KEYS = [
+  "collapseStyle",
+  "ruinSeconds",
+  "collapseDeformation",
+  "heavyDeformation",
+  "slots",
+] as const;
+
 function validateDamageOverride(value: unknown, where: string, extraKeys: readonly string[] = []): RtsDamageOverride {
   const raw = asObject(value, where);
-  requireExactKeys(raw, ["collapseStyle", "slots", ...extraKeys], where);
+  requireExactKeys(raw, [...DAMAGE_OVERRIDE_KEYS, ...extraKeys], where);
   let slots: Record<string, RtsDamageSlotOverride> | undefined;
   if (raw["slots"] !== undefined) {
     const slotsWhere = `${where}.slots`;
@@ -537,6 +702,20 @@ function validateDamageOverride(value: unknown, where: string, extraKeys: readon
     ...(raw["collapseStyle"] === undefined
       ? {}
       : { collapseStyle: validateCollapseStyle(raw["collapseStyle"], `${where}.collapseStyle`) }),
+    ...(raw["ruinSeconds"] === undefined
+      ? {}
+      : { ruinSeconds: validateRuinSeconds(raw["ruinSeconds"], `${where}.ruinSeconds`) }),
+    ...(raw["collapseDeformation"] === undefined
+      ? {}
+      : {
+          collapseDeformation: validateDeformationOverride(
+            raw["collapseDeformation"],
+            `${where}.collapseDeformation`,
+          ),
+        }),
+    ...(raw["heavyDeformation"] === undefined
+      ? {}
+      : { heavyDeformation: validateDeformationOverride(raw["heavyDeformation"], `${where}.heavyDeformation`) }),
     ...(slots === undefined ? {} : { slots }),
   };
 }
@@ -558,7 +737,12 @@ function validateDamage(value: unknown, buildingIds: ReadonlySet<string>): RtsDa
 
   const defaultsWhere = `${where}.defaults`;
   const rawDefaults = asObject(raw["defaults"], defaultsWhere);
-  requireExactKeys(rawDefaults, ["collapseStyle", "slots"], defaultsWhere);
+  requireExactKeys(rawDefaults, DAMAGE_OVERRIDE_KEYS, defaultsWhere);
+  // Exhaustive for the same reason the slots are: `defaults` is the layer every
+  // resolution bottoms out in, so a field missing here has no value to inherit.
+  for (const key of DAMAGE_OVERRIDE_KEYS) {
+    if (rawDefaults[key] === undefined) throw new RtsContentCatalogError(`${defaultsWhere}.${key}: required`);
+  }
   const slotsWhere = `${defaultsWhere}.slots`;
   const rawSlots = asObject(rawDefaults["slots"], slotsWhere);
   // Exhaustive, not just allowlisted: defaults is the layer every resolution
@@ -605,7 +789,16 @@ function validateDamage(value: unknown, buildingIds: ReadonlySet<string>): RtsDa
   }
 
   return {
-    defaults: { collapseStyle: validateCollapseStyle(rawDefaults["collapseStyle"], `${defaultsWhere}.collapseStyle`), slots },
+    defaults: {
+      collapseStyle: validateCollapseStyle(rawDefaults["collapseStyle"], `${defaultsWhere}.collapseStyle`),
+      ruinSeconds: validateRuinSeconds(rawDefaults["ruinSeconds"], `${defaultsWhere}.ruinSeconds`),
+      collapseDeformation: validateDeformation(
+        rawDefaults["collapseDeformation"],
+        `${defaultsWhere}.collapseDeformation`,
+      ),
+      heavyDeformation: validateDeformation(rawDefaults["heavyDeformation"], `${defaultsWhere}.heavyDeformation`),
+      slots,
+    },
     materials,
     buildings,
   };

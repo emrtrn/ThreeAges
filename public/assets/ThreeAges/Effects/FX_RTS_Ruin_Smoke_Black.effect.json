@@ -33,12 +33,12 @@
   },
   "spawn": {
     "mode": "rate",
-    "rate": 9,
+    "rate": 8,
     "count": 14,
     "delay": 0,
     "interval": 0,
     "shape": "sphere",
-    "radius": 0.9,
+    "radius": 3,
     "boxSize": [
       0,
       0,
@@ -47,15 +47,15 @@
   },
   "initialize": {
     "lifetime": [
-      1.8,
-      2.6
+      2,
+      6
     ],
     "startSize": [
-      0.7,
-      1.1
+      10,
+      20
     ],
     "startColor": "#201c19",
-    "startOpacity": 0.85,
+    "startOpacity": 0.5,
     "direction": [
       0,
       1,
@@ -63,7 +63,7 @@
     ],
     "speed": [
       0.9,
-      1.6
+      5
     ],
     "spreadAngleDeg": 22,
     "rotation": [
@@ -84,8 +84,8 @@
       0
     ],
     "endSize": [
-      2.4,
-      3.2
+      2,
+      4
     ],
     "endColor": "#4a443f",
     "endOpacity": 0,
@@ -96,6 +96,11 @@
     "type": "sprite",
     "blendMode": "alpha",
     "softness": 0.65,
-    "sortMode": "none"
+    "sortMode": "none",
+    "texture": null,
+    "subUV": {
+      "cols": 4,
+      "rows": 4
+    }
   }
 }

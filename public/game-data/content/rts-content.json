@@ -224,7 +224,18 @@
   "ui": {},
   "damage": {
     "defaults": {
-      "collapseStyle": "topple",
+      "collapseStyle": "inPlace",
+      "ruinSeconds": 3,
+      "collapseDeformation": {
+        "squash": 0.34,
+        "splay": 0.16,
+        "buckle": 0.05
+      },
+      "heavyDeformation": {
+        "squash": 0,
+        "splay": 0,
+        "buckle": 0.035
+      },
       "slots": {
         "lightSmoke": {
           "effects": [
@@ -254,7 +265,19 @@
           },
           "intervalSeconds": 0.65
         },
-        "heavyDebris": {
+        "ruinSmoke": {
+          "effects": [],
+          "anchor": {
+            "mode": "ground",
+            "offset": [
+              0,
+              0.15,
+              0
+            ]
+          },
+          "intervalSeconds": 3
+        },
+        "impactDebris": {
           "effects": [
             "rts-fx-debris-stone",
             "rts-fx-debris-wood"
@@ -267,19 +290,7 @@
               0
             ]
           },
-          "intervalSeconds": 2.4
-        },
-        "ruinSmoke": {
-          "effects": [],
-          "anchor": {
-            "mode": "ground",
-            "offset": [
-              0,
-              0.15,
-              0
-            ]
-          },
-          "intervalSeconds": 1.1
+          "minIntervalSeconds": 0.35
         },
         "collapseDust": {
           "effects": [
@@ -314,12 +325,12 @@
     "materials": {
       "stone": {
         "slots": {
-          "heavyDebris": {
+          "collapseDebris": {
             "effects": [
               "rts-fx-debris-stone"
             ]
           },
-          "collapseDebris": {
+          "impactDebris": {
             "effects": [
               "rts-fx-debris-stone"
             ]
@@ -328,12 +339,12 @@
       },
       "wood": {
         "slots": {
-          "heavyDebris": {
+          "collapseDebris": {
             "effects": [
               "rts-fx-debris-wood"
             ]
           },
-          "collapseDebris": {
+          "impactDebris": {
             "effects": [
               "rts-fx-debris-wood"
             ]
@@ -350,6 +361,11 @@
               "rts-fx-ruin-smoke-black"
             ]
           }
+        },
+        "collapseDeformation": {
+          "squash": 0.58,
+          "splay": 0.26,
+          "buckle": 0.04
         }
       },
       "lumber_camp": {
@@ -360,6 +376,11 @@
               "rts-fx-ruin-smoke-black"
             ]
           }
+        },
+        "collapseDeformation": {
+          "squash": 0.58,
+          "splay": 0.26,
+          "buckle": 0.04
         }
       },
       "quarry": {
@@ -370,6 +391,11 @@
               "rts-fx-ruin-smoke-black"
             ]
           }
+        },
+        "collapseDeformation": {
+          "squash": 0.58,
+          "splay": 0.26,
+          "buckle": 0.04
         }
       },
       "gold_mine": {
@@ -380,6 +406,11 @@
               "rts-fx-ruin-smoke-black"
             ]
           }
+        },
+        "collapseDeformation": {
+          "squash": 0.58,
+          "splay": 0.26,
+          "buckle": 0.04
         }
       }
     }
