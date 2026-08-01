@@ -56,8 +56,14 @@ export class DataTableEditor {
   private readonly statusEl: HTMLElement;
   private readonly saveBtn: HTMLButtonElement;
 
-  /** The parsed document, mutated in place as leaves are committed. */
+  /**
+   * The entry root, mutated in place as leaves are committed. Identical to
+   * {@link fullDoc} unless the def names a `section`, in which case this is that
+   * sub-object and {@link fullDoc} is what gets validated and written.
+   */
   private doc: Record<string, unknown> = {};
+  /** The whole parsed file; the save payload and the validator's input. */
+  private fullDoc: Record<string, unknown> = {};
   /** Field metadata keyed by dotted leaf path, for labels/steps/enums. */
   private readonly fieldMeta = new Map<string, EditorDataTableFieldMeta>();
   /** Friendly names for repeated (array) blocks, keyed by the array's dotted path. */
@@ -123,7 +129,13 @@ export class DataTableEditor {
         this.setStatus("Bu dosya girdi kimliğine göre bir nesne değil; düzenlenemez.", "error");
         return;
       }
-      this.doc = raw;
+      const entryRoot = this.sectionOf(raw);
+      if (!entryRoot) {
+        this.setStatus(`Bu dosyada "${this.options.def.section}" bölümü yok; düzenlenemez.`, "error");
+        return;
+      }
+      this.fullDoc = raw;
+      this.doc = entryRoot;
       this.titleEl.textContent = this.options.def.label;
       this.renderEntries();
       this.setStatus(`Hazır — ${Object.keys(this.doc).length} girdi.`);
@@ -219,10 +231,31 @@ export class DataTableEditor {
     return `${label} — Seviye ${level}`;
   }
 
+  /**
+   * The sub-object this editor treats as its entry root: the whole document, or
+   * the named `section` within it. Null when the section is missing or not an
+   * object, which is a load failure rather than something to edit around.
+   */
+  private sectionOf(doc: Record<string, unknown>): Record<string, unknown> | null {
+    const section = this.options.def.section;
+    if (section === undefined) return doc;
+    let cursor: unknown = doc;
+    for (const key of section.split(".")) {
+      if (!isPlainObject(cursor)) return null;
+      cursor = cursor[key];
+    }
+    return isPlainObject(cursor) ? cursor : null;
+  }
+
   /** Restore one entry to its committed defaults, then leave it as a dirty edit to save. */
   private async resetEntry(entryId: string): Promise<void> {
     try {
-      if (!this.defaults) this.defaults = await loadDataTableDefaults(this.options.path);
+      if (!this.defaults) {
+        const committed = await loadDataTableDefaults(this.options.path);
+        // Reset reads the same section the editor is showing, or an entry id
+        // would be looked up against the wrong level of the file.
+        this.defaults = this.sectionOf(committed) ?? {};
+      }
       const defaultEntry = this.defaults[entryId];
       if (defaultEntry === undefined) {
         this.setStatus(`"${entryId}" depoda (git) yok; sıfırlanacak varsayılan değer bulunamadı.`, "warning");
@@ -324,13 +357,15 @@ export class DataTableEditor {
   }
 
   private async save(): Promise<void> {
-    const message = this.options.def.validate(this.doc);
+    // `doc` is a live reference into `fullDoc`, so edits are already merged; the
+    // validator and the write both see the whole file either way.
+    const message = this.options.def.validate(this.fullDoc);
     if (message !== null) {
       this.setStatus(`Geçersiz veri — kaydedilmedi: ${message}`, "error");
       return;
     }
     try {
-      const result = await saveDataTable(this.options.path, this.doc);
+      const result = await saveDataTable(this.options.path, this.fullDoc);
       this.saveBtn.classList.remove("is-dirty");
       this.setStatus(
         result.changed ? "Kaydedildi. ?rts sekmesini yenileyerek görebilirsiniz." : "Değişiklik yok.",

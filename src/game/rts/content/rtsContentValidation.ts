@@ -167,16 +167,21 @@ export function validateRtsPresentationActor(
  * effect, and assign it to a building without any of the three steps needing a
  * code change.
  */
-export function parseRtsEffectManifest(value: unknown): Set<string> {
-  const effects = new Set<string>();
+export function parseRtsEffectManifestPaths(value: unknown): Map<string, string> {
+  const effects = new Map<string, string>();
   const assets = (value as { assets?: unknown } | null)?.assets;
   if (!Array.isArray(assets)) throw new Error("RTS effect manifest has no assets array");
   for (const entry of assets) {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue;
-    const { id, assetType } = entry as Record<string, unknown>;
-    if (typeof id === "string" && assetType === "effect") effects.add(id);
+    const { id, path, assetType } = entry as Record<string, unknown>;
+    if (typeof id === "string" && typeof path === "string" && assetType === "effect") effects.set(id, path);
   }
   return effects;
+}
+
+/** The id set alone, for coverage checks that do not need to load anything. */
+export function parseRtsEffectManifest(value: unknown): Set<string> {
+  return new Set(parseRtsEffectManifestPaths(value).keys());
 }
 
 /**

@@ -52,8 +52,6 @@ export interface RtsBuildingContentEntry {
    * first; anything it does not map falls back to the age-agnostic `levels`.
    */
   readonly ages?: Readonly<Partial<Record<SettlementAge, Readonly<Record<string, RtsActorRef>>>>>;
-  /** This building's layer over `damage.defaults`; absent means "the default". */
-  readonly damage?: RtsBuildingDamageOverride;
 }
 
 /** Whether a razed building topples sideways or settles where it stood. */
@@ -128,15 +126,23 @@ export interface RtsDamageOverride {
 /** A named debris family (`stone`, `wood`, ...) buildings opt into by name. */
 export interface RtsDamageMaterialClass extends RtsDamageOverride {}
 
+/** A building's own layer: a material class to inherit, plus direct overrides. */
+export interface RtsBuildingDamageOverride extends RtsDamageOverride {
+  readonly material?: string;
+}
+
+/**
+ * Every damage-presentation decision, in one section.
+ *
+ * Per-building overrides live here rather than beside that building's art refs
+ * so `buildings.<id>` stays purely "which Actor", and so the whole authoring
+ * surface is one editable table instead of a decision spread across two shapes.
+ */
 export interface RtsDamageSection {
   /** The only complete entry; every other layer is a partial laid over it. */
   readonly defaults: RtsDamagePresentation;
   readonly materials: Readonly<Record<string, RtsDamageMaterialClass>>;
-}
-
-/** A building's own layer: a material class to inherit, plus direct overrides. */
-export interface RtsBuildingDamageOverride extends RtsDamageOverride {
-  readonly material?: string;
+  readonly buildings: Readonly<Record<string, RtsBuildingDamageOverride>>;
 }
 
 export interface RtsContentCatalog {
@@ -251,7 +257,7 @@ export function rtsBuildingDamagePresentation(
   catalog: RtsContentCatalog,
   buildingId: string,
 ): RtsDamagePresentation {
-  const authored = catalog.buildings[buildingId]?.damage;
+  const authored = catalog.damage.buildings[buildingId];
   const material = authored?.material === undefined ? undefined : catalog.damage.materials[authored.material];
   return applyDamageOverride(applyDamageOverride(catalog.damage.defaults, material), authored);
 }
@@ -388,7 +394,7 @@ function validateBuildings(
     }
     const entryWhere = `${where}."${id}"`;
     const entry = asObject(raw, entryWhere);
-    requireExactKeys(entry, ["constructionActorRef", "levels", "ages", "damage"], entryWhere);
+    requireExactKeys(entry, ["constructionActorRef", "levels", "ages"], entryWhere);
     const levels = validateLevels(entry["levels"], `${entryWhere}.levels`);
     entries[id] = {
       ...(entry["constructionActorRef"] === undefined
@@ -396,9 +402,6 @@ function validateBuildings(
         : { constructionActorRef: requireActorRef(entry["constructionActorRef"], `${entryWhere}.constructionActorRef`) }),
       levels,
       ...(entry["ages"] === undefined ? {} : { ages: validateAges(entry["ages"], `${entryWhere}.ages`) }),
-      ...(entry["damage"] === undefined
-        ? {}
-        : { damage: validateBuildingDamage(entry["damage"], `${entryWhere}.damage`) }),
     };
   }
   return entries;
@@ -548,10 +551,10 @@ function validateBuildingDamage(value: unknown, where: string): RtsBuildingDamag
   return { ...override, material: raw["material"] };
 }
 
-function validateDamage(value: unknown): RtsDamageSection {
+function validateDamage(value: unknown, buildingIds: ReadonlySet<string>): RtsDamageSection {
   const where = "rts-content.json.damage";
   const raw = asObject(value, where);
-  requireExactKeys(raw, ["defaults", "materials"], where);
+  requireExactKeys(raw, ["defaults", "materials", "buildings"], where);
 
   const defaultsWhere = `${where}.defaults`;
   const rawDefaults = asObject(raw["defaults"], defaultsWhere);
@@ -579,9 +582,32 @@ function validateDamage(value: unknown): RtsDamageSection {
     materials[name] = validateDamageOverride(rawMaterial, `${materialsWhere}."${name}"`);
   }
 
+  const buildingsWhere = `${where}.buildings`;
+  const rawBuildings = asObject(raw["buildings"], buildingsWhere);
+  const buildings: Record<string, RtsBuildingDamageOverride> = {};
+  for (const [id, rawBuilding] of Object.entries(rawBuildings)) {
+    // Checked against the catalog's own building map rather than the balance
+    // table: it is the stricter rule (those keys are themselves balance-checked)
+    // and it makes the damage section validatable from the document alone, which
+    // is what lets the editor refuse a bad save without loading balance JSON.
+    if (!buildingIds.has(id)) {
+      throw new RtsContentCatalogError(`${buildingsWhere}: "${id}" is not a mapped building id`);
+    }
+    const override = validateBuildingDamage(rawBuilding, `${buildingsWhere}."${id}"`);
+    // Named here rather than left to fail as an unresolved lookup at collapse
+    // time, when nothing would be left to say which entry was wrong.
+    if (override.material !== undefined && materials[override.material] === undefined) {
+      throw new RtsContentCatalogError(
+        `${buildingsWhere}."${id}".material: unknown material class "${override.material}"`,
+      );
+    }
+    buildings[id] = override;
+  }
+
   return {
     defaults: { collapseStyle: validateCollapseStyle(rawDefaults["collapseStyle"], `${defaultsWhere}.collapseStyle`), slots },
     materials,
+    buildings,
   };
 }
 
@@ -612,24 +638,27 @@ export function validateRtsContentCatalog(
   if (obj["type"] !== "rtsContentCatalog") {
     throw new RtsContentCatalogError(`${where}.type: expected "rtsContentCatalog"`);
   }
-  const damage = validateDamage(obj["damage"]);
   const buildings = validateBuildings(obj["buildings"], context);
-  // Checked after both parse, so the message can name the class that is missing
-  // rather than failing later as an unresolved lookup at collapse time.
-  for (const [id, entry] of Object.entries(buildings)) {
-    const material = entry.damage?.material;
-    if (material !== undefined && damage.materials[material] === undefined) {
-      throw new RtsContentCatalogError(
-        `${where}.buildings."${id}".damage.material: unknown material class "${material}"`,
-      );
-    }
-  }
   return {
     schema: RTS_CONTENT_CATALOG_SCHEMA,
     type: "rtsContentCatalog",
     units: validateUnits(obj["units"], context),
     buildings,
     ui: validateUi(obj["ui"]),
-    damage,
+    damage: validateDamage(obj["damage"], new Set(Object.keys(buildings))),
   };
+}
+
+/**
+ * Validate only the `damage` section of a raw catalog document.
+ *
+ * The editor's Data Table save gate. It needs no balance tables — the section's
+ * only cross-reference is to the document's own `buildings` keys — so the editor
+ * route can refuse a bad damage edit without loading the game's balance JSON,
+ * using the same rules the runtime boots with.
+ */
+export function validateRtsContentDamageSection(value: unknown): RtsDamageSection {
+  const obj = asObject(value, "rts-content.json");
+  const buildings = asObject(obj["buildings"], "rts-content.json.buildings");
+  return validateDamage(obj["damage"], new Set(Object.keys(buildings)));
 }

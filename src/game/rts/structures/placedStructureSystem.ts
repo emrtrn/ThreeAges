@@ -51,25 +51,8 @@ const RUIN_DURATION = 14;
 const MAX_RUINS = 10;
 /** Economy scenery that reserves build space but units may walk through. */
 const UNIT_PASS_THROUGH_STRUCTURE_IDS = new Set(["farm", "lumber_camp"]);
-/**
- * Ground-hugging worksites — a tilled field, a log yard, a quarry pit, a mine
- * mouth. The shared topple reads as a mistake on these: there is no silhouette
- * to fall over, so the model just rolls onto its side and floats a corner in the
- * air. They collapse in place instead, and the game layer vents smoke over the
- * charred remains until the ruin clears.
- */
-const IN_PLACE_COLLAPSE_STRUCTURE_IDS = new Set(["farm", "lumber_camp", "quarry", "gold_mine"]);
 /** How far the husk's own materials move toward soot when it collapses in place. */
 const CHARRED_COLOR = new Color("#241f1b");
-
-/**
- * Whether this building's death animation skips the sideways fall. Exported so
- * the game's VFX layer can pick the matching presentation from the same rule
- * rather than repeating the id list.
- */
-export function collapsesInPlace(structureId: string): boolean {
-  return IN_PLACE_COLLAPSE_STRUCTURE_IDS.has(structureId);
-}
 
 /** Health-driven presentation stages shared by every placed structure. */
 export type StructureDamageStage = "normal" | "light" | "heavy" | "destroyed";
@@ -135,6 +118,15 @@ export interface StructureDamagePresentationHandler {
    * the ruin's lifetime, so an early trim never leaves smoke over bare ground.
    */
   onRuinCleared?(structureId: number): void;
+  /**
+   * Whether this building settles where it stood instead of toppling sideways.
+   *
+   * A query rather than a rule of this system: which buildings have a silhouette
+   * worth falling over is a game-content decision, authored in the damage table.
+   * Absent (or no handler at all) means the shared topple, which is what keeps a
+   * fork with no content catalog rendering something sensible.
+   */
+  collapsesInPlace?(structure: PlacedStructure): boolean;
 }
 
 export interface PlacedStructure {
@@ -512,7 +504,7 @@ export class PlacedStructureSystem {
     // so the husk needs its own opaque copies before it becomes an independent
     // ruin. No per-frame opacity mutation is used for the collapse.
     makeObjectMaterialsPrivate(structure.object);
-    const inPlace = collapsesInPlace(structure.stats.id);
+    const inPlace = this.damagePresentationHandler?.collapsesInPlace?.(structure) ?? false;
     // Now that the copies are private, souring them is safe. A worksite that
     // never topples needs this: without it the husk would sit in its original
     // colours for the whole ruin window and read as an undamaged building.

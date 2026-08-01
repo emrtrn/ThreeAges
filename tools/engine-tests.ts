@@ -193,7 +193,6 @@ import {
 } from "../src/game/rts/structures/placementGrid";
 import {
   PlacedStructureSystem,
-  collapsesInPlace,
   structureDamageStage,
 } from "../src/game/rts/structures/placedStructureSystem";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
@@ -28302,9 +28301,26 @@ check("GAME_EDITOR_CATALOG satisfies the editor catalog contract once injected",
   // shipped file must validate, which catches a copy-paste that pairs (say) the
   // buildings path with the units validator.
   for (const table of catalog.dataTables ?? []) {
-    assert.match(table.path, /^game-data\/balance\/[a-z]+\.json$/, `${table.id} path is a balance file`);
+    // The same fence the dev save endpoint applies, asserted at the registration
+    // site so a table can never be pointed outside the authoring scope.
+    assert.match(table.path, /^game-data\/[a-z-]+\/[a-z-]+\.json$/, `${table.id} path is a game-data file`);
     const real = JSON.parse(readFileSync(`public/${table.path}`, "utf8")) as unknown;
     assert.equal(table.validate(real), null, `the shipped ${table.id} file validates through its registered validator`);
+    // A section-scoped table must actually resolve, or the editor would open
+    // empty and its field metadata would silently match nothing.
+    if (table.section === undefined) continue;
+    let cursor: unknown = real;
+    for (const key of table.section.split(".")) {
+      assert.ok(
+        cursor !== null && typeof cursor === "object" && !Array.isArray(cursor),
+        `${table.id} section "${table.section}" resolves`,
+      );
+      cursor = (cursor as Record<string, unknown>)[key];
+    }
+    assert.ok(
+      cursor !== null && typeof cursor === "object" && !Array.isArray(cursor),
+      `${table.id} section "${table.section}" is an editable object`,
+    );
   }
 });
 
@@ -29454,23 +29470,21 @@ check("RTS structure collapse keeps an opaque, non-blocking ruin after the fall"
   assert.equal(structure.object.parent, null, "match cleanup disposes the presentation-only ruin");
 });
 
-check("RTS ground-hugging worksites collapse in place instead of toppling", () => {
+check("RTS collapse style comes from the damage table, not from the structure system", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
-  // The rule is about silhouette, not about any one building's tuning: a field
-  // has nothing to fall over, an outpost does.
-  for (const id of ["farm", "lumber_camp", "quarry", "gold_mine"]) {
-    assert.ok(buildings[id], `${id} must exist in the balance table this rule names`);
-    assert.equal(collapsesInPlace(id), true, `${id} is a ground-hugging worksite`);
-  }
-  for (const id of ["outpost", "command_center", "barracks"]) {
-    assert.equal(collapsesInPlace(id), false, `${id} keeps the shared topple`);
-  }
-
+  const catalog = shippedRtsContentCatalog();
   const farm = buildings.farm ?? assert.fail("farm balance missing");
   const outpost = buildings.outpost ?? assert.fail("outpost balance missing");
   const structures = new PlacedStructureSystem();
+  // Wired exactly as the runtime wires it, so this exercises the authored data
+  // reaching the husk rather than a rule re-stated in the test.
+  structures.setDamagePresentationHandler({
+    collapsesInPlace: (structure) =>
+      rtsBuildingDamagePresentation(catalog, structure.stats.id).collapseStyle === "inPlace",
+  });
+
   const field = structures.place("player", farm, 0, 0);
   const tower = structures.place("player", outpost, 20, 0);
   structures.advanceConstruction(field, farm.constructionSeconds);
@@ -29484,14 +29498,21 @@ check("RTS ground-hugging worksites collapse in place instead of toppling", () =
   assert.equal(
     field.object.rotation.z,
     uprightRotation,
-    "the razed field ends its collapse upright, with no residual tilt",
+    "an inPlace building ends its collapse upright, with no residual tilt",
   );
-  assert.ok(
-    Math.abs(tower.object.rotation.z) > 0.1,
-    "a building with a silhouette still topples",
-  );
+  assert.ok(Math.abs(tower.object.rotation.z) > 0.1, "a topple building still falls");
   assert.equal(field.object.position.y, 0, "collapsing in place never sinks the husk");
   structures.clear();
+
+  // With no handler at all — a fork that ships no content catalog — every
+  // building takes the shared topple rather than silently freezing upright.
+  const bare = new PlacedStructureSystem();
+  const unmanaged = bare.place("player", farm, 0, 0);
+  bare.advanceConstruction(unmanaged, farm.constructionSeconds);
+  bare.destroy(unmanaged);
+  bare.updateVisualAnimations(1);
+  assert.ok(Math.abs(unmanaged.object.rotation.z) > 0.1, "the default is to topple");
+  bare.clear();
 });
 
 check("RTS ruin clearing is announced so trailing husk VFX cannot outlive the husk", () => {
@@ -30675,6 +30696,7 @@ function minimalDamageSection(): unknown {
       },
     },
     materials: {},
+    buildings: {},
   };
 }
 
@@ -30685,6 +30707,7 @@ function minimalDamageSection(): unknown {
  */
 function damageCatalogFixture(overrides: {
   materials?: Record<string, unknown>;
+  damageBuildings?: Record<string, unknown>;
   buildings?: Record<string, unknown>;
 } = {}): unknown {
   return {
@@ -30705,7 +30728,9 @@ function damageCatalogFixture(overrides: {
         },
       },
       materials: overrides.materials ?? {},
+      buildings: overrides.damageBuildings ?? {},
     },
+    // Art refs only; every damage decision lives in the section above.
     buildings: overrides.buildings ?? {},
   };
 }
@@ -30721,19 +30746,16 @@ check("RTS damage table resolves defaults → material class → building, field
       materials: {
         stone: { slots: { heavyDebris: { effects: ["fx.stone"] } } },
       },
-      buildings: {
-        // Nothing authored at all.
-        house: { levels },
+      buildings: { house: { levels }, barracks: { levels }, outpost: { levels } },
+      damageBuildings: {
+        // `house` is deliberately absent: nothing authored at all.
         // Opts into a class and nothing else.
-        barracks: { levels, damage: { material: "stone" } },
+        barracks: { material: "stone" },
         // Class plus its own narrower override.
         outpost: {
-          levels,
-          damage: {
-            material: "stone",
-            collapseStyle: "inPlace",
-            slots: { heavyDebris: { effects: ["fx.tile"], anchor: { offset: [0, 4, 0] } } },
-          },
+          material: "stone",
+          collapseStyle: "inPlace",
+          slots: { heavyDebris: { effects: ["fx.tile"], anchor: { offset: [0, 4, 0] } } },
         },
       },
     }),
@@ -30789,9 +30811,17 @@ check("RTS damage table refuses data the runtime would have to guess about", () 
   refuses((d) => { d.damage.defaults.collapseStyle = "explode"; }, "collapse style is a closed set");
   refuses((d) => { d.damage.defaults.slots.heavySmoke.wobble = 1; }, "an unknown field is a typo, not an extension");
   refuses(
-    (d) => { d.buildings = { house: { levels, damage: { material: "obsidian" } } }; },
+    (d) => {
+      d.buildings = { house: { levels } };
+      d.damage.buildings = { house: { material: "obsidian" } };
+    },
     "a building cannot name a material class that does not exist",
   );
+  refuses(
+    (d) => { d.damage.buildings = { nonesuch: { collapseStyle: "topple" } }; },
+    "a damage override cannot name a building the catalog does not map",
+  );
+  refuses((d) => { delete d.damage.buildings; }, "the per-building map is required, even when empty");
   refuses((d) => { d.schema = 1; }, "schema 1 predates the damage section");
   refuses((d) => { delete d.damage; }, "the damage section is required, not optional");
 });
@@ -30812,17 +30842,54 @@ check("RTS shipped damage table names only real effects and preserves today's co
     "every authored slot names a manifested effect asset",
   );
 
-  // Migration fidelity, for as long as both sources exist: the table was written
-  // to reproduce the runtime's hard-coded rule exactly. When the runtime starts
-  // reading the table, `collapsesInPlace` and this assertion go away together —
-  // until then this is what catches the styles being silently dropped.
-  for (const buildingId of buildingIds) {
+  // The stated design rule: a worksite with no silhouette does not topple. This
+  // is a presentation decision rather than a tuning magnitude, so it is pinned —
+  // the list moves only when the design does, and a dropped `collapseStyle`
+  // would otherwise fail silently by reverting the building to a topple.
+  for (const buildingId of ["farm", "lumber_camp", "quarry", "gold_mine"]) {
     assert.equal(
-      rtsBuildingDamagePresentation(catalog, buildingId).collapseStyle === "inPlace",
-      collapsesInPlace(buildingId),
-      `${buildingId}: the table and the runtime rule must still agree`,
+      rtsBuildingDamagePresentation(catalog, buildingId).collapseStyle,
+      "inPlace",
+      `${buildingId} is a ground-hugging worksite`,
     );
   }
+  assert.ok(
+    buildingIds.some((id) => rtsBuildingDamagePresentation(catalog, id).collapseStyle === "topple"),
+    "and the table still authors the toppling style at all",
+  );
+});
+
+check("RTS damage tables are editable and their save gate refuses what the game would reject", () => {
+  const catalog = GAME_EDITOR_CATALOG;
+  const tables = (catalog.dataTables ?? []).filter((table) => table.id.startsWith("rts-damage-"));
+  assert.equal(tables.length, 3, "the three damage layers are each registered as a table");
+  const document = JSON.parse(
+    readFileSync("public/game-data/content/rts-content.json", "utf8"),
+  ) as Record<string, any>;
+
+  for (const table of tables) {
+    assert.equal(table.path, "game-data/content/rts-content.json");
+    assert.equal(table.validate(document), null, `${table.id} accepts the shipped document`);
+    // Field metadata must reach real leaves. The editor matches array indices
+    // through `[]`, so an offset entry proves the generated paths line up with
+    // the shape the section actually has.
+    assert.ok(
+      table.fields?.some((field) => field.path.endsWith("anchor.offset.[]")),
+      `${table.id} labels the spawn offset`,
+    );
+  }
+
+  const refuse = (mutate: (doc: Record<string, any>) => void, why: string): void => {
+    const broken = JSON.parse(JSON.stringify(document)) as Record<string, any>;
+    mutate(broken);
+    for (const table of tables) {
+      assert.equal(typeof table.validate(broken), "string", `${table.id}: ${why}`);
+    }
+  };
+  refuse((d) => { d.damage.defaults.slots.heavySmoke.intervalSeconds = 0; }, "a zero interval is refused");
+  refuse((d) => { d.damage.defaults.slots.lightSmoke.anchor.mode = "sky"; }, "an unknown anchor mode is refused");
+  refuse((d) => { d.damage.buildings.farm.material = "obsidian"; }, "an unknown material class is refused");
+  refuse((d) => { d.damage.buildings.nonesuch = { collapseStyle: "topple" }; }, "an unmapped building is refused");
 });
 
 check("Unit owner Actors Faz 1: an owner resolves its own variant, and only a real owner may author one", () => {

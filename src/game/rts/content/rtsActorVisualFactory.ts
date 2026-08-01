@@ -18,6 +18,7 @@ import type { SettlementAge } from "@/game/data/gameDataTypes";
 import { rtsBuildingActorRef, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
 import {
   RtsActorPresentationError,
+  parseRtsEffectManifestPaths,
   parseRtsMeshManifest,
   rtsContentCatalogRefs,
   validateRtsPresentationActor,
@@ -87,6 +88,8 @@ export class RtsActorVisualFactory {
   /** In-flight/settled model loads, keyed by asset id — see {@link templateFor}. */
   private readonly templateLoads = new Map<string, Promise<RtsModelTemplate>>();
   private readonly manifestMeshes = new Map<string, RtsMeshAsset>();
+  /** Effect asset id → public-root-relative path, for the damage table's slots. */
+  private readonly manifestEffects = new Map<string, string>();
   /**
    * Tinted material variants, keyed by source material and tint.
    *
@@ -108,13 +111,37 @@ export class RtsActorVisualFactory {
     this.loader = createForgeGltfLoader(renderer);
   }
 
+  /**
+   * Public-root-relative path of a manifested effect asset, or null.
+   *
+   * This is what replaces the runtime's former hand-written effect allowlist: an
+   * effect the author imported and registered resolves, anything else does not,
+   * and no code change sits between those two states.
+   */
+  effectAssetPath(effectId: string): string | null {
+    return this.manifestEffects.get(effectId) ?? null;
+  }
+
+  /** Same, for a static mesh — the debris models an effect's renderer names. */
+  staticMeshAssetPath(assetId: string): string | null {
+    const asset = this.manifestMeshes.get(assetId);
+    return asset?.assetType === "staticMesh" ? asset.path : null;
+  }
+
   async load(): Promise<void> {
     const manifestResponse = await fetch(projectFileUrl("assets/manifest.json"), { cache: "no-cache" });
     if (!manifestResponse.ok) {
       throw new Error(`RTS Actor manifest fetch failed: ${manifestResponse.status}`);
     }
-    for (const [id, asset] of parseRtsMeshManifest(await manifestResponse.json())) {
+    const manifestJson = (await manifestResponse.json()) as unknown;
+    for (const [id, asset] of parseRtsMeshManifest(manifestJson)) {
       this.manifestMeshes.set(id, asset);
+    }
+    // The damage table names effect assets; the factory is where the manifest is
+    // already read, so indexing them here keeps the whole match to one fetch of a
+    // file this size.
+    for (const [id, path] of parseRtsEffectManifestPaths(manifestJson)) {
+      this.manifestEffects.set(id, path);
     }
 
     const refs = rtsContentCatalogRefs(this.catalog);

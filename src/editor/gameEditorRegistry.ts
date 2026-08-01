@@ -104,6 +104,19 @@ export interface EditorDataTableDef {
   readonly label: string;
   /** Public-root-relative JSON path, e.g. `game-data/balance/units.json`. */
   readonly path: string;
+  /**
+   * Edit one sub-object instead of the whole document, e.g. `damage.materials`.
+   * Dotted, so a file can expose several tables at the depth whose keys are the
+   * natural rows.
+   *
+   * For a file that is only a table, this is absent and every top-level key is
+   * an entry. It exists for files that carry a table *alongside* other data:
+   * without it the editor would offer a project's schema markers and asset-
+   * reference maps as editable rows, which is a worse hazard than the extra
+   * field. Save merges the edited section back and still writes — and validates —
+   * the whole document.
+   */
+  readonly section?: string;
   /** Optional per-leaf presentation hints; keyed by dotted path. */
   readonly fields?: readonly EditorDataTableFieldMeta[];
   /**

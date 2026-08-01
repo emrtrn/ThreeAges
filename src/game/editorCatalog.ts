@@ -22,6 +22,7 @@ import {
   validateRoadBalance,
   validateUnitBalance,
 } from "@/game/data/validateGameData";
+import { validateRtsContentDamageSection } from "@/game/rts/content/rtsContentCatalog";
 
 /**
  * Wrap a runtime game-data validator as the editor's `validate` contract:
@@ -40,6 +41,80 @@ const asTableValidator =
       return error instanceof Error ? error.message : String(error);
     }
   };
+
+/**
+ * Damage-slot field metadata, generated rather than written out.
+ *
+ * The same six slots appear in all three damage tables, at two depths: directly
+ * under the defaults entry, and under `slots.` for a material class or a
+ * building. Generating from one list keeps a renamed slot from being labelled in
+ * one table and raw in the others.
+ */
+const DAMAGE_SLOT_LABELS: readonly (readonly [string, string, boolean])[] = [
+  ["lightSmoke", "Hafif hasar dumanı", true],
+  ["heavySmoke", "Ağır hasar dumanı", true],
+  ["heavyDebris", "Ağır hasar molozu", true],
+  ["ruinSmoke", "Enkaz dumanı", true],
+  ["collapseDust", "Çöküş tozu", false],
+  ["collapseDebris", "Çöküş molozu", false],
+];
+
+const DAMAGE_COLLAPSE_STYLE_FIELD = {
+  path: "collapseStyle",
+  label: "Çöküş biçimi",
+  enum: ["topple", "inPlace"],
+  hint: "topple: yana devrilir (silueti olan binalar). inPlace: yerinde kalır, materyali kararır — tarla, oduncu kampı, ocak gibi zemin yapıları için.",
+};
+
+const DAMAGE_MATERIAL_FIELD = {
+  path: "material",
+  label: "Malzeme sınıfı",
+  hint: "Devralınacak malzeme sınıfının adı (Malzeme Sınıfları tablosundaki bir başlık). Boş bırakılırsa yalnızca varsayılanlar ve buradaki alanlar geçerlidir.",
+};
+
+function damageSlotFields(prefix: string): readonly {
+  path: string;
+  label: string;
+  hint?: string;
+  enum?: readonly string[];
+  min?: number;
+  max?: number;
+  step?: number;
+}[] {
+  return DAMAGE_SLOT_LABELS.flatMap(([slot, label, repeating]) => [
+    {
+      path: `${prefix}${slot}.effects.[]`,
+      label: `${label}: Efekt`,
+      hint: repeating
+        ? "Content Drawer efekt asset id'si. Birden fazla yazılırsa yapı kimliğine göre biri seçilir — bir bina ömrü boyunca aynı efekti kullanır."
+        : "Content Drawer efekt asset id'si. Tek atışlık slot: buradaki efektlerin hepsi aynı anda çalışır.",
+    },
+    {
+      path: `${prefix}${slot}.anchor.mode`,
+      label: `${label}: Konum`,
+      enum: ["ground", "center", "roof"],
+      hint: "Efektin doğduğu referans yükseklik. Ayak izinden türetilir, bu yüzden küçük ve büyük binalarda aynı girdi doğru kalır.",
+    },
+    {
+      path: `${prefix}${slot}.anchor.offset.[]`,
+      label: `${label}: Kayma (x / y / z)`,
+      min: -50,
+      max: 50,
+      step: 0.05,
+      hint: "Referans noktasının üstüne eklenen serbest kaydırma, dünya birimi.",
+    },
+    ...(repeating
+      ? [{
+        path: `${prefix}${slot}.intervalSeconds`,
+        label: `${label}: Aralık (sn)`,
+        min: 0.05,
+        max: 60,
+        step: 0.05,
+        hint: "Efektin kaç saniyede bir yeniden tetikleneceği. Küçük değerler parçacık bütçesini hızla doldurur.",
+      }]
+      : []),
+  ]);
+}
 
 // Friendly Turkish labels + gentle min/max/step for the Data Table editor. These
 // are presentation only — the authoritative range check stays in the validators
@@ -421,6 +496,34 @@ export const GAME_EDITOR_CATALOG = {
   // to defaults" restores an entry from git HEAD. Adding a file here is all it
   // takes to make it editable — the form and reset button are generic.
   dataTables: [
+    // Three views onto one section of `rts-content.json`, each pointed at the
+    // depth whose keys are the rows an author thinks in: the base presentation,
+    // the debris families, and the per-building exceptions. Splitting them is
+    // what lets one field-metadata list label all three.
+    {
+      id: "rts-damage-defaults",
+      label: "Yapı Hasarı — Varsayılan Sunum",
+      path: "game-data/content/rts-content.json",
+      section: "damage.defaults",
+      fields: [DAMAGE_COLLAPSE_STYLE_FIELD, ...damageSlotFields("")],
+      validate: asTableValidator(validateRtsContentDamageSection),
+    },
+    {
+      id: "rts-damage-materials",
+      label: "Yapı Hasarı — Malzeme Sınıfları",
+      path: "game-data/content/rts-content.json",
+      section: "damage.materials",
+      fields: [DAMAGE_COLLAPSE_STYLE_FIELD, ...damageSlotFields("slots.")],
+      validate: asTableValidator(validateRtsContentDamageSection),
+    },
+    {
+      id: "rts-damage-buildings",
+      label: "Yapı Hasarı — Bina Özel",
+      path: "game-data/content/rts-content.json",
+      section: "damage.buildings",
+      fields: [DAMAGE_MATERIAL_FIELD, DAMAGE_COLLAPSE_STYLE_FIELD, ...damageSlotFields("slots.")],
+      validate: asTableValidator(validateRtsContentDamageSection),
+    },
     {
       id: "units",
       label: "Birim Dengesi",

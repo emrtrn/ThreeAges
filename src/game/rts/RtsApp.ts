@@ -126,11 +126,22 @@ import type { RtsGraphicsQuality } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 import {
   PlacedStructureSystem,
-  collapsesInPlace,
   structureDamageStage,
   type PlacedStructure,
   type StructureDamageStage,
 } from "./structures/placedStructureSystem";
+import {
+  RTS_DAMAGE_SLOTS,
+  rtsBuildingDamagePresentation,
+  type RtsDamagePresentation,
+  type RtsDamageSlot,
+  type RtsDamageSlotName,
+} from "./content/rtsContentCatalog";
+
+/** Timer key for one building's one repeating slot. */
+function slotTimerKey(structureId: number, slot: RtsDamageSlotName): string {
+  return `${structureId}:${slot}`;
+}
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { StructureConstructionService } from "./structures/structureConstructionService";
 import { KingdomRegistry } from "./kingdom/kingdomRegistry";
@@ -279,41 +290,16 @@ const PLAYER_OWNER: UnitOwner = "player";
  * in two seconds are one problem, not five notices.
  */
 type RtsCommandSubject = "production" | "trade" | "structure" | "orders" | "workers" | "progression";
-/** Content Drawer effect assets used by the first RTS damage presentation pass. */
-const STRUCTURE_DAMAGE_EFFECT_URLS: Readonly<Record<string, string>> = {
-  "starter-fx-smoke-puff": "assets/starter-content/Effects/FX_Smoke_Puff.effect.json",
-  "rts-fx-debris-stone": "assets/ThreeAges/Effects/FX_RTS_Debris_Stone.effect.json",
-  "rts-fx-debris-wood": "assets/ThreeAges/Effects/FX_RTS_Debris_Wood.effect.json",
-  "rts-fx-collapse-dust": "assets/ThreeAges/Effects/FX_RTS_Collapse_Dust.effect.json",
-  "rts-fx-ruin-smoke-black": "assets/ThreeAges/Effects/FX_RTS_Ruin_Smoke_Black.effect.json",
-};
-/** Explicit manifest-backed source map: VFX assets never supply arbitrary model URLs. */
-const STRUCTURE_DAMAGE_MODEL_URLS: Readonly<Record<string, string>> = {
-  rock: "assets/ThreeAges/StaticMeshes/Rock.gltf",
-  logs: "assets/ThreeAges/StaticMeshes/Logs.gltf",
-};
-const STRUCTURE_DAMAGE_SMOKE_EFFECT = "starter-fx-smoke-puff";
-const STRUCTURE_COLLAPSE_EFFECTS = [
-  "rts-fx-collapse-dust",
-  "rts-fx-debris-stone",
-  "rts-fx-debris-wood",
-] as const;
-const STRUCTURE_DAMAGE_DEBRIS_EFFECTS = [
-  "rts-fx-debris-stone",
-  "rts-fx-debris-wood",
-] as const;
-const LIGHT_DAMAGE_SMOKE_INTERVAL_SECONDS = 1.35;
-const HEAVY_DAMAGE_SMOKE_INTERVAL_SECONDS = 0.65;
-/** A critical building occasionally sheds authored debris, never once per frame. */
-const HEAVY_DAMAGE_DEBRIS_INTERVAL_SECONDS = 2.4;
 /**
- * A razed worksite that never topples needs a second signal, so it vents black
- * smoke for as long as its charred husk is on the field. Re-triggered on this
- * interval rather than looped: a one-shot emitter is what the shared budget in
- * {@link applyQualitySettings} can actually account for.
+ * Which damage slot each health stage drives. `heavyDebris` rides alongside
+ * `heavySmoke` rather than replacing it — a critical building both smokes and
+ * sheds. Every timing, effect and spawn point behind these names is authored in
+ * `rts-content.json`; nothing about the damage presentation is written here.
  */
-const RUIN_SMOKE_EFFECT = "rts-fx-ruin-smoke-black";
-const RUIN_SMOKE_INTERVAL_SECONDS = 1.1;
+const STAGE_SLOTS: Readonly<Record<"light" | "heavy", readonly RtsDamageSlotName[]>> = {
+  light: ["lightSmoke"],
+  heavy: ["heavySmoke", "heavyDebris"],
+};
 /** Faz 5: the kingdom the AI opponent plays (plan §37). */
 const AI_OWNER: UnitOwner = "enemy";
 /**
@@ -512,22 +498,30 @@ export class RtsApp {
   /** RTS-owned use of the general Forge VFX runtime; effect assets stay editable. */
   private readonly structureDamageVfx = new VfxSubsystem({
     resolveEffectUrl: (effectId) => {
-      const path = STRUCTURE_DAMAGE_EFFECT_URLS[effectId];
+      const path = this.actorVisuals?.effectAssetPath(effectId);
       return path ? projectFileUrl(path) : null;
     },
     loadMeshModels: (modelIds) => this.loadStructureDamageModels(modelIds),
   });
-  /** Real-time accumulator per damaged building; avoids a new smoke effect every frame. */
-  private readonly structureSmokeElapsed = new Map<number, number>();
-  /** Separate, deliberately slower budget for the heavy-damage debris bursts. */
-  private readonly structureDebrisElapsed = new Map<number, number>();
+  /**
+   * Real-time accumulators for the repeating damage slots, keyed `<id>:<slot>`.
+   * Reconciled against the live set every frame, so a building that heals, dies
+   * or finishes construction drops its timers without a bespoke unsubscribe.
+   */
+  private readonly structureSlotElapsed = new Map<string, number>();
   /**
    * Smouldering husks of razed worksites, keyed by the id of a structure that no
    * longer exists. The position is captured at collapse because nothing can
    * resolve that id back to a building afterwards; entries leave only through
    * `onRuinCleared`, so the smoke and the husk disappear on the same frame.
    */
-  private readonly structureRuinSmoke = new Map<number, { readonly position: [number, number, number]; elapsed: number }>();
+  private readonly structureRuinSmoke = new Map<number, {
+    readonly position: [number, number, number];
+    readonly effects: readonly string[];
+    readonly intervalSeconds: number;
+    readonly rotationKey: number;
+    elapsed: number;
+  }>();
   private readonly roads: RoadGraph;
   private readonly roadDebugView: RoadDebugView;
   private readonly territory = new TerritoryControlSystem(() => this.centers.all().map((center) => ({
@@ -1373,14 +1367,11 @@ export class RtsApp {
       onDamageStageChanged: (structure, _previous, next) => this.onStructureDamageStageChanged(structure, next),
       onCollapse: (structure) => this.onStructureCollapse(structure),
       onRuinCleared: (structureId) => this.structureRuinSmoke.delete(structureId),
+      collapsesInPlace: (structure) =>
+        this.structureDamagePresentation(structure)?.collapseStyle === "inPlace",
     });
-    // Warm at match boot. The calls below still retry safely if a project has
-    // removed this optional starter asset from its manifest.
-    void Promise.all([
-      this.structureDamageVfx.warm(STRUCTURE_DAMAGE_SMOKE_EFFECT),
-      this.structureDamageVfx.warm(RUIN_SMOKE_EFFECT),
-      ...STRUCTURE_COLLAPSE_EFFECTS.map((effectId) => this.structureDamageVfx.warm(effectId)),
-    ]);
+    // Damage effects are warmed inside `loadActorVisuals`, which is where the
+    // manifest that resolves their ids becomes readable.
     void this.loadActorVisuals();
     this.spawnStartingUnits();
     // §59: one fog pass before the first frame is drawn.
@@ -2065,100 +2056,120 @@ export class RtsApp {
     };
   }
 
-  /** Starts a smoke puff immediately when a completed building crosses a health threshold. */
-  private onStructureDamageStageChanged(structure: PlacedStructure, stage: StructureDamageStage): void {
-    if (!structure.construction.complete || (stage !== "light" && stage !== "heavy")) {
-      this.structureSmokeElapsed.delete(structure.id);
-      this.structureDebrisElapsed.delete(structure.id);
-      return;
+  /**
+   * Parse every effect the damage table can reach, once, at boot.
+   *
+   * Derived from the table rather than listed here, so an author who assigns a
+   * newly imported effect gets it warmed without touching code. A ref that no
+   * longer resolves is not fatal — `playStructureEffect` still retries, and one
+   * dead slot must not cost the match its other damage VFX.
+   */
+  private warmStructureDamageEffects(): void {
+    const catalog = this.options.contentCatalog;
+    if (!catalog) return;
+    const effectIds = new Set<string>();
+    for (const buildingId of Object.keys(this.options.buildingBalance)) {
+      const presentation = rtsBuildingDamagePresentation(catalog, buildingId);
+      for (const slot of RTS_DAMAGE_SLOTS) {
+        for (const effectId of presentation.slots[slot].effects) effectIds.add(effectId);
+      }
     }
-    this.structureSmokeElapsed.set(structure.id, 0);
-    this.playStructureSmoke(structure);
-    if (stage === "heavy") {
-      this.structureDebrisElapsed.set(structure.id, 0);
-      this.playStructureDamageDebris(structure);
-    } else {
-      this.structureDebrisElapsed.delete(structure.id);
+    void Promise.all([...effectIds].map((effectId) => this.structureDamageVfx.warm(effectId)));
+  }
+
+  /** The authored damage presentation for this building, or null with no catalog. */
+  private structureDamagePresentation(structure: PlacedStructure): RtsDamagePresentation | null {
+    const catalog = this.options.contentCatalog;
+    return catalog ? rtsBuildingDamagePresentation(catalog, structure.stats.id) : null;
+  }
+
+  /** Fires a repeating slot's single rotated effect; one-shot slots use `playSlotBurst`. */
+  private playSlotRotation(structure: PlacedStructure, slot: RtsDamageSlot, rotationKey: number): void {
+    if (slot.effects.length === 0) return;
+    // Keyed by structure rather than by trigger, so one building's debris stays
+    // the same debris for its whole life instead of flickering between presets.
+    const effectId = slot.effects[rotationKey % slot.effects.length];
+    if (effectId) this.playStructureEffect(effectId, this.slotPosition(structure, slot));
+  }
+
+  /** A one-shot slot is a composed burst: every effect it names fires together. */
+  private playSlotBurst(structure: PlacedStructure, slot: RtsDamageSlot): void {
+    const position = this.slotPosition(structure, slot);
+    for (const effectId of slot.effects) this.playStructureEffect(effectId, position);
+  }
+
+  /** Restarts the slots a health stage owns, so a threshold reads immediately. */
+  private onStructureDamageStageChanged(structure: PlacedStructure, stage: StructureDamageStage): void {
+    const presentation = this.structureDamagePresentation(structure);
+    for (const slot of RTS_DAMAGE_SLOTS) this.structureSlotElapsed.delete(slotTimerKey(structure.id, slot));
+    if (!presentation || !structure.construction.complete) return;
+    if (stage !== "light" && stage !== "heavy") return;
+    for (const slotName of STAGE_SLOTS[stage]) {
+      this.structureSlotElapsed.set(slotTimerKey(structure.id, slotName), 0);
+      this.playSlotRotation(structure, presentation.slots[slotName], structure.id);
     }
   }
 
   /** A collapse has already left gameplay; this is presentation only. */
   private onStructureCollapse(structure: PlacedStructure): void {
-    this.structureSmokeElapsed.delete(structure.id);
-    this.structureDebrisElapsed.delete(structure.id);
-    this.playStructureSmoke(structure, true);
-    const ground = this.structureDamageVfxPosition(structure, true);
-    const roof = this.structureDamageVfxPosition(structure, false);
-    this.playStructureEffect("rts-fx-collapse-dust", ground);
-    this.playStructureEffect("rts-fx-debris-stone", roof);
-    this.playStructureEffect("rts-fx-debris-wood", roof);
-    // A worksite that stays upright reads as intact unless something keeps
-    // marking it. Registered from the same rule the husk used to skip its fall,
-    // so the two presentations can never disagree about which buildings topple.
-    if (!collapsesInPlace(structure.stats.id)) return;
-    this.structureRuinSmoke.set(structure.id, { position: ground, elapsed: 0 });
-    this.playStructureEffect(RUIN_SMOKE_EFFECT, ground);
+    for (const slot of RTS_DAMAGE_SLOTS) this.structureSlotElapsed.delete(slotTimerKey(structure.id, slot));
+    const presentation = this.structureDamagePresentation(structure);
+    if (!presentation) return;
+    this.playSlotBurst(structure, presentation.slots.collapseDust);
+    this.playSlotBurst(structure, presentation.slots.collapseDebris);
+    // The husk outlives the record, so its trailing smoke has to be captured now:
+    // nothing can resolve this id back to a building on a later frame.
+    const ruinSmoke = presentation.slots.ruinSmoke;
+    if (ruinSmoke.effects.length === 0) return;
+    const position = this.slotPosition(structure, ruinSmoke);
+    this.structureRuinSmoke.set(structure.id, {
+      position,
+      effects: ruinSmoke.effects,
+      intervalSeconds: ruinSmoke.intervalSeconds ?? 1,
+      rotationKey: structure.id,
+      elapsed: 0,
+    });
+    this.playSlotRotation(structure, ruinSmoke, structure.id);
   }
 
-  /** Keeps damaged-building smoke sparse and frame-rate independent. */
+  /** Keeps damage VFX sparse and frame-rate independent, at the authored intervals. */
   private updateStructureDamageVfx(dt: number): void {
     this.structureDamageVfx.advance(dt);
-    const active = new Set<number>();
-    const heavy = new Set<number>();
+    const live = new Set<string>();
     for (const structure of this.structures.all()) {
       if (!structure.construction.complete) continue;
       const stage = structureDamageStage(structure.health.ratio);
       if (stage !== "light" && stage !== "heavy") continue;
-      active.add(structure.id);
-      const interval = stage === "heavy"
-        ? HEAVY_DAMAGE_SMOKE_INTERVAL_SECONDS
-        : LIGHT_DAMAGE_SMOKE_INTERVAL_SECONDS;
-      const elapsed = (this.structureSmokeElapsed.get(structure.id) ?? 0) + Math.max(0, dt);
-      if (elapsed >= interval) {
-        this.playStructureSmoke(structure);
-        this.structureSmokeElapsed.set(structure.id, elapsed % interval);
-      } else {
-        this.structureSmokeElapsed.set(structure.id, elapsed);
-      }
-      if (stage !== "heavy") continue;
-      heavy.add(structure.id);
-      const debrisElapsed = (this.structureDebrisElapsed.get(structure.id) ?? 0) + Math.max(0, dt);
-      if (debrisElapsed >= HEAVY_DAMAGE_DEBRIS_INTERVAL_SECONDS) {
-        this.playStructureDamageDebris(structure);
-        this.structureDebrisElapsed.set(structure.id, debrisElapsed % HEAVY_DAMAGE_DEBRIS_INTERVAL_SECONDS);
-      } else {
-        this.structureDebrisElapsed.set(structure.id, debrisElapsed);
+      const presentation = this.structureDamagePresentation(structure);
+      if (!presentation) continue;
+      for (const slotName of STAGE_SLOTS[stage]) {
+        const slot = presentation.slots[slotName];
+        const interval = slot.intervalSeconds;
+        if (slot.effects.length === 0 || interval === undefined) continue;
+        const key = slotTimerKey(structure.id, slotName);
+        live.add(key);
+        const elapsed = (this.structureSlotElapsed.get(key) ?? 0) + Math.max(0, dt);
+        if (elapsed >= interval) {
+          this.playSlotRotation(structure, slot, structure.id);
+          this.structureSlotElapsed.set(key, elapsed % interval);
+        } else {
+          this.structureSlotElapsed.set(key, elapsed);
+        }
       }
     }
-    for (const id of this.structureSmokeElapsed.keys()) {
-      if (!active.has(id)) this.structureSmokeElapsed.delete(id);
+    for (const key of this.structureSlotElapsed.keys()) {
+      if (!live.has(key)) this.structureSlotElapsed.delete(key);
     }
-    for (const id of this.structureDebrisElapsed.keys()) {
-      if (!heavy.has(id)) this.structureDebrisElapsed.delete(id);
-    }
-    // Not reconciled against `structures.all()` like the loops above: these
+    // Not reconciled against `structures.all()` like the loop above: these
     // buildings are gone from the simulation by definition. `onRuinCleared` is
     // the only thing that ends an entry.
     for (const smoke of this.structureRuinSmoke.values()) {
       smoke.elapsed += Math.max(0, dt);
-      if (smoke.elapsed < RUIN_SMOKE_INTERVAL_SECONDS) continue;
-      smoke.elapsed %= RUIN_SMOKE_INTERVAL_SECONDS;
-      this.playStructureEffect(RUIN_SMOKE_EFFECT, smoke.position);
+      if (smoke.elapsed < smoke.intervalSeconds) continue;
+      smoke.elapsed %= smoke.intervalSeconds;
+      const effectId = smoke.effects[smoke.rotationKey % smoke.effects.length];
+      if (effectId) this.playStructureEffect(effectId, smoke.position);
     }
-  }
-
-  private playStructureSmoke(structure: PlacedStructure, atGround = false): void {
-    const position = this.structureDamageVfxPosition(structure, atGround);
-    this.playStructureEffect(STRUCTURE_DAMAGE_SMOKE_EFFECT, position);
-  }
-
-  /** Alternates the two Content Drawer debris presets without runtime randomness. */
-  private playStructureDamageDebris(structure: PlacedStructure): void {
-    const effectId = STRUCTURE_DAMAGE_DEBRIS_EFFECTS[
-      structure.id % STRUCTURE_DAMAGE_DEBRIS_EFFECTS.length
-    ];
-    if (!effectId) return;
-    this.playStructureEffect(effectId, this.structureDamageVfxPosition(structure, false));
   }
 
   /** Plays a warmed effect without ever making a damage event wait on IO. */
@@ -2173,10 +2184,18 @@ export class RtsApp {
     });
   }
 
-  /** Loads only the two explicitly allowed debris models declared above. */
+  /**
+   * Load the debris models an effect's renderer names.
+   *
+   * The former hand-written URL allowlist is gone: an id resolves when it is a
+   * manifested `staticMesh` and not otherwise. That is the same guarantee the
+   * allowlist gave — a VFX asset can never name an arbitrary path or URL — but it
+   * no longer costs a code change per imported model, which is the whole point of
+   * moving the assignment into the table.
+   */
   private async loadStructureDamageModels(modelIds: readonly string[]): Promise<readonly Object3D[]> {
     const models = await Promise.all(modelIds.map(async (id): Promise<Object3D | null> => {
-      const path = STRUCTURE_DAMAGE_MODEL_URLS[id];
+      const path = this.actorVisuals?.staticMeshAssetPath(id);
       if (!path) return null;
       try {
         return (await this.structureDamageModelLoader.load(id, projectFileUrl(path))).scene;
@@ -2187,15 +2206,25 @@ export class RtsApp {
     return models.filter((model): model is Object3D => model !== null);
   }
 
-  private structureDamageVfxPosition(
-    structure: PlacedStructure,
-    atGround: boolean,
-  ): [number, number, number] {
+  /**
+   * Resolve a slot's anchor to a world position.
+   *
+   * The mode is derived from the footprint rather than authored in world units so
+   * one table entry stays right for a 2x2 house and a 6x6 depot; the offset on
+   * top of it is the author's own nudge.
+   */
+  private slotPosition(structure: PlacedStructure, slot: RtsDamageSlot): [number, number, number] {
     const roofHeight = Math.max(
       1.2,
       Math.min(4, Math.max(structure.stats.footprint.width, structure.stats.footprint.depth) * 0.42),
     );
-    return [structure.x, structure.groundY + (atGround ? 0.15 : roofHeight), structure.z];
+    const base = slot.anchor.mode === "roof"
+      ? roofHeight
+      : slot.anchor.mode === "center"
+        ? roofHeight / 2
+        : 0;
+    const [dx, dy, dz] = slot.anchor.offset;
+    return [structure.x + dx, structure.groundY + base + dy, structure.z + dz];
   }
 
   private updateWorldProgressOverlay(): void {
@@ -3401,6 +3430,7 @@ export class RtsApp {
       await this.actorVisuals.load();
       if (this.disposed) return;
       this.reportActorVisuals(this.actorVisuals.report());
+      this.warmStructureDamageEffects();
       this.units.setPresentationFactory((owner, stats) =>
         this.actorVisuals?.createUnitPresentation(
           Object.entries(this.options.unitBalance).find(([, value]) => value === stats)?.[0] ?? "",

@@ -121,16 +121,6 @@
           "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T2.actor.json",
           "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Farm_SecondAge_T3.actor.json"
         }
-      },
-      "damage": {
-        "collapseStyle": "inPlace",
-        "slots": {
-          "ruinSmoke": {
-            "effects": [
-              "rts-fx-ruin-smoke-black"
-            ]
-          }
-        }
       }
     },
     "lumber_camp": {
@@ -138,16 +128,6 @@
         "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json",
         "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json",
         "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json"
-      },
-      "damage": {
-        "collapseStyle": "inPlace",
-        "slots": {
-          "ruinSmoke": {
-            "effects": [
-              "rts-fx-ruin-smoke-black"
-            ]
-          }
-        }
       }
     },
     "quarry": {
@@ -155,16 +135,6 @@
         "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Quarry.actor.json",
         "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Quarry.actor.json",
         "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Quarry.actor.json"
-      },
-      "damage": {
-        "collapseStyle": "inPlace",
-        "slots": {
-          "ruinSmoke": {
-            "effects": [
-              "rts-fx-ruin-smoke-black"
-            ]
-          }
-        }
       }
     },
     "gold_mine": {
@@ -172,16 +142,6 @@
         "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_GoldMine.actor.json",
         "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_GoldMine.actor.json",
         "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_GoldMine.actor.json"
-      },
-      "damage": {
-        "collapseStyle": "inPlace",
-        "slots": {
-          "ruinSmoke": {
-            "effects": [
-              "rts-fx-ruin-smoke-black"
-            ]
-          }
-        }
       }
     },
     "market": {
@@ -315,7 +275,7 @@
             "mode": "ground",
             "offset": [
               0,
-              0,
+              0.15,
               0
             ]
           },
@@ -323,13 +283,14 @@
         },
         "collapseDust": {
           "effects": [
-            "rts-fx-collapse-dust"
+            "rts-fx-collapse-dust",
+            "starter-fx-smoke-puff"
           ],
           "anchor": {
             "mode": "ground",
             "offset": [
               0,
-              0,
+              0.15,
               0
             ]
           }
@@ -375,6 +336,48 @@
           "collapseDebris": {
             "effects": [
               "rts-fx-debris-wood"
+            ]
+          }
+        }
+      }
+    },
+    "buildings": {
+      "farm": {
+        "collapseStyle": "inPlace",
+        "slots": {
+          "ruinSmoke": {
+            "effects": [
+              "rts-fx-ruin-smoke-black"
+            ]
+          }
+        }
+      },
+      "lumber_camp": {
+        "collapseStyle": "inPlace",
+        "slots": {
+          "ruinSmoke": {
+            "effects": [
+              "rts-fx-ruin-smoke-black"
+            ]
+          }
+        }
+      },
+      "quarry": {
+        "collapseStyle": "inPlace",
+        "slots": {
+          "ruinSmoke": {
+            "effects": [
+              "rts-fx-ruin-smoke-black"
+            ]
+          }
+        }
+      },
+      "gold_mine": {
+        "collapseStyle": "inPlace",
+        "slots": {
+          "ruinSmoke": {
+            "effects": [
+              "rts-fx-ruin-smoke-black"
             ]
           }
         }

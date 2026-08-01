@@ -143,6 +143,33 @@ sonrası önbellek düşürülür).
   ömrünü tahmin etmek yerine yeni `onRuinCleared` geri çağrısıyla durur — böylece
   `MAX_RUINS` erken kırpması boş zeminde duman bırakmaz. Aynı kural hem husk
   hareketini hem VFX seçimini besler, iki sunum ayrışamaz.
+- Uygulama notu (2026-08-01, adım 2/4): hasar sunumu artık koda değil veriye
+  yazılı. `rts-content.json` şema 2'ye çıktı ve `damage` bölümü taşıyor:
+  `defaults` → malzeme sınıfı → bina zinciriyle alan alan çözülen altı slot
+  (`lightSmoke`, `heavySmoke`, `heavyDebris`, `ruinSmoke`, `collapseDust`,
+  `collapseDebris`). Her slot kendi efekt listesini, `ground`/`center`/`roof`
+  anchor'ını + offset'ini ve (tekrarlı slotlarda) aralığını taşır. Tekrarlı
+  slotlar yapı id'sine göre **tek** efekt döndürür, tek-atışlık slotlar
+  listedeki **tüm** efektleri birlikte patlatır. `RtsApp`'teki efekt/model URL
+  allowlist'leri ve interval sabitleri kaldırıldı; efekt ve debris modeli
+  çözünürlüğü artık manifestten (`assetType: effect` / `staticMesh`) geliyor, bu
+  yüzden yeni bir debris içeriği eklemek kod değişikliği istemiyor.
+  `collapsesInPlace` sabit listesi de silinip
+  `StructureDamagePresentationHandler`'a sorgu olarak taşındı; handler yoksa
+  varsayılan devrilmedir. Migration birebir doğrulandı: 12 binanın çözülmüş
+  sunumu, taşımadan önceki sabit davranışla aynı efekt/aralık/yükseklik üretiyor.
+- Uygulama notu (2026-08-01, adım 3/4): hasar tablosu editörden düzenlenebilir.
+  Bina özel override'lar `buildings.<id>.damage`'dan `damage.buildings.<id>`'ye
+  taşındı — böylece `buildings.<id>` yalnızca Actor referansı kalıyor ve tüm
+  hasar authoring'i tek bölümde toplanıyor. `EditorDataTableDef` noktalı
+  `section` alanı kazandı (bir dosyanın, satırların doğal olduğu derinlikte
+  birden çok tablo sunabilmesi için); üç tablo kayıtlı: **Varsayılan Sunum**
+  (`damage.defaults`), **Malzeme Sınıfları** (`damage.materials`) ve
+  **Bina Özel** (`damage.buildings`). Alan metadatası altı slot için tek listeden
+  üretiliyor, iki derinlikte de aynı etiketleri veriyor. Kayıt kapısı
+  `validateRtsContentDamageSection`: denge tablolarına ihtiyaç duymadan çalışır,
+  çünkü bölümün tek çapraz referansı belgenin kendi `buildings` anahtarlarıdır.
+- Kalan: adım 4 — debris GLTF import + atama (senin işin).
 
 Çıkış kriteri: bir referans binada dört sağlık durumu görünür biçimde ayrılır; çöküş, opaklığı azaltıp zemine gömme yerine kontrollü bir olay olarak okunur.
 
