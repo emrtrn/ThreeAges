@@ -323,6 +323,8 @@ import { issueAttackOrder } from "../src/game/rts/units/attackPathing";
 import { retaliateAgainstAttack, updateUnitEngagement } from "../src/game/rts/combat/engagementSystem";
 import { resolveDamage } from "../src/game/rts/combat/damageResolution";
 import { ProjectileSystem } from "../src/game/rts/combat/projectileSystem";
+import { CannonballSystem } from "../src/game/rts/combat/cannonballSystem";
+import { PendingImpactQueue } from "../src/game/rts/combat/pendingImpacts";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
 import { SupportAuraSystem } from "../src/game/rts/structures/supportAuraSystem";
 import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
@@ -992,6 +994,7 @@ import {
   ANIMATION_SET_ROLES,
   normalizeAssetSkeleton,
   resolveBlendSpaceWeights,
+  skeletonClipNames,
   skeletonSidecarPath,
   type AssetSkeletonBlendSpaceDef,
 } from "../src/scene/assetSkeletonLoader";
@@ -1252,6 +1255,13 @@ import {
   resolveWorldWidgetVisibility,
 } from "../engine/ui/uiWorldWidget";
 import { getGameEditorCatalog, setGameEditorCatalog } from "../src/editor/gameEditorRegistry";
+import {
+  collectLeaves,
+  groupTitle,
+  leafLabel,
+  partitionLeaves,
+  templatePath,
+} from "../src/editor/dataTableLayout";
 import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 
 let checks = 0;
@@ -28327,6 +28337,67 @@ check("GAME_EDITOR_CATALOG satisfies the editor catalog contract once injected",
   }
 });
 
+check("the Data Table form groups repeated blocks and never splinters a scalar array", () => {
+  // The defect this pins: grouping used to key off any numeric path segment, so
+  // an `offset: [x, y, z]` triple rendered as three anonymous "Seviye" blocks and
+  // the slot's own name never appeared. A block is a repeated *object* — an array
+  // element, or a child of a path the game opted in through `groups`.
+  const catalog = getGameEditorCatalog();
+  const table = catalog.dataTables?.find((t) => t.id === "rts-damage-defaults")
+    ?? assert.fail("rts-damage-defaults is not registered in the editor catalog");
+  const content = JSON.parse(readFileSync(`public/${table.path}`, "utf8")) as any;
+  const slotsEntry = content.damage.defaults.slots as Record<string, unknown>;
+  const blockParents = new Set((table.groups ?? []).map((group) => group.path));
+
+  const groups = partitionLeaves(collectLeaves(slotsEntry, "", "", blockParents));
+  // One group per slot, in the file's own order — and nothing else. No group may
+  // come from an array index, which is what an `effects`/`offset` split looked like.
+  assert.deepEqual(
+    groups.map((group) => group.key),
+    Object.keys(slotsEntry),
+    "each damage slot is one block; the arrays inside them are not",
+  );
+  for (const group of groups) {
+    assert.equal(group.index, -1, `${group.key} is an object block, not an array element`);
+    assert.ok(!group.isBase, `${group.key} is a real block`);
+  }
+
+  // Every slot is titled by the name an author reads, never a raw key or a level.
+  const meta = (table.groups ?? []).find((group) => group.path === "");
+  for (const group of groups) {
+    const title = groupTitle(slotsEntry, group, meta);
+    assert.ok(title.length > 0 && !title.includes("Seviye"), `${group.key} is titled, not levelled`);
+    assert.equal(title, meta?.keyLabels?.[group.childKey], `${group.key} uses its authored label`);
+  }
+
+  // The offset triple stays inside its slot and its members are told apart, so
+  // three number boxes are never left carrying one identical caption.
+  const fields = new Map((table.fields ?? []).map((field) => [field.path, field]));
+  const first = groups[0] ?? assert.fail("no damage slot groups");
+  const offsets = first.leaves.filter((leaf) => leaf.path.includes("anchor.offset"));
+  assert.equal(offsets.length, 3, "the anchor offset is x/y/z, all in the slot's own block");
+  assert.deepEqual(
+    offsets.map((leaf) => leafLabel(leaf, fields.get(templatePath(leaf.path)))),
+    ["Kayma — X", "Kayma — Y", "Kayma — Z"],
+  );
+
+  // The tier case the grouping was built for still holds: an array of objects
+  // groups per element and reads as a level.
+  const buildings = catalog.dataTables?.find((t) => t.id === "buildings")
+    ?? assert.fail("buildings data table is not registered");
+  const buildingsDoc = JSON.parse(readFileSync(`public/${buildings.path}`, "utf8")) as any;
+  const entryId = Object.keys(buildingsDoc).find((id) =>
+    Array.isArray(buildingsDoc[id]?.progression?.settlement)
+  ) ?? assert.fail("no building entry carries a settlement progression");
+  const entry = buildingsDoc[entryId] as Record<string, unknown>;
+  const tierGroups = partitionLeaves(
+    collectLeaves(entry, "", "", new Set((buildings.groups ?? []).map((group) => group.path))),
+  ).filter((group) => group.containerPath === "progression.settlement");
+  assert.ok(tierGroups.length >= 1, "settlement tiers still group per element");
+  const tierMeta = (buildings.groups ?? []).find((group) => group.path === "progression.settlement");
+  assert.match(groupTitle(entry, tierGroups[0]!, tierMeta), /^Yerleşim çağı — Seviye \d+$/);
+});
+
 check("validateSaveGameDataPayload fences writes to game-data JSON and rejects the rest", () => {
   // The dev endpoint's guard is generic on purpose: path scope + a keyed object,
   // no balance rules (those ride on the injected validator above and the runtime
@@ -29578,6 +29649,46 @@ check("RTS structure material groups classify the materials the shipped building
   assert.equal(structureMaterialGroup("Walls"), "masonry");
   assert.equal(structureMaterialGroup("Gold"), "fitting");
   assert.equal(structureMaterialGroup("SomethingNobodyHasAuthoredYet"), "fitting");
+});
+
+check("RTS wildlife sidecars name clips the shipped animal models actually carry", () => {
+  // Two rig families ship under Animals/ and their clip names differ in *case*
+  // as well as in meaning — the ungulates carry `Jump_toIdle` / `Idle_Headlow`,
+  // the canines `Jump_ToIdle` / `Idle_2_HeadLow`, and only the canines have a
+  // bare `Attack`. A sidecar copied from the wrong family resolves to nothing,
+  // and an animal whose clip never resolves stands frozen in its bind pose
+  // rather than erroring. That is the silent failure this pins.
+  const directory = "public/assets/ThreeAges/Animals";
+  const sidecars = readdirSync(directory).filter((name) => name.endsWith(".skeleton.json"));
+  assert.ok(sidecars.length > 0, "at least one animal skeleton sidecar is authored");
+
+  for (const sidecarName of sidecars) {
+    const modelName = sidecarName.replace(/\.skeleton\.json$/, ".gltf");
+    const model = JSON.parse(
+      readFileSync(`${directory}/${modelName}`, "utf8"),
+    ) as { animations?: { name?: string }[] };
+    const shipped = new Set((model.animations ?? []).map((clip) => clip.name ?? ""));
+    assert.ok(shipped.size > 0, `${modelName} ships animation clips`);
+
+    const skeleton = normalizeAssetSkeleton(
+      JSON.parse(readFileSync(`${directory}/${sidecarName}`, "utf8")),
+    );
+    for (const clip of skeletonClipNames(skeleton)) {
+      assert.ok(shipped.has(clip), `${sidecarName}: "${clip}" is a clip ${modelName} actually ships`);
+    }
+
+    // The six roles `classifyRtsAnimation` can return. An unmapped role falls
+    // back silently, so a hunted deer would die standing up or graze mid-stride.
+    for (const role of ["idle", "walk", "run", "work", "attack", "death"] as const) {
+      assert.ok(skeleton.animationSet[role], `${sidecarName}: RTS role "${role}" is mapped`);
+    }
+  }
+
+  // The naming convention is the only thing pairing a model with its sidecar.
+  assert.equal(
+    skeletonSidecarPath("assets/ThreeAges/Animals/Deer.gltf"),
+    "assets/ThreeAges/Animals/Deer.skeleton.json",
+  );
 });
 
 check("RTS collapse deformation patches the husk's own materials, never the ones it was cloned from", () => {
@@ -35966,6 +36077,69 @@ check("Faz 7 ranged attacks fire a tracer while melee does not", () => {
   assert.equal(projectiles.root.children.length, 0, "tracers retire once they arrive");
   assert.equal(archerTarget.health.current, health);
   projectiles.dispose();
+});
+
+check("a shot with a flight time hurts nothing until it arrives", () => {
+  const units = new UnitSystem();
+  const impacts = new PendingImpactQueue();
+  const gun = units.spawn("player", 0, 0, RTS_TEST_ARCHER_STATS);
+  const target = units.spawn("enemy", 5, 0, RTS_TEST_UNIT_STATS);
+  gun.setAttackTarget(target);
+  // Derived from the same table the shot will use, so this holds at any tuning.
+  const expected = gun.attack.damageAgainst(target);
+  const travel = 0.8;
+
+  const applied: number[] = [];
+  const record = (hit: { change: { applied: number } }): void => void applied.push(hit.change.applied);
+  updateUnitCombat([gun], 0, record, { onShot: () => travel, impacts });
+  assert.equal(applied.length, 0, "firing is not hitting");
+  assert.equal(target.health.current, target.health.max, "the target is untouched while the shot flies");
+  assert.equal(impacts.size, 1, "the blow is parked on the shot in flight");
+
+  impacts.update(travel * 0.5, record);
+  assert.equal(target.health.current, target.health.max, "half way is still no damage");
+  assert.equal(impacts.size, 1);
+
+  impacts.update(travel * 0.5, record);
+  assert.deepEqual(applied, [expected], "the blow lands once, on arrival");
+  assert.equal(target.health.current, target.health.max - expected);
+  assert.equal(impacts.size, 0, "an arrived shot leaves the queue");
+});
+
+check("a shell whose target dies mid-flight lands on rubble", () => {
+  const units = new UnitSystem();
+  const impacts = new PendingImpactQueue();
+  const gun = units.spawn("player", 0, 0, RTS_TEST_ARCHER_STATS);
+  const target = units.spawn("enemy", 5, 0, RTS_TEST_UNIT_STATS);
+  gun.setAttackTarget(target);
+  updateUnitCombat([gun], 0, undefined, { onShot: () => 0.5, impacts });
+  assert.equal(impacts.size, 1);
+
+  target.health.damage(target.health.max);
+  let hits = 0;
+  impacts.update(1, () => { hits += 1; });
+  assert.equal(hits, 0, "a dead target is not hit again by a shot already in the air");
+  assert.equal(impacts.size, 0);
+});
+
+check("the artillery's damage waits exactly as long as its ball is in the air", () => {
+  const cannonballs = new CannonballSystem();
+  // The queue schedules on whatever `spawn` reports, so that number has to be a
+  // real, readable flight — a zero would put the hit back at the muzzle.
+  const flight = cannonballs.spawn(new Vector3(0, 0, 0), new Vector3(12, 0, 0));
+  assert.ok(flight > 0, `a fired shell must report a flight time, got ${flight}`);
+  assert.equal(cannonballs.root.children.length, 1, "the ball is in the scene while it flies");
+
+  // Advanced on the simulation delta in RtsApp: the same seconds the blow waits.
+  for (let i = 0; i < Math.ceil((flight + 1) * 60); i += 1) cannonballs.update(1 / 60);
+  assert.equal(cannonballs.root.children.length, 0, "the ball and its dust retire after impact");
+
+  // A shot across the field waits at least as long as one at the gun's feet —
+  // the delay tracks the distance rather than being one fixed pause.
+  const near = cannonballs.spawn(new Vector3(0, 0, 0), new Vector3(4, 0, 0));
+  const far = cannonballs.spawn(new Vector3(0, 0, 0), new Vector3(40, 0, 0));
+  assert.ok(far >= near, `a longer shot cannot land sooner (${far} < ${near})`);
+  cannonballs.dispose();
 });
 
 check("RTS grid navigation routes a unit around a static blocker", () => {

@@ -25476,6 +25476,305 @@
         "bytes": 429
       },
       "license": "Unknown"
+    },
+    {
+      "id": "alpaca",
+      "name": "Alpaca",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/Alpaca.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1435679
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "bull",
+      "name": "Bull",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/Bull.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3110158
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "cow",
+      "name": "Cow",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/Cow.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3114187
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "deer",
+      "name": "Deer",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/Deer.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3288813
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "donkey",
+      "name": "Donkey",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/Donkey.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3564269
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "fox",
+      "name": "Fox",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/Fox.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3163174
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "horse",
+      "name": "Horse",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/Horse.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3610082
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "horse-white",
+      "name": "Horse White",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/Horse_White.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3607730
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "husky",
+      "name": "Husky",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/Husky.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3059335
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "shibainu",
+      "name": "Shiba Inu",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/ShibaInu.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2894445
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "stag",
+      "name": "Stag",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/Stag.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3224724
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wolf",
+      "name": "Wolf",
+      "assetType": "skeletalMesh",
+      "category": "Animals",
+      "path": "assets/ThreeAges/Animals/Wolf.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Animals",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3175890
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "birchtree-1",
+      "name": "Birch Tree 1",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/ThreeAges/Environment/BirchTree_1.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 436704
+      },
+      "license": "Unknown"
     }
   ]
 }

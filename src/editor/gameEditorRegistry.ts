@@ -76,18 +76,31 @@ export interface EditorDataTableFieldMeta {
   readonly readonly?: boolean;
   /** Tooltip on the field, e.g. explaining that a value is only the level-1 base. */
   readonly hint?: string;
+  /** Per-element names for a scalar array (`[]` path), e.g. `["X", "Y", "Z"]` for
+   *  an offset triple. Elements past the list fall back to `#n`. */
+  readonly itemLabels?: readonly string[];
 }
 
 /**
- * Optional label for a repeated (array) block, so the editor can title the
- * collapsible sub-group it renders for each element. Purely presentational.
+ * Optional label for a repeated block, so the editor can title the collapsible
+ * sub-group it renders for each element. Purely presentational.
+ *
+ * Two block shapes are supported. An **array** path (`progression.settlement`)
+ * groups each object element as a tier. An **object** path opts its direct
+ * object children into grouping (`slots` → one group per slot); without that
+ * opt-in every nested object would become a group, which is noise for the flat
+ * balance files. `path: ""` names the entry root itself, for a table whose rows
+ * *are* the container (e.g. a `slots` entry whose keys are the slots).
  */
 export interface EditorDataTableGroupMeta {
-  /** Dotted path to the array itself, e.g. `progression.settlement` or `levels`. */
+  /** Dotted path to the array or the grouping object; `""` for the entry root. */
   readonly path: string;
   /** Friendly name for the block, e.g. `Yerleşim`. The editor appends the
-   *  element's level (`— Seviye N`) to distinguish the tiers. */
+   *  element's level (`— Seviye N`) to distinguish array tiers. */
   readonly label: string;
+  /** Object blocks only: friendly title per child key (`lightSmoke` → `Hafif
+   *  hasar dumanı`). Keys with no entry fall back to the raw key. */
+  readonly keyLabels?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -120,10 +133,12 @@ export interface EditorDataTableDef {
   /** Optional per-leaf presentation hints; keyed by dotted path. */
   readonly fields?: readonly EditorDataTableFieldMeta[];
   /**
-   * Optional friendly names for repeated (array) blocks. When an entry contains
-   * arrays (progression tiers, upgrade levels), the editor renders one
+   * Optional friendly names for repeated blocks. When an entry contains arrays
+   * of objects (progression tiers, upgrade levels), the editor renders one
    * collapsible sub-group per element; these labels title those groups. Blocks
-   * with no matching entry fall back to the array's own key.
+   * with no matching entry fall back to the array's own key. An entry here also
+   * opts an *object* path's children into the same grouping — see
+   * {@link EditorDataTableGroupMeta}.
    */
   readonly groups?: readonly EditorDataTableGroupMeta[];
   /**

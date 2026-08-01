@@ -22,7 +22,13 @@ import {
   validateRoadBalance,
   validateUnitBalance,
 } from "@/game/data/validateGameData";
-import { validateRtsContentDamageSection } from "@/game/rts/content/rtsContentCatalog";
+import {
+  RTS_DAMAGE_ANCHOR_MODES,
+  RTS_DAMAGE_IMPACT_SLOTS,
+  RTS_DAMAGE_REPEATING_SLOTS,
+  RTS_DAMAGE_SLOTS,
+  validateRtsContentDamageSection,
+} from "@/game/rts/content/rtsContentCatalog";
 
 /**
  * Wrap a runtime game-data validator as the editor's `validate` contract:
@@ -50,14 +56,17 @@ const asTableValidator =
  * building. Generating from one list keeps a renamed slot from being labelled in
  * one table and raw in the others.
  */
-const DAMAGE_SLOT_LABELS: readonly (readonly [string, string, boolean])[] = [
-  ["lightSmoke", "Hafif hasar dumanı", true],
-  ["heavySmoke", "Ağır hasar dumanı", true],
-  ["heavyDebris", "Ağır hasar molozu", true],
-  ["ruinSmoke", "Enkaz dumanı", true],
-  ["collapseDust", "Çöküş tozu", false],
-  ["collapseDebris", "Çöküş molozu", false],
-];
+const DAMAGE_SLOT_LABELS: Readonly<Record<string, string>> = {
+  lightSmoke: "Hafif hasar dumanı",
+  heavySmoke: "Ağır hasar dumanı",
+  ruinSmoke: "Enkaz dumanı",
+  impactDebris: "Darbe molozu",
+  collapseDust: "Çöküş tozu",
+  collapseDebris: "Çöküş molozu",
+};
+
+/** The slot's own name when the game grows one before a label is written for it. */
+const damageSlotLabel = (slot: string): string => DAMAGE_SLOT_LABELS[slot] ?? slot;
 
 const DAMAGE_COLLAPSE_STYLE_FIELD = {
   path: "collapseStyle",
@@ -77,44 +86,123 @@ function damageSlotFields(prefix: string): readonly {
   label: string;
   hint?: string;
   enum?: readonly string[];
+  itemLabels?: readonly string[];
   min?: number;
   max?: number;
   step?: number;
 }[] {
-  return DAMAGE_SLOT_LABELS.flatMap(([slot, label, repeating]) => [
-    {
-      path: `${prefix}${slot}.effects.[]`,
-      label: `${label}: Efekt`,
-      hint: repeating
-        ? "Content Drawer efekt asset id'si. Birden fazla yazılırsa yapı kimliğine göre biri seçilir — bir bina ömrü boyunca aynı efekti kullanır."
-        : "Content Drawer efekt asset id'si. Tek atışlık slot: buradaki efektlerin hepsi aynı anda çalışır.",
-    },
-    {
-      path: `${prefix}${slot}.anchor.mode`,
-      label: `${label}: Konum`,
-      enum: ["ground", "center", "roof"],
-      hint: "Efektin doğduğu referans yükseklik. Ayak izinden türetilir, bu yüzden küçük ve büyük binalarda aynı girdi doğru kalır.",
-    },
-    {
-      path: `${prefix}${slot}.anchor.offset.[]`,
-      label: `${label}: Kayma (x / y / z)`,
-      min: -50,
-      max: 50,
-      step: 0.05,
-      hint: "Referans noktasının üstüne eklenen serbest kaydırma, dünya birimi.",
-    },
-    ...(repeating
-      ? [{
-        path: `${prefix}${slot}.intervalSeconds`,
-        label: `${label}: Aralık (sn)`,
-        min: 0.05,
-        max: 60,
+  // Slot names come from the runtime's own lists, so a slot the game adds or
+  // renames can never stay labelled here as one that no longer exists. The slot
+  // itself titles the editor's sub-group, so these labels stay short.
+  return RTS_DAMAGE_SLOTS.flatMap((slot) => {
+    const repeating = (RTS_DAMAGE_REPEATING_SLOTS as readonly string[]).includes(slot);
+    const impact = (RTS_DAMAGE_IMPACT_SLOTS as readonly string[]).includes(slot);
+    const rotated = repeating || impact;
+    return [
+      {
+        path: `${prefix}${slot}.effects.[]`,
+        label: "Efekt",
+        hint: rotated
+          ? "Content Drawer efekt asset id'si. Birden fazla yazılırsa yapı kimliğine göre biri seçilir — bir bina ömrü boyunca aynı efekti kullanır."
+          : "Content Drawer efekt asset id'si. Tek atışlık slot: buradaki efektlerin hepsi aynı anda çalışır.",
+      },
+      {
+        path: `${prefix}${slot}.anchor.mode`,
+        label: "Konum",
+        enum: RTS_DAMAGE_ANCHOR_MODES,
+        hint: "Efektin doğduğu referans yükseklik. Ayak izinden türetilir, bu yüzden küçük ve büyük binalarda aynı girdi doğru kalır.",
+      },
+      {
+        path: `${prefix}${slot}.anchor.offset.[]`,
+        label: "Kayma",
+        itemLabels: ["X", "Y", "Z"],
+        min: -50,
+        max: 50,
         step: 0.05,
-        hint: "Efektin kaç saniyede bir yeniden tetikleneceği. Küçük değerler parçacık bütçesini hızla doldurur.",
-      }]
-      : []),
-  ]);
+        hint: "Referans noktasının üstüne eklenen serbest kaydırma, dünya birimi.",
+      },
+      ...(repeating
+        ? [{
+          path: `${prefix}${slot}.intervalSeconds`,
+          label: "Aralık (sn)",
+          min: 0.05,
+          max: 60,
+          step: 0.05,
+          hint: "Efektin kaç saniyede bir yeniden tetikleneceği. Küçük değerler parçacık bütçesini hızla doldurur.",
+        }]
+        : []),
+      ...(impact
+        ? [{
+          path: `${prefix}${slot}.minIntervalSeconds`,
+          label: "En kısa aralık (sn)",
+          min: 0.05,
+          max: 60,
+          step: 0.05,
+          hint: "Darbe slotu: iki patlama arasındaki en kısa süre. Yirmi birim aynı binayı döverken saniyede yirmi patlama olmasını engeller.",
+        }]
+        : []),
+    ];
+  });
 }
+
+/**
+ * The deformation triple, which reads as three anonymous numbers without names.
+ * Written once against a prefix because the defaults table edits it as its own
+ * entry (`squash`) while an override reaches it through the block
+ * (`collapseDeformation.squash`).
+ */
+const damageDeformationFields = (prefix: string) => [
+  {
+    path: `${prefix}squash`,
+    label: "Basıklık",
+    min: 0,
+    max: 0.9,
+    step: 0.01,
+    hint: "Yapının çökerken ne kadar alçaldığı (0 = hiç, 0.9 = neredeyse yere yapışır).",
+  },
+  {
+    path: `${prefix}splay`,
+    label: "Yanal yayılma",
+    min: 0,
+    max: 1,
+    step: 0.01,
+    hint: "Alçalırken tabanın yanlara ne kadar genişlediği — moloz yığını hissi.",
+  },
+  {
+    path: `${prefix}buckle`,
+    label: "Eğilme",
+    min: 0,
+    max: 0.5,
+    step: 0.01,
+    hint: "Siluetin ne kadar yana kaykıldığı. Ağır hasarda küçük bir değer yeter.",
+  },
+];
+
+const DAMAGE_RUIN_SECONDS_FIELD = {
+  path: "ruinSeconds",
+  label: "Enkaz süresi (sn)",
+  min: 0,
+  max: 120,
+  step: 0.5,
+  hint: "Çöküş bittikten sonra enkazın sahnede kalma süresi. Oyun kuralları açısından etkisizdir; 0 = hemen kaybolur.",
+};
+
+/** Defaults table: the deformation blocks are entries, so their leaves are bare. */
+const DAMAGE_TUNING_FIELDS = [...damageDeformationFields(""), DAMAGE_RUIN_SECONDS_FIELD];
+
+/** Material/building tables: the same values, reached through their block. */
+const DAMAGE_OVERRIDE_TUNING_FIELDS = [
+  ...damageDeformationFields("collapseDeformation."),
+  ...damageDeformationFields("heavyDeformation."),
+  DAMAGE_RUIN_SECONDS_FIELD,
+];
+
+/** Sub-group titles for the damage slots: one collapsible block per slot, named. */
+const DAMAGE_SLOT_GROUP = (path: string) => ({
+  path,
+  label: "Sunum slotu",
+  keyLabels: Object.fromEntries(RTS_DAMAGE_SLOTS.map((slot) => [slot, damageSlotLabel(slot)])),
+});
 
 // Friendly Turkish labels + gentle min/max/step for the Data Table editor. These
 // are presentation only — the authoritative range check stays in the validators
@@ -505,7 +593,10 @@ export const GAME_EDITOR_CATALOG = {
       label: "Yapı Hasarı — Varsayılan Sunum",
       path: "game-data/content/rts-content.json",
       section: "damage.defaults",
-      fields: [DAMAGE_COLLAPSE_STYLE_FIELD, ...damageSlotFields("")],
+      fields: [DAMAGE_COLLAPSE_STYLE_FIELD, ...DAMAGE_TUNING_FIELDS, ...damageSlotFields("")],
+      // The `slots` entry's own keys are the slots, so the entry root is what
+      // groups here; the material/building tables reach them under `slots`.
+      groups: [DAMAGE_SLOT_GROUP("")],
       validate: asTableValidator(validateRtsContentDamageSection),
     },
     {
@@ -513,7 +604,12 @@ export const GAME_EDITOR_CATALOG = {
       label: "Yapı Hasarı — Malzeme Sınıfları",
       path: "game-data/content/rts-content.json",
       section: "damage.materials",
-      fields: [DAMAGE_COLLAPSE_STYLE_FIELD, ...damageSlotFields("slots.")],
+      fields: [
+        DAMAGE_COLLAPSE_STYLE_FIELD,
+        ...DAMAGE_OVERRIDE_TUNING_FIELDS,
+        ...damageSlotFields("slots."),
+      ],
+      groups: [DAMAGE_SLOT_GROUP("slots")],
       validate: asTableValidator(validateRtsContentDamageSection),
     },
     {
@@ -521,7 +617,13 @@ export const GAME_EDITOR_CATALOG = {
       label: "Yapı Hasarı — Bina Özel",
       path: "game-data/content/rts-content.json",
       section: "damage.buildings",
-      fields: [DAMAGE_MATERIAL_FIELD, DAMAGE_COLLAPSE_STYLE_FIELD, ...damageSlotFields("slots.")],
+      fields: [
+        DAMAGE_MATERIAL_FIELD,
+        DAMAGE_COLLAPSE_STYLE_FIELD,
+        ...DAMAGE_OVERRIDE_TUNING_FIELDS,
+        ...damageSlotFields("slots."),
+      ],
+      groups: [DAMAGE_SLOT_GROUP("slots")],
       validate: asTableValidator(validateRtsContentDamageSection),
     },
     {

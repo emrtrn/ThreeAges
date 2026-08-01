@@ -16,8 +16,20 @@
 import type {
   EditorDataTableDef,
   EditorDataTableFieldMeta,
+  EditorDataTableGroupMeta,
 } from "@/editor/gameEditorRegistry";
 import { loadDataTable, loadDataTableDefaults, saveDataTable } from "@/editor/dataTableStore";
+import {
+  collectLeaves,
+  groupTitle,
+  isPlainObject,
+  leafLabel,
+  leafType,
+  partitionLeaves,
+  templatePath,
+  type Leaf,
+  type LeafGroup,
+} from "@/editor/dataTableLayout";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -27,16 +39,6 @@ export interface DataTableEditorOptions {
   def: EditorDataTableDef;
   onStatus?: (message: string, tone?: StatusTone) => void;
   onSaved?: () => void;
-}
-
-/** A single editable scalar leaf discovered by walking an entry. */
-interface Leaf {
-  /** Dotted path within the entry, e.g. `cost.food`. */
-  readonly path: string;
-  readonly type: "number" | "string" | "boolean";
-  /** Parent container + key so a committed edit writes straight back into the doc. */
-  readonly container: Record<string, unknown> | unknown[];
-  readonly key: string | number;
 }
 
 export class DataTableEditor {
@@ -66,15 +68,20 @@ export class DataTableEditor {
   private fullDoc: Record<string, unknown> = {};
   /** Field metadata keyed by dotted leaf path, for labels/steps/enums. */
   private readonly fieldMeta = new Map<string, EditorDataTableFieldMeta>();
-  /** Friendly names for repeated (array) blocks, keyed by the array's dotted path. */
-  private readonly groupLabels = new Map<string, string>();
+  /** Block metadata keyed by the container's dotted path (the array, or the object whose children group). */
+  private readonly groupMeta = new Map<string, EditorDataTableGroupMeta>();
+  /** Object paths whose direct object children each form a block. Arrays group without opt-in. */
+  private readonly blockParents = new Set<string>();
   /** Committed (git HEAD) document, lazily fetched the first time an entry is reset. */
   private defaults: Record<string, unknown> | null = null;
   private disposed = false;
 
   private constructor(private readonly options: DataTableEditorOptions) {
     for (const field of options.def.fields ?? []) this.fieldMeta.set(field.path, field);
-    for (const group of options.def.groups ?? []) this.groupLabels.set(group.path, group.label);
+    for (const group of options.def.groups ?? []) {
+      this.groupMeta.set(group.path, group);
+      this.blockParents.add(group.path);
+    }
     ensureStyles();
 
     this.overlay = document.createElement("div");
@@ -182,15 +189,15 @@ export class DataTableEditor {
 
     const leaves =
       isPlainObject(entry) || Array.isArray(entry)
-        ? collectLeaves(entry as Record<string, unknown> | unknown[], "")
+        ? collectLeaves(entry as Record<string, unknown> | unknown[], "", "", this.blockParents)
         : // A scalar top-level entry is itself a single leaf; key it by the entry
           // id so a flat config (e.g. roads.json) can label each value distinctly.
-          [{ path: entryId, type: leafType(entry)!, container: this.doc, key: entryId } satisfies Leaf];
+          [{ path: entryId, type: leafType(entry)!, container: this.doc, key: entryId, block: "" } satisfies Leaf];
 
     const groups = partitionLeaves(leaves);
-    // Entries with repeated blocks (progression tiers, upgrade levels) get one
-    // collapsible sub-group each so the long form stays readable; simpler flat
-    // configs (units, roads, …) keep the single grid unchanged.
+    // Entries with repeated blocks (progression tiers, upgrade levels, damage
+    // slots) get one collapsible sub-group each so the long form stays readable;
+    // simpler flat configs (units, roads, …) keep the single grid unchanged.
     if (groups.some((group) => !group.isBase)) {
       for (const group of groups) section.append(this.buildGroupSection(entry, group));
     } else {
@@ -211,7 +218,7 @@ export class DataTableEditor {
 
     const summary = document.createElement("summary");
     summary.className = "dte-group-title";
-    summary.textContent = this.groupTitle(entry, group);
+    summary.textContent = groupTitle(entry, group, this.groupMeta.get(group.containerPath));
     details.append(summary);
 
     const grid = document.createElement("div");
@@ -219,16 +226,6 @@ export class DataTableEditor {
     for (const leaf of group.leaves) grid.append(this.renderLeaf(leaf));
     details.append(grid);
     return details;
-  }
-
-  /** Title for a sub-group: "Temel değerler", or "<block> — Seviye N" for a tier. */
-  private groupTitle(entry: unknown, group: LeafGroup): string {
-    if (group.isBase) return "Temel değerler";
-    const label = this.groupLabels.get(group.arrayPath) ?? lastSegment(group.arrayPath);
-    const element = resolveArrayElement(entry, group.arrayPath, group.index);
-    const level =
-      isPlainObject(element) && typeof element.level === "number" ? element.level : group.index + 1;
-    return `${label} — Seviye ${level}`;
   }
 
   /**
@@ -293,7 +290,7 @@ export class DataTableEditor {
 
     const name = document.createElement("span");
     name.className = "dte-field-label";
-    name.textContent = meta?.label ?? (leaf.path || "(değer)");
+    name.textContent = leafLabel(leaf, meta);
     row.append(name);
 
     const current = (leaf.container as Record<string | number, unknown>)[leaf.key];
@@ -393,109 +390,6 @@ export class DataTableEditor {
 }
 
 // ─── Pure helpers ────────────────────────────────────────────────────────────
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Replace array-index path segments with `[]` so field metadata is index-agnostic. */
-function templatePath(path: string): string {
-  return path.replace(/\.\d+(?=\.|$)/g, ".[]");
-}
-
-function leafType(value: unknown): Leaf["type"] | null {
-  if (typeof value === "number") return "number";
-  if (typeof value === "boolean") return "boolean";
-  if (typeof value === "string") return "string";
-  return null;
-}
-
-/**
- * Depth-first walk of an entry to its editable scalar leaves. Nested objects and
- * arrays recurse with a dotted path (`levels.0.maxHealth`); null/other values are
- * skipped so a leaf always has a coercible type.
- */
-function collectLeaves(node: Record<string, unknown> | unknown[], prefix: string): Leaf[] {
-  const leaves: Leaf[] = [];
-  const entries: [string | number, unknown][] = Array.isArray(node)
-    ? node.map((value, index) => [index, value])
-    : Object.entries(node);
-  for (const [key, value] of entries) {
-    const path = prefix ? `${prefix}.${key}` : String(key);
-    const type = leafType(value);
-    if (type) {
-      leaves.push({ path, type, container: node, key });
-    } else if (isPlainObject(value) || Array.isArray(value)) {
-      leaves.push(...collectLeaves(value as Record<string, unknown> | unknown[], path));
-    }
-  }
-  return leaves;
-}
-
-/** A run of leaves rendered as one collapsible sub-group of an entry. */
-interface LeafGroup {
-  /** Group identity: the array-element path (`progression.settlement.0`) or `""` for base. */
-  readonly key: string;
-  /** Base values (no repeated block) vs. one element of an array. */
-  readonly isBase: boolean;
-  /** Path to the owning array (`progression.settlement`); empty for base. */
-  readonly arrayPath: string;
-  /** Element index within the array; `-1` for base. */
-  readonly index: number;
-  readonly leaves: Leaf[];
-}
-
-/**
- * Partition an entry's leaves into ordered sub-groups: base scalars first, then
- * one group per array element (keyed by the array-element prefix of each leaf's
- * path). Insertion order follows first appearance, so groups keep the natural
- * document order (base, then each tier). The grouping is data-shape driven, not
- * game-specific — an entry with no arrays yields a single base group.
- */
-function partitionLeaves(leaves: Leaf[]): LeafGroup[] {
-  const order: string[] = [];
-  const groups = new Map<string, LeafGroup>();
-  for (const leaf of leaves) {
-    const meta = groupKeyFor(leaf.path);
-    let bucket = groups.get(meta.key);
-    if (!bucket) {
-      bucket = { ...meta, leaves: [] };
-      groups.set(meta.key, bucket);
-      order.push(meta.key);
-    }
-    bucket.leaves.push(leaf);
-  }
-  return order.map((key) => groups.get(key)!);
-}
-
-/** Classify a leaf path by its first array-index segment (`levels.0.cost.wood` → element `levels.0`). */
-function groupKeyFor(path: string): Omit<LeafGroup, "leaves"> {
-  const segments = path.split(".");
-  const at = segments.findIndex((segment) => /^\d+$/.test(segment));
-  if (at === -1) return { key: "", isBase: true, arrayPath: "", index: -1 };
-  return {
-    key: segments.slice(0, at + 1).join("."),
-    isBase: false,
-    arrayPath: segments.slice(0, at).join("."),
-    index: Number(segments[at]),
-  };
-}
-
-/** Resolve `entry.<arrayPath>[index]`, tolerating missing intermediate keys. */
-function resolveArrayElement(entry: unknown, arrayPath: string, index: number): unknown {
-  let node: unknown = entry;
-  for (const segment of arrayPath.split(".")) {
-    if (!isPlainObject(node)) return undefined;
-    node = node[segment];
-  }
-  return Array.isArray(node) ? node[index] : undefined;
-}
-
-/** Last dotted segment, used as a fallback group label when the game names none. */
-function lastSegment(path: string): string {
-  const segments = path.split(".");
-  return segments[segments.length - 1] || path;
-}
 
 /** A `label`/`name` scalar on an entry, used as a friendly section subtitle. */
 function displayLabel(entry: unknown): string {

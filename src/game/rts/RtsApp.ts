@@ -99,12 +99,13 @@ import { UnitSystem } from "./units/unitSystem";
 import { Unit } from "./units/unit";
 import { updateUnitMovement } from "./units/unitMovement";
 import { settleStoppedUnitOverlaps } from "./units/unitSeparation";
-import { updateUnitCombat } from "./units/unitCombat";
+import { updateUnitCombat, type CombatHit, type CombatShot } from "./units/unitCombat";
 import { updateUnitDeaths } from "./units/unitDeath";
 import { retaliateAgainstAttack, updateUnitEngagement } from "./combat/engagementSystem";
 import { ProjectileSystem } from "./combat/projectileSystem";
 import { FirebrandSystem } from "./combat/firebrandSystem";
 import { CannonballSystem } from "./combat/cannonballSystem";
+import { PendingImpactQueue } from "./combat/pendingImpacts";
 import { StructureDefenseSystem } from "./combat/structureDefenseSystem";
 import { SupportAuraSystem } from "./structures/supportAuraSystem";
 import { combatImpactPoint, structureImpactPoint, type CombatTarget } from "./combat/combatTarget";
@@ -684,6 +685,8 @@ export class RtsApp {
   private readonly projectiles = new ProjectileSystem();
   private readonly firebrands = new FirebrandSystem();
   private readonly cannonballs = new CannonballSystem();
+  /** Artillery damage waiting on the ball that is carrying it (see §21 wiring below). */
+  private readonly pendingImpacts = new PendingImpactQueue();
   private readonly structureDefense = new StructureDefenseSystem();
   private readonly supportAuras = new SupportAuraSystem();
   private readonly hudBar = new RtsHudBar(
@@ -1708,7 +1711,9 @@ export class RtsApp {
     // tracer and a health bar should look the same at any game speed.
     this.projectiles.update(dt);
     this.firebrands.update(dt);
-    this.cannonballs.update(dt);
+    // Cannonballs are deliberately absent here: they gate damage now, so they
+    // are advanced with the simulation in `updateSimulation`, not on this
+    // rendered delta.
     this.units.updatePresentation(
       dt,
       this.cameraController.camera.quaternion,
@@ -2568,30 +2573,20 @@ export class RtsApp {
     // already be protected when it is hit, not from the tick after. The same
     // pass mends units and clears the protection of everyone who left a field.
     this.supportAuras.update(this.structures.all(), this.units.all(), dt);
+    // Shells fired on an earlier tick land first, so a wall that is about to be
+    // finished off by one is already rubble before this tick's guns pick targets.
+    this.pendingImpacts.update(dt, (hit) => this.resolveCombatHit(hit));
+    // The shell's flight also runs on the simulation delta, not the rendered
+    // one: it is carrying a blow now, and the two must arrive together at any
+    // game speed — and neither may advance while the match is paused.
+    this.cannonballs.update(dt);
     updateUnitCombat(
       this.units.all(),
       dt,
-      (hit) => {
-        this.debugOverlay?.recordHit(hit);
-        const attackVfx = hit.attacker.stats.structureAttackVfx;
-        const onStructure = hit.target.armorClass === "structure";
-        // The Topçu's shot *is* a lobbed iron ball, so it replaces the arrow
-        // tracer rather than joining it — and it lands on a soldier as readily
-        // as on a wall, which is why this one is not gated on the target class.
-        if (attackVfx === "cannonball") {
-          this.cannonballs.spawn(hit.attacker.position, combatImpactPoint(hit.attacker.position, hit.target));
-        } else if (hit.ranged) {
-          this.projectiles.spawn(hit.attacker.owner, hit.attacker.position, hit.target.position);
-        }
-        // A Guard's blow against a building is thrown fire, not a swing: same
-        // point-blank attack and same damage, shown as an attempt to burn the
-        // structure down (`structureAttackVfx` in balance/units.json).
-        if (attackVfx === "firebrand" && onStructure) {
-          this.firebrands.spawn(hit.attacker.position, structureImpactPoint(hit.attacker.position, hit.target));
-        }
-        if (hit.target instanceof Unit) {
-          retaliateAgainstAttack(hit.target, hit.attacker, this.navigation);
-        }
+      (hit) => this.resolveCombatHit(hit),
+      {
+        onShot: (shot) => this.launchShot(shot),
+        impacts: this.pendingImpacts,
       },
     );
     this.structureDefense.update(this.structures.all(), this.combatTargets(), dt, (hit) => {
@@ -2623,6 +2618,51 @@ export class RtsApp {
     if (this.match.outcome !== "active" && (outcome !== "active" || regional)) {
       this.log.info(`Match ended: ${this.match.outcome} (${this.match.reason})`);
       this.showMatchResult();
+    }
+  }
+
+  /**
+   * Show a weapon going off and say how long its shot needs to arrive.
+   *
+   * Everything but the artillery answers `0` — a sword lands where it swings and
+   * an arrow's tracer is decoration over a blow that has already been struck.
+   * The Topçu's shell is the exception: its damage waits in
+   * {@link pendingImpacts} for exactly the flight time returned here, so the
+   * building takes the hit when the ball reaches it rather than when the gun
+   * fires.
+   */
+  private launchShot(shot: CombatShot): number {
+    const attackVfx = shot.attacker.stats.structureAttackVfx;
+    // The Topçu's shot *is* a lobbed iron ball, so it replaces the arrow tracer
+    // rather than joining it — and it lands on a soldier as readily as on a
+    // wall, which is why this one is not gated on the target class.
+    if (attackVfx === "cannonball") {
+      return this.cannonballs.spawn(
+        shot.attacker.position,
+        combatImpactPoint(shot.attacker.position, shot.target),
+      );
+    }
+    if (shot.ranged) {
+      this.projectiles.spawn(shot.attacker.owner, shot.attacker.position, shot.target.position);
+    }
+    // A Guard's blow against a building is thrown fire, not a swing: same
+    // point-blank attack and same damage, shown as an attempt to burn the
+    // structure down (`structureAttackVfx` in balance/units.json).
+    if (attackVfx === "firebrand" && shot.target.armorClass === "structure") {
+      this.firebrands.spawn(shot.attacker.position, structureImpactPoint(shot.attacker.position, shot.target));
+    }
+    return 0;
+  }
+
+  /**
+   * A blow that has actually landed — whether it was struck this tick or fired
+   * a second ago and only now arrived. Everything downstream of damage hangs
+   * here so a delayed shell provokes the same response as an instant one.
+   */
+  private resolveCombatHit(hit: CombatHit): void {
+    this.debugOverlay?.recordHit(hit);
+    if (hit.target instanceof Unit) {
+      retaliateAgainstAttack(hit.target, hit.attacker, this.navigation);
     }
   }
 
@@ -3272,6 +3312,9 @@ export class RtsApp {
     this.projectiles.clear();
     this.firebrands.clear();
     this.cannonballs.clear();
+    // The shells those guns had in the air belong to the match that just ended;
+    // landing them on a fresh field would damage whatever now stands there.
+    this.pendingImpacts.clear();
     // The units it was tracking are gone with the match; the readout must not
     // keep answering for them.
     this.supportAuras.clear();

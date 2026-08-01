@@ -2,11 +2,17 @@
  * Artillery cannonballs — the lobbed iron ball a Topçu throws at whatever it is
  * shooting, from well outside the range of the thing being shot at.
  *
- * Same split as {@link ProjectileSystem} and {@link FirebrandSystem}:
- * `unitCombat` has already applied the damage by the time a ball is spawned, so
- * this is presentation only. What the player must read is "that gun is shelling
- * the wall from a hill the wall cannot answer", and a heavy arc that lands in a
- * cloud of dust says it.
+ * Unlike {@link ProjectileSystem} and {@link FirebrandSystem}, this one is not
+ * pure decoration trailing a blow that already landed: `unitCombat` holds the
+ * gun's damage in a {@link PendingImpactQueue} for exactly the flight time
+ * {@link CannonballSystem.spawn} returns, so the wall cracks when the ball
+ * reaches it. What the player must read is "that gun is shelling the wall from
+ * a hill the wall cannot answer", and a heavy arc that lands in a cloud of dust
+ * says it — which only holds if the damage waits for the dust.
+ *
+ * Because it now gates damage, it is advanced on the simulation delta rather
+ * than the rendered one: a shell freezes on pause and flies faster at 2x, in
+ * step with the blow it is carrying.
  *
  * It is not a second tracer type inside `projectileSystem` for the same reason
  * the firebrand is not: an arrow is a straight fast line sharing one material
@@ -110,12 +116,16 @@ export class CannonballSystem {
    * `to` is the impact point in full world space — the caller aims it, because
    * only the caller knows the target's footprint. A zero-length shot is dropped:
    * it has nothing to animate, and it would divide by zero below.
+   *
+   * Returns the shot's flight time in seconds (0 for a dropped shot). This is
+   * not decoration any more: the gun's damage is held until the ball lands, so
+   * the caller schedules the blow on exactly the number returned here.
    */
-  spawn(from: Vector3, to: Vector3): void {
+  spawn(from: Vector3, to: Vector3): number {
     const start = new Vector3(from.x, from.y + LAUNCH_HEIGHT, from.z);
     const end = to.clone();
     const distance = start.distanceTo(end);
-    if (distance < 0.01) return;
+    if (distance < 0.01) return 0;
     const shot = this.pool.pop() ?? this.create();
     shot.from.copy(start);
     shot.to.copy(end);
@@ -135,6 +145,7 @@ export class CannonballSystem {
     shot.flash.scale.setScalar(1);
     this.root.add(shot.group);
     this.live.push(shot);
+    return shot.duration;
   }
 
   update(dt: number): void {

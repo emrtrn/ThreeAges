@@ -275,7 +275,7 @@
               0
             ]
           },
-          "intervalSeconds": 3
+          "intervalSeconds": 1
         },
         "impactDebris": {
           "effects": [

@@ -68,10 +68,23 @@ export class AttackComponent {
    * confirmed range and hostility; this only owns the timing and the amount.
    */
   tryHit(target: CombatTarget): HealthChange | null {
+    const damage = this.tryFire(target);
+    return damage === null ? null : target.health.damage(damage);
+  }
+
+  /**
+   * Spend the cooldown and resolve what this shot is worth, *without* applying
+   * it. A weapon whose shot has to travel — the artillery's lobbed ball — fires
+   * here and lands later through
+   * {@link ../combat/pendingImpacts.PendingImpactQueue}; the amount is fixed at
+   * the moment of firing so a shell already in the air keeps the value it was
+   * fired with.
+   */
+  tryFire(target: CombatTarget): number | null {
     if (!this.ready || target.health.depleted) return null;
-    const change = target.health.damage(resolveDamage(this.stats, target));
+    const damage = resolveDamage(this.stats, target);
     this.cooldownRemaining = this.stats.attackCooldown;
     this.blows += 1;
-    return change;
+    return damage;
   }
 }
