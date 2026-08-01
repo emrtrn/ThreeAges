@@ -106,11 +106,15 @@ import {
   rtsUnitActorRef,
   rtsUnitOwnerActorRefIsAuthored,
   validateRtsContentCatalog,
+  rtsBuildingDamagePresentation,
+  RTS_DAMAGE_SLOTS,
   type RtsActorRef,
 } from "../src/game/rts/content/rtsContentCatalog";
 import {
   RtsActorPresentationError,
   parseRtsMeshManifest,
+  parseRtsEffectManifest,
+  rtsDamageEffectGaps,
   rtsContentCatalogRefs,
   rtsContentCoverageGaps,
   validateRtsPresentationActor,
@@ -30549,8 +30553,9 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
   }
 
   const validPilot = validateRtsContentCatalog({
-    schema: 1,
+    schema: 2,
     type: "rtsContentCatalog",
+    damage: minimalDamageSection(),
     units: {
       guard_placeholder: { actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json" },
     },
@@ -30566,22 +30571,22 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
   assert.equal(validPilot.buildings.barracks?.levels["1"], "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T1.actor.json");
 
   assert.throws(
-    () => validateRtsContentCatalog({ schema: 1, type: "rtsContentCatalog", units: { unknown: { actorRef: "assets/A.actor.json" } }, buildings: {}, ui: {} }, context),
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", damage: minimalDamageSection(), units: { unknown: { actorRef: "assets/A.actor.json" } }, buildings: {}, ui: {} }, context),
     RtsContentCatalogError,
     "unit mapping must name an existing balance id",
   );
   assert.throws(
-    () => validateRtsContentCatalog({ schema: 1, type: "rtsContentCatalog", units: {}, buildings: { barracks: { levels: { "0": "assets/A.actor.json" } } }, ui: {} }, context),
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", damage: minimalDamageSection(), units: {}, buildings: { barracks: { levels: { "0": "assets/A.actor.json" } } }, ui: {} }, context),
     RtsContentCatalogError,
     "building levels must use positive integer keys",
   );
   assert.throws(
-    () => validateRtsContentCatalog({ schema: 1, type: "rtsContentCatalog", units: { guard_placeholder: { actorRef: "/assets/ThreeAges/Actors/Units/Guard.actor.json" } }, buildings: {}, ui: {} }, context),
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", damage: minimalDamageSection(), units: { guard_placeholder: { actorRef: "/assets/ThreeAges/Actors/Units/Guard.actor.json" } }, buildings: {}, ui: {} }, context),
     RtsContentCatalogError,
     "Actor references must stay public-root-relative and traversal-free",
   );
   assert.throws(
-    () => validateRtsContentCatalog({ schema: 1, type: "rtsContentCatalog", units: {}, buildings: { farm: { levels: {}, ages: { thirdAge: { "1": "assets/A.actor.json" } } } }, ui: {} }, context),
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", damage: minimalDamageSection(), units: {}, buildings: { farm: { levels: {}, ages: { thirdAge: { "1": "assets/A.actor.json" } } } }, ui: {} }, context),
     RtsContentCatalogError,
     "per-age art must name a real settlement age",
   );
@@ -30651,6 +30656,175 @@ check("Actor presentation Faz 1: the catalog covers every playable RTS identity 
   );
 });
 
+/**
+ * The smallest damage section schema 2 accepts. Catalog fixtures that are about
+ * something else carry this so their `assert.throws` cases fail on the rule they
+ * name rather than on a missing block — a test that agrees for the wrong reason.
+ */
+function minimalDamageSection(): unknown {
+  return {
+    defaults: {
+      collapseStyle: "topple",
+      slots: {
+        lightSmoke: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 1 },
+        heavySmoke: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 1 },
+        heavyDebris: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 1 },
+        ruinSmoke: { effects: [], anchor: { mode: "ground", offset: [0, 0, 0] }, intervalSeconds: 1 },
+        collapseDust: { effects: [], anchor: { mode: "ground", offset: [0, 0, 0] } },
+        collapseDebris: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] } },
+      },
+    },
+    materials: {},
+  };
+}
+
+/**
+ * Damage-table fixtures. Deliberately not the shipped data: the resolution rules
+ * below are about *how* layers combine, and pinning them to the project's real
+ * effect ids would turn a retune into a red build.
+ */
+function damageCatalogFixture(overrides: {
+  materials?: Record<string, unknown>;
+  buildings?: Record<string, unknown>;
+} = {}): unknown {
+  return {
+    schema: 2,
+    type: "rtsContentCatalog",
+    units: {},
+    ui: {},
+    damage: {
+      defaults: {
+        collapseStyle: "topple",
+        slots: {
+          lightSmoke: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 1, 0] }, intervalSeconds: 2 },
+          heavySmoke: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 1 },
+          heavyDebris: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 3 },
+          ruinSmoke: { effects: [], anchor: { mode: "ground", offset: [0, 0, 0] }, intervalSeconds: 1 },
+          collapseDust: { effects: ["fx.a"], anchor: { mode: "ground", offset: [0, 0, 0] } },
+          collapseDebris: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 0, 0] } },
+        },
+      },
+      materials: overrides.materials ?? {},
+    },
+    buildings: overrides.buildings ?? {},
+  };
+}
+
+check("RTS damage table resolves defaults → material class → building, field by field", () => {
+  const buildingBalance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const context = { unitBalance: {}, buildingBalance };
+  const levels = { "1": "assets/A.actor.json" };
+  const catalog = validateRtsContentCatalog(
+    damageCatalogFixture({
+      materials: {
+        stone: { slots: { heavyDebris: { effects: ["fx.stone"] } } },
+      },
+      buildings: {
+        // Nothing authored at all.
+        house: { levels },
+        // Opts into a class and nothing else.
+        barracks: { levels, damage: { material: "stone" } },
+        // Class plus its own narrower override.
+        outpost: {
+          levels,
+          damage: {
+            material: "stone",
+            collapseStyle: "inPlace",
+            slots: { heavyDebris: { effects: ["fx.tile"], anchor: { offset: [0, 4, 0] } } },
+          },
+        },
+      },
+    }),
+    context,
+  );
+
+  const plain = rtsBuildingDamagePresentation(catalog, "house");
+  assert.equal(plain.collapseStyle, "topple", "an unauthored building is the default, not a gap");
+  assert.deepEqual(plain.slots.heavyDebris.effects, ["fx.a"]);
+
+  const classed = rtsBuildingDamagePresentation(catalog, "barracks");
+  assert.deepEqual(classed.slots.heavyDebris.effects, ["fx.stone"], "the material class replaces the effects");
+  assert.equal(classed.slots.heavyDebris.anchor.mode, "roof", "and inherits every field it does not name");
+  assert.equal(classed.slots.heavyDebris.intervalSeconds, 3);
+  assert.deepEqual(classed.slots.lightSmoke.effects, ["fx.a"], "a slot the class ignores stays at the default");
+
+  const own = rtsBuildingDamagePresentation(catalog, "outpost");
+  assert.deepEqual(own.slots.heavyDebris.effects, ["fx.tile"], "the building's own layer outranks its class");
+  assert.equal(own.collapseStyle, "inPlace");
+  assert.deepEqual(own.slots.heavyDebris.anchor.offset, [0, 4, 0], "the offset override applies");
+  assert.equal(own.slots.heavyDebris.anchor.mode, "roof", "and does not drag the mode along with it");
+
+  // Totality: the resolver must answer for every playable building, so nothing
+  // downstream needs a null branch at collapse time.
+  for (const buildingId of Object.keys(buildingBalance)) {
+    const resolved = rtsBuildingDamagePresentation(catalog, buildingId);
+    for (const slot of RTS_DAMAGE_SLOTS) {
+      assert.ok(resolved.slots[slot], `${buildingId}.${slot} resolves`);
+    }
+  }
+});
+
+check("RTS damage table refuses data the runtime would have to guess about", () => {
+  const buildingBalance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const context = { unitBalance: {}, buildingBalance };
+  const levels = { "1": "assets/A.actor.json" };
+  const refuses = (mutate: (doc: any) => void, why: string): void => {
+    const doc = damageCatalogFixture() as any;
+    mutate(doc);
+    assert.throws(() => validateRtsContentCatalog(doc, context), RtsContentCatalogError, why);
+  };
+
+  refuses((d) => { delete d.damage.defaults.slots.ruinSmoke; }, "defaults must cover every slot");
+  refuses((d) => { d.damage.defaults.slots.collapseDust.intervalSeconds = 2; }, "a one-shot slot has no interval");
+  refuses((d) => { delete d.damage.defaults.slots.heavySmoke.intervalSeconds; }, "a repeating slot needs one");
+  refuses((d) => { d.damage.defaults.slots.heavySmoke.intervalSeconds = 0; }, "a zero interval would spawn per frame");
+  refuses((d) => { d.damage.defaults.slots.heavySmoke.anchor.mode = "sky"; }, "anchor mode is a closed set");
+  refuses((d) => { d.damage.defaults.slots.heavySmoke.anchor.offset = [0, 999, 0]; }, "an offset has bounds");
+  refuses((d) => { d.damage.defaults.slots.heavyDebris.effects = ["fx.a", "fx.a"]; }, "a duplicate would bias the rotation");
+  refuses((d) => { d.damage.defaults.slots.heavyDebris.effects = ["../evil.json"]; }, "effects are manifest ids, not paths");
+  refuses((d) => { d.damage.defaults.collapseStyle = "explode"; }, "collapse style is a closed set");
+  refuses((d) => { d.damage.defaults.slots.heavySmoke.wobble = 1; }, "an unknown field is a typo, not an extension");
+  refuses(
+    (d) => { d.buildings = { house: { levels, damage: { material: "obsidian" } } }; },
+    "a building cannot name a material class that does not exist",
+  );
+  refuses((d) => { d.schema = 1; }, "schema 1 predates the damage section");
+  refuses((d) => { delete d.damage; }, "the damage section is required, not optional");
+});
+
+check("RTS shipped damage table names only real effects and preserves today's collapse styles", () => {
+  const catalog = shippedRtsContentCatalog();
+  const buildingBalance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const buildingIds = Object.keys(buildingBalance);
+
+  const effectIds = parseRtsEffectManifest(
+    JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
+  );
+  assert.deepEqual(
+    rtsDamageEffectGaps(catalog, effectIds, buildingIds),
+    [],
+    "every authored slot names a manifested effect asset",
+  );
+
+  // Migration fidelity, for as long as both sources exist: the table was written
+  // to reproduce the runtime's hard-coded rule exactly. When the runtime starts
+  // reading the table, `collapsesInPlace` and this assertion go away together —
+  // until then this is what catches the styles being silently dropped.
+  for (const buildingId of buildingIds) {
+    assert.equal(
+      rtsBuildingDamagePresentation(catalog, buildingId).collapseStyle === "inPlace",
+      collapsesInPlace(buildingId),
+      `${buildingId}: the table and the runtime rule must still agree`,
+    );
+  }
+});
+
 check("Unit owner Actors Faz 1: an owner resolves its own variant, and only a real owner may author one", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
@@ -30691,8 +30865,9 @@ check("Unit owner Actors Faz 1: an owner resolves its own variant, and only a re
   // An owner without an override falls back rather than failing: the fallback is
   // the authoring convenience, and coverage is what stops it hiding a gap.
   const playerOnly = validateRtsContentCatalog({
-    schema: 1,
+    schema: 2,
     type: "rtsContentCatalog",
+    damage: minimalDamageSection(),
     units: { guard_placeholder: { actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json" } },
     buildings: {},
     ui: {},
@@ -30711,8 +30886,9 @@ check("Unit owner Actors Faz 1: an owner resolves its own variant, and only a re
 
   assert.throws(
     () => validateRtsContentCatalog({
-      schema: 1,
+      schema: 2,
       type: "rtsContentCatalog",
+      damage: minimalDamageSection(),
       units: {
         guard_placeholder: {
           actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json",
@@ -30727,8 +30903,9 @@ check("Unit owner Actors Faz 1: an owner resolves its own variant, and only a re
   );
   assert.throws(
     () => validateRtsContentCatalog({
-      schema: 1,
+      schema: 2,
       type: "rtsContentCatalog",
+      damage: minimalDamageSection(),
       units: {
         guard_placeholder: {
           actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json",

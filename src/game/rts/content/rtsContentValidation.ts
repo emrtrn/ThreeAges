@@ -15,7 +15,9 @@ import { isMeshComponentKind, type ActorScriptDef } from "@engine/scene/actorScr
 import type { SettlementAge } from "@/game/data/gameDataTypes";
 import { readRtsActorMotions } from "./rtsPresentationMotion";
 import {
+  RTS_DAMAGE_SLOTS,
   rtsBuildingActorRef,
+  rtsBuildingDamagePresentation,
   rtsUnitActorRef,
   rtsUnitOwnerActorRefIsAuthored,
   type RtsActorRef,
@@ -154,6 +156,64 @@ export function validateRtsPresentationActor(
       );
     }
   }
+}
+
+/**
+ * Index the effect asset ids out of a raw `assets/manifest.json`.
+ *
+ * The damage table names effects, never models — a debris GLTF is reached through
+ * the effect asset's own `renderer.modelIds`, which the effect parser already
+ * validates. That layering is what lets an author import a mesh, wrap it in an
+ * effect, and assign it to a building without any of the three steps needing a
+ * code change.
+ */
+export function parseRtsEffectManifest(value: unknown): Set<string> {
+  const effects = new Set<string>();
+  const assets = (value as { assets?: unknown } | null)?.assets;
+  if (!Array.isArray(assets)) throw new Error("RTS effect manifest has no assets array");
+  for (const entry of assets) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue;
+    const { id, assetType } = entry as Record<string, unknown>;
+    if (typeof id === "string" && assetType === "effect") effects.add(id);
+  }
+  return effects;
+}
+
+/**
+ * Every damage-table effect reference that no manifested effect asset answers,
+ * as `<layer>.<slot>:<effectId>` strings. Empty means every authored slot can
+ * actually play.
+ *
+ * Checked against the resolved presentation *per building* as well as the raw
+ * layers, because an override that names a dead effect is only reachable through
+ * the building that opts into it.
+ */
+export function rtsDamageEffectGaps(
+  catalog: RtsContentCatalog,
+  manifestEffectIds: ReadonlySet<string>,
+  buildingIds: readonly string[],
+): readonly string[] {
+  const gaps: string[] = [];
+  const check = (layer: string, slot: string, effects: readonly string[]): void => {
+    for (const effectId of effects) {
+      if (!manifestEffectIds.has(effectId)) gaps.push(`${layer}.${slot}:${effectId}`);
+    }
+  };
+  for (const slot of RTS_DAMAGE_SLOTS) {
+    check("defaults", slot, catalog.damage.defaults.slots[slot].effects);
+  }
+  for (const [name, material] of Object.entries(catalog.damage.materials)) {
+    for (const slot of RTS_DAMAGE_SLOTS) {
+      check(`materials.${name}`, slot, material.slots?.[slot]?.effects ?? []);
+    }
+  }
+  for (const buildingId of buildingIds) {
+    const presentation = rtsBuildingDamagePresentation(catalog, buildingId);
+    for (const slot of RTS_DAMAGE_SLOTS) {
+      check(`buildings.${buildingId}`, slot, presentation.slots[slot].effects);
+    }
+  }
+  return [...new Set(gaps)];
 }
 
 /** What a match may ask the catalog for, derived from balance rather than art. */
