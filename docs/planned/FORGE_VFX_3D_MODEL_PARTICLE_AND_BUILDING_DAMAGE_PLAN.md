@@ -135,6 +135,14 @@ sonrası önbellek düşürülür).
 - [x] Birim/yapı için aynı VFX'in istemsizce üst üste çoğalmasını engelleyecek lifecycle/cleanup kurallarını ekle.
 - Uygulama notu (2026-07-30): yıkıntı görseli gameplay kaydı kaldırıldıktan sonra 14 saniye opak kalır; aynı anda en fazla 10 yıkıntı tutulur. Eşik geçişleri tek seferliktir, duman seyrek zamanlayıcıyla üretilir ve çöküş VFX'i yalnızca tek olaydan doğar.
 - Uygulama notu (2026-07-30): ağır hasar, girişte ve sonrasında her 2,4 saniyede bir taş/ahşap debris presetini dönüşümlü çalıştırır. Particle sayısı, ömür, hız, renk ve model seçimi ilgili Content Drawer efekt assetinde düzenlenir.
+- Uygulama notu (2026-08-01): ortak çöküş zaman çizelgesi tek biçim değil, iki biçim.
+  Silueti olmayan zemin yapıları (`farm`, `lumber_camp`, `quarry`, `gold_mine`)
+  `collapsesInPlace` kuralıyla devrilmeyi atlar: kısa titreme kalır, yan yatma
+  kalkar, husk'ın *özel* materyalleri isle karartılır ve enkaz sahnedeyken
+  `rts-fx-ruin-smoke-black` 1,1 saniyede bir yeniden tetiklenir. Duman, enkazın
+  ömrünü tahmin etmek yerine yeni `onRuinCleared` geri çağrısıyla durur — böylece
+  `MAX_RUINS` erken kırpması boş zeminde duman bırakmaz. Aynı kural hem husk
+  hareketini hem VFX seçimini besler, iki sunum ayrışamaz.
 
 Çıkış kriteri: bir referans binada dört sağlık durumu görünür biçimde ayrılır; çöküş, opaklığı azaltıp zemine gömme yerine kontrollü bir olay olarak okunur.
 

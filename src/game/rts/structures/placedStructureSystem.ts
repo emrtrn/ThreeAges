@@ -51,6 +51,25 @@ const RUIN_DURATION = 14;
 const MAX_RUINS = 10;
 /** Economy scenery that reserves build space but units may walk through. */
 const UNIT_PASS_THROUGH_STRUCTURE_IDS = new Set(["farm", "lumber_camp"]);
+/**
+ * Ground-hugging worksites — a tilled field, a log yard, a quarry pit, a mine
+ * mouth. The shared topple reads as a mistake on these: there is no silhouette
+ * to fall over, so the model just rolls onto its side and floats a corner in the
+ * air. They collapse in place instead, and the game layer vents smoke over the
+ * charred remains until the ruin clears.
+ */
+const IN_PLACE_COLLAPSE_STRUCTURE_IDS = new Set(["farm", "lumber_camp", "quarry", "gold_mine"]);
+/** How far the husk's own materials move toward soot when it collapses in place. */
+const CHARRED_COLOR = new Color("#241f1b");
+
+/**
+ * Whether this building's death animation skips the sideways fall. Exported so
+ * the game's VFX layer can pick the matching presentation from the same rule
+ * rather than repeating the id list.
+ */
+export function collapsesInPlace(structureId: string): boolean {
+  return IN_PLACE_COLLAPSE_STRUCTURE_IDS.has(structureId);
+}
 
 /** Health-driven presentation stages shared by every placed structure. */
 export type StructureDamageStage = "normal" | "light" | "heavy" | "destroyed";
@@ -83,8 +102,11 @@ interface DamagePresentation {
 
 interface CollapseAnimation {
   readonly object: Object3D;
+  /** Id only, never the record: the structure is gone by the time this animates. */
+  readonly structureId: number;
   readonly originY: number;
   readonly originRotationZ: number;
+  /** Zero for {@link collapsesInPlace} buildings, which shake but never topple. */
   readonly fallDirection: number;
   elapsed: number;
 }
@@ -92,6 +114,7 @@ interface CollapseAnimation {
 /** A non-gameplay, non-pickable remnant left after the common collapse motion. */
 interface RuinPresentation {
   readonly object: Object3D;
+  readonly structureId: number;
   elapsed: number;
 }
 
@@ -105,6 +128,13 @@ export interface StructureDamagePresentationHandler {
   ): void;
   /** Fires once when the record leaves gameplay and its visible collapse begins. */
   onCollapse?(structure: PlacedStructure): void;
+  /**
+   * Fires when the husk finally leaves the scene — timed out, trimmed by
+   * {@link MAX_RUINS}, or dropped on a match reset. Trailing presentation that
+   * outlives the structure (smouldering smoke) stops here rather than guessing
+   * the ruin's lifetime, so an early trim never leaves smoke over bare ground.
+   */
+  onRuinCleared?(structureId: number): void;
 }
 
 export interface PlacedStructure {
@@ -325,7 +355,7 @@ export class PlacedStructureSystem {
       collapse.object.position.y = collapse.originY;
       if (progress >= 1) {
         this.collapses.splice(i, 1);
-        this.ruins.push({ object: collapse.object, elapsed: 0 });
+        this.ruins.push({ object: collapse.object, structureId: collapse.structureId, elapsed: 0 });
         this.trimRuins();
       }
     }
@@ -451,10 +481,13 @@ export class PlacedStructureSystem {
     this.structures.length = 0;
     this.version += 1;
     this.dropAnimations.clear();
-    // A restart takes the husks with it: they belong to the finished match.
+    // A restart takes the husks with it: they belong to the finished match. Mid-
+    // fall husks never became ruins, so they are announced here — otherwise the
+    // smoke a worksite was venting would outlive the match that spawned it.
     for (const collapse of this.collapses) {
       this.root.remove(collapse.object);
       disposeObjectMeshes(collapse.object);
+      this.damagePresentationHandler?.onRuinCleared?.(collapse.structureId);
     }
     this.collapses.length = 0;
     for (let i = this.ruins.length - 1; i >= 0; i -= 1) this.removeRuinAt(i);
@@ -479,12 +512,18 @@ export class PlacedStructureSystem {
     // so the husk needs its own opaque copies before it becomes an independent
     // ruin. No per-frame opacity mutation is used for the collapse.
     makeObjectMaterialsPrivate(structure.object);
+    const inPlace = collapsesInPlace(structure.stats.id);
+    // Now that the copies are private, souring them is safe. A worksite that
+    // never topples needs this: without it the husk would sit in its original
+    // colours for the whole ruin window and read as an undamaged building.
+    if (inPlace) charCollapsedMaterials(structure.object);
     this.collapses.push({
       object: structure.object,
+      structureId: structure.id,
       originY: structure.object.position.y,
       originRotationZ: structure.object.rotation.z,
       // Stable per structure: repeated previews do not flip a building randomly.
-      fallDirection: structure.id % 2 === 0 ? 1 : -1,
+      fallDirection: inPlace ? 0 : structure.id % 2 === 0 ? 1 : -1,
       elapsed: 0,
     });
   }
@@ -499,6 +538,7 @@ export class PlacedStructureSystem {
     this.root.remove(ruin.object);
     disposeObjectMeshes(ruin.object);
     this.ruins.splice(index, 1);
+    this.damagePresentationHandler?.onRuinCleared?.(ruin.structureId);
   }
 
   private disposeStructure(structure: PlacedStructure): void {
@@ -709,6 +749,25 @@ function makeObjectMaterialsPrivate(root: Object3D): void {
     child.material = Array.isArray(child.material)
       ? child.material.map(clone)
       : clone(child.material);
+  });
+}
+
+/**
+ * Sour a husk's *already private* materials toward soot. Mutates in place rather
+ * than cloning, which is only safe because {@link makeObjectMaterialsPrivate}
+ * has just run — calling this on a live building would repaint every other
+ * building sharing that GLTF material.
+ */
+function charCollapsedMaterials(root: Object3D): void {
+  root.traverse((child) => {
+    if (!(child instanceof Mesh)) return;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) {
+      const shaded = material as Material & { color?: Color; emissive?: Color; roughness?: number };
+      shaded.color?.lerp(CHARRED_COLOR, 0.72);
+      shaded.emissive?.multiplyScalar(0.15);
+      if (typeof shaded.roughness === "number") shaded.roughness = Math.min(1, shaded.roughness + 0.25);
+    }
   });
 }
 

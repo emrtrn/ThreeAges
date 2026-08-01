@@ -1,0 +1,101 @@
+{
+  "schema": 2,
+  "type": "particleEffect",
+  "name": "RTS Ruin Smoke Black",
+  "category": "RTS Damage",
+  "tags": [
+    "rts",
+    "damage",
+    "smoke",
+    "ruin",
+    "collapse"
+  ],
+  "system": {
+    "enabled": true,
+    "loop": false,
+    "duration": 1.6,
+    "seed": null,
+    "maxParticles": 40,
+    "bounds": {
+      "mode": "fixed",
+      "min": [
+        -2,
+        0,
+        -2
+      ],
+      "max": [
+        2,
+        6,
+        2
+      ],
+      "showInPreview": true
+    }
+  },
+  "spawn": {
+    "mode": "rate",
+    "rate": 9,
+    "count": 14,
+    "delay": 0,
+    "interval": 0,
+    "shape": "sphere",
+    "radius": 0.9,
+    "boxSize": [
+      0,
+      0,
+      0
+    ]
+  },
+  "initialize": {
+    "lifetime": [
+      1.8,
+      2.6
+    ],
+    "startSize": [
+      0.7,
+      1.1
+    ],
+    "startColor": "#201c19",
+    "startOpacity": 0.85,
+    "direction": [
+      0,
+      1,
+      0
+    ],
+    "speed": [
+      0.9,
+      1.6
+    ],
+    "spreadAngleDeg": 22,
+    "rotation": [
+      0,
+      360
+    ],
+    "angularVelocity": [
+      -18,
+      18
+    ]
+  },
+  "update": {
+    "gravityScale": -0.05,
+    "drag": 0.35,
+    "acceleration": [
+      0.25,
+      0,
+      0
+    ],
+    "endSize": [
+      2.4,
+      3.2
+    ],
+    "endColor": "#4a443f",
+    "endOpacity": 0,
+    "fadeInTime": 0.2,
+    "fadeOutTime": 0.9
+  },
+  "renderer": {
+    "type": "sprite",
+    "blendMode": "alpha",
+    "softness": 0.65,
+    "sortMode": "none"
+  }
+}

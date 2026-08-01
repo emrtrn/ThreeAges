@@ -25403,6 +25403,35 @@
       "license": "Project-local RTS effect"
     },
     {
+      "id": "rts-fx-ruin-smoke-black",
+      "name": "RTS Ruin Smoke Black",
+      "assetType": "effect",
+      "category": "RTS Damage",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Ruin_Smoke_Black.effect.json",
+      "tags": [
+        "rts",
+        "damage",
+        "smoke",
+        "ruin",
+        "collapse"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "RTS Damage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1457
+      },
+      "license": "Project-local RTS effect"
+    },
+    {
       "id": "m-cobblestonerough-material",
       "name": "M Cobble Stone Rough.Material",
       "assetType": "material",

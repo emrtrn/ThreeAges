@@ -126,6 +126,7 @@ import type { RtsGraphicsQuality } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 import {
   PlacedStructureSystem,
+  collapsesInPlace,
   structureDamageStage,
   type PlacedStructure,
   type StructureDamageStage,
@@ -284,6 +285,7 @@ const STRUCTURE_DAMAGE_EFFECT_URLS: Readonly<Record<string, string>> = {
   "rts-fx-debris-stone": "assets/ThreeAges/Effects/FX_RTS_Debris_Stone.effect.json",
   "rts-fx-debris-wood": "assets/ThreeAges/Effects/FX_RTS_Debris_Wood.effect.json",
   "rts-fx-collapse-dust": "assets/ThreeAges/Effects/FX_RTS_Collapse_Dust.effect.json",
+  "rts-fx-ruin-smoke-black": "assets/ThreeAges/Effects/FX_RTS_Ruin_Smoke_Black.effect.json",
 };
 /** Explicit manifest-backed source map: VFX assets never supply arbitrary model URLs. */
 const STRUCTURE_DAMAGE_MODEL_URLS: Readonly<Record<string, string>> = {
@@ -304,6 +306,14 @@ const LIGHT_DAMAGE_SMOKE_INTERVAL_SECONDS = 1.35;
 const HEAVY_DAMAGE_SMOKE_INTERVAL_SECONDS = 0.65;
 /** A critical building occasionally sheds authored debris, never once per frame. */
 const HEAVY_DAMAGE_DEBRIS_INTERVAL_SECONDS = 2.4;
+/**
+ * A razed worksite that never topples needs a second signal, so it vents black
+ * smoke for as long as its charred husk is on the field. Re-triggered on this
+ * interval rather than looped: a one-shot emitter is what the shared budget in
+ * {@link applyQualitySettings} can actually account for.
+ */
+const RUIN_SMOKE_EFFECT = "rts-fx-ruin-smoke-black";
+const RUIN_SMOKE_INTERVAL_SECONDS = 1.1;
 /** Faz 5: the kingdom the AI opponent plays (plan §37). */
 const AI_OWNER: UnitOwner = "enemy";
 /**
@@ -511,6 +521,13 @@ export class RtsApp {
   private readonly structureSmokeElapsed = new Map<number, number>();
   /** Separate, deliberately slower budget for the heavy-damage debris bursts. */
   private readonly structureDebrisElapsed = new Map<number, number>();
+  /**
+   * Smouldering husks of razed worksites, keyed by the id of a structure that no
+   * longer exists. The position is captured at collapse because nothing can
+   * resolve that id back to a building afterwards; entries leave only through
+   * `onRuinCleared`, so the smoke and the husk disappear on the same frame.
+   */
+  private readonly structureRuinSmoke = new Map<number, { readonly position: [number, number, number]; elapsed: number }>();
   private readonly roads: RoadGraph;
   private readonly roadDebugView: RoadDebugView;
   private readonly territory = new TerritoryControlSystem(() => this.centers.all().map((center) => ({
@@ -1355,11 +1372,13 @@ export class RtsApp {
     this.structures.setDamagePresentationHandler({
       onDamageStageChanged: (structure, _previous, next) => this.onStructureDamageStageChanged(structure, next),
       onCollapse: (structure) => this.onStructureCollapse(structure),
+      onRuinCleared: (structureId) => this.structureRuinSmoke.delete(structureId),
     });
     // Warm at match boot. The calls below still retry safely if a project has
     // removed this optional starter asset from its manifest.
     void Promise.all([
       this.structureDamageVfx.warm(STRUCTURE_DAMAGE_SMOKE_EFFECT),
+      this.structureDamageVfx.warm(RUIN_SMOKE_EFFECT),
       ...STRUCTURE_COLLAPSE_EFFECTS.map((effectId) => this.structureDamageVfx.warm(effectId)),
     ]);
     void this.loadActorVisuals();
@@ -2073,6 +2092,12 @@ export class RtsApp {
     this.playStructureEffect("rts-fx-collapse-dust", ground);
     this.playStructureEffect("rts-fx-debris-stone", roof);
     this.playStructureEffect("rts-fx-debris-wood", roof);
+    // A worksite that stays upright reads as intact unless something keeps
+    // marking it. Registered from the same rule the husk used to skip its fall,
+    // so the two presentations can never disagree about which buildings topple.
+    if (!collapsesInPlace(structure.stats.id)) return;
+    this.structureRuinSmoke.set(structure.id, { position: ground, elapsed: 0 });
+    this.playStructureEffect(RUIN_SMOKE_EFFECT, ground);
   }
 
   /** Keeps damaged-building smoke sparse and frame-rate independent. */
@@ -2110,6 +2135,15 @@ export class RtsApp {
     }
     for (const id of this.structureDebrisElapsed.keys()) {
       if (!heavy.has(id)) this.structureDebrisElapsed.delete(id);
+    }
+    // Not reconciled against `structures.all()` like the loops above: these
+    // buildings are gone from the simulation by definition. `onRuinCleared` is
+    // the only thing that ends an entry.
+    for (const smoke of this.structureRuinSmoke.values()) {
+      smoke.elapsed += Math.max(0, dt);
+      if (smoke.elapsed < RUIN_SMOKE_INTERVAL_SECONDS) continue;
+      smoke.elapsed %= RUIN_SMOKE_INTERVAL_SECONDS;
+      this.playStructureEffect(RUIN_SMOKE_EFFECT, smoke.position);
     }
   }
 

@@ -189,6 +189,7 @@ import {
 } from "../src/game/rts/structures/placementGrid";
 import {
   PlacedStructureSystem,
+  collapsesInPlace,
   structureDamageStage,
 } from "../src/game/rts/structures/placedStructureSystem";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
@@ -29447,6 +29448,74 @@ check("RTS structure collapse keeps an opaque, non-blocking ruin after the fall"
   assert.ok(Math.abs(structure.object.rotation.z) > 0.1, "the shared collapse leaves a visible tilt");
   structures.clear();
   assert.equal(structure.object.parent, null, "match cleanup disposes the presentation-only ruin");
+});
+
+check("RTS ground-hugging worksites collapse in place instead of toppling", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  // The rule is about silhouette, not about any one building's tuning: a field
+  // has nothing to fall over, an outpost does.
+  for (const id of ["farm", "lumber_camp", "quarry", "gold_mine"]) {
+    assert.ok(buildings[id], `${id} must exist in the balance table this rule names`);
+    assert.equal(collapsesInPlace(id), true, `${id} is a ground-hugging worksite`);
+  }
+  for (const id of ["outpost", "command_center", "barracks"]) {
+    assert.equal(collapsesInPlace(id), false, `${id} keeps the shared topple`);
+  }
+
+  const farm = buildings.farm ?? assert.fail("farm balance missing");
+  const outpost = buildings.outpost ?? assert.fail("outpost balance missing");
+  const structures = new PlacedStructureSystem();
+  const field = structures.place("player", farm, 0, 0);
+  const tower = structures.place("player", outpost, 20, 0);
+  structures.advanceConstruction(field, farm.constructionSeconds);
+  structures.advanceConstruction(tower, outpost.constructionSeconds);
+  const uprightRotation = field.object.rotation.z;
+
+  structures.destroy(field);
+  structures.destroy(tower);
+  structures.updateVisualAnimations(1);
+
+  assert.equal(
+    field.object.rotation.z,
+    uprightRotation,
+    "the razed field ends its collapse upright, with no residual tilt",
+  );
+  assert.ok(
+    Math.abs(tower.object.rotation.z) > 0.1,
+    "a building with a silhouette still topples",
+  );
+  assert.equal(field.object.position.y, 0, "collapsing in place never sinks the husk");
+  structures.clear();
+});
+
+check("RTS ruin clearing is announced so trailing husk VFX cannot outlive the husk", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const farm = buildings.farm ?? assert.fail("farm balance missing");
+  const structures = new PlacedStructureSystem();
+  const cleared: number[] = [];
+  structures.setDamagePresentationHandler({ onRuinCleared: (id) => cleared.push(id) });
+
+  const timedOut = structures.place("player", farm, 0, 0);
+  structures.advanceConstruction(timedOut, farm.constructionSeconds);
+  structures.destroy(timedOut);
+  // Past the fall, then past the ruin window: the husk leaves on its own.
+  structures.updateVisualAnimations(1);
+  assert.deepEqual(cleared, [], "a standing ruin is not announced as cleared");
+  structures.updateVisualAnimations(60);
+  assert.deepEqual(cleared, [timedOut.id], "the timed-out ruin reports its own id");
+
+  // A husk still mid-fall when the match resets must be announced too, or the
+  // smoke it was venting would outlive the match that spawned it.
+  const midFall = structures.place("player", farm, 8, 0);
+  structures.advanceConstruction(midFall, farm.constructionSeconds);
+  structures.destroy(midFall);
+  structures.updateVisualAnimations(0.1);
+  structures.clear();
+  assert.deepEqual(cleared, [timedOut.id, midFall.id], "match cleanup releases the falling husk");
 });
 
 /**
