@@ -2,7 +2,7 @@
 import { normalizeActorScriptDef } from "@engine/scene/actorScript";
 import type { RoomLayout } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
-import type { BuildingBalance, ResourceBalance } from "../../data/gameDataTypes";
+import type { AnimalBalance, BuildingBalance, ResourceBalance } from "../../data/gameDataTypes";
 import { adaptRtsLevel, type RtsLevelDefinition } from "./rtsLevelAdapter";
 
 async function fetchJson(path: string): Promise<unknown> {
@@ -22,7 +22,11 @@ export interface RtsLevel {
 /** Fetches Level layout and every placed Actor class, then validates its RTS markers. */
 export async function loadRtsLevel(
   levelRef: string,
-  balance: { readonly buildings: BuildingBalance; readonly resources: ResourceBalance },
+  balance: {
+    readonly buildings: BuildingBalance;
+    readonly resources: ResourceBalance;
+    readonly animals: AnimalBalance;
+  },
 ): Promise<RtsLevel> {
   const layout = await fetchJson(levelRef) as RoomLayout;
   const actors = await Promise.all((layout.actors ?? []).map(async (instance, index) => ({
@@ -36,7 +40,11 @@ export async function loadRtsLevel(
 /** Back-compat: the marker definition only, for callers that ignore the art. */
 export async function loadRtsLevelDefinition(
   levelRef: string,
-  balance: { readonly buildings: BuildingBalance; readonly resources: ResourceBalance },
+  balance: {
+    readonly buildings: BuildingBalance;
+    readonly resources: ResourceBalance;
+    readonly animals: AnimalBalance;
+  },
 ): Promise<RtsLevelDefinition> {
   return (await loadRtsLevel(levelRef, balance)).definition;
 }

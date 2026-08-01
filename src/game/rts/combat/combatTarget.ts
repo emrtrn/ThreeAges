@@ -5,8 +5,24 @@ import type { UnitArmorClass } from "../../data/gameDataTypes";
 import type { HealthComponent } from "../units/health";
 import type { UnitOwner } from "../units/unit";
 
+/**
+ * Who a combat target answers to.
+ *
+ * Wider than {@link UnitOwner} by exactly one value: wildlife belongs to no
+ * kingdom. Widening *here* rather than widening `UnitOwner` itself is the whole
+ * point — `UnitOwner` still means "a kingdom", so population counting, team
+ * colours, the AI blackboard and the kingdom registry keep working on the two
+ * values they were written for, while a deer can still be shot at.
+ *
+ * Note the consequence for {@link isHostile}, which is a plain inequality: an
+ * animal reads as hostile to both kingdoms. That is only ever reached for
+ * targets a system actually offers up, so wildlife stays unattackable until the
+ * hunt deliberately puts an animal in front of a hunter.
+ */
+export type CombatTargetOwner = UnitOwner | "wild";
+
 export interface CombatTarget {
-  readonly owner: UnitOwner;
+  readonly owner: CombatTargetOwner;
   readonly position: Vector3;
   readonly health: HealthComponent;
   /**

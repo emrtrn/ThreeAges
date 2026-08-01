@@ -221,6 +221,14 @@
       }
     }
   },
+  "animals": {
+    "deer": {
+      "actorRef": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Deer.actor.json"
+    },
+    "stag": {
+      "actorRef": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Stag.actor.json"
+    }
+  },
   "ui": {},
   "damage": {
     "defaults": {

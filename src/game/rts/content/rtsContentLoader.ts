@@ -1,6 +1,6 @@
 /** Browser loader for the reference-only RTS Content Catalog (assetization Faz B). */
 import { logger } from "@/game/core/logger";
-import type { BuildingBalance, UnitBalance } from "@/game/data/gameDataTypes";
+import type { AnimalBalance, BuildingBalance, UnitBalance } from "@/game/data/gameDataTypes";
 import {
   validateRtsContentCatalog,
   type RtsContentCatalog,
@@ -28,10 +28,12 @@ async function fetchJson(url: string): Promise<unknown> {
 export async function loadRtsContentCatalog(
   unitBalance: UnitBalance,
   buildingBalance: BuildingBalance,
+  animalBalance: AnimalBalance,
 ): Promise<RtsContentCatalog> {
   const catalog = validateRtsContentCatalog(await fetchJson(CATALOG_URL), {
     unitBalance,
     buildingBalance,
+    animalBalance,
   });
   log.debug(
     `loaded RTS content catalog (${Object.keys(catalog.units).length} unit, ${Object.keys(catalog.buildings).length} building mappings)`,

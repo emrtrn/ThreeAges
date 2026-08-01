@@ -50,6 +50,7 @@ import type {
   AiBalance,
   AgeBalance,
   AiProfile,
+  AnimalBalance,
   BuildingBalance,
   ResourceBalance,
   RoadBalance,
@@ -178,6 +179,8 @@ import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTradeSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { ForestSystem } from "./economy/forestSystem";
+import { WildlifeSystem } from "./wildlife/wildlifeSystem";
+import { WildlifeView } from "./wildlife/wildlifeView";
 import { KingdomProgressionSystem, type UpgradableStructure } from "./progression/kingdomProgressionSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { type ProducerLogisticsStatus, ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
@@ -375,6 +378,8 @@ export interface RtsAppOptions {
   readonly buildingBalance: BuildingBalance;
   /** Faz 6 finite stone/gold deposit profiles; consumed by the quarry/mine slice. */
   readonly resourceBalance: ResourceBalance;
+  /** Huntable species stats; consumed by {@link WildlifeSystem}. */
+  readonly animalBalance: AnimalBalance;
   /** Faz 6 Settlement -> Town cost, prerequisites and upgrade duration. */
   readonly ageBalance: AgeBalance;
   /** Preset-owned initial stockpile for Phase 2 construction reservations. */
@@ -497,6 +502,9 @@ export class RtsApp {
   private readonly cameraController = new RtsCameraController();
   private readonly input: RtsInput;
   private readonly units = new UnitSystem();
+  private readonly wildlife: WildlifeSystem;
+  private readonly wildlifeRoot = new Group();
+  private readonly wildlifeView = new WildlifeView(this.wildlifeRoot);
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
   private readonly structureDamageModelLoader: GltfModelLoader;
@@ -886,6 +894,7 @@ export class RtsApp {
     this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics, this.territory, this.logisticsOccupation);
     this.resourceNodes = new ResourceNodeSystem(this.options.resourceBalance, this.spatial.resourceNodes);
     this.forests = new ForestSystem(this.spatial.trees);
+    this.wildlife = new WildlifeSystem(this.options.animalBalance, this.spatial.herds);
     this.kingdoms = new KingdomRegistry(
       KINGDOM_OWNERS,
       this.units,
@@ -1492,6 +1501,7 @@ export class RtsApp {
     this.workerProduction.reset();
     this.structures.clear();
     this.centers.clear();
+    this.wildlifeView.dispose();
     this.actorVisuals?.dispose();
     this.mapArt.dispose();
     // Faz E: release the authored world's GPU resources so restart/dispose leaves
@@ -1566,6 +1576,9 @@ export class RtsApp {
     // occluded by this plane.
     if (this.fogView) this.scene.add(this.fogView.root);
     if (this.ghostStructures) this.scene.add(this.ghostStructures.root);
+    // Wildlife sits with the units rather than with the ground overlays: it is a
+    // moving body on the field, and the fog binder treats it the same way.
+    this.scene.add(this.wildlifeRoot);
     this.scene.add(this.units.root);
     this.scene.add(this.projectiles.root);
     this.scene.add(this.firebrands.root);
@@ -1719,6 +1732,9 @@ export class RtsApp {
       this.cameraController.camera.quaternion,
       this.cameraController.camera.position,
     );
+    // Rendered delta, like the units': a grazing animal should look the same at
+    // any game speed. Distance throttling is left to the presentation itself.
+    this.wildlifeView.sync(this.wildlife.all(), dt, null);
     this.selectionPanel.setSelection(this.selectionView());
     // Objectives run on the rendered-frame delta like the rest of the read-only
     // presentation: the story card is paced for a person reading it, not for the
@@ -2535,6 +2551,12 @@ export class RtsApp {
     // Moving bodies pass through one another. When an order ends, settle a real
     // idle overlap once instead of continuously pushing the whole stopped group.
     settleStoppedUnitOverlaps(this.units.all(), this.navigation);
+    // Wildlife moves on the simulation delta like every other body, so the
+    // game-speed control carries it too. Deliberately *not* a navigation
+    // agent and deliberately not a nav blocker: a herd is scenery that can be
+    // hunted, and paying for pathfinding per animal per frame would be the
+    // most expensive way to solve the least important problem.
+    this.wildlife.update(dt);
     this.workerConstruction.update(dt);
     // Settle repair jobs whose building was razed or demolished since the last
     // tick; an untouched job is refunded here exactly as a cancelled one is.
@@ -3172,6 +3194,12 @@ export class RtsApp {
     for (const unit of this.units.all()) {
       unit.position.y = this.groundSurface.heightAt(unit.position.x, unit.position.z);
     }
+    // Wildlife rides the same surface. It roams in 2D and never asks the
+    // navigation grid anything, so without this a herd grazes at y = 0 and
+    // sinks into (or floats over) any authored landscape.
+    for (const animal of this.wildlife.all()) {
+      animal.position.y = this.groundSurface.heightAt(animal.position.x, animal.position.z);
+    }
   }
 
   /**
@@ -3530,6 +3558,8 @@ export class RtsApp {
           stats.moveSpeed,
         ) ?? null);
       this.units.refreshPresentations();
+      this.wildlifeView.setPresentationFactory((species, moveSpeed) =>
+        this.actorVisuals?.createAnimalPresentation(species, moveSpeed) ?? null);
       this.placement.setPreviewFactory((buildingId, width, depth) =>
         this.buildingVisuals.createPreviewForBuilding(
           buildingId,

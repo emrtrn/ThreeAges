@@ -91,6 +91,7 @@ import {
   GameDataError,
   validateAgeBalance,
   validateAiBalance,
+  validateAnimalBalance,
   validateBuildingBalance,
   validateGamePreset,
   validateGameVersion,
@@ -103,6 +104,7 @@ import {
 import {
   RtsContentCatalogError,
   type RtsCollapseStyle,
+  rtsAnimalActorRef,
   rtsBuildingActorRef,
   rtsUnitActorRef,
   rtsUnitOwnerActorRefIsAuthored,
@@ -331,6 +333,13 @@ import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combat
 import type { BuildingBalanceStats, GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import { Unit, UNIT_DEATH_SECONDS, type RtsPresentationHandle } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
+import { WildlifeSystem } from "../src/game/rts/wildlife/wildlifeSystem";
+import {
+  advanceRoam,
+  initialRoamState,
+  makeWildlifeRng,
+  WILDLIFE_ROAM_SPEED_FRACTION,
+} from "../src/game/rts/wildlife/wildlifeRoaming";
 import { SelectionSystem } from "../src/game/rts/selection/selectionSystem";
 import type { MarqueeOverlay } from "../src/game/rts/selection/marqueeOverlay";
 import type { ActorSpawnRequest } from "../engine/behavior/behaviorSubsystem";
@@ -29691,6 +29700,205 @@ check("RTS wildlife sidecars name clips the shipped animal models actually carry
   );
 });
 
+const shippedAnimalBalance = () => validateAnimalBalance(
+  JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as unknown,
+);
+
+check("wildlife never counts against a kingdom's population", () => {
+  // The reason wildlife is its own system rather than a third `UnitOwner`
+  // (wildlife plan §3.5/§4.2): population is `units.unitsOf(owner).length`, so a
+  // deer registered as a Unit would silently eat a supply slot that nothing on
+  // screen explains. Pinned here because the "simplification" that breaks it —
+  // folding animals into UnitSystem — looks like a cleanup, not a regression.
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const population = new PopulationSystem("player", units, structures, 10);
+
+  units.spawn("player", 0, 0, RTS_TEST_WORKER_STATS);
+  const before = population.snapshot();
+  assert.equal(before.current, 1, "the worker is the only thing counted so far");
+
+  const wildlife = new WildlifeSystem(shippedAnimalBalance(), [
+    { id: "test-herd", species: "deer", x: 0, z: 0, count: 6 },
+  ]);
+  wildlife.update(1);
+  assert.equal(wildlife.all().length, 6, "the herd really did populate the field");
+  assert.deepEqual(
+    population.snapshot(),
+    before,
+    "six deer standing next to the worker change nothing about population",
+  );
+});
+
+check("a herd stays a local cluster its hunters could be built beside", () => {
+  // The forest's gather-radius lesson generalised: a source that spreads across
+  // the map is not a source, it is one global pool. An animal that wandered out
+  // of its herd's circle would be unreachable from any camp sited on that herd,
+  // so the circle is the contract — checked over a long run, not one step.
+  const balance = shippedAnimalBalance();
+  const deer = balance.deer ?? assert.fail("the shipped table defines deer");
+  const wildlife = new WildlifeSystem(balance, [
+    { id: "drift-herd", species: "deer", x: 12, z: -8, count: 5 },
+  ]);
+  for (let tick = 0; tick < 4000; tick += 1) wildlife.update(0.1);
+
+  for (const animal of wildlife.snapshots()) {
+    const distance = Math.hypot(animal.x - 12, animal.z - -8);
+    assert.ok(
+      distance <= deer.roamRadius + 1e-6,
+      `${animal.id} strayed ${distance.toFixed(2)} from a herd whose radius is ${deer.roamRadius}`,
+    );
+  }
+});
+
+check("grazing reads as walking, and the herd grazes the same way twice", () => {
+  const balance = shippedAnimalBalance();
+  const deer = balance.deer ?? assert.fail("the shipped table defines deer");
+
+  // Grazing speed has to land between the animation selector's walk and run
+  // thresholds (`RTS_LOCOMOTION_CALIBRATION`), or a herd either freezes into
+  // statues or stampedes on the spot. Derived from the same table as the
+  // behaviour, so this holds at any tuning of `moveSpeed`.
+  const tuning = rtsLocomotionTuning(deer.moveSpeed);
+  const grazeSpeed = deer.moveSpeed * WILDLIFE_ROAM_SPEED_FRACTION;
+  assert.ok(grazeSpeed > tuning.walkSpeed, "a grazing animal is moving, not standing");
+  assert.ok(grazeSpeed < tuning.runSpeed, "a grazing animal is not galloping");
+
+  // Seeded, not `Math.random`: where a deer wandered decides whether a hunter
+  // can reach it, so it is simulation and the headless AI must see the same
+  // field the player does.
+  const definitions = [{ id: "same-herd", species: "deer", x: 4, z: 4, count: 4 }];
+  const left = new WildlifeSystem(balance, definitions);
+  const right = new WildlifeSystem(balance, definitions);
+  for (let tick = 0; tick < 120; tick += 1) {
+    left.update(0.2);
+    right.update(0.2);
+  }
+  assert.deepEqual(left.snapshots(), right.snapshots(), "the same herd grazes identically twice");
+});
+
+check("a grazing animal stands still long enough to play its eating clip", () => {
+  // The roam step must actually come to rest, not creep forever: standing still
+  // is what puts the animal on the `work` role, which is what plays `Eating`.
+  const profile = { homeX: 0, homeZ: 0, roamRadius: 8, moveSpeed: 6 };
+  const random = makeWildlifeRng(7);
+  const state = initialRoamState(profile, random);
+  let pose = { x: 0, z: 0, facing: 0 };
+  let restedTicks = 0;
+  for (let tick = 0; tick < 600; tick += 1) {
+    const next = advanceRoam(state, pose, profile, 0.1, random);
+    pose = { x: next.x, z: next.z, facing: next.facing };
+    if (next.speed === 0) restedTicks += 1;
+  }
+  assert.ok(restedTicks > 0, "the animal grazes rather than pacing without pause");
+});
+
+check("wildlife herds and their art are cross-checked against the balance table", () => {
+  const balance = shippedAnimalBalance();
+  const catalog = shippedRtsContentCatalog();
+
+  // Every shipped species must resolve to art. A species that does not is a herd
+  // of nothing at spawn, long after the catalog stopped being reported on.
+  for (const species of Object.keys(balance)) {
+    assert.ok(
+      rtsAnimalActorRef(catalog, species),
+      `species "${species}" resolves to an Actor`,
+    );
+  }
+
+  // And the refusals, so a typo fails the load instead of the match.
+  assert.throws(
+    () => new WildlifeSystem(balance, [{ id: "h", species: "dragon", x: 0, z: 0, count: 2 }]),
+    /unknown species/,
+    "a herd of an unknown species is refused",
+  );
+  assert.throws(
+    () => new WildlifeSystem(balance, [
+      { id: "h", species: "deer", x: 0, z: 0, count: 1 },
+      { id: "h", species: "stag", x: 5, z: 5, count: 1 },
+    ]),
+    /Duplicate herd/,
+    "two herds cannot share an id",
+  );
+});
+
+check("every shipped RTS Level authors the herds the blockout promises", () => {
+  // The Level is the spatial authority for the `?rts` route, not the blockout
+  // fallback — so wildlife added to `RTS_BLOCKOUT_MAP` alone would grazes in a
+  // map nobody plays. A Level regenerated without its herd markers is exactly
+  // the silent loss this pins.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const resources = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  const animals = shippedAnimalBalance();
+
+  for (const name of ["RTS_CoreMatch", "RTS_GameplayProof"]) {
+    const layout = JSON.parse(
+      readFileSync(`public/assets/ThreeAges/Levels/${name}.level.json`, "utf8"),
+    ) as {
+      actors: Array<{
+        classRef: string;
+        position: [number, number, number];
+        variableOverrides?: Record<string, string | number | boolean | string[]>;
+      }>;
+      splines: Parameters<typeof adaptRtsLevel>[1];
+    };
+    const actors = layout.actors.map((instance, index) => ({
+      index,
+      instance,
+      def: normalizeActorScriptDef(
+        JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown,
+        instance.classRef,
+      ),
+    }));
+    const level = adaptRtsLevel(actors, layout.splines, { buildings, resources, animals });
+    assert.ok(level.herds.length > 0, `${name} authors at least one herd`);
+    for (const herd of level.herds) {
+      assert.ok(animals[herd.species], `${name}: herd "${herd.id}" names a known species`);
+      assert.ok(herd.count > 0, `${name}: herd "${herd.id}" holds animals`);
+    }
+    // The whole point of the wildlife axis: what is safe is small and what is
+    // rich is out in the open. A map whose only herd sits in a starting base
+    // would teach the opposite, so at least one must be worth leaving home for.
+    const starts = [level.playerStart, level.enemyStart];
+    assert.ok(
+      level.herds.some((herd) => starts.every(
+        (start) => Math.hypot(herd.x - start.x, herd.z - start.z) > 28,
+      )),
+      `${name} puts at least one herd outside both starting control radii`,
+    );
+  }
+});
+
+check("the animal validator refuses data that could never make sense", () => {
+  const sane = {
+    label: "Geyik",
+    meatCapacity: 120,
+    maxHealth: 40,
+    moveSpeed: 7.5,
+    fleeRadius: 9,
+    roamRadius: 10,
+  };
+  assert.ok(validateAnimalBalance({ deer: sane }).deer, "the sane shape passes");
+
+  for (const key of ["meatCapacity", "maxHealth", "moveSpeed", "fleeRadius", "roamRadius"] as const) {
+    assert.throws(
+      () => validateAnimalBalance({ deer: { ...sane, [key]: 0 } }),
+      new RegExp(`${key}: must be > 0`),
+      `a zero ${key} is refused, naming the field`,
+    );
+  }
+  // A herd that roams the whole map is the "one global pool" failure again.
+  assert.throws(
+    () => validateAnimalBalance({ deer: { ...sane, roamRadius: 70 } }),
+    /at map scale/,
+    "a map-scale roam radius is refused",
+  );
+});
+
 check("RTS collapse deformation patches the husk's own materials, never the ones it was cloned from", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -30289,6 +30497,9 @@ function shippedRtsContentCatalog(): RtsContentCatalog {
       buildingBalance: validateBuildingBalance(
         JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
       ),
+      animalBalance: validateAnimalBalance(
+        JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as unknown,
+      ),
     },
   );
 }
@@ -30444,11 +30655,11 @@ check("Assetization Faz D: Level marker Actors resolve starts, resources, anchor
       { key: "buildingId", label: "Building", type: "text", default: "farm" },
     ], { buildingId: "farm" }, [4, 0, 5]),
   ];
-  const level = adaptRtsLevel(markerActors, [{ id: "route", position: [1, 0, 2], spline: { schema: 1, closed: false, defaultUp: [0, 1, 0], reparamStepsPerSegment: 8, points: [{ id: "a", position: [0, 0, 0], pointType: "linear" }, { id: "b", position: [4, 0, 0], pointType: "linear" }] }, runtime: { tags: ["rts.route:enemy:base:0"] } }], { buildings, resources });
+  const level = adaptRtsLevel(markerActors, [{ id: "route", position: [1, 0, 2], spline: { schema: 1, closed: false, defaultUp: [0, 1, 0], reparamStepsPerSegment: 8, points: [{ id: "a", position: [0, 0, 0], pointType: "linear" }, { id: "b", position: [4, 0, 0], pointType: "linear" }] }, runtime: { tags: ["rts.route:enemy:base:0"] } }], { buildings, resources, animals: shippedAnimalBalance() });
   assert.deepEqual(level.playerStart, { x: -10, z: 10 });
   assert.deepEqual(level.resourceNodes, [{ id: "stone-a", resourceId: "stone", kind: "safe", x: 2, z: 3 }]);
   assert.deepEqual(level.routes.get("rts.route:enemy:base:0"), [{ x: 1, z: 2 }, { x: 5, z: 2 }]);
-  assert.throws(() => adaptRtsLevel([starts[0]!], [], { buildings, resources }), RtsLevelError);
+  assert.throws(() => adaptRtsLevel([starts[0]!], [], { buildings, resources, animals: shippedAnimalBalance() }), RtsLevelError);
 });
 
 check("RTS maps Forge Blocking Volumes into conservative navigation blockers", () => {
@@ -30462,7 +30673,7 @@ check("RTS maps Forge Blocking Volumes into conservative navigation blockers", (
   const level = adaptRtsLevel(
     [actor("player", [-10, 0, 10]), actor("enemy", [10, 0, -10])],
     [],
-    { buildings, resources },
+    { buildings, resources, animals: shippedAnimalBalance() },
     [{ id: "ridge", position: [4, 2, 6], rotation: [0, 90, 0], size: [8, 6, 2] }],
   );
   assert.deepEqual(level.navigationBlockers, [{ min: [3, -1, 2], max: [5, 5, 10] }]);
@@ -30479,7 +30690,7 @@ check("RTS Walkable Deck volumes raise units without blocking their bridge corri
   const level = adaptRtsLevel(
     [actor("player", [-10, 0, 10]), actor("enemy", [10, 0, -10])],
     [],
-    { buildings, resources },
+    { buildings, resources, animals: shippedAnimalBalance() },
     [{
       id: "bridge-deck",
       position: [4, 2, 6],
@@ -30514,7 +30725,7 @@ check("Assetization Faz D: Expansion markers require all roles and an authored r
     actor("BP_RTS_ExpansionMarker", expansionVariables, { regionId: "west", role: "production", buildingId: "farm" }, [0, 0, 4]),
   ];
   const route = [{ id: "west-route", position: [0, 0, 0], spline: { schema: 1, closed: false, defaultUp: [0, 1, 0], reparamStepsPerSegment: 8, points: [{ id: "a", position: [0, 0, 0], pointType: "linear" }, { id: "b", position: [4, 0, 0], pointType: "linear" }] }, runtime: { tags: ["rts.route:enemy:west:0"] } }];
-  const level = adaptRtsLevel([...starts, ...expansion], route, { buildings, resources });
+  const level = adaptRtsLevel([...starts, ...expansion], route, { buildings, resources, animals: shippedAnimalBalance() });
   assert.deepEqual(level.expansions, [{
     id: "west",
     outpost: { buildingId: "outpost", x: 0, z: 0 },
@@ -30522,13 +30733,13 @@ check("Assetization Faz D: Expansion markers require all roles and an authored r
     production: { buildingId: "farm", x: 0, z: 4 },
     routes: [[{ x: 0, z: 0 }, { x: 4, z: 0 }]],
   }]);
-  assert.throws(() => adaptRtsLevel([...starts, ...expansion.slice(0, 2)], route, { buildings, resources }), RtsLevelError);
-  assert.throws(() => adaptRtsLevel([...starts, ...expansion], [], { buildings, resources }), RtsLevelError);
-  assert.throws(() => adaptRtsLevel(starts, [{ ...route[0]!, runtime: { tags: ["rts.route:enemy:west"] } }], { buildings, resources }), RtsLevelError);
+  assert.throws(() => adaptRtsLevel([...starts, ...expansion.slice(0, 2)], route, { buildings, resources, animals: shippedAnimalBalance() }), RtsLevelError);
+  assert.throws(() => adaptRtsLevel([...starts, ...expansion], [], { buildings, resources, animals: shippedAnimalBalance() }), RtsLevelError);
+  assert.throws(() => adaptRtsLevel(starts, [{ ...route[0]!, runtime: { tags: ["rts.route:enemy:west"] } }], { buildings, resources, animals: shippedAnimalBalance() }), RtsLevelError);
   assert.throws(() => adaptRtsLevel([
     starts[0]!,
     actor("BP_RTS_KingdomStart", [{ key: "owner", label: "Owner", type: "select", default: "player" }], { owner: "enemy" }, [71, 0, 0]),
-  ], [], { buildings, resources }), RtsLevelError);
+  ], [], { buildings, resources, animals: shippedAnimalBalance() }), RtsLevelError);
 });
 
 check("Assetization Faz D: shipped RTS Core Match Level reproduces the full legacy spatial contract", () => {
@@ -30550,7 +30761,7 @@ check("Assetization Faz D: shipped RTS Core Match Level reproduces the full lega
       instance.classRef,
     ),
   }));
-  const level = adaptRtsLevel(actors, layout.splines, { buildings, resources });
+  const level = adaptRtsLevel(actors, layout.splines, { buildings, resources, animals: shippedAnimalBalance() });
   // The shipped Level is now the complete copy of RTS_BLOCKOUT_MAP's gameplay
   // inventory, so resolving it must reproduce exactly the legacy spatial
   // contract. That is the Faz D "eksiksiz Level kopyasi" acceptance: the
@@ -30615,7 +30826,7 @@ check("Landscape: the gameplay proof Level stays structurally playable as it is 
   // both flanks connected around it, resource + wood sources, and the enemy's
   // economy scaffold. Freezing coordinates here would turn a legal design edit
   // into a red build; these invariants are the real contract instead.
-  const level = adaptRtsLevel(actors, layout.splines, { buildings, resources });
+  const level = adaptRtsLevel(actors, layout.splines, { buildings, resources, animals: shippedAnimalBalance() });
   const spatial = resolveRtsSpatialLayout(level);
   assert.ok(spatial.playerStart && spatial.enemyStart, "both a player and enemy start are authored");
   assert.ok(spatial.navigationBlockers.length >= 1, "a central chokepoint blocker is authored — the two-flank design's only gameplay wall");
@@ -30672,7 +30883,7 @@ check("Landscape Faz 2: moving a Level marker moves the runtime behaviour it dri
     return adaptRtsLevel(
       actors.map((instance, index) => ({ index, instance, def: defFor(instance.classRef) })),
       layout.splines,
-      { buildings, resources },
+      { buildings, resources, animals: shippedAnimalBalance() },
     );
   };
 
@@ -30787,7 +30998,7 @@ check("Assetization Faz D: the authored Level keeps both flanks and the enemy ba
     instance,
     def: normalizeActorScriptDef(JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown, instance.classRef),
   }));
-  const spatial = resolveRtsSpatialLayout(adaptRtsLevel(actors, layout.splines, { buildings, resources }));
+  const spatial = resolveRtsSpatialLayout(adaptRtsLevel(actors, layout.splines, { buildings, resources, animals: shippedAnimalBalance() }));
 
   // The two starts stay connected around the authored ridge, using an open flank
   // rather than crossing it — the §25 spatial contract, now sourced from markers.
@@ -30926,7 +31137,9 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
   const buildingBalance = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
-  const context = { unitBalance, buildingBalance };
+  const context = { unitBalance, buildingBalance, animalBalance: validateAnimalBalance(
+    JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as unknown,
+  ) };
   const catalog = validateRtsContentCatalog(
     JSON.parse(readFileSync("public/game-data/content/rts-content.json", "utf8")) as unknown,
     context,
@@ -30989,6 +31202,7 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
   const validPilot = validateRtsContentCatalog({
     schema: 2,
     type: "rtsContentCatalog",
+    animals: {},
     damage: minimalDamageSection(),
     units: {
       guard_placeholder: { actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json" },
@@ -31005,22 +31219,22 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
   assert.equal(validPilot.buildings.barracks?.levels["1"], "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T1.actor.json");
 
   assert.throws(
-    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", damage: minimalDamageSection(), units: { unknown: { actorRef: "assets/A.actor.json" } }, buildings: {}, ui: {} }, context),
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", animals: {}, damage: minimalDamageSection(), units: { unknown: { actorRef: "assets/A.actor.json" } }, buildings: {}, ui: {} }, context),
     RtsContentCatalogError,
     "unit mapping must name an existing balance id",
   );
   assert.throws(
-    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", damage: minimalDamageSection(), units: {}, buildings: { barracks: { levels: { "0": "assets/A.actor.json" } } }, ui: {} }, context),
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", animals: {}, damage: minimalDamageSection(), units: {}, buildings: { barracks: { levels: { "0": "assets/A.actor.json" } } }, ui: {} }, context),
     RtsContentCatalogError,
     "building levels must use positive integer keys",
   );
   assert.throws(
-    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", damage: minimalDamageSection(), units: { guard_placeholder: { actorRef: "/assets/ThreeAges/Actors/Units/Guard.actor.json" } }, buildings: {}, ui: {} }, context),
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", animals: {}, damage: minimalDamageSection(), units: { guard_placeholder: { actorRef: "/assets/ThreeAges/Actors/Units/Guard.actor.json" } }, buildings: {}, ui: {} }, context),
     RtsContentCatalogError,
     "Actor references must stay public-root-relative and traversal-free",
   );
   assert.throws(
-    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", damage: minimalDamageSection(), units: {}, buildings: { farm: { levels: {}, ages: { thirdAge: { "1": "assets/A.actor.json" } } } }, ui: {} }, context),
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", animals: {}, damage: minimalDamageSection(), units: {}, buildings: { farm: { levels: {}, ages: { thirdAge: { "1": "assets/A.actor.json" } } } }, ui: {} }, context),
     RtsContentCatalogError,
     "per-age art must name a real settlement age",
   );
@@ -31038,7 +31252,9 @@ check("Actor presentation Faz 1: the catalog covers every playable RTS identity 
   );
   const catalog = validateRtsContentCatalog(
     JSON.parse(readFileSync("public/game-data/content/rts-content.json", "utf8")) as unknown,
-    { unitBalance, buildingBalance },
+    { unitBalance, buildingBalance, animalBalance: validateAnimalBalance(
+      JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as unknown,
+    ) },
   );
 
   // The tier ladder comes from age balance, not from the art pack: whatever a
@@ -31129,6 +31345,7 @@ function damageCatalogFixture(overrides: {
   return {
     schema: 2,
     type: "rtsContentCatalog",
+    animals: {},
     units: {},
     ui: {},
     damage: {
@@ -31158,7 +31375,7 @@ check("RTS damage table resolves defaults → material class → building, field
   const buildingBalance = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
-  const context = { unitBalance: {}, buildingBalance };
+  const context = { unitBalance: {}, buildingBalance, animalBalance: {} };
   const levels = { "1": "assets/A.actor.json" };
   const catalog = validateRtsContentCatalog(
     damageCatalogFixture({
@@ -31222,7 +31439,7 @@ check("RTS damage table refuses data the runtime would have to guess about", () 
   const buildingBalance = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
-  const context = { unitBalance: {}, buildingBalance };
+  const context = { unitBalance: {}, buildingBalance, animalBalance: {} };
   const levels = { "1": "assets/A.actor.json" };
   const refuses = (mutate: (doc: any) => void, why: string): void => {
     const doc = damageCatalogFixture() as any;
@@ -31348,7 +31565,9 @@ check("Unit owner Actors Faz 1: an owner resolves its own variant, and only a re
   const buildingBalance = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
-  const context = { unitBalance, buildingBalance };
+  const context = { unitBalance, buildingBalance, animalBalance: validateAnimalBalance(
+    JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as unknown,
+  ) };
   const catalog = validateRtsContentCatalog(
     JSON.parse(readFileSync("public/game-data/content/rts-content.json", "utf8")) as unknown,
     context,
@@ -31383,6 +31602,7 @@ check("Unit owner Actors Faz 1: an owner resolves its own variant, and only a re
   const playerOnly = validateRtsContentCatalog({
     schema: 2,
     type: "rtsContentCatalog",
+    animals: {},
     damage: minimalDamageSection(),
     units: { guard_placeholder: { actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json" } },
     buildings: {},
@@ -31404,6 +31624,7 @@ check("Unit owner Actors Faz 1: an owner resolves its own variant, and only a re
     () => validateRtsContentCatalog({
       schema: 2,
       type: "rtsContentCatalog",
+      animals: {},
       damage: minimalDamageSection(),
       units: {
         guard_placeholder: {
@@ -31421,6 +31642,7 @@ check("Unit owner Actors Faz 1: an owner resolves its own variant, and only a re
     () => validateRtsContentCatalog({
       schema: 2,
       type: "rtsContentCatalog",
+      animals: {},
       damage: minimalDamageSection(),
       units: {
         guard_placeholder: {
@@ -31762,7 +31984,9 @@ check("Actor presentation Faz 2: every catalog Actor is renderable and every mes
   );
   const catalog = validateRtsContentCatalog(
     JSON.parse(readFileSync("public/game-data/content/rts-content.json", "utf8")) as unknown,
-    { unitBalance, buildingBalance },
+    { unitBalance, buildingBalance, animalBalance: validateAnimalBalance(
+      JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as unknown,
+    ) },
   );
   const manifest = parseRtsMeshManifest(
     JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,

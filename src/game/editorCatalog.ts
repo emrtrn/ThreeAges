@@ -18,6 +18,7 @@ import {
   validateAgeBalance,
   validateAiBalance,
   validateBuildingBalance,
+  validateAnimalBalance,
   validateResourceBalance,
   validateRoadBalance,
   validateUnitBalance,
@@ -520,6 +521,15 @@ const RESOURCES_FIELDS = [
   { path: "externalNode.perWorkerPerMinute", label: "Dış düğüm: İşçi başı/dk", min: 0, step: 0.5 },
 ];
 
+const ANIMALS_FIELDS = [
+  { path: "label", label: "Ad" },
+  { path: "meatCapacity", label: "Et kapasitesi (yiyecek)", min: 0, step: 5 },
+  { path: "maxHealth", label: "Can", min: 0, step: 5 },
+  { path: "moveSpeed", label: "Hız", min: 0, step: 0.5 },
+  { path: "fleeRadius", label: "Kaçış yarıçapı", min: 0, step: 0.5, hint: "Avcı bu mesafeye girince hayvan kaçar." },
+  { path: "roamRadius", label: "Dolaşma yarıçapı", min: 0, step: 0.5, hint: "Sürü merkezinden en fazla bu kadar uzaklaşır; avcı kulübesinin menzilinden küçük kalmalı." },
+];
+
 // Centre-led progression (docs/planned/THREEAGES_CENTER_LED_PROGRESSION_PLAN.md).
 // Applied to each top-level age entry (settlement / town). The Town-only fields
 // (cost, upgradeSeconds) are simply absent on the Settlement entry. `levelUpgrades`
@@ -652,6 +662,13 @@ export const GAME_EDITOR_CATALOG = {
       path: "game-data/balance/resources.json",
       fields: RESOURCES_FIELDS,
       validate: asTableValidator(validateResourceBalance),
+    },
+    {
+      id: "animals",
+      label: "Hayvan Dengesi",
+      path: "game-data/balance/animals.json",
+      fields: ANIMALS_FIELDS,
+      validate: asTableValidator(validateAnimalBalance),
     },
     {
       id: "ages",

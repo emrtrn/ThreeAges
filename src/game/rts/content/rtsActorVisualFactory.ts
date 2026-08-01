@@ -15,7 +15,7 @@ import { isMeshComponentKind, normalizeActorScriptDef, type ActorScriptDef } fro
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import type { SettlementAge } from "@/game/data/gameDataTypes";
-import { rtsBuildingActorRef, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
+import { rtsAnimalActorRef, rtsBuildingActorRef, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
 import {
   RtsActorPresentationError,
   parseRtsEffectManifestPaths,
@@ -205,6 +205,30 @@ export class RtsActorVisualFactory {
       animation: def ? this.animationSourceFor(root) : null,
       moveSpeed,
       wheelSpins: def ? bindRtsWheelSpins(def, root) : [],
+    });
+  }
+
+  /**
+   * A grazing animal's presentation. Shares the unit path deliberately: an
+   * animal needs exactly what a unit needs — a cloned tree, a mixer bound to the
+   * model, and speed-driven clip selection — and the only thing wildlife lacks
+   * (an owner variant) is the one argument left off.
+   */
+  createAnimalPresentation(species: string, moveSpeed?: number): RtsPresentationHandle | null {
+    const actorRef = rtsAnimalActorRef(this.catalog, species);
+    if (!actorRef || !this.ready) return null;
+    const root = this.createActorVisual(actorRef);
+    if (!root) return null;
+    const pickTargets = collectRtsPickTargets(root);
+    if (pickTargets.length === 0) return null;
+    const def = this.definitions.get(actorRef);
+    return createRtsUnitPresentation({
+      root,
+      pickTargets,
+      selectionRadius: readRtsSelectionRadius(def),
+      animation: def ? this.animationSourceFor(root) : null,
+      moveSpeed,
+      wheelSpins: [],
     });
   }
 

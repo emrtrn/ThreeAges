@@ -427,6 +427,33 @@ export interface ResourceBalanceStats {
 /** `public/game-data/balance/resources.json` — finite stone and gold deposits. */
 export type ResourceBalance = Readonly<Record<string, ResourceBalanceStats>>;
 
+/**
+ * One huntable species. Wildlife is a *finite* food source that moves, which is
+ * why its numbers live here rather than in `resources.json`: a deposit profile
+ * is split safe/external by placement, while an animal carries its own yield
+ * wherever it wanders (the tree model, not the deposit model).
+ *
+ * Deliberately carries no rig or clip data — the `*.skeleton.json` sidecar is
+ * the single authority for which clip plays, and duplicating that here would
+ * give a species two disagreeing animation truths.
+ */
+export interface AnimalBalanceStats {
+  /** Stable data id, copied from the key in `balance/animals.json`. */
+  readonly id: string;
+  readonly label: string;
+  /** Food one carcass yields before it is picked clean. */
+  readonly meatCapacity: number;
+  readonly maxHealth: number;
+  readonly moveSpeed: number;
+  /** Distance at which the animal breaks away from an approaching hunter. */
+  readonly fleeRadius: number;
+  /** How far from its herd's centre the animal may wander. */
+  readonly roamRadius: number;
+}
+
+/** `public/game-data/balance/animals.json` — keyed by stable species id. */
+export type AnimalBalance = Readonly<Record<string, AnimalBalanceStats>>;
+
 /** The two progression states included in Faz 6 (Kingdom deliberately remains out of scope). */
 export type SettlementAge = "settlement" | "town";
 

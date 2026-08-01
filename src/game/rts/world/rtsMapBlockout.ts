@@ -12,6 +12,7 @@ import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
 import type { RtsTreeDefinition } from "../economy/forestSystem";
+import type { RtsHerdDefinition } from "../wildlife/wildlifeSystem";
 import { RTS_WORLD_HALF_EXTENT } from "./rtsGround";
 
 export interface RtsMapPoint {
@@ -138,6 +139,8 @@ export interface RtsMapBlockout {
   readonly resourceNodes: readonly RtsResourceNodeDefinition[];
   /** Individually harvestable wood sources; no forest group mesh owns gameplay. */
   readonly trees: readonly RtsTreeDefinition[];
+  /** Wildlife clusters; one entry seeds a whole grazing herd. */
+  readonly herds: readonly RtsHerdDefinition[];
   /** Static obstacle footprints consumed by `RtsNavigation`. */
   readonly navigationBlockers: readonly NavBlocker[];
   /** Horizontal authored floors that raise units (empty in the code blockout). */
@@ -417,6 +420,18 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     { id: "south-wood-10", forestId: "south-grove", x: 8, z: 44, capacity: 30, variant: "tree1" },
     { id: "south-wood-11", forestId: "south-grove", x: 10, z: 46, capacity: 30, variant: "tree2" },
   ]),
+  // Wildlife teaches the same lesson the deposits do: what is safe is small, and
+  // what is worth taking is out in the open. Each kingdom opens with one modest
+  // deer herd inside its starting control radius (28), while the rich stag herd
+  // sits in the middle, far outside both — the first thing worth leaving home
+  // for. Its centre is north of the central ridge blocker (z <= 4) by more than
+  // one roam radius, so grazing animals never wander onto the ridge; they are
+  // not navigation agents and nothing would push them back off it.
+  herds: [
+    { id: "player-deer", species: "deer", x: -30, z: 22, count: 5 },
+    { id: "enemy-deer", species: "deer", x: 30, z: -22, count: 5 },
+    { id: "central-stag", species: "stag", x: 0, z: 16, count: 4 },
+  ],
   navigationBlockers: [
     { min: [-12, -1, -4], max: [12, 4, 4] },
   ],

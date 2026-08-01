@@ -30,6 +30,8 @@ import type {
   AiProfileBalance,
   AiScoringBalance,
   AiTargetWeights,
+  AnimalBalance,
+  AnimalBalanceStats,
   BuildingBalance,
   BuildingPadVisual,
   BuildingProgressionBalance,
@@ -965,6 +967,51 @@ function assertNoArbitrage(priceStep: number, indexMin: number, commission: numb
       + `${indexMin} — require priceStep * (1 + commission) < 2 * indexMin * commission`,
     );
   }
+}
+
+/**
+ * Validate the huntable species table.
+ *
+ * Refuses only what can never be sensible, never a tuning: a species with no
+ * meat is a hunt that can never pay, a non-positive health or speed is an
+ * animal that cannot be hunted or cannot move, and a `roamRadius` at map scale
+ * is the "one global pool" failure the forest's gather radius already taught —
+ * a herd that wanders the whole map is not a herd, and no camp could ever be
+ * built "near" it. The magnitudes themselves stay free to be retuned.
+ */
+export function validateAnimalBalance(value: unknown): AnimalBalance {
+  const where = "balance/animals.json";
+  const obj = asObject(value, where);
+  const animals: Record<string, AnimalBalanceStats> = {};
+  for (const [id, raw] of Object.entries(obj)) {
+    if (!/^[a-z][a-z0-9_]*$/.test(id)) {
+      throw new GameDataError(`${where}: invalid animal id "${id}"`);
+    }
+    const statsWhere = `${where}."${id}"`;
+    const stats = asObject(raw, statsWhere);
+    const positive = (key: "meatCapacity" | "maxHealth" | "moveSpeed" | "fleeRadius" | "roamRadius") => {
+      const amount = requireFiniteNumber(stats, key, statsWhere);
+      if (amount <= 0) throw new GameDataError(`${statsWhere}.${key}: must be > 0`);
+      return amount;
+    };
+    const roamRadius = positive("roamRadius");
+    if (roamRadius >= WORLD_HALF_EXTENT_FOR_VISION_CHECK) {
+      throw new GameDataError(
+        `${statsWhere}.roamRadius: ${roamRadius} is at map scale — must stay below `
+        + `${WORLD_HALF_EXTENT_FOR_VISION_CHECK} so a herd stays a local cluster a camp can be built beside`,
+      );
+    }
+    animals[id] = {
+      id,
+      label: requireString(stats, "label", statsWhere),
+      meatCapacity: positive("meatCapacity"),
+      maxHealth: positive("maxHealth"),
+      moveSpeed: positive("moveSpeed"),
+      fleeRadius: positive("fleeRadius"),
+      roamRadius,
+    };
+  }
+  return animals;
 }
 
 /** Validate Faz 6's finite stone/gold deposit profiles. */

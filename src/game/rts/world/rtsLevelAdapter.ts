@@ -3,9 +3,10 @@ import { resolveActorInstanceVariables, type ResolvedActorClass } from "@engine/
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { LayoutBlockingVolume, LayoutSplineActor } from "@engine/scene/layout";
 import { resolveBlockingVolume } from "@engine/scene/blockingVolume";
-import type { BuildingBalance, ResourceBalance } from "../../data/gameDataTypes";
+import type { AnimalBalance, BuildingBalance, ResourceBalance } from "../../data/gameDataTypes";
 import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
 import type { RtsTreeDefinition } from "../economy/forestSystem";
+import type { RtsHerdDefinition } from "../wildlife/wildlifeSystem";
 import type { RtsBuildAnchor, RtsExpansionRegion, RtsMapPoint, RtsStrategicPoint } from "./rtsMapBlockout";
 import { RTS_WORLD_HALF_EXTENT } from "./rtsGround";
 import type { UnitOwner } from "../units/unit";
@@ -20,6 +21,8 @@ export interface RtsLevelDefinition {
   readonly enemyStart: RtsMapPoint;
   readonly resourceNodes: readonly RtsResourceNodeDefinition[];
   readonly trees: readonly RtsTreeDefinition[];
+  /** Authored wildlife clusters; one marker stands for a whole herd. */
+  readonly herds: readonly RtsHerdDefinition[];
   readonly strategicPoints: readonly RtsStrategicPoint[];
   readonly navigationBlockers: readonly NavBlocker[];
   /** Horizontal walkable floors, such as bridge decks, that raise unit visuals. */
@@ -71,12 +74,17 @@ function requirePositiveNumber(values: Readonly<Record<string, unknown>>, key: s
 export function adaptRtsLevel(
   actors: readonly ResolvedActorClass[],
   splines: readonly LayoutSplineActor[],
-  balance: { readonly buildings: BuildingBalance; readonly resources: ResourceBalance },
+  balance: {
+    readonly buildings: BuildingBalance;
+    readonly resources: ResourceBalance;
+    readonly animals: AnimalBalance;
+  },
   blockingVolumes: readonly LayoutBlockingVolume[] = [],
 ): RtsLevelDefinition {
   const starts = new Map<string, RtsMapPoint>();
   const nodes: RtsResourceNodeDefinition[] = [];
   const trees: RtsTreeDefinition[] = [];
+  const herds: RtsHerdDefinition[] = [];
   const strategicPoints: RtsStrategicPoint[] = [];
   const navigationBlockers: NavBlocker[] = [];
   const walkableDecks: RtsWalkableDeck[] = [];
@@ -111,6 +119,17 @@ export function adaptRtsLevel(
       if (variant !== "pine" && variant !== "tree1" && variant !== "tree2") throw new RtsLevelError(`Tree ${id} has invalid variant`);
       if (trees.some((tree) => tree.id === id)) throw new RtsLevelError(`duplicate tree ${id}`);
       trees.push({ id, forestId, capacity, variant, ...point });
+    } else if (def.name === "BP_RTS_Herd") {
+      // One marker stands for the whole herd: authoring twelve deer by hand
+      // would make a herd a chore to move, and the individual animals do not
+      // hold still anyway — `WildlifeSystem` scatters them around this centre.
+      const id = requireText(values, "herdId", "Herd");
+      const species = requireText(values, "species", `Herd ${id}`);
+      if (!balance.animals[species]) throw new RtsLevelError(`Herd ${id} references unknown species "${species}"`);
+      const count = requirePositiveNumber(values, "count", `Herd ${id}`);
+      if (!Number.isInteger(count)) throw new RtsLevelError(`Herd ${id} count must be a whole number`);
+      if (herds.some((herd) => herd.id === id)) throw new RtsLevelError(`duplicate herd ${id}`);
+      herds.push({ id, species, count, ...point });
     } else if (def.name === "BP_RTS_StrategicPoint") {
       const id = requireText(values, "pointId", "StrategicPoint");
       const name = requireText(values, "label", `StrategicPoint ${id}`);
@@ -185,6 +204,7 @@ export function adaptRtsLevel(
     enemyStart,
     resourceNodes: nodes,
     trees,
+    herds,
     strategicPoints,
     navigationBlockers,
     walkableDecks,

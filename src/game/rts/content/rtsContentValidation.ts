@@ -72,6 +72,7 @@ export function rtsContentCatalogRefs(catalog: RtsContentCatalog): readonly RtsA
     // spawn time, when the manifest is no longer being reported on.
     for (const ref of Object.values(entry.ownerActorRefs ?? {})) refs.add(ref);
   }
+  for (const entry of Object.values(catalog.animals)) refs.add(entry.actorRef);
   for (const entry of Object.values(catalog.buildings)) {
     if (entry.constructionActorRef) refs.add(entry.constructionActorRef);
     for (const ref of Object.values(entry.levels)) refs.add(ref);

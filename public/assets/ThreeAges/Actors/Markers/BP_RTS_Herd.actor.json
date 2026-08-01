@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_Herd",
+  "parentClass": "actor",
+  "variables": [
+    { "key": "herdId", "label": "Herd Id", "type": "text", "default": "herd-1" },
+    { "key": "species", "label": "Species", "type": "select", "default": "deer", "options": ["deer", "stag"] },
+    { "key": "count", "label": "Count", "type": "number", "default": 5 }
+  ],
+  "components": [{ "id": "root", "component": "Transform", "props": {} }],
+  "interfaces": [], "references": [], "dispatchers": [], "eventBindings": [], "messageBindings": [], "construction": null
+}

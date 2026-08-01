@@ -17,7 +17,7 @@ import {
   readBootOptionsFromUrl,
   snapshotRuntimeConfig,
 } from "@/game/core/runtimeConfig";
-import { loadAgeBalance, loadAiBalance, loadBuildingBalance, loadGamePreset, loadMissionScript, loadResourceBalance, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
+import { loadAgeBalance, loadAiBalance, loadAnimalBalance, loadBuildingBalance, loadGamePreset, loadMissionScript, loadResourceBalance, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
 import { loadRtsContentCatalog } from "@/game/rts/content/rtsContentLoader";
 import {
   readStoredVictoryCondition,
@@ -160,10 +160,11 @@ async function main(): Promise<void> {
   // own lightweight runtime — never mixes with the character SceneApp above.
   if (!editorEnabled && params.has("rts")) {
     const { RtsApp } = await import("@/game/rts/RtsApp");
-    const [unitBalance, buildingBalance, resourceBalance, ageBalance, roadBalance, aiBalance] = await Promise.all([
+    const [unitBalance, buildingBalance, resourceBalance, animalBalance, ageBalance, roadBalance, aiBalance] = await Promise.all([
       loadUnitBalance(),
       loadBuildingBalance(),
       loadResourceBalance(),
+      loadAnimalBalance(),
       loadAgeBalance(),
       loadRoadBalance(),
       loadAiBalance(),
@@ -172,7 +173,7 @@ async function main(): Promise<void> {
     // A catalog that fails to load is fatal to the route on purpose: it is the
     // mapping from gameplay ids to art, and there is no second art path left to
     // quietly fall back to — a match booted without it would be an art-less match.
-    const contentCatalog = await loadRtsContentCatalog(unitBalance, buildingBalance);
+    const contentCatalog = await loadRtsContentCatalog(unitBalance, buildingBalance, animalBalance);
     // Story/tutorial chain (Hikâye / Öğretici Tur Modu, Faz 1). Opt-in through
     // `?mission=<id>` until Faz 2 gives the start card a mode row; until then an
     // ordinary match is what every URL without the parameter still gets.
@@ -222,7 +223,7 @@ async function main(): Promise<void> {
       if (levelRef) {
         authoredLevel = await (await import("@/game/rts/world/rtsLevelLoader")).loadRtsLevel(
           levelRef,
-          { buildings: buildingBalance, resources: resourceBalance },
+          { buildings: buildingBalance, resources: resourceBalance, animals: animalBalance },
         );
       }
     } catch (error) {
@@ -252,6 +253,7 @@ async function main(): Promise<void> {
       unitBalance,
       buildingBalance,
       resourceBalance,
+      animalBalance,
       ageBalance,
       roadBalance,
       aiBalance,

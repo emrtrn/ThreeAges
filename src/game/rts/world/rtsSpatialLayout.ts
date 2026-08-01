@@ -3,6 +3,7 @@ import type { RtsExpansionRegion, RtsMapPoint, RtsStrategicPoint } from "./rtsMa
 import { RTS_BLOCKOUT_MAP } from "./rtsMapBlockout";
 import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
 import type { RtsTreeDefinition } from "../economy/forestSystem";
+import type { RtsHerdDefinition } from "../wildlife/wildlifeSystem";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import { RtsLevelError, type RtsLevelDefinition } from "./rtsLevelAdapter";
 import type { RtsWalkableDeck } from "./rtsTerrainSurface";
@@ -12,6 +13,7 @@ export interface RtsSpatialLayout {
   readonly enemyStart: RtsMapPoint;
   readonly resourceNodes: readonly RtsResourceNodeDefinition[];
   readonly trees: readonly RtsTreeDefinition[];
+  readonly herds: readonly RtsHerdDefinition[];
   readonly strategicPoints: readonly RtsStrategicPoint[];
   readonly enemyBaseAnchors: typeof RTS_BLOCKOUT_MAP.enemyBaseAnchors;
   readonly enemyBaseRoute: readonly RtsMapPoint[];
@@ -36,6 +38,7 @@ export function resolveRtsSpatialLayout(level?: RtsLevelDefinition): RtsSpatialL
     enemyStart: level.enemyStart,
     resourceNodes: level.resourceNodes,
     trees: level.trees,
+    herds: level.herds,
     strategicPoints: level.strategicPoints,
     enemyBaseAnchors,
     enemyBaseRoute,

@@ -152,7 +152,54 @@ yapmistir (`src/game/rts/territory/territoryControlSystem.ts:22`), yani
 "ucuncu sahip" fikri kod tabaninda yabanci degildir; ornek alinacak desen
 oradadir.
 
-### 3.6 Savas tarafi - isci karsilik verme yolu
+### 3.6 Kritik bulgu - `characters[]` RTS'te gorunmez (Faz 1'de olculdu)
+
+Content Browser'dan sahneye birakilan bir skeletal mesh, Level'in
+**`characters[]`** dizisine yazilir. Bu dizi:
+
+- **editor viewport'unda cizilir** (`SceneApp` karakterleri isler), ama
+- **`?rts` Play rotasinda cizilmez.** Dogrulandi: `src/game/rts/**` altinda
+  `characters` gecen tek satir yoktur; `loadRtsAuthoredWorld`'un sardigi
+  `src/scene/authoredWorld.ts` yalnizca `instances`, `lights`, `landscapes`,
+  `splines`, `riverWaters` ve foliage mount eder.
+
+RTS yolunda `actors[]` **veri tasiyan marker**'lardir; `rtsLevelAdapter` onlari
+okur (`BP_RTS_Tree`, `BP_RTS_KingdomStart`, `Resource *`) ve agaci/yatagi
+RtsApp kendisi cizer. Yani RTS'te bir canliyi haritaya koymanin yolu
+`characters[]` degil, **marker actor + onu spawn eden sistem**dir.
+
+Sonuc - bu plan icin bir degisiklik gerektirmez, tersine plani dogrular:
+suruler `BP_RTS_Herd` marker'i olarak author edilir (§5.1, Faz 2) ve
+`WildlifeSystem` tarafindan spawn edilir. Ancak bu, **Faz 1'in gorsel kabulunun
+neden editorde yapildigini** ve hayvanlarin Play'de neden ancak Faz 2'den sonra
+gorunecegini acikca kaydeder. Genel `characters[]` parity bosluğu bu planin
+kapsami disindadir; ayri bir isdir.
+
+### 3.7 Ikinci bulgu - `characters[]` animasyonu klip adini birebir arar
+
+`characters[]` yolunun animasyonu, sidecar'in `animationSet`'ini **hic
+okumaz**. `createSceneCharacterMixer` (`src/scene/SceneRuntimeCore.ts:786`)
+dogrudan klip adiyla eslesir:
+
+```ts
+const clip = animationName ? gltf.animations.find((c) => c.name === animationName) : null;
+if (!clip) return null;   // eslesme yoksa mixer yok, yani hic animasyon yok
+```
+
+Content Browser'dan birakilan karakterin varsayilan `animation` degeri ise
+`"idle"`dir (`src/scene/SceneApp.ts:3124`) - **kucuk harfle**. Hayvan
+varliklari `Idle` (buyuk I) tasir, dolayisiyla esleme basarisiz olur ve hayvan
+sessizce hareketsiz kalir. Details panelindeki alan zaten "Clip (Play)"
+etiketlidir ve gercek klip adlarini listeler; dogru deger elle secilebilir.
+
+Bu, §3.6 ile birlesince Faz 1'in gorsel kabulunun **nerede** yapilmasi
+gerektigini kesinlestirir: klip oynatimi **Skeletal Mesh Editor**'un kendi
+onizlemesinde dogrulanir (`SkeletalMeshEditor.ts` klip secip oynatir ve
+`animationSet`'i kullanir). Viewport'a birakilan bir karakter, sidecar'i degil
+ham klip adini kullandigi icin sidecar'in dogrulugu hakkinda **hicbir sey
+soylemez**.
+
+### 3.8 Savas tarafi - isci karsilik verme yolu
 
 `src/game/rts/units/unitCombat.ts:60`:
 
@@ -409,6 +456,11 @@ Amac: Hayvanin ekranda dogru klibi oynatmasi. Bu fazda hicbir oynanis yoktur.
 - [x] `BP_RTS_Deer.actor.json` / `BP_RTS_Stag.actor.json` yazildi
   (`BP_RTS_Worker.actor.json` deseni, `SkeletalMeshComponent` + `assetId`
   `deer`/`stag`, `selectionRadius` 0.6 / 0.7).
+- [x] Model olcegi actor'e kondu: Deer `scale: [0.2, 0.2, 0.2]` (kullanici
+  kararı, editorde denenerek bulundu), Stag `0.22` (ayni rig, biraz iri olan
+  tur - **turetilmis varsayim**, kullanici duzeltebilir). Olcek burada durur
+  cunku `rtsActorPresentationTree.ts:114` `props.scale`'i okuyup uygular; yani
+  Faz 2'de suru spawn'i dogru boyutta gelir.
 - [x] Klip adlarinin gltf'te gercekten var oldugu engine testiyle pinlendi:
   "RTS wildlife sidecars name clips the shipped animal models actually carry".
   Testin kirmizyya donebildigi dogrulandi (Deer'a kopek ailesinin `Attack`
@@ -437,35 +489,66 @@ Kabul:
 
 - [x] `npx tsc --noEmit`, `npm run test:engine` (1198 check) ve
   `npm run build:verify` (`verify:dist --strict` dahil) yesil.
-- [ ] **Gorsel kabul kullanicidadir:** hayvanlar manifest'te zaten
-  `placeable: true` / `surface: "character"` oldugu icin geyik **editorde
-  sahneye birakilarak** ve Skeletal Mesh Editor'de sidecar onizlemesiyle
-  dogrulanir; runtime spawn'i beklemez. Geyik dogru olcekte, dik ve `Idle`
-  oynatiyor olmalidir. Bunun icin Playwright/screenshot kaniti uretilmez;
-  kullaniciya bakmasi soylenir (CLAUDE.md kurali).
+- [x] **Gorsel kabul alindi (2026-08-02).** Kullanici Skeletal Mesh Editor'de
+  dogruladi: 13 klibin tamami oynuyor ve rol eslemeleri
+  (`idle`/`walk`/`run`/`work`/`attack`/`death`) dogru. §3.6/§3.7 geregi
+  viewport'a birakilan bir karakter ne `?rts` Play'de gorunur ne de sidecar'i
+  kullanir; klip oynatimini dogrulayan tek yer Skeletal Mesh Editor'un kendi
+  onizlemesidir. Bunun icin Playwright/screenshot kaniti uretilmedi;
+  kullaniciya bakmasi soylendi (CLAUDE.md kurali).
+
+**Faz 1 tamamlandi (2026-08-02).**
 
 ### Faz 2 - `WildlifeSystem` ve dolasma (oynanis yok)
 
 Amac: Hayvanlarin haritada var olmasi ve dolasmasi. Avlanma yoktur.
 
-- [ ] `wildlifeSystem.ts`: renderer'siz suru/hayvan durumu, `snapshots()`,
-  `liveAnimalsNear()`.
-- [ ] `wildlifeRoaming.ts`: saf dolasma (suru merkezi + `roamRadius`).
-- [ ] `CombatTargetOwner` genisletmesi yapilir; hayvan `CombatTarget` uyumlu
-  olur ama henuz kimse hedef almaz.
-- [ ] `RtsSpatialLayout.herds` + `rtsLevelAdapter`'da `BP_RTS_Herd` vakasi.
-- [ ] `RTS_BLOCKOUT_MAP` fallback'ine suru eklenir.
-- [ ] `animals.json` + `validateGameData` dogrulamalari.
-- [ ] `rts-content.json`'a `animals` bolumu (Faz 1'den tasindi); anahtarlari
+- [x] `wildlifeSystem.ts`: renderer'siz suru/hayvan durumu, `snapshots()`,
+  `liveAnimalsNear()`, `all()`.
+- [x] `wildlifeRoaming.ts`: saf dolasma (suru merkezi + `roamRadius`) + **seed'li
+  PRNG**. `Math.random` kasitli olarak kullanilmadi: bir hayvanin nerede
+  durdugu avcinin ona erisip erisemeyecegini belirler, yani dolasma dekor
+  degil simulasyondur ve headless AI ile oyuncunun ayni tarlayi gormesi
+  gerekir. Seed hayvan id'sinden turetilir.
+- [x] `wildlifeView.ts` (planda yoktu, gerekti): snapshot'lari Object3D'ye
+  baglayan sunum katmani. Otlayan hayvan `working: true` ile `work` roluna,
+  yani `Eating` klibine duser - duran sure heykel tarlasina donmez.
+- [x] `CombatTargetOwner` genisletmesi yapildi; hayvan `CombatTarget` uyumlu
+  ama kimse hedef almiyor (`engagementSystem`'e verilmiyorlar).
+- [x] `RtsSpatialLayout.herds` + `rtsLevelAdapter`'da `BP_RTS_Herd` vakasi +
+  `BP_RTS_Herd.actor.json` marker'i.
+- [x] `RTS_BLOCKOUT_MAP` fallback'ine suru eklendi.
+- [x] **Iki Level'a da suru marker'i eklendi** (`RTS_CoreMatch`,
+  `RTS_GameplayProof`). Bu planda yoktu ve atlanirsa Faz 2 gorunmez olurdu:
+  `?rts` rotasi Level'i yukler, blockout fallback'ini degil, yani yalniz
+  blockout'a eklenen suru kimsenin oynamadigi haritada otlardi. Engine testi
+  bunu artik pinliyor.
+- [x] `animals.json` + `validateGameData` dogrulamalari + editor Data Table
+  girdisi ("Hayvan Dengesi"), boylece denge elle ayarlanabilir.
+- [x] `rts-content.json`'a `animals` bolumu (Faz 1'den tasindi); anahtarlari
   `animals.json`'a karsi dogrulanir, `RtsContentCatalogValidationContext`'e
-  `animalBalance` eklenir; `rtsContentValidation.ts` ve `rtsContentCatalog.ts`
+  `animalBalance` eklendi; `rtsContentValidation.ts` ve `rtsContentCatalog.ts`
   bolumu tanir.
-- [ ] `RtsApp` hayvanlari mount eder ve update sirasina baglar.
-- [ ] Hayvanlar **NavBlocker uretmez** (§9); ayrim `unitSeparation` isidir.
-- [ ] Hayvanlar nufus saymaz - engine testiyle pinlenir (§8).
+- [x] `RtsApp` hayvanlari mount eder ve update sirasina baglar: otlama
+  **simulasyon delta'sinda** (oyun hizi kontrolu hayvani da tasir), sunum
+  **render delta'sinda** (herhangi bir hizda ayni gorunur) - birimlerin
+  ayrimiyla ayni.
+- [x] Hayvanlar **NavBlocker uretmez** (§9) ve nav ajani da degildir; bir sure
+  avlanabilir dekordur, hayvan basina kare basina yol bulma en onemsiz sorunu
+  cozmenin en pahali yolu olurdu.
+- [x] Hayvanlar nufus saymaz - engine testiyle pinlendi (§8).
+- [x] Hayvanlar `syncUnitsToGround` ile ayni zemin yuzeyine oturtulur. Planda
+  yoktu; hayvan 2D dolastigi ve nav grid'e hicbir sey sormadigi icin bu
+  olmadan author edilmis bir Landscape'te y = 0'da kalir, yani zemine gomulur
+  ya da havada otlar.
 
-Kabul: sure haritada dolasir, `Idle`/`Walk` arasi gecer, nufus ve AI
-sayaclarinda hicbir degisiklik olmaz.
+Kabul:
+
+- [x] `npx tsc --noEmit`, `npm run test:engine` (1205 check) ve
+  `npm run build:verify` yesil.
+- [ ] **Gorsel kabul kullanicidadir:** `?rts` Play rotasinda sure haritada
+  dolasir, dururken otlar (`Eating`), yururken `Walk` oynatir; nufus ve AI
+  sayaclarinda hicbir degisiklik olmaz.
 
 ### Faz 3 - Kaynak arayuzu tekillestirmesi
 
@@ -625,7 +708,7 @@ geyik de avlar - harita canli gorunur, bedava atmosfer.
 
 `Fox` korunmasiz tarla tamponundan calip kacar, ya da tamamen ambiyanstir.
 
-Maliyet: dusuk (V1 altyapisi uzerine). Onkosul: §3.6'daki karsilik verme
+Maliyet: dusuk (V1 altyapisi uzerine). Onkosul: §3.8'deki karsilik verme
 yolunun dogrulanmasi.
 
 ### V4 - Esek lojistigi (Donkey) - en yuksek getirili madde

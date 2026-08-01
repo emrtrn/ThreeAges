@@ -200,32 +200,11 @@
     },
     {
       "assetId": "crate-big-stack2",
-      "placements": [
-        {
-          "position": [
-            -1.03,
-            0,
-            19.51
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "barrel",
-      "placements": [
-        {
-          "position": [
-            -0.1,
-            0,
-            19.74
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "dock-firstage",
@@ -269,18 +248,185 @@
           "scale": 3
         }
       ]
+    },
+    {
+      "assetId": "birchtree-1",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-2",
+      "placements": []
+    },
+    {
+      "assetId": "bush-flowers",
+      "placements": []
+    },
+    {
+      "assetId": "bush-large-flowers",
+      "placements": []
+    },
+    {
+      "assetId": "bush-large",
+      "placements": []
+    },
+    {
+      "assetId": "bush-small-flowers",
+      "placements": []
+    },
+    {
+      "assetId": "bush-small",
+      "placements": []
+    },
+    {
+      "assetId": "bush",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-1",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-5",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-4",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-3",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-10",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-2",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-3",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-4",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-5",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-6",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-7",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-8",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-9",
+      "placements": []
+    },
+    {
+      "assetId": "flower-1-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-1",
+      "placements": []
+    },
+    {
+      "assetId": "flower-2-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-2",
+      "placements": [
+        {
+          "position": [
+            -48.7,
+            0.01,
+            50.04
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "flower-3-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-4-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-5-clump",
+      "placements": []
+    },
+    {
+      "assetId": "grass-large-extruded",
+      "placements": []
+    },
+    {
+      "assetId": "grass-large",
+      "placements": []
+    },
+    {
+      "assetId": "grass-small",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-1",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-2",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-3",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-4",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-5",
+      "placements": []
     }
   ],
   "characters": [
     {
-      "assetId": "ual1-standard-rm",
+      "assetId": "deer",
       "position": [
-        -0.85,
-        0,
-        18.84
+        0.83,
+        0.01,
+        20.12
       ],
-      "animation": "idle",
-      "name": "ual1-standard-rm",
+      "animation": "Walk",
+      "name": "deer",
+      "scaleLocked": true,
+      "rotationYDeg": 0,
+      "scale": 0.2
+    },
+    {
+      "assetId": "deer",
+      "position": [
+        -34.86,
+        0.01,
+        41.79
+      ],
+      "animation": "Eating",
+      "name": "deer",
       "rotationYDeg": 0,
       "scale": 0.42
     }
@@ -3976,6 +4122,51 @@
         "width": 10,
         "depth": 10,
         "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        -30.0,
+        0,
+        22.0
+      ],
+      "name": "Herd player-deer",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "player-deer",
+        "species": "deer",
+        "count": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        30.0,
+        0,
+        -22.0
+      ],
+      "name": "Herd enemy-deer",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "enemy-deer",
+        "species": "deer",
+        "count": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        0.0,
+        0,
+        16.0
+      ],
+      "name": "Herd central-stag",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "central-stag",
+        "species": "stag",
+        "count": 4
       }
     }
   ]

@@ -13,6 +13,7 @@ import { logger } from "../core/logger";
 import {
   validateAiBalance,
   validateAgeBalance,
+  validateAnimalBalance,
   validateGamePreset,
   validateGameVersion,
   validateBuildingBalance,
@@ -21,7 +22,7 @@ import {
   validateRoadBalance,
   validateUnitBalance,
 } from "./validateGameData";
-import type { AgeBalance, AiBalance, BuildingBalance, GamePreset, GameVersion, ResourceBalance, RoadBalance, UnitBalance } from "./gameDataTypes";
+import type { AgeBalance, AiBalance, AnimalBalance, BuildingBalance, GamePreset, GameVersion, ResourceBalance, RoadBalance, UnitBalance } from "./gameDataTypes";
 import type { MissionScript } from "../rts/tutorial/missionScript";
 
 const log = logger("Data");
@@ -85,6 +86,14 @@ export async function loadResourceBalance(): Promise<ResourceBalance> {
   const url = `${GAME_DATA_ROOT}/balance/resources.json`;
   const balance = validateResourceBalance(await fetchJson(url));
   log.debug(`loaded resource balance (${Object.keys(balance).length} definitions)`);
+  return balance;
+}
+
+/** Load and validate the huntable species table. */
+export async function loadAnimalBalance(): Promise<AnimalBalance> {
+  const url = `${GAME_DATA_ROOT}/balance/animals.json`;
+  const balance = validateAnimalBalance(await fetchJson(url));
+  log.debug(`loaded animal balance (${Object.keys(balance).length} species)`);
   return balance;
 }
 

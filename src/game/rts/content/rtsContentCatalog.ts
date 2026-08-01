@@ -5,7 +5,7 @@
  * authored Actor/UI assets. Gameplay numbers remain in balance JSON; the
  * catalog never becomes a second source for cost, health, timing, or rules.
  */
-import type { BuildingBalance, SettlementAge, UnitBalance } from "@/game/data/gameDataTypes";
+import type { AnimalBalance, BuildingBalance, SettlementAge, UnitBalance } from "@/game/data/gameDataTypes";
 import type { UnitOwner } from "@/game/rts/units/unit";
 
 /**
@@ -40,6 +40,18 @@ export interface RtsUnitContentEntry {
    * never changes cost, health, AI, or navigation.
    */
   readonly ownerActorRefs?: Readonly<Partial<Record<UnitOwner, RtsActorRef>>>;
+}
+
+/**
+ * One huntable species' art.
+ *
+ * No `ownerActorRefs` twin of {@link RtsUnitContentEntry}: wildlife belongs to
+ * no kingdom, so there is no second owner whose art could differ. A tamed animal
+ * (the pasture, V2) would be the first thing to want one, and it can add the
+ * field then rather than carrying an always-empty one now.
+ */
+export interface RtsAnimalContentEntry {
+  readonly actorRef: RtsActorRef;
 }
 
 export interface RtsBuildingContentEntry {
@@ -213,6 +225,8 @@ export interface RtsContentCatalog {
   readonly type: "rtsContentCatalog";
   readonly units: Readonly<Record<string, RtsUnitContentEntry>>;
   readonly buildings: Readonly<Record<string, RtsBuildingContentEntry>>;
+  /** Huntable species art, keyed by the `balance/animals.json` species id. */
+  readonly animals: Readonly<Record<string, RtsAnimalContentEntry>>;
   /** Manifest asset ids. UI migration starts in Faz F, so these are optional now. */
   readonly ui: Readonly<Record<string, string>>;
   /** Health-driven damage/collapse presentation; see {@link rtsBuildingDamagePresentation}. */
@@ -222,6 +236,7 @@ export interface RtsContentCatalog {
 export interface RtsContentCatalogValidationContext {
   readonly unitBalance: UnitBalance;
   readonly buildingBalance: BuildingBalance;
+  readonly animalBalance: AnimalBalance;
 }
 
 /**
@@ -240,6 +255,11 @@ export function rtsUnitActorRef(
   const entry = catalog.units[unitId];
   if (!entry) return null;
   return entry.ownerActorRefs?.[owner] ?? entry.actorRef;
+}
+
+/** Resolve a species' Actor, or null when the catalog does not map it. */
+export function rtsAnimalActorRef(catalog: RtsContentCatalog, species: string): RtsActorRef | null {
+  return catalog.animals[species]?.actorRef ?? null;
 }
 
 /**
@@ -438,6 +458,29 @@ function validateUnits(value: unknown, context: RtsContentCatalogValidationConte
         ? {}
         : { ownerActorRefs: validateOwnerActorRefs(entry["ownerActorRefs"], `${entryWhere}.ownerActorRefs`) }),
     };
+  }
+  return entries;
+}
+
+/**
+ * Species art, cross-checked against the balance table exactly as units are.
+ *
+ * The check is the point: a typo'd species would otherwise load "successfully"
+ * and then produce a herd of placeholders at spawn, when nothing is reporting on
+ * the catalog any more.
+ */
+function validateAnimals(value: unknown, context: RtsContentCatalogValidationContext): RtsContentCatalog["animals"] {
+  const where = "rts-content.json.animals";
+  const rawEntries = asObject(value, where);
+  const entries: Record<string, RtsAnimalContentEntry> = {};
+  for (const [id, raw] of Object.entries(rawEntries)) {
+    if (!context.animalBalance[id]) {
+      throw new RtsContentCatalogError(`${where}: unknown animal balance id "${id}"`);
+    }
+    const entryWhere = `${where}."${id}"`;
+    const entry = asObject(raw, entryWhere);
+    requireExactKeys(entry, ["actorRef"], entryWhere);
+    entries[id] = { actorRef: requireActorRef(entry["actorRef"], `${entryWhere}.actorRef`) };
   }
   return entries;
 }
@@ -824,7 +867,7 @@ export function validateRtsContentCatalog(
 ): RtsContentCatalog {
   const where = "rts-content.json";
   const obj = asObject(value, where);
-  requireExactKeys(obj, ["schema", "type", "units", "buildings", "ui", "damage"], where);
+  requireExactKeys(obj, ["schema", "type", "units", "buildings", "animals", "ui", "damage"], where);
   if (obj["schema"] !== RTS_CONTENT_CATALOG_SCHEMA) {
     throw new RtsContentCatalogError(`${where}.schema: expected ${RTS_CONTENT_CATALOG_SCHEMA}`);
   }
@@ -837,6 +880,7 @@ export function validateRtsContentCatalog(
     type: "rtsContentCatalog",
     units: validateUnits(obj["units"], context),
     buildings,
+    animals: validateAnimals(obj["animals"], context),
     ui: validateUi(obj["ui"]),
     damage: validateDamage(obj["damage"], new Set(Object.keys(buildings))),
   };
