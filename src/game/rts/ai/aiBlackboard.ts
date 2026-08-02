@@ -19,7 +19,7 @@ import type { PlacedStructureSystem } from "../structures/placedStructureSystem"
 import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { KingdomProgressionSystem } from "../progression/kingdomProgressionSystem";
-import type { EconomyProductionSystem } from "../economy/economyProductionSystem";
+import { producerHasSource, type EconomyProductionSystem } from "../economy/economyProductionSystem";
 import type { ProductionLogisticsSystem } from "../economy/productionLogisticsSystem";
 import type { AiArmyMission, AiExpansionStep, AiIntent, AiPlan } from "./aiTypes";
 import type { AiVisionFilter } from "./aiVisionFilter";
@@ -44,6 +44,20 @@ export interface AiBlackboard {
   readonly population: number;
   readonly populationCap: number;
   readonly buildingCounts: Readonly<Record<string, number>>;
+  /**
+   * §19 ResourceIncome's missing half: how many completed producers *can still
+   * work a source* for each resource, keyed by resource id rather than by
+   * building id.
+   *
+   * §37's "no food production" is a question about supply, not about a
+   * particular building: measured as `buildingCounts["farm"]` it reads a
+   * kingdom fed entirely by hunting (or, later, by a port) as starving, and it
+   * reads a hunting camp whose herd has been eaten as a food supply. Both
+   * errors point the AI at the wrong repair. Depleted producers are excluded
+   * here — {@link producerHasSource} — which is what makes "the herd ran out,
+   * go build a farm" fall out of the same bottleneck the opening uses.
+   */
+  readonly resourceProducerCounts: Readonly<Record<string, number>>;
   /** Completed producers whose output cannot currently reach a depot (§37). */
   readonly disconnectedProducers: number;
   /** §19 ActiveExpansion: how far the §47 recipe has run. */
@@ -195,6 +209,14 @@ export class AiBlackboardReader {
       buildingCounts[structure.stats.id] = (buildingCounts[structure.stats.id] ?? 0) + 1;
     }
 
+    // Keyed by resource, not by building: what the economy is short of is a
+    // supply, and which building supplies it is data (`balance/buildings.json`).
+    const resourceProducerCounts: Record<string, number> = {};
+    for (const producer of production.snapshots(owner)) {
+      if (!producerHasSource(producer.status)) continue;
+      resourceProducerCounts[producer.resourceId] = (resourceProducerCounts[producer.resourceId] ?? 0) + 1;
+    }
+
     const disconnectedProducers = logistics.snapshots()
       .filter((producer) => producer.owner === owner && producer.status !== "linked").length;
 
@@ -219,6 +241,7 @@ export class AiBlackboardReader {
       population: populationSnapshot.used,
       populationCap: populationSnapshot.capacity,
       buildingCounts,
+      resourceProducerCounts,
       disconnectedProducers,
       expansionStep: context.expansionStep,
       expansionPlanAvailable: context.expansionPlanAvailable,

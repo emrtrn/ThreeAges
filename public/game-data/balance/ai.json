@@ -56,6 +56,7 @@
       "settlement": {
         "house": 4,
         "farm": 1,
+        "hunting_camp": 1,
         "lumber_camp": 1,
         "quarry": 1,
         "gold_mine": 1,
@@ -66,6 +67,7 @@
       "town": {
         "house": 6,
         "farm": 2,
+        "hunting_camp": 1,
         "lumber_camp": 2,
         "quarry": 1,
         "gold_mine": 1,

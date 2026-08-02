@@ -1,8 +1,9 @@
 # ThreeAges RTS Yaban Hayati, Avcilik ve Hayvan Varliklari Plani
 
 Olusturulma tarihi: 2026-08-01
-Durum: Faz 0-5 tamamlandi ve gorsel kabul aldi (2026-08-02). §2'deki 1-7
-adimlari oyunda calisiyor. Sirada Faz 6 - AI uyumu. Kararlar §4te kilitli.
+Durum: Faz 0-6 tamamlandi (2026-08-02); Faz 0-5 gorsel kabul aldi. §2'deki 1-8
+adimlari oyunda calisiyor. Sirada Faz 7 - sis, seviye icerigi ve kabul maci.
+Kararlar §4te kilitli.
 Kapsam: `public/assets/ThreeAges/Animals/` altindaki 12 animasyonlu hayvan
 modelini, oyunun ekonomi/savas/lojistik cercevesine oturan gercek RTS
 sistemlerine cevirmek. V1 hedefi **avlanma**dir; kalan turler icin yol haritasi
@@ -821,14 +822,91 @@ avcilikla beslenen bir ekonomiyi ac sanmamasi (Faz 6) ve sis + kabul maci
 
 ### Faz 6 - AI uyumu
 
-- [ ] `aiEconomyManager` yiyecek olcusu "tarla sayisi"ndan "yiyecek ureten
-  yapi"ya cevrilir. **Liman planiyla ortak duzeltmedir**; iki plandan hangisi
-  once uygularsa digeri devralir.
-- [ ] AI suru yakinina avci kulubesi kurabilir (`aiBuildManager`).
-- [ ] AI, tukenmis suruden kulubeyi terk edip tarlaya gecebilir.
-- [ ] `ai.json` `buildingTargets` guncellenir.
+- [x] `aiEconomyManager` yiyecek olcusu bina adindan **kaynak kimligine**
+  cevrildi. Blackboard'a `resourceProducerCounts` eklendi: tamamlanmis
+  ureticiler **kaynak basina** sayilir ve kaynagi bitmis olan sayilmaz
+  (`producerHasSource`, `economyProductionSystem.ts`). **Liman planiyla ortak
+  duzeltmedir**; liman `resourceId: "food"` tasidigi gun hicbir ek is
+  gerektirmeden ayni olcuye girer.
+- [x] AI suru yakinina avci kulubesi kurabilir. Bu **`aiBuildManager`
+  degisikligi cikmadi** (§5.1 tablosu onu tahmin ediyordu): §40 geregi aday
+  yerler serbest arama degil **author edilmis anchor**tir, yani is iki yerde
+  bitti - `buildOrder`'a bir satir ve haritaya bir anchor.
+- [x] AI, tukenmis suruden kulubeyi terk edip tarlaya gecer. Buna da **yeni
+  kural yazilmadi**; asagida.
+- [x] `ai.json` `buildingTargets`: `hunting_camp: 1` (yerlesim ve kasaba).
 
-Kabul: avcilikla beslenen AI kendini ac sanmaz; kasabaya gecis kilitlenmez.
+**Olcu neden dort kaynagin hepsine uygulandi.** Plan yalniz yiyecegi istiyordu,
+ama `detectBottleneck` ayni hatayi dort kez yapiyordu: odun `lumber_camp`
+sayisi, tas `quarry`, altin `gold_mine`. Hepsi ayni iki yonde yaniliyor -
+kaynagini baska bir bina veren ekonomiyi ac sanmak, ve **kaynagi bitmis** bir
+binayi arz saymak. Ikinci yon avcilikta teorik degil: kulube tukenmis suruden
+sonra ayakta kalir. Dort satirin dordu de `resourceProducerCounts` okuyunca AI
+darbogaz sozlugu bina adlarindan tamamen kurtuldu ve **kod kisaldi**.
+
+**Kulube acilis sirasinda nereye kondu.** Iki temel uretecinin arkasina,
+askeriyenin onune (`buildOrder`). Tarlanin arkasinda cunku kasaba gecisi
+tarlayi **adiyla** sart kosuyor; yalniz avla acan bir AI hic kurmadigi bir
+binaya takilirdi. Askeriyenin onunde cunku suru, haritada degeri **yalniz
+azalan** tek varlik: kulubenin toplam verimi surunun tuttugu ete esittir, yani
+gec kurulan kulube kucuk kurulmus kulubedir.
+
+**"Tukenen suruden tarlaya gecis" neden kendiliginden calisiyor.** Uc mevcut
+davranisin toplami: (1) tukenen kulube iscilerini birakir (Faz 5'te pinlendi),
+(2) `resourceProducerCounts` onu artik yiyecek arzi saymaz, yani
+`no-food-production` **dogru anda** doner, (3) `short("hunting_camp")` yanlis
+kalir (bina hala ayakta, hedef 1) ve sira dogal olarak tarlaya duser. Bu, "suru
+bitti" diye bir AI kurali yazmadan cikan sonuctur; yazsaydik ayni seyi iki
+yerden bilen bir sistem olurdu.
+
+**Anchor: `atEnemyBase(-12, 12)` = (26,-26).** Uc kisitin ayni anda saglandigi
+tek nokta:
+
+- `enemy-deer` suru merkezine 5.7 birim; hayvan `roamRadius` 10'un en uzak
+  kenarinda otlasa bile kulubenin 18 birimlik menzilinde kalir.
+- Tas ocagi slotuna (32,-26) **tam 6 birim** - iki 6x6 ayak izi kenar kenara,
+  ust uste degil.
+- z = -30 yol omurgasindan bir yol hucresi otede. Bu ucuncusu atlanabilir
+  gorunuyordu ve degildi: yol degmeyen bir uretici tamponunu doldurup durur,
+  yani suru dibindeki ama teslimat yapamayan bir kulube **yiyecek arzi degil,
+  `disconnectedProducers` sayacinda bir satirdir**.
+
+Anchor hem `RTS_BLOCKOUT_MAP`'e hem **iki Level'a** eklendi; CoreMatch blockout
+aynasi oldugu icin sira da birebir korundu.
+
+**Test kosumuna yaban hayati baglandi (`aiTestWorld`).** Planda yoktu, zorunlu
+cikti: AI harness'inda `WildlifeSystem` yoktu, yani AI'nin kurdugu kulube
+`missing-game` bildirir, hicbir sey uretmez ve "AI avla yasayabilir" iddiasi
+tam da onu olcecek harness'ta olculemezdi. Ormanin ayni sebeple eklenmis olmasi
+(`RTS_BLOCKOUT_MAP.trees`) burada da gecerli. Ekleme RtsApp'i birebir taklit
+eder: ayni suruler, ayni `missing-game` yerlestirme dali, ve `update` sirasi
+hareket **sonrasi** / uretim **oncesi**.
+
+Kabul:
+
+- [x] `npx tsc --noEmit`, `npm run test:engine` (1212 check),
+  `npm run build:verify` ve `npm run check:assets` yesil.
+- [x] Olcu sozlesmesi pinlendi: "Faz 6: a kingdom fed by hunting is not
+  diagnosed as starving, and a spent camp is". Iki yon de ayri ayri: yalniz
+  kulubeyle beslenen ekonomi darbogazsiz, ayni ekonomi suru bitince
+  `no-food-production` - ve ardindan istenen bina **tarla**.
+- [x] Harita sozlesmesi pinlendi: "Faz 6: the AI's hunting camp anchor is
+  authored on a herd it can work and a road it can ship from". Menzil iki
+  tablodan hesaplanir (mesafe + `roamRadius` <= `gatherRadius`), yol temasi
+  author edilmis omurga gercekten dosenip `roadCellTouchingFootprint` ile
+  olculur. Editorde suru marker'i tasindiginda kirmiziya donen test budur.
+- [x] Acilis testi genisletildi: AI ~5 dakikalik acilisinda kulubeyi gercekten
+  **kuruyor** ve kurdugu kulube `missing-game` bildirmiyor - "sirada var"
+  degil, "yasal bir yere ulasti".
+- [x] Olcek testi: `roamRadius` ve `gatherRadius` yariya indirilerek kosuldu.
+  Ilk kirilan **bu fazin testi degil**, Faz 5'in mevcut av dongusu testi oldu
+  (menzili yarilanan kulube kendi surusune yetismiyor) - yani yeni testler
+  suitin mevcut ayar duyarliligini artirmiyor. `animals.json`/`buildings.json`
+  x2 kosumu ise GDD'nin kendi gorus yaricapi tavanina (<= 35) takiliyor; bu da
+  bu fazdan bagimsiz, validator'un kasitli siniri.
+
+Kabul olcutu (avcilikla beslenen AI kendini ac sanmaz; kasabaya gecis
+kilitlenmez) saglandi. **Faz 6 tamamlandi (2026-08-02).** Sirada Faz 7.
 
 ### Faz 7 - Sis, seviye icerigi ve kabul maci
 
@@ -868,6 +946,13 @@ sozlesme** dogrulanir; hicbir test bir buyuklugu pinlemez.
 - [x] **Rezervasyon (Faz 5'te uygulandi):** bir hayvani ayni anda iki avci
   rezerve edemez; rezervasyon kacisi asar ve birakildiginda hayvan yeniden
   alinabilir.
+- [x] **AI olcusu (Faz 6'da uygulandi):** yalniz avcilikla beslenen bir ekonomi
+  darbogazsiz okunur, kaynagi bitmis bir kulube ise yiyecek arzi sayilmaz.
+  Hicbir buyukluk pinlenmez; olculen sey hangi **kaynagin** uretildigidir.
+- [x] **Harita/tablo uyumu (Faz 6'da uygulandi):** AI'nin avci kulubesi
+  anchor'i, bir surunun tum dolasma cemberini menzilinde tutar ve author
+  edilmis yol omurgasina deger. Mesafe haritadan, yaricaplar iki tablodan
+  hesaplanir.
 - [x] **Validator:** sifir/negatif `meatCapacity` (Faz 2) ve yakalanamaz kacis
   ayari (Faz 5) `validateGameData` tarafindan dosya ve alan adiyla reddedilir.
   `roamRadius >= gatherRadius` iki tablo birden gerektirdigi icin engine

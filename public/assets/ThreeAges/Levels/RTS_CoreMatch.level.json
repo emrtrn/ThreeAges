@@ -3075,6 +3075,20 @@
       }
     },
     {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        26,
+        0,
+        -26
+      ],
+      "name": "Enemy hunting_camp (26,-26)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "hunting_camp",
+        "regionId": "enemy-base"
+      }
+    },
+    {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
         10,

@@ -38684,6 +38684,32 @@ check("RTS workers, production and logistics never cross kingdoms", () => {
 // --- Faz 5 §38: AI temel yapı (blackboard, director, army, decision log) ---
 
 /** A neutral blackboard; each test perturbs only the fields it is about. */
+/**
+ * Which resource each building supplies, read off the shipped balance.
+ *
+ * The blackboard counts producers per *resource* rather than per building id, so
+ * a fixture that says "a farm stands" has to keep meaning "a food producer
+ * stands". Deriving the mapping from `buildings.json` instead of restating it
+ * here is what keeps that true when a building's resource is retuned — and what
+ * lets a hunting camp count as food without a single fixture being rewritten.
+ */
+const AI_TEST_PRODUCER_RESOURCES: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  )).flatMap(([id, stats]) => (stats.economy ? [[id, stats.economy.resourceId] as const] : [])),
+);
+
+/** Building counts as the blackboard reports them: per resource, all sources live. */
+function aiTestProducerCounts(buildingCounts: Readonly<Record<string, number>>): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const [buildingId, count] of Object.entries(buildingCounts)) {
+    const resourceId = AI_TEST_PRODUCER_RESOURCES[buildingId];
+    if (resourceId === undefined) continue;
+    counts[resourceId] = (counts[resourceId] ?? 0) + count;
+  }
+  return counts;
+}
+
 function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
   return {
     // Past the §53 (4) non-aggression window, for the same reason the economy
@@ -38703,6 +38729,10 @@ function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
     population: AI_TEST_BALANCE.economy.workerTarget.settlement,
     populationCap: 20,
     buildingCounts: {},
+    // Derived, not defaulted to empty: every fixture that stands a producer up
+    // means it to be producing, and a hand-written default here would quietly
+    // make each of them a base with buildings and no supply.
+    resourceProducerCounts: aiTestProducerCounts(overrides.buildingCounts ?? {}),
     disconnectedProducers: 0,
     expansionStep: "outpost",
     expansionPlanAvailable: true,
@@ -38808,6 +38838,11 @@ function aiTestWorld(
   // were handed thousands of starting wood. A wood economy cannot be tested
   // against a world with no trees in it.
   const forests = new ForestSystem(RTS_BLOCKOUT_MAP.trees);
+  // As in RtsApp: the map's real herds, for the same reason the groves are here.
+  // Without them the AI's hunting camp reports `missing-game` forever, so the one
+  // food source that is *not* a farm would be untestable in the harness that
+  // drives the AI — and Faz 6's whole claim is that the AI can live off it.
+  const wildlife = new WildlifeSystem(shippedAnimalBalance(), RTS_BLOCKOUT_MAP.herds);
   // As in RtsApp: production must not re-grab a worker that is mid-construction.
   // The two systems reference each other, so the link is resolved lazily.
   let workerConstructionRef: WorkerConstructionSystem | null = null;
@@ -38818,6 +38853,7 @@ function aiTestWorld(
     (unit) => workerConstructionRef !== null && workerConstructionRef.stateFor(unit) !== "idle",
     resourceNodes,
     forests,
+    wildlife,
   );
   const roads = new RoadGraph(balance);
   const depots = new DepotLogisticsSystem(structures, roads);
@@ -38876,7 +38912,12 @@ function aiTestWorld(
       : stats.economy?.requiresForest
         && !forests.hasLiveTreeNear(x, z, stats.economy.gatherRadius ?? 0, stats.footprint)
         ? "missing-forest"
-        : null,
+        // As in RtsApp: a hunting camp needs live game in reach, and only live —
+        // a herd that has already been eaten must not keep justifying a camp.
+        : stats.economy?.requiresGame
+          && wildlife.liveAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
+          ? "missing-game"
+          : null,
     // As in RtsApp: roads, standing trees and live deposits reserve build space
     // without blocking navigation, so a camp is placed beside a grove and a mine
     // beside a deposit, never on top. This is also the blocker set that makes the
@@ -38957,6 +38998,10 @@ function aiTestWorld(
   const step = (dt: number) => {
     kingdoms.advance(dt);
     updateUnitMovement(units.all(), dt);
+    // After movement and before production, exactly as RtsApp orders it: the herd
+    // reacts to where the bodies on the field are *now*, and the hunt loop then
+    // reads the position the animal actually bolted to.
+    wildlife.update(dt, units.all().map((unit) => unit.position));
     workerConstruction.update(dt);
     production.update(dt);
     transfers.update();
@@ -38969,7 +39014,7 @@ function aiTestWorld(
   };
   return {
     units, structures, centers, kingdoms, ai, workerConstruction, territory, roads, progression,
-    production, resourceNodes, construction, step,
+    production, resourceNodes, wildlife, construction, step,
   };
 }
 
@@ -39897,6 +39942,15 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
   const built = opener.structures.ownedBy("enemy").map((structure) => structure.stats.id);
   assert.ok(built.includes("farm"), "§34: the opening puts up a food building");
   assert.ok(built.includes("lumber_camp"), "§34: then a wood building");
+  // Faz 6: and the hunting camp, on the slot authored beside the AI's own herd.
+  // The claim is not just that the order names it — it is that the AI reaches a
+  // legal spot for it, which is the half of "the AI can hunt" that map data owns.
+  assert.ok(built.includes("hunting_camp"), "Faz 6: the opening takes the herd beside the base");
+  const camp = opener.structures.ownedBy("enemy").find((structure) => structure.stats.id === "hunting_camp");
+  if (camp?.construction.complete) {
+    const status = opener.production.snapshots("enemy").find((producer) => producer.structureId === camp.id)?.status;
+    assert.notEqual(status, "missing-game", "the camp the AI built has game in reach, not an empty circle");
+  }
   assert.ok(built.includes("barracks"), "§34: then a Barracks");
   assert.equal(
     opener.structures.ownedBy("player").length,
@@ -40572,24 +40626,32 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   assert.equal(nextBuilding(bb({ population: 19, populationCap: 20 }), AI_TEST_BALANCE), "house");
   assert.equal(nextBuilding(bb(), AI_TEST_BALANCE), "farm");
   assert.equal(nextBuilding(bb({ buildingCounts: { farm: 1 } }), AI_TEST_BALANCE), "lumber_camp");
-  assert.equal(nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1 } }), AI_TEST_BALANCE), "barracks");
+  // Faz 6: the hunting camp joins the opening behind both staples. Behind the
+  // farm because the Town transition requires a farm by name; ahead of the
+  // military because a herd is the one asset whose yield only shrinks with time.
+  assert.equal(
+    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1 } }), AI_TEST_BALANCE),
+    "hunting_camp",
+  );
+  const staples = { farm: 1, lumber_camp: 1, hunting_camp: 1 };
+  assert.equal(nextBuilding(bb({ buildingCounts: staples }), AI_TEST_BALANCE), "barracks");
   // Base defence comes straight after the Barracks: the outpost is the only
   // building carrying a `defense` block, so an undefended base does not live long
   // enough to spend the stone the extractors below would mine.
   assert.equal(
-    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 } }), AI_TEST_BALANCE),
+    nextBuilding(bb({ buildingCounts: { ...staples, barracks: 1 } }), AI_TEST_BALANCE),
     "outpost",
   );
   // Faz 8: the Town age needs stone and gold too, so the opening continues past
   // the Barracks into the two extractors — after it, so the base is never mining
   // while it has nothing to defend itself with.
   assert.equal(
-    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, outpost: 1 } }), AI_TEST_BALANCE),
+    nextBuilding(bb({ buildingCounts: { ...staples, barracks: 1, outpost: 1 } }), AI_TEST_BALANCE),
     "quarry",
   );
   assert.equal(
     nextBuilding(
-      bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, outpost: 1, quarry: 1 } }),
+      bb({ buildingCounts: { ...staples, barracks: 1, outpost: 1, quarry: 1 } }),
       AI_TEST_BALANCE,
     ),
     "gold_mine",
@@ -40599,7 +40661,7 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   // stone at a spread while its own deposits sat untouched.
   assert.equal(
     nextBuilding(
-      bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, outpost: 1, quarry: 1, gold_mine: 1 } }),
+      bb({ buildingCounts: { ...staples, barracks: 1, outpost: 1, quarry: 1, gold_mine: 1 } }),
       AI_TEST_BALANCE,
     ),
     "market",
@@ -40610,7 +40672,7 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   const settlementPlan = AI_TEST_BALANCE.economy.buildingTargets.settlement;
   assert.equal(
     nextBuilding(
-      bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, outpost: 1, quarry: 1, gold_mine: 1, market: 1 } }),
+      bb({ buildingCounts: { ...staples, barracks: 1, outpost: 1, quarry: 1, gold_mine: 1, market: 1 } }),
       AI_TEST_BALANCE,
     ),
     "house",
@@ -40636,7 +40698,7 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   // mine underneath it are never reached, so the Town age stays unreachable.
   assert.deepEqual(
     buildOrder(bb({ population: 19, populationCap: 20, buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 } }), AI_TEST_BALANCE),
-    ["house", "outpost", "quarry", "gold_mine", "market"],
+    ["house", "hunting_camp", "outpost", "quarry", "gold_mine", "market"],
     "a blocked priority still lets the ones below it through",
   );
   // Urgent housing is listed *once*, at the top: the settlement plan's own housing
@@ -40696,6 +40758,96 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
     null,
     "a healthy base reports no bottleneck",
   );
+});
+
+check("Faz 6: a kingdom fed by hunting is not diagnosed as starving, and a spent camp is", () => {
+  // Everything but the food source is settled, so what these three fixtures
+  // measure is only which building the food came from and whether it still has a
+  // herd to work.
+  const others = { lumber_camp: 1, quarry: 1, gold_mine: 1 };
+  const hunting = aiTestBlackboard({ buildingCounts: { ...others, hunting_camp: 1 } });
+  assert.equal(
+    detectBottleneck(hunting, AI_TEST_BALANCE),
+    null,
+    "a camp feeds the kingdom exactly as a farm does — the measure is food, not farms",
+  );
+  // The old measure was `buildingCounts["farm"]`, so this is the case it got
+  // wrong: a working economy reported as starving, which is §37's most severe
+  // economic bottleneck and would have pinned the AI on repairing nothing.
+  assert.notEqual(
+    detectBottleneck(hunting, AI_TEST_BALANCE),
+    "no-food-production",
+    "the diagnosis must not depend on the food coming from a farm",
+  );
+
+  // The same kingdom once the herd has been eaten: the camp still stands, so
+  // `buildingCounts` is unchanged and only the producer count falls away. This is
+  // the other direction of the same error — a building counted as a supply.
+  const spent = aiTestBlackboard({
+    buildingCounts: { ...others, hunting_camp: 1 },
+    resourceProducerCounts: aiTestProducerCounts(others),
+  });
+  assert.equal(
+    detectBottleneck(spent, AI_TEST_BALANCE),
+    "no-food-production",
+    "an emptied herd leaves a building, not a food supply",
+  );
+  // And the repair it reaches for is the renewable one: the camp it already owns
+  // meets its target, so the order falls through to the farm. That is "abandon
+  // the spent herd and go farm" without a single rule about herds in the AI.
+  assert.equal(nextBuilding(spent, AI_TEST_BALANCE), "farm");
+});
+
+check("Faz 6: the AI's hunting camp anchor is authored on a herd it can work and a road it can ship from", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const camp = buildings.hunting_camp ?? assert.fail("hunting camp balance missing");
+  const reach = camp.economy?.gatherRadius ?? assert.fail("a hunting camp needs a reach");
+  const animals = shippedAnimalBalance();
+  const anchors = RTS_BLOCKOUT_MAP.enemyBaseAnchors.filter((anchor) => anchor.buildingId === "hunting_camp");
+  // The generic "every target has a slot" check would catch a missing anchor, but
+  // not an anchor authored somewhere a camp cannot actually hunt from.
+  assert.ok(anchors.length > 0, "the AI's settlement plan wants a hunting camp, so the map must offer it a slot");
+
+  for (const anchor of anchors) {
+    const herd = RTS_BLOCKOUT_MAP.herds
+      .map((candidate) => ({ candidate, distance: Math.hypot(candidate.x - anchor.x, candidate.z - anchor.z) }))
+      .sort((left, right) => left.distance - right.distance)[0]
+      ?? assert.fail("the map has no herd for the AI to hunt");
+    const species = animals[herd.candidate.species] ?? assert.fail(`unknown species ${herd.candidate.species}`);
+    // The whole roam circle, not the herd's centre: an animal grazing the far
+    // edge must still be workable, or the camp flickers between a source and none
+    // as its own quarry wanders. Computed from both tables, so it survives any
+    // retuning of the reach, the roam radius or the anchor's position.
+    assert.ok(
+      herd.distance + species.roamRadius <= reach,
+      `the hunting camp anchor is ${herd.distance.toFixed(1)} from ${herd.candidate.id}, whose animals roam `
+      + `${species.roamRadius} — past the camp's reach of ${reach}`,
+    );
+  }
+
+  // Reaching the herd is only half a food supply: a producer pays into the
+  // stockpile only while a road touches its footprint, so an anchor beside a herd
+  // and away from the spine is a camp that fills its buffer and stops. Measured
+  // against the *authored* spine, walked as the AI walks it.
+  const roads = new RoadGraph(validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  ));
+  const spine = RTS_BLOCKOUT_MAP.enemyBaseRoute;
+  for (let index = 0; index < spine.length - 1; index += 1) {
+    const from = spine[index];
+    const to = spine[index + 1];
+    if (!from || !to) continue;
+    const leg = roads.plan(from, to, []) ?? assert.fail(`the authored spine leg ${index} cannot be routed`);
+    roads.commit(leg);
+  }
+  for (const anchor of anchors) {
+    assert.ok(
+      roadCellTouchingFootprint(roads, anchor.x, anchor.z, camp.footprint.width, camp.footprint.depth),
+      `the hunting camp anchor @${anchor.x},${anchor.z} is off the AI's authored road spine`,
+    );
+  }
 });
 
 check("AiBuildManager keeps one site, skips taken anchors and blacklists a failing one (§42/§43)", () => {

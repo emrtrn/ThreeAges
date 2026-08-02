@@ -19,6 +19,27 @@ import type { WildlifeSystem } from "../wildlife/wildlifeSystem";
 export type EconomyWorkerState = "idle" | "moving" | "producing" | "moving-to-source" | "gathering" | "returning" | "unloading";
 export type EconomyProductionStatus = "awaiting-workers" | "workers-moving" | "producing" | "buffer-full" | "missing-resource-node" | "missing-forest" | "missing-game" | "source-depleted";
 
+/**
+ * The statuses that mean the producer's *source* is gone rather than that it is
+ * merely between loads.
+ *
+ * The distinction is what separates "this building is idle right now" from
+ * "this building will never produce again where it stands" — a hunting camp
+ * whose herd has been eaten is a building, not a food supply. Counting the two
+ * together is how a kingdom reads a spent camp as an economy.
+ */
+const SOURCELESS_PRODUCTION_STATUSES: readonly EconomyProductionStatus[] = [
+  "missing-resource-node",
+  "missing-forest",
+  "missing-game",
+  "source-depleted",
+];
+
+/** True while this producer still has something to work, staffed or not. */
+export function producerHasSource(status: EconomyProductionStatus): boolean {
+  return !SOURCELESS_PRODUCTION_STATUSES.includes(status);
+}
+
 export interface EconomyBuildingSnapshot {
   readonly structureId: number;
   readonly structureLabel: string;

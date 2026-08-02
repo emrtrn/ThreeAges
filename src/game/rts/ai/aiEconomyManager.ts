@@ -44,13 +44,18 @@ export function detectBottleneck(bb: AiBlackboard, balance: AiBalance): AiBottle
   // §27: no workers is worse than a full population — nothing rebuilds itself.
   if (bb.workerCount === 0) return "workers-lost";
   if (bb.population >= bb.populationCap) return "population-blocked";
-  if ((bb.buildingCounts["farm"] ?? 0) === 0) return "no-food-production";
-  if ((bb.buildingCounts["lumber_camp"] ?? 0) === 0) return "no-wood-production";
+  // Measured per resource rather than per building id. Naming the buildings
+  // here made the diagnosis wrong in both directions the moment food stopped
+  // being a farm's exclusive business: an AI living off a hunting camp reported
+  // starvation it was not in, and a camp standing over an eaten herd reported a
+  // food supply that no longer existed.
+  if ((bb.resourceProducerCounts["food"] ?? 0) === 0) return "no-food-production";
+  if ((bb.resourceProducerCounts["wood"] ?? 0) === 0) return "no-wood-production";
   if (bb.disconnectedProducers > 0) return "disconnected-production";
   // Stone and gold rank below the two staples and below logistics: they only
   // gate the age, while food/wood gate the units that survive to reach it.
-  if ((bb.buildingCounts["quarry"] ?? 0) === 0) return "no-stone-production";
-  if ((bb.buildingCounts["gold_mine"] ?? 0) === 0) return "no-gold-production";
+  if ((bb.resourceProducerCounts["stone"] ?? 0) === 0) return "no-stone-production";
+  if ((bb.resourceProducerCounts["gold"] ?? 0) === 0) return "no-gold-production";
   if (bb.workerCount < workerTargetFor(bb, balance) && bb.idleWorkerCount === 0) return "no-available-worker";
   if ((bb.resourceStocks["wood"] ?? 0) < AI_WOOD_SAFETY_STOCK) return "wood-shortage";
   return null;
@@ -86,6 +91,13 @@ export function buildOrder(bb: AiBlackboard, balance: AiBalance): readonly strin
   if (headroom <= balance.economy.populationPressureBuffer) order.push("house");
   if (short("farm")) order.push("farm");
   if (short("lumber_camp")) order.push("lumber_camp");
+  // Additive food off a source that runs out, so it sits behind both staples and
+  // ahead of everything else. Behind the farm because the Town transition
+  // requires one by name, and an AI that opened on game alone would be gated on
+  // a building it had never built. Ahead of the military because a herd is the
+  // one asset on the map whose value only decays: the camp's whole yield is
+  // fixed at what the herd holds, so a camp built late is a camp built smaller.
+  if (short("hunting_camp")) order.push("hunting_camp");
   if (short("barracks")) order.push("barracks");
   // §41 "Kule: kritik geçit veya karakol yakını" — the AI's only structure with a
   // `defense` block, so on this data set the outpost *is* the base defence. After

@@ -261,6 +261,14 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     // The second camp goes east because `requiresForest` needs a live tree within
     // its 20-unit gather radius, and the enemy grove is the only one in reach.
     { buildingId: "lumber_camp", ...atEnemyBase(18, -14) },
+    // The hunting camp, on the only spot that satisfies all three of its
+    // constraints at once: 5.7 units from the `enemy-deer` herd centre — inside
+    // the 18-unit reach even for an animal grazing the far edge of its 10-unit
+    // roam circle — edge-to-edge with the quarry slot rather than overlapping it,
+    // and one road cell off the z = -30 spine, so the meat it banks can actually
+    // reach the depot. A camp beside a herd it cannot deliver from is not a food
+    // supply, it is a disconnected producer.
+    { buildingId: "hunting_camp", ...atEnemyBase(-12, 12) },
   ],
   // Spur to the centre, spine across the base, then a branch down to each of the
   // two starting producers. The leg back along z=-18 is retraced on purpose:
