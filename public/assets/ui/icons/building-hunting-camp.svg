@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Avcı Kulübesi">
+  <title>Avcı Kulübesi</title>
+  <!-- Antlers first and oversized: at palette scale the hut alone reads as any
+       other wooden building, and the rack is what says "this one hunts". -->
+  <g fill="none" stroke="#e8ddc8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 19 C29 15 26 12 21 11" />
+    <path d="M27 13 L25 6" />
+    <path d="M23 11 L18 6" />
+    <path d="M32 19 C35 15 38 12 43 11" />
+    <path d="M37 13 L39 6" />
+    <path d="M41 11 L46 6" />
+  </g>
+  <!-- Hut: steep roof over a low timber wall, the same silhouette family as the
+       other camp buildings so it still reads as a work site. -->
+  <path d="M32 20 L55 39 L9 39 Z" fill="#8a5a2b" />
+  <rect x="15" y="39" width="34" height="17" rx="1.5" fill="#b07a44" />
+  <rect x="27" y="45" width="10" height="11" rx="1" fill="#4a2f18" />
+  <rect x="9" y="56" width="46" height="3" rx="1.5" fill="#3a2512" />
+</svg>

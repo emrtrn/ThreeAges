@@ -16,7 +16,7 @@ import type { ForestSystem } from "./forestSystem";
 import type { ResourceReach, ResourceSource } from "./resourceSource";
 
 export type EconomyWorkerState = "idle" | "moving" | "producing" | "moving-to-source" | "gathering" | "returning" | "unloading";
-export type EconomyProductionStatus = "awaiting-workers" | "workers-moving" | "producing" | "buffer-full" | "missing-resource-node" | "missing-forest" | "source-depleted";
+export type EconomyProductionStatus = "awaiting-workers" | "workers-moving" | "producing" | "buffer-full" | "missing-resource-node" | "missing-forest" | "missing-game" | "source-depleted";
 
 export interface EconomyBuildingSnapshot {
   readonly structureId: number;
@@ -179,6 +179,11 @@ export class EconomyProductionSystem {
     if (economy.requiresResourceNode) {
       return { source: this.resourceNodes ?? null, missingStatus: "missing-resource-node" };
     }
+    // Faz 5 hands this branch the herd. Declaring it now with no source is what
+    // keeps a hunting camp *idle* rather than falling through to the renewable
+    // path below, where it would quietly mint food out of an empty map — the one
+    // thing worse than a camp that cannot hunt yet.
+    if (economy.requiresGame) return { source: null, missingStatus: "missing-game" };
     return null;
   }
 

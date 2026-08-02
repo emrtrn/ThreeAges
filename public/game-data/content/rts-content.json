@@ -130,6 +130,13 @@
         "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json"
       }
     },
+    "hunting_camp": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json"
+      }
+    },
     "quarry": {
       "levels": {
         "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Quarry.actor.json",

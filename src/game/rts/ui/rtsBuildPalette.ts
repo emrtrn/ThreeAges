@@ -54,7 +54,7 @@ interface BuildCategory {
 }
 
 const BUILD_CATEGORIES: readonly BuildCategory[] = [
-  { title: "Ekonomi", buildingIds: ["farm", "lumber_camp", "quarry", "gold_mine", "market"] },
+  { title: "Ekonomi", buildingIds: ["farm", "hunting_camp", "lumber_camp", "quarry", "gold_mine", "market"] },
   { title: "Lojistik", buildingIds: ["depot", "outpost"], includesRoad: true },
   // The Tapınak files under "Yerleşim" rather than "Askerî": it trains nothing
   // and fires nothing — what it does is make a place worth standing in, which is
@@ -253,6 +253,8 @@ export class RtsBuildPalette {
         ? "Kaynak yetersiz: inşaat maliyeti ayrılmadı."
         : state.result.reason === "missing-forest"
           ? "Oduncu Kampı için yakında kesilebilir ağaç gerekir."
+        : state.result.reason === "missing-game"
+          ? "Avcı Kulübesi için yakında av hayvanı gerekir."
         : state.result.reason === "enemy-occupied"
           ? "Geçersiz konum: alanda düşman birlikleri var."
         : state.result.reason === "missing-resource-node"

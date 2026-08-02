@@ -357,6 +357,11 @@ const BUILDINGS_FIELDS = [
     label: "Ekonomi: Kaynak yatağı gerektirir",
     hint: "Açıksa bina bir taş/altın yatağının üzerine kurulmalı ve kaynağı o yataktan çeker (Taş Ocağı / Altın Madeni).",
   },
+  {
+    path: "economy.requiresGame",
+    label: "Ekonomi: Av hayvanı gerektirir",
+    hint: "Açıksa bina yakındaki yaban hayvanına avcı gönderir (Avcı Kulübesi modeli). Tarladan farkı: sürü sonludur, tükenince kulübe boş kalır. 'Kaynak arama yarıçapı' sürünün dolaşma yarıçapından büyük olmalıdır, yoksa otlayan hayvan menzil dışına çıkar.",
+  },
   { path: "market.lotSize", label: "Pazar: İşlem miktarı (lot)", min: 1, step: 1, hint: "Tek alım/satım işleminde el değiştiren kaynak miktarı." },
   { path: "market.basePrice.food", label: "Pazar: Taban fiyat: Yiyecek", min: 0, step: 1, hint: "Fiyat endeksi 1.0 iken bir lot yiyeceğin altın fiyatı." },
   { path: "market.basePrice.wood", label: "Pazar: Taban fiyat: Odun", min: 0, step: 1, hint: "Fiyat endeksi 1.0 iken bir lot odunun altın fiyatı." },

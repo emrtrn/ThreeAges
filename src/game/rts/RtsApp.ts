@@ -1114,7 +1114,14 @@ export class RtsApp {
             stats.footprint,
           )
           ? "missing-forest"
-          : null,
+          // A hunting camp is placed *at the herd*, the same "beside the source"
+          // rule a lumber camp follows. Live animals only: a herd that has been
+          // hunted out must stop justifying a new camp, or the player builds one
+          // over a field of carcasses.
+          : stats.economy?.requiresGame
+            && this.wildlife.liveAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
+            ? "missing-game"
+            : null,
       // Roads, standing trees and live deposits all reserve build space without
       // blocking navigation: a camp is placed beside a grove and a mine beside a
       // deposit, never on top, so the buried source stays harvestable — and its

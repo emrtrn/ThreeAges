@@ -1,8 +1,8 @@
 # ThreeAges RTS Yaban Hayati, Avcilik ve Hayvan Varliklari Plani
 
 Olusturulma tarihi: 2026-08-01
-Durum: Faz 0-3 tamamlandi (2026-08-02). Sirada Faz 4 - Avci Kulubesi ve
-yerlestirme kurali. Kararlar §4te kilitli.
+Durum: Faz 0-4 kod olarak tamamlandi (2026-08-02); Faz 4'un gorsel kabulu
+kullanicida. Sirada Faz 5 - avlanma dongusu. Kararlar §4te kilitli.
 Kapsam: `public/assets/ThreeAges/Animals/` altindaki 12 animasyonlu hayvan
 modelini, oyunun ekonomi/savas/lojistik cercevesine oturan gercek RTS
 sistemlerine cevirmek. V1 hedefi **avlanma**dir; kalan turler icin yol haritasi
@@ -652,13 +652,63 @@ kurali.
 
 ### Faz 4 - Avci Kulubesi ve yerlestirme kurali
 
-- [ ] `buildings.json` -> `hunting_camp` (§6.2).
-- [ ] `requiresGame` alani tip + validator + editor catalog.
-- [ ] `PlacementFailure`/`StructureBuildFailure` -> `"missing-game"`.
-- [ ] `RtsApp.additionalPlacementFailure` zincirine yeni dal.
-- [ ] Build paleti + "Yakinda av yok" gerekcesi + ikon.
+- [x] `buildings.json` -> `hunting_camp` (§6.2 tablosu birebir; alti kademeli
+  `progression` dahil).
+- [x] `requiresGame` alani: `EconomyProductionBalance` tipi,
+  `validateGameData` (boolean + `gatherRadius`/`carryCapacity` zorunlu ve > 0,
+  orman/yatak bloklarinin ikizi) ve editor Details alani.
+- [x] `PlacementFailure` / `StructureBuildFailure` -> `"missing-game"`.
+- [x] `RtsApp.additionalPlacementFailure` zincirine ucuncu dal:
+  `wildlife.liveAnimalsNear(x, z, gatherRadius)` bos ise `missing-game`.
+  **Yalniz yasayan hayvan sayilir** - avlanip bitmis bir suru yeni bir kulubeyi
+  hakli cikarmaya devam etmemeli.
+- [x] Build paleti ("Ekonomi" kategorisi, Tarla'nin hemen yaninda - ikisi de
+  yiyecek uretir ve oyuncunun sordugu soru aynidir), "Avci Kulubesi icin
+  yakinda av hayvani gerekir." gerekcesi ve
+  `public/assets/ui/icons/building-hunting-camp.svg` ikonu (boynuz + kulube;
+  bina siluetleri palet olceginde birbirine benzedigi icin okunan parca
+  boynuzdur). `rtsSelectionView` -> `"missing-game": "Yakinda av yok"`.
 
-Kabul: sururun uzaginda ghost kirmizi ve gerekceli; suru yakininda yesil.
+**Planda olmayan ama zorunlu olan madde - `requirementFor`'a ucuncu dal.**
+Faz 3'un tekillestirdigi zincir `requiresGame`'i tanimasaydi, kurulan kulube
+**yenilenebilir** dala duser ve tarla gibi yoktan yiyecek uretirdi; avlanamayan
+bir kulubeden cok daha kotusu budur. Bu yuzden dal Faz 4'te eklendi ama
+kaynagi henuz `null`: kulube kurulur, dogru gerekceyle **bos durur**
+(`missing-game`) ve Faz 5 ayni dala `WildlifeSystem`'i verir.
+`EconomyProductionStatus` de bu yuzden simdi `"missing-game"` tasiyor.
+
+**Placeholder gorsel.** `rts-content.json`'da `hunting_camp` uc kademede de
+`BP_RTS_LumberCamp.actor.json`'a bakar. Icerik kapsam testi her binanin bir
+Actor cozmesini sart kosar ve varlik paketinde avci kulubesi modeli yoktur;
+mevcut sanat icinde en yakini ahsap calisma kampidir. Kendi modeli
+gelene kadar kulube oduncu kampiyla ayni gorunur - bu **bilinen bir eksiktir**,
+oynanisi etkilemez.
+
+Kabul:
+
+- [x] `npx tsc --noEmit`, `npm run test:engine` (1207 check) ,
+  `npm run build:verify` ve `npm run check:assets` yesil.
+- [x] Yerlestirme kurali **engine testiyle** pinlendi: "Faz 4: a hunting camp is
+  refused away from live game and legal beside a herd" - suru uzerinde
+  `valid`, `gatherRadius * 3` uzaginda `missing-game`.
+- [x] **Menzil ve yerellik sozlesmeleri** (§8'in iki maddesi) pinlendi: "Faz 4: a
+  gathering camp's reach stays local and still covers the herd it was built
+  for". Her tur icin `roamRadius < gatherRadius` **iki tablodan hesaplanarak**
+  dogrulanir (ayar pinlenmez), ve **her** sonlu kaynakli bina icin
+  `gatherRadius < RTS_WORLD_HALF_EXTENT / 2` - orman dersinin genellenmis hali.
+  Testin kirmiziya donebildigi dogrulandi: `gatherRadius` gecici olarak 5
+  yapilinca suite "deer roams 10, past the hunting camp's reach of 5" ile
+  kirildi, sonra geri alindi.
+- [ ] **Gorsel kabul kullanicida:** `?rts` Play rotasinda paletten Avci
+  Kulubesi secilip surunun uzaginda ghost'un kirmizi + gerekceli, suru
+  yakininda yesil oldugu; kurulan kulubenin secim panelinde "Yakinda av yok"
+  yazdigi (Faz 5'e kadar dogru davranis budur).
+
+**Not - veri dosyalarina PowerShell ile yazmayin.** Bu fazda
+`Set-Content`/`Get-Content -Raw` ile yapilan tek bir gecici duzenleme
+`buildings.json`'a BOM ekledi ve butun Turkce etiketleri bozdu (`Taş Ocağı` ->
+mojibake); dosya git'teki surumden geri alinip degisiklik yeniden uygulandi.
+Bu dosyalar UTF-8/LF'dir; duzenleme dosya araclariyla yapilmalidir.
 
 ### Faz 5 - Avlanma dongusu
 
@@ -711,11 +761,13 @@ sozlesme** dogrulanir; hicbir test bir buyuklugu pinlemez.
   eslenmistir. Iki rig ailesinin buyuk/kucuk harf farki (§3.1) tam olarak bu
   testin yakaladigi hata turudur. Test `Animals/` altindaki **her** sidecar'i
   tarar, yani V2+ turleri eklendiginde kendiliginden kapsar.
-- [ ] **Menzil sozlesmesi:** her tur icin `roamRadius < hunting_camp
-  gatherRadius`. Kacan hayvan kalici olarak erisilemez bir yere gidemez.
-  (Orman `gatherRadius` dersinin genellenmis hali.)
-- [ ] **Yerellik:** `gatherRadius`, harita kosegeninin makul bir kesrinin
-  altinda kalir; global havuz olusmaz.
+- [x] **Menzil sozlesmesi (Faz 4'te uygulandi):** her tur icin `roamRadius <
+  hunting_camp gatherRadius`. Kacan hayvan kalici olarak erisilemez bir yere
+  gidemez. (Orman `gatherRadius` dersinin genellenmis hali.) Deger iki tablodan
+  hesaplanir, pinlenmez.
+- [x] **Yerellik (Faz 4'te uygulandi):** `gatherRadius`, `RTS_WORLD_HALF_EXTENT
+  / 2`nin altinda kalir; global havuz olusmaz. Test yalniz avci kulubesini
+  degil, **her** sonlu kaynakli binayi tarar.
 - [ ] **Nufus:** yaban hayvani `PopulationSystem.snapshot()` sayimina
   girmez.
 - [ ] **Turetim:** bir lesin verdigi toplam yiyecek, `animals.json`'daki

@@ -30,6 +30,7 @@ export type StructureBuildFailure =
   | "insufficient-resources"
   | "missing-resource-node"
   | "missing-forest"
+  | "missing-game"
   | "enemy-occupied";
 
 export type StructureBuildResult =

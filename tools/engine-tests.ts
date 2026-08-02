@@ -29922,6 +29922,91 @@ check("the animal validator refuses data that could never make sense", () => {
   );
 });
 
+check("Faz 4: a gathering camp's reach stays local and still covers the herd it was built for", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const camp = buildings.hunting_camp ?? assert.fail("hunting camp balance missing");
+  const economy = camp.economy ?? assert.fail("a hunting camp needs an economy block");
+  assert.equal(economy.requiresGame, true, "the hunting camp hunts rather than farms");
+  assert.equal(economy.resourceId, "food", "hunting banks food, like the farm it competes with");
+  // Reach and load size are what make the cycle a round trip rather than a
+  // building that drains a herd from a distance; both must be authored.
+  const reach = economy.gatherRadius ?? assert.fail("a hunting camp needs a reach");
+  assert.ok(reach > 0 && (economy.carryCapacity ?? 0) > 0);
+
+  // Range contract: a grazing animal must never wander permanently out of the
+  // camp built for its herd. Computed from both tables rather than pinned, so it
+  // stays true at any tuning of either.
+  for (const [id, stats] of Object.entries(shippedAnimalBalance())) {
+    assert.ok(
+      stats.roamRadius < reach,
+      `${id} roams ${stats.roamRadius}, past the hunting camp's reach of ${reach}`,
+    );
+  }
+
+  // Locality, the forest lesson generalised to every finite source: a reach that
+  // approaches map scale turns every herd, grove and deposit into one shared
+  // pool, and *where* a camp is built stops meaning anything.
+  const localLimit = RTS_WORLD_HALF_EXTENT / 2;
+  for (const [id, stats] of Object.entries(buildings)) {
+    const source = stats.economy;
+    if (!source?.requiresGame && !source?.requiresForest && !source?.requiresResourceNode) continue;
+    assert.ok(
+      (source.gatherRadius ?? 0) < localLimit,
+      `${id} reaches ${source.gatherRadius}, which is map-scale rather than local`,
+    );
+  }
+});
+
+check("Faz 4: a hunting camp is refused away from live game and legal beside a herd", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const camp = buildings.hunting_camp ?? assert.fail("hunting camp balance missing");
+  const reach = camp.economy?.gatherRadius ?? assert.fail("a hunting camp needs a reach");
+  const wildlife = new WildlifeSystem(shippedAnimalBalance(), [
+    { id: "herd", species: "deer", x: 0, z: 0, count: 4 },
+  ]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const navigation = new RtsNavigation();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 500 }, 20);
+  // A control zone large enough that territory never vetoes these proposals —
+  // the rule under test is the herd, not the border.
+  const territory = new TerritoryControlSystem(() => [{ owner: "player", x: 0, z: 0, radius: 1000 }]);
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => structures.navigationBlockers(),
+    territory,
+    () => {},
+    () => {},
+    (stats, x, z) => stats.economy?.requiresGame
+      && wildlife.liveAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
+      ? "missing-game"
+      : null,
+  );
+  assert.equal(
+    construction.validate("player", "hunting_camp", 0, 0)?.valid,
+    true,
+    "a camp is legal at the herd it will hunt",
+  );
+  // Far enough that no animal can graze into reach: the herd's own roam radius
+  // plus the camp's, and then some.
+  const away = Math.ceil(reach * 3);
+  assert.ok(away < RTS_WORLD_HALF_EXTENT, "the far test point stays on the map");
+  assert.equal(
+    construction.validate("player", "hunting_camp", away, 0)?.reason,
+    "missing-game",
+    "away from every herd the ghost is refused, and says why",
+  );
+  territory.dispose();
+});
+
 check("RTS collapse deformation patches the husk's own materials, never the ones it was cloned from", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,

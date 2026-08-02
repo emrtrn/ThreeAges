@@ -211,9 +211,9 @@
       "placements": [
         {
           "position": [
-            -2.13,
+            -3.24,
             -0.49,
-            -4.48
+            -4.36
           ],
           "rotationYDeg": 0,
           "rotation": [
@@ -402,6 +402,116 @@
     {
       "assetId": "mapletree-5",
       "placements": []
+    },
+    {
+      "assetId": "naturemega-clover-1",
+      "placements": [
+        {
+          "position": [
+            -6,
+            0.01,
+            3.9
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-pebble-round-1",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-round-2",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-round-3",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-round-4",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-round-5",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-1",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-2",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-3",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-4",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-5",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-6",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-medium-1",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-medium-2",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-medium-3",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-round-small-1",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-round-small-2",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-round-small-3",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-round-thin",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-round-wide",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-square-small-1",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-square-small-2",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-square-small-3",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-square-thin",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-square-wide",
+      "placements": []
     }
   ],
   "characters": [
@@ -460,9 +570,9 @@
     {
       "id": "blocking-volume-1",
       "position": [
-        -2.27,
+        -3.38,
         -0.35,
-        -4.41
+        -4.29
       ],
       "name": "Blocking Volume",
       "rotation": [
@@ -892,31 +1002,47 @@
         {
           "id": "instances",
           "type": "instances",
-          "meshAsset": "rock",
-          "spacing": 0.6,
+          "meshAsset": "naturemega-pebble-round-1",
+          "spacing": 3,
           "enabled": true,
           "previewEnabled": true,
           "runtimeEnabled": true,
           "alignToSpline": true,
+          "startOffset": 0,
+          "endOffset": 0,
           "lateralOffset": 0,
           "verticalOffset": -0.5,
           "seed": 1,
           "placementMode": "distance",
           "random": {
-            "scaleMin": 4,
-            "scaleMax": 5
+            "scaleMin": 3,
+            "scaleMax": 4
           }
         },
         {
           "id": "instances-2",
           "type": "instances",
-          "meshAsset": "rock",
-          "spacing": 1,
-          "lateralOffset": -0.5,
+          "meshAsset": "naturemega-pebble-round-2",
+          "spacing": 2,
+          "lateralOffset": -0.2,
+          "verticalOffset": -0.3,
           "seed": 2,
           "random": {
-            "scaleMin": 4,
-            "scaleMax": 5
+            "scaleMin": 3,
+            "scaleMax": 4
+          }
+        },
+        {
+          "id": "instances-3",
+          "type": "instances",
+          "meshAsset": "naturemega-pebble-round-3",
+          "spacing": 2,
+          "startOffset": 1,
+          "lateralOffset": -0.4,
+          "verticalOffset": -0.1,
+          "random": {
+            "scaleMin": 3,
+            "scaleMax": 4
           }
         }
       ],
@@ -925,6 +1051,45 @@
         "color": "#ffffff",
         "resolution": 16
       }
+    },
+    {
+      "id": "spline-2",
+      "position": [
+        -12.29,
+        0.52,
+        -0.54
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "spline-point-1",
+            "position": [
+              -1.82,
+              0,
+              -12.13
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-2",
+            "position": [
+              2.37,
+              0,
+              -5.03
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "Spline 2"
     }
   ],
   "landscapes": [

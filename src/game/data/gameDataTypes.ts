@@ -315,6 +315,11 @@ export interface EconomyProductionBalance {
   readonly requiresResourceNode?: boolean;
   /** Maximum distance at which a lumber worker may search for a live tree. */
   readonly requiresForest?: boolean;
+  /**
+   * Food buildings that hunt rather than farm: the camp must have live game in
+   * reach, and its workers walk out to it. The finite twin of the endless Farm.
+   */
+  readonly requiresGame?: boolean;
   /** Camp-centre radius in which a worker may reserve and harvest a tree. */
   readonly gatherRadius?: number;
   /** Maximum wood a worker carries from one tree back to the camp. */

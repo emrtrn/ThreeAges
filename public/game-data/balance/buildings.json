@@ -360,6 +360,95 @@
       ]
     }
   },
+  "hunting_camp": {
+    "label": "Avcı Kulübesi",
+    "icon": "/assets/ui/icons/building-hunting-camp.svg",
+    "footprint": {
+      "width": 6,
+      "depth": 6
+    },
+    "cost": {
+      "wood": 60
+    },
+    "constructionSeconds": 25,
+    "maxHealth": 100,
+    "visionRadius": 10,
+    "economy": {
+      "resourceId": "food",
+      "workerCapacity": 3,
+      "perWorkerPerMinute": 30,
+      "localBufferCapacity": 50,
+      "requiresGame": true,
+      "gatherRadius": 18,
+      "carryCapacity": 25
+    },
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 100,
+          "economy": {
+            "workerCapacity": 3,
+            "perWorkerPerMinute": 30,
+            "localBufferCapacity": 50,
+            "carryCapacity": 25
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 110,
+          "economy": {
+            "workerCapacity": 3,
+            "perWorkerPerMinute": 34,
+            "localBufferCapacity": 60,
+            "carryCapacity": 30
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 120,
+          "economy": {
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 38,
+            "localBufferCapacity": 80,
+            "carryCapacity": 35
+          }
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 130,
+          "economy": {
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 45,
+            "localBufferCapacity": 100,
+            "carryCapacity": 45
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 140,
+          "economy": {
+            "workerCapacity": 5,
+            "perWorkerPerMinute": 50,
+            "localBufferCapacity": 120,
+            "carryCapacity": 50
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 150,
+          "economy": {
+            "workerCapacity": 5,
+            "perWorkerPerMinute": 55,
+            "localBufferCapacity": 140,
+            "carryCapacity": 55
+          }
+        }
+      ]
+    }
+  },
   "lumber_camp": {
     "label": "Oduncu Kampı",
     "icon": "/assets/ui/icons/building-lumber-camp.png",

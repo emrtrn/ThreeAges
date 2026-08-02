@@ -531,6 +531,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       const localBufferCapacity = requireFiniteNumber(economyData, "localBufferCapacity", economyWhere);
       const requiresResourceNode = economyData["requiresResourceNode"];
       const requiresForest = economyData["requiresForest"];
+      const requiresGame = economyData["requiresGame"];
       if (!Number.isInteger(workerCapacity) || workerCapacity <= 0) {
         throw new GameDataError(`${economyWhere}.workerCapacity: must be a positive integer`);
       }
@@ -562,6 +563,21 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       if (nodeSettings && (nodeSettings.gatherRadius <= 0 || nodeSettings.carryCapacity <= 0)) {
         throw new GameDataError(`${economyWhere}: resource node gatherRadius and carryCapacity must be > 0`);
       }
+      if (requiresGame !== undefined && typeof requiresGame !== "boolean") {
+        throw new GameDataError(`${economyWhere}.requiresGame: must be a boolean`);
+      }
+      // A hunting camp's hunters walk out to the herd and carry the meat back, so
+      // it needs a reach and a load size for the same reasons a lumber camp does.
+      // The reach also has to clear the herd's own `roamRadius`, or a grazing
+      // animal wanders permanently out of the camp that was built for it — the
+      // range contract is pinned as an engine test, where both tables are in hand.
+      const gameSettings = requiresGame === true ? {
+        gatherRadius: requireFiniteNumber(economyData, "gatherRadius", economyWhere),
+        carryCapacity: requireFiniteNumber(economyData, "carryCapacity", economyWhere),
+      } : null;
+      if (gameSettings && (gameSettings.gatherRadius <= 0 || gameSettings.carryCapacity <= 0)) {
+        throw new GameDataError(`${economyWhere}: game gatherRadius and carryCapacity must be > 0`);
+      }
       economy = {
         resourceId,
         workerCapacity,
@@ -569,6 +585,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
         localBufferCapacity,
         ...(nodeSettings ? { requiresResourceNode: true, ...nodeSettings } : {}),
         ...(forestSettings ? { requiresForest: true, ...forestSettings } : {}),
+        ...(gameSettings ? { requiresGame: true, ...gameSettings } : {}),
       };
     }
     const territoryRaw = stats["territory"];

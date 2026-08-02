@@ -1,0 +1,410 @@
+[
+  {
+    "name": "Bush_Common",
+    "bytes": 128052,
+    "height": 1.5817856639623642,
+    "width": 1.9651408791542053
+  },
+  {
+    "name": "Bush_Common_Flowers",
+    "bytes": 272668,
+    "height": 1.5817856639623642,
+    "width": 1.9651408791542053
+  },
+  {
+    "name": "Clover_1",
+    "bytes": 129932,
+    "height": 1.1447324370965362,
+    "width": 0.796289324760437
+  },
+  {
+    "name": "Clover_2",
+    "bytes": 137988,
+    "height": 1.2637853054329753,
+    "width": 0.8511282801628113
+  },
+  {
+    "name": "CommonTree_1",
+    "bytes": 650944,
+    "height": 7.264785200357437,
+    "width": 4.577713966369629
+  },
+  {
+    "name": "CommonTree_2",
+    "bytes": 582388,
+    "height": 7.642995744943619,
+    "width": 4.464301586151123
+  },
+  {
+    "name": "CommonTree_3",
+    "bytes": 456348,
+    "height": 9.425189882516861,
+    "width": 4.241076946258545
+  },
+  {
+    "name": "CommonTree_4",
+    "bytes": 466956,
+    "height": 9.438381105661392,
+    "width": 3.8255257606506348
+  },
+  {
+    "name": "CommonTree_5",
+    "bytes": 412352,
+    "height": 7.006239801645279,
+    "width": 4.219650030136108
+  },
+  {
+    "name": "DeadTree_1",
+    "bytes": 529084,
+    "height": 9.495477199554443,
+    "width": 6.148936033248901
+  },
+  {
+    "name": "DeadTree_2",
+    "bytes": 560168,
+    "height": 11.488231182098389,
+    "width": 6.7296178340911865
+  },
+  {
+    "name": "DeadTree_3",
+    "bytes": 522080,
+    "height": 13.280385494232178,
+    "width": 6.430059194564819
+  },
+  {
+    "name": "DeadTree_4",
+    "bytes": 507896,
+    "height": 12.77097749710083,
+    "width": 7.960942029953003
+  },
+  {
+    "name": "DeadTree_5",
+    "bytes": 500184,
+    "height": 16.437382221221924,
+    "width": 8.413267612457275
+  },
+  {
+    "name": "Fern_1",
+    "bytes": 128412,
+    "height": 0.8402432501316071,
+    "width": 2.8269338607788086
+  },
+  {
+    "name": "Flower_3_Group",
+    "bytes": 204388,
+    "height": 2.0548351034522057,
+    "width": 1.5911270380020142
+  },
+  {
+    "name": "Flower_3_Single",
+    "bytes": 187416,
+    "height": 2.068193631246686,
+    "width": 0.9066098928451538
+  },
+  {
+    "name": "Flower_4_Group",
+    "bytes": 238848,
+    "height": 2.4867683202028275,
+    "width": 1.7805257439613342
+  },
+  {
+    "name": "Flower_4_Single",
+    "bytes": 200432,
+    "height": 2.4191591013222933,
+    "width": 1.0722883939743042
+  },
+  {
+    "name": "Grass_Common_Short",
+    "bytes": 9940,
+    "height": 1.3341034408658743,
+    "width": 0.7372654974460602
+  },
+  {
+    "name": "Grass_Common_Tall",
+    "bytes": 16968,
+    "height": 1.8726952821016312,
+    "width": 0.9931118488311768
+  },
+  {
+    "name": "Grass_Wispy_Short",
+    "bytes": 28216,
+    "height": 1.0718468874692917,
+    "width": 1.32218599319458
+  },
+  {
+    "name": "Grass_Wispy_Tall",
+    "bytes": 32380,
+    "height": 1.6718023493885994,
+    "width": 1.5937159657478333
+  },
+  {
+    "name": "Mushroom_Common",
+    "bytes": 112868,
+    "height": 0.4634807240217924,
+    "width": 0.779112696647644
+  },
+  {
+    "name": "Mushroom_Laetiporus",
+    "bytes": 166920,
+    "height": 0.7669583261013031,
+    "width": 1.3660326600074768
+  },
+  {
+    "name": "Pebble_Round_1",
+    "bytes": 59212,
+    "height": 0.09547655284404755,
+    "width": 0.500038743019104
+  },
+  {
+    "name": "Pebble_Round_2",
+    "bytes": 56516,
+    "height": 0.09422973287291825,
+    "width": 0.4494768977165222
+  },
+  {
+    "name": "Pebble_Round_3",
+    "bytes": 57628,
+    "height": 0.09862238075584173,
+    "width": 0.4848102927207947
+  },
+  {
+    "name": "Pebble_Round_4",
+    "bytes": 58308,
+    "height": 0.09939864045009017,
+    "width": 0.4523976892232895
+  },
+  {
+    "name": "Pebble_Round_5",
+    "bytes": 57920,
+    "height": 0.10082686180248857,
+    "width": 0.4185932129621506
+  },
+  {
+    "name": "Pebble_Square_1",
+    "bytes": 56588,
+    "height": 0.12993089412339032,
+    "width": 0.4396430104970932
+  },
+  {
+    "name": "Pebble_Square_2",
+    "bytes": 54700,
+    "height": 0.1404439229518175,
+    "width": 0.39109599590301514
+  },
+  {
+    "name": "Pebble_Square_3",
+    "bytes": 52820,
+    "height": 0.15893334429711103,
+    "width": 0.37333619594573975
+  },
+  {
+    "name": "Pebble_Square_4",
+    "bytes": 52412,
+    "height": 0.16829113056883216,
+    "width": 0.33994340896606445
+  },
+  {
+    "name": "Pebble_Square_5",
+    "bytes": 54476,
+    "height": 0.15215961635112762,
+    "width": 0.45043955743312836
+  },
+  {
+    "name": "Pebble_Square_6",
+    "bytes": 53892,
+    "height": 0.13777477573603392,
+    "width": 0.4620286226272583
+  },
+  {
+    "name": "Petal_1",
+    "bytes": 60600,
+    "height": 0.2436732572538176,
+    "width": 0.46023906767368317
+  },
+  {
+    "name": "Petal_2",
+    "bytes": 60652,
+    "height": 0.23606069386005402,
+    "width": 0.6732153296470642
+  },
+  {
+    "name": "Petal_3",
+    "bytes": 60672,
+    "height": 0.18948498461540453,
+    "width": 0.6194837689399719
+  },
+  {
+    "name": "Petal_4",
+    "bytes": 61048,
+    "height": 0.25205631886133517,
+    "width": 0.3290932923555374
+  },
+  {
+    "name": "Petal_5",
+    "bytes": 60668,
+    "height": 0.2887718271231279,
+    "width": 0.833962619304657
+  },
+  {
+    "name": "Pine_1",
+    "bytes": 379084,
+    "height": 7.316917672753334,
+    "width": 4.944698095321655
+  },
+  {
+    "name": "Pine_2",
+    "bytes": 361932,
+    "height": 7.376238122582436,
+    "width": 5.7280848026275635
+  },
+  {
+    "name": "Pine_3",
+    "bytes": 448880,
+    "height": 7.392198815941811,
+    "width": 3.9958035945892334
+  },
+  {
+    "name": "Pine_4",
+    "bytes": 358432,
+    "height": 10.236431390047073,
+    "width": 5.8020243644714355
+  },
+  {
+    "name": "Pine_5",
+    "bytes": 224576,
+    "height": 8.723807603120804,
+    "width": 6.420140743255615
+  },
+  {
+    "name": "Plant_1",
+    "bytes": 122484,
+    "height": 1.0135701447725296,
+    "width": 1.386027455329895
+  },
+  {
+    "name": "Plant_1_Big",
+    "bytes": 133536,
+    "height": 2.3477659970521927,
+    "width": 1.9540292024612427
+  },
+  {
+    "name": "Plant_7",
+    "bytes": 118872,
+    "height": 0.24951478838920593,
+    "width": 1.0478354692459106
+  },
+  {
+    "name": "Plant_7_Big",
+    "bytes": 121568,
+    "height": 0.2534325495362282,
+    "width": 1.3621740341186523
+  },
+  {
+    "name": "RockPath_Round_Small_1",
+    "bytes": 120208,
+    "height": 0.11283181235194206,
+    "width": 1.4763587713241577
+  },
+  {
+    "name": "RockPath_Round_Small_2",
+    "bytes": 128272,
+    "height": 0.10466732829809189,
+    "width": 1.3542838096618652
+  },
+  {
+    "name": "RockPath_Round_Small_3",
+    "bytes": 119912,
+    "height": 0.10927321389317513,
+    "width": 1.289994716644287
+  },
+  {
+    "name": "RockPath_Round_Thin",
+    "bytes": 208380,
+    "height": 0.11033729463815689,
+    "width": 2.0892062187194824
+  },
+  {
+    "name": "RockPath_Round_Wide",
+    "bytes": 296756,
+    "height": 0.11283182352781296,
+    "width": 2.129036545753479
+  },
+  {
+    "name": "RockPath_Square_Small_1",
+    "bytes": 106028,
+    "height": 0.1498702121898532,
+    "width": 1.018884301185608
+  },
+  {
+    "name": "RockPath_Square_Small_2",
+    "bytes": 89704,
+    "height": 0.14933522511273623,
+    "width": 0.9927218556404114
+  },
+  {
+    "name": "RockPath_Square_Small_3",
+    "bytes": 90112,
+    "height": 0.17363302689045668,
+    "width": 1.0762888193130493
+  },
+  {
+    "name": "RockPath_Square_Thin",
+    "bytes": 179096,
+    "height": 0.17634792253375053,
+    "width": 1.9869367480278015
+  },
+  {
+    "name": "RockPath_Square_Wide",
+    "bytes": 213392,
+    "height": 0.17634792160242796,
+    "width": 2.051580786705017
+  },
+  {
+    "name": "Rock_Medium_1",
+    "bytes": 67024,
+    "height": 2.2597965598106384,
+    "width": 3.2251484394073486
+  },
+  {
+    "name": "Rock_Medium_2",
+    "bytes": 63168,
+    "height": 1.8989749141037464,
+    "width": 3.048760414123535
+  },
+  {
+    "name": "Rock_Medium_3",
+    "bytes": 73864,
+    "height": 2.3162826597690582,
+    "width": 3.476110100746155
+  },
+  {
+    "name": "TwistedTree_1",
+    "bytes": 889364,
+    "height": 16.725495845079422,
+    "width": 13.515754699707031
+  },
+  {
+    "name": "TwistedTree_2",
+    "bytes": 855240,
+    "height": 18.94920302927494,
+    "width": 10.562872409820557
+  },
+  {
+    "name": "TwistedTree_3",
+    "bytes": 928084,
+    "height": 16.072540774941444,
+    "width": 11.505619049072266
+  },
+  {
+    "name": "TwistedTree_4",
+    "bytes": 914156,
+    "height": 18.738235011696815,
+    "width": 11.293086051940918
+  },
+  {
+    "name": "TwistedTree_5",
+    "bytes": 968592,
+    "height": 15.662175670266151,
+    "width": 9.494712114334106
+  }
+]
