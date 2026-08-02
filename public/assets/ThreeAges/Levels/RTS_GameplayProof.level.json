@@ -1051,45 +1051,6 @@
         "color": "#ffffff",
         "resolution": 16
       }
-    },
-    {
-      "id": "spline-2",
-      "position": [
-        -12.29,
-        0.52,
-        -0.54
-      ],
-      "spline": {
-        "schema": 1,
-        "closed": false,
-        "defaultUp": [
-          0,
-          1,
-          0
-        ],
-        "reparamStepsPerSegment": 8,
-        "points": [
-          {
-            "id": "spline-point-1",
-            "position": [
-              -1.82,
-              0,
-              -12.13
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-2",
-            "position": [
-              2.37,
-              0,
-              -5.03
-            ],
-            "pointType": "curveAuto"
-          }
-        ]
-      },
-      "name": "Spline 2"
     }
   ],
   "landscapes": [

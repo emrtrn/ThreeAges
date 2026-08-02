@@ -1445,7 +1445,9 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
   options.setDetailsScale([...selection.scale]);
   const locked = selection.locked ? "disabled" : "";
   const points = options.getSelectedSplinePoints();
-  const activePoint = points.find((point) => point.id === options.getActiveSplinePointId()) ?? points[0];
+  // Strictly the app-state active point: while none is active the move gizmo
+  // belongs to the Spline Actor itself, and the panel has to say so.
+  const activePoint = points.find((point) => point.id === options.getActiveSplinePointId());
   const pointButtons = points
     .map((point, index) => `<button type="button" class="${activePoint?.id === point.id ? "active" : ""}" data-spline-point="${escapeHtml(point.id)}" ${locked}><span>${index + 1}</span>${escapeHtml(point.id)}</button>`)
     .join("");
@@ -1566,7 +1568,10 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
       ${activePoint.pointType === "curveCustom" ? `<label class="detail-row"><span>Linked Tangents</span><input type="checkbox" data-spline-tangents-linked ${activePoint.tangentsLinked ? "checked" : ""} ${locked}></label><div class="detail-readonly">Drag the orange handles in the viewport.</div>` : ""}
       <div class="detail-button-row spline-point-editor__actions"><button type="button" data-spline-point-delete ${locked}>Delete Point</button>${splitButtons}</div>
       </div>`
-    : "<div class=\"spline-generator-empty\"><strong>No control points</strong><span>Add a point to begin shaping this spline.</span></div>";
+    : points.length === 0
+      ? "<div class=\"spline-generator-empty\"><strong>No control points</strong><span>Add a point to begin shaping this spline.</span></div>"
+      : `<div class="spline-generator-empty"><strong>No point selected</strong><span>The gizmo moves the whole Spline Actor. Pick a control point above (or click its marker in the viewport) to edit it; click the selected point again to come back here.</span></div>
+        ${splitButtons ? `<div class="detail-button-row spline-point-editor__actions">${splitButtons}</div>` : ""}`;
   body.innerHTML = `
     <section class="details-section spline-details"><div class="spline-details__header"><div><h3>Spline</h3><span>${spline.pointCount} control points</span></div><span class="spline-status ${spline.closed ? "is-closed" : ""}">${spline.closed ? "Closed loop" : "Open path"}</span></div>
       ${hasDegenerateSegment ? "<div class=\"detail-readonly\">Warning: a segment has coincident control points; move or delete one point.</div>" : ""}
@@ -1670,7 +1675,12 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
     else if (key === "segmentLength" || key === "gap") options.setSelectedSplineRigidSegmentGenerator(id, { [key]: value } as Partial<ForgeSplineRigidSegmentGeneratorDef>);
   }));
   body.querySelector<HTMLButtonElement>("[data-spline-point-add]")?.addEventListener("click", () => options.addSelectedSplinePoint());
-  body.querySelectorAll<HTMLButtonElement>("[data-spline-point]").forEach((button) => button.addEventListener("click", () => options.selectSplinePoint(button.dataset.splinePoint ?? null)));
+  // Clicking the selected point again leaves point mode, handing the move gizmo
+  // back to the Spline Actor.
+  body.querySelectorAll<HTMLButtonElement>("[data-spline-point]").forEach((button) => button.addEventListener("click", () => {
+    const pointId = button.dataset.splinePoint ?? null;
+    options.selectSplinePoint(pointId && pointId === activePoint?.id ? null : pointId);
+  }));
   body.querySelector<HTMLButtonElement>("[data-spline-point-delete]")?.addEventListener("click", () => options.deleteSelectedSplinePoint(activePoint?.id));
   body.querySelectorAll<HTMLButtonElement>("[data-spline-split]").forEach((button) => button.addEventListener("click", () => options.splitSelectedSplineSegment(Number(button.dataset.splineSplit))));
   body.querySelector<HTMLSelectElement>("[data-spline-point-type]")?.addEventListener("change", (event) => {

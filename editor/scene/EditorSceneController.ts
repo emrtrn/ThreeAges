@@ -38,9 +38,15 @@ import {
   type InstanceSelection,
   type LightSelection,
   type Selection,
+  type SplineSelection,
 } from "@editor/core/selection";
 import { SelectionStore } from "@editor/core/selectionStore";
 import { uniqueActorName } from "@engine/scene/lights";
+import {
+  cloneSplineActor,
+  uniqueSplineActorId,
+  uniqueSplineActorName,
+} from "@engine/scene/splineActor";
 import type {
   LayoutActorInstance,
   LayoutAudio,
@@ -53,6 +59,7 @@ import type {
   LayoutParticleEmitter,
   LayoutPlacement,
   LayoutPhysics,
+  LayoutSplineActor,
   MetadataValue,
   RoomLayout,
 } from "@engine/scene/layout";
@@ -234,11 +241,13 @@ export interface EditorSceneControllerHost {
   insertCharacterPlacement: (index: number, placement: LayoutCharacter) => void;
   insertInstancePlacement: (assetId: string, placementIndex: number, placement: LayoutPlacement) => void;
   insertLightActor: (index: number, actor: LayoutLightActor) => void;
+  insertSplineActor: (index: number, actor: LayoutSplineActor) => void;
   onStatus: (message: string, tone?: StatusTone) => void;
   removeActorPlacement: (index: number) => LayoutActorInstance | null;
   removeCharacterPlacement: (index: number) => LayoutCharacter | null;
   removeInstancePlacement: (assetId: string, placementIndex: number) => LayoutPlacement | null;
   removeLightActor: (index: number) => LayoutLightActor | null;
+  removeSplineActor: (index: number) => LayoutSplineActor | null;
   updateGizmo: () => void;
   updateSelectionBox: () => void;
 }
@@ -1304,6 +1313,22 @@ export class EditorSceneController {
     });
   }
 
+  /**
+   * A Spline Actor is addressed by `id` (generators, runtime lookups), so a copy
+   * needs its own id + display name — never the source's.
+   */
+  private cloneSplineActorForDuplicate(
+    actor: LayoutSplineActor,
+    existing: readonly LayoutSplineActor[],
+  ): LayoutSplineActor {
+    const snapshot = cloneSplineActor(actor);
+    snapshot.id = uniqueSplineActorId(existing);
+    snapshot.name = uniqueSplineActorName(actor.name ?? actor.id, existing);
+    delete snapshot.groupId;
+    delete snapshot.nodeId;
+    return snapshot;
+  }
+
   private duplicateSelection(selection: Selection): Selection | null {
     const layout = this.host.getMutableLayout();
     if (!layout) return null;
@@ -1394,7 +1419,35 @@ export class EditorSceneController {
       return duplicateSelection;
     }
 
-    if (selection.kind === "post") {
+    if (selection.kind === "spline") {
+      const actor = layout.splines?.[selection.index];
+      if (!actor) return null;
+      const snapshot = this.cloneSplineActorForDuplicate(actor, layout.splines ?? []);
+      const duplicateIndex = selection.index + 1;
+      const duplicateSelection: Selection = { kind: "spline", index: duplicateIndex };
+      this.executeCommand({
+        label: `Duplicate ${actor.name ?? actor.id}`,
+        redo: () => {
+          this.host.insertSplineActor(duplicateIndex, snapshot);
+          this.select(duplicateSelection);
+        },
+        undo: () => {
+          this.host.removeSplineActor(duplicateIndex);
+          this.select(selection);
+        },
+      });
+      return duplicateSelection;
+    }
+
+    // Blocking / AI navigation volumes and target points have no duplicate path
+    // yet; without this guard they would fall through to the character branch
+    // below and clone whatever character happens to sit at the same index.
+    if (
+      selection.kind === "post" ||
+      selection.kind === "blockingVolume" ||
+      selection.kind === "aiNavigationVolume" ||
+      selection.kind === "targetPoint"
+    ) {
       return null;
     }
 
@@ -1428,7 +1481,12 @@ export class EditorSceneController {
     const inserts: Array<{
       source: Selection;
       selection: Selection;
-      snapshot: LayoutPlacement | LayoutCharacter | LayoutLightActor | LayoutActorInstance;
+      snapshot:
+        | LayoutPlacement
+        | LayoutCharacter
+        | LayoutLightActor
+        | LayoutActorInstance
+        | LayoutSplineActor;
     }> = [];
 
     const instancesByAsset = new Map<string, Selection[]>();
@@ -1507,6 +1565,24 @@ export class EditorSceneController {
       });
     });
 
+    const splineSelections = selections
+      .filter((selection): selection is SplineSelection => selection.kind === "spline")
+      .map((selection) => cloneSelection(selection) as SplineSelection)
+      .sort((left, right) => left.index - right.index);
+    // Ids stay unique across the batch, not just against the current layout.
+    const splinePool = [...(layout.splines ?? [])];
+    splineSelections.forEach((selection, offset) => {
+      const actor = layout.splines?.[selection.index];
+      if (!actor) return;
+      const snapshot = this.cloneSplineActorForDuplicate(actor, splinePool);
+      splinePool.push(snapshot);
+      inserts.push({
+        source: cloneSelection(selection),
+        selection: { kind: "spline", index: selection.index + offset + 1 },
+        snapshot,
+      });
+    });
+
     if (inserts.length === 0) return null;
 
     const duplicateSelections = inserts.map((entry) => cloneSelection(entry.selection));
@@ -1538,6 +1614,8 @@ export class EditorSceneController {
             );
           } else if (entry.selection.kind === "light") {
             this.host.insertLightActor(entry.selection.index, entry.snapshot as LayoutLightActor);
+          } else if (entry.selection.kind === "spline") {
+            this.host.insertSplineActor(entry.selection.index, entry.snapshot as LayoutSplineActor);
           }
         }
         this.selectMany(
@@ -1555,6 +1633,8 @@ export class EditorSceneController {
             this.host.removeActorPlacement(entry.selection.index);
           } else if (entry.selection.kind === "light") {
             this.host.removeLightActor(entry.selection.index);
+          } else if (entry.selection.kind === "spline") {
+            this.host.removeSplineActor(entry.selection.index);
           }
         }
         this.selectMany(previousSelections, previousActive);

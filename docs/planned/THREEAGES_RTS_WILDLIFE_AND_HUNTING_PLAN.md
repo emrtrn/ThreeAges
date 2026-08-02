@@ -1,8 +1,8 @@
 # ThreeAges RTS Yaban Hayati, Avcilik ve Hayvan Varliklari Plani
 
 Olusturulma tarihi: 2026-08-01
-Durum: Faz 0-4 kod olarak tamamlandi (2026-08-02); Faz 4'un gorsel kabulu
-kullanicida. Sirada Faz 5 - avlanma dongusu. Kararlar §4te kilitli.
+Durum: Faz 0-5 kod olarak tamamlandi (2026-08-02); Faz 0-4 gorsel kabul aldi,
+Faz 5'inki kullanicida. Sirada Faz 6 - AI uyumu. Kararlar §4te kilitli.
 Kapsam: `public/assets/ThreeAges/Animals/` altindaki 12 animasyonlu hayvan
 modelini, oyunun ekonomi/savas/lojistik cercevesine oturan gercek RTS
 sistemlerine cevirmek. V1 hedefi **avlanma**dir; kalan turler icin yol haritasi
@@ -677,12 +677,13 @@ kaynagi henuz `null`: kulube kurulur, dogru gerekceyle **bos durur**
 (`missing-game`) ve Faz 5 ayni dala `WildlifeSystem`'i verir.
 `EconomyProductionStatus` de bu yuzden simdi `"missing-game"` tasiyor.
 
-**Placeholder gorsel.** `rts-content.json`'da `hunting_camp` uc kademede de
-`BP_RTS_LumberCamp.actor.json`'a bakar. Icerik kapsam testi her binanin bir
-Actor cozmesini sart kosar ve varlik paketinde avci kulubesi modeli yoktur;
-mevcut sanat icinde en yakini ahsap calisma kampidir. Kendi modeli
-gelene kadar kulube oduncu kampiyla ayni gorunur - bu **bilinen bir eksiktir**,
-oynanisi etkilemez.
+**Gorsel: `BP_RTS_HuntingCamp` (kullanici secimi, 2026-08-02).** Kulube kendi
+Actor'unu tasir (`houses-firstage-3-level3` static mesh'i) ve oduncu kampi gibi
+**tum cag ve kademelerde ayni** modeli kullanir. Actor manifest'e
+`threeages-rts-huntingcamp-actor` olarak kaydedildi; diger bina Actor'lerinin
+deseni budur. Ilk uygulamada gecici olarak `BP_RTS_LumberCamp`'e bakiyordu -
+icerik kapsam testi her binanin bir Actor cozmesini sart kostugu icin bos
+birakilamazdi.
 
 Kabul:
 
@@ -699,10 +700,13 @@ Kabul:
   Testin kirmiziya donebildigi dogrulandi: `gatherRadius` gecici olarak 5
   yapilinca suite "deer roams 10, past the hunting camp's reach of 5" ile
   kirildi, sonra geri alindi.
-- [ ] **Gorsel kabul kullanicida:** `?rts` Play rotasinda paletten Avci
-  Kulubesi secilip surunun uzaginda ghost'un kirmizi + gerekceli, suru
-  yakininda yesil oldugu; kurulan kulubenin secim panelinde "Yakinda av yok"
-  yazdigi (Faz 5'e kadar dogru davranis budur).
+- [x] **Gorsel kabul alindi (2026-08-02).** Kullanici `?rts` Play rotasinda
+  dogruladi: surunun uzaginda ghost kirmizi ve gerekceli, suru yakininda yesil.
+  Ayni gecise ait tek istek - kulubeye kendi modelinin verilmesi - yukarida
+  uygulandi.
+
+**Faz 4 tamamlandi (2026-08-02).** Kulube kurulabiliyor ama henuz avlanmiyor;
+"Yakinda av yok" durumu Faz 5'e kadar dogru davranistir. Sirada Faz 5.
 
 **Not - veri dosyalarina PowerShell ile yazmayin.** Bu fazda
 `Set-Content`/`Get-Content -Raw` ile yapilan tek bir gecici duzenleme
@@ -712,22 +716,103 @@ Bu dosyalar UTF-8/LF'dir; duzenleme dosya araclariyla yapilmalidir.
 
 ### Faz 5 - Avlanma dongusu
 
-- [ ] `WildlifeSystem` `reserveNearest` / `harvest` / `releaseReservation`
-  uclusunu uygular (`ForestSystem` ikizi).
-- [ ] Avci hayvana yurur; hayvan `fleeRadius` icinde kacar (`Gallop`), avci
-  kovalar.
-- [ ] Menzilde `attack` rolu; hayvan `Idle_HitReact` oynar.
-- [ ] Saglik bitince `Death` klibi -> **les** durumu
-  (`remaining = meatCapacity`).
-- [ ] Avci `gathering` durumuna gecer (`Eating`/`work` klibi), `carryCapacity`
-  doldurur, kulubeye doner, `unloading`.
-- [ ] Et yol/depo zinciriyle merkeze akar.
-- [ ] **Histerezis:** rezervasyon, hayvanin gecici olarak `gatherRadius`
-  disina cikmasina dayanir (§9). Durum `producing` <-> `source-depleted`
-  arasinda titremez.
-- [ ] Suru tukenince kulube `source-depleted` bildirir.
+- [x] `WildlifeSystem implements ResourceSource`. Ucuncu dal **eklenmedi** -
+  Faz 4'te acilan `requiresGame` dalina kaynak verildi, hepsi bu.
+- [x] Avci hayvana yurur; hayvan `fleeRadius` icinde kacar, avci kovalar.
+- [x] Sikisinca avci `attack` pozuna gecer (`Unit.setHunting`).
+- [x] Saglik bitince **les**: `Death` klibi (`dying` zaten sunuma gidiyordu) ve
+  `remainingMeat = meatCapacity`.
+- [x] Avci `work` pozunda leşi keser, `carryCapacity` doldurur, kulubeye doner,
+  bosaltir - hepsi Faz 3'te tekillestirilmis **ayni** dongude.
+- [x] Et yol/depo zincirine akar: kulube diger ureticiler gibi `localBuffer`
+  doldurur ve `withdrawBuffered` ile cekilir; avciliga ozel bir yol yoktur
+  (§4.1'in butun gerekcesi buydu).
+- [x] **Histerezis** (§9) - asagida.
+- [x] Suru tukenince kulube `source-depleted` bildirir.
 
-Kabul: §2'deki 1-7 adimlari uctan uca calisir.
+**Arayuze iki kavram eklendi; ikisi de gercek genellemedir.**
+
+1. `ResourceSource.positionOf(sourceId)` - kaynagin **su anki** yeri. Agac ve
+   yatak icin sabit, yani takip kontrolu onlar icin hic tetiklenmez; hayvan icin
+   kacisin ta kendisi. Olmasaydi avci hayvanin *bulundugu* yere degil *oldugu*
+   yere yururdu.
+2. `harvest` artik `{ amount, working }` dondurur. Ayrim sart: **calisiyor ama
+   hicbir sey kazanmadi** durumu, hayvani heniz devirmemis avcidir. Eskiden
+   `0` donmek "gezi bitti, eve don" demekti; av bu yuzden hic baslayamazdi.
+   Agac ve yatak `working: amount > 0` dondurur - davranislari birebir ayni
+   kalir. Loop bu ikiliden **pozu da** turetir: `working && amount <= 0` ise
+   saldiri pozu, degilse calisma pozu. Boylece jenerik dongu "yaban hayati"
+   diye bir sey bilmeden dogru klibi surer.
+
+`Unit.setHunting` eklendi: `setWorking`'in ikizi, ayni sistem tarafindan
+yazilir. Gerekce somut - avcinin **saldiri hedefi yoktur**, hicbir zaman darbe
+alisverisi yapmaz, yani `isTradingBlows()` onu hayvan onunde bos bos dururken
+gosterirdi. Sunum-yalniz; hasar buradan gecmez, oldurme islemi kaynagin kendi
+isidir.
+
+**Uc davranis hatasi olcumle bulundu ve duzeltildi.** Tasarim kagit uzerinde
+dogruydu; kod calistirilinca degildi:
+
+1. **Kacis sinirsizdi.** Av isciden hizli (7.5'e karsi 6), yani duz kacan bir
+   geyik gitti. Olculdu: tek geyik 90 birim asti ve **haritadan cikti**, avci
+   pesinde; kulube surusunu tek atis yapmadan kaybetti. Cozum `keepInHerdGround`
+   - kacis sururun cemberine kelepcelenir, hayvan hiz ustunlugunu kendi
+   otlagini turlayarak harcar. Yan kazanc: §8'in menzil sozlesmesi
+   (`roamRadius < gatherRadius`) artik **ortalamada degil kelimesi kelimesine**
+   dogru; kacan hayvan kulubenin menzilinden cikamaz.
+2. **Her karede yol planlaniyordu.** Kacan hayvan tikte 1.875 birim gidiyor,
+   `WORK_RANGE` ise 1.25 - yani takip kontrolu her tik yeni yol istiyor ve
+   yuruyusu daha ilk adim atilmadan sifirliyordu. Cozum iki esik: yolda
+   `SOURCE_FOLLOW_SLACK` (gevsek, kovalamaca yol planini dovmesin), kaynagin
+   basinda `WORK_RANGE` (sikí, yoksa avci leşi dort adim oteden kesiyor - bu da
+   olculdu).
+3. **Hayvan hic kosaya sikismiyordu.** `fleeRadius` icindeki her insan kacisi
+   tetikledigi icin, hayvani deviren avci tam da kapattigi mesafeyi yeniden
+   aciyordu: olculdu, 5 saniyelik `huntSeconds` **65 saniye** surdu. Cozum
+   `CAUGHT_DISTANCE` - bu mesafenin icinde hayvan kacmaz, durur ve tehdide
+   doner. Sikisan av, olum klibinin de dogru yonde oynadigi andir.
+
+**Histerezis (§9): kulube surunun *kendisine* baglidir, konumuna degil.** Bir
+hayvan, kendisi menzildeyse **ya da sururunun merkezi** menzildeyse avlanabilir
+sayilir. Sebep somut: hayvan kulubeden uzaga kacar ve durdugu yerde olur;
+"nerede dustuyse orayla" olculseydi, avci rezervasyonu birakir birakmaz les
+menzilden cikar ve kulube **yerde et dururken** `source-depleted` derdi. Bu
+kural bilerek yerlestirme kuralindan ayridir: nereye **kurulabilecegi** hala
+gorunen hayvanlarla ilgili yerel bir sorudur (`liveAnimalsNear`), ne
+**isleyebilecegi** ise kuruldugu suruyu izler.
+
+**Kapsam disi birakilan tek madde - `Idle_HitReact`.** `animationSet` semasinda
+`hitReact` diye bir rol yok; eklemek sidecar semasini ve CLAUDE.md'nin ikinci
+allowlist yuzeyini (`tools/saveValidator.ts`) degistirmek demek. Av anlatisini
+`Gallop` kacis + sikisma + `Death` zaten tasiyor; hit-react ayri ve
+allowlist'e dokunan bir is olarak ertelendi.
+
+Yeni balans alanlari (`animals.json`): `fleeSeconds`, `fleeRecoverySeconds`,
+`huntSeconds`. Av hasari **turetilir** (`maxHealth / huntSeconds`), yani ayari
+yapan "bu tur kac saniyede devrilir" okur, aritmetik yapmaz - ve hayvan V3'te
+kurdun/ordunun vurabilecegi gercek bir can cubugu tasimaya devam eder.
+
+Kabul:
+
+- [x] `npx tsc --noEmit`, `npm run test:engine` (1210 check) ve
+  `npm run build:verify` yesil.
+- [x] §2'nin 1-7 adimlari **tek bir engine testinde uctan uca** kosuyor:
+  "Faz 5: a hunter runs down its quarry, butchers it, and banks exactly what the
+  carcass held". Kulube kurulur, avci kovalar, saldiri pozunu takar, hayvan
+  duser, les temizlenir ve bankaya giren miktar `animals.json`'daki
+  `meatCapacity`'den **hesaplanarak** dogrulanir. Ayrica avin bitmesiyle
+  `source-depleted` ve iscinin serbest birakilmasi pinlenir.
+- [x] Rezervasyon sozlesmesi (§8) pinlendi: iki avci ayni hayvani alamaz,
+  rezervasyon **kacisi asar** ve birakildiginda hayvan yeniden alinabilir.
+- [x] Titreme (§9) testin icinde pinlendi: et yerde dururken kulube hicbir tikte
+  `source-depleted` demiyor.
+- [x] Yakalanabilirlik validator'a girdi: bir kacis, isci onu telafi
+  suresinde kapatabileceginden uzun surerse `validateGameData` dosya ve alan
+  adiyla reddeder ("can never be caught"). Bu, kovalamaca hatasinin bir
+  **yol bulma arizasi gibi** gorunen turunu veriye kapatir.
+- [ ] **Gorsel kabul kullanicida:** suru yakinina Avci Kulubesi, isci ata; avci
+  geyigi kovalamali (`Gallop`), sikistirmali, hayvan `Death` ile dusmeli, avci
+  les basinda `Eating` oynayip kulubeye et tasimali ve HUD'da yiyecek artmali.
 
 ### Faz 6 - AI uyumu
 
@@ -768,17 +853,20 @@ sozlesme** dogrulanir; hicbir test bir buyuklugu pinlemez.
 - [x] **Yerellik (Faz 4'te uygulandi):** `gatherRadius`, `RTS_WORLD_HALF_EXTENT
   / 2`nin altinda kalir; global havuz olusmaz. Test yalniz avci kulubesini
   degil, **her** sonlu kaynakli binayi tarar.
-- [ ] **Nufus:** yaban hayvani `PopulationSystem.snapshot()` sayimina
-  girmez.
-- [ ] **Turetim:** bir lesin verdigi toplam yiyecek, `animals.json`'daki
-  `meatCapacity`'den **hesaplanarak** dogrulanir; boylece her ayarda gecerli
-  kalir.
-- [ ] **Icerik cozumu:** her turun `actorRef`'i cozulur; eksik esleme
-  sessizce placeholder'a dusmez.
-- [ ] **Rezervasyon:** bir hayvani ayni anda iki avci rezerve edemez;
-  avci olunce/serbest kalinca rezervasyon birakilir.
-- [ ] **Validator:** sifir/negatif `meatCapacity` ve `roamRadius >=
-  gatherRadius` `validateGameData` tarafindan dosya ve alan adiyla reddedilir.
+- [x] **Nufus (Faz 2'de uygulandi):** yaban hayvani
+  `PopulationSystem.snapshot()` sayimina girmez.
+- [x] **Turetim (Faz 5'te uygulandi):** bir lesin verdigi toplam yiyecek,
+  `animals.json`'daki `meatCapacity`'den **hesaplanarak** dogrulanir; boylece
+  her ayarda gecerli kalir.
+- [x] **Icerik cozumu (Faz 2'de uygulandi):** her turun `actorRef`'i cozulur;
+  eksik esleme sessizce placeholder'a dusmez.
+- [x] **Rezervasyon (Faz 5'te uygulandi):** bir hayvani ayni anda iki avci
+  rezerve edemez; rezervasyon kacisi asar ve birakildiginda hayvan yeniden
+  alinabilir.
+- [x] **Validator:** sifir/negatif `meatCapacity` (Faz 2) ve yakalanamaz kacis
+  ayari (Faz 5) `validateGameData` tarafindan dosya ve alan adiyla reddedilir.
+  `roamRadius >= gatherRadius` iki tablo birden gerektirdigi icin engine
+  testinde durur (Faz 4).
 
 Kapi: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`.
 Olcek testi: `animals.json` ve `buildings.json`'daki her buyukluk olceklenip

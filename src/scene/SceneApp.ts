@@ -1244,6 +1244,12 @@ export class SceneApp {
   private splinePointOverlay: Group | null = null;
   private activeSplinePointId: string | null = null;
   private activeSplineTangent: SplineTangentHandle | null = null;
+  /**
+   * The selection the active control point belongs to. Point mode owns the move
+   * gizmo, so it is scoped to one selection: any selection change (including
+   * re-selecting the same Spline Actor) drops back to the actor-level gizmo.
+   */
+  private activeSplinePointSelectionId: string | null = null;
   /** Live generic-spline point drag; one snapshot becomes one undo command on release. */
   private splinePointDrag: { index: number; pointId: string; handle: SplinePointGizmoTarget["handle"]; before: LayoutSplineActor; worldMatrixInverse: Matrix4 } | null = null;
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
@@ -1453,11 +1459,13 @@ export class SceneApp {
       insertInstancePlacement: (assetId, placementIndex, placement) =>
         this.insertInstancePlacement(assetId, placementIndex, placement),
       insertLightActor: (index, actor) => this.insertLightActor(index, actor),
+      insertSplineActor: (index, actor) => this.insertSpline(index, actor),
       onStatus: (message, tone) => this.onStatus?.(message, tone),
       removeCharacterPlacement: (index) => this.removeCharacterPlacement(index),
       removeInstancePlacement: (assetId, placementIndex) =>
         this.removeInstancePlacement(assetId, placementIndex),
       removeLightActor: (index) => this.removeLightActor(index),
+      removeSplineActor: (index) => this.removeSplineAt(index),
       updateGizmo: () => this.updateGizmo(),
       updateSelectionBox: () => this.updateSelectionBox(),
     });
@@ -5056,8 +5064,33 @@ export class SceneApp {
     });
   }
 
+  /** Enters (or leaves) spline point mode for the current selection. */
+  private setActiveSplinePoint(
+    pointId: string | null,
+    tangent: SplineTangentHandle | null = null,
+  ): void {
+    this.activeSplinePointId = pointId;
+    this.activeSplineTangent = pointId ? tangent : null;
+    this.activeSplinePointSelectionId = this.selection ? selectionId(this.selection) : null;
+  }
+
+  /**
+   * Drops point mode whenever the selection changes. The active point owns the
+   * move gizmo, so without this the first control-point click would pin the
+   * gizmo to that point forever — the Spline Actor itself could never be moved
+   * again. Called from the overlay refresh, which runs on every gizmo update.
+   */
+  private syncActiveSplinePointSelection(): void {
+    const id = this.selection ? selectionId(this.selection) : null;
+    if (id === this.activeSplinePointSelectionId) return;
+    this.activeSplinePointSelectionId = id;
+    this.activeSplinePointId = null;
+    this.activeSplineTangent = null;
+  }
+
   /** Rebuilds lightweight point markers only while a generic Spline Actor is selected. */
   private refreshSplinePointOverlay(): void {
+    this.syncActiveSplinePointSelection();
     this.clearSplinePointOverlay();
     if (this.selection?.kind !== "spline") return;
     const actor = this.layout?.splines?.[this.selection.index];
@@ -5438,8 +5471,7 @@ export class SceneApp {
   selectSplinePoint(pointId: string | null): void {
     if (this.selection?.kind !== "spline") return;
     const points = this.layout?.splines?.[this.selection.index]?.spline.points ?? [];
-    this.activeSplinePointId = points.some((point) => point.id === pointId) ? pointId : null;
-    this.activeSplineTangent = null;
+    this.setActiveSplinePoint(points.some((point) => point.id === pointId) ? pointId : null);
     this.refreshSplinePointOverlay();
     this.updateGizmo();
     this.emitSelectionChanged();
@@ -5656,8 +5688,7 @@ export class SceneApp {
     const apply = (value: LayoutSplineActor): void => {
       if (!this.layout?.splines?.[index]) return;
       this.layout.splines[index] = cloneSplineActor(value);
-      this.activeSplinePointId = activePointId;
-      this.activeSplineTangent = null;
+      this.setActiveSplinePoint(activePointId);
       this.refreshSpline(index);
       this.updateGizmo();
       this.emitSelectionChanged();
@@ -11328,11 +11359,18 @@ export class SceneApp {
       pickSelection: (clientX, clientY) => {
         const hit = this.pickSplinePoint(clientX, clientY);
         if (hit && this.selection?.kind === "spline") {
-          this.activeSplinePointId = hit.pointId;
-          this.activeSplineTangent = hit.handle === "point" ? null : hit.handle;
+          this.setActiveSplinePoint(hit.pointId, hit.handle === "point" ? null : hit.handle);
           this.refreshSplinePointOverlay();
           this.updateGizmo();
           return { kind: "spline", index: this.selection.index };
+        }
+        // A click that misses every control-point marker leaves point mode, so
+        // the gizmo goes back to the Spline Actor itself (clicks on a gizmo
+        // handle never reach here — the input binder tests handles first).
+        if (this.activeSplinePointId !== null) {
+          this.setActiveSplinePoint(null);
+          this.refreshSplinePointOverlay();
+          this.updateGizmo();
         }
         return this.picker.pickSelection(clientX, clientY);
       },
@@ -11707,8 +11745,7 @@ export class SceneApp {
     const apply = (value: LayoutSplineActor): void => {
       if (!this.layout?.splines?.[index]) return;
       this.layout.splines[index] = cloneSplineActor(value);
-      this.activeSplinePointId = drag.pointId;
-      this.activeSplineTangent = drag.handle === "point" ? null : drag.handle;
+      this.setActiveSplinePoint(drag.pointId, drag.handle === "point" ? null : drag.handle);
       this.refreshSpline(index);
       this.updateGizmo();
       this.emitSelectionChanged();

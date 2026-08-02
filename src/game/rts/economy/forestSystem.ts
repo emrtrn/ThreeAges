@@ -4,7 +4,13 @@
  * forest as one opaque static mesh.
  */
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
-import type { ResourceReach, ResourceSearchArea, ResourceSource } from "./resourceSource";
+import type {
+  ResourceHarvest,
+  ResourceHarvestRequest,
+  ResourceReach,
+  ResourceSearchArea,
+  ResourceSource,
+} from "./resourceSource";
 
 export type TreeVariant = "pine" | "tree1" | "tree2";
 
@@ -116,22 +122,31 @@ export class ForestSystem implements ResourceSource {
     return tree ? this.snapshot(tree) : null;
   }
 
+  /** A tree stands where it was authored; nothing here ever moves. */
+  positionOf(sourceId: string): { readonly x: number; readonly z: number } | null {
+    const tree = this.trees.get(sourceId);
+    return tree ? { x: tree.definition.x, z: tree.definition.z } : null;
+  }
+
   /**
-   * Cut from the tree this worker holds. The caller also names the source it
+   * Cut from the tree this worker holds. The request also names the source it
    * believes he is at, but the reservation is what binds here: a lumberjack can
    * only ever fell the trunk the forest handed him, so the name is not consulted.
+   * Nor is the tick length — an axe yields by the stroke, not by the second.
    */
-  harvest(workerId: number, _sourceId: string, requested: number): number {
+  harvest({ workerId, amount: requested }: ResourceHarvestRequest): ResourceHarvest {
     if (!Number.isFinite(requested) || requested < 0) {
       throw new RangeError("Requested wood harvest must be a non-negative finite number");
     }
     const treeId = this.treeIdByWorkerId.get(workerId);
     const tree = treeId ? this.trees.get(treeId) : null;
-    if (!tree || tree.reservedByWorkerId !== workerId || tree.remaining <= 0) return 0;
+    if (!tree || tree.reservedByWorkerId !== workerId || tree.remaining <= 0) {
+      return { amount: 0, working: false };
+    }
     const amount = Math.min(requested, tree.remaining);
     tree.remaining -= amount;
     if (tree.remaining <= DEPLETION_EPSILON) tree.remaining = 0;
-    return amount;
+    return { amount, working: amount > 0 };
   }
 
   releaseReservation(workerId: number): void {

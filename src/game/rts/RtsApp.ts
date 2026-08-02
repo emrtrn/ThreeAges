@@ -1027,6 +1027,7 @@ export class RtsApp {
       (worker) => this.workerConstruction.stateFor(worker) !== "idle",
       this.resourceNodes,
       this.forests,
+      this.wildlife,
     );
     this.logisticsTransfers = new LogisticsTransferSystem(
       this.economyProduction,
@@ -2563,7 +2564,10 @@ export class RtsApp {
     // agent and deliberately not a nav blocker: a herd is scenery that can be
     // hunted, and paying for pathfinding per animal per frame would be the
     // most expensive way to solve the least important problem.
-    this.wildlife.update(dt);
+    // Every body on the field frightens game, not just the hunter who claimed
+    // it: a herd that scattered for its assigned hunter and ignored an army
+    // walking through it would read as scenery with one scripted reaction.
+    this.wildlife.update(dt, this.units.all().map((unit) => unit.position));
     this.workerConstruction.update(dt);
     // Settle repair jobs whose building was razed or demolished since the last
     // tick; an untouched job is refunded here exactly as a cancelled one is.

@@ -21275,6 +21275,34 @@
       "license": "Project-local RTS presentation asset"
     },
     {
+      "id": "threeages-rts-huntingcamp-actor",
+      "name": "BP RTS HuntingCamp.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "hunting-camp"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 533
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
       "id": "threeages-rts-market-firstage-t1-actor",
       "name": "BP RTS Market FirstAge T1.Actor",
       "assetType": "prefab",

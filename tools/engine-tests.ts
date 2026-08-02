@@ -6580,6 +6580,91 @@ check("EditorSceneController duplicates and deletes layout objects through host 
   assert.equal(layout.lights?.length, 1);
 });
 
+check("EditorSceneController duplicates a Spline Actor with its own id and name", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "controller-splines",
+    loadGroups: [],
+    instances: [],
+    characters: [{ assetId: "npc", position: [9, 0, 9] }],
+    splines: [
+      {
+        id: "spline-1",
+        name: "Road",
+        position: [4, 0, 6],
+        groupId: "g1",
+        spline: {
+          closed: false,
+          points: [
+            { id: "point-1", position: [0, 0, 0], pointType: "curveAuto" },
+            { id: "point-2", position: [8, 0, 0], pointType: "curveAuto" },
+          ],
+        },
+      },
+    ],
+  };
+  const splineSelections = (): Selection[] =>
+    (layout.splines ?? []).map((_actor, index) => ({ kind: "spline" as const, index }));
+  const mutableTransform = (selection: Selection): HeadlessTransform | null => {
+    if (selection.kind === "spline") return layout.splines?.[selection.index] ?? null;
+    if (selection.kind === "character") return layout.characters[selection.index] ?? null;
+    return null;
+  };
+  const controller = new EditorSceneController({
+    applyGroupId: () => {},
+    descendantsOf: () => [],
+    emitHistoryChanged: () => {},
+    emitSelectionChanged: () => {},
+    getAllSelections: splineSelections,
+    getGroupedSelections: (selection) => [selection],
+    getMutableLayout: () => layout,
+    getMutableTransform: mutableTransform,
+    getSelectionLabel: (selection) => selectionId(selection),
+    hasSelection: (selection) => mutableTransform(selection) !== null,
+    createLightId: (type) => `${type}-copy`,
+    insertCharacterPlacement: (index, placement) => {
+      layout.characters.splice(index, 0, { ...placement });
+    },
+    insertInstancePlacement: () => {},
+    insertLightActor: () => {},
+    insertSplineActor: (index, actor) => {
+      layout.splines ??= [];
+      layout.splines.splice(index, 0, actor);
+    },
+    onStatus: () => {},
+    removeCharacterPlacement: (index) => layout.characters.splice(index, 1)[0] ?? null,
+    removeInstancePlacement: () => null,
+    removeLightActor: () => null,
+    removeSplineActor: (index) => layout.splines?.splice(index, 1)[0] ?? null,
+    updateGizmo: () => {},
+    updateSelectionBox: () => {},
+  });
+
+  controller.select({ kind: "spline", index: 0 });
+  controller.duplicateSelected();
+  // A Spline Actor is addressed by id, so the copy must never share the source's
+  // id or display name — and it must not fall through to the character list.
+  assert.equal(layout.splines?.length, 2);
+  assert.equal(layout.characters.length, 1);
+  const copy = layout.splines?.[1];
+  assert.ok(copy, "expected a duplicated spline at index 1");
+  assert.notEqual(copy.id, "spline-1");
+  assert.notEqual(copy.name, "Road");
+  assert.deepEqual(copy.position, [4, 0, 6]);
+  assert.equal(copy.spline.points.length, 2);
+  assert.equal(copy.groupId, undefined);
+  controller.undo();
+  assert.equal(layout.splines?.length, 1);
+  assert.equal(layout.splines?.[0]?.id, "spline-1");
+
+  // The multi-selection path keeps ids unique across the whole batch too.
+  controller.redo();
+  controller.selectMany(splineSelections(), splineSelections()[0] ?? null);
+  controller.duplicateSelected();
+  assert.equal(layout.splines?.length, 4);
+  assert.equal(new Set((layout.splines ?? []).map((actor) => actor.id)).size, 4);
+});
+
 check("EditorSceneController applies flags, default-true fields, and metadata with undo", () => {
   const layout: RoomLayout = {
     schema: 1,
@@ -29901,12 +29986,16 @@ check("the animal validator refuses data that could never make sense", () => {
     moveSpeed: 7.5,
     walkClipSpeed: 1.5,
     fleeRadius: 9,
+    fleeSeconds: 1.5,
+    fleeRecoverySeconds: 3,
+    huntSeconds: 5,
     roamRadius: 10,
   };
   assert.ok(validateAnimalBalance({ deer: sane }).deer, "the sane shape passes");
 
   for (const key of [
     "meatCapacity", "maxHealth", "moveSpeed", "walkClipSpeed", "fleeRadius", "roamRadius",
+    "fleeSeconds", "fleeRecoverySeconds", "huntSeconds",
   ] as const) {
     assert.throws(
       () => validateAnimalBalance({ deer: { ...sane, [key]: 0 } }),
@@ -29919,6 +30008,14 @@ check("the animal validator refuses data that could never make sense", () => {
     () => validateAnimalBalance({ deer: { ...sane, roamRadius: 70 } }),
     /at map scale/,
     "a map-scale roam radius is refused",
+  );
+  // Prey outruns a worker, so a hunt only converges during the winded window.
+  // Data where a bolt outlasts the recovery produces game that is chased forever
+  // — a bug that presents as broken pathfinding rather than as a bad number.
+  assert.throws(
+    () => validateAnimalBalance({ deer: { ...sane, fleeRecoverySeconds: 0.5 } }),
+    /can never be caught/,
+    "a species that always outruns its hunter is refused",
   );
 });
 
@@ -29957,6 +30054,117 @@ check("Faz 4: a gathering camp's reach stays local and still covers the herd it 
       `${id} reaches ${source.gatherRadius}, which is map-scale rather than local`,
     );
   }
+});
+
+check("Faz 5: one animal is claimed by one hunter, and the claim survives the chase", () => {
+  const animals = shippedAnimalBalance();
+  // Exactly two animals, so "the only one left free" is a claim the test can name.
+  const wildlife = new WildlifeSystem(animals, [{ id: "herd", species: "deer", x: 0, z: 0, count: 2 }]);
+  const reach = { resourceId: "food", x: 0, z: 0, radius: 18 } as const;
+
+  const first = wildlife.reserveNearest(1, reach) ?? assert.fail("the first hunter found nothing to claim");
+  const second = wildlife.reserveNearest(2, reach) ?? assert.fail("the second hunter found nothing to claim");
+  assert.notEqual(first.id, second.id, "two hunters cannot bring down the same animal");
+  assert.equal(
+    wildlife.reserveNearest(1, reach)?.id,
+    first.id,
+    "asking again returns the animal already claimed rather than shopping around",
+  );
+
+  // Drive the claimed animal far outside the camp's reach, which is exactly what
+  // a chase does. The claim has to survive it, or the hunter is sent home every
+  // time his quarry does the one thing quarry does.
+  const claimed = wildlife.all().find((animal) => animal.id === first.id) ?? assert.fail("claimed animal missing");
+  claimed.position.set(reach.radius * 4, 0, 0);
+  assert.equal(wildlife.reserveNearest(1, reach)?.id, first.id, "a bolt does not break the claim");
+
+  wildlife.releaseReservation(1);
+  // The released animal is still standing four camp-radii away, so this only
+  // passes because a camp works the *herd* it was built for rather than whatever
+  // is inside its circle this second.
+  assert.equal(
+    wildlife.reserveNearest(3, reach)?.id,
+    first.id,
+    "a released animal is claimable again, herd-anchored even where it ran to",
+  );
+  assert.equal(wildlife.reserveNearest(2, reach)?.id, second.id, "another hunter's claim is untouched");
+});
+
+check("Faz 5: a hunter runs down its quarry, butchers it, and banks exactly what the carcass held", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const camp = buildings.hunting_camp ?? assert.fail("hunting camp balance missing");
+  const economy = camp.economy ?? assert.fail("hunting camp economy missing");
+  const animals = shippedAnimalBalance();
+  const deer = animals.deer ?? assert.fail("deer balance missing");
+  // One animal, so the run has an exact expected yield derived from the table.
+  const wildlife = new WildlifeSystem(animals, [{ id: "herd", species: "deer", x: 0, z: 0, count: 1 }]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const navigation = new RtsNavigation();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 500 }, 20);
+  const territory = new TerritoryControlSystem(() => [{ owner: "player", x: 0, z: 0, radius: 1000 }]);
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => structures.navigationBlockers(),
+    territory,
+    () => {},
+    () => {},
+    (stats, x, z) => stats.economy?.requiresGame
+      && wildlife.liveAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
+      ? "missing-game"
+      : null,
+  );
+  // On the herd itself, which is where a player puts it: with one animal the
+  // spawn point is a seeded draw anywhere inside the roam circle, and a camp
+  // placed off to one side can legitimately fall out of reach of it.
+  const built = construction.build("player", "hunting_camp", 0, 0);
+  if (!built.built) return assert.fail(`hunting camp construction failed: ${built.reason}`);
+  structures.advanceConstruction(built.structure, camp.constructionSeconds);
+
+  const hunter = units.spawn("player", 6, 0, RTS_TEST_WORKER_STATS);
+  const production = new EconomyProductionSystem(
+    units, structures, navigation, () => false, undefined, undefined, wildlife,
+  );
+  const quarry = wildlife.all()[0] ?? assert.fail("the herd spawned no animal");
+
+  let banked = 0;
+  let sawHuntingPose = false;
+  let depletedWhileMeatRemained = false;
+  const step = 0.25;
+  for (let tick = 0; tick < 4000; tick += 1) {
+    wildlife.update(step, units.all().map((unit) => unit.position));
+    updateUnitMovement(units.all(), step);
+    production.update(step);
+    if (hunter.isHunting) sawHuntingPose = true;
+    // Stand in for the road/depot chain so the camp's buffer cannot cap the run:
+    // one deer carries more meat than the camp can hold at once, by design.
+    banked += production.withdrawBuffered(built.structure.id)?.amount ?? 0;
+    const status = production.snapshots("player")[0]?.status;
+    if (status === "source-depleted" && quarry.remainingMeat > 0) depletedWhileMeatRemained = true;
+  }
+
+  assert.ok(sawHuntingPose, "the hunter took the attack pose while bringing the animal down");
+  assert.equal(quarry.dead, true, "the quarry was brought down");
+  assert.equal(quarry.remainingMeat, 0, "the carcass was picked clean");
+  // Derived from the table, not pinned: retune `meatCapacity` and this still holds.
+  assert.ok(
+    Math.abs(banked - deer.meatCapacity) < 0.0001,
+    `a carcass banks exactly its meatCapacity (expected ${deer.meatCapacity}, banked ${banked})`,
+  );
+  assert.equal(economy.resourceId, "food", "the meat arrives as food");
+  // §9's flicker: a chase repeatedly carries the quarry outside the camp's reach,
+  // and a camp that called itself exhausted every time would read as broken while
+  // the hunt was going perfectly.
+  assert.equal(depletedWhileMeatRemained, false, "the camp never called itself exhausted while meat remained");
+  assert.equal(production.snapshots("player")[0]?.status, "source-depleted", "an emptied herd stops the camp");
+  assert.equal(production.isAssigned(hunter), false, "the hunter is released once the herd is gone");
+  territory.dispose();
 });
 
 check("Faz 4: a hunting camp is refused away from live game and legal beside a herd", () => {
@@ -33835,7 +34043,7 @@ check("RTS a live tree blocks a building footprint until it is harvested away", 
   assert.equal(construction.validate("player", "lumber_camp", 10, 0)?.valid, true, "a camp is legal beside the grove");
   // Harvest the blocking tree to nothing; its ground becomes buildable again.
   forests.reserveNearest(1, { resourceId: "wood", x: 20, z: 0, radius: 4 });
-  forests.harvest(1, "under-camp", 40);
+  forests.harvest({ workerId: 1, sourceId: "under-camp", amount: 40, deltaSeconds: 1 });
   assert.equal(forests.snapshots().find((tree) => tree.id === "under-camp")?.depleted, true, "the buried tree is now gone");
   assert.notEqual(construction.validate("player", "lumber_camp", 20, 0)?.reason, "blocked", "a depleted tree stops reserving its cell");
   territory.dispose();
@@ -36637,7 +36845,7 @@ check("RTS a road routes around a standing tree and straight through once it is 
   assert.ok(detour.cells.every((cell) => cell.x !== 0 || cell.z !== 0), "the route bends around the standing tree");
   // Fell the tree; its cell stops reserving road space.
   forests.reserveNearest(1, { resourceId: "wood", x: 0, z: 0, radius: 4 });
-  forests.harvest(1, "on-route", 40);
+  forests.harvest({ workerId: 1, sourceId: "on-route", amount: 40, deltaSeconds: 1 });
   const through = construction.plan({ x: -6, z: 0 }, { x: 6, z: 0 });
   assert.ok(through, "a road plans across the cleared cell");
   assert.ok(through.cells.some((cell) => cell.x === 0 && cell.z === 0), "the felled tree no longer diverts the road");

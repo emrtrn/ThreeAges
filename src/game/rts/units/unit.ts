@@ -230,6 +230,8 @@ export class Unit {
   private deathElapsed: number | null = null;
   /** See {@link setWorking}: presentation-only, written by the job system. */
   private working = false;
+  /** See {@link setHunting}: presentation-only, written by the job system. */
+  private hunting = false;
 
   constructor(
     owner: UnitOwner,
@@ -342,7 +344,7 @@ export class Unit {
     this.presentation?.update?.({
       deltaSeconds,
       planarSpeed: this.measurePlanarSpeed(deltaSeconds),
-      attacking: this.isTradingBlows(),
+      attacking: this.isTradingBlows() || this.hunting,
       dying: this.dying,
       working: this.working,
       attackCount: this.attack.blowCount,
@@ -366,6 +368,25 @@ export class Unit {
   /** Whether an in-place job is running; see {@link setWorking}. */
   get isWorking(): boolean {
     return this.working;
+  }
+
+  /**
+   * Mark the unit as bringing down prey.
+   *
+   * The twin of {@link setWorking} and owned by the same system, for a job that
+   * is not in-place work but is not combat either: a hunter has no attack target
+   * and never trades blows, so `isTradingBlows()` would leave him standing idle
+   * while an animal dies in front of him. Presentation-only — nothing in
+   * movement, combat or death reads it, and no damage is dealt through it; the
+   * kill itself belongs to the source being worked.
+   */
+  setHunting(hunting: boolean): void {
+    this.hunting = hunting;
+  }
+
+  /** Whether prey is being brought down; see {@link setHunting}. */
+  get isHunting(): boolean {
+    return this.hunting;
   }
 
   /**

@@ -42,6 +42,36 @@ export interface ReservedResourceSource {
   readonly z: number;
 }
 
+/** One tick of one worker's work at one source. */
+export interface ResourceHarvestRequest {
+  readonly workerId: number;
+  readonly sourceId: string;
+  /** How much the worker still has room to carry this tick. */
+  readonly amount: number;
+  /**
+   * Tick length, for sources whose work is *timed* rather than metered. A tree
+   * yields by the axe-stroke; an animal has to be brought down first, and how
+   * long that takes is a duration, not a quantity.
+   */
+  readonly deltaSeconds: number;
+}
+
+/** What that tick produced, and whether the trip is over. */
+export interface ResourceHarvest {
+  /** Material added to the worker's load. */
+  readonly amount: number;
+  /**
+   * True while this worker still has work at this source. False ends the trip
+   * and sends him home — a full load or a source that just ran out.
+   *
+   * The two are separable on purpose: `working` with `amount === 0` is a hunter
+   * whose quarry is not down yet. He has to stay, and nothing has been earned.
+   * A tree or a deposit never reports that combination, so for them "working"
+   * simply means "it gave me something".
+   */
+  readonly working: boolean;
+}
+
 export interface ResourceSource {
   /**
    * Whether nearby sources of this kind are interchangeable, which decides two
@@ -86,11 +116,24 @@ export interface ResourceSource {
   ): ReservedResourceSource | null;
 
   /**
-   * Draw up to `requested` material for a worker standing at `sourceId`,
-   * returning zero once there is nothing left — the caller's cue to send the
-   * worker home and look for another source.
+   * Where this source is *now*, or null if it is gone.
+   *
+   * A tree stands where it was authored and a deposit never moves, so for them
+   * this is a constant and the gather loop's follow check never fires. A hunted
+   * animal bolts, and a hunter who does not follow ends up working an empty
+   * field — which is the whole reason this is on the contract rather than
+   * assumed away.
    */
-  harvest(workerId: number, sourceId: string, requested: number): number;
+  positionOf(sourceId: string): { readonly x: number; readonly z: number } | null;
+
+  /**
+   * Work `sourceId` for one tick on behalf of one worker.
+   *
+   * Returning `working: false` is the caller's cue to send the worker home and
+   * look for another source; see {@link ResourceHarvest} for why that is not the
+   * same question as "did it yield anything".
+   */
+  harvest(request: ResourceHarvestRequest): ResourceHarvest;
 
   /** Drop this worker's claim, if this kind of source holds one. Idempotent. */
   releaseReservation(workerId: number): void;

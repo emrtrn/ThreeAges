@@ -14,7 +14,13 @@
  */
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { ResourceBalance } from "../../data/gameDataTypes";
-import type { ResourceReach, ResourceSearchArea, ResourceSource } from "./resourceSource";
+import type {
+  ResourceHarvest,
+  ResourceHarvestRequest,
+  ResourceReach,
+  ResourceSearchArea,
+  ResourceSource,
+} from "./resourceSource";
 
 /**
  * Half-extent of the square a live deposit reserves against roads and building
@@ -155,21 +161,27 @@ export class ResourceNodeSystem implements ResourceSource {
   /** Nothing is claimed, so nothing is released. Present so the gather loop needs no special case. */
   releaseReservation(_workerId: number): void {}
 
+  /** A deposit is authored where it lies and is worked from beside it; it never moves. */
+  positionOf(sourceId: string): { readonly x: number; readonly z: number } | null {
+    const node = this.nodes.get(sourceId);
+    return node ? { x: node.definition.x, z: node.definition.z } : null;
+  }
+
   /**
    * Draw from one named deposit — the one a worker is actually kneeling at,
-   * rather than whichever happens to be nearest to its building. Returns zero
-   * for an unknown or spent deposit, which is the caller's cue to send the
-   * worker home and look for another.
+   * rather than whichever happens to be nearest to its building. A spent or
+   * unknown deposit reports `working: false`, which is the caller's cue to send
+   * the worker home and look for another.
    */
-  harvest(_workerId: number, sourceId: string, requested: number): number {
+  harvest({ sourceId, amount: requested }: ResourceHarvestRequest): ResourceHarvest {
     if (!Number.isFinite(requested) || requested < 0) {
       throw new RangeError("Requested resource extraction must be a non-negative finite number");
     }
     const node = this.nodes.get(sourceId);
-    if (!node || node.remaining <= 0) return 0;
+    if (!node || node.remaining <= 0) return { amount: 0, working: false };
     const amount = Math.min(requested, node.remaining);
     node.remaining -= amount;
-    return amount;
+    return { amount, working: amount > 0 };
   }
 
   reset(): void {

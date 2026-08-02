@@ -14,6 +14,7 @@ import type { UnitSystem } from "../units/unitSystem";
 import type { ResourceNodeSystem } from "./resourceNodeSystem";
 import type { ForestSystem } from "./forestSystem";
 import type { ResourceReach, ResourceSource } from "./resourceSource";
+import type { WildlifeSystem } from "../wildlife/wildlifeSystem";
 
 export type EconomyWorkerState = "idle" | "moving" | "producing" | "moving-to-source" | "gathering" | "returning" | "unloading";
 export type EconomyProductionStatus = "awaiting-workers" | "workers-moving" | "producing" | "buffer-full" | "missing-resource-node" | "missing-forest" | "missing-game" | "source-depleted";
@@ -70,6 +71,17 @@ interface ProducerRecord {
 
 const WORK_RANGE = 1.25;
 /**
+ * How far a source may drift from the point a worker was sent to before the walk
+ * is re-planned, in world units.
+ *
+ * Only a moving source ever reaches it. Wider than {@link WORK_RANGE} on purpose:
+ * a bolting animal covers more ground per tick than the work range itself, so
+ * re-planning the instant it moved would mean a fresh path every single frame of
+ * every chase — expensive, and it kept resetting the walk before the hunter had
+ * taken a step along it.
+ */
+const SOURCE_FOLLOW_SLACK = WORK_RANGE * 3;
+/**
  * How far into a walkable footprint a work post sits, as a fraction of its half
  * extent. Well inside the crop so the pose reads as working the field, but off
  * the middle, where the farm's own building stands.
@@ -99,10 +111,12 @@ export class EconomyProductionSystem {
     private readonly isWorkerConstructing: (worker: Unit) => boolean,
     private readonly resourceNodes?: ResourceNodeSystem,
     private readonly forests?: ForestSystem,
+    private readonly wildlife?: WildlifeSystem,
   ) {
     const sources: ResourceSource[] = [];
     if (forests) sources.push(forests);
     if (resourceNodes) sources.push(resourceNodes);
+    if (wildlife) sources.push(wildlife);
     this.sources = sources;
   }
 
@@ -179,11 +193,7 @@ export class EconomyProductionSystem {
     if (economy.requiresResourceNode) {
       return { source: this.resourceNodes ?? null, missingStatus: "missing-resource-node" };
     }
-    // Faz 5 hands this branch the herd. Declaring it now with no source is what
-    // keeps a hunting camp *idle* rather than falling through to the renewable
-    // path below, where it would quietly mint food out of an empty map — the one
-    // thing worse than a camp that cannot hunt yet.
-    if (economy.requiresGame) return { source: null, missingStatus: "missing-game" };
+    if (economy.requiresGame) return { source: this.wildlife ?? null, missingStatus: "missing-game" };
     return null;
   }
 
@@ -235,6 +245,7 @@ export class EconomyProductionSystem {
     // longer belongs to. Cleared on every exit path — player order, reassignment,
     // producer loss, death — the same way the construction system does it.
     worker.setWorking(false);
+    worker.setHunting(false);
     return true;
   }
 
@@ -429,6 +440,39 @@ export class EconomyProductionSystem {
       // Unloading is deliberately left out — it is shorter than the animation's
       // kneel, so the pose would be cut off part-way down and read as a twitch.
       assignment.worker.setWorking(false);
+      assignment.worker.setHunting(false);
+      // Follow a source that moved out from under the worker. A tree never does,
+      // so for wood and stone this is a distance check that always passes; a
+      // hunted animal bolts, and a hunter who keeps walking to where it *was*
+      // stands in an empty field for the rest of the match. Re-planned only once
+      // the quarry has outrun the approach by a whole work range, so a chase
+      // costs a handful of paths rather than one per frame.
+      if (assignment.sourceId
+        && (assignment.state === "moving-to-source" || assignment.state === "gathering")) {
+        const at = source.positionOf(assignment.sourceId);
+        // Two thresholds, because the two states are asking different questions.
+        // In transit: has the quarry moved far enough that the walk is aimed at
+        // the wrong place — tolerant, so a bolt does not re-plan every frame.
+        // On station: is the worker still *at* it — tight, or a hunter would
+        // butcher a carcass from a stale approach several paces away.
+        const drift = assignment.state === "gathering"
+          ? { from: assignment.worker.position, limit: WORK_RANGE }
+          : { from: assignment.approach, limit: SOURCE_FOLLOW_SLACK };
+        if (at && Math.hypot(at.x - drift.from.x, at.z - drift.from.z) > drift.limit) {
+          const chase = this.navigation.plan(assignment.worker.position, new Vector3(at.x, 0, at.z));
+          // A failed path is not fatal here, unlike a first approach: the quarry
+          // is moving, so the next tick offers a different point to aim at. The
+          // walk that is already underway carries on until the ordinary
+          // `moving-to-source` retry gives up on it.
+          if (chase) {
+            assignment.approach.set(at.x, 0, at.z);
+            assignment.worker.setMovePath(chase);
+            assignment.state = "moving-to-source";
+            movingWorkers += 1;
+            continue;
+          }
+        }
+      }
       if (assignment.state === "moving-to-source") {
         if (assignment.worker.position.distanceTo(assignment.approach) > WORK_RANGE) {
           if (!this.replanApproach(assignment)) {
@@ -450,18 +494,27 @@ export class EconomyProductionSystem {
           }
           continue;
         }
-        assignment.worker.setWorking(true);
         const harvested = assignment.sourceId
-          ? source.harvest(
-            assignment.worker.id,
-            assignment.sourceId,
-            Math.min((economy.perWorkerPerMinute * deltaSeconds) / 60, economy.carryCapacity - assignment.cargoAmount),
-          )
-          : 0;
-        assignment.cargoAmount += harvested;
+          ? source.harvest({
+            workerId: assignment.worker.id,
+            sourceId: assignment.sourceId,
+            amount: Math.min(
+              (economy.perWorkerPerMinute * deltaSeconds) / 60,
+              economy.carryCapacity - assignment.cargoAmount,
+            ),
+            deltaSeconds,
+          })
+          : { amount: 0, working: false };
+        // Still at it but nothing earned is a hunter whose quarry is not down
+        // yet — the one combination a tree or a deposit never reports. That is
+        // what tells the two poses apart without the loop knowing what wildlife
+        // is: fighting the source, versus gathering from it.
+        if (harvested.working && harvested.amount <= 0) assignment.worker.setHunting(true);
+        else assignment.worker.setWorking(true);
+        assignment.cargoAmount += harvested.amount;
         // A full load, or a source that just ran out under the tool: either way
         // the trip is over and the stand-up plays.
-        if (assignment.cargoAmount >= economy.carryCapacity || harvested <= 0) {
+        if (assignment.cargoAmount >= economy.carryCapacity || !harvested.working) {
           if (!this.returnToCamp(assignment, producer.structure)) this.release(assignment.worker);
         }
         continue;
@@ -536,15 +589,23 @@ export class EconomyProductionSystem {
     }
   }
 
-  /** Drops (or raises) the working pose for every worker at this producer at once. */
+  /**
+   * Drops (or raises) the working pose for every worker at this producer at once.
+   * The hunting pose is only ever dropped here: a producer-wide pose change means
+   * the job stopped, and no reason for it can leave a hunter mid-swing.
+   */
   private setProducerWorking(producer: ProducerRecord, working: boolean): void {
-    for (const assignment of producer.assignments.values()) assignment.worker.setWorking(working);
+    for (const assignment of producer.assignments.values()) {
+      assignment.worker.setWorking(working);
+      assignment.worker.setHunting(false);
+    }
   }
 
   private dropInvalidAssignments(producer: ProducerRecord): void {
     for (const [workerId, assignment] of producer.assignments) {
       if (!assignment.worker.health.depleted && this.units.all().includes(assignment.worker)) continue;
       assignment.worker.setWorking(false);
+      assignment.worker.setHunting(false);
       this.releaseSourceClaims(workerId);
       producer.assignments.delete(workerId);
       this.assignmentByWorker.delete(workerId);
@@ -555,6 +616,7 @@ export class EconomyProductionSystem {
     for (const assignment of producer.assignments.values()) {
       assignment.worker.stop();
       assignment.worker.setWorking(false);
+      assignment.worker.setHunting(false);
       this.releaseSourceClaims(assignment.worker.id);
       this.assignmentByWorker.delete(assignment.worker.id);
     }

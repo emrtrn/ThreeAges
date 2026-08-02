@@ -6,6 +6,9 @@
     "moveSpeed": 7.5,
     "walkClipSpeed": 1.5,
     "fleeRadius": 9,
+    "fleeSeconds": 1.5,
+    "fleeRecoverySeconds": 3,
+    "huntSeconds": 5,
     "roamRadius": 10
   },
   "stag": {
@@ -15,6 +18,9 @@
     "moveSpeed": 7,
     "walkClipSpeed": 1.4,
     "fleeRadius": 9,
+    "fleeSeconds": 1.5,
+    "fleeRecoverySeconds": 3,
+    "huntSeconds": 8,
     "roamRadius": 10
   }
 }

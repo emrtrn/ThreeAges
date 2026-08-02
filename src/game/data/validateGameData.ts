@@ -19,6 +19,16 @@ import type { MissionGoal, MissionGuide, MissionScript, MissionStep } from "../r
  * passes bad data.
  */
 const WORLD_HALF_EXTENT_FOR_VISION_CHECK = 70;
+
+/**
+ * The worker `moveSpeed` in `balance/units.json`, mirrored here for one check:
+ * that a hunt can converge (see {@link validateAnimalBalance}).
+ *
+ * Deliberately conservative rather than read from the unit table — the two files
+ * are validated independently, and a hunter who turns out to be *faster* than
+ * this only makes the check stricter than it needs to be, never looser.
+ */
+const FASTEST_HUNTER_SPEED = 6;
 import type {
   AiAgeUpScoring,
   AiArmyComposition,
@@ -1007,7 +1017,8 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
     const statsWhere = `${where}."${id}"`;
     const stats = asObject(raw, statsWhere);
     const positive = (
-      key: "meatCapacity" | "maxHealth" | "moveSpeed" | "walkClipSpeed" | "fleeRadius" | "roamRadius",
+      key: "meatCapacity" | "maxHealth" | "moveSpeed" | "walkClipSpeed" | "fleeRadius" | "roamRadius"
+        | "fleeSeconds" | "fleeRecoverySeconds" | "huntSeconds",
     ) => {
       const amount = requireFiniteNumber(stats, key, statsWhere);
       if (amount <= 0) throw new GameDataError(`${statsWhere}.${key}: must be > 0`);
@@ -1020,14 +1031,34 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
         + `${WORLD_HALF_EXTENT_FOR_VISION_CHECK} so a herd stays a local cluster a camp can be built beside`,
       );
     }
+    const moveSpeed = positive("moveSpeed");
+    const fleeSeconds = positive("fleeSeconds");
+    const fleeRecoverySeconds = positive("fleeRecoverySeconds");
+    // The hunt has to be able to end. A bolt covers `moveSpeed * fleeSeconds`;
+    // the hunter only closes that ground while the animal is winded, and the
+    // fastest worker in the game moves at {@link FASTEST_HUNTER_SPEED}. Data that
+    // gets this backwards produces prey that is chased to the edge of the map and
+    // never caught — a bug that looks like a pathfinding fault, not a tuning one.
+    const bolt = moveSpeed * fleeSeconds;
+    const closed = FASTEST_HUNTER_SPEED * fleeRecoverySeconds;
+    if (closed <= bolt) {
+      throw new GameDataError(
+        `${statsWhere}: a bolt covers ${bolt.toFixed(1)} but a hunter only closes `
+        + `${closed.toFixed(1)} while it recovers — raise fleeRecoverySeconds or lower `
+        + `fleeSeconds/moveSpeed, or this species can never be caught`,
+      );
+    }
     animals[id] = {
       id,
       label: requireString(stats, "label", statsWhere),
       meatCapacity: positive("meatCapacity"),
       maxHealth: positive("maxHealth"),
-      moveSpeed: positive("moveSpeed"),
+      moveSpeed,
       walkClipSpeed: positive("walkClipSpeed"),
       fleeRadius: positive("fleeRadius"),
+      fleeSeconds,
+      fleeRecoverySeconds,
+      huntSeconds: positive("huntSeconds"),
       roamRadius,
     };
   }

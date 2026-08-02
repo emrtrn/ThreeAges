@@ -463,6 +463,21 @@ export interface AnimalBalanceStats {
   readonly walkClipSpeed: number;
   /** Distance at which the animal breaks away from an approaching hunter. */
   readonly fleeRadius: number;
+  /** How long one bolt lasts, in seconds. */
+  readonly fleeSeconds: number;
+  /**
+   * Seconds the animal is winded after a bolt and ignores whatever frightened
+   * it. This is what makes a hunt finish at all: prey is faster than a worker,
+   * so a hunter only ever closes the gap during the recovery.
+   */
+  readonly fleeRecoverySeconds: number;
+  /**
+   * Seconds one hunter needs to bring this species down. The damage rate is
+   * derived from it and `maxHealth`, so a tuner reads a duration rather than
+   * doing the arithmetic — and the animal keeps a real health bar for whatever
+   * else shoots at it.
+   */
+  readonly huntSeconds: number;
   /** How far from its herd's centre the animal may wander. */
   readonly roamRadius: number;
 }

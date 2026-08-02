@@ -22,11 +22,37 @@ const REST_SECONDS_MAX = 7;
 /** Close enough to a grazing spot to stop and eat, in world units. */
 const ARRIVE_EPSILON = 0.15;
 
+/**
+ * Closer than this and the animal is caught rather than frightened: it stops
+ * dead and turns to face what has hold of it.
+ *
+ * Without it a hunt cannot finish. Prey bolts whenever a person is inside
+ * `fleeRadius`, so a hunter standing over his quarry re-triggered the flight he
+ * had just closed — measured, one deer took 65 seconds of near-misses to bring
+ * down instead of the 5 its `huntSeconds` asks for, because the hunter was only
+ * ever in contact for the odd frame.
+ *
+ * Must stay above the gather loop's work range (`WORK_RANGE`, 1.25): a hunter
+ * standing at his work post has to be inside this, or he pins nothing.
+ */
+const CAUGHT_DISTANCE = 2;
+
 /** Where an animal is heading and how long it stands once it gets there. */
 export interface RoamState {
   targetX: number;
   targetZ: number;
   restSeconds: number;
+  /** Seconds left in the current bolt; > 0 means running flat out from a threat. */
+  fleeSeconds: number;
+  /**
+   * Seconds left of being winded, during which a threat is ignored.
+   *
+   * This is the whole reason a hunt can ever end. A deer is faster than a worker
+   * (7.5 against 6), so an animal that bolted for as long as anything frightened
+   * it could never be caught — the hunter would follow it to the edge of the map
+   * and back. Bolt, blow, graze: the hunter closes the gap in the gaps.
+   */
+  recoverySeconds: number;
 }
 
 /** The unchanging half: the herd's circle and the species' grazing pace. */
@@ -49,6 +75,20 @@ export interface RoamProfile {
    * the gallop clip is calibrated to.
    */
   readonly walkSpeed: number;
+  /** Flat-out speed while bolting — the species' `moveSpeed`, what Gallop is calibrated to. */
+  readonly fleeSpeed: number;
+  /** How close a person may come before the animal bolts. */
+  readonly fleeRadius: number;
+  /** How long one bolt lasts. */
+  readonly fleeSeconds: number;
+  /** How long the animal is winded afterwards; see {@link RoamState.recoverySeconds}. */
+  readonly fleeRecoverySeconds: number;
+}
+
+/** A person close enough to frighten an animal. */
+export interface ThreatPoint {
+  readonly x: number;
+  readonly z: number;
 }
 
 /** Where the animal ended up this tick, and how fast it got there. */
@@ -104,6 +144,30 @@ export function randomPointInHerd(profile: RoamProfile, random: () => number): {
   };
 }
 
+/**
+ * Hold a point inside the herd's ground, sliding it back onto the rim when a
+ * bolt would carry it out.
+ *
+ * This is what makes an animal huntable at all. Prey outruns a worker, so an
+ * animal that ran in a straight line simply left — measured, a single deer
+ * crossed 90 world units and walked off the map with its hunter trailing behind
+ * it, and the camp's herd was gone without a shot fired. Confined, the bolt
+ * turns along the rim instead: the deer keeps its speed advantage but spends it
+ * circling its own meadow, which is where a hunter eventually corners it.
+ *
+ * It also makes the plan's range contract (`roamRadius < gatherRadius`) literally
+ * true rather than true on average — a fleeing animal cannot leave the reach of
+ * the camp built for its herd.
+ */
+function keepInHerdGround(x: number, z: number, profile: RoamProfile): { x: number; z: number } {
+  const dx = x - profile.homeX;
+  const dz = z - profile.homeZ;
+  const distance = Math.hypot(dx, dz);
+  if (distance <= profile.roamRadius || distance < 1e-4) return { x, z };
+  const scale = profile.roamRadius / distance;
+  return { x: profile.homeX + dx * scale, z: profile.homeZ + dz * scale };
+}
+
 /** Opening state: already standing somewhere in the circle, about to graze. */
 export function initialRoamState(profile: RoamProfile, random: () => number): RoamState {
   const point = randomPointInHerd(profile, random);
@@ -111,15 +175,23 @@ export function initialRoamState(profile: RoamProfile, random: () => number): Ro
     targetX: point.x,
     targetZ: point.z,
     restSeconds: REST_SECONDS_MIN + random() * (REST_SECONDS_MAX - REST_SECONDS_MIN),
+    fleeSeconds: 0,
+    recoverySeconds: 0,
   };
 }
 
 /**
  * Advance one animal by `deltaSeconds`, mutating `state` and returning its pose.
  *
- * Resting outranks moving: an animal that has arrived stands and eats until its
- * timer runs out, and only then picks a new spot. Facing is carried through
- * unchanged while standing so a grazing animal does not spin on the spot.
+ * Fleeing outranks everything, then resting outranks moving: an animal that has
+ * arrived stands and eats until its timer runs out, and only then picks a new
+ * spot. Facing is carried through unchanged while standing so a grazing animal
+ * does not spin on the spot.
+ *
+ * `threat` is the nearest person, or null when nobody is about. A bolt is
+ * deliberately *not* steered back toward the herd — the animal runs flat out
+ * away from what frightened it, and it is the grazing half that walks it home,
+ * because every grazing target is a point inside the herd's own circle.
  */
 export function advanceRoam(
   state: RoamState,
@@ -127,10 +199,66 @@ export function advanceRoam(
   profile: RoamProfile,
   deltaSeconds: number,
   random: () => number,
+  threat: ThreatPoint | null = null,
 ): RoamPose {
   if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
     throw new RangeError("Roam delta must be a non-negative finite number");
   }
+
+  const threatDistance = threat
+    ? Math.hypot(threat.x - current.x, threat.z - current.z)
+    : Number.POSITIVE_INFINITY;
+  if (threatDistance <= CAUGHT_DISTANCE && threat) {
+    // Caught: it holds still and faces what has hold of it, which is also the
+    // pose the death clip reads out of.
+    state.fleeSeconds = 0;
+    return {
+      x: current.x,
+      z: current.z,
+      facing: Math.atan2(threat.x - current.x, threat.z - current.z),
+      speed: 0,
+    };
+  }
+  if (state.fleeSeconds <= 0 && state.recoverySeconds <= 0 && threatDistance <= profile.fleeRadius) {
+    state.fleeSeconds = profile.fleeSeconds;
+  }
+  if (state.fleeSeconds > 0) {
+    state.fleeSeconds -= deltaSeconds;
+    if (state.fleeSeconds <= 0) {
+      state.fleeSeconds = 0;
+      state.recoverySeconds = profile.fleeRecoverySeconds;
+      // Graze from wherever the bolt ended rather than resuming the old target,
+      // which may now be behind the hunter.
+      const point = randomPointInHerd(profile, random);
+      state.targetX = point.x;
+      state.targetZ = point.z;
+      state.restSeconds = 0;
+    }
+    // Straight away from the threat. With none left (it died, or the animal is
+    // standing exactly on it) the bolt simply carries on facing forward.
+    const awayX = threat ? current.x - threat.x : Math.sin(current.facing);
+    const awayZ = threat ? current.z - threat.z : Math.cos(current.facing);
+    const length = Math.hypot(awayX, awayZ);
+    if (length < 1e-4) return { x: current.x, z: current.z, facing: current.facing, speed: 0 };
+    const step = profile.fleeSpeed * deltaSeconds;
+    const bolted = keepInHerdGround(
+      current.x + (awayX / length) * step,
+      current.z + (awayZ / length) * step,
+      profile,
+    );
+    const travelled = Math.hypot(bolted.x - current.x, bolted.z - current.z);
+    return {
+      x: bolted.x,
+      z: bolted.z,
+      facing: Math.atan2(awayX, awayZ),
+      // Report what it actually covered, not what it tried to: an animal running
+      // along the rim of its ground moves slower than flat out, and the gallop
+      // clip has to be played at the speed the feet are travelling.
+      speed: deltaSeconds > 0 ? travelled / deltaSeconds : 0,
+    };
+  }
+  if (state.recoverySeconds > 0) state.recoverySeconds -= deltaSeconds;
+
   const dx = state.targetX - current.x;
   const dz = state.targetZ - current.z;
   const distance = Math.hypot(dx, dz);
