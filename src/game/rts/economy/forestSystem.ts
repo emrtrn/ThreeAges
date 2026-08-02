@@ -4,6 +4,7 @@
  * forest as one opaque static mesh.
  */
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
+import type { ResourceReach, ResourceSearchArea, ResourceSource } from "./resourceSource";
 
 export type TreeVariant = "pine" | "tree1" | "tree2";
 
@@ -32,10 +33,8 @@ export interface TreeSnapshot extends RtsTreeDefinition {
   readonly reservedByWorkerId: number | null;
 }
 
-export interface ForestSearchArea {
-  readonly width: number;
-  readonly depth: number;
-}
+/** The camp footprint a tree may not hide under. Named for its callers here. */
+export type ForestSearchArea = ResourceSearchArea;
 
 interface TreeRecord {
   readonly definition: RtsTreeDefinition;
@@ -44,9 +43,16 @@ interface TreeRecord {
 }
 
 /** Shared tree state for camps, workers, AI and visual presentation. */
-export class ForestSystem {
+export class ForestSystem implements ResourceSource {
   private readonly trees = new Map<string, TreeRecord>();
   private readonly treeIdByWorkerId = new Map<number, string>();
+
+  /**
+   * One trunk is as good as the next: a lumberjack walled in from his tree takes
+   * its neighbour, and one who has just unloaded goes to whichever camp is
+   * closest to standing wood.
+   */
+  readonly sourcesAreInterchangeable = true;
 
   constructor(definitions: readonly RtsTreeDefinition[]) {
     for (const definition of definitions) {
@@ -62,13 +68,21 @@ export class ForestSystem {
     return this.liveTreesNear(x, z, radius, excludedFootprint).length > 0;
   }
 
-  remainingNear(x: number, z: number, radius: number, excludedFootprint?: ForestSearchArea): number {
-    return this.liveTreesNear(x, z, radius, excludedFootprint).reduce((total, tree) => total + tree.remaining, 0);
+  /**
+   * Standing wood in reach, and never null: a camp out of range of every tree
+   * and a camp that has felled its whole grove are the same thing to a player —
+   * no wood here — unlike a mine, whose deposits are separate piles worth
+   * telling apart.
+   */
+  remainingNear(reach: ResourceReach): number {
+    return this.liveTreesNear(reach.x, reach.z, reach.radius, reach.footprint)
+      .reduce((total, tree) => total + tree.remaining, 0);
   }
 
   /** Squared camp-to-tree distance for choosing the best delivery point without a renderer query. */
-  nearestLiveTreeDistanceSquared(x: number, z: number, radius: number, excludedFootprint?: ForestSearchArea): number {
-    const nearest = this.liveTreesNear(x, z, radius, excludedFootprint)
+  nearestSourceDistanceSquared(reach: ResourceReach): number {
+    const { x, z } = reach;
+    const nearest = this.liveTreesNear(x, z, reach.radius, reach.footprint)
       .sort((a, b) => this.distanceSquared(a.definition, x, z) - this.distanceSquared(b.definition, x, z))[0];
     return nearest ? this.distanceSquared(nearest.definition, x, z) : Number.POSITIVE_INFINITY;
   }
@@ -76,21 +90,19 @@ export class ForestSystem {
   /** Reserve the closest free live tree, keeping one worker from crowding another. */
   reserveNearest(
     workerId: number,
-    x: number,
-    z: number,
-    radius: number,
-    excludedFootprint?: ForestSearchArea,
-    excludedTreeIds: ReadonlySet<string> = new Set(),
+    reach: ResourceReach,
+    rejectedSourceIds: ReadonlySet<string> = new Set(),
   ): TreeSnapshot | null {
+    const { x, z, radius, footprint } = reach;
     const currentId = this.treeIdByWorkerId.get(workerId);
     const current = currentId ? this.trees.get(currentId) : null;
-    if (current && !excludedTreeIds.has(current.definition.id) && current.remaining > 0 && this.inRange(current.definition, x, z, radius)
-      && this.outsideFootprint(current.definition, x, z, excludedFootprint)) {
+    if (current && !rejectedSourceIds.has(current.definition.id) && current.remaining > 0 && this.inRange(current.definition, x, z, radius)
+      && this.outsideFootprint(current.definition, x, z, footprint)) {
       return this.snapshot(current);
     }
     this.releaseReservation(workerId);
-    const next = this.liveTreesNear(x, z, radius, excludedFootprint)
-      .filter((tree) => tree.reservedByWorkerId === null && !excludedTreeIds.has(tree.definition.id))
+    const next = this.liveTreesNear(x, z, radius, footprint)
+      .filter((tree) => tree.reservedByWorkerId === null && !rejectedSourceIds.has(tree.definition.id))
       .sort((a, b) => this.distanceSquared(a.definition, x, z) - this.distanceSquared(b.definition, x, z))[0];
     if (!next) return null;
     next.reservedByWorkerId = workerId;
@@ -104,7 +116,12 @@ export class ForestSystem {
     return tree ? this.snapshot(tree) : null;
   }
 
-  harvest(workerId: number, requested: number): number {
+  /**
+   * Cut from the tree this worker holds. The caller also names the source it
+   * believes he is at, but the reservation is what binds here: a lumberjack can
+   * only ever fell the trunk the forest handed him, so the name is not consulted.
+   */
+  harvest(workerId: number, _sourceId: string, requested: number): number {
     if (!Number.isFinite(requested) || requested < 0) {
       throw new RangeError("Requested wood harvest must be a non-negative finite number");
     }

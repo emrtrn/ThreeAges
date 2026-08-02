@@ -214,7 +214,11 @@ export class RtsActorVisualFactory {
    * model, and speed-driven clip selection — and the only thing wildlife lacks
    * (an owner variant) is the one argument left off.
    */
-  createAnimalPresentation(species: string, moveSpeed?: number): RtsPresentationHandle | null {
+  createAnimalPresentation(
+    species: string,
+    moveSpeed?: number,
+    walkClipSpeed?: number,
+  ): RtsPresentationHandle | null {
     const actorRef = rtsAnimalActorRef(this.catalog, species);
     if (!actorRef || !this.ready) return null;
     const root = this.createActorVisual(actorRef);
@@ -228,6 +232,9 @@ export class RtsActorVisualFactory {
       selectionRadius: readRtsSelectionRadius(def),
       animation: def ? this.animationSourceFor(root) : null,
       moveSpeed,
+      // Animals carry an authored model scale, so the engine's "walk clip is
+      // natural at half move speed" default would leave them sliding.
+      walkClipSpeed,
       wheelSpins: [],
     });
   }

@@ -4127,9 +4127,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        -30.0,
+        -30,
         0,
-        22.0
+        22
       ],
       "name": "Herd player-deer",
       "scale": 1,
@@ -4142,9 +4142,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        30.0,
+        30,
         0,
-        -22.0
+        -22
       ],
       "name": "Herd enemy-deer",
       "scale": 1,
@@ -4157,9 +4157,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        0.0,
         0,
-        16.0
+        0,
+        16
       ],
       "name": "Herd central-stag",
       "scale": 1,

@@ -13,6 +13,7 @@ import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { ResourceNodeSystem } from "./resourceNodeSystem";
 import type { ForestSystem } from "./forestSystem";
+import type { ResourceReach, ResourceSource } from "./resourceSource";
 
 export type EconomyWorkerState = "idle" | "moving" | "producing" | "moving-to-source" | "gathering" | "returning" | "unloading";
 export type EconomyProductionStatus = "awaiting-workers" | "workers-moving" | "producing" | "buffer-full" | "missing-resource-node" | "missing-forest" | "source-depleted";
@@ -46,6 +47,16 @@ interface WorkerAssignment {
   cargoAmount: number;
 }
 
+/**
+ * The finite source a producer works, plus what its panel says when that source
+ * is unavailable — "no forest here" and "no deposit here" are different messages
+ * for the same shape of failure.
+ */
+interface ResourceRequirement {
+  readonly source: ResourceSource | null;
+  readonly missingStatus: EconomyProductionStatus;
+}
+
 interface ProducerRecord {
   readonly structure: PlacedStructure;
   readonly assignments: Map<number, WorkerAssignment>;
@@ -73,6 +84,13 @@ export interface ManualEconomyAssignmentResult {
 export class EconomyProductionSystem {
   private readonly producers = new Map<number, ProducerRecord>();
   private readonly assignmentByWorker = new Map<number, ProducerRecord>();
+  /**
+   * Every finite source in play. A released worker is offered to all of them
+   * rather than only the kind he was sent to: a claim is held per worker, so
+   * releasing one he never held is a no-op, and that is cheaper than remembering
+   * which source a worker who is being dropped mid-cycle belonged to.
+   */
+  private readonly sources: readonly ResourceSource[];
 
   constructor(
     private readonly units: UnitSystem,
@@ -81,7 +99,12 @@ export class EconomyProductionSystem {
     private readonly isWorkerConstructing: (worker: Unit) => boolean,
     private readonly resourceNodes?: ResourceNodeSystem,
     private readonly forests?: ForestSystem,
-  ) {}
+  ) {
+    const sources: ResourceSource[] = [];
+    if (forests) sources.push(forests);
+    if (resourceNodes) sources.push(resourceNodes);
+    this.sources = sources;
+  }
 
   update(deltaSeconds: number): void {
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
@@ -131,22 +154,7 @@ export class EconomyProductionSystem {
           lastTransferTick: producer.lastTransferTick,
           totalProduced: producer.totalProduced,
           totalTransferred: producer.totalTransferred,
-          sourceRemaining: economy.requiresForest
-            ? this.forests?.remainingNear(
-              producer.structure.x,
-              producer.structure.z,
-              economy.gatherRadius ?? 0,
-              producer.structure.stats.footprint,
-            ) ?? null
-            : economy.requiresResourceNode
-            ? this.resourceNodes?.remainingAt(
-              economy.resourceId,
-              producer.structure.x,
-              producer.structure.z,
-              economy.gatherRadius ?? 0,
-              producer.structure.stats.footprint,
-            ) ?? null
-            : null,
+          sourceRemaining: this.sourceRemainingFor(producer),
           status: producer.status,
         };
       });
@@ -156,6 +164,50 @@ export class EconomyProductionSystem {
     for (const producer of this.producers.values()) this.releaseProducer(producer);
     this.producers.clear();
     this.assignmentByWorker.clear();
+  }
+
+  /**
+   * Which finite source a producer works, if any, and what to report when it is
+   * unavailable.
+   *
+   * The only place the source kinds are enumerated. The chain used to be spelled
+   * out twice — once in {@link snapshots} and again in the production loop — so
+   * a new kind of source meant finding both copies and getting them to agree.
+   */
+  private requirementFor(economy: NonNullable<PlacedStructure["economy"]>): ResourceRequirement | null {
+    if (economy.requiresForest) return { source: this.forests ?? null, missingStatus: "missing-forest" };
+    if (economy.requiresResourceNode) {
+      return { source: this.resourceNodes ?? null, missingStatus: "missing-resource-node" };
+    }
+    return null;
+  }
+
+  /**
+   * What this producer can reach. A missing `gatherRadius` becomes a reach of
+   * zero, which finds nothing: every source query already excludes the
+   * producer's own footprint, so a radius of zero can only ever land inside it.
+   */
+  private reachFor(structure: PlacedStructure, economy: NonNullable<PlacedStructure["economy"]>): ResourceReach {
+    return {
+      resourceId: economy.resourceId,
+      x: structure.x,
+      z: structure.z,
+      radius: economy.gatherRadius ?? 0,
+      footprint: structure.stats.footprint,
+    };
+  }
+
+  /** Material left at this producer's source; null for renewable producers and for a source out of reach entirely. */
+  private sourceRemainingFor(producer: ProducerRecord): number | null {
+    const economy = producer.structure.economy;
+    if (!economy) return null;
+    const source = this.requirementFor(economy)?.source;
+    if (!source) return null;
+    return source.remainingNear(this.reachFor(producer.structure, economy));
+  }
+
+  private releaseSourceClaims(workerId: number): void {
+    for (const source of this.sources) source.releaseReservation(workerId);
   }
 
   /**
@@ -172,7 +224,7 @@ export class EconomyProductionSystem {
     if (!producer) return false;
     producer.assignments.delete(worker.id);
     this.assignmentByWorker.delete(worker.id);
-    this.forests?.releaseReservation(worker.id);
+    this.releaseSourceClaims(worker.id);
     worker.stop();
     // Presentation only: a released gatherer must not keep working a field it no
     // longer belongs to. Cleared on every exit path — player order, reassignment,
@@ -264,12 +316,9 @@ export class EconomyProductionSystem {
     producer.lastProductionTick = 0;
     producer.lastTransferTick = 0;
     this.dropInvalidAssignments(producer);
-    if (economy.requiresForest) {
-      this.updateForestProducer(producer, deltaSeconds);
-      return;
-    }
-    if (economy.requiresResourceNode) {
-      this.updateNodeProducer(producer, deltaSeconds);
+    const requirement = this.requirementFor(economy);
+    if (requirement) {
+      this.updateGatheringProducer(producer, deltaSeconds, requirement);
       return;
     }
     if (producer.localBuffer >= economy.localBufferCapacity) {
@@ -321,42 +370,46 @@ export class EconomyProductionSystem {
   }
 
   /**
-   * Stone and gold are cut from a specific deposit and carried back to the
-   * extractor, the lumber camp's cycle applied to a mine.
+   * The gather cycle every finite source shares: walk out to the source, work it
+   * until the load is full or it runs dry, carry the load home, unload it into
+   * the camp buffer, go again. Wood, stone and gold all run through here; the
+   * {@link ResourceSource} decides what "the source" is.
    *
-   * The two used to differ for no reason a player could see: a lumberjack walked
-   * to his tree, while a miner stood at the quarry door and the pile emptied
-   * itself from a distance. Now the deposit is authored beside the building
-   * rather than under it, so the walk is the only way to reach it — and the
-   * shrinking deposit finally has someone visibly taking material off it.
+   * This was two copies of the same hundred lines, and they had already drifted
+   * for no reason a player could see: a lumberjack walked to his tree while a
+   * miner stood at the quarry door and the pile emptied itself from a distance.
+   * The deposit is now authored beside the building rather than under it, so the
+   * walk is the only way to reach it either way — and the shrinking deposit
+   * finally has someone visibly taking material off it.
    *
    * Kneeling is not timed here. `setWorking(true)` hands the body to the work
    * montage, whose authored `enter` section kneels once and whose `loop` holds
-   * until work ends; `setWorking(false)` is what starts the stand-up. So a miner
-   * cannot pop upright mid-cut: the trip ends when its load is full or the
-   * deposit runs dry, and only then does the wind-down play.
+   * until work ends; `setWorking(false)` is what starts the stand-up. So a worker
+   * cannot pop upright mid-cut: the trip ends when the load is full or the source
+   * runs dry, and only then does the wind-down play.
    */
-  private updateNodeProducer(producer: ProducerRecord, deltaSeconds: number): void {
+  private updateGatheringProducer(
+    producer: ProducerRecord,
+    deltaSeconds: number,
+    requirement: ResourceRequirement,
+  ): void {
     const economy = producer.structure.economy;
-    if (!economy?.requiresResourceNode || !this.resourceNodes
-      || economy.gatherRadius === undefined || economy.carryCapacity === undefined) {
-      producer.status = "missing-resource-node";
+    const { source, missingStatus } = requirement;
+    if (!economy || !source || economy.gatherRadius === undefined || economy.carryCapacity === undefined) {
+      producer.status = missingStatus;
+      // Same reason as a full buffer: a camp that cannot gather must not leave
+      // its crew frozen mid-swing at a source that is no longer there.
       this.setProducerWorking(producer, false);
       return;
     }
-    const reach = {
-      x: producer.structure.x,
-      z: producer.structure.z,
-      radius: economy.gatherRadius,
-      footprint: producer.structure.stats.footprint,
-    };
-    const remaining = this.resourceNodes.remainingAt(economy.resourceId, reach.x, reach.z, reach.radius, reach.footprint);
-    const hasLiveNode = (remaining ?? 0) > 0;
-    // Nothing in reach at all is a different failure from a deposit that has
-    // been worked out, and the panel says so. Workers already carrying a load
-    // finish their delivery either way rather than dropping it on the ground.
-    const emptyStatus: EconomyProductionStatus = remaining === null ? "missing-resource-node" : "source-depleted";
-    if (!hasLiveNode && producer.assignments.size === 0) {
+    const reach = this.reachFor(producer.structure, economy);
+    const remaining = source.remainingNear(reach);
+    const hasLiveSource = (remaining ?? 0) > 0;
+    // Nothing in reach at all is a different failure from a source that has been
+    // worked out, and the panel says so. Workers already carrying a load finish
+    // their delivery either way rather than dropping it on the ground.
+    const emptyStatus: EconomyProductionStatus = remaining === null ? missingStatus : "source-depleted";
+    if (!hasLiveSource && producer.assignments.size === 0) {
       producer.status = emptyStatus;
       this.setProducerWorking(producer, false);
       return;
@@ -366,8 +419,10 @@ export class EconomyProductionSystem {
     let movingWorkers = 0;
     let delivered = 0;
     for (const assignment of [...producer.assignments.values()]) {
-      // Cleared up front, re-raised only by the cutting branch: the walk out,
-      // the walk back and the unload are all done on the worker's feet.
+      // Cleared up front and re-raised only by the working branch below: the walk
+      // out, the walk back and the unload are all done on the worker's feet.
+      // Unloading is deliberately left out — it is shorter than the animation's
+      // kneel, so the pose would be cut off part-way down and read as a twitch.
       assignment.worker.setWorking(false);
       if (assignment.state === "moving-to-source") {
         if (assignment.worker.position.distanceTo(assignment.approach) > WORK_RANGE) {
@@ -391,113 +446,16 @@ export class EconomyProductionSystem {
           continue;
         }
         assignment.worker.setWorking(true);
-        const cut = assignment.sourceId
-          ? this.resourceNodes.extractFrom(
+        const harvested = assignment.sourceId
+          ? source.harvest(
+            assignment.worker.id,
             assignment.sourceId,
             Math.min((economy.perWorkerPerMinute * deltaSeconds) / 60, economy.carryCapacity - assignment.cargoAmount),
           )
           : 0;
-        assignment.cargoAmount += cut;
-        // A full load, or a deposit that just ran out under the pick: either way
-        // the trip is over and the stand-up plays.
-        if (assignment.cargoAmount >= economy.carryCapacity || cut <= 0) {
-          if (!this.returnToCamp(assignment, producer.structure)) this.release(assignment.worker);
-        }
-        continue;
-      }
-      if (assignment.state === "returning") {
-        if (assignment.worker.position.distanceTo(assignment.approach) > WORK_RANGE) {
-          if (!this.replanApproach(assignment)) {
-            this.release(assignment.worker);
-            continue;
-          }
-          movingWorkers += 1;
-          continue;
-        }
-        assignment.worker.stop();
-        assignment.state = "unloading";
-      }
-      if (assignment.state === "unloading") {
-        const unloaded = Math.min(assignment.cargoAmount, economy.localBufferCapacity - producer.localBuffer);
-        assignment.cargoAmount -= unloaded;
-        delivered += unloaded;
-        producer.localBuffer += unloaded;
-        if (assignment.cargoAmount > 0) continue;
-        if (!this.moveWorkerToNode(assignment, producer.structure, economy)) this.release(assignment.worker);
-      }
-    }
-    producer.lastProductionTick = delivered;
-    producer.totalProduced += delivered;
-    producer.status = producer.localBuffer >= economy.localBufferCapacity
-      ? "buffer-full"
-      : producer.assignments.size === 0
-        ? hasLiveNode ? "awaiting-workers" : emptyStatus
-        : gatheringWorkers > 0 || delivered > 0
-          ? "producing"
-          : movingWorkers > 0
-            ? "workers-moving"
-            : hasLiveNode ? "awaiting-workers" : emptyStatus;
-  }
-
-  /** Wood is harvested from a specific tree and carried back before it enters the camp buffer. */
-  private updateForestProducer(producer: ProducerRecord, deltaSeconds: number): void {
-    const economy = producer.structure.economy;
-    if (!economy?.requiresForest || !this.forests || economy.gatherRadius === undefined || economy.carryCapacity === undefined) {
-      producer.status = "missing-forest";
-      // Same reason as a full buffer: a camp that cannot gather must not leave
-      // its crew frozen mid-swing at a forest that is no longer there.
-      this.setProducerWorking(producer, false);
-      return;
-    }
-    const hasLiveTree = this.forests.hasLiveTreeNear(
-      producer.structure.x,
-      producer.structure.z,
-      economy.gatherRadius,
-      producer.structure.stats.footprint,
-    );
-    if (!hasLiveTree && producer.assignments.size === 0) {
-      producer.status = "source-depleted";
-      this.setProducerWorking(producer, false);
-      return;
-    }
-    this.assignIdleWorkersToProducer(producer);
-    let gatheringWorkers = 0;
-    let movingWorkers = 0;
-    let delivered = 0;
-    for (const assignment of [...producer.assignments.values()]) {
-      // Cleared up front and re-raised only by the felling branch below: a
-      // lumberjack's cycle walks, chops, walks back and unloads, and only the
-      // chopping half is performed from a standstill. Unloading is deliberately
-      // left out — it is shorter than the animation's kneel, so the pose would
-      // be cut off part-way down and read as a twitch.
-      assignment.worker.setWorking(false);
-      if (assignment.state === "moving-to-source") {
-        if (assignment.worker.position.distanceTo(assignment.approach) > WORK_RANGE) {
-          if (!this.replanApproach(assignment)) {
-            this.release(assignment.worker);
-            continue;
-          }
-          movingWorkers += 1;
-          continue;
-        }
-        assignment.worker.stop();
-        assignment.state = "gathering";
-      }
-      if (assignment.state === "gathering") {
-        gatheringWorkers += 1;
-        if (producer.localBuffer >= economy.localBufferCapacity) {
-          producer.localBuffer = economy.localBufferCapacity;
-          if (assignment.cargoAmount > 0 && !this.returnToCamp(assignment, producer.structure)) {
-            this.release(assignment.worker);
-          }
-          continue;
-        }
-        assignment.worker.setWorking(true);
-        const harvested = this.forests.harvest(
-          assignment.worker.id,
-          Math.min((economy.perWorkerPerMinute * deltaSeconds) / 60, economy.carryCapacity - assignment.cargoAmount),
-        );
         assignment.cargoAmount += harvested;
+        // A full load, or a source that just ran out under the tool: either way
+        // the trip is over and the stand-up plays.
         if (assignment.cargoAmount >= economy.carryCapacity || harvested <= 0) {
           if (!this.returnToCamp(assignment, producer.structure)) this.release(assignment.worker);
         }
@@ -521,9 +479,12 @@ export class EconomyProductionSystem {
         delivered += unloaded;
         producer.localBuffer += unloaded;
         if (assignment.cargoAmount > 0) continue;
-        this.forests.releaseReservation(assignment.worker.id);
-        const nextProducer = assignment.source === "automatic"
-          ? this.preferredForestProducer(producer, assignment.worker)
+        source.releaseReservation(assignment.worker.id);
+        // Only where sources are interchangeable: a lumberjack may deliver to
+        // whichever camp faces the shortest next trip, while a miner belongs to
+        // the deposit his mine was built beside.
+        const nextProducer: ProducerRecord = source.sourcesAreInterchangeable && assignment.source === "automatic"
+          ? this.preferredProducer(producer, assignment.worker, source)
           : producer;
         if (nextProducer !== producer) {
           producer.assignments.delete(assignment.worker.id);
@@ -531,8 +492,8 @@ export class EconomyProductionSystem {
           this.assignmentByWorker.set(assignment.worker.id, nextProducer);
         }
         const nextEconomy = nextProducer.structure.economy;
-        if (!nextEconomy?.requiresForest || nextEconomy.gatherRadius === undefined
-          || !this.moveWorkerToTree(assignment, nextProducer.structure, nextEconomy.gatherRadius)) {
+        if (!nextEconomy || this.requirementFor(nextEconomy)?.source !== source
+          || !this.moveWorkerToSource(assignment, nextProducer.structure, nextEconomy, source)) {
           this.release(assignment.worker);
         }
       }
@@ -542,12 +503,12 @@ export class EconomyProductionSystem {
     producer.status = producer.localBuffer >= economy.localBufferCapacity
       ? "buffer-full"
       : producer.assignments.size === 0
-        ? hasLiveTree ? "awaiting-workers" : "source-depleted"
+        ? hasLiveSource ? "awaiting-workers" : emptyStatus
         : gatheringWorkers > 0 || delivered > 0
           ? "producing"
           : movingWorkers > 0
             ? "workers-moving"
-            : hasLiveTree ? "awaiting-workers" : "source-depleted";
+            : hasLiveSource ? "awaiting-workers" : emptyStatus;
   }
 
   /** Immediately offer every currently eligible worker to a completed producer. */
@@ -579,7 +540,7 @@ export class EconomyProductionSystem {
     for (const [workerId, assignment] of producer.assignments) {
       if (!assignment.worker.health.depleted && this.units.all().includes(assignment.worker)) continue;
       assignment.worker.setWorking(false);
-      this.forests?.releaseReservation(workerId);
+      this.releaseSourceClaims(workerId);
       producer.assignments.delete(workerId);
       this.assignmentByWorker.delete(workerId);
     }
@@ -589,7 +550,7 @@ export class EconomyProductionSystem {
     for (const assignment of producer.assignments.values()) {
       assignment.worker.stop();
       assignment.worker.setWorking(false);
-      this.forests?.releaseReservation(assignment.worker.id);
+      this.releaseSourceClaims(assignment.worker.id);
       this.assignmentByWorker.delete(assignment.worker.id);
     }
     producer.assignments.clear();
@@ -602,25 +563,10 @@ export class EconomyProductionSystem {
   ): boolean {
     const economy = producer.structure.economy;
     if (!economy || producer.assignments.size >= economy.workerCapacity) return false;
-    if (economy.requiresForest) {
-      if (economy.gatherRadius === undefined) return false;
-      const target = this.findReachableTree(worker, producer.structure, economy.gatherRadius);
-      if (!target) return false;
-      worker.setMovePath(target.path);
-      const assignment: WorkerAssignment = {
-        worker,
-        approach: target.approach,
-        source,
-        state: "moving-to-source",
-        sourceId: target.sourceId,
-        cargoAmount: 0,
-      };
-      producer.assignments.set(worker.id, assignment);
-      this.assignmentByWorker.set(worker.id, producer);
-      return true;
-    }
-    if (economy.requiresResourceNode) {
-      const target = this.findReachableNode(worker, producer.structure, economy);
+    const requirement = this.requirementFor(economy);
+    if (requirement) {
+      if (!requirement.source) return false;
+      const target = this.findReachableSource(worker, producer.structure, economy, requirement.source);
       if (!target) return false;
       worker.setMovePath(target.path);
       const assignment: WorkerAssignment = {
@@ -669,12 +615,13 @@ export class EconomyProductionSystem {
     return true;
   }
 
-  private moveWorkerToNode(
+  private moveWorkerToSource(
     assignment: WorkerAssignment,
     structure: PlacedStructure,
     economy: NonNullable<PlacedStructure["economy"]>,
+    source: ResourceSource,
   ): boolean {
-    const target = this.findReachableNode(assignment.worker, structure, economy);
+    const target = this.findReachableSource(assignment.worker, structure, economy, source);
     if (!target) return false;
     assignment.sourceId = target.sourceId;
     assignment.approach = target.approach;
@@ -684,63 +631,50 @@ export class EconomyProductionSystem {
   }
 
   /**
-   * The deposit a worker is sent to next: the extractor's nearest live one.
+   * The source a worker is sent to, and the route he takes to it.
    *
-   * Unreachable is fatal here where the forest retries its neighbours, because a
-   * deposit's neighbours are a different deposit entirely — the miner is released
-   * and the producer reports it, rather than quietly walking to a pile across the
-   * map that its building could never bank.
+   * A live source may still be unreachable because a player built around it, and
+   * whether that is worth retrying is the source's own call
+   * ({@link ResourceSource.sourcesAreInterchangeable}): a grove simply offers the
+   * next trunk, while a deposit's neighbour is a different pile that this
+   * extractor could never bank — so the miner is released and the producer
+   * reports it, rather than quietly walking to a deposit across the map.
    */
-  private findReachableNode(
+  private findReachableSource(
     worker: Unit,
     structure: PlacedStructure,
     economy: NonNullable<PlacedStructure["economy"]>,
+    source: ResourceSource,
   ): { readonly sourceId: string; readonly approach: Vector3; readonly path: readonly Vector3[] } | null {
-    if (!this.resourceNodes || economy.gatherRadius === undefined) return null;
-    const node = this.resourceNodes.nearestLiveNodeNear(
-      economy.resourceId,
-      structure.x,
-      structure.z,
-      economy.gatherRadius,
-      structure.stats.footprint,
-    );
-    if (!node) return null;
-    const approach = new Vector3(node.x, 0, node.z);
-    const path = this.navigation.plan(worker.position, approach);
-    return path ? { sourceId: node.id, approach, path } : null;
+    if (economy.gatherRadius === undefined) return null;
+    const reach = this.reachFor(structure, economy);
+    const rejected = new Set<string>();
+    while (true) {
+      const reserved = source.reserveNearest(worker.id, reach, rejected);
+      if (!reserved) return null;
+      const approach = new Vector3(reserved.x, 0, reserved.z);
+      const path = this.navigation.plan(worker.position, approach);
+      if (path) return { sourceId: reserved.id, approach, path };
+      source.releaseReservation(worker.id);
+      if (!source.sourcesAreInterchangeable) return null;
+      rejected.add(reserved.id);
+    }
   }
 
-  private moveWorkerToTree(assignment: WorkerAssignment, structure: PlacedStructure, gatherRadius: number): boolean {
-    const target = this.findReachableTree(assignment.worker, structure, gatherRadius);
-    if (!target) return false;
-    assignment.sourceId = target.sourceId;
-    assignment.approach = target.approach;
-    assignment.worker.setMovePath(target.path);
-    assignment.state = "moving-to-source";
-    return true;
-  }
-
-  /** After delivering, automatic gatherers prefer the camp with the shortest next tree-to-camp trip. */
-  private preferredForestProducer(current: ProducerRecord, worker: Unit): ProducerRecord {
-    if (!this.forests) return current;
+  /** After delivering, automatic gatherers prefer the camp with the shortest next source-to-camp trip. */
+  private preferredProducer(current: ProducerRecord, worker: Unit, source: ResourceSource): ProducerRecord {
     const candidates = [...this.producers.values()]
       .filter((producer) => {
         const economy = producer.structure.economy;
-        return producer.structure.owner === worker.owner
-          && economy?.requiresForest === true
-          && economy.gatherRadius !== undefined
-          && (producer === current || producer.assignments.size < economy.workerCapacity)
-          && this.forests!.hasLiveTreeNear(
-            producer.structure.x,
-            producer.structure.z,
-            economy.gatherRadius,
-            producer.structure.stats.footprint,
-          );
+        if (!economy || producer.structure.owner !== worker.owner) return false;
+        if (this.requirementFor(economy)?.source !== source || economy.gatherRadius === undefined) return false;
+        if (producer !== current && producer.assignments.size >= economy.workerCapacity) return false;
+        return (source.remainingNear(this.reachFor(producer.structure, economy)) ?? 0) > 0;
       });
     let best = current;
-    let bestDistance = this.forestDistanceForCamp(current);
+    let bestDistance = this.sourceDistanceForCamp(current, source);
     for (const candidate of candidates) {
-      const distance = this.forestDistanceForCamp(candidate);
+      const distance = this.sourceDistanceForCamp(candidate, source);
       if (distance >= bestDistance) continue;
       best = candidate;
       bestDistance = distance;
@@ -748,41 +682,12 @@ export class EconomyProductionSystem {
     return best;
   }
 
-  private forestDistanceForCamp(producer: ProducerRecord): number {
+  private sourceDistanceForCamp(producer: ProducerRecord, source: ResourceSource): number {
     const economy = producer.structure.economy;
-    if (!this.forests || !economy?.requiresForest || economy.gatherRadius === undefined) return Number.POSITIVE_INFINITY;
-    return this.forests.nearestLiveTreeDistanceSquared(
-      producer.structure.x,
-      producer.structure.z,
-      economy.gatherRadius,
-      producer.structure.stats.footprint,
-    );
-  }
-
-  /** A live tree may still be unreachable because a player built around it. Try its neighbours before giving up. */
-  private findReachableTree(
-    worker: Unit,
-    structure: PlacedStructure,
-    gatherRadius: number,
-  ): { readonly sourceId: string; readonly approach: Vector3; readonly path: readonly Vector3[] } | null {
-    if (!this.forests) return null;
-    const rejected = new Set<string>();
-    while (true) {
-      const tree = this.forests.reserveNearest(
-        worker.id,
-        structure.x,
-        structure.z,
-        gatherRadius,
-        structure.stats.footprint,
-        rejected,
-      );
-      if (!tree) return null;
-      const approach = new Vector3(tree.x, 0, tree.z);
-      const path = this.navigation.plan(worker.position, approach);
-      if (path) return { sourceId: tree.id, approach, path };
-      this.forests.releaseReservation(worker.id);
-      rejected.add(tree.id);
+    if (!economy || economy.gatherRadius === undefined || this.requirementFor(economy)?.source !== source) {
+      return Number.POSITIVE_INFINITY;
     }
+    return source.nearestSourceDistanceSquared(this.reachFor(producer.structure, economy));
   }
 
   /**

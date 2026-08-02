@@ -989,7 +989,9 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
     }
     const statsWhere = `${where}."${id}"`;
     const stats = asObject(raw, statsWhere);
-    const positive = (key: "meatCapacity" | "maxHealth" | "moveSpeed" | "fleeRadius" | "roamRadius") => {
+    const positive = (
+      key: "meatCapacity" | "maxHealth" | "moveSpeed" | "walkClipSpeed" | "fleeRadius" | "roamRadius",
+    ) => {
       const amount = requireFiniteNumber(stats, key, statsWhere);
       if (amount <= 0) throw new GameDataError(`${statsWhere}.${key}: must be > 0`);
       return amount;
@@ -1007,6 +1009,7 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
       meatCapacity: positive("meatCapacity"),
       maxHealth: positive("maxHealth"),
       moveSpeed: positive("moveSpeed"),
+      walkClipSpeed: positive("walkClipSpeed"),
       fleeRadius: positive("fleeRadius"),
       roamRadius,
     };

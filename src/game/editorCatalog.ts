@@ -525,7 +525,8 @@ const ANIMALS_FIELDS = [
   { path: "label", label: "Ad" },
   { path: "meatCapacity", label: "Et kapasitesi (yiyecek)", min: 0, step: 5 },
   { path: "maxHealth", label: "Can", min: 0, step: 5 },
-  { path: "moveSpeed", label: "Hız", min: 0, step: 0.5 },
+  { path: "moveSpeed", label: "Kaçış hızı", min: 0, step: 0.5, hint: "Avcıdan kaçarken; dörtnal klibi buna göre kalibre edilir." },
+  { path: "walkClipSpeed", label: "Otlama / yürüme hızı", min: 0, step: 0.1, hint: "Yürüme animasyonunun doğal göründüğü hız. Hayvan tam bu hızda otlar, böylece ayak kayması olmaz. Büyütmek hem yürümeyi hem animasyonu birlikte hızlandırır." },
   { path: "fleeRadius", label: "Kaçış yarıçapı", min: 0, step: 0.5, hint: "Avcı bu mesafeye girince hayvan kaçar." },
   { path: "roamRadius", label: "Dolaşma yarıçapı", min: 0, step: 0.5, hint: "Sürü merkezinden en fazla bu kadar uzaklaşır; avcı kulübesinin menzilinden küçük kalmalı." },
 ];

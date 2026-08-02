@@ -4,6 +4,7 @@
     "meatCapacity": 120,
     "maxHealth": 40,
     "moveSpeed": 7.5,
+    "walkClipSpeed": 1.5,
     "fleeRadius": 9,
     "roamRadius": 10
   },
@@ -12,6 +13,7 @@
     "meatCapacity": 200,
     "maxHealth": 70,
     "moveSpeed": 7,
+    "walkClipSpeed": 1.4,
     "fleeRadius": 9,
     "roamRadius": 10
   }

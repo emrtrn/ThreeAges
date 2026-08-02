@@ -71,6 +71,13 @@ export interface RtsUnitPresentationOptions {
    */
   readonly moveSpeed?: number | undefined;
   /**
+   * Ground speed this actor's walk clip reads naturally at. Omitted keeps the
+   * `moveSpeed`-derived default, which is right for anything drawn at the scale
+   * its clips were authored for; an actor with an authored model scale must
+   * supply it or its feet slide (see {@link RtsLocomotionOverrides}).
+   */
+  readonly walkClipSpeed?: number | undefined;
+  /**
    * Authored presentation motions already bound to their runtime nodes. Empty or
    * omitted for every unit that is a body with a walk cycle; the siege engine is
    * what this exists for.
@@ -128,7 +135,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     this.root = options.root;
     this.pickTargets = options.pickTargets;
     this.selectionRadius = options.selectionRadius;
-    this.tuning = rtsLocomotionTuning(options.moveSpeed ?? 1);
+    this.tuning = rtsLocomotionTuning(options.moveSpeed ?? 1, { walkClipSpeed: options.walkClipSpeed });
     this.wheelSpins = options.wheelSpins ?? [];
 
     const animation = options.animation;

@@ -338,7 +338,6 @@ import {
   advanceRoam,
   initialRoamState,
   makeWildlifeRng,
-  WILDLIFE_ROAM_SPEED_FRACTION,
 } from "../src/game/rts/wildlife/wildlifeRoaming";
 import { SelectionSystem } from "../src/game/rts/selection/selectionSystem";
 import type { MarqueeOverlay } from "../src/game/rts/selection/marqueeOverlay";
@@ -29751,18 +29750,39 @@ check("a herd stays a local cluster its hunters could be built beside", () => {
   }
 });
 
-check("grazing reads as walking, and the herd grazes the same way twice", () => {
+check("grazing reads as walking, at playback rate 1, and repeats identically", () => {
   const balance = shippedAnimalBalance();
-  const deer = balance.deer ?? assert.fail("the shipped table defines deer");
 
-  // Grazing speed has to land between the animation selector's walk and run
-  // thresholds (`RTS_LOCOMOTION_CALIBRATION`), or a herd either freezes into
-  // statues or stampedes on the spot. Derived from the same table as the
-  // behaviour, so this holds at any tuning of `moveSpeed`.
-  const tuning = rtsLocomotionTuning(deer.moveSpeed);
-  const grazeSpeed = deer.moveSpeed * WILDLIFE_ROAM_SPEED_FRACTION;
-  assert.ok(grazeSpeed > tuning.walkSpeed, "a grazing animal is moving, not standing");
-  assert.ok(grazeSpeed < tuning.runSpeed, "a grazing animal is not galloping");
+  for (const species of Object.values(balance)) {
+    // Grazing speed has to land between the animation selector's walk and run
+    // thresholds, or a herd either freezes into statues or stampedes on the
+    // spot. Derived from the same table as the behaviour, so it holds at any
+    // tuning rather than pinning today's numbers.
+    const tuning = rtsLocomotionTuning(species.moveSpeed, { walkClipSpeed: species.walkClipSpeed });
+    assert.ok(
+      species.walkClipSpeed > tuning.walkSpeed,
+      `${species.id} grazes fast enough to read as moving`,
+    );
+    assert.ok(
+      species.walkClipSpeed < tuning.runSpeed,
+      `${species.id} grazes slowly enough not to read as galloping`,
+    );
+
+    // The foot-slide contract, and the reason grazing speed *is* the clip speed:
+    // an animal drawn at an authored model scale cannot use the engine's
+    // "natural at half move speed" default. Pinning the two together makes the
+    // rate exactly 1 at every tuning, so the feet plant where the animator put
+    // them. Slowing the animal down would not have fixed this — the rate is
+    // speed/clipSpeed, so it scales with the speed and the mismatch survives.
+    assert.equal(
+      rtsPlaybackRate("walk", species.walkClipSpeed, tuning),
+      1,
+      `${species.id} plays its walk clip at its authored pace`,
+    );
+  }
+
+  const deer = balance.deer ?? assert.fail("the shipped table defines deer");
+  assert.ok(deer.walkClipSpeed < deer.moveSpeed, "an animal flees faster than it grazes");
 
   // Seeded, not `Math.random`: where a deer wandered decides whether a hunter
   // can reach it, so it is simulation and the headless AI must see the same
@@ -29780,7 +29800,7 @@ check("grazing reads as walking, and the herd grazes the same way twice", () => 
 check("a grazing animal stands still long enough to play its eating clip", () => {
   // The roam step must actually come to rest, not creep forever: standing still
   // is what puts the animal on the `work` role, which is what plays `Eating`.
-  const profile = { homeX: 0, homeZ: 0, roamRadius: 8, moveSpeed: 6 };
+  const profile = { homeX: 0, homeZ: 0, roamRadius: 8, walkSpeed: 1.5 };
   const random = makeWildlifeRng(7);
   const state = initialRoamState(profile, random);
   let pose = { x: 0, z: 0, facing: 0 };
@@ -29879,12 +29899,15 @@ check("the animal validator refuses data that could never make sense", () => {
     meatCapacity: 120,
     maxHealth: 40,
     moveSpeed: 7.5,
+    walkClipSpeed: 1.5,
     fleeRadius: 9,
     roamRadius: 10,
   };
   assert.ok(validateAnimalBalance({ deer: sane }).deer, "the sane shape passes");
 
-  for (const key of ["meatCapacity", "maxHealth", "moveSpeed", "fleeRadius", "roamRadius"] as const) {
+  for (const key of [
+    "meatCapacity", "maxHealth", "moveSpeed", "walkClipSpeed", "fleeRadius", "roamRadius",
+  ] as const) {
     assert.throws(
       () => validateAnimalBalance({ deer: { ...sane, [key]: 0 } }),
       new RegExp(`${key}: must be > 0`),
@@ -33726,8 +33749,8 @@ check("RTS a live tree blocks a building footprint until it is harvested away", 
   // Beside the grove, clear of every trunk, the same camp is legal.
   assert.equal(construction.validate("player", "lumber_camp", 10, 0)?.valid, true, "a camp is legal beside the grove");
   // Harvest the blocking tree to nothing; its ground becomes buildable again.
-  forests.reserveNearest(1, 20, 0, 4);
-  forests.harvest(1, 40);
+  forests.reserveNearest(1, { resourceId: "wood", x: 20, z: 0, radius: 4 });
+  forests.harvest(1, "under-camp", 40);
   assert.equal(forests.snapshots().find((tree) => tree.id === "under-camp")?.depleted, true, "the buried tree is now gone");
   assert.notEqual(construction.validate("player", "lumber_camp", 20, 0)?.reason, "blocked", "a depleted tree stops reserving its cell");
   territory.dispose();
@@ -36528,8 +36551,8 @@ check("RTS a road routes around a standing tree and straight through once it is 
   assert.ok(detour, "a road still connects across a grove");
   assert.ok(detour.cells.every((cell) => cell.x !== 0 || cell.z !== 0), "the route bends around the standing tree");
   // Fell the tree; its cell stops reserving road space.
-  forests.reserveNearest(1, 0, 0, 4);
-  forests.harvest(1, 40);
+  forests.reserveNearest(1, { resourceId: "wood", x: 0, z: 0, radius: 4 });
+  forests.harvest(1, "on-route", 40);
   const through = construction.plan({ x: -6, z: 0 }, { x: 6, z: 0 });
   assert.ok(through, "a road plans across the cleared cell");
   assert.ok(through.cells.some((cell) => cell.x === 0 && cell.z === 0), "the felled tree no longer diverts the road");

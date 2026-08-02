@@ -444,7 +444,18 @@ export interface AnimalBalanceStats {
   /** Food one carcass yields before it is picked clean. */
   readonly meatCapacity: number;
   readonly maxHealth: number;
+  /** Speed the animal flees at; the gallop clip is calibrated to it. */
   readonly moveSpeed: number;
+  /**
+   * Ground speed this species' walk clip reads naturally at, in world units/s.
+   *
+   * Authored rather than derived because the engine's default — half of
+   * `moveSpeed` — assumes a model drawn at the scale its clips were made for,
+   * and every animal carries an authored scale instead. It doubles as the
+   * grazing speed ({@link RoamProfile}), which is what keeps a wandering animal
+   * at playback rate 1 and so free of foot slide at any tuning.
+   */
+  readonly walkClipSpeed: number;
   /** Distance at which the animal breaks away from an approaching hunter. */
   readonly fleeRadius: number;
   /** How far from its herd's centre the animal may wander. */

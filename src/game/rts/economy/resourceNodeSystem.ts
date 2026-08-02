@@ -14,6 +14,7 @@
  */
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { ResourceBalance } from "../../data/gameDataTypes";
+import type { ResourceReach, ResourceSearchArea, ResourceSource } from "./resourceSource";
 
 /**
  * Half-extent of the square a live deposit reserves against roads and building
@@ -49,14 +50,19 @@ interface ResourceNodeRecord {
 }
 
 /** The extractor footprint a deposit must stay clear of to be workable. */
-export interface ResourceNodeSearchArea {
-  readonly width: number;
-  readonly depth: number;
-}
+export type ResourceNodeSearchArea = ResourceSearchArea;
 
 /** A source is worked from beside it, within reach and outside the footprint. */
-export class ResourceNodeSystem {
+export class ResourceNodeSystem implements ResourceSource {
   private readonly nodes = new Map<string, ResourceNodeRecord>();
+
+  /**
+   * Deposits are not interchangeable. Each is a distinct pile that the extractor
+   * beside it was built to work, so a miner who cannot reach his is released
+   * rather than sent to one his mine could never bank, and a miner who has just
+   * unloaded goes back to the same pile instead of shopping for a nearer mine.
+   */
+  readonly sourcesAreInterchangeable = false;
 
   constructor(
     balance: ResourceBalance,
@@ -114,37 +120,40 @@ export class ResourceNodeSystem {
    * not "depleted" because it just finished the closest one, and the status it
    * reports has to say which of those two it is.
    */
-  remainingAt(
-    resourceId: string,
-    x: number,
-    z: number,
-    radius: number,
-    footprint?: ResourceNodeSearchArea,
-  ): number | null {
-    const nodes = this.nodesNear(resourceId, x, z, radius, footprint);
+  remainingNear(reach: ResourceReach): number | null {
+    const nodes = this.nodesNear(reach.resourceId, reach.x, reach.z, reach.radius, reach.footprint);
     if (nodes.length === 0) return null;
     return nodes.reduce((total, node) => total + node.remaining, 0);
+  }
+
+  /** Squared extractor-to-deposit distance, or infinity when nothing is in reach. */
+  nearestSourceDistanceSquared(reach: ResourceReach): number {
+    const node = this.nearestLiveNode(reach.resourceId, reach.x, reach.z, reach.radius, reach.footprint);
+    return node ? this.distanceSquared(node, reach.x, reach.z) : Number.POSITIVE_INFINITY;
   }
 
   /**
    * The nearest deposit with material left that an extractor at this point can
    * send a worker to, or null when none is in reach.
    *
-   * Unlike {@link ForestSystem.reserveNearest} there is no per-worker claim: a
-   * tree is one trunk and two lumberjacks would stand inside each other, while a
-   * deposit is a pile several miners can work at once. Capacity is limited by the
-   * extractor's `workerCapacity`, which is where that limit belongs.
+   * Unlike {@link ForestSystem.reserveNearest} nothing is actually claimed, so
+   * the worker is not recorded: a tree is one trunk and two lumberjacks would
+   * stand inside each other, while a deposit is a pile several miners can work at
+   * once. Capacity is limited by the extractor's `workerCapacity`, which is where
+   * that limit belongs.
    */
-  nearestLiveNodeNear(
-    resourceId: string,
-    x: number,
-    z: number,
-    radius: number,
-    footprint?: ResourceNodeSearchArea,
+  reserveNearest(
+    _workerId: number,
+    reach: ResourceReach,
+    rejectedSourceIds: ReadonlySet<string> = new Set(),
   ): ResourceNodeSnapshot | null {
-    const node = this.nearestLiveNode(resourceId, x, z, radius, footprint);
+    const node = this.nodesNear(reach.resourceId, reach.x, reach.z, reach.radius, reach.footprint)
+      .find((candidate) => candidate.remaining > 0 && !rejectedSourceIds.has(candidate.definition.id));
     return node ? this.snapshot(node) : null;
   }
+
+  /** Nothing is claimed, so nothing is released. Present so the gather loop needs no special case. */
+  releaseReservation(_workerId: number): void {}
 
   /**
    * Draw from one named deposit — the one a worker is actually kneeling at,
@@ -152,11 +161,11 @@ export class ResourceNodeSystem {
    * for an unknown or spent deposit, which is the caller's cue to send the
    * worker home and look for another.
    */
-  extractFrom(nodeId: string, requested: number): number {
+  harvest(_workerId: number, sourceId: string, requested: number): number {
     if (!Number.isFinite(requested) || requested < 0) {
       throw new RangeError("Requested resource extraction must be a non-negative finite number");
     }
-    const node = this.nodes.get(nodeId);
+    const node = this.nodes.get(sourceId);
     if (!node || node.remaining <= 0) return 0;
     const amount = Math.min(requested, node.remaining);
     node.remaining -= amount;

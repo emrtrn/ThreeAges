@@ -94,14 +94,38 @@ export const RTS_LOCOMOTION_CALIBRATION = {
   maxPlaybackRate: 1.8,
 } as const;
 
+/**
+ * Per-actor override of the calibration half of the tuning.
+ *
+ * The `walkClipSpeed: 0.5` assumption above holds for anything rendered at the
+ * scale its clips were authored for — which every unit is. It does *not* hold
+ * for an actor whose model carries an authored scale: a deer drawn at 0.2 covers
+ * a fifth of the ground per stride, so its walk clip reads naturally at roughly a
+ * fifth of the speed, and calibrating it off `moveSpeed` leaves it sliding.
+ *
+ * Only the calibration is overridable, never the thresholds: what counts as
+ * walking rather than running is a gameplay fact about the actor's speed, and
+ * moving that would put a grazing animal into its gallop.
+ */
+export interface RtsLocomotionOverrides {
+  /** Ground speed this actor's walk clip looks natural at, in world units/s. */
+  readonly walkClipSpeed?: number | undefined;
+}
+
 /** Builds the per-unit tuning from its authored `moveSpeed` (`balance/units.json`). */
-export function rtsLocomotionTuning(moveSpeed: number): RtsLocomotionTuning {
+export function rtsLocomotionTuning(
+  moveSpeed: number,
+  overrides?: RtsLocomotionOverrides,
+): RtsLocomotionTuning {
   const speed = Number.isFinite(moveSpeed) && moveSpeed > 0 ? moveSpeed : 1;
   const c = RTS_LOCOMOTION_CALIBRATION;
+  const authoredWalkClipSpeed = overrides?.walkClipSpeed;
   return {
     walkSpeed: Math.max(c.minWalkThreshold, speed * c.walkThreshold),
     runSpeed: speed * c.runThreshold,
-    walkClipSpeed: speed * c.walkClipSpeed,
+    walkClipSpeed: authoredWalkClipSpeed !== undefined && Number.isFinite(authoredWalkClipSpeed) && authoredWalkClipSpeed > 0
+      ? authoredWalkClipSpeed
+      : speed * c.walkClipSpeed,
     runClipSpeed: speed,
     minPlaybackRate: c.minPlaybackRate,
     maxPlaybackRate: c.maxPlaybackRate,

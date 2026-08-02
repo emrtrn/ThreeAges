@@ -15,16 +15,6 @@
  * would be the most expensive way to solve the least important problem.
  */
 
-/**
- * Fraction of the species' `moveSpeed` used while grazing.
- *
- * `moveSpeed` is the speed the animal *flees* at, which is what the run clip is
- * calibrated to (`rtsLocomotionTuning`). A quarter of it lands below that
- * module's 0.55 run threshold and above its 0.1 walk threshold, so grazing reads
- * as `Walk` and bolting reads as `Gallop` without either being tuned separately.
- */
-export const WILDLIFE_ROAM_SPEED_FRACTION = 0.25;
-
 /** Seconds an animal stands and grazes between moves. */
 const REST_SECONDS_MIN = 2.5;
 const REST_SECONDS_MAX = 7;
@@ -39,12 +29,26 @@ export interface RoamState {
   restSeconds: number;
 }
 
-/** The unchanging half: the herd's circle and the species' speed. */
+/** The unchanging half: the herd's circle and the species' grazing pace. */
 export interface RoamProfile {
   readonly homeX: number;
   readonly homeZ: number;
   readonly roamRadius: number;
-  readonly moveSpeed: number;
+  /**
+   * Speed a grazing animal drifts at — deliberately the species'
+   * `walkClipSpeed`, the ground speed its walk clip reads naturally at.
+   *
+   * That equality is the whole fix for foot slide, and it is worth stating why
+   * a fraction of `moveSpeed` was wrong: playback rate is
+   * `planarSpeed / walkClipSpeed`, so scaling the speed scales the animation
+   * with it and the mismatch survives untouched. Only pinning the two together
+   * removes it — at this speed the rate is exactly 1, at every tuning, so the
+   * feet plant wherever the animator put them.
+   *
+   * Fleeing (Faz 5) is the other half: it runs at `moveSpeed`, which is what
+   * the gallop clip is calibrated to.
+   */
+  readonly walkSpeed: number;
 }
 
 /** Where the animal ended up this tick, and how fast it got there. */
@@ -142,8 +146,7 @@ export function advanceRoam(
     return { x: current.x, z: current.z, facing: current.facing, speed: 0 };
   }
 
-  const speed = profile.moveSpeed * WILDLIFE_ROAM_SPEED_FRACTION;
-  const step = Math.min(speed * deltaSeconds, distance);
+  const step = Math.min(profile.walkSpeed * deltaSeconds, distance);
   return {
     x: current.x + (dx / distance) * step,
     z: current.z + (dz / distance) * step,

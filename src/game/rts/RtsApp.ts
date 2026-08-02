@@ -3558,8 +3558,8 @@ export class RtsApp {
           stats.moveSpeed,
         ) ?? null);
       this.units.refreshPresentations();
-      this.wildlifeView.setPresentationFactory((species, moveSpeed) =>
-        this.actorVisuals?.createAnimalPresentation(species, moveSpeed) ?? null);
+      this.wildlifeView.setPresentationFactory((species, moveSpeed, walkClipSpeed) =>
+        this.actorVisuals?.createAnimalPresentation(species, moveSpeed, walkClipSpeed) ?? null);
       this.placement.setPreviewFactory((buildingId, width, depth) =>
         this.buildingVisuals.createPreviewForBuilding(
           buildingId,

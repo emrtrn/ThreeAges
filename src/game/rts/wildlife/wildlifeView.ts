@@ -16,6 +16,7 @@ import type { WildlifeAnimal } from "./wildlifeSystem";
 export type WildlifePresentationFactory = (
   species: string,
   moveSpeed: number,
+  walkClipSpeed: number,
 ) => RtsPresentationHandle | null;
 
 export class WildlifeView {
@@ -67,7 +68,7 @@ export class WildlifeView {
     const existing = this.handles.get(animal.id);
     if (existing) return existing;
     if (!this.factory || this.unavailable.has(animal.stats.id)) return null;
-    const handle = this.factory(animal.stats.id, animal.stats.moveSpeed);
+    const handle = this.factory(animal.stats.id, animal.stats.moveSpeed, animal.stats.walkClipSpeed);
     if (!handle) {
       this.unavailable.add(animal.stats.id);
       return null;

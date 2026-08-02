@@ -1,7 +1,8 @@
 # ThreeAges RTS Yaban Hayati, Avcilik ve Hayvan Varliklari Plani
 
 Olusturulma tarihi: 2026-08-01
-Durum: Planlandi - uygulama baslamadi. Acik kararlar §4'te.
+Durum: Faz 0-3 tamamlandi (2026-08-02). Sirada Faz 4 - Avci Kulubesi ve
+yerlestirme kurali. Kararlar §4te kilitli.
 Kapsam: `public/assets/ThreeAges/Animals/` altindaki 12 animasyonlu hayvan
 modelini, oyunun ekonomi/savas/lojistik cercevesine oturan gercek RTS
 sistemlerine cevirmek. V1 hedefi **avlanma**dir; kalan turler icin yol haritasi
@@ -199,7 +200,45 @@ onizlemesinde dogrulanir (`SkeletalMeshEditor.ts` klip secip oynatir ve
 ham klip adini kullandigi icin sidecar'in dogrulugu hakkinda **hicbir sey
 soylemez**.
 
-### 3.8 Savas tarafi - isci karsilik verme yolu
+### 3.8 Ucuncu bulgu - klip kalibrasyonu model olcegini bilmez
+
+Faz 2'nin gorsel kabulunde yakalandi: hayvanlar animasyonlarina gore **hizli
+yuruyordu** (ayak kaymasi). Sebep tek bir varsayim:
+
+```text
+oynatma hizi = planarSpeed / walkClipSpeed        (rtsUnitAnimation.ts)
+walkClipSpeed = moveSpeed * 0.5                   (RTS_LOCOMOTION_CALIBRATION)
+```
+
+Motor "yurume klibi `moveSpeed`'in yarisinda dogal gorunur" varsayar ve bunu
+kendi de yazar ("no clip declares the speed it was authored for"). Bu varsayim
+**scale 1** cizilen her sey icin dogrudur - butun unit'ler oyle. Hayvan ise
+author edilmis bir olcek tasir (geyik 0.2), yani adimi besde bir yer kaplar ve
+klibinin dogal hizi da yaklasik besde birdir. Kalibrasyon ~5 kat yuksek kalir.
+
+**Onemli: hayvani yavaslatmak bunu duzeltmez.** Oran `hiz / klipHizi`
+oldugundan hizi yariya indirmek animasyonu da yariya indirir; uyusmazlik
+degismeden kalir. Yalnizca kalibrasyon sabiti duzeltebilir.
+
+Cozum, tek sayilik bir yama yerine kendi kendini duzelten bir esitlik:
+
+- `animals.json` her ture bir **`walkClipSpeed`** tasir - yurume klibinin dogal
+  gorundugu yer hizi, author edilmis olcekte.
+- Otlama hizi **tam olarak bu deger**dir (`RoamProfile.walkSpeed`). Boylece
+  oynatma hizi her ayarda tam **1.0** olur ve ayak kaymasi tanim geregi imkansiz
+  hale gelir.
+- `rtsLocomotionTuning` bir `walkClipSpeed` override'i kabul eder; **yalnizca
+  kalibrasyon** override edilir, esikler asla - neyin yurume neyin kosma
+  sayildigi oyunun hiz gercegidir ve onu kaydirmak otlayan hayvani dortnala
+  sokardi.
+- Kacis (Faz 5) diger yaridir: `moveSpeed` ile kosar, dortnal klibi zaten ona
+  kalibrelidir.
+
+Eski `WILDLIFE_ROAM_SPEED_FRACTION = 0.25` sabiti kaldirildi; otlama hizi artik
+turetilmis degil, author edilmis bir sayidir ve editorde "Hayvan Dengesi"
+tablosundan ayarlanir. Yeni bir tur eklenirken bu sayi gozle bulunur.
+
+### 3.9 Savas tarafi - isci karsilik verme yolu
 
 `src/game/rts/units/unitCombat.ts:60`:
 
@@ -546,21 +585,70 @@ Kabul:
 
 - [x] `npx tsc --noEmit`, `npm run test:engine` (1205 check) ve
   `npm run build:verify` yesil.
-- [ ] **Gorsel kabul kullanicidadir:** `?rts` Play rotasinda sure haritada
-  dolasir, dururken otlar (`Eating`), yururken `Walk` oynatir; nufus ve AI
-  sayaclarinda hicbir degisiklik olmaz.
+- [x] **Gorsel kabul alindi (2026-08-02).** Kullanici `?rts` Play rotasinda
+  dogruladi: suruler dogru boyutta gorunuyor, dolasip otluyor, zemine oturuyor
+  ve nufus sayaci etkilenmemis. Ayni gecise ait tek kusur - animasyona gore
+  hizli yurume - §3.8'de teshis edilip duzeltildi ve tekrar dogrulandi.
+
+**Faz 2 tamamlandi (2026-08-02).** V1 hedefi acisindan durum: hayvanlar
+haritada yasiyor ama henuz avlanamiyor. Sirada Faz 3.
 
 ### Faz 3 - Kaynak arayuzu tekillestirmesi
 
 Amac: Ucuncu kaynak dalini eklemeden once tekrari kaldirmak (§5.4).
 
-- [ ] `resourceSource.ts` arayuzu cikarilir.
-- [ ] `ForestSystem` ve `ResourceNodeSystem` arayuzu uygular (davranis
-  degismez).
-- [ ] `economyProductionSystem` uclu zinciri iki yerde birden arayuz uzerinden
-  cozer.
+- [x] `resourceSource.ts` arayuzu cikarildi: `ResourceReach` (uretici konumu +
+  `gatherRadius` + kaynak id + footprint, bes gevsek argumanin yerine tek deger),
+  `ReservedResourceSource` ve `ResourceSource`
+  (`remainingNear` / `nearestSourceDistanceSquared` / `reserveNearest` /
+  `harvest` / `releaseReservation`).
+- [x] `ForestSystem` ve `ResourceNodeSystem` arayuzu uygular; davranis
+  degismedi. Imza uyumu icin degisenler: `ForestSystem.remainingNear` ve
+  `reserveNearest` artik `ResourceReach` alir,
+  `nearestLiveTreeDistanceSquared` -> `nearestSourceDistanceSquared`,
+  `harvest(workerId, sourceId, requested)`;
+  `ResourceNodeSystem.remainingAt` -> `remainingNear`, `nearestLiveNodeNear` ->
+  `reserveNearest` (rezervasyon tutmaz), `extractFrom` -> `harvest`, ve bos bir
+  `releaseReservation`. Yerlestirme sorgulari (`hasLiveTreeNear`,
+  `canExtractAt`, `extract`) konumsal imzalariyla durdu - `RtsApp` ve testler
+  onlari kullaniyor ve toplama dongusunun parcasi degiller.
+- [x] `economyProductionSystem` zinciri tek bir `requirementFor()` icinde
+  cozulur; `snapshots()` ve uretim dongusu ayni cozumu kullanir.
+  `updateForestProducer` + `updateNodeProducer` (~110'ar satir, ikizi) tek bir
+  `updateGatheringProducer`'a indi; ayni sekilde
+  `findReachableTree`/`findReachableNode` -> `findReachableSource`,
+  `moveWorkerToTree`/`moveWorkerToNode` -> `moveWorkerToSource`,
+  `preferredForestProducer` -> `preferredProducer`.
 
-Kabul: hicbir oynanis degisikligi yok, mevcut testler yesil kalir.
+**Iki davranis farki tek bir ozellige indi.** Orman ile yatak gercekten iki
+yerde ayrisiyordu: (1) erisilemeyen bir agac atlanip komsusu denenir, erisilemez
+bir yatakta isci serbest birakilir; (2) yukunu bosaltan oduncu daha yakin bir
+kampa gecebilir, madenci gecemez. Ikisi de ayni alt gercegin sonucu - **ayni
+turden kaynaklar birbirinin yerine gecer mi** - ve arayuzde tek bir
+`sourcesAreInterchangeable` bayragi olarak durur (orman `true`, yatak `false`).
+Bu, "davranis degismez" kabulunu bir dilek olmaktan cikarip derleyicinin
+gorebildigi bir sozlesmeye cevirir; Faz 5'te suru bu bayragi kendi dogrusuyla
+doldurur.
+
+`ForestSystem.harvest` `sourceId`'yi **okumaz**: bir oduncu ancak ormanin ona
+verdigi govdeyi kesebilir, yani rezervasyon otoritedir. Parametre arayuz
+sozlesmesi geregi durur ve bu gerekce kodda yazilidir.
+
+Kabul:
+
+- [x] Hicbir oynanis degisikligi yok: `npx tsc --noEmit`,
+  `npm run test:engine` (1205 check - Faz 2 ile ayni sayi) ve
+  `npm run build:verify` yesil.
+- [x] Refactor gercekten kapsanmis durumda; iki yolu da zaman icinde suren
+  mevcut testler yesil kaldi: "RTS lumber camps require individual trees and
+  workers carry wood back to camp", "RTS wood workers switch to a nearer camp
+  after delivering their exhausted tree" (orman + kamp gecisi) ve "RTS miners
+  walk to the deposit, cut a load there, and carry it back to the mine"
+  (yatak). Bu faz saf refactor oldugu icin yeni test eklenmedi - §8'de de
+  istenmiyor.
+
+**Faz 3 tamamlandi (2026-08-02).** Sirada Faz 4 - Avci Kulubesi ve yerlestirme
+kurali.
 
 ### Faz 4 - Avci Kulubesi ve yerlestirme kurali
 
@@ -708,7 +796,7 @@ geyik de avlar - harita canli gorunur, bedava atmosfer.
 
 `Fox` korunmasiz tarla tamponundan calip kacar, ya da tamamen ambiyanstir.
 
-Maliyet: dusuk (V1 altyapisi uzerine). Onkosul: §3.8'deki karsilik verme
+Maliyet: dusuk (V1 altyapisi uzerine). Onkosul: §3.9'daki karsilik verme
 yolunun dogrulanmasi.
 
 ### V4 - Esek lojistigi (Donkey) - en yuksek getirili madde

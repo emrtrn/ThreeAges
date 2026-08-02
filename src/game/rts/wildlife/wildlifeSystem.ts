@@ -142,7 +142,7 @@ export class WildlifeSystem {
         homeX: herd.x,
         homeZ: herd.z,
         roamRadius: stats.roamRadius,
-        moveSpeed: stats.moveSpeed,
+        walkSpeed: stats.walkClipSpeed,
       };
       for (let index = 0; index < herd.count; index += 1) {
         this.animals.push(new WildlifeAnimal(`${herd.id}:${index}`, herd.id, stats, profile));
