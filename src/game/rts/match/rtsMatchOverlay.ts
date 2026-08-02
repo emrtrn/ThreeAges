@@ -15,6 +15,7 @@ import { DEFAULT_RTS_CAMERA_SETTINGS, type RtsCameraSettings } from "../camera/r
 import { formatMatchDuration } from "./rtsMatchClock";
 import type { RtsMatchEndReason, RtsMatchOutcome } from "./rtsMatchState";
 import { DEFAULT_VICTORY_CONDITION, type VictoryConditionChoice } from "./victoryConditionChoice";
+import { DEFAULT_FOG_OF_WAR, type FogOfWarChoice } from "../vision/fogOfWarChoice";
 import type { MissionModeChoice } from "../tutorial/missionModeChoice";
 
 /** RTS exposes the three player-facing profiles; Ultra/custom remain engine APIs. */
@@ -60,6 +61,11 @@ export interface RtsMatchOverlayHandlers {
    * and then the row is not built at all — same rule as the picker above.
    */
   readonly onMissionMode?: (choice: MissionModeChoice) => void;
+  /**
+   * §59: whether the next match is played under fog. Absent when the host cannot
+   * act on it — same rule as the two rows above.
+   */
+  readonly onFogOfWar?: (choice: FogOfWarChoice) => void;
   /** Faz 2 "serbest oyuna çevir": end a live chain without ending the match. */
   readonly onAbandonMission?: () => void;
 }
@@ -118,6 +124,35 @@ const MISSION_MODE_ROWS: readonly MissionModeRow[] = [
     choice: "free",
     label: "Serbest maç",
     hint: "Görev yok. Bu oyunun yol/depo lojistiği ve Merkez'den yükseltme düzeni türün alışıldık kurallarından farklı; hepsini kendin keşfedersin.",
+  },
+];
+
+interface FogOfWarRow {
+  readonly choice: FogOfWarChoice;
+  readonly label: string;
+  readonly hint: string;
+}
+
+/**
+ * §59, phrased as two kinds of match rather than as an on/off switch.
+ *
+ * "Kapalı" alone would read as disabling an effect, and the hints have to carry
+ * the part that is not obvious from the name: fog is what makes scouting, the
+ * remembered-building markers and the AI's own blindness mean anything, so
+ * turning it off is a change to how the match is *played*, not to how it looks.
+ * The symmetry is worth stating outright — a player who assumes the AI cheats
+ * under fog is a player who will never scout.
+ */
+const FOG_OF_WAR_ROWS: readonly FogOfWarRow[] = [
+  {
+    choice: "on",
+    label: "Açık",
+    hint: "Harita keşfedilene kadar karanlık. Görmediğin düşman birlikleri gizlenir, keşfettiğin binalar hafızada kalır. Düşman da aynı sisin altında oynar — senin birliklerini ancak gördüğünde bilir.",
+  },
+  {
+    choice: "off",
+    label: "Kapalı",
+    hint: "Tüm harita ve her iki tarafın birlikleri baştan görünür. Keşif ve baskın avantajı ortadan kalkar; doğrudan ekonomi ve ordu yarışına dönersin.",
   },
 ];
 
@@ -207,6 +242,9 @@ export class RtsMatchOverlay {
   /** Faz 2 mission mode; empty and permanently hidden without a mode handler. */
   private readonly missionHint = document.createElement("p");
   private missionMode: MissionModeChoice = "story";
+  /** §59 fog row; same "absent handler means no row" rule as the two above. */
+  private readonly fogHint = document.createElement("p");
+  private fogOfWar: FogOfWarChoice = DEFAULT_FOG_OF_WAR;
 
   constructor(private readonly handlers: RtsMatchOverlayHandlers) {
     this.graphicsSettings = handlers.graphicsSettings ?? null;
@@ -244,6 +282,15 @@ export class RtsMatchOverlay {
     // round asks the player to pick how the game ends before knowing whether they
     // are being walked through it.
     this.buildMissionMode();
+    this.buildVictoryCondition();
+    // Last, and each row guards its own handler rather than the whole tail
+    // returning early: three optional rows chained through one `return` meant a
+    // host that could not act on the victory condition silently lost every row
+    // after it.
+    this.buildFogOfWar();
+  }
+
+  private buildVictoryCondition(): void {
     if (!this.handlers.onVictoryCondition) return;
     const group = document.createElement("fieldset");
     group.className = "rts-match-setup-group";
@@ -307,6 +354,37 @@ export class RtsMatchOverlay {
     this.setup.append(group, this.missionHint);
   }
 
+  /** §59's fog row, on the same radio/one-swapping-hint pattern as the two above. */
+  private buildFogOfWar(): void {
+    if (!this.handlers.onFogOfWar) return;
+    const group = document.createElement("fieldset");
+    group.className = "rts-match-setup-group";
+    const legend = document.createElement("legend");
+    legend.textContent = "Savaş sisi";
+    group.appendChild(legend);
+    for (const row of FOG_OF_WAR_ROWS) {
+      const wrapper = document.createElement("label");
+      wrapper.className = "rts-match-setup-option";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "rts-fog-of-war";
+      input.value = row.choice;
+      input.dataset.rtsFogOfWar = row.choice;
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        this.setFogOfWar(row.choice);
+        this.handlers.onFogOfWar?.(row.choice);
+      });
+      const label = document.createElement("span");
+      label.textContent = row.label;
+      wrapper.append(input, label);
+      group.appendChild(wrapper);
+    }
+    this.fogHint.className = "rts-match-setup-hint";
+    this.fogHint.dataset.rtsFogHint = "";
+    this.setup.append(group, this.fogHint);
+  }
+
   /** Reflect a choice in the radios and the hint. Fires no handler. */
   private setVictoryCondition(choice: VictoryConditionChoice): void {
     this.victoryCondition = choice;
@@ -326,6 +404,14 @@ export class RtsMatchOverlay {
     }
     this.missionHint.textContent =
       MISSION_MODE_ROWS.find((row) => row.choice === choice)?.hint ?? "";
+  }
+
+  private setFogOfWar(choice: FogOfWarChoice): void {
+    this.fogOfWar = choice;
+    for (const input of this.setup.querySelectorAll<HTMLInputElement>("input[name='rts-fog-of-war']")) {
+      input.checked = input.value === choice;
+    }
+    this.fogHint.textContent = FOG_OF_WAR_ROWS.find((row) => row.choice === choice)?.hint ?? "";
   }
 
   /**
@@ -476,9 +562,11 @@ export class RtsMatchOverlay {
   showStart(
     victoryCondition: VictoryConditionChoice = DEFAULT_VICTORY_CONDITION,
     missionMode: MissionModeChoice = "story",
+    fogOfWar: FogOfWarChoice = DEFAULT_FOG_OF_WAR,
   ): void {
     if (this.handlers.onVictoryCondition) this.setVictoryCondition(victoryCondition);
     if (this.handlers.onMissionMode) this.setMissionMode(missionMode);
+    if (this.handlers.onFogOfWar) this.setFogOfWar(fogOfWar);
     this.render(
       "Üç Çağ: Sınır Krallıkları",
       "Ekonomini kur, yolunu bağla ve düşman merkezini yık.",
@@ -500,6 +588,10 @@ export class RtsMatchOverlay {
 
   get selectedMissionMode(): MissionModeChoice {
     return this.missionMode;
+  }
+
+  get selectedFogOfWar(): FogOfWarChoice {
+    return this.fogOfWar;
   }
 
   /**

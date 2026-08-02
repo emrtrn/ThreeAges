@@ -14,8 +14,9 @@
  * Pure TS: no three.js / DOM-render imports (Forge boundary, CLAUDE.md / TD-002).
  */
 
-/** The canonical flag set (plan §13). All default OFF — each is a later or
- *  conditional system, not part of Ürün A's core.
+/** The canonical flag set (plan §13). Default OFF unless listed in
+ *  {@link DEFAULT_ON_FLAGS} — a flag exists because the system behind it is
+ *  later or conditional, not part of Ürün A's core.
  *
  *  `contentAssets` was removed in the Actor presentation plan's Faz 5: the
  *  authored Actor pack is simply how the RTS renders, and the legacy code-side
@@ -39,11 +40,25 @@ export type FeatureFlag = (typeof FEATURE_FLAG_IDS)[number];
 
 export type FeatureFlagState = Readonly<Record<FeatureFlag, boolean>>;
 
+/**
+ * Flags whose system has graduated from "conditional" to *how the game ships*.
+ *
+ * `fogOfWar` (§59) is the first: it passed its acceptance criteria, the start
+ * card now offers it as a match setting (`rts/vision/fogOfWarChoice.ts`), and a
+ * match played without it is the exception rather than the baseline. Turning the
+ * default around here rather than making the card force the flag on every boot
+ * keeps §13's precedence intact — a preset can still author `fogOfWar: false`,
+ * and the player's choice still outranks both.
+ *
+ * The one thing this costs: `?flags=` can only force a flag *on*, so there is no
+ * longer a URL that turns fog off. The start card and a preset are the two doors.
+ */
+const DEFAULT_ON_FLAGS: readonly FeatureFlag[] = ["fogOfWar"];
+
 const DEFAULT_FLAGS: FeatureFlagState = Object.freeze(
-  Object.fromEntries(FEATURE_FLAG_IDS.map((id) => [id, false])) as Record<
-    FeatureFlag,
-    boolean
-  >,
+  Object.fromEntries(
+    FEATURE_FLAG_IDS.map((id) => [id, DEFAULT_ON_FLAGS.includes(id)]),
+  ) as Record<FeatureFlag, boolean>,
 );
 
 export function isFeatureFlag(value: string): value is FeatureFlag {

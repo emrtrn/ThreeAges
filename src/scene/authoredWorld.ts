@@ -86,6 +86,23 @@ export interface AuthoredWorldHandle {
   /** Authored directional lights, exposed so a shell can re-tune their shadows. */
   readonly directionalLights: readonly DirectionalLight[];
   /**
+   * The batched meshes carrying the Level's authored static placements — the
+   * layout's `instances` plus spline generator output — exposed so a game shell
+   * can apply a per-placement rule to art it did not create. The RTS uses it for
+   * §59 fog of war: without it, every model added to a Level in the editor stands
+   * in plain sight on ground the player has never scouted, and the only way to
+   * fog a new prop would be to name it in game code.
+   *
+   * Three things are deliberately *not* here. Landscape and water are the ground
+   * itself, which GDD 08 §40 keeps visible once seen rather than hiding piece by
+   * piece; painted foliage is ground cover in the tens of thousands, and a
+   * per-blade rule would cost more than it could ever be worth.
+   *
+   * A shell that ignores this field pays nothing: the array is already built to
+   * mount the world.
+   */
+  readonly staticInstanceMeshes: readonly InstancedMesh[];
+  /**
    * How many Landscape terrains this world mounted. A shell reads this to retire
    * its own flat placeholder ground once an authored terrain is standing in for
    * it; 0 means the terrain was absent (or failed to load) and the fallback stays.
@@ -599,6 +616,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     root,
     navigationBlockers: [],
     directionalLights,
+    staticInstanceMeshes: instancedMeshes,
     landscapeCount: landscapeObjects.length,
     landscapes: mountedLandscapes,
     foliageInstanceCount,

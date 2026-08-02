@@ -26,6 +26,12 @@ import {
   type VictoryConditionChoice,
 } from "@/game/rts/match/victoryConditionChoice";
 import {
+  fogOfWarFlagOverride,
+  readStoredFogOfWar,
+  writeStoredFogOfWar,
+  type FogOfWarChoice,
+} from "@/game/rts/vision/fogOfWarChoice";
+import {
   markMissionSeen,
   missionScriptIdForMode,
   resolveMissionMode,
@@ -123,12 +129,19 @@ async function bootFoundation(): Promise<BootFoundationResult> {
     log.warn(`Preset "${presetId}" unavailable; using defaults`, error);
   }
 
-  // §78.1: the start card's victory condition, chosen in a previous pass through
-  // this boot. Null until the player picks one, which is what keeps `?flags=` and
-  // the §72 test presets authoritative for anyone who never touched the card.
+  // §78.1/§59: the start card's choices, made in a previous pass through this
+  // boot. Each is null until the player picks it, which is what keeps `?flags=`
+  // and the §72 test presets authoritative for anyone who never touched the card.
+  // Merged into one override object because `flagOverrides` is the last word in
+  // the precedence chain and there is only one of it — the two choices own
+  // different flags, so a spread cannot lose either.
+  const setupStorage = matchSetupStorage();
   const config = createRuntimeConfig(preset, {
     ...readBootOptionsFromUrl(isDev),
-    flagOverrides: victoryConditionFlagOverride(readStoredVictoryCondition(matchSetupStorage())),
+    flagOverrides: {
+      ...victoryConditionFlagOverride(readStoredVictoryCondition(setupStorage)),
+      ...fogOfWarFlagOverride(readStoredFogOfWar(setupStorage)),
+    },
   });
   log.info(`runtime config ready (preset ${config.presetId})`);
 
@@ -243,6 +256,12 @@ async function main(): Promise<void> {
       // resolve time; the cost is one reload of a start screen nobody has played.
       onVictoryConditionChange: (choice: VictoryConditionChoice) => {
         writeStoredVictoryCondition(matchSetupStorage(), choice);
+        location.reload();
+      },
+      // §59: same store-and-reload shape, and the same §13 reason — the vision
+      // system and its view layers resolve once, at construction.
+      onFogOfWarChange: (choice: FogOfWarChoice) => {
+        writeStoredFogOfWar(matchSetupStorage(), choice);
         location.reload();
       },
       contentCatalog,

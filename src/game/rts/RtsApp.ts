@@ -220,6 +220,8 @@ import {
   commandCenterMemoryId,
   type ObservableStructure,
 } from "./vision/enemyMemorySystem";
+import { fogChoiceForFlag, type FogOfWarChoice } from "./vision/fogOfWarChoice";
+import { instancedFogProps, objectFogProps } from "./vision/fogProps";
 import { FogView } from "./vision/fogView";
 import { GhostStructureView } from "./vision/ghostStructureView";
 import { FogVisibilityBinder } from "./vision/fogVisibilityBinder";
@@ -345,10 +347,18 @@ export interface RtsAppOptions {
    */
   readonly onVictoryConditionChange?: (choice: VictoryConditionChoice) => void;
   /**
-   * `?flags=fogOfWar` (§59, Faz 11): unknown / explored / visible layers, for
-   * both kingdoms. Symmetric on purpose — see `ai/aiVisionFilter.ts`.
+   * §59 (Faz 11): unknown / explored / visible layers, for both kingdoms.
+   * Symmetric on purpose — see `ai/aiVisionFilter.ts`. On by default since the
+   * system graduated; the start card and a preset are the two doors that close it.
    */
   readonly fogOfWarEnabled?: boolean;
+  /**
+   * §59: the start card's fog row picked a different match. Same store-and-reboot
+   * shape as {@link onVictoryConditionChange}, and for the same §13 reason — the
+   * vision system and its five view layers are constructed once, ahead of the AI
+   * filter that reads them. Supplying it is what puts the row on the card at all.
+   */
+  readonly onFogOfWarChange?: (choice: FogOfWarChoice) => void;
   /**
    * The gameplay-id -> Actor mapping the whole presentation hangs from. `main.ts`
    * always supplies it; it stays optional only for the harnesses that drive an
@@ -661,6 +671,8 @@ export class RtsApp {
    * only ever read while the start card is up.
    */
   private victoryCondition: VictoryConditionChoice;
+  /** §59: the fog row's selection, seeded from the resolved flag for the same reason. */
+  private fogOfWar: FogOfWarChoice;
   private readonly match = new RtsMatchState();
   /** §51: whether the simulation should be running; `match` owns who won. */
   private readonly flow = new RtsMatchFlow();
@@ -938,6 +950,7 @@ export class RtsApp {
       this.objectiveTracker = null;
     }
     this.victoryCondition = victoryChoiceForFlag(this.options.regionalVictoryEnabled === true);
+    this.fogOfWar = fogChoiceForFlag(this.options.fogOfWarEnabled === true);
     // Same "absent means nothing exists" construction rule as §58 above: without
     // a script there is no director and no card, so an ordinary match never pays
     // for the mode and can never be changed by it.
@@ -1278,6 +1291,12 @@ export class RtsApp {
       ...(this.options.onMissionModeChange
         ? { onMissionMode: (choice: MissionModeChoice) => { this.options.onMissionModeChange?.(choice); } }
         : {}),
+      // §59. Deferred to "Maçı Başlat" like the victory condition rather than
+      // rebooting on the click, because the fog row is one the player may well
+      // toggle twice while reading its hint.
+      ...(this.options.onFogOfWarChange
+        ? { onFogOfWar: (choice: FogOfWarChoice) => { this.fogOfWar = choice; } }
+        : {}),
       onAbandonMission: () => this.abandonMission(),
     });
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
@@ -1460,6 +1479,7 @@ export class RtsApp {
       // The row reflects the match that actually booted, not a stored preference:
       // a card claiming "Hikâye turu" over a match with no chain would be lying.
       this.missions ? "story" : "free",
+      this.fogOfWar,
     );
     this.frameHandle = requestAnimationFrame(this.onFrame);
   }
@@ -1742,7 +1762,17 @@ export class RtsApp {
     );
     // Rendered delta, like the units': a grazing animal should look the same at
     // any game speed. Distance throttling is left to the presentation itself.
-    this.wildlifeView.sync(this.wildlife.all(), dt, null);
+    //
+    // §59: the fog test rides along here rather than in `FogVisibilityBinder`,
+    // because this is the loop that creates the bodies and the only one that runs
+    // on the start screen — a herd fogged from the binder's schedule would graze
+    // in plain sight until the first simulation tick.
+    this.wildlifeView.sync(this.wildlife.all(), dt, null, this.playerVisibilityTest());
+    // §59: the grid is a simulation fact and `updateFogOfWar` owns it; how far
+    // the drawn frontier has eased toward it is presentation, so it runs here on
+    // the rendered delta. Same reason as the wildlife above — at §38's 8x test
+    // speed a fade driven by the simulation would collapse into a pop.
+    this.fogView?.advance(dt);
     this.selectionPanel.setSelection(this.selectionView());
     // Objectives run on the rendered-frame delta like the rest of the read-only
     // presentation: the story card is paced for a person reading it, not for the
@@ -2960,7 +2990,7 @@ export class RtsApp {
       // in ground the player has never scouted. Registered here rather than at
       // construction because the art loads asynchronously — at construction time
       // there is nothing to hide yet.
-      this.fogVisibility?.trackWorldProps(collectWorldProps(blockout));
+      this.fogVisibility?.trackWorldProps(objectFogProps(collectWorldProps(blockout)));
       // The art arrives after setup's fog pass, and on the start screen there is
       // no simulation tick coming to catch it up — so the newly built props and
       // forest get their first fog pass here, or they would render unfogged
@@ -2997,6 +3027,19 @@ export class RtsApp {
       }
       this.authoredWorld = handle;
       this.scene.add(handle.root);
+      // §59/GDD 08 §39: every model the Level authors falls under the fog, with
+      // no game code naming it. This is the whole answer to "I placed a prop in
+      // the editor and it was visible on ground I had never scouted" — the fog
+      // used to cover exactly one hard-coded group, so a new placement was
+      // unfogged by construction rather than by oversight.
+      //
+      // Registered before the first fog pass below, and hidden on registration,
+      // so the world is never drawn unfogged for even one frame.
+      this.fogVisibility?.trackWorldProps(instancedFogProps(handle.staticInstanceMeshes));
+      // The world arrives after setup's fog pass, and on the start screen there
+      // is no simulation tick coming to catch it up — the same reason the map
+      // art does this a few lines into its own loader.
+      this.updateFogOfWar();
       // Retire the code sun only now that a real authored directional light exists.
       if (this.codeSun && levelHasAuthoredSun(layout)) {
         this.scene.remove(this.codeSun);
@@ -3152,6 +3195,10 @@ export class RtsApp {
     this.placement.setGroundSurface(this.groundSurface);
     this.roadPlacement.setGroundSurface(this.groundSurface);
     this.territory.setGroundHeightSampler((x, z) => this.groundSurface.heightAt(x, z));
+    // §59: the fog surface is draped over the same ground as the territory
+    // overlay. Without this it stays the flat quad it is built as, and any
+    // landscape taller than the overlay clearance simply stands through it.
+    this.fogView?.setGroundHeightSampler((x, z) => this.groundSurface.heightAt(x, z));
     for (const center of this.centers.all()) {
       center.groundY = this.groundSurface.heightAt(center.position.x, center.position.z);
       center.object.position.y = center.groundY;
@@ -3252,18 +3299,44 @@ export class RtsApp {
     this.mapArt.syncResourceNodes(this.resourceNodes, isExplored);
   }
 
+  /**
+   * §59: what the player's kingdom can see *right now*, or `undefined` while the
+   * fog flag is off.
+   *
+   * The moving half of {@link syncForestVisibility}'s rule. Wildlife reads this
+   * one rather than `isExplored` for the same reason enemy units do: a remembered
+   * animal is a claim about where something is, and the herd left that spot.
+   */
+  private playerVisibilityTest(): ((x: number, z: number) => boolean) | undefined {
+    return this.vision ? (x, z) => this.vision!.isVisible(PLAYER_OWNER, x, z) : undefined;
+  }
+
   /** §51: leave the start screen and let the simulation run. */
   private readonly beginMatch = (): void => {
     // §78.1: the choice is committed here, at match setup, and never again. If it
     // asks for a different rule set than this app was built with, the host
     // re-resolves the boot instead — nothing has been played yet, so there is no
     // match state to lose, and §13's "read-only once resolved" stays intact.
-    if (
-      this.options.onVictoryConditionChange &&
-      this.victoryCondition !== victoryChoiceForFlag(this.options.regionalVictoryEnabled === true)
-    ) {
-      this.log.info(`RTS match setup: victory condition -> ${this.victoryCondition}`);
-      this.options.onVictoryConditionChange(this.victoryCondition);
+    const victoryChanged =
+      this.options.onVictoryConditionChange !== undefined &&
+      this.victoryCondition !== victoryChoiceForFlag(this.options.regionalVictoryEnabled === true);
+    const fogChanged =
+      this.options.onFogOfWarChange !== undefined &&
+      this.fogOfWar !== fogChoiceForFlag(this.options.fogOfWarEnabled === true);
+    if (victoryChanged || fogChanged) {
+      // Both are handed over before returning, not one per reboot. The host
+      // stores each choice and asks for a reload; `location.reload()` only queues
+      // the navigation, so the second store still lands — and a player who
+      // changed both rows must not have to come back and change one of them again
+      // on a card that reopened having forgotten it.
+      if (victoryChanged) {
+        this.log.info(`RTS match setup: victory condition -> ${this.victoryCondition}`);
+        this.options.onVictoryConditionChange?.(this.victoryCondition);
+      }
+      if (fogChanged) {
+        this.log.info(`RTS match setup: fog of war -> ${this.fogOfWar}`);
+        this.options.onFogOfWarChange?.(this.fogOfWar);
+      }
       return;
     }
     if (!this.flow.begin()) return;

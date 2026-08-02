@@ -17,6 +17,8 @@ import {
   BoxGeometry,
   DoubleSide,
   Group,
+  InstancedMesh,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -60,6 +62,15 @@ import {
   writeStoredVictoryCondition,
   type VictoryConditionStorage,
 } from "../src/game/rts/match/victoryConditionChoice";
+import {
+  DEFAULT_FOG_OF_WAR,
+  fogChoiceEnablesFog,
+  fogChoiceForFlag,
+  fogOfWarFlagOverride,
+  readStoredFogOfWar,
+  writeStoredFogOfWar,
+  type FogOfWarStorage,
+} from "../src/game/rts/vision/fogOfWarChoice";
 import { MissionDirector } from "../src/game/rts/tutorial/missionDirector";
 import {
   isGoalMet,
@@ -306,6 +317,7 @@ import {
 } from "../src/game/rts/vision/enemyMemorySystem";
 import { VisionSystemAiFilter } from "../src/game/rts/ai/aiVisionFilter";
 import { FogVisibilityBinder } from "../src/game/rts/vision/fogVisibilityBinder";
+import { instancedFogProps, objectFogProps } from "../src/game/rts/vision/fogProps";
 import {
   isResourceNodeVisible,
   isTreeVisible,
@@ -334,6 +346,7 @@ import type { BuildingBalanceStats, GamePreset, UnitBalance, UnitBalanceStats } 
 import { Unit, UNIT_DEATH_SECONDS, type RtsPresentationHandle } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import { WildlifeSystem } from "../src/game/rts/wildlife/wildlifeSystem";
+import { WildlifeView, isWildlifeVisible } from "../src/game/rts/wildlife/wildlifeView";
 import {
   advanceRoam,
   initialRoamState,
@@ -29965,17 +29978,137 @@ check("every shipped RTS Level authors the herds the blockout promises", () => {
       assert.ok(animals[herd.species], `${name}: herd "${herd.id}" names a known species`);
       assert.ok(herd.count > 0, `${name}: herd "${herd.id}" holds animals`);
     }
-    // The whole point of the wildlife axis: what is safe is small and what is
-    // rich is out in the open. A map whose only herd sits in a starting base
-    // would teach the opposite, so at least one must be worth leaving home for.
+    // The whole point of the wildlife axis, and Faz 7's level contract: what is
+    // safe is small and what is rich is out in the open. Both halves have to be
+    // on the map or the lesson is not there to learn — a map whose only herd sits
+    // in a base teaches "hunting is free", and one whose only herd is in the
+    // middle teaches "hunting is an expansion", neither of which is the design.
+    //
+    // Measured against the starting control radius rather than a literal, so
+    // retuning that radius moves the goalposts here too.
     const starts = [level.playerStart, level.enemyStart];
+    for (const start of starts) {
+      assert.ok(
+        level.herds.some(
+          (herd) => Math.hypot(herd.x - start.x, herd.z - start.z) < COMMAND_CENTER_CONTROL_RADIUS,
+        ),
+        `${name} opens every kingdom with game inside its own starting ground`,
+      );
+    }
     assert.ok(
       level.herds.some((herd) => starts.every(
-        (start) => Math.hypot(herd.x - start.x, herd.z - start.z) > 28,
+        (start) => Math.hypot(herd.x - start.x, herd.z - start.z) > COMMAND_CENTER_CONTROL_RADIUS,
       )),
       `${name} puts at least one herd outside both starting control radii`,
     );
   }
+});
+
+check("a carcass picked clean leaves the field, and its art is released with it", () => {
+  // The felled-tree rule for wildlife. A body that stays after the last of its
+  // meat is banked is not a carcass, it is litter — it lies there for the rest of
+  // the match, and every hunted herd leaves a graveyard where it grazed.
+  const wildlife = new WildlifeSystem(shippedAnimalBalance(), [
+    { id: "herd", species: "deer", x: 0, z: 0, count: 2 },
+  ]);
+  const reach = { resourceId: "food", x: 0, z: 0, radius: 18 } as const;
+
+  let disposed = 0;
+  const field = new Group();
+  const view = new WildlifeView(field);
+  view.setPresentationFactory(() => ({
+    root: new Object3D(),
+    pickTargets: [],
+    selectionRadius: 0.5,
+    dispose: () => { disposed += 1; },
+  }));
+  view.sync(wildlife.all(), 0, null);
+  assert.equal(field.children.length, 2, "both animals are on the field");
+
+  // Bring one down and butcher it in one load, which is what the last trip of a
+  // real hunt does — the loads before it leave meat, and the body must stay for
+  // those or the hunter walks back to nothing.
+  const claim = wildlife.reserveNearest(1, reach) ?? assert.fail("nothing to claim");
+  const quarry = wildlife.all().find((animal) => animal.id === claim.id) ?? assert.fail("claim missing");
+  quarry.health.damage(quarry.stats.maxHealth);
+  const partial = quarry.stats.meatCapacity / 2;
+  assert.equal(
+    wildlife.harvest({ workerId: 1, sourceId: claim.id, amount: partial, deltaSeconds: 1 }).amount,
+    partial,
+    "half the carcass comes off in the first load",
+  );
+  view.sync(wildlife.all(), 0, null);
+  assert.equal(field.children.length, 2, "a half-butchered carcass is still there to work");
+  assert.equal(disposed, 0);
+
+  wildlife.harvest({ workerId: 1, sourceId: claim.id, amount: partial, deltaSeconds: 1 });
+  assert.equal(quarry.spent, true, "nothing is left on it");
+  view.sync(wildlife.all(), 0, null);
+  assert.equal(field.children.length, 1, "the spent carcass left the field");
+  assert.equal(disposed, 1, "and its art was released rather than left hidden in the graph");
+
+  // The animal record survives on purpose (the forest keeps its stumps too), so
+  // a worker still holding the claim resolves it instead of hitting a hole.
+  assert.ok(wildlife.positionOf(claim.id), "the simulation still knows the source id");
+  // And a later sync must not hand the corpse a fresh body every frame.
+  view.sync(wildlife.all(), 0, null);
+  assert.equal(field.children.length, 1, "a spent animal is never redrawn");
+
+  view.dispose();
+});
+
+check("Faz 7: fog hides a herd, and unlike a forest it hides it again when the scout leaves", () => {
+  const wildlife = new WildlifeSystem(shippedAnimalBalance(), [
+    { id: "home", species: "deer", x: -30, z: -30, count: 3 },
+    { id: "away", species: "deer", x: 30, z: 30, count: 3 },
+  ]);
+  let sources: VisionSource[] = [{ owner: "player", x: -30, z: -30, radius: 14 }];
+  const vision = new VisionSystem(() => sources, { cellSize: 2, worldHalfExtent: 60 });
+  const canSee = (x: number, z: number): boolean => vision.isVisible("player", x, z);
+
+  // The shipped loop, not a copy of it: `WildlifeView` needs no GL context, so
+  // the test drives the same `sync` the game runs and reads the same `visible`
+  // flags the renderer would. Bodies are matched to herds by the sign of their x,
+  // which the two herd centres and a 10-unit roam radius keep unambiguous.
+  const field = new Group();
+  const view = new WildlifeView(field);
+  view.setPresentationFactory(() => ({
+    root: new Object3D(),
+    pickTargets: [],
+    selectionRadius: 0.5,
+    dispose: () => {},
+  }));
+
+  const drawn = (herd: "home" | "away"): Object3D[] =>
+    field.children.filter((body) => (herd === "home" ? body.position.x < 0 : body.position.x > 0));
+
+  vision.refresh();
+  view.sync(wildlife.all(), 0, null, canSee);
+  assert.equal(field.children.length, 6, "every animal got a body to hide");
+  assert.ok(drawn("home").every((body) => body.visible), "the herd under your eye is drawn");
+  assert.ok(
+    drawn("away").every((body) => !body.visible),
+    "a herd in unscouted ground is not on the map",
+  );
+
+  // Walk the eye across the map. This is the whole reason wildlife takes the unit
+  // rule rather than the forest's: a tree stays drawn once explored, but a herd
+  // remembered where it grazed has moved, or been hunted out by the opponent —
+  // and the camp you would place on that memory has nothing to hunt.
+  sources = [{ owner: "player", x: 30, z: 30, radius: 14 }];
+  vision.refresh();
+  view.sync(wildlife.all(), 0, null, canSee);
+  assert.equal(vision.isExplored("player", -30, -30), true, "the ground is still explored");
+  assert.ok(drawn("home").every((body) => !body.visible), "yet the herd that left your sight is gone");
+  assert.ok(drawn("away").every((body) => body.visible), "and the one you found is on the map");
+
+  // Flag off: no predicate, so the whole field is drawn exactly as it was before
+  // fog existed — the same "absent means nothing hides" rule the forest follows.
+  view.sync(wildlife.all(), 0, null);
+  assert.ok(field.children.every((body) => body.visible), "a fogless match draws every animal");
+  assert.equal(isWildlifeVisible(1000, 1000, undefined), true, "and the rule itself says so");
+
+  view.dispose();
 });
 
 check("the animal validator refuses data that could never make sense", () => {
@@ -34711,7 +34844,10 @@ check("§78.1: the start card's victory choice outranks the preset and ?flags=, 
   }).flags;
   assert.equal(flags.regionalVictory, true);
   assert.equal("notARealFlag" in flags, false);
-  assert.equal(flags.fogOfWar, false, "§78.1 offers one condition, not a flag console");
+  // Read against a flag that is still default-off: the point is that an override
+  // touches only the flag it names, and `fogOfWar` stopped being able to witness
+  // that once §59 graduated to a default-on flag with a card row of its own.
+  assert.equal(flags.minimap, false, "§78.1 offers one condition, not a flag console");
 
   // The card seeds from the resolved flag, not from storage: a match booted on a
   // preset that enables the route must open with that row already selected.
@@ -34720,6 +34856,84 @@ check("§78.1: the start card's victory choice outranks the preset and ?flags=, 
   assert.equal(DEFAULT_VICTORY_CONDITION, "military", "§78.1: the second route is opt-in");
   assert.equal(victoryChoiceEnablesRegional("military"), false);
   assert.equal(victoryChoiceEnablesRegional("military_regional"), true);
+});
+
+check("§59: fog is the default match, and the start card's row is the only door that closes it", () => {
+  const stored = (value: string | null): FogOfWarStorage => ({
+    getItem: () => value,
+    setItem: () => {},
+  });
+
+  // The graduated default. This is the whole reason the flag's built-in value was
+  // turned around rather than the card forcing it on every boot: a player who
+  // never opens the card, and a preset that says nothing, both get fog.
+  assert.equal(resolveFeatureFlags().fogOfWar, true, "§59 ships on");
+  assert.equal(DEFAULT_FOG_OF_WAR, "on");
+  assert.equal(fogChoiceEnablesFog("on"), true);
+  assert.equal(fogChoiceEnablesFog("off"), false);
+
+  // Nothing chosen: the preset stays authoritative, in *both* directions. A §72
+  // test preset that wants a fog-less match must still get one.
+  assert.equal(readStoredFogOfWar(stored(null)), null);
+  assert.equal(
+    createRuntimeConfig({ id: "p", label: "P", flags: { fogOfWar: false } } as GamePreset, {
+      isDev: true,
+      flagOverrides: fogOfWarFlagOverride(readStoredFogOfWar(stored(null))),
+    }).flags.fogOfWar,
+    false,
+    "an unchosen session must not quietly switch the flag back on",
+  );
+
+  // Chosen: it wins over the preset either way. Turning fog *off* is the half
+  // `?flags=` cannot express at all — flags there only force on — so this row is
+  // the only door a player has.
+  assert.equal(
+    createRuntimeConfig({ id: "p", label: "P", flags: { fogOfWar: false } } as GamePreset, {
+      isDev: true,
+      flagOverrides: fogOfWarFlagOverride(readStoredFogOfWar(stored("on"))),
+    }).flags.fogOfWar,
+    true,
+  );
+  assert.equal(
+    createRuntimeConfig(null, {
+      isDev: true,
+      urlFlags: "fogOfWar",
+      flagOverrides: fogOfWarFlagOverride(readStoredFogOfWar(stored("off"))),
+    }).flags.fogOfWar,
+    false,
+    "a player who picked Kapalı gets a fog-less match whatever the URL says",
+  );
+
+  // The two rows own different flags, so `main.ts` can merge them into the one
+  // `flagOverrides` object without either losing the other.
+  const both = createRuntimeConfig(null, {
+    isDev: true,
+    flagOverrides: {
+      ...victoryConditionFlagOverride("military_regional"),
+      ...fogOfWarFlagOverride("off"),
+    },
+  }).flags;
+  assert.equal(both.regionalVictory, true);
+  assert.equal(both.fogOfWar, false);
+
+  // Corrupt or stale storage is not a choice; it must not decide a match.
+  assert.equal(readStoredFogOfWar(stored("sometimes")), null);
+  assert.equal(readStoredFogOfWar(null), null, "storage-less browsers still boot");
+  const throwing: FogOfWarStorage = {
+    getItem: () => {
+      throw new Error("blocked");
+    },
+    setItem: () => {
+      throw new Error("blocked");
+    },
+  };
+  assert.equal(readStoredFogOfWar(throwing), null);
+  assert.doesNotThrow(() => writeStoredFogOfWar(throwing, "off"));
+
+  // The card seeds from the resolved flag, not from storage, so a preset-driven
+  // fog-less match opens with the matching row already selected.
+  assert.equal(fogChoiceForFlag(true), DEFAULT_FOG_OF_WAR);
+  assert.equal(fogChoiceForFlag(false), "off");
 });
 
 /**
@@ -35672,6 +35886,69 @@ check("§59: the binder hides every enemy render object, command centre included
 
   units.clear();
   centers.clear();
+});
+
+check("§59: an authored Level placement is fogged without game code naming it", () => {
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const centers = new CommandCenterSystem();
+  let sources: VisionSource[] = [{ owner: "player", x: -30, z: -30, radius: 8 }];
+  const vision = new VisionSystem(() => sources, { cellSize: 2, worldHalfExtent: 40 });
+
+  // Two placements of one authored model, batched into a single mesh as the
+  // world loader batches them: one inside the player's opening vision, one in a
+  // corner they have never been to. There is no `Object3D` per placement, which
+  // is exactly why `visible` was never able to fog these.
+  const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial(), 2);
+  const near = new Matrix4().makeTranslation(-30, 0, -30);
+  const far = new Matrix4().makeTranslation(30, 0, 30);
+  mesh.setMatrixAt(0, near);
+  mesh.setMatrixAt(1, far);
+  mesh.updateMatrixWorld(true);
+
+  const props = instancedFogProps([mesh]);
+  assert.equal(props.length, 2, "one prop per placement, not one per mesh");
+
+  const binder = new FogVisibilityBinder(vision, units, structures, centers, "player");
+  // A separate source, registered before the authored one. Both must survive:
+  // the blockout art and a Level's world load independently, and this used to
+  // replace the list rather than add to it — so whichever landed second silently
+  // un-tracked the first.
+  const ridge = new Object3D();
+  ridge.position.set(30, 0, 28);
+  binder.trackWorldProps(objectFogProps([ridge]));
+  binder.trackWorldProps(props);
+  assert.equal(ridge.visible, false, "registering hides immediately — never one unfogged frame");
+
+  const matrixAt = (index: number): Matrix4 => {
+    const read = new Matrix4();
+    mesh.getMatrixAt(index, read);
+    return read;
+  };
+  const isHidden = (index: number): boolean =>
+    matrixAt(index).elements.every((value) => value === 0);
+
+  assert.equal(isHidden(0), true, "and hides authored placements the same way");
+  assert.equal(isHidden(1), true);
+
+  vision.refresh();
+  binder.refresh();
+  assert.deepEqual(matrixAt(0).elements, near.elements, "a scouted placement is restored exactly");
+  assert.equal(isHidden(1), true, "the unscouted corner stays hidden");
+  assert.equal(ridge.visible, false, "and the earlier source is still tracked");
+
+  // §40's latch: walking away does not un-reveal what was seen.
+  sources = [];
+  vision.refresh();
+  binder.refresh();
+  assert.deepEqual(matrixAt(0).elements, near.elements, "explored never clears");
+
+  binder.revealAll();
+  assert.deepEqual(matrixAt(1).elements, far.elements, "teardown restores every placement");
+  assert.equal(ridge.visible, true);
+
+  mesh.geometry.dispose();
+  mesh.dispose();
 });
 
 check("§59: an unscouted forest is hidden, and stays drawn once explored", () => {

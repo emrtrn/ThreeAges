@@ -18,11 +18,18 @@
  *
  * Own-kingdom objects are never touched — this only ever hides the opponent's.
  *
+ * Two kinds of thing are fogged elsewhere, both for the same reason: their own
+ * sync loop already owns `visible`, and a second writer here would fight it at
+ * whichever rate the two ran at. Trees and deposits are decided in
+ * `rtsMapArt.syncForest`/`syncResourceNodes`, wild animals in
+ * `wildlifeView.sync` — which is also the only loop that runs before a match
+ * starts, when this binder is not being ticked at all. Wildlife takes the
+ * **unit** rule rather than the forest's, because a herd moves.
+ *
  * View-side only: it reads vision and sets `visible`; it never decides what is
  * visible and never mutates simulation state.
  */
-import type { Object3D } from "three";
-
+import type { FogProp } from "./fogProps";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { UnitOwner } from "../units/unit";
@@ -31,15 +38,16 @@ import type { VisionSystem } from "./visionSystem";
 
 export class FogVisibilityBinder {
   /**
-   * World props (resource deposits, ridges, trees) still waiting to be revealed.
+   * World props (code-built ridges, and every placement a Level authors) still
+   * waiting to be revealed.
    *
    * Held as a shrinking worklist rather than re-walked every tick because
    * `explored` only ever latches on: once a prop is revealed it can never hide
-   * again, so it leaves this list for good. The forest is the reason that
-   * matters — re-testing every tree every tick would be the per-frame cost §59's
-   * performance criterion is about.
+   * again, so it leaves this list for good. A densely dressed Level is the reason
+   * that matters — re-testing every authored placement every tick would be the
+   * per-frame cost §59's performance criterion is about.
    */
-  private hiddenProps: Object3D[] = [];
+  private hiddenProps: FogProp[] = [];
 
   constructor(
     private readonly vision: VisionSystem,
@@ -58,18 +66,26 @@ export class FogVisibilityBinder {
    * seen — so these key off `isExplored`, not `isVisible`. A stone deposit you
    * walked past stays on your map; one you have never approached is not there
    * to plan around.
+   *
+   * Additive, and called more than once: the blockout's art and a Level's
+   * authored world finish loading independently, in an order neither controls.
+   * Replacing the list — which is what this used to do — meant whichever source
+   * landed second silently un-tracked the first, and the symptom (some scenery
+   * fogged, some not) reads as a rule rather than as a race.
    */
-  trackWorldProps(props: readonly Object3D[]): void {
-    this.hiddenProps = [...props];
-    for (const prop of this.hiddenProps) prop.visible = false;
+  trackWorldProps(props: readonly FogProp[]): void {
+    for (const prop of props) {
+      prop.setRevealed(false);
+      this.hiddenProps.push(prop);
+    }
   }
 
   /** Apply current visibility to every opponent-owned render object. */
   refresh(): void {
     if (this.hiddenProps.length > 0) {
       this.hiddenProps = this.hiddenProps.filter((prop) => {
-        if (!this.vision.isExplored(this.observer, prop.position.x, prop.position.z)) return true;
-        prop.visible = true;
+        if (!this.vision.isExplored(this.observer, prop.x, prop.z)) return true;
+        prop.setRevealed(true);
         return false;
       });
     }
@@ -104,7 +120,7 @@ export class FogVisibilityBinder {
     for (const unit of this.units.all()) unit.object.visible = true;
     for (const structure of this.structures.all()) structure.object.visible = true;
     for (const center of this.centers.all()) center.object.visible = true;
-    for (const prop of this.hiddenProps) prop.visible = true;
+    for (const prop of this.hiddenProps) prop.setRevealed(true);
     this.hiddenProps = [];
   }
 }

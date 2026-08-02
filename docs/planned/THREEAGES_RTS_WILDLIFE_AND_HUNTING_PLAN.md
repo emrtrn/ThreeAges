@@ -1,9 +1,13 @@
 # ThreeAges RTS Yaban Hayati, Avcilik ve Hayvan Varliklari Plani
 
 Olusturulma tarihi: 2026-08-01
-Durum: Faz 0-6 tamamlandi (2026-08-02); Faz 0-5 gorsel kabul aldi. §2'deki 1-8
-adimlari oyunda calisiyor. Sirada Faz 7 - sis, seviye icerigi ve kabul maci.
-Kararlar §4te kilitli.
+Durum: **V1 tamamlandi (Faz 0-7, 2026-08-02).** Kabul maci oynandi ve gecti;
+§2'deki dokuz madde oyunda calisiyor. Kararlar §4te kilitli.
+
+**Dosya arsive tasinmiyor (kullanici karari, 2026-08-02).** §10'un son maddesi
+askiya alindi: yol haritasinin devami (§12) bu dosyadan yurutulecek. Sirada
+**V2 - Agil ve evcillestirme**; V3 ve V4 onu izler. **V5 (suvari / Cag 3)
+yapilmayacaktir.**
 Kapsam: `public/assets/ThreeAges/Animals/` altindaki 12 animasyonlu hayvan
 modelini, oyunun ekonomi/savas/lojistik cercevesine oturan gercek RTS
 sistemlerine cevirmek. V1 hedefi **avlanma**dir; kalan turler icin yol haritasi
@@ -910,13 +914,111 @@ kilitlenmez) saglandi. **Faz 6 tamamlandi (2026-08-02).** Sirada Faz 7.
 
 ### Faz 7 - Sis, seviye icerigi ve kabul maci
 
-- [ ] `fogVisibilityBinder` hayvanlari sis altinda gizler.
-- [ ] Kabul Level'ina en az iki suru yerlestirilir: biri baslangic kontrol
-  yaricapi (28) icinde, biri disinda - "guvenli az / disarida cok" dersini
-  ogretmek icin.
-- [ ] Tam mac oynanir: av ile acilis, tukenme, tarlaya gecis.
+- [x] Hayvanlar sis altinda gizlenir. Kural `isWildlifeVisible` olarak
+  `wildlifeView.ts`e cikarildi; `sync` onun uzerinde doner ve `RtsApp` sis
+  kapaliyken hicbir yuklem gecirmez, yani fogsuz bir mac bire bir eskisi gibi
+  cizer.
+- [x] Kabul Level'lari sozlesmeye baglandi (asagida; icerik Faz 2'den beri
+  yerindeydi, eksik olan pindi).
+- [x] Tam mac oynanir: av ile acilis, tukenme, tarlaya gecis. **Kabul alindi
+  (2026-08-02).** Ayni gecise ait tek kusur - temizlenen lesin sahnede kalmasi -
+  asagida duzeltildi.
 
-Kabul: §2'deki 9 madde eksiksiz.
+**Planda kural `fogVisibilityBinder`daydi; `wildlifeView.sync` icine kondu.**
+Uc gerekce, ucuncusu belirleyici:
+
+1. Tek yazar kurali. `rtsMapArt.syncForest` ayni sebeple binder'in disindadir ve
+   gerekcesini kendi kodunda yazar: `visible`i zaten suren bir dongu varken
+   ikinci bir yazar onunla her tik kavga eder.
+2. Govdeler `sync` icinde **tembel** dogar. Binder kendi programinda kossaydi,
+   yeni dogan bir suru ilk simulasyon tikine kadar bir kare aciktan cizilirdi.
+3. **Binder mac baslamadan hic kosmaz.** `updateFogOfWar` simulasyon tikinden
+   gelir; baslangic ekraninda simulasyon yoktur (kod bunu `mapArt` icin zaten
+   soyluyor). Hayvan govdeleri ise render dongusunde dogar - yani binder yolunda
+   suru, oyuncu "Maci Baslat" diyene kadar sisin icinde acikta otlardi.
+
+Binder'in bas yorumuna bu iki istisnayi (agac/yatak ve hayvan) ve nedenini
+gosteren bir not birakildi; "sis neyi gizler" sorusunu binder'dan soran biri
+yolunu bulur.
+
+**Kural agacin degil birimin kuralidir** (`isVisible`, `isExplored` degil).
+GDD 08 §40 *kalici dogal ogeleri* gorulduyse haritada birakir; hareket eden
+seye ayni hafizayi vermez. Hatirlanan bir orman hala orada duruyordur, hatirlanan
+bir suru ise yurumustur, rakip tarafindan avlanmistir ya da ikisi birden - ve o
+hafizaya kurulan kulubenin avlayacak hicbir seyi yoktur. Les de gizlenir: ondan
+okunan sey "surada et var"dir ve baskasinin avcisi onu temizledigi an yanlis olur.
+
+**Seviye icerigi olculdu: sart zaten saglaniyordu, pin eksikti.** Iki Level de
+Faz 2'den beri uc suru tasiyor - her kralligin kendi 28'lik kontrol yaricapi
+icinde bir geyik surusu, ve ikisinin de disinda merkez erkek geyik surusu. Faz
+7'de yapilan is mevcut Level testini iki yonlu hale getirmek oldu: **her**
+baslangic icin kendi topragi icinde bir suru, **ve** ikisinin de disinda bir
+suru. Yaricap `COMMAND_CENTER_CONTROL_RADIUS`tan okunur, 28 yazilmaz. Testin
+kirmiziya donebildigi dogrulandi (`player-deer` gecici olarak elenip suite
+"RTS_CoreMatch opens every kingdom with game inside its own starting ground" ile
+kirildi, sonra geri alindi). Eski hali yalnizca "disarida bir suru var mi" diye
+soruyordu; tek surulu bir harita o testi gecerdi ve dersin yarisi kaybolurdu.
+
+**Kayda gecen iki bulgu - ikisinde de kod degistirilmedi.**
+
+1. **Merkez odul esit uzaklikta degil.** `central-stag` (0,16) oyuncu
+   baslangicina 43.9, dusmana 66 birim. Ikisi de 28'in disinda, yani §7'nin
+   sarti saglanir; ama "ortadaki odul" pratikte oyuncuya daha yakindir. Ridge
+   (`x` ∈ [-12,12], `z` ∈ [-4,4]) ve "suru merkezi ridge'e bir `roamRadius`tan
+   yakin olamaz" kurali x = 0 hattinda daha simetrik bir nokta birakmiyor; esit
+   uzaklik ancak (16,16) gibi kosegen bir noktada saglanir ve orasi
+   `RTS_GameplayProof`un nehir blocker'lariyla kesisme riski tasir. Ayrica
+   harita zaten nokta-simetrik degil: `external_stone` (-34,16) oyuncuya 22.4,
+   dusmana 90 birimdir. Harita dengesi bu planin kapsami disi - istenirse ayri
+   bir is kalemi.
+2. **Yerlestirme sis okumaz.** Kesfedilmemis alandaki bir hayvan
+   `liveAnimalsNear` sorgusunda gorunur, yani ghost orada yesile donebilir.
+   Davranis orman ve yataklarda birebir ayni (`hasLiveTreeNear`,
+   `canExtractAt`), yani avciliga ozgu yeni bir acik degil - kaynak
+   yerlestirmesinin genel bir bilgi sizintisi. Duzeltmesi de avciliga ozgu
+   olamaz: zincir AI ile paylasilir ve oyuncunun gorusuyle kapatilirsa AI'nin
+   insaati oyuncunun sisine takilir. Ayri ve ortak bir is olarak birakildi.
+
+Kabul:
+
+- [x] `npx tsc --noEmit`, `npm run test:engine` (1213 check),
+  `npm run build:verify` (`verify:dist --strict` dahil) yesil.
+- [x] Sis sozlesmesi pinlendi: "Faz 7: fog hides a herd, and unlike a forest it
+  hides it again when the scout leaves". Test **gercek `WildlifeView.sync`**
+  dongusunu surer (GL gerektirmez), kuralin kopyasini degil: kesfedilmemis suru
+  cizilmez, goz uzerine gelince cizilir, goz cekilince - `isExplored` hala
+  dogruyken - yeniden gizlenir, ve yuklem verilmediginde her sey cizilir. Testin
+  kirmiziya donebildigi dogrulandi (`visible` her zaman `true` yapilinca suite
+  "a herd in unscouted ground is not on the map" ile kirildi, sonra geri alindi).
+- [x] Kabul maci: §2'deki 9 madde uctan uca (kullanici, 2026-08-02).
+
+**Kabul macinin cikardigi tek duzeltme - temizlenen les sahnede kaliyordu.**
+Olculdu: eti alinmis hayvan macin sonuna kadar dustugu yerde duruyor, yani
+avlanan her suru otladigi yerde bir mezarlik birakiyor. Sebep sunum
+tarafindaydi; `WildlifeView` bir govdeyi hicbir zaman geri almiyordu.
+
+Duzeltme agacin kuralidir (`isTreeVisible`): `spent` bir hayvan artik cizilmez,
+tuttugu sunum `dispose` edilip sahne grafigninden dusurulur. Uc ayrinti kasitli:
+
+- **Simulasyon kaydi kalir.** Orman da kutugu Map'inde tutar; kayit silinseydi
+  elinde hala o rezervasyon olan bir avcinin `positionOf` sorgusu bosluga
+  duserdi. Giden sey govdedir, kayit degil.
+- **`spent` kontrolu `handleFor`dan once.** Sonra olsaydi les her karede yeni
+  bir govde dogurur, her karede silinirdi.
+- **Toplama kuralı "cizilmedi" uzerinden yazildi**, `spent` uzerinden degil: bir
+  govdenin sahneden cikmasinin ikinci yolu - hayvanin listeden tamamen kalkmasi,
+  ki V2'de evcillesen hayvan suruden boyle ayrilacak - ayni tek kuralla kapanir.
+  Tarama yalnizca sayilar tutmadigi tikte yapilir; diger her kare tek bir
+  tamsayi karsilastirmasidir.
+
+Pinlendi: "a carcass picked clean leaves the field, and its art is released with
+it" - yarim kesilmis les sahnede kalir (yoksa avci ikinci yuke doner ve hicbir
+sey bulamaz), temizlenen les cikar, sunumu `dispose` edilir, sonraki tiklerde
+yeniden dogmaz ve kaynak id'si hala cozulur. Testin kirmiziya donebildigi
+dogrulandi (`spent` atlamasi devre disi birakilinca suite "the spent carcass left
+the field" ile kirildi, sonra geri alindi). `npm run test:engine` 1214 check.
+
+Kabul: §2'deki 9 madde eksiksiz. **Faz 7 tamamlandi (2026-08-02); V1 bitti.**
 
 ## 8. Test ve Gate
 
@@ -953,6 +1055,15 @@ sozlesme** dogrulanir; hicbir test bir buyuklugu pinlemez.
   anchor'i, bir surunun tum dolasma cemberini menzilinde tutar ve author
   edilmis yol omurgasina deger. Mesafe haritadan, yaricaplar iki tablodan
   hesaplanir.
+- [x] **Sis (Faz 7'de uygulandi):** kesfedilmemis alandaki hayvan cizilmez ve
+  goz cekildiginde - `isExplored` hala dogruyken - yeniden gizlenir; agacin
+  aksine. Test gercek `WildlifeView.sync` dongusunu surer.
+- [x] **Seviye dersi (Faz 7'de uygulandi):** her Level, her krallik icin kendi
+  baslangic kontrol yaricapi icinde bir suru ve ikisinin de disinda en az bir
+  suru tasir. Yaricap `COMMAND_CENTER_CONTROL_RADIUS`tan okunur.
+- [x] **Les temizligi (Faz 7'de uygulandi):** eti alinmis hayvan sahneden cikar
+  ve sunumu birakilir; yarim kesilmis les kalir. Test gercek `WildlifeView.sync`
+  dongusunu surer.
 - [x] **Validator:** sifir/negatif `meatCapacity` (Faz 2) ve yakalanamaz kacis
   ayari (Faz 5) `validateGameData` tarafindan dosya ve alan adiyla reddedilir.
   `roamRadius >= gatherRadius` iki tablo birden gerektirdigi icin engine
@@ -979,15 +1090,18 @@ kani uretilmez.
 
 ## 10. Tamamlanma Kapisi
 
-Bu plan asagidakilerin hepsi saglandiginda tamamlanmis sayilir:
+V1 icin bu kapi **gecildi (2026-08-02)**:
 
-- §2'deki dokuz madde uctan uca calisir.
-- §8'deki tum sozlesme testleri gecer; olcek testi yesil kalir.
-- `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify` yesil.
-- Kullanici gorsel kabulu verir (geyik olcegi, animasyonu, olum ve les
-  gorunumu).
-- §4.5 kapsam disi listesinden hicbir sey V1'e sizmamistir.
-- Bu dosya `docs/COMPLETED_WORK_INDEX.md`'ye eklenip arsive tasinir.
+- [x] §2'deki dokuz madde uctan uca calisir.
+- [x] §8'deki tum sozlesme testleri gecer; olcek testi yesil kalir.
+- [x] `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify` yesil.
+- [x] Kullanici gorsel kabulu verdi (geyik olcegi, animasyonu, olum ve les
+  gorunumu; les temizligi kabul macinda duzeltildi - Faz 7).
+- [x] §4.5 kapsam disi listesinden hicbir sey V1'e sizmadi.
+- [ ] ~~Bu dosya `docs/COMPLETED_WORK_INDEX.md`'ye eklenip arsive tasinir.~~
+  **Askiya alindi (kullanici karari, 2026-08-02):** yol haritasinin devami
+  (§12) bu dosyadan yurutulecek, yani dosya `docs/planned/` altinda kalir.
+  Arsivleme V4 bittiginde yeniden degerlendirilir.
 
 ## 11. Uygulama Sirasi
 
@@ -1001,6 +1115,12 @@ degistirilebilir, ancak Faz 1'in gorsel kabulu erken alinmasi risk azaltir.
 
 V1 disindaki sekiz asset icin kabul edilen yon. Her biri ayri bir plan
 dosyasini hak eder; burada yalnizca gerekce ve maliyet kaydedilir.
+
+**Kapsam karari (2026-08-02):** sira **V2 -> V3 -> V4**. **V5 (suvari, at,
+Cag 3) yapilmayacaktir** - `ages.json`'in ucuncu cagi acilmadikca dayanagi yok
+ve maliyeti digerlerinin toplamina yakin. `Horse` / `Horse_White` bu yuzden V1
+sonrasi kapsamin **disindadir**; asset'ler dosyada durur, sistem yazilmaz.
+Bagimsiz "kesif kopegi" maddesi bu siranin disinda, istenildigi an alinabilir.
 
 ### V2 - Agil ve evcillestirme (Cow, Bull, Alpaca)
 
@@ -1046,7 +1166,11 @@ budur.
 Maliyet: orta-yuksek. `ProductionLogisticsSystem`'in soyut transferini
 tasiyiciya baglamak gerekir.
 
-### V5 - Suvari ve Cag 3 (Horse, Horse_White)
+### V5 - Suvari ve Cag 3 (Horse, Horse_White) - YAPILMAYACAK
+
+**Kapsam disi (kullanici karari, 2026-08-02).** Asagidaki gerekce kayit icin
+durur; yol haritasi V4'te biter. Suvari borcu (`gameDataTypes.ts:109`) acik
+kalir ve ucuncu cag gundeme gelirse yeniden degerlendirilir.
 
 `UnitRoleId`'ye `cavalry` eklenir, Ahir binasi acilir. Bu, bilincli ertelenmis
 suvari borcunu kapatir (`gameDataTypes.ts:109`).
