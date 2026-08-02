@@ -5008,6 +5008,51 @@
         "species": "stag",
         "count": 4
       }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        -18,
+        0,
+        14
+      ],
+      "name": "Herd player-cattle",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "player-cattle",
+        "species": "cow",
+        "count": 4
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        18,
+        0,
+        -14
+      ],
+      "name": "Herd enemy-cattle",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "enemy-cattle",
+        "species": "cow",
+        "count": 4
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        0,
+        0,
+        -16
+      ],
+      "name": "Herd central-bull",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "central-bull",
+        "species": "bull",
+        "count": 3
+      }
     }
   ]
 }

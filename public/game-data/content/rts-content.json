@@ -234,6 +234,12 @@
     },
     "stag": {
       "actorRef": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Stag.actor.json"
+    },
+    "cow": {
+      "actorRef": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Cow.actor.json"
+    },
+    "bull": {
+      "actorRef": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Bull.actor.json"
     }
   },
   "ui": {},

@@ -480,6 +480,29 @@ export interface AnimalBalanceStats {
   readonly huntSeconds: number;
   /** How far from its herd's centre the animal may wander. */
   readonly roamRadius: number;
+  /**
+   * Whether a herder may drive this species into a Pasture instead of killing it
+   * (V2 §4.1).
+   *
+   * Required rather than defaulted: "does this species tame" is a design answer
+   * every species owes, and a missing field that quietly means `false` would let
+   * a new animal ship as un-tameable because nobody wrote the line, not because
+   * anybody decided it.
+   */
+  readonly tameable: boolean;
+  /** Seconds one herder needs to calm this species; tameable species only. */
+  readonly tameSeconds?: number;
+  /**
+   * How much this animal is worth in a pen, as a multiplier on the Pasture's
+   * `perAnimalPerMinute`; tameable species only.
+   *
+   * The species half of V2 §4.4's split: the building says how good the pasture
+   * is, the species says how good the animal is — the same shape as
+   * `perWorkerPerMinute * workers`.
+   */
+  readonly pastureYield?: number;
+  /** Seconds a stocked pen takes to add one animal, up to its capacity. */
+  readonly breedSeconds?: number;
 }
 
 /** `public/game-data/balance/animals.json` — keyed by stable species id. */

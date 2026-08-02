@@ -1237,7 +1237,11 @@ export class RtsApp {
       (id) => {
         const requiredAge = this.options.buildingBalance[id]?.requiredAge;
         if (requiredAge === "town" && this.progression.tierFor(PLAYER_OWNER).age !== "town") {
-          this.buildPalette.setActionMessage("Okçuluk Alanı Kasaba Çağında açılır.");
+          // Named from the data, not spelled out: the Okçuluk Alanı is only the
+          // first Town-gated building, and the second would have been refused
+          // under its neighbour's name.
+          const label = this.options.buildingBalance[id]?.label ?? id;
+          this.buildPalette.setActionMessage(`${label} Kasaba Çağında açılır.`);
           return;
         }
         if (!this.beginMissionGatedPlacement(id)) return;

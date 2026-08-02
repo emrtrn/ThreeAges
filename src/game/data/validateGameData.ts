@@ -997,7 +997,7 @@ function assertNoArbitrage(priceStep: number, indexMin: number, commission: numb
 }
 
 /**
- * Validate the huntable species table.
+ * Validate the wildlife species table.
  *
  * Refuses only what can never be sensible, never a tuning: a species with no
  * meat is a hunt that can never pay, a non-positive health or speed is an
@@ -1048,6 +1048,28 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
         + `fleeSeconds/moveSpeed, or this species can never be caught`,
       );
     }
+    // Taming (V2). `tameable` is required of every species so a new animal
+    // cannot ship un-tameable by omission, and the three taming numbers are
+    // required of exactly the species that claim it: a tameable animal missing
+    // its `tameSeconds` would be walked up to and then never caught, and one
+    // missing its `pastureYield` would sit in a pen earning nothing — both look
+    // like herding bugs rather than a blank field.
+    const tameable = stats["tameable"];
+    if (typeof tameable !== "boolean") {
+      throw new GameDataError(`${statsWhere}.tameable: must be a boolean`);
+    }
+    const tamingNumber = (key: "tameSeconds" | "pastureYield" | "breedSeconds"): number => {
+      const amount = requireFiniteNumber(stats, key, statsWhere);
+      if (amount <= 0) throw new GameDataError(`${statsWhere}.${key}: must be > 0`);
+      return amount;
+    };
+    if (!tameable) {
+      for (const key of ["tameSeconds", "pastureYield", "breedSeconds"] as const) {
+        if (stats[key] !== undefined) {
+          throw new GameDataError(`${statsWhere}.${key}: only a tameable species may carry it`);
+        }
+      }
+    }
     animals[id] = {
       id,
       label: requireString(stats, "label", statsWhere),
@@ -1060,6 +1082,14 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
       fleeRecoverySeconds,
       huntSeconds: positive("huntSeconds"),
       roamRadius,
+      tameable,
+      ...(tameable
+        ? {
+          tameSeconds: tamingNumber("tameSeconds"),
+          pastureYield: tamingNumber("pastureYield"),
+          breedSeconds: tamingNumber("breedSeconds"),
+        }
+        : {}),
     };
   }
   return animals;

@@ -74,6 +74,9 @@ export class RtsBuildPalette {
       readonly cost: HTMLSpanElement;
       readonly price: StartingResources;
       readonly requiredAge: BuildingBalance[string]["requiredAge"];
+      /** Age-gated shut. Held so the tooltip can outrank the price. */
+      locked: boolean;
+      affordable: boolean;
     }
   >();
   private affordabilitySignature = "";
@@ -163,7 +166,14 @@ export class RtsBuildPalette {
         cost.textContent = formatResourceCost(stats.cost);
         button.append(label, cost);
         button.addEventListener("click", () => this.onChoose(id));
-        this.buildButtons.set(id, { button, cost, price: stats.cost, requiredAge: stats.requiredAge });
+        this.buildButtons.set(id, {
+          button,
+          cost,
+          price: stats.cost,
+          requiredAge: stats.requiredAge,
+          locked: false,
+          affordable: true,
+        });
         choices.appendChild(button);
       }
       if (category.includesRoad) {
@@ -223,7 +233,7 @@ export class RtsBuildPalette {
     this.root.appendChild(this.roadHint);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setState({ activeBuildingId: null, result: null });
-    this.setAgeState({ age: "settlement", upgrading: false });
+    this.setAgeState({ age: "settlement" });
     this.selectCategory(this.activeCategory);
   }
 
@@ -266,12 +276,16 @@ export class RtsBuildPalette {
    * What the age milestone means, before the player owns a building to click.
    * The age resets every existing building to Level 1 and also opens any
    * building whose data declares Town as its first available age.
+   *
+   * The gate is the age and nothing else ({@link townUnlocksAvailable}): a
+   * centre *level* upgrade running inside Kasaba must not shut a door the age
+   * already opened.
    */
-  setAgeState(snapshot: Pick<ProgressionSnapshot, "age" | "upgrading">): void {
-    for (const { button, requiredAge } of this.buildButtons.values()) {
-      const locked = requiredAge === "town" && !townUnlocksAvailable(snapshot);
-      button.disabled = locked;
-      button.title = locked ? "Kasaba Çağında açılır." : "";
+  setAgeState(snapshot: Pick<ProgressionSnapshot, "age">): void {
+    for (const entry of this.buildButtons.values()) {
+      entry.locked = entry.requiredAge === "town" && !townUnlocksAvailable(snapshot);
+      entry.button.disabled = entry.locked;
+      this.syncTitle(entry);
     }
   }
 
@@ -324,11 +338,28 @@ export class RtsBuildPalette {
     if (signature === this.affordabilitySignature) return;
     this.affordabilitySignature = signature;
     for (const entry of this.buildButtons.values()) {
-      const affordable = canAffordCost(entry.price, stock);
-      entry.button.classList.toggle("is-unaffordable", !affordable);
-      entry.cost.classList.toggle("is-unaffordable", !affordable);
-      entry.button.title = affordable ? "" : `Kaynak yetersiz: ${formatResourceCost(entry.price)} gerekir.`;
+      entry.affordable = canAffordCost(entry.price, stock);
+      entry.button.classList.toggle("is-unaffordable", !entry.affordable);
+      entry.cost.classList.toggle("is-unaffordable", !entry.affordable);
+      this.syncTitle(entry);
     }
+  }
+
+  /**
+   * The one reason the card gives for itself, worst first.
+   *
+   * A locked card is also, almost always, an unaffordable one — the age it
+   * waits on is expensive. Written independently, the two passes overwrote each
+   * other in whichever order they last ran, and the age lock lost: the player
+   * hovering a shut Okçuluk Alanı was told a price, which reads as "save up"
+   * when the answer is "reach Kasaba".
+   */
+  private syncTitle(entry: { button: HTMLButtonElement; price: StartingResources; locked: boolean; affordable: boolean }): void {
+    entry.button.title = entry.locked
+      ? "Kasaba Çağında açılır."
+      : entry.affordable
+        ? ""
+        : `Kaynak yetersiz: ${formatResourceCost(entry.price)} gerekir.`;
   }
 
   /**

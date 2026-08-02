@@ -9,7 +9,8 @@
     "fleeSeconds": 1.5,
     "fleeRecoverySeconds": 3,
     "huntSeconds": 5,
-    "roamRadius": 10
+    "roamRadius": 10,
+    "tameable": false
   },
   "stag": {
     "label": "Erkek Geyik",
@@ -21,6 +22,39 @@
     "fleeSeconds": 1.5,
     "fleeRecoverySeconds": 3,
     "huntSeconds": 8,
-    "roamRadius": 10
+    "roamRadius": 10,
+    "tameable": false
+  },
+  "cow": {
+    "label": "İnek",
+    "meatCapacity": 150,
+    "maxHealth": 60,
+    "moveSpeed": 5.5,
+    "walkClipSpeed": 1.1,
+    "fleeRadius": 7,
+    "fleeSeconds": 1.2,
+    "fleeRecoverySeconds": 3.5,
+    "huntSeconds": 7,
+    "roamRadius": 8,
+    "tameable": true,
+    "tameSeconds": 8,
+    "pastureYield": 1,
+    "breedSeconds": 90
+  },
+  "bull": {
+    "label": "Boğa",
+    "meatCapacity": 220,
+    "maxHealth": 100,
+    "moveSpeed": 6,
+    "walkClipSpeed": 1.2,
+    "fleeRadius": 6,
+    "fleeSeconds": 1,
+    "fleeRecoverySeconds": 3.5,
+    "huntSeconds": 11,
+    "roamRadius": 8,
+    "tameable": true,
+    "tameSeconds": 14,
+    "pastureYield": 1.6,
+    "breedSeconds": 130
   }
 }

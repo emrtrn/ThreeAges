@@ -25,6 +25,7 @@ import {
   NoColorSpace,
   Object3D,
   PerspectiveCamera,
+  PlaneGeometry,
   PointLight,
   PropertyBinding,
   Quaternion,
@@ -318,6 +319,7 @@ import {
 import { VisionSystemAiFilter } from "../src/game/rts/ai/aiVisionFilter";
 import { FogVisibilityBinder } from "../src/game/rts/vision/fogVisibilityBinder";
 import { instancedFogProps, objectFogProps } from "../src/game/rts/vision/fogProps";
+import { FogView } from "../src/game/rts/vision/fogView";
 import {
   isResourceNodeVisible,
   isTreeVisible,
@@ -30001,6 +30003,56 @@ check("every shipped RTS Level authors the herds the blockout promises", () => {
       )),
       `${name} puts at least one herd outside both starting control radii`,
     );
+
+    // V2 Faz 2. Cattle answer a different question from deer: deer are food you
+    // spend, cattle are food you *keep*, so a herd of them is worth expanding to
+    // and worth denying. Both halves are pinned — that the species is on the map
+    // at all (a Level regenerated without it leaves the pasture nothing to work),
+    // and that none of it is free.
+    const tameable = level.herds.filter((herd) => animals[herd.species]?.tameable);
+    assert.ok(tameable.length > 0, `${name} authors game the pasture can actually tame`);
+    for (const herd of tameable) {
+      assert.ok(
+        starts.every((start) => Math.hypot(herd.x - start.x, herd.z - start.z) > COMMAND_CENTER_CONTROL_RADIUS),
+        `${name}: cattle herd "${herd.id}" is contested rather than sitting in a starting ground`,
+      );
+    }
+
+  }
+});
+
+check("V2 Faz 2: the authored herd layout offers both kingdoms the same walks to game", () => {
+  // Fairness, stated as the only thing it can mean for a resource both sides
+  // race for: the two kingdoms face the *same multiset* of walks. Derived from
+  // the table rather than pinned, so it survives any retuning of where the herds
+  // sit — what it refuses is dragging one marker and quietly handing one side a
+  // shorter opening.
+  //
+  // Worth pinning because fairness here is reached in *pairs*, not by putting a
+  // herd in the middle: the perfectly equidistant points all lie on the x = z
+  // diagonal, and measured, that diagonal is `RTS_GameplayProof`'s river. So each
+  // herd is mirrored across the map centre by another — the deer by the deer, the
+  // stag by the bull, the cattle by the cattle — and one misplaced marker is
+  // exactly what breaks that.
+  //
+  // Asserted against the blockout rather than the Levels because the blockout is
+  // where this layout is designed and its two starts are symmetric by
+  // construction. `RTS_GameplayProof` authors its player start at (-40, 40)
+  // against an enemy at (38, -38) — measured — so its herds inherit a two-unit
+  // skew that has nothing to do with wildlife. Levelling that is map balance, out
+  // of scope here (V1 §7).
+  const walks = (start: { readonly x: number; readonly z: number }): number[] => RTS_BLOCKOUT_MAP.herds
+    .map((herd) => Math.hypot(herd.x - start.x, herd.z - start.z))
+    .sort((a, b) => a - b);
+  const fromPlayer = walks(RTS_BLOCKOUT_MAP.playerStart);
+  const fromEnemy = walks(RTS_BLOCKOUT_MAP.enemyStart);
+  assert.equal(fromPlayer.length, fromEnemy.length);
+  for (let index = 0; index < fromPlayer.length; index += 1) {
+    assert.ok(
+      Math.abs((fromPlayer[index] ?? 0) - (fromEnemy[index] ?? 0)) < 0.001,
+      "both kingdoms face the same set of walks to game "
+      + `(${(fromPlayer[index] ?? 0).toFixed(1)} vs ${(fromEnemy[index] ?? 0).toFixed(1)})`,
+    );
   }
 });
 
@@ -30123,6 +30175,7 @@ check("the animal validator refuses data that could never make sense", () => {
     fleeRecoverySeconds: 3,
     huntSeconds: 5,
     roamRadius: 10,
+    tameable: false,
   };
   assert.ok(validateAnimalBalance({ deer: sane }).deer, "the sane shape passes");
 
@@ -30150,6 +30203,39 @@ check("the animal validator refuses data that could never make sense", () => {
     /can never be caught/,
     "a species that always outruns its hunter is refused",
   );
+
+  // V2 taming. `tameable` is required of every species rather than defaulted:
+  // omitting it must be a load failure, not a silent "no", or a new animal ships
+  // un-tameable because nobody wrote the line.
+  const { tameable: _omitted, ...untamed } = sane;
+  assert.throws(
+    () => validateAnimalBalance({ deer: untamed }),
+    /tameable: must be a boolean/,
+    "a species that never answers whether it tames is refused",
+  );
+  const cow = { ...sane, tameable: true, tameSeconds: 8, pastureYield: 1, breedSeconds: 90 };
+  assert.ok(validateAnimalBalance({ cow }).cow?.tameable, "a fully answered tameable species passes");
+  for (const key of ["tameSeconds", "pastureYield", "breedSeconds"] as const) {
+    // Each of these is a herding bug in disguise when it is missing: no calm
+    // time is prey that is walked up to and never caught, no yield is an animal
+    // that stands in a pen earning nothing, no breeding is a pen that never fills.
+    const { [key]: _dropped, ...incomplete } = cow;
+    assert.throws(
+      () => validateAnimalBalance({ cow: incomplete }),
+      new RegExp(`must be a finite number`),
+      `a tameable species without ${key} is refused`,
+    );
+    assert.throws(
+      () => validateAnimalBalance({ cow: { ...cow, [key]: 0 } }),
+      new RegExp(`${key}: must be > 0`),
+      `a zero ${key} is refused, naming the field`,
+    );
+    assert.throws(
+      () => validateAnimalBalance({ deer: { ...sane, [key]: 1 } }),
+      new RegExp(`${key}: only a tameable species may carry it`),
+      `${key} on an untameable species is refused rather than ignored`,
+    );
+  }
 });
 
 check("Faz 4: a gathering camp's reach stays local and still covers the herd it was built for", () => {
@@ -33793,6 +33879,11 @@ check("centre-led progression: level-ups and the Town transition advance the who
   const stockBefore = kingdoms.get("player").wallet.snapshot();
   assert.equal(progression.startTownUpgrade("player"), "started");
   assert.equal(progression.snapshot("player").upgradeKind, "town");
+  assert.equal(
+    townUnlocksAvailable(progression.snapshot("player")),
+    false,
+    "the transition itself opens nothing until it commits",
+  );
   for (const resourceId of ["food", "wood", "stone", "gold"] as const) {
     assert.equal(
       kingdoms.get("player").wallet.amount(resourceId),
@@ -33831,6 +33922,15 @@ check("centre-led progression: level-ups and the Town transition advance the who
   kingdoms.get("player").wallet.credit("stone", 2000);
   kingdoms.get("player").wallet.credit("gold", 2000);
   assert.equal(progression.startLevelUpgrade("player"), "started");
+  // A centre level-up inside Kasaba must not shut a door the age already opened:
+  // the age is the whole gate. Keyed on `upgrading` instead, the Okçuluk Alanı
+  // left the palette again for the length of the Lv1->Lv2 upgrade, so the age's
+  // promise looked like it only arrived at Kasaba Lv2.
+  assert.equal(
+    townUnlocksAvailable(progression.snapshot("player")),
+    true,
+    "a Kasaba-internal level upgrade does not re-lock Town structures",
+  );
   assert.deepEqual(progression.update(ages.town.levelUpgrades[0]!.durationSeconds).map((event) => event.level), [2]);
   assert.equal(house.health.max, houseTier("town", 2).maxHealth);
   assert.equal(progression.startLevelUpgrade("player"), "started");
@@ -35886,6 +35986,59 @@ check("§59: the binder hides every enemy render object, command centre included
 
   units.clear();
   centers.clear();
+});
+
+check("§59: no fog triangle passes under the ground it spans", () => {
+  // A narrow, steep ridge — a river bank in miniature. This is the shape that
+  // broke the first conforming surface: sampling the ground once per vertex left
+  // every triangle edge a straight chord under the crest, so the bank stood
+  // through the fog in a bright ribbon while the map around it was dark.
+  //
+  // Wider than the height-sample spacing on purpose. Nothing can conform to
+  // terrain finer than it samples, and the sampler is already at the shipped
+  // Landscape's own resolution; the claim being pinned is about chords passing
+  // under sampled ground, not about detail no grid could see.
+  const ridge = (x: number): number => 6 * Math.exp(-((x - 5) * (x - 5)) / 0.72);
+  const vision = new VisionSystem(() => [], { cellSize: 2, worldHalfExtent: 20 });
+  const view = new FogView(vision, "player");
+  view.setGroundHeightSampler((x) => ridge(x));
+
+  const mesh = view.root.children[0] as Mesh;
+  const position = (mesh.geometry as PlaneGeometry).attributes.position!;
+
+  // Vertices, gathered per row so adjacent ones can be walked as edges.
+  const rows = new Map<number, { x: number; y: number }[]>();
+  for (let index = 0; index < position.count; index += 1) {
+    const z = Math.round(position.getZ(index) * 1000) / 1000;
+    const row = rows.get(z) ?? [];
+    row.push({ x: position.getX(index), y: position.getY(index) });
+    rows.set(z, row);
+  }
+  assert.ok(rows.size > 2, "a conforming surface is subdivided, not one quad");
+
+  let checked = 0;
+  for (const row of rows.values()) {
+    row.sort((a, b) => a.x - b.x);
+    for (let i = 0; i + 1 < row.length; i += 1) {
+      const left = row[i]!;
+      const right = row[i + 1]!;
+      // Walk the chord: the failure was never at the vertices, which sat exactly
+      // on the ground, but between them.
+      for (let step = 1; step < 8; step += 1) {
+        const t = step / 8;
+        const x = left.x + (right.x - left.x) * t;
+        const chord = left.y + (right.y - left.y) * t;
+        assert.ok(
+          chord >= ridge(x),
+          `fog sank into the slope at x=${x.toFixed(2)}: surface ${chord.toFixed(3)} < ground ${ridge(x).toFixed(3)}`,
+        );
+        checked += 1;
+      }
+    }
+  }
+  assert.ok(checked > 1000, "the whole span was walked, not a corner of it");
+
+  view.dispose();
 });
 
 check("§59: an authored Level placement is fogged without game code naming it", () => {

@@ -121,9 +121,23 @@ export function ageRank(age: SettlementAge): number {
   return age === "town" ? 1 : 0;
 }
 
-/** Town-only structures unlock once the Town transition commits (not while it runs). */
-export function townUnlocksAvailable(snapshot: { readonly age: SettlementAge; readonly upgrading: boolean }): boolean {
-  return snapshot.age === "town" && !snapshot.upgrading;
+/**
+ * Town-only structures unlock once the Town transition commits (not while it runs).
+ *
+ * The age *is* the whole gate: {@link update} only writes `age = "town"` on
+ * commit, so an in-flight transition still reads "settlement" and the lock holds
+ * without any help. The `&& !upgrading` clause this used to carry meant to say
+ * the same thing and said something else — *every* centre action re-locked what
+ * the age had already opened. Reaching Kasaba and then starting the ordinary
+ * Lv1→Lv2 level-up pulled the Okçuluk Alanı back out of the palette for the
+ * whole upgrade, so the age's promise looked like it arrived at Kasaba Lv2.
+ *
+ * The two gates that answer this question from code — the palette's own click
+ * handler and `BarracksProductionSystem` — have always read the age alone, so a
+ * player could be refused a button whose click path would have allowed it.
+ */
+export function townUnlocksAvailable(snapshot: { readonly age: SettlementAge }): boolean {
+  return snapshot.age === "town";
 }
 
 export class KingdomProgressionSystem {

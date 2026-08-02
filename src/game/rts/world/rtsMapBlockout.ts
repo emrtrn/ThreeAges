@@ -435,10 +435,26 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
   // for. Its centre is north of the central ridge blocker (z <= 4) by more than
   // one roam radius, so grazing animals never wander onto the ridge; they are
   // not navigation agents and nothing would push them back off it.
+  // Cattle (V2) are authored to a different rule from the deer above, because
+  // they answer a different question. Deer are food you spend; cattle are food
+  // you *keep*, so a herd of them is worth walking out for and worth denying the
+  // opponent. The two cow herds sit just outside their nearest kingdom's opening
+  // control radius — close enough to be "yours" if you expand, never free — and
+  // are point-symmetric about the map centre, so neither side opens with a
+  // shorter walk to a pasture site.
+  //
+  // The bull herd mirrors `central-stag` across the centre on purpose: the map's
+  // two rare prizes then lean one to each side by exactly the same margin, which
+  // is the fairness the stag alone could not have (V1 §7's recorded asymmetry).
+  // The perfectly equidistant points all lie on the x = z diagonal, and that
+  // diagonal is `RTS_GameplayProof`'s river — measured, not assumed.
   herds: [
     { id: "player-deer", species: "deer", x: -30, z: 22, count: 5 },
     { id: "enemy-deer", species: "deer", x: 30, z: -22, count: 5 },
     { id: "central-stag", species: "stag", x: 0, z: 16, count: 4 },
+    { id: "player-cattle", species: "cow", x: -18, z: 14, count: 4 },
+    { id: "enemy-cattle", species: "cow", x: 18, z: -14, count: 4 },
+    { id: "central-bull", species: "bull", x: 0, z: -16, count: 3 },
   ],
   navigationBlockers: [
     { min: [-12, -1, -4], max: [12, 4, 4] },

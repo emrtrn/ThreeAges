@@ -5,9 +5,10 @@ Durum: **V1 tamamlandi (Faz 0-7, 2026-08-02).** Kabul maci oynandi ve gecti;
 §2'deki dokuz madde oyunda calisiyor. Kararlar §4te kilitli.
 
 **Dosya arsive tasinmiyor (kullanici karari, 2026-08-02).** §10'un son maddesi
-askiya alindi: yol haritasinin devami (§12) bu dosyadan yurutulecek. Sirada
-**V2 - Agil ve evcillestirme**; V3 ve V4 onu izler. **V5 (suvari / Cag 3)
-yapilmayacaktir.**
+askiya alindi: yol haritasinin devami (§12) bu dosyadan yurutulecek. **V2 - Agil
+ve evcillestirme basladi (2026-08-02)** ve kendi plan dosyasindan yurutuluyor:
+`THREEAGES_RTS_V2_PASTURE_AND_TAMING_PLAN.md` (§12). V3 ve V4 onu izler.
+**V5 (suvari / Cag 3) yapilmayacaktir.**
 Kapsam: `public/assets/ThreeAges/Animals/` altindaki 12 animasyonlu hayvan
 modelini, oyunun ekonomi/savas/lojistik cercevesine oturan gercek RTS
 sistemlerine cevirmek. V1 hedefi **avlanma**dir; kalan turler icin yol haritasi
@@ -1123,6 +1124,13 @@ sonrasi kapsamin **disindadir**; asset'ler dosyada durur, sistem yazilmaz.
 Bagimsiz "kesif kopegi" maddesi bu siranin disinda, istenildigi an alinabilir.
 
 ### V2 - Agil ve evcillestirme (Cow, Bull, Alpaca)
+
+**Plani yazildi ve basladi (2026-08-02):**
+`docs/planned/THREEAGES_RTS_V2_PASTURE_AND_TAMING_PLAN.md`. Orada Faz 0
+kilitlendi: gudme **agil kamp modeliyle** yapilir (bu dosyanin §4.1 kararinin
+ikizi), V2 **Cow + Bull** gonderir (Alpaca'nin dayandigi biyom sistemi yok,
+V2.1'e), ve boganin karsilik vermesi V2'de kendi fazinda kalir. Asagidaki
+gerekce kayit icin durur.
 
 Inek geyikten farkli olmalidir: **oldurmek yerine yakalanabilir**. Isci yabani
 inegi guder, Agil'a sokar; hayvan artik oyuncunundur ve **iscisiz yavas

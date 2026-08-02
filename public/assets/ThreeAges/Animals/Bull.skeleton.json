@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "sockets": [],
+  "animationSet": {
+    "idle": "Idle",
+    "walk": "Walk",
+    "run": "Gallop",
+    "jump": "Gallop_Jump",
+    "fall": "Jump_toIdle",
+    "work": "Eating",
+    "attack": "Attack_Headbutt",
+    "death": "Death"
+  },
+  "blendSpaces": [],
+  "notifies": [],
+  "montages": [],
+  "rootMotion": [],
+  "physicsBodies": [],
+  "physicsConstraints": [],
+  "preview": {
+    "selectedClip": "Idle"
+  }
+}

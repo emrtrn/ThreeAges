@@ -19,9 +19,11 @@
  *  - **The surface follows the terrain.** It used to be one flat quad at y=0.05,
  *    which any landscape taller than five centimetres simply stood through — the
  *    hill was lit while the ground around it was dark. It is now a subdivided
- *    plane whose vertices are sampled from the same ground height every other
- *    overlay uses ({@link setGroundHeightSampler}), rebuilt once when the terrain
- *    mounts rather than per frame.
+ *    plane built from the same ground height every other overlay uses
+ *    ({@link setGroundHeightSampler}), and specifically from that terrain's
+ *    *upper envelope*, so no triangle edge can pass beneath a bank it spans (see
+ *    {@link sampleGroundEnvelope}). Rebuilt once when the terrain mounts rather
+ *    than per frame.
  *  - **The alpha is blurred** before upload. `LinearFilter` alone interpolates a
  *    hard 0/128/255 step over one 2-unit texel, which reads as the square-edged
  *    frontier of an early-2000s RTS. A small separable gaussian over the cell
@@ -74,25 +76,27 @@ const BLUR_RADIUS_CELLS = 2;
  */
 const FADE_TIME_CONSTANT_SECONDS = 0.16;
 
+/** World units between fog-surface vertices. */
+const SURFACE_VERTEX_SPACING = 1;
+
 /**
- * World units between fog-surface vertices. Matched to the vision cell size and
- * to the territory overlay's own grid: the surface only has to follow terrain
- * that the rest of the ground presentation already follows at this resolution.
+ * World units between terrain height samples, which is finer than the vertices
+ * they feed. A Landscape is authored at sub-metre spacing (the shipped field is
+ * 0.547), so a grid sampled at the vertex spacing would step straight over the
+ * lip of a river bank and never know it was there.
  */
-const SURFACE_VERTEX_SPACING = 2;
+const HEIGHT_SAMPLE_SPACING = 0.5;
 
 /**
  * Clearance above the sampled ground. Above the territory cells (0.022) and the
  * §58 objective rings (0.03), because fog has to hide the player's own control
  * overlay too — the shape of your territory would otherwise quietly map the
  * parts of the world you have never visited.
- *
- * The extra margin over those two covers the one place a conforming mesh can
- * still sink below the terrain: a chord drawn between two sampled vertices
- * passes under convex ground. At this spacing, on a landscape gentle enough to
- * be an RTS field, that sag is centimetres.
  */
 const SURFACE_LIFT = 0.12;
+
+/** The no-terrain sampler, compared by identity to keep the surface one quad. */
+const FLAT_GROUND = (): number => 0;
 
 export class FogView {
   readonly root = new Group();
@@ -112,7 +116,7 @@ export class FogView {
   private readonly blurKernel: Float32Array;
   /** False until the first refresh, which snaps rather than fades in from black. */
   private primed = false;
-  private groundHeightAt: (x: number, z: number) => number = () => 0;
+  private groundHeightAt: (x: number, z: number) => number = FLAT_GROUND;
 
   constructor(private readonly vision: VisionSystem, private readonly observer: UnitOwner) {
     this.root.name = "rts-fog-of-war";
@@ -323,19 +327,111 @@ export class FogView {
   private createSurfaceGeometry(): PlaneGeometry {
     const { cellSize } = this.vision.gridOptions;
     const span = this.resolution * cellSize;
-    const segments = Math.max(1, Math.round(span / SURFACE_VERTEX_SPACING));
+    // Flat until a Landscape mounts: a level with no terrain — and the moment
+    // before one has loaded — needs one quad's worth of geometry, not a few
+    // hundred thousand samples of a function that answers zero.
+    const segments = this.groundHeightAt === FLAT_GROUND
+      ? 1
+      : Math.max(1, Math.round(span / SURFACE_VERTEX_SPACING));
+    const heights = segments === 1 ? null : this.sampleGroundEnvelope(span);
     const geometry = new PlaneGeometry(span, span, segments, segments);
     geometry.rotateX(-Math.PI / 2);
     const position = geometry.attributes.position!;
+    if (!heights) {
+      for (let index = 0; index < position.count; index += 1) {
+        position.setY(index, SURFACE_LIFT);
+      }
+      position.needsUpdate = true;
+      geometry.computeBoundingSphere();
+      return geometry;
+    }
+    // Looked up by world position rather than by vertex index: `PlaneGeometry`'s
+    // ordering plus the `rotateX` is exactly the kind of reasoning that produced
+    // the mirrored-fog bug the texture comment above records.
     for (let index = 0; index < position.count; index += 1) {
       const x = position.getX(index);
       const z = position.getZ(index);
-      position.setY(index, this.groundHeightAt(x, z) + SURFACE_LIFT);
+      position.setY(index, heights.sample(x, z) + SURFACE_LIFT);
     }
     position.needsUpdate = true;
     geometry.computeBoundingSphere();
     return geometry;
   }
+
+  /**
+   * The terrain's *upper envelope* at vertex resolution — every sample raised to
+   * the highest ground within one vertex spacing of it.
+   *
+   * Sampling the ground directly at each vertex is not enough, and the failure is
+   * the one this whole surface exists to fix. A triangle edge is a straight chord
+   * between two samples, and a chord passes *under* anything that rises between
+   * them: along a river bank, where the Landscape drops several units inside a
+   * metre, the fog sank into the slope and the bank stood through it in a bright
+   * ribbon tracing the water — dark map, lit shoreline.
+   *
+   * Dilating by one full vertex spacing is what makes that impossible rather than
+   * unlikely. Every point on an edge lies within one spacing of *both* of its
+   * endpoints, so both endpoints have already seen it and neither can be below
+   * it. The cost is that the surface bridges a narrow gully instead of dipping
+   * into it — from an RTS camera, looking down at an opaque veil, that is not
+   * something the player can see, and the alternative is terrain punching holes
+   * in the fog.
+   *
+   * Built once per terrain mount. The sample count is high (a few hundred
+   * thousand) but it is paid while the Level is still loading behind the start
+   * card, and never again.
+   */
+  private sampleGroundEnvelope(span: number): GroundEnvelope {
+    const size = Math.max(2, Math.round(span / HEIGHT_SAMPLE_SPACING) + 1);
+    const step = span / (size - 1);
+    const origin = -span / 2;
+    const raw = new Float32Array(size * size);
+    for (let row = 0; row < size; row += 1) {
+      const z = origin + row * step;
+      for (let col = 0; col < size; col += 1) {
+        raw[row * size + col] = this.groundHeightAt(origin + col * step, z);
+      }
+    }
+    // Separable max: rows into a scratch buffer, then columns out of it. The 2D
+    // window costs (2r+1)² samples per cell and this costs 2(2r+1), which is what
+    // keeps a dilation over a few hundred thousand samples a non-event.
+    const radius = Math.max(1, Math.ceil(SURFACE_VERTEX_SPACING / step));
+    const rows = new Float32Array(size * size);
+    for (let row = 0; row < size; row += 1) {
+      const rowStart = row * size;
+      for (let col = 0; col < size; col += 1) {
+        let peak = -Infinity;
+        for (let offset = -radius; offset <= radius; offset += 1) {
+          const value = raw[rowStart + clampIndex(col + offset, size)]!;
+          if (value > peak) peak = value;
+        }
+        rows[rowStart + col] = peak;
+      }
+    }
+    const envelope = new Float32Array(size * size);
+    for (let col = 0; col < size; col += 1) {
+      for (let row = 0; row < size; row += 1) {
+        let peak = -Infinity;
+        for (let offset = -radius; offset <= radius; offset += 1) {
+          const value = rows[clampIndex(row + offset, size) * size + col]!;
+          if (value > peak) peak = value;
+        }
+        envelope[row * size + col] = peak;
+      }
+    }
+    return {
+      sample: (x, z) => {
+        const col = clampIndex(Math.round((x - origin) / step), size);
+        const row = clampIndex(Math.round((z - origin) / step), size);
+        return envelope[row * size + col]!;
+      },
+    };
+  }
+}
+
+/** The dilated ground heightfield the surface geometry is built from. */
+interface GroundEnvelope {
+  sample(x: number, z: number): number;
 }
 
 /** Normalized 1D gaussian weights for offsets -radius..+radius. */

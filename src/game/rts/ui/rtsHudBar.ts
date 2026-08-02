@@ -185,8 +185,20 @@ export class RtsHudBar {
     this.assignIdleWorkers.disabled = count === 0;
   }
 
-  setAge(snapshot: Pick<ProgressionSnapshot, "age" | "upgrading" | "remainingSeconds">, balance: AgeBalance): void {
-    const text = snapshot.upgrading
+  /**
+   * The kingdom's age, and the transition when one is actually running.
+   *
+   * Only the `"town"` kind renames the age. Keyed on `upgrading` alone, this
+   * cell claimed "Yerleşim → Kasaba" for *any* centre action, so a Kasaba
+   * kingdom starting its Lv1→Lv2 upgrade was told it was still on its way to a
+   * Kasaba it already had — the same confusion the palette's age lock used to
+   * create at the same moment.
+   */
+  setAge(
+    snapshot: Pick<ProgressionSnapshot, "age" | "upgrading" | "upgradeKind" | "remainingSeconds">,
+    balance: AgeBalance,
+  ): void {
+    const text = snapshot.upgrading && snapshot.upgradeKind === "town"
       ? `Çağ: ${balance.settlement.label} → ${balance.town.label} (${Math.ceil(snapshot.remainingSeconds)} sn)`
       : `Çağ: ${snapshot.age === "town" ? balance.town.label : balance.settlement.label}`;
     if (this.age.textContent !== text) this.age.textContent = text;
