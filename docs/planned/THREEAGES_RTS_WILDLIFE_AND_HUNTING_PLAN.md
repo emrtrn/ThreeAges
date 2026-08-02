@@ -1,8 +1,8 @@
 # ThreeAges RTS Yaban Hayati, Avcilik ve Hayvan Varliklari Plani
 
 Olusturulma tarihi: 2026-08-01
-Durum: Faz 0-5 kod olarak tamamlandi (2026-08-02); Faz 0-4 gorsel kabul aldi,
-Faz 5'inki kullanicida. Sirada Faz 6 - AI uyumu. Kararlar §4te kilitli.
+Durum: Faz 0-5 tamamlandi ve gorsel kabul aldi (2026-08-02). §2'deki 1-7
+adimlari oyunda calisiyor. Sirada Faz 6 - AI uyumu. Kararlar §4te kilitli.
 Kapsam: `public/assets/ThreeAges/Animals/` altindaki 12 animasyonlu hayvan
 modelini, oyunun ekonomi/savas/lojistik cercevesine oturan gercek RTS
 sistemlerine cevirmek. V1 hedefi **avlanma**dir; kalan turler icin yol haritasi
@@ -810,9 +810,14 @@ Kabul:
   suresinde kapatabileceginden uzun surerse `validateGameData` dosya ve alan
   adiyla reddeder ("can never be caught"). Bu, kovalamaca hatasinin bir
   **yol bulma arizasi gibi** gorunen turunu veriye kapatir.
-- [ ] **Gorsel kabul kullanicida:** suru yakinina Avci Kulubesi, isci ata; avci
-  geyigi kovalamali (`Gallop`), sikistirmali, hayvan `Death` ile dusmeli, avci
-  les basinda `Eating` oynayip kulubeye et tasimali ve HUD'da yiyecek artmali.
+- [x] **Gorsel kabul alindi (2026-08-02).** Kullanici `?rts` Play rotasinda
+  dogruladi: avci geyigi kovaliyor, sikistiriyor, hayvan dusuyor, les basinda
+  calisip eti kulubeye tasiyor.
+
+**Faz 5 tamamlandi (2026-08-02).** V1 hedefi acisindan durum: §2'nin 1-7
+adimlari oyunda calisiyor. Kalan iki faz oynanis degil **uyum**dur - AI'nin
+avcilikla beslenen bir ekonomiyi ac sanmamasi (Faz 6) ve sis + kabul maci
+(Faz 7). Sirada Faz 6; **ayri bir oturumda** ele alinacak.
 
 ### Faz 6 - AI uyumu
 
