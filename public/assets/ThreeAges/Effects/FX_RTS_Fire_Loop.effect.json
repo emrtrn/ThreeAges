@@ -1,44 +1,46 @@
 {
   "schema": 2,
   "type": "particleEffect",
-  "name": "RTS Ruin Smoke Black",
+  "name": "RTS Building Fire",
   "category": "RTS Damage",
   "tags": [
     "rts",
     "damage",
-    "smoke",
-    "ruin",
-    "collapse"
+    "fire",
+    "flame",
+    "burning",
+    "loop",
+    "flipbook"
   ],
   "system": {
     "enabled": true,
-    "loop": false,
+    "loop": true,
     "duration": 1,
     "seed": null,
-    "maxParticles": 10,
+    "maxParticles": 64,
     "bounds": {
       "mode": "fixed",
       "min": [
-        -2,
+        -3,
         0,
-        -2
+        -3
       ],
       "max": [
-        2,
-        6,
-        2
+        3,
+        8,
+        3
       ],
       "showInPreview": true
     }
   },
   "spawn": {
     "mode": "rate",
-    "rate": 12,
-    "count": 14,
+    "rate": 18,
+    "count": 20,
     "delay": 0,
     "interval": 0,
-    "shape": "sphere",
-    "radius": 1,
+    "shape": "circle",
+    "radius": 1.4,
     "boxSize": [
       0,
       0,
@@ -47,60 +49,60 @@
   },
   "initialize": {
     "lifetime": [
-      3,
-      4
+      1,
+      1.5
     ],
     "startSize": [
-      4,
-      6
+      7,
+      11
     ],
-    "startColor": "#504a44",
-    "startOpacity": 0.5,
+    "startColor": "#ff8f2a",
+    "startOpacity": 1,
     "direction": [
       0,
       1,
       0
     ],
     "speed": [
-      2,
-      5
+      1.2,
+      2.2
     ],
-    "spreadAngleDeg": 60,
+    "spreadAngleDeg": 14,
     "rotation": [
-      0,
-      360
-    ],
-    "angularVelocity": [
-      -18,
-      18
-    ]
-  },
-  "update": {
-    "gravityScale": -0.05,
-    "drag": 0.35,
-    "acceleration": [
-      0.25,
       0,
       0
     ],
-    "endSize": [
-      16,
-      32
+    "angularVelocity": [
+      0,
+      0
+    ]
+  },
+  "update": {
+    "gravityScale": -0.08,
+    "drag": 0.7,
+    "acceleration": [
+      0,
+      0.6,
+      0
     ],
-    "endColor": "#171717",
+    "endSize": [
+      3,
+      5
+    ],
+    "endColor": "#7a1a04",
     "endOpacity": 0,
-    "fadeInTime": 0.2,
-    "fadeOutTime": 0.8
+    "fadeInTime": 0.06,
+    "fadeOutTime": 0.3
   },
   "renderer": {
     "type": "sprite",
-    "blendMode": "alpha",
-    "softness": 0.5,
+    "blendMode": "additive",
+    "softness": 0.6,
     "sortMode": "none",
-    "texture": null,
+    "texture": "t-fire-subuv",
     "subUV": {
-      "cols": 4,
-      "rows": 4
+      "cols": 6,
+      "rows": 6
     }
   }
 }

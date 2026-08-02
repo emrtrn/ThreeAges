@@ -1,44 +1,45 @@
 {
   "schema": 2,
   "type": "particleEffect",
-  "name": "RTS Ruin Smoke Black",
+  "name": "RTS Dust Cloud",
   "category": "RTS Damage",
   "tags": [
     "rts",
     "damage",
-    "smoke",
-    "ruin",
-    "collapse"
+    "dust",
+    "cloud",
+    "ground",
+    "flipbook"
   ],
   "system": {
     "enabled": true,
     "loop": false,
-    "duration": 1,
+    "duration": 1.2,
     "seed": null,
-    "maxParticles": 10,
+    "maxParticles": 64,
     "bounds": {
       "mode": "fixed",
       "min": [
-        -2,
+        -6,
         0,
-        -2
+        -6
       ],
       "max": [
-        2,
         6,
-        2
+        5,
+        6
       ],
       "showInPreview": true
     }
   },
   "spawn": {
-    "mode": "rate",
-    "rate": 12,
-    "count": 14,
+    "mode": "burst",
+    "rate": 0,
+    "count": 24,
     "delay": 0,
     "interval": 0,
-    "shape": "sphere",
-    "radius": 1,
+    "shape": "circle",
+    "radius": 1.2,
     "boxSize": [
       0,
       0,
@@ -47,60 +48,60 @@
   },
   "initialize": {
     "lifetime": [
-      3,
-      4
+      1.8,
+      2.6
     ],
     "startSize": [
-      4,
-      6
+      8,
+      12
     ],
-    "startColor": "#504a44",
-    "startOpacity": 0.5,
+    "startColor": "#fff1da",
+    "startOpacity": 0.85,
     "direction": [
       0,
-      1,
+      0.35,
       0
     ],
     "speed": [
-      2,
-      5
+      1.6,
+      2.8
     ],
-    "spreadAngleDeg": 60,
+    "spreadAngleDeg": 105,
     "rotation": [
       0,
       360
     ],
     "angularVelocity": [
-      -18,
-      18
+      -40,
+      40
     ]
   },
   "update": {
-    "gravityScale": -0.05,
-    "drag": 0.35,
+    "gravityScale": -0.02,
+    "drag": 1.6,
     "acceleration": [
-      0.25,
       0,
+      0.15,
       0
     ],
     "endSize": [
-      16,
-      32
+      20,
+      26
     ],
-    "endColor": "#171717",
+    "endColor": "#b3a189",
     "endOpacity": 0,
-    "fadeInTime": 0.2,
-    "fadeOutTime": 0.8
+    "fadeInTime": 0.12,
+    "fadeOutTime": 0.7
   },
   "renderer": {
     "type": "sprite",
     "blendMode": "alpha",
-    "softness": 0.5,
+    "softness": 0.6,
     "sortMode": "none",
-    "texture": null,
+    "texture": "t-dust-particle-d",
     "subUV": {
-      "cols": 4,
-      "rows": 4
+      "cols": 2,
+      "rows": 2
     }
   }
 }

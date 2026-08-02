@@ -71,6 +71,18 @@ export interface EditorDataTableFieldMeta {
   readonly step?: number;
   /** When set, the leaf renders as a dropdown of these string options. */
   readonly enum?: readonly string[];
+  /**
+   * When set, the leaf names a manifest asset of this kind (`effect`,
+   * `staticMesh`, …) and renders as a picker of the project's assets instead of
+   * a free-text id — so an author chooses from what actually exists rather than
+   * typing an id the runtime would fail to resolve.
+   *
+   * On an **array** path the whole array is one add/remove list of pickers, which
+   * is also the only way to fill a list the file left empty. Ids already used in
+   * the same list are not offered twice; an id no asset answers is preserved and
+   * flagged rather than silently dropped.
+   */
+  readonly assetOptions?: string;
   /** Renders the input disabled — for structural/identity fields the validator
    *  would reject edits to anyway (tier level indices, entry ids). */
   readonly readonly?: boolean;

@@ -15,11 +15,12 @@ import type {
   EditorDataTableGroupMeta,
 } from "@/editor/gameEditorRegistry";
 
-/** A single editable scalar leaf discovered by walking an entry. */
+/** A single editable leaf discovered by walking an entry. */
 export interface Leaf {
   /** Dotted path within the entry, e.g. `cost.food`. */
   readonly path: string;
-  readonly type: "number" | "string" | "boolean";
+  /** `stringList` is a whole string array edited as one add/remove widget. */
+  readonly type: "number" | "string" | "boolean" | "stringList";
   /** Parent container + key so a committed edit writes straight back into the doc. */
   readonly container: Record<string, unknown> | unknown[];
   readonly key: string | number;
@@ -71,12 +72,19 @@ export function templatePath(path: string): string {
  *
  * `blockParents` holds the object paths the game opted in (relative to the entry;
  * `""` is the entry root). Arrays need no opt-in.
+ *
+ * `listPaths` holds the (template) paths the game asked to edit as a *whole
+ * list* rather than per index — an asset-id array. Such an array yields one
+ * `stringList` leaf pointing at the array itself, so the widget can add and
+ * remove entries. An empty list still yields its leaf, which is what makes a
+ * slot the file left empty fillable at all.
  */
 export function collectLeaves(
   node: Record<string, unknown> | unknown[],
   prefix: string,
   block: string,
   blockParents: ReadonlySet<string>,
+  listPaths: ReadonlySet<string> = new Set(),
 ): Leaf[] {
   const leaves: Leaf[] = [];
   const isArray = Array.isArray(node);
@@ -98,9 +106,15 @@ export function collectLeaves(
       });
     } else if (isPlainObject(value)) {
       const childBlock = isArray || childrenAreBlocks ? path : block;
-      leaves.push(...collectLeaves(value, path, childBlock, blockParents));
+      leaves.push(...collectLeaves(value, path, childBlock, blockParents, listPaths));
     } else if (Array.isArray(value)) {
-      leaves.push(...collectLeaves(value, path, block, blockParents));
+      // A list the game named is one leaf over the array; anything else recurses
+      // to its members, so an `offset` triple stays three numbered fields.
+      if (listPaths.has(templatePath(path)) && value.every((item) => typeof item === "string")) {
+        leaves.push({ path, type: "stringList", container: node, key, block });
+      } else {
+        leaves.push(...collectLeaves(value, path, block, blockParents, listPaths));
+      }
     }
   }
   return leaves;

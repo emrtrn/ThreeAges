@@ -42,6 +42,10 @@ export interface ParticleEffectOverrides {
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
+const clamp01 = (value: number): number =>
+  Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+const clampMin0 = (value: number): number => (Number.isFinite(value) ? Math.max(0, value) : 0);
+
 // Back-compat aliases: the runtime path (RuntimeSceneApp) and tests reference the
 // flat runtime effect + the normalize→collapse entry point through these names.
 export {
@@ -111,6 +115,12 @@ export class ParticleEffect {
   private readonly capacity: number;
   private readonly lifetime: number;
   private readonly rate: number;
+  // Authored opacity ramp + fade windows. Not override-affected, so they are read
+  // once from the definition; the defaults reproduce the old linear 1 → 0 ramp.
+  private readonly startOpacity: number;
+  private readonly endOpacity: number;
+  private readonly fadeInTime: number;
+  private readonly fadeOutTime: number;
   // Effective (override-applied) simulation params; recomputed by applyOverrides.
   private loop: boolean;
   private startSize: number;
@@ -148,6 +158,10 @@ export class ParticleEffect {
     this.definition = definition;
     this.lifetime = definition.lifetime;
     this.rate = definition.rate;
+    this.startOpacity = clamp01(definition.startOpacity ?? 1);
+    this.endOpacity = clamp01(definition.endOpacity ?? 0);
+    this.fadeInTime = clampMin0(definition.fadeInTime ?? 0);
+    this.fadeOutTime = clampMin0(definition.fadeOutTime ?? 0);
     // Effective params default to the un-scaled asset; applyOverrides() below
     // re-derives them (and the shader colour) from `overrides`.
     this.loop = definition.loop;
@@ -290,7 +304,7 @@ export class ParticleEffect {
       this.positions[base + 1] = this.positions[base + 1]! + this.velocities[base + 1]! * dt;
       this.positions[base + 2] = this.positions[base + 2]! + this.velocities[base + 2]! * dt;
       this.sizes[i] = startSize + (endSize - startSize) * t;
-      this.alphas[i] = 1 - t;
+      this.alphas[i] = this.opacityAt(age, t);
       this.lifeTs[i] = t;
     }
 
@@ -309,6 +323,20 @@ export class ParticleEffect {
     this.geometry.attributes.aSize!.needsUpdate = true;
     this.geometry.attributes.aAlpha!.needsUpdate = true;
     this.geometry.attributes.aLifeT!.needsUpdate = true;
+  }
+
+  /**
+   * Per-particle alpha at `age` seconds (life fraction `t`): the authored
+   * start→end opacity ramp, multiplied by the fade-in window measured from birth
+   * and the fade-out window measured into death. The two windows are independent
+   * multipliers, so overlapping them on a short lifetime lowers the peak rather
+   * than fighting over the curve.
+   */
+  private opacityAt(age: number, t: number): number {
+    let alpha = this.startOpacity + (this.endOpacity - this.startOpacity) * t;
+    if (this.fadeInTime > 0) alpha *= Math.min(1, age / this.fadeInTime);
+    if (this.fadeOutTime > 0) alpha *= Math.min(1, (this.lifetime - age) / this.fadeOutTime);
+    return clamp01(alpha);
   }
 
   /** A non-looping effect is finished once it stopped emitting and all particles died. */
@@ -361,7 +389,9 @@ export class ParticleEffect {
     this.velocities[slot * 3 + 1] = velocity[1] + (Math.random() * 2 - 1) * spread * 0.3;
     this.velocities[slot * 3 + 2] = velocity[2] + jitter();
     this.sizes[slot] = startSize;
-    this.alphas[slot] = 1;
+    // Birth alpha comes from the same curve, so a fade-in starts at 0 instead of
+    // flashing at full opacity for the frame between spawn and the next update.
+    this.alphas[slot] = this.opacityAt(0, 0);
     this.lifeTs[slot] = 0;
   }
 }

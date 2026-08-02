@@ -260,7 +260,7 @@
       "slots": {
         "lightSmoke": {
           "effects": [
-            "starter-fx-smoke-puff"
+            "rts-fx-collapse-dust"
           ],
           "anchor": {
             "mode": "roof",
@@ -274,7 +274,7 @@
         },
         "heavySmoke": {
           "effects": [
-            "starter-fx-smoke-puff"
+            "rts-fx-explosion"
           ],
           "anchor": {
             "mode": "roof",
@@ -296,7 +296,7 @@
               0
             ]
           },
-          "intervalSeconds": 1
+          "intervalSeconds": 10
         },
         "impactDebris": {
           "effects": [
@@ -314,10 +314,7 @@
           "minIntervalSeconds": 0.35
         },
         "collapseDust": {
-          "effects": [
-            "rts-fx-collapse-dust",
-            "starter-fx-smoke-puff"
-          ],
+          "effects": [],
           "anchor": {
             "mode": "ground",
             "offset": [

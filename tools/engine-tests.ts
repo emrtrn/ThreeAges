@@ -16318,6 +16318,12 @@ check("parseRuntimeParticleEffect collapses a schema-1 effect and rejects bad in
       spread: 0.4,
       materialMode: "alpha",
       color: "#a7a7a7",
+      // Schema 1 had no opacity block, so the upgrade path fills the §6 defaults:
+      // a 1 → 0 ramp with the default short fade-out.
+      startOpacity: 1,
+      endOpacity: 0,
+      fadeInTime: 0,
+      fadeOutTime: 0.1,
     },
   );
   // Non-object, unknown schema, or empty schema-1 effectId â†’ null.
@@ -16377,6 +16383,21 @@ check("normalizeEffectDefinition reads a schema-2 effect and applies defaults", 
   assert.deepEqual(messy.initialize.startSize, [0.3, 0.3]);
   assert.equal(messy.initialize.startColor, "#ffffff");
   assert.equal(messy.renderer.blendMode, "alpha");
+
+  // The opacity block must survive the collapse to the flat runtime effect — the
+  // renderer simulates that shape, so a field dropped here is an editor slider
+  // that silently moves nothing.
+  const opaque = normalizeEffectDefinition({
+    schema: 2,
+    initialize: { startOpacity: 0.65 },
+    update: { endOpacity: 0.2, fadeInTime: 0.3, fadeOutTime: 0.7 },
+  });
+  assert.ok(opaque);
+  const opaqueRuntime = toRuntimeParticleEffect(opaque);
+  assert.equal(opaqueRuntime.startOpacity, 0.65);
+  assert.equal(opaqueRuntime.endOpacity, 0.2);
+  assert.equal(opaqueRuntime.fadeInTime, 0.3);
+  assert.equal(opaqueRuntime.fadeOutTime, 0.7);
 });
 
 check("renderer.texture (VFX Lite Faz 6a) normalizes and collapses through to runtime", () => {
@@ -16696,6 +16717,71 @@ check("ParticleEffect density scale thins the spawn rate (quality knob)", () => 
   half.update(0.1); // 10 * 1 * 0.1 = 1
   assert.equal(half.aliveCount(), 1);
   half.dispose();
+});
+
+/**
+ * Sprite alpha is per-particle state in a Float32Array attribute; slot 0 holds the
+ * first particle ever spawned (spawnParticle takes the lowest free slot), so it is
+ * the one whose age the tests below can reason about exactly.
+ */
+function alphaOfFirstParticle(fx: ParticleEffect): number {
+  const attr = fx.object3D.geometry.getAttribute("aAlpha") as { array: ArrayLike<number> };
+  return attr.array[0]!;
+}
+
+/** Compare at float32 precision — the attribute round-trips through a Float32Array. */
+function assertAlpha(actual: number, expected: number, message: string): void {
+  assert.ok(Math.abs(actual - expected) < 1e-6, `${message} (${actual} vs ${expected})`);
+}
+
+// The authored opacity ramp reaches the renderer: `startOpacity`/`endOpacity` and
+// the two fade windows were dropped by toRuntimeParticleEffect, so the sprite path
+// hard-coded a 1 → 0 ramp and the editor's opacity fields moved nothing. What is
+// pinned here is the curve's contract (endpoints, ramp direction, fade gating),
+// derived from the authored numbers rather than any one tuning.
+check("ParticleEffect fades on the authored opacity ramp", () => {
+  // update() ages live particles before spawning, so the first update spawns slot 0
+  // at age 0 and each later update advances it by that call's dt.
+  const ramped = new ParticleEffect(
+    runtimeFx({ loop: true, rate: 10, lifetime: 1, startOpacity: 0.5, endOpacity: 0.1 }),
+  );
+  ramped.update(0.1);
+  assertAlpha(alphaOfFirstParticle(ramped), 0.5, "birth alpha is startOpacity");
+  ramped.update(0.5); // slot 0 at age 0.5 → half way along the ramp
+  assertAlpha(alphaOfFirstParticle(ramped), 0.3, "mid-life alpha interpolates the ramp");
+  ramped.dispose();
+
+  // Absent fields keep the pre-opacity behaviour (1 → 0 linear), so every effect
+  // authored before the ramp existed renders exactly as it did.
+  const legacy = new ParticleEffect(runtimeFx({ loop: true, rate: 10, lifetime: 1 }));
+  legacy.update(0.1);
+  assertAlpha(alphaOfFirstParticle(legacy), 1, "default birth alpha is opaque");
+  legacy.update(0.4);
+  assertAlpha(alphaOfFirstParticle(legacy), 0.6, "default ramp is linear 1 - t");
+  legacy.dispose();
+});
+
+check("ParticleEffect fade windows gate the opacity ramp at birth and death", () => {
+  // A flat 1 → 1 ramp isolates the windows: any dip is the fade, not the ramp.
+  const fadeIn = new ParticleEffect(
+    runtimeFx({ loop: true, rate: 10, lifetime: 1, startOpacity: 1, endOpacity: 1, fadeInTime: 0.5 }),
+  );
+  fadeIn.update(0.1); // spawned this frame: the fade-in starts at zero, no pop
+  assertAlpha(alphaOfFirstParticle(fadeIn), 0, "fade-in starts fully transparent");
+  fadeIn.update(0.25);
+  assertAlpha(alphaOfFirstParticle(fadeIn), 0.5, "fade-in is half way through its window");
+  fadeIn.update(0.25);
+  assertAlpha(alphaOfFirstParticle(fadeIn), 1, "fade-in reaches the ramp value");
+  fadeIn.dispose();
+
+  const fadeOut = new ParticleEffect(
+    runtimeFx({ loop: true, rate: 10, lifetime: 1, startOpacity: 1, endOpacity: 1, fadeOutTime: 0.4 }),
+  );
+  fadeOut.update(0.1);
+  assertAlpha(alphaOfFirstParticle(fadeOut), 1, "fade-out window has not opened yet");
+  fadeOut.update(0.8); // age 0.8 → 0.2s of life left inside a 0.4s window
+  assertAlpha(alphaOfFirstParticle(fadeOut), 0.5, "fade-out is half way into death");
+  fadeOut.dispose();
 });
 
 check("ParticleEffect one-shot drains to zero alive and reports finished", () => {
@@ -28504,6 +28590,77 @@ check("the Data Table form groups repeated blocks and never splinters a scalar a
   assert.ok(tierGroups.length >= 1, "settlement tiers still group per element");
   const tierMeta = (buildings.groups ?? []).find((group) => group.path === "progression.settlement");
   assert.match(groupTitle(entry, tierGroups[0]!, tierMeta), /^Yerleşim çağı — Seviye \d+$/);
+});
+
+check("the damage tables pick effects from the manifest, list-wise", () => {
+  // What this pins: an `effects` entry is a *picker over the whole array*, not a
+  // text box per existing index. Typed ids were the failure mode — an author had
+  // to recall `rts-fx-collapse-dust` exactly — and an index-wise field left a
+  // slot the file ships empty with no row at all, so it could not be filled from
+  // the editor. Both follow from the field naming the array and carrying
+  // `assetOptions`; the runtime rule that the id must resolve is checked
+  // separately (`rtsDamageEffectGaps`).
+  const catalog = getGameEditorCatalog();
+  const tables = (catalog.dataTables ?? []).filter((table) => table.id.startsWith("rts-damage-"));
+  assert.ok(tables.length >= 1, "the damage tables are registered in the editor catalog");
+  for (const table of tables) {
+    const effectFields = (table.fields ?? []).filter((field) => field.path.endsWith(".effects"));
+    assert.equal(
+      effectFields.length,
+      RTS_DAMAGE_SLOTS.length,
+      `${table.id} names an effects field for every damage slot`,
+    );
+    for (const field of effectFields) {
+      assert.equal(field.assetOptions, "effect", `${table.id}:${field.path} picks effect assets`);
+      assert.ok(!field.path.includes("[]"), `${table.id}:${field.path} names the array, not its indices`);
+    }
+  }
+
+  // Walked the way the editor walks it: one list leaf per slot, pointing at the
+  // array itself — and the anchor offset still splinters into its three numbers,
+  // so opting one array into list editing never swallows the others.
+  const defaults = tables.find((table) => table.id === "rts-damage-defaults")
+    ?? assert.fail("rts-damage-defaults is not registered in the editor catalog");
+  const content = JSON.parse(readFileSync(`public/${defaults.path}`, "utf8")) as any;
+  const slotsEntry = content.damage.defaults.slots as Record<string, unknown>;
+  const listPaths = new Set(
+    (defaults.fields ?? []).filter((field) => field.assetOptions).map((field) => field.path),
+  );
+  const leaves = collectLeaves(
+    slotsEntry,
+    "",
+    "",
+    new Set((defaults.groups ?? []).map((group) => group.path)),
+    listPaths,
+  );
+  assert.deepEqual(
+    leaves.filter((leaf) => leaf.type === "stringList").map((leaf) => leaf.path),
+    RTS_DAMAGE_SLOTS.map((slot) => `${slot}.effects`),
+    "every slot's effects render as one list, in slot order",
+  );
+  for (const leaf of leaves.filter((entry) => entry.type === "stringList")) {
+    const array = (leaf.container as Record<string, unknown>)[leaf.key as string];
+    assert.ok(Array.isArray(array), `${leaf.path} points at the array the widget mutates`);
+  }
+  assert.equal(
+    leaves.filter((leaf) => leaf.path.startsWith(`${RTS_DAMAGE_SLOTS[0]}.anchor.offset`)).length,
+    3,
+    "the offset triple is still three numbered fields",
+  );
+
+  // An empty list keeps its leaf — that row is the only way to fill a slot the
+  // file ships silent, which is exactly the case an index-wise field lost.
+  const emptyLeaves = collectLeaves(
+    { ruinSmoke: { effects: [] } },
+    "",
+    "",
+    new Set([""]),
+    new Set(["ruinSmoke.effects"]),
+  );
+  assert.deepEqual(
+    emptyLeaves.map((leaf) => [leaf.path, leaf.type]),
+    [["ruinSmoke.effects", "stringList"]],
+  );
 });
 
 check("validateSaveGameDataPayload fences writes to game-data JSON and rejects the rest", () => {

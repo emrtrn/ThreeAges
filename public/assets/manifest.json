@@ -25460,6 +25460,97 @@
       "license": "Project-local RTS effect"
     },
     {
+      "id": "rts-fx-dust-cloud",
+      "name": "RTS Dust Cloud",
+      "assetType": "effect",
+      "category": "RTS Damage",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Dust_Cloud.effect.json",
+      "tags": [
+        "rts",
+        "damage",
+        "dust",
+        "cloud",
+        "ground",
+        "flipbook"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "RTS Damage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1555
+      },
+      "license": "Project-local RTS effect"
+    },
+    {
+      "id": "rts-fx-explosion",
+      "name": "RTS Explosion",
+      "assetType": "effect",
+      "category": "RTS Damage",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Explosion.effect.json",
+      "tags": [
+        "rts",
+        "damage",
+        "explosion",
+        "fireball",
+        "siege",
+        "flipbook"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "RTS Damage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1556
+      },
+      "license": "Project-local RTS effect"
+    },
+    {
+      "id": "rts-fx-fire-loop",
+      "name": "RTS Building Fire",
+      "assetType": "effect",
+      "category": "RTS Damage",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Fire_Loop.effect.json",
+      "tags": [
+        "rts",
+        "damage",
+        "fire",
+        "flame",
+        "burning",
+        "loop",
+        "flipbook"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "RTS Damage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1549
+      },
+      "license": "Project-local RTS effect"
+    },
+    {
       "id": "m-cobblestonerough-material",
       "name": "M Cobble Stone Rough.Material",
       "assetType": "material",

@@ -3095,6 +3095,14 @@ export class EditorUi {
         path: def.path,
         label: def.label,
         def,
+        // Asset-picker fields (an effect id in the damage table) choose from the
+        // project's own manifest rather than a typed id.
+        assets: this.editableAssets.map((asset) => ({
+          id: asset.id,
+          name: asset.displayName ?? asset.name,
+          assetType: assetType(asset),
+          path: assetPath(asset),
+        })),
         onStatus: (message, tone) => this.setStatus(message, tone),
       });
     } catch (error) {

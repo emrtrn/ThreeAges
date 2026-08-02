@@ -3,15 +3,15 @@
   "label": "Gameplay Proof (Ürün A)",
   "flags": {},
   "startingResources": {
-    "food": 4000,
-    "wood": 4000,
-    "stone": 2000,
-    "gold": 2000
+    "food": 400,
+    "wood": 400,
+    "stone": 200,
+    "gold": 200
   },
   "startingUnits": {
-    "guard": 6,
+    "guard": 2,
     "worker": 8,
-    "siege": 2
+    "siege": 0
   },
   "enemyStartingResources": {
     "food": 500,
@@ -20,7 +20,7 @@
     "gold": 100
   },
   "enemyStartingUnits": {
-    "guard": 0,
+    "guard": 2,
     "worker": 8
   },
   "gameSpeed": 1,

@@ -87,6 +87,7 @@ function damageSlotFields(prefix: string): readonly {
   label: string;
   hint?: string;
   enum?: readonly string[];
+  assetOptions?: string;
   itemLabels?: readonly string[];
   min?: number;
   max?: number;
@@ -101,11 +102,15 @@ function damageSlotFields(prefix: string): readonly {
     const rotated = repeating || impact;
     return [
       {
-        path: `${prefix}${slot}.effects.[]`,
+        // The whole array is one picker list, not a field per index: the effect
+        // is chosen from the manifest's own effect assets, and a slot the file
+        // left empty can be filled without hand-editing JSON.
+        path: `${prefix}${slot}.effects`,
         label: "Efekt",
+        assetOptions: "effect",
         hint: rotated
-          ? "Content Drawer efekt asset id'si. Birden fazla yazılırsa yapı kimliğine göre biri seçilir — bir bina ömrü boyunca aynı efekti kullanır."
-          : "Content Drawer efekt asset id'si. Tek atışlık slot: buradaki efektlerin hepsi aynı anda çalışır.",
+          ? "Content Drawer efekt varlığı. Birden fazla seçilirse yapı kimliğine göre biri kullanılır — bir bina ömrü boyunca aynı efekti oynatır."
+          : "Content Drawer efekt varlığı. Tek atışlık slot: buradaki efektlerin hepsi aynı anda çalışır.",
       },
       {
         path: `${prefix}${slot}.anchor.mode`,

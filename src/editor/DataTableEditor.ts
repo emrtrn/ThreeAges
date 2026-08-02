@@ -37,6 +37,12 @@ export interface DataTableEditorOptions {
   path: string;
   label: string;
   def: EditorDataTableDef;
+  /**
+   * Manifest assets (id/name/type/path) offered by fields the game marked with
+   * `assetOptions` — an effect id is chosen from what the project actually
+   * ships rather than typed. Absent (or empty) leaves those fields as text.
+   */
+  assets?: ReadonlyArray<{ id: string; name: string; assetType: string; path: string }>;
   onStatus?: (message: string, tone?: StatusTone) => void;
   onSaved?: () => void;
 }
@@ -72,12 +78,19 @@ export class DataTableEditor {
   private readonly groupMeta = new Map<string, EditorDataTableGroupMeta>();
   /** Object paths whose direct object children each form a block. Arrays group without opt-in. */
   private readonly blockParents = new Set<string>();
+  /** Template paths edited as a whole list (an asset-id array), not per index. */
+  private readonly listPaths = new Set<string>();
   /** Committed (git HEAD) document, lazily fetched the first time an entry is reset. */
   private defaults: Record<string, unknown> | null = null;
   private disposed = false;
 
   private constructor(private readonly options: DataTableEditorOptions) {
-    for (const field of options.def.fields ?? []) this.fieldMeta.set(field.path, field);
+    for (const field of options.def.fields ?? []) {
+      this.fieldMeta.set(field.path, field);
+      // An asset-picker field over an array is edited as a list; over a scalar
+      // the same entry just turns the text box into a dropdown.
+      if (field.assetOptions) this.listPaths.add(field.path);
+    }
     for (const group of options.def.groups ?? []) {
       this.groupMeta.set(group.path, group);
       this.blockParents.add(group.path);
@@ -159,7 +172,7 @@ export class DataTableEditor {
   }
 
   /** One collapsible section for a single entry: title, reset button, field grid. */
-  private buildEntrySection(entryId: string): HTMLElement {
+  private buildEntrySection(entryId: string): HTMLDetailsElement {
     const entry = this.doc[entryId];
     const section = document.createElement("details");
     section.className = "dte-entry";
@@ -189,7 +202,13 @@ export class DataTableEditor {
 
     const leaves =
       isPlainObject(entry) || Array.isArray(entry)
-        ? collectLeaves(entry as Record<string, unknown> | unknown[], "", "", this.blockParents)
+        ? collectLeaves(
+            entry as Record<string, unknown> | unknown[],
+            "",
+            "",
+            this.blockParents,
+            this.listPaths,
+          )
         : // A scalar top-level entry is itself a single leaf; key it by the entry
           // id so a flat config (e.g. roads.json) can label each value distinctly.
           [{ path: entryId, type: leafType(entry)!, container: this.doc, key: entryId, block: "" } satisfies Leaf];
@@ -199,20 +218,22 @@ export class DataTableEditor {
     // slots) get one collapsible sub-group each so the long form stays readable;
     // simpler flat configs (units, roads, …) keep the single grid unchanged.
     if (groups.some((group) => !group.isBase)) {
-      for (const group of groups) section.append(this.buildGroupSection(entry, group));
+      for (const group of groups) section.append(this.buildGroupSection(entry, group, entryId));
     } else {
       const grid = document.createElement("div");
       grid.className = "dte-grid";
-      for (const leaf of leaves) grid.append(this.renderLeaf(leaf));
+      for (const leaf of leaves) grid.append(this.renderLeaf(leaf, entryId));
       section.append(grid);
     }
     return section;
   }
 
   /** One collapsible sub-group (base values, or a single array tier/level). */
-  private buildGroupSection(entry: unknown, group: LeafGroup): HTMLElement {
+  private buildGroupSection(entry: unknown, group: LeafGroup, entryId: string): HTMLElement {
     const details = document.createElement("details");
     details.className = "dte-group";
+    // Keyed so a re-render (a list edit) can put the open sub-groups back.
+    details.dataset.groupKey = group.key;
     // Base values open by default; tiers/levels start collapsed to cut clutter.
     details.open = group.isBase;
 
@@ -223,9 +244,38 @@ export class DataTableEditor {
 
     const grid = document.createElement("div");
     grid.className = "dte-grid";
-    for (const leaf of group.leaves) grid.append(this.renderLeaf(leaf));
+    for (const leaf of group.leaves) grid.append(this.renderLeaf(leaf, entryId));
     details.append(grid);
     return details;
+  }
+
+  /**
+   * Rebuild one entry's section in place, keeping what the author had open and
+   * where they were scrolled. Used after an edit that changes the *shape* of the
+   * form — adding or removing a list item, or a reset — where re-rendering just
+   * that leaf is not enough.
+   */
+  private replaceEntrySection(entryId: string): void {
+    const existing = this.bodyEl.querySelector<HTMLDetailsElement>(
+      `.dte-entry[data-entry-id="${CSS.escape(entryId)}"]`,
+    );
+    if (!existing) {
+      this.renderEntries();
+      return;
+    }
+    const openGroups = new Set(
+      Array.from(existing.querySelectorAll<HTMLDetailsElement>("details[data-group-key]"))
+        .filter((details) => details.open)
+        .map((details) => details.dataset.groupKey ?? ""),
+    );
+    const scrollTop = this.bodyEl.scrollTop;
+    const rebuilt = this.buildEntrySection(entryId);
+    rebuilt.open = existing.open;
+    for (const details of rebuilt.querySelectorAll<HTMLDetailsElement>("details[data-group-key]")) {
+      details.open = openGroups.has(details.dataset.groupKey ?? "");
+    }
+    existing.replaceWith(rebuilt);
+    this.bodyEl.scrollTop = scrollTop;
   }
 
   /**
@@ -259,10 +309,7 @@ export class DataTableEditor {
         return;
       }
       this.doc[entryId] = structuredClone(defaultEntry);
-      const rebuilt = this.buildEntrySection(entryId);
-      const existing = this.bodyEl.querySelector(`.dte-entry[data-entry-id="${CSS.escape(entryId)}"]`);
-      if (existing) existing.replaceWith(rebuilt);
-      else this.renderEntries();
+      this.replaceEntrySection(entryId);
       this.markDirty();
       this.setStatus(`"${entryId}" varsayılana döndürüldü — kaydetmek için Kaydet'e basın.`, "info");
     } catch (error) {
@@ -279,10 +326,12 @@ export class DataTableEditor {
     return this.fieldMeta.get(path) ?? this.fieldMeta.get(templatePath(path));
   }
 
-  private renderLeaf(leaf: Leaf): HTMLElement {
+  private renderLeaf(leaf: Leaf, entryId: string): HTMLElement {
+    const meta = this.metaFor(leaf.path);
+    if (leaf.type === "stringList") return this.renderAssetList(leaf, meta, entryId);
+
     const row = document.createElement("label");
     row.className = "dte-field";
-    const meta = this.metaFor(leaf.path);
     if (meta?.hint) {
       row.title = meta.hint;
       row.classList.add("dte-field-hinted");
@@ -308,6 +357,10 @@ export class DataTableEditor {
         if (option === current) opt.selected = true;
         input.append(opt);
       }
+    } else if (leaf.type === "string" && meta?.assetOptions) {
+      // A lone asset id (not a list): the same picker, with the current value
+      // preserved as an option so an id no asset answers survives a stray edit.
+      input = this.buildAssetSelect(meta.assetOptions, typeof current === "string" ? current : "", []);
     } else {
       input = document.createElement("input");
       input.type = leaf.type === "number" ? "number" : "text";
@@ -327,6 +380,117 @@ export class DataTableEditor {
     }
     row.append(input);
     return row;
+  }
+
+  /**
+   * Manifest assets of one kind, name-sorted, as the picker's options. The kind
+   * is matched against the manifest's own `assetType`, with the file suffix
+   * (`.effect.json`) as the tolerant fallback the runtime loader also applies to
+   * older manifests that typed effects as prefabs.
+   */
+  private assetOptionsFor(kind: string): Array<{ id: string; name: string }> {
+    const wanted = kind.toLowerCase();
+    const suffix = `.${wanted}.json`;
+    return (this.options.assets ?? [])
+      .filter(
+        (asset) =>
+          asset.assetType?.toLowerCase() === wanted || asset.path.toLowerCase().endsWith(suffix),
+      )
+      .map((asset) => ({ id: asset.id, name: asset.name || asset.id }))
+      .sort((a, b) => a.name.localeCompare(b.name, "tr"));
+  }
+
+  /**
+   * A picker over the assets of one kind. `current` stays selectable even when no
+   * asset answers it (flagged, never dropped — an id can outlive an import), and
+   * `excluded` hides ids already spoken for elsewhere in the same list.
+   */
+  private buildAssetSelect(
+    kind: string,
+    current: string,
+    excluded: readonly string[],
+    blankLabel = "— seçilmedi —",
+  ): HTMLSelectElement {
+    const select = document.createElement("select");
+    const assets = this.assetOptionsFor(kind);
+    const taken = new Set(excluded);
+    select.append(buildOption("", blankLabel, current === ""));
+    if (current && !assets.some((asset) => asset.id === current)) {
+      select.append(buildOption(current, `⚠ ${current} (bilinmeyen varlık)`, true));
+    }
+    for (const asset of assets) {
+      if (asset.id !== current && taken.has(asset.id)) continue;
+      select.append(buildOption(asset.id, asset.name, asset.id === current));
+    }
+    return select;
+  }
+
+  /**
+   * A string array of asset ids as one add/remove column of pickers: one row per
+   * authored id (its blank option removes the row) plus a trailing "add" row of
+   * the ids not yet used. Rendering the whole array rather than a field per index
+   * is what lets a slot the file left empty be filled at all.
+   */
+  private renderAssetList(
+    leaf: Leaf,
+    meta: EditorDataTableFieldMeta | undefined,
+    entryId: string,
+  ): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "dte-field dte-field-list";
+    if (meta?.hint) {
+      row.title = meta.hint;
+      row.classList.add("dte-field-hinted");
+    }
+
+    const name = document.createElement("span");
+    name.className = "dte-field-label";
+    name.textContent = leafLabel(leaf, meta);
+    row.append(name);
+
+    const list = document.createElement("div");
+    list.className = "dte-list";
+    const values = (leaf.container as Record<string | number, unknown>)[leaf.key];
+    const items = Array.isArray(values) ? values.filter((item): item is string => typeof item === "string") : [];
+    const kind = meta?.assetOptions ?? "";
+    const label = meta?.label ?? "değer";
+
+    items.forEach((value, index) => {
+      const select = this.buildAssetSelect(kind, value, items, "— kaldır —");
+      select.className = "dte-field-input dte-list-input";
+      select.addEventListener("change", () => this.commitListItem(leaf, index, select.value, entryId));
+      list.append(select);
+    });
+
+    const remaining = this.assetOptionsFor(kind).filter((asset) => !items.includes(asset.id));
+    if (remaining.length > 0) {
+      const add = document.createElement("select");
+      add.className = "dte-field-input dte-list-input dte-list-add";
+      add.append(buildOption("", `+ ${label} ekle…`, true));
+      for (const asset of remaining) add.append(buildOption(asset.id, asset.name, false));
+      add.addEventListener("change", () => {
+        if (add.value) this.commitListItem(leaf, items.length, add.value, entryId);
+      });
+      list.append(add);
+    } else if (items.length === 0) {
+      const empty = document.createElement("span");
+      empty.className = "dte-list-empty";
+      empty.textContent = "(seçilebilecek varlık yok)";
+      list.append(empty);
+    }
+    row.append(list);
+    return row;
+  }
+
+  /** Write one list row back: a blank choice removes it, anything else sets/appends it. */
+  private commitListItem(leaf: Leaf, index: number, value: string, entryId: string): void {
+    const array = (leaf.container as Record<string | number, unknown>)[leaf.key];
+    if (!Array.isArray(array)) return;
+    if (value === "") array.splice(index, 1);
+    else array[index] = value;
+    this.markDirty();
+    // The row count changed, so the whole entry is rebuilt rather than patched.
+    this.replaceEntrySection(entryId);
   }
 
   /** Coerce the input back to the leaf's original JS type and write it into the doc. */
@@ -398,6 +562,14 @@ function displayLabel(entry: unknown): string {
   return typeof label === "string" ? label : "";
 }
 
+function buildOption(value: string, label: string, selected: boolean): HTMLOptionElement {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  option.selected = selected;
+  return option;
+}
+
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -442,6 +614,12 @@ function ensureStyles(): void {
 .dte-field-input:disabled{opacity:.55;cursor:not-allowed;}
 .dte-field-input{flex:0 0 30%;min-width:0;background:#171a20;color:#dfe3ea;border:1px solid #333842;border-radius:4px;padding:4px 6px;font:inherit;}
 .dte-field-input[type=checkbox]{flex:0 0 auto;}
+.dte-field-list{grid-column:1/-1;align-items:flex-start;}
+.dte-field-list .dte-field-label{padding-top:4px;white-space:normal;}
+.dte-list{flex:0 0 65%;display:flex;flex-direction:column;gap:4px;min-width:0;}
+.dte-list-input{flex:1 1 auto;width:100%;}
+.dte-list-add{color:#9fb0c8;border-style:dashed;}
+.dte-list-empty{color:#7f8aa0;font-size:12px;padding:4px 0;}
 .dte-field-input:focus{outline:none;border-color:#4a6bea;}
 .dte-status{padding:8px 12px;border-top:1px solid #333842;background:#252932;font-size:12px;color:#aeb6c4;}
 .dte-status[data-tone=error]{color:#ff8a8a;}

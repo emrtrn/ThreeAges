@@ -23,8 +23,8 @@
     "requiredAge": "settlement",
     "requiredSettlementLevel": 1,
     "cost": {
-      "food": 20,
-      "wood": 10
+      "food": 40,
+      "wood": 0
     },
     "populationCost": 1,
     "structureAttackVfx": "firebrand"
@@ -53,8 +53,8 @@
     "requiredAge": "town",
     "requiredSettlementLevel": 1,
     "cost": {
-      "food": 20,
-      "wood": 20
+      "food": 40,
+      "wood": 10
     },
     "populationCost": 1
   },

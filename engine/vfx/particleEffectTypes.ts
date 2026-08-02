@@ -173,6 +173,17 @@ export interface RuntimeParticleEffect {
   materialMode: ParticleBlendMode;
   /** Particle tint (hex `#rrggbb`). */
   color: string;
+  /**
+   * Sprite opacity ramp over a particle's life, gated by the fade windows below.
+   * All four are optional and their defaults (1 → 0, no fades) reproduce the plain
+   * linear `1 - t` ramp the sprite renderer used before opacity was authorable.
+   */
+  startOpacity?: number;
+  endOpacity?: number;
+  /** Seconds spent ramping up from 0 at birth; 0 = the particle pops in at full. */
+  fadeInTime?: number;
+  /** Seconds spent ramping down to 0 before death; 0 = it pops out. */
+  fadeOutTime?: number;
   /** Optional sprite texture asset id; absent renders the procedural sprite. */
   texture?: string;
   /** Flipbook grid; present only when animating (`cols*rows > 1`), Faz 6b. */
