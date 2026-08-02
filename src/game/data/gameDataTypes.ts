@@ -295,7 +295,8 @@ export interface BuildingProgressionTier {
   readonly maxHealth: number;
   readonly populationCapacity?: number;
   readonly economy?: Pick<EconomyProductionBalance,
-    "workerCapacity" | "perWorkerPerMinute" | "localBufferCapacity" | "carryCapacity">;
+    "workerCapacity" | "perWorkerPerMinute" | "localBufferCapacity" | "carryCapacity"
+    | "livestockCapacity" | "perAnimalPerMinute">;
   readonly territory?: Pick<TerritoryBuildingBalance, "controlRadius" | "connectedControlRadius">;
   readonly tradeCommission?: number;
   readonly defense?: Pick<BuildingDefenseBalance, "attackDamage">;
@@ -309,7 +310,16 @@ export interface BuildingProgressionTier {
 export interface EconomyProductionBalance {
   readonly resourceId: string;
   readonly workerCapacity: number;
-  readonly perWorkerPerMinute: number;
+  /**
+   * Output per worker standing at the job, per minute.
+   *
+   * Optional for exactly one shape of producer: a {@link requiresLivestock}
+   * pasture, whose output is measured in penned animals rather than staff
+   * (pasture plan §3.5). Everywhere else the validator still demands it — a
+   * producer that hires workers and has no rate for them would earn nothing and
+   * say nothing about why.
+   */
+  readonly perWorkerPerMinute?: number;
   readonly localBufferCapacity: number;
   /** Stone/gold buildings must cover a live matching finite deposit. */
   readonly requiresResourceNode?: boolean;
@@ -320,6 +330,25 @@ export interface EconomyProductionBalance {
    * reach, and its workers walk out to it. The finite twin of the endless Farm.
    */
   readonly requiresGame?: boolean;
+  /**
+   * The third production shape (pasture plan §3.5): this building pens tamed
+   * animals and produces from the pen, with no worker at the till at all. Its
+   * `workerCapacity` buys shepherds — who go out and *bring animals in* — rather
+   * than staff whose presence is the output.
+   *
+   * Mutually exclusive with the three gathering flags above: a pasture is not a
+   * camp that walks out to a finite source, it is a herd that lives here.
+   */
+  readonly requiresLivestock?: boolean;
+  /** Maximum animals a pasture may hold; the hard ceiling on livestock income. */
+  readonly livestockCapacity?: number;
+  /**
+   * Output per minute per unit of penned `pastureYield`, independent of workers.
+   * Named for what it measures rather than reusing {@link perWorkerPerMinute},
+   * because a tuner reading "per worker" on a building that needs none would be
+   * reading a lie.
+   */
+  readonly perAnimalPerMinute?: number;
   /** Camp-centre radius in which a worker may reserve and harvest a tree. */
   readonly gatherRadius?: number;
   /** Maximum wood a worker carries from one tree back to the camp. */

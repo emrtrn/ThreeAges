@@ -17,7 +17,7 @@ import type { ResourceReach, ResourceSource } from "./resourceSource";
 import type { WildlifeSystem } from "../wildlife/wildlifeSystem";
 
 export type EconomyWorkerState = "idle" | "moving" | "producing" | "moving-to-source" | "gathering" | "returning" | "unloading";
-export type EconomyProductionStatus = "awaiting-workers" | "workers-moving" | "producing" | "buffer-full" | "missing-resource-node" | "missing-forest" | "missing-game" | "source-depleted";
+export type EconomyProductionStatus = "awaiting-workers" | "workers-moving" | "producing" | "buffer-full" | "missing-resource-node" | "missing-forest" | "missing-game" | "missing-livestock" | "source-depleted";
 
 /**
  * The statuses that mean the producer's *source* is gone rather than that it is
@@ -32,6 +32,10 @@ const SOURCELESS_PRODUCTION_STATUSES: readonly EconomyProductionStatus[] = [
   "missing-resource-node",
   "missing-forest",
   "missing-game",
+  // An empty pen is the same sentence as an eaten herd: the building stands, and
+  // it is not a food supply. A kingdom that counted it would stop building farms
+  // on the strength of a pasture nobody has driven an animal into yet.
+  "missing-livestock",
   "source-depleted",
 ];
 
@@ -181,8 +185,10 @@ export class EconomyProductionSystem {
           assignedWorkers: producer.assignments.size,
           workingWorkers,
           workerCapacity: economy.workerCapacity,
-          perWorkerPerMinute: economy.perWorkerPerMinute,
-          productionPerMinute: producer.status === "producing" ? workingWorkers * economy.perWorkerPerMinute : 0,
+          // A pasture has no per-worker rate to report (plan §3.5); its output is
+          // measured in penned animals, which Faz 5 fills in here.
+          perWorkerPerMinute: economy.perWorkerPerMinute ?? 0,
+          productionPerMinute: producer.status === "producing" ? workingWorkers * (economy.perWorkerPerMinute ?? 0) : 0,
           localBuffer: producer.localBuffer,
           localBufferCapacity: economy.localBufferCapacity,
           lastProductionTick: producer.lastProductionTick,
@@ -353,6 +359,13 @@ export class EconomyProductionSystem {
     producer.lastProductionTick = 0;
     producer.lastTransferTick = 0;
     this.dropInvalidAssignments(producer);
+    // The third production shape, ahead of the gather cycle rather than inside it
+    // (plan §3.5): a pasture is not a camp that works a source, so it never joins
+    // the requirement chain and never runs a round trip.
+    if (economy.requiresLivestock) {
+      this.updateLivestockProducer(producer);
+      return;
+    }
     const requirement = this.requirementFor(economy);
     if (requirement) {
       this.updateGatheringProducer(producer, deltaSeconds, requirement);
@@ -393,8 +406,12 @@ export class EconomyProductionSystem {
       producer.status = producer.assignments.size === 0 ? "awaiting-workers" : "workers-moving";
       return;
     }
+    // The rate is optional only on a pasture, and a pasture never reaches this
+    // branch — it returned above. Everywhere else the validator has already
+    // refused a producer without one, so the fallback is unreachable rather than
+    // a quiet way to earn nothing.
     const requested = Math.min(
-      (workingWorkers * economy.perWorkerPerMinute * deltaSeconds) / 60,
+      (workingWorkers * (economy.perWorkerPerMinute ?? 0) * deltaSeconds) / 60,
       economy.localBufferCapacity - producer.localBuffer,
     );
     // Renewable producers only: a farm's crop is grown on the spot, so the
@@ -404,6 +421,20 @@ export class EconomyProductionSystem {
     producer.localBuffer += producer.lastProductionTick;
     producer.totalProduced += producer.lastProductionTick;
     producer.status = producer.localBuffer >= economy.localBufferCapacity ? "buffer-full" : "producing";
+  }
+
+  /**
+   * The pasture, whose output is its pen rather than its staff.
+   *
+   * Nothing here hires: the shepherds a pasture pays for are pulled by the
+   * pasture system itself, the way a construction site pulls its builders, and
+   * this loop only ever reads the result. Until that system exists (Faz 4) an
+   * authored pasture is a finished building with an empty pen, and the one thing
+   * it owes the player is to say so instead of reading as broken.
+   */
+  private updateLivestockProducer(producer: ProducerRecord): void {
+    producer.status = "missing-livestock";
+    this.setProducerWorking(producer, false);
   }
 
   /**
@@ -432,7 +463,8 @@ export class EconomyProductionSystem {
   ): void {
     const economy = producer.structure.economy;
     const { source, missingStatus } = requirement;
-    if (!economy || !source || economy.gatherRadius === undefined || economy.carryCapacity === undefined) {
+    if (!economy || !source || economy.gatherRadius === undefined || economy.carryCapacity === undefined
+      || economy.perWorkerPerMinute === undefined) {
       producer.status = missingStatus;
       // Same reason as a full buffer: a camp that cannot gather must not leave
       // its crew frozen mid-swing at a source that is no longer there.
@@ -651,6 +683,11 @@ export class EconomyProductionSystem {
   ): boolean {
     const economy = producer.structure.economy;
     if (!economy || producer.assignments.size >= economy.workerCapacity) return false;
+    // A pasture's worker capacity buys shepherds, and shepherds are hired by the
+    // pasture system. Taking them here — automatically or on a player's order —
+    // would fill the crew with workers who then stand at the door producing
+    // nothing, and leave none for the job that actually fills the pen.
+    if (economy.requiresLivestock) return false;
     const requirement = this.requirementFor(economy);
     if (requirement) {
       if (!requirement.source) return false;

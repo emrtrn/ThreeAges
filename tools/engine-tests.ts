@@ -215,7 +215,7 @@ import { structureMaterialGroup } from "../src/game/rts/structures/structureDefo
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { MarketPrices } from "../src/game/rts/economy/marketPricing";
 import { MarketTradeSystem } from "../src/game/rts/economy/marketTradeSystem";
-import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
+import { EconomyProductionSystem, producerHasSource } from "../src/game/rts/economy/economyProductionSystem";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
 import { ForestSystem } from "../src/game/rts/economy/forestSystem";
 import { KingdomProgressionSystem, townUnlocksAvailable } from "../src/game/rts/progression/kingdomProgressionSystem";
@@ -30424,7 +30424,8 @@ check("Faz 4: a gathering camp's reach stays local and still covers the herd it 
   const localLimit = RTS_WORLD_HALF_EXTENT / 2;
   for (const [id, stats] of Object.entries(buildings)) {
     const source = stats.economy;
-    if (!source?.requiresGame && !source?.requiresForest && !source?.requiresResourceNode) continue;
+    if (!source?.requiresGame && !source?.requiresForest && !source?.requiresResourceNode
+      && !source?.requiresLivestock) continue;
     assert.ok(
       (source.gatherRadius ?? 0) < localLimit,
       `${id} reaches ${source.gatherRadius}, which is map-scale rather than local`,
@@ -30588,6 +30589,267 @@ check("Faz 4: a hunting camp is refused away from live game and legal beside a h
     "missing-game",
     "away from every herd the ghost is refused, and says why",
   );
+  territory.dispose();
+});
+
+// --- Pasture and taming V2 Faz 3: the building and its placement rule ---
+
+check("V2 Faz 3: the pasture is authored as the third production shape, and its reach covers what it can tame", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const pasture = buildings.pasture ?? assert.fail("pasture balance missing");
+  const economy = pasture.economy ?? assert.fail("a pasture needs an economy block");
+  assert.equal(economy.requiresLivestock, true, "the pasture produces from its pen, not from a source it works");
+  assert.equal(economy.resourceId, "food", "penned livestock banks food, like the farm it competes with");
+  // §3.5's whole point: output is measured in animals, so the per-worker rate is
+  // the one field this shape may omit — and the pen size is what bounds it.
+  assert.equal(economy.perWorkerPerMinute, undefined, "a pasture declares no per-worker rate");
+  assert.ok((economy.perAnimalPerMinute ?? 0) > 0, "the pasture rate is per animal");
+  assert.ok(
+    Number.isInteger(economy.livestockCapacity) && (economy.livestockCapacity ?? 0) > 0,
+    "the pen has a whole-animal ceiling, which is what keeps livestock income finite",
+  );
+  // A pasture is not a camp that walks out to a finite source. Sharing those
+  // flags would put it in the gather cycle, which §3.4 measured as the way a
+  // tamed cow gets banked as meat.
+  assert.ok(
+    !economy.requiresGame && !economy.requiresForest && !economy.requiresResourceNode,
+    "a pasture is not also a gathering camp",
+  );
+
+  // Every tier of the six carries the two livestock numbers, and neither ever
+  // regresses — the tier is what the match actually reads.
+  const tiers = [...pasture.progression?.settlement ?? [], ...pasture.progression?.town ?? []];
+  assert.equal(tiers.length, 6, "the pasture declares all six playable tiers");
+  let previousPen = 0;
+  let previousRate = 0;
+  for (const tier of tiers) {
+    const pen = tier.economy?.livestockCapacity ?? 0;
+    const rate = tier.economy?.perAnimalPerMinute ?? 0;
+    assert.ok(Number.isInteger(pen) && pen > 0, `pasture tier ${tier.level} declares a whole-animal pen`);
+    assert.ok(rate > 0, `pasture tier ${tier.level} declares a per-animal rate`);
+    assert.ok(pen >= previousPen && rate >= previousRate, `pasture tier ${tier.level} does not regress`);
+    previousPen = pen;
+    previousRate = rate;
+  }
+
+  // Range contract, the hunting camp's rule applied to the species that can
+  // actually fill this building: a grazing cow must not wander permanently out of
+  // the pasture built for its herd. Computed from both tables, never pinned.
+  const reach = economy.gatherRadius ?? assert.fail("a pasture needs a reach");
+  const tameable = Object.entries(shippedAnimalBalance()).filter(([, stats]) => stats.tameable);
+  assert.ok(tameable.length > 0, "there is at least one tameable species, or this contract is vacuous");
+  for (const [id, stats] of tameable) {
+    assert.ok(
+      stats.roamRadius < reach,
+      `${id} roams ${stats.roamRadius}, past the pasture's reach of ${reach}`,
+    );
+  }
+});
+
+check("V2 Faz 3: the pasture's data shape is enforced, and the per-worker rate stays mandatory elsewhere", () => {
+  const raw = JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as Record<string, any>;
+  const mutated = (edit: (data: Record<string, any>) => void): Record<string, any> => {
+    const copy = JSON.parse(JSON.stringify(raw)) as Record<string, any>;
+    edit(copy);
+    return copy;
+  };
+  const refuses = (edit: (data: Record<string, any>) => void, pattern: RegExp, why: string): void => {
+    assert.throws(
+      () => validateBuildingBalance(mutated(edit)),
+      (error: unknown) => error instanceof GameDataError && pattern.test(error.message),
+      why,
+    );
+  };
+
+  // §9's risk, held shut: the exemption is scoped to the livestock flag, so
+  // dropping the rate from an ordinary producer is still a load failure.
+  refuses(
+    (data) => { delete data.farm.economy.perWorkerPerMinute; },
+    /perWorkerPerMinute/,
+    "a farm without a per-worker rate is refused, naming the field",
+  );
+  refuses(
+    (data) => { delete data.farm.progression.settlement[0].economy.perWorkerPerMinute; },
+    /perWorkerPerMinute/,
+    "and so is a farm tier without one",
+  );
+
+  // The animals-table rule in the other direction: a livestock field on a
+  // building that has no pen is refused rather than silently dropped.
+  for (const field of ["livestockCapacity", "perAnimalPerMinute"] as const) {
+    refuses(
+      (data) => { data.farm.economy[field] = 4; },
+      new RegExp(`${field}: only a requiresLivestock building may carry it`),
+      `${field} on a farm is refused rather than ignored`,
+    );
+    refuses(
+      (data) => { data.farm.progression.town[0].economy[field] = 4; },
+      new RegExp(`${field}: only a requiresLivestock building may carry it`),
+      `${field} on a farm tier is refused rather than ignored`,
+    );
+  }
+
+  refuses(
+    (data) => { data.pasture.economy.livestockCapacity = 0; },
+    /livestockCapacity: must be a positive integer/,
+    "a pen that holds nothing is refused, naming the field",
+  );
+  refuses(
+    (data) => { data.pasture.economy.livestockCapacity = 4.5; },
+    /livestockCapacity: must be a positive integer/,
+    "half an animal is refused too",
+  );
+  refuses(
+    (data) => { data.pasture.economy.perAnimalPerMinute = 0; },
+    /perAnimalPerMinute must be > 0/,
+    "a pasture that produces nothing per animal is refused",
+  );
+  refuses(
+    (data) => { delete data.pasture.economy.gatherRadius; },
+    /gatherRadius/,
+    "a pasture with no reach is refused: a shepherd would have nowhere to look",
+  );
+  // A pasture that also claimed a finite source would run both production shapes
+  // at once, which §3.4 measured as the path that banks a tamed cow as meat.
+  refuses(
+    (data) => { data.pasture.economy.requiresGame = true; data.pasture.economy.carryCapacity = 10; },
+    /may not also gather a finite source/,
+    "a pasture may not double as a gathering camp",
+  );
+
+  const shippedPen = validateBuildingBalance(raw).pasture?.progression?.settlement[0]?.economy?.livestockCapacity
+    ?? assert.fail("pasture Settlement Lv1 pen missing");
+  refuses(
+    (data) => { data.pasture.progression.settlement[1].economy.livestockCapacity = shippedPen - 1; },
+    /livestockCapacity/,
+    "a tier that shrinks the pen is refused",
+  );
+  refuses(
+    (data) => { delete data.pasture.progression.town[0].economy.perAnimalPerMinute; },
+    /perAnimalPerMinute/,
+    "a pasture tier without its rate is refused",
+  );
+});
+
+check("V2 Faz 3: a pasture is refused away from tameable animals, and deer are not tameable animals", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const reach = buildings.pasture?.economy?.gatherRadius ?? assert.fail("a pasture needs a reach");
+  // Two herds, far enough apart that neither can graze into the other's circle:
+  // cattle at the origin, deer off to one side. The deer herd is the sharp half
+  // of this test — live game in reach must not justify a pasture that could never
+  // fill, which `liveAnimalsNear` alone would have allowed.
+  const deerAt = Math.ceil(reach * 3);
+  const wildlife = new WildlifeSystem(shippedAnimalBalance(), [
+    { id: "cattle", species: "cow", x: 0, z: 0, count: 4 },
+    { id: "deer", species: "deer", x: deerAt, z: 0, count: 4 },
+  ]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const navigation = new RtsNavigation();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 500 }, 20);
+  const territory = new TerritoryControlSystem(() => [{ owner: "player", x: 0, z: 0, radius: 1000 }]);
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => structures.navigationBlockers(),
+    territory,
+    () => {},
+    () => {},
+    (stats, x, z) => stats.economy?.requiresLivestock
+      && wildlife.tameableAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
+      ? "missing-livestock"
+      : null,
+  );
+
+  assert.equal(
+    construction.validate("player", "pasture", 0, 0)?.valid,
+    true,
+    "a pasture is legal at the cattle it will tame",
+  );
+  // Perpendicular to the two herds rather than further along their line, so the
+  // empty point stays comfortably on the map while clearing both circles.
+  const away = deerAt;
+  assert.ok(away < RTS_WORLD_HALF_EXTENT, "the far test point stays on the map");
+  assert.equal(
+    construction.validate("player", "pasture", 0, away)?.reason,
+    "missing-livestock",
+    "away from every herd the ghost is refused, and says why",
+  );
+  assert.equal(
+    construction.validate("player", "pasture", deerAt, 0)?.reason,
+    "missing-livestock",
+    "a ring of deer is game, not livestock: the pasture is still refused",
+  );
+  territory.dispose();
+});
+
+check("V2 Faz 3: a completed pasture stands with an empty pen, hires no one, and is not counted as a food supply", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const pasture = buildings.pasture ?? assert.fail("pasture balance missing");
+  const wildlife = new WildlifeSystem(shippedAnimalBalance(), [
+    { id: "cattle", species: "cow", x: 0, z: 0, count: 4 },
+  ]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const navigation = new RtsNavigation();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 500 }, 20);
+  const territory = new TerritoryControlSystem(() => [{ owner: "player", x: 0, z: 0, radius: 1000 }]);
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => structures.navigationBlockers(),
+    territory,
+    () => {},
+    () => {},
+    (stats, x, z) => stats.economy?.requiresLivestock
+      && wildlife.tameableAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
+      ? "missing-livestock"
+      : null,
+  );
+  const built = construction.build("player", "pasture", 0, 0);
+  if (!built.built) return assert.fail(`pasture construction failed: ${built.reason}`);
+  structures.advanceConstruction(built.structure, pasture.constructionSeconds);
+
+  // Idle workers standing right at the door: an ordinary producer would have
+  // hired them on the first tick.
+  const shepherds = [units.spawn("player", 6, 0, RTS_TEST_WORKER_STATS), units.spawn("player", -6, 0, RTS_TEST_WORKER_STATS)];
+  const production = new EconomyProductionSystem(
+    units, structures, navigation, () => false, undefined, undefined, wildlife,
+  );
+  for (let tick = 0; tick < 40; tick += 1) {
+    updateUnitMovement(units.all(), 0.25);
+    production.update(0.25);
+  }
+
+  const snapshot = production.snapshots("player")[0] ?? assert.fail("the completed pasture is not a producer");
+  assert.equal(snapshot.status, "missing-livestock", "an empty pen says so rather than reading as broken");
+  assert.equal(snapshot.assignedWorkers, 0, "the pasture's crew is hired by the pasture system, not by the economy loop");
+  for (const shepherd of shepherds) {
+    assert.equal(production.isAssigned(shepherd), false, "an idle worker beside a pasture stays idle");
+  }
+  // Manual assignment is the same rule: a player order must not fill the crew
+  // with workers who would then stand at the door producing nothing.
+  assert.equal(
+    production.assignWorkers(built.structure, shepherds).assignedWorkers,
+    0,
+    "even an explicit order cannot staff a pasture through the economy loop",
+  );
+  assert.equal(snapshot.localBuffer, 0, "and nothing is produced from an empty pen");
+  // The AI reads this: a pasture nobody has driven an animal into is a building,
+  // not a food supply, exactly like a hunted-out camp.
+  assert.equal(producerHasSource(snapshot.status), false, "an empty pen does not count as a live food source");
   territory.dispose();
 });
 

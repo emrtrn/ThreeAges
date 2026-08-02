@@ -1135,7 +1135,15 @@ export class RtsApp {
           : stats.economy?.requiresGame
             && this.wildlife.liveAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
             ? "missing-game"
-            : null,
+            // A pasture is placed at the herd it will tame, the same rule one
+            // building over — but a stricter reading of "a herd": only living,
+            // still-wild animals of a species the table calls tameable. Deer in
+            // reach must not make a pasture legal that could never fill, and
+            // neither must animals already penned by someone.
+            : stats.economy?.requiresLivestock
+              && this.wildlife.tameableAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
+              ? "missing-livestock"
+              : null,
       // Roads, standing trees and live deposits all reserve build space without
       // blocking navigation: a camp is placed beside a grove and a mine beside a
       // deposit, never on top, so the buried source stays harvestable — and its

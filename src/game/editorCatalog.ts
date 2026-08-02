@@ -367,6 +367,25 @@ const BUILDINGS_FIELDS = [
     label: "Ekonomi: Av hayvanı gerektirir",
     hint: "Açıksa bina yakındaki yaban hayvanına avcı gönderir (Avcı Kulübesi modeli). Tarladan farkı: sürü sonludur, tükenince kulübe boş kalır. 'Kaynak arama yarıçapı' sürünün dolaşma yarıçapından büyük olmalıdır, yoksa otlayan hayvan menzil dışına çıkar.",
   },
+  {
+    path: "economy.requiresLivestock",
+    label: "Ekonomi: Evcil hayvan gerektirir",
+    hint: "Açıksa bina üçüncü üretim şeklini kullanır (Ağıl modeli): üretim işçiyle değil ağıldaki hayvan sayısıyla ölçülür. Çobanlar hayvanı güdüp içeri sokar, sonra ağıl işçisiz üretir. Bu açıkken 'İşçi başı toplama/dk' isteğe bağlıdır; yerine 'Hayvan başı üretim/dk' geçer. Diğer kaynak bayraklarıyla (orman/yatak/av) birlikte kullanılamaz.",
+  },
+  {
+    path: "economy.livestockCapacity",
+    label: "Ekonomi: Ağıl kapasitesi (temel)",
+    min: 0,
+    step: 1,
+    hint: "Ağılın alabileceği maks. hayvan sayısı; çoğalma da bu sayıda durur. Üretimin sert tavanı budur. Progression tier'ı olan binalarda oyundaki değer aşağıdaki tier alanından gelir.",
+  },
+  {
+    path: "economy.perAnimalPerMinute",
+    label: "Ekonomi: Hayvan başı üretim/dk (temel)",
+    min: 0,
+    step: 0.5,
+    hint: "Ağıldaki bir hayvanın dakikada ürettiği yiyecek. Gerçek üretim = bu değer × ağıldaki hayvanların 'pastureYield' toplamı (tür çarpanı animals.json'da). DİKKAT: progression tier'ı olan binalarda oyunda aşağıdaki tier değeri kullanılır.",
+  },
   { path: "market.lotSize", label: "Pazar: İşlem miktarı (lot)", min: 1, step: 1, hint: "Tek alım/satım işleminde el değiştiren kaynak miktarı." },
   { path: "market.basePrice.food", label: "Pazar: Taban fiyat: Yiyecek", min: 0, step: 1, hint: "Fiyat endeksi 1.0 iken bir lot yiyeceğin altın fiyatı." },
   { path: "market.basePrice.wood", label: "Pazar: Taban fiyat: Odun", min: 0, step: 1, hint: "Fiyat endeksi 1.0 iken bir lot odunun altın fiyatı." },
@@ -494,6 +513,20 @@ const BUILDINGS_FIELDS = [
     hint: "Bu seviyede işçinin kampa dönmeden taşıdığı maks. yük (Oduncu Kampı).",
   },
   {
+    path: "progression.settlement.[].economy.livestockCapacity",
+    label: "Yerleşim tier: Ağıl kapasitesi",
+    min: 0,
+    step: 1,
+    hint: "Yerleşim çağında bu seviyede ağılın alabileceği maks. hayvan sayısı. OYUNDA KULLANILAN değer budur; üretimin tavanını bu belirler.",
+  },
+  {
+    path: "progression.settlement.[].economy.perAnimalPerMinute",
+    label: "Yerleşim tier: Hayvan başı üretim/dk",
+    min: 0,
+    step: 0.5,
+    hint: "Yerleşim çağında bu seviyede ağıldaki hayvan başına dakikalık yiyecek. OYUNDA KULLANILAN değer budur (Ağıl).",
+  },
+  {
     path: "progression.town.[].economy.workerCapacity",
     label: "Kasaba tier: Maks. işçi",
     min: 0,
@@ -520,6 +553,20 @@ const BUILDINGS_FIELDS = [
     min: 0,
     step: 1,
     hint: "Bu seviyede işçinin kampa dönmeden taşıdığı maks. yük (Oduncu Kampı).",
+  },
+  {
+    path: "progression.town.[].economy.livestockCapacity",
+    label: "Kasaba tier: Ağıl kapasitesi",
+    min: 0,
+    step: 1,
+    hint: "Kasaba çağında bu seviyede ağılın alabileceği maks. hayvan sayısı. OYUNDA KULLANILAN değer budur.",
+  },
+  {
+    path: "progression.town.[].economy.perAnimalPerMinute",
+    label: "Kasaba tier: Hayvan başı üretim/dk",
+    min: 0,
+    step: 0.5,
+    hint: "Kasaba çağında bu seviyede ağıldaki hayvan başına dakikalık yiyecek. OYUNDA KULLANILAN değer budur (Ağıl).",
   },
 ];
 

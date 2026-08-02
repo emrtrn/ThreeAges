@@ -137,6 +137,13 @@
         "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp.actor.json"
       }
     },
+    "pasture": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture.actor.json"
+      }
+    },
     "quarry": {
       "levels": {
         "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Quarry.actor.json",
@@ -274,7 +281,7 @@
         },
         "heavySmoke": {
           "effects": [
-            "rts-fx-explosion"
+            "starter-fx-smoke-puff"
           ],
           "anchor": {
             "mode": "roof",
@@ -284,7 +291,7 @@
               0
             ]
           },
-          "intervalSeconds": 0.65
+          "intervalSeconds": 1
         },
         "ruinSmoke": {
           "effects": [],

@@ -449,6 +449,95 @@
       ]
     }
   },
+  "pasture": {
+    "label": "Ağıl",
+    "icon": "/assets/ui/icons/building-pasture.svg",
+    "footprint": {
+      "width": 6,
+      "depth": 6
+    },
+    "cost": {
+      "wood": 70
+    },
+    "constructionSeconds": 30,
+    "maxHealth": 100,
+    "visionRadius": 10,
+    "economy": {
+      "resourceId": "food",
+      "workerCapacity": 2,
+      "localBufferCapacity": 40,
+      "requiresLivestock": true,
+      "gatherRadius": 16,
+      "livestockCapacity": 4,
+      "perAnimalPerMinute": 9
+    },
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 100,
+          "economy": {
+            "workerCapacity": 2,
+            "localBufferCapacity": 40,
+            "livestockCapacity": 4,
+            "perAnimalPerMinute": 9
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 110,
+          "economy": {
+            "workerCapacity": 2,
+            "localBufferCapacity": 50,
+            "livestockCapacity": 5,
+            "perAnimalPerMinute": 10
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 120,
+          "economy": {
+            "workerCapacity": 3,
+            "localBufferCapacity": 70,
+            "livestockCapacity": 6,
+            "perAnimalPerMinute": 11
+          }
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 130,
+          "economy": {
+            "workerCapacity": 3,
+            "localBufferCapacity": 90,
+            "livestockCapacity": 8,
+            "perAnimalPerMinute": 13
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 140,
+          "economy": {
+            "workerCapacity": 3,
+            "localBufferCapacity": 110,
+            "livestockCapacity": 10,
+            "perAnimalPerMinute": 14
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 150,
+          "economy": {
+            "workerCapacity": 4,
+            "localBufferCapacity": 130,
+            "livestockCapacity": 12,
+            "perAnimalPerMinute": 15
+          }
+        }
+      ]
+    }
+  },
   "lumber_camp": {
     "label": "Oduncu Kampı",
     "icon": "/assets/ui/icons/building-lumber-camp.png",

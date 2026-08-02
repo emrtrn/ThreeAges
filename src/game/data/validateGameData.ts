@@ -537,15 +537,25 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
         throw new GameDataError(`${economyWhere}.resourceId: invalid resource id "${resourceId}"`);
       }
       const workerCapacity = requireFiniteNumber(economyData, "workerCapacity", economyWhere);
-      const perWorkerPerMinute = requireFiniteNumber(economyData, "perWorkerPerMinute", economyWhere);
       const localBufferCapacity = requireFiniteNumber(economyData, "localBufferCapacity", economyWhere);
       const requiresResourceNode = economyData["requiresResourceNode"];
       const requiresForest = economyData["requiresForest"];
       const requiresGame = economyData["requiresGame"];
+      const requiresLivestock = economyData["requiresLivestock"];
+      if (requiresLivestock !== undefined && typeof requiresLivestock !== "boolean") {
+        throw new GameDataError(`${economyWhere}.requiresLivestock: must be a boolean`);
+      }
+      // A pasture produces from its pen, so its rate is per animal, and
+      // `perWorkerPerMinute` is the one field it may leave out (plan §3.5). The
+      // exemption is scoped to exactly that flag: everywhere else the field stays
+      // mandatory, which is the §9 risk this line exists to hold shut.
+      const perWorkerPerMinute = requiresLivestock === true && economyData["perWorkerPerMinute"] === undefined
+        ? undefined
+        : requireFiniteNumber(economyData, "perWorkerPerMinute", economyWhere);
       if (!Number.isInteger(workerCapacity) || workerCapacity <= 0) {
         throw new GameDataError(`${economyWhere}.workerCapacity: must be a positive integer`);
       }
-      if (perWorkerPerMinute <= 0 || localBufferCapacity <= 0) {
+      if ((perWorkerPerMinute !== undefined && perWorkerPerMinute <= 0) || localBufferCapacity <= 0) {
         throw new GameDataError(`${economyWhere}: production rate and local buffer capacity must be > 0`);
       }
       if (requiresResourceNode !== undefined && typeof requiresResourceNode !== "boolean") {
@@ -588,14 +598,46 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       if (gameSettings && (gameSettings.gatherRadius <= 0 || gameSettings.carryCapacity <= 0)) {
         throw new GameDataError(`${economyWhere}: game gatherRadius and carryCapacity must be > 0`);
       }
+      // The pasture's own shape. `gatherRadius` means the same thing it does for a
+      // hunting camp — how far a shepherd may go for an animal — and it has to
+      // clear the species' `roamRadius` for the same reason, pinned as an engine
+      // test where both tables are in hand. Capacity and rate are the two numbers
+      // that make penned income finite: without a ceiling a pasture would breed
+      // forever, which §9 names as the plan's sharpest risk.
+      const livestockSettings = requiresLivestock === true ? {
+        gatherRadius: requireFiniteNumber(economyData, "gatherRadius", economyWhere),
+        livestockCapacity: requireFiniteNumber(economyData, "livestockCapacity", economyWhere),
+        perAnimalPerMinute: requireFiniteNumber(economyData, "perAnimalPerMinute", economyWhere),
+      } : null;
+      if (livestockSettings) {
+        if (requiresForest === true || requiresResourceNode === true || requiresGame === true) {
+          throw new GameDataError(`${economyWhere}.requiresLivestock: a pasture may not also gather a finite source`);
+        }
+        if (livestockSettings.gatherRadius <= 0 || livestockSettings.perAnimalPerMinute <= 0) {
+          throw new GameDataError(`${economyWhere}: livestock gatherRadius and perAnimalPerMinute must be > 0`);
+        }
+        if (!Number.isInteger(livestockSettings.livestockCapacity) || livestockSettings.livestockCapacity <= 0) {
+          throw new GameDataError(`${economyWhere}.livestockCapacity: must be a positive integer`);
+        }
+      } else {
+        // Refused rather than ignored, the animals-table rule in the other
+        // direction: a pen size on a farm is either a mistake or a design nobody
+        // implemented, and silently dropping it hides both.
+        for (const field of ["livestockCapacity", "perAnimalPerMinute"] as const) {
+          if (economyData[field] !== undefined) {
+            throw new GameDataError(`${economyWhere}.${field}: only a requiresLivestock building may carry it`);
+          }
+        }
+      }
       economy = {
         resourceId,
         workerCapacity,
-        perWorkerPerMinute,
+        ...(perWorkerPerMinute !== undefined ? { perWorkerPerMinute } : {}),
         localBufferCapacity,
         ...(nodeSettings ? { requiresResourceNode: true, ...nodeSettings } : {}),
         ...(forestSettings ? { requiresForest: true, ...forestSettings } : {}),
         ...(gameSettings ? { requiresGame: true, ...gameSettings } : {}),
+        ...(livestockSettings ? { requiresLivestock: true, ...livestockSettings } : {}),
       };
     }
     const territoryRaw = stats["territory"];
@@ -737,8 +779,10 @@ function validateBuildingProgression(
     let previousPopulation = 0;
     let previousWorkerCapacity = 0;
     let previousRate = 0;
+    let previousWorkerRate = 0;
     let previousBuffer = 0;
     let previousCarry = 0;
+    let previousLivestockCapacity = 0;
     let previousControlRadius = 0;
     let previousConnectedRadius = 0;
     let previousCommission = 1;
@@ -785,30 +829,76 @@ function validateBuildingProgression(
       let economy: BuildingProgressionTier["economy"];
       if (economyRaw !== undefined) {
         if (!base.economy) throw new GameDataError(`${entryWhere}.economy: requires a base economy definition`);
-        const economyData = asObject(economyRaw, `${entryWhere}.economy`);
-        const workerCapacity = requireFiniteNumber(economyData, "workerCapacity", `${entryWhere}.economy`);
-        const perWorkerPerMinute = requireFiniteNumber(economyData, "perWorkerPerMinute", `${entryWhere}.economy`);
-        const localBufferCapacity = requireFiniteNumber(economyData, "localBufferCapacity", `${entryWhere}.economy`);
+        const economyWhere = `${entryWhere}.economy`;
+        const economyData = asObject(economyRaw, economyWhere);
+        // Which field carries this building's rate is the base block's decision,
+        // not the tier's: a pasture ladders `perAnimalPerMinute`, everything else
+        // ladders `perWorkerPerMinute`. Reading it from the base is what keeps the
+        // two shapes from having to be spelled out twice down here.
+        const livestock = base.economy.requiresLivestock === true;
+        const rateField = livestock ? "perAnimalPerMinute" : "perWorkerPerMinute";
+        const workerCapacity = requireFiniteNumber(economyData, "workerCapacity", economyWhere);
+        const rate = requireFiniteNumber(economyData, rateField, economyWhere);
+        const localBufferCapacity = requireFiniteNumber(economyData, "localBufferCapacity", economyWhere);
+        // A pasture's pen size is a core tier value: it is the ceiling on penned
+        // income, so a tier that raised nothing else but the pen still earns its
+        // level.
+        const livestockCapacity = livestock
+          ? requireFiniteNumber(economyData, "livestockCapacity", economyWhere)
+          : undefined;
+        if (livestockCapacity !== undefined
+          && (!Number.isInteger(livestockCapacity) || livestockCapacity < previousLivestockCapacity)) {
+          throw new GameDataError(`${economyWhere}.livestockCapacity: must be an integer that never shrinks by tier`);
+        }
         if (!Number.isInteger(workerCapacity) || workerCapacity < previousWorkerCapacity
-          || perWorkerPerMinute < previousRate || localBufferCapacity < previousBuffer
+          || rate < previousRate || localBufferCapacity < previousBuffer
           || (workerCapacity === previousWorkerCapacity
-            && perWorkerPerMinute === previousRate
-            && localBufferCapacity === previousBuffer)) {
-          throw new GameDataError(`${entryWhere}.economy: no value may shrink and at least one core value must increase by tier`);
+            && rate === previousRate
+            && localBufferCapacity === previousBuffer
+            && (livestockCapacity ?? previousLivestockCapacity) === previousLivestockCapacity)) {
+          throw new GameDataError(`${economyWhere}: no value may shrink and at least one core value must increase by tier`);
+        }
+        if (!livestock) {
+          for (const field of ["livestockCapacity", "perAnimalPerMinute"] as const) {
+            if (economyData[field] !== undefined) {
+              throw new GameDataError(`${economyWhere}.${field}: only a requiresLivestock building may carry it`);
+            }
+          }
+        }
+        // A pasture tier may still declare `perWorkerPerMinute` — the field is
+        // optional there, not forbidden — but it goes through the same no-shrink
+        // rule as every other rate, so "optional" never means "unchecked".
+        const workerRateRaw = livestock ? economyData["perWorkerPerMinute"] : undefined;
+        let workerRate: number | undefined;
+        if (workerRateRaw !== undefined) {
+          if (typeof workerRateRaw !== "number" || !Number.isFinite(workerRateRaw)
+            || workerRateRaw <= 0 || workerRateRaw < previousWorkerRate) {
+            throw new GameDataError(`${economyWhere}.perWorkerPerMinute: must be > 0 and may not shrink by tier`);
+          }
+          workerRate = workerRateRaw;
+          previousWorkerRate = workerRateRaw;
         }
         const carryRaw = economyData["carryCapacity"];
         let carryCapacity: number | undefined;
         if (carryRaw !== undefined) {
           if (typeof carryRaw !== "number" || !Number.isFinite(carryRaw) || carryRaw < previousCarry) {
-            throw new GameDataError(`${entryWhere}.economy.carryCapacity: may not shrink by tier`);
+            throw new GameDataError(`${economyWhere}.carryCapacity: may not shrink by tier`);
           }
           carryCapacity = carryRaw;
           previousCarry = carryRaw;
         }
         previousWorkerCapacity = workerCapacity;
-        previousRate = perWorkerPerMinute;
+        previousRate = rate;
         previousBuffer = localBufferCapacity;
-        economy = { workerCapacity, perWorkerPerMinute, localBufferCapacity, ...(carryCapacity !== undefined ? { carryCapacity } : {}) };
+        if (livestockCapacity !== undefined) previousLivestockCapacity = livestockCapacity;
+        economy = {
+          workerCapacity,
+          ...(livestock ? { perAnimalPerMinute: rate } : { perWorkerPerMinute: rate }),
+          ...(workerRate !== undefined ? { perWorkerPerMinute: workerRate } : {}),
+          localBufferCapacity,
+          ...(livestockCapacity !== undefined ? { livestockCapacity } : {}),
+          ...(carryCapacity !== undefined ? { carryCapacity } : {}),
+        };
       }
 
       const territoryRaw = entry["territory"];
@@ -886,6 +976,8 @@ function validateBuildingProgression(
   assertTownTierDoesNotRegress(where, "economy.perWorkerPerMinute", townFirst.economy?.perWorkerPerMinute, settlementLast.economy?.perWorkerPerMinute);
   assertTownTierDoesNotRegress(where, "economy.localBufferCapacity", townFirst.economy?.localBufferCapacity, settlementLast.economy?.localBufferCapacity);
   assertTownTierDoesNotRegress(where, "economy.carryCapacity", townFirst.economy?.carryCapacity, settlementLast.economy?.carryCapacity);
+  assertTownTierDoesNotRegress(where, "economy.perAnimalPerMinute", townFirst.economy?.perAnimalPerMinute, settlementLast.economy?.perAnimalPerMinute);
+  assertTownTierDoesNotRegress(where, "economy.livestockCapacity", townFirst.economy?.livestockCapacity, settlementLast.economy?.livestockCapacity);
   assertTownTierDoesNotRegress(where, "territory.controlRadius", townFirst.territory?.controlRadius, settlementLast.territory?.controlRadius);
   assertTownTierDoesNotRegress(where, "territory.connectedControlRadius", townFirst.territory?.connectedControlRadius, settlementLast.territory?.connectedControlRadius);
   assertTownTierDoesNotRegress(where, "defense.attackDamage", townFirst.defense?.attackDamage, settlementLast.defense?.attackDamage);

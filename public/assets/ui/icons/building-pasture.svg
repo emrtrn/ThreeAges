@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Ağıl">
+  <title>Ağıl</title>
+  <!-- The fence is the whole claim, so it comes first and takes the width: at
+       palette scale a shed alone reads as any other camp, and "penned" is what
+       tells this one apart from the hut next to it in the Ekonomi list. -->
+  <rect x="5" y="27" width="54" height="3" rx="1.5" fill="#8a5a2b" />
+  <rect x="5" y="36" width="54" height="3" rx="1.5" fill="#8a5a2b" />
+  <g fill="#a06a34">
+    <rect x="7" y="22" width="4" height="24" rx="1" />
+    <rect x="30" y="22" width="4" height="24" rx="1" />
+    <rect x="53" y="22" width="4" height="24" rx="1" />
+  </g>
+  <!-- One animal standing inside the rails: a blocky bovine silhouette, drawn
+       light against the timber so it survives being shrunk to a button. -->
+  <g fill="#e8ddc8">
+    <rect x="16" y="42" width="26" height="11" rx="3" />
+    <rect x="19" y="52" width="4" height="7" rx="1.5" />
+    <rect x="35" y="52" width="4" height="7" rx="1.5" />
+    <rect x="40" y="35" width="10" height="9" rx="3" />
+  </g>
+  <!-- Horns, the one detail that says cattle rather than dog. -->
+  <g fill="none" stroke="#e8ddc8" stroke-width="3" stroke-linecap="round">
+    <path d="M41 35 L38 30" />
+    <path d="M49 35 L52 30" />
+  </g>
+  <rect x="5" y="59" width="54" height="3" rx="1.5" fill="#3a2512" />
+</svg>

@@ -242,6 +242,24 @@ export class WildlifeSystem implements ResourceSource {
       .sort((left, right) => this.distanceSquared(left, x, z) - this.distanceSquared(right, x, z));
   }
 
+  /**
+   * Live, wild, tameable animals within `radius`, nearest first.
+   *
+   * Deliberately narrower than {@link liveAnimalsNear} on both counts the pasture
+   * plan §2 cares about. A species the table says cannot be tamed justifies no
+   * pasture — a ring of deer would otherwise let a player build one that could
+   * never fill. And an animal that is already someone's counts for nobody: from
+   * Faz 4 `owner` leaves `"wild"` when a shepherd pens it, so a full pen must stop
+   * being the reason a second pasture is legal beside it.
+   *
+   * This is the placement question today; from Faz 4 it is also which animal a
+   * shepherd walks out to.
+   */
+  tameableAnimalsNear(x: number, z: number, radius: number): readonly WildlifeAnimal[] {
+    return this.liveAnimalsNear(x, z, radius)
+      .filter((animal) => animal.stats.tameable && animal.owner === "wild");
+  }
+
   snapshots(): readonly WildlifeAnimalSnapshot[] {
     return this.animals
       .map((animal) => animal.snapshot())

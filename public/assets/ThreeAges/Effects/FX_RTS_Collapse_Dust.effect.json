@@ -12,9 +12,9 @@
   "system": {
     "enabled": true,
     "loop": false,
-    "duration": 3,
+    "duration": 1,
     "seed": null,
-    "maxParticles": 72,
+    "maxParticles": 10,
     "bounds": {
       "mode": "fixed",
       "min": [
@@ -32,46 +32,46 @@
   },
   "spawn": {
     "mode": "burst",
-    "rate": 0,
-    "count": 100,
+    "rate": 24,
+    "count": 50,
     "delay": 0,
     "interval": 0,
     "shape": "sphere",
     "radius": 1,
     "boxSize": [
-      0,
-      0,
-      0
+      1,
+      1,
+      1
     ]
   },
   "initialize": {
     "lifetime": [
-      3,
-      4
+      2,
+      3
     ],
     "startSize": [
       12,
-      16
+      18
     ],
     "startColor": "#aea18f",
-    "startOpacity": 0.7,
+    "startOpacity": 0.8,
     "direction": [
       0,
-      0.1,
+      0.2,
       0
     ],
     "speed": [
       2,
       3
     ],
-    "spreadAngleDeg": 120,
+    "spreadAngleDeg": 150,
     "rotation": [
       0,
-      360
+      0
     ],
     "angularVelocity": [
-      -90,
-      90
+      0,
+      0
     ]
   },
   "update": {
@@ -83,13 +83,13 @@
       0
     ],
     "endSize": [
-      8,
-      12
+      30,
+      40
     ],
     "endColor": "#786a58",
     "endOpacity": 0.1,
-    "fadeInTime": 0.03,
-    "fadeOutTime": 0.28
+    "fadeInTime": 0.2,
+    "fadeOutTime": 0.8
   },
   "renderer": {
     "type": "sprite",

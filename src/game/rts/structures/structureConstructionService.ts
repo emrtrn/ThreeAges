@@ -31,6 +31,7 @@ export type StructureBuildFailure =
   | "missing-resource-node"
   | "missing-forest"
   | "missing-game"
+  | "missing-livestock"
   | "enemy-occupied";
 
 export type StructureBuildResult =

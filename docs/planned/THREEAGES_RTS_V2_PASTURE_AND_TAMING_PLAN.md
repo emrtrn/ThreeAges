@@ -2,7 +2,9 @@
 
 Olusturulma tarihi: 2026-08-02
 Durum: **Faz 0-2 tamamlandi (2026-08-02), gorsel kabul dahil.**
-Sirada Faz 3 - Agil binasi ve yerlestirme kurali.
+Faz 3 kodu ve verisi yazildi (2026-08-02); **gorsel kabul bekliyor** - kullanici
+sururun yaninda/uzaginda ghost rengini dogrulayacak.
+Sonra Faz 4 - Sahiplik ve gudme dongusu.
 Onkosul: `THREEAGES_RTS_WILDLIFE_AND_HUNTING_PLAN.md` V1 (Faz 0-7) tamamlandi.
 
 Bu dosya, yaban hayati yol haritasinin (`...WILDLIFE_AND_HUNTING_PLAN.md` §12)
@@ -431,24 +433,63 @@ haritada yasiyor ve avlanabiliyor, ama henuz evcillestirilemiyor. Sirada Faz 3.
 
 ### Faz 3 - Agil binasi ve yerlestirme kurali
 
-- [ ] `buildings.json` -> `pasture` (§6.2 tablosu, alti kademe).
-- [ ] `requiresLivestock` / `livestockCapacity` / `perAnimalPerMinute`:
+- [x] `buildings.json` -> `pasture` (§6.2 tablosu, alti kademe). Sabitler
+  birebir; `maxHealth` planda yoktu, Avci Kulubesi profili alindi (100-120 /
+  130-150).
+- [x] `requiresLivestock` / `livestockCapacity` / `perAnimalPerMinute`:
   `gameDataTypes`, `validateGameData` (`requiresGame` blokunun ikizi),
-  kademe matrisi, editor Details alani.
-- [ ] `perWorkerPerMinute` agilda istege bagli (§3.5) - hem taban hem kademe
-  dogrulamasinda.
-- [ ] `PlacementFailure` / `StructureBuildFailure` -> `"missing-livestock"`.
-- [ ] `RtsApp.additionalPlacementFailure` dorduncu dal:
+  kademe matrisi, editor Details alani (taban + iki cag tier'i).
+- [x] `perWorkerPerMinute` agilda istege bagli (§3.5) - hem taban hem kademe
+  dogrulamasinda. Ikizi de kondu: `livestockCapacity` / `perAnimalPerMinute`
+  agil olmayan binada **reddedilir**, sessizce dusurulmez.
+- [x] `PlacementFailure` / `StructureBuildFailure` -> `"missing-livestock"`.
+- [x] `RtsApp.additionalPlacementFailure` dorduncu dal:
   `wildlife.tameableAnimalsNear(...)` bos ise `missing-livestock`. **Yalniz
-  yasayan ve yabani** hayvan sayilir.
-- [ ] Build paleti (Ekonomi kategorisi, Avci Kulubesi'nin yaninda), ikon,
-  `rtsSelectionView` etiketi.
-- [ ] `EconomyProductionStatus` -> `"missing-livestock"`; `requirementFor`'a
+  yasayan ve yabani** hayvan sayilir - `owner === "wild"` suzgeci bugun
+  tautoloji, Faz 4'te sahiplik yazilabilir olunca calismaya baslar.
+- [x] Build paleti (Ekonomi kategorisi, Avci Kulubesi'nin yaninda), ikon
+  (`building-pasture.svg`), `rtsSelectionView` etiketi ("Yakinda evcil hayvan
+  yok"), `BP_RTS_Pasture.actor.json` + manifest kaydi + `rts-content.json`.
+- [x] `EconomyProductionStatus` -> `"missing-livestock"`; `requirementFor`'a
   **dordoncu dal degil**, ayri bir uretim sekli dali (§3.5). Bina kurulur,
   dogru gerekceyle bos durur; Faz 4 ona pen verir.
 
-Kabul: gateler + engine testi (surunun uzaginda `missing-livestock`, yaninda
-`valid`) + kullanici ghost rengini dogrular.
+**Planda yazmayan, uygulamanin cikardigi uc sey.**
+
+1. **§8'in "agil kendiliginden girer" varsayimi yanlisti.** Yerellik testinin
+   dongusu `requiresGame || requiresForest || requiresResourceNode` suzuyor;
+   agil bunlarin hicbirini tasimaz, yani teste **elle** eklenmesi gerekti. Simdi
+   dorduncu bayrak da suzgecte.
+2. **Ekonomi dongusu agila isci almayi da reddetmeli.** Yalniz "uretme" dalini
+   ayirmak yetmiyordu: `assignWorker` agila da isci atayabiliyordu, yani agilin
+   `workerCapacity`'si - ki o **coban butcesi** - kapida bekleyen isciyle
+   dolabiliyordu ve Faz 4'e coban kalmiyordu. Otomatik ve manuel atama, ikisi de
+   `requiresLivestock` binada kapali; testle pinlendi.
+3. **`requiresLivestock` uc toplayici bayrakla birlikte kullanilamaz.** §3.4'un
+   olcumu tam olarak bu: iki uretim seklini ayni binada acmak, evcil inegi
+   `localBuffer` uzerinden ete cevirmenin yolu. Validator artik dosya ve alan
+   adiyla reddediyor.
+
+Ayrica `perWorkerPerMinute` istege bagli olunca iki TS noktasi acikta kaldi:
+toplama dongusunun giris kontrolu (alan yoksa artik `missingStatus` dondurur) ve
+yenilenebilir dal (agil oraya hic ulasmaz, cunku ustte donuyor).
+
+Kabul:
+
+- [x] `npx tsc --noEmit`, `npm run verify:imports`, `vite build`,
+  `verify:dist --strict` ve `npm run check:assets` yesil (0 hata; yeni Actor
+  Avci Kulubesi ile **birebir ayni uyari profilinde**: yalniz thumbnail uyarisi).
+- [x] Dort yeni engine testi gecti: veri sekli, validator sozlesmesi,
+  yerlestirme (sigirin yaninda `valid`, uzaginda ve **geyik surusunun icinde**
+  `missing-livestock`), ve bos penli agil (`missing-livestock`, sifir isci,
+  `producerHasSource` false).
+- [ ] `npm run test:engine` **suite olarak kirmizi**, ama Faz 3'ten degil: HEAD
+  (`797f84f0`, birim maliyet ayari) `guard_placeholder.cost.wood`'u 0 yapmis ve
+  "wood contributes to military production" iddiasi o yuzden dusuyor. Testin
+  gectigi yer Faz 3'un tum kontrollerinden **sonra**. Karar kullanicinin: ya
+  muhafiz yeniden odun yer, ya da iddia "bir askeri birim odun yer" seviyesine
+  cekilir (okcu 10, kusatma 40 zaten odiyor).
+- [ ] Kullanici ghost rengini dogrular.
 
 ### Faz 4 - Sahiplik ve gudme dongusu
 
@@ -519,10 +560,15 @@ CLAUDE.md kurali: **ayar degil sozlesme**. Hicbir test bir buyuklugu pinlemez.
 - [x] **Harita adaleti (Faz 2):** iki kralligin gordugu yuruyus mesafeleri kumesi
   ayni; her sigir surusu iki baslangic yaricapinin da disinda. Mesafeler
   hesaplanir, pinlenmez.
-- [ ] **Menzil:** her evcillestirilebilir tur icin `roamRadius < pasture
+- [x] **Menzil (Faz 3):** her evcillestirilebilir tur icin `roamRadius < pasture
   gatherRadius`, iki tablodan hesaplanarak.
-- [ ] **Yerellik:** agil `gatherRadius` < `RTS_WORLD_HALF_EXTENT / 2` (mevcut
-  test her sonlu kaynakli binayi tariyor - agil kendiliginden girer).
+- [x] **Yerellik (Faz 3):** agil `gatherRadius` < `RTS_WORLD_HALF_EXTENT / 2`.
+  Mevcut testin dongusune **elle eklendi**: suzgec yalniz uc toplayici bayragi
+  taniyordu (Faz 3 notu).
+- [x] **Yerlestirme (Faz 3):** sigirin yaninda `valid`; sururun uzaginda ve
+  geyik surusunun icinde `missing-livestock`.
+- [x] **Bos pen (Faz 3):** tamamlanmis agil `missing-livestock` der, hicbir isci
+  almaz (otomatik veya emirle), `producerHasSource` false doner.
 - [ ] **Nufus:** evcil hayvan da nufus saymaz (V1 testinin devami).
 - [ ] **Sahiplik:** evcillestirilen hayvan avci kulubesinin `remainingNear`
   sayimindan cikar; kendi inegini avlayan kulube kirmizi verir.

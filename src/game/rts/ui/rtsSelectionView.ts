@@ -416,6 +416,7 @@ const PRODUCTION_STATUS_LABEL: Record<EconomyProductionStatus, string> = {
   "missing-resource-node": "Kaynak düğümü yok",
   "missing-forest": "Yakında orman yok",
   "missing-game": "Yakında av yok",
+  "missing-livestock": "Yakında evcil hayvan yok",
   "source-depleted": "Kaynak tükendi",
 };
 
