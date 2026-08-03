@@ -5,7 +5,7 @@
   "parentClass": "actor",
   "variables": [
     { "key": "herdId", "label": "Herd Id", "type": "text", "default": "herd-1" },
-    { "key": "species", "label": "Species", "type": "select", "default": "deer", "options": ["deer", "stag"] },
+    { "key": "species", "label": "Species", "type": "select", "default": "deer", "options": ["deer", "stag", "wolf"] },
     { "key": "count", "label": "Count", "type": "number", "default": 5 }
   ],
   "components": [{ "id": "root", "component": "Transform", "props": {} }],

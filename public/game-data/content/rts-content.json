@@ -247,6 +247,12 @@
     },
     "bull": {
       "actorRef": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Bull.actor.json"
+    },
+    "wolf": {
+      "actorRef": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Wolf.actor.json"
+    },
+    "fox": {
+      "actorRef": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Fox.actor.json"
     }
   },
   "ui": {},

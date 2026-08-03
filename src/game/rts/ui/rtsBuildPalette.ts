@@ -42,26 +42,61 @@ import {
  * reaches for a building. A Depot has no `economy` block but is the reason a
  * Farm pays: deriving would have filed it away from the decision it belongs to.
  *
- * The Market sits under "Ekonomi" for the same reason, not because it produces:
- * it converts. The player reaching for it is asking "I need stone/gold I cannot
- * mine", which is the same question the producers answer — a "Ticaret" category
- * of one would split that decision across two lists to scan.
+ * Ekonomi is the drawer the game keeps filling, and a pile that size is scanned
+ * item by item — the cost the categories were meant to remove in the first
+ * place. So a category may break itself into named {@link BuildGroup}s inside
+ * its own panel: three cards under "Gıda", three under "Ham Madde" is the size
+ * an eye takes in at once. The decision stays on one screen — no tab to switch,
+ * no shortcut digit to relearn — it just stops arriving as one heap.
+ *
+ * Two groups, not three, and that is what moved the Market. It was filed under
+ * Ekonomi because it answers the producers' question from the other side ("I
+ * need stone I cannot mine"), and that reading still holds — but a third group
+ * of one card cost the panel a whole row of height for a single building, and
+ * the palette grows from the bottom of the screen upward into the player's view.
+ * Under "Yerleşim" it costs nothing: that tab already holds the two buildings
+ * you place *inside* a settled town rather than out on a resource, which is
+ * where a market stands anyway.
  */
-interface BuildCategory {
+interface BuildGroup {
   readonly title: string;
   readonly buildingIds: readonly string[];
+}
+
+interface BuildCategory {
+  readonly title: string;
+  /** Flat categories. Mutually exclusive with {@link BuildCategory.groups}. */
+  readonly buildingIds?: readonly string[];
+  /** Sub-headed categories: the ids live in the groups, in display order. */
+  readonly groups?: readonly BuildGroup[];
   readonly includesRoad?: boolean;
 }
 
 const BUILD_CATEGORIES: readonly BuildCategory[] = [
-  { title: "Ekonomi", buildingIds: ["farm", "hunting_camp", "pasture", "lumber_camp", "quarry", "gold_mine", "market"] },
+  {
+    title: "Ekonomi",
+    groups: [
+      { title: "Gıda", buildingIds: ["farm", "hunting_camp", "pasture"] },
+      { title: "Ham Madde", buildingIds: ["lumber_camp", "quarry", "gold_mine"] },
+    ],
+  },
   { title: "Lojistik", buildingIds: ["depot", "outpost"], includesRoad: true },
   // The Tapınak files under "Yerleşim" rather than "Askerî": it trains nothing
   // and fires nothing — what it does is make a place worth standing in, which is
-  // the same claim the House makes about ground the player has taken.
-  { title: "Yerleşim", buildingIds: ["house", "temple"] },
+  // the same claim the House makes about ground the player has taken, and the
+  // same one the Pazar makes.
+  { title: "Yerleşim", buildingIds: ["house", "temple", "market"] },
   { title: "Askerî", buildingIds: ["barracks", "archery_range"] },
 ];
+
+/**
+ * The one reading of a category's contents, so the render loop and the "did
+ * anybody file this building?" sweep cannot disagree about a grouped category.
+ * A flat category is the degenerate case: one untitled group.
+ */
+function categoryGroups(category: BuildCategory): readonly BuildGroup[] {
+  return category.groups ?? [{ title: "", buildingIds: category.buildingIds ?? [] }];
+}
 
 export class RtsBuildPalette {
   private readonly root = document.createElement("section");
@@ -116,10 +151,12 @@ export class RtsBuildPalette {
     // Anything the categories do not name still has to reach the player: a new
     // building added to the data must not vanish from the palette because nobody
     // filed it. It lands under "Diğer" instead.
-    const categorised = new Set(BUILD_CATEGORIES.flatMap((category) => category.buildingIds));
+    const categorised = new Set(
+      BUILD_CATEGORIES.flatMap((category) => categoryGroups(category).flatMap((group) => group.buildingIds)),
+    );
     const uncategorised = Object.keys(buildings)
       .filter((id) => id !== "command_center" && !categorised.has(id));
-    const groups: readonly BuildCategory[] = uncategorised.length > 0
+    const categories: readonly BuildCategory[] = uncategorised.length > 0
       ? [...BUILD_CATEGORIES, { title: "Diğer", buildingIds: uncategorised }]
       : BUILD_CATEGORIES;
     const tabRow = document.createElement("div");
@@ -128,9 +165,14 @@ export class RtsBuildPalette {
     const grid = document.createElement("div");
     grid.className = "rts-build-grid";
     this.root.appendChild(grid);
-    for (const category of groups) {
-      const ids = category.buildingIds.filter((id) => buildings[id]);
-      if (ids.length === 0 && !category.includesRoad) continue;
+    for (const category of categories) {
+      // A group whose buildings the data does not carry is not an empty heading:
+      // it is dropped, so a fork that ships no market never draws a "Ticaret"
+      // title over nothing.
+      const groups = categoryGroups(category)
+        .map((group) => ({ ...group, buildingIds: group.buildingIds.filter((id) => buildings[id]) }))
+        .filter((group) => group.buildingIds.length > 0);
+      if (groups.length === 0 && !category.includesRoad) continue;
       const tab = document.createElement("button");
       tab.type = "button";
       tab.className = "rts-build-tab";
@@ -138,91 +180,41 @@ export class RtsBuildPalette {
       tab.addEventListener("click", () => this.selectCategory(category.title));
       this.tabs.set(category.title, tab);
       tabRow.appendChild(tab);
-      const choices = document.createElement("div");
-      choices.className = "rts-build-choices rts-build-category-panel";
-      choices.dataset.rtsBuildCategory = category.title;
-      for (const id of ids) {
-        const stats = buildings[id]!;
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "rts-build-choice";
-        button.dataset.rtsBuilding = id;
-        // Keep the action's accessible name concise while the visual label shows
-        // the explicit resource cost needed for faster purchase decisions.
-        button.setAttribute("aria-label", stats.label);
-        if (stats.icon) {
-          const icon = document.createElement("img");
-          icon.className = "rts-build-choice-icon";
-          icon.src = stats.icon;
-          icon.alt = "";
-          attachIconFallback(icon);
-          button.appendChild(icon);
+      const panel = document.createElement("div");
+      panel.className = "rts-build-choices rts-build-category-panel";
+      panel.dataset.rtsBuildCategory = category.title;
+      // Sub-headed categories nest one grid per group; flat ones keep the cards
+      // as the panel's own children, so the card rules address them the same way
+      // either side of the split.
+      const grouped = groups.some((group) => group.title !== "");
+      panel.classList.toggle("is-grouped", grouped);
+      let lastGrid = panel;
+      for (const group of groups) {
+        let target = panel;
+        if (grouped) {
+          const section = document.createElement("div");
+          section.className = "rts-build-group";
+          const heading = document.createElement("p");
+          heading.className = "rts-build-group-title";
+          heading.textContent = group.title;
+          const cards = document.createElement("div");
+          cards.className = "rts-build-group-choices";
+          section.append(heading, cards);
+          panel.appendChild(section);
+          target = cards;
         }
-        const label = document.createElement("span");
-        label.className = "rts-build-choice-label";
-        label.textContent = stats.label;
-        const cost = document.createElement("span");
-        cost.className = "rts-build-choice-cost";
-        cost.textContent = formatResourceCost(stats.cost);
-        button.append(label, cost);
-        button.addEventListener("click", () => this.onChoose(id));
-        this.buildButtons.set(id, {
-          button,
-          cost,
-          price: stats.cost,
-          requiredAge: stats.requiredAge,
-          locked: false,
-          affordable: true,
-        });
-        choices.appendChild(button);
+        for (const id of group.buildingIds) target.appendChild(this.createBuildChoice(id, buildings[id]!));
+        lastGrid = target;
       }
       if (category.includesRoad) {
-        const road = document.createElement("button");
-        road.type = "button";
-        road.className = "rts-build-choice";
-        road.dataset.rtsBuilding = "road";
-        road.setAttribute("aria-label", "Yol");
-        const icon = document.createElement("img");
-        icon.className = "rts-build-choice-icon";
-        icon.src = PALETTE_ROAD_ICON;
-        icon.alt = "";
-        attachIconFallback(icon);
-        const label = document.createElement("span");
-        label.className = "rts-build-choice-label";
-        label.textContent = "Yol";
-        const cost = document.createElement("span");
-        cost.className = "rts-build-choice-cost";
-        cost.textContent = "Odun / hücre";
-        road.append(icon, label, cost);
-        road.addEventListener("click", this.onChooseRoad);
-        this.roadButtons.set("build", road);
-        choices.appendChild(road);
+        lastGrid.appendChild(this.createRoadChoice("build"));
         // GDD 10 §44 "Yol Silme". Sits beside the tool that made the mistake,
         // because a paved tile reserves its ground: without this, a route drawn
         // across a stone or gold deposit locked that deposit out of the match.
-        const erase = document.createElement("button");
-        erase.type = "button";
-        erase.className = "rts-build-choice";
-        erase.dataset.rtsBuilding = "road-erase";
-        erase.setAttribute("aria-label", "Yol Sil");
-        const eraseIcon = document.createElement("img");
-        eraseIcon.className = "rts-build-choice-icon";
-        eraseIcon.src = PALETTE_ROAD_ERASE_ICON;
-        eraseIcon.alt = "";
-        attachIconFallback(eraseIcon);
-        const eraseLabel = document.createElement("span");
-        eraseLabel.className = "rts-build-choice-label";
-        eraseLabel.textContent = "Yol Sil";
-        const eraseCost = document.createElement("span");
-        eraseCost.className = "rts-build-choice-cost";
-        eraseCost.textContent = "İade yok";
-        erase.append(eraseIcon, eraseLabel, eraseCost);
-        erase.addEventListener("click", this.onChooseRoadErase);
-        this.roadButtons.set("erase", erase);
-        choices.appendChild(erase);
+        lastGrid.appendChild(this.createRoadChoice("erase"));
       }
-      this.categoryPanels.set(category.title, choices);
-      grid.appendChild(choices);
+      this.categoryPanels.set(category.title, panel);
+      grid.appendChild(panel);
     }
     this.actionMessage.className = "rts-build-action-message";
     this.root.appendChild(this.actionMessage);
@@ -235,6 +227,67 @@ export class RtsBuildPalette {
     this.setState({ activeBuildingId: null, result: null });
     this.setAgeState({ age: "settlement" });
     this.selectCategory(this.activeCategory);
+  }
+
+  /** One build card, registered with the affordability/lock passes that drive it. */
+  private createBuildChoice(id: string, stats: BuildingBalance[string]): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "rts-build-choice";
+    button.dataset.rtsBuilding = id;
+    // Keep the action's accessible name concise while the visual label shows
+    // the explicit resource cost needed for faster purchase decisions.
+    button.setAttribute("aria-label", stats.label);
+    if (stats.icon) {
+      const icon = document.createElement("img");
+      icon.className = "rts-build-choice-icon";
+      icon.src = stats.icon;
+      icon.alt = "";
+      attachIconFallback(icon);
+      button.appendChild(icon);
+    }
+    const label = document.createElement("span");
+    label.className = "rts-build-choice-label";
+    label.textContent = stats.label;
+    const cost = document.createElement("span");
+    cost.className = "rts-build-choice-cost";
+    cost.textContent = formatResourceCost(stats.cost);
+    button.append(label, cost);
+    button.addEventListener("click", () => this.onChoose(id));
+    this.buildButtons.set(id, {
+      button,
+      cost,
+      price: stats.cost,
+      requiredAge: stats.requiredAge,
+      locked: false,
+      affordable: true,
+    });
+    return button;
+  }
+
+  /** The road tools wear the build card, but are keyed by mode rather than by id. */
+  private createRoadChoice(mode: "build" | "erase"): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "rts-build-choice";
+    button.dataset.rtsBuilding = mode === "build" ? "road" : "road-erase";
+    const text = mode === "build" ? "Yol" : "Yol Sil";
+    button.setAttribute("aria-label", text);
+    const icon = document.createElement("img");
+    icon.className = "rts-build-choice-icon";
+    icon.src = mode === "build" ? PALETTE_ROAD_ICON : PALETTE_ROAD_ERASE_ICON;
+    icon.alt = "";
+    attachIconFallback(icon);
+    const label = document.createElement("span");
+    label.className = "rts-build-choice-label";
+    label.textContent = text;
+    const cost = document.createElement("span");
+    cost.className = "rts-build-choice-cost";
+    cost.textContent = mode === "build" ? "Odun / hücre" : "İade yok";
+    button.append(icon, label, cost);
+    button.addEventListener("click", mode === "build" ? this.onChooseRoad : this.onChooseRoadErase);
+    this.roadButtons.set(mode, button);
+    return button;
   }
 
   setState(state: BuildingPlacementState): void {

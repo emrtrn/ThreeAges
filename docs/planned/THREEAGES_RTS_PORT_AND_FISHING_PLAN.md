@@ -179,7 +179,7 @@ kilitlenir.
 | `src/game/rts/structures/rtsBuildingArt.ts` | `port` icin `aged` eslemesi: basename `Port_<family>_Level<level>` |
 | `src/game/rts/structures/rtsBuildingVisuals.ts` | `artAnchor` / waterline hizalama (§4.3) |
 | `src/game/rts/structures/placedStructureSystem.ts` | `yaw` alani (§4.2, karar B1 ise) |
-| `src/game/rts/ui/rtsBuildPalette.ts` | "Ekonomi" kategorisine `port`; `missing-water` gerekcesi |
+| `src/game/rts/ui/rtsBuildPalette.ts` | "Ekonomi" > "Gida" alt grubuna `port`; `missing-water` gerekcesi |
 | `src/game/rts/ui/rtsSelectionView.ts` | `"missing-water": "Yakinda su yok"` |
 | `src/game/rts/ai/aiEconomyManager.ts` | `buildingCounts["farm"] === 0` yerine "yiyecek ureten yapi" olcusu |
 | `tools/engine-tests.ts` | Su mesafesi, placement reddi, art path ve validator testleri |
@@ -308,7 +308,10 @@ Amac: Limanin oyuncu icin var olmasi.
 - [ ] `buildings.json` -> `port` girdisi (§6 tablosu; Yerlesim ve Kasaba
   progression dizileri dolu).
 - [ ] `building-port.svg` ikonu uretilir.
-- [ ] `rtsBuildPalette` "Ekonomi" kategorisine `port` eklenir.
+- [ ] `rtsBuildPalette` "Ekonomi" kategorisinin **"Gida" alt basligina** `port`
+  eklenir — kategori artik Gida / Ham Madde olarak bolunuyor, yani duz
+  `buildingIds` listesine degil `groups` icine girer. Liman yiyecek uretir, bu
+  yuzden Gida; ayrica grup 3'ten 4 karta cikar, panel yeni satir istemez.
 - [ ] `ages.json -> town.requiredBuildingIds` **degistirilmez** (§4.5) —
   test ile kilitlenir.
 - [ ] Engine testi: `port` balance verisi dogrulamadan gecer; `economy.resourceId`

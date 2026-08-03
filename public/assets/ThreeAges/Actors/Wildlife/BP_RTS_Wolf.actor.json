@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_Wolf",
+  "parentClass": "actor",
+  "variables": [
+    {
+      "key": "selectionRadius",
+      "label": "Selection Radius",
+      "type": "number",
+      "min": 0.1,
+      "max": 4,
+      "step": 0.1,
+      "default": 0.6
+    }
+  ],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "wolfMesh",
+      "component": "SkeletalMeshComponent",
+      "props": {
+        "assetId": "wolf",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.24,
+          0.24,
+          0.24
+        ]
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

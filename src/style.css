@@ -2220,14 +2220,26 @@ body {
   line-height: 1.1;
 }
 
-/* Faz 2 placement controls: intentionally small until the full RTS HUD lands. */
+/*
+ * Faz 2 placement controls: intentionally small until the full RTS HUD lands.
+ *
+ * The height is the content's, not a number: this panel is bottom-anchored, so
+ * a taller tab grows upward into empty sky rather than pushing anything. It was
+ * pinned at 244px, which is one row of cards plus change — the seventh Ekonomi
+ * building already hung out of the frame before the sub-headings made it
+ * obvious, and every building added after would have done the same. The
+ * max-height is the only real limit (a short viewport), and it hands the
+ * overflow to the card area rather than letting the frame clip it.
+ */
 .rts-build-palette {
   position: absolute;
   left: max(12px, env(safe-area-inset-left));
   bottom: max(12px, env(safe-area-inset-bottom));
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   width: min(544px, calc(100vw - 24px));
-  height: 244px;
+  max-height: calc(100vh - 96px);
   padding: 22px 24px;
   color: var(--ta-ink);
   box-shadow: var(--ta-panel-shadow);
@@ -2301,15 +2313,46 @@ body {
     0 -1px 1px rgb(66 39 8 / 34%);
 }
 
+/* The scroll of last resort: only a viewport too short for the tallest tab ever
+   reaches it, and it scrolls the cards rather than clipping the frame. */
 .rts-build-grid {
-  height: auto;
+  min-height: 0;
   margin-top: 5px;
+  overflow-y: auto;
 }
 
 .rts-build-category-panel {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
+}
+
+/*
+ * Sub-headed category (e.g. Ekonomi → Gıda · Ham Madde · Ticaret). The panel
+ * stops being the card grid and becomes a stack of them, one per group; each
+ * group keeps the same five-column track so a three-card group draws
+ * three cards the size of every other card, not three stretched ones.
+ */
+.rts-build-category-panel.is-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rts-build-group-choices {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.rts-build-group-title {
+  margin: 0 0 3px;
+  color: #b9a273;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
 }
 
 .rts-build-category-panel[hidden] {
@@ -2620,7 +2663,7 @@ body {
 .rts-selection-panel > strong,
 .rts-hud-resource-label,
 .rts-hud-age,
-.rts-build-category {
+.rts-build-group-title {
   font-family: var(--ta-font-display);
 }
 

@@ -492,6 +492,45 @@ export interface AnimalRetaliationBalance {
 }
 
 /**
+ * What a species does to somebody who never touched it (V3 §4, KARAR 1).
+ *
+ * The exact opposite of {@link AnimalRetaliationBalance}, and separate from it
+ * for that reason: retaliation has no range because the animal never chooses
+ * anybody, while every field here exists so it *can* choose — how far it looks,
+ * how far it will follow, and what it is willing to look at. Merging the two
+ * would attach a target to the rule whose whole point is that it has none.
+ *
+ * The radii are measured from different origins on purpose:
+ * `acquisitionRadius` from the predator itself (what it can see right now), and
+ * `pursuitRadius` from its den (how far the leash reaches). That is what keeps a
+ * chase a local event instead of a walk across the map — a predator past its
+ * leash gives up and returns to patrol.
+ */
+export interface AnimalPredatorBalance {
+  /** How far the predator looks for a victim, measured from itself. */
+  readonly acquisitionRadius: number;
+  /** Damage one bite lands. */
+  readonly damage: number;
+  /** How often it bites, in bites per minute. */
+  readonly attacksPerMinute: number;
+  /**
+   * How far from its den the predator will follow a target before giving up.
+   *
+   * Must exceed the species' `roamRadius` — a leash shorter than the patrol
+   * circle means the predator abandons every chase before it starts, which
+   * reads as broken pathfinding rather than as tuning, so the validator refuses
+   * it.
+   */
+  readonly pursuitRadius: number;
+  /**
+   * Wild species this predator hunts, by animal id. Empty is legal and means
+   * "preys on workers only"; a tamed animal is never a victim regardless of
+   * what is listed (V3 KARAR 5).
+   */
+  readonly preySpecies: readonly string[];
+}
+
+/**
  * One huntable species. Wildlife is a *finite* food source that moves, which is
  * why its numbers live here rather than in `resources.json`: a deposit profile
  * is split safe/external by placement, while an animal carries its own yield
@@ -571,6 +610,16 @@ export interface AnimalBalanceStats {
    * this same field without ever being drivable into a pen.
    */
   readonly retaliation?: AnimalRetaliationBalance;
+  /**
+   * What this species hunts on its own initiative; absent for every species that
+   * only ever grazes (V3 Faz 1).
+   *
+   * Absence is the normal answer, so it is optional rather than required like
+   * {@link tameable}: "does this animal hunt" is answered by the whole shape of
+   * the species, not by one flag somebody might forget. A species that carries
+   * the block is a predator; one that does not is prey or livestock.
+   */
+  readonly predator?: AnimalPredatorBalance;
 }
 
 /** `public/game-data/balance/animals.json` — keyed by stable species id. */

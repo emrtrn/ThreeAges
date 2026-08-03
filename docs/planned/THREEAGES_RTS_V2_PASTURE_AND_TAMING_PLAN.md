@@ -1,9 +1,10 @@
 # ThreeAges RTS V2 - Agil ve Evcillestirme Plani
 
 Olusturulma tarihi: 2026-08-02
-Durum: **Faz 0-6 tamamlandi (2026-08-03), gorsel kabul dahil.**
-Faz 7'nin kodu, harita isi ve testleri yazildi; kalan tek sey **kabul maci**
-(kullanici oynar: sigir icin yaris, gudme, kalici gelir, tarlasiz Kasaba).
+Durum: **TAMAMLANDI - Faz 0-7, gorsel kabul dahil (2026-08-03).**
+Kabul maci kullanici tarafindan oynandi ve onaylandi: sigir icin yaris, gudme,
+kalici gelir ve tarlaya gerek kalmadan Kasaba'ya gecis dogrulandi. Sira
+V3'tedir (`THREEAGES_RTS_V3_PREDATOR_PRESSURE_PLAN.md`).
 Onkosul: `THREEAGES_RTS_WILDLIFE_AND_HUNTING_PLAN.md` V1 (Faz 0-7) tamamlandi.
 
 Bu dosya, yaban hayati yol haritasinin (`...WILDLIFE_AND_HUNTING_PLAN.md` §12)
@@ -708,8 +709,8 @@ Kabul:
 - [x] Harita: agil anchor'i + yol mahmuzu, blockout ve **iki Level'da da**
   (`RTS_CoreMatch` parite testiyle zorunlu, `RTS_GameplayProof` oyunun kostugu
   yer oldugu icin).
-- [ ] Tam mac: sigir surusu icin yaris, gudme, kalici gelir, tarlaya gerek
-  kalmadan kasabaya gecis. **Kullanici gorsel kabulu.**
+- [x] Tam mac: sigir surusu icin yaris, gudme, kalici gelir, tarlaya gerek
+  kalmadan kasabaya gecis. **Kullanici gorsel kabulu verildi (2026-08-03).**
 
 **Olculen bulgu 1 - agil, haritanin en dar yuvasi.** Uc kisit ayni anda
 saglanmali: sigirin **tum** dolasma cemberi agilin 16 birimlik menzilinde
@@ -830,13 +831,13 @@ Gorsel kabul kullanicidadir; otomatik kani uretilmez (CLAUDE.md).
 
 ## 10. Tamamlanma Kapisi
 
-- [ ] §2'deki 11 madde uctan uca calisir.
-- [ ] §8'deki tum sozlesme testleri gecer; olcek testi yesil kalir.
-- [ ] `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`,
+- [x] §2'deki 11 madde uctan uca calisir.
+- [x] §8'deki tum sozlesme testleri gecer; olcek testi yesil kalir.
+- [x] `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`,
   `npm run check:assets` yesil.
-- [ ] Kullanici gorsel kabulu verdi.
-- [ ] §4.5 kapsam disi listesinden hicbir sey V2'ye sizmadi.
-- [ ] V1 dosyasinin §12'sinde V2 tamamlandi olarak isaretlendi ve sira V3'e
+- [x] Kullanici gorsel kabulu verdi (2026-08-03, kabul maci).
+- [x] §4.5 kapsam disi listesinden hicbir sey V2'ye sizmadi.
+- [x] V1 dosyasinin §12'sinde V2 tamamlandi olarak isaretlendi ve sira V3'e
   gecti.
 
 ## 11. Uygulama Sirasi

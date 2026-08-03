@@ -6,9 +6,11 @@ Durum: **V1 tamamlandi (Faz 0-7, 2026-08-02).** Kabul maci oynandi ve gecti;
 
 **Dosya arsive tasinmiyor (kullanici karari, 2026-08-02).** §10'un son maddesi
 askiya alindi: yol haritasinin devami (§12) bu dosyadan yurutulecek. **V2 - Agil
-ve evcillestirme basladi (2026-08-02)** ve kendi plan dosyasindan yurutuluyor:
-`THREEAGES_RTS_V2_PASTURE_AND_TAMING_PLAN.md` (§12). V3 ve V4 onu izler.
-**V5 (suvari / Cag 3) yapilmayacaktir.**
+ve evcillestirme tamamlandi (2026-08-03, gorsel kabul dahil)**:
+`THREEAGES_RTS_V2_PASTURE_AND_TAMING_PLAN.md`. **V3 - Yirtici baskisi basladi
+(2026-08-03)** ve kendi plan dosyasindan yurutuluyor:
+`THREEAGES_RTS_V3_PREDATOR_PRESSURE_PLAN.md` (§12); Faz 0 karar kilidi acik.
+V4 onu izler. **V5 (suvari / Cag 3) yapilmayacaktir.**
 Kapsam: `public/assets/ThreeAges/Animals/` altindaki 12 animasyonlu hayvan
 modelini, oyunun ekonomi/savas/lojistik cercevesine oturan gercek RTS
 sistemlerine cevirmek. V1 hedefi **avlanma**dir; kalan turler icin yol haritasi
@@ -1123,10 +1125,10 @@ ve maliyeti digerlerinin toplamina yakin. `Horse` / `Horse_White` bu yuzden V1
 sonrasi kapsamin **disindadir**; asset'ler dosyada durur, sistem yazilmaz.
 Bagimsiz "kesif kopegi" maddesi bu siranin disinda, istenildigi an alinabilir.
 
-### V2 - Agil ve evcillestirme (Cow, Bull, Alpaca)
+### V2 - Agil ve evcillestirme (Cow, Bull, Alpaca) - **TAMAMLANDI**
 
-**Plani yazildi ve basladi (2026-08-02):**
-`docs/planned/THREEAGES_RTS_V2_PASTURE_AND_TAMING_PLAN.md`. Orada Faz 0
+**Tamamlandi (2026-08-03), gorsel kabul dahil:**
+`docs/planned/THREEAGES_RTS_V2_PASTURE_AND_TAMING_PLAN.md` (Faz 0-7). Orada Faz 0
 kilitlendi: gudme **agil kamp modeliyle** yapilir (bu dosyanin §4.1 kararinin
 ikizi), V2 **Cow + Bull** gonderir (Alpaca'nin dayandigi biyom sistemi yok,
 V2.1'e), ve boganin karsilik vermesi V2'de kendi fazinda kalir. Asagidaki
@@ -1145,7 +1147,12 @@ karsilik verir. Risk/odul bedava gelir. `Alpaca` dag biyomunun inegidir.
 
 Maliyet: orta. `WildlifeSystem`'e `owner` alani ve gudme emri gerekir.
 
-### V3 - Yirtici baskisi (Wolf, Fox)
+### V3 - Yirtici baskisi (Wolf, Fox) - **BASLADI**
+
+**Plani yazildi (2026-08-03):**
+`docs/planned/THREEAGES_RTS_V3_PREDATOR_PRESSURE_PLAN.md`. Faz 0 karar kilidi
+acik (bes soru: hedef kurali, kurdun avlanabilirligi, surunun yenilenmesi,
+Fox'un kapsami, evcil hayvana saldiri). Asagidaki gerekce kayit icin durur.
 
 Bugun harita tamamen edilgendir; disari cikmanin tek riski rakip AI'dir. Kurt
 bunu degistirir: bolge disindaki yalniz isciye saldirir. Bu, Karakol'u ve

@@ -8,7 +8,7 @@
  * `editor/core/selection.ts#selectionId`.
  */
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { NodeIO } from "@gltf-transform/core";
 import { KHRMaterialsSpecular } from "@gltf-transform/extensions";
 import {
@@ -30041,6 +30041,156 @@ check("RTS wildlife sidecars name clips the shipped animal models actually carry
 const shippedAnimalBalance = () => validateAnimalBalance(
   JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as unknown,
 );
+
+check("V3 Faz 1: every shipped species owns a sidecar and an actor", () => {
+  // The clip-name test above scans whatever sidecars happen to be on disk, so it
+  // is silent about one that was never written. This is the other half: a species
+  // in the balance table with no rig is a herd marker that authors cleanly and
+  // then draws nothing, which is the failure that looks like the level adapter
+  // dropping the marker rather than like a missing file.
+  const content = JSON.parse(
+    readFileSync("public/game-data/content/rts-content.json", "utf8"),
+  ) as { animals?: Record<string, { actorRef?: string }> };
+  const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
+    assets: { id: string; path: string }[];
+  };
+  for (const id of Object.keys(shippedAnimalBalance())) {
+    const actorRef = content.animals?.[id]?.actorRef
+      ?? assert.fail(`rts-content.json has no actorRef for species "${id}"`);
+    const actor = JSON.parse(readFileSync(`public/${actorRef}`, "utf8")) as {
+      components: { component: string; props?: { assetId?: string } }[];
+    };
+    const mesh = actor.components.find((component) => component.component === "SkeletalMeshComponent")
+      ?? assert.fail(`${actorRef} has no skeletal mesh`);
+    const assetId = mesh.props?.assetId ?? assert.fail(`${actorRef} names no assetId`);
+    const entry = manifest.assets.find((asset) => asset.id === assetId)
+      ?? assert.fail(`${actorRef} names assetId "${assetId}", which the manifest does not carry`);
+    const sidecar = entry.path.replace(/\.gltf$/, ".skeleton.json");
+    assert.notEqual(sidecar, entry.path, `${assetId} is a .gltf the sidecar convention applies to`);
+    assert.ok(existsSync(`public/${sidecar}`), `species "${id}" needs ${sidecar}`);
+  }
+});
+
+check("V3 Faz 1: the predator block describes a hunter that can actually hunt", () => {
+  const animals = shippedAnimalBalance();
+  const predators = Object.values(animals).filter((stats) => stats.predator);
+  assert.ok(predators.length > 0, "V3 ships at least one predator");
+
+  const units = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const fastestWorker = Math.max(
+    ...Object.values(units).filter((unit) => unit.role === "worker").map((unit) => unit.moveSpeed),
+  );
+  assert.ok(Number.isFinite(fastestWorker) && fastestWorker > 0, "units.json ships a worker to be chased");
+
+  for (const stats of predators) {
+    const predator = stats.predator ?? assert.fail("filtered above");
+
+    // Speed contract, computed from both tables rather than pinned: a predator
+    // slower than the worker it is hunting never lands a bite, and the whole
+    // feature dies quietly — no error, just a wolf trailing a worker forever.
+    assert.ok(
+      stats.moveSpeed > fastestWorker,
+      `${stats.id} moves ${stats.moveSpeed}, no faster than the ${fastestWorker}-speed worker it hunts`,
+    );
+
+    // Range contract, from the species' own two fields. The leash is measured
+    // from the den and the patrol circle is too, so a leash inside the circle
+    // means the chase is abandoned before it begins.
+    assert.ok(
+      predator.pursuitRadius > stats.roamRadius,
+      `${stats.id} patrols ${stats.roamRadius} but only pursues to ${predator.pursuitRadius}`,
+    );
+    assert.ok(predator.acquisitionRadius > 0, `${stats.id} must be able to see a victim`);
+
+    // Locality, the forest lesson again: a leash at map scale is a wolf that
+    // follows a worker home rather than a den that is dangerous to walk past.
+    assert.ok(
+      predator.pursuitRadius < RTS_WORLD_HALF_EXTENT / 2,
+      `${stats.id} pursues ${predator.pursuitRadius}, which is map-scale rather than local`,
+    );
+
+    // KARAR 5: prey is wild game, never the livestock V2 let the player earn.
+    for (const prey of predator.preySpecies) {
+      const target = animals[prey] ?? assert.fail(`${stats.id} names unknown prey "${prey}"`);
+      assert.equal(target.tameable, false, `${stats.id} must not hunt the tameable "${prey}"`);
+    }
+    assert.equal(stats.tameable, false, `${stats.id} is a predator and cannot also be driven into a pen`);
+  }
+});
+
+check("V3 Faz 1: a predator is hunted by the same rules as its prey (KARAR 2 opened no exemption)", () => {
+  // The whole reason KARAR 2 made the wolf huntable: the catchability inequality
+  // in `validateAnimalBalance` stays a rule for *every* species, so no "predator
+  // exemption" back door exists to quietly switch off the next species' flee
+  // balance. This pins that the shipped predator satisfies it unchanged, and
+  // that the validator still enforces it when a predator breaks it.
+  const animals = shippedAnimalBalance();
+  const fastestWorker = 6; // Only the shape below depends on this; magnitudes come from the table.
+  for (const stats of Object.values(animals)) {
+    assert.ok(stats.meatCapacity > 0, `${stats.id} is huntable and yields food`);
+    assert.ok(
+      fastestWorker * stats.fleeRecoverySeconds > stats.moveSpeed * stats.fleeSeconds,
+      `${stats.id} bolts further than a hunter can close`,
+    );
+  }
+
+  const uncatchablePredator = {
+    ...JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as Record<string, unknown>,
+  };
+  const wolf = uncatchablePredator["wolf"] as Record<string, unknown>;
+  uncatchablePredator["wolf"] = { ...wolf, fleeSeconds: 60 };
+  assert.throws(
+    () => validateAnimalBalance(uncatchablePredator),
+    GameDataError,
+    "being a predator does not exempt a species from being catchable",
+  );
+});
+
+check("V3 Faz 1: the validator refuses a predator block that cannot work", () => {
+  const table = JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as Record<string, unknown>;
+  const wolf = table["wolf"] as Record<string, unknown>;
+  const predator = wolf["predator"] as Record<string, unknown>;
+  const withPredator = (patch: Record<string, unknown> | undefined) => ({
+    ...table,
+    wolf: { ...wolf, ...(patch === undefined ? { predator: undefined } : { predator: { ...predator, ...patch } }) },
+  });
+
+  // Non-positive is nonsense in every field, at any tuning.
+  for (const key of ["acquisitionRadius", "damage", "attacksPerMinute", "pursuitRadius"] as const) {
+    for (const bad of [0, -1]) {
+      assert.throws(() => validateAnimalBalance(withPredator({ [key]: bad })), GameDataError, `${key} = ${bad}`);
+    }
+    assert.throws(() => validateAnimalBalance(withPredator({ [key]: undefined })), GameDataError, `${key} missing`);
+  }
+
+  // The two relationship rules, both of which read as pathfinding faults in play.
+  const roamRadius = (wolf["roamRadius"] as number);
+  assert.throws(() => validateAnimalBalance(withPredator({ pursuitRadius: roamRadius })), GameDataError);
+  assert.throws(
+    () => validateAnimalBalance(withPredator({ pursuitRadius: RTS_WORLD_HALF_EXTENT })),
+    GameDataError,
+  );
+
+  // A prey list is a set of real, wild, other species.
+  assert.throws(() => validateAnimalBalance(withPredator({ preySpecies: "deer" })), GameDataError);
+  assert.throws(() => validateAnimalBalance(withPredator({ preySpecies: ["dragon"] })), GameDataError);
+  assert.throws(() => validateAnimalBalance(withPredator({ preySpecies: ["wolf"] })), GameDataError);
+  assert.throws(() => validateAnimalBalance(withPredator({ preySpecies: ["deer", "deer"] })), GameDataError);
+
+  // KARAR 5 as a data rule, not a runtime one.
+  assert.throws(
+    () => validateAnimalBalance({ ...table, wolf: { ...wolf, tameable: true } }),
+    GameDataError,
+    "a predator cannot also be tameable",
+  );
+
+  // And the block stays optional: dropping it leaves a legal grazing species.
+  const grazing = validateAnimalBalance(withPredator(undefined));
+  assert.equal(grazing.wolf?.predator, undefined);
+  assert.ok(grazing.fox && !grazing.fox.predator, "the fox ships as ambience, carrying no predator block");
+});
 
 check("wildlife never counts against a kingdom's population", () => {
   // The reason wildlife is its own system rather than a third `UnitOwner`

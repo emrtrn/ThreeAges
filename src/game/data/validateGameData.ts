@@ -42,6 +42,7 @@ import type {
   AiTargetWeights,
   AnimalBalance,
   AnimalBalanceStats,
+  AnimalPredatorBalance,
   AnimalRetaliationBalance,
   BuildingBalance,
   BuildingPadVisual,
@@ -1183,6 +1184,13 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
       }
     }
     const retaliation = validateAnimalRetaliation(stats["retaliation"], `${statsWhere}.retaliation`);
+    const predator = validateAnimalPredator(stats["predator"], `${statsWhere}.predator`, roamRadius);
+    // A predator that hunts what it can also be driven into a pen is two
+    // designs at once (V3 KARAR 5 keeps tamed animals off the menu), so the
+    // combination is refused here rather than silently resolved at runtime.
+    if (predator && tameable) {
+      throw new GameDataError(`${statsWhere}: a predator cannot also be tameable`);
+    }
     animals[id] = {
       id,
       label: requireString(stats, "label", statsWhere),
@@ -1204,7 +1212,25 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
         }
         : {}),
       ...(retaliation ? { retaliation } : {}),
+      ...(predator ? { predator } : {}),
     };
+  }
+  // Prey lists are resolved after the whole table is read, because a predator
+  // may legally name a species declared below it. What is refused is a name no
+  // species answers to, or one that answers with a predator: a typo'd id would
+  // otherwise show up as a wolf that ignores the deer beside it, which is
+  // indistinguishable from the hunting code failing.
+  for (const animal of Object.values(animals)) {
+    if (!animal.predator) continue;
+    const where = `balance/animals.json."${animal.id}".predator.preySpecies`;
+    const seen = new Set<string>();
+    for (const prey of animal.predator.preySpecies) {
+      if (!animals[prey]) throw new GameDataError(`${where}: unknown species "${prey}"`);
+      if (prey === animal.id) throw new GameDataError(`${where}: "${prey}" cannot prey on itself`);
+      if (animals[prey].predator) throw new GameDataError(`${where}: "${prey}" is itself a predator`);
+      if (seen.has(prey)) throw new GameDataError(`${where}: duplicate species "${prey}"`);
+      seen.add(prey);
+    }
   }
   return animals;
 }
@@ -1234,6 +1260,69 @@ function validateAnimalRetaliation(value: unknown, where: string): AnimalRetalia
     return amount;
   };
   return { damage: positive("damage"), attacksPerMinute: positive("attacksPerMinute") };
+}
+
+/**
+ * The optional block that makes a species hunt on its own initiative (V3 Faz 1).
+ *
+ * Absent means "this animal only grazes" and is never an error. What is refused
+ * is a block that describes a hunter which cannot hunt: a bite worth no damage
+ * or one that never lands, a predator that can see nothing, and — the two that
+ * are not merely non-positive — a leash shorter than its own patrol circle, and
+ * one at map scale.
+ *
+ * Those last two are the same rule from both ends, and they are here for the
+ * reason the forest's gather radius is: a radius that is not local stops being a
+ * radius. A `pursuitRadius` inside `roamRadius` abandons every chase before it
+ * begins; one at map scale turns a den into a wolf that follows a worker home.
+ * Both read as broken pathfinding rather than as tuning, which is exactly the
+ * class of fault this file exists to name.
+ *
+ * How *hard* the bite is stays deliberately unjudged, for the same reason
+ * {@link validateAnimalRetaliation} does not judge it: a wolf that kills a
+ * worker too fast is a thing the player watches happen and can retune, not
+ * something invisible.
+ */
+function validateAnimalPredator(
+  value: unknown,
+  where: string,
+  roamRadius: number,
+): AnimalPredatorBalance | null {
+  if (value === undefined) return null;
+  const obj = asObject(value, where);
+  const positive = (key: "acquisitionRadius" | "damage" | "attacksPerMinute" | "pursuitRadius"): number => {
+    const amount = requireFiniteNumber(obj, key, where);
+    if (amount <= 0) throw new GameDataError(`${where}.${key}: must be > 0`);
+    return amount;
+  };
+  const pursuitRadius = positive("pursuitRadius");
+  if (pursuitRadius <= roamRadius) {
+    throw new GameDataError(
+      `${where}.pursuitRadius: ${pursuitRadius} must exceed the species' roamRadius ${roamRadius}, `
+      + "or the predator gives up every chase before it leaves its own patrol circle",
+    );
+  }
+  if (pursuitRadius >= WORLD_HALF_EXTENT_FOR_VISION_CHECK) {
+    throw new GameDataError(
+      `${where}.pursuitRadius: ${pursuitRadius} is at map scale — must stay below `
+      + `${WORLD_HALF_EXTENT_FOR_VISION_CHECK} so a chase stays a local event near the den`,
+    );
+  }
+  const preyRaw = obj["preySpecies"];
+  if (!Array.isArray(preyRaw)) throw new GameDataError(`${where}.preySpecies: must be an array`);
+  const preySpecies = preyRaw.map((entry, index) => {
+    if (typeof entry !== "string" || !entry) {
+      throw new GameDataError(`${where}.preySpecies[${index}]: must be a non-empty species id`);
+    }
+    return entry;
+  });
+  return {
+    acquisitionRadius: positive("acquisitionRadius"),
+    damage: positive("damage"),
+    attacksPerMinute: positive("attacksPerMinute"),
+    pursuitRadius,
+    preySpecies,
+  };
 }
 
 /** Validate Faz 6's finite stone/gold deposit profiles. */

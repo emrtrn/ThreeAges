@@ -60,5 +60,38 @@
       "damage": 5,
       "attacksPerMinute": 20
     }
+  },
+  "wolf": {
+    "label": "Kurt",
+    "meatCapacity": 60,
+    "maxHealth": 55,
+    "moveSpeed": 8.5,
+    "walkClipSpeed": 1.8,
+    "fleeRadius": 0.1,
+    "fleeSeconds": 0.5,
+    "fleeRecoverySeconds": 4,
+    "huntSeconds": 6,
+    "roamRadius": 14,
+    "tameable": false,
+    "predator": {
+      "acquisitionRadius": 14,
+      "damage": 6,
+      "attacksPerMinute": 40,
+      "pursuitRadius": 26,
+      "preySpecies": ["deer", "stag"]
+    }
+  },
+  "fox": {
+    "label": "Tilki",
+    "meatCapacity": 20,
+    "maxHealth": 25,
+    "moveSpeed": 9,
+    "walkClipSpeed": 1.9,
+    "fleeRadius": 10,
+    "fleeSeconds": 1.2,
+    "fleeRecoverySeconds": 4,
+    "huntSeconds": 3,
+    "roamRadius": 12,
+    "tameable": false
   }
 }

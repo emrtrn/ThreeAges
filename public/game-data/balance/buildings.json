@@ -362,7 +362,7 @@
   },
   "hunting_camp": {
     "label": "Avcı Kulübesi",
-    "icon": "/assets/ui/icons/building-hunting-camp.svg",
+    "icon": "/assets/ui/icons/building-hunting-camp.png",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -451,7 +451,7 @@
   },
   "pasture": {
     "label": "Ağıl",
-    "icon": "/assets/ui/icons/building-pasture.svg",
+    "icon": "/assets/ui/icons/building-pasture.png",
     "footprint": {
       "width": 6,
       "depth": 6
