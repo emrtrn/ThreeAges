@@ -24,6 +24,12 @@
  *    *upper envelope*, so no triangle edge can pass beneath a bank it spans (see
  *    {@link sampleGroundEnvelope}). Rebuilt once when the terrain mounts rather
  *    than per frame.
+ *  - **The surface reaches past the grid.** Sized to the vision grid it ended at
+ *    the playable border, which is not where the map ends — a Level's backdrop
+ *    scenery stands beyond it, and the fog stopped in a bright rim around the
+ *    landscape rather than carrying on into the distance. An apron of
+ *    {@link SURFACE_MARGIN} extends the same surface outward, reading the nearest
+ *    border cell's state (see {@link mapUvToGridSpan}).
  *  - **The alpha is blurred** before upload. `LinearFilter` alone interpolates a
  *    hard 0/128/255 step over one 2-unit texel, which reads as the square-edged
  *    frontier of an early-2000s RTS. A small separable gaussian over the cell
@@ -78,6 +84,26 @@ const FADE_TIME_CONSTANT_SECONDS = 0.16;
 
 /** World units between fog-surface vertices. */
 const SURFACE_VERTEX_SPACING = 1;
+
+/**
+ * How far the surface reaches past the vision grid, in world units.
+ *
+ * The grid stops at the playable border, but the map does not: a Level dresses
+ * the horizon with backdrop scenery — the shipped one puts mountains out to ~86
+ * on a 70 half-extent field — and a surface sized to the grid ended exactly at
+ * the landscape edge. What the player saw there was not fog thinning out, it was
+ * fog stopping: a bright rim of unfogged nothing where the terrain ran out, with
+ * the backdrop hidden behind it (border scenery is off-grid, so §40's latch never
+ * reveals it — see `fogVisibilityBinder`'s clamp).
+ *
+ * The apron carries no cells of its own. Its texture coordinates run past 0..1
+ * and the fog texture clamps to its edge texel, so every point outside the grid
+ * simply shows the state of the nearest border cell: dark until the player
+ * scouts that stretch of border, clear once they have. Generous on purpose —
+ * it only has to outrun whatever a Level parks on the horizon, and it costs one
+ * larger geometry built once per terrain mount.
+ */
+const SURFACE_MARGIN = 60;
 
 /**
  * World units between terrain height samples, which is finer than the vertices
@@ -327,15 +353,20 @@ export class FogView {
   private createSurfaceGeometry(): PlaneGeometry {
     const { cellSize } = this.vision.gridOptions;
     const span = this.resolution * cellSize;
+    const outerSpan = span + SURFACE_MARGIN * 2;
     // Flat until a Landscape mounts: a level with no terrain — and the moment
     // before one has loaded — needs one quad's worth of geometry, not a few
     // hundred thousand samples of a function that answers zero.
     const segments = this.groundHeightAt === FLAT_GROUND
       ? 1
-      : Math.max(1, Math.round(span / SURFACE_VERTEX_SPACING));
+      : Math.max(1, Math.round(outerSpan / SURFACE_VERTEX_SPACING));
+    // Sampled over the grid's span, not the apron's: the envelope clamps its own
+    // lookups, so a vertex out in the margin reads the border height it extends
+    // from, and the sample count does not grow with the apron.
     const heights = segments === 1 ? null : this.sampleGroundEnvelope(span);
-    const geometry = new PlaneGeometry(span, span, segments, segments);
+    const geometry = new PlaneGeometry(outerSpan, outerSpan, segments, segments);
     geometry.rotateX(-Math.PI / 2);
+    this.mapUvToGridSpan(geometry, span);
     const position = geometry.attributes.position!;
     if (!heights) {
       for (let index = 0; index < position.count; index += 1) {
@@ -356,6 +387,32 @@ export class FogView {
     position.needsUpdate = true;
     geometry.computeBoundingSphere();
     return geometry;
+  }
+
+  /**
+   * Rescale the surface's texture coordinates so the fog texture covers the
+   * *grid* span rather than the whole geometry.
+   *
+   * `PlaneGeometry` maps 0..1 across whatever it was sized to, which for an
+   * apron-widened plane would stretch the cell grid over the margin as well —
+   * every reveal would land tens of metres off its own ground. Written from world
+   * position for the same reason the heights are: the generated UV order plus the
+   * `rotateX` is exactly the reasoning that produced the mirrored-fog bug the
+   * texture comment above records. The relation matches what `PlaneGeometry`
+   * itself generates (`rotateX(-PI/2)` sends local +Y to world -Z), with the grid
+   * span substituted for the geometry's, so orientation is unchanged and
+   * `texture.flipY` still does its job.
+   *
+   * Coordinates outside 0..1 are what the apron is for: `DataTexture` clamps to
+   * its edge texel, so the margin shows the nearest border cell's fog state.
+   */
+  private mapUvToGridSpan(geometry: PlaneGeometry, span: number): void {
+    const position = geometry.attributes.position!;
+    const uv = geometry.attributes.uv!;
+    for (let index = 0; index < position.count; index += 1) {
+      uv.setXY(index, 0.5 + position.getX(index) / span, 0.5 - position.getZ(index) / span);
+    }
+    uv.needsUpdate = true;
   }
 
   /**

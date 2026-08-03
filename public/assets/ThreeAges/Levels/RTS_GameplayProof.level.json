@@ -432,9 +432,9 @@
         },
         {
           "position": [
-            -72.88,
+            -69.59,
             -1.17,
-            26.39
+            28.55
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
@@ -442,13 +442,43 @@
         },
         {
           "position": [
-            -69.42,
-            -1.17,
-            41.06
+            -67.62,
+            1.23,
+            54.72
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
+          "rotation": [
+            -192.5,
+            -56,
+            -187
+          ],
           "scale": 3
+        },
+        {
+          "position": [
+            -69.21,
+            0.13,
+            40.96
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 2
+        },
+        {
+          "position": [
+            -69.43,
+            0.13,
+            46.06
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -191,
+            0
+          ],
+          "scale": 2
         },
         {
           "position": [
@@ -476,23 +506,38 @@
         },
         {
           "position": [
-            -71.71,
+            -70.05,
             -1.36,
-            22.39
+            24.58
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
-          "scale": 3
+          "scale": 2
         },
         {
           "position": [
-            -68.25,
-            -1.36,
-            37.06
+            -69.28,
+            5.27,
+            57.85
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
-          "scale": 3
+          "rotation": [
+            -180,
+            11,
+            -180
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -68.79,
+            -0.32,
+            37.74
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 2
         },
         {
           "position": [
@@ -599,9 +644,9 @@
         },
         {
           "position": [
-            -73.07,
-            -1.47,
-            16.76
+            -71.4,
+            -0.93,
+            20.25
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
@@ -610,13 +655,28 @@
             73,
             0
           ],
-          "scale": 3.2
+          "scale": 2
         },
         {
           "position": [
-            -72.11,
-            -1.47,
-            31.14
+            -65.09,
+            2.06,
+            57.92
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            180,
+            -62,
+            180
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -70.08,
+            -0.45,
+            34.9
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
@@ -625,7 +685,22 @@
             73,
             0
           ],
-          "scale": 3.2
+          "scale": 2
+        },
+        {
+          "position": [
+            -67.92,
+            -0.45,
+            48.92
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            180,
+            -62,
+            180
+          ],
+          "scale": 2
         },
         {
           "position": [
@@ -735,17 +810,151 @@
     },
     {
       "assetId": "forestmountain-landscape",
+      "placements": []
+    },
+    {
+      "assetId": "mountain",
+      "placements": []
+    },
+    {
+      "assetId": "mountain4k",
       "placements": [
         {
           "position": [
-            -90.24,
-            0.65,
-            27.76
+            -82.74,
+            2.41,
+            38.17
           ],
           "rotationYDeg": 0,
           "rotation": [
             0,
-            90,
+            37.5,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -69.41,
+            2.41,
+            56.25
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            37.5,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -81.88,
+            1.68,
+            69.98
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -79,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -53.28,
+            0.38,
+            84.54
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -45.5,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -29.68,
+            -1.21,
+            82.97
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -62,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -0.97,
+            -1.21,
+            85.04
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -62,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            26.24,
+            -1.21,
+            85.04
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -30,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            51.85,
+            -1.21,
+            85.58
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -62,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            78.25,
+            1.98,
+            60.44
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -164,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            78.25,
+            0.73,
+            32.93
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -164,
             0
           ],
           "scale": 1

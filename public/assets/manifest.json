@@ -28336,6 +28336,52 @@
         "author": "dasy444"
       },
       "license": "SKETCHFAB Standard (https://sketchfab.com/licenses)"
+    },
+    {
+      "id": "mountain",
+      "name": "Mountain",
+      "assetType": "staticMesh",
+      "category": "Landscape",
+      "path": "assets/ThreeAges/Landscape/Mountain.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Landscape",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3755984
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "mountain4k",
+      "name": "Mountain4 K",
+      "assetType": "staticMesh",
+      "category": "Landscape",
+      "path": "assets/ThreeAges/Landscape/Mountain4K.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Landscape",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 34186024
+      },
+      "license": "Unknown"
     }
   ]
 }

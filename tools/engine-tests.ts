@@ -37684,6 +37684,85 @@ check("§59: an authored Level placement is fogged without game code naming it",
   mesh.dispose();
 });
 
+check("§59: the fog surface covers the backdrop beyond the playable grid", () => {
+  // The map does not end where the grid does — a Level dresses the horizon with
+  // scenery standing outside the border. A surface sized to the grid left that
+  // ground unfogged, so the fog stopped in a rim around the landscape.
+  const vision = new VisionSystem(() => [], { cellSize: 2, worldHalfExtent: 20 });
+  const view = new FogView(vision, "player");
+  view.setGroundHeightSampler(() => 0);
+
+  const mesh = view.root.children[0] as Mesh;
+  const geometry = mesh.geometry as PlaneGeometry;
+  const position = geometry.attributes.position!;
+  const uv = geometry.attributes.uv!;
+  const gridSpan = vision.gridResolution * vision.gridOptions.cellSize;
+
+  let reach = 0;
+  for (let index = 0; index < position.count; index += 1) {
+    reach = Math.max(reach, Math.abs(position.getX(index)), Math.abs(position.getZ(index)));
+  }
+  assert.ok(
+    reach > gridSpan / 2 + 20,
+    `the surface must reach past the grid border, got ${reach.toFixed(1)} for a ${gridSpan} span`,
+  );
+
+  // The apron carries no cells of its own: the grid still maps to exactly 0..1,
+  // so a reveal lands on its own ground, and everything beyond runs off the
+  // texture where clamping hands it the nearest border cell.
+  let insideMin = Infinity;
+  let insideMax = -Infinity;
+  let outsideBeyondEdge = 0;
+  for (let index = 0; index < position.count; index += 1) {
+    const x = position.getX(index);
+    const z = position.getZ(index);
+    const u = uv.getX(index);
+    const v = uv.getY(index);
+    if (Math.abs(x) <= gridSpan / 2 && Math.abs(z) <= gridSpan / 2) {
+      insideMin = Math.min(insideMin, u, v);
+      insideMax = Math.max(insideMax, u, v);
+    } else if (u < 0 || u > 1 || v < 0 || v > 1) {
+      outsideBeyondEdge += 1;
+    }
+  }
+  assert.ok(
+    Math.abs(insideMin) < 1e-6 && Math.abs(insideMax - 1) < 1e-6,
+    `the grid must still map to 0..1, got ${insideMin.toFixed(4)}..${insideMax.toFixed(4)}`,
+  );
+  assert.ok(outsideBeyondEdge > 0, "apron vertices sample past the texture, where clamping holds");
+
+  view.dispose();
+});
+
+check("§59: backdrop scenery outside the grid reveals with the border it stands behind", () => {
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const centers = new CommandCenterSystem();
+  let sources: VisionSource[] = [];
+  const vision = new VisionSystem(() => sources, { cellSize: 2, worldHalfExtent: 40 });
+
+  // A mountain parked past the playable border, as the shipped Level does. Its
+  // point has no cell, so `isExplored` answers false forever — which used to mean
+  // hidden for the whole match, leaving a hole in the horizon.
+  const mountain = new Object3D();
+  mountain.position.set(-56, 0, -20);
+  const binder = new FogVisibilityBinder(vision, units, structures, centers, "player");
+  binder.trackWorldProps(objectFogProps([mountain]));
+  assert.equal(mountain.visible, false, "still hidden before anything is scouted");
+
+  sources = [{ owner: "player", x: 30, z: 30, radius: 8 }];
+  vision.refresh();
+  binder.refresh();
+  assert.equal(mountain.visible, false, "scouting the far corner reveals nothing on this border");
+
+  sources = [{ owner: "player", x: -36, z: -20, radius: 8 }];
+  vision.refresh();
+  binder.refresh();
+  assert.equal(mountain.visible, true, "reaching the border it stands behind brings it in");
+
+  units.clear();
+});
+
 check("§59: an unscouted forest is hidden, and stays drawn once explored", () => {
   // isTreeVisible is the rule syncForest loops over, so this drives the shipped
   // decision rather than a copy of it.

@@ -83,8 +83,19 @@ export class FogVisibilityBinder {
   /** Apply current visibility to every opponent-owned render object. */
   refresh(): void {
     if (this.hiddenProps.length > 0) {
+      const { worldHalfExtent } = this.vision.gridOptions;
       this.hiddenProps = this.hiddenProps.filter((prop) => {
-        if (!this.vision.isExplored(this.observer, prop.x, prop.z)) return true;
+        // Clamped into the grid, because a Level's backdrop scenery stands
+        // *outside* it — the shipped map puts mountains out to ~86 on a 70
+        // half-extent field. `isExplored` answers false for a point it has no
+        // cell for, and false is permanent here: §40's latch only ever fires from
+        // a cell, so off-grid scenery was hidden for the whole match and the
+        // horizon read as a hole in the world. Asking the nearest border cell
+        // instead ties the backdrop to the stretch of border it sits behind,
+        // which is the same thing the fog apron does for the ground under it.
+        const x = clamp(prop.x, worldHalfExtent);
+        const z = clamp(prop.z, worldHalfExtent);
+        if (!this.vision.isExplored(this.observer, x, z)) return true;
         prop.setRevealed(true);
         return false;
       });
@@ -123,4 +134,9 @@ export class FogVisibilityBinder {
     for (const prop of this.hiddenProps) prop.setRevealed(true);
     this.hiddenProps = [];
   }
+}
+
+/** Fold a world coordinate back inside the vision grid's extent. */
+function clamp(value: number, halfExtent: number): number {
+  return value < -halfExtent ? -halfExtent : value > halfExtent ? halfExtent : value;
 }
