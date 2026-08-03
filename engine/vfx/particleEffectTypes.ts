@@ -159,8 +159,19 @@ export interface RuntimeParticleEffect {
   /** Renderer selected by the authored asset; absent means legacy sprite. */
   rendererType?: RendererType;
   loop: boolean;
-  /** Particles spawned per second. */
+  /** Particles spawned per second. Zero on a burst effect, which emits no trickle. */
   rate: number;
+  /**
+   * Burst emission: `count` particles released together, `delay` seconds after
+   * the effect starts. Present only for `spawn.mode: "burst"` assets.
+   *
+   * This is what makes an explosion read as a hit rather than as a cloud fading
+   * up. It used to be approximated as a continuous rate of `count / lifetime`,
+   * which put the *first* particle a whole `lifetime / count` seconds after the
+   * blow — half a second on a ten-particle burst, long enough that the blast
+   * looked like it belonged to something else.
+   */
+  burst?: { count: number; delay: number };
   /** Particle lifetime in seconds. */
   lifetime: number;
   /** Authored upper bound for live particles; renderers must never exceed it. */

@@ -169,15 +169,33 @@ export function validateRtsPresentationActor(
  * code change.
  */
 export function parseRtsEffectManifestPaths(value: unknown): Map<string, string> {
-  const effects = new Map<string, string>();
+  return parseRtsManifestPaths(value, "effect");
+}
+
+/**
+ * Same, for the sprite textures an effect's `renderer.texture` names.
+ *
+ * Effects reach their art through the manifest exactly as they reach their debris
+ * meshes, and for the same reason: an id resolves when the project ships that
+ * asset and never otherwise, so an effect can never name an arbitrary URL. Left
+ * unresolved, a textured effect silently falls back to the engine's procedural
+ * round sprite — a flipbook fireball renders as a grey blob, in the match only,
+ * while the effect editor's preview (which does resolve textures) looks right.
+ */
+export function parseRtsTextureManifestPaths(value: unknown): Map<string, string> {
+  return parseRtsManifestPaths(value, "texture");
+}
+
+function parseRtsManifestPaths(value: unknown, assetType: string): Map<string, string> {
+  const paths = new Map<string, string>();
   const assets = (value as { assets?: unknown } | null)?.assets;
   if (!Array.isArray(assets)) throw new Error("RTS effect manifest has no assets array");
   for (const entry of assets) {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue;
-    const { id, path, assetType } = entry as Record<string, unknown>;
-    if (typeof id === "string" && typeof path === "string" && assetType === "effect") effects.set(id, path);
+    const { id, path, assetType: type } = entry as Record<string, unknown>;
+    if (typeof id === "string" && typeof path === "string" && type === assetType) paths.set(id, path);
   }
-  return effects;
+  return paths;
 }
 
 /** The id set alone, for coverage checks that do not need to load anything. */

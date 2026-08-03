@@ -137,6 +137,17 @@ export class EconomyProductionSystem {
     private readonly resourceNodes?: ResourceNodeSystem,
     private readonly forests?: ForestSystem,
     private readonly wildlife?: WildlifeSystem,
+    /**
+     * Total `pastureYield` standing in this building's pen — the third
+     * production shape's only input (plan §3.5).
+     *
+     * A function rather than the pasture system itself, so this loop stays
+     * ignorant of shepherds, drives and taming: it needs one number, and asking
+     * for exactly that keeps the two systems from having to know each other. The
+     * default answers zero, so a runtime built without pastures simply has none
+     * rather than a broken reference.
+     */
+    private readonly livestockYield: (structure: PlacedStructure) => number = () => 0,
   ) {
     const sources: ResourceSource[] = [];
     if (forests) sources.push(forests);
@@ -186,9 +197,13 @@ export class EconomyProductionSystem {
           workingWorkers,
           workerCapacity: economy.workerCapacity,
           // A pasture has no per-worker rate to report (plan §3.5); its output is
-          // measured in penned animals, which Faz 5 fills in here.
+          // measured in penned animals, so its rate line is computed the other way.
           perWorkerPerMinute: economy.perWorkerPerMinute ?? 0,
-          productionPerMinute: producer.status === "producing" ? workingWorkers * (economy.perWorkerPerMinute ?? 0) : 0,
+          productionPerMinute: producer.status !== "producing"
+            ? 0
+            : economy.requiresLivestock
+              ? this.livestockYield(producer.structure) * (economy.perAnimalPerMinute ?? 0)
+              : workingWorkers * (economy.perWorkerPerMinute ?? 0),
           localBuffer: producer.localBuffer,
           localBufferCapacity: economy.localBufferCapacity,
           lastProductionTick: producer.lastProductionTick,
@@ -363,7 +378,7 @@ export class EconomyProductionSystem {
     // (plan §3.5): a pasture is not a camp that works a source, so it never joins
     // the requirement chain and never runs a round trip.
     if (economy.requiresLivestock) {
-      this.updateLivestockProducer(producer);
+      this.updateLivestockProducer(producer, deltaSeconds);
       return;
     }
     const requirement = this.requirementFor(economy);
@@ -428,13 +443,38 @@ export class EconomyProductionSystem {
    *
    * Nothing here hires: the shepherds a pasture pays for are pulled by the
    * pasture system itself, the way a construction site pulls its builders, and
-   * this loop only ever reads the result. Until that system exists (Faz 4) an
-   * authored pasture is a finished building with an empty pen, and the one thing
-   * it owes the player is to say so instead of reading as broken.
+   * this loop only ever reads the result — one number, the pen's total
+   * `pastureYield`.
+   *
+   * That number times the building's `perAnimalPerMinute` is the whole
+   * production rule, and it is the same shape as `workers × perWorkerPerMinute`
+   * with both halves renamed: the building says how good a pasture it is, the
+   * species says how good an animal it is (§4.4). What comes out lands in the
+   * ordinary `localBuffer`, so the road and depot chain carries it home with no
+   * idea that a cow was involved.
    */
-  private updateLivestockProducer(producer: ProducerRecord): void {
-    producer.status = "missing-livestock";
-    this.setProducerWorking(producer, false);
+  private updateLivestockProducer(producer: ProducerRecord, deltaSeconds: number): void {
+    const economy = producer.structure.economy;
+    if (!economy) return;
+    const pennedYield = this.livestockYield(producer.structure);
+    if (pennedYield <= 0) {
+      producer.status = "missing-livestock";
+      this.setProducerWorking(producer, false);
+      return;
+    }
+    if (producer.localBuffer >= economy.localBufferCapacity) {
+      producer.localBuffer = economy.localBufferCapacity;
+      producer.status = "buffer-full";
+      return;
+    }
+    const requested = Math.min(
+      (pennedYield * (economy.perAnimalPerMinute ?? 0) * deltaSeconds) / 60,
+      economy.localBufferCapacity - producer.localBuffer,
+    );
+    producer.lastProductionTick = requested;
+    producer.localBuffer += requested;
+    producer.totalProduced += requested;
+    producer.status = producer.localBuffer >= economy.localBufferCapacity ? "buffer-full" : "producing";
   }
 
   /**

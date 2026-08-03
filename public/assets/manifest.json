@@ -25259,36 +25259,6 @@
       "license": "Project-local RTS effect"
     },
     {
-      "id": "rts-fx-dust-cloud",
-      "name": "RTS Dust Cloud",
-      "assetType": "effect",
-      "category": "RTS Damage",
-      "path": "assets/ThreeAges/Effects/FX_RTS_Dust_Cloud.effect.json",
-      "tags": [
-        "rts",
-        "damage",
-        "dust",
-        "cloud",
-        "ground",
-        "flipbook"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "RTS Damage",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 1555
-      },
-      "license": "Project-local RTS effect"
-    },
-    {
       "id": "rts-fx-explosion",
       "name": "RTS Explosion",
       "assetType": "effect",

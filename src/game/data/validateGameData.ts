@@ -302,6 +302,8 @@ export function validateGamePreset(
 const UNIT_ROLES: readonly UnitRoleId[] = ["guard", "archer", "siege", "worker"];
 const UNIT_ATTACK_TYPES: readonly UnitAttackType[] = ["melee", "ranged"];
 const UNIT_STRUCTURE_ATTACK_VFX: readonly UnitStructureAttackVfx[] = ["firebrand", "cannonball"];
+/** Same id shape the RTS content catalog accepts, so one table cannot be laxer. */
+const MANIFEST_ASSET_ID = /^[a-zA-Z][a-zA-Z0-9_.-]*$/;
 const UNIT_ARMOR_CLASSES: readonly UnitArmorClass[] = ["light", "heavy", "structure"];
 /** A unit's own armour is what attackers hit; only buildings are "structure". */
 const UNIT_SELF_ARMOR_CLASSES: readonly UnitArmorClass[] = ["light", "heavy"];
@@ -442,6 +444,22 @@ export function validateUnitBalance(value: unknown): UnitBalance {
         `${statsWhere}.structureAttackVfx: must be one of ${UNIT_STRUCTURE_ATTACK_VFX.join(", ")}`,
       );
     }
+    const impactEffect = stats["impactEffect"];
+    if (impactEffect !== undefined) {
+      // Shape only — whether the id resolves is the manifest's business, and the
+      // balance validator has never been allowed to read the asset manifest.
+      if (typeof impactEffect !== "string" || !MANIFEST_ASSET_ID.test(impactEffect)) {
+        throw new GameDataError(`${statsWhere}.impactEffect: must be a manifest asset id`);
+      }
+      // A burst needs a landing to burst at, and only the lobbed shot has one.
+      // Authored on a swordsman it would simply never play, which is a typo that
+      // looks like working data until someone watches for an explosion.
+      if (structureAttackVfx !== "cannonball") {
+        throw new GameDataError(
+          `${statsWhere}.impactEffect: only units with structureAttackVfx "cannonball" have an impact to show`,
+        );
+      }
+    }
     units[id] = {
       id,
       label: requireString(stats, "label", statsWhere),
@@ -468,6 +486,7 @@ export function validateUnitBalance(value: unknown): UnitBalance {
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
       populationCost,
       ...(structureAttackVfx ? { structureAttackVfx: structureAttackVfx as UnitStructureAttackVfx } : {}),
+      ...(impactEffect === undefined ? {} : { impactEffect: impactEffect as string }),
     };
   }
   if (Object.keys(units).length === 0) {

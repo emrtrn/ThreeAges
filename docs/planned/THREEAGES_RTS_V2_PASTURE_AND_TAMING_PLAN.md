@@ -1,10 +1,9 @@
 # ThreeAges RTS V2 - Agil ve Evcillestirme Plani
 
 Olusturulma tarihi: 2026-08-02
-Durum: **Faz 0-2 tamamlandi (2026-08-02), gorsel kabul dahil.**
-Faz 3 kodu ve verisi yazildi (2026-08-02); **gorsel kabul bekliyor** - kullanici
-sururun yaninda/uzaginda ghost rengini dogrulayacak.
-Sonra Faz 4 - Sahiplik ve gudme dongusu.
+Durum: **Faz 0-4 tamamlandi (2026-08-03), gorsel kabul dahil.**
+Faz 5 kodu ve testleri yazildi; **gorsel kabul bekliyor** (agil uretiyor mu,
+yiyecek merkeze akiyor mu). Sonra Faz 6 - Boga karsilik verir.
 Onkosul: `THREEAGES_RTS_WILDLIFE_AND_HUNTING_PLAN.md` V1 (Faz 0-7) tamamlandi.
 
 Bu dosya, yaban hayati yol haritasinin (`...WILDLIFE_AND_HUNTING_PLAN.md` §12)
@@ -489,40 +488,124 @@ Kabul:
   gectigi yer Faz 3'un tum kontrollerinden **sonra**. Karar kullanicinin: ya
   muhafiz yeniden odun yer, ya da iddia "bir askeri birim odun yer" seviyesine
   cekilir (okcu 10, kusatma 40 zaten odiyor).
-- [ ] Kullanici ghost rengini dogrular.
+- [x] **Gorsel kabul alindi (2026-08-03).** Kullanici `?rts` rotasinda dogruladi:
+  Ekonomi kategorisinde Agil cikiyor, sigirin yaninda ghost gecerli, uzaginda
+  gerekceli kirmizi; kurulan agil bos peniyle "Yakinda evcil hayvan yok" diyor.
+  Yer tutucu model (`houses-firstage-2-level1`) oldugu gibi kabul edildi.
+
+**Faz 3 tamamlandi (2026-08-03).**
 
 ### Faz 4 - Sahiplik ve gudme dongusu
 
-- [ ] `WildlifeAnimal.owner` yazilabilir; `huntable()` yalniz `wild` (§3.7).
-- [ ] `PastureSystem`: bos isci cekme, `moving-to-animal -> calming -> driving ->
-  penned` durum makinesi.
-- [ ] Sakinlestirme `tameSeconds` surer; coban `work` pozunda durur
-  (`setWorking`), hayvan `CAUGHT_DISTANCE` icinde kacmaz (V1 Faz 5 dersi).
-- [ ] **Surulen hayvan nav grid'e hic sormaz**: cobanin *konumunu* takip eder,
-  coban ise navigasyonla yol alir. Boylece hayvan gecerli bir rotayi izler ve
-  hayvan basina yol bulma maliyeti sifir kalir (V1 Faz 2 karari).
-- [ ] Agila varinca `tame()`: `owner` degisir, roam profili agil merkezli kucuk
-  cembere doner, kacis kapanir.
-- [ ] Sis: kendi hayvanin her zaman cizilir; rakibin hayvani hareket eden seyin
+- [x] `WildlifeAnimal.owner` yazilabilir; `huntable()` yalniz `wild` (§3.7).
+  Yerlestirme tarafi da kapatildi: `huntableAnimalsNear` eklendi, cunku dolu bir
+  penin yanina kurulan avci kulubesi aksi halde **gecerli** olup hemen
+  `source-depleted` diyordu.
+- [x] `PastureSystem`: bos isci cekme, `moving-to-animal -> calming -> driving ->
+  penned` durum makinesi (`WorkerConstructionSystem` deseni).
+- [x] Sakinlestirme `tameSeconds` surer; coban `work` pozunda durur
+  (`setWorking`), hayvan **acikca** tutulur (`lead.follow = false`) -
+  `CAUGHT_DISTANCE`'a guvenmek yetmiyordu (V1 Faz 5 dersi).
+- [x] **Surulen hayvan nav grid'e hic sormaz**: cobanin *konumunu* takip eder,
+  coban ise navigasyonla yol alir.
+- [x] Agila varinca `tame()`: `owner` degisir, roam profili agil merkezli kucuk
+  **halkaya** doner, kacis kapanir.
+- [x] Sis: kendi hayvanin her zaman cizilir; rakibin hayvani hareket eden seyin
   kuralina uyar (`isWildlifeVisible` owner farkindaligi).
-- [ ] Coban olur/serbest birakilirsa rezervasyon ve surulen hayvan birakilir.
+- [x] Coban olur/serbest birakilirsa rezervasyon ve surulen hayvan birakilir;
+  hayvan yabani kalir ve yeniden avlanabilir/gudulebilir.
+- [x] Ek: agil paneli artik "Cobanlar: n/N" ve "Agil: n/N hayvan" gosteriyor.
+  Agilda "Isciler: 0/2" hem dogru hem ise yaramazdi.
 
-Kabul: gateler + §2'nin 3-6 adimlari engine testinde uctan uca + gorsel kabul.
+**Planda yazmayan, uygulamanin cikardigi dort sey.**
+
+1. **Pen bir daire degil, bir halka olmali.** Duz daire uniform alanla
+   ornekleniyor, yani hayvanlarin bir kismi binanin *icinde* otluyor. Pen artik
+   `roamInnerRadius` (binanin yari-kosegeni) ile `+3` arasinda bir halka ve
+   geometri footprint'ten **turetiliyor**, ayarlanmiyor.
+2. **Halka, yurume adiminin da kelepcelenmesini gerektirdi.** Hedef halkanin
+   icinde olsa bile iki nokta arasindaki duz cizgi delikten - yani ahirin
+   ustunden - geciyordu. `keepInHerdGround` artik yuruyuse de uygulaniyor (yabani
+   surude no-op: disbukey dairede iki uc zaten icerde) ve hiz **gercekte alinan
+   yoldan** hesaplaniyor. Testi kirmiziya donduren sey tam olarak buydu (3.63 <
+   4.24).
+3. **Surulen hayvan `walkClipSpeed` ile yurur, coban onden gider ve bekler.**
+   Tasma (leash) denenmedi bile: inek 1.1 br/s, isci ~4-6 br/s, yani coban her
+   birkac adimda duracak ve gudme bir titremeye donusecekti. Daha onemlisi
+   herhangi bir yuksek hiz ya oynatma hizini kirpip ayaklari kaydirir ya da
+   hayvani **dortnala** klibine atar. Bu yuzden varis **hayvanin** konumundan
+   olculuyor, cobanin degil.
+4. **Otomatik insaat kurtarmasi cobani calamaz.** `WorkerConstructionSystem`
+   kilitlenmeyi acmak icin toplayici isci kapabiliyor; ayni sey cobana yapilirsa
+   sakinlestirilmis hayvan tarlanin ortasinda kalirdi. Manuel (oyuncunun adiyla
+   istedigi) emir hala cobani alir.
+
+Kabul:
+
+- [x] `npx tsc --noEmit`, `verify:imports`, `vite build`, `verify:dist --strict`,
+  `check:assets` (0 hata) yesil.
+- [x] Dort yeni engine testi: uctan uca gudme (§2'nin 3-6 adimlari; uc durumun
+  da kostugu, pen kapasitesinde durdugu, hayvanin **avluda** - ahirda degil -
+  otladigi), sahiplik (avci kulubesinin sayimindan tam kendi degeri kadar
+  dusuyor, hicbir avci claim edemiyor, nufus saymiyor), coban olumu, ve sis.
+- [x] `npm run test:engine`: **1230 check gecti** (suite bastan sona kosuyor).
+- [x] **Gorsel kabul alindi (2026-08-03).** Kullanici dogruladi: coban hayvani
+  kovaliyor, sakinlestiriyor, agila suruyor; pen dolunca cobanlar ayriliyor ve
+  dort hayvan agilda kaliyor.
+
+**Faz 4 tamamlandi (2026-08-03).**
+
+**Faz 3'ten devreden engel kapatildi (kullanici karari, 2026-08-03).** HEAD'deki
+`797f84f0` `guard_placeholder.cost.wood`'u 0 yapmisti ve "wood contributes to
+military production" iddiasi tek bir birim id'sini pinledigi icin kirmiziya
+donmustu - suite orada duruyor, sonraki ~230 kontrol hic kosmuyordu. Iddia
+CLAUDE.md'nin balans kuralina uygun sekilde **genellestirildi**: odun asker
+alir, ama illa *o* askeri degil (okcu 10, kusatma 40 zaten odiyor). Veri
+degistirilmedi.
 
 ### Faz 5 - Agil uretimi ve cogalma
 
-- [ ] Ucuncu uretim sekli: cikti `perAnimalPerMinute * toplam(pastureYield)`,
-  **isci sayisindan bagimsiz**.
-- [ ] Et yol/depo zincirine akar (`localBuffer` + `withdrawBuffered`), agila ozel
-  yol yoktur.
-- [ ] Cogalma: pen bos degilse `breedSeconds` dolunca +1 hayvan,
+- [x] Ucuncu uretim sekli: cikti `perAnimalPerMinute * toplam(pastureYield)`,
+  **isci sayisindan bagimsiz**. `EconomyProductionSystem` pen'i tanimaz; tek bir
+  sayi sorar (`livestockYield` closure'i), yani gudme/sakinlestirme/sahiplik bu
+  dongude hic gorunmez.
+- [x] Et yol/depo zincirine akar (`localBuffer` + `withdrawBuffered`), agila ozel
+  yol yoktur - `ProductionLogisticsSystem` zaten `economy` tasiyan her tamamlanmis
+  yapiyi tariyor, yani agil kendiliginden girdi. Toplanmayan agil **tamponunu
+  doldurup durur**, tarlanin geri-basincinin aynisi.
+- [x] Cogalma: pen bos degilse `breedSeconds` dolunca +1 hayvan,
   `livestockCapacity` ile sinirli.
-- [ ] Pen doluyken cobanlar serbest birakilir (isciler bos beklemez).
-- [ ] Agil yikilirsa penindeki hayvanlar **yabaniye doner** (kaybolmaz).
-- [ ] Validator: `livestockCapacity` pozitif tamsayi; `perAnimalPerMinute` > 0;
-  cogalma penin kapasitesini asamaz.
+- [x] Pen doluyken cobanlar serbest birakilir (isciler bos beklemez).
+- [x] Agil yikilirsa penindeki hayvanlar **yabaniye doner** (kaybolmaz):
+  durduklari yeri merkez alan yeni bir yabani cember alirlar, yeniden avlanabilir
+  ve yeniden gudulebilir olurlar.
+- [x] Validator: `livestockCapacity` pozitif tamsayi ve `perAnimalPerMinute` > 0
+  (Faz 3'te kondu); cogalmanin kapasiteyi asamamasi kod invaryanti, testle
+  pinlendi.
 
-Kabul: gateler + turetim testi (uretim iki tablodan hesaplanir, pinlenmez).
+**Planda yazmayan iki karar.**
+
+1. **Cogalma tur basina isler.** `breedSeconds` tur tablosunda, yani tek bir
+   ortak sayac iki turun ortalamasini almak zorunda kalirdi - hicbir tabloda
+   olmayan bir sayi. Her pen, icindeki her tur icin ayri bir gebelik sayaci
+   tutar; inek inek dogurur, boga boga. Bu ayni zamanda §4.4'un tur carpanini
+   durust tutar: boga daha verimlidir ve daha yavas urer.
+2. **Kapasite tavani "taahhut" uzerinden.** Sinir yalniz pendekiler degil,
+   pendekiler **arti yolda olanlar**. Yalniz peni saymak, tarlanin yarisini
+   gecmis bir gudmenin altindan son slotu cekerdi. Ucu de kapali: ise alim,
+   dogum, ve pen'e sokma ani.
+
+Kabul:
+
+- [x] Gateler yesil; `npm run test:engine` **1233 check**.
+- [x] Turetim testi: uretim `perAnimalPerMinute` ve `pastureYield`'den
+  **hesaplanarak** dogrulaniyor (iki dakikalik banka, %2 tolerans), sifir isciyle.
+- [x] Cogalma testi: iki hayvanla dolan pen kapasitede duruyor ve aradaki fark
+  **dogumdan** geliyor (haritadaki toplam hayvan sayisi artiyor); bos pen hic
+  uremiyor.
+- [x] Yikim testi: agil yikilinca hayvanlar yok olmuyor, yabaniye donuyor ve
+  `huntableAnimalsNear` onlari yeniden av olarak sayiyor.
+- [ ] Kullanici gorsel kabulu: agilin yiyecek uretmesi ve merkeze akmasi.
 
 ### Faz 6 - Boga karsilik verir
 
@@ -569,15 +652,17 @@ CLAUDE.md kurali: **ayar degil sozlesme**. Hicbir test bir buyuklugu pinlemez.
   geyik surusunun icinde `missing-livestock`.
 - [x] **Bos pen (Faz 3):** tamamlanmis agil `missing-livestock` der, hicbir isci
   almaz (otomatik veya emirle), `producerHasSource` false doner.
-- [ ] **Nufus:** evcil hayvan da nufus saymaz (V1 testinin devami).
-- [ ] **Sahiplik:** evcillestirilen hayvan avci kulubesinin `remainingNear`
-  sayimindan cikar; kendi inegini avlayan kulube kirmizi verir.
-- [ ] **Turetim:** agilin dakikalik ciktisi `perAnimalPerMinute` ve
+- [x] **Nufus (Faz 4):** evcil hayvan da nufus saymaz (V1 testinin devami).
+- [x] **Sahiplik (Faz 4):** evcillestirilen hayvan avci kulubesinin
+  `remainingNear` sayimindan **tam kendi degeri kadar** cikar; hicbir avci onu
+  claim edemez; `huntableAnimalsNear` yalniz yabani doner.
+- [x] **Turetim (Faz 5):** agilin dakikalik ciktisi `perAnimalPerMinute` ve
   `pastureYield`'den **hesaplanarak** dogrulanir.
-- [ ] **Cogalma:** pen kapasitesini asmaz; bos pen cogalmaz.
-- [ ] **Sis:** kendi evcil hayvanin kesfedilmemis alanda bile cizilir; rakibin
-  hayvani gorunmuyorsa cizilmez.
-- [ ] **Yikim:** agil yikilinca hayvanlar yabaniye doner ve yeniden avlanabilir.
+- [x] **Cogalma (Faz 5):** pen kapasitesini asmaz; bos pen cogalmaz.
+- [x] **Sis (Faz 4):** kendi evcil hayvanin kesfedilmemis alanda bile cizilir;
+  rakibin hayvani gorunmuyorsa cizilmez.
+- [x] **Yikim (Faz 5):** agil yikilinca hayvanlar yabaniye doner ve yeniden
+  avlanabilir.
 - [ ] **Boga (Faz 6):** gudulen boga cobanin canini azaltir, inek azaltmaz.
 - [ ] **Validator:** `tameable` turde eksik `tameSeconds`/`pastureYield`,
   sifir/negatif `livestockCapacity`, ve yakalanamaz kacis ayari dosya ve alan

@@ -144,6 +144,11 @@ export class ParticleEffect {
   private spawnAccumulator = 0;
   /** Global density multiplier on the spawn rate (quality knob, 1 = authored). */
   private densityScale = 1;
+  /** Authored burst, or 0 particles for a pure rate emitter. */
+  private readonly burstCount: number;
+  private readonly burstDelay: number;
+  /** Whether this play has already released its burst; cleared by {@link reset}. */
+  private burstFired = false;
 
   /**
    * @param textureUrl Resolved sprite-texture URL (the app boundary turns the
@@ -169,8 +174,12 @@ export class ParticleEffect {
     this.endSize = definition.endSize;
     this.velocity = [...definition.velocity];
     this.spread = definition.spread;
-    // Max particles alive at once ≈ rate * lifetime; pad for spawn jitter.
-    this.capacity = Math.max(8, Math.ceil(this.rate * this.lifetime) + 4);
+    this.burstCount = Math.max(0, Math.round(definition.burst?.count ?? 0));
+    this.burstDelay = clampMin0(definition.burst?.delay ?? 0);
+    // Max particles alive at once ≈ rate * lifetime, plus a burst that lands all
+    // at once; pad for spawn jitter. The burst term is not optional padding — a
+    // capacity that cannot hold it would silently drop the tail of every blast.
+    this.capacity = Math.max(8, Math.ceil(this.rate * this.lifetime) + this.burstCount + 4);
     this.positions = new Float32Array(this.capacity * 3);
     this.sizes = new Float32Array(this.capacity);
     this.alphas = new Float32Array(this.capacity);
@@ -253,6 +262,7 @@ export class ParticleEffect {
     this.applyOverrides(overrides);
     this.elapsed = 0;
     this.spawnAccumulator = 0;
+    this.burstFired = false;
     this.ages.fill(-1);
     this.positions.fill(0);
     this.sizes.fill(0);
@@ -308,6 +318,17 @@ export class ParticleEffect {
       this.lifeTs[i] = t;
     }
 
+    // The burst goes out whole, on the first tick at or past its delay — this is
+    // the frame the effect was played on when the delay is 0, which is what makes
+    // a blast land with the blow instead of trailing it.
+    if (!this.burstFired && this.burstCount > 0 && this.elapsed >= this.burstDelay) {
+      this.burstFired = true;
+      // Thinned by the same quality knob as the rate below: a low-density setting
+      // must reduce the blast, not exempt it.
+      const count = Math.round(this.burstCount * this.densityScale);
+      for (let i = 0; i < count; i += 1) this.spawnParticle();
+    }
+
     // A looping effect emits forever; a one-shot emits for one lifetime window.
     if (loop || this.elapsed <= lifetime) {
       // Density scales the emission rate (fewer particles → less fill/overdraw);
@@ -342,6 +363,10 @@ export class ParticleEffect {
   /** A non-looping effect is finished once it stopped emitting and all particles died. */
   isFinished(): boolean {
     if (this.loop) return false;
+    // A burst still owed is work outstanding, however long the effect has run:
+    // a delay past the lifetime would otherwise see the instance recycled before
+    // it ever emitted, and the blast would simply never appear.
+    if (!this.burstFired && this.burstCount > 0) return false;
     if (this.elapsed <= this.lifetime) return false;
     for (let i = 0; i < this.capacity; i += 1) {
       if (this.ages[i]! >= 0) return false;

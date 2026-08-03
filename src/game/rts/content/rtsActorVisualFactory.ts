@@ -19,6 +19,7 @@ import { rtsAnimalActorRef, rtsBuildingActorRef, rtsUnitActorRef, type RtsActorR
 import {
   RtsActorPresentationError,
   parseRtsEffectManifestPaths,
+  parseRtsTextureManifestPaths,
   parseRtsMeshManifest,
   rtsContentCatalogRefs,
   validateRtsPresentationActor,
@@ -90,6 +91,8 @@ export class RtsActorVisualFactory {
   private readonly manifestMeshes = new Map<string, RtsMeshAsset>();
   /** Effect asset id → public-root-relative path, for the damage table's slots. */
   private readonly manifestEffects = new Map<string, string>();
+  /** Texture asset id → path, for the sprite art an effect's renderer names. */
+  private readonly manifestTextures = new Map<string, string>();
   /**
    * Tinted material variants, keyed by source material and tint.
    *
@@ -122,6 +125,11 @@ export class RtsActorVisualFactory {
     return this.manifestEffects.get(effectId) ?? null;
   }
 
+  /** Same, for the sprite texture an effect's renderer names. */
+  textureAssetPath(textureId: string): string | null {
+    return this.manifestTextures.get(textureId) ?? null;
+  }
+
   /** Same, for a static mesh — the debris models an effect's renderer names. */
   staticMeshAssetPath(assetId: string): string | null {
     const asset = this.manifestMeshes.get(assetId);
@@ -142,6 +150,11 @@ export class RtsActorVisualFactory {
     // file this size.
     for (const [id, path] of parseRtsEffectManifestPaths(manifestJson)) {
       this.manifestEffects.set(id, path);
+    }
+    // Indexed from the same read: an effect that names a sprite texture is no use
+    // without it, and the match has no other chance to resolve the id.
+    for (const [id, path] of parseRtsTextureManifestPaths(manifestJson)) {
+      this.manifestTextures.set(id, path);
     }
 
     const refs = rtsContentCatalogRefs(this.catalog);

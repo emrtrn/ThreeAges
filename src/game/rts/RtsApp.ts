@@ -179,6 +179,7 @@ import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTradeSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { ForestSystem } from "./economy/forestSystem";
+import { PastureSystem } from "./wildlife/pastureSystem";
 import { WildlifeSystem } from "./wildlife/wildlifeSystem";
 import { WildlifeView } from "./wildlife/wildlifeView";
 import { KingdomProgressionSystem, type UpgradableStructure } from "./progression/kingdomProgressionSystem";
@@ -513,15 +514,29 @@ export class RtsApp {
   private readonly input: RtsInput;
   private readonly units = new UnitSystem();
   private readonly wildlife: WildlifeSystem;
+  private readonly pasture: PastureSystem;
   private readonly wildlifeRoot = new Group();
   private readonly wildlifeView = new WildlifeView(this.wildlifeRoot);
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
   private readonly structureDamageModelLoader: GltfModelLoader;
-  /** RTS-owned use of the general Forge VFX runtime; effect assets stay editable. */
+  /**
+   * RTS-owned use of the general Forge VFX runtime; effect assets stay editable.
+   *
+   * Grew past the buildings' damage slots when the artillery's blast became an
+   * authored effect too, so anything in the match that bursts goes through this
+   * one subsystem — one warm cache, one instance budget, one density setting.
+   */
   private readonly structureDamageVfx = new VfxSubsystem({
     resolveEffectUrl: (effectId) => {
       const path = this.actorVisuals?.effectAssetPath(effectId);
+      return path ? projectFileUrl(path) : null;
+    },
+    // Without this a sprite effect falls back to the engine's procedural round
+    // blob, so an authored flipbook (the explosion's fireball, the dust cloud)
+    // looked right in the effect editor's preview and wrong in the match.
+    resolveTextureUrl: (textureId) => {
+      const path = this.actorVisuals?.textureAssetPath(textureId);
       return path ? projectFileUrl(path) : null;
     },
     loadMeshModels: (modelIds) => this.loadStructureDamageModels(modelIds),
@@ -1016,16 +1031,32 @@ export class RtsApp {
       (structure, target) => this.orderStructureAttack(structure, target),
     );
     this.structureRepair = new StructureRepairSystem(this.kingdoms);
+    // Built before the two systems it cross-checks, and reads them through
+    // closures rather than references: all three answer the same question about a
+    // worker ("is somebody else already using him") and none of them may be the
+    // only one that knows.
+    this.pasture = new PastureSystem(
+      this.units,
+      this.structures,
+      this.navigation,
+      this.wildlife,
+      (worker) => this.workerConstruction.stateFor(worker) !== "idle"
+        || (this.economyProduction?.isAssigned(worker) ?? false),
+    );
     this.workerConstruction = new WorkerConstructionSystem(
       this.units,
       this.structures,
       this.navigation,
-      (worker) => this.economyProduction?.isAssigned(worker) ?? false,
+      (worker) => (this.economyProduction?.isAssigned(worker) ?? false) || this.pasture.isShepherd(worker),
       (structure) => {
         if (structure.stats.territory) this.territory.refresh();
       },
+      // Automatic recovery deliberately cannot take a shepherd: preemption exists
+      // to stop a foundation deadlocking behind gathering, and stealing a worker
+      // mid-drive would drop a calmed animal in the field. A player who asks by
+      // name still gets him.
       (worker, source) => source === "manual"
-        ? this.economyProduction?.release(worker) ?? false
+        ? (this.economyProduction?.release(worker) ?? false) || this.pasture.release(worker)
         : this.economyProduction?.releaseAutomatic(worker) ?? false,
       // Only the player's sites pull in every idle worker: hand-picking three
       // more builders per foundation was busywork the player always did anyway.
@@ -1037,10 +1068,13 @@ export class RtsApp {
       this.units,
       this.structures,
       this.navigation,
-      (worker) => this.workerConstruction.stateFor(worker) !== "idle",
+      // Both of the systems that pull their own workers, so a builder and a
+      // shepherd are equally invisible to the producers' hiring pass.
+      (worker) => this.workerConstruction.stateFor(worker) !== "idle" || this.pasture.isShepherd(worker),
       this.resourceNodes,
       this.forests,
       this.wildlife,
+      (structure) => this.pasture.pennedYield(structure),
     );
     this.logisticsTransfers = new LogisticsTransferSystem(
       this.economyProduction,
@@ -1132,8 +1166,11 @@ export class RtsApp {
           // rule a lumber camp follows. Live animals only: a herd that has been
           // hunted out must stop justifying a new camp, or the player builds one
           // over a field of carcasses.
+          // Wild game only: cattle penned in a pasture are nobody's quarry, so a
+          // camp raised beside a full pen would be legal and then immediately
+          // report that its herd is gone.
           : stats.economy?.requiresGame
-            && this.wildlife.liveAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
+            && this.wildlife.huntableAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
             ? "missing-game"
             // A pasture is placed at the herd it will tame, the same rule one
             // building over — but a stricter reading of "a herd": only living,
@@ -1535,6 +1572,7 @@ export class RtsApp {
     this.fogView?.dispose();
     this.ghostStructures?.dispose();
     this.objectiveTracker?.dispose();
+    this.pasture.reset();
     this.workerConstruction.reset();
     this.structureRepair.reset();
     this.barracksProduction.reset();
@@ -1623,6 +1661,13 @@ export class RtsApp {
     this.scene.add(this.projectiles.root);
     this.scene.add(this.firebrands.root);
     this.scene.add(this.cannonballs.root);
+    // The shell's blast is an authored effect, not something the cannonball
+    // system draws: it reports the landing, this plays whatever the gun's
+    // `impactEffect` names. Wired here rather than at construction because the
+    // VFX subsystem is what resolves the id, and it is the scene's to own.
+    this.cannonballs.setImpactHandler((effectId, position) => {
+      if (effectId) this.playWorldEffect(effectId, [position.x, position.y, position.z]);
+    });
     this.scene.add(this.commandMarkers.root);
   }
 
@@ -1779,7 +1824,7 @@ export class RtsApp {
     // because this is the loop that creates the bodies and the only one that runs
     // on the start screen — a herd fogged from the binder's schedule would graze
     // in plain sight until the first simulation tick.
-    this.wildlifeView.sync(this.wildlife.all(), dt, null, this.playerVisibilityTest());
+    this.wildlifeView.sync(this.wildlife.all(), dt, null, this.playerVisibilityTest(), PLAYER_OWNER);
     // §59: the grid is a simulation fact and `updateFogOfWar` owns it; how far
     // the drawn frontier has eased toward it is presentation, so it runs here on
     // the rendered delta. Same reason as the wildlife above — at §38's 8x test
@@ -2147,21 +2192,28 @@ export class RtsApp {
   }
 
   /**
-   * Parse every effect the damage table can reach, once, at boot.
+   * Parse every effect the match can reach, once, at boot.
    *
-   * Derived from the table rather than listed here, so an author who assigns a
+   * Derived from the tables rather than listed here, so an author who assigns a
    * newly imported effect gets it warmed without touching code. A ref that no
-   * longer resolves is not fatal — `playStructureEffect` still retries, and one
-   * dead slot must not cost the match its other damage VFX.
+   * longer resolves is not fatal — `playWorldEffect` still retries, and one dead
+   * slot must not cost the match its other VFX.
    */
   private warmStructureDamageEffects(): void {
-    const catalog = this.options.contentCatalog;
-    if (!catalog) return;
     const effectIds = new Set<string>();
-    for (const buildingId of Object.keys(this.options.buildingBalance)) {
-      const presentation = rtsBuildingDamagePresentation(catalog, buildingId);
-      for (const slot of RTS_DAMAGE_SLOTS) {
-        for (const effectId of presentation.slots[slot].effects) effectIds.add(effectId);
+    // The guns' bursts warm even where there is no content catalog: they are
+    // named in `balance/units.json`, which every match has, and a first shell
+    // that had to wait on IO would land well before its explosion did.
+    for (const stats of Object.values(this.options.unitBalance)) {
+      if (stats.impactEffect) effectIds.add(stats.impactEffect);
+    }
+    const catalog = this.options.contentCatalog;
+    if (catalog) {
+      for (const buildingId of Object.keys(this.options.buildingBalance)) {
+        const presentation = rtsBuildingDamagePresentation(catalog, buildingId);
+        for (const slot of RTS_DAMAGE_SLOTS) {
+          for (const effectId of presentation.slots[slot].effects) effectIds.add(effectId);
+        }
       }
     }
     void Promise.all([...effectIds].map((effectId) => this.structureDamageVfx.warm(effectId)));
@@ -2179,13 +2231,13 @@ export class RtsApp {
     // Keyed by structure rather than by trigger, so one building's debris stays
     // the same debris for its whole life instead of flickering between presets.
     const effectId = slot.effects[rotationKey % slot.effects.length];
-    if (effectId) this.playStructureEffect(effectId, this.slotPosition(structure, slot));
+    if (effectId) this.playWorldEffect(effectId, this.slotPosition(structure, slot));
   }
 
   /** A one-shot slot is a composed burst: every effect it names fires together. */
   private playSlotBurst(structure: PlacedStructure, slot: RtsDamageSlot): void {
     const position = this.slotPosition(structure, slot);
-    for (const effectId of slot.effects) this.playStructureEffect(effectId, position);
+    for (const effectId of slot.effects) this.playWorldEffect(effectId, position);
   }
 
   /** Restarts the slots a health stage owns, so a threshold reads immediately. */
@@ -2288,12 +2340,12 @@ export class RtsApp {
       if (smoke.elapsed < smoke.intervalSeconds) continue;
       smoke.elapsed %= smoke.intervalSeconds;
       const effectId = smoke.effects[smoke.rotationKey % smoke.effects.length];
-      if (effectId) this.playStructureEffect(effectId, smoke.position);
+      if (effectId) this.playWorldEffect(effectId, smoke.position);
     }
   }
 
-  /** Plays a warmed effect without ever making a damage event wait on IO. */
-  private playStructureEffect(effectId: string, position: [number, number, number]): void {
+  /** Plays a warmed effect without ever making a gameplay event wait on IO. */
+  private playWorldEffect(effectId: string, position: [number, number, number]): void {
     if (this.structureDamageVfx.play(effectId, { position }) !== null) return;
     // An early hit before the match-start warm finished should still be visible;
     // retry once the cached definition settles, without blocking the frame.
@@ -2609,6 +2661,10 @@ export class RtsApp {
     // Every body on the field frightens game, not just the hunter who claimed
     // it: a herd that scattered for its assigned hunter and ignored an army
     // walking through it would read as scenery with one scripted reaction.
+    // Ahead of the herd's own tick so a lead set this frame moves the animal this
+    // frame: the shepherd's position has just been updated above, and a drive that
+    // aimed at where he stood last tick would trail a step behind all the way home.
+    this.pasture.update(dt);
     this.wildlife.update(dt, this.units.all().map((unit) => unit.position));
     this.workerConstruction.update(dt);
     // Settle repair jobs whose building was razed or demolished since the last
@@ -2715,6 +2771,9 @@ export class RtsApp {
       return this.cannonballs.spawn(
         shot.attacker.position,
         combatImpactPoint(shot.attacker.position, shot.target),
+        // The blast belongs to the gun, not to what it hit: the same shell is
+        // the same explosion on a wall and on a soldier.
+        shot.attacker.stats.impactEffect ?? null,
       );
     }
     if (shot.ranged) {
@@ -3417,6 +3476,7 @@ export class RtsApp {
     this.economyProduction?.reset();
     this.logisticsOccupation.reset();
     this.logisticsTransfers.reset();
+    this.pasture.reset();
     this.workerConstruction.reset();
     // Dropped rather than refunded: `kingdoms.reset()` below restores every
     // wallet to its match-start stockpile, so a refund here would be paid into
@@ -4046,6 +4106,10 @@ export class RtsApp {
    * uses for a genuinely free one.
    */
   private workerJob(worker: Unit): WorkerJob {
+    // A shepherd is asked about first: he is in neither of the other two, and
+    // calming an animal is standing work while the rest of the drive is a walk.
+    const herding = this.pasture.stateFor(worker);
+    if (herding !== "idle") return herding === "calming" ? "producing" : "moving";
     if (this.economyProduction?.isAssigned(worker)) {
       // "gathering" is a worker kneeling at a tree or a deposit: as much at work
       // as one standing in a field, and the panel must not call it "moving".
@@ -4137,7 +4201,8 @@ export class RtsApp {
     return worker.role === "worker"
       && !worker.blocksAutomaticWorkerAssignment
       && this.workerConstruction.stateFor(worker) === "idle"
-      && !(this.economyProduction?.isAssigned(worker) ?? false);
+      && !(this.economyProduction?.isAssigned(worker) ?? false)
+      && !this.pasture.isShepherd(worker);
   }
 
   private structureDetail(structure: PlacedStructure): StructureDetailView {
@@ -4151,11 +4216,20 @@ export class RtsApp {
     const production = this.economyProduction?.snapshots(structure.owner)
       .find((snapshot) => snapshot.structureId === structure.id);
     if (production) {
+      const livestock = this.pasture.snapshots(structure.owner)
+        .find((pasture) => pasture.structureId === structure.id);
       return {
         kind: "producer",
         production,
         logistics: this.productionLogistics.snapshots()
           .find((producer) => producer.structureId === structure.id)?.status ?? null,
+        livestock: livestock
+          ? {
+            pennedAnimals: livestock.pennedAnimals,
+            livestockCapacity: livestock.livestockCapacity,
+            shepherds: livestock.shepherds,
+          }
+          : null,
       };
     }
     if (structure.stats.id === "depot") {
@@ -4458,6 +4532,10 @@ export class RtsApp {
     for (const worker of workers) {
       this.workerConstruction.release(worker);
       this.economyProduction?.release(worker);
+      // A shepherd taken off the job lets go of his animal with him
+      // (`PastureSystem.release`), so an ordered-away drive leaves a wild cow
+      // rather than one frozen mid-lead.
+      this.pasture.release(worker);
     }
   }
 

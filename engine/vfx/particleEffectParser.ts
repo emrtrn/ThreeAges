@@ -404,18 +404,20 @@ export function normalizeEffectDefinition(value: unknown): ParticleEffectDefinit
 export function toRuntimeParticleEffect(def: ParticleEffectDefinition): RuntimeParticleEffect {
   const speedMid = rangeMid(def.initialize.speed);
   const dir = def.initialize.direction;
-  // For burst mode the simple renderer has no burst concept yet; approximate a
-  // continuous rate that emits ~count particles across one lifetime window.
   const lifetimeMid = rangeMid(def.initialize.lifetime);
-  const rate =
-    def.spawn.mode === "rate"
-      ? def.spawn.rate
-      : def.spawn.count / Math.max(0.05, lifetimeMid);
+  // The two spawn modes are exclusive, as they are in the authored schema: a
+  // burst releases its whole count at once and then stops, so it carries no
+  // trickle, and a rate emitter has nothing to release up front. Burst used to be
+  // flattened into `count / lifetime` particles per second, which is not a slow
+  // burst — it is a *late* one, because the first particle then waits
+  // `lifetime / count` seconds to appear.
+  const burstMode = def.spawn.mode === "burst";
   return {
     ...(def.name ? { name: def.name } : {}),
     ...(def.renderer.type === "mesh" ? { rendererType: "mesh" as const } : {}),
     loop: def.system.loop,
-    rate,
+    rate: burstMode ? 0 : def.spawn.rate,
+    ...(burstMode ? { burst: { count: def.spawn.count, delay: def.spawn.delay } } : {}),
     lifetime: clampMin(lifetimeMid, 0.01),
     ...(def.renderer.type === "mesh" ? { maxParticles: def.system.maxParticles } : {}),
     startSize: rangeMid(def.initialize.startSize),

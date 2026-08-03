@@ -218,6 +218,21 @@ export interface UnitBalanceStats {
    * which is the default for every role that has no siege identity of its own.
    */
   readonly structureAttackVfx?: UnitStructureAttackVfx;
+  /**
+   * Manifest effect asset id burst at the point this unit's shot lands.
+   *
+   * Only the arcing weapons can use it — the ones whose blow waits on a shell
+   * that has to arrive ({@link structureAttackVfx} `cannonball`), because those
+   * are the only shots with a landing to burst at. Presentation only: an id that
+   * no manifested effect answers costs the shot its blast, never its damage.
+   *
+   * It is a free-form asset id rather than another closed enum like
+   * `structureAttackVfx` on purpose. The choice of *which* weapon lobs is a
+   * gameplay fact with code behind it; the choice of what its blast looks like
+   * is authoring, and pointing it at a newly imported `.effect.json` must not
+   * need a code change.
+   */
+  readonly impactEffect?: string;
 }
 
 /** `public/game-data/balance/units.json` — keyed by stable unit id. */

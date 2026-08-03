@@ -35,7 +35,16 @@ const ARRIVE_EPSILON = 0.15;
  * Must stay above the gather loop's work range (`WORK_RANGE`, 1.25): a hunter
  * standing at his work post has to be inside this, or he pins nothing.
  */
-const CAUGHT_DISTANCE = 2;
+export const CAUGHT_DISTANCE = 2;
+
+/**
+ * How far behind its shepherd a driven animal walks.
+ *
+ * Under {@link CAUGHT_DISTANCE} on purpose: the animal being driven is the
+ * animal that was just calmed, and it stays in contact for the whole walk rather
+ * than re-entering the frightened branch every time the shepherd steps ahead.
+ */
+const DRIVE_FOLLOW_GAP = 1.5;
 
 /** Where an animal is heading and how long it stands once it gets there. */
 export interface RoamState {
@@ -60,6 +69,15 @@ export interface RoamProfile {
   readonly homeX: number;
   readonly homeZ: number;
   readonly roamRadius: number;
+  /**
+   * Radius the animal never grazes *inside*, turning the circle into a ring.
+   *
+   * Zero (a wild herd) is a plain disc. A pasture's pen sets it to the building's
+   * own half-diagonal, which is the whole reason it exists: a penned cow drawn
+   * standing in the middle of the barn is the one way this feature can look
+   * broken, and no amount of tuning a disc fixes it.
+   */
+  readonly roamInnerRadius?: number;
   /**
    * Speed a grazing animal drifts at — deliberately the species'
    * `walkClipSpeed`, the ground speed its walk clip reads naturally at.
@@ -89,6 +107,20 @@ export interface RoamProfile {
 export interface ThreatPoint {
   readonly x: number;
   readonly z: number;
+}
+
+/**
+ * A shepherd who has hold of this animal — pasture plan Faz 4.
+ *
+ * The point is always the shepherd's *live position*, never a route: an animal
+ * is not a navigation agent (Faz 2's decision, kept), so the way it comes to
+ * follow a walkable line is by following someone who walked one.
+ */
+export interface WildlifeLead {
+  readonly x: number;
+  readonly z: number;
+  /** False while it is being calmed: it stands and faces the shepherd. */
+  readonly follow: boolean;
 }
 
 /** Where the animal ended up this tick, and how fast it got there. */
@@ -136,7 +168,11 @@ export function wildlifeSeed(id: string): number {
  * animal crowds the herd's centre, which reads as a pile rather than a herd.
  */
 export function randomPointInHerd(profile: RoamProfile, random: () => number): { x: number; z: number } {
-  const radius = profile.roamRadius * Math.sqrt(random());
+  // Uniform by area over the *ring* rather than the disc, which reduces to the
+  // disc when there is no hole. Interpolating the radius directly instead would
+  // crowd a narrow pen's inner rail.
+  const inner = profile.roamInnerRadius ?? 0;
+  const radius = Math.sqrt(inner * inner + (profile.roamRadius * profile.roamRadius - inner * inner) * random());
   const angle = random() * Math.PI * 2;
   return {
     x: profile.homeX + Math.cos(angle) * radius,
@@ -163,9 +199,19 @@ function keepInHerdGround(x: number, z: number, profile: RoamProfile): { x: numb
   const dx = x - profile.homeX;
   const dz = z - profile.homeZ;
   const distance = Math.hypot(dx, dz);
-  if (distance <= profile.roamRadius || distance < 1e-4) return { x, z };
-  const scale = profile.roamRadius / distance;
-  return { x: profile.homeX + dx * scale, z: profile.homeZ + dz * scale };
+  const inner = profile.roamInnerRadius ?? 0;
+  // Both rails, for the same reason: a pen's hole is the building, and an animal
+  // shoved into it by a bolt would stand inside its own barn.
+  if (distance < 1e-4) return { x, z };
+  if (distance > profile.roamRadius) {
+    const scale = profile.roamRadius / distance;
+    return { x: profile.homeX + dx * scale, z: profile.homeZ + dz * scale };
+  }
+  if (inner > 0 && distance < inner) {
+    const scale = inner / distance;
+    return { x: profile.homeX + dx * scale, z: profile.homeZ + dz * scale };
+  }
+  return { x, z };
 }
 
 /** Opening state: already standing somewhere in the circle, about to graze. */
@@ -177,6 +223,44 @@ export function initialRoamState(profile: RoamProfile, random: () => number): Ro
     restSeconds: REST_SECONDS_MIN + random() * (REST_SECONDS_MAX - REST_SECONDS_MIN),
     fleeSeconds: 0,
     recoverySeconds: 0,
+  };
+}
+
+/**
+ * Advance an animal a shepherd has hold of — pasture plan Faz 4.
+ *
+ * Threats, herd ground and the grazing timer are all deliberately absent. A
+ * driven animal is out of its herd's circle by definition (that is the point of
+ * driving it), it must not bolt from the person leading it, and every other unit
+ * on the field would otherwise scatter the drive at the last step.
+ *
+ * It walks at `walkSpeed`, which is not a pace choice but the only speed its walk
+ * clip reads at rate 1 (see {@link RoamProfile.walkSpeed}). Driving it faster
+ * would either clamp the playback and slide the feet, or tip it into the gallop
+ * clip — a cow galloping to the barn behind a walking man.
+ */
+export function advanceLed(
+  current: { readonly x: number; readonly z: number; readonly facing: number },
+  lead: WildlifeLead,
+  profile: RoamProfile,
+  deltaSeconds: number,
+): RoamPose {
+  if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
+    throw new RangeError("Lead delta must be a non-negative finite number");
+  }
+  const dx = lead.x - current.x;
+  const dz = lead.z - current.z;
+  const distance = Math.hypot(dx, dz);
+  const facing = distance < 1e-4 ? current.facing : Math.atan2(dx, dz);
+  if (!lead.follow || distance <= DRIVE_FOLLOW_GAP) {
+    return { x: current.x, z: current.z, facing, speed: 0 };
+  }
+  const step = Math.min(profile.walkSpeed * deltaSeconds, distance - DRIVE_FOLLOW_GAP);
+  return {
+    x: current.x + (dx / distance) * step,
+    z: current.z + (dz / distance) * step,
+    facing,
+    speed: deltaSeconds > 0 ? step / deltaSeconds : 0,
   };
 }
 
@@ -275,12 +359,24 @@ export function advanceRoam(
   }
 
   const step = Math.min(profile.walkSpeed * deltaSeconds, distance);
+  // Held to the ground on the walk as well as the bolt. For a herd's disc this
+  // is a no-op — both ends of the step are already inside a convex circle — but a
+  // pen is a *ring*, and a straight line between two points on it cuts through
+  // the hole, which is the building. Clamped, the animal walks around the barn
+  // instead of through it.
+  const walked = keepInHerdGround(
+    current.x + (dx / distance) * step,
+    current.z + (dz / distance) * step,
+    profile,
+  );
+  const travelled = Math.hypot(walked.x - current.x, walked.z - current.z);
   return {
-    x: current.x + (dx / distance) * step,
-    z: current.z + (dz / distance) * step,
+    x: walked.x,
+    z: walked.z,
     facing: Math.atan2(dx, dz),
     // Report the speed actually achieved: a tick that lands exactly on the
-    // target travelled less than a full step, and the clip should say so.
-    speed: deltaSeconds > 0 ? step / deltaSeconds : 0,
+    // target, or one shortened by the rail, travelled less than a full step, and
+    // the clip should say so.
+    speed: deltaSeconds > 0 ? travelled / deltaSeconds : 0,
   };
 }

@@ -87,7 +87,8 @@
       "gold": 10
     },
     "populationCost": 3,
-    "structureAttackVfx": "cannonball"
+    "structureAttackVfx": "cannonball",
+    "impactEffect": "rts-fx-explosion"
   },
   "worker_placeholder": {
     "label": "İşçi",

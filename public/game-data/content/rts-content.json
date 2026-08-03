@@ -281,7 +281,8 @@
         },
         "heavySmoke": {
           "effects": [
-            "starter-fx-smoke-puff"
+            "rts-fx-collapse-dust",
+            "rts-fx-fire-loop"
           ],
           "anchor": {
             "mode": "roof",
@@ -294,7 +295,10 @@
           "intervalSeconds": 1
         },
         "ruinSmoke": {
-          "effects": [],
+          "effects": [
+            "rts-fx-ruin-smoke-black",
+            "rts-fx-collapse-dust"
+          ],
           "anchor": {
             "mode": "ground",
             "offset": [
@@ -321,7 +325,9 @@
           "minIntervalSeconds": 0.35
         },
         "collapseDust": {
-          "effects": [],
+          "effects": [
+            "rts-fx-collapse-dust"
+          ],
           "anchor": {
             "mode": "ground",
             "offset": [

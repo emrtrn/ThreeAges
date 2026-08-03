@@ -63,13 +63,27 @@ export class MeshParticleEffect {
   private densityScale = 1;
   /** Round-robin cursor for `modelSelection: "sequence"`; unused when random. */
   private nextSourceIndex = 0;
+  /** Authored burst, or 0 particles for a pure rate emitter. */
+  private readonly burstCount: number;
+  private readonly burstDelay: number;
+  /** Whether this play has already released its burst; cleared by {@link reset}. */
+  private burstFired = false;
 
   constructor(
     private readonly definition: RuntimeParticleEffect,
     modelRoots: readonly Object3D[],
     overrides?: ParticleEffectOverrides,
   ) {
-    const naturalCapacity = Math.max(1, Math.ceil(definition.rate * definition.lifetime) + 4);
+    this.burstCount = Math.max(0, Math.round(definition.burst?.count ?? 0));
+    this.burstDelay = Math.max(0, definition.burst?.delay ?? 0);
+    // The burst lands whole, so it counts toward what has to be alive at once —
+    // a burst emitter carries no rate, and sizing on the rate alone would leave
+    // capacity 4 for a fifty-piece blast. The authored caps below still win:
+    // clipping to a budget the author set is a decision, clipping to zero is a bug.
+    const naturalCapacity = Math.max(
+      1,
+      Math.ceil(definition.rate * definition.lifetime) + this.burstCount + 4,
+    );
     this.capacity = Math.min(
       naturalCapacity,
       definition.maxParticles ?? naturalCapacity,
@@ -145,6 +159,7 @@ export class MeshParticleEffect {
     this.applyOverrides(overrides);
     this.elapsed = 0;
     this.spawnAccumulator = 0;
+    this.burstFired = false;
     // A pooled effect restarts its sequence, so every play reads the same way.
     this.nextSourceIndex = 0;
     this.positions.fill(0);
@@ -201,6 +216,13 @@ export class MeshParticleEffect {
       this.scales[index] = this.startSize + (this.endSize - this.startSize) * lifeT;
       this.writeMatrix(index);
     }
+    // Released whole on the first tick at or past its delay, so debris leaves the
+    // wall on the blow rather than trickling off it afterwards.
+    if (!this.burstFired && this.burstCount > 0 && this.elapsed >= this.burstDelay) {
+      this.burstFired = true;
+      const count = Math.round(this.burstCount * this.densityScale);
+      for (let i = 0; i < count; i += 1) this.spawnParticle();
+    }
     if (this.loop || this.elapsed <= this.lifetime) {
       this.spawnAccumulator += this.rate * this.densityScale * dt;
       while (this.spawnAccumulator >= 1) {
@@ -213,6 +235,8 @@ export class MeshParticleEffect {
 
   isFinished(): boolean {
     if (this.loop) return false;
+    // A burst still owed keeps the instance alive; see ParticleEffect.isFinished.
+    if (!this.burstFired && this.burstCount > 0) return false;
     if (this.elapsed <= this.lifetime) return false;
     return this.aliveCount() === 0;
   }

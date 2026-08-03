@@ -19,7 +19,8 @@
 import { Vector3 } from "three";
 
 import type { AnimalBalance, AnimalBalanceStats, UnitArmorClass } from "../../data/gameDataTypes";
-import type { CombatTarget } from "../combat/combatTarget";
+import type { CombatTarget, CombatTargetOwner } from "../combat/combatTarget";
+import type { UnitOwner } from "../units/unit";
 import { HealthComponent } from "../units/health";
 import type {
   ReservedResourceSource,
@@ -29,6 +30,7 @@ import type {
   ResourceSource,
 } from "../economy/resourceSource";
 import {
+  advanceLed,
   advanceRoam,
   initialRoamState,
   makeWildlifeRng,
@@ -37,10 +39,31 @@ import {
   type RoamProfile,
   type RoamState,
   type ThreatPoint,
+  type WildlifeLead,
 } from "./wildlifeRoaming";
 
 /** Below this, a carcass counts as picked clean rather than carrying a rounding crumb. */
 const MEAT_EPSILON = 1e-9;
+
+/**
+ * A wild herd's grazing circle, centred wherever the herd lives.
+ *
+ * One definition rather than two, because it is built in two places that must
+ * agree: at spawn from the authored herd, and again when a razed pasture turns
+ * its livestock loose where it stood (Faz 5).
+ */
+export function wildProfileFor(stats: AnimalBalanceStats, x: number, z: number): RoamProfile {
+  return {
+    homeX: x,
+    homeZ: z,
+    roamRadius: stats.roamRadius,
+    walkSpeed: stats.walkClipSpeed,
+    fleeSpeed: stats.moveSpeed,
+    fleeRadius: stats.fleeRadius,
+    fleeSeconds: stats.fleeSeconds,
+    fleeRecoverySeconds: stats.fleeRecoverySeconds,
+  };
+}
 
 /** One authored herd: a species, a centre, and how many animals stand in it. */
 export interface RtsHerdDefinition {
@@ -64,6 +87,8 @@ export interface WildlifeAnimalSnapshot {
   readonly dead: boolean;
   /** Food left on the carcass; the species' full `meatCapacity` while it lives. */
   readonly remainingMeat: number;
+  /** `"wild"` until a shepherd pens it; then the kingdom that owns the pasture. */
+  readonly owner: CombatTargetOwner;
 }
 
 /**
@@ -74,7 +99,14 @@ export interface WildlifeAnimalSnapshot {
  * value is one value invites a nonsensical one.
  */
 export class WildlifeAnimal implements CombatTarget {
-  readonly owner = "wild" as const;
+  /**
+   * Who this animal answers to. Written only by {@link WildlifeSystem.tame}.
+   *
+   * The type was already wide enough (V1 Faz 2 made it {@link CombatTargetOwner}),
+   * so ownership costs a mutable field and nothing else — no second roster, no
+   * kingdom registration, and population still cannot see it.
+   */
+  owner: CombatTargetOwner = "wild";
   readonly armorClass: UnitArmorClass = "light";
   readonly position = new Vector3();
   readonly health: HealthComponent;
@@ -91,17 +123,29 @@ export class WildlifeAnimal implements CombatTarget {
    * reachable.
    */
   remainingMeat: number;
-  /** The one hunter who has claimed this animal, herd-plan §3.4's one-worker-per-tree rule. */
+  /**
+   * The one worker who has claimed this animal — herd-plan §3.4's
+   * one-worker-per-tree rule, shared by the hunt and the drive.
+   *
+   * Deliberately one field rather than two: a hunter and a shepherd wanting the
+   * same cow is a real race, and a second claim register would have let both win
+   * it.
+   */
   reservedByWorkerId: number | null = null;
+  /**
+   * Set while a shepherd has hold of this animal (Faz 4). Overrides grazing and
+   * fleeing entirely — see {@link advanceLed}.
+   */
+  lead: WildlifeLead | null = null;
 
-  private readonly roam: RoamState;
+  private roam: RoamState;
   private readonly random: () => number;
 
   constructor(
     readonly id: string,
     readonly herdId: string,
     readonly stats: AnimalBalanceStats,
-    private readonly profile: RoamProfile,
+    private profile: RoamProfile,
   ) {
     this.health = new HealthComponent(stats.maxHealth);
     this.remainingMeat = stats.meatCapacity;
@@ -131,10 +175,39 @@ export class WildlifeAnimal implements CombatTarget {
     return this.profile.homeZ;
   }
 
+  /** Where this animal grazes now — its herd's circle, or its pasture's yard. */
+  get roamProfile(): RoamProfile {
+    return this.profile;
+  }
+
+  /**
+   * Move this animal's home to a new circle and re-seat it inside it.
+   *
+   * The roam state is rebuilt rather than kept: its target is a point in the old
+   * herd's ground, so an animal penned without this would walk straight back to
+   * the meadow it was driven out of.
+   */
+  rehome(profile: RoamProfile): void {
+    this.profile = profile;
+    this.roam = initialRoamState(profile, this.random);
+  }
+
   /** Graze one tick, or bolt from `threat`. A carcass holds still. */
   update(deltaSeconds: number, threat: ThreatPoint | null = null): void {
     if (this.dead) {
       this.speed = 0;
+      return;
+    }
+    if (this.lead) {
+      const led = advanceLed(
+        { x: this.position.x, z: this.position.z, facing: this.facing },
+        this.lead,
+        this.profile,
+        deltaSeconds,
+      );
+      this.position.set(led.x, this.position.y, led.z);
+      this.facing = led.facing;
+      this.speed = led.speed;
       return;
     }
     const pose = advanceRoam(
@@ -161,6 +234,7 @@ export class WildlifeAnimal implements CombatTarget {
       speed: this.speed,
       dead: this.dead,
       remainingMeat: this.remainingMeat,
+      owner: this.owner,
     };
   }
 }
@@ -170,6 +244,8 @@ export class WildlifeSystem implements ResourceSource {
   private readonly animals: WildlifeAnimal[] = [];
   private readonly byId = new Map<string, WildlifeAnimal>();
   private readonly animalIdByWorkerId = new Map<number, string>();
+  /** Monotonic, so a newborn never inherits a dead animal's id (see {@link bear}). */
+  private bornCount = 0;
 
   /**
    * One deer is as good as the next. A hunter walled off from his quarry takes
@@ -179,7 +255,7 @@ export class WildlifeSystem implements ResourceSource {
    */
   readonly sourcesAreInterchangeable = true;
 
-  constructor(balance: AnimalBalance, herds: readonly RtsHerdDefinition[]) {
+  constructor(private readonly balance: AnimalBalance, herds: readonly RtsHerdDefinition[]) {
     const seen = new Set<string>();
     for (const herd of herds) {
       if (seen.has(herd.id)) throw new Error(`Duplicate herd "${herd.id}"`);
@@ -189,16 +265,7 @@ export class WildlifeSystem implements ResourceSource {
       if (!Number.isInteger(herd.count) || herd.count <= 0) {
         throw new RangeError(`Herd "${herd.id}" count must be a positive integer`);
       }
-      const profile: RoamProfile = {
-        homeX: herd.x,
-        homeZ: herd.z,
-        roamRadius: stats.roamRadius,
-        walkSpeed: stats.walkClipSpeed,
-        fleeSpeed: stats.moveSpeed,
-        fleeRadius: stats.fleeRadius,
-        fleeSeconds: stats.fleeSeconds,
-        fleeRecoverySeconds: stats.fleeRecoverySeconds,
-      };
+      const profile = wildProfileFor(stats, herd.x, herd.z);
       for (let index = 0; index < herd.count; index += 1) {
         const animal = new WildlifeAnimal(`${herd.id}:${index}`, herd.id, stats, profile);
         this.animals.push(animal);
@@ -219,7 +286,13 @@ export class WildlifeSystem implements ResourceSource {
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
       throw new RangeError("Wildlife delta must be a non-negative finite number");
     }
-    for (const animal of this.animals) animal.update(deltaSeconds, this.nearestThreat(animal, threats));
+    for (const animal of this.animals) {
+      // Livestock is not frightened by people. A penned cow that still bolted
+      // would spend the match being spooked by the very workers who own it, and
+      // the caught-branch freeze would pin it every time one walked past.
+      const threat = animal.owner === "wild" ? this.nearestThreat(animal, threats) : null;
+      animal.update(deltaSeconds, threat);
+    }
   }
 
   /** Every animal, dead ones included — presentation still draws a carcass. */
@@ -243,21 +316,120 @@ export class WildlifeSystem implements ResourceSource {
   }
 
   /**
+   * Live animals in reach that still belong to nobody — what a hunting camp may
+   * actually work, and so what may justify building one.
+   *
+   * The placement half of §3.7: without it a camp raised beside a full pasture
+   * would be legal and then immediately report `source-depleted`, because the
+   * only animals in its circle are cattle it is forbidden to shoot.
+   */
+  huntableAnimalsNear(x: number, z: number, radius: number): readonly WildlifeAnimal[] {
+    return this.liveAnimalsNear(x, z, radius).filter((animal) => animal.owner === "wild");
+  }
+
+  /**
    * Live, wild, tameable animals within `radius`, nearest first.
    *
    * Deliberately narrower than {@link liveAnimalsNear} on both counts the pasture
    * plan §2 cares about. A species the table says cannot be tamed justifies no
    * pasture — a ring of deer would otherwise let a player build one that could
-   * never fill. And an animal that is already someone's counts for nobody: from
-   * Faz 4 `owner` leaves `"wild"` when a shepherd pens it, so a full pen must stop
-   * being the reason a second pasture is legal beside it.
+   * never fill. And an animal that is already someone's counts for nobody: a full
+   * pen must stop being the reason a second pasture is legal beside it.
    *
-   * This is the placement question today; from Faz 4 it is also which animal a
-   * shepherd walks out to.
+   * This is the placement question, and it is also which animal a shepherd walks
+   * out to ({@link reserveForTaming}).
    */
   tameableAnimalsNear(x: number, z: number, radius: number): readonly WildlifeAnimal[] {
-    return this.liveAnimalsNear(x, z, radius)
-      .filter((animal) => animal.stats.tameable && animal.owner === "wild");
+    return this.huntableAnimalsNear(x, z, radius).filter((animal) => animal.stats.tameable);
+  }
+
+  /**
+   * Claim the nearest unclaimed tameable animal for a shepherd — the drive's
+   * counterpart of {@link reserveNearest}, sharing its one claim register so a
+   * hunter and a shepherd can never both take the same cow.
+   *
+   * Like a hunter's claim it survives range: the point of calming an animal is
+   * that it bolted first, and a claim dropped when the quarry crossed the
+   * pasture's circle would restart the chase forever.
+   */
+  reserveForTaming(workerId: number, x: number, z: number, radius: number): WildlifeAnimal | null {
+    const heldId = this.animalIdByWorkerId.get(workerId);
+    const held = heldId ? this.byId.get(heldId) : undefined;
+    if (held && !held.dead && held.owner === "wild" && held.stats.tameable) return held;
+    this.releaseReservation(workerId);
+    const next = this.tameableAnimalsNear(x, z, radius)
+      .find((animal) => animal.reservedByWorkerId === null);
+    if (!next) return null;
+    next.reservedByWorkerId = workerId;
+    this.animalIdByWorkerId.set(workerId, next.id);
+    return next;
+  }
+
+  /** One animal by id, for systems that hold ids rather than references. */
+  animalById(animalId: string): WildlifeAnimal | null {
+    return this.byId.get(animalId) ?? null;
+  }
+
+  /** The animal this worker is holding, hunt or drive alike; null if none. */
+  reservationOf(workerId: number): WildlifeAnimal | null {
+    const animalId = this.animalIdByWorkerId.get(workerId);
+    return (animalId ? this.byId.get(animalId) : undefined) ?? null;
+  }
+
+  /**
+   * Hand a calmed animal to a kingdom and re-home it in its pasture's yard.
+   *
+   * This is the one call that takes an animal out of the wild economy: from here
+   * `huntable` refuses it, so the hunting camp next door stops counting it as
+   * meat and can never shoot it. Its claim is dropped at the same moment — the
+   * shepherd's job is done, and a claim left behind would keep the next shepherd
+   * away from an animal nobody is walking any more.
+   */
+  tame(animalId: string, owner: UnitOwner, pen: RoamProfile): boolean {
+    const animal = this.byId.get(animalId);
+    if (!animal || animal.dead || animal.owner !== "wild") return false;
+    animal.owner = owner;
+    animal.lead = null;
+    animal.rehome(pen);
+    if (animal.reservedByWorkerId !== null) this.releaseReservation(animal.reservedByWorkerId);
+    return true;
+  }
+
+  /**
+   * Turn an owned animal loose where it stands — a razed pasture, Faz 5.
+   *
+   * It re-enters the wild economy completely: huntable again, frightened again,
+   * and grazing a fresh circle centred on wherever the pen was. Deleting it
+   * instead would be the cheaper code and the worse rule — the plan is explicit
+   * that razing a pasture *frees* the herd rather than destroying it, and an
+   * opponent who burns your barn should have to hunt the cattle down.
+   */
+  returnToWild(animalId: string): boolean {
+    const animal = this.byId.get(animalId);
+    if (!animal || animal.owner === "wild") return false;
+    animal.owner = "wild";
+    animal.lead = null;
+    animal.rehome(wildProfileFor(animal.stats, animal.position.x, animal.position.z));
+    return true;
+  }
+
+  /**
+   * Add an animal born in a pen (Faz 5's breeding), already owned and already
+   * standing in its pasture's yard.
+   *
+   * Ids are minted rather than authored, and they must stay unique for the life
+   * of the match: presentation keys its bodies on them, and a reused id would
+   * hand a newborn the art of an animal that is no longer there.
+   */
+  bear(species: string, owner: UnitOwner, pen: RoamProfile): WildlifeAnimal | null {
+    const stats = this.balance[species];
+    if (!stats) return null;
+    const id = `born:${species}:${this.bornCount += 1}`;
+    const animal = new WildlifeAnimal(id, id, stats, pen);
+    animal.owner = owner;
+    this.animals.push(animal);
+    this.byId.set(id, animal);
+    return animal;
   }
 
   snapshots(): readonly WildlifeAnimalSnapshot[] {
@@ -383,7 +555,10 @@ export class WildlifeSystem implements ResourceSource {
       throw new RangeError("Wildlife search radius must be non-negative and finite");
     }
     const radiusSquared = reach.radius * reach.radius;
-    return this.animals.filter((animal) => !animal.spent
+    // Wild only, §3.7: a camp built beside its owner's pasture would otherwise
+    // count the pen as its herd and send hunters to shoot the kingdom's own
+    // cattle. A tamed animal leaves the wild economy completely.
+    return this.animals.filter((animal) => !animal.spent && animal.owner === "wild"
       && (this.distanceSquared(animal, reach.x, reach.z) <= radiusSquared
         || this.homeInRange(animal, reach, radiusSquared)));
   }

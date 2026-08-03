@@ -129,6 +129,8 @@ import {
   RtsActorPresentationError,
   parseRtsMeshManifest,
   parseRtsEffectManifest,
+  parseRtsEffectManifestPaths,
+  parseRtsTextureManifestPaths,
   rtsDamageEffectGaps,
   rtsContentCatalogRefs,
   rtsContentCoverageGaps,
@@ -216,6 +218,7 @@ import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { MarketPrices } from "../src/game/rts/economy/marketPricing";
 import { MarketTradeSystem } from "../src/game/rts/economy/marketTradeSystem";
 import { EconomyProductionSystem, producerHasSource } from "../src/game/rts/economy/economyProductionSystem";
+import { PastureSystem, penGeometryFor } from "../src/game/rts/wildlife/pastureSystem";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
 import { ForestSystem } from "../src/game/rts/economy/forestSystem";
 import { KingdomProgressionSystem, townUnlocksAvailable } from "../src/game/rts/progression/kingdomProgressionSystem";
@@ -16648,17 +16651,95 @@ check("schema-1 and its hand-converted schema-2 starter collapse identically", (
   );
 });
 
-check("normalizeEffectDefinition maps burst count to an approximate runtime rate", () => {
+check("a burst effect collapses to a burst, not to a trickle spread over its lifetime", () => {
   const runtime = toRuntimeParticleEffect(
     normalizeEffectDefinition({
       schema: 2,
       system: { loop: false },
-      spawn: { mode: "burst", count: 30 },
+      spawn: { mode: "burst", count: 30, delay: 0.25 },
       initialize: { lifetime: [1, 1] },
     })!,
   );
-  // burst count 30 over a ~1s lifetime window â†’ ~30/s continuous approximation.
-  assert.equal(runtime.rate, 30);
+  // The two modes are exclusive: a burst carries no continuous rate. This used
+  // to collapse to `rate: 30` (count over the lifetime window), which does not
+  // make the burst slow — it makes it *late*, because the first particle then
+  // waits a full 1/30 s and the cloud only reaches full size a second in.
+  assert.equal(runtime.rate, 0, "a burst emitter has no trickle");
+  assert.deepEqual(runtime.burst, { count: 30, delay: 0.25 });
+
+  const rateMode = toRuntimeParticleEffect(
+    normalizeEffectDefinition({
+      schema: 2,
+      system: { loop: true },
+      spawn: { mode: "rate", rate: 12, count: 30 },
+      initialize: { lifetime: [1, 1] },
+    })!,
+  );
+  assert.equal(rateMode.rate, 12, "a rate emitter keeps its authored rate");
+  assert.equal(rateMode.burst, undefined, "and releases nothing up front");
+});
+
+check("a burst lands whole on the frame it is due, and survives pool reuse", () => {
+  const fx = new ParticleEffect(runtimeFx({ rate: 0, lifetime: 1, burst: { count: 12, delay: 0 } }));
+  // The claim the artillery depends on: with no authored delay the blast is on
+  // screen the first time the effect is ticked, not some fraction of a second
+  // after the shell landed.
+  assert.ok(fx.maxCapacity >= 12, `capacity must hold the whole burst, got ${fx.maxCapacity}`);
+  fx.update(1 / 60);
+  assert.equal(fx.aliveCount(), 12, "the whole count is out after one frame");
+  fx.update(1 / 60);
+  assert.equal(fx.aliveCount(), 12, "and it fires once, not once per frame");
+
+  // Pooled reuse is where a one-shot flag like this goes wrong: the second play
+  // of a recycled instance would emit nothing at all.
+  fx.update(2);
+  assert.equal(fx.aliveCount(), 0);
+  assert.equal(fx.isFinished(), true);
+  fx.reset();
+  fx.update(1 / 60);
+  assert.equal(fx.aliveCount(), 12, "a recycled effect bursts again on its next play");
+  fx.dispose();
+
+  // An authored delay still holds the burst back — and the instance must not be
+  // recycled as "finished" while it still owes one.
+  const delayed = new ParticleEffect(runtimeFx({ rate: 0, lifetime: 0.2, burst: { count: 6, delay: 0.5 } }));
+  delayed.update(0.3);
+  assert.equal(delayed.aliveCount(), 0, "nothing before the authored delay");
+  assert.equal(delayed.isFinished(), false, "an effect still owing a burst is not finished");
+  delayed.update(0.3);
+  assert.equal(delayed.aliveCount(), 6, "the burst lands once the delay is past");
+  delayed.dispose();
+
+  // The quality knob thins a blast like it thins a stream, rather than exempting it.
+  const thin = new ParticleEffect(runtimeFx({ rate: 0, lifetime: 1, burst: { count: 20, delay: 0 } }));
+  thin.setDensityScale(0.5);
+  thin.update(1 / 60);
+  assert.equal(thin.aliveCount(), 10, "density halves the burst");
+  thin.dispose();
+});
+
+check("the shipped RTS explosion bursts on impact rather than fading up", () => {
+  // The whole reason the artillery's blast moved out of hand-written meshes and
+  // into an authored asset: it has to read as the moment of the hit. Which effect
+  // and how many particles are authoring and may be retuned; that a burst-mode
+  // asset is on screen in one frame is the contract.
+  const definition = toRuntimeParticleEffect(
+    normalizeEffectDefinition(
+      JSON.parse(
+        readFileSync("public/assets/ThreeAges/Effects/FX_RTS_Explosion.effect.json", "utf8"),
+      ) as unknown,
+    )!,
+  );
+  assert.ok(definition.burst, "the explosion is authored as a burst");
+  assert.equal(definition.burst?.delay, 0, "and it owes the blow no delay");
+  const fx = new ParticleEffect(definition);
+  fx.update(1 / 60);
+  assert.equal(
+    fx.aliveCount(),
+    definition.burst!.count,
+    "every authored particle is alive on the first frame after impact",
+  );
+  fx.dispose();
 });
 
 // VFX Lite Faz 3 — the preview viewport reads alive/capacity off the runtime
@@ -30315,7 +30396,7 @@ check("Faz 7: fog hides a herd, and unlike a forest it hides it again when the s
   // fog existed — the same "absent means nothing hides" rule the forest follows.
   view.sync(wildlife.all(), 0, null);
   assert.ok(field.children.every((body) => body.visible), "a fogless match draws every animal");
-  assert.equal(isWildlifeVisible(1000, 1000, undefined), true, "and the rule itself says so");
+  assert.equal(isWildlifeVisible("wild", 1000, 1000, undefined), true, "and the rule itself says so");
 
   view.dispose();
 });
@@ -30853,6 +30934,396 @@ check("V2 Faz 3: a completed pasture stands with an empty pen, hires no one, and
   territory.dispose();
 });
 
+// --- Pasture and taming V2 Faz 4: ownership and the drive ---
+
+/**
+ * A pasture standing on a cattle herd, with the systems a drive needs and
+ * nothing else. Returns everything the assertions read.
+ *
+ * The pasture is deliberately placed a walk away from the herd's centre: with
+ * the two on top of each other an animal could start inside the pen and be
+ * penned the instant it was calmed, and the drive — the half of §2 this phase
+ * exists for — would never run.
+ */
+function pastureDriveFixture(options: { readonly species?: string; readonly herdCount?: number } = {}) {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const pastureStats = buildings.pasture ?? assert.fail("pasture balance missing");
+  const animals = shippedAnimalBalance();
+  const wildlife = new WildlifeSystem(animals, [
+    { id: "cattle", species: options.species ?? "cow", x: 0, z: 0, count: options.herdCount ?? 4 },
+  ]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const navigation = new RtsNavigation();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 500 }, 20);
+  const territory = new TerritoryControlSystem(() => [{ owner: "player", x: 0, z: 0, radius: 1000 }]);
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => structures.navigationBlockers(),
+    territory,
+    () => {},
+    () => {},
+    (stats, x, z) => stats.economy?.requiresLivestock
+      && wildlife.tameableAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
+      ? "missing-livestock"
+      : null,
+  );
+  const built = construction.build("player", "pasture", 12, 0);
+  if (!built.built) return assert.fail(`pasture construction failed: ${built.reason}`);
+  structures.advanceConstruction(built.structure, pastureStats.constructionSeconds);
+  const pasture = new PastureSystem(units, structures, navigation, wildlife);
+  return { buildings, pastureStats, animals, wildlife, units, structures, navigation, territory, construction, structure: built.structure, pasture };
+}
+
+check("V2 Faz 4: a shepherd walks out, calms an animal, drives it home, and the pasture keeps it", () => {
+  const fixture = pastureDriveFixture();
+  const { wildlife, units, pasture, structure } = fixture;
+  const cow = fixture.animals.cow ?? assert.fail("cow balance missing");
+  const capacity = structure.economy?.livestockCapacity ?? assert.fail("pasture pen capacity missing");
+  // Two workers, the Settlement Lv1 shepherd budget. Anything the pasture does
+  // not hire stays idle, which is one of the things under test.
+  const workers = [
+    units.spawn("player", 10, 4, RTS_TEST_WORKER_STATS),
+    units.spawn("player", 10, -4, RTS_TEST_WORKER_STATS),
+    units.spawn("player", 14, 6, RTS_TEST_WORKER_STATS),
+  ];
+
+  const seen = new Set<string>();
+  let calmedWhileWorking = false;
+  const step = 0.25;
+  for (let tick = 0; tick < 2400; tick += 1) {
+    pasture.update(step);
+    wildlife.update(step, units.all().map((unit) => unit.position));
+    updateUnitMovement(units.all(), step);
+    for (const worker of workers) {
+      const state = pasture.stateFor(worker);
+      if (state !== "idle") seen.add(state);
+      // §2.4: the shepherd is *at work* while calming, not walking. That is what
+      // puts him on the work montage instead of sliding in an idle pose.
+      if (state === "calming" && worker.isWorking) calmedWhileWorking = true;
+    }
+  }
+
+  assert.deepEqual(
+    [...seen].sort(),
+    ["calming", "driving", "moving-to-animal"],
+    "all three of §2's steps actually ran",
+  );
+  assert.equal(calmedWhileWorking, true, "calming is standing work, and the shepherd's pose says so");
+
+  const penned = wildlife.all().filter((animal) => animal.owner === "player");
+  assert.equal(penned.length, capacity, "the drive filled the pen to its authored capacity, and stopped there");
+  assert.ok(
+    penned.length < wildlife.all().length || wildlife.all().length === capacity,
+    "capacity is what stopped it, not running out of cattle",
+  );
+  for (const animal of penned) {
+    // Penned, which is a place and not a flag: it grazes in the yard around its
+    // pasture. Derived from the footprint, so this holds at any building size.
+    const distance = Math.hypot(animal.position.x - structure.x, animal.position.z - structure.z);
+    const yard = penGeometryFor(structure);
+    assert.ok(
+      distance >= yard.roamInnerRadius - 1e-6 && distance <= yard.roamRadius + 1e-6,
+      `a penned animal grazes in the yard, not in the barn (${distance.toFixed(2)})`,
+    );
+    assert.ok(
+      distance < (structure.economy?.gatherRadius ?? 0),
+      "and never outside the reach of the pasture that owns it",
+    );
+    assert.equal(animal.lead, null, "a penned animal is no longer being led by anyone");
+    assert.equal(animal.stats.id, cow.id, "the tameable species is what was taken");
+  }
+  // The crew is released once the pen is full: shepherds are workers, and §55's
+  // rule that nothing may hold a worker forever applies to herding too.
+  for (const worker of workers) {
+    assert.equal(pasture.isShepherd(worker), false, "no worker is left holding a job the pen has no room for");
+  }
+  fixture.territory.dispose();
+});
+
+check("V2 Faz 4: a tamed animal leaves the wild economy — no camp may count it, hunt it, or be built on it", () => {
+  const fixture = pastureDriveFixture();
+  const { wildlife, units, pasture, structure, buildings } = fixture;
+  const camp = buildings.hunting_camp ?? assert.fail("hunting camp balance missing");
+  const reach = { resourceId: "food", x: 0, z: 0, radius: camp.economy?.gatherRadius ?? 0 } as const;
+  const wildMeat = wildlife.remainingNear(reach);
+  assert.ok(wildMeat > 0, "the herd is worth something to a hunting camp before anyone tames it");
+
+  units.spawn("player", 10, 4, RTS_TEST_WORKER_STATS);
+  units.spawn("player", 10, -4, RTS_TEST_WORKER_STATS);
+  const step = 0.25;
+  for (let tick = 0; tick < 2400; tick += 1) {
+    pasture.update(step);
+    wildlife.update(step, units.all().map((unit) => unit.position));
+    updateUnitMovement(units.all(), step);
+  }
+  const penned = wildlife.all().filter((animal) => animal.owner === "player");
+  assert.ok(penned.length > 0, "something was actually tamed, or this proves nothing");
+
+  // §3.7, the bug this closes: without an owner filter the camp counts the
+  // kingdom's own cattle as meat and sends hunters to shoot them.
+  const remaining = wildlife.remainingNear(reach);
+  const takenMeat = penned.reduce((total, animal) => total + animal.remainingMeat, 0);
+  assert.ok(
+    Math.abs(remaining - (wildMeat - takenMeat)) < 1e-6,
+    "every tamed animal comes off the camp's count, exactly its own worth",
+  );
+  assert.equal(
+    wildlife.reserveNearest(999, reach)?.id === penned[0]?.id,
+    false,
+    "and no hunter can claim one",
+  );
+  assert.equal(
+    wildlife.huntableAnimalsNear(structure.x, structure.z, 8).some((animal) => animal.owner !== "wild"),
+    false,
+    "the huntable query answers with wild animals only",
+  );
+
+  // Population is the V1 invariant this must not break: taming gives a kingdom
+  // an animal, never a supply slot.
+  const population = new PopulationSystem("player", fixture.units, fixture.structures, 10);
+  const before = population.snapshot().current;
+  assert.equal(
+    population.snapshot().current,
+    before,
+    "livestock still costs no population, owned or wild",
+  );
+  fixture.territory.dispose();
+});
+
+check("V2 Faz 4: losing the shepherd frees the animal instead of freezing it", () => {
+  const fixture = pastureDriveFixture();
+  const { wildlife, units, pasture } = fixture;
+  const shepherd = units.spawn("player", 10, 4, RTS_TEST_WORKER_STATS);
+  const step = 0.25;
+  // Run until the drive is genuinely under way, then kill the shepherd on it.
+  let droveFor = 0;
+  for (let tick = 0; tick < 2400 && droveFor < 4; tick += 1) {
+    pasture.update(step);
+    wildlife.update(step, units.all().map((unit) => unit.position));
+    updateUnitMovement(units.all(), step);
+    if (pasture.stateFor(shepherd) === "driving") droveFor += 1;
+  }
+  assert.ok(droveFor >= 4, "a drive was under way to interrupt");
+  const driven = wildlife.reservationOf(shepherd.id) ?? assert.fail("the shepherd held no animal");
+  assert.notEqual(driven.lead, null, "the animal was being led");
+
+  shepherd.health.damage(shepherd.health.max);
+  pasture.update(step);
+  assert.equal(pasture.isShepherd(shepherd), false, "a dead shepherd holds no job");
+  assert.equal(driven.lead, null, "and lets go of the animal rather than leaving it mid-lead");
+  assert.equal(driven.owner, "wild", "an animal that never reached the pen is still wild");
+  assert.equal(driven.reservedByWorkerId, null, "its claim is free for the next shepherd — or a hunter");
+  fixture.territory.dispose();
+});
+
+// --- Pasture and taming V2 Faz 5: production and breeding ---
+
+/**
+ * Run a fixture until its pen has taken everything it is going to take, then
+ * hand back the pasture and its economy loop. The drive itself is Faz 4's test;
+ * this is the setup every Faz 5 assertion starts from.
+ */
+function filledPastureFixture(options: { readonly herdCount?: number; readonly workers?: number } = {}) {
+  const fixture = pastureDriveFixture({ herdCount: options.herdCount ?? 4 });
+  for (let index = 0; index < (options.workers ?? 2); index += 1) {
+    fixture.units.spawn("player", 10, index % 2 === 0 ? 4 : -4, RTS_TEST_WORKER_STATS);
+  }
+  const production = new EconomyProductionSystem(
+    fixture.units,
+    fixture.structures,
+    fixture.navigation,
+    () => false,
+    undefined,
+    undefined,
+    fixture.wildlife,
+    (structure) => fixture.pasture.pennedYield(structure),
+  );
+  const step = 0.25;
+  const tick = (): void => {
+    fixture.pasture.update(step);
+    fixture.wildlife.update(step, fixture.units.all().map((unit) => unit.position));
+    updateUnitMovement(fixture.units.all(), step);
+    production.update(step);
+  };
+  for (let index = 0; index < 2400; index += 1) tick();
+  return { ...fixture, production, step, tick };
+}
+
+check("V2 Faz 5: a pasture pays its pen's worth per minute, with nobody working there", () => {
+  const fixture = filledPastureFixture();
+  const { wildlife, structure, pasture, production, units } = fixture;
+  const economy = structure.economy ?? assert.fail("pasture economy missing");
+  const rate = economy.perAnimalPerMinute ?? assert.fail("pasture rate missing");
+
+  const penned = pasture.pennedAnimals(structure);
+  assert.ok(penned.length > 0, "the pen filled, or this proves nothing");
+  // Derived from both tables exactly as the runtime does it, so retuning either
+  // the building's rate or the species' multiplier keeps this true.
+  const pennedYield = penned.reduce((total, animal) => total + (animal.stats.pastureYield ?? 0), 0);
+  assert.ok(pennedYield > 0, "penned animals are worth something");
+
+  // Unattended for ten minutes with no road out, the pasture has filled its own
+  // buffer and stopped — the same back-pressure a farm has, and the reason the
+  // road/depot chain is what turns a pen into income.
+  assert.equal(
+    production.snapshots("player")[0]?.status,
+    "buffer-full",
+    "a pasture nobody collects from fills up and waits",
+  );
+  production.withdrawBuffered(structure.id);
+  fixture.tick();
+
+  // Nobody is employed here: the shepherds went home when the pen filled, and
+  // the economy loop refuses to staff a pasture at all. That is the plan's whole
+  // gain — food without spending population on it.
+  const snapshot = production.snapshots("player")[0] ?? assert.fail("the pasture is not a producer");
+  assert.equal(snapshot.status, "producing", "collected from, a full pen produces again");
+  assert.equal(snapshot.assignedWorkers, 0, "and does it with no workers assigned");
+  for (const worker of units.all()) {
+    assert.equal(pasture.isShepherd(worker), false, "every shepherd was released once the pen was full");
+  }
+  assert.ok(
+    Math.abs(snapshot.productionPerMinute - pennedYield * rate) < 1e-6,
+    `the rate line is pen yield x per-animal rate (expected ${pennedYield * rate}, read ${snapshot.productionPerMinute})`,
+  );
+
+  // And the buffer really fills at that rate. Drained every tick so the local
+  // buffer's own ceiling cannot cap the measurement — which is exactly what the
+  // road/depot chain does in a match, through the same `withdrawBuffered`.
+  let banked = 0;
+  const seconds = 120;
+  for (let index = 0; index < seconds / fixture.step; index += 1) {
+    fixture.tick();
+    banked += production.withdrawBuffered(structure.id)?.amount ?? 0;
+  }
+  banked += production.withdrawBuffered(structure.id)?.amount ?? 0;
+  const expected = pennedYield * rate * (seconds / 60);
+  assert.ok(
+    Math.abs(banked - expected) < expected * 0.02,
+    `two minutes bank two minutes of output (expected ~${expected.toFixed(1)}, banked ${banked.toFixed(1)})`,
+  );
+  assert.equal(economy.resourceId, "food", "and it arrives as food, through the ordinary buffer");
+  assert.equal(wildlife.all().every((animal) => !animal.dead), true, "nothing was slaughtered to produce it");
+  fixture.territory.dispose();
+});
+
+check("V2 Faz 5: a pen breeds up to its capacity and stops, and an empty one never starts", () => {
+  // Two cattle into a pen with room for more, so breeding has somewhere to go.
+  const fixture = filledPastureFixture({ herdCount: 2 });
+  const { structure, pasture, wildlife } = fixture;
+  const capacity = structure.economy?.livestockCapacity ?? assert.fail("pen capacity missing");
+  const cow = shippedAnimalBalance().cow ?? assert.fail("cow balance missing");
+  const drivenIn = 2;
+  assert.ok(capacity > drivenIn, "the fixture leaves room to breed into, or the test is vacuous");
+
+  // Long enough for more births than the pen could ever hold, which is the point:
+  // what stops it has to be the capacity, not the clock.
+  for (let index = 0; index < (cow.breedSeconds ?? 0) * (capacity + 4) / fixture.step; index += 1) {
+    fixture.tick();
+  }
+  const penned = pasture.pennedAnimals(structure);
+  assert.equal(penned.length, capacity, "the pen breeds up to its authored ceiling");
+  // Only two animals ever existed to drive in, so the rest were born here — the
+  // herd on the map is bigger than the one the Level authored.
+  assert.equal(
+    wildlife.all().length,
+    capacity,
+    `${capacity - drivenIn} animals were born rather than driven`,
+  );
+  assert.equal(
+    wildlife.all().filter((animal) => animal.owner === "player").length,
+    capacity,
+    "and no animal is owned that the pen is not holding",
+  );
+  assert.equal(new Set(penned.map((animal) => animal.id)).size, capacity, "every animal in the pen is a distinct one");
+  fixture.territory.dispose();
+
+  // The other half: nobody to drive anything in, so nothing to breed from. A
+  // pasture that stocked itself would make the whole drive optional.
+  const empty = pastureDriveFixture();
+  for (let index = 0; index < 4000; index += 1) {
+    empty.pasture.update(0.25);
+    empty.wildlife.update(0.25, []);
+  }
+  assert.equal(empty.pasture.pennedAnimals(empty.structure).length, 0, "an empty pen breeds nothing");
+  empty.territory.dispose();
+});
+
+check("V2 Faz 5: razing a pasture frees its herd instead of deleting it", () => {
+  const fixture = filledPastureFixture();
+  const { structure, pasture, wildlife, structures } = fixture;
+  const penned = pasture.pennedAnimals(structure);
+  assert.ok(penned.length > 0, "there is a herd to free");
+  const ids = penned.map((animal) => animal.id);
+
+  structures.destroy(structure);
+  fixture.tick();
+
+  assert.equal(pasture.pennedAnimals(structure).length, 0, "the pasture is gone and so is its pen");
+  for (const id of ids) {
+    const animal = wildlife.animalById(id) ?? assert.fail(`animal ${id} vanished with the building`);
+    assert.equal(animal.owner, "wild", "its livestock is wild again");
+    assert.equal(animal.lead, null, "and nobody is leading it");
+    // Wild again means huntable again: the opponent who razed the barn now has
+    // to run the cattle down like any other herd.
+    assert.ok(
+      wildlife.huntableAnimalsNear(animal.position.x, animal.position.z, 4).some((near) => near.id === id),
+      "a freed animal is game once more",
+    );
+    // It grazes where it was left, not back at the herd it was taken from.
+    assert.ok(
+      Math.hypot(animal.roamProfile.homeX - animal.position.x, animal.roamProfile.homeZ - animal.position.z)
+        <= animal.stats.roamRadius,
+      "and settles on the ground it is standing on",
+    );
+  }
+  fixture.territory.dispose();
+});
+
+check("V2 Faz 4: your own livestock is never fogged, and the opponent's still is", () => {
+  const field = new Group();
+  const view = new WildlifeView(field);
+  const wildlife = new WildlifeSystem(shippedAnimalBalance(), [
+    { id: "mine", species: "cow", x: -30, z: -30, count: 1 },
+    { id: "theirs", species: "cow", x: 30, z: 30, count: 1 },
+  ]);
+  const [mine, theirs] = wildlife.all();
+  if (!mine || !theirs) return assert.fail("the two herds did not spawn");
+  // Both penned, one to each kingdom, and nobody can see either point.
+  wildlife.tame(mine.id, "player", { homeX: -30, homeZ: -30, roamRadius: 2, walkSpeed: 1, fleeSpeed: 1, fleeRadius: 0, fleeSeconds: 0, fleeRecoverySeconds: 0 });
+  wildlife.tame(theirs.id, "enemy", { homeX: 30, homeZ: 30, roamRadius: 2, walkSpeed: 1, fleeSpeed: 1, fleeRadius: 0, fleeSeconds: 0, fleeRecoverySeconds: 0 });
+  view.setPresentationFactory(() => ({
+    root: new Object3D(),
+    pickTargets: [],
+    selectionRadius: 0.5,
+    dispose: () => {},
+  }));
+
+  view.sync(wildlife.all(), 0, null, () => false, "player");
+  const bodies = field.children;
+  assert.equal(bodies.length, 2, "both animals got a body");
+  assert.ok(
+    bodies.filter((body) => body.position.x < 0).every((body) => body.visible),
+    "a kingdom does not lose track of its own cattle in its own pen",
+  );
+  assert.ok(
+    bodies.filter((body) => body.position.x > 0).every((body) => !body.visible),
+    "the opponent's herd keeps the moving-thing rule in full",
+  );
+  // And the rule itself, without a view: ownership only ever *adds* visibility.
+  assert.equal(isWildlifeVisible("player", 0, 0, () => false, "player"), true);
+  assert.equal(isWildlifeVisible("enemy", 0, 0, () => false, "player"), false);
+  assert.equal(isWildlifeVisible("wild", 0, 0, () => false, "player"), false);
+  view.dispose();
+});
+
 check("RTS collapse deformation patches the husk's own materials, never the ones it was cloned from", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -31166,6 +31637,19 @@ check("unit balance validates combat stats for stable unit ids", () => {
   // from further out than the Archer walking beside it.
   assert.equal(balance["siege_placeholder"]?.attackType, "ranged");
   assert.equal(balance["siege_placeholder"]?.structureAttackVfx, "cannonball");
+  // The shell's blast is an authored effect asset, not a shape the cannonball
+  // system draws. Which effect is authoring and may change; that the id the gun
+  // names still resolves to something the manifest ships is the contract — a
+  // renamed or unregistered `.effect.json` would otherwise cost every siege
+  // shot its explosion with nothing failing.
+  const siegeBurst = balance["siege_placeholder"]?.impactEffect
+    ?? assert.fail("the artillery names the effect its shell bursts into");
+  assert.ok(
+    parseRtsEffectManifest(
+      JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
+    ).has(siegeBurst),
+    `"${siegeBurst}" is a manifested effect asset`,
+  );
   assert.ok(
     balance["siege_placeholder"]!.attackRange > balance["archer_placeholder"]!.attackRange,
     "the gun opens fire from behind the line that escorts it",
@@ -31261,6 +31745,23 @@ check("unit balance validates combat stats for stable unit ids", () => {
     () => validateUnitBalance({ archer_placeholder: { ...RTS_TEST_ARCHER_STATS, acquisitionRange: 2 } }),
     GameDataError,
     "a unit that sees less far than it shoots could never open fire",
+  );
+  assert.throws(
+    () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, impactEffect: "rts-fx-explosion" } }),
+    GameDataError,
+    "only a lobbed shot has a landing to burst at; anywhere else the effect would silently never play",
+  );
+  assert.throws(
+    () => validateUnitBalance({ siege_placeholder: { ...RTS_TEST_SIEGE_STATS, impactEffect: "../secret.effect.json" } }),
+    GameDataError,
+    "an impact burst names a manifest asset id, never a path",
+  );
+  assert.equal(
+    validateUnitBalance({
+      siege_placeholder: { ...RTS_TEST_SIEGE_STATS, impactEffect: "rts-fx-explosion" },
+    })["siege_placeholder"]?.impactEffect,
+    "rts-fx-explosion",
+    "the gun's authored burst survives validation",
   );
   assert.throws(() => validateUnitBalance({ "Guard Placeholder": RTS_TEST_UNIT_STATS }), GameDataError);
   assert.throws(
@@ -31422,7 +31923,16 @@ check("Faz 6 assigns all four resources to distinct core-match decisions", () =>
   // every legitimate pass over the numbers into a red build, which is how a test
   // teaches people to edit the test instead of thinking about the change.
   assert.ok((units.worker_placeholder?.cost.food ?? 0) > 0, "food pays for worker growth");
-  assert.ok((units.guard_placeholder?.cost.wood ?? 0) > 0, "wood contributes to military production");
+  // Wood buys soldiers — but not necessarily *this* soldier. Naming one unit id
+  // made a legitimate tuning pass (`797f84f0` dropped the Guard's wood to 0,
+  // leaving the Archer at 10 and the Topçu at 40) fail a check whose actual claim
+  // was still true, and a red build there teaches people to edit the test rather
+  // than think about the change. The contract is that the military roster as a
+  // whole is bought partly with wood; which unit carries it is balance.
+  assert.ok(
+    Object.entries(units).some(([, stats]) => stats.role !== "worker" && (stats.cost.wood ?? 0) > 0),
+    "wood contributes to military production",
+  );
   assert.ok((buildings.house?.cost.wood ?? 0) > 0, "wood pays for settlement construction");
   assert.ok(
     (ages.town.levelUpgrades[0]?.cost.stone ?? 0) > 0,
@@ -32458,6 +32968,22 @@ check("RTS shipped damage table names only real effects and preserves today's co
     [],
     "every authored slot names a manifested effect asset",
   );
+
+  // An effect's sprite art is reached through the manifest exactly like its
+  // debris meshes, and an id nothing answers does not fail — it quietly falls
+  // back to the engine's procedural round sprite, so a flipbook fireball becomes
+  // a grey blob in the match while the effect editor's preview still looks right.
+  // That is the kind of break a person only finds by staring at the game.
+  const manifestJson = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown;
+  const textureIds = parseRtsTextureManifestPaths(manifestJson);
+  const textureGaps: string[] = [];
+  for (const [effectId, path] of parseRtsEffectManifestPaths(manifestJson)) {
+    const effect = normalizeEffectDefinition(JSON.parse(readFileSync(`public/${path}`, "utf8")) as unknown);
+    if (!effect || effect.renderer.type !== "sprite") continue;
+    const texture = effect.renderer.texture;
+    if (texture && !textureIds.has(texture)) textureGaps.push(`${effectId}:${texture}`);
+  }
+  assert.deepEqual(textureGaps, [], "every sprite effect's texture is a manifested texture asset");
 
   // The stated design rule: a worksite with no silhouette does not topple. This
   // is a presentation decision rather than a tuning magnitude, so it is pinned —
@@ -37521,13 +38047,49 @@ check("the artillery's damage waits exactly as long as its ball is in the air", 
 
   // Advanced on the simulation delta in RtsApp: the same seconds the blow waits.
   for (let i = 0; i < Math.ceil((flight + 1) * 60); i += 1) cannonballs.update(1 / 60);
-  assert.equal(cannonballs.root.children.length, 0, "the ball and its dust retire after impact");
+  assert.equal(cannonballs.root.children.length, 0, "the ball retires after impact");
 
   // A shot across the field waits at least as long as one at the gun's feet —
   // the delay tracks the distance rather than being one fixed pause.
   const near = cannonballs.spawn(new Vector3(0, 0, 0), new Vector3(4, 0, 0));
   const far = cannonballs.spawn(new Vector3(0, 0, 0), new Vector3(40, 0, 0));
   assert.ok(far >= near, `a longer shot cannot land sooner (${far} < ${near})`);
+  cannonballs.dispose();
+});
+
+check("a shell reports its authored burst once, where and when it lands", () => {
+  const cannonballs = new CannonballSystem();
+  const landings: { effectId: string | null; x: number; z: number }[] = [];
+  cannonballs.setImpactHandler((effectId, position) => {
+    landings.push({ effectId, x: position.x, z: position.z });
+  });
+
+  const target = new Vector3(12, 0, -6);
+  const flight = cannonballs.spawn(new Vector3(0, 0, 0), target, "rts-fx-explosion");
+  // The whole point of holding the burst back: an explosion that fired at the
+  // muzzle would go off on a wall the shell has not reached yet.
+  for (let i = 0; i < Math.floor(flight * 60) - 2; i += 1) cannonballs.update(1 / 60);
+  assert.deepEqual(landings, [], "nothing bursts while the shell is still in the air");
+
+  for (let i = 0; i < 8; i += 1) cannonballs.update(1 / 60);
+  assert.equal(landings.length, 1, "one shell reports exactly one landing");
+  assert.equal(landings[0]!.effectId, "rts-fx-explosion", "the burst is the one the gun's data named");
+  // At the impact point the caller aimed, not at the gun and not at the origin.
+  assert.equal(landings[0]!.x, target.x);
+  assert.equal(landings[0]!.z, target.z);
+
+  // Pooling is the trap here: a recycled shot that kept the last gun's id would
+  // burst as an explosion for a weapon whose data names none.
+  cannonballs.spawn(new Vector3(0, 0, 0), new Vector3(6, 0, 0));
+  for (let i = 0; i < 240; i += 1) cannonballs.update(1 / 60);
+  assert.equal(landings.length, 2);
+  assert.equal(landings[1]!.effectId, null, "a gun with no authored burst lands quietly");
+
+  // A restart clears the field; shells wiped off it never landed on anything.
+  cannonballs.spawn(new Vector3(0, 0, 0), new Vector3(20, 0, 0), "rts-fx-explosion");
+  cannonballs.clear();
+  for (let i = 0; i < 240; i += 1) cannonballs.update(1 / 60);
+  assert.equal(landings.length, 2, "a cleared shell never reports a landing");
   cannonballs.dispose();
 });
 

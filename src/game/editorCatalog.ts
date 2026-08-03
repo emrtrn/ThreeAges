@@ -242,6 +242,21 @@ const UNITS_FIELDS = [
   { path: "damageMultipliers.light", label: "Hasar çarpanı: Hafif", min: 0, step: 0.05 },
   { path: "damageMultipliers.heavy", label: "Hasar çarpanı: Ağır", min: 0, step: 0.05 },
   { path: "damageMultipliers.structure", label: "Hasar çarpanı: Yapı", min: 0, step: 0.05 },
+  // Listed next to each other because the second only means anything with the
+  // first set to "cannonball" — the validator refuses the pair otherwise, and an
+  // author who could set the burst without seeing the weapon would not know why.
+  {
+    path: "structureAttackVfx",
+    label: "Saldırı gösterimi",
+    enum: ["firebrand", "cannonball"],
+    hint: "Silahı sıradan kılıç/ok gibi görünmeyen birimler için. firebrand: Muhafız'ın binaya attığı meşale. cannonball: Topçu'nun her hedefe savurduğu gülle — hasarı gülle varana kadar bekler.",
+  },
+  {
+    path: "impactEffect",
+    label: "İsabet efekti",
+    assetOptions: "effect",
+    hint: "Gülle düştüğü noktada patlatılan Content Drawer efekt varlığı. Yalnızca 'cannonball' gösterimli birimlerde geçerlidir; boş bırakılırsa gülle sessizce iner.",
+  },
 ];
 
 const BUILDINGS_FIELDS = [

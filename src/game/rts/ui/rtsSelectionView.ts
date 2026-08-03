@@ -102,6 +102,17 @@ export interface ProducerDetailView {
   readonly kind: "producer";
   readonly production: EconomyBuildingSnapshot;
   readonly logistics: ProducerLogisticsStatus | null;
+  /**
+   * Present only on a pasture. Its crew are shepherds — they leave to fetch
+   * animals rather than standing at the building — so "İşçiler: 0/2" would be
+   * both true and useless there: the number that says whether the pasture is
+   * working is how full the pen is.
+   */
+  readonly livestock?: {
+    readonly pennedAnimals: number;
+    readonly livestockCapacity: number;
+    readonly shepherds: number;
+  } | null;
 }
 
 export interface DepotDetailView {
@@ -1014,12 +1025,17 @@ function describeProducer(
   summary: string,
   detail: ProducerDetailView,
 ): SelectionPanelContent {
-  const { production, logistics } = detail;
+  const { production, logistics, livestock } = detail;
   return {
     title,
     summary,
     lines: [
-      `İşçiler: ${production.assignedWorkers}/${production.workerCapacity} (${production.workingWorkers} çalışıyor)`,
+      ...(livestock
+        ? [
+          `Çobanlar: ${livestock.shepherds}/${production.workerCapacity}`,
+          `Ağıl: ${livestock.pennedAnimals}/${livestock.livestockCapacity} hayvan`,
+        ]
+        : [`İşçiler: ${production.assignedWorkers}/${production.workerCapacity} (${production.workingWorkers} çalışıyor)`]),
       `Üretim: ${production.productionPerMinute.toFixed(1)} ${resourceLabel(production.resourceId)}/dk`,
       `Yerel tampon: ${production.localBuffer.toFixed(1)}/${production.localBufferCapacity}`,
       ...(production.sourceRemaining === null

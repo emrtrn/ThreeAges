@@ -9,7 +9,8 @@
  */
 import type { Group, Object3D } from "three";
 
-import type { RtsPresentationHandle } from "../units/unit";
+import type { CombatTargetOwner } from "../combat/combatTarget";
+import type { RtsPresentationHandle, UnitOwner } from "../units/unit";
 import type { WildlifeAnimal } from "./wildlifeSystem";
 
 /**
@@ -27,12 +28,20 @@ import type { WildlifeAnimal } from "./wildlifeSystem";
  * A carcass is the one thing here that does hold still, and it still hides: what
  * a player would read off a remembered carcass is "there is meat lying there",
  * which stops being true the moment someone else's hunter picks it clean.
+ *
+ * Your own livestock is the exception, and it is the same exception your own
+ * units get: fog answers "what can you see of the world", and a kingdom does not
+ * lose track of its own cattle standing in its own pen (pasture plan Faz 4). The
+ * opponent's herd keeps the moving-thing rule in full.
  */
 export function isWildlifeVisible(
+  owner: CombatTargetOwner,
   x: number,
   z: number,
   isVisible?: (x: number, z: number) => boolean,
+  viewer?: UnitOwner,
 ): boolean {
+  if (viewer !== undefined && owner === viewer) return true;
   // No predicate = the `fogOfWar` flag is off; the whole herd is on the map.
   return !isVisible || isVisible(x, z);
 }
@@ -70,12 +79,14 @@ export class WildlifeView {
    *
    * @param isVisible §59: whether the observing kingdom can see a point right
    *   now. Omitted (the `fogOfWar` flag off) draws every animal.
+   * @param viewer which kingdom is looking, so its own livestock is never fogged.
    */
   sync(
     animals: readonly WildlifeAnimal[],
     deltaSeconds: number,
     cameraDistanceSquared: number | null,
     isVisible?: (x: number, z: number) => boolean,
+    viewer?: UnitOwner,
   ): void {
     this.drawn.clear();
     for (const animal of animals) {
@@ -90,7 +101,13 @@ export class WildlifeView {
       this.drawn.add(animal.id);
       handle.root.position.set(animal.position.x, animal.position.y, animal.position.z);
       handle.root.rotation.y = animal.facing;
-      handle.root.visible = isWildlifeVisible(animal.position.x, animal.position.z, isVisible);
+      handle.root.visible = isWildlifeVisible(
+        animal.owner,
+        animal.position.x,
+        animal.position.z,
+        isVisible,
+        viewer,
+      );
       handle.update?.({
         deltaSeconds,
         planarSpeed: animal.speed,
