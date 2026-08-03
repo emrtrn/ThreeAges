@@ -522,9 +522,28 @@ Fox (Q4 = B ise haritaya konmaz, ama veri yazilir): `moveSpeed` 9, `maxHealth`
 - [x] Kurt cizilir, animasyonlari dogru rolde oynar, sise tabidir (§3.9).
   Kod tarafi Faz 1'de zaten hazirdi; kullanici calisan macta **gordu ve
   hareket ettigini dogruladi**.
+- [x] **Devriye yuruyusu** (§2.1'in "geyik gibi otlamaz, hareketleri avci gibi
+  okunur" maddesi). Ilk gorsel turda kullanici ayak kaymasi bildirdi ve teshis
+  benim ilk tahminimden derindi: `wildProfileFor` her turun otlama hizini
+  `walkClipSpeed`'in **kendisine** esitliyor, yani otlarken oynatma hizi her
+  zaman tam 1. Bu her otlayan icin dogru - ayak kaymasinin cozumu bu - ama
+  yirtici icin yanlis: kurdun bosta davranisi yemek degil, **yiyecek aramak**.
+  Sonuc, §2.1'i yazili olmasina ragmen teslim etmemis olmam.
+  `predator.patrolSpeed` eklendi (2.4); yirtici otlama hizinin **ustunde**
+  devriye gezer, yani ayni yurume klibi rate 1'in ustunde oynar - ayni zeminde
+  daha hizli bacaklar, ayaklar hala basili.
+- [x] **`walkClipSpeed` 1.8 -> 1.6, olcumle.** 1.8'i tahminle koymustum.
+  Kliplerden olculdu (bind-pose IK ayak dugumlerinin ileri eksendeki gezinimi):
+  kurdun dunya adimi 0.419, geyigin 0.427, ama kurdun dongusu %9 kisa - yani
+  ayaklari saniyede ~%7 daha fazla yol aliyor. Geyik 1.5'te kabul edilmis
+  oldugundan kurdun karsiligi 1.6. Not: bu alan **saf geometri degil**; Deer ve
+  Cow birebir ayni klip verisini tasiyor (adim 2.14, sure 1.167) ama 1.5 ve 1.1
+  authorlanmis, yani icinde bir tempo tercihi de var. Bu yuzden bu sayi bir
+  testle **pinlenmedi**; pinlenen sey iliskiler (asagida).
 - [ ] Kabul: kurt gorunur ve dolasir; hicbir seye saldirmaz, hicbir sey ona
-  saldirmaz. **Kullanici gorsel kabulu** (dogru boy, dogru klip, yurume hizi
-  kaymiyor) - **acik**.
+  saldirmaz. **Kullanici gorsel kabulu** - ilk turda dort maddenin ucu gecti
+  (iki kanatta devriye, dogru boy, isciden kacmiyor, geyikler kurttan kaciyor);
+  ayak kaymasi icin ikinci tur **acik**.
 
 **Yerlesim olcumle bulundu, gozle degil** - ve ilk deneme testte kirmizi yandi.
 (-28, -2) en yakin baslangica 41.2 uzaktaydi; gereken 28 (kontrol yaricapi) + 14
@@ -620,6 +639,14 @@ CLAUDE.md kurali: **ayar degil sozlesme**. Hicbir test bir buyuklugu pinlemez.
 - [x] **Tehdit turlemesi (Faz 2):** kurt isciden kacmaz (uzerinde duran isciyle
   bile devriye cemberinde kaliyor); geyik kurttan kacar; evcil hayvan hicbir
   seyden kacmaz - ucu de tek testte, gercek bir yirticinin yaninda.
+- [x] **Devriye yuruyusu (Faz 2):** yirticinin `patrolSpeed`'i otlama hizinin
+  ustunde **ve** yurume/kosma sinirinin (`moveSpeed * runThreshold`) altinda -
+  ikisi de sunum katmaninin kendi kalibrasyon tablosundan **hesaplanarak**,
+  sayiya pinlenmeden. Ustelik ortaya cikan oynatma hizi clamp'e takilmiyor
+  (takilsaydi ayaklar tam da bu alanin belirledigi hizda kayardi) ve 1'in
+  ustunde. Buyuklugun kendisi kasitla pinlenmedi: Deer ve Cow'un ayni klipten
+  farkli `walkClipSpeed` authorlamasi, bu alanin bir tempo tercihi de tasidigini
+  gosteriyor.
 - [x] **Kovalama sozlesmesi (Faz 2):** `advanceHunt` devriye cemberini **asar**
   ama tasmayi **asmaz**; tasmanin ucunda bildirilen hiz sifirdir (duran bir
   govdenin uzerinde Gallop oynamaz); iki ucus sayaci da sifirlanir.

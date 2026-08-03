@@ -13,7 +13,6 @@ import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
 import type { RtsTreeDefinition } from "../economy/forestSystem";
 import type { RtsHerdDefinition } from "../wildlife/wildlifeSystem";
-import { RTS_WORLD_BORDER_BAND, RTS_WORLD_HALF_EXTENT } from "./rtsGround";
 
 export interface RtsMapPoint {
   readonly x: number;
@@ -524,8 +523,19 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
   walkableDecks: [],
 };
 
-/** Creates the non-interactive blockout landmarks for the Phase 2 field. */
-export function createRtsMapBlockout(map: RtsMapBlockout = RTS_BLOCKOUT_MAP): Group {
+/**
+ * Creates the non-interactive blockout landmarks for the Phase 2 field.
+ *
+ * @param options.includeRidge Whether to stand a placeholder box over each of
+ *   `map.navigationBlockers`. Only meaningful while this blockout *is* the
+ *   spatial authority: once a Level supplies the blockers (its own river
+ *   blockers, bridges and terrain), the legacy central ridge is not in play and
+ *   its box would be a grey wall standing in a map that has no such wall.
+ */
+export function createRtsMapBlockout(
+  map: RtsMapBlockout = RTS_BLOCKOUT_MAP,
+  options: { includeRidge?: boolean } = {},
+): Group {
   const root = new Group();
   root.name = "rts-map-blockout";
 
@@ -536,10 +546,16 @@ export function createRtsMapBlockout(map: RtsMapBlockout = RTS_BLOCKOUT_MAP): Gr
   // real answer: the §64 team rings read ownership on every unit and building,
   // and the deposits are read from their own gold/stone pile art. The discs only
   // left coloured patches of ground competing with the art standing on them.
-  for (const blocker of map.navigationBlockers) {
-    root.add(createRockRidge(blocker));
+  // No border band art either. The edge used to be dressed with four dark boxes
+  // ringing the world; the boundary is invisible now, enforced only by the
+  // `RtsNavigation` world bounds and the `RTS_WORLD_BUILD_HALF_EXTENT` placement
+  // inset, so the authored landscape (impassable slopes, cliffs, treelines) is
+  // free to tell the player where the world ends.
+  if (options.includeRidge ?? true) {
+    for (const blocker of map.navigationBlockers) {
+      root.add(createRockRidge(blocker));
+    }
   }
-  root.add(...createBoundaryPlaceholders());
   return root;
 }
 
@@ -562,30 +578,3 @@ function createRockRidge(blocker: NavBlocker): Mesh {
   return ridge;
 }
 
-/**
- * Visual-only boundary rocks; `RtsNavigation` world bounds enforce the edge.
- *
- * The band occupies exactly {@link RTS_WORLD_BORDER_BAND} inward from the world
- * extent, which is the same constant `RTS_WORLD_BUILD_HALF_EXTENT` insets
- * placement by. Derived rather than repeated: when this art is replaced by a
- * thicker authored ridge, moving the constant moves the buildable rim with it.
- */
-function createBoundaryPlaceholders(): Mesh[] {
-  const material = new MeshStandardMaterial({ color: "#3f4934", roughness: 1 });
-  const size = RTS_WORLD_HALF_EXTENT * 2;
-  const band = RTS_WORLD_BORDER_BAND;
-  const inset = RTS_WORLD_HALF_EXTENT - band / 2;
-  const geometry = new BoxGeometry(size, 4, band);
-  const north = new Mesh(geometry, material);
-  north.name = "rts-natural-boundary";
-  north.position.set(0, 2, -inset);
-  const south = north.clone();
-  south.position.z = inset;
-  const sideGeometry = new BoxGeometry(band, 4, size - band * 2);
-  const west = new Mesh(sideGeometry, material);
-  west.name = "rts-natural-boundary";
-  west.position.set(-inset, 2, 0);
-  const east = west.clone();
-  east.position.x = inset;
-  return [north, south, west, east];
-}

@@ -507,6 +507,22 @@ export interface AnimalRetaliationBalance {
  * leash gives up and returns to patrol.
  */
 export interface AnimalPredatorBalance {
+  /**
+   * Ground speed the predator patrols its territory at (V3 §2.1).
+   *
+   * The one field here that is about *reading* rather than about damage, and it
+   * exists because a predator has no grazing pace to fall back on. Every other
+   * species drifts at its `walkClipSpeed`, which pins playback to rate 1 and is
+   * exactly right for an animal whose idle behaviour is eating. A wolf's idle
+   * behaviour is looking for something to eat, and at a grazer's pace it reads
+   * as a deer with the wrong model on it.
+   *
+   * Above `walkClipSpeed` (or it is not a patrol) and below the presentation's
+   * walk/run boundary — `moveSpeed * RTS_LOCOMOTION_CALIBRATION.runThreshold` —
+   * or the wolf spends its whole patrol in the gallop clip. Both are pinned in
+   * `test:engine` against the calibration itself rather than against a number.
+   */
+  readonly patrolSpeed: number;
   /** How far the predator looks for a victim, measured from itself. */
   readonly acquisitionRadius: number;
   /** Damage one bite lands. */

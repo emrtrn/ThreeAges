@@ -735,7 +735,7 @@ Oyuncunun işçiyle temel yapılar kurabildiği ve küçük blockout haritada ha
 - [x] Merkezi genişleme alanı oluştur. (`RTS_BLOCKOUT_MAP.centralExpansion`; merkezi alan işaretçisi)
 - [x] İki farklı yaklaşım rotası oluştur. (merkez kaya sırtının doğu ve batı flankları; engine testi karşı başlangıçlar arasında rota kanıtlar)
 - [x] Bir dış kaynak alanı oluştur. (`RTS_BLOCKOUT_MAP.externalResource`; yeşil placeholder alanı)
-- [x] Harita sınırlarını doğal engel placeholder’larıyla kapat. (`createBoundaryPlaceholders`; navigasyon sınırı mevcut dünya limitleriyle korunur)
+- [x] Harita sınırlarını doğal engel placeholder’larıyla kapat. (placeholder kutular kaldırıldı; sınır artık görünmez — `RtsNavigation` dünya limitleri tutuyor, kenar dekoru authored landscape’e (yamaç/kayalık/ağaç hattı) bırakıldı)
 
 ### Navigasyon
 

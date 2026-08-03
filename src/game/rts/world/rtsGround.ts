@@ -27,11 +27,11 @@ export interface RtsGroundOptions {
 export const RTS_WORLD_HALF_EXTENT = 70;
 
 /**
- * Thickness of the visual border band the map edge is dressed with — the
- * blockout's boundary placeholders now, an authored ridge/treeline later.
- * Nothing gameplay-owned may stand inside it: the band is art the camera reads
- * as "the world ends here", and a building overlapping it looks embedded in a
- * wall.
+ * Thickness of the rim the map edge reserves for whatever dresses it — an
+ * authored slope, cliff or treeline on the landscape. The blockout no longer
+ * builds boundary geometry of its own: the edge is an invisible limit held by
+ * the navigation bounds. Nothing gameplay-owned may stand inside the band, so
+ * a building never ends up embedded in the terrain painted over it.
  */
 export const RTS_WORLD_BORDER_BAND = 3;
 

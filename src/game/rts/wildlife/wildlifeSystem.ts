@@ -57,7 +57,13 @@ export function wildProfileFor(stats: AnimalBalanceStats, x: number, z: number):
     homeX: x,
     homeZ: z,
     roamRadius: stats.roamRadius,
-    walkSpeed: stats.walkClipSpeed,
+    // Everything that grazes drifts at exactly its `walkClipSpeed`, which pins
+    // playback to rate 1 and is the whole fix for foot slide. A predator is the
+    // one animal that must not: its idle behaviour is looking for something to
+    // eat, and at a grazer's pace it reads as a deer wearing the wrong model
+    // (V3 §2.1). It patrols above that speed, so the same walk clip plays above
+    // rate 1 — faster legs for faster ground, feet still planted.
+    walkSpeed: stats.predator?.patrolSpeed ?? stats.walkClipSpeed,
     fleeSpeed: stats.moveSpeed,
     fleeRadius: stats.fleeRadius,
     fleeSeconds: stats.fleeSeconds,

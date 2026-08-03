@@ -198,7 +198,7 @@ import {
   RTS_WORLD_BUILD_HALF_EXTENT,
   RTS_WORLD_HALF_EXTENT,
 } from "../src/game/rts/world/rtsGround";
-import { RTS_BLOCKOUT_MAP } from "../src/game/rts/world/rtsMapBlockout";
+import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "../src/game/rts/world/rtsMapBlockout";
 import { adaptRtsLevel, RtsLevelError } from "../src/game/rts/world/rtsLevelAdapter";
 import { resolveRtsSpatialLayout } from "../src/game/rts/world/rtsSpatialLayout";
 import {
@@ -30243,6 +30243,30 @@ check("V3 Faz 1: the predator block describes a hunter that can actually hunt", 
       `${stats.id} pursues ${predator.pursuitRadius}, which is map-scale rather than local`,
     );
 
+    // V3 §2.1: a predator patrols, it does not graze. Both bounds are computed
+    // from the presentation's own calibration rather than pinned, because both
+    // failures are things you only ever see on screen: below the grazing drift
+    // the wolf reads as a deer wearing the wrong model, and at or above the
+    // walk/run boundary it spends its entire patrol in the gallop clip.
+    const tuning = rtsLocomotionTuning(stats.moveSpeed, { walkClipSpeed: stats.walkClipSpeed });
+    assert.ok(
+      predator.patrolSpeed > stats.walkClipSpeed,
+      `${stats.id} patrols at ${predator.patrolSpeed}, no faster than the ${stats.walkClipSpeed} its prey grazes at`,
+    );
+    assert.ok(
+      predator.patrolSpeed < tuning.runSpeed,
+      `${stats.id} patrols at ${predator.patrolSpeed}, at or past the ${tuning.runSpeed} where it breaks into a gallop`,
+    );
+    // And the resulting playback rate has to be one the clamp will actually
+    // honour, or the legs stop keeping up with the ground at exactly the pace
+    // this field exists to set.
+    const patrolRate = rtsPlaybackRate("walk", predator.patrolSpeed, tuning);
+    assert.ok(
+      Math.abs(patrolRate - predator.patrolSpeed / stats.walkClipSpeed) < 1e-9,
+      `${stats.id}'s patrol rate is clamped, so its feet slide at its own patrol speed`,
+    );
+    assert.ok(patrolRate > 1, `${stats.id} plays its walk clip faster than a grazer does`);
+
     // KARAR 5: prey is wild game, never the livestock V2 let the player earn.
     for (const prey of predator.preySpecies) {
       const target = animals[prey] ?? assert.fail(`${stats.id} names unknown prey "${prey}"`);
@@ -30290,12 +30314,19 @@ check("V3 Faz 1: the validator refuses a predator block that cannot work", () =>
   });
 
   // Non-positive is nonsense in every field, at any tuning.
-  for (const key of ["acquisitionRadius", "damage", "attacksPerMinute", "pursuitRadius"] as const) {
+  for (const key of
+    ["acquisitionRadius", "damage", "attacksPerMinute", "pursuitRadius", "patrolSpeed"] as const) {
     for (const bad of [0, -1]) {
       assert.throws(() => validateAnimalBalance(withPredator({ [key]: bad })), GameDataError, `${key} = ${bad}`);
     }
     assert.throws(() => validateAnimalBalance(withPredator({ [key]: undefined })), GameDataError, `${key} missing`);
   }
+
+  // A patrol at or below the grazing drift is not a patrol.
+  assert.throws(
+    () => validateAnimalBalance(withPredator({ patrolSpeed: wolf["walkClipSpeed"] as number })),
+    GameDataError,
+  );
 
   // The two relationship rules, both of which read as pathfinding faults in play.
   const roamRadius = (wolf["roamRadius"] as number);
@@ -38710,6 +38741,32 @@ check("RTS grid navigation routes a unit around a static blocker", () => {
   for (let i = 0; i < 300; i += 1) updateUnitMovement([walker], 1 / 60);
   assert.ok(walker.position.distanceTo(new Vector3(5, 0, 0)) < 0.16, "follows every waypoint to goal");
   assert.equal(walker.pathTarget, null, "clears the path after reaching the goal");
+});
+
+check("RTS blockout draws no map-edge wall, and no ridge box once a Level owns the blockers", () => {
+  const names = (group: { traverse(fn: (child: { name: string }) => void): void }): string[] => {
+    const found: string[] = [];
+    group.traverse((child) => { if (child.name) found.push(child.name); });
+    return found;
+  };
+  // The world edge is an invisible limit: `RtsNavigation` bounds hold it, and the
+  // authored landscape (slopes, cliffs, treelines) is what the player reads. Any
+  // box geometry re-appearing on the rim would sit *inside* that art.
+  assert.ok(
+    !names(createRtsMapBlockout()).some((name) => name.includes("boundary")),
+    "the blockout builds no border band geometry in either mode",
+  );
+  // The ridge placeholder stands for `RTS_BLOCKOUT_MAP.navigationBlockers`. A
+  // Level replaces those wholesale (`resolveRtsSpatialLayout`), so drawing it
+  // there would be a wall with nothing behind it.
+  assert.ok(
+    names(createRtsMapBlockout(RTS_BLOCKOUT_MAP, { includeRidge: true })).includes("rts-central-ridge"),
+    "the legacy blockout still shows its own ridge blocker",
+  );
+  assert.ok(
+    !names(createRtsMapBlockout(RTS_BLOCKOUT_MAP, { includeRidge: false })).includes("rts-central-ridge"),
+    "a Level-driven match gets no legacy ridge box",
+  );
 });
 
 check("RTS Faz 2 blockout keeps both flanks reachable around the central ridge", () => {

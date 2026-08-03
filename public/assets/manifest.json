@@ -28303,6 +28303,39 @@
         "bytes": 446
       },
       "license": "Unknown"
+    },
+    {
+      "id": "forestmountain-landscape",
+      "name": "Forest Mountain Landscape",
+      "assetType": "staticMesh",
+      "category": "Landscape",
+      "path": "assets/ThreeAges/Landscape/ForestMountain_Landscape.glb",
+      "tags": [
+        "landscape",
+        "terrain",
+        "forest",
+        "mountain"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Landscape",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 9943188
+      },
+      "source": {
+        "origin": "sketchfab",
+        "pack": "The landscape is a forest in the mountains",
+        "author": "dasy444"
+      },
+      "license": "SKETCHFAB Standard (https://sketchfab.com/licenses)"
     }
   ]
 }

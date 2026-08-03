@@ -75,7 +75,7 @@ import { RtsPointer } from "./input/rtsPointer";
 import { createRtsGround, RTS_WORLD_HALF_EXTENT } from "./world/rtsGround";
 import { AuthoredRtsGroundSurface, FLAT_RTS_GROUND, RtsDeckGroundSurface, type RtsGroundSurface } from "./world/rtsTerrainSurface";
 import { RTS_PLACEMENT_GRID_SIZE } from "./structures/placementGrid";
-import { createRtsMapBlockout } from "./world/rtsMapBlockout";
+import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "./world/rtsMapBlockout";
 import { resolveRtsSpatialLayout, type RtsSpatialLayout } from "./world/rtsSpatialLayout";
 import type { RtsLevelDefinition } from "./world/rtsLevelAdapter";
 import { RtsMapArt, collectWorldProps } from "./world/rtsMapArt";
@@ -1633,7 +1633,14 @@ export class RtsApp {
     // Witness of which ground the match renders on: the flat placeholder now, or
     // an authored Landscape once one mounts (see retireFlatGround).
     this.canvas.dataset.rtsGround = "flat";
-    const blockout = createRtsMapBlockout();
+    // Ridge placeholder only while the legacy blockout is the spatial authority.
+    // With a Level loaded the blockers are the authored ones (river + bridges),
+    // so the legacy central ridge box would be a grey wall across a map whose
+    // chokepoint is the river — and it used to be visible until the authored
+    // world finished mounting, or forever if that mount failed.
+    const blockout = createRtsMapBlockout(RTS_BLOCKOUT_MAP, {
+      includeRidge: !this.options.level,
+    });
     this.scene.add(blockout);
     this.canvas.dataset.rtsMapArt = "loading";
     void this.loadMapArt(blockout);
@@ -3161,8 +3168,11 @@ export class RtsApp {
         this.setupRoadPainter(handle);
       }
       // The blockout still drew a placeholder ridge box from the marker blocker;
-      // remove it so it does not sit under the authored ridge mesh.
-      const placeholder = this.scene.getObjectByName("rts-central-ridge");
+      // remove it so it does not sit under the authored ridge mesh. Only when the
+      // Level is also the spatial authority: if adaptation failed we fell back to
+      // the blockout's own ridge blocker, and deleting its box would leave an
+      // invisible wall across the middle of the map.
+      const placeholder = this.options.level ? this.scene.getObjectByName("rts-central-ridge") : null;
       if (placeholder instanceof Mesh) {
         placeholder.removeFromParent();
         placeholder.geometry.dispose();

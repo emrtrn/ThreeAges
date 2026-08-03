@@ -1184,7 +1184,13 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
       }
     }
     const retaliation = validateAnimalRetaliation(stats["retaliation"], `${statsWhere}.retaliation`);
-    const predator = validateAnimalPredator(stats["predator"], `${statsWhere}.predator`, roamRadius);
+    const walkClipSpeed = positive("walkClipSpeed");
+    const predator = validateAnimalPredator(
+      stats["predator"],
+      `${statsWhere}.predator`,
+      roamRadius,
+      walkClipSpeed,
+    );
     // A predator that hunts what it can also be driven into a pen is two
     // designs at once (V3 KARAR 5 keeps tamed animals off the menu), so the
     // combination is refused here rather than silently resolved at runtime.
@@ -1197,7 +1203,7 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
       meatCapacity: positive("meatCapacity"),
       maxHealth: positive("maxHealth"),
       moveSpeed,
-      walkClipSpeed: positive("walkClipSpeed"),
+      walkClipSpeed,
       fleeRadius: positive("fleeRadius"),
       fleeSeconds,
       fleeRecoverySeconds,
@@ -1287,10 +1293,13 @@ function validateAnimalPredator(
   value: unknown,
   where: string,
   roamRadius: number,
+  walkClipSpeed: number,
 ): AnimalPredatorBalance | null {
   if (value === undefined) return null;
   const obj = asObject(value, where);
-  const positive = (key: "acquisitionRadius" | "damage" | "attacksPerMinute" | "pursuitRadius"): number => {
+  const positive = (
+    key: "acquisitionRadius" | "damage" | "attacksPerMinute" | "pursuitRadius" | "patrolSpeed",
+  ): number => {
     const amount = requireFiniteNumber(obj, key, where);
     if (amount <= 0) throw new GameDataError(`${where}.${key}: must be > 0`);
     return amount;
@@ -1308,6 +1317,17 @@ function validateAnimalPredator(
       + `${WORLD_HALF_EXTENT_FOR_VISION_CHECK} so a chase stays a local event near the den`,
     );
   }
+  // A patrol below the grazing drift is not a patrol. The upper bound (the
+  // walk/run boundary) is a presentation constant and stays in `test:engine`
+  // rather than being mirrored into this file, but this half needs no other
+  // table to be checkable and reads as a stationary wolf if it is wrong.
+  const patrolSpeed = positive("patrolSpeed");
+  if (patrolSpeed <= walkClipSpeed) {
+    throw new GameDataError(
+      `${where}.patrolSpeed: ${patrolSpeed} must exceed the species' walkClipSpeed ${walkClipSpeed}, `
+      + "or the predator drifts like the grazers it hunts",
+    );
+  }
   const preyRaw = obj["preySpecies"];
   if (!Array.isArray(preyRaw)) throw new GameDataError(`${where}.preySpecies: must be an array`);
   const preySpecies = preyRaw.map((entry, index) => {
@@ -1317,6 +1337,7 @@ function validateAnimalPredator(
     return entry;
   });
   return {
+    patrolSpeed,
     acquisitionRadius: positive("acquisitionRadius"),
     damage: positive("damage"),
     attacksPerMinute: positive("attacksPerMinute"),
