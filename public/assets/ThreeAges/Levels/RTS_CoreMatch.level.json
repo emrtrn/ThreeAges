@@ -172,6 +172,42 @@
             "pointType": "linear"
           },
           {
+            "id": "pasture-spur-1",
+            "position": [
+              22,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "pasture-spur-2",
+            "position": [
+              22,
+              0,
+              -24
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "pasture-spur-3",
+            "position": [
+              22,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "pasture-spur-4",
+            "position": [
+              26,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
             "id": "p5",
             "position": [
               50,
@@ -3089,6 +3125,20 @@
       }
     },
     {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        22,
+        0,
+        -20
+      ],
+      "name": "Enemy pasture (22,-20)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "pasture",
+        "regionId": "enemy-base"
+      }
+    },
+    {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
         10,
@@ -3189,9 +3239,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        -30.0,
+        -30,
         0,
-        22.0
+        22
       ],
       "name": "Herd player-deer",
       "scale": 1,
@@ -3204,9 +3254,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        30.0,
+        30,
         0,
-        -22.0
+        -22
       ],
       "name": "Herd enemy-deer",
       "scale": 1,
@@ -3219,9 +3269,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        0.0,
         0,
-        16.0
+        0,
+        16
       ],
       "name": "Herd central-stag",
       "scale": 1,
@@ -3234,9 +3284,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        -18.0,
+        -18,
         0,
-        14.0
+        14
       ],
       "name": "Herd player-cattle",
       "scale": 1,
@@ -3249,9 +3299,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        18.0,
+        18,
         0,
-        -14.0
+        -14
       ],
       "name": "Herd enemy-cattle",
       "scale": 1,
@@ -3264,9 +3314,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        0.0,
         0,
-        -16.0
+        0,
+        -16
       ],
       "name": "Herd central-bull",
       "scale": 1,

@@ -98,6 +98,15 @@ export function buildOrder(bb: AiBlackboard, balance: AiBalance): readonly strin
   // one asset on the map whose value only decays: the camp's whole yield is
   // fixed at what the herd holds, so a camp built late is a camp built smaller.
   if (short("hunting_camp")) order.push("hunting_camp");
+  // Beside the camp, for a sharper version of the camp's own reason. A herd is
+  // the one asset on the map that only ever gets smaller, and cattle are the
+  // half of it the opponent can take *permanently* — a cow he drives into his
+  // own pasture is one this kingdom can never hunt, tame or replace. Where the
+  // camp built late is merely a camp built smaller, a pasture built late is a
+  // pasture built on nothing. Left unnamed it would still be ordered, by the
+  // fallback loop's key order, at almost this position — so this line is about
+  // saying why, not about moving it.
+  if (short("pasture")) order.push("pasture");
   if (short("barracks")) order.push("barracks");
   // §41 "Kule: kritik geçit veya karakol yakını" — the AI's only structure with a
   // `defense` block, so on this data set the outpost *is* the base defence. After

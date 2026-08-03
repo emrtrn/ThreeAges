@@ -269,6 +269,23 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     // reach the depot. A camp beside a herd it cannot deliver from is not a food
     // supply, it is a disconnected producer.
     { buildingId: "hunting_camp", ...atEnemyBase(-12, 12) },
+    // V2 Faz 7: the pasture, and it is the map's tightest slot by a wide margin —
+    // measured, not estimated. Three constraints intersect in exactly **one**
+    // even-grid cell: the whole `enemy-cattle` roam circle has to sit inside the
+    // pasture's 16-unit reach (so a grazing cow never wanders out of the pen's
+    // own building), every cell of the 6x6 footprint has to stay inside the
+    // 28-unit settlement control, and it may not overlap a neighbouring slot.
+    // Only (22,-20) satisfies all three, with 0.79 units to spare.
+    //
+    // That thinness is the design, not an oversight. Faz 2 put both cattle herds
+    // *outside* their nearest kingdom's opening radius on purpose — "close enough
+    // to be yours if you expand, never free" — so a pasture is by construction a
+    // building at the very edge of what a kingdom holds. The player faces the
+    // mirror of this constraint at (-22,20), which is what makes the race fair.
+    // Two engine tests compute the margin from `animals.json` and
+    // `buildings.json` rather than pinning it, so retuning either reach or roam
+    // turns the suite red here instead of silently leaving the AI no slot at all.
+    { buildingId: "pasture", ...atEnemyBase(-16, 18) },
   ],
   // Spur to the centre, spine across the base, then a branch down to each of the
   // two starting producers. The leg back along z=-18 is retraced on purpose:
@@ -278,6 +295,20 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     atEnemyBase(0, 8),
     atEnemyBase(-12, 8),
     atEnemyBase(-12, 4),
+    atEnemyBase(-12, 8),
+    // V2 Faz 7: the spur out to the pasture, and it runs at x = 22 for a reason
+    // the map leaves no choice about. At z = -26 the slots form a solid wall from
+    // x = 23 (hunting camp) to x = 47 (gold mine) — camp, quarry, depot, gold in
+    // a row — and a road cell may never overlap a footprint. So the only way
+    // north out of the spine is *past* the camp's western edge, one cell clear of
+    // it. Measured: 5 new cells, 20 wood, no overlap, and no existing producer's
+    // road contact changes.
+    atEnemyBase(-16, 8),
+    atEnemyBase(-16, 14),
+    // Retraced back to the spine before it continues east — segments are
+    // idempotent, so re-walking these cells is free, and it keeps one polyline
+    // expressing a branching network (the z = -18 leg above does the same).
+    atEnemyBase(-16, 8),
     atEnemyBase(-12, 8),
     atEnemyBase(12, 8),
     atEnemyBase(12, 4),

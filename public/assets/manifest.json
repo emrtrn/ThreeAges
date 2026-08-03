@@ -28280,6 +28280,29 @@
         "bytes": 968592
       },
       "license": "Unknown"
+    },
+    {
+      "id": "grasslargee-foliagetype",
+      "name": "Grass Large E.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/GrassLargeE.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 446
+      },
+      "license": "Unknown"
     }
   ]
 }

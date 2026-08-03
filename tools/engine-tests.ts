@@ -40440,14 +40440,20 @@ function aiTestWorld(
   // As in RtsApp: production must not re-grab a worker that is mid-construction.
   // The two systems reference each other, so the link is resolved lazily.
   let workerConstructionRef: WorkerConstructionSystem | null = null;
+  // As in RtsApp: the pasture pulls its own shepherds, so every system that hires
+  // workers has to be able to see that it did (V2 Faz 7). Resolved lazily for the
+  // same reason the construction link is — the two ask each other the question.
+  let pastureRef: PastureSystem | null = null;
   const production = new EconomyProductionSystem(
     units,
     structures,
     navigation,
-    (unit) => workerConstructionRef !== null && workerConstructionRef.stateFor(unit) !== "idle",
+    (unit) => (workerConstructionRef !== null && workerConstructionRef.stateFor(unit) !== "idle")
+      || (pastureRef?.isShepherd(unit) ?? false),
     resourceNodes,
     forests,
     wildlife,
+    (structure) => pastureRef?.pennedYield(structure) ?? 0,
   );
   const roads = new RoadGraph(balance);
   const depots = new DepotLogisticsSystem(structures, roads);
@@ -40481,12 +40487,22 @@ function aiTestWorld(
     units,
     structures,
     navigation,
-    (unit) => production.isAssigned(unit),
+    (unit) => production.isAssigned(unit) || (pastureRef?.isShepherd(unit) ?? false),
     // As in RtsApp: a completed outpost changes who owns what.
     (structure) => { if (structure.stats.territory) territory.refresh(); },
     (unit) => production.release(unit),
   );
   workerConstructionRef = workerConstruction;
+  // As in RtsApp, and built after the two systems it cross-checks: a pasture
+  // hires shepherds nobody else may take, and it is what turns a pen into food.
+  const pasture = new PastureSystem(
+    units,
+    structures,
+    navigation,
+    wildlife,
+    (unit) => workerConstruction.stateFor(unit) !== "idle" || production.isAssigned(unit),
+  );
+  pastureRef = pasture;
   const transfers = new LogisticsTransferSystem(production, logistics, kingdoms);
   const construction = new StructureConstructionService(
     buildings,
@@ -40508,9 +40524,17 @@ function aiTestWorld(
         ? "missing-forest"
         // As in RtsApp: a hunting camp needs live game in reach, and only live —
         // a herd that has already been eaten must not keep justifying a camp.
+        // As in RtsApp: wild game only. A camp raised beside a full pasture would
+        // otherwise be legal and then immediately report `source-depleted`, since
+        // the only animals in its circle are cattle it may never shoot (V2 §3.7).
         : stats.economy?.requiresGame
-          && wildlife.liveAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
+          && wildlife.huntableAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
           ? "missing-game"
+          // As in RtsApp: a pasture is placed at the herd it will tame, and only
+          // at live, wild, tameable animals — a ring of deer justifies no pen.
+          : stats.economy?.requiresLivestock
+            && wildlife.tameableAnimalsNear(x, z, stats.economy.gatherRadius ?? 0).length === 0
+            ? "missing-livestock"
           : null,
     // As in RtsApp: roads, standing trees and live deposits reserve build space
     // without blocking navigation, so a camp is placed beside a grove and a mine
@@ -40566,7 +40590,11 @@ function aiTestWorld(
     townRequiredBuildingIds: ageBalance.town.requiredBuildingIds,
     unitIdForRole: (role) => Object.entries(unitBalance)
       .find(([, stats]) => stats.role === role)?.[0] ?? null,
-    isWorkerBusy: (unit) => workerConstruction.stateFor(unit) !== "idle" || production.isAssigned(unit),
+    // As in RtsApp, shepherds included: a worker out driving cattle is spent, and
+    // an AI that counted him as idle would read a fully committed crew as spare
+    // labour and stop training the workers the drive is costing it (V2 Faz 7).
+    isWorkerBusy: (unit) => workerConstruction.stateFor(unit) !== "idle"
+      || production.isAssigned(unit) || pasture.isShepherd(unit),
     navigation,
     anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
     baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
@@ -40595,6 +40623,9 @@ function aiTestWorld(
     // After movement and before production, exactly as RtsApp orders it: the herd
     // reacts to where the bodies on the field are *now*, and the hunt loop then
     // reads the position the animal actually bolted to.
+    // Ahead of the herd's own tick, as RtsApp orders it: a lead set this frame
+    // has to move the animal this frame, or the drive trails a step behind.
+    pasture.update(dt);
     wildlife.update(dt, units.all().map((unit) => unit.position));
     workerConstruction.update(dt);
     production.update(dt);
@@ -40608,7 +40639,7 @@ function aiTestWorld(
   };
   return {
     units, structures, centers, kingdoms, ai, workerConstruction, territory, roads, progression,
-    production, resourceNodes, wildlife, construction, step,
+    production, resourceNodes, wildlife, pasture, construction, step,
   };
 }
 
@@ -42227,7 +42258,14 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
     nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1 } }), AI_TEST_BALANCE),
     "hunting_camp",
   );
-  const staples = { farm: 1, lumber_camp: 1, hunting_camp: 1 };
+  // V2 Faz 7: the pasture stands beside the camp, and ahead of the military for a
+  // sharper version of the camp's reason — cattle the opponent tames are gone for
+  // good, so a pasture built late is a pasture built on nothing.
+  assert.equal(
+    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1, hunting_camp: 1 } }), AI_TEST_BALANCE),
+    "pasture",
+  );
+  const staples = { farm: 1, lumber_camp: 1, hunting_camp: 1, pasture: 1 };
   assert.equal(nextBuilding(bb({ buildingCounts: staples }), AI_TEST_BALANCE), "barracks");
   // Base defence comes straight after the Barracks: the outpost is the only
   // building carrying a `defense` block, so an undefended base does not live long
@@ -42292,7 +42330,7 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   // mine underneath it are never reached, so the Town age stays unreachable.
   assert.deepEqual(
     buildOrder(bb({ population: 19, populationCap: 20, buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 } }), AI_TEST_BALANCE),
-    ["house", "hunting_camp", "outpost", "quarry", "gold_mine", "market"],
+    ["house", "hunting_camp", "pasture", "outpost", "quarry", "gold_mine", "market"],
     "a blocked priority still lets the ones below it through",
   );
   // Urgent housing is listed *once*, at the top: the settlement plan's own housing
@@ -42390,6 +42428,158 @@ check("Faz 6: a kingdom fed by hunting is not diagnosed as starving, and a spent
   // meets its target, so the order falls through to the farm. That is "abandon
   // the spent herd and go farm" without a single rule about herds in the AI.
   assert.equal(nextBuilding(spent, AI_TEST_BALANCE), "farm");
+});
+
+check("V2 Faz 7: a kingdom fed by a stocked pen is not diagnosed as starving, and an empty pen is", () => {
+  // The Faz 6 hunting test's twin, and it has to be a twin: the diagnosis is
+  // supposed to be about *food*, so a third way of producing it must need no new
+  // rule in the AI at all. Only the food source differs between the two fixtures.
+  const others = { lumber_camp: 1, quarry: 1, gold_mine: 1 };
+  const stocked = aiTestBlackboard({ buildingCounts: { ...others, pasture: 1 } });
+  assert.equal(
+    detectBottleneck(stocked, AI_TEST_BALANCE),
+    null,
+    "a pen feeds the kingdom exactly as a farm or a camp does",
+  );
+  // An empty pen is a building, not a supply — the same sentence as an eaten
+  // herd, and the reason `missing-livestock` is a sourceless status.
+  const empty = aiTestBlackboard({
+    buildingCounts: { ...others, pasture: 1 },
+    resourceProducerCounts: aiTestProducerCounts(others),
+  });
+  assert.equal(
+    detectBottleneck(empty, AI_TEST_BALANCE),
+    "no-food-production",
+    "a pasture nobody has driven an animal into does not feed anyone",
+  );
+  // And the repair is the renewable one it can build unaided: its pasture target
+  // is already met, so the order falls through to the farm rather than raising a
+  // second pen beside a herd that has not moved.
+  assert.equal(nextBuilding(empty, AI_TEST_BALANCE), "farm");
+});
+
+check("V2 Faz 7: the AI opens a pasture on the contested cattle and lives off the pen", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const worker = unitBalance.worker_placeholder ?? assert.fail("worker balance missing");
+  const world = aiTestWorld({ food: 800, wood: 1200 });
+  for (let index = 0; index < 5; index += 1) {
+    world.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
+  }
+  const anchor = RTS_BLOCKOUT_MAP.enemyBaseAnchors.find((slot) => slot.buildingId === "pasture")
+    ?? assert.fail("no authored pasture anchor");
+
+  // Long enough for the opening to reach the pasture, raise it, and for shepherds
+  // to walk out to cattle a good 30 units from the base and drive them back.
+  for (let index = 0; index < 3000; index += 1) world.step(0.5);
+
+  const pasture = world.structures.ownedBy("enemy").find((structure) => structure.stats.id === "pasture")
+    ?? assert.fail("the AI never built a pasture");
+  assert.equal(pasture.construction.complete, true, "and finished it");
+  // §40 again, because this anchor is the map's tightest: the AI must have used
+  // the authored slot, not drifted to a spot that merely happened to validate.
+  assert.equal(pasture.x, anchor.x, "the pasture stands on its authored anchor (x)");
+  assert.equal(pasture.z, anchor.z, "the pasture stands on its authored anchor (z)");
+
+  // §2.10's real claim: the AI runs the *whole* mechanic, not just the building.
+  const penned = world.pasture.pennedAnimals(pasture);
+  assert.ok(penned.length > 0, "the AI's shepherds drove cattle home");
+  for (const animal of penned) {
+    assert.equal(animal.owner, "enemy", "the pen holds animals the AI owns");
+    assert.equal(animal.stats.tameable, true, "and only species that can be tamed");
+  }
+  // The one thing a pasture is for: food, with nobody working there.
+  const snapshot = world.production.snapshots("enemy").find((producer) => producer.structureId === pasture.id)
+    ?? assert.fail("the completed pasture is not a producer");
+  assert.equal(snapshot.resourceId, "food", "a pasture banks food");
+  assert.equal(snapshot.assignedWorkers, 0, "and banks it with nobody assigned to it");
+  assert.ok(snapshot.totalProduced > 0, "the pen actually produced");
+  assert.ok(
+    producerHasSource(snapshot.status),
+    `a stocked pen is a food supply, not a building (status ${snapshot.status})`,
+  );
+  // And it reaches the stockpile: the spine spur authored for this anchor is what
+  // separates income from a full local buffer (Faz 5's back-pressure).
+  assert.ok(snapshot.totalTransferred > 0, "the pasture's food reaches the kingdom, not just its own buffer");
+});
+
+check("V2 Faz 7: the AI's pasture anchor is authored on cattle it can tame and a road it can ship from", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const pasture = buildings.pasture ?? assert.fail("pasture balance missing");
+  const reach = pasture.economy?.gatherRadius ?? assert.fail("a pasture needs a reach");
+  const animals = shippedAnimalBalance();
+  const anchors = RTS_BLOCKOUT_MAP.enemyBaseAnchors.filter((anchor) => anchor.buildingId === "pasture");
+  assert.ok(anchors.length > 0, "the AI's settlement plan wants a pasture, so the map must offer it a slot");
+
+  for (const anchor of anchors) {
+    // The nearest *tameable* herd, not the nearest herd: a pasture authored on
+    // the deer would be refused at placement with `missing-livestock`, which is
+    // the failure this test exists to catch before a match does.
+    const herd = RTS_BLOCKOUT_MAP.herds
+      .filter((candidate) => animals[candidate.species]?.tameable)
+      .map((candidate) => ({ candidate, distance: Math.hypot(candidate.x - anchor.x, candidate.z - anchor.z) }))
+      .sort((left, right) => left.distance - right.distance)[0]
+      ?? assert.fail("the map has no tameable herd for the AI to drive");
+    const species = animals[herd.candidate.species] ?? assert.fail(`unknown species ${herd.candidate.species}`);
+    // The whole roam circle, exactly as the hunting camp's anchor is judged, and
+    // for a sharper reason: a shepherd only ever claims an animal that is in the
+    // pasture's reach *right now*, so a herd that half-leaves the circle is a
+    // pasture that stops hiring halfway through filling its pen.
+    assert.ok(
+      herd.distance + species.roamRadius <= reach,
+      `the pasture anchor is ${herd.distance.toFixed(1)} from ${herd.candidate.id}, whose animals roam `
+      + `${species.roamRadius} — past the pasture's reach of ${reach}`,
+    );
+    // Every cell of the footprint inside the opening control radius. This is the
+    // constraint that makes the slot unique (see the anchor's own comment), and
+    // it is checked here because `outside-control` is a placement refusal the AI
+    // answers by blacklisting the anchor — permanently, for the whole match.
+    const start = RTS_BLOCKOUT_MAP.enemyStart;
+    for (const offsetX of [-2, 0, 2]) {
+      for (const offsetZ of [-2, 0, 2]) {
+        assert.ok(
+          Math.hypot(anchor.x + offsetX - start.x, anchor.z + offsetZ - start.z) <= COMMAND_CENTER_CONTROL_RADIUS,
+          `the pasture anchor's ${offsetX},${offsetZ} cell falls outside the AI's opening territory`,
+        );
+      }
+    }
+  }
+
+  // A pen with no road out is a pasture that fills its buffer and stops — the
+  // back-pressure Faz 5 records, and the same half-a-food-supply the camp test
+  // measures. Walked against the *authored* spine, as the AI walks it.
+  const roads = new RoadGraph(validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  ));
+  const spine = RTS_BLOCKOUT_MAP.enemyBaseRoute;
+  for (let index = 0; index < spine.length - 1; index += 1) {
+    const from = spine[index];
+    const to = spine[index + 1];
+    if (!from || !to) continue;
+    const leg = roads.plan(from, to, []) ?? assert.fail(`the authored spine leg ${index} cannot be routed`);
+    roads.commit(leg);
+  }
+  for (const anchor of anchors) {
+    assert.ok(
+      roadCellTouchingFootprint(roads, anchor.x, anchor.z, pasture.footprint.width, pasture.footprint.depth),
+      `the pasture anchor @${anchor.x},${anchor.z} is off the AI's authored road spine`,
+    );
+  }
+  // The spur must not have cost the buildings it was threaded past: at z = -26 the
+  // base slots form a solid wall, and a road cell may never overlap a footprint.
+  for (const cell of roads.all()) {
+    for (const anchor of RTS_BLOCKOUT_MAP.enemyBaseAnchors) {
+      const stats = buildings[anchor.buildingId] ?? assert.fail(`unknown anchor building ${anchor.buildingId}`);
+      assert.ok(
+        Math.abs(cell.x - anchor.x) >= stats.footprint.width / 2
+        || Math.abs(cell.z - anchor.z) >= stats.footprint.depth / 2,
+        `road cell ${cell.x},${cell.z} lies inside the ${anchor.buildingId} slot @${anchor.x},${anchor.z}`,
+      );
+    }
+  }
 });
 
 check("Faz 6: the AI's hunting camp anchor is authored on a herd it can work and a road it can ship from", () => {

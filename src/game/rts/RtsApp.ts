@@ -1234,8 +1234,15 @@ export class RtsApp {
       unitIdForRole: (role) => Object.entries(this.options.unitBalance)
         .find(([, stats]) => stats.role === role)?.[0] ?? null,
       marketTrade: this.marketTrade,
+      // The fourth reader of "is somebody already using this worker", and the
+      // last one to learn about herding (pasture plan V2 Faz 7). A shepherd
+      // counted as idle is a worker the AI believes it can spend: `§19
+      // IdleWorkerCount` feeds the `no-available-worker` bottleneck, so a kingdom
+      // with its whole crew out driving cattle would read as fully staffed and
+      // stop training the workers the drive is costing it.
       isWorkerBusy: (unit) => this.workerConstruction.stateFor(unit) !== "idle"
-        || (this.economyProduction?.isAssigned(unit) ?? false),
+        || (this.economyProduction?.isAssigned(unit) ?? false)
+        || this.pasture.isShepherd(unit),
       navigation: this.navigation,
       // §58: undefined while the flag is off, so the army manager is built with
       // a null provider and never spends a tick on objectives that do not exist.

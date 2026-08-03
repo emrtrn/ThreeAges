@@ -1,9 +1,9 @@
 # ThreeAges RTS V2 - Agil ve Evcillestirme Plani
 
 Olusturulma tarihi: 2026-08-02
-Durum: **Faz 0-5 tamamlandi (2026-08-03), gorsel kabul dahil.**
-Faz 6 kodu ve testleri yazildi; **gorsel kabul bekliyor** (boga cobana vuruyor
-mu, `Attack_Headbutt` oynuyor mu). Sonra Faz 7 - AI uyumu ve kabul maci.
+Durum: **Faz 0-6 tamamlandi (2026-08-03), gorsel kabul dahil.**
+Faz 7'nin kodu, harita isi ve testleri yazildi; kalan tek sey **kabul maci**
+(kullanici oynar: sigir icin yaris, gudme, kalici gelir, tarlasiz Kasaba).
 Onkosul: `THREEAGES_RTS_WILDLIFE_AND_HUNTING_PLAN.md` V1 (Faz 0-7) tamamlandi.
 
 Bu dosya, yaban hayati yol haritasinin (`...WILDLIFE_AND_HUNTING_PLAN.md` §12)
@@ -688,20 +688,78 @@ Kabul:
   `{1, 6}`'dan `{11, 37}`'ye (~10x yayilim) degistirilip suite uc kez kosuldu,
   ucunde de 1237 yesil. Oldurucu ayarda bile testler gecer, cunku "boga
   evcillestirilebilir" gibi bir ayar iddiasi tasimiyorlar.
-- [ ] Kullanici gorsel kabulu: boga sakinlestirilirken cobana vuruyor,
-  `Attack_Headbutt` oynuyor, coban duruyor ve yiyor; inekte hicbiri olmuyor.
+- [x] **Gorsel kabul alindi (2026-08-03).** Kullanici dogruladi: boga
+  sakinlestirilirken cobana vuruyor ve `Attack_Headbutt` oynuyor; coban duruyor,
+  hasari yiyor ve karsilik vermiyor. Inekte hicbiri olmuyor. Ayar
+  (5 hasar / dakikada 20 vurus) **oldugu gibi kabul edildi** - boga ilk cobanini
+  oldurmuyor ama gorunur bir bedel odetiyor, yani §4.3'un "risk" tanimi tutuyor.
+
+**Faz 6 tamamlandi (2026-08-03).**
 
 ### Faz 7 - AI uyumu, seviye icerigi ve kabul maci
 
-- [ ] AI agil kurar (V1 Faz 6 dersi: muhtemelen `buildOrder` + anchor, yeni
-  kural yazilmaz).
-- [ ] `ai.json` `buildingTargets`: `pasture`.
-- [ ] Agille beslenen AI ac sanilmaz (`resourceProducerCounts` zaten `resourceId`
-  okur; pen dolu agilin `producerHasSource` dogru olmasi yeter).
+- [x] `ai.json` `buildingTargets`: `pasture: 1` (hem Yerlesim hem Kasaba).
+- [x] AI agil kurar. V1 Faz 6 dersi **yarim tuttu**: veri yetmedi, harita isi
+  cikti (asagida). `buildOrder`'a tek satir kondu - avci kulubesinin yanina.
+- [x] Agille beslenen AI ac sanilmaz. Bu gercekten bedavaydi:
+  `resourceProducerCounts` `resourceId` okuyor ve `missing-livestock` zaten Faz
+  3'te sourceless statuler arasina konmustu, yani AI'a tek kural yazilmadi.
+  Avcilik testinin **ikizi** olarak pinlendi.
+- [x] Harita: agil anchor'i + yol mahmuzu, blockout ve **iki Level'da da**
+  (`RTS_CoreMatch` parite testiyle zorunlu, `RTS_GameplayProof` oyunun kostugu
+  yer oldugu icin).
 - [ ] Tam mac: sigir surusu icin yaris, gudme, kalici gelir, tarlaya gerek
-  kalmadan kasabaya gecis.
+  kalmadan kasabaya gecis. **Kullanici gorsel kabulu.**
 
-Kabul: §2'deki 11 madde uctan uca; kullanici gorsel kabulu.
+**Olculen bulgu 1 - agil, haritanin en dar yuvasi.** Uc kisit ayni anda
+saglanmali: sigirin **tum** dolasma cemberi agilin 16 birimlik menzilinde
+(yoksa pen yarida hiring'i keser), 6x6 ayak izinin **her hucresi** 28 birimlik
+acilis kontrolunde (yoksa `outside-control`), ve komsu yuvalarla cakisma yok.
+Cift sayili izgara taranarak olculdu: **tek bir hucre** gecer - `(22,-20)`,
+0.79 birim payla. Bu darlik tasarimin kendisi: Faz 2 sigiri kasitli olarak
+acilis yaricapinin **disina** koydu ("biraz genislersen senin olur"), yani agil
+tanim geregi kralligin sinirindaki binadir. Oyuncu `(-22,20)`'de aynanin
+aynisiyla karsilasir - yarisi adil yapan sey bu. Pay artik iki tablodan
+**hesaplanan** bir testle korunuyor: `gatherRadius` 16'dan 15'e cekilince suite
+"7.2 + roam 8 > 15" diyerek kiriliyor.
+
+**Olculen bulgu 2 - yol mahmuzu icin tek koridor var.** z = -26 hattinda yuvalar
+x = 23'ten (avci kulubesi) x = 47'ye (altin) kadar **kesintisiz duvar**: kulube,
+tas ocagi, depo, altin yan yana. Yol hucresi ayak izine giremeyecegi icin
+spine'dan kuzeye tek cikis kulubenin bati kenarindan, x = 22'den. Olculdu: 5 yeni
+hucre, 20 odun, hicbir ayak iziyle cakisma yok, mevcut hicbir ureticinin yol
+temasi degismiyor. Agil bu mahmuzun `(22,-24)` hucresine degiyor.
+
+**Olculen bulgu 3 - AI cobani "bos isci" saniyordu.** `RtsApp`'te "bu isciyi
+baskasi kullaniyor mu" sorusunun **dort** okuyucusu var; ucu (insaat, ekonomi,
+agilin kendisi) Faz 4'te ogrendi, dorduncusu - AI blackboard'unun `isWorkerBusy`
+closure'i - atlanmisti. Sonucu somut: `§19 IdleWorkerCount` `no-available-worker`
+darbogazini besliyor, yani tum ekibi sigir gudmekte olan bir kralligi "tam
+kadrolu" okuyup gudmenin maliyeti olan isciyi uretmeyi birakirdi. Duzeltildi;
+`aiTestWorld` harness'i da ayni sekilde geride kalmisti ve RtsApp paritesine
+cekildi (agil sistemi, `requiresLivestock` yerlestirme dali, `pennedYield`, ve
+`requiresGame`'in `huntableAnimalsNear`'a gecmesi - sonuncusu Faz 4'ten kalan
+bir kayma).
+
+**Planda yazmayan karar - `buildOrder`'da adi geciyor.** §7 "muhtemelen yalniz
+veri" diyordu; hedeflere eklemek fiilen yetiyordu (yedek dongu onu zaten hemen
+hemen ayni yere koyuyordu), ama sirasinin **kaza eseri** belirlenmesi
+istenmedi. Agil avci kulubesinin yanina kondu, gerekcesi kulubeninkinin daha
+keskin hali: suru yalnizca kuculur, ve sigir bunun rakibin **kalici** olarak
+alabildigi yarisidir - gec kurulan kulube daha kucuk bir kulubedir, gec kurulan
+agil **hicbir seyin uzerine** kurulmus agildir.
+
+Kabul:
+
+- [x] `npx tsc --noEmit`, `verify:imports`, `vite build`, `verify:dist --strict`,
+  `check:assets` (0 hata) yesil.
+- [x] `npm run test:engine`: **1240 check gecti.**
+- [x] Uc yeni engine testi: aclik teshisi (dolu pen besler, bos pen besleyemez ve
+  tamir olarak tarlaya duser), anchor sozlesmesi (evcillestirilebilir surunun tum
+  cemberi menzilde, ayak izinin her hucresi kontrol icinde, yol spine'ina degiyor,
+  ve hicbir yol hucresi bir ayak izine girmiyor), ve **uctan uca AI maci**: AI
+  agili authored anchor'a kuruyor, cobanlari sigiri surup peni dolduruyor,
+  **sifir isciyle** yiyecek uretiyor ve uretim tampona degil kralliga ulasiyor.
 
 ## 8. Test ve Gate
 
@@ -735,6 +793,13 @@ CLAUDE.md kurali: **ayar degil sozlesme**. Hicbir test bir buyuklugu pinlemez.
   rakibin hayvani gorunmuyorsa cizilmez.
 - [x] **Yikim (Faz 5):** agil yikilinca hayvanlar yabaniye doner ve yeniden
   avlanabilir.
+- [x] **AI anchor'i (Faz 7):** agil yuvasi evcillestirilebilir surunun tum
+  cemberini kapsar, her ayak izi hucresi acilis kontrolunde kalir, yol spine'ina
+  deger, ve hicbir yol hucresi bir ayak izine girmez - hepsi tablolardan
+  **hesaplanarak**.
+- [x] **AI ekonomisi (Faz 7):** dolu pen kralligi besler, bos pen besleyemez ve
+  tamir olarak tarlaya duser; uctan uca macta AI agili kurup peni doldurur ve
+  sifir isciyle uretip merkeze aktarir.
 - [x] **Boga (Faz 6):** gudulen boga cobanin canini azaltir, inek azaltmaz; yara
   `retaliation`'dan **hesaplanarak** dogrulanir, buyukluk pinlenmez.
 - [x] **Karsilik sinirlari (Faz 6):** vurus yalniz sakinlestirme sirasinda duser
