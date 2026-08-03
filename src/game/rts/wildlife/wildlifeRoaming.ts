@@ -265,6 +265,100 @@ export function advanceLed(
 }
 
 /**
+ * What a predator is running at, and how far its den will let it go — V3 §3.6.
+ *
+ * The leash is measured from the den rather than from where the chase started,
+ * which is the whole difference between a dangerous place and a wolf that
+ * follows a worker home. `pursuitRadius` exceeds the species' `roamRadius` by
+ * data contract (`validateAnimalPredator`), so the leash always reaches past the
+ * patrol circle the predator set out from.
+ */
+export interface HuntQuarry {
+  readonly x: number;
+  readonly z: number;
+  /** How far from the den the predator may travel before the leash stops it. */
+  readonly pursuitRadius: number;
+}
+
+/**
+ * Advance a predator toward its quarry — the third movement mode (V3 §3.6).
+ *
+ * The inverse of both the others, which is why it is a third function rather
+ * than a branch in {@link advanceRoam}: grazing picks a point *inside* the home
+ * circle and being led follows somebody else's feet, while this crosses the rim
+ * outward under the animal's own will. Folding it into the roam branch would put
+ * "stay inside" and "leave" behind the same `keepInHerdGround` call.
+ *
+ * It runs at `fleeSpeed` — the species' `moveSpeed`, what the Gallop clip is
+ * calibrated to — because a chase is the same motion as a bolt pointed the other
+ * way, and the clip has no third gear.
+ *
+ * Giving up is deliberately not decided here. This reports where the predator
+ * got to and how fast; whether the leash has run out is read off the returned
+ * position by the caller, which is also what owns going home.
+ */
+export function advanceHunt(
+  state: RoamState,
+  current: { readonly x: number; readonly z: number; readonly facing: number },
+  profile: RoamProfile,
+  deltaSeconds: number,
+  quarry: HuntQuarry,
+): RoamPose {
+  if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
+    throw new RangeError("Hunt delta must be a non-negative finite number");
+  }
+  if (!Number.isFinite(quarry.pursuitRadius) || quarry.pursuitRadius <= 0) {
+    throw new RangeError("Hunt pursuit radius must be a positive finite number");
+  }
+  // A hunting animal is not also a frightened one. Clearing both timers is what
+  // keeps a predator that walked through a threat from spending its chase
+  // bolting away from the very thing it is running at.
+  state.fleeSeconds = 0;
+  state.recoverySeconds = 0;
+
+  const dx = quarry.x - current.x;
+  const dz = quarry.z - current.z;
+  const distance = Math.hypot(dx, dz);
+  if (distance < 1e-4) {
+    return { x: current.x, z: current.z, facing: current.facing, speed: 0 };
+  }
+  const step = Math.min(profile.fleeSpeed * deltaSeconds, distance);
+  const held = clampToCircle(
+    current.x + (dx / distance) * step,
+    current.z + (dz / distance) * step,
+    profile.homeX,
+    profile.homeZ,
+    quarry.pursuitRadius,
+  );
+  const travelled = Math.hypot(held.x - current.x, held.z - current.z);
+  return {
+    x: held.x,
+    z: held.z,
+    facing: Math.atan2(dx, dz),
+    // What it actually covered: a predator at the end of its leash is being held
+    // still, and a Gallop clip played over a stationary body is the foot slide
+    // this field exists to prevent.
+    speed: deltaSeconds > 0 ? travelled / deltaSeconds : 0,
+  };
+}
+
+/** Pull a point back onto a circle it has left; unchanged when already inside. */
+function clampToCircle(
+  x: number,
+  z: number,
+  centerX: number,
+  centerZ: number,
+  radius: number,
+): { x: number; z: number } {
+  const dx = x - centerX;
+  const dz = z - centerZ;
+  const distance = Math.hypot(dx, dz);
+  if (distance <= radius || distance < 1e-4) return { x, z };
+  const scale = radius / distance;
+  return { x: centerX + dx * scale, z: centerZ + dz * scale };
+}
+
+/**
  * Advance one animal by `deltaSeconds`, mutating `state` and returning its pose.
  *
  * Fleeing outranks everything, then resting outranks moving: an animal that has

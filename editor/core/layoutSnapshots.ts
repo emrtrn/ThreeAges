@@ -195,6 +195,12 @@ export function cloneActorInstance(actor: LayoutActorInstance): LayoutActorInsta
   if (actor.rotation !== undefined) clone.rotation = [...actor.rotation];
   if (actor.scale !== undefined) clone.scale = cloneScale(actor.scale);
   if (actor.scaleLocked !== undefined) clone.scaleLocked = actor.scaleLocked;
+  // Copied like metadata, and for the same reason: this clone is what an undo
+  // snapshot holds, so a shared `string[]` value would let a later edit reach
+  // back and rewrite the state undo is supposed to restore.
+  if (actor.variableOverrides !== undefined) {
+    clone.variableOverrides = cloneMetadata(actor.variableOverrides);
+  }
   if (actor.patrolRoute !== undefined) clone.patrolRoute = { ...actor.patrolRoute };
   return clone;
 }

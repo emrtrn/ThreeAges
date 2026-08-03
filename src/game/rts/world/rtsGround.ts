@@ -26,6 +26,34 @@ export interface RtsGroundOptions {
 /** Shared terrain, navigation, territory, road and placement half-extent. */
 export const RTS_WORLD_HALF_EXTENT = 70;
 
+/**
+ * Thickness of the visual border band the map edge is dressed with — the
+ * blockout's boundary placeholders now, an authored ridge/treeline later.
+ * Nothing gameplay-owned may stand inside it: the band is art the camera reads
+ * as "the world ends here", and a building overlapping it looks embedded in a
+ * wall.
+ */
+export const RTS_WORLD_BORDER_BAND = 3;
+
+/**
+ * Clearance kept between the border band and the outermost legal building
+ * footprint edge, so a structure reads as *near* the edge rather than pressed
+ * against it. Band + clearance is the whole non-buildable rim.
+ */
+export const RTS_WORLD_BORDER_CLEARANCE = 2;
+
+/**
+ * Half-extent buildings may occupy — strictly inside {@link RTS_WORLD_HALF_EXTENT}.
+ *
+ * Navigation, territory and roads still run to the full world extent: units may
+ * walk and ground may be owned right up to the edge. Only *placement* is inset,
+ * because only placement produces geometry tall enough to intersect the border
+ * art. Enforced once in `validateBuildingPlacement`, so the player's cursor, the
+ * AI's expansions and authored anchors all obey the same rim.
+ */
+export const RTS_WORLD_BUILD_HALF_EXTENT =
+  RTS_WORLD_HALF_EXTENT - RTS_WORLD_BORDER_BAND - RTS_WORLD_BORDER_CLEARANCE;
+
 export const DEFAULT_RTS_GROUND_OPTIONS: RtsGroundOptions = {
   halfExtent: RTS_WORLD_HALF_EXTENT,
   groundColor: "#4b5d3a",

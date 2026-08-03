@@ -483,22 +483,66 @@ Fox (Q4 = B ise haritaya konmaz, ama veri yazilir): `moveSpeed` 9, `maxHealth`
   beklenti: `rtsLevelAdapter.ts:128` `species`'i yalnizca `balance.animals`'a
   karsi dogruluyor, yani `wolf` artik gecerli; yeni alan eklenmedigi icin uc
   allowlist yuzeyi de dokunulmadan dogru kalmali.
+  **Bu adim ilk denemede bir editor hatasini acti** (V3'e ait degil, mevcut):
+  `cloneActorInstance` (`editor/core/layoutSnapshots.ts`) alan alan kopyalayan
+  bir allowlist ve `variableOverrides`'i **hic kopyalamiyordu**. Details
+  panelinden yazilan her actor degiskeni, layout'a yazilirken ayni klondan
+  gectigi icin sessizce dusuyordu - ve placement sinif varsayilanina donuyordu
+  ("wolf sectim, deer kaldi"). Ayni klon surukleme ve undo anlik goruntulerinde
+  de kullaniliyor, yani bir marker'i tasimak `herdId`/`species`/`count`
+  degerlerini de siliyordu. Duzeltildi ve iki testle pinlendi; eski test bunu
+  kaciriyordu cunku fixture'i `variableOverrides` tasimiyordu.
 - [x] Kabul: `npx tsc --noEmit`, `npm run test:engine` (1244 check),
   `npm run check:assets`, `npm run build:verify` **yesil**; kurt iki Level'da da
   ve `rtsMapBlockout`'ta **yok**, hicbir davranis degismedi.
   `check:assets`'in Wolf/Fox uyarilari (thumbnail yok, sidecar/actor manifest'te
   kayitli degil) alti hayvanin **hepsinde** ayni - yeni bir uyari sinifi degil.
 
-### Faz 2 - Kurt haritada devriye geziyor (saldiri yok)
+### Faz 2 - Kurt haritada devriye geziyor (saldiri yok) **[KOD TAMAM - gorsel kabul kullanicida]**
 
-- [ ] `wildlifeRoaming`'e ucuncu mod: hedefe dogru hareket, cember disina cikma
-  izni (§3.6).
-- [ ] `wildlifeSystem` tehdit listesini turler (§3.8): kurt isciden korkmaz.
-- [ ] Kurt yuvalari `rtsMapBlockout`'a, **iki Level'a da**.
-- [ ] Kurt cizilir, animasyonlari dogru rolde oynar, sise tabidir (§3.9).
+- [x] `wildlifeRoaming`'e ucuncu mod: `advanceHunt` (§3.6). Hedefe dogru,
+  `fleeSpeed` (= `moveSpeed`, Gallop'un kalibre edildigi hiz) ile, **yuvadan**
+  olculen `pursuitRadius` tasmasina kadar. Pes etme kasitla burada degil: fonksiyon
+  nereye varildigini ve ne hizla gidildigini bildirir, tasmanin bittigine karar
+  vermek Faz 3'un isi. Bir kovalama ayni zamanda bir kacis **degildir** - iki
+  ucus sayaci da sifirlanir, yoksa esikten gecmis bir kurt kovalamayi ters yone
+  kacarak gecirir.
+- [x] `wildlifeSystem` tehdit listesini turler (§3.8). Uc cevap, ortadaki yeni:
+  evcil hayvan hicbir seyden korkmaz (V2), **yirtici hic kimseden korkmaz**,
+  geri kalan her yabani hayvan insan ile yirticidan **hangisi yakinsa** ondan
+  kacar. Yirtici listesi cagirandan degil **surunun kendisinden** uretiliyor,
+  bu yuzden `update`'in imzasi ve her cagiran yeri **degismedi** - §3.8'in
+  ongordugu imza degisikligi gereksiz cikti.
+- [x] Kurt yuvalari `rtsMapBlockout`'a **ve iki Level'a da**: `west-wolves`
+  (-28, -6) ve `east-wolves` (28, 6), ucer kurt. Iki kanat koridorunu tutuyorlar -
+  merkez sirtinin etrafindan dolasan bati/dogu yollari, yani her akinin, uzak
+  yataga giden her seferin ve her sigir surusunun gectigi zemin. KARAR 3 bunu
+  zorunlu kildi: geri gelmeyen bir suru, macin insanlari zaten getirdigi yere
+  konmali.
+- [x] Kurt cizilir, animasyonlari dogru rolde oynar, sise tabidir (§3.9).
+  Kod tarafi Faz 1'de zaten hazirdi; kullanici calisan macta **gordu ve
+  hareket ettigini dogruladi**.
 - [ ] Kabul: kurt gorunur ve dolasir; hicbir seye saldirmaz, hicbir sey ona
   saldirmaz. **Kullanici gorsel kabulu** (dogru boy, dogru klip, yurume hizi
-  kaymiyor).
+  kaymiyor) - **acik**.
+
+**Yerlesim olcumle bulundu, gozle degil** - ve ilk deneme testte kirmizi yandi.
+(-28, -2) en yakin baslangica 41.2 uzaktaydi; gereken 28 (kontrol yaricapi) + 14
+(devriye yaricapi) = 42. Yani *marker* disaridaydi ama **sunun** bir parcasi
+iceri giriyordu, ki KARAR 1'i anlamsiz kilardi. (-28, -6) 45.1 veriyor: hem 42'yi
+hem de 26'lik kovalama tasmasini asiyor, yani bir kovalama bile baslangic
+zeminine giremiyor. Sirt engeline (|x| <= 12, |z| <= 4) uzaklik 16.1, yani
+devriye cemberi duvardan 2.1 birim acikta - kurtlar navigasyonu olmayan bir
+duvarin icine girmiyor.
+
+**Adalet, haritanin kendi carpikligina karsi olculuyor.** Blockout'un iki
+baslangici insa geregi simetrik, orada yuvalar **tam** adil olmali ve oyle.
+`RTS_GameplayProof` ise oyuncu baslangicini (-40, 40), dusmani (38, -38)
+authorluyor; oradaki **her** suru bu iki birimlik carpikligi zaten tasiyor ve
+mevcut V2 adalet testi bunu "harita dengesi, kapsam disi" diye kayda gecirmis.
+V3'un gercekten yanlis yapabilecegi sey bu degil - haritayi **daha da**
+dengesiz birakmak. Test onu reddediyor: yuvalarin carpikligi (2.68) haritanin
+kendi surulerininkini (2.83) asamaz.
 
 ### Faz 3 - Kurt isciye saldirir
 
@@ -573,8 +617,18 @@ CLAUDE.md kurali: **ayar degil sozlesme**. Hicbir test bir buyuklugu pinlemez.
 - [x] **Yerellik (Faz 2 maddesi, veri oldugu icin Faz 1'de dustu):** yirticinin
   `pursuitRadius`'u `RTS_WORLD_HALF_EXTENT` olceginde degil - hem testte hem
   validator'da.
-- [ ] **Tehdit turlemesi (Faz 2):** kurt isciden kacmaz; geyik kurttan kacar;
-  evcil hayvan hicbir seyden kacmaz (V2 kurali korundu).
+- [x] **Tehdit turlemesi (Faz 2):** kurt isciden kacmaz (uzerinde duran isciyle
+  bile devriye cemberinde kaliyor); geyik kurttan kacar; evcil hayvan hicbir
+  seyden kacmaz - ucu de tek testte, gercek bir yirticinin yaninda.
+- [x] **Kovalama sozlesmesi (Faz 2):** `advanceHunt` devriye cemberini **asar**
+  ama tasmayi **asmaz**; tasmanin ucunda bildirilen hiz sifirdir (duran bir
+  govdenin uzerinde Gallop oynamaz); iki ucus sayaci da sifirlanir.
+- [x] **Yuva adaleti (Faz 2):** yuvalar cift halinde ve haritanin kendi
+  carpikligindan fazlasini eklemiyor; simetrik baslangicli blockout'ta **tam**
+  adil.
+- [x] **Yuva yerlesimi (Faz 2):** her yuva, devriye yaricapi dahil, iki
+  baslangic kontrol alaninin da disinda; kovalama tasmasi bir baslangica
+  yetismiyor; her yuva bir suru, tek kurt degil.
 - [ ] **Hedef secimi (Faz 3, Q1 = A):** kontrol alani disindaki isci hedeflenir,
   icindeki hedeflenmez - `ownerAt` uzerinden, mesafe pinlenmeden.
 - [ ] **Isci pasifligi (Faz 3):** saldiriya ugrayan isci hicbir sey hedef almaz

@@ -1001,7 +1001,7 @@
           {
             "id": "p1",
             "position": [
-              62,
+              60,
               0,
               -30
             ],
@@ -1010,7 +1010,7 @@
           {
             "id": "p2",
             "position": [
-              62,
+              60,
               0,
               -24
             ],
@@ -1019,7 +1019,7 @@
           {
             "id": "p3",
             "position": [
-              62,
+              60,
               0,
               -40
             ],
@@ -1072,7 +1072,7 @@
           {
             "id": "p2",
             "position": [
-              62,
+              60,
               0,
               -20
             ],
@@ -1081,7 +1081,7 @@
           {
             "id": "p3",
             "position": [
-              62,
+              60,
               0,
               -24
             ],
@@ -1090,7 +1090,7 @@
           {
             "id": "p4",
             "position": [
-              62,
+              60,
               0,
               -40
             ],
@@ -2285,9 +2285,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        56,
+        52,
         0,
-        -30
+        -32
       ],
       "name": "Tree enemy-wood-3",
       "variableOverrides": {
@@ -2300,9 +2300,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        58,
+        54,
         0,
-        -32
+        -34
       ],
       "name": "Tree enemy-wood-3-dense",
       "variableOverrides": {
@@ -2362,7 +2362,7 @@
       "position": [
         58,
         0,
-        -38
+        -36
       ],
       "name": "Tree enemy-wood-6",
       "variableOverrides": {
@@ -2377,7 +2377,7 @@
       "position": [
         56,
         0,
-        -36
+        -34
       ],
       "name": "Tree enemy-wood-6-dense",
       "variableOverrides": {
@@ -3433,9 +3433,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        56,
+        52,
         0,
-        -28
+        -30
       ],
       "name": "Tree enemy-wood-11",
       "variableOverrides": {
@@ -3448,9 +3448,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        58,
+        54,
         0,
-        -30
+        -32
       ],
       "name": "Tree enemy-wood-11-dense",
       "variableOverrides": {
@@ -4606,7 +4606,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
-        66,
+        60,
         0,
         -32
       ],
@@ -4620,7 +4620,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
-        66,
+        60,
         0,
         -40
       ],
@@ -4634,7 +4634,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
-        66,
+        60,
         0,
         -24
       ],
@@ -5182,6 +5182,36 @@
       "variableOverrides": {
         "herdId": "central-bull",
         "species": "bull",
+        "count": 3
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        -28,
+        0,
+        -6
+      ],
+      "name": "Herd west-wolves",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "west-wolves",
+        "species": "wolf",
+        "count": 3
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        28,
+        0,
+        6
+      ],
+      "name": "Herd east-wolves",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "east-wolves",
+        "species": "wolf",
         "count": 3
       }
     }

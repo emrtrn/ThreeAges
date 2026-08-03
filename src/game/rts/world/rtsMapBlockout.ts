@@ -13,7 +13,7 @@ import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
 import type { RtsTreeDefinition } from "../economy/forestSystem";
 import type { RtsHerdDefinition } from "../wildlife/wildlifeSystem";
-import { RTS_WORLD_HALF_EXTENT } from "./rtsGround";
+import { RTS_WORLD_BORDER_BAND, RTS_WORLD_HALF_EXTENT } from "./rtsGround";
 
 export interface RtsMapPoint {
   readonly x: number;
@@ -351,22 +351,26 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     },
     {
       id: "enemy_east",
-      outpost: { buildingId: "outpost", ...atEnemyBase(28, 6) },
-      depot: { buildingId: "depot", ...atEnemyBase(28, -2) },
-      production: { buildingId: "lumber_camp", ...atEnemyBase(28, 14) },
+      // Held at +22 rather than +28: at +28 the sites sat at x = 66, and a 6-wide
+      // footprint there reaches x = 69 — inside the border band the map edge is
+      // dressed with (RTS_WORLD_BUILD_HALF_EXTENT). The expansion still reads as
+      // the outward one; it just stops short of the wall.
+      outpost: { buildingId: "outpost", ...atEnemyBase(22, 6) },
+      depot: { buildingId: "depot", ...atEnemyBase(22, -2) },
+      production: { buildingId: "lumber_camp", ...atEnemyBase(22, 14) },
       routes: [
         [
           atEnemyBase(12, 8),
-          atEnemyBase(24, 8),
-          atEnemyBase(24, 14),
-          atEnemyBase(24, -2),
+          atEnemyBase(22, 8),
+          atEnemyBase(22, 14),
+          atEnemyBase(22, -2),
         ],
         [
           atEnemyBase(12, 8),
           atEnemyBase(12, 18),
-          atEnemyBase(24, 18),
-          atEnemyBase(24, 14),
-          atEnemyBase(24, -2),
+          atEnemyBase(22, 18),
+          atEnemyBase(22, 14),
+          atEnemyBase(22, -2),
         ],
       ],
     },
@@ -390,10 +394,15 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     { id: "player-wood-8", forestId: "player-grove", x: -48, z: 28, capacity: 30, variant: "pine" },
     { id: "enemy-wood-1", forestId: "enemy-grove", x: 48, z: -30, capacity: 30, variant: "pine" },
     { id: "enemy-wood-2", forestId: "enemy-grove", x: 52, z: -28, capacity: 30, variant: "tree1" },
-    { id: "enemy-wood-3", forestId: "enemy-grove", x: 56, z: -30, capacity: 30, variant: "tree2" },
+    // Pulled west off the enemy_east outpost slot: its `-dense` copy (+2,-2) stood
+    // at (58,-32), inside that 6x6 footprint. Unlike the house slot below, burying
+    // this one buys nothing — the outpost is built before the grove is worked, so
+    // the tree was simply deleted on contact.
+    { id: "enemy-wood-3", forestId: "enemy-grove", x: 52, z: -32, capacity: 30, variant: "tree2" },
     { id: "enemy-wood-4", forestId: "enemy-grove", x: 46, z: -36, capacity: 30, variant: "tree1" },
     { id: "enemy-wood-5", forestId: "enemy-grove", x: 54, z: -36, capacity: 30, variant: "pine" },
-    { id: "enemy-wood-6", forestId: "enemy-grove", x: 58, z: -38, capacity: 30, variant: "tree2" },
+    // Off the enemy_east depot slot at (60,-40) for the same reason.
+    { id: "enemy-wood-6", forestId: "enemy-grove", x: 58, z: -36, capacity: 30, variant: "tree2" },
     { id: "enemy-wood-7", forestId: "enemy-grove", x: 48, z: -44, capacity: 30, variant: "tree2" },
     { id: "enemy-wood-8", forestId: "enemy-grove", x: 54, z: -44, capacity: 30, variant: "pine" },
     { id: "west-wood-1", forestId: "west-grove", x: -48, z: 10, capacity: 30, variant: "pine" },
@@ -430,7 +439,8 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     { id: "player-wood-14", forestId: "player-grove", x: -56, z: 42, capacity: 30, variant: "tree2" },
     { id: "enemy-wood-9", forestId: "enemy-grove", x: 52, z: -26, capacity: 30, variant: "pine" },
     { id: "enemy-wood-10", forestId: "enemy-grove", x: 56, z: -32, capacity: 30, variant: "tree1" },
-    { id: "enemy-wood-11", forestId: "enemy-grove", x: 56, z: -28, capacity: 30, variant: "tree2" },
+    // Its `-dense` copy stood at (58,-30), also inside the outpost footprint.
+    { id: "enemy-wood-11", forestId: "enemy-grove", x: 52, z: -30, capacity: 30, variant: "tree2" },
     { id: "enemy-wood-12", forestId: "enemy-grove", x: 54, z: -26, capacity: 30, variant: "pine" },
     { id: "enemy-wood-13", forestId: "enemy-grove", x: 56, z: -26, capacity: 30, variant: "tree1" },
     { id: "enemy-wood-14", forestId: "enemy-grove", x: 54, z: -24, capacity: 30, variant: "tree2" },
@@ -479,6 +489,25 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
   // is the fairness the stag alone could not have (V1 §7's recorded asymmetry).
   // The perfectly equidistant points all lie on the x = z diagonal, and that
   // diagonal is `RTS_GameplayProof`'s river — measured, not assumed.
+  //
+  // The wolf dens (V3) are authored to a third rule again, and it is the one
+  // KARAR 3 forced: a pack that never respawns has to sit where the match brings
+  // people anyway, or it is cleared in the opening five minutes and the map
+  // spends the rest of the game as it was before. So they hold the two flank
+  // corridors — the west and east ways around the central ridge, which is the
+  // ground every attack, every trip to the far deposit and every cattle drive
+  // crosses. Point-symmetric about the centre like the cattle, so the set of
+  // walking distances is the same from both starts.
+  //
+  // Placed by measurement, not by eye. A den sits 45.1 from the nearest start,
+  // which clears the opening control radius (28) by more than a whole patrol
+  // radius (14) — so the *pack*, not merely the marker, stays off everyone's
+  // ground. That is what KARAR 1 needs to mean anything: wolves only ever
+  // threaten people who left home. The same 45.1 also exceeds the 26-unit
+  // pursuit leash, so a chase can never reach a starting ground either.
+  // The offsets keep the patrol circle two units clear of the ridge blocker
+  // (|x| <= 12, |z| <= 4), so wolves never wander into a wall they have no
+  // navigation to walk back out of.
   herds: [
     { id: "player-deer", species: "deer", x: -30, z: 22, count: 5 },
     { id: "enemy-deer", species: "deer", x: 30, z: -22, count: 5 },
@@ -486,6 +515,8 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     { id: "player-cattle", species: "cow", x: -18, z: 14, count: 4 },
     { id: "enemy-cattle", species: "cow", x: 18, z: -14, count: 4 },
     { id: "central-bull", species: "bull", x: 0, z: -16, count: 3 },
+    { id: "west-wolves", species: "wolf", x: -28, z: -6, count: 3 },
+    { id: "east-wolves", species: "wolf", x: 28, z: 6, count: 3 },
   ],
   navigationBlockers: [
     { min: [-12, -1, -4], max: [12, 4, 4] },
@@ -531,21 +562,30 @@ function createRockRidge(blocker: NavBlocker): Mesh {
   return ridge;
 }
 
-/** Visual-only boundary rocks; `RtsNavigation` world bounds enforce the edge. */
+/**
+ * Visual-only boundary rocks; `RtsNavigation` world bounds enforce the edge.
+ *
+ * The band occupies exactly {@link RTS_WORLD_BORDER_BAND} inward from the world
+ * extent, which is the same constant `RTS_WORLD_BUILD_HALF_EXTENT` insets
+ * placement by. Derived rather than repeated: when this art is replaced by a
+ * thicker authored ridge, moving the constant moves the buildable rim with it.
+ */
 function createBoundaryPlaceholders(): Mesh[] {
   const material = new MeshStandardMaterial({ color: "#3f4934", roughness: 1 });
   const size = RTS_WORLD_HALF_EXTENT * 2;
-  const geometry = new BoxGeometry(size, 4, 3);
+  const band = RTS_WORLD_BORDER_BAND;
+  const inset = RTS_WORLD_HALF_EXTENT - band / 2;
+  const geometry = new BoxGeometry(size, 4, band);
   const north = new Mesh(geometry, material);
   north.name = "rts-natural-boundary";
-  north.position.set(0, 2, -RTS_WORLD_HALF_EXTENT + 1.5);
+  north.position.set(0, 2, -inset);
   const south = north.clone();
-  south.position.z = RTS_WORLD_HALF_EXTENT - 1.5;
-  const sideGeometry = new BoxGeometry(3, 4, size - 6);
+  south.position.z = inset;
+  const sideGeometry = new BoxGeometry(band, 4, size - band * 2);
   const west = new Mesh(sideGeometry, material);
   west.name = "rts-natural-boundary";
-  west.position.set(-RTS_WORLD_HALF_EXTENT + 1.5, 2, 0);
+  west.position.set(-inset, 2, 0);
   const east = west.clone();
-  east.position.x = RTS_WORLD_HALF_EXTENT - 1.5;
+  east.position.x = inset;
   return [north, south, west, east];
 }

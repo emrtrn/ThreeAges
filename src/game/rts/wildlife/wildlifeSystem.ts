@@ -300,13 +300,60 @@ export class WildlifeSystem implements ResourceSource {
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
       throw new RangeError("Wildlife delta must be a non-negative finite number");
     }
+    // V3 §3.8: built once per tick rather than per animal, and from the roster
+    // itself rather than from the caller. A predator is the one threat wildlife
+    // already knows about without being told, so typing the danger here keeps
+    // `update`'s signature — and every caller — exactly as it was.
+    const predators = this.livePredatorPoints();
     for (const animal of this.animals) {
-      // Livestock is not frightened by people. A penned cow that still bolted
-      // would spend the match being spooked by the very workers who own it, and
-      // the caught-branch freeze would pin it every time one walked past.
-      const threat = animal.owner === "wild" ? this.nearestThreat(animal, threats) : null;
-      animal.update(deltaSeconds, threat);
+      animal.update(deltaSeconds, this.frightenedBy(animal, threats, predators));
     }
+  }
+
+  /**
+   * What this animal runs from, which V3 makes a question about *what it is*
+   * rather than about who is nearby.
+   *
+   * Three answers, and the middle one is the new one. Livestock fears nothing —
+   * a penned cow that bolted would spend the match being spooked by the workers
+   * who own it (V2). A predator fears nobody: it is the thing that does the
+   * frightening, and a wolf that fled the worker it is stalking would be the
+   * feature cancelling itself out. Everything else wild runs from whichever is
+   * nearer, a person or a predator — because a deer that scattered for a hunter
+   * and grazed on beside a wolf would read as scenery with one scripted
+   * reaction, which is the same complaint that made every unit a threat in Faz 2.
+   */
+  private frightenedBy(
+    animal: WildlifeAnimal,
+    people: readonly ThreatPoint[],
+    predators: readonly ThreatPoint[],
+  ): ThreatPoint | null {
+    if (animal.owner !== "wild") return null;
+    if (animal.stats.predator) return null;
+    const person = this.nearestThreat(animal, people);
+    const predator = this.nearestThreat(animal, predators);
+    if (!person) return predator;
+    if (!predator) return person;
+    return this.distanceSquared(animal, predator.x, predator.z)
+      < this.distanceSquared(animal, person.x, person.z)
+      ? predator
+      : person;
+  }
+
+  /**
+   * Where the live predators are standing, as plain points.
+   *
+   * A carcass frightens nothing, and a tamed predator would be its owner's
+   * animal rather than a danger on the map — so both are filtered out here
+   * instead of at every reader.
+   */
+  private livePredatorPoints(): readonly ThreatPoint[] {
+    const points: ThreatPoint[] = [];
+    for (const animal of this.animals) {
+      if (!animal.stats.predator || animal.dead || animal.owner !== "wild") continue;
+      points.push({ x: animal.position.x, z: animal.position.z });
+    }
+    return points;
   }
 
   /** Every animal, dead ones included — presentation still draws a carcass. */

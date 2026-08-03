@@ -192,7 +192,12 @@ import { RtsInput } from "../src/game/rts/input/rtsInput";
 import { RtsPointer } from "../src/game/rts/input/rtsPointer";
 import { HealthComponent } from "../src/game/rts/units/health";
 import { RtsNavigation } from "../src/game/rts/navigation/rtsNavigation";
-import { RTS_WORLD_HALF_EXTENT } from "../src/game/rts/world/rtsGround";
+import {
+  RTS_WORLD_BORDER_BAND,
+  RTS_WORLD_BORDER_CLEARANCE,
+  RTS_WORLD_BUILD_HALF_EXTENT,
+  RTS_WORLD_HALF_EXTENT,
+} from "../src/game/rts/world/rtsGround";
 import { RTS_BLOCKOUT_MAP } from "../src/game/rts/world/rtsMapBlockout";
 import { adaptRtsLevel, RtsLevelError } from "../src/game/rts/world/rtsLevelAdapter";
 import { resolveRtsSpatialLayout } from "../src/game/rts/world/rtsSpatialLayout";
@@ -351,12 +356,14 @@ import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combat
 import type { BuildingBalanceStats, GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import { Unit, UNIT_DEATH_SECONDS, type RtsPresentationHandle } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
-import { WildlifeSystem } from "../src/game/rts/wildlife/wildlifeSystem";
+import { WildlifeSystem, wildProfileFor } from "../src/game/rts/wildlife/wildlifeSystem";
 import { WildlifeView, isWildlifeVisible } from "../src/game/rts/wildlife/wildlifeView";
 import {
+  advanceHunt,
   advanceRoam,
   initialRoamState,
   makeWildlifeRng,
+  wildlifeSeed,
 } from "../src/game/rts/wildlife/wildlifeRoaming";
 import { SelectionSystem } from "../src/game/rts/selection/selectionSystem";
 import type { MarqueeOverlay } from "../src/game/rts/selection/marqueeOverlay";
@@ -20454,6 +20461,13 @@ check("cloneActorInstance deep-copies fields and shares no references", () => {
       lookAheadDistance: 1.2,
       wrapMode: "loop" as const,
     },
+    // The field this fixture used to omit, which is how it missed that the clone
+    // dropped it. Losing it is silent and total: the Details panel writes an
+    // override, the clone strips it, and the placement snaps back to its class
+    // default — indistinguishable from the panel refusing the edit. Every drag
+    // and every undo snapshot goes through here too, so a marker's whole
+    // identity rode on a field nobody copied.
+    variableOverrides: { species: "wolf", count: 3, tags: ["rts", "marker"] },
   };
   const clone = cloneActorInstance(original);
   assert.deepEqual(clone, original);
@@ -20461,9 +20475,39 @@ check("cloneActorInstance deep-copies fields and shares no references", () => {
   (clone.rotation as number[])[1] = 0;
   assert.ok(clone.patrolRoute);
   clone.patrolRoute.splineId = "route-2";
+  assert.ok(clone.variableOverrides);
+  clone.variableOverrides.species = "deer";
+  (clone.variableOverrides.tags as string[])[0] = "changed";
   assert.equal(original.position[0], 1, "position array must be copied");
   assert.equal(original.rotation[1], 90, "rotation array must be copied");
   assert.equal(original.patrolRoute.splineId, "route-1", "patrol route must be copied");
+  assert.equal(original.variableOverrides.species, "wolf", "variable overrides must be copied");
+  assert.equal(original.variableOverrides.tags[0], "rts", "array override values must be copied");
+});
+
+check("an actor variable edit survives the clone the layout is stored through", () => {
+  // The end-to-end shape of the bug above, at the level the editor actually
+  // works at: write an override, store the instance the way `apply` does, and
+  // the resolved value has to be what was written rather than the class default.
+  const def = normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_Marker",
+    variables: [{ key: "species", label: "Species", type: "select", default: "deer", options: ["deer", "wolf"] }],
+    components: [{ id: "root", component: "Transform", props: {} }],
+  }, "markers/BP_Marker.actor.json");
+
+  const placed = {
+    classRef: "markers/BP_Marker.actor.json",
+    position: [0, 0, 0],
+    variableOverrides: { species: "wolf" },
+  };
+  const stored = cloneActorInstance(placed);
+  assert.equal(
+    resolveActorInstanceVariables(def, stored.variableOverrides).species,
+    "wolf",
+    "a stored placement keeps the species it was set to, not the class default",
+  );
 });
 
 check("validateActorInstance allowlists classRef + transform and rejects bad refs", () => {
@@ -30042,6 +30086,94 @@ const shippedAnimalBalance = () => validateAnimalBalance(
   JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as unknown,
 );
 
+check("V3 Faz 2: fear is typed by what an animal is, not by who is nearby", () => {
+  const animals = shippedAnimalBalance();
+  // One den and one deer herd, close enough that the wolves are inside the
+  // deer's flee radius from the first tick. Cattle stand on the same ground so
+  // "livestock fears nothing" is tested against a real predator, not an absence.
+  const wildlife = new WildlifeSystem(animals, [
+    { id: "den", species: "wolf", x: 0, z: 0, count: 2 },
+    { id: "prey", species: "deer", x: 4, z: 0, count: 2 },
+    { id: "cattle", species: "cow", x: -4, z: 0, count: 2 },
+  ]);
+  const wolves = wildlife.all().filter((animal) => animal.stats.id === "wolf");
+  const deer = wildlife.all().filter((animal) => animal.stats.id === "deer");
+  const cattle = wildlife.all().filter((animal) => animal.stats.id === "cow");
+  // Penned where they stand: the pen's yard is the herd circle they are already
+  // in, so this changes ownership without moving anybody.
+  for (const cow of cattle) {
+    assert.ok(wildlife.tame(cow.id, "player", wildProfileFor(animals.cow!, -4, 0)), "cattle pen");
+  }
+
+  const startedAt = new Map(wildlife.all().map((animal) => [animal.id, animal.position.clone()]));
+  // A worker standing among all three. The wolf must ignore him; the deer must
+  // not, and neither may the deer ignore the wolves.
+  const worker = [{ x: 0, z: 0 }];
+  for (let tick = 0; tick < 40; tick += 1) wildlife.update(1 / 30, worker);
+
+  const moved = (animal: (typeof deer)[number]) =>
+    Math.hypot(
+      animal.position.x - (startedAt.get(animal.id)?.x ?? 0),
+      animal.position.z - (startedAt.get(animal.id)?.z ?? 0),
+    );
+
+  // A predator standing on a worker is not a frightened animal. Its patrol keeps
+  // it near the den; a bolt would have carried it out to its own roam rim.
+  for (const wolf of wolves) {
+    assert.ok(
+      Math.hypot(wolf.position.x, wolf.position.z) <= animals.wolf!.roamRadius + 1e-6,
+      "a wolf standing on a worker patrols rather than bolts",
+    );
+  }
+  // The prey moved, and it moved *away* from the danger it started beside.
+  assert.ok(deer.some((animal) => moved(animal) > 0), "deer react to what is standing beside them");
+  // Livestock: unmoved by the worker and unmoved by the pack (V2's rule kept).
+  for (const cow of cattle) {
+    assert.ok(
+      Math.hypot(cow.position.x + 4, cow.position.z) <= animals.cow!.roamRadius + 1e-6,
+      "penned livestock is frightened by nothing, predator included",
+    );
+  }
+});
+
+check("V3 Faz 2: a chase leaves the patrol circle but never the leash", () => {
+  const animals = shippedAnimalBalance();
+  const wolf = animals.wolf ?? assert.fail("wolf balance missing");
+  const predator = wolf.predator ?? assert.fail("wolf predator block missing");
+  const profile = wildProfileFor(wolf, 0, 0);
+  const random = makeWildlifeRng(wildlifeSeed("chase"));
+  const state = initialRoamState(profile, random);
+
+  // The quarry stands past the leash, which is the case that decides both rules:
+  // the predator has to cross its own rim to give chase, and stop at the leash.
+  const quarry = { x: predator.pursuitRadius * 3, z: 0, pursuitRadius: predator.pursuitRadius };
+  let pose = { x: 0, z: 0, facing: 0 };
+  let leftTheCircle = false;
+  for (let tick = 0; tick < 600; tick += 1) {
+    const next = advanceHunt(state, pose, profile, 1 / 30, quarry);
+    pose = { x: next.x, z: next.z, facing: next.facing };
+    const fromDen = Math.hypot(pose.x, pose.z);
+    if (fromDen > wolf.roamRadius) leftTheCircle = true;
+    assert.ok(
+      fromDen <= predator.pursuitRadius + 1e-6,
+      `a chase reached ${fromDen}, past the leash of ${predator.pursuitRadius}`,
+    );
+  }
+  assert.ok(leftTheCircle, "a chase crosses the patrol rim the roam mode may never leave");
+  // Held at the leash, the reported speed is what the body covered — zero — so
+  // the Gallop clip is not played over a stationary wolf.
+  const held = advanceHunt(state, pose, profile, 1 / 30, quarry);
+  assert.equal(held.speed, 0, "a predator at the end of its leash reports no ground speed");
+
+  // And a chase is not a bolt: both flight timers are cleared, or a predator
+  // that walked through a threat would spend the chase running the other way.
+  state.fleeSeconds = 5;
+  state.recoverySeconds = 5;
+  advanceHunt(state, pose, profile, 1 / 30, quarry);
+  assert.equal(state.fleeSeconds, 0);
+  assert.equal(state.recoverySeconds, 0);
+});
+
 check("V3 Faz 1: every shipped species owns a sidecar and an actor", () => {
   // The clip-name test above scans whatever sidecars happen to be on disk, so it
   // is silent about one that was never written. This is the other half: a species
@@ -30407,7 +30539,146 @@ check("every shipped RTS Level authors the herds the blockout promises", () => {
       );
     }
 
+    // V3 Faz 2. A den has to be on the map at all — the predator is the whole
+    // version, and a Level regenerated without its wolves loses it silently
+    // while every test about wolf *data* stays green.
+    const dens = level.herds.filter((herd) => animals[herd.species]?.predator);
+    assert.ok(dens.length > 0, `${name} authors the predator dens V3 adds`);
+    for (const den of dens) {
+      const predator = animals[den.species]?.predator ?? assert.fail("filtered above");
+      // KARAR 1 is a rule about ground nobody owns, so it says nothing at all if
+      // the pack patrols a kingdom's opening ground. Measured with the patrol
+      // circle included, not just the den's centre: a wolf standing on the rim
+      // is as much inside a base as one standing on the marker.
+      for (const start of starts) {
+        assert.ok(
+          Math.hypot(den.x - start.x, den.z - start.z)
+            > COMMAND_CENTER_CONTROL_RADIUS + animals[den.species]!.roamRadius,
+          `${name}: den "${den.id}" patrols into a starting ground, where KARAR 1 forbids it to hunt`,
+        );
+      }
+      // KARAR 3: the pack never comes back, so it has to be worth the walk once.
+      assert.ok(den.count > 1, `${name}: den "${den.id}" is a pack rather than a lone wolf`);
+      // Locality again, from the den's own leash: a pack whose reach covers a
+      // start is not a dangerous place, it is a wolf that follows you home.
+      for (const start of starts) {
+        assert.ok(
+          Math.hypot(den.x - start.x, den.z - start.z) > predator.pursuitRadius,
+          `${name}: den "${den.id}" can chase into a starting ground`,
+        );
+      }
+    }
   }
+});
+
+check("V3 Faz 2: the dens threaten both kingdoms as evenly as the map allows", () => {
+  // The same fairness rule the cattle get, applied to the version's risk rather
+  // than to its reward: if one kingdom's road out is guarded and the other's is
+  // not, the wolf is not pressure, it is a handicap.
+  //
+  // Stated against the *map's own* skew rather than against zero, which is what
+  // lets one rule cover all three layouts. The blockout's starts are symmetric by
+  // construction, so its existing herds are exactly fair and the dens must be
+  // too. `RTS_GameplayProof` authors its player start at (-40, 40) against an
+  // enemy at (38, -38) — measured — and every herd on it already inherits that
+  // two-unit skew, which the V2 fairness test records as map balance and out of
+  // scope. So what is refused here is the thing V3 could actually do wrong:
+  // dragging a den somewhere that makes the map *less* even than it already was.
+  // Compared as multisets of distances, derived, never pinned to a number.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const resources = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  const animals = shippedAnimalBalance();
+
+  /**
+   * The worst gap between what one kingdom walks and what the other walks, over
+   * the two sorted distance lists. Zero is a perfectly mirrored layout.
+   */
+  const skew = (
+    herds: readonly { x: number; z: number }[],
+    playerStart: { x: number; z: number },
+    enemyStart: { x: number; z: number },
+  ): number => {
+    const walks = (start: { x: number; z: number }) => herds
+      .map((herd) => Math.hypot(herd.x - start.x, herd.z - start.z))
+      .sort((left, right) => left - right);
+    const fromPlayer = walks(playerStart);
+    const fromEnemy = walks(enemyStart);
+    let worst = 0;
+    for (let index = 0; index < fromPlayer.length; index += 1) {
+      worst = Math.max(worst, Math.abs((fromPlayer[index] ?? 0) - (fromEnemy[index] ?? 0)));
+    }
+    return worst;
+  };
+
+  const layouts: { readonly name: string; readonly herds: readonly { species: string; x: number; z: number }[];
+    readonly playerStart: { x: number; z: number }; readonly enemyStart: { x: number; z: number } }[] = [];
+  const blockout = resolveRtsSpatialLayout();
+  layouts.push({
+    name: "RTS_BLOCKOUT_MAP",
+    herds: blockout.herds,
+    playerStart: blockout.playerStart,
+    enemyStart: blockout.enemyStart,
+  });
+  for (const name of ["RTS_CoreMatch", "RTS_GameplayProof"]) {
+    const layout = JSON.parse(
+      readFileSync(`public/assets/ThreeAges/Levels/${name}.level.json`, "utf8"),
+    ) as {
+      actors: Array<{
+        classRef: string;
+        position: [number, number, number];
+        variableOverrides?: Record<string, string | number | boolean | string[]>;
+      }>;
+      splines: Parameters<typeof adaptRtsLevel>[1];
+    };
+    const actors = layout.actors.map((instance, index) => ({
+      index,
+      instance,
+      def: normalizeActorScriptDef(
+        JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown,
+        instance.classRef,
+      ),
+    }));
+    const level = adaptRtsLevel(actors, layout.splines, { buildings, resources, animals });
+    layouts.push({
+      name,
+      herds: level.herds,
+      playerStart: level.playerStart,
+      enemyStart: level.enemyStart,
+    });
+  }
+
+  for (const layout of layouts) {
+    const dens = layout.herds.filter((herd) => animals[herd.species]?.predator);
+    const grazing = layout.herds.filter((herd) => !animals[herd.species]?.predator);
+    assert.ok(dens.length > 0, `${layout.name} carries the predator dens`);
+    assert.ok(dens.length % 2 === 0, `${layout.name}: dens come in mirrored pairs`);
+
+    const denSkew = skew(dens, layout.playerStart, layout.enemyStart);
+    const mapSkew = skew(grazing, layout.playerStart, layout.enemyStart);
+    assert.ok(
+      denSkew <= mapSkew + 1e-3,
+      `${layout.name}: the dens are ${denSkew.toFixed(2)} apart for the two kingdoms, worse than the `
+      + `${mapSkew.toFixed(2)} skew the map's own herds already carry`,
+    );
+  }
+
+  // And on the layout where the starts *are* symmetric, "no worse" has to mean
+  // exactly fair — otherwise the rule above would pass a blockout that quietly
+  // gained a skew, because it would be comparing against itself.
+  const blockoutLayout = layouts[0] ?? assert.fail("blockout layout missing");
+  assert.equal(blockoutLayout.name, "RTS_BLOCKOUT_MAP");
+  assert.ok(
+    skew(
+      blockoutLayout.herds.filter((herd) => animals[herd.species]?.predator),
+      blockoutLayout.playerStart,
+      blockoutLayout.enemyStart,
+    ) < 0.001,
+    "the blockout's symmetric starts make its dens exactly fair",
+  );
 });
 
 check("V2 Faz 2: the authored herd layout offers both kingdoms the same walks to game", () => {
@@ -38508,6 +38779,89 @@ check("RTS placement snap rejects occupied footprints and refreshes navigation b
   assert.equal(structures.cancelLatest("player"), site, "latest unbuilt foundation can be cancelled");
   assert.equal(structures.navigationBlockers().length, 0);
   structures.clear();
+});
+
+check("RTS building placement keeps the map's border band clear of footprints", () => {
+  // The bug this pins: the blockout dresses the map edge with a border band, and
+  // placement used to allow the full world extent — so an expansion authored near
+  // the edge built a structure standing *inside* the wall. Relationships only, so
+  // widening the band or the clearance keeps the test honest.
+  assert.ok(
+    RTS_WORLD_BUILD_HALF_EXTENT + RTS_WORLD_BORDER_BAND <= RTS_WORLD_HALF_EXTENT,
+    "the buildable rim clears the whole border band",
+  );
+  assert.ok(RTS_WORLD_BORDER_CLEARANCE > 0, "a building never sits flush against the band");
+
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const outpost = buildings.outpost ?? assert.fail("outpost definition missing");
+  const half = outpost.footprint.width / 2;
+  // Derived from the same constants the runtime uses: the outermost cell whose
+  // footprint still fits, and the next one out.
+  const grid = RTS_PLACEMENT_GRID_SIZE;
+  const lastLegal = Math.floor((RTS_WORLD_BUILD_HALF_EXTENT - half) / grid) * grid;
+  assert.equal(validateBuildingPlacement(outpost, lastLegal, 0, []).valid, true,
+    "the outermost cell inside the rim is still buildable");
+  const overBand = validateBuildingPlacement(outpost, lastLegal + grid, 0, []);
+  assert.equal(overBand.valid, false);
+  assert.equal(overBand.reason, "outside-map");
+  // The rim is square: the same limit holds on Z, and on the negative side.
+  assert.equal(validateBuildingPlacement(outpost, 0, -(lastLegal + grid), []).reason, "outside-map");
+  // Navigation is deliberately *not* inset — units still reach the true edge.
+  assert.ok(RTS_WORLD_BUILD_HALF_EXTENT < RTS_WORLD_HALF_EXTENT,
+    "placement is inset from the world the units walk");
+});
+
+check("RTS level adapter refuses an authored build site that reaches the border band", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const resources = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  const animals = shippedAnimalBalance();
+  const actor = (name: string, variables: unknown[], overrides: Record<string, string>, position: [number, number, number]) => ({
+    index: 0,
+    instance: { classRef: `${name}.actor.json`, position, variableOverrides: overrides },
+    def: normalizeActorScriptDef({ name, parentClass: "actor", variables }),
+  });
+  const ownerVar = { key: "owner", label: "Owner", type: "select", default: "player" };
+  const starts = [
+    actor("BP_RTS_KingdomStart", [ownerVar], { owner: "player" }, [-10, 0, 10]),
+    actor("BP_RTS_KingdomStart", [ownerVar], { owner: "enemy" }, [10, 0, -10]),
+  ];
+  const route = {
+    id: "route", position: [0, 0, 0] as [number, number, number],
+    spline: {
+      schema: 1 as const, closed: false, defaultUp: [0, 1, 0] as [number, number, number],
+      reparamStepsPerSegment: 8,
+      points: [
+        { id: "a", position: [0, 0, 0] as [number, number, number], pointType: "linear" as const },
+        { id: "b", position: [4, 0, 0] as [number, number, number], pointType: "linear" as const },
+      ],
+    },
+    runtime: { tags: ["rts.route:enemy:base:0"] },
+  };
+  const anchorVars = [ownerVar, { key: "buildingId", label: "Building", type: "text", default: "farm" }];
+  const farm = buildings.farm ?? assert.fail("farm definition missing");
+  const overBand = RTS_WORLD_BUILD_HALF_EXTENT - farm.footprint.width / 2 + 1;
+  assert.throws(
+    () => adaptRtsLevel(
+      [...starts, actor("BP_RTS_BuildAnchor", anchorVars, { owner: "enemy", buildingId: "farm" }, [overBand, 0, 0])],
+      [route], { buildings, resources, animals },
+    ),
+    RtsLevelError,
+    "an anchor whose footprint reaches the band fails the level, not the match",
+  );
+  const inBand = RTS_WORLD_BUILD_HALF_EXTENT - farm.footprint.width / 2 - 1;
+  assert.ok(
+    adaptRtsLevel(
+      [...starts, actor("BP_RTS_BuildAnchor", anchorVars, { owner: "enemy", buildingId: "farm" }, [inBand, 0, 0])],
+      [route], { buildings, resources, animals },
+    ).buildAnchors.length === 1,
+    "the same anchor one unit further in is accepted",
+  );
 });
 
 check("RTS simulation speed multiplies time in safe fixed-size slices", () => {

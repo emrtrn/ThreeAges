@@ -8,7 +8,7 @@ import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
 import type { RtsTreeDefinition } from "../economy/forestSystem";
 import type { RtsHerdDefinition } from "../wildlife/wildlifeSystem";
 import type { RtsBuildAnchor, RtsExpansionRegion, RtsMapPoint, RtsStrategicPoint } from "./rtsMapBlockout";
-import { RTS_WORLD_HALF_EXTENT } from "./rtsGround";
+import { RTS_WORLD_BUILD_HALF_EXTENT, RTS_WORLD_HALF_EXTENT } from "./rtsGround";
 import type { UnitOwner } from "../units/unit";
 import type { RtsWalkableDeck } from "./rtsTerrainSurface";
 
@@ -51,6 +51,33 @@ function mapPoint(position: readonly number[], label: string): RtsMapPoint {
     throw new RtsLevelError(`${label} is outside RTS world bounds`);
   }
   return { x, z };
+}
+
+/**
+ * Refuse an authored build site whose footprint would reach into the map's
+ * border band.
+ *
+ * Placement already rejects those coordinates at runtime, but silently: the AI
+ * would keep asking for an expansion it can never legally build, and the level
+ * would look correct in the editor. Failing here names the marker, so a site
+ * dragged too near the edge is caught when the level loads instead of as a
+ * stalled kingdom mid-match.
+ */
+function requireBuildableSite(
+  point: RtsMapPoint,
+  stats: { readonly footprint: { readonly width: number; readonly depth: number } },
+  label: string,
+): RtsMapPoint {
+  const halfWidth = stats.footprint.width / 2;
+  const halfDepth = stats.footprint.depth / 2;
+  if (Math.abs(point.x) + halfWidth > RTS_WORLD_BUILD_HALF_EXTENT
+    || Math.abs(point.z) + halfDepth > RTS_WORLD_BUILD_HALF_EXTENT) {
+    throw new RtsLevelError(
+      `${label} at (${point.x}, ${point.z}) reaches the map border band; `
+      + `keep its footprint within ±${RTS_WORLD_BUILD_HALF_EXTENT}`,
+    );
+  }
+  return point;
 }
 
 function requireText(values: Readonly<Record<string, unknown>>, key: string, label: string): string {
@@ -150,8 +177,9 @@ export function adaptRtsLevel(
       const owner = values.owner;
       const buildingId = requireText(values, "buildingId", "BuildAnchor");
       if (owner !== "player" && owner !== "enemy") throw new RtsLevelError("BuildAnchor owner must be player or enemy");
-      if (!balance.buildings[buildingId]) throw new RtsLevelError("invalid build anchor buildingId");
-      anchors.push({ owner, buildingId, ...point });
+      const stats = balance.buildings[buildingId];
+      if (!stats) throw new RtsLevelError("invalid build anchor buildingId");
+      anchors.push({ owner, buildingId, ...requireBuildableSite(point, stats, `BuildAnchor ${buildingId}`) });
     } else if (def.name === "BP_RTS_ExpansionMarker") {
       const regionId = requireText(values, "regionId", "ExpansionMarker");
       const role = values.role;
@@ -159,13 +187,15 @@ export function adaptRtsLevel(
       if (role !== "outpost" && role !== "depot" && role !== "production") {
         throw new RtsLevelError(`ExpansionMarker ${regionId} has invalid role`);
       }
-      if (!balance.buildings[buildingId]) throw new RtsLevelError(`ExpansionMarker ${regionId} has invalid buildingId`);
+      const stats = balance.buildings[buildingId];
+      if (!stats) throw new RtsLevelError(`ExpansionMarker ${regionId} has invalid buildingId`);
       if ((role === "outpost" && buildingId !== "outpost") || (role === "depot" && buildingId !== "depot")) {
         throw new RtsLevelError(`ExpansionMarker ${regionId} ${role} must use its matching buildingId`);
       }
       const region = expansionMembers.get(regionId) ?? { id: regionId, members: {} };
       if (region.members[role]) throw new RtsLevelError(`ExpansionMarker ${regionId} has duplicate ${role}`);
-      region.members[role] = { buildingId, ...point };
+      const site = requireBuildableSite(point, stats, `ExpansionMarker ${regionId} ${role}`);
+      region.members[role] = { buildingId, ...site };
       expansionMembers.set(regionId, region);
     }
   }

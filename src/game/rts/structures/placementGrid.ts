@@ -2,7 +2,7 @@
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { BuildingBalanceStats } from "../../data/gameDataTypes";
 import type { UnitOwner } from "../units/unit";
-import { RTS_WORLD_HALF_EXTENT } from "../world/rtsGround";
+import { RTS_WORLD_BUILD_HALF_EXTENT } from "../world/rtsGround";
 
 /** Confirmed Phase 2 placement-grid measure, in world units. */
 export const RTS_PLACEMENT_GRID_SIZE = 2;
@@ -59,8 +59,11 @@ export function validateBuildingPlacement(
   const candidate = buildingFootprintBlocker(stats, snapped.x, snapped.z);
   const [minX, , minZ] = candidate.min;
   const [maxX, , maxZ] = candidate.max;
-  if (minX < -RTS_WORLD_HALF_EXTENT || maxX > RTS_WORLD_HALF_EXTENT
-    || minZ < -RTS_WORLD_HALF_EXTENT || maxZ > RTS_WORLD_HALF_EXTENT) {
+  // Inset from the world extent, not equal to it: the outer rim is border art
+  // (see RTS_WORLD_BUILD_HALF_EXTENT). Units still walk out there — only
+  // buildings are held back, so none can end up standing inside the edge wall.
+  if (minX < -RTS_WORLD_BUILD_HALF_EXTENT || maxX > RTS_WORLD_BUILD_HALF_EXTENT
+    || minZ < -RTS_WORLD_BUILD_HALF_EXTENT || maxZ > RTS_WORLD_BUILD_HALF_EXTENT) {
     return { ...snapped, valid: false, reason: "outside-map" };
   }
   if (occupied.some((blocker) => footprintsOverlap(candidate, blocker))) {
