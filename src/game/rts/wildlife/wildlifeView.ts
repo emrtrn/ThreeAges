@@ -111,13 +111,16 @@ export class WildlifeView {
       handle.update?.({
         deltaSeconds,
         planarSpeed: animal.speed,
-        attacking: false,
+        // Faz 6: a bull fighting its shepherd. `attacking` outranks grazing and
+        // locomotion in the role chain, and the blow count is what actually
+        // starts each `Attack_Headbutt` — one clip per landed hit, the unit rule.
+        attacking: animal.attacking,
         dying: animal.dead,
         // A standing animal is grazing, and grazing is an in-place job — which is
         // what puts it on the `work` role and so on the asset's `Eating` clip.
         // Without this a herd at rest reads as a field of statues.
         working: !animal.dead && animal.speed <= 0,
-        attackCount: 0,
+        attackCount: animal.strikeCount,
         cameraDistanceSquared,
       });
     }

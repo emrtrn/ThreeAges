@@ -477,6 +477,21 @@ export interface ResourceBalanceStats {
 export type ResourceBalance = Readonly<Record<string, ResourceBalanceStats>>;
 
 /**
+ * What a species does to the worker who has hold of it (V2 §4.3).
+ *
+ * Deliberately not a weapon: there is no range, no acquisition and no target
+ * here, because the animal never chooses anybody. It hurts whoever is already
+ * touching it — the one worker its claim names — and that is the whole of the
+ * bull's risk. A species with no block simply endures being handled.
+ */
+export interface AnimalRetaliationBalance {
+  /** Damage one blow lands on the worker holding the animal. */
+  readonly damage: number;
+  /** How often it lands, in blows per minute. */
+  readonly attacksPerMinute: number;
+}
+
+/**
  * One huntable species. Wildlife is a *finite* food source that moves, which is
  * why its numbers live here rather than in `resources.json`: a deposit profile
  * is split safe/external by placement, while an animal carries its own yield
@@ -547,6 +562,15 @@ export interface AnimalBalanceStats {
   readonly pastureYield?: number;
   /** Seconds a stocked pen takes to add one animal, up to its capacity. */
   readonly breedSeconds?: number;
+  /**
+   * What this species does back while it is being calmed or hunted; absent for
+   * every species that simply submits (V2 Faz 6).
+   *
+   * Optional and independent of {@link tameable} on purpose: fighting back is
+   * not a taming trait, it is a temperament, and the predator V3 adds will want
+   * this same field without ever being drivable into a pen.
+   */
+  readonly retaliation?: AnimalRetaliationBalance;
 }
 
 /** `public/game-data/balance/animals.json` — keyed by stable species id. */

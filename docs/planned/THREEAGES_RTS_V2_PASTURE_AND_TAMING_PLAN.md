@@ -1,9 +1,9 @@
 # ThreeAges RTS V2 - Agil ve Evcillestirme Plani
 
 Olusturulma tarihi: 2026-08-02
-Durum: **Faz 0-4 tamamlandi (2026-08-03), gorsel kabul dahil.**
-Faz 5 kodu ve testleri yazildi; **gorsel kabul bekliyor** (agil uretiyor mu,
-yiyecek merkeze akiyor mu). Sonra Faz 6 - Boga karsilik verir.
+Durum: **Faz 0-5 tamamlandi (2026-08-03), gorsel kabul dahil.**
+Faz 6 kodu ve testleri yazildi; **gorsel kabul bekliyor** (boga cobana vuruyor
+mu, `Attack_Headbutt` oynuyor mu). Sonra Faz 7 - AI uyumu ve kabul maci.
 Onkosul: `THREEAGES_RTS_WILDLIFE_AND_HUNTING_PLAN.md` V1 (Faz 0-7) tamamlandi.
 
 Bu dosya, yaban hayati yol haritasinin (`...WILDLIFE_AND_HUNTING_PLAN.md` §12)
@@ -218,13 +218,14 @@ kadar iyi oldugunu, **tur** hayvanin ne kadar iyi oldugunu soyler. Bu,
 | Dosya | Is |
 | --- | --- |
 | `src/game/rts/wildlife/pastureSystem.ts` | **Yeni.** Gudme isi + pen rosteri + cogalma. `WorkerConstructionSystem` deseni (§3.4) |
+| `src/game/rts/wildlife/wildlifeRetaliation.ts` | **Yeni (Faz 6).** Tutulan hayvanin claim sahibine vurmasi; tek kural, hedef edinme yok |
 | `src/game/rts/wildlife/wildlifeSystem.ts` | `owner` yazilabilir; `tame(animalId, owner, pen)`; `huntable` yalniz `wild`; `tameableAnimalsNear` |
 | `src/game/rts/wildlife/wildlifeRoaming.ts` | Pen profili: kucuk cember, kacis yok; surulen hayvanin cobani takip etmesi |
 | `src/game/rts/wildlife/wildlifeView.ts` | `isWildlifeVisible` owner farkindaligi: kendi hayvanin hep cizilir |
 | `src/game/rts/economy/economyProductionSystem.ts` | Ucuncu uretim sekli: `requiresLivestock` dali, cikti pen nufusundan |
 | `src/game/data/gameDataTypes.ts` | `EconomyProductionBalance`: `requiresLivestock`, `livestockCapacity`, `perAnimalPerMinute`; `AnimalBalanceStats`: `tameable`, `tameSeconds`, `pastureYield`, `breedSeconds`, `retaliation` |
 | `src/game/data/validateGameData.ts` | `requiresGame` blokunun ikizi; `perWorkerPerMinute` agilda istege bagli; tur/agil capraz sartlari |
-| `src/game/editorCatalog.ts` | Details panelinde yeni ekonomi alanlari |
+| `src/game/editorCatalog.ts` | Details panelinde yeni ekonomi alanlari; Faz 6'da hayvan tablosuna evcillestirme + `retaliation` alanlari |
 | `src/game/rts/structures/placementGrid.ts` | `PlacementFailure` -> `"missing-livestock"` |
 | `src/game/rts/structures/structureConstructionService.ts` | `StructureBuildFailure` -> `"missing-livestock"` |
 | `src/game/rts/RtsApp.ts` | `PastureSystem` kurulumu + update sirasi; yerlestirme dali; sis yuklemi |
@@ -278,9 +279,17 @@ degismez. `BP_RTS_Cow` / `BP_RTS_Pasture` generic actor yolundan gecer;
 | `pastureYield` | 1.0 | 1.6 | §4.4 tur carpani |
 | `breedSeconds` | 90 | 130 | |
 
+| `retaliation` | (yok) | `{ damage: 5, attacksPerMinute: 20 }` | §4.3, Faz 6 |
+
 Mevcut `deer` / `stag`: `tameable: false`. Alan **zorunlu** olur (varsayilan
 yok): "bu tur evcillesir mi" sorusu her tur icin bilincli cevaplanmalidir,
-sessizce `false`'a dusmemeli.
+sessizce `false`'a dusmemeli. `retaliation` ise tersine **istege baglidir**:
+yoklugu "bu hayvan boyun eger" demektir ve turlerin cogunun dogru cevabi budur.
+
+Boganin sayilari: 3 saniyede bir 5 hasar, yani 14 saniyelik sakinlestirme
+boyunca ~4 vurus = ~20-23 hasar. 60 canli bir isci icin bu yaklasik yarim coban;
+bogayi almak gercek bir bedel odetir ama tek seferde oldurmez. Ikinci yari
+zaten §6.1'de: boga daha yavas urer ve daha uzun sakinlesir.
 
 ### 6.2 `pasture`
 
@@ -605,19 +614,82 @@ Kabul:
   uremiyor.
 - [x] Yikim testi: agil yikilinca hayvanlar yok olmuyor, yabaniye donuyor ve
   `huntableAnimalsNear` onlari yeniden av olarak sayiyor.
-- [ ] Kullanici gorsel kabulu: agilin yiyecek uretmesi ve merkeze akmasi.
+- [x] **Gorsel kabul alindi (2026-08-03).** Kullanici `?rts` rotasinda dogruladi:
+  agil penindeki hayvanlardan yiyecek uretiyor, sifir isciyle, ve uretim
+  yol/depo zinciriyle merkeze akiyor.
+
+**Faz 5 tamamlandi (2026-08-03).**
 
 ### Faz 6 - Boga karsilik verir
 
-- [ ] `animals.json` `retaliation: { damage, attacksPerMinute }` - yalniz boga.
-- [ ] Sakinlestirilirken/avlanirken boga **rezerve eden isciye** hasar verir.
-  Hedef edinme yok: rezervasyon zaten kimin temas ettigini soyluyor.
-- [ ] Sunumda `attacking: true` -> `Attack_Headbutt`.
-- [ ] Olen coban rezervasyonu birakir; agil isi yeni cobanla surer.
-- [ ] V1 §3.9 dogrulamasi: isci yaban hayvani saldirisina karsi ne yapar
-  (`unitCombat.ts:60`, `autoAcquired` yolu) - olculur ve yazilir.
+- [x] `animals.json` `retaliation: { damage, attacksPerMinute }` - yalniz boga
+  (5 hasar, dakikada 20 vurus). Alan **istege bagli** ve `tameable`'dan
+  bagimsiz: karsilik vermek bir evcillesme ozelligi degil, bir mizactir, ve
+  V3'un yirticisi ayni blogu hic gudulemez oldugu halde isteyecek.
+- [x] Sakinlestirilirken/avlanirken boga **rezerve eden isciye** hasar verir.
+  Hedef edinme yok - iki yolun ikisinde de `reservedByWorkerId` zaten tam olarak
+  "eli bu hayvanda olan isci"dir.
+- [x] Sunumda `attacking` -> rol zinciri `attack`, `strikeCount` -> her vurusta
+  bir `Attack_Headbutt`. Sidecar zaten `attack: "Attack_Headbutt"` tasiyordu
+  (Faz 1'de Deer sablonundan geldi), yani varlik tarafinda is cikmadi.
+- [x] Olen coban rezervasyonu birakir; agil isi yeni cobanla surer - Faz 4'un
+  `dropInvalidAssignments` yolu, yeni bir yonden gelinerek testle pinlendi.
+- [x] V1 §3.9 dogrulamasi asagida (**olculdu**).
 
-Kabul: gateler + engine testi (bogayi gudmek cobana hasar verir, inek vermez).
+**Yeni dosya: `src/game/rts/wildlife/wildlifeRetaliation.ts`.** Ne
+`WildlifeSystem`'in ne de `PastureSystem`'in icine konabilirdi: ilki `Unit`
+tanimaz, ikincisi **avi** tanimaz - vuruslarin yarisi avlanirken duser. Uc
+sistemin de bildigi tek sey ortak: claim register.
+
+**Planda yazmayan uc sey.**
+
+1. **"Karsilik verir" degil, "hala tutulurken karsilik verir".** Dort kosul
+   birden gerekti: **yasiyor ve hala yabani** (kesilmis govde vurmaz; evcil boga
+   sahibini omur boyu suslemez), **claim'li**, **halde surulmuyor**
+   (`lead.follow` sakinlestirmenin bittigi andir - yenilmis hayvan dovusmez), ve
+   **`CAUGHT_DISTANCE` icinde**. Sonuncusu sart, cunku claim **menzili kasitli
+   olarak asar** (V1 dersi: kovalamayi sonsuza kadar bastan baslatmamak icin) -
+   yani temasi soyleyen sey claim degil, mesafedir.
+2. **Vurus dongusu, tick basina tek vurus degil.** 8x oyun hizinda tek adim iki
+   araligi kapsayabiliyor; oyun hizlandikca daha az vuran bir boga, kimsenin
+   secmedigi bir zorluk ayari olurdu.
+3. **Isci karsilik vermez, ve bu bir eksiklik degil olcum.** `retaliateAgainstAttack`
+   **`Unit` tipinde bir saldirgan** ister ve yalnizca `resolveCombatHit`
+   cagirir; hayvan ise `CombatTarget`'tir, `Unit` degildir. Dolayisiyla hicbir
+   yaban vurusu `unitCombat.ts:60`'in aradigi `autoAcquired` bayragini
+   kuramaz. Coban durur ve yer - §4.3'un istedigi tam olarak bu: risk boganin
+   fiyatidir, isci-yaban savasinin acilisi degil. Testle pinlendi.
+
+**Validator kasitli olarak susuyor - ve gerekcesi CLAUDE.md kurali.** Ilk
+yazilan hali `damage x attacksPerMinute x tameSeconds < isci cani` sartini
+kosuyordu ("her cobani olduren boga, verinin evcillesir dedigi ama oyunun asla
+evcillestiremedigi turdur"). Geri alindi, cunku olculdu: bu carpim uniform
+olcekte **s³** buyuyor, yani §8'in olcek supurgesini s≈1.63'ten s≈1.29'a
+sikistiriyordu - tablodaki sayilari oynatmayi zorlastiran bir kontrol. Ustelik
+§3.8'in "asla yakalanamaz" kuralindan farkli olarak gizli degil: her cobani
+olduren bir boga, oyuncunun **ekranda izledigi** bir seydir, kirik yol bulma
+gibi gorunen bir sey degil. Doğrulayici bu yuzden yalnizca **sekli** reddediyor:
+blok varsa `damage > 0` ve `attacksPerMinute > 0`.
+
+Kabul:
+
+- [x] `npx tsc --noEmit`, `npm run verify:imports`, `vite build`,
+  `verify:dist --strict`, `npm run check:assets` (0 hata) yesil.
+- [x] `npm run test:engine`: **1237 check gecti.**
+- [x] Iki yeni engine testi: gudulen boga cobani yaralar / inek yaralamaz
+  (yara **tablodan hesaplanarak** dogrulanir: dusen vurus x `damage`), vuruslar
+  yalniz `calming` sirasinda duser, evcil ya da surulen boga vurmaz, coban
+  hicbir sey hedef almaz; ve boga cobani oldurunce kendini kurtarir, agil bir
+  sonrakini yollar.
+- [x] Testlerin kirmiziya donebildigi dogrulandi (uc ayri falsifikasyon:
+  karsilik dali kapatildi, `lead.follow` suzgeci kaldirildi, `owner` suzgeci
+  kaldirildi - ucu de ayri bir iddiayi dusurdu).
+- [x] **Ayar bagimsizligi olculdu**, pinlenmedigi kanitlandi: `retaliation`
+  `{1, 6}`'dan `{11, 37}`'ye (~10x yayilim) degistirilip suite uc kez kosuldu,
+  ucunde de 1237 yesil. Oldurucu ayarda bile testler gecer, cunku "boga
+  evcillestirilebilir" gibi bir ayar iddiasi tasimiyorlar.
+- [ ] Kullanici gorsel kabulu: boga sakinlestirilirken cobana vuruyor,
+  `Attack_Headbutt` oynuyor, coban duruyor ve yiyor; inekte hicbiri olmuyor.
 
 ### Faz 7 - AI uyumu, seviye icerigi ve kabul maci
 
@@ -663,10 +735,15 @@ CLAUDE.md kurali: **ayar degil sozlesme**. Hicbir test bir buyuklugu pinlemez.
   rakibin hayvani gorunmuyorsa cizilmez.
 - [x] **Yikim (Faz 5):** agil yikilinca hayvanlar yabaniye doner ve yeniden
   avlanabilir.
-- [ ] **Boga (Faz 6):** gudulen boga cobanin canini azaltir, inek azaltmaz.
-- [ ] **Validator:** `tameable` turde eksik `tameSeconds`/`pastureYield`,
-  sifir/negatif `livestockCapacity`, ve yakalanamaz kacis ayari dosya ve alan
-  adiyla reddedilir.
+- [x] **Boga (Faz 6):** gudulen boga cobanin canini azaltir, inek azaltmaz; yara
+  `retaliation`'dan **hesaplanarak** dogrulanir, buyukluk pinlenmez.
+- [x] **Karsilik sinirlari (Faz 6):** vurus yalniz sakinlestirme sirasinda duser
+  - surulen, penlenmis ya da temastan cikmis hayvan vurmaz - ve vurulan isci
+  hicbir sey hedef almaz (V1 §3.9).
+- [x] **Validator:** `tameable` turde eksik `tameSeconds`/`pastureYield`,
+  sifir/negatif `livestockCapacity`, yakalanamaz kacis ayari, ve sifir
+  `retaliation.damage`/`attacksPerMinute` dosya ve alan adiyla reddedilir.
+  Vurusun **ne kadar sert** oldugu kasitli olarak reddedilmez (Faz 6 notu).
 
 Kapi: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`,
 `npm run check:assets`. Olcek testi: `animals.json` ve `buildings.json`'daki her

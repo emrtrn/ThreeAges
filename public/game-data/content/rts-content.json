@@ -285,7 +285,7 @@
             "rts-fx-fire-loop"
           ],
           "anchor": {
-            "mode": "roof",
+            "mode": "ground",
             "offset": [
               0,
               0,

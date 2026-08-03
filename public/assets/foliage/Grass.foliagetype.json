@@ -3,7 +3,7 @@
   "type": "foliageType",
   "name": "Grass",
   "meshAssetId": "grass-large",
-  "radius": 0.5,
+  "radius": 0.2,
   "density": 10,
   "scaleMin": [
     0.7,

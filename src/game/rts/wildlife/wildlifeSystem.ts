@@ -137,6 +137,20 @@ export class WildlifeAnimal implements CombatTarget {
    * fleeing entirely — see {@link advanceLed}.
    */
   lead: WildlifeLead | null = null;
+  /**
+   * True while this animal is fighting the worker holding it (Faz 6). Written by
+   * {@link WildlifeRetaliationSystem}; read by presentation, where it outranks
+   * both grazing and locomotion.
+   */
+  attacking = false;
+  /**
+   * Blows landed so far. Each increment is one `Attack_Headbutt` to play — the
+   * unit rule (`attackCount`), so the clip is driven by the blow rather than by
+   * a duration the animation guessed for itself.
+   */
+  strikeCount = 0;
+  /** Seconds of the current blow's wind-up, banked only while in contact. */
+  strikeSeconds = 0;
 
   private roam: RoamState;
   private readonly random: () => number;

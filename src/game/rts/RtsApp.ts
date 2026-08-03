@@ -180,6 +180,7 @@ import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTrade
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { ForestSystem } from "./economy/forestSystem";
 import { PastureSystem } from "./wildlife/pastureSystem";
+import { WildlifeRetaliationSystem } from "./wildlife/wildlifeRetaliation";
 import { WildlifeSystem } from "./wildlife/wildlifeSystem";
 import { WildlifeView } from "./wildlife/wildlifeView";
 import { KingdomProgressionSystem, type UpgradableStructure } from "./progression/kingdomProgressionSystem";
@@ -515,6 +516,7 @@ export class RtsApp {
   private readonly units = new UnitSystem();
   private readonly wildlife: WildlifeSystem;
   private readonly pasture: PastureSystem;
+  private readonly wildlifeRetaliation: WildlifeRetaliationSystem;
   private readonly wildlifeRoot = new Group();
   private readonly wildlifeView = new WildlifeView(this.wildlifeRoot);
   private readonly centers = new CommandCenterSystem();
@@ -922,6 +924,7 @@ export class RtsApp {
     this.resourceNodes = new ResourceNodeSystem(this.options.resourceBalance, this.spatial.resourceNodes);
     this.forests = new ForestSystem(this.spatial.trees);
     this.wildlife = new WildlifeSystem(this.options.animalBalance, this.spatial.herds);
+    this.wildlifeRetaliation = new WildlifeRetaliationSystem(this.units, this.wildlife);
     this.kingdoms = new KingdomRegistry(
       KINGDOM_OWNERS,
       this.units,
@@ -2666,6 +2669,10 @@ export class RtsApp {
     // aimed at where he stood last tick would trail a step behind all the way home.
     this.pasture.update(dt);
     this.wildlife.update(dt, this.units.all().map((unit) => unit.position));
+    // Last of the three, and it has to be: a blow lands on whoever is *still*
+    // standing over the animal after both of them have moved this frame. A bull
+    // struck at the top of the tick would be hitting last frame's contact.
+    this.wildlifeRetaliation.update(dt);
     this.workerConstruction.update(dt);
     // Settle repair jobs whose building was razed or demolished since the last
     // tick; an untouched job is refunded here exactly as a cancelled one is.

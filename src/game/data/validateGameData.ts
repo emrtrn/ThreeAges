@@ -42,6 +42,7 @@ import type {
   AiTargetWeights,
   AnimalBalance,
   AnimalBalanceStats,
+  AnimalRetaliationBalance,
   BuildingBalance,
   BuildingPadVisual,
   BuildingProgressionBalance,
@@ -1181,6 +1182,7 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
         }
       }
     }
+    const retaliation = validateAnimalRetaliation(stats["retaliation"], `${statsWhere}.retaliation`);
     animals[id] = {
       id,
       label: requireString(stats, "label", statsWhere),
@@ -1201,9 +1203,37 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
           breedSeconds: tamingNumber("breedSeconds"),
         }
         : {}),
+      ...(retaliation ? { retaliation } : {}),
     };
   }
   return animals;
+}
+
+/**
+ * The optional block that makes a species fight back (V2 Faz 6).
+ *
+ * Absent is the normal answer and means "this animal submits", so omission is
+ * never an error here — unlike `tameable`, which every species owes an answer
+ * to. What is refused is a block that is present and says nothing: a blow worth
+ * no damage, or one that never lands, is a temperament the player can never see
+ * and a bug that looks like the retaliation code failing.
+ *
+ * How *hard* it hits is deliberately not judged, including the case where the
+ * calming costs more than a worker's whole health. That would be a cross-file
+ * comparison against `units.json`, and unlike the catchability rule above it
+ * guards nothing invisible: prey that can never be caught reads as broken
+ * pathfinding, while a bull that kills every shepherd is a thing the player
+ * watches happen. Refusing it would only make the tuning tables harder to move.
+ */
+function validateAnimalRetaliation(value: unknown, where: string): AnimalRetaliationBalance | null {
+  if (value === undefined) return null;
+  const obj = asObject(value, where);
+  const positive = (key: "damage" | "attacksPerMinute"): number => {
+    const amount = requireFiniteNumber(obj, key, where);
+    if (amount <= 0) throw new GameDataError(`${where}.${key}: must be > 0`);
+    return amount;
+  };
+  return { damage: positive("damage"), attacksPerMinute: positive("attacksPerMinute") };
 }
 
 /** Validate Faz 6's finite stone/gold deposit profiles. */

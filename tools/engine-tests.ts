@@ -219,6 +219,7 @@ import { MarketPrices } from "../src/game/rts/economy/marketPricing";
 import { MarketTradeSystem } from "../src/game/rts/economy/marketTradeSystem";
 import { EconomyProductionSystem, producerHasSource } from "../src/game/rts/economy/economyProductionSystem";
 import { PastureSystem, penGeometryFor } from "../src/game/rts/wildlife/pastureSystem";
+import { WildlifeRetaliationSystem, type WildlifeStrike } from "../src/game/rts/wildlife/wildlifeRetaliation";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
 import { ForestSystem } from "../src/game/rts/economy/forestSystem";
 import { KingdomProgressionSystem, townUnlocksAvailable } from "../src/game/rts/progression/kingdomProgressionSystem";
@@ -30474,6 +30475,31 @@ check("the animal validator refuses data that could never make sense", () => {
       `${key} on an untameable species is refused rather than ignored`,
     );
   }
+
+  // V2 Faz 6, fighting back. Optional and independent of taming — omission is
+  // the normal answer, and V3's predator will want the block without ever being
+  // tameable — but a block that is *present* has to mean something.
+  assert.equal(validateAnimalBalance({ deer: sane }).deer?.retaliation, undefined, "a species may simply submit");
+  assert.ok(
+    validateAnimalBalance({ deer: { ...sane, retaliation: { damage: 4, attacksPerMinute: 20 } } })
+      .deer?.retaliation,
+    "an untameable species may still fight back",
+  );
+  for (const key of ["damage", "attacksPerMinute"] as const) {
+    assert.throws(
+      () => validateAnimalBalance({ deer: { ...sane, retaliation: { damage: 4, attacksPerMinute: 20, [key]: 0 } } }),
+      new RegExp(`retaliation.${key}: must be > 0`),
+      `a retaliation with no ${key} is refused rather than silently harmless`,
+    );
+  }
+  // And how hard it hits is a tuning, not a contract: a bull that kills every
+  // shepherd is something the player watches happen, unlike prey that can never
+  // be caught, which only ever looks like broken pathfinding.
+  assert.ok(
+    validateAnimalBalance({ cow: { ...cow, retaliation: { damage: 500, attacksPerMinute: 600 } } })
+      .cow?.retaliation,
+    "the validator has no opinion on how hard a blow lands",
+  );
 });
 
 check("Faz 4: a gathering camp's reach stays local and still covers the herd it was built for", () => {
@@ -30945,14 +30971,23 @@ check("V2 Faz 3: a completed pasture stands with an empty pen, hires no one, and
  * penned the instant it was calmed, and the drive — the half of §2 this phase
  * exists for — would never run.
  */
-function pastureDriveFixture(options: { readonly species?: string; readonly herdCount?: number } = {}) {
+function pastureDriveFixture(options: {
+  readonly species?: string;
+  readonly herdCount?: number;
+  /**
+   * Where the herd grazes. Moved only by the single-animal fixtures: one animal
+   * scattered anywhere in a `roamRadius` circle can start outside the pasture's
+   * reach, and the building would then be refused before the test began.
+   */
+  readonly herdX?: number;
+} = {}) {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
   const pastureStats = buildings.pasture ?? assert.fail("pasture balance missing");
   const animals = shippedAnimalBalance();
   const wildlife = new WildlifeSystem(animals, [
-    { id: "cattle", species: options.species ?? "cow", x: 0, z: 0, count: options.herdCount ?? 4 },
+    { id: "cattle", species: options.species ?? "cow", x: options.herdX ?? 0, z: 0, count: options.herdCount ?? 4 },
   ]);
   const units = new UnitSystem();
   const structures = new PlacedStructureSystem();
@@ -31284,6 +31319,154 @@ check("V2 Faz 5: razing a pasture frees its herd instead of deleting it", () => 
       "and settles on the ground it is standing on",
     );
   }
+  fixture.territory.dispose();
+});
+
+// --- Pasture and taming V2 Faz 6: the bull fights back ---
+
+/**
+ * A drive with the retaliation system wired in, and a record of every blow that
+ * landed during it.
+ *
+ * One animal in the herd and one shepherd on purpose: the point of these
+ * assertions is a single struggle whose whole arithmetic can be checked against
+ * the table, not a field of them.
+ */
+function retaliationDriveFixture(species: string, options: { readonly leaveHealth?: number } = {}) {
+  const fixture = pastureDriveFixture({ species, herdCount: 1, herdX: 6 });
+  const retaliation = new WildlifeRetaliationSystem(fixture.units, fixture.wildlife);
+  const shepherd = fixture.units.spawn("player", 10, 4, RTS_TEST_WORKER_STATS);
+  if (options.leaveHealth !== undefined) {
+    shepherd.health.damage(Math.max(0, shepherd.health.max - options.leaveHealth));
+  }
+  const strikes: WildlifeStrike[] = [];
+  const statesWhenStruck = new Set<string>();
+  const step = 0.25;
+  const tick = (): void => {
+    fixture.pasture.update(step);
+    fixture.wildlife.update(step, fixture.units.all().map((unit) => unit.position));
+    updateUnitMovement(fixture.units.all(), step);
+    // Last, exactly as `RtsApp` orders it: a blow lands on whoever is still
+    // standing over the animal once both of them have moved.
+    const landed = retaliation.update(step);
+    for (const strike of landed) statesWhenStruck.add(fixture.pasture.stateFor(strike.worker));
+    strikes.push(...landed);
+  };
+  return { ...fixture, retaliation, shepherd, strikes, statesWhenStruck, step, tick };
+}
+
+check("V2 Faz 6: driving a bull wounds the shepherd holding it, and driving a cow does not", () => {
+  const bullRun = retaliationDriveFixture("bull");
+  const bull = bullRun.animals.bull ?? assert.fail("bull balance missing");
+  const profile = bull.retaliation ?? assert.fail("the bull is the species that fights back");
+  const quarry = bullRun.wildlife.all()[0] ?? assert.fail("no bull spawned");
+  // Run until the struggle has actually produced blows, and stop there. How many
+  // a bull gets in before it gives up — whether the shepherd survives at all —
+  // is the tuning this phase exists to let somebody choose, so nothing below
+  // asks for a particular answer to it.
+  for (
+    let tick = 0;
+    tick < 2400 && bullRun.strikes.length < 3
+      && quarry.owner === "wild" && !bullRun.shepherd.health.depleted;
+    tick += 1
+  ) bullRun.tick();
+
+  // Derived from the table rather than pinned: whatever the damage is retuned
+  // to, the shepherd's wound is the blows he took times that number.
+  assert.ok(bullRun.strikes.length > 0, "a bull being calmed fights the shepherd calming it");
+  assert.equal(
+    bullRun.shepherd.health.max - bullRun.shepherd.health.current,
+    bullRun.strikes.length * profile.damage,
+    "every point of the wound came from a blow the bull actually landed",
+  );
+  assert.equal(
+    quarry.strikeCount,
+    bullRun.strikes.length,
+    "and presentation is told about each one, so `Attack_Headbutt` plays per blow rather than on a loop",
+  );
+  // §4.3's narrow door: the bull answers being *handled*, and stops the moment
+  // it has been beaten. A shepherd gored all the way home would be the animal
+  // winning a struggle it had already lost.
+  assert.deepEqual(
+    [...bullRun.statesWhenStruck],
+    ["calming"],
+    "the blows land while it is being calmed, never once it is walking home",
+  );
+  // V1 §3.9, measured rather than assumed: a struck worker does *not* fight
+  // back. The defensive path needs an attacking `Unit` (`retaliateAgainstAttack`
+  // takes one, and only `resolveCombatHit` calls it), and an animal is a
+  // `CombatTarget` that is not a `Unit` — so no wildlife blow can set the
+  // `autoAcquired` flag that `unitCombat` requires before a worker swings. The
+  // shepherd stands there and takes it, which is §4.3's whole point: the risk is
+  // the price of the bull, not the opening of a worker-versus-wildlife war.
+  assert.equal(bullRun.shepherd.attackTarget, null, "a gored shepherd acquires nothing");
+  assert.equal(bullRun.shepherd.autoAcquired, false, "and never enters combat over it");
+
+  // The two halves of "it stops once it is beaten", set up directly rather than
+  // waiting for a drive to happen to put the pair in contact: a bull standing on
+  // top of a worker who has claimed it, once as that kingdom's own livestock and
+  // once as a wild animal already on a lead. Both are the same sentence — this
+  // fight is over — and a full minute of ticks is given to break it in.
+  const bystander = bullRun.units.spawn("player", quarry.position.x, quarry.position.z, RTS_TEST_WORKER_STATS);
+  quarry.lead = null;
+  quarry.reservedByWorkerId = bystander.id;
+  quarry.owner = "player";
+  bullRun.retaliation.update(60);
+  assert.equal(quarry.attacking, false, "a penned bull has nothing left to fight");
+  assert.equal(bystander.health.current, bystander.health.max, "and never gores the kingdom that owns it");
+  quarry.owner = "wild";
+  quarry.lead = { x: bystander.position.x, z: bystander.position.z, follow: true };
+  bullRun.retaliation.update(60);
+  assert.equal(bystander.health.current, bystander.health.max, "a bull being walked home is a bull that lost");
+  bullRun.territory.dispose();
+
+  // The control, and the reason the field is optional: an animal with no
+  // retaliation block is handled without a scratch.
+  const cowRun = retaliationDriveFixture("cow");
+  const cow = cowRun.animals.cow ?? assert.fail("cow balance missing");
+  assert.equal(cow.retaliation, undefined, "the cow simply submits");
+  const calf = cowRun.wildlife.all()[0] ?? assert.fail("no cow spawned");
+  for (let tick = 0; tick < 2400 && calf.owner === "wild"; tick += 1) cowRun.tick();
+  assert.equal(calf.owner, "player", "the cow was penned too, so the two runs are comparable");
+  assert.equal(cowRun.strikes.length, 0, "and nothing was struck");
+  assert.equal(cowRun.shepherd.health.current, cowRun.shepherd.health.max, "the cow's shepherd is untouched");
+  cowRun.territory.dispose();
+});
+
+check("V2 Faz 6: a bull that kills its shepherd frees itself, and the pasture sends the next one", () => {
+  // Sent out with exactly one blow left in him, computed from the table rather
+  // than chosen: whatever the bull's damage is retuned to, the first hit that
+  // lands is the one that kills him — so the death path is reached at any tuning
+  // rather than only at the shipped one.
+  const bull = shippedAnimalBalance().bull ?? assert.fail("bull balance missing");
+  const profile = bull.retaliation ?? assert.fail("the bull is the species that fights back");
+  const fixture = retaliationDriveFixture("bull", { leaveHealth: profile.damage });
+  const { wildlife, units, pasture, shepherd } = fixture;
+  const quarry = wildlife.all()[0] ?? assert.fail("no bull spawned");
+  for (let tick = 0; tick < 2400 && !shepherd.health.depleted; tick += 1) fixture.tick();
+  assert.equal(shepherd.health.depleted, true, "the bull killed the man holding it");
+  assert.equal(fixture.strikes.length, 1, "one blow, and it was the bull's");
+
+  // Faz 4's release path, reached from a new direction: the job is dropped, the
+  // animal is let go rather than left standing mid-lead, and it is wild again.
+  fixture.tick();
+  assert.equal(pasture.isShepherd(shepherd), false, "a dead shepherd holds no job");
+  assert.equal(quarry.lead, null, "the bull is not left holding a lead nobody is walking");
+  assert.equal(quarry.owner, "wild", "and it is still wild — it won this round");
+  assert.equal(quarry.reservedByWorkerId, null, "its claim is free again");
+  assert.equal(quarry.attacking, false, "with nobody to fight, it stops fighting");
+
+  // §2.9's promise is a price, not a dead end: the pasture hires again rather
+  // than writing the job off, and the next man out pays the same toll. Whether
+  // he lives to finish is the tuning, and is nobody's business here.
+  const relief = units.spawn("player", 10, -4, RTS_TEST_WORKER_STATS);
+  let relieved = false;
+  for (let tick = 0; tick < 2400 && relief.health.current === relief.health.max; tick += 1) {
+    fixture.tick();
+    relieved ||= pasture.isShepherd(relief);
+  }
+  assert.equal(relieved, true, "the pasture sent the next shepherd out to the same bull");
+  assert.ok(relief.health.current < relief.health.max, "and he pays the same toll on the way");
   fixture.territory.dispose();
 });
 

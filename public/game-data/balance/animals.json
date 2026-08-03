@@ -55,6 +55,10 @@
     "tameable": true,
     "tameSeconds": 14,
     "pastureYield": 1.6,
-    "breedSeconds": 130
+    "breedSeconds": 130,
+    "retaliation": {
+      "damage": 5,
+      "attacksPerMinute": 20
+    }
   }
 }

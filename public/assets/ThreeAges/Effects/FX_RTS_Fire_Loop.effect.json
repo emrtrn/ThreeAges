@@ -14,7 +14,7 @@
   ],
   "system": {
     "enabled": true,
-    "loop": true,
+    "loop": false,
     "duration": 1,
     "seed": null,
     "maxParticles": 64,

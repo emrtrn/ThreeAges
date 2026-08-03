@@ -601,6 +601,12 @@ const ANIMALS_FIELDS = [
   { path: "walkClipSpeed", label: "Otlama / yürüme hızı", min: 0, step: 0.1, hint: "Yürüme animasyonunun doğal göründüğü hız. Hayvan tam bu hızda otlar, böylece ayak kayması olmaz. Büyütmek hem yürümeyi hem animasyonu birlikte hızlandırır." },
   { path: "fleeRadius", label: "Kaçış yarıçapı", min: 0, step: 0.5, hint: "Avcı bu mesafeye girince hayvan kaçar." },
   { path: "roamRadius", label: "Dolaşma yarıçapı", min: 0, step: 0.5, hint: "Sürü merkezinden en fazla bu kadar uzaklaşır; avcı kulübesinin menzilinden küçük kalmalı." },
+  { path: "tameable", label: "Evcilleştirilebilir", hint: "Açıksa çoban bu türü öldürmek yerine Ağıl'a güdebilir. Kapalıysa aşağıdaki üç evcilleştirme alanı boş bırakılmalıdır; dolu bırakılırsa veri yüklenmez." },
+  { path: "tameSeconds", label: "Sakinleştirme süresi (sn)", min: 0, step: 1, hint: "Çoban hayvanı bu kadar süre tutar; ancak evcilleştirilebilir türlerde geçerlidir. Karşılık veren bir türde bu süre aynı zamanda çobanın hasar yediği süredir." },
+  { path: "pastureYield", label: "Ağıl verim çarpanı", min: 0, step: 0.1, hint: "Ağıl'ın 'Hayvan başı üretim/dk' değeri bununla çarpılır: bina ağılın ne kadar iyi olduğunu, bu alan hayvanın ne kadar iyi olduğunu söyler." },
+  { path: "breedSeconds", label: "Doğum aralığı (sn)", min: 0, step: 5, hint: "Dolu bir ağılda bu türden yeni bir hayvan doğana kadar geçen süre; ağıl kapasitesine kadar." },
+  { path: "retaliation.damage", label: "Karşılık: Vuruş hasarı", min: 0, step: 1, hint: "Hayvanı tutan (sakinleştiren ya da avlayan) işçiye vuruş başına verdiği hasar. Boğa modeli. Blok tamamen boş bırakılırsa tür karşılık vermez. Hasar × dakikadaki vuruş × sakinleştirme süresi bir işçinin canını geçerse o türü kimse evcilleştiremez; bu bir ayar kararıdır, doğrulayıcı karışmaz." },
+  { path: "retaliation.attacksPerMinute", label: "Karşılık: Dakikadaki vuruş", min: 0, step: 1, hint: "Vuruş sıklığı. Her vuruş bir Attack_Headbutt oynatır." },
 ];
 
 // Centre-led progression (docs/planned/THREEAGES_CENTER_LED_PROGRESSION_PLAN.md).
