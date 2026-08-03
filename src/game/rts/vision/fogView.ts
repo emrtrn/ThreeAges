@@ -62,10 +62,18 @@ import {
 import type { UnitOwner } from "../units/unit";
 import type { VisionSystem } from "./visionSystem";
 
-/** Alpha applied to each §38 layer, as a 0–255 texel value. */
-const UNKNOWN_ALPHA = 255;
-const EXPLORED_ALPHA = 128;
-const VISIBLE_ALPHA = 0;
+/**
+ * Alpha applied to each §38 layer, as a 0–255 texel value.
+ *
+ * Exported because this texture is no longer only an overlay: `fogMask.ts` hands
+ * it to the map art's materials as a world-space mask, and its threshold has to
+ * sit between the explored and unknown levels. Two modules agreeing on three
+ * numbers by coincidence is exactly the kind of thing that renders plausibly and
+ * is wrong, so the numbers are shared and `test:engine` pins the relation.
+ */
+export const UNKNOWN_ALPHA = 255;
+export const EXPLORED_ALPHA = 128;
+export const VISIBLE_ALPHA = 0;
 
 /**
  * Gaussian blur radius, in cells. Two cells is four world units either side of a
@@ -209,6 +217,31 @@ export class FogView {
     // nothing and getting it wrong blanks the overlay at the map edge.
     this.mesh.frustumCulled = false;
     this.root.add(this.mesh);
+  }
+
+  /**
+   * The fog texture itself, for `fogMask.ts` to sample in the map art's shaders.
+   *
+   * Shared rather than copied on purpose: everything that makes this readable as
+   * fog rather than as a grid — the gaussian blur, the reveal easing — is already
+   * baked into these texels, so scenery dissolves on exactly the same frontier,
+   * at exactly the same moment, as the ground under it. A second texture would
+   * be a second thing to keep in step.
+   */
+  get maskTexture(): DataTexture {
+    return this.texture;
+  }
+
+  /**
+   * World-unit width the texture's 0..1 UV range covers, centred on the origin.
+   *
+   * `resolution * cellSize`, not `worldHalfExtent * 2` — see
+   * {@link createSurfaceGeometry} for why those differ by a cell. Anything
+   * sampling this texture by world position has to use this number or it lands
+   * half a cell off.
+   */
+  get maskSpan(): number {
+    return this.resolution * this.vision.gridOptions.cellSize;
   }
 
   /**

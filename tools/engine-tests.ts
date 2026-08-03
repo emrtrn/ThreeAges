@@ -33,6 +33,8 @@ import {
   RepeatWrapping,
   SRGBColorSpace,
   Scene,
+  ShaderChunk,
+  ShaderLib,
   Skeleton,
   SkinnedMesh,
   Texture,
@@ -327,8 +329,18 @@ import {
 } from "../src/game/rts/vision/enemyMemorySystem";
 import { VisionSystemAiFilter } from "../src/game/rts/ai/aiVisionFilter";
 import { FogVisibilityBinder } from "../src/game/rts/vision/fogVisibilityBinder";
-import { instancedFogProps, objectFogProps } from "../src/game/rts/vision/fogProps";
-import { FogView } from "../src/game/rts/vision/fogView";
+import { FogMask, FOG_MASK_RANGE } from "../src/game/rts/vision/fogMask";
+import {
+  EXPLORED_ALPHA,
+  FogView,
+  UNKNOWN_ALPHA,
+  VISIBLE_ALPHA,
+} from "../src/game/rts/vision/fogView";
+import {
+  WORLD_MASK_SHADER_SOURCE,
+  applyWorldMask,
+  createWorldMaskUniforms,
+} from "../engine/render-three/worldMaskPatch";
 import {
   isResourceNodeVisible,
   isTreeVisible,
@@ -37621,67 +37633,203 @@ check("§59: no fog triangle passes under the ground it spans", () => {
   view.dispose();
 });
 
-check("§59: an authored Level placement is fogged without game code naming it", () => {
-  const units = new UnitSystem();
-  const structures = new PlacedStructureSystem();
-  const centers = new CommandCenterSystem();
-  let sources: VisionSource[] = [{ owner: "player", x: -30, z: -30, radius: 8 }];
-  const vision = new VisionSystem(() => sources, { cellSize: 2, worldHalfExtent: 40 });
+check("§59: the fog mask patch survives a three.js upgrade, or fails loudly", () => {
+  // Both anchors are `#include` directives in three's own shader sources. If an
+  // upgrade renames or drops one, `applyWorldMask` finds nothing to replace and
+  // returns quietly — the map renders perfectly, with no fog on any of its art.
+  // Nothing else in the build would notice.
+  const { vertexAnchor, fragmentAnchor } = WORLD_MASK_SHADER_SOURCE;
+  for (const [name, lib] of [
+    ["physical", ShaderLib.physical],
+    ["lambert", ShaderLib.lambert],
+    ["basic", ShaderLib.basic],
+    // The shadow path: without this anchor a hidden mountain still darkens the
+    // ground the player can see.
+    ["depth", ShaderLib.depth],
+  ] as const) {
+    assert.ok(lib.vertexShader.includes(vertexAnchor), `${name} vertex still carries ${vertexAnchor}`);
+    assert.ok(
+      lib.fragmentShader.includes(fragmentAnchor),
+      `${name} fragment still carries ${fragmentAnchor}`,
+    );
+  }
 
-  // Two placements of one authored model, batched into a single mesh as the
-  // world loader batches them: one inside the player's opening vision, one in a
-  // corner they have never been to. There is no `Object3D` per placement, which
-  // is exactly why `visible` was never able to fog these.
-  const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial(), 2);
-  const near = new Matrix4().makeTranslation(-30, 0, -30);
-  const far = new Matrix4().makeTranslation(30, 0, 30);
-  mesh.setMatrixAt(0, near);
-  mesh.setMatrixAt(1, far);
-  mesh.updateMatrixWorld(true);
+  // The patch recomputes world position by mirroring `project_vertex`'s own
+  // sequence, because `transformed` is still object-local there. Miss a matrix
+  // and every instance of a batched model samples the mask at the *model's*
+  // origin — the entire authored world reads one texel, which looks like a fog
+  // bug rather than a transform bug.
+  const projectVertex = ShaderChunk.project_vertex;
+  for (const matrix of ["batchingMatrix", "instanceMatrix", "modelMatrix"]) {
+    const needed = matrix === "modelMatrix" || projectVertex.includes(matrix);
+    if (!needed) continue;
+    assert.ok(
+      WORLD_MASK_SHADER_SOURCE.vertexPatch.includes(matrix),
+      `the world-position patch must apply ${matrix}, as project_vertex does`,
+    );
+  }
+});
 
-  const props = instancedFogProps([mesh]);
-  assert.equal(props.length, 2, "one prop per placement, not one per mesh");
-
-  const binder = new FogVisibilityBinder(vision, units, structures, centers, "player");
-  // A separate source, registered before the authored one. Both must survive:
-  // the blockout art and a Level's world load independently, and this used to
-  // replace the list rather than add to it — so whichever landed second silently
-  // un-tracked the first.
-  const ridge = new Object3D();
-  ridge.position.set(30, 0, 28);
-  binder.trackWorldProps(objectFogProps([ridge]));
-  binder.trackWorldProps(props);
-  assert.equal(ridge.visible, false, "registering hides immediately — never one unfogged frame");
-
-  const matrixAt = (index: number): Matrix4 => {
-    const read = new Matrix4();
-    mesh.getMatrixAt(index, read);
-    return read;
+check("§59: the fog mask chains a material's own shader patch instead of replacing it", () => {
+  // Forge already patches materials through `onBeforeCompile` — the landscape
+  // layer blend and the reflection capture both do. Overwriting the hook would
+  // flatten a layer-blended surface the moment it came under the fog, and the
+  // symptom (one material stopped blending) reads as an asset problem.
+  const uniforms = createWorldMaskUniforms({ span: 100, rangeLow: 0.55, rangeHigh: 0.92 });
+  uniforms.tWorldMask.value = new Texture();
+  const material = new MeshStandardMaterial();
+  let priorRuns = 0;
+  material.onBeforeCompile = (shader) => {
+    priorRuns += 1;
+    shader.uniforms.priorMarker = { value: 1 };
   };
-  const isHidden = (index: number): boolean =>
-    matrixAt(index).elements.every((value) => value === 0);
+  material.customProgramCacheKey = () => "prior-key";
 
-  assert.equal(isHidden(0), true, "and hides authored placements the same way");
-  assert.equal(isHidden(1), true);
+  assert.equal(applyWorldMask(material, uniforms), true, "a fresh material is patched");
+  assert.equal(applyWorldMask(material, uniforms), false, "and never patched twice");
 
-  vision.refresh();
-  binder.refresh();
-  assert.deepEqual(matrixAt(0).elements, near.elements, "a scouted placement is restored exactly");
-  assert.equal(isHidden(1), true, "the unscouted corner stays hidden");
-  assert.equal(ridge.visible, false, "and the earlier source is still tracked");
+  const shader = {
+    uniforms: {} as Record<string, unknown>,
+    vertexShader: `void main() {\n${WORLD_MASK_SHADER_SOURCE.vertexAnchor}\n}`,
+    fragmentShader: `void main() {\n${WORLD_MASK_SHADER_SOURCE.fragmentAnchor}\n}`,
+  };
+  (material.onBeforeCompile as (s: unknown, r: unknown) => void)(shader, null);
 
-  // §40's latch: walking away does not un-reveal what was seen.
-  sources = [];
-  vision.refresh();
-  binder.refresh();
-  assert.deepEqual(matrixAt(0).elements, near.elements, "explored never clears");
+  assert.equal(priorRuns, 1, "the material's own patch still runs");
+  assert.ok(shader.uniforms.priorMarker, "and its uniforms still reach the program");
+  assert.equal(shader.uniforms.tWorldMask, uniforms.tWorldMask, "the mask binds the live uniform");
+  assert.equal(
+    shader.uniforms.worldMaskStrength,
+    uniforms.worldMaskStrength,
+    "including the strength, so disabling never needs a recompile",
+  );
+  assert.ok(shader.fragmentShader.includes("discard"), "and the fragment is actually discarded");
+  assert.ok(
+    material.customProgramCacheKey().includes("prior-key"),
+    "the prior cache key is folded in, not dropped — two programs must not collide",
+  );
 
-  binder.revealAll();
-  assert.deepEqual(matrixAt(1).elements, far.elements, "teardown restores every placement");
-  assert.equal(ridge.visible, true);
+  // A patched and an unpatched material must never share a compiled program.
+  const plain = new MeshStandardMaterial();
+  assert.notEqual(
+    material.customProgramCacheKey(),
+    plain.customProgramCacheKey(),
+    "patched and stock materials need distinct cache keys",
+  );
+  material.dispose();
+  plain.dispose();
+});
 
-  mesh.geometry.dispose();
-  mesh.dispose();
+check("§59: the fog mask reads the same texels the fog surface draws", () => {
+  // The shader maps world X/Z to fog UV with its own arithmetic; `FogView` maps
+  // its surface's vertices with `mapUvToGridSpan`. Nothing links the two but
+  // this test. If they drift, the fog on the ground and the fog cutting the
+  // scenery above it land on different cells — a mountain dissolving several
+  // metres away from the darkness under it, which reads as a soft edge rather
+  // than as a bug.
+  const vision = new VisionSystem(() => [], { cellSize: 2, worldHalfExtent: 20 });
+  const view = new FogView(vision, "player");
+  view.setGroundHeightSampler(() => 0);
+  const span = view.maskSpan;
+  assert.equal(
+    span,
+    vision.gridResolution * vision.gridOptions.cellSize,
+    "the span is the grid's, which is one cell wider than the half extent doubled",
+  );
+
+  const geometry = (view.root.children[0] as Mesh).geometry as PlaneGeometry;
+  const position = geometry.attributes.position!;
+  const uv = geometry.attributes.uv!;
+  let compared = 0;
+  for (let index = 0; index < position.count; index += 1) {
+    // The shader's own formula, transcribed from `worldMaskPatch`'s fragment
+    // source. Kept literal on purpose: a helper shared with the shader string
+    // would only prove the helper agrees with itself.
+    const shaderU = 0.5 + position.getX(index) / span;
+    const shaderV = 0.5 - position.getZ(index) / span;
+    assert.ok(
+      Math.abs(shaderU - uv.getX(index)) < 1e-6 && Math.abs(shaderV - uv.getY(index)) < 1e-6,
+      `mask UV diverged from the fog surface at vertex ${index}`,
+    );
+    compared += 1;
+  }
+  assert.ok(compared > 1000, "the whole surface was walked, not a corner of it");
+  view.dispose();
+});
+
+check("§59: §40 memory survives the mask threshold — explored ground keeps its scenery", () => {
+  // The mask is a threshold on the *overlay's* alpha, so these two modules agree
+  // on three numbers across a texture. Put the low end under the explored alpha
+  // and every ridge the player scouted an hour ago starts dissolving again as
+  // the overlay darkens over it, which is precisely what §40 forbids.
+  const normalized = (alpha: number): number => alpha / 255;
+  assert.ok(
+    normalized(VISIBLE_ALPHA) < FOG_MASK_RANGE.low,
+    "ground in sight never hides its scenery",
+  );
+  assert.ok(
+    normalized(EXPLORED_ALPHA) < FOG_MASK_RANGE.low,
+    "§40: ground the player has seen keeps its scenery for the rest of the match",
+  );
+  assert.ok(
+    normalized(UNKNOWN_ALPHA) >= FOG_MASK_RANGE.high,
+    "§39: ground never seen hides its scenery completely, not partially",
+  );
+  assert.ok(
+    FOG_MASK_RANGE.low < FOG_MASK_RANGE.high,
+    "and there is a band between them to dissolve across",
+  );
+});
+
+check("§59: an authored Level placement is masked without game code naming it", () => {
+  // The world loader batches every copy of a model into one InstancedMesh, so
+  // there is no `Object3D` per placement to switch off — which is exactly why
+  // this could never be done with `visible`. The mask reaches them because it
+  // works on the *material*, and one material covers every placement at once.
+  const vision = new VisionSystem(() => [], { cellSize: 2, worldHalfExtent: 40 });
+  const view = new FogView(vision, "player");
+  const mask = new FogMask(view.maskSpan);
+  mask.setTexture(view.maskTexture);
+
+  const shared = new MeshStandardMaterial();
+  const near = new InstancedMesh(new BoxGeometry(1, 1, 1), shared, 2);
+  const far = new InstancedMesh(new BoxGeometry(1, 1, 1), shared, 1);
+  near.castShadow = true;
+  const world = new Group();
+  world.add(near, far);
+
+  mask.apply([world]);
+  const compiled = (material: Material): boolean =>
+    Object.prototype.hasOwnProperty.call(material, "onBeforeCompile");
+  assert.ok(compiled(shared), "the authored world's material is patched");
+  assert.ok(
+    near.customDepthMaterial && compiled(near.customDepthMaterial),
+    "a shadow caster's depth material too, or a hidden mountain still shadows lit ground",
+  );
+  assert.equal(far.customDepthMaterial, undefined, "and a non-caster is left alone");
+
+  // Re-applied because the blockout art and the authored world land in an order
+  // neither controls; the shared material must not be patched a second time.
+  const first = shared.onBeforeCompile;
+  mask.apply([world]);
+  assert.equal(shared.onBeforeCompile, first, "re-applying does not stack patches");
+
+  assert.equal(mask.maskUniforms.tWorldMask.value, view.maskTexture, "the mask reads the fog view");
+  assert.equal(mask.maskUniforms.worldMaskStrength.value, 1, "and hides while the match runs");
+
+  // Teardown must disable before it drops the texture: three binds a 1x1 *white*
+  // texture to a null sampler, which the patch reads as "unknown everywhere" and
+  // would discard the entire map with.
+  mask.dispose();
+  assert.equal(mask.maskUniforms.worldMaskStrength.value, 0, "disposal stops hiding first");
+  assert.equal(mask.maskUniforms.tWorldMask.value, null);
+
+  near.geometry.dispose();
+  near.dispose();
+  far.geometry.dispose();
+  far.dispose();
+  shared.dispose();
+  view.dispose();
 });
 
 check("§59: the fog surface covers the backdrop beyond the playable grid", () => {
@@ -37734,33 +37882,33 @@ check("§59: the fog surface covers the backdrop beyond the playable grid", () =
   view.dispose();
 });
 
-check("§59: backdrop scenery outside the grid reveals with the border it stands behind", () => {
-  const units = new UnitSystem();
-  const structures = new PlacedStructureSystem();
-  const centers = new CommandCenterSystem();
-  let sources: VisionSource[] = [];
-  const vision = new VisionSystem(() => sources, { cellSize: 2, worldHalfExtent: 40 });
+check("§59: backdrop scenery outside the grid is masked by the border it stands behind", () => {
+  // A Level dresses the horizon with scenery standing *outside* the vision grid —
+  // the shipped map puts mountains out to ~86 on a 70 half-extent field. The grid
+  // has no cell there, so any query keyed to a cell answers "never explored"
+  // forever, and the old per-prop rule hid the whole horizon for the whole match.
+  //
+  // The mask has no such cliff: UV outside 0..1 is clamped to the edge texel, so
+  // a fragment beyond the border reads the state of the strip it stands behind.
+  // The clamp is in the shader rather than left to the sampler's wrap mode, so
+  // this holds however the fog texture happens to be configured.
+  assert.ok(
+    WORLD_MASK_SHADER_SOURCE.fragmentPatch.includes("clamp("),
+    "off-grid fragments must clamp to the border, not wrap in the far side of the world",
+  );
 
-  // A mountain parked past the playable border, as the shipped Level does. Its
-  // point has no cell, so `isExplored` answers false forever — which used to mean
-  // hidden for the whole match, leaving a hole in the horizon.
-  const mountain = new Object3D();
-  mountain.position.set(-56, 0, -20);
-  const binder = new FogVisibilityBinder(vision, units, structures, centers, "player");
-  binder.trackWorldProps(objectFogProps([mountain]));
-  assert.equal(mountain.visible, false, "still hidden before anything is scouted");
-
-  sources = [{ owner: "player", x: 30, z: 30, radius: 8 }];
-  vision.refresh();
-  binder.refresh();
-  assert.equal(mountain.visible, false, "scouting the far corner reveals nothing on this border");
-
-  sources = [{ owner: "player", x: -36, z: -20, radius: 8 }];
-  vision.refresh();
-  binder.refresh();
-  assert.equal(mountain.visible, true, "reaching the border it stands behind brings it in");
-
-  units.clear();
+  const vision = new VisionSystem(() => [], { cellSize: 2, worldHalfExtent: 40 });
+  const view = new FogView(vision, "player");
+  const span = view.maskSpan;
+  // A mountain past the border, as the shipped Level places one. Its UV runs off
+  // the texture; what matters is that it runs off the *near* edge, so the strip
+  // of border the player actually walks is the one that brings it in.
+  const beyond = -56;
+  assert.ok(Math.abs(beyond) > span / 2, "the fixture really does stand outside the grid");
+  const u = 0.5 + beyond / span;
+  assert.ok(u < 0, "and its UV falls off the low edge");
+  assert.equal(Math.min(Math.max(u, 0), 1), 0, "where clamping hands it the first column of cells");
+  view.dispose();
 });
 
 check("§59: an unscouted forest is hidden, and stays drawn once explored", () => {

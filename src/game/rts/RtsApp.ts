@@ -223,7 +223,7 @@ import {
   type ObservableStructure,
 } from "./vision/enemyMemorySystem";
 import { fogChoiceForFlag, type FogOfWarChoice } from "./vision/fogOfWarChoice";
-import { instancedFogProps, objectFogProps } from "./vision/fogProps";
+import { FogMask } from "./vision/fogMask";
 import { FogView } from "./vision/fogView";
 import { GhostStructureView } from "./vision/ghostStructureView";
 import { FogVisibilityBinder } from "./vision/fogVisibilityBinder";
@@ -623,6 +623,8 @@ export class RtsApp {
   private readonly fogView: FogView | null;
   private readonly ghostStructures: GhostStructureView | null;
   private readonly fogVisibility: FogVisibilityBinder | null;
+  /** Per-fragment fog for the map's static art; see `vision/fogMask.ts`. */
+  private readonly fogMask: FogMask | null;
   private readonly objectiveTracker: RtsObjectiveTracker | null;
   /**
    * Story/tutorial chain (Hikâye / Öğretici Tur Modu). Both null unless the boot
@@ -995,6 +997,10 @@ export class RtsApp {
       );
       this.enemyMemory = new EnemyMemorySystem(this.vision, () => this.collectObservableStructures());
       this.fogView = new FogView(this.vision, PLAYER_OWNER);
+      // The mask reads the fog view's own texture, so scenery dissolves on the
+      // same frontier the ground overlay draws — one blur, one fade, one source.
+      this.fogMask = new FogMask(this.fogView.maskSpan);
+      this.fogMask.setTexture(this.fogView.maskTexture);
       this.ghostStructures = new GhostStructureView(this.enemyMemory, PLAYER_OWNER);
       this.fogVisibility = new FogVisibilityBinder(
         this.vision,
@@ -1007,6 +1013,7 @@ export class RtsApp {
       this.vision = null;
       this.enemyMemory = null;
       this.fogView = null;
+      this.fogMask = null;
       this.ghostStructures = null;
       this.fogVisibility = null;
     }
@@ -1579,6 +1586,10 @@ export class RtsApp {
     // objects, and tearing the fog down without undoing that would leave them
     // permanently invisible to whatever renders next.
     this.fogVisibility?.revealAll();
+    // Same reason, for the art the binder no longer owns: the patched materials
+    // outlive this app, so the mask has to be switched off before the texture it
+    // reads goes away.
+    this.fogMask?.dispose();
     this.fogView?.dispose();
     this.ghostStructures?.dispose();
     this.objectiveTracker?.dispose();
@@ -3082,7 +3093,7 @@ export class RtsApp {
       // in ground the player has never scouted. Registered here rather than at
       // construction because the art loads asynchronously — at construction time
       // there is nothing to hide yet.
-      this.fogVisibility?.trackWorldProps(objectFogProps(collectWorldProps(blockout)));
+      this.fogMask?.apply(collectWorldProps(blockout));
       // The art arrives after setup's fog pass, and on the start screen there is
       // no simulation tick coming to catch it up — so the newly built props and
       // forest get their first fog pass here, or they would render unfogged
@@ -3125,9 +3136,11 @@ export class RtsApp {
       // used to cover exactly one hard-coded group, so a new placement was
       // unfogged by construction rather than by oversight.
       //
-      // Registered before the first fog pass below, and hidden on registration,
-      // so the world is never drawn unfogged for even one frame.
-      this.fogVisibility?.trackWorldProps(instancedFogProps(handle.staticInstanceMeshes));
+      // The mask starts fully unknown (`FogView` fills its texture before the
+      // first refresh), so the world is never drawn unfogged for even one frame,
+      // and it cuts per fragment — a backdrop mountain that straddles the
+      // frontier is drawn up to it rather than waiting to arrive whole.
+      this.fogMask?.apply(handle.staticInstanceMeshes);
       // The world arrives after setup's fog pass, and on the start screen there
       // is no simulation tick coming to catch it up — the same reason the map
       // art does this a few lines into its own loader.

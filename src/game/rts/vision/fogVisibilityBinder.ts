@@ -18,9 +18,22 @@
  *
  * Own-kingdom objects are never touched — this only ever hides the opponent's.
  *
- * Two kinds of thing are fogged elsewhere, both for the same reason: their own
- * sync loop already owns `visible`, and a second writer here would fight it at
- * whichever rate the two ran at. Trees and deposits are decided in
+ * **Objects only.** Static map art used to be hidden from here too, as a
+ * worklist of props each shown or hidden whole. It no longer is: a mountain is
+ * not in one place, so no single reveal point could be right for it, and every
+ * choice of point either kept the horizon hidden until the player walked into it
+ * or revealed the whole range on the first frame. That art is now cut per
+ * fragment against the fog texture in `fogMask.ts`, which has no notion of a
+ * prop at all.
+ *
+ * Units, structures and command centres deliberately stayed here. Cutting them
+ * per fragment would draw the half of an enemy army that stands in lit ground
+ * and leak where the rest of it is — object-level hiding is the honest answer
+ * for anything whose position is information.
+ *
+ * Two more kinds of thing are fogged elsewhere, both for the same reason: their
+ * own sync loop already owns `visible`, and a second writer here would fight it
+ * at whichever rate the two ran at. Trees and deposits are decided in
  * `rtsMapArt.syncForest`/`syncResourceNodes`, wild animals in
  * `wildlifeView.sync` — which is also the only loop that runs before a match
  * starts, when this binder is not being ticked at all. Wildlife takes the
@@ -29,7 +42,6 @@
  * View-side only: it reads vision and sets `visible`; it never decides what is
  * visible and never mutates simulation state.
  */
-import type { FogProp } from "./fogProps";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { UnitOwner } from "../units/unit";
@@ -37,18 +49,6 @@ import type { UnitSystem } from "../units/unitSystem";
 import type { VisionSystem } from "./visionSystem";
 
 export class FogVisibilityBinder {
-  /**
-   * World props (code-built ridges, and every placement a Level authors) still
-   * waiting to be revealed.
-   *
-   * Held as a shrinking worklist rather than re-walked every tick because
-   * `explored` only ever latches on: once a prop is revealed it can never hide
-   * again, so it leaves this list for good. A densely dressed Level is the reason
-   * that matters — re-testing every authored placement every tick would be the
-   * per-frame cost §59's performance criterion is about.
-   */
-  private hiddenProps: FogProp[] = [];
-
   constructor(
     private readonly vision: VisionSystem,
     private readonly units: UnitSystem,
@@ -58,48 +58,8 @@ export class FogVisibilityBinder {
     private readonly observer: UnitOwner,
   ) {}
 
-  /**
-   * Register the static map art that must stay hidden until scouted.
-   *
-   * GDD 08 §39 forbids showing resources and strategic detail in **unknown**
-   * ground, while §40 keeps terrain and permanent natural elements visible once
-   * seen — so these key off `isExplored`, not `isVisible`. A stone deposit you
-   * walked past stays on your map; one you have never approached is not there
-   * to plan around.
-   *
-   * Additive, and called more than once: the blockout's art and a Level's
-   * authored world finish loading independently, in an order neither controls.
-   * Replacing the list — which is what this used to do — meant whichever source
-   * landed second silently un-tracked the first, and the symptom (some scenery
-   * fogged, some not) reads as a rule rather than as a race.
-   */
-  trackWorldProps(props: readonly FogProp[]): void {
-    for (const prop of props) {
-      prop.setRevealed(false);
-      this.hiddenProps.push(prop);
-    }
-  }
-
   /** Apply current visibility to every opponent-owned render object. */
   refresh(): void {
-    if (this.hiddenProps.length > 0) {
-      const { worldHalfExtent } = this.vision.gridOptions;
-      this.hiddenProps = this.hiddenProps.filter((prop) => {
-        // Clamped into the grid, because a Level's backdrop scenery stands
-        // *outside* it — the shipped map puts mountains out to ~86 on a 70
-        // half-extent field. `isExplored` answers false for a point it has no
-        // cell for, and false is permanent here: §40's latch only ever fires from
-        // a cell, so off-grid scenery was hidden for the whole match and the
-        // horizon read as a hole in the world. Asking the nearest border cell
-        // instead ties the backdrop to the stretch of border it sits behind,
-        // which is the same thing the fog apron does for the ground under it.
-        const x = clamp(prop.x, worldHalfExtent);
-        const z = clamp(prop.z, worldHalfExtent);
-        if (!this.vision.isExplored(this.observer, x, z)) return true;
-        prop.setRevealed(true);
-        return false;
-      });
-    }
     for (const unit of this.units.all()) {
       if (unit.owner === this.observer) continue;
       unit.object.visible = this.vision.isVisible(this.observer, unit.position.x, unit.position.z);
@@ -126,17 +86,14 @@ export class FogVisibilityBinder {
    * Restore everything to visible. Used when the match ends and when the system
    * is torn down, so a disabled or finished match never leaves objects
    * permanently hidden in the scene graph.
+   *
+   * Static map art is not restored here — it is not hidden here. `RtsApp` turns
+   * `FogMask` off at the same call sites, which is one uniform rather than a
+   * walk of the world.
    */
   revealAll(): void {
     for (const unit of this.units.all()) unit.object.visible = true;
     for (const structure of this.structures.all()) structure.object.visible = true;
     for (const center of this.centers.all()) center.object.visible = true;
-    for (const prop of this.hiddenProps) prop.setRevealed(true);
-    this.hiddenProps = [];
   }
-}
-
-/** Fold a world coordinate back inside the vision grid's extent. */
-function clamp(value: number, halfExtent: number): number {
-  return value < -halfExtent ? -halfExtent : value > halfExtent ? halfExtent : value;
 }
