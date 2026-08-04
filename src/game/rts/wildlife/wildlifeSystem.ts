@@ -207,6 +207,8 @@ export class WildlifeAnimal implements CombatTarget {
 
   private roam: RoamState;
   private readonly random: () => number;
+  /** A close predator warning, published by PredatorSystem for the next roam step. */
+  private pendingPredatorThreat: ThreatPoint | null = null;
 
   constructor(
     readonly id: string,
@@ -250,6 +252,12 @@ export class WildlifeAnimal implements CombatTarget {
   /** True once it has been killed and picked clean; nothing is left to hunt here. */
   get spent(): boolean {
     return this.dead && this.remainingMeat <= 0;
+  }
+
+  /** A wolf crossed this animal's close-range threat boundary. */
+  fleeFromPredator(threat: ThreatPoint): void {
+    if (this.dead || this.owner !== "wild" || this.stats.predator) return;
+    this.pendingPredatorThreat = threat;
   }
 
   /** The herd centre this animal belongs to — a fixed point a bolt cannot move. */
@@ -312,13 +320,15 @@ export class WildlifeAnimal implements CombatTarget {
       this.speed = chase.speed;
       return;
     }
+    const predatorThreat = this.pendingPredatorThreat;
+    this.pendingPredatorThreat = null;
     const pose = advanceRoam(
       this.roam,
       { x: this.position.x, z: this.position.z, facing: this.facing },
       this.profile,
       deltaSeconds,
       this.random,
-      threat,
+      predatorThreat ?? threat,
     );
     this.position.set(pose.x, this.position.y, pose.z);
     this.facing = pose.facing;
@@ -385,7 +395,7 @@ export class WildlifeSystem implements ResourceSource {
    * in an army's path would look like scenery with one scripted reaction. It
    * also keeps this system from having to learn which workers are hunting.
    */
-  update(deltaSeconds: number, threats: readonly ThreatPoint[] = []): void {
+  update(deltaSeconds: number, _people: readonly ThreatPoint[] = []): void {
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
       throw new RangeError("Wildlife delta must be a non-negative finite number");
     }
@@ -393,9 +403,8 @@ export class WildlifeSystem implements ResourceSource {
     // itself rather than from the caller. A predator is the one threat wildlife
     // already knows about without being told, so typing the danger here keeps
     // `update`'s signature — and every caller — exactly as it was.
-    const predators = this.livePredatorPoints();
     for (const animal of this.animals) {
-      animal.update(deltaSeconds, this.frightenedBy(animal, threats, predators));
+      animal.update(deltaSeconds);
     }
   }
 
@@ -412,23 +421,6 @@ export class WildlifeSystem implements ResourceSource {
    * and grazed on beside a wolf would read as scenery with one scripted
    * reaction, which is the same complaint that made every unit a threat in Faz 2.
    */
-  private frightenedBy(
-    animal: WildlifeAnimal,
-    people: readonly ThreatPoint[],
-    predators: readonly ThreatPoint[],
-  ): ThreatPoint | null {
-    if (animal.owner !== "wild") return null;
-    if (animal.stats.predator) return null;
-    const person = this.nearestThreat(animal, people);
-    const predator = this.nearestThreat(animal, predators);
-    if (!person) return predator;
-    if (!predator) return person;
-    return this.distanceSquared(animal, predator.x, predator.z)
-      < this.distanceSquared(animal, person.x, person.z)
-      ? predator
-      : person;
-  }
-
   /**
    * Where the live predators are standing, as plain points.
    *
@@ -436,15 +428,6 @@ export class WildlifeSystem implements ResourceSource {
    * animal rather than a danger on the map — so both are filtered out here
    * instead of at every reader.
    */
-  private livePredatorPoints(): readonly ThreatPoint[] {
-    const points: ThreatPoint[] = [];
-    for (const animal of this.animals) {
-      if (!animal.stats.predator || animal.dead || animal.owner !== "wild") continue;
-      points.push({ x: animal.position.x, z: animal.position.z });
-    }
-    return points;
-  }
-
   /** Every animal, dead ones included — presentation still draws a carcass. */
   all(): readonly WildlifeAnimal[] {
     return this.animals;
@@ -721,18 +704,6 @@ export class WildlifeSystem implements ResourceSource {
     const dx = animal.homeX - reach.x;
     const dz = animal.homeZ - reach.z;
     return dx * dx + dz * dz <= radiusSquared;
-  }
-
-  private nearestThreat(animal: WildlifeAnimal, threats: readonly ThreatPoint[]): ThreatPoint | null {
-    let nearest: ThreatPoint | null = null;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (const threat of threats) {
-      const distance = this.distanceSquared(animal, threat.x, threat.z);
-      if (distance >= bestDistance) continue;
-      nearest = threat;
-      bestDistance = distance;
-    }
-    return nearest;
   }
 
   private distanceSquared(animal: WildlifeAnimal, x: number, z: number): number {

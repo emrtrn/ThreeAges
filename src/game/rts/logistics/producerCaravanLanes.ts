@@ -52,7 +52,7 @@ export class ProducerCaravanLanes implements CaravanLaneProvider {
   lanes(): readonly CaravanLane[] {
     const lanes: CaravanLane[] = [];
     for (const link of this.links.snapshots()) {
-      if (link.status !== "linked" || !link.roadCell) continue;
+      if (link.status !== "linked" || link.transport === "direct" || !link.roadCell) continue;
       lanes.push({
         id: producerLaneId(link.structureId),
         owner: link.owner,

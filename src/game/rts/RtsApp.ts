@@ -951,7 +951,14 @@ export class RtsApp {
     this.depotLogistics = new DepotLogisticsSystem(this.structures, this.roads, this.centers);
     this.resourceCapacity = new ResourceCapacitySystem(this.structures, this.depotLogistics);
     this.logisticsOccupation = new LogisticsOccupationSystem(this.depotLogistics);
-    this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics, this.territory, this.logisticsOccupation);
+    this.productionLogistics = new ProductionLogisticsSystem(
+      this.structures,
+      this.roads,
+      this.depotLogistics,
+      this.territory,
+      this.logisticsOccupation,
+      this.centers,
+    );
     this.resourceNodes = new ResourceNodeSystem(this.options.resourceBalance, this.spatial.resourceNodes);
     this.tradeSites = new TradeSiteSystem(this.options.tradeSiteBalance, this.spatial.tradeSites);
     this.forests = new ForestSystem(this.spatial.trees);
@@ -4472,11 +4479,13 @@ export class RtsApp {
       const caravan = this.caravans.snapshots()
         .find((candidate) => candidate.laneId === producerLaneId(structure.id)) ?? null;
       const dispatch = this.caravanDispatch(structure.id);
+      const logistics = this.productionLogistics.snapshots()
+        .find((producer) => producer.structureId === structure.id) ?? null;
       return {
         kind: "producer",
         production,
-        logistics: this.productionLogistics.snapshots()
-          .find((producer) => producer.structureId === structure.id)?.status ?? null,
+        logistics: logistics?.status ?? null,
+        transport: logistics?.transport ?? null,
         caravan,
         caravanStorageFull: dispatch !== null && !dispatch.canReceive,
         livestock: livestock

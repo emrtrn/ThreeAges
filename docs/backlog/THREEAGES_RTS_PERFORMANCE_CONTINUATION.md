@@ -170,6 +170,22 @@ Not: Kamera göreli güneş gölge frustum'u üzerine bir deneme yapıldı; öl�
 kazanç vermediği için tamamen geri alındı. Bu yaklaşım mevcut çözümün parçası
 değildir.
 
+### 3.1 AI hareket ve yerel lojistik sadeleştirmesi (2026-08-04)
+
+Hareketli AI sayısını ve yakınlık sorgularını azaltan ilk oyun-kuralı dilimi uygulandı:
+
+1. Yabani hayvanlar artık oyuncu veya ordu birimlerinden kaçmak için her simülasyon adımında bütün birimleri taramaz. Yalnızca vahşi bir kurt 3 m yakınlık çemberine girdiğinde ilgili av hayvanına tek bir kaçış olayı yayınlanır. Kurt avlama/öldürme davranışı korunur; insan yakınlığı hayvan hareketini değiştirmez.
+2. Üretici ile aynı sahibin merkezinin veya Merkeze bağlı, işgal edilmemiş Deposunun bina-kenarı mesafesi otomatik yol erişim mesafesi içindeyse (`roads.json`: 6 hücre x 2 m = 12 m), üretici `direct` aktarım işaretini alır. Yerel tampon, global stok kapasitesine doğrudan aktarılır; dolu stokta tamponda kalır. Bu hat eşek, road BFS veya kervan state-machine oluşturmaz.
+3. Eşik dışındaki üreticiler mevcut kuralı korur: manuel yolun Merkez/bağlı Depo ağına ulaşması gerekir ve yalnız o zaman kervan çıkar.
+
+Panelde yerel yapılar `Lojistik: Yerel aktarım` ve `Yerel aktarım: Merkez/Depoya doğrudan gidiyor` olarak okunur. Bu, oyuncunun "merkezin yanı yerel, uzak alan yol ister" zihinsel modelini korur.
+
+Kanıt:
+
+- `test:engine` insan yakınlığının hayvan rotasını değiştirmemesini, kurt yakınlığının kaçışı başlatmasını ve yakın üreticinin yolsuz-kervansız aktarımını kapsar.
+- `npx.cmd tsc --noEmit` ve `npm.cmd run build:verify` geçti; build doğrulaması 1305 engine kontrolü ve strict dist denetimini içerdi.
+- Tarayıcı doğrulaması: `rts-building-placement.spec.ts` bu oturumda 124 sn süre sınırına ulaştı; bu nedenle panel metni ve canlı maç kabulü açık kalır.
+
 ## 4. İlk ölçüm kaydı
 
 Kaynak rapor: `test-results/rts-perf/rts-perf-2026-07-28T12-45-43-721Z.md`  

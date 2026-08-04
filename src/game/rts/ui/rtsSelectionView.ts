@@ -21,7 +21,7 @@
 import type { UnitArmorClass, UnitBalanceStats, UnitRoleId } from "../../data/gameDataTypes";
 import type { UnitStance } from "../units/unit";
 import type { EconomyBuildingSnapshot, EconomyProductionStatus } from "../economy/economyProductionSystem";
-import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
+import type { ProducerLogisticsStatus, ProducerTransport } from "../economy/productionLogisticsSystem";
 import type { DepotNodeStatus } from "../economy/depotLogisticsSystem";
 import type { CaravanSnapshot } from "../logistics/caravanSystem";
 import type { BarracksQueueSnapshot } from "../structures/barracksProductionSystem";
@@ -103,6 +103,8 @@ export interface ProducerDetailView {
   readonly kind: "producer";
   readonly production: EconomyBuildingSnapshot;
   readonly logistics: ProducerLogisticsStatus | null;
+  /** Direct local delivery has no donkey lane. */
+  readonly transport: ProducerTransport | null;
   /** The automatic donkey, if this producer currently has a linked road. */
   readonly caravan: CaravanSnapshot | null;
   /** True when the global resource store has no capacity for the next load. */
@@ -1030,7 +1032,7 @@ function describeProducer(
   summary: string,
   detail: ProducerDetailView,
 ): SelectionPanelContent {
-  const { production, logistics, livestock, caravan, caravanStorageFull } = detail;
+  const { production, logistics, transport, livestock, caravan, caravanStorageFull } = detail;
   return {
     title,
     summary,
@@ -1047,14 +1049,16 @@ function describeProducer(
         ? []
         : [`Düğüm: ${production.sourceRemaining.toFixed(1)} kaldı`]),
       `Durum: ${PRODUCTION_STATUS_LABEL[production.status]}`,
-      `Lojistik: ${logistics ? LOGISTICS_LABEL[logistics] : "Bekleniyor"}`,
-      caravanLine(production, logistics, caravan, caravanStorageFull),
+      `Lojistik: ${transport === "direct" ? "Yerel aktarım" : logistics ? LOGISTICS_LABEL[logistics] : "Bekleniyor"}`,
+      caravanLine(production, logistics, transport, caravan, caravanStorageFull),
     ],
     // Staffing a producer is a world gesture (select workers, right-click it),
     // so there is no verb here a button could carry.
     actions: [],
     hint: "",
-    tooltip: logistics
+    tooltip: transport === "direct"
+      ? "Merkez veya bağlı Depo yerel erişim mesafesinde; kaynak kervan beklemeden aktarılır."
+      : logistics
       ? LOGISTICS_REASON[logistics]
       : "Yapı tamamlanınca lojistik bağlantısı hesaplanır.",
   };
@@ -1063,9 +1067,13 @@ function describeProducer(
 function caravanLine(
   production: EconomyBuildingSnapshot,
   logistics: ProducerLogisticsStatus | null,
+  transport: ProducerTransport | null,
   caravan: CaravanSnapshot | null,
   storageFull: boolean,
 ): string {
+  if (transport === "direct") {
+    return storageFull ? "Yerel aktarım: Stok dolu, üreticide bekliyor" : "Yerel aktarım: Merkez/Depoya doğrudan gidiyor";
+  }
   if (logistics !== "linked" || !caravan) return "Kervan: Yol bağlantısı bekleniyor";
   if (storageFull) return "Kervan: Stok dolu, üreticide bekliyor";
   const threshold = caravan.carryCapacity.toFixed(1);

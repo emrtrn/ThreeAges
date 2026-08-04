@@ -15,7 +15,7 @@ export interface LogisticsTransferSnapshot {
   readonly totalTransferred: number;
 }
 
-/** Faz 4: only an arriving caravan may withdraw from a linked producer buffer. */
+/** Linked producers either hand off locally or withdraw when their caravan arrives. */
 export class LogisticsTransferSystem {
   private readonly transfers = new Map<number, LogisticsTransferSnapshot>();
 
@@ -37,18 +37,18 @@ export class LogisticsTransferSystem {
       .filter((link) => link.status === "linked")
       .map((link) => [producerLaneId(link.structureId), link]));
     const amounts = new Map<number, number>();
+    // A producer inside the centre/depot's local access radius has no road trip
+    // to simulate. It still takes the same capacity-limited withdrawal path as
+    // a delivered load, so a full global store leaves its goods in the local
+    // buffer rather than creating or losing stock.
+    for (const link of links.values()) {
+      if (link.transport !== "direct") continue;
+      this.transfer(link.structureId, link.owner, link.resourceId, Number.POSITIVE_INFINITY, amounts);
+    }
     for (const arrival of arrivals) {
       const link = links.get(arrival.laneId);
-      if (!link || link.owner !== arrival.owner) continue;
-      const wallet = this.kingdoms.get(link.owner).wallet;
-      const capacity = this.capacity?.availableFor(link.owner, link.resourceId, wallet.amount(link.resourceId));
-      const transfer = this.production.withdrawBuffered(
-        link.structureId,
-        capacity === undefined ? arrival.carryCapacity : Math.min(arrival.carryCapacity, capacity),
-      );
-      if (!transfer) continue;
-      wallet.credit(transfer.resourceId, transfer.amount);
-      amounts.set(link.structureId, (amounts.get(link.structureId) ?? 0) + transfer.amount);
+      if (!link || link.transport === "direct" || link.owner !== arrival.owner) continue;
+      this.transfer(link.structureId, link.owner, link.resourceId, arrival.carryCapacity, amounts);
     }
     for (const [structureId, snapshot] of this.transfers) {
       if (!links.has(producerLaneId(structureId))) this.transfers.set(structureId, { ...snapshot, amount: 0 });
@@ -75,5 +75,23 @@ export class LogisticsTransferSystem {
       amount,
       totalTransferred: (previous?.totalTransferred ?? 0) + amount,
     });
+  }
+
+  private transfer(
+    structureId: number,
+    owner: UnitOwner,
+    resourceId: string,
+    maximumAmount: number,
+    amounts: Map<number, number>,
+  ): void {
+    const wallet = this.kingdoms.get(owner).wallet;
+    const capacity = this.capacity?.availableFor(owner, resourceId, wallet.amount(resourceId));
+    const transfer = this.production.withdrawBuffered(
+      structureId,
+      capacity === undefined ? maximumAmount : Math.min(maximumAmount, capacity),
+    );
+    if (!transfer) return;
+    wallet.credit(transfer.resourceId, transfer.amount);
+    amounts.set(structureId, (amounts.get(structureId) ?? 0) + transfer.amount);
   }
 }

@@ -40651,6 +40651,34 @@ check("V4 Faz 3: a caravan follows road cells through its full continuous route"
   assert.equal(last.arrived, true, "a large simulation step cannot skip the road endpoint");
 });
 
+check("wildlife ignores people but flees once when a wolf enters its close threat circle", () => {
+  const animals = shippedAnimalBalance();
+  const herd = [{ id: "deer", species: "deer", x: 0, z: 0, count: 1 }];
+  const calm = new WildlifeSystem(animals, herd);
+  const peopleNearby = new WildlifeSystem(animals, herd);
+  calm.update(0.25, []);
+  peopleNearby.update(0.25, [{ x: 0, z: 0 }]);
+  assert.deepEqual(
+    peopleNearby.snapshots(),
+    calm.snapshots(),
+    "people no longer alter wildlife roaming or trigger a nearest-person scan",
+  );
+
+  const wildlife = new WildlifeSystem(animals, [
+    { id: "deer", species: "deer", x: 0, z: 0, count: 1 },
+    { id: "wolf", species: "wolf", x: 12, z: 0, count: 1 },
+  ]);
+  const deer = wildlife.animalById("deer:0") ?? assert.fail("deer missing");
+  const wolf = wildlife.animalById("wolf:0") ?? assert.fail("wolf missing");
+  deer.position.set(0, 0, 0);
+  wolf.position.set(2.5, 0, 0);
+  const predators = new PredatorSystem(new UnitSystem(), wildlife, () => "neutral");
+  predators.update(0.25);
+  wildlife.update(0.25);
+  assert.ok(deer.speed > 0, "the deer receives the wolf's one-time close-range flee event");
+  assert.ok(deer.position.x < 0, "the flee direction points away from the wolf");
+});
+
 check("V4 Faz 3: linked producers receive automatic non-population caravans", () => {
   const buildings = shippedBuildingBalance();
   const roads = new RoadGraph(validateRoadBalance(
@@ -40829,6 +40857,45 @@ check("V4 Faz 4: resources reach the wallet only when the caravan arrives", () =
     "nothing else reaches the wallet while the donkey is away",
   );
   structures.clear();
+  units.clear();
+});
+
+check("local producers transfer directly to a nearby centre without a road or caravan", () => {
+  const buildings = shippedBuildingBalance();
+  const roadBalance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const centerStats = buildings.command_center ?? assert.fail("command centre definition missing");
+  const farmStats = buildings.farm ?? assert.fail("farm definition missing");
+  const units = new UnitSystem();
+  for (let index = 0; index < 3; index += 1) units.spawn("player", -2 + index * 2, 17, RTS_TEST_WORKER_STATS);
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 0, centerStats.maxHealth, centerStats);
+  const structures = new PlacedStructureSystem();
+  const farm = structures.place("player", farmStats, 0, 10);
+  structures.advanceConstruction(farm, farmStats.constructionSeconds);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+  const roads = new RoadGraph(roadBalance);
+  const depots = new DepotLogisticsSystem(structures, roads, centers);
+  const links = new ProductionLogisticsSystem(structures, roads, depots, undefined, undefined, centers);
+  const link = links.snapshots()[0] ?? assert.fail("farm link missing");
+  assert.equal(link.status, "linked");
+  assert.equal(link.transport, "direct", "the centre's auto-access radius is a no-caravan local hand-off");
+  const lanes = new ProducerCaravanLanes(shippedCaravanBalance(), links, roads, structures, centers).lanes();
+  assert.deepEqual(lanes, [], "a direct producer never creates a donkey lane");
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 0 }, 20);
+  const transfer = new LogisticsTransferSystem(production, links, kingdoms);
+  for (let frame = 0; frame < 900; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    production.update(1 / 60);
+  }
+  assert.ok((production.snapshots("player")[0]?.localBuffer ?? 0) > 0, "the nearby farm produced into its local buffer");
+  transfer.update([]);
+  assert.ok(kingdoms.get("player").wallet.amount("food") > 0, "local delivery transfers without a caravan arrival");
+  structures.clear();
+  centers.clear();
   units.clear();
 });
 

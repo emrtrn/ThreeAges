@@ -49,6 +49,11 @@ export class RoadGraph {
     return this.balance.cellSize;
   }
 
+  /** The short access-road reach, reused as the local no-caravan logistics radius. */
+  get autoConnectMaximumDistance(): number {
+    return (this.balance.autoConnect?.maxCells ?? 0) * this.balance.cellSize;
+  }
+
   /** Increments only when committed topology changes, for event-style views. */
   get version(): number {
     return this.revision;

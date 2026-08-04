@@ -49,6 +49,8 @@ import {
  * standing *beside* its victim rather than inside him.
  */
 const PREDATOR_STANDOFF = 1.2;
+/** A wolf only spooks game after it enters this close-range circle. */
+export const PREDATOR_FLEE_RADIUS = 3;
 
 /**
  * One bite that has landed **on a person**, for the Faz 4 notification, the
@@ -133,6 +135,8 @@ export class PredatorSystem {
    * map at all (a trespasser hunting nobody).
    */
   private hostileNow: WildlifeAnimal[] = [];
+  /** Predator/prey pairs that were inside the close-range circle last tick. */
+  private readonly fleeContacts = new Set<string>();
 
   constructor(
     private readonly units: UnitSystem,
@@ -157,6 +161,7 @@ export class PredatorSystem {
     }
     const strikes: PredatorStrike[] = [];
     this.hostileNow = [];
+    const fleeContactsNow = new Set<string>();
     let workers: readonly Unit[] | null = null;
     for (const animal of this.wildlife.all()) {
       const predator = animal.stats.predator;
@@ -171,6 +176,7 @@ export class PredatorSystem {
         this.giveUp(animal);
         continue;
       }
+      this.warnNearbyPrey(animal, predator, fleeContactsNow);
       // A predator on its kill picks nothing, which is the whole brake on §2.8.
       const eating = this.chewOn(animal, predator, deltaSeconds);
       const quarry = eating
@@ -237,6 +243,8 @@ export class PredatorSystem {
         }
       }
     }
+    this.fleeContacts.clear();
+    for (const contact of fleeContactsNow) this.fleeContacts.add(contact);
     return strikes;
   }
 
@@ -354,6 +362,28 @@ export class PredatorSystem {
       && !candidate.dead
       && candidate.owner === "wild"
       && predator.preySpecies.includes(candidate.stats.id);
+  }
+
+  /**
+   * Emits one flight event when a wild predator crosses a prey animal's
+   * close-range boundary. This intentionally replaces the old all-animals ×
+   * all-units nearest-threat scan; walking people now have no wildlife cost.
+   */
+  private warnNearbyPrey(
+    predatorAnimal: WildlifeAnimal,
+    predator: AnimalPredatorBalance,
+    contactsNow: Set<string>,
+  ): void {
+    const radiusSquared = PREDATOR_FLEE_RADIUS * PREDATOR_FLEE_RADIUS;
+    for (const prey of this.wildlife.all()) {
+      if (!this.isPrey(predatorAnimal, predator, prey)) continue;
+      if (this.distanceSquared(predatorAnimal, prey.position) > radiusSquared) continue;
+      const contact = `${predatorAnimal.id}:${prey.id}`;
+      contactsNow.add(contact);
+      if (!this.fleeContacts.has(contact)) {
+        prey.fleeFromPredator({ x: predatorAnimal.position.x, z: predatorAnimal.position.z });
+      }
+    }
   }
 
   /** The nearest of `candidates` inside both the eye and the leash, or null. */
