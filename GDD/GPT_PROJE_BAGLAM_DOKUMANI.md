@@ -769,12 +769,6 @@ Güncel çekirdek RTS maçını açar.
 Authored oynanış kanıtı level’ını açar.
 
 ```text
-/?rts&preset=siege_test
-```
-
-Kasaba Lv1 ve Topçu odaklı test senaryosunu açar.
-
-```text
 /?rts&preset=gameplay_proof&debug
 ```
 

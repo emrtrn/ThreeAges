@@ -85,7 +85,7 @@ export interface GamePreset {
    * with it.
    */
   startingTier?: StartingTier;
-  /** Simulation speed multiplier (1 = real time; debug_fast raises it). */
+  /** Simulation speed multiplier (1 = real time; a debug preset may raise it). */
   gameSpeed: number;
   /** Map/level this preset boots into (blockout id; empty until Faz 2). */
   mapState: string;

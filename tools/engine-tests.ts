@@ -29318,38 +29318,41 @@ check("RTS attack watch reports health losses, not placements or rebuilds (plan 
   assert.deepEqual(watch.observe([{ id: "center", health: 1 }]), [], "a reset watch re-baselines");
 });
 
-check("game-data presets load and debug_fast is faster", () => {
+check("the shipped preset loads and startingTier stays validated", () => {
   const proof = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
-  const fast = validateGamePreset(readPresetJson("debug_fast"), "debug_fast");
   assert.equal(proof.id, "gameplay_proof");
-  assert.equal(fast.id, "debug_fast");
   // The shipped default since `core_match` was retired, so its opening stockpile
   // is what every unqualified `/?rts` boot plays — and what the story tur's own
   // budget invariant is measured against.
   assert.equal(proof.flags.prosperity ?? false, false, "the shipped default keeps optional prosperity disabled");
   assert.ok((proof.startingResources?.gold ?? 0) > 0, "the tur's Market step needs gold to trade with");
-  // debug_fast exists to raise the sim speed (plan §19 acceptance criterion).
-  assert.ok(fast.gameSpeed > proof.gameSpeed);
-
-  // The siege scenario opens on the tier the Topçu is gated behind, so a
-  // bombardment can be tested without first playing the economy that unlocks it.
-  const siege = validateGamePreset(readPresetJson("siege_test"), "siege_test");
-  assert.deepEqual(siege.startingTier, { age: "town", level: 1 });
+  assert.ok(proof.gameSpeed > 0, "a preset must name a real-time-or-faster sim speed");
   // A shipped balance preset must never carry the handicap.
   assert.equal(proof.startingTier, undefined);
 
+  // `startingTier` no longer has a preset on disk that uses it (the `siege_test`
+  // and `debug_fast` scratch scenarios were retired once they stopped being
+  // played), but the field is still read by the boot path, so its validation is
+  // pinned against a literal rather than a file. Dropping the checks with the
+  // files would leave the next preset that opens past Settlement unguarded.
+  const base = readPresetJson("gameplay_proof") as object;
+  assert.deepEqual(
+    validateGamePreset({ ...base, startingTier: { age: "town", level: 1 } }, "gameplay_proof").startingTier,
+    { age: "town", level: 1 },
+    "a fully stated opening tier survives validation",
+  );
   assert.throws(
-    () => validateGamePreset({ ...readPresetJson("siege_test") as object, startingTier: { age: "town" } }),
+    () => validateGamePreset({ ...base, startingTier: { age: "town" } }),
     GameDataError,
     "a half-stated tier would pick a level for the author",
   );
   assert.throws(
-    () => validateGamePreset({ ...readPresetJson("siege_test") as object, startingTier: { age: "town", level: 4 } }),
+    () => validateGamePreset({ ...base, startingTier: { age: "town", level: 4 } }),
     GameDataError,
     "there are six playable tiers, not seven",
   );
   assert.throws(
-    () => validateGamePreset({ ...readPresetJson("siege_test") as object, startingTier: { age: "empire", level: 1 } }),
+    () => validateGamePreset({ ...base, startingTier: { age: "empire", level: 1 } }),
     GameDataError,
     "an unknown age must not slip in through a test preset",
   );
@@ -29409,7 +29412,7 @@ check("game-data validator rejects an unknown feature flag", () => {
 check("game-data validator rejects a mismatched id and missing field", () => {
   // id does not match the expected file name.
   assert.throws(
-    () => validateGamePreset(readPresetJson("gameplay_proof"), "debug_fast"),
+    () => validateGamePreset(readPresetJson("gameplay_proof"), "some_other_preset"),
     GameDataError,
   );
   // required numeric field is missing.
@@ -38603,8 +38606,8 @@ check("the shipped mission script validates, and a broken one fails at load", ()
   // balance data that moves, and an invariant quoting a number the presets have
   // left behind protects nothing. Every preset that opens on Settlement counts —
   // the tur can be launched on any of them, and the leanest is the one that
-  // decides whether its opening is affordable. `siege_test` is excluded because
-  // it starts the match in Town, past everything this budget is about.
+  // decides whether its opening is affordable. A preset carrying a `startingTier`
+  // is excluded because it starts the match past everything this budget is about.
   const leanestStartingWood = Math.min(...readdirSync("public/game-data/presets")
     .filter((file) => file.endsWith(".json"))
     .map((file) => file.slice(0, -".json".length))
@@ -42114,10 +42117,11 @@ check("RTS workers rest for three seconds after reaching a player-ordered point"
 });
 
 check("a preset's opening tier makes the Town-gated Topçu trainable from the first second", () => {
-  // The debug switch behind `?preset=siege_test`: the gun sits at Town Lv1, and
-  // "play the economy that reaches the Town age" is not a step worth repeating
-  // every time the bombardment itself is being looked at. The gate is untouched —
-  // the scenario simply starts on the far side of it.
+  // What a preset's `startingTier` buys: the gun sits at Town Lv1, and "play the
+  // economy that reaches the Town age" is not a step worth repeating every time
+  // the bombardment itself is being looked at. The gate is untouched — a scenario
+  // can simply start on the far side of it. (The `siege_test` preset that used
+  // this was retired; the mechanism it exercised is still shipped.)
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
