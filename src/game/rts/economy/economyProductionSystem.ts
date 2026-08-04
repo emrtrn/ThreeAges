@@ -148,6 +148,12 @@ export class EconomyProductionSystem {
      * rather than a broken reference.
      */
     private readonly livestockYield: (structure: PlacedStructure) => number = () => 0,
+    /**
+     * Optional AI-only safety gate. It is queried at a finite source point, not
+     * at a building, so a camp can keep using its safe side after a moving source
+     * changes while an unsafe quarry is never assigned a replacement crew.
+     */
+    private readonly isWorkerLocationUnsafe: (owner: UnitOwner, x: number, z: number) => boolean = () => false,
   ) {
     const sources: ResourceSource[] = [];
     if (forests) sources.push(forests);
@@ -374,6 +380,7 @@ export class EconomyProductionSystem {
     producer.lastProductionTick = 0;
     producer.lastTransferTick = 0;
     this.dropInvalidAssignments(producer);
+    this.releaseUnsafeAutomaticAssignments(producer);
     // The third production shape, ahead of the gather cycle rather than inside it
     // (plan §3.5): a pasture is not a camp that works a source, so it never joins
     // the requirement chain and never runs a round trip.
@@ -705,6 +712,19 @@ export class EconomyProductionSystem {
     }
   }
 
+  /** V3 Faz 7: do not replace a worker the AI just lost at the same den. */
+  private releaseUnsafeAutomaticAssignments(producer: ProducerRecord): void {
+    for (const assignment of [...producer.assignments.values()]) {
+      if (assignment.source !== "automatic") continue;
+      if (!this.isWorkerLocationUnsafe(
+        producer.structure.owner,
+        assignment.approach.x,
+        assignment.approach.z,
+      )) continue;
+      this.release(assignment.worker);
+    }
+  }
+
   private releaseProducer(producer: ProducerRecord): void {
     for (const assignment of producer.assignments.values()) {
       assignment.worker.stop();
@@ -817,6 +837,11 @@ export class EconomyProductionSystem {
     while (true) {
       const reserved = source.reserveNearest(worker.id, reach, rejected);
       if (!reserved) return null;
+      if (this.isWorkerLocationUnsafe(structure.owner, reserved.x, reserved.z)) {
+        source.releaseReservation(worker.id);
+        rejected.add(reserved.id);
+        continue;
+      }
       const approach = new Vector3(reserved.x, 0, reserved.z);
       const path = this.navigation.plan(worker.position, approach);
       if (path) return { sourceId: reserved.id, approach, path };

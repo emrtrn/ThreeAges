@@ -31800,9 +31800,22 @@ check("V3 Faz 2: the dens threaten both kingdoms as evenly as the map allows", (
     herds: readonly { x: number; z: number }[],
     playerStart: { x: number; z: number },
     enemyStart: { x: number; z: number },
+    navigationBlockers: readonly NavBlocker[],
   ): number => {
+    // The contract says *walking* distance. The ridge/river can make a straight
+    // line look fair while one kingdom actually walks a longer flank, so route
+    // through the same grid the match uses instead of measuring a ruler line.
+    const navigation = new RtsNavigation();
+    navigation.setBlockers(navigationBlockers);
     const walks = (start: { x: number; z: number }) => herds
-      .map((herd) => Math.hypot(herd.x - start.x, herd.z - start.z))
+      .map((herd) => {
+        const path = navigation.plan(new Vector3(start.x, 0, start.z), new Vector3(herd.x, 0, herd.z));
+        assert.ok(path, "every authored wolf den must be reachable on the match navigation grid");
+        return path.slice(1).reduce(
+          (distance, point, index) => distance + point.distanceTo(path[index] ?? point),
+          0,
+        );
+      })
       .sort((left, right) => left - right);
     const fromPlayer = walks(playerStart);
     const fromEnemy = walks(enemyStart);
@@ -31814,13 +31827,15 @@ check("V3 Faz 2: the dens threaten both kingdoms as evenly as the map allows", (
   };
 
   const layouts: { readonly name: string; readonly herds: readonly { species: string; x: number; z: number }[];
-    readonly playerStart: { x: number; z: number }; readonly enemyStart: { x: number; z: number } }[] = [];
+    readonly playerStart: { x: number; z: number }; readonly enemyStart: { x: number; z: number };
+    readonly navigationBlockers: readonly NavBlocker[] }[] = [];
   const blockout = resolveRtsSpatialLayout();
   layouts.push({
     name: "RTS_BLOCKOUT_MAP",
     herds: blockout.herds,
     playerStart: blockout.playerStart,
     enemyStart: blockout.enemyStart,
+    navigationBlockers: blockout.navigationBlockers,
   });
   for (const name of ["RTS_CoreMatch", "RTS_GameplayProof"]) {
     const layout = JSON.parse(
@@ -31847,6 +31862,7 @@ check("V3 Faz 2: the dens threaten both kingdoms as evenly as the map allows", (
       herds: level.herds,
       playerStart: level.playerStart,
       enemyStart: level.enemyStart,
+      navigationBlockers: level.navigationBlockers,
     });
   }
 
@@ -31856,8 +31872,8 @@ check("V3 Faz 2: the dens threaten both kingdoms as evenly as the map allows", (
     assert.ok(dens.length > 0, `${layout.name} carries the predator dens`);
     assert.ok(dens.length % 2 === 0, `${layout.name}: dens come in mirrored pairs`);
 
-    const denSkew = skew(dens, layout.playerStart, layout.enemyStart);
-    const mapSkew = skew(grazing, layout.playerStart, layout.enemyStart);
+    const denSkew = skew(dens, layout.playerStart, layout.enemyStart, layout.navigationBlockers);
+    const mapSkew = skew(grazing, layout.playerStart, layout.enemyStart, layout.navigationBlockers);
     assert.ok(
       denSkew <= mapSkew + 1e-3,
       `${layout.name}: the dens are ${denSkew.toFixed(2)} apart for the two kingdoms, worse than the `
@@ -31875,6 +31891,7 @@ check("V3 Faz 2: the dens threaten both kingdoms as evenly as the map allows", (
       blockoutLayout.herds.filter((herd) => animals[herd.species]?.predator),
       blockoutLayout.playerStart,
       blockoutLayout.enemyStart,
+      blockoutLayout.navigationBlockers,
     ) < 0.001,
     "the blockout's symmetric starts make its dens exactly fair",
   );
@@ -42571,6 +42588,7 @@ function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
     // and a literal here silently becomes "understaffed" the day the target moves.
     workerCount: AI_TEST_BALANCE.economy.workerTarget.settlement,
     idleWorkerCount: 0,
+    predatorWorkerLosses: 0,
     population: AI_TEST_BALANCE.economy.workerTarget.settlement,
     populationCap: 20,
     buildingCounts: {},
@@ -42688,6 +42706,10 @@ function aiTestWorld(
   // food source that is *not* a farm would be untestable in the harness that
   // drives the AI — and Faz 6's whole claim is that the AI can live off it.
   const wildlife = new WildlifeSystem(shippedAnimalBalance(), RTS_BLOCKOUT_MAP.herds);
+  // Kept as a lazy link for the same reason as construction/pasture below: the
+  // economy is built before the AI, yet Faz 7 needs its automatic assignments
+  // to read the AI's predator memory exactly as RtsApp does.
+  let aiRef: AiController | null = null;
   // As in RtsApp: production must not re-grab a worker that is mid-construction.
   // The two systems reference each other, so the link is resolved lazily.
   let workerConstructionRef: WorkerConstructionSystem | null = null;
@@ -42705,6 +42727,7 @@ function aiTestWorld(
     forests,
     wildlife,
     (structure) => pastureRef?.pennedYield(structure) ?? 0,
+    (owner, x, z) => owner === "enemy" && (aiRef?.workerLocationUnsafe(x, z) ?? false),
   );
   const roads = new RoadGraph(balance);
   const depots = new DepotLogisticsSystem(structures, roads);
@@ -42734,6 +42757,7 @@ function aiTestWorld(
         : structure.stats.territory?.controlRadius ?? 0,
     }))));
   territory.refresh();
+  const predators = new PredatorSystem(units, wildlife, (x, z) => territory.ownerAt(x, z));
   const workerConstruction = new WorkerConstructionSystem(
     units,
     structures,
@@ -42847,6 +42871,7 @@ function aiTestWorld(
     isWorkerBusy: (unit) => workerConstruction.stateFor(unit) !== "idle"
       || production.isAssigned(unit) || pasture.isShepherd(unit),
     navigation,
+    isPredatorDenLive: (homeX, homeZ) => predators.denIsLive(homeX, homeZ),
     anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
     baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
     expansions: RTS_BLOCKOUT_MAP.enemyExpansions,
@@ -42865,6 +42890,7 @@ function aiTestWorld(
     balance: AI_TEST_BALANCE,
     profile: "normal",
   });
+  aiRef = ai;
   // A freshly completed structure joins the kingdom's current tier; the harness
   // applies it on completion the way RtsApp's completed-visual handler does.
   /** Advance the world the way RtsApp's simulation loop does. */
@@ -42877,6 +42903,7 @@ function aiTestWorld(
     // Ahead of the herd's own tick, as RtsApp orders it: a lead set this frame
     // has to move the animal this frame, or the drive trails a step behind.
     pasture.update(dt);
+    for (const strike of predators.update(dt)) ai.reportPredatorStrike(strike);
     wildlife.update(dt, units.all().map((unit) => unit.position));
     workerConstruction.update(dt);
     production.update(dt);
@@ -42890,7 +42917,7 @@ function aiTestWorld(
   };
   return {
     units, structures, centers, kingdoms, ai, workerConstruction, territory, roads, progression,
-    production, resourceNodes, wildlife, pasture, construction, step,
+    production, resourceNodes, wildlife, pasture, predators, construction, step,
   };
 }
 
@@ -43074,6 +43101,80 @@ check("ai balance validates cadences, ordered power thresholds and the no-cheat 
   // Attack above every other intent.
   assert.throws(() => validateAiBalance(withScoring({ attack: { developmentFloor: 1.4 } })), GameDataError);
   assert.throws(() => validateAiBalance(withScoring({ attack: { developmentFloor: -0.1 } })), GameDataError);
+});
+
+check("V3 Faz 7: the AI records a wolf loss and does not refill that den's work site", () => {
+  // This uses the same complete world and update ordering as RtsApp. The old
+  // harness omitted PredatorSystem entirely, so it could prove an AI opening
+  // but never prove what that opening did after a wolf killed a worker.
+  const world = aiTestWorld();
+  const animals = shippedAnimalBalance();
+  const wolf = world.wildlife.all().find((animal) => animal.stats.predator !== undefined)
+    ?? assert.fail("V3 requires a wolf in the AI harness map");
+  const predator = wolf.stats.predator ?? assert.fail("wolf predator balance missing");
+  const workers = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const workerStats = workers.worker_placeholder ?? assert.fail("worker balance missing");
+  const lost = world.units.spawn("enemy", wolf.homeX, wolf.homeZ, workerStats);
+  // PredatorSystem itself has its chase/strike contract above; this fixture
+  // supplies its already-fatal output to the AI seam and asserts the formerly
+  // missing RtsApp parity: the harness owns a real PredatorSystem in its frame
+  // order before production and AI advance.
+  assert.ok(world.predators instanceof PredatorSystem, "the AI harness carries RtsApp's predator system");
+  lost.health.damage(lost.health.max);
+  world.ai.reportPredatorStrike({ predator: wolf, victim: lost, damage: predator.damage });
+  world.ai.update(AI_TEST_BALANCE.evaluation.directorSeconds);
+  assert.equal(
+    world.ai.snapshot().blackboard?.predatorWorkerLosses,
+    1,
+    "the blackboard names the wolf-caused worker loss instead of inferring a farm shortage",
+  );
+
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const resources = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  const mineStats = buildings.gold_mine ?? assert.fail("gold mine balance missing");
+  const economyUnits = new UnitSystem();
+  const economyStructures = new PlacedStructureSystem();
+  const economyNavigation = new RtsNavigation();
+  const nodes = new ResourceNodeSystem(resources, [{
+    id: "wolf-den-gold", resourceId: "gold", kind: "external", x: wolf.homeX, z: wolf.homeZ,
+  }]);
+  const production = new EconomyProductionSystem(
+    economyUnits,
+    economyStructures,
+    economyNavigation,
+    () => false,
+    nodes,
+    undefined,
+    undefined,
+    () => 0,
+    (owner, x, z) => owner === "enemy" && world.ai.workerLocationUnsafe(x, z),
+  );
+  const mine = economyStructures.place("enemy", mineStats, wolf.homeX - 4, wolf.homeZ);
+  economyStructures.advanceConstruction(mine, mineStats.constructionSeconds);
+  const replacement = economyUnits.spawn("enemy", wolf.homeX - 3, wolf.homeZ, workerStats);
+  production.update(0);
+  assert.equal(
+    production.isAssigned(replacement),
+    false,
+    "a replacement worker is not fed back into the den that killed the first one",
+  );
+
+  // KARAR 3: clearing every wolf at a den makes the region safe permanently;
+  // the assignment gate must release its memory with the pack rather than leave
+  // a hidden AI blacklist behind.
+  for (const animal of world.wildlife.all()) {
+    if (animal.homeX === wolf.homeX && animal.homeZ === wolf.homeZ) animal.health.damage(animal.health.max);
+  }
+  assert.equal(world.ai.workerLocationUnsafe(wolf.homeX, wolf.homeZ), false, "a cleared den stops reserving work sites");
+  production.update(0);
+  assert.equal(production.isAssigned(replacement), true, "ordinary work resumes once the den is cleared");
+  assert.ok(animals.wolf?.predator, "the scenario remains data-owned by the shipped wolf row");
 });
 
 check("the AI's settlement plan names real buildings and every target has an authored slot", () => {
@@ -44601,6 +44702,11 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
 
   // §37: the most severe bottleneck wins, and a healthy base reports none.
   assert.equal(detectBottleneck(bb({ population: 20, populationCap: 20 }), AI_TEST_BALANCE), "population-blocked");
+  assert.equal(
+    detectBottleneck(bb({ predatorWorkerLosses: 1 }), AI_TEST_BALANCE),
+    "predator-pressure",
+    "V3 Faz 7: a wolf-caused loss is named before a missing food producer",
+  );
   assert.equal(detectBottleneck(bb(), AI_TEST_BALANCE), "no-food-production");
   assert.equal(detectBottleneck(bb({ buildingCounts: { farm: 1 } }), AI_TEST_BALANCE), "no-wood-production");
   assert.equal(

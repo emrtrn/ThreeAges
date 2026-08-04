@@ -23,6 +23,7 @@ import { workerTargetFor } from "./intentScorer";
 export type AiBottleneck =
   | "population-blocked"
   | "workers-lost"
+  | "predator-pressure"
   | "no-food-production"
   | "no-wood-production"
   | "no-stone-production"
@@ -43,6 +44,10 @@ export const AI_WOOD_SAFETY_STOCK = 80;
 export function detectBottleneck(bb: AiBlackboard, balance: AiBalance): AiBottleneck {
   // §27: no workers is worse than a full population — nothing rebuilds itself.
   if (bb.workerCount === 0) return "workers-lost";
+  // V3 Faz 7. A camp whose crew was eaten is not evidence that the map needs
+  // another farm. Name the cause first; the assignment gate then keeps the
+  // replacement crew out of the same wolf den while the normal economy repairs.
+  if (bb.predatorWorkerLosses > 0) return "predator-pressure";
   if (bb.population >= bb.populationCap) return "population-blocked";
   // Measured per resource rather than per building id. Naming the buildings
   // here made the diagnosis wrong in both directions the moment food stopped

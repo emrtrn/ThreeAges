@@ -1111,6 +1111,10 @@ export class RtsApp {
       this.forests,
       this.wildlife,
       (structure) => this.pasture.pennedYield(structure),
+      // V3 Faz 7: only the AI's automatic assignments learn from a worker loss.
+      // Player orders remain the player's decision, including the deliberate
+      // choice to escort a worker into wolf territory.
+      (owner, x, z) => owner === AI_OWNER && this.ai.workerLocationUnsafe(x, z),
     );
     this.logisticsTransfers = new LogisticsTransferSystem(
       this.economyProduction,
@@ -1287,6 +1291,7 @@ export class RtsApp {
       vision: this.vision && this.enemyMemory
         ? new VisionSystemAiFilter(this.vision, this.enemyMemory, AI_OWNER)
         : null,
+      isPredatorDenLive: (homeX, homeZ) => this.predators.denIsLive(homeX, homeZ),
       anchors: this.spatial.enemyBaseAnchors,
       baseRoute: this.spatial.enemyBaseRoute,
       expansions: this.spatial.enemyExpansions,
@@ -2747,6 +2752,7 @@ export class RtsApp {
       // *picks* the fight: `updateUnitEngagement` skips workers outright, so this
       // is the one door into it and it only opens on a hit already taken.
       retaliateAgainstAttack(strike.victim, strike.predator, this.navigation);
+      this.ai.reportPredatorStrike(strike);
     }
     this.wildlife.update(dt, this.units.all().map((unit) => unit.position));
     // Last of the three, and it has to be: a blow lands on whoever is *still*

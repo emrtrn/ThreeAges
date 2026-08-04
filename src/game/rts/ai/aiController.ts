@@ -34,6 +34,7 @@ import { AiTradeManager, type AiTradeStep } from "./aiTradeManager";
 import { AiUpgradeManager, type AiUpgradeStep } from "./aiUpgradeManager";
 import { ArmyManager, type AiObjectiveWatch, type AiRetreatReason } from "./armyManager";
 import type { AiVisionFilter } from "./aiVisionFilter";
+import type { PredatorStrike } from "../wildlife/predatorSystem";
 import { KingdomDirector } from "./kingdomDirector";
 import type { AiTargetScore } from "./armyTargeting";
 import type { AiArmyMission, AiExpansionStep, AiIntent, AiIntentScore, AiPlan } from "./aiTypes";
@@ -70,6 +71,8 @@ export interface AiControllerOptions extends AiBlackboardSources {
    * everything rather than arrive there by forgetting a field.
    */
   readonly vision: AiVisionFilter | null;
+  /** V3 Faz 7: cleared packs must stop reserving their former territory. */
+  readonly isPredatorDenLive: (homeX: number, homeZ: number) => boolean;
   readonly construction: StructureConstructionService;
   readonly roadConstruction: RoadConstructionService;
   readonly workerProduction: WorkerProductionSystem;
@@ -141,6 +144,12 @@ export class AiController {
   private economyAccumulator = 0;
   private lastBlackboard: AiBlackboard | null = null;
   private matchConcluded = false;
+  /**
+   * V3 Faz 7. A worker death teaches the AI the den that caused it. The den is
+   * retained only while its pack is live, so clearing it makes the region safe
+   * forever (KARAR 3).
+   */
+  private readonly predatorThreats = new Map<string, { readonly homeX: number; readonly homeZ: number; readonly radius: number }>();
 
   constructor(private readonly options: AiControllerOptions) {
     this.reader = new AiBlackboardReader(options, options.balance);
@@ -216,6 +225,35 @@ export class AiController {
   /** §69: true once the match is decided and this AI has stopped deciding. */
   get concluded(): boolean {
     return this.matchConcluded;
+  }
+
+  /** Record a fatal wolf strike against this AI's economy. */
+  reportPredatorStrike(strike: PredatorStrike): void {
+    if (strike.victim.owner !== this.options.owner || !strike.victim.health.depleted) return;
+    const predator = strike.predator.stats.predator;
+    if (!predator) return;
+    this.predatorThreats.set(
+      `${strike.predator.homeX}:${strike.predator.homeZ}`,
+      { homeX: strike.predator.homeX, homeZ: strike.predator.homeZ, radius: predator.pursuitRadius },
+    );
+  }
+
+  /**
+   * Whether automatic gathering may send an AI worker to this point.
+   *
+   * The den's own pursuit radius is the boundary, not a second AI tuning
+   * number. Dead or tamed wolves are removed as they are read, so clearing a
+   * pack restores the ordinary economy without a special reset path.
+   */
+  workerLocationUnsafe(x: number, z: number): boolean {
+    for (const [id, den] of this.predatorThreats) {
+      if (!this.options.isPredatorDenLive(den.homeX, den.homeZ)) {
+        this.predatorThreats.delete(id);
+        continue;
+      }
+      if (Math.hypot(x - den.homeX, z - den.homeZ) <= den.radius) return true;
+    }
+    return false;
   }
 
   /** Advance AI time by one simulation step; evaluates only on its own cadence. */
@@ -319,6 +357,7 @@ export class AiController {
     this.economyAccumulator = 0;
     this.lastBlackboard = null;
     this.matchConcluded = false;
+    this.predatorThreats.clear();
     this.director.reset();
     this.army.reset();
     this.builds.reset();
@@ -386,14 +425,24 @@ export class AiController {
   }
 
   private readBlackboard(): AiBlackboard {
-    this.lastBlackboard = this.reader.read({
+    this.lastBlackboard = {
+      ...this.reader.read({
       now: this.now,
       currentIntent: this.director.currentIntent,
       currentPlan: this.director.currentPlan,
       armyMission: this.army.currentMission,
       expansionStep: this.expansion.currentStep,
       expansionPlanAvailable: this.expansion.planAvailable,
-    });
+      }),
+      predatorWorkerLosses: this.predatorThreatCount(),
+    };
     return this.lastBlackboard;
+  }
+
+  private predatorThreatCount(): number {
+    // Use the same read as the work-assignment gate so the debug snapshot never
+    // reports a den after its last wolf has been cleared.
+    this.workerLocationUnsafe(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
+    return this.predatorThreats.size;
   }
 }

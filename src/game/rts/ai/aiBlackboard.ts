@@ -41,6 +41,13 @@ export interface AiBlackboard {
   readonly resourceIncomePerMinute: Readonly<Record<string, number>>;
   readonly workerCount: number;
   readonly idleWorkerCount: number;
+  /**
+   * V3 Faz 7. Live wolf dens which have already killed one of this kingdom's
+   * workers. This is deliberately not inferred from food income: the economy
+   * needs to name a dangerous work area before it concludes that a farm is
+   * missing.
+   */
+  readonly predatorWorkerLosses: number;
   readonly population: number;
   readonly populationCap: number;
   readonly buildingCounts: Readonly<Record<string, number>>;
@@ -238,6 +245,10 @@ export class AiBlackboardReader {
       ),
       workerCount: workers.length,
       idleWorkerCount: workers.filter((worker) => !this.sources.isWorkerBusy(worker)).length,
+      // The controller overlays its owner-specific predator memory. Keeping the
+      // reader's baseline explicit makes this pure world snapshot usable by
+      // isolation tests as well.
+      predatorWorkerLosses: 0,
       population: populationSnapshot.used,
       populationCap: populationSnapshot.capacity,
       buildingCounts,

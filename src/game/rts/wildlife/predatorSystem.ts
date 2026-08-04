@@ -269,6 +269,15 @@ export class PredatorSystem {
     return this.hostileNow;
   }
 
+  /** True while any living wild predator remains at this authored den. */
+  denIsLive(homeX: number, homeZ: number): boolean {
+    return this.wildlife.all().some((animal) => animal.stats.predator !== undefined
+      && !animal.dead
+      && animal.owner === "wild"
+      && animal.homeX === homeX
+      && animal.homeZ === homeZ);
+  }
+
   // --- internals ------------------------------------------------------------
 
   /**
