@@ -40690,6 +40690,41 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
   assert.equal(redundant.connected({ x: -4, z: 0 }, { x: 4, z: 0 }), true, "an alternate branch preserves connectivity after a road cut");
 });
 
+check("RTS a caravan route uses only committed road cells", () => {
+  const roads = roadGraphOf([[{ x: -6, z: 0 }, { x: 6, z: 0 }]]);
+  const route = roads.route({ x: -6, z: 0 }, { x: 6, z: 0 });
+  assert.ok(route, "committed endpoints have a route");
+  const committed = new Set(roads.all().map((cell) => `${cell.x}:${cell.z}`));
+  assert.ok(route.every((cell) => committed.has(`${cell.x}:${cell.z}`)), "a caravan never crosses bare ground");
+});
+
+check("RTS a caravan route is deterministic", () => {
+  const roads = new RoadGraph({
+    cellSize: 2,
+    woodCostPerCell: 4,
+    visual: ROAD_PAINT_VISUAL,
+    buildingPad: BUILDING_PAD_VISUAL,
+  });
+  const cells = [
+    { x: 0, z: 0 }, { x: 2, z: 0 }, { x: 4, z: 0 },
+    { x: 0, z: 2 }, { x: 4, z: 2 },
+    { x: 0, z: 4 }, { x: 2, z: 4 }, { x: 4, z: 4 },
+  ];
+  roads.commit({ cells, newCells: cells, woodCost: 0 });
+  assert.deepEqual(
+    roads.route({ x: 0, z: 0 }, { x: 4, z: 4 }),
+    roads.route({ x: 0, z: 0 }, { x: 4, z: 4 }),
+    "equal-length road branches resolve to the same route",
+  );
+});
+
+check("RTS a severed road leaves a caravan without a route", () => {
+  const roads = roadGraphOf([[{ x: -4, z: 0 }, { x: 4, z: 0 }]]);
+  assert.ok(roads.route({ x: -4, z: 0 }, { x: 4, z: 0 }), "the intact road is traversable");
+  assert.equal(roads.remove([{ x: 0, z: 0 }]), 1, "the bridge tile is removed");
+  assert.equal(roads.route({ x: -4, z: 0 }, { x: 4, z: 0 }), null, "the disconnected endpoint has no route");
+});
+
 check("RTS a road routes around a standing tree and straight through once it is felled", () => {
   const balance = validateRoadBalance(
     JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,

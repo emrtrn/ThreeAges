@@ -1,7 +1,7 @@
 # ThreeAges RTS V4 - Yuk Esegi ve Gorunur Lojistik Plani
 
 Olusturulma tarihi: 2026-08-04
-Durum: **Faz 0 kilitlendi (2026-08-04).** Alti kararin hepsi §4'teki onerilen
+Durum: **Faz 2 tamamlandi (2026-08-04).** Faz 0'daki alti kararin hepsi §4'teki onerilen
 secenekle kapandi: **1-B, 2-A, 3-B, 4-A, 5-A, 6-A.** Kapsam disi listesi (§4
 sonu) teyit edildi. Bu kararlar kod yazilirken yeniden tartisilmaz.
 
@@ -427,12 +427,15 @@ uretilmez (CLAUDE.md kurali).
 
 ### Faz 2 - `RoadGraph.route()` (oynanis yok)
 
-- [ ] `route(from, to): readonly RoadCell[] | null` - yalniz committed hucreler,
+- [x] `route(from, to): readonly RoadCell[] | null` - yalniz committed hucreler,
   deterministik siralama, kopuk agda `null`.
-- [ ] Uc yuzey testi (§8): rota her hucresi committed; ayni girdi ayni cikti;
+- [x] Uc yuzey testi (§8): rota her hucresi committed; ayni girdi ayni cikti;
   kopru hucresi `remove` edilince `null`.
 
-Kabul: saf ekleme, hicbir oynanis degisikligi yok; suite yesil.
+Kabul: saf ekleme, hicbir oynanis degisikligi yok; suite yesil. 2026-08-04'te
+`npx tsc --noEmit`, `npm run test:engine` (1283 kontrol), `npm run build:verify`
+ve `npm run check:assets` yesil. Committed-hucre filtresi gecici olarak tersine
+cevrilerek yeni rota sozlesmesinin kirmizi kaniti alindi, sonra geri alindi.
 
 ### Faz 3 - Kervan haritada yuruyor (ekonomi degismedi)
 

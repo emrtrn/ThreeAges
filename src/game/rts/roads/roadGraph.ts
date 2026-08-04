@@ -180,6 +180,39 @@ export class RoadGraph {
     return false;
   }
 
+  /**
+   * Shortest deterministic route through completed road cells only.
+   *
+   * Unlike {@link plan}, this never crosses bare ground or considers build
+   * blockers. It is a read-only query for systems that travel on the road
+   * network itself, such as a logistics caravan.
+   */
+  route(from: RoadCell, to: RoadCell): readonly RoadCell[] | null {
+    const start = this.snap(from);
+    const goal = this.snap(to);
+    const startKey = this.key(start);
+    const goalKey = this.key(goal);
+    if (!this.cells.has(startKey) || !this.cells.has(goalKey)) return null;
+
+    const frontier = [this.node(start)];
+    const cameFrom = new Map<string, string | null>([[startKey, null]]);
+    for (let index = 0; index < frontier.length; index += 1) {
+      const current = frontier[index];
+      if (!current) continue;
+      if (current.key === goalKey) return this.reconstruct(cameFrom, goalKey);
+      // `neighbors` has a fixed cardinal order. FIFO traversal therefore keeps
+      // equal-length alternatives stable while still guaranteeing a shortest
+      // path over the committed, unweighted road graph.
+      for (const neighbor of this.neighbors(current)) {
+        const node = this.node(neighbor);
+        if (!this.cells.has(node.key) || cameFrom.has(node.key)) continue;
+        cameFrom.set(node.key, current.key);
+        frontier.push(node);
+      }
+    }
+    return null;
+  }
+
   /** Connected road islands, deterministically ordered for debug and logistics. */
   components(): readonly RoadComponent[] {
     const unvisited = new Set(this.cells.keys());
