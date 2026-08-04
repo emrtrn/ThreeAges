@@ -304,6 +304,7 @@ import {
   type SelectedStructureView,
   type SelectedUnitView,
   type SelectionAction,
+  type SelectionChip,
   type SelectionPanelContent,
   type StructureDetailView,
   type CenterProgressionView,
@@ -41991,14 +41992,22 @@ check("Yapı tamiri: buton yalnız hasar varken çıkar, çalışırken kendi ip
   assert.equal(stop.label, "Tamiri Durdur");
   assert.equal(stop.enabled, true);
   assert.equal(stop.active, true);
-  assert.match(running.lines.join(" | "), /Tamir %50 · 2 işçi/);
+  // A running repair is a badge, not a body line: repair is offered on every
+  // building kind, so as a line it landed in whichever body grid the selection
+  // had — and on a producer that was the eighth line of a six-slot grid.
+  const repairChip = (content: SelectionPanelContent): SelectionChip =>
+    content.chips?.find((candidate) => candidate.id === "repair") ?? assert.fail("no repair chip");
+  assert.equal(repairChip(running).value, "%50");
+  assert.match(repairChip(running).tooltip, /Tamir %50 · 2 işçi/);
+  assert.equal(repairChip(running).tone, "good");
 
   // Ordered but not yet staffed reads differently: the player has paid and is
   // waiting on a worker, which is a thing they can go and fix.
   const waiting = panel({
     missingHealth: 40, cost: { wood: 4 }, workerSeconds: 2, active: true, progress: 0, workers: 0, stock: { wood: 100 },
   }, 160);
-  assert.match(waiting.lines.join(" | "), /işçi bekliyor/);
+  assert.match(repairChip(waiting).tooltip, /işçi bekliyor/);
+  assert.equal(repairChip(waiting).tone, "warn", "paid for and unstaffed is a thing the player can go and fix");
   assert.match(action(waiting)?.hint ?? "", /tam iade/);
 });
 
@@ -46581,6 +46590,21 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
       kind: "structure",
       structure: { id: 1, label, level, health: 200, maxHealth: 400, detail },
     }) ?? assert.fail("a structure selection has a panel");
+  // The states a building reports are chips rather than body lines (the split
+  // that stopped a producer opening a clipped third column). They are still
+  // plain data, so the text they carry is still checked here — a chip's
+  // `tooltip` is the sentence it stands in for, and §52's "bir yapı
+  // çalışmadığında nedeni gösteriliyor" lives there now.
+  const chip = (content: SelectionPanelContent, id: string): SelectionChip =>
+    content.chips?.find((candidate) => candidate.id === id) ?? assert.fail(`no ${id} chip`);
+  /**
+   * What the body grid holds: two columns of two rows (`.rts-selection-body`).
+   * A fifth line does not wrap or scroll — `grid-auto-columns` opens a third
+   * column inside a fixed-width panel and every column is clipped, which is the
+   * bug the chip strip was written to undo. Pinned here because the limit lives
+   * in CSS, where nothing can fail a build.
+   */
+  const BODY_LINE_BUDGET = 4;
 
   // A levelled building says so in its title: level is the whole reason it cost twice.
   assert.equal(structure({ kind: "passive", populationCapacity: 8 }, "Ev", 2).title, "Ev Lv2");
@@ -46591,8 +46615,12 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   // the fix, not just the state.
   const stalled = structure({ kind: "construction", progress: 0.42, assignedWorkers: 0 });
   assert.match(stalled.lines.join(" | "), /İnşaat: %42/);
-  assert.match(stalled.lines.join(" | "), /İşçi yok/);
+  assert.match(chip(stalled, "workers").tooltip, /İşçi yok/);
+  assert.equal(chip(stalled, "workers").tone, "bad", "an unmanned site is stuck, not merely waiting");
   assert.match(stalled.tooltip ?? "", /sağ tıklayın/);
+  const staffedSite = structure({ kind: "construction", progress: 0.42, assignedWorkers: 2 });
+  assert.equal(chip(staffedSite, "workers").value, "2");
+  assert.equal(chip(staffedSite, "workers").tone, "good");
 
   const producer = structure({
     kind: "producer",
@@ -46606,13 +46634,47 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
       sourceRemaining: null, status: "buffer-full",
     },
   });
-  assert.match(producer.lines.join(" | "), /İşçiler: 2\/3 \(1 çalışıyor\)/);
+  // What stays as prose is what the player *reads* off a producer: three
+  // measurements. Everything else became a badge, which is what keeps the body
+  // inside the six slots the two-column grid holds.
   assert.match(producer.lines.join(" | "), /Üretim: 7\.0 Yiyecek\/dk/);
   assert.match(producer.lines.join(" | "), /Yerel tampon: 40\.0\/40/);
+  assert.ok(
+    producer.lines.length <= BODY_LINE_BUDGET,
+    "the body must fit the two-column grid; past its budget a clipped third column opens",
+  );
+  assert.equal(chip(producer, "workers").value, "2/3");
+  assert.equal(chip(producer, "workers").tone, "warn", "understaffed is neither working nor broken");
+  assert.match(chip(producer, "workers").tooltip, /2\/3 işçi atandı, 1 tanesi çalışıyor/);
+  assert.equal(chip(producer, "logistics").value, "Depo Yok");
+  assert.equal(chip(producer, "logistics").tone, "bad");
+  assert.match(chip(producer, "logistics").tooltip, /Depo gerekli/, "the chip resolves the state it reports");
   // The status is a translated phrase, not the raw enum the Faz 3 palette leaked.
-  assert.match(producer.lines.join(" | "), /Durum: Tampon dolu/);
-  assert.match(producer.lines.join(" | "), /Lojistik: Depo Yok/);
+  assert.equal(chip(producer, "status").value, "Tampon dolu");
+  assert.equal(chip(producer, "status").tone, "warn", "a full buffer clears itself; it is not an alarm");
   assert.match(producer.tooltip ?? "", /Depo gerekli/, "the tooltip resolves the state it reports");
+
+  // A working producer carries no badge saying nothing is wrong with it — the
+  // rule the Barracks panel already followed and this one did not.
+  const healthyProducer = structure({
+    kind: "producer",
+    logistics: "linked",
+    transport: "direct",
+    production: {
+      structureId: 1, structureLabel: "Tarla", resourceId: "food",
+      assignedWorkers: 3, workingWorkers: 3, workerCapacity: 3,
+      perWorkerPerMinute: 7, productionPerMinute: 21,
+      localBuffer: 4, localBufferCapacity: 40,
+      lastProductionTick: 0, lastTransferTick: 0, totalProduced: 0, totalTransferred: 0,
+      sourceRemaining: null, status: "producing",
+    },
+  });
+  assert.equal(healthyProducer.chips?.some((entry) => entry.id === "status"), false);
+  assert.equal(chip(healthyProducer, "workers").tone, "good");
+  // A local lane has no donkey, and the logistics chip beside it already says
+  // so: a second chip repeating "Yerel aktarım" was the clearest duplication.
+  assert.equal(chip(healthyProducer, "logistics").value, "Yerel aktarım");
+  assert.equal(healthyProducer.chips?.some((entry) => entry.id === "caravan"), false);
 
   const fullStoreProducer = structure({
     kind: "producer",
@@ -46631,16 +46693,48 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
       sourceRemaining: null, status: "buffer-full",
     },
   });
-  assert.match(fullStoreProducer.lines.join(" | "), /Kervan: Stok dolu, üreticide bekliyor/);
+  assert.equal(chip(fullStoreProducer, "caravan").value, "Stok dolu");
+  assert.match(chip(fullStoreProducer, "caravan").tooltip, /Global stokta yer yok/);
+  // The loading leg no longer prints its numbers: they are the same measurement
+  // as the `Yerel tampon` line above it. The carry threshold is worth knowing
+  // when it differs from the buffer, so it moved to the tooltip.
+  const loadingProducer = structure({
+    kind: "producer",
+    logistics: "linked",
+    caravan: {
+      id: "caravan:producer:1:player:0", laneId: "producer:1", owner: "player", x: 0, z: 0,
+      destinationX: 4, destinationZ: 0, facing: 0, speed: 0, carryCapacity: 120, phase: "loading",
+    },
+    production: {
+      structureId: 1, structureLabel: "Oduncu Kampı", resourceId: "wood",
+      assignedWorkers: 3, workingWorkers: 3, workerCapacity: 3,
+      perWorkerPerMinute: 40, productionPerMinute: 120,
+      localBuffer: 19.4, localBufferCapacity: 120,
+      lastProductionTick: 0, lastTransferTick: 0, totalProduced: 0, totalTransferred: 0,
+      sourceRemaining: 2371.9, status: "producing",
+    },
+  });
+  assert.equal(chip(loadingProducer, "caravan").value, "Yük bekliyor");
+  assert.match(chip(loadingProducer, "caravan").tooltip, /19\.4\/120\.0/);
+  assert.equal(chip(loadingProducer, "logistics").value, "Bağlı");
+  assert.match(loadingProducer.lines.join(" | "), /Düğüm: 2371\.9 kaldı/);
 
   const depot = structure({
     kind: "depot", status: "linked", componentId: 3, linkedProducers: 2, occupied: true,
   }, "Depo");
   // The panel names the network state in the player's terms; the raw component
   // id it used to print was a debugging leak, not an answer to "is this working".
-  assert.match(depot.lines.join(" | "), /Yol: Merkez ağına bağlı/);
+  assert.equal(chip(depot, "logistics").value, "Bağlı");
+  assert.match(chip(depot, "logistics").tooltip, /Merkez ağına bağlı/);
   assert.match(depot.lines.join(" | "), /Teslim eden yapı: 2/);
-  assert.match(depot.lines.join(" | "), /işgali altında/, "an occupied depot says why nothing arrives");
+  assert.match(chip(depot, "occupied").tooltip, /işgali altında/, "an occupied depot says why nothing arrives");
+  assert.equal(chip(depot, "occupied").tone, "bad");
+  const unroadedDepot = structure({
+    kind: "depot", status: "unlinked-main-network", componentId: 3, linkedProducers: 0, occupied: false,
+  }, "Depo");
+  assert.equal(chip(unroadedDepot, "logistics").value, "Ağ dışı");
+  assert.equal(chip(unroadedDepot, "logistics").tone, "bad");
+  assert.equal(unroadedDepot.chips?.some((entry) => entry.id === "occupied"), false);
 
   // §35: the connected radius is the outpost's whole reason to want a road, so
   // an unroaded one is told what the road is worth.
@@ -46648,7 +46742,10 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
     kind: "outpost", controlRadius: 16, connectedControlRadius: 20, roadConnected: false,
   }, "Karakol");
   assert.match(outpost.lines.join(" | "), /Kontrol yarıçapı: 16/);
-  assert.match(outpost.lines.join(" | "), /Yol bağlantısı yok/);
+  assert.match(chip(outpost, "logistics").tooltip, /Yol bağlantısı yok/);
+  // Not "bad": an unroaded Outpost still holds ground, it just holds less. The
+  // red is reserved for a link that was there and is gone.
+  assert.equal(chip(outpost, "logistics").tone, "warn");
   // Worded to avoid a number + case suffix: Turkish picks the suffix from the
   // spoken number, so "16’dan 20’ye" cannot be templated over live radii.
   assert.match(outpost.tooltip ?? "", /16 yerine 20 yapar/);
@@ -46656,6 +46753,8 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
     kind: "outpost", controlRadius: 16, connectedControlRadius: 20, roadConnected: true,
   }, "Karakol");
   assert.match(roaded.lines.join(" | "), /Kontrol yarıçapı: 20/, "the connected radius is the live one");
+  assert.equal(chip(roaded, "logistics").value, "Bağlı");
+  assert.equal(chip(roaded, "logistics").tone, "good");
 
   const roster = [
     { id: "guard_placeholder", stats: RTS_TEST_UNIT_STATS, unlocked: true },
@@ -46674,7 +46773,8 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
     },
   }, "Kışla");
   assert.match(barracks.lines.join(" | "), /Kuyruk: 3\/5/);
-  assert.match(barracks.lines.join(" | "), /Toplanma noktası: belirlendi/);
+  assert.equal(chip(barracks, "rally").value, "Belirlendi");
+  assert.equal(chip(barracks, "rally").tone, "good");
   // What is training and how long it has left is the bar's job now, so the body
   // must not say it a second time directly above the bar — and the pending
   // roll-call is gone with it: "Kuyruk: 3/5" already says how much is waiting.
@@ -46686,9 +46786,13 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   assert.equal(barracks.progress?.label, "Muhafız üretiliyor");
   assert.equal(barracks.progress?.remainingSeconds, 4.2);
   assert.ok(Math.abs((barracks.progress?.value ?? 0) - 0.475) < 1e-9, "the fill is elapsed over the order's own duration");
-  // A healthy Barracks does not carry lines saying nothing is wrong with it.
-  assert.ok(!barracks.lines.join(" | ").includes("Kontrol Dışı"));
-  assert.ok(!barracks.lines.join(" | ").includes("yükseltmesi sürüyor"));
+  // A healthy Barracks does not carry lines *or badges* saying nothing is wrong
+  // with it — the rule the chip split then carried to every other panel.
+  assert.deepEqual(
+    (barracks.chips ?? []).map((entry) => entry.id),
+    ["rally"],
+    "a working Barracks reports only its rally point",
+  );
 
   const severed = structure({
     kind: "military",
@@ -46703,10 +46807,44 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
     },
   }, "Kışla");
   assert.match(severed.lines.join(" | "), /Üretim yok/);
-  assert.match(severed.lines.join(" | "), /Kontrol Dışı/);
-  assert.match(severed.lines.join(" | "), /Seviye yükseltmesi sürüyor/);
+  assert.equal(chip(severed, "logistics").value, "Kontrol Dışı");
+  assert.equal(chip(severed, "logistics").tone, "bad");
+  assert.match(chip(severed, "upgrading").tooltip, /Seviye yükseltmesi sürüyor/);
+  assert.equal(chip(severed, "rally").value, "Yok");
   assert.match(severed.tooltip ?? "", /alanı geri alın/);
   assert.equal(severed.progress ?? null, null, "an idle Barracks shows no bar, so there is nothing to cancel");
+
+  // Every panel this test built, in its most talkative state, against the grid
+  // that has to draw it. This is the assertion that keeps the split honest: the
+  // next fact added to a building has to arrive as a chip, or displace a line.
+  for (const [name, panel] of [
+    ["construction", stalled],
+    ["producer", producer],
+    ["producer (loading)", loadingProducer],
+    ["producer (livestock)", structure({
+      kind: "producer",
+      logistics: "linked",
+      livestock: { pennedAnimals: 4, livestockCapacity: 6, shepherds: 1 },
+      production: {
+        structureId: 1, structureLabel: "Ağıl", resourceId: "food",
+        assignedWorkers: 1, workingWorkers: 1, workerCapacity: 2,
+        perWorkerPerMinute: 6, productionPerMinute: 6,
+        localBuffer: 2, localBufferCapacity: 30,
+        lastProductionTick: 0, lastTransferTick: 0, totalProduced: 0, totalTransferred: 0,
+        sourceRemaining: 120, status: "producing",
+      },
+    })],
+    ["depot", depot],
+    ["outpost", outpost],
+    ["military", severed],
+    ["aura", structure({ kind: "aura", radius: 12, healPerSecond: 3, damageResistance: 0.2, sustainedUnits: 5 })],
+    ["passive", structure({ kind: "passive", populationCapacity: 8 })],
+  ] as const) {
+    assert.ok(
+      panel.lines.length <= BODY_LINE_BUDGET,
+      `${name} prints ${panel.lines.length} lines; the body grid holds ${BODY_LINE_BUDGET}`,
+    );
+  }
 });
 
 check("Faz 9 §51: a selection's buttons state their own gate, in the system's order", () => {
@@ -48076,7 +48214,10 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
 
   // KR-M4: the one gate the panel does state, because the system handed it over.
   const severed = marketPanel({ connected: false });
-  assert.match(severed.lines.join(" | "), /Kontrol Dışı — bu Pazar ticaret yapamaz/);
+  assert.match(
+    severed.chips?.find((entry) => entry.id === "logistics")?.tooltip ?? "",
+    /Kontrol Dışı — bu Pazar ticaret yapamaz/,
+  );
   assert.equal(action(severed, "trade-sell:wood").enabled, false);
   assert.match(action(severed, "trade-sell:wood").reason ?? "", /Kontrol Dışı/);
   assert.match(severed.tooltip ?? "", /alanı geri alın/);
@@ -48085,9 +48226,10 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   assert.match(healthy.tooltip ?? "", /komisyon/i);
 
   // Faz S1: with nothing stocked the panel is bit for bit the old one — no stock
-  // line, no dark button. This is the assertion that would catch the supply rule
+  // badge, no dark button. This is the assertion that would catch the supply rule
   // leaking into a project that never opted in.
   assert.equal(healthy.lines.length, 2, "an unstocked market grows no extra lines");
+  assert.deepEqual(healthy.chips ?? [], [], "and no extra badges");
   assert.equal(action(healthy, "trade-buy:wood").enabled, true);
 
   // ...and once a resource *is* gated, the empty shelf darkens its buy button and
@@ -48103,7 +48245,14 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
     stock: { wood },
   });
   const empty = marketPanel({ trade: stockedTrade(0) });
-  assert.match(empty.lines.join(" | "), /Odun stoğu: 0 \/ lot 100/, "the shelf is on the panel");
+  // The shelf is a badge now: three tradable resources made three lines, which
+  // on its own pushed the Market body past the six slots the grid holds. Whether
+  // a lot can be bought is a yes/no the player scans, which is a chip's job.
+  const shelf = (content: SelectionPanelContent, resourceId: string): SelectionChip =>
+    content.chips?.find((entry) => entry.id === `stock:${resourceId}`) ?? assert.fail(`no ${resourceId} shelf`);
+  assert.equal(shelf(empty, "wood").value, "Odun 0", "the shelf is on the panel");
+  assert.equal(shelf(empty, "wood").tone, "bad");
+  assert.match(shelf(empty, "wood").tooltip, /0\/100/, "and it names how short it is");
   assert.equal(action(empty, "trade-buy:wood").enabled, false, "an empty shelf darkens its own buy button");
   assert.match(action(empty, "trade-buy:wood").reason ?? "", /Pazarda stok yok: 0\/100/);
   // KARAR 7-A: selling is never gated by stock, and the ungated resource is
@@ -48117,6 +48266,7 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   const full = marketPanel({ trade: stockedTrade(100) });
   assert.equal(action(full, "trade-buy:wood").enabled, true, "one full lot opens the button");
   assert.equal(action(full, "trade-buy:wood").reason, null);
+  assert.equal(shelf(full, "wood").tone, "good", "a stocked shelf reads as one at a glance");
 });
 
 check("§69: the AI stops deciding once the match is over", () => {

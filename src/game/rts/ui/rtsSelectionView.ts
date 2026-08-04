@@ -320,6 +320,13 @@ export interface SelectionPanelContent {
   readonly title: string;
   readonly summary: string;
   readonly lines: readonly string[];
+  /**
+   * Status badges shown as one strip under {@link lines}. Absent or empty for a
+   * selection with no finite states worth scanning — a House, an army.
+   *
+   * See {@link SelectionChip} for why these are not simply more lines.
+   */
+  readonly chips?: readonly SelectionChip[];
   /** Buttons the selection offers; empty for anything the player cannot command. */
   readonly actions: readonly SelectionAction[];
   /** Presentation family for a structure with a non-generic command deck. */
@@ -351,6 +358,46 @@ export interface SelectionPanelContent {
   readonly cards?: readonly SelectionUnitCard[];
   /** A running timed job (e.g. a level-up), or null/absent when nothing is timed. */
   readonly progress?: SelectionProgress | null;
+}
+
+/**
+ * How a chip reads at a glance. Four values rather than a boolean because the
+ * question a status chip answers is not "on or off": a producer staffed 2/3 is
+ * neither working nor broken, and painting it the same red as a severed road
+ * would teach the player to stop trusting the colour.
+ */
+export type SelectionChipTone = "good" | "warn" | "bad" | "neutral";
+
+/**
+ * A compact status badge — a glyph, a short value, and a tone.
+ *
+ * The panel's body lines carry two different kinds of fact in the same
+ * typeface: *measurements* that move continuously (production per minute, node
+ * remaining, buffer) and *states* drawn from a small finite set (staffed or
+ * not, road linked or not, which leg the caravan is on). The player reads the
+ * first kind and scans the second, and printing both as `Etiket: değer`
+ * sentences made a producer eight lines long — past the six the two-column body
+ * can hold, so the grid opened a third column and clipped it.
+ *
+ * A chip is the second kind given its own shape. Nothing is lost by the
+ * shortening: {@link tooltip} carries the sentence the chip stands in for,
+ * which is where the §52 "bir yapı çalışmadığında nedeni gösteriliyor" criteria
+ * still lives — and, being plain data like {@link SelectionPanelContent.lines},
+ * `test:engine` can still hold that text to account without a browser.
+ *
+ * The icons are literal emoji for now, deliberately: the visual pass that
+ * replaces them with the panel's own gold-on-parchment glyph set is a separate
+ * job, and it only has to touch {@link CHIP_ICON}.
+ */
+export interface SelectionChip {
+  /** Stable id, so a test (and the DOM) can name the chip it means. */
+  readonly id: string;
+  readonly icon: string;
+  /** The short reading, e.g. "3/3" or "Bağlı". Never a full sentence. */
+  readonly value: string;
+  readonly tone: SelectionChipTone;
+  /** The sentence the chip replaced; its tooltip and its accessible name. */
+  readonly tooltip: string;
 }
 
 export interface SelectionSlot {
@@ -445,6 +492,48 @@ const LOGISTICS_LABEL: Record<ProducerLogisticsStatus, string> = {
   "unlinked-depot": "Depo Yok",
   "unlinked-main-network": "Merkez Ağı Yok",
   "depot-occupied": "Depo İşgal Altında",
+};
+
+/**
+ * Every glyph the chip strip can draw, in one place.
+ *
+ * One map rather than literals at each call site, for the reason chips exist at
+ * all: the same state must look the same on every building. A road link reads 🔗
+ * on a Farm, a Depot, an Outpost and a Barracks, so a player who learns it once
+ * has learned it everywhere — and the visual pass that swaps emoji for authored
+ * artwork changes this map and nothing else.
+ */
+const CHIP_ICON = {
+  workers: "👷",
+  livestock: "🐑",
+  logistics: "🔗",
+  caravan: "🐴",
+  warning: "⚠",
+  siege: "⚔",
+  delivery: "📦",
+  rally: "🚩",
+  repair: "🔨",
+} as const;
+
+/**
+ * How loudly each production stop reads.
+ *
+ * The split is "the building is waiting" versus "the building is stuck": a
+ * buffer that filled or a crew still walking clears itself in seconds, while a
+ * depleted node or a missing forest needs the player to go and do something
+ * about it. Painting both red would spend the alarm colour on the state that
+ * does not need it.
+ */
+const PRODUCTION_STATUS_TONE: Record<EconomyProductionStatus, SelectionChipTone> = {
+  "awaiting-workers": "warn",
+  "workers-moving": "neutral",
+  producing: "good",
+  "buffer-full": "warn",
+  "missing-resource-node": "bad",
+  "missing-forest": "bad",
+  "missing-game": "bad",
+  "missing-livestock": "bad",
+  "source-depleted": "bad",
 };
 
 const LOGISTICS_REASON: Record<ProducerLogisticsStatus, string> = {
@@ -648,7 +737,7 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
   ];
   return {
     ...base,
-    lines: [...base.lines, ...repairLines(structure)],
+    chips: [...(base.chips ?? []), ...repairChips(structure)],
     actions,
     // Whatever the detail decided is timed — a kingdom upgrade on the centre, a
     // training bar on a producer of units. Deciding it here again would put the
@@ -726,13 +815,26 @@ function repairAction(structure: SelectedStructureView): SelectionAction | null 
   };
 }
 
-/** The running repair as a body line, so the panel says it even without the button. */
-function repairLines(structure: SelectedStructureView): string[] {
+/**
+ * The running repair as a chip, so the panel says it even without the button.
+ *
+ * A chip rather than the body line it used to be for the reason repair is
+ * offered on every building kind: as a line it landed in whichever body grid
+ * the selected building had, and on a producer — the one panel that was already
+ * over budget — it was the eighth line. The strip has room for it on all of them.
+ */
+function repairChips(structure: SelectedStructureView): SelectionChip[] {
   const repair = structure.repair ?? null;
   if (!repair?.active) return [];
-  return [repair.workers === 0
-    ? `Tamir %${Math.floor(repair.progress * 100)} — işçi bekliyor.`
-    : `Tamir %${Math.floor(repair.progress * 100)} · ${repair.workers} işçi çalışıyor.`];
+  return [{
+    id: "repair",
+    icon: CHIP_ICON.repair,
+    value: `%${Math.floor(repair.progress * 100)}`,
+    tone: repair.workers === 0 ? "warn" : "good",
+    tooltip: repair.workers === 0
+      ? `Tamir %${Math.floor(repair.progress * 100)} — işçi bekliyor.`
+      : `Tamir %${Math.floor(repair.progress * 100)} · ${repair.workers} işçi çalışıyor.`,
+  }];
 }
 
 /**
@@ -864,12 +966,19 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
       return {
         title,
         summary,
-        lines: [
-          `İnşaat: %${Math.floor(detail.progress * 100)}`,
-          detail.assignedWorkers === 0
+        lines: [`İnşaat: %${Math.floor(detail.progress * 100)}`],
+        // Same glyph a producer's crew gets. A site with nobody on it and a Farm
+        // with nobody on it are the same problem with the same fix, and they
+        // should be recognisable from across the screen as such.
+        chips: [{
+          id: "workers",
+          icon: CHIP_ICON.workers,
+          value: `${detail.assignedWorkers}`,
+          tone: detail.assignedWorkers === 0 ? "bad" : "good",
+          tooltip: detail.assignedWorkers === 0
             ? "İşçi yok — inşaat durdu."
             : `${detail.assignedWorkers} işçi çalışıyor.`,
-        ],
+        }],
         actions: [],
         hint: "",
         tooltip: detail.assignedWorkers === 0
@@ -882,14 +991,30 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
       return {
         title,
         summary,
-        lines: [
-          `Yol: ${detail.status === "linked"
-            ? "Merkez ağına bağlı"
-            : detail.status === "unlinked-main-network"
-              ? "Merkez ağına bağlı değil"
-              : "yok"}`,
-          `Teslim eden yapı: ${detail.linkedProducers}`,
-          ...(detail.occupied ? ["Düşman işgali altında — teslimat durdu."] : []),
+        lines: [`Teslim eden yapı: ${detail.linkedProducers}`],
+        chips: [
+          {
+            id: "logistics",
+            icon: CHIP_ICON.logistics,
+            value: detail.status === "linked"
+              ? "Bağlı"
+              : detail.status === "unlinked-main-network" ? "Ağ dışı" : "Yol yok",
+            tone: detail.status === "linked" ? "good" : "bad",
+            tooltip: detail.status === "linked"
+              ? "Yol: Merkez ağına bağlı."
+              : detail.status === "unlinked-main-network"
+                ? "Yol: Merkez ağına bağlı değil."
+                : "Yol: yok. Depo footprint’ine temas eden bir yol hücresi kurun.",
+          },
+          ...(detail.occupied
+            ? [{
+              id: "occupied",
+              icon: CHIP_ICON.siege,
+              value: "İşgal altında",
+              tone: "bad" as const,
+              tooltip: "Düşman işgali altında — teslimat durdu.",
+            }]
+            : []),
         ],
         actions: [],
         hint: "",
@@ -909,10 +1034,18 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
           `Kontrol yarıçapı: ${detail.roadConnected && detail.connectedControlRadius !== null
             ? detail.connectedControlRadius
             : detail.controlRadius}`,
-          detail.roadConnected
+        ],
+        chips: [{
+          id: "logistics",
+          icon: CHIP_ICON.logistics,
+          value: detail.roadConnected ? "Bağlı" : "Yol yok",
+          // Not "bad": an unroaded Outpost still holds ground, it just holds
+          // less of it. The red is kept for a link that was there and is gone.
+          tone: detail.roadConnected ? "good" : "warn",
+          tooltip: detail.roadConnected
             ? "Merkez yol ağına bağlı — tam alan açık."
             : "Yol bağlantısı yok — yalnız küçük alan açık.",
-        ],
+        }],
         actions: [],
         hint: OUTPOST_HINT,
         // "yerine" rather than a number + case suffix: Turkish suffixes follow
@@ -936,10 +1069,18 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
           `Etki alanı: ${detail.radius} birim yarıçap`,
           `İyileştirme: saniyede ${detail.healPerSecond} can`,
           `Hasar direnci: %${Math.round(detail.damageResistance * 100)}`,
-          detail.sustainedUnits > 0
+        ],
+        // How many bodies the field actually reached is the one live state here;
+        // the three lines above are the building's fixed stats.
+        chips: [{
+          id: "sustained",
+          icon: CHIP_ICON.workers,
+          value: `${detail.sustainedUnits}`,
+          tone: detail.sustainedUnits > 0 ? "good" : "neutral",
+          tooltip: detail.sustainedUnits > 0
             ? `Alan içinde ${detail.sustainedUnits} birim korunuyor.`
             : "Alanda birim yok.",
-        ],
+        }],
         actions: [],
         hint: "",
         tooltip: "Alandaki kendi birimleriniz sürekli iyileşir ve aldıkları hasar azalır;"
@@ -1027,31 +1168,34 @@ function workerTrainingProgress(detail: CenterDetailView): SelectionProgress | n
   };
 }
 
+/**
+ * The producer panel — the selection this whole chip split was written for.
+ *
+ * It used to print seven `Etiket: değer` lines (eight while a repair ran) into a
+ * body grid that holds six, which opened a third column at a third of the width
+ * and clipped every one of them. Four of those seven were states rather than
+ * measurements, so they became the chip strip; what stays as prose is the three
+ * numbers a player actually reads off a producer — what it makes, what is
+ * sitting in its buffer, and how much of its node is left.
+ */
 function describeProducer(
   title: string,
   summary: string,
   detail: ProducerDetailView,
 ): SelectionPanelContent {
-  const { production, logistics, transport, livestock, caravan, caravanStorageFull } = detail;
+  const { production, logistics, transport, livestock } = detail;
   return {
     title,
     summary,
     lines: [
-      ...(livestock
-        ? [
-          `Çobanlar: ${livestock.shepherds}/${production.workerCapacity}`,
-          `Ağıl: ${livestock.pennedAnimals}/${livestock.livestockCapacity} hayvan`,
-        ]
-        : [`İşçiler: ${production.assignedWorkers}/${production.workerCapacity} (${production.workingWorkers} çalışıyor)`]),
       `Üretim: ${production.productionPerMinute.toFixed(1)} ${resourceLabel(production.resourceId)}/dk`,
       `Yerel tampon: ${production.localBuffer.toFixed(1)}/${production.localBufferCapacity}`,
+      ...(livestock ? [`Ağıl: ${livestock.pennedAnimals}/${livestock.livestockCapacity} hayvan`] : []),
       ...(production.sourceRemaining === null
         ? []
         : [`Düğüm: ${production.sourceRemaining.toFixed(1)} kaldı`]),
-      `Durum: ${PRODUCTION_STATUS_LABEL[production.status]}`,
-      `Lojistik: ${transport === "direct" ? "Yerel aktarım" : logistics ? LOGISTICS_LABEL[logistics] : "Bekleniyor"}`,
-      caravanLine(production, logistics, transport, caravan, caravanStorageFull),
     ],
+    chips: producerChips(detail),
     // Staffing a producer is a world gesture (select workers, right-click it),
     // so there is no verb here a button could carry.
     actions: [],
@@ -1064,24 +1208,108 @@ function describeProducer(
   };
 }
 
-function caravanLine(
+/** Staffing, road link, caravan leg, and whatever stopped production. */
+function producerChips(detail: ProducerDetailView): SelectionChip[] {
+  const { production, logistics, transport, livestock, caravan, caravanStorageFull } = detail;
+  const chips: SelectionChip[] = [];
+
+  // A pasture's crew are shepherds who leave to fetch animals, so the count that
+  // says whether it is manned is the one the livestock block reports — but it is
+  // the same question ("is anybody working here?") and takes the same slot.
+  const crew = livestock ? livestock.shepherds : production.assignedWorkers;
+  const capacity = production.workerCapacity;
+  chips.push({
+    id: "workers",
+    icon: livestock ? CHIP_ICON.livestock : CHIP_ICON.workers,
+    value: `${crew}/${capacity}`,
+    // Idle-but-assigned is its own state: a crew still walking to the building
+    // is neither missing nor at work, and it resolves itself in seconds.
+    tone: crew === 0
+      ? "bad"
+      : crew < capacity || (!livestock && production.workingWorkers < production.assignedWorkers)
+        ? "warn"
+        : "good",
+    tooltip: livestock
+      ? `${crew}/${capacity} çoban görevde.`
+      : `${production.assignedWorkers}/${capacity} işçi atandı, ${production.workingWorkers} tanesi çalışıyor.`,
+  });
+
+  const direct = transport === "direct";
+  chips.push({
+    id: "logistics",
+    icon: CHIP_ICON.logistics,
+    value: direct ? "Yerel aktarım" : logistics ? LOGISTICS_LABEL[logistics] : "Bekleniyor",
+    tone: direct || logistics === "linked" ? "good" : logistics === null ? "neutral" : "bad",
+    tooltip: direct
+      ? "Merkez veya bağlı Depo yerel erişim mesafesinde; kaynak kervan beklemeden aktarılır."
+      : logistics
+        ? LOGISTICS_REASON[logistics]
+        : "Yapı tamamlanınca lojistik bağlantısı hesaplanır.",
+  });
+
+  const caravanChip = describeCaravanChip(production, logistics, transport, caravan, caravanStorageFull);
+  if (caravanChip) chips.push(caravanChip);
+
+  // A working building does not need a badge saying nothing is wrong with it —
+  // the same rule the Barracks panel already followed and the producer did not.
+  if (production.status !== "producing") {
+    chips.push({
+      id: "status",
+      icon: CHIP_ICON.warning,
+      value: PRODUCTION_STATUS_LABEL[production.status],
+      tone: PRODUCTION_STATUS_TONE[production.status],
+      tooltip: `Durum: ${PRODUCTION_STATUS_LABEL[production.status]}`,
+    });
+  }
+  return chips;
+}
+
+/**
+ * The caravan's leg, or nothing at all.
+ *
+ * Nothing when the producer delivers locally: there is no donkey on a direct
+ * lane, and the logistics chip beside it already says "Yerel aktarım" — a second
+ * chip repeating it was the clearest of the panel's duplications.
+ *
+ * The loading leg deliberately drops the numbers it used to print. The old line
+ * read `Kervan: Yük bekliyor (19.4/120.0)`, which is the *same measurement* as
+ * the `Yerel tampon` line directly above it wherever a producer's buffer
+ * capacity and its caravan's carry threshold agree. The threshold is worth
+ * knowing when they differ, so it moved to the tooltip rather than being
+ * deleted.
+ */
+function describeCaravanChip(
   production: EconomyBuildingSnapshot,
   logistics: ProducerLogisticsStatus | null,
   transport: ProducerTransport | null,
   caravan: CaravanSnapshot | null,
   storageFull: boolean,
-): string {
+): SelectionChip | null {
+  const chip = (value: string, tone: SelectionChipTone, tooltip: string): SelectionChip =>
+    ({ id: "caravan", icon: CHIP_ICON.caravan, value, tone, tooltip });
   if (transport === "direct") {
-    return storageFull ? "Yerel aktarım: Stok dolu, üreticide bekliyor" : "Yerel aktarım: Merkez/Depoya doğrudan gidiyor";
+    return storageFull
+      ? chip("Stok dolu", "warn", "Global stokta yer yok; kaynak üreticide bekliyor.")
+      : null;
   }
-  if (logistics !== "linked" || !caravan) return "Kervan: Yol bağlantısı bekleniyor";
-  if (storageFull) return "Kervan: Stok dolu, üreticide bekliyor";
+  if (logistics !== "linked" || !caravan) {
+    return chip("Yol bekliyor", "warn", "Kervan, yol bağlantısı kurulana kadar sefere çıkamaz.");
+  }
+  if (storageFull) return chip("Stok dolu", "warn", "Global stokta yer yok; kaynak üreticide bekliyor.");
   const threshold = caravan.carryCapacity.toFixed(1);
   switch (caravan.phase) {
-    case "outbound": return `Kervan: Teslim noktasına gidiyor (yük eşiği ${threshold})`;
-    case "unloading": return "Kervan: Teslim noktasında boşaltıyor";
-    case "inbound": return "Kervan: Üreticiye dönüyor";
-    case "loading": return `Kervan: Yük bekliyor (${production.localBuffer.toFixed(1)}/${threshold})`;
+    case "outbound":
+      return chip("Teslimatta", "neutral", `Kervan teslim noktasına gidiyor (yük eşiği ${threshold}).`);
+    case "unloading":
+      return chip("Boşaltıyor", "neutral", "Kervan teslim noktasında boşaltıyor.");
+    case "inbound":
+      return chip("Dönüyor", "neutral", "Kervan üreticiye dönüyor.");
+    case "loading":
+      return chip(
+        "Yük bekliyor",
+        "neutral",
+        `Kervan yükleniyor: ${production.localBuffer.toFixed(1)}/${threshold}.`,
+      );
   }
 }
 
@@ -1102,11 +1330,37 @@ function describeMilitary(
       // is waiting, and naming each order made the longest line in the panel out
       // of the least actionable fact.
       ...(queue.trainingLabel === null ? ["Üretim yok."] : []),
-      `Toplanma noktası: ${detail.rallySet ? "belirlendi" : "yok"}`,
+    ],
+    chips: [
+      {
+        id: "rally",
+        icon: CHIP_ICON.rally,
+        value: detail.rallySet ? "Belirlendi" : "Yok",
+        tone: detail.rallySet ? "good" : "neutral",
+        tooltip: detail.rallySet
+          ? "Toplanma noktası belirlendi; yeni birlikler oraya yürür."
+          : "Toplanma noktası yok; yeni birlikler Kışlanın yanında bekler.",
+      },
       // The two things that stop a Barracks silently. Only shown when true: a
-      // healthy Barracks does not need a line saying nothing is wrong with it.
-      ...(detail.upgrading ? ["Seviye yükseltmesi sürüyor — üretim duraklatıldı."] : []),
-      ...(detail.connected ? [] : ["Kontrol Dışı — bu Kışla birlik üretemez."]),
+      // healthy Barracks does not need a badge saying nothing is wrong with it.
+      ...(detail.upgrading
+        ? [{
+          id: "upgrading",
+          icon: CHIP_ICON.warning,
+          value: "Yükseltiliyor",
+          tone: "warn" as const,
+          tooltip: "Seviye yükseltmesi sürüyor — üretim duraklatıldı.",
+        }]
+        : []),
+      ...(detail.connected
+        ? []
+        : [{
+          id: "logistics",
+          icon: CHIP_ICON.logistics,
+          value: "Kontrol Dışı",
+          tone: "bad" as const,
+          tooltip: "Kontrol Dışı — bu Kışla birlik üretemez.",
+        }]),
     ],
     actions: [
       ...detail.roster.map((entry) => trainAction(entry, detail)),
@@ -1152,20 +1406,40 @@ function describeMarket(
 ): SelectionPanelContent {
   const { trade } = detail;
   const commissionPercent = Math.round(trade.commission * 100);
-  // One line per stocked resource, and none at all when this project stocks
+  // One chip per stocked resource, and none at all when this project stocks
   // nothing — an empty `stocked` list must leave the panel exactly as it was.
-  const stockLines = Object.entries(trade.stock).map(
-    ([resourceId, held]) => `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)} / lot ${trade.lotSize}`,
-  );
+  //
+  // These were lines until the chip split, and three tradable resources made
+  // three of them: enough on their own to push the Market body past the six
+  // slots the two-column grid holds. Whether a lot can be bought is a yes/no
+  // the player scans before pressing a card, which is exactly a chip's job.
+  const stockChips: SelectionChip[] = Object.entries(trade.stock).map(([resourceId, held]) => ({
+    id: `stock:${resourceId}`,
+    icon: CHIP_ICON.delivery,
+    value: `${resourceLabel(resourceId)} ${Math.floor(held)}`,
+    tone: held >= trade.lotSize ? "good" : "bad",
+    tooltip: held >= trade.lotSize
+      ? `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)} — bir lot (${trade.lotSize}) satın alınabilir.`
+      : `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)}/${trade.lotSize}. Bir arz noktasına yol çekin.`,
+  }));
   return {
     title,
     summary,
     lines: [
       `Lot: ${trade.lotSize} birim · komisyon %${commissionPercent}`,
-      detail.connected
-        ? "Fiyat ve endeks, aşağıdaki Al/Sat kartlarında."
-        : "Kontrol Dışı — bu Pazar ticaret yapamaz.",
-      ...stockLines,
+      "Fiyat ve endeks, aşağıdaki Al/Sat kartlarında.",
+    ],
+    chips: [
+      ...(detail.connected
+        ? []
+        : [{
+          id: "logistics",
+          icon: CHIP_ICON.logistics,
+          value: "Kontrol Dışı",
+          tone: "bad" as const,
+          tooltip: "Kontrol Dışı — bu Pazar ticaret yapamaz.",
+        }]),
+      ...stockChips,
     ],
     actions: trade.prices.flatMap((price) => [
       tradeAction(

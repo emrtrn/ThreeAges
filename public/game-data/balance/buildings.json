@@ -297,7 +297,7 @@
       "resourceId": "food",
       "workerCapacity": 3,
       "perWorkerPerMinute": 10,
-      "localBufferCapacity": 30
+      "localBufferCapacity": 60
     },
     "progression": {
       "settlement": [
@@ -307,7 +307,7 @@
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 10,
-            "localBufferCapacity": 30
+            "localBufferCapacity": 60
           }
         },
         {
@@ -316,7 +316,7 @@
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 20,
-            "localBufferCapacity": 60
+            "localBufferCapacity": 120
           }
         },
         {
@@ -325,7 +325,7 @@
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 30,
-            "localBufferCapacity": 120
+            "localBufferCapacity": 240
           }
         }
       ],
@@ -336,7 +336,7 @@
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 40,
-            "localBufferCapacity": 160
+            "localBufferCapacity": 320
           }
         },
         {
@@ -345,7 +345,7 @@
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 50,
-            "localBufferCapacity": 250
+            "localBufferCapacity": 500
           }
         },
         {
@@ -354,7 +354,7 @@
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 60,
-            "localBufferCapacity": 300
+            "localBufferCapacity": 600
           }
         }
       ]
@@ -377,10 +377,10 @@
       "resourceId": "food",
       "workerCapacity": 3,
       "perWorkerPerMinute": 30,
-      "localBufferCapacity": 50,
+      "localBufferCapacity": 180,
       "requiresGame": true,
       "gatherRadius": 18,
-      "carryCapacity": 25
+      "carryCapacity": 15
     },
     "progression": {
       "settlement": [
@@ -390,8 +390,8 @@
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 30,
-            "localBufferCapacity": 50,
-            "carryCapacity": 25
+            "localBufferCapacity": 180,
+            "carryCapacity": 15
           }
         },
         {
@@ -399,9 +399,9 @@
           "maxHealth": 110,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 34,
-            "localBufferCapacity": 60,
-            "carryCapacity": 30
+            "perWorkerPerMinute": 40,
+            "localBufferCapacity": 240,
+            "carryCapacity": 20
           }
         },
         {
@@ -409,9 +409,9 @@
           "maxHealth": 120,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 38,
-            "localBufferCapacity": 80,
-            "carryCapacity": 35
+            "perWorkerPerMinute": 50,
+            "localBufferCapacity": 400,
+            "carryCapacity": 25
           }
         }
       ],
@@ -421,9 +421,9 @@
           "maxHealth": 130,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 45,
-            "localBufferCapacity": 100,
-            "carryCapacity": 45
+            "perWorkerPerMinute": 60,
+            "localBufferCapacity": 480,
+            "carryCapacity": 30
           }
         },
         {
@@ -431,9 +431,9 @@
           "maxHealth": 140,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 50,
-            "localBufferCapacity": 120,
-            "carryCapacity": 50
+            "perWorkerPerMinute": 70,
+            "localBufferCapacity": 700,
+            "carryCapacity": 35
           }
         },
         {
@@ -441,9 +441,9 @@
           "maxHealth": 150,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 55,
-            "localBufferCapacity": 140,
-            "carryCapacity": 55
+            "perWorkerPerMinute": 80,
+            "localBufferCapacity": 800,
+            "carryCapacity": 40
           }
         }
       ]
@@ -465,11 +465,11 @@
     "economy": {
       "resourceId": "food",
       "workerCapacity": 2,
-      "localBufferCapacity": 40,
+      "localBufferCapacity": 80,
       "requiresLivestock": true,
       "gatherRadius": 16,
       "livestockCapacity": 4,
-      "perAnimalPerMinute": 9
+      "perAnimalPerMinute": 10
     },
     "progression": {
       "settlement": [
@@ -478,9 +478,9 @@
           "maxHealth": 100,
           "economy": {
             "workerCapacity": 2,
-            "localBufferCapacity": 40,
+            "localBufferCapacity": 80,
             "livestockCapacity": 4,
-            "perAnimalPerMinute": 9
+            "perAnimalPerMinute": 10
           }
         },
         {
@@ -488,9 +488,9 @@
           "maxHealth": 110,
           "economy": {
             "workerCapacity": 2,
-            "localBufferCapacity": 50,
+            "localBufferCapacity": 120,
             "livestockCapacity": 5,
-            "perAnimalPerMinute": 10
+            "perAnimalPerMinute": 12
           }
         },
         {
@@ -498,9 +498,9 @@
           "maxHealth": 120,
           "economy": {
             "workerCapacity": 3,
-            "localBufferCapacity": 70,
+            "localBufferCapacity": 168,
             "livestockCapacity": 6,
-            "perAnimalPerMinute": 11
+            "perAnimalPerMinute": 14
           }
         }
       ],
@@ -510,9 +510,9 @@
           "maxHealth": 130,
           "economy": {
             "workerCapacity": 3,
-            "localBufferCapacity": 90,
+            "localBufferCapacity": 256,
             "livestockCapacity": 8,
-            "perAnimalPerMinute": 13
+            "perAnimalPerMinute": 16
           }
         },
         {
@@ -520,9 +520,9 @@
           "maxHealth": 140,
           "economy": {
             "workerCapacity": 3,
-            "localBufferCapacity": 110,
+            "localBufferCapacity": 360,
             "livestockCapacity": 10,
-            "perAnimalPerMinute": 14
+            "perAnimalPerMinute": 18
           }
         },
         {
@@ -530,9 +530,9 @@
           "maxHealth": 150,
           "economy": {
             "workerCapacity": 4,
-            "localBufferCapacity": 130,
+            "localBufferCapacity": 480,
             "livestockCapacity": 12,
-            "perAnimalPerMinute": 15
+            "perAnimalPerMinute": 20
           }
         }
       ]
@@ -555,7 +555,7 @@
       "resourceId": "wood",
       "workerCapacity": 3,
       "perWorkerPerMinute": 40,
-      "localBufferCapacity": 60,
+      "localBufferCapacity": 240,
       "requiresForest": true,
       "gatherRadius": 20,
       "carryCapacity": 20
@@ -568,7 +568,7 @@
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 40,
-            "localBufferCapacity": 60,
+            "localBufferCapacity": 240,
             "carryCapacity": 20
           }
         },
@@ -578,7 +578,7 @@
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 60,
-            "localBufferCapacity": 90,
+            "localBufferCapacity": 360,
             "carryCapacity": 30
           }
         },
@@ -588,7 +588,7 @@
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 80,
-            "localBufferCapacity": 160,
+            "localBufferCapacity": 640,
             "carryCapacity": 40
           }
         }
@@ -600,7 +600,7 @@
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 100,
-            "localBufferCapacity": 200,
+            "localBufferCapacity": 800,
             "carryCapacity": 50
           }
         },
@@ -610,7 +610,7 @@
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 120,
-            "localBufferCapacity": 300,
+            "localBufferCapacity": 1200,
             "carryCapacity": 60
           }
         },
@@ -620,7 +620,7 @@
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 140,
-            "localBufferCapacity": 350,
+            "localBufferCapacity": 1400,
             "carryCapacity": 70
           }
         }
@@ -817,7 +817,11 @@
       "indexMin": 0.3,
       "indexMax": 4,
       "commission": 0.15,
-      "stocked": ["food", "wood", "stone"]
+      "stocked": [
+        "food",
+        "wood",
+        "stone"
+      ]
     },
     "progression": {
       "settlement": [

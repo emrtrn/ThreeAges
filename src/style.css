@@ -1650,6 +1650,11 @@ body {
   gap: 6px 10px;
   width: min(620px, calc(100vw - 640px));
   box-sizing: border-box;
+  /* Pinned. The bottom-centre box is click-through except for the body and the
+     buttons, and `rts-building-placement.spec.ts` places a Barracks just above
+     it at a point derived from this height; growing the panel walks that click
+     into the interactive body. The status strip is paid for out of the body's
+     own rows instead — see the two-row grid below. */
   height: 165px;
   padding: 16px 24px;
   color: var(--ta-ink);
@@ -1692,7 +1697,19 @@ body {
   display: grid;
   grid-auto-columns: minmax(0, 1fr);
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(3, max-content);
+  /*
+   * Two rows, not three. Three was right when a producer printed seven facts;
+   * now that its four states are chips, no panel emits more than four lines, and
+   * a three-row template stacked three of them in the first column while the
+   * second sat empty — 44px of body where 28px would do. The 16px that frees is
+   * exactly what the status strip below costs, which is why the panel keeps its
+   * pinned height.
+   *
+   * Four lines is therefore the budget: past it, `grid-auto-columns` opens a
+   * third column at a third of the width and clips everything. `describeSelection`
+   * is where that limit is kept.
+   */
+  grid-template-rows: repeat(2, max-content);
   grid-auto-flow: column;
   align-content: start;
   column-gap: 18px;
@@ -1742,6 +1759,7 @@ body {
 .rts-selection-action-tray {
   position: absolute;
   left: 50%;
+  /* The panel's height plus a 10px gap; keep the two in step. */
   bottom: calc(max(12px, env(safe-area-inset-bottom)) + 175px);
   display: flex;
   flex-wrap: wrap;
@@ -1991,14 +2009,95 @@ body {
   font-weight: 700;
 }
 
+/* A column so the chip strip can sit under the lines it summarises and keep its
+   own height while the body takes whatever is left. */
 .rts-selection-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
   overflow: hidden;
 }
 
 .rts-selection-body {
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: 100%;
   overflow: hidden;
+}
+
+/*
+ * Status strip. The states a building reports — staffed, road-linked, which leg
+ * the caravan is on — used to be body lines, which is what pushed a producer
+ * past the six slots the two-column body grid holds and opened a clipped third
+ * column. Compact badges instead: the glyph and the short value are the whole
+ * chip, and the sentence they replaced is the `title`.
+ *
+ * `flex: 0 0 auto` so the strip keeps its height and the lines above give way
+ * first; it is the smaller and more scannable of the two.
+ */
+.rts-selection-chips {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.rts-selection-chips[hidden] {
+  display: none;
+}
+
+.rts-selection-chip {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  height: 17px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  background: rgb(27 17 10 / 74%);
+  border: 1px solid rgb(167 127 65 / 58%);
+  border-radius: 9px;
+}
+
+/* The emoji are a stopgap for the authored glyph set; keep them from riding
+   above the text baseline and from being scaled by the surrounding font stack. */
+.rts-selection-chip-icon {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.rts-selection-chip-value {
+  font-weight: 800;
+}
+
+/*
+ * Four tones, not two. "Warn" is the state that clears itself — a crew still
+ * walking, a buffer that filled, a caravan waiting on a road that is being
+ * drawn — and it must not look like a severed supply line, or the red stops
+ * meaning "go and fix this".
+ */
+.rts-selection-chip[data-rts-tone="good"] {
+  color: #b6d78a;
+  border-color: rgb(122 173 87 / 62%);
+}
+
+.rts-selection-chip[data-rts-tone="warn"] {
+  color: #e2b95c;
+  border-color: rgb(226 185 92 / 62%);
+}
+
+.rts-selection-chip[data-rts-tone="bad"] {
+  color: #e08c72;
+  border-color: rgb(197 92 62 / 68%);
+  background: rgb(52 20 14 / 78%);
+}
+
+.rts-selection-chip[data-rts-tone="neutral"] {
+  color: var(--ta-ink-muted);
 }
 
 /* Faz 9: the fixed role/counter/stance rows became a variable-length body, one

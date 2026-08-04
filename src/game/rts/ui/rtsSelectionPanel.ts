@@ -17,6 +17,7 @@ import {
   describeSelection,
   type RtsSelectionView,
   type SelectionAction,
+  type SelectionChip,
   type SelectionPanelContent,
   type SelectionUnitCard,
 } from "./rtsSelectionView";
@@ -36,6 +37,8 @@ export class RtsSelectionPanel {
   private readonly cards = document.createElement("div");
   private readonly body = document.createElement("div");
   private readonly lines: HTMLParagraphElement[] = [];
+  /** The status strip under the body lines; see {@link SelectionChip}. */
+  private readonly chips = document.createElement("div");
   private readonly progress = document.createElement("div");
   private readonly progressLabel = document.createElement("span");
   private readonly progressTime = document.createElement("span");
@@ -114,9 +117,18 @@ export class RtsSelectionPanel {
     this.progressFill.className = "rts-selection-progress-fill";
     track.appendChild(this.progressFill);
     this.progress.append(this.progressLabel, track, this.progressTime, this.progressCancel);
+    // The chips sit inside `details`, under the body, rather than claiming the
+    // panel's last row. That row is genuinely free in the demolish-only layout,
+    // but it is also where `.rts-selection-progress` lives — so a Barracks with
+    // a training bar and a "Kontrol Dışı" badge would have had them fighting for
+    // it. Under the lines they summarise, the strip works in every layout with
+    // no grid surgery, and the roster face hides it for free (`details` is
+    // `display: none` there).
+    this.chips.className = "rts-selection-chips ui-interactive";
+    this.chips.hidden = true;
     const details = document.createElement("div");
     details.className = "rts-selection-details";
-    details.append(this.body);
+    details.append(this.body, this.chips);
     // Scrolls rather than shrinks: a project that ships eight unit types must
     // not squeeze eight portraits into unreadable slivers, and the panel's
     // height is fixed by the frame it lives in.
@@ -229,6 +241,7 @@ export class RtsSelectionPanel {
       if (line.textContent !== text) line.textContent = text;
     }
     this.body.title = content.tooltip ?? "";
+    this.renderChips(content.chips ?? []);
     this.renderProgress(content);
     this.renderActions(panelActions, trayActions);
   }
@@ -294,6 +307,46 @@ export class RtsSelectionPanel {
       label.textContent = card.label;
 
       entry.append(frame, label);
+      return entry;
+    }));
+  }
+
+  /**
+   * Draw the status strip: one badge per finite state the selection reports.
+   *
+   * Rebuilt whole rather than diffed, on the same reasoning as
+   * {@link renderCards}: the signature guard keeps it to the frames where a chip
+   * actually changed, and the strip is one to five elements — a reconcile loop
+   * would cost more to read than it saves to run.
+   *
+   * The tooltip is the sentence the chip stands in for, and it is also the
+   * accessible name: a screen reader must not be handed "🔗 Bağlı".
+   */
+  private renderChips(chips: readonly SelectionChip[]): void {
+    const signature = chips.map((chip) => `${chip.id}|${chip.value}|${chip.tone}`).join(";");
+    if (this.chips.dataset.rtsChips === signature) return;
+    this.chips.dataset.rtsChips = signature;
+    this.chips.hidden = chips.length === 0;
+    this.chips.replaceChildren(...chips.map((chip) => {
+      const entry = document.createElement("span");
+      entry.className = "rts-selection-chip";
+      entry.dataset.rtsChip = chip.id;
+      entry.dataset.rtsTone = chip.tone;
+      entry.title = chip.tooltip;
+      entry.setAttribute("aria-label", chip.tooltip);
+
+      const icon = document.createElement("span");
+      icon.className = "rts-selection-chip-icon";
+      // The glyph repeats what the value and the label already say, so it is
+      // decoration; the accessible name lives on the chip itself.
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = chip.icon;
+
+      const value = document.createElement("b");
+      value.className = "rts-selection-chip-value";
+      value.textContent = chip.value;
+
+      entry.append(icon, value);
       return entry;
     }));
   }

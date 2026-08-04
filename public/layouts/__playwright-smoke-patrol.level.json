@@ -5,222 +5,78 @@
   "instances": [
     {
       "assetId": "mountain-group-1",
-      "placements": [
-        {
-          "position": [
-            -61.62,
-            0.08,
-            63.44
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -38.92,
-            0.08,
-            64.07
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
-    },
-    {
-      "assetId": "rock-group",
       "placements": []
     },
     {
-      "assetId": "resource-gold-1",
+      "assetId": "rock-group",
       "placements": [
         {
           "position": [
-            -34.1,
-            0.01,
-            24.92
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
-    },
-    {
-      "assetId": "resource-gold-2",
-      "placements": [
-        {
-          "position": [
-            -34.83,
-            0.01,
-            26.39
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
-    },
-    {
-      "assetId": "resource-gold-3",
-      "placements": [
-        {
-          "position": [
-            -33.51,
+            -26,
             0,
-            26.47
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
-    },
-    {
-      "assetId": "resource-rock-1",
-      "placements": [
-        {
-          "position": [
-            -41.9,
-            0.02,
-            25
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -33.95,
-            0.02,
-            15.63
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
-    },
-    {
-      "assetId": "resource-rock-2",
-      "placements": [
-        {
-          "position": [
-            -42.79,
-            0.01,
-            26
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -34.84,
-            0.01,
-            16.63
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
-    },
-    {
-      "assetId": "resource-rock-3",
-      "placements": [
-        {
-          "position": [
-            -41.78,
-            0,
-            26.42
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -33.83,
-            0,
-            17.05
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
-    },
-    {
-      "assetId": "mountain-group-2",
-      "placements": [
-        {
-          "position": [
-            -53.98,
-            0.04,
-            63.57
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -64.59,
-            0.04,
-            55.87
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -63.62,
-            0.04,
-            50.73
+            4
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
-            -90,
+            15,
             0
           ],
-          "scale": 3
+          "scale": 2.5
+        },
+        {
+          "position": [
+            26,
+            0,
+            -4
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            195,
+            0
+          ],
+          "scale": 2.5
         }
       ]
+    },
+    {
+      "assetId": "resource-gold-1",
+      "placements": []
+    },
+    {
+      "assetId": "resource-gold-2",
+      "placements": []
+    },
+    {
+      "assetId": "resource-gold-3",
+      "placements": []
+    },
+    {
+      "assetId": "resource-rock-1",
+      "placements": []
+    },
+    {
+      "assetId": "resource-rock-2",
+      "placements": []
+    },
+    {
+      "assetId": "resource-rock-3",
+      "placements": []
+    },
+    {
+      "assetId": "mountain-group-2",
+      "placements": []
     },
     {
       "assetId": "mountain-single",
-      "placements": [
-        {
-          "position": [
-            -50.03,
-            0.04,
-            64.16
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "mountainlarge-single",
-      "placements": [
-        {
-          "position": [
-            -47.45,
-            0.1,
-            65.03
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "highpolyplane",
@@ -284,51 +140,1540 @@
           "scale": 10.27
         }
       ]
+    },
+    {
+      "assetId": "archery-firstage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "shape:cube",
+      "placements": []
+    },
+    {
+      "assetId": "crate-big-stack2",
+      "placements": []
+    },
+    {
+      "assetId": "barrel",
+      "placements": []
+    },
+    {
+      "assetId": "dock-firstage",
+      "placements": [
+        {
+          "position": [
+            -3.24,
+            -0.49,
+            -4.36
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -55,
+            0
+          ],
+          "scale": [
+            8,
+            8,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "port-secondage-level3",
+      "placements": [
+        {
+          "position": [
+            4.61,
+            0.14,
+            17.91
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            120,
+            0
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            -4.61,
+            0.14,
+            -17.91
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            300,
+            0
+          ],
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "birchtree-1",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-2",
+      "placements": []
+    },
+    {
+      "assetId": "bush-flowers",
+      "placements": []
+    },
+    {
+      "assetId": "bush-large-flowers",
+      "placements": []
+    },
+    {
+      "assetId": "bush-large",
+      "placements": []
+    },
+    {
+      "assetId": "bush-small-flowers",
+      "placements": []
+    },
+    {
+      "assetId": "bush-small",
+      "placements": []
+    },
+    {
+      "assetId": "bush",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-1",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-5",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-4",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-3",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-10",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-2",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-3",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-4",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-5",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-6",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-7",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-8",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-9",
+      "placements": []
+    },
+    {
+      "assetId": "flower-1-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-1",
+      "placements": []
+    },
+    {
+      "assetId": "flower-2-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-2",
+      "placements": [
+        {
+          "position": [
+            -48.7,
+            0.01,
+            50.04
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "flower-3-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-4-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-5-clump",
+      "placements": []
+    },
+    {
+      "assetId": "grass-large-extruded",
+      "placements": []
+    },
+    {
+      "assetId": "grass-large",
+      "placements": []
+    },
+    {
+      "assetId": "grass-small",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-1",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-2",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-3",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-4",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-5",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-clover-1",
+      "placements": [
+        {
+          "position": [
+            -58.61,
+            -1.82,
+            -52.61
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -57.43,
+            -1.99,
+            -49.92
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-pebble-round-1",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-round-2",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-round-3",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-round-4",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-round-5",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-1",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-2",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-3",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-4",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-5",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-pebble-square-6",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-medium-1",
+      "placements": [
+        {
+          "position": [
+            -67.73,
+            1.82,
+            -35.13
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -69.59,
+            -1.17,
+            28.55
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -61.83,
+            -1.17,
+            7.07
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -67.62,
+            1.23,
+            54.72
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            -192.5,
+            -56,
+            -187
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            -69.21,
+            0.13,
+            40.96
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 2
+        },
+        {
+          "position": [
+            -69.43,
+            0.13,
+            46.06
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -191,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -61.37,
+            -1.73,
+            -54.36
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-rock-medium-2",
+      "placements": [
+        {
+          "position": [
+            -66.56,
+            1.63,
+            -39.13
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -70.05,
+            -1.36,
+            24.58
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 2
+        },
+        {
+          "position": [
+            -63.11,
+            -1.36,
+            11.9
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 2
+        },
+        {
+          "position": [
+            -59.05,
+            -1,
+            3.76
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            123,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -69.28,
+            5.27,
+            57.85
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            -180,
+            11,
+            -180
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -68.79,
+            -0.32,
+            37.74
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 2
+        },
+        {
+          "position": [
+            -68.51,
+            0.47,
+            -54.56
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            0,
+            11.5
+          ],
+          "scale": 4.1
+        },
+        {
+          "position": [
+            -64.21,
+            1.65,
+            -61.78
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -71,
+            0
+          ],
+          "scale": 4.1
+        },
+        {
+          "position": [
+            -56.85,
+            0.47,
+            -62.51
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -128.5,
+            0
+          ],
+          "scale": [
+            4.1,
+            4.9,
+            4.1
+          ]
+        },
+        {
+          "position": [
+            -59.39,
+            -1.95,
+            -53.4
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-rock-medium-3",
+      "placements": [
+        {
+          "position": [
+            -51.14,
+            -0.65,
+            -59.8
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -44,
+            0
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            -49.28,
+            -0.7,
+            -66.95
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -71.47,
+            1.52,
+            -45.25
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            73,
+            0
+          ],
+          "scale": 3.2
+        },
+        {
+          "position": [
+            -70.87,
+            -0.93,
+            20.81
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            133.5,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -67.41,
+            -0.93,
+            14.81
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            84,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -65.09,
+            2.06,
+            57.92
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            180,
+            -62,
+            180
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -70.08,
+            -0.45,
+            34.9
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            73,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -56.98,
+            -0.21,
+            2.25
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            84.5,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -67.92,
+            -0.45,
+            48.92
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            180,
+            -62,
+            180
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -72.03,
+            5.12,
+            -56.31
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            73,
+            0
+          ],
+          "scale": 3.2
+        },
+        {
+          "position": [
+            -69.95,
+            5.12,
+            -68.33
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            73,
+            0
+          ],
+          "scale": 5
+        },
+        {
+          "position": [
+            -64.7,
+            5.12,
+            -61.69
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            4.5,
+            73,
+            0
+          ],
+          "scale": 3.2
+        },
+        {
+          "position": [
+            -56.71,
+            5.12,
+            -63.33
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -31,
+            0
+          ],
+          "scale": 3.2
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-rock-path-round-small-1",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-round-small-2",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-round-small-3",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-round-thin",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-round-wide",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-square-small-1",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-square-small-2",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-square-small-3",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-square-thin",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-rock-path-square-wide",
+      "placements": []
+    },
+    {
+      "assetId": "sm-road-asphalt",
+      "placements": []
+    },
+    {
+      "assetId": "forestmountain-landscape",
+      "placements": []
+    },
+    {
+      "assetId": "mountain",
+      "placements": []
+    },
+    {
+      "assetId": "mountain4k",
+      "placements": [
+        {
+          "position": [
+            -82.74,
+            2.41,
+            38.17
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            37.5,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -81.88,
+            1.68,
+            69.98
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -79,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -53.28,
+            0.38,
+            84.54
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -45.5,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -29.68,
+            -1.21,
+            82.97
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -62,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -7.79,
+            -1.21,
+            81.88
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -62,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            26.24,
+            -1.21,
+            85.04
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -30,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            51.85,
+            -1.21,
+            85.58
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -62,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            82.09,
+            1.98,
+            59.65
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -164,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            78.25,
+            0.73,
+            32.93
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -164,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -106.97,
+            -1.62,
+            -36.01
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -110,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -94.95,
+            -4.48,
+            3.22
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -65.5,
+            0
+          ],
+          "scale": 1.5
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-dead-tree-1",
+      "placements": [
+        {
+          "position": [
+            -63.8,
+            1.51,
+            -48.04
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-dead-tree-2",
+      "placements": [
+        {
+          "position": [
+            -53.19,
+            0.32,
+            -51.32
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-dead-tree-3",
+      "placements": [
+        {
+          "position": [
+            -50.66,
+            0.37,
+            -52.38
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-dead-tree-4",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-dead-tree-5",
+      "placements": []
+    },
+    {
+      "assetId": "naturemega-common-tree-1",
+      "placements": [
+        {
+          "position": [
+            -60.63,
+            1.56,
+            -37.11
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -47.84,
+            0.31,
+            -53.91
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -42,
+            0.24,
+            -66.1
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -37.84,
+            0.26,
+            -48.68
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -64.48,
+            4.31,
+            -29.83
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -57.38,
+            1.71,
+            -28.97
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -45.76,
+            0.36,
+            -59.25
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-common-tree-2",
+      "placements": [
+        {
+          "position": [
+            -60.94,
+            1.8,
+            -34.22
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -46.4,
+            0.26,
+            -44.88
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -46.41,
+            0.4,
+            -57.43
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -33.79,
+            0.25,
+            -51.82
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -43.53,
+            0.26,
+            -41.82
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -60.98,
+            2.86,
+            -30.79
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -61.66,
+            0.51,
+            -45.45
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -44.84,
+            0.28,
+            -49.91
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-common-tree-3",
+      "placements": [
+        {
+          "position": [
+            -58.09,
+            0.49,
+            -36.85
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -38.61,
+            0.33,
+            -58.14
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -38.2,
+            0.26,
+            -52.99
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -31.81,
+            0.24,
+            -57.88
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -56.98,
+            0.84,
+            -32.56
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -64.36,
+            0.15,
+            -50.76
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -41.9,
+            0.26,
+            -56.98
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-common-tree-4",
+      "placements": [
+        {
+          "position": [
+            -52.09,
+            0.24,
+            -49.58
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -41.16,
+            0.25,
+            -50.58
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -36.22,
+            0.24,
+            -62.54
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -32.46,
+            0.24,
+            -64.15
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -62.21,
+            2.97,
+            -27.25
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -60.24,
+            0.07,
+            -42.28
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-common-tree-5",
+      "placements": [
+        {
+          "position": [
+            -48.69,
+            0.26,
+            -50.33
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -35.32,
+            0.26,
+            -56.05
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -41.25,
+            0.25,
+            -46.27
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -62.53,
+            2.04,
+            -43.66
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -60.35,
+            0.9,
+            -39.57
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-clover-2",
+      "placements": [
+        {
+          "position": [
+            -61.55,
+            -1.98,
+            -51.64
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -60.28,
+            -2,
+            -51.42
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -59.3,
+            -2,
+            -50.39
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-bush-common-flowers",
+      "placements": [
+        {
+          "position": [
+            -51.99,
+            0.06,
+            -47.52
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -58.75,
+            0.74,
+            -35.9
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-fern-1",
+      "placements": [
+        {
+          "position": [
+            -54.31,
+            -0.08,
+            -52.27
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "naturemega-mushroom-common",
+      "placements": [
+        {
+          "position": [
+            -53.34,
+            -0.13,
+            -50.2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "resource-pinetree-group-cut",
+      "placements": [
+        {
+          "position": [
+            -8,
+            0,
+            50
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            8,
+            0,
+            -50
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            180,
+            0
+          ],
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "logs",
+      "placements": [
+        {
+          "position": [
+            -5.8,
+            0,
+            52.4
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            35,
+            0
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            5.8,
+            0,
+            -52.4
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            215,
+            0
+          ],
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "mine",
+      "placements": [
+        {
+          "position": [
+            -28,
+            0,
+            6
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            340,
+            0
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            28,
+            0,
+            -6
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            160,
+            0
+          ],
+          "scale": 3
+        }
+      ]
     }
   ],
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
+    "ambientIntensity": 1,
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
     "locale": "en"
   },
-  "skyAtmosphere": {
-    "rayleigh": 1,
-    "turbidity": 1,
-    "mie": 0.002,
-    "mieDirectionalG": 0.6
-  },
-  "postProcess": {
-    "antialias": "smaa",
-    "bloom": {
-      "enabled": true,
-      "threshold": 1,
-      "intensity": 1,
-      "radius": 1
-    }
-  },
   "lights": [
     {
-      "id": "sun",
+      "id": "directional-light-mrzeo4fp-7bl",
       "type": "directional",
       "position": [
-        40,
-        80,
-        30
+        0,
+        5,
+        0
       ],
-      "name": "Sun",
+      "name": "Directional Light",
       "rotation": [
         -55,
         35,
         0
       ],
       "color": "#ffffff",
-      "intensity": 1.6,
+      "intensity": 2,
       "castShadow": true
     }
   ],
   "reflectiveSurfaces": [],
+  "blockingVolumes": [
+    {
+      "id": "blocking-volume-1",
+      "position": [
+        -3.38,
+        -0.35,
+        -4.29
+      ],
+      "name": "Blocking Volume",
+      "rotation": [
+        0,
+        -55,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        4,
+        1,
+        12
+      ],
+      "navigationRole": "walkable"
+    }
+  ],
   "splines": [
     {
       "id": "enemy-base-route",
@@ -385,6 +1730,42 @@
           },
           {
             "id": "p4",
+            "position": [
+              26,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "pasture-spur-1",
+            "position": [
+              22,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "pasture-spur-2",
+            "position": [
+              22,
+              0,
+              -24
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "pasture-spur-3",
+            "position": [
+              22,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "pasture-spur-4",
             "position": [
               26,
               0,
@@ -581,7 +1962,7 @@
           {
             "id": "p1",
             "position": [
-              62,
+              60,
               0,
               -30
             ],
@@ -590,7 +1971,7 @@
           {
             "id": "p2",
             "position": [
-              62,
+              60,
               0,
               -24
             ],
@@ -599,7 +1980,7 @@
           {
             "id": "p3",
             "position": [
-              62,
+              60,
               0,
               -40
             ],
@@ -652,7 +2033,7 @@
           {
             "id": "p2",
             "position": [
-              62,
+              60,
               0,
               -20
             ],
@@ -661,7 +2042,7 @@
           {
             "id": "p3",
             "position": [
-              62,
+              60,
               0,
               -24
             ],
@@ -670,7 +2051,7 @@
           {
             "id": "p4",
             "position": [
-              62,
+              60,
               0,
               -40
             ],
@@ -684,6 +2065,679 @@
           "rts.route:enemy:enemy_east:1"
         ]
       }
+    },
+    {
+      "id": "spline-1",
+      "position": [
+        -69.37,
+        -0.74,
+        -61.76
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "spline-point-1",
+            "position": [
+              -0.24,
+              -0.09,
+              -0.51
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-2",
+            "position": [
+              28.49,
+              -0.1,
+              0.14
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-16",
+            "position": [
+              34.48,
+              -0.095,
+              -0.816
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-17",
+            "position": [
+              40.09,
+              -0.51,
+              -2.95
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-3",
+            "position": [
+              43.79,
+              -0.17,
+              -5.11
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-15",
+            "position": [
+              52.086,
+              -0.066,
+              -12.776
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-4",
+            "position": [
+              59.96,
+              -0.06,
+              -20.46
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-5",
+            "position": [
+              71.89,
+              -0.02,
+              -25.86
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-6",
+            "position": [
+              101.94,
+              -0.33,
+              -26.89
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-7",
+            "position": [
+              117.17,
+              -0.12,
+              -30.19
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-8",
+            "position": [
+              126.74,
+              -0.11,
+              -36.05
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-9",
+            "position": [
+              136.3,
+              -0.27,
+              -44.75
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-14",
+            "position": [
+              138.72,
+              -0.9,
+              -47.44
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-13",
+            "position": [
+              141.85,
+              -0.16,
+              -49.41
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-10",
+            "position": [
+              147.17,
+              0.04,
+              -51.2
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-11",
+            "position": [
+              157.62,
+              0.01,
+              -53.24
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-12",
+            "position": [
+              178.13,
+              -0.01,
+              -52.73
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "Spline",
+      "rotation": [
+        0,
+        -61,
+        0
+      ],
+      "scale": 1,
+      "generators": [
+        {
+          "id": "instances",
+          "type": "instances",
+          "meshAsset": "naturemega-pebble-round-1",
+          "spacing": 3,
+          "enabled": true,
+          "previewEnabled": true,
+          "runtimeEnabled": true,
+          "alignToSpline": true,
+          "startOffset": 0,
+          "endOffset": 0,
+          "lateralOffset": 0,
+          "verticalOffset": -0.3,
+          "seed": 1,
+          "placementMode": "distance",
+          "random": {
+            "scaleMin": 3,
+            "scaleMax": 4
+          }
+        },
+        {
+          "id": "instances-2",
+          "type": "instances",
+          "meshAsset": "naturemega-pebble-round-2",
+          "spacing": 2,
+          "lateralOffset": -0.1,
+          "verticalOffset": -0.2,
+          "seed": 2,
+          "random": {
+            "scaleMin": 3,
+            "scaleMax": 4
+          }
+        },
+        {
+          "id": "instances-3",
+          "type": "instances",
+          "meshAsset": "naturemega-pebble-round-3",
+          "spacing": 2,
+          "startOffset": 1,
+          "lateralOffset": -0.2,
+          "verticalOffset": -0.1,
+          "random": {
+            "scaleMin": 3,
+            "scaleMax": 4
+          }
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "color": "#ffffff",
+        "resolution": 16
+      }
+    },
+    {
+      "id": "spline-2",
+      "position": [
+        -63.07,
+        -0.74,
+        -66.61
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "spline-point-1",
+            "position": [
+              -0.24,
+              -0.09,
+              -0.51
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-2",
+            "position": [
+              28.49,
+              -0.1,
+              0.14
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-15",
+            "position": [
+              36.64,
+              -0.46,
+              -1.4
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-16",
+            "position": [
+              39.43,
+              -0.48,
+              -2.31
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-3",
+            "position": [
+              42.72,
+              -0.18,
+              -4.61
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-4",
+            "position": [
+              54.86,
+              -0.06,
+              -17.33
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-5",
+            "position": [
+              71.88,
+              -0.02,
+              -25.67
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-6",
+            "position": [
+              101.78,
+              -0.33,
+              -26.4
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-7",
+            "position": [
+              116.15,
+              -0.12,
+              -29.42
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-8",
+            "position": [
+              125.92,
+              -0.11,
+              -36.12
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-9",
+            "position": [
+              136.3,
+              -0.27,
+              -44.75
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-14",
+            "position": [
+              139.11,
+              -0.24,
+              -46.82
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-13",
+            "position": [
+              142.09,
+              -0.16,
+              -49.11
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-10",
+            "position": [
+              147.17,
+              0.04,
+              -51.2
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-11",
+            "position": [
+              157.62,
+              0.01,
+              -53.24
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-12",
+            "position": [
+              177.95,
+              -0.01,
+              -52.96
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "Spline 2",
+      "rotation": [
+        0,
+        -61,
+        0
+      ],
+      "scale": 1,
+      "generators": [
+        {
+          "id": "instances",
+          "type": "instances",
+          "meshAsset": "naturemega-pebble-round-1",
+          "spacing": 3,
+          "enabled": true,
+          "previewEnabled": true,
+          "runtimeEnabled": true,
+          "alignToSpline": true,
+          "startOffset": 0,
+          "endOffset": 0,
+          "lateralOffset": 0,
+          "verticalOffset": -0.3,
+          "seed": 1,
+          "placementMode": "distance",
+          "random": {
+            "scaleMin": 3,
+            "scaleMax": 4
+          }
+        },
+        {
+          "id": "instances-2",
+          "type": "instances",
+          "meshAsset": "naturemega-pebble-round-2",
+          "spacing": 2,
+          "lateralOffset": -0.1,
+          "verticalOffset": -0.2,
+          "seed": 2,
+          "random": {
+            "scaleMin": 3,
+            "scaleMax": 4
+          }
+        },
+        {
+          "id": "instances-3",
+          "type": "instances",
+          "meshAsset": "naturemega-pebble-round-3",
+          "spacing": 2,
+          "startOffset": 1,
+          "lateralOffset": -0.2,
+          "verticalOffset": -0.1,
+          "random": {
+            "scaleMin": 3,
+            "scaleMax": 4
+          }
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "color": "#ffffff",
+        "resolution": 16
+      }
+    },
+    {
+      "id": "spline-3",
+      "position": [
+        38.09,
+        0,
+        41.28
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "spline-point-1",
+            "position": [
+              0.76,
+              -0.01,
+              -1.28
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-6",
+            "position": [
+              2.64,
+              -0.3,
+              -1.13
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-2",
+            "position": [
+              4.37,
+              -0.85,
+              -0.97
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-7",
+            "position": [
+              6.38,
+              -1.06,
+              -0.93
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-5",
+            "position": [
+              8.27,
+              -1.05,
+              -0.7
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-3",
+            "position": [
+              10.24,
+              -0.89,
+              -0.74
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-9",
+            "position": [
+              12.01,
+              -0.42,
+              -0.77
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-4",
+            "position": [
+              13.41,
+              0.07,
+              -0.72
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "Spline 3",
+      "rotation": [
+        0,
+        60,
+        0
+      ],
+      "scale": 1,
+      "generators": [
+        {
+          "id": "instances",
+          "type": "instances",
+          "meshAsset": "naturemega-rock-path-square-wide",
+          "spacing": 2,
+          "placementMode": "point"
+        }
+      ]
+    },
+    {
+      "id": "spline-4",
+      "position": [
+        -48.89,
+        0,
+        -24.49
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "spline-point-1",
+            "position": [
+              0.74,
+              0.21,
+              -1.28
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-6",
+            "position": [
+              2.64,
+              -0.31,
+              -1.13
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-2",
+            "position": [
+              4.37,
+              -0.85,
+              -0.97
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-7",
+            "position": [
+              6.38,
+              -1.06,
+              -0.93
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-5",
+            "position": [
+              8.27,
+              -1.05,
+              -0.7
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-3",
+            "position": [
+              10.24,
+              -0.89,
+              -0.74
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-9",
+            "position": [
+              12.12,
+              -0.42,
+              -0.52
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-4",
+            "position": [
+              14.06,
+              0.29,
+              -0.32
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "Spline 3 2",
+      "rotation": [
+        0,
+        60,
+        0
+      ],
+      "scale": 1,
+      "generators": [
+        {
+          "id": "instances",
+          "type": "instances",
+          "meshAsset": "naturemega-rock-path-square-wide",
+          "spacing": 2,
+          "placementMode": "point"
+        }
+      ]
     }
   ],
   "landscapes": [
@@ -705,30 +2759,75 @@
       "splineRef": "spline-1",
       "name": "River Water 1",
       "surfaceLevel": -1,
-      "opacity": 1,
-      "bedVisibility": 0.2,
-      "absorptionDistance": 1,
-      "foamIntensity": 1,
-      "foamScale": 1,
-      "shoreWaveIntensity": 0,
+      "opacity": 0.8,
+      "bedVisibility": 0.01,
+      "absorptionDistance": 2,
+      "foamOpacity": 0.7,
       "shoreWaveSpacing": 4,
       "shoreWaveSpeed": 0.3,
       "shoreWaveReach": 0.3,
       "shoreWaveBreakupScale": 1,
-      "foamStamps": [],
+      "foamStamps": [
+        {
+          "id": "foam-1",
+          "kind": "point",
+          "position": [
+            15.39,
+            -1,
+            20.51
+          ],
+          "radius": 4,
+          "intensity": 0.7
+        },
+        {
+          "id": "foam-2",
+          "kind": "point",
+          "position": [
+            14.33,
+            -1,
+            20.17
+          ],
+          "radius": 4,
+          "intensity": 0.7
+        },
+        {
+          "id": "foam-3",
+          "kind": "point",
+          "position": [
+            -59.61,
+            -1,
+            -53.06
+          ],
+          "radius": 6,
+          "intensity": 0.7
+        },
+        {
+          "id": "foam-4",
+          "kind": "point",
+          "position": [
+            37.37,
+            -1,
+            39.81
+          ],
+          "radius": 2,
+          "intensity": 0.7
+        }
+      ],
       "reflectionMode": "sharedPlanar",
-      "reflectionQuality": "high"
+      "reflectionQuality": "high",
+      "reflectionStrength": 0.9
     }
   ],
   "actors": [
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json",
       "position": [
-        -38,
+        -40,
         0,
-        38
+        40
       ],
       "name": "Player Start",
+      "scale": 1,
       "variableOverrides": {
         "owner": "player"
       }
@@ -748,11 +2847,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
       "position": [
-        -42,
+        -22.93,
         0,
-        26
+        40.76
       ],
       "name": "Resource player_safe_stone",
+      "scale": 1,
       "variableOverrides": {
         "nodeId": "player_safe_stone",
         "resourceId": "stone",
@@ -762,11 +2862,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
       "position": [
-        -34,
+        -49.39,
         0,
-        26
+        48.22
       ],
       "name": "Resource player_safe_gold",
+      "scale": 1,
       "variableOverrides": {
         "nodeId": "player_safe_gold",
         "resourceId": "gold",
@@ -778,7 +2879,7 @@
       "position": [
         34,
         0,
-        -26
+        -20
       ],
       "name": "Resource enemy_safe_stone",
       "variableOverrides": {
@@ -792,7 +2893,7 @@
       "position": [
         42,
         0,
-        -26
+        -20
       ],
       "name": "Resource enemy_safe_gold",
       "variableOverrides": {
@@ -832,11 +2933,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -56,
+        -55.87,
         0,
-        40
+        22.66
       ],
       "name": "Tree player-wood-1",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-1",
         "forestId": "player-grove",
@@ -847,11 +2949,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -54,
+        -58.17,
         0,
-        38
+        25.98
       ],
       "name": "Tree player-wood-1-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-1-dense",
         "forestId": "player-grove",
@@ -862,11 +2965,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -52,
+        -55.8,
         0,
-        42
+        19.01
       ],
       "name": "Tree player-wood-2",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-2",
         "forestId": "player-grove",
@@ -877,11 +2981,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -54,
+        -59.17,
         0,
-        44
+        18.31
       ],
       "name": "Tree player-wood-2-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-2-dense",
         "forestId": "player-grove",
@@ -892,11 +2997,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -48,
+        -59.41,
         0,
-        40
+        24.93
       ],
       "name": "Tree player-wood-3",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-3",
         "forestId": "player-grove",
@@ -907,11 +3013,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -46,
+        -57,
         0,
-        38
+        20.67
       ],
       "name": "Tree player-wood-3-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-3-dense",
         "forestId": "player-grove",
@@ -937,11 +3044,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -58,
+        -60.34,
         0,
-        36
+        28.87
       ],
       "name": "Tree player-wood-4-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-4-dense",
         "forestId": "player-grove",
@@ -952,11 +3060,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -52,
+        -54.19,
         0,
-        32
+        30.73
       ],
       "name": "Tree player-wood-5",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-5",
         "forestId": "player-grove",
@@ -967,11 +3076,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -50,
+        -51.85,
         0,
-        30
+        28.72
       ],
       "name": "Tree player-wood-5-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-5-dense",
         "forestId": "player-grove",
@@ -982,11 +3092,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -48,
+        -58.16,
         0,
-        34
+        28.33
       ],
       "name": "Tree player-wood-6",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-6",
         "forestId": "player-grove",
@@ -997,11 +3108,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -50,
+        -56.39,
         0,
-        36
+        25.13
       ],
       "name": "Tree player-wood-6-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-6-dense",
         "forestId": "player-grove",
@@ -1012,7 +3124,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -54,
+        -49.34,
         0,
         28
       ],
@@ -1042,11 +3154,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -48,
+        -54,
         0,
-        28
+        26.73
       ],
       "name": "Tree player-wood-8",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-8",
         "forestId": "player-grove",
@@ -1057,11 +3170,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -50,
+        -58.46,
         0,
-        30
+        31.62
       ],
       "name": "Tree player-wood-8-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-8-dense",
         "forestId": "player-grove",
@@ -1132,9 +3246,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        56,
+        52,
         0,
-        -30
+        -32
       ],
       "name": "Tree enemy-wood-3",
       "variableOverrides": {
@@ -1147,9 +3261,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        58,
+        54,
         0,
-        -32
+        -34
       ],
       "name": "Tree enemy-wood-3-dense",
       "variableOverrides": {
@@ -1172,21 +3286,6 @@
         "forestId": "enemy-grove",
         "capacity": 60,
         "variant": "tree1"
-      }
-    },
-    {
-      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
-      "position": [
-        44,
-        0,
-        -34
-      ],
-      "name": "Tree enemy-wood-4-dense",
-      "variableOverrides": {
-        "treeId": "enemy-wood-4-dense",
-        "forestId": "enemy-grove",
-        "capacity": 60,
-        "variant": "pine"
       }
     },
     {
@@ -1224,7 +3323,7 @@
       "position": [
         58,
         0,
-        -38
+        -36
       ],
       "name": "Tree enemy-wood-6",
       "variableOverrides": {
@@ -1239,7 +3338,7 @@
       "position": [
         56,
         0,
-        -36
+        -34
       ],
       "name": "Tree enemy-wood-6-dense",
       "variableOverrides": {
@@ -1387,11 +3486,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -38,
+        -42.86,
         0,
-        8
+        9.92
       ],
       "name": "Tree west-wood-3-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "west-wood-3-dense",
         "forestId": "west-grove",
@@ -1432,11 +3532,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -42,
+        -47.45,
         0,
-        4
+        16.07
       ],
       "name": "Tree west-wood-5",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "west-wood-5",
         "forestId": "west-grove",
@@ -1447,11 +3548,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -40,
+        -46.68,
         0,
-        2
+        20.3
       ],
       "name": "Tree west-wood-5-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "west-wood-5-dense",
         "forestId": "west-grove",
@@ -1462,11 +3564,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -38,
+        -46.45,
         0,
-        6
+        18.11
       ],
       "name": "Tree west-wood-6",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "west-wood-6",
         "forestId": "west-grove",
@@ -1747,6 +3850,54 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
+        -4.04,
+        0,
+        -46.24
+      ],
+      "name": "Tree north-wood-3-a",
+      "scale": 1,
+      "variableOverrides": {
+        "treeId": "north-wood-3-a",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -2.79,
+        0,
+        -45.02
+      ],
+      "name": "Tree north-wood-3-b",
+      "scale": 1,
+      "variableOverrides": {
+        "treeId": "north-wood-3-b",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -2.53,
+        0,
+        -47.03
+      ],
+      "name": "Tree north-wood-3-c",
+      "scale": 1,
+      "variableOverrides": {
+        "treeId": "north-wood-3-c",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
         2,
         0,
         -48
@@ -1799,6 +3950,22 @@
       "name": "Tree north-wood-5",
       "variableOverrides": {
         "treeId": "north-wood-5",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -0.9,
+        0,
+        -49.24
+      ],
+      "name": "Tree north-wood-5-a",
+      "scale": 1,
+      "variableOverrides": {
+        "treeId": "north-wood-5-a",
         "forestId": "north-grove",
         "capacity": 60,
         "variant": "pine"
@@ -1867,11 +4034,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        12,
+        2.18,
         0,
-        42
+        46.05
       ],
       "name": "Tree south-wood-2-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-2-dense",
         "forestId": "south-grove",
@@ -1882,11 +4050,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        16,
+        2.1,
         0,
-        42
+        48
       ],
       "name": "Tree south-wood-3",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-3",
         "forestId": "south-grove",
@@ -1897,11 +4066,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        14,
+        4.9,
         0,
-        44
+        47.57
       ],
       "name": "Tree south-wood-3-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-3-dense",
         "forestId": "south-grove",
@@ -1912,11 +4082,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        6,
+        -1.82,
         0,
-        36
+        41.04
       ],
       "name": "Tree south-wood-4",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-4",
         "forestId": "south-grove",
@@ -1927,11 +4098,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        8,
+        -2.63,
         0,
-        34
+        40.92
       ],
       "name": "Tree south-wood-4-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-4-dense",
         "forestId": "south-grove",
@@ -1942,11 +4114,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        14,
+        -0.57,
         0,
-        36
+        45.12
       ],
       "name": "Tree south-wood-5",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-5",
         "forestId": "south-grove",
@@ -1957,11 +4130,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        12,
+        -0.12,
         0,
-        38
+        42.86
       ],
       "name": "Tree south-wood-5-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-5-dense",
         "forestId": "south-grove",
@@ -2002,11 +4176,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -58,
+        -60.62,
         0,
-        40
+        26.54
       ],
       "name": "Tree player-wood-10",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-10",
         "forestId": "player-grove",
@@ -2017,11 +4192,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -60,
+        -57.82,
         0,
-        42
+        23.99
       ],
       "name": "Tree player-wood-10-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-10-dense",
         "forestId": "player-grove",
@@ -2062,11 +4238,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -56,
+        -56.84,
         0,
-        36
+        30.16
       ],
       "name": "Tree player-wood-12",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-12",
         "forestId": "player-grove",
@@ -2077,11 +4254,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -58,
+        -60.84,
         0,
-        38
+        20.4
       ],
       "name": "Tree player-wood-12-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-12-dense",
         "forestId": "player-grove",
@@ -2092,11 +4270,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -56,
+        -59.34,
         0,
-        38
+        30.05
       ],
       "name": "Tree player-wood-13",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-13",
         "forestId": "player-grove",
@@ -2107,11 +4286,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -54,
+        -54.04,
         0,
-        36
+        22.94
       ],
       "name": "Tree player-wood-13-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-13-dense",
         "forestId": "player-grove",
@@ -2122,11 +4302,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -56,
+        -60.8,
         0,
-        42
+        23.76
       ],
       "name": "Tree player-wood-14",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-14",
         "forestId": "player-grove",
@@ -2137,11 +4318,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -58,
+        -59.09,
         0,
-        44
+        21.54
       ],
       "name": "Tree player-wood-14-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "player-wood-14-dense",
         "forestId": "player-grove",
@@ -2212,9 +4394,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        56,
+        52,
         0,
-        -28
+        -30
       ],
       "name": "Tree enemy-wood-11",
       "variableOverrides": {
@@ -2227,9 +4409,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        58,
+        54,
         0,
-        -30
+        -32
       ],
       "name": "Tree enemy-wood-11-dense",
       "variableOverrides": {
@@ -2347,11 +4529,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        -48,
+        -48.96,
         0,
-        2
+        17.37
       ],
       "name": "Tree west-wood-7-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "west-wood-7-dense",
         "forestId": "west-grove",
@@ -2842,6 +5025,38 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
+        -7.82,
+        0,
+        -47.41
+      ],
+      "name": "Tree north-wood-10-dense-a",
+      "scale": 1,
+      "variableOverrides": {
+        "treeId": "north-wood-10-dense-a",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -4.8,
+        0,
+        -49.03
+      ],
+      "name": "Tree north-wood-10-dense-b",
+      "scale": 1,
+      "variableOverrides": {
+        "treeId": "north-wood-10-dense-b",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
         -6,
         0,
         -42
@@ -2902,11 +5117,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        4,
+        -2.37,
         0,
-        36
+        40.84
       ],
       "name": "Tree south-wood-7",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-7",
         "forestId": "south-grove",
@@ -2962,11 +5178,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        8,
+        0.12,
         0,
-        36
+        40.03
       ],
       "name": "Tree south-wood-9",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-9",
         "forestId": "south-grove",
@@ -2977,11 +5194,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        6,
+        -0.39,
         0,
-        38
+        37.74
       ],
       "name": "Tree south-wood-9-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-9-dense",
         "forestId": "south-grove",
@@ -3007,11 +5225,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
       "position": [
-        10,
+        5.42,
         0,
-        42
+        45.56
       ],
       "name": "Tree south-wood-10-dense",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "south-wood-10-dense",
         "forestId": "south-grove",
@@ -3052,11 +5271,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_StrategicPoint.actor.json",
       "position": [
-        -20,
+        -25.67,
         0,
-        -20
+        -44.58
       ],
       "name": "Strategic west_pass",
+      "scale": 1,
       "variableOverrides": {
         "pointId": "west_pass",
         "label": "Batı Geçidi",
@@ -3066,11 +5286,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_StrategicPoint.actor.json",
       "position": [
-        20,
+        34,
         0,
-        20
+        54
       ],
       "name": "Strategic east_pass",
+      "scale": 1,
       "variableOverrides": {
         "pointId": "east_pass",
         "label": "Doğu Geçidi",
@@ -3274,6 +5495,34 @@
       }
     },
     {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        26,
+        0,
+        -26
+      ],
+      "name": "Enemy hunting_camp (26,-26)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "hunting_camp",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        22,
+        0,
+        -20
+      ],
+      "name": "Enemy pasture (22,-20)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "pasture",
+        "regionId": "enemy-base"
+      }
+    },
+    {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
         10,
@@ -3318,7 +5567,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
-        66,
+        60,
         0,
         -32
       ],
@@ -3332,7 +5581,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
-        66,
+        60,
         0,
         -40
       ],
@@ -3346,7 +5595,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
       "position": [
-        66,
+        60,
         0,
         -24
       ],
@@ -3360,15 +5609,655 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
       "position": [
-        0,
+        -66.5,
         1.5,
-        0
+        -64.9
       ],
-      "name": "Blocker 0",
+      "name": "River Blocker 1",
       "variableOverrides": {
-        "width": 24,
-        "depth": 8,
+        "width": 10,
+        "depth": 10,
         "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -64.3,
+        1.5,
+        -60.4
+      ],
+      "name": "River Blocker 2",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -62,
+        1.5,
+        -55.9
+      ],
+      "name": "River Blocker 3",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -59.8,
+        1.5,
+        -51.5
+      ],
+      "name": "River Blocker 4",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -57.4,
+        1.5,
+        -47.1
+      ],
+      "name": "River Blocker 5",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -54.9,
+        1.5,
+        -42.7
+      ],
+      "name": "River Blocker 6",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -52.2,
+        1.5,
+        -38.5
+      ],
+      "name": "River Blocker 7",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -39.28,
+        1.5,
+        -27.81
+      ],
+      "name": "River Blocker 11",
+      "scale": 1,
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -34.43,
+        1.5,
+        -26.15
+      ],
+      "name": "River Blocker 12",
+      "scale": 1,
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -27,
+        1.5,
+        -24.5
+      ],
+      "name": "River Blocker 13",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -22.2,
+        1.5,
+        -23.2
+      ],
+      "name": "River Blocker 14",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -17.6,
+        1.5,
+        -21.3
+      ],
+      "name": "River Blocker 15",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -13.5,
+        1.5,
+        -18.4
+      ],
+      "name": "River Blocker 16",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -10.1,
+        1.5,
+        -14.7
+      ],
+      "name": "River Blocker 17",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -7.2,
+        1.5,
+        -10.7
+      ],
+      "name": "River Blocker 18",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        0.2,
+        1.5,
+        2.4
+      ],
+      "name": "River Blocker 21",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        2.6,
+        1.5,
+        6.7
+      ],
+      "name": "River Blocker 22",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        5.2,
+        1.5,
+        11
+      ],
+      "name": "River Blocker 23",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        8,
+        1.5,
+        15.2
+      ],
+      "name": "River Blocker 24",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        11.1,
+        1.5,
+        19
+      ],
+      "name": "River Blocker 25",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        14.9,
+        1.5,
+        22.3
+      ],
+      "name": "River Blocker 26",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        19.1,
+        1.5,
+        25
+      ],
+      "name": "River Blocker 27",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        23.6,
+        1.5,
+        27.2
+      ],
+      "name": "River Blocker 28",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        28.2,
+        1.5,
+        29.1
+      ],
+      "name": "River Blocker 29",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        32.9,
+        1.5,
+        30.8
+      ],
+      "name": "River Blocker 30",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        50.3,
+        1.5,
+        40.3
+      ],
+      "name": "River Blocker 34",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        53.6,
+        1.5,
+        44.1
+      ],
+      "name": "River Blocker 35",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        56.5,
+        1.5,
+        48.1
+      ],
+      "name": "River Blocker 36",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        59.1,
+        1.5,
+        52.4
+      ],
+      "name": "River Blocker 37",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        61.6,
+        1.5,
+        56.7
+      ],
+      "name": "River Blocker 38",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        63.9,
+        1.5,
+        61.2
+      ],
+      "name": "River Blocker 39",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        66.3,
+        1.5,
+        65.6
+      ],
+      "name": "River Blocker 40",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        -30,
+        0,
+        22
+      ],
+      "name": "Herd player-deer",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "player-deer",
+        "species": "deer",
+        "count": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        30,
+        0,
+        -22
+      ],
+      "name": "Herd enemy-deer",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "enemy-deer",
+        "species": "deer",
+        "count": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        10.97,
+        0,
+        38.04
+      ],
+      "name": "Herd central-stag",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "central-stag",
+        "species": "stag",
+        "count": 4
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        -18,
+        0,
+        14
+      ],
+      "name": "Herd player-cattle",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "player-cattle",
+        "species": "cow",
+        "count": 4
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        18,
+        0,
+        -14
+      ],
+      "name": "Herd enemy-cattle",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "enemy-cattle",
+        "species": "cow",
+        "count": 4
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        -7.13,
+        0,
+        -33.14
+      ],
+      "name": "Herd central-bull",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "central-bull",
+        "species": "bull",
+        "count": 3
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        -45,
+        0,
+        -6
+      ],
+      "name": "Herd west-wolves",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "west-wolves",
+        "species": "wolf",
+        "count": 3
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "position": [
+        28,
+        0,
+        6
+      ],
+      "name": "Herd east-wolves",
+      "scale": 1,
+      "variableOverrides": {
+        "herdId": "east-wolves",
+        "species": "wolf",
+        "count": 3
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        -1,
+        0,
+        20
+      ],
+      "name": "TradeSite player_river_port",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "player_river_port",
+        "siteType": "river_port"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        1,
+        0,
+        -20
+      ],
+      "name": "TradeSite enemy_river_port",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "enemy_river_port",
+        "siteType": "river_port"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        -8,
+        0,
+        50
+      ],
+      "name": "TradeSite player_timber_camp",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "player_timber_camp",
+        "siteType": "timber_camp"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        8,
+        0,
+        -50
+      ],
+      "name": "TradeSite enemy_timber_camp",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "enemy_timber_camp",
+        "siteType": "timber_camp"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        -28,
+        0,
+        6
+      ],
+      "name": "TradeSite player_stone_pit",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "player_stone_pit",
+        "siteType": "stone_pit"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        28,
+        0,
+        -6
+      ],
+      "name": "TradeSite enemy_stone_pit",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "enemy_stone_pit",
+        "siteType": "stone_pit"
       }
     }
   ]
