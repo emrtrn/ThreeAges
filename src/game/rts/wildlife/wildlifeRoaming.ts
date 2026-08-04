@@ -62,6 +62,20 @@ export interface RoamState {
    * and back. Bolt, blow, graze: the hunter closes the gap in the gaps.
    */
   recoverySeconds: number;
+  /**
+   * The heading this bolt committed to, as a unit vector; zero between bolts.
+   *
+   * A bolt is one panicked dash in one direction, decided at the moment the
+   * animal took fright — not a steering loop re-aimed at whoever is nearest this
+   * frame. Recomputing it per tick is what it used to do, and measured over a
+   * 400-second run with six people standing around a herd, **14.6% of every
+   * moving tick turned the body more than 90 degrees** — a deer at full gallop
+   * reversing several times a second. With one person on the field the same run
+   * gave 3.4%, which is what named the cause: the nearest threat kept changing,
+   * and the escape direction flipped with it.
+   */
+  fleeDirX: number;
+  fleeDirZ: number;
 }
 
 /** The unchanging half: the herd's circle and the species' grazing pace. */
@@ -223,7 +237,59 @@ export function initialRoamState(profile: RoamProfile, random: () => number): Ro
     restSeconds: REST_SECONDS_MIN + random() * (REST_SECONDS_MAX - REST_SECONDS_MIN),
     fleeSeconds: 0,
     recoverySeconds: 0,
+    fleeDirX: 0,
+    fleeDirZ: 0,
   };
+}
+
+/**
+ * Step a bolting animal, turning it along the rim rather than pinning it to it.
+ *
+ * {@link keepInHerdGround} projects an escaping step straight back down its own
+ * radius, so an animal running dead-outward lands exactly where it started: the
+ * body stands still at full gallop. Presentation then reads `speed === 0` as
+ * *standing*, which puts a fleeing deer on its eating clip — measured, 400 ticks
+ * of a 400-second run. The doc on that function already claims the bolt "turns
+ * along the rim instead"; this is the code that makes it true. The outward part
+ * of the escape is dropped and the rest spent going *around*, which is both the
+ * intended reading (it circles its own meadow) and the one that keeps the feet
+ * moving at the speed the gallop clip is calibrated to.
+ */
+function boltInsideHerdGround(
+  current: { readonly x: number; readonly z: number },
+  dirX: number,
+  dirZ: number,
+  step: number,
+  profile: RoamProfile,
+): { x: number; z: number } {
+  const straight = keepInHerdGround(current.x + dirX * step, current.z + dirZ * step, profile);
+  const wouldLeave = Math.hypot(
+    current.x + dirX * step - profile.homeX,
+    current.z + dirZ * step - profile.homeZ,
+  ) > profile.roamRadius;
+  if (!wouldLeave) return straight;
+  const radialX = current.x - profile.homeX;
+  const radialZ = current.z - profile.homeZ;
+  const radius = Math.hypot(radialX, radialZ);
+  // At the very centre there is no rim to run along; the plain clamp is as good
+  // an answer as any and cannot be wrong by more than one step.
+  if (radius < 1e-4) return straight;
+  const outX = radialX / radius;
+  const outZ = radialZ / radius;
+  const outward = dirX * outX + dirZ * outZ;
+  let tangentX = dirX - outward * outX;
+  let tangentZ = dirZ - outward * outZ;
+  const tangentLength = Math.hypot(tangentX, tangentZ);
+  if (tangentLength < 1e-4) {
+    // Running exactly outward: pick a side deterministically, so a herd cornered
+    // by a hunter standing on its centre circles instead of freezing.
+    tangentX = -outZ;
+    tangentZ = outX;
+  } else {
+    tangentX /= tangentLength;
+    tangentZ /= tangentLength;
+  }
+  return keepInHerdGround(current.x + tangentX * step, current.z + tangentZ * step, profile);
 }
 
 /**
@@ -278,6 +344,19 @@ export interface HuntQuarry {
   readonly z: number;
   /** How far from the den the predator may travel before the leash stops it. */
   readonly pursuitRadius: number;
+  /**
+   * How close the predator plants itself rather than standing *on* its victim.
+   *
+   * The chase's counterpart of {@link DRIVE_FOLLOW_GAP}, and it exists for the
+   * same reason: without it the step is clamped to the remaining distance, so a
+   * wolf that catches a worker ends the tick inside his body. Absent (V3 Faz 2's
+   * pure-movement callers, and the walk home in Faz 3) means "run all the way to
+   * the point", which is right when the point is not a person.
+   *
+   * Under the strike range it feeds, or the predator would stand just out of
+   * reach of the bite it closed for.
+   */
+  readonly standoff?: number;
 }
 
 /**
@@ -322,7 +401,13 @@ export function advanceHunt(
   if (distance < 1e-4) {
     return { x: current.x, z: current.z, facing: current.facing, speed: 0 };
   }
-  const step = Math.min(profile.fleeSpeed * deltaSeconds, distance);
+  // Already inside the standoff, the predator holds its ground and keeps facing
+  // the quarry — the pose a bite is played over. `max(0, …)` rather than a branch
+  // so a victim that walks *into* the wolf is not answered with a step backwards.
+  const step = Math.min(
+    profile.fleeSpeed * deltaSeconds,
+    Math.max(0, distance - (quarry.standoff ?? 0)),
+  );
   const held = clampToCircle(
     current.x + (dx / distance) * step,
     current.z + (dz / distance) * step,
@@ -399,6 +484,14 @@ export function advanceRoam(
   }
   if (state.fleeSeconds <= 0 && state.recoverySeconds <= 0 && threatDistance <= profile.fleeRadius) {
     state.fleeSeconds = profile.fleeSeconds;
+    // Committed here and only here: the direction is a decision the animal takes
+    // at the moment it takes fright. See {@link RoamState.fleeDirX} for what
+    // re-deciding it every tick actually looked like.
+    const awayX = threat ? current.x - threat.x : Math.sin(current.facing);
+    const awayZ = threat ? current.z - threat.z : Math.cos(current.facing);
+    const length = Math.hypot(awayX, awayZ);
+    state.fleeDirX = length < 1e-4 ? Math.sin(current.facing) : awayX / length;
+    state.fleeDirZ = length < 1e-4 ? Math.cos(current.facing) : awayZ / length;
   }
   if (state.fleeSeconds > 0) {
     state.fleeSeconds -= deltaSeconds;
@@ -412,23 +505,26 @@ export function advanceRoam(
       state.targetZ = point.z;
       state.restSeconds = 0;
     }
-    // Straight away from the threat. With none left (it died, or the animal is
-    // standing exactly on it) the bolt simply carries on facing forward.
-    const awayX = threat ? current.x - threat.x : Math.sin(current.facing);
-    const awayZ = threat ? current.z - threat.z : Math.cos(current.facing);
+    // The heading this bolt committed to when it started. A bolt in progress is
+    // never re-aimed: whatever has since become the nearest body, the animal is
+    // already running, and turning it mid-stride is the reversal this state
+    // exists to stop.
+    const awayX = state.fleeDirX;
+    const awayZ = state.fleeDirZ;
     const length = Math.hypot(awayX, awayZ);
     if (length < 1e-4) return { x: current.x, z: current.z, facing: current.facing, speed: 0 };
     const step = profile.fleeSpeed * deltaSeconds;
-    const bolted = keepInHerdGround(
-      current.x + (awayX / length) * step,
-      current.z + (awayZ / length) * step,
-      profile,
-    );
+    const bolted = boltInsideHerdGround(current, awayX / length, awayZ / length, step, profile);
     const travelled = Math.hypot(bolted.x - current.x, bolted.z - current.z);
     return {
       x: bolted.x,
       z: bolted.z,
-      facing: Math.atan2(awayX, awayZ),
+      // Where the body is actually going, which along the rim is not where it is
+      // trying to go: facing the escape while travelling the tangent would slide
+      // the feet sideways for the whole run.
+      facing: travelled > 1e-4
+        ? Math.atan2(bolted.x - current.x, bolted.z - current.z)
+        : Math.atan2(awayX, awayZ),
       // Report what it actually covered, not what it tried to: an animal running
       // along the rim of its ground moves slower than flat out, and the gallop
       // clip has to be played at the speed the feet are travelling.

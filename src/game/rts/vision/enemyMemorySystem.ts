@@ -20,6 +20,7 @@
  *
  * Pure TS: no three.js, no DOM (Forge boundary, CLAUDE.md / TD-002).
  */
+import type { SettlementAge } from "../../data/gameDataTypes";
 import type { UnitOwner } from "../units/unit";
 import type { VisionSystem } from "./visionSystem";
 
@@ -33,7 +34,18 @@ export function commandCenterMemoryId(owner: UnitOwner): number {
   return owner === "player" ? -1 : -2;
 }
 
-/** What one kingdom believes about one enemy structure. */
+/**
+ * Everything about a structure that was true *at the moment it was last seen*.
+ *
+ * The appearance fields — {@link RememberedStructure.level},
+ * {@link RememberedStructure.age}, the footprint, the ground height — are here
+ * for the same reason the position is: `ghostStructureView.ts` now draws the
+ * remembered building as the building rather than as an abstract sign, and it
+ * must draw the one the observer saw. Resolving any of them from live state at
+ * render time would quietly re-couple the picture to the truth, so a ghost would
+ * upgrade itself the moment the real building did — which is exactly the lie
+ * this system exists to prevent.
+ */
 export interface RememberedStructure {
   /** The live structure's id, so a re-sighting updates rather than duplicates. */
   readonly structureId: number;
@@ -41,10 +53,17 @@ export interface RememberedStructure {
   readonly owner: UnitOwner;
   readonly x: number;
   readonly z: number;
+  /** Ground elevation under the structure, so the ghost stands where it stood. */
+  readonly groundY: number;
   readonly level: number;
+  /** The owner's age at the sighting; picks the same art variant they saw. */
+  readonly age: SettlementAge;
+  /** Footprint the visual was fitted to, so the ghost is the same size. */
+  readonly footprintWidth: number;
+  readonly footprintDepth: number;
   /** Health ratio *at the moment it was last seen*, not the live value. */
   readonly healthRatio: number;
-  /** Match seconds at the last sighting; the renderer fades old ghosts by age. */
+  /** Match seconds at the last sighting; how stale the belief is (§40). */
   readonly lastSeenAt: number;
   /** True while the structure is in vision right now. */
   readonly currentlyVisible: boolean;
@@ -57,7 +76,11 @@ export interface ObservableStructure {
   readonly buildingId: string;
   readonly x: number;
   readonly z: number;
+  readonly groundY: number;
   readonly level: number;
+  readonly age: SettlementAge;
+  readonly footprintWidth: number;
+  readonly footprintDepth: number;
   readonly healthRatio: number;
 }
 
@@ -94,7 +117,11 @@ export class EnemyMemorySystem {
           owner: structure.owner,
           x: structure.x,
           z: structure.z,
+          groundY: structure.groundY,
           level: structure.level,
+          age: structure.age,
+          footprintWidth: structure.footprintWidth,
+          footprintDepth: structure.footprintDepth,
           healthRatio: structure.healthRatio,
           lastSeenAt: now,
           currentlyVisible: true,

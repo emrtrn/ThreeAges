@@ -24,8 +24,16 @@ import { fitPresentationToFootprint } from "../content/rtsActorPresentationTree"
 import type { CommandCenter } from "./commandCenter";
 import type { PlacedStructure } from "./placedStructureSystem";
 
-/** The centre is spawned by its own system, so its footprint is not in `stats` here. */
-const COMMAND_CENTER_FOOTPRINT = 8;
+/**
+ * The centre is spawned by its own system, so its footprint is not in `stats`
+ * here.
+ *
+ * Exported because §40's ghost renderer has to fit the *same* footprint the live
+ * centre was fitted to (`vision/ghostStructureView.ts`). A remembered centre a
+ * size off its real one is the kind of thing that renders plausibly and is
+ * wrong, so the number is shared rather than repeated.
+ */
+export const COMMAND_CENTER_VISUAL_FOOTPRINT = 8;
 
 export class RtsBuildingVisuals {
   constructor(private readonly actorVisuals: RtsActorVisualFactory | null = null) {}
@@ -37,8 +45,8 @@ export class RtsBuildingVisuals {
       "command_center",
       "completed",
       center.level,
-      COMMAND_CENTER_FOOTPRINT,
-      COMMAND_CENTER_FOOTPRINT,
+      COMMAND_CENTER_VISUAL_FOOTPRINT,
+      COMMAND_CENTER_VISUAL_FOOTPRINT,
       age,
     );
     if (visual) center.setVisual(visual);
@@ -61,6 +69,24 @@ export class RtsBuildingVisuals {
     footprintDepth: number,
     age: SettlementAge = "settlement",
     level = 1,
+  ): Group | null {
+    return this.resolve(buildingId, "completed", level, footprintWidth, footprintDepth, age);
+  }
+
+  /**
+   * The last-seen form of an enemy building — GDD 08 §40's ghost.
+   *
+   * Every input is remembered rather than looked up, which is the whole point:
+   * this resolves what the observer saw, not what is there now. Same resolution
+   * order as the live building, so a ghost and the real thing are the same model
+   * and a re-sighting is not a visible swap.
+   */
+  createRememberedVisual(
+    buildingId: string,
+    level: number,
+    footprintWidth: number,
+    footprintDepth: number,
+    age: SettlementAge,
   ): Group | null {
     return this.resolve(buildingId, "completed", level, footprintWidth, footprintDepth, age);
   }

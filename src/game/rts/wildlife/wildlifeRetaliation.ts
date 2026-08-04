@@ -48,9 +48,13 @@ export class WildlifeRetaliationSystem {
     const strikes: WildlifeStrike[] = [];
     let workers: Map<number, Unit> | null = null;
     for (const animal of this.wildlife.all()) {
-      animal.attacking = false;
       const profile = animal.stats.retaliation;
+      // Cleared only for the animals this system governs, which V3 Faz 3 made
+      // load-bearing: `attacking` now has a second author (`PredatorSystem`), and
+      // a blanket reset here would silently cancel a wolf's bite every tick
+      // depending on which of the two ran last.
       if (!profile) continue;
+      animal.attacking = false;
       const worker = this.grappler(animal, () => (workers ??= this.workerIndex()));
       if (!worker) {
         // The struggle is over, not paused: an animal let go of has calmed down,

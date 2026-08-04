@@ -33,6 +33,7 @@ export type RtsNotificationKind =
   | "logistics-restored"
   | "outpost-under-attack"
   | "center-under-attack"
+  | "worker-under-attack"
   | "age-upgraded"
   | "enemy-age-upgraded"
   | "regional-victory-warning"
@@ -74,6 +75,14 @@ const RULES: Readonly<Record<RtsNotificationKind, NotificationRule>> = {
   "logistics-restored": { severity: "info", displaySeconds: 6, cooldownSeconds: 0 },
   "outpost-under-attack": { severity: "alert", displaySeconds: 6, cooldownSeconds: 12 },
   "center-under-attack": { severity: "alert", displaySeconds: 8, cooldownSeconds: 10 },
+  // V3 §3.10. The one notice that is not a convenience: a wolf in unscouted
+  // ground is not drawn at all (`isWildlifeVisible`), so for the mauling this
+  // was written for, this line *is* the signal — without it a worker leaves the
+  // roster and nothing on screen ever said why. Alert for that reason, and the
+  // shortest cooldown of the three under-attack kinds, because a second worker
+  // taken a few seconds later is a second decision to make rather than a repeat
+  // of the first.
+  "worker-under-attack": { severity: "alert", displaySeconds: 6, cooldownSeconds: 8 },
   "age-upgraded": { severity: "info", displaySeconds: 6, cooldownSeconds: 0 },
   "enemy-age-upgraded": { severity: "warning", displaySeconds: 8, cooldownSeconds: 0 },
   // §58: the longest display and a cooldown to match. Unlike the others this

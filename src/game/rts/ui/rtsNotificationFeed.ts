@@ -15,6 +15,7 @@ const ICON_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "logistics-restored": "✓",
   "outpost-under-attack": "⚔",
   "center-under-attack": "⚔",
+  "worker-under-attack": "⚔",
   "age-upgraded": "✦",
   "enemy-age-upgraded": "✦",
   "regional-victory-warning": "⚑",
@@ -39,6 +40,10 @@ const ICON_SRC_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "logistics-restored": "/assets/ui/icons/notification_logistics_restored.png",
   "outpost-under-attack": "/assets/ui/icons/building-outpost.png",
   "center-under-attack": "/assets/ui/icons/building-command-center.png",
+  // The subject here is a person, not a place — the same worker portrait the
+  // roster and the build palette already use, so the line is read as "one of
+  // yours" at a glance rather than as another building warning.
+  "worker-under-attack": "/assets/ui/icons/unit-worker.png",
   "age-upgraded": "/assets/ui/icons/notification_age_up.png",
   "enemy-age-upgraded": "/assets/ui/icons/notification_age_up.png",
   "regional-victory-warning": "/assets/ui/icons/notification_regional_victory.png",

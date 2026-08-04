@@ -2,109 +2,155 @@
  * "Last known" enemy buildings on the map — Vertical Slice Plan v0.2 §59,
  * GDD 08 §40.
  *
- * §40 offers two presentations: the last seen model, or a ghost sign. This draws
- * the sign — a flat translucent footprint marker at the remembered position —
- * for a specific reason beyond cost. Reusing the real building model would mean
- * the ghost stays perfectly accurate as the true building levels up or takes
- * damage, because a cloned model is tempting to keep in sync. A deliberately
- * abstract marker cannot lie in that direction: it shows *that* something was
- * seen there and how long ago, and nothing it does not know.
+ * §40 offers two presentations: the last seen model, or a ghost sign. This drew
+ * the sign — a flat translucent footprint square — and the reasoning was that an
+ * abstract marker cannot drift out of date the way a cloned model would. In the
+ * running game that argument lost to what the player actually sees: a scouted
+ * enemy base reads as a field of red rectangles, and since a siege weapon
+ * outranges its own vision, the common case is a gun shelling a red square. The
+ * marker is honest about what it does not know and says nothing about what it
+ * does — including which building it is, which is the one thing scouting is for.
  *
- * §40's "bilgi eskidikçe doğruluk kaybedebilir" is the fade: a marker loses
- * opacity with the age of the sighting, so a fresh scout report reads as solid
- * and a five-minute-old one as a hint.
+ * So the ghost is now the **last seen model**: the building the observer saw,
+ * built from {@link RememberedStructure} alone.
+ *
+ * That does not give up the "memory can be wrong" property, because the model is
+ * a *snapshot*, not a mirror. It is built once, from remembered data, and
+ * rebuilt only when the memory itself changes — which {@link EnemyMemorySystem}
+ * only ever does from a fresh sighting. A building that upgrades, takes damage or
+ * is demolished under fog leaves its ghost exactly as it was; the player still
+ * has to walk back and look. The signature in {@link markerSignature} is what
+ * enforces that: it is the whole of the remembered appearance, so anything the
+ * observer did not witness cannot change what is drawn.
+ *
+ * The old opacity-by-age fade went with the marker. It was §40's "bilgi
+ * eskidikçe doğruluk kaybedebilir" expressed as transparency, which on a real
+ * building would read as a rendering fault rather than as staleness — and the
+ * snapshot above expresses the same idea structurally and more strongly: the age
+ * of a belief shows up as the belief being *wrong*, not as it being faint.
  *
  * View only. It renders {@link EnemyMemorySystem} and never decides what is
  * remembered.
  */
-import { Color, Group, Mesh, MeshBasicMaterial, PlaneGeometry } from "three";
+import { Group } from "three";
 
 import type { EnemyMemorySystem, RememberedStructure } from "./enemyMemorySystem";
 import type { UnitOwner } from "../units/unit";
 
-/** Matches the territory palette so an enemy ghost reads as enemy at a glance. */
-const GHOST_COLOR: Readonly<Record<UnitOwner, string>> = {
-  player: "#2d7fd6",
-  enemy: "#c0392b",
-};
+/**
+ * Builds the visual for one remembered building.
+ *
+ * Injected rather than reached for, because resolving a building's art needs the
+ * loaded Actor pack and this module must stay a renderer of memory. `null` is a
+ * normal answer — the pack may still be loading — and simply means no ghost is
+ * drawn this refresh; the next one retries.
+ */
+export type RememberedStructureVisualFactory = (
+  remembered: RememberedStructure,
+) => Group | null;
 
-const FRESH_OPACITY = 0.55;
-const STALE_OPACITY = 0.15;
-/** Seconds after which a sighting has decayed to {@link STALE_OPACITY}. */
-const FULL_DECAY_SECONDS = 180;
-
-/** Footprint sizes are not remembered, so every ghost is one neutral size. */
-const MARKER_SIZE = 4;
+interface GhostMarker {
+  readonly object: Group;
+  /** The remembered appearance this was built from; see the module doc. */
+  readonly signature: string;
+}
 
 export class GhostStructureView {
   readonly root = new Group();
-  private readonly markers = new Map<number, { mesh: Mesh; material: MeshBasicMaterial }>();
-  private readonly geometry: PlaneGeometry;
+  private readonly markers = new Map<number, GhostMarker>();
 
   constructor(
     private readonly memory: EnemyMemorySystem,
     private readonly observer: UnitOwner,
+    private readonly createVisual: RememberedStructureVisualFactory,
   ) {
     this.root.name = "rts-structure-ghosts";
-    this.geometry = new PlaneGeometry(MARKER_SIZE, MARKER_SIZE);
-    this.geometry.rotateX(-Math.PI / 2);
   }
 
   /**
-   * Sync markers to the observer's current ghost set.
+   * Sync ghosts to the observer's current memory.
    *
-   * Markers are keyed by structure id and reused, so a building repeatedly
-   * scouted and lost does not churn geometry.
+   * Markers are keyed by structure id and kept while their signature holds, so a
+   * building sitting under fog for the whole match costs one model build, not one
+   * per tick — and, more importantly, is not silently re-derived from data that
+   * may have moved on.
    */
-  refresh(now: number): void {
-    const ghosts = this.memory.ghosts(this.observer);
+  refresh(): void {
     const live = new Set<number>();
 
-    for (const ghost of ghosts) {
-      live.add(ghost.structureId);
-      const entry = this.markers.get(ghost.structureId) ?? this.createMarker(ghost);
-      entry.material.opacity = this.opacityFor(ghost, now);
+    for (const ghost of this.memory.ghosts(this.observer)) {
+      const signature = markerSignature(ghost);
+      const existing = this.markers.get(ghost.structureId);
+      if (existing && existing.signature === signature) {
+        live.add(ghost.structureId);
+        continue;
+      }
+      // A re-sighting found it changed (levelled up, a new age's art). The old
+      // snapshot is now known to be wrong, so it is replaced rather than kept.
+      if (existing) this.removeMarker(ghost.structureId);
+      if (this.createMarker(ghost, signature)) live.add(ghost.structureId);
     }
 
-    for (const [id, entry] of this.markers) {
+    for (const id of [...this.markers.keys()]) {
       if (live.has(id)) continue;
-      // The memory was either re-sighted (the real building renders again) or
-      // corrected away (it is gone). Either way the sign must not linger.
-      this.root.remove(entry.mesh);
-      entry.material.dispose();
-      this.markers.delete(id);
+      // The memory was either re-sighted — the real building renders again, via
+      // `fogVisibilityBinder` — or corrected away because it is gone. Either way
+      // two of it must never be on screen at once.
+      this.removeMarker(id);
     }
   }
 
-  private opacityFor(ghost: RememberedStructure, now: number): number {
-    const age = this.memory.ageOf(ghost, now);
-    const decay = Math.min(1, age / FULL_DECAY_SECONDS);
-    return FRESH_OPACITY + (STALE_OPACITY - FRESH_OPACITY) * decay;
+  private createMarker(ghost: RememberedStructure, signature: string): boolean {
+    const visual = this.createVisual(ghost);
+    if (!visual) return false;
+    const object = new Group();
+    object.name = `rts-structure-ghost-${ghost.structureId}`;
+    // Same anchor the live structure uses: origin at the footprint centre, on the
+    // ground height sampled where it stands (`placedStructureSystem.place`), so
+    // the ghost and the building it stands for occupy the same space exactly.
+    object.position.set(ghost.x, ghost.groundY, ghost.z);
+    object.add(visual);
+    this.root.add(object);
+    this.markers.set(ghost.structureId, { object, signature });
+    return true;
   }
 
-  private createMarker(ghost: RememberedStructure): { mesh: Mesh; material: MeshBasicMaterial } {
-    const material = new MeshBasicMaterial({
-      color: new Color(GHOST_COLOR[ghost.owner]),
-      transparent: true,
-      opacity: FRESH_OPACITY,
-      depthWrite: false,
-    });
-    const mesh = new Mesh(this.geometry, material);
-    mesh.name = `rts-structure-ghost-${ghost.structureId}`;
-    // Above the fog plane (y 0.05): a ghost is a memory the fog must not swallow,
-    // and it sits in fogged ground by definition.
-    mesh.position.set(ghost.x, 0.06, ghost.z);
-    mesh.renderOrder = 5;
-    this.root.add(mesh);
-    const entry = { mesh, material };
-    this.markers.set(ghost.structureId, entry);
-    return entry;
+  private removeMarker(id: number): void {
+    const marker = this.markers.get(id);
+    if (!marker) return;
+    this.root.remove(marker.object);
+    this.markers.delete(id);
   }
 
+  /**
+   * Ghost visuals are clones off the Actor pack's templates and carry
+   * `rtsSharedModel`, so their geometry and materials belong to
+   * `RtsActorVisualFactory` and are freed with it — the same ownership rule
+   * `placedStructureSystem` follows for live buildings. Disposing them here would
+   * blank every other instance of the model.
+   */
   dispose(): void {
-    for (const entry of this.markers.values()) entry.material.dispose();
     this.markers.clear();
-    this.geometry.dispose();
     this.root.clear();
   }
+}
+
+/**
+ * Everything about a remembered building that decides what is drawn.
+ *
+ * Deliberately not the sighting time: a belief growing older is not a reason to
+ * rebuild the model, and folding `lastSeenAt` in here would rebuild every ghost
+ * on every tick.
+ */
+function markerSignature(ghost: RememberedStructure): string {
+  return [
+    ghost.buildingId,
+    ghost.age,
+    ghost.level,
+    ghost.x,
+    ghost.z,
+    ghost.groundY,
+    ghost.footprintWidth,
+    ghost.footprintDepth,
+  ].join("|");
 }

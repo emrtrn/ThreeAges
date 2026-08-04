@@ -5935,9 +5935,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
+        10.97,
         0,
-        0,
-        16
+        38.04
       ],
       "name": "Herd central-stag",
       "scale": 1,
@@ -5980,9 +5980,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
+        -7.13,
         0,
-        0,
-        -16
+        -33.14
       ],
       "name": "Herd central-bull",
       "scale": 1,

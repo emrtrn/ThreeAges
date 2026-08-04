@@ -45,9 +45,17 @@ export function updateUnitEngagement(units: readonly Unit[], options: Engagement
  * still defend after taking damage. Existing attack intent wins; this remains
  * a fallback for an otherwise unengaged defender. Workers never independently
  * enter combat, but may answer a hit through this defensive path.
+ *
+ * The attacker is a {@link CombatTarget} rather than a {@link Unit} (V3 §3.5).
+ * Nothing in the body ever needed more than the shared contract — owner, health
+ * and a position to walk to — and the one field that did, `dying`, is now asked
+ * of the interface. What the widening buys is the wolf: its bite is landed by
+ * {@link PredatorSystem} instead of `updateUnitCombat`, so without this a worker
+ * mauled on open ground would go down without the defensive answer every other
+ * blow in the match provokes (V1 §3.9's "workers die silently" debt).
  */
-export function retaliateAgainstAttack(defender: Unit, attacker: Unit, navigation: RtsNavigation): boolean {
-  if (defender.health.depleted || defender.dying || attacker.health.depleted || attacker.dying
+export function retaliateAgainstAttack(defender: Unit, attacker: CombatTarget, navigation: RtsNavigation): boolean {
+  if (defender.health.depleted || defender.dying || attacker.health.depleted || (attacker.dying ?? false)
     || defender.owner === attacker.owner || defender.attackTarget !== null) return false;
   // Workers never acquire enemies and player attack commands still do no damage.
   // A received hit is their one defensive exception; unlike a Guard's transit

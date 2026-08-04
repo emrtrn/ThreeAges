@@ -118,7 +118,10 @@ import { CommandMarkerSystem } from "./commands/commandMarker";
 import { CommandSystem } from "./commands/commandSystem";
 import { CommandCenterSystem } from "./structures/commandCenterSystem";
 import { COMMAND_CENTER_MAX_HEALTH, CommandCenter } from "./structures/commandCenter";
-import { RtsBuildingVisuals } from "./structures/rtsBuildingVisuals";
+import {
+  COMMAND_CENTER_VISUAL_FOOTPRINT,
+  RtsBuildingVisuals,
+} from "./structures/rtsBuildingVisuals";
 import { updateStructureDestruction } from "./structures/structureDestruction";
 import { RtsMatchState } from "./match/rtsMatchState";
 import { RtsMatchFlow } from "./match/rtsMatchFlow";
@@ -180,6 +183,7 @@ import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTrade
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { ForestSystem } from "./economy/forestSystem";
 import { PastureSystem } from "./wildlife/pastureSystem";
+import { PredatorSystem } from "./wildlife/predatorSystem";
 import { WildlifeRetaliationSystem } from "./wildlife/wildlifeRetaliation";
 import { WildlifeSystem } from "./wildlife/wildlifeSystem";
 import { WildlifeView } from "./wildlife/wildlifeView";
@@ -517,6 +521,7 @@ export class RtsApp {
   private readonly wildlife: WildlifeSystem;
   private readonly pasture: PastureSystem;
   private readonly wildlifeRetaliation: WildlifeRetaliationSystem;
+  private readonly predators: PredatorSystem;
   private readonly wildlifeRoot = new Group();
   private readonly wildlifeView = new WildlifeView(this.wildlifeRoot);
   private readonly centers = new CommandCenterSystem();
@@ -927,6 +932,14 @@ export class RtsApp {
     this.forests = new ForestSystem(this.spatial.trees);
     this.wildlife = new WildlifeSystem(this.options.animalBalance, this.spatial.herds);
     this.wildlifeRetaliation = new WildlifeRetaliationSystem(this.units, this.wildlife);
+    // V3 Faz 3. The territory grid is passed as the raw question rather than the
+    // system, because that question — who holds this point — is the entirety of
+    // what a wolf reads from it (KARAR 1).
+    this.predators = new PredatorSystem(
+      this.units,
+      this.wildlife,
+      (x, z) => this.territory.ownerAt(x, z),
+    );
     this.kingdoms = new KingdomRegistry(
       KINGDOM_OWNERS,
       this.units,
@@ -1001,7 +1014,20 @@ export class RtsApp {
       // same frontier the ground overlay draws — one blur, one fade, one source.
       this.fogMask = new FogMask(this.fogView.maskSpan);
       this.fogMask.setTexture(this.fogView.maskTexture);
-      this.ghostStructures = new GhostStructureView(this.enemyMemory, PLAYER_OWNER);
+      // §40 draws the last seen *building*, so the ghost needs the same art
+      // lookup a live one goes through — fed only from remembered fields, which
+      // is what keeps a ghost from silently tracking the truth.
+      this.ghostStructures = new GhostStructureView(
+        this.enemyMemory,
+        PLAYER_OWNER,
+        (remembered) => this.buildingVisuals.createRememberedVisual(
+          remembered.buildingId,
+          remembered.level,
+          remembered.footprintWidth,
+          remembered.footprintDepth,
+          remembered.age,
+        ),
+      );
       this.fogVisibility = new FogVisibilityBinder(
         this.vision,
         this.units,
@@ -2598,9 +2624,24 @@ export class RtsApp {
     if (pointer) this.commands.issueAttackMoveAt(pointer.x, pointer.y);
   }
 
-  /** Every damageable thing on the field, for target acquisition. */
+  /**
+   * Every damageable thing on the field, for target acquisition.
+   *
+   * Wildlife enters this list by **state, never by species** (V3 §3.4): only the
+   * predators that are actually hunting somebody. `nearestHostile` compares
+   * owners alone and an animal is `"wild"`, so a roster-wide entry would make
+   * every grazing deer hostile to both kingdoms — half the army would break off
+   * a raid to chase venison. A wolf that gives up leaves the list on the same
+   * tick; a Guard already trading blows with it keeps its own target, which is
+   * how a started fight finishes rather than being called off mid-swing.
+   */
   private combatTargets() {
-    return [...this.units.all(), ...this.centers.all(), ...this.structures.all()];
+    return [
+      ...this.units.all(),
+      ...this.centers.all(),
+      ...this.structures.all(),
+      ...this.predators.aggressors(),
+    ];
   }
 
   private commitRallyPoint(x: number, y: number): void {
@@ -2693,6 +2734,19 @@ export class RtsApp {
     // frame: the shepherd's position has just been updated above, and a drive that
     // aimed at where he stood last tick would trail a step behind all the way home.
     this.pasture.update(dt);
+    // V3 Faz 3, and ahead of the herd's tick for the same reason the drive is: a
+    // quarry chosen this frame has to move the wolf this frame, or every chase
+    // trails one step behind the worker it is aimed at.
+    for (const strike of this.predators.update(dt)) {
+      // V3 Faz 4, closing V1 §3.9's debt. Every other blow in the match reaches
+      // `resolveCombatHit` and gets a defensive answer out of it; the wolf's does
+      // not, because `updateUnitCombat` never landed it. So the call is made here
+      // instead — a mauled worker turns on the wolf exactly as he turns on a
+      // raider, rather than being eaten without ever reacting. He still never
+      // *picks* the fight: `updateUnitEngagement` skips workers outright, so this
+      // is the one door into it and it only opens on a hit already taken.
+      retaliateAgainstAttack(strike.victim, strike.predator, this.navigation);
+    }
     this.wildlife.update(dt, this.units.all().map((unit) => unit.position));
     // Last of the three, and it has to be: a blow lands on whoever is *still*
     // standing over the animal after both of them have moved this frame. A bull
@@ -2847,7 +2901,7 @@ export class RtsApp {
     vision.refresh();
     this.enemyMemory?.refresh(this.clock.seconds);
     this.fogView?.refresh();
-    this.ghostStructures?.refresh(this.clock.seconds);
+    this.ghostStructures?.refresh();
     this.fogVisibility?.refresh();
   }
 
@@ -2902,7 +2956,11 @@ export class RtsApp {
         buildingId: structure.stats.id,
         x: structure.x,
         z: structure.z,
+        groundY: structure.groundY,
         level: structure.level,
+        age: this.ageOf(structure.owner),
+        footprintWidth: structure.stats.footprint.width,
+        footprintDepth: structure.stats.footprint.depth,
         healthRatio: structure.health.ratio,
       });
     }
@@ -2914,7 +2972,15 @@ export class RtsApp {
         buildingId: "command_center",
         x: center.position.x,
         z: center.position.z,
-        level: 1,
+        groundY: center.groundY,
+        // The centre's own level, so a remembered one is the art the observer
+        // saw rather than a permanent level 1.
+        level: center.level,
+        age: this.ageOf(center.owner),
+        // The visual footprint, not the nav one: this feeds the ghost renderer,
+        // which has to fit what `applyToCenter` fitted the live centre to.
+        footprintWidth: COMMAND_CENTER_VISUAL_FOOTPRINT,
+        footprintDepth: COMMAND_CENTER_VISUAL_FOOTPRINT,
         healthRatio: center.health.ratio,
       });
     }
@@ -4474,18 +4540,27 @@ export class RtsApp {
   }
 
   /**
-   * One watch over both target kinds. They are sampled together because the
+   * One watch over all three target kinds. They are sampled together because the
    * watch's contract is "what lost health since the last look" — splitting it
-   * per kind would need two baselines advanced in lockstep for no gain.
+   * per kind would need three baselines advanced in lockstep for no gain.
+   *
+   * Workers joined in V3 Faz 4 (§3.10), and by health rather than by attacker:
+   * the watch never asks *what* took the health off, so a worker mauled by a wolf
+   * and one shot by a raider read the same, which is right — both are "somebody
+   * out there is dying and you have not looked". A dead worker leaves the sample
+   * list and the watch forgets him, so his removal cannot read as a fresh wound.
    */
   private syncUnderAttackNotifications(): void {
     const center = this.centers.get(PLAYER_OWNER);
     const outposts = this.structures.ownedBy(PLAYER_OWNER)
       .filter((structure) => structure.stats.territory !== undefined);
+    const workers = this.units.unitsOf(PLAYER_OWNER).filter((unit) => unit.role === "worker");
     const damaged = this.attackWatch.observe([
       ...(center ? [{ id: "center", health: center.health.current }] : []),
       ...outposts.map((outpost) => ({ id: `outpost:${outpost.id}`, health: outpost.health.current })),
+      ...workers.map((worker) => ({ id: `worker:${worker.id}`, health: worker.health.current })),
     ]);
+    let woundedWorkers = 0;
     for (const id of damaged) {
       if (id === "center") {
         this.notifications.post({
@@ -4494,12 +4569,29 @@ export class RtsApp {
         });
         continue;
       }
+      if (id.startsWith("worker:")) {
+        woundedWorkers += 1;
+        continue;
+      }
       this.notifications.post({
         kind: "outpost-under-attack",
         // Keyed per outpost: two outposts under attack are two places the player
         // has to choose between, which is the decision the notice exists to prompt.
         subject: id,
         text: "Karakolunuz saldırı altında.",
+      });
+    }
+    // Deliberately *not* keyed per worker, unlike the outposts. A raid catches
+    // whole crews at once, and four workers would be four lines — the entire feed
+    // (`MAX_ACTIVE_NOTIFICATIONS`), pushing out the centre warning that is the
+    // more urgent of the two. One line that says how many keeps the same
+    // information in one slot.
+    if (woundedWorkers > 0) {
+      this.notifications.post({
+        kind: "worker-under-attack",
+        text: woundedWorkers > 1
+          ? `${woundedWorkers} işçiniz saldırı altında!`
+          : "İşçiniz saldırı altında!",
       });
     }
   }

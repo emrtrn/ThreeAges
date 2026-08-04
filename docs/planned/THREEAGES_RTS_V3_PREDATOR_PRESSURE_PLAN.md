@@ -498,7 +498,7 @@ Fox (Q4 = B ise haritaya konmaz, ama veri yazilir): `moveSpeed` 9, `maxHealth`
   `check:assets`'in Wolf/Fox uyarilari (thumbnail yok, sidecar/actor manifest'te
   kayitli degil) alti hayvanin **hepsinde** ayni - yeni bir uyari sinifi degil.
 
-### Faz 2 - Kurt haritada devriye geziyor (saldiri yok) **[KOD TAMAM - gorsel kabul kullanicida]**
+### Faz 2 - Kurt haritada devriye geziyor (saldiri yok) **[TAMAM 2026-08-04]**
 
 - [x] `wildlifeRoaming`'e ucuncu mod: `advanceHunt` (§3.6). Hedefe dogru,
   `fleeSpeed` (= `moveSpeed`, Gallop'un kalibre edildigi hiz) ile, **yuvadan**
@@ -540,10 +540,11 @@ Fox (Q4 = B ise haritaya konmaz, ama veri yazilir): `moveSpeed` 9, `maxHealth`
   Cow birebir ayni klip verisini tasiyor (adim 2.14, sure 1.167) ama 1.5 ve 1.1
   authorlanmis, yani icinde bir tempo tercihi de var. Bu yuzden bu sayi bir
   testle **pinlenmedi**; pinlenen sey iliskiler (asagida).
-- [ ] Kabul: kurt gorunur ve dolasir; hicbir seye saldirmaz, hicbir sey ona
-  saldirmaz. **Kullanici gorsel kabulu** - ilk turda dort maddenin ucu gecti
-  (iki kanatta devriye, dogru boy, isciden kacmiyor, geyikler kurttan kaciyor);
-  ayak kaymasi icin ikinci tur **acik**.
+- [x] Kabul: kurt gorunur ve dolasir; hicbir seye saldirmaz, hicbir sey ona
+  saldirmaz. **Kullanici gorsel kabulu verildi (2026-08-04).** Ilk turda dort
+  maddenin ucu gecmisti (iki kanatta devriye, dogru boy, isciden kacmiyor,
+  geyikler kurttan kaciyor); ayak kaymasi `predator.patrolSpeed` + olculmus
+  `walkClipSpeed` ile kapandi ve ikinci tur onaylandi.
 
 **Yerlesim olcumle bulundu, gozle degil** - ve ilk deneme testte kirmizi yandi.
 (-28, -2) en yakin baslangica 41.2 uzaktaydi; gereken 28 (kontrol yaricapi) + 14
@@ -563,28 +564,115 @@ V3'un gercekten yanlis yapabilecegi sey bu degil - haritayi **daha da**
 dengesiz birakmak. Test onu reddediyor: yuvalarin carpikligi (2.68) haritanin
 kendi surulerininkini (2.83) asamaz.
 
-### Faz 3 - Kurt isciye saldirir
+### Faz 3 - Kurt isciye saldirir **[KOD TAMAM - gorsel kabul kullanicida]**
 
-- [ ] `predatorSystem.ts`: hedef secimi (Q1'in karari), kovalama, vurus.
-- [ ] Vurus `Attack` klibini `attackCount` uzerinden tetikler (V2 deseni).
-- [ ] Olen isci temiz duser: `PastureSystem` / `WorkerConstructionSystem` /
-  ekonomi rezervasyonlari birakir - V2 Faz 7'nin **dort okuyucu** dersi burada
-  yeniden kontrol edilir.
-- [ ] Isci kendi basina kurdu hedef **almaz** (V1 §3.9).
-- [ ] Kabul: bolge disindaki isci saldiriya ugrar ve olur; bolge icindeki isci
-  guvendedir.
+- [x] `predatorSystem.ts`: hedef secimi (KARAR 1), kovalama, vurus. Hedef
+  `territory.ownerAt(...) === "neutral"` olan **isci**; asker hicbir kosulda
+  hedef degil. Secilen kurban **tutulur**, her tick yeniden secilmez - iki isci
+  birbirini kesince kurban degistiren bir kurt ikisinin arasinda salinip
+  hicbirini isirmazdi.
+- [x] Hareket burada **degil**: sistem yalnizca `WildlifeAnimal.hunt` yazar,
+  ucuncu modu surunun kendi tick'i kosturur - V2'nin `lead` deseni aynen.
+  Bu yuzden `predators.update` surunun tick'inden **once** kosuyor (surme
+  kuralinin ayni gerekcesi: bu karede secilen kurban bu karede hareket etmeli).
+- [x] Vurus `Attack` klibini `attackCount` uzerinden tetikler (V2 deseni).
+  `attacking` bayraginin artik **iki** yazari var; `wildlifeRetaliation` bayragi
+  yalnizca kendi yonettigi hayvanlar icin sifirliyor, yoksa sira degisince kurdun
+  isirigi sessizce iptal olurdu.
+- [x] Olen isci temiz duser: `PastureSystem` / `WorkerConstructionSystem` /
+  ekonomi rezervasyonlari birakir. Kontrol edildi ve **sifir kod cikti** - dort
+  okuyucunun hepsi `health.depleted` okuyor ve kurdun isirigi zaten
+  `health.damage`, yani askerin vurusuyla ayni cagri. Testle pinlendi (coban
+  kolu; olen cobanin tuttugu inek claim'siz, lead'siz ve yeniden avlanabilir).
+- [x] Isci kendi basina kurdu hedef **almaz** (V1 §3.9) - yapisal olarak dogru:
+  `combatTargets()` yaban hayatini hala tasimiyor (Faz 4) ve
+  `updateUnitEngagement` isciyi zaten atliyor. Olculdu, varsayilmadi.
+- [x] **Kovalama biterken isinlanma yok.** Sadece kosturunca cikan sey: otlama
+  modu hayvani `keepInHerdGround` ile cembere **kelepceler**, yani kovalamanin
+  sonunda oylece birakilan kurt tasmanin cogunu tek karede geri **ziplardi**.
+  Cozum, pes etmeyi yuvaya nisanlanmis bir kovalama yapmak. §3.6'nin onerdigi
+  `rehome` **reddedildi** ve gerekce dosyada yazili: yuva, tasmanin, yuva
+  yerlesim kuralinin ve harita adalet testinin hepsinin olculdugu sabit nokta -
+  kurtla birlikte yuruyen bir yuva, pakedi her kovalamada bir adim kaydirir.
+  (§3.6'nin `rehome` onerisi Faz 5'te, geyik oldurme yerinde, yeniden tartilir.)
+- [x] Kurt kurbanin **yanina** duruyor, icine degil: `HuntQuarry.standoff`
+  (`advanceLed`'in `DRIVE_FOLLOW_GAP`'inin ikizi). Duruş mesafesi isirik
+  menzilinin (`CAUGHT_DISTANCE`) altinda, yoksa kurt kapandigi isirigin bir
+  tik disinda beklerdi.
+- [x] Kabul: bolge disindaki isci saldiriya ugrar ve olur; bolge icindeki isci
+  guvendedir. **Kullanici gorsel kabulu verildi (2026-08-04).**
+- [x] **Kabulun actigi ikinci hata - geyiklerde de "isinlanma" (V3'e ait degil,
+  V1 Faz 2'den beri mevcut).** Kullanici bunu kurdunkine benzeterek bildirdi;
+  teshis tahminle degil **olcumle** yapildi (400 saniyelik kosu, tek tehdide
+  karsi alti tehdit):
+  - `advanceRoam` kacis yonunu **her tick** o anki en yakin tehditten yeniden
+    hesapliyordu. Kalabalikta "en yakin" degistikce yon de degisiyor, yani geyik
+    dortnala kosarken saniyede birkac kez geri donuyordu. Olculen: hareket eden
+    tick'lerin **%14.6'si** govdeyi 90 dereceden fazla ceviriyor; tek kisiyle
+    ayni kosu %3.4. Bu fark nedeni adlandirdi. Kacis yonu artik **urkme aninda
+    bir kez** secilip bolt boyunca korunuyor.
+  - `keepInHerdGround` disari kacan adimi kendi yaricapi boyunca geri
+    projeliyordu, yani **tam disari** kosan hayvan basladigi yere iniyor: govde
+    dururken `speed === 0` cikiyor ve sunum bunu *duruyor* diye okuyup dortnala
+    kosan geyige **yeme klibini** oynatiyordu ("animasyonlari karisiyor").
+    Olculen: 400 tick. Artik disari bileseni atilip cember **boyunca** kosuluyor -
+    ki `keepInHerdGround`'un dokumaninin zaten iddia ettigi davranis buydu.
+  - Sonuc: ters donus %14.6 -> **%0.6**, kacarken yerinde sayma 400 -> **1**.
+    Ikisi de sozlesme testiyle pinlendi (buyukluk degil: "bolt yonunu
+    degistirmez" ve "kosarken hiz sifir olmaz").
 
-### Faz 4 - Karsilik: asker ve Karakol kurdu vurur
+### Faz 4 - Karsilik: asker ve Karakol kurdu vurur **[KOD TAMAM - gorsel kabul kullanicida]**
 
-- [ ] `combatTargets()` saldirgan durumdaki yirticiyi icerir - **tur degil
-  durum** (§3.4).
-- [ ] `retaliateAgainstAttack` saldirgani `CombatTarget`'a genisler (§3.5);
-  `predatorSystem` vurusundan sonra onu cagirir. **V1 §3.9 borcu burada kapanir.**
-- [ ] `worker-under-attack` bildirimi (§3.10); `RtsAttackWatch` isciye baglanir.
-- [ ] Karakol'un kurdu vurdugu dogrulanir - beklenti: **sifir yeni kod** (§3.13).
-  Cikmazsa neden cikmadigi buraya yazilir.
+- [x] `combatTargets()` saldirgan durumdaki yirticiyi icerir - **tur degil
+  durum** (§3.4). Durumun sahibi `PredatorSystem.aggressors()`: her tick'te
+  yeniden kurulan, o an bir kurbani olan yirticilerin listesi. Kapiyi kimin
+  actigi onemli - liste `WildlifeSystem`'den degil **yirtici sisteminden** gelir,
+  cunku "hedef secmis olmak" o sistemin bildigi tek sey. Kovalamaya **henuz
+  baslamis** kurt da listede: eskortun saldiriyi karsilamasi icin ilk isirigin
+  dusmesini beklemesi gerekmemeli.
+- [x] `retaliateAgainstAttack` saldirgani `CombatTarget`'a genisledi (§3.5).
+  Govde zaten yalnizca ortak sozlesmeyi okuyordu; tek istisna olan `dying`
+  `CombatTarget`'a **istege bagli** alan olarak eklendi (yalnizca `Unit`'in bir
+  olum pozu var; bina moloz, hayvan les). Cagriyi `RtsApp` yapiyor - donen her
+  `PredatorStrike` icin bir satir, `resolveCombatHit`'in her vurus icin yaptigi
+  seyin ayni. **V1 §3.9 borcu burada kapandi:** isirilan isci artik akinci
+  vurdugunda oldugu gibi donup vuruyor. §2.5 ile catismiyor - kural "isci
+  **kendi basina** hedef almaz"di, ve `updateUnitEngagement` isciyi hala
+  atliyor; bu kapi yalnizca **zaten yenmis** bir darbeyle aciliyor.
+- [x] `worker-under-attack` bildirimi (§3.10); `RtsAttackWatch` isciye baglandi -
+  ucuncu ornek kume olarak, ayni tek izleyicide. Karakol'un aksine **konu bazli
+  anahtarlanmadi**: bir akin bir ekibi birden yakalar ve dort isci dort satir
+  demek olurdu - `MAX_ACTIVE_NOTIFICATIONS`'in tamami, yani Merkez uyarisini
+  disari iten bir isci uyarisi. Tek satir kac kisi oldugunu soyluyor.
+- [x] Karakol'un kurdu vurdugu dogrulandi - **sifir yeni kod** (§3.13): kurt
+  `combatTargets()`'a girer girmez `structureDefense` onu `nearestHostile`'da
+  buluyor ve `resolveDamage` `light` carpanini (1.2) kendi tablosundan
+  uyguluyor. Test bunu iki tablodan **hesaplayarak** pinliyor.
+  **Ama bir sey cikti ve buraya yaziliyor** (asagida).
 - [ ] Kabul: muhafiz eskortlu avci guvende; Karakol menzilindeki kurt duser;
-  saldiri sessiz degil.
+  saldiri sessiz degil. **Kullanici gorsel kabulu.**
+
+**Karakol'un atisi bedava, ama gonderilen sayilarla neredeyse hic tetiklenmiyor.**
+Kod yolu §3.13'un dedigi gibi ucretsiz; engel **geometri**. Saldirgan bir kurt,
+KARAR 1 geregi, **sahipsiz** zeminde duran bir iscinin yanindadir; Karakol ise
+`territory.controlRadius` **16**'ya kadar her noktanin sahibidir ve
+`defense.attackRange`'i **12**'dir. Yani vurabilecegi her nokta zaten kendi
+bolgesi, ve kendi bolgesinde saldirgan kurt olamaz. Ikisi arasindaki 4 birim,
+§2.7'yi pratikte kagit uzerinde birakiyor.
+
+Uc secenek var ve ucu de **kullanicinin**: (a) oldugu gibi birakmak - §2.3
+(bolge icindeki isci dokunulmaz) Karakol'un V3'teki asil degeri zaten ve o
+tanim geregi calisiyor; (b) `attackRange`'i `controlRadius`'un ustune cekmek -
+ayar isi, ama Karakol'un PvP menzilini de degistirir; (c) "durum"un tanimini
+genisletip **bolgeye giren** yirticiyi de hedeflenebilir saymak - o zaman ussune
+dalan kurt vurulur, ama bu §7'nin yazdigi seyin otesinde bir tasarim karari,
+bu yuzden yapilmadi. Kabul macinda olculur.
+
+**§2.4'un ikinci yarisi acik.** "Bildirim akisinda bir uyari cikar" teslim
+edildi; "oyuncu kamerayi oraya goturebilir" icin bildirim akisinda tiklanabilir
+bir odak yok - hicbir bildirim turunde yok, yani V3'e ait bir eksik degil.
+Faz 4'un checklist'i yalnizca bildirimi istiyordu; kamera odagi genel bir HUD
+isi olarak birakildi.
 
 ### Faz 5 - Kurt geyik avlar
 
@@ -656,19 +744,42 @@ CLAUDE.md kurali: **ayar degil sozlesme**. Hicbir test bir buyuklugu pinlemez.
 - [x] **Yuva yerlesimi (Faz 2):** her yuva, devriye yaricapi dahil, iki
   baslangic kontrol alaninin da disinda; kovalama tasmasi bir baslangica
   yetismiyor; her yuva bir suru, tek kurt degil.
-- [ ] **Hedef secimi (Faz 3, Q1 = A):** kontrol alani disindaki isci hedeflenir,
-  icindeki hedeflenmez - `ownerAt` uzerinden, mesafe pinlenmeden.
-- [ ] **Isci pasifligi (Faz 3):** saldiriya ugrayan isci hicbir sey hedef almaz
-  (V1 §3.9).
-- [ ] **Temiz olum (Faz 3):** kurt tarafindan oldurulen coban/insaatci/toplayici
-  isini birakir; hicbir rezervasyon sizmaz - V2 Faz 7'nin dort okuyucusu.
-- [ ] **Nufus (Faz 3):** kurt da nufus saymaz (V1/V2 testlerinin devami).
-- [ ] **Hedeflenebilirlik (Faz 4):** saldirgan kurt `combatTargets()`'ta; otlayan
-  geyik/sigir **degil**. Bir muhafiz otlayan hayvani hicbir kosulda hedef almaz.
-- [ ] **Karsilik (Faz 4):** kurdun vurdugu isci `retaliateAgainstAttack` yolundan
-  gecer ve yakindaki muhafiz kurdu hedefler; muhafizin komutu yoksa.
-- [ ] **Karakol (Faz 4):** menzildeki kurt Karakol atesinden hasar alir ve `light`
-  carpani uygulanir - `buildings.json`'dan **hesaplanarak**.
+- [x] **Hedef secimi (Faz 3, KARAR 1):** kontrol alani disindaki isci hedeflenir,
+  icindeki hedeflenmez - `ownerAt` uzerinden. Korunan isci kasitla **daha yakin**
+  duruyor, yani mesafe karar verseydi test kirmizi yanardi. Bütün mesafeler
+  kurdun kendi `acquisitionRadius`'undan **hesaplaniyor**, biri bile pinlenmedi;
+  yara da `damage` tablosundan turetiliyor.
+- [x] **Isci pasifligi (Faz 3):** saldiriya ugrayan isci hicbir sey hedef almaz -
+  `attackTarget` ve `autoAcquired` olculuyor (V1 §3.9).
+- [x] **Temiz olum (Faz 3):** kurdun oldurdugu coban isini birakir; claim, lead
+  ve sahiplik sizmaz, inek yeniden avlanabilir hale gelir - V2 Faz 7'nin dort
+  okuyucusu.
+- [x] **Kovalamanin sonu (Faz 3):** kurt devriye cemberini asiyor, tasmayi
+  asmiyor, kurbani dusunce **yuruyerek** donuyor (tek karelik yer degistirme
+  turun kendi `moveSpeed`'inden hesaplanarak sinirlaniyor) ve yuvasi yerinde
+  kaliyor.
+- [x] **Nufus (Faz 3):** kurt da nufus saymaz - mevcut yaban hayati testi bir
+  kurt pakediyle genisletildi.
+- [x] **Hedeflenebilirlik (Faz 4):** saldirgan kurt `combatTargets()`'ta; otlayan
+  geyik/sigir **degil**. Bir muhafiz otlayan hayvani hicbir kosulda hedef almaz -
+  ve hedef aldigi anda listeden **cikiyor**, yani durum guncel bir durum, mac
+  boyu tasinan bir damga degil. Testin bos olmadigi ayrica kanitlaniyor: ayni
+  muhafiza §3.4'un uyardigi naif liste (`wildlife.all()`) verildiginde hemen bir
+  hayvan seciyor. Yani cayirin guvenli olmasinin nedeni **kural**, testin
+  hayvanlari uzaga koymus olmasi degil. Butun mesafeler iki turun kendi
+  yaricaplarindan hesaplaniyor.
+- [x] **Karsilik (Faz 4):** kurdun vurdugu isci `retaliateAgainstAttack` yolundan
+  geciyor (`attackTarget` + `autoAcquired`) ve yanindaki muhafiz kurdu
+  hedefliyor; **hareket emri olan** muhafiz yoluna devam ediyor. Muhafizin
+  hedeflemesi kurt **daha kovalarken** olculuyor - eskortun ilk isirigi beklemesi
+  gerekseydi eskort olmazdi. Sonunda tek muhafiz kurdu **olduruyor** (§2.6:
+  asker ister, ordu istemez); testte olculen sey oldurmenin kendisi, ne kadar
+  surdugu degil.
+- [x] **Karakol (Faz 4):** menzildeki kurt Karakol atesinden hasar alir ve `light`
+  carpani uygulanir - `buildings.json`'dan **hesaplanarak**; ayni menzildeki
+  otlayan geyik ise dokunulmadan kaliyor. Testin kasitla **iddia etmedigi** sey,
+  bunun gercek bir macta ne siklikta oldugu: §7 Faz 4'teki `controlRadius` /
+  `attackRange` notu.
 - [ ] **Av (Faz 5):** kurt yalniz `preySpecies`'teki yabani hayvani oldurur;
   evcil hayvana ve binaya dokunmaz (Q5 = A).
 - [ ] **Les (Faz 5):** kurdun oldurdugu geyik avci kulubesi tarafindan toplanabilir.
@@ -686,6 +797,24 @@ Kapi: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`,
 `npm run check:assets`. Olcek testi: `animals.json`, `units.json` ve
 `buildings.json`'daki her buyukluk olceklenip suite yeniden kosulur; **yesil
 kalmalidir**.
+
+Faz 3'te olcek testi kosuldu (x0.6) ve **bir sey buldu**: yeni hedef-secimi
+testi yarayi `assert.equal` ile karsilastiriyordu, yani yalnizca `damage` tam
+sayiyken geciyordu - ondalikli bir ayarda tek bir ulp fark kirmizi yaniyor.
+Tolerans eklendi. Ayni kosuda **V3'e ait olmayan** bir kirilganlik da goruldu
+(V1 avlanma fixture'i, "the quarry was brought down"): kaynak temiz agacta,
+ayni olceklenmis veriyle, ayni sekilde kirmizi yaniyor - yani mevcut ve V3'un
+borcu degil. Not buraya, cozumu Faz 7'nin harita/AI isine.
+
+Faz 4'te olcek testi (x0.6, uc tablo birden) **V3'te hicbir sey bulmadi**:
+Faz 1-4'un on uc testinin hepsi olceklenmis veriyle yesil kaldi - yeni ucu de
+mesafelerini turun kendi yaricaplarindan, yarayi da binanin kendi tablosundan
+hesapladigi icin. Suite yine de iki yerde kirmizi yandi ve **ikisi de V3'e ait
+degil**: (1) bir V2 agil fixture'i `missing-livestock` veriyor, cunku kulubenin
+`gatherRadius`'u kuculunce authorlanmis sabit mesafedeki suru erisim disina
+cikiyor; (2) Faz 3'un notuna dusulen orman/teslimat fixture'i ("one 40-wood tree
+reaches camp in four 10-wood deliveries") ayni sekilde. Ikisi de fixture'in
+sabit sayisi, kodun sozlesmesi degil - Faz 7'nin harita/AI isine.
 
 Gorsel kabul kullanicidadir; otomatik kani uretilmez (CLAUDE.md).
 

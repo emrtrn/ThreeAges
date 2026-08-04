@@ -30,12 +30,14 @@ import type {
   ResourceSource,
 } from "../economy/resourceSource";
 import {
+  advanceHunt,
   advanceLed,
   advanceRoam,
   initialRoamState,
   makeWildlifeRng,
   randomPointInHerd,
   wildlifeSeed,
+  type HuntQuarry,
   type RoamProfile,
   type RoamState,
   type ThreatPoint,
@@ -144,6 +146,16 @@ export class WildlifeAnimal implements CombatTarget {
    */
   lead: WildlifeLead | null = null;
   /**
+   * Where this predator is running, set by {@link PredatorSystem} (V3 Faz 3).
+   *
+   * The third movement mode's handle, and deliberately the same shape as
+   * {@link lead}: one system decides *who* is being chased, this class only knows
+   * that something is. Set to null the animal falls straight back into its patrol
+   * — which is also how a chase is called off, so giving up costs one assignment
+   * rather than a state machine.
+   */
+  hunt: HuntQuarry | null = null;
+  /**
    * True while this animal is fighting the worker holding it (Faz 6). Written by
    * {@link WildlifeRetaliationSystem}; read by presentation, where it outranks
    * both grazing and locomotion.
@@ -228,6 +240,22 @@ export class WildlifeAnimal implements CombatTarget {
       this.position.set(led.x, this.position.y, led.z);
       this.facing = led.facing;
       this.speed = led.speed;
+      return;
+    }
+    if (this.hunt) {
+      // Below being led on purpose, even though nothing can be both today: a
+      // tamed animal is somebody's property and its owner's shepherd outranks
+      // whatever it had its eye on.
+      const chase = advanceHunt(
+        this.roam,
+        { x: this.position.x, z: this.position.z, facing: this.facing },
+        this.profile,
+        deltaSeconds,
+        this.hunt,
+      );
+      this.position.set(chase.x, this.position.y, chase.z);
+      this.facing = chase.facing;
+      this.speed = chase.speed;
       return;
     }
     const pose = advanceRoam(
@@ -457,6 +485,10 @@ export class WildlifeSystem implements ResourceSource {
     if (!animal || animal.dead || animal.owner !== "wild") return false;
     animal.owner = owner;
     animal.lead = null;
+    // A kingdom's animal hunts nobody: cleared here as well as in
+    // {@link PredatorSystem}, because this is the call that moves its den and a
+    // chase surviving it would be aimed from the new pen.
+    animal.hunt = null;
     animal.rehome(pen);
     if (animal.reservedByWorkerId !== null) this.releaseReservation(animal.reservedByWorkerId);
     return true;

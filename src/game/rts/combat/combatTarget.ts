@@ -36,6 +36,17 @@ export interface CombatTarget {
    */
   readonly combatRadius?: number;
   /**
+   * True while this target is already going down — a body playing its defeat
+   * pose rather than a threat still standing.
+   *
+   * Optional because only {@link Unit} has a death presentation to be in the
+   * middle of; a structure is rubble the instant its health empties, and an
+   * animal is a carcass. Absent therefore means "not dying", which is what lets
+   * a caller ask the question of any target without knowing which kind it holds
+   * (V3 §3.5 — {@link retaliateAgainstAttack} asks it of a wolf).
+   */
+  readonly dying?: boolean;
+  /**
    * Fraction of incoming damage this target currently absorbs, 0..1.
    *
    * Written by whatever grants the protection rather than owned by the target —
