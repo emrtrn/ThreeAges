@@ -114,6 +114,7 @@ import {
   validateMissionScript,
   validateResourceBalance,
   validateRoadBalance,
+  validateTradeSiteBalance,
   validateUnitBalance,
 } from "../src/game/data/validateGameData";
 import {
@@ -231,6 +232,7 @@ import { EconomyProductionSystem, producerHasSource } from "../src/game/rts/econ
 import { PastureSystem, penGeometryFor } from "../src/game/rts/wildlife/pastureSystem";
 import { WildlifeRetaliationSystem, type WildlifeStrike } from "../src/game/rts/wildlife/wildlifeRetaliation";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
+import { TradeSiteSystem } from "../src/game/rts/economy/tradeSiteSystem";
 import { ForestSystem } from "../src/game/rts/economy/forestSystem";
 import { KingdomProgressionSystem, townUnlocksAvailable } from "../src/game/rts/progression/kingdomProgressionSystem";
 import {
@@ -47246,6 +47248,257 @@ check("Faz S1: this project's market data is a valid, revertible supply switch",
   // buy buttons with no supply chain to open them.
   assert.deepEqual(market.stocked, [],
     "Faz S1 ships the supply switch off: no resource is gated yet");
+});
+
+const shippedTradeSiteBalance = () => validateTradeSiteBalance(
+  JSON.parse(readFileSync("public/game-data/balance/trade-sites.json", "utf8")) as unknown,
+);
+
+check("Faz S2: the trade site validator refuses data that could never make sense", () => {
+  const sites = shippedTradeSiteBalance();
+  const port = sites["river_port"] ?? assert.fail("the river port site type is missing");
+  const refuse = (patch: Record<string, unknown>, why: string): void => {
+    assert.throws(() => validateTradeSiteBalance({ river_port: { ...port, ...patch } }), GameDataError, why);
+  };
+  refuse({ perMinute: 0 }, "a site that never produces is a road built to nowhere");
+  refuse({ carryCapacity: 0 }, "a caravan that carries nothing never delivers a lot");
+  refuse({ caravanCount: 0 }, "a lane with no animals on it is not a supply line");
+  refuse({ caravanCount: 2.5 }, "half a donkey is not a caravan");
+  refuse({ label: "" }, "the table entry has to name itself");
+  refuse({ resourceId: "gold" }, "gold is the numeraire, so no buy button exists for a supply chain to feed");
+  refuse({ dock: { width: 0, depth: 8 } }, "a dock with no extent is a landing no road can touch");
+  refuse({ capacity: 0 }, "a finite site with nothing in it is spent before the match starts");
+  // The one relationship, and the reason it lives in this table (plan §3.8): a
+  // buffer under one load empties on every arrival, so the site can never report
+  // being backed up — and "add a caravan or move your market closer" is exactly
+  // the pressure the buffer exists to express.
+  refuse(
+    { bufferCapacity: port.carryCapacity - 1 },
+    "a buffer under one caravan load can never fill, so the site can never say it is backed up",
+  );
+  assert.throws(() => validateTradeSiteBalance({}), GameDataError, "an empty table supplies no market at all");
+  assert.throws(() => validateTradeSiteBalance({ "River Port": port }), GameDataError, "ids stay data ids");
+
+  // Renewable is the shipped choice (KARAR 2-A) but the schema keeps the door
+  // open, so a fork can author a finite pit without touching code.
+  assert.equal(port.capacity, undefined, "the template's sites are renewable; the limit is throughput");
+  assert.equal(validateTradeSiteBalance({ river_port: { ...port, capacity: 500 } })["river_port"]?.capacity, 500);
+});
+
+check("Faz S2: this project's supply table answers every buy button the market offers", () => {
+  const sites = shippedTradeSiteBalance();
+  const buildings = shippedBuildingBalance();
+  const market = buildings["market"]?.market ?? assert.fail("the market building is missing");
+
+  // The §3.6 catcher. A priced resource with no site is a buy button that can
+  // never open once Faz S3 flips `stocked` on — and the failure mode is silence:
+  // wood is the most-bought line in the game, and dropping it from this table
+  // would leave the player unable to buy the very thing this plan's own roads
+  // consume. Checked against `basePrice` rather than `stocked` because S1 ships
+  // that list empty on purpose; when S3 fills it the two sets coincide.
+  const supplied = new Set(Object.values(sites).map((site) => site.resourceId));
+  for (const resourceId of Object.keys(market.basePrice)) {
+    assert.ok(supplied.has(resourceId), `every priced resource has a supply site (${resourceId} has none)`);
+  }
+  for (const [id, site] of Object.entries(sites)) {
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(market.basePrice, site.resourceId),
+      `trade site "${id}" supplies ${site.resourceId}, which the market does not price`,
+    );
+    // Contract, not tuning: derived from the same tables, so a retune of either
+    // side moves the bound with it.
+    assert.ok(site.bufferCapacity >= site.carryCapacity,
+      `trade site "${id}" holds at least one caravan load`);
+  }
+
+  // §3.6's design point, computed rather than pinned: the timber site is a way
+  // *out* for a kingdom whose grove is gone, never a replacement for cutting one.
+  // The moment it out-produces an owned camp, "no need to chop" becomes true and
+  // the wood economy collapses into a market button.
+  const timber = sites["timber_camp"] ?? assert.fail("the timber camp site type is missing");
+  const camp = shippedBuildingBalance()["lumber_camp"]?.economy ?? assert.fail("lumber camp economy missing");
+  const ownedCampPerMinute = (camp.perWorkerPerMinute ?? 0) * (camp.workerCapacity ?? 0);
+  assert.ok(ownedCampPerMinute > 0, "an owned lumber camp produces something to compare against");
+  assert.ok(timber.perMinute < ownedCampPerMinute,
+    `the timber site (${timber.perMinute}/min) must stay under a worked camp (${ownedCampPerMinute}/min)`);
+});
+
+check("Faz S2: a trade site fills its own buffer and then stops", () => {
+  const sites = shippedTradeSiteBalance();
+  const port = sites["river_port"] ?? assert.fail("the river port site type is missing");
+  const system = new TradeSiteSystem(sites, [
+    { id: "player_port", siteType: "river_port", x: -1, z: 20 },
+    { id: "player_pit", siteType: "stone_pit", x: -28, z: 6 },
+  ]);
+  assert.equal(system.bufferedAt("player_port"), 0, "a match opens with every site empty");
+
+  // Derived from the table, never pinned: one minute of production is whatever
+  // `perMinute` currently says it is.
+  system.update(60);
+  assert.ok(Math.abs(system.bufferedAt("player_port") - port.perMinute) < 1e-9,
+    "a minute of production is exactly the site's authored rate");
+  assert.notEqual(system.bufferedAt("player_pit"), system.bufferedAt("player_port"),
+    "each kind runs at its own rate, which is the only knob that differs between them");
+
+  // The Faz S2 acceptance in one line: it fills, and then it *stops*. Nothing
+  // collects it until Faz S3 puts a caravan on the road.
+  system.update(60 * 60);
+  assert.equal(system.bufferedAt("player_port"), port.bufferCapacity, "the buffer stops at its cap");
+  const full = system.snapshots().find((site) => site.id === "player_port") ?? assert.fail("site missing");
+  assert.equal(full.bufferFull, true, "and says so, the same way a backed-up producer does");
+  assert.equal(full.resourceId, port.resourceId, "the snapshot names the resource from the table, not the level");
+  assert.equal(full.label, port.label);
+
+  system.reset();
+  assert.equal(system.bufferedAt("player_port"), 0, "a restart empties every site with every other buffer");
+
+  // The dock is the site's footprint: the ground a road touches from outside and
+  // nothing may be built on. Geometry derived from the table so a retuned dock
+  // moves the reserve with it.
+  const blockers = system.dockBlockers();
+  assert.equal(blockers.length, 2, "every site reserves its own landing");
+  const portDock = blockers.find((blocker) => blocker.min[0] === -1 - port.dock.width / 2)
+    ?? assert.fail("the port's dock is not reserved");
+  assert.deepEqual(
+    [portDock.min[0], portDock.max[0], portDock.min[2], portDock.max[2]],
+    [-1 - port.dock.width / 2, -1 + port.dock.width / 2, 20 - port.dock.depth / 2, 20 + port.dock.depth / 2],
+    "the reserve is exactly the authored dock, centred on the marker",
+  );
+
+  // Loud rather than silent: a mistyped kind would otherwise stand on the map
+  // supplying nothing, and the player's road out to it would be wood spent on a
+  // place that can never fill.
+  assert.throws(
+    () => new TradeSiteSystem(sites, [{ id: "x", siteType: "sea_port", x: 0, z: 0 }]),
+    /unknown site type/,
+  );
+  assert.throws(
+    () => new TradeSiteSystem(sites, [
+      { id: "x", siteType: "river_port", x: 0, z: 0 },
+      { id: "x", siteType: "stone_pit", x: 8, z: 8 },
+    ]),
+    /Duplicate trade site/,
+  );
+  assert.throws(() => system.update(-1), RangeError);
+});
+
+check("Faz S2: the shipped level authors the supply table's sites in fair pairs", () => {
+  const buildings = shippedBuildingBalance();
+  const resources = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  const sites = shippedTradeSiteBalance();
+  const layout = JSON.parse(
+    readFileSync("public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json", "utf8"),
+  ) as {
+    actors: Array<{
+      classRef: string;
+      position: [number, number, number];
+      variableOverrides?: Record<string, string | number | boolean | string[]>;
+    }>;
+    splines: Parameters<typeof adaptRtsLevel>[1];
+  };
+  const actors = layout.actors.map((instance, index) => ({
+    index,
+    instance,
+    def: normalizeActorScriptDef(
+      JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown,
+      instance.classRef,
+    ),
+  }));
+  const level = adaptRtsLevel(actors, layout.splines, { buildings, resources, animals: shippedAnimalBalance() });
+
+  // Every kind the table defines is actually on the map. A site type nobody
+  // authored is a resource whose buy button can never open, and the table alone
+  // would keep looking correct.
+  for (const siteType of Object.keys(sites)) {
+    assert.ok(level.tradeSites.some((site) => site.siteType === siteType),
+      `the level authors at least one "${siteType}"`);
+  }
+  // Constructing the system is itself the reference check: an unknown kind throws.
+  new TradeSiteSystem(sites, level.tradeSites);
+
+  // KARAR 4-A's precondition (§3.7), and a *new* contract rather than an echo of
+  // an existing one: the river splits the two kingdoms, so an exclusive resource
+  // that stands on one bank alone does not delay a match, it decides it. Measured
+  // with a tolerance because the positions are hand-authored.
+  const TWIN_TOLERANCE = 0.5;
+  assert.ok(level.tradeSites.length > 0, "the level authors trade sites at all");
+  assert.equal(level.tradeSites.length % 2, 0, "trade sites come in pairs");
+  for (const site of level.tradeSites) {
+    const twin = level.tradeSites.find((candidate) => candidate.id !== site.id
+      && candidate.siteType === site.siteType
+      && Math.hypot(candidate.x + site.x, candidate.z + site.z) <= TWIN_TOLERANCE);
+    assert.ok(twin, `trade site "${site.id}" has no point-symmetric twin of its own kind`);
+  }
+
+  // §3.3/§3.7: the three river crossings are the whole military shape of this
+  // map. A dock straddling one would quietly turn an economic decision into a
+  // closed gate — and would do it to *both* kingdoms, since roads may not be
+  // paved across a dock either.
+  const blockers = level.navigationBlockers
+    .map((blocker) => ({
+      x: (blocker.min[0] + blocker.max[0]) / 2,
+      z: (blocker.min[2] + blocker.max[2]) / 2,
+    }))
+    .sort((left, right) => (left.x + left.z) - (right.x + right.z));
+  const crossings: Array<{ x: number; z: number; width: number }> = [];
+  for (let index = 1; index < blockers.length; index += 1) {
+    const gap = Math.hypot(blockers[index]!.x - blockers[index - 1]!.x, blockers[index]!.z - blockers[index - 1]!.z);
+    // Two river blockers further apart than one blocker's own span leave a hole
+    // in the wall; that hole is a crossing.
+    if (gap <= 12) continue;
+    crossings.push({
+      x: (blockers[index]!.x + blockers[index - 1]!.x) / 2,
+      z: (blockers[index]!.z + blockers[index - 1]!.z) / 2,
+      width: gap,
+    });
+  }
+  assert.equal(crossings.length, 3, "the river still has exactly the three crossings the plan measured");
+  for (const site of level.tradeSites) {
+    const dock = sites[site.siteType] ?? assert.fail(`unknown site type ${site.siteType}`);
+    // The dock's corner reach, against half the crossing's width: a dock that
+    // gets no closer than that leaves the gap's full walking width open.
+    const dockReach = Math.hypot(dock.dock.width, dock.dock.depth) / 2;
+    for (const crossing of crossings) {
+      assert.ok(
+        Math.hypot(site.x - crossing.x, site.z - crossing.z) > dockReach + crossing.width / 2,
+        `trade site "${site.id}" reaches into the river crossing at (${crossing.x.toFixed(1)}, ${crossing.z.toFixed(1)})`,
+      );
+    }
+  }
+
+  // A dock is ground nobody may build or pave on, so it must not have been
+  // authored on top of ground something else already owns — a deposit buried
+  // under one could never be quarried again, and an AI build slot under one is a
+  // plan the enemy would retry for the rest of the match.
+  for (const site of level.tradeSites) {
+    const dock = sites[site.siteType]!.dock;
+    const clearOf = (x: number, z: number, width: number, depth: number): boolean =>
+      Math.abs(site.x - x) >= (dock.width + width) / 2 || Math.abs(site.z - z) >= (dock.depth + depth) / 2;
+    for (const node of level.resourceNodes) {
+      assert.ok(clearOf(node.x, node.z, 0, 0), `trade site "${site.id}" is authored on deposit "${node.id}"`);
+    }
+    for (const tree of level.trees) {
+      assert.ok(clearOf(tree.x, tree.z, 0, 0), `trade site "${site.id}" is authored on tree "${tree.id}"`);
+    }
+    for (const anchor of level.buildAnchors) {
+      const footprint = buildings[anchor.buildingId]?.footprint ?? { width: 0, depth: 0 };
+      assert.ok(
+        clearOf(anchor.x, anchor.z, footprint.width, footprint.depth),
+        `trade site "${site.id}" covers the ${anchor.buildingId} slot at (${anchor.x}, ${anchor.z})`,
+      );
+    }
+    for (const region of level.expansions) {
+      for (const member of [region.outpost, region.depot, region.production]) {
+        const footprint = buildings[member.buildingId]?.footprint ?? { width: 0, depth: 0 };
+        assert.ok(
+          clearOf(member.x, member.z, footprint.width, footprint.depth),
+          `trade site "${site.id}" covers ${region.id}'s ${member.buildingId} slot`,
+        );
+      }
+    }
+  }
 });
 
 check("Faz M4: the AI trades toward the age it is short for, and stops once it can pay", () => {

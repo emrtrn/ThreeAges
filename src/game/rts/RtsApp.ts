@@ -59,6 +59,7 @@ import type {
   StartingResources,
   StartingTier,
   StartingUnits,
+  TradeSiteBalance,
   UnitBalance,
 } from "@/game/data/gameDataTypes";
 import type { RtsContentCatalog } from "./content/rtsContentCatalog";
@@ -182,6 +183,7 @@ import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem, producerHasSource } from "./economy/economyProductionSystem";
 import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTradeSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
+import { TradeSiteSystem } from "./economy/tradeSiteSystem";
 import { ForestSystem } from "./economy/forestSystem";
 import { PastureSystem } from "./wildlife/pastureSystem";
 import { PredatorSystem } from "./wildlife/predatorSystem";
@@ -401,6 +403,8 @@ export interface RtsAppOptions {
   readonly animalBalance: AnimalBalance;
   /** V4 autonomous donkey stats; intentionally separate from huntable animals. */
   readonly caravanBalance: CaravanBalance;
+  /** Supply-plan trade site kinds (port / timber camp / stone pit) — Faz S2. */
+  readonly tradeSiteBalance: TradeSiteBalance;
   /** Faz 6 Settlement -> Town cost, prerequisites and upgrade duration. */
   readonly ageBalance: AgeBalance;
   /** Preset-owned initial stockpile for Phase 2 construction reservations. */
@@ -610,6 +614,11 @@ export class RtsApp {
   private readonly structureRepair: StructureRepairSystem;
   private economyProduction: EconomyProductionSystem | null = null;
   private readonly resourceNodes: ResourceNodeSystem;
+  /**
+   * Supply plan Faz S2. Its buffers fill and stop; nothing collects them until
+   * Faz S3 puts a caravan lane on the road between a site and a market.
+   */
+  private readonly tradeSites: TradeSiteSystem;
   private readonly forests: ForestSystem;
   private readonly depotLogistics: DepotLogisticsSystem;
   private readonly productionLogistics: ProductionLogisticsSystem;
@@ -937,6 +946,7 @@ export class RtsApp {
     this.logisticsOccupation = new LogisticsOccupationSystem(this.depotLogistics);
     this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics, this.territory, this.logisticsOccupation);
     this.resourceNodes = new ResourceNodeSystem(this.options.resourceBalance, this.spatial.resourceNodes);
+    this.tradeSites = new TradeSiteSystem(this.options.tradeSiteBalance, this.spatial.tradeSites);
     this.forests = new ForestSystem(this.spatial.trees);
     this.wildlife = new WildlifeSystem(this.options.animalBalance, this.spatial.herds);
     this.wildlifeRetaliation = new WildlifeRetaliationSystem(this.units, this.wildlife);
@@ -1242,10 +1252,16 @@ export class RtsApp {
       // blocking navigation: a camp is placed beside a grove and a mine beside a
       // deposit, never on top, so the buried source stays harvestable — and its
       // shrinking mesh stays visible as it is worked out.
+      //
+      // A trade site's dock reserves the same way for the mirror-image reason:
+      // it is not a yield to protect but the site's own footprint, and the edge a
+      // supply road connects through. A building parked on it would take that
+      // edge away.
       () => [
         ...this.roads.occupancyBlockers(),
         ...this.forests.liveTreeBlockers(),
         ...this.resourceNodes.liveNodeBlockers(),
+        ...this.tradeSites.dockBlockers(),
       ],
       () => this.units.all(),
       (x, z) => this.groundSurface.heightAt(x, z),
@@ -1260,10 +1276,14 @@ export class RtsApp {
       // Deposits are the sharper case: an extractor footprint must *contain* the
       // deposit point, so one road tile on top of it refused every legal quarry
       // centre and — with no way to unpave a road — retired the deposit for good.
+      // A dock is reserved against paving too: the supply lane touches it from
+      // the outside exactly as a road touches a producer's footprint, so a route
+      // driven *across* it would occupy the very cells that make the connection.
       () => [
         ...this.occupancyBlockers(),
         ...this.forests.liveTreeBlockers(),
         ...this.resourceNodes.liveNodeBlockers(),
+        ...this.tradeSites.dockBlockers(),
       ],
       () => {
         this.syncRoadVisuals();
@@ -2826,6 +2846,11 @@ export class RtsApp {
     // tick; an untouched job is refunded here exactly as a cancelled one is.
     this.structureRepair.update(this.structures.all());
     this.economyProduction?.update(dt);
+    // Faz S2: the trade sites fill their own buffers and stop there. Ticked
+    // beside the producers because that is what they are — a facility with an
+    // output rate and a local buffer — and their goods reach a market the same
+    // way a producer's do, down a road, once Faz S3 lands.
+    this.tradeSites.update(dt);
     this.syncForestVisibility();
     // Simulation owns the route state; the animation itself advances above on
     // rendered time, so the speed picker cannot change its playback rate.
@@ -3697,6 +3722,7 @@ export class RtsApp {
     // would price the first trade of a fresh game off the last one's spree.
     this.marketTrade.reset();
     this.resourceNodes.reset();
+    this.tradeSites.reset();
     this.forests.reset();
     this.commandMarkers.clear();
     // A restart is a new match, not a continuation: carrying a cooldown over

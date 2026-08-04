@@ -1,12 +1,14 @@
 # ThreeAges RTS - Pazar Arzi ve Ticaret Noktalari Plani
 
 Olusturulma tarihi: 2026-08-04
-Durum: **Faz S0 ve S1 kapandi (2026-08-04).** Dokuz kararin dokuzu da onerildigi gibi
-kilitlendi, §3.7'nin harita cozumu **uc nokta-simetrik cift (alti nokta)** olarak
+Durum: **Faz S0, S1 ve S2 kapandi (2026-08-04).** Dokuz kararin dokuzu da onerildigi
+gibi kilitlendi, §3.7'nin harita cozumu **uc nokta-simetrik cift (alti nokta)** olarak
 secildi ve alti marker'in konumu olculup sabitlendi (§7 Faz S0). Kod yazilirken
-hicbiri yeniden tartisilmaz. **S1 (stok cekirdegi) de bitti** - makine iceride,
-kural henuz degil (`stocked: []`), yani oyun bit bit S0 oncesiyle ayni oynaniyor.
-**Siradaki: S2** (arz noktasi haritada).
+hicbiri yeniden tartisilmaz. **S1 (stok cekirdegi) bitti** - makine iceride,
+kural henuz degil (`stocked: []`). **S2 (arz noktasi haritada) de bitti** - alti
+nokta authorlandi, tamponlari doluyor ve duruyor; ekonomi hala bit bit S0
+oncesiyle ayni. **Siradaki: S3** (baglanti ve kervan) - ve S2'nin **gorsel kabulu
+kullanicida acik** (§7 Faz S2).
 
 S0 sirasinda haritanin ve balans verisinin olculmesi, planin dort ifadesini
 duzeltti; hepsi asagida ilgili bolume islendi:
@@ -748,34 +750,112 @@ ve gerekirse ayni satirla geri alinir. §8'in "every priced resource is stocked"
 testi de bu yuzden S1'de **yok**: S1'in kendi testi tam tersini pinliyor
 (`stocked === []`), ve S3 o satiri doldururken bu iki test yer degistirir.
 
-### Faz S2 - Arz noktasi haritada (ekonomi degismedi)
+### Faz S2 - Arz noktasi haritada (ekonomi degismedi) -> **TAMAM (2026-08-04)**
 
-- [ ] `BP_RTS_TradeSite` marker Actor'u + manifest girdisi.
-- [ ] `RtsTradeSiteDefinition` + `rtsLevelAdapter` okumasi + blockout alani.
-- [ ] `trade-sites.json` + `TradeSiteBalance` + `validateTradeSiteBalance` +
-  editor Data Table girdisi.
-- [ ] Level'da alti marker: liman `(-1,20)`/`(1,-20)`, oduncu kampi
+- [x] `BP_RTS_TradeSite` marker Actor'u + manifest girdisi
+  (`threeages-rts-trade-site-marker`).
+- [x] `RtsTradeSiteDefinition` + `rtsLevelAdapter` okumasi + blockout alani
+  (+ `rtsSpatialLayout` alani).
+- [x] `trade-sites.json` + `TradeSiteBalance` + `validateTradeSiteBalance` +
+  editor Data Table girdisi ("Arz Noktasi Dengesi").
+- [x] Level'da alti marker: liman `(-1,20)`/`(1,-20)`, oduncu kampi
   `(-8,50)`/`(8,-50)`, tas sahasi `(-28,6)`/`(28,-6)` (§7 Faz S0'da kilitli).
-  Liman mesh'i `(4.61,17.91)`'de kalir; dusman yakasi icin `(-4.61,-17.91)`'e
-  aynalanir.
-- [ ] Oduncu kampi ve tas sahasi icin gorsel secimi (her biri iki kez, iki
-  yakada). Liman mesh'i hazir (`port-secondage-level3`); digerleri icin mevcut
-  mesh katalogundan secilir, yeni varlik uretilmez.
-- [ ] `tradeSiteSystem.ts`: tampon dolar, hicbir yere gitmez.
-- [ ] Marker'in ayagi altindaki zemin: nokta build/road blocker uretir mi?
-  Rihtimin ustune bina kurulamamali (deposit kurali, `liveNodeBlockers` ikizi).
-- [ ] Hicbir arz noktasi bir nehir gecidini kapatmiyor (§3.3/§3.7) - marker'lar
-  authorlandiktan sonra uc gecidin de yuruyus genisligi korunur. S0'da alti
-  konum icin **on olcum yapildi** (en yakin gecit 16.5 birim), ama olcum 8x8
-  rihtimi baz aldi; secilen **mesh'ler** daha genis olabilir, o yuzden bu madde
-  gorsel authoring'den sonra tekrar dogrulanir.
-- [ ] Liman marker'i mesh merkezinde **degil** (§3.3): mesh uc blocker'in icinde
-  kaliyor. Marker `(-1, 20)`'de, mesh `(4.61, 17.91)`'de - ikisinin birlikte
-  dogru gorunup gorunmedigi gorsel kabulun parcasidir.
+  Liman mesh'i `(4.61,17.91)`'de kaldi; dusman yakasi icin `(-4.61,-17.91)`'e
+  aynalandi (yaw 120 -> 300, ayni olcek 3).
+- [x] Oduncu kampi ve tas sahasi icin gorsel secimi. Yeni varlik uretilmedi;
+  mevcut StaticMesh katalogundan, her biri iki yakada:
+  oduncu kampi = `resource-pinetree-group-cut` (olcek 3) + `logs` (olcek 3),
+  tas sahasi = `mine` (olcek 3) + `rock-group` (olcek 2.5).
+- [x] `tradeSiteSystem.ts`: tampon dolar, **hicbir yere gitmez**.
+- [x] Marker'in ayagi altindaki zemin: `dockBlockers()`, `liveNodeBlockers`'in
+  ikizi. Rihtim hem bina yerlesimine hem yol hucresine kapali - ikisi de
+  `RtsApp`'in iki blocker listesine baglandi. **Yol rihtime disaridan degecek**
+  (S3'un `roadCellTouchingFootprint`'i), o yuzden rihtimin *ustunun* yola da
+  kapali olmasi dogru olan: uzerinden gecen bir yol, baglantiyi kuran kenari
+  isgal ederdi.
+- [x] Hicbir arz noktasi bir nehir gecidini kapatmiyor - **secilen mesh'lerle
+  yeniden olculdu** (asagida). Ayrica rihtimlerin hicbiri agac, deposit, build
+  anchor ya da expansion slot'una degmiyor; bu da teste baglandi.
+- [x] Liman marker'i mesh merkezinde **degil** (§3.3). Marker `(-1,20)`, mesh
+  `(4.61,17.91)` - 6.0 birim. Aynasi ayni bagintiyi tasiyor.
 
-Kabul: `?rts` Play'de uc arz noktasi da haritadadir, panelde gorulur, tamponu
-dolar ve **durur**. Ekonomi S1 oncesiyle bit bit ayni. **Gorsel kabul
-kullanicidadir** (olcek, rihtimin yola degdigi kenar).
+Kabul: `?rts` Play'de alti arz noktasi da haritadadir, tamponu dolar ve
+**durur**. Ekonomi S1 oncesiyle bit bit ayni (`stocked` hala `[]`).
+`tsc --noEmit`, `test:engine` (1298 check), `build:verify`, `check:assets` -
+**dordu de yesil**; `check:assets` yalnizca marker'in thumbnail'i icin uyariyor,
+ki diger yedi RTS marker'i da ayni uyariyi tasiyor.
+
+`smoke:browser`'in RTS baseline spec'i de kosuldu: sekiz testin **yedisi yesil**
+(iki ayri boot yolu, sifir runtime hatasi, authored Level + landscape mount).
+Sekizincisi - "Landscape Faz 5: command and build placement picking work over the
+mounted landscape" - kirmizi, ama **bu plandan once de kirmiziydi**: degisiklikler
+stash'lenip temiz agacta tekrar kosuldu, ayni yerde ayni sekilde dustu
+("Yerlesim" dugmesine tiklama zaman asimina ugruyor). S2'nin urunu degil; ayri
+bir is olarak durmali.
+
+**Gorsel kabul kullanicida acik** - olcek, rihtimin yola degecegi kenar, ve
+ozellikle asagidaki 0.40'lik pay.
+
+#### S2'de olculenler
+
+**Mesh'lerin gecit payi.** S0'un on olcumu 8x8 rihtimi baz aliyordu; asil soru
+secilen mesh'lerdi. Her yerlestirmenin kosegen erisimi ile en yakin gecidin
+yarim genisligi karsilastirildi (ikisi de kasitli olarak comert):
+
+| Yerlestirme | Konum | Dunya olcusu | En yakin gecide pay |
+| --- | --- | --- | --- |
+| Liman (oyuncu) | `(4.61, 17.91)` | 8.0 x 8.6 | 10.10 |
+| **Liman (dusman)** | `(-4.61, -17.91)` | 8.0 x 8.6 | **0.40** |
+| Tas sahasi mesh'leri | `(±28, ∓6)` civari | ~3.9 x 4.1 | 13.9 - 21.2 |
+| Oduncu kampi mesh'leri | `(∓8, ±50)` civari | ~4.5 x 4.4 | 36.6 - 39.5 |
+
+Aynalanan liman **0.40 birimle** en dar paya sahip, ve sebebi ayna degil
+haritanin kendisi: orta gecit `(-3.5, -4.1)`'de, yani **merkezde degil**. Ayna
+mesh'i kendi marker'ina oyuncu tarafiyla birebir ayni bagintida durur, ama gecide
+o kadar yakin duser. Uc gerekce onu birakmayi destekliyor: (1) mesh bir
+**gorseldir**, `navigationBlockers` uretmez, yani yuruyus genisligi tanimi geregi
+degismedi; (2) olcumun kendisi comert - gecit genisligi blocker *merkezleri*
+arasi mesafe, gercek acikligi bundan ~10 birim dar; (3) `dock-firstage` koprusune
+13.6 birim var, yani ortusme yok. Yine de **bu, S2'nin en dar sayisidir ve gorsel
+kabulun ilk bakacagi yerdir**; rahatsiz ederse cozum mesh'i nehir asagi 2-3 birim
+kaydirmaktir, marker'a dokunmadan.
+
+**Planin harfinden iki sapma** (ikisi de bilincli, ikisi de dar):
+
+1. **Marker `resourceId` degil `siteType` tasiyor.** §5.1 marker'in
+   (`resourceId`, `siteId`, rihtim olcusu) tasidigini yaziyordu, ama §5.3 ayni
+   anda "hiz/tampon/kervan sayisi `trade-sites.json`'a gider" diyor - ve rihtim
+   olcusu §6.1'de zaten o tablodadir. Ikisini birden tutmak, Level'in "food"
+   derken tablonun "wood" demesini mumkun kilardi: sahibi olmayan bir celiski.
+   Marker `siteId` + `siteType` tasir; kaynak, hiz, tampon ve rihtim tek yerde,
+   tabloda durur. §5.3'un kurali ("Level yalnizca nerede ve hangi tur soyler")
+   boylece tam olarak korunur.
+2. **`siteType`'i tabloya karsi dogrulayan yer adapter degil sistemdir.**
+   `adaptRtsLevel` marker'in *seklini* dogrular (bos olmayan id, tekil id);
+   bilinmeyen bir tur `TradeSiteSystem` kurucusunda patlar - `ResourceNodeSystem`
+   bilinmeyen `resourceId` icin ne yapiyorsa aynen o. Alternatif, `adaptRtsLevel`
+   imzasina besinci bir balans tablosu eklemek ve on bes cagri yerini
+   guncellemekti; ayni hatayi ayni yuksek sesle veren, daha ucuz yol bu.
+
+**Iki harita disarida kaldi.** `RTS_BLOCKOUT_MAP` ve `RTS_CoreMatch` icin
+`tradeSites` bos birakildi. S0'un alti konumu `RTS_GameplayProof`'un nehri,
+korulari ve deposit'lerine gore olculdu; o haritalarda ayni olcum yok, ve
+**munhasir** bir kaynagi olculmemis zemine gozle koymak §3.7'nin "maci belirler"
+dedigi asimetrinin ta kendisidir. Bunun S3'e dusen sonucu su: `stocked` listesi
+dolduruldugunda o iki haritada pazarin alis tarafi kalici olarak kapali kalir.
+Varsayilan preset (`gameplay_proof`) zaten `RTS_GameplayProof`'u aciyor, ama S3
+bu iki haritayi ya olcup authorlamali ya da acikca kapsam disi ilan etmelidir.
+
+**Testler (§8'den bu fazda pinlenenler).** Dordu de kasitli mutasyonla bir kez
+kirmizi gorulup geri alindi:
+`a trade site buffer holds at least one caravan load`,
+`every priced resource has a supply site in this project's data`,
+`every trade site has a point-symmetric twin`,
+`no trade site blocks a river crossing`, artisi tampon tavani, rihtim
+geometrisi, bilinmeyen tur/tekrarli id reddi, ve "her tur haritada authorlanmis
+mi". Bir de tuning degil **iliski** olarak: oduncu kampi arz noktasinin hizi
+(80/dk) sahip olunan `lumber_camp`'in acilis hizinin (3 x 40 = 120/dk) **altinda**
+kalmalidir (§3.6) - iki taraf da tablodan turetiliyor.
 
 ### Faz S3 - Baglanti ve kervan
 
@@ -882,13 +962,13 @@ gorulur ve geri alinir (V1/V3/V4 aliskanligi).
 ## 11. Uygulama Sirasi
 
 ```text
-S0 (TAMAM) -> S1 (TAMAM) -> S2 -> S3 -> S4 -> S5 -> S6
+S0 (TAMAM) -> S1 (TAMAM) -> S2 (TAMAM) -> S3 -> S4 -> S5 -> S6
 ```
 
 Hicbir faz artik baska bir plani beklemiyor (§3.4). S1 ve S2 birbirinden
-bagimsizdir; S1 bitti, S2 acik.
-S2'nin gorsel kabulunun erken alinmasi riski azaltir (arz noktalarinin
-olcegi/konumu).
+bagimsizdi; ikisi de bitti, S3 acik.
+S2'nin gorsel kabulu hala kullanicidadir ve S3'u **bloke etmez**: rihtimin yeri
+S3'un rota hesabini degistirmez, yalnizca mesh'lerin gorunumunu degistirir.
 
 S3 kendi icinde ikiye ayrilir ve bu ayrim korunmalidir: once `CaravanLane`
 genellestirmesi **hicbir oynanis degistirmeden** yesil kosar, sonra ikinci hat

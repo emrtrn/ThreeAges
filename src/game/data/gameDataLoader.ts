@@ -21,9 +21,10 @@ import {
   validateMissionScript,
   validateResourceBalance,
   validateRoadBalance,
+  validateTradeSiteBalance,
   validateUnitBalance,
 } from "./validateGameData";
-import type { AgeBalance, AiBalance, AnimalBalance, BuildingBalance, CaravanBalance, GamePreset, GameVersion, ResourceBalance, RoadBalance, UnitBalance } from "./gameDataTypes";
+import type { AgeBalance, AiBalance, AnimalBalance, BuildingBalance, CaravanBalance, GamePreset, GameVersion, ResourceBalance, RoadBalance, TradeSiteBalance, UnitBalance } from "./gameDataTypes";
 import type { MissionScript } from "../rts/tutorial/missionScript";
 
 const log = logger("Data");
@@ -124,6 +125,21 @@ export async function loadCaravanBalance(): Promise<CaravanBalance> {
   const url = `${GAME_DATA_ROOT}/balance/logistics.json`;
   const balance = validateCaravanBalance(await fetchJson(url));
   log.debug(`loaded caravan balance (${balance.moveSpeed}/s)`);
+  return balance;
+}
+
+/**
+ * Load and validate `public/game-data/balance/trade-sites.json` — the supply
+ * plan's port, timber camp and stone pit.
+ *
+ * A trade site is authored on the map but tuned here: the Level says only *where*
+ * a site stands and *which kind* it is, so a fork can retune throughput without
+ * reopening a level (supply plan §5.3).
+ */
+export async function loadTradeSiteBalance(): Promise<TradeSiteBalance> {
+  const url = `${GAME_DATA_ROOT}/balance/trade-sites.json`;
+  const balance = validateTradeSiteBalance(await fetchJson(url));
+  log.debug(`loaded trade site balance (${Object.keys(balance).length} site types)`);
   return balance;
 }
 

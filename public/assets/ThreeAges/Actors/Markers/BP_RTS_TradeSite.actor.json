@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_TradeSite",
+  "parentClass": "actor",
+  "variables": [
+    { "key": "siteId", "label": "Site Id", "type": "text", "default": "trade-site" },
+    { "key": "siteType", "label": "Site Type", "type": "text", "default": "river_port" }
+  ],
+  "components": [{ "id": "root", "component": "Transform", "props": {} }],
+  "interfaces": [], "references": [], "dispatchers": [], "eventBindings": [], "messageBindings": [], "construction": null
+}

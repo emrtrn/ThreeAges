@@ -71,6 +71,8 @@ import type {
   StartingResources,
   StartingTier,
   StartingUnits,
+  TradeSiteBalance,
+  TradeSiteBalanceStats,
   UnitArmorClass,
   UnitAttackType,
   UnitBalance,
@@ -2095,6 +2097,94 @@ export function validateCaravanBalance(value: unknown): CaravanBalance {
     loadSeconds,
     spawnPerProducer,
   };
+}
+
+/**
+ * Validate the trade-site table behind the market's supply chain
+ * (`balance/trade-sites.json`, supply plan §6.1).
+ *
+ * Every magnitude stays tunable; what is refused is data that cannot mean
+ * anything. A site with no output never fills, so the buy button it feeds is
+ * dead in a way nothing on screen explains; a site supplying `gold` names a buy
+ * button that cannot exist, because gold is the numeraire and
+ * {@link validateMarketBalance} already refuses to price it; a fractional
+ * `caravanCount` is part of a donkey.
+ *
+ * The one relationship check is `bufferCapacity >= carryCapacity`, and it earns
+ * its place: a buffer smaller than a single load is emptied by every arrival, so
+ * the site never reports "full" and the player never gets the one signal that
+ * says "add a caravan or move your market closer". Both fields sit in this table
+ * (plan §3.8), so the rule is verifiable from this file alone — the producer
+ * side needs two.
+ */
+export function validateTradeSiteBalance(value: unknown): TradeSiteBalance {
+  const where = "balance/trade-sites.json";
+  const obj = asObject(value, where);
+  const sites: Record<string, TradeSiteBalanceStats> = {};
+  for (const [id, raw] of Object.entries(obj)) {
+    if (!/^[a-z][a-z0-9_]*$/.test(id)) {
+      throw new GameDataError(`${where}: invalid trade site id "${id}"`);
+    }
+    const siteWhere = `${where}."${id}"`;
+    const site = asObject(raw, siteWhere);
+    const resourceId = requireString(site, "resourceId", siteWhere);
+    if (!/^[a-z][a-z0-9_]*$/.test(resourceId)) {
+      throw new GameDataError(`${siteWhere}.resourceId: invalid resource id "${resourceId}"`);
+    }
+    if (resourceId === "gold") {
+      throw new GameDataError(
+        `${siteWhere}.resourceId: gold is the numeraire and has no buy button, so no supply chain can feed one`,
+      );
+    }
+    const positive = (key: "perMinute" | "carryCapacity" | "bufferCapacity" | "caravanCount"): number => {
+      const amount = requireFiniteNumber(site, key, siteWhere);
+      if (amount <= 0) throw new GameDataError(`${siteWhere}.${key}: must be > 0`);
+      return amount;
+    };
+    const carryCapacity = positive("carryCapacity");
+    const bufferCapacity = positive("bufferCapacity");
+    if (bufferCapacity < carryCapacity) {
+      throw new GameDataError(
+        `${siteWhere}: bufferCapacity ${bufferCapacity} is under one caravan load (carryCapacity ${carryCapacity}), `
+        + "so the buffer can never fill and the site can never report being backed up",
+      );
+    }
+    const caravanCount = positive("caravanCount");
+    if (!Number.isInteger(caravanCount)) {
+      throw new GameDataError(`${siteWhere}.caravanCount: must be a whole number of caravans`);
+    }
+    const capacity = site["capacity"];
+    if (capacity !== undefined && (typeof capacity !== "number" || !Number.isFinite(capacity) || capacity <= 0)) {
+      throw new GameDataError(`${siteWhere}.capacity: must be a finite number > 0, or absent for a renewable site`);
+    }
+    sites[id] = {
+      label: requireString(site, "label", siteWhere),
+      resourceId,
+      perMinute: positive("perMinute"),
+      carryCapacity,
+      bufferCapacity,
+      caravanCount,
+      dock: validateTradeSiteDock(site["dock"], `${siteWhere}.dock`),
+      ...(capacity === undefined ? {} : { capacity: capacity as number }),
+    };
+  }
+  if (Object.keys(sites).length === 0) {
+    throw new GameDataError(`${where}: must define at least one trade site`);
+  }
+  return sites;
+}
+
+/**
+ * The landing a supply road has to touch. Non-positive is refused for the same
+ * reason a zero-capacity deposit is: a dock with no extent is a place no road
+ * could ever reach, so the site would sit on the map permanently unusable.
+ */
+function validateTradeSiteDock(value: unknown, where: string): { readonly width: number; readonly depth: number } {
+  const dock = asObject(value, where);
+  const width = requireFiniteNumber(dock, "width", where);
+  const depth = requireFiniteNumber(dock, "depth", where);
+  if (width <= 0 || depth <= 0) throw new GameDataError(`${where}: width and depth must be > 0`);
+  return { width, depth };
 }
 
 /**

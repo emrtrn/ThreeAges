@@ -1134,3 +1134,65 @@ export interface CaravanBalance {
   /** Caravans a linked producer keeps on the road (V4 KARAR 2-A: automatic). */
   readonly spawnPerProducer: number;
 }
+
+/**
+ * One *kind* of trade site — the supply plan's answer to "where did the goods on
+ * the market shelf come from" (`THREEAGES_RTS_MARKET_SUPPLY_PLAN.md` §6.1).
+ *
+ * A trade site is not a building: it is never built, never demolished, needs no
+ * worker and costs no population (KARAR 2-A/3-A). The only decision it asks of a
+ * kingdom is whether to run a road out to it. So its tuning cannot live in
+ * `buildings.json` — every field that table requires of a building (cost,
+ * construction time, footprint, health, progression tiers) would have to be
+ * invented, and invented numbers in a balance table mislead the next person to
+ * tune it.
+ *
+ * {@link carryCapacity} sits here rather than in `logistics.json` for a measured
+ * reason (plan §3.8): cargo is a property of the *facility at the end of the
+ * line*, not of the animal — producers carry it per building × tier in
+ * `buildings.json`. A trade site has no tiers to inherit from, so it carries its
+ * own, and {@link bufferCapacity} >= {@link carryCapacity} is then checkable from
+ * this one table.
+ */
+export interface TradeSiteBalanceStats {
+  /** Shown wherever the site is named in the UI. */
+  readonly label: string;
+  /** Which resource this site supplies; must have a market price to be buyable. */
+  readonly resourceId: string;
+  /** Units produced into the local buffer per minute, independent of workers. */
+  readonly perMinute: number;
+  /** Units one caravan carries from here to the market in a single trip. */
+  readonly carryCapacity: number;
+  /**
+   * Units the site holds before production stalls (`buffer-full`), exactly as a
+   * producer's `localBufferCapacity` does. Kept at or above
+   * {@link carryCapacity}: a buffer smaller than one load empties on every
+   * arrival, so "the buffer is full" — the signal that says "add a caravan or
+   * move your market closer" — could never appear.
+   */
+  readonly bufferCapacity: number;
+  /**
+   * Pack animals this site keeps on its road. Per site rather than global
+   * (`logistics.json`'s `spawnPerProducer`) because throughput is a property of
+   * the *lane*: plan §3.8 measured one donkey at ~4.2 minutes per lot, which is
+   * "practically closed", and four at ~63 seconds.
+   */
+  readonly caravanCount: number;
+  /**
+   * The landing the road has to touch, in world units. It is the site's
+   * footprint for placement purposes: nothing is built or paved on it, and a
+   * road reaches it from outside exactly as it reaches a producer.
+   */
+  readonly dock: { readonly width: number; readonly depth: number };
+  /**
+   * Total units this site can ever yield, or absent for a renewable one.
+   *
+   * KARAR 2-A ships renewable — the limit is throughput, not quantity — but the
+   * field stays in the schema so a fork can author a finite pit without a code
+   * change.
+   */
+  readonly capacity?: number;
+}
+
+/** `public/game-data/balance/trade-sites.json` — keyed by stable site-type id. */
+export type TradeSiteBalance = Readonly<Record<string, TradeSiteBalanceStats>>;

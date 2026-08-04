@@ -21715,6 +21715,35 @@
       "license": "Project-local RTS gameplay marker"
     },
     {
+      "id": "threeages-rts-trade-site-marker",
+      "name": "BP RTS Trade Site.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Markers",
+      "path": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "marker",
+        "trade",
+        "supply"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 488
+      },
+      "license": "Project-local RTS gameplay marker"
+    },
+    {
       "id": "ual1-standard-rm",
       "name": "UAL1 Standard RM",
       "assetType": "skeletalMesh",

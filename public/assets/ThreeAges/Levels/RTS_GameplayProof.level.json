@@ -9,7 +9,38 @@
     },
     {
       "assetId": "rock-group",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -26,
+            0,
+            4
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            15,
+            0
+          ],
+          "scale": 2.5
+        },
+        {
+          "position": [
+            26,
+            0,
+            -4
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            195,
+            0
+          ],
+          "scale": 2.5
+        }
+      ]
     },
     {
       "assetId": "resource-gold-1",
@@ -163,6 +194,21 @@
           "rotation": [
             0,
             120,
+            0
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            -4.61,
+            0.14,
+            -17.91
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            300,
             0
           ],
           "scale": 3
@@ -1467,6 +1513,111 @@
           ],
           "rotationYDeg": 0,
           "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "resource-pinetree-group-cut",
+      "placements": [
+        {
+          "position": [
+            -8,
+            0,
+            50
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            8,
+            0,
+            -50
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            180,
+            0
+          ],
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "logs",
+      "placements": [
+        {
+          "position": [
+            -5.8,
+            0,
+            52.4
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            35,
+            0
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            5.8,
+            0,
+            -52.4
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            215,
+            0
+          ],
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "mine",
+      "placements": [
+        {
+          "position": [
+            -28,
+            0,
+            6
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            340,
+            0
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            28,
+            0,
+            -6
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            160,
+            0
+          ],
+          "scale": 3
         }
       ]
     }
@@ -6020,6 +6171,90 @@
         "herdId": "east-wolves",
         "species": "wolf",
         "count": 3
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        -1,
+        0,
+        20
+      ],
+      "name": "TradeSite player_river_port",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "player_river_port",
+        "siteType": "river_port"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        1,
+        0,
+        -20
+      ],
+      "name": "TradeSite enemy_river_port",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "enemy_river_port",
+        "siteType": "river_port"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        -8,
+        0,
+        50
+      ],
+      "name": "TradeSite player_timber_camp",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "player_timber_camp",
+        "siteType": "timber_camp"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        8,
+        0,
+        -50
+      ],
+      "name": "TradeSite enemy_timber_camp",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "enemy_timber_camp",
+        "siteType": "timber_camp"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        -28,
+        0,
+        6
+      ],
+      "name": "TradeSite player_stone_pit",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "player_stone_pit",
+        "siteType": "stone_pit"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
+      "position": [
+        28,
+        0,
+        -6
+      ],
+      "name": "TradeSite enemy_stone_pit",
+      "scale": 1,
+      "variableOverrides": {
+        "siteId": "enemy_stone_pit",
+        "siteType": "stone_pit"
       }
     }
   ]

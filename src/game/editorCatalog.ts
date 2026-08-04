@@ -22,6 +22,7 @@ import {
   validateCaravanBalance,
   validateResourceBalance,
   validateRoadBalance,
+  validateTradeSiteBalance,
   validateUnitBalance,
 } from "@/game/data/validateGameData";
 import {
@@ -668,6 +669,20 @@ const LOGISTICS_FIELDS = [
   { path: "spawnPerProducer", label: "Üretici başına kervan", min: 1, step: 1, hint: "Bağlı her üreticinin yolda tuttuğu eşek sayısı. Tam sayı olmalıdır." },
 ];
 
+// Arz noktaları (`balance/trade-sites.json`). Satırlar *tür*tür, tek tek nokta
+// değil: haritada altı nokta var ama üç tür, ve bir türü ayarlamak iki yakayı
+// birden ayarlar — adaletin veriden gelmesi bu yüzden.
+const TRADE_SITE_FIELDS = [
+  { path: "label", label: "Ad" },
+  { path: "resourceId", label: "Kaynak", hint: "Bu noktanın pazara taşıdığı kaynak. Pazarda fiyatı olmayan bir kaynak seçilirse alış düğmesi hiç açılmaz." },
+  { path: "perMinute", label: "Dakikada üretim", min: 0, step: 5, hint: "Tamponu dolduran hız. Sahip olunan üreticinin üstüne çıkarsa arz noktası kendi kampınızın yerini alır; altında kalması kasıtlıdır." },
+  { path: "carryCapacity", label: "Sefer başına yük", min: 0, step: 5, hint: "Bir eşeğin tek seferde götürdüğü miktar. Tampondan büyük olamaz." },
+  { path: "bufferCapacity", label: "Yerel tampon", min: 0, step: 10, hint: "Nokta durmadan önce biriktirebildiği miktar. Sefer yükünün altına inerse tampon hiç dolmaz ve 'tampon dolu' uyarısı kaybolur." },
+  { path: "caravanCount", label: "Nokta başına kervan", min: 1, step: 1, hint: "Bu noktanın yolda tuttuğu eşek sayısı. Tek eşekle bir lot ~4 dakika sürer, dörtle ~1 dakika." },
+  { path: "dock.width", label: "Rıhtım genişliği", min: 1, step: 1, hint: "Yolun değeceği alanın ölçüsü. Üstüne bina kurulamaz ve yol döşenemez; yol kenarından temas eder." },
+  { path: "dock.depth", label: "Rıhtım derinliği", min: 1, step: 1 },
+];
+
 const ROADS_FIELDS = [
   { path: "cellSize", label: "Hücre boyutu (birim)", min: 0.1, step: 0.1 },
   { path: "woodCostPerCell", label: "Hücre başına odun maliyeti", min: 0, step: 1 },
@@ -786,6 +801,18 @@ export const GAME_EDITOR_CATALOG = {
       path: "game-data/balance/roads.json",
       fields: ROADS_FIELDS,
       validate: asTableValidator(validateRoadBalance),
+    },
+    {
+      id: "trade-sites",
+      label: "Arz Noktası Dengesi",
+      path: "game-data/balance/trade-sites.json",
+      fields: TRADE_SITE_FIELDS,
+      // The cross-table check (`resourceId` has to be priced by the Market, and
+      // gated by its `stocked` list) is deliberately not applied here: it needs
+      // `buildings.json`, which this route does not load. The runtime boot and
+      // the engine suite both apply it, so a site authored for a resource nobody
+      // can buy is caught where it would actually be played.
+      validate: asTableValidator(validateTradeSiteBalance),
     },
     {
       id: "logistics",

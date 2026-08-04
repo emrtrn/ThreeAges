@@ -5,6 +5,7 @@ import type { LayoutBlockingVolume, LayoutSplineActor } from "@engine/scene/layo
 import { resolveBlockingVolume } from "@engine/scene/blockingVolume";
 import type { AnimalBalance, BuildingBalance, ResourceBalance } from "../../data/gameDataTypes";
 import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
+import type { RtsTradeSiteDefinition } from "../economy/tradeSiteSystem";
 import type { RtsTreeDefinition } from "../economy/forestSystem";
 import type { RtsHerdDefinition } from "../wildlife/wildlifeSystem";
 import type { RtsBuildAnchor, RtsExpansionRegion, RtsMapPoint, RtsStrategicPoint } from "./rtsMapBlockout";
@@ -23,6 +24,8 @@ export interface RtsLevelDefinition {
   readonly trees: readonly RtsTreeDefinition[];
   /** Authored wildlife clusters; one marker stands for a whole herd. */
   readonly herds: readonly RtsHerdDefinition[];
+  /** Authored market supply points; the marker names where and which kind. */
+  readonly tradeSites: readonly RtsTradeSiteDefinition[];
   readonly strategicPoints: readonly RtsStrategicPoint[];
   readonly navigationBlockers: readonly NavBlocker[];
   /** Horizontal walkable floors, such as bridge decks, that raise unit visuals. */
@@ -112,6 +115,7 @@ export function adaptRtsLevel(
   const nodes: RtsResourceNodeDefinition[] = [];
   const trees: RtsTreeDefinition[] = [];
   const herds: RtsHerdDefinition[] = [];
+  const tradeSites: RtsTradeSiteDefinition[] = [];
   const strategicPoints: RtsStrategicPoint[] = [];
   const navigationBlockers: NavBlocker[] = [];
   const walkableDecks: RtsWalkableDeck[] = [];
@@ -157,6 +161,21 @@ export function adaptRtsLevel(
       if (!Number.isInteger(count)) throw new RtsLevelError(`Herd ${id} count must be a whole number`);
       if (herds.some((herd) => herd.id === id)) throw new RtsLevelError(`duplicate herd ${id}`);
       herds.push({ id, species, count, ...point });
+    } else if (def.name === "BP_RTS_TradeSite") {
+      // Only *where* and *which kind* (supply plan §5.3). Throughput, buffer,
+      // fleet size and dock size stay in `balance/trade-sites.json`, so a tuning
+      // pass never reopens a level — and the site's resource is named in exactly
+      // one place, where it cannot contradict itself.
+      //
+      // `siteType` is checked against the balance table by
+      // {@link TradeSiteSystem}'s constructor rather than here, which is where
+      // `resourceId` is checked for a deposit too: the adapter's job is the
+      // marker's shape, and pulling a fifth balance table through this signature
+      // would buy nothing the constructor does not already refuse.
+      const id = requireText(values, "siteId", "TradeSite");
+      const siteType = requireText(values, "siteType", `TradeSite ${id}`);
+      if (tradeSites.some((site) => site.id === id)) throw new RtsLevelError(`duplicate trade site ${id}`);
+      tradeSites.push({ id, siteType, ...point });
     } else if (def.name === "BP_RTS_StrategicPoint") {
       const id = requireText(values, "pointId", "StrategicPoint");
       const name = requireText(values, "label", `StrategicPoint ${id}`);
@@ -235,6 +254,7 @@ export function adaptRtsLevel(
     resourceNodes: nodes,
     trees,
     herds,
+    tradeSites,
     strategicPoints,
     navigationBlockers,
     walkableDecks,

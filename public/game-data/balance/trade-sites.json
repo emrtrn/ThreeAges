@@ -1,0 +1,29 @@
+{
+  "river_port": {
+    "label": "Nehir Limanı",
+    "resourceId": "food",
+    "perMinute": 60,
+    "carryCapacity": 30,
+    "bufferCapacity": 120,
+    "caravanCount": 4,
+    "dock": { "width": 8, "depth": 8 }
+  },
+  "timber_camp": {
+    "label": "Bağımsız Oduncu Kampı",
+    "resourceId": "wood",
+    "perMinute": 80,
+    "carryCapacity": 30,
+    "bufferCapacity": 120,
+    "caravanCount": 4,
+    "dock": { "width": 8, "depth": 8 }
+  },
+  "stone_pit": {
+    "label": "Taş Sahası",
+    "resourceId": "stone",
+    "perMinute": 40,
+    "carryCapacity": 30,
+    "bufferCapacity": 120,
+    "caravanCount": 4,
+    "dock": { "width": 8, "depth": 8 }
+  }
+}

@@ -12,6 +12,7 @@ import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
 import type { RtsTreeDefinition } from "../economy/forestSystem";
+import type { RtsTradeSiteDefinition } from "../economy/tradeSiteSystem";
 import type { RtsHerdDefinition } from "../wildlife/wildlifeSystem";
 
 export interface RtsMapPoint {
@@ -140,6 +141,17 @@ export interface RtsMapBlockout {
   readonly trees: readonly RtsTreeDefinition[];
   /** Wildlife clusters; one entry seeds a whole grazing herd. */
   readonly herds: readonly RtsHerdDefinition[];
+  /**
+   * The supply plan's authored trade sites — a port, a timber camp and a stone
+   * pit, each in a point-symmetric pair (KARAR 4-A, plan §3.7).
+   *
+   * Empty on this legacy code blockout, and deliberately so: the six positions
+   * the plan locked were measured against `RTS_GameplayProof`'s river, groves and
+   * deposits, none of which exist on this map. Authoring them here by eye would
+   * put an *exclusive* resource on unmeasured ground, which is the one asymmetry
+   * §3.7 says decides matches rather than delaying them.
+   */
+  readonly tradeSites: readonly RtsTradeSiteDefinition[];
   /** Static obstacle footprints consumed by `RtsNavigation`. */
   readonly navigationBlockers: readonly NavBlocker[];
   /** Horizontal authored floors that raise units (empty in the code blockout). */
@@ -517,6 +529,10 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     { id: "west-wolves", species: "wolf", x: -28, z: -6, count: 3 },
     { id: "east-wolves", species: "wolf", x: 28, z: 6, count: 3 },
   ],
+  // See `RtsMapBlockout.tradeSites`: the plan's six positions belong to
+  // `RTS_GameplayProof`, and an exclusive supply point authored by eye here
+  // would hand one kingdom a resource the other cannot reach.
+  tradeSites: [],
   navigationBlockers: [
     { min: [-12, -1, -4], max: [12, 4, 4] },
   ],
