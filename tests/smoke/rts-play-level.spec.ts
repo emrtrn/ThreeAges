@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * The editor -> runtime round trip: Play opens the level being edited.
+ * The editor -> runtime round trip: this project pins Play to its RTS preset.
  *
  * A wider viewport than the suite default because the editor toolbar overflows
  * 1280x720 and the Play button lands outside it, which Playwright refuses to
@@ -18,33 +18,21 @@ async function openEditor(page: import("@playwright/test").Page): Promise<void> 
   await expect(page.locator("[data-project-name]")).not.toHaveText("loading level", { timeout: 30_000 });
 }
 
-test("Play opens the level being edited, and says so if that level is not playable", async ({ page, context }) => {
+test("Play preserves the configured RTS route when the project pins its gameplay map", async ({ page, context }) => {
   await openEditor(page);
-
-  const activeLevel = await page.evaluate(async () => {
-    const response = await fetch("/project.3dgame.json");
-    return ((await response.json()) as { editor: { defaultScene: string } }).editor.defaultScene;
-  });
 
   const [runtime] = await Promise.all([
     context.waitForEvent("page"),
     page.getByTestId("editor-play").click(),
   ]);
   await runtime.waitForLoadState("domcontentloaded");
-  // The saved scene is handed over explicitly, so the runtime cannot pick a
-  // different map than the one that was just edited.
-  expect(new URL(runtime.url()).searchParams.get("level")).toBe(activeLevel);
-  await expect(runtime.locator("#game-canvas")).toHaveAttribute("data-rts-level-ref", activeLevel, { timeout: 30_000 });
-
-  // The smoke suite edits a scene with no RTS markers in it, which is also what
-  // mid-edit authoring looks like. That must read as a refusal with a reason,
-  // not as a blank page: the route still boots, on the blockout map, saying why.
-  const level = await runtime.locator("#game-canvas").getAttribute("data-rts-level");
-  if (level === "invalid") {
-    await expect(runtime.locator("#game-canvas")).toHaveAttribute("data-rts-level-error", /.+/);
-  } else {
-    expect(level, "a level with RTS markers plays as authored").toBe("authored");
-  }
+  expect(new URL(runtime.url()).searchParams.get("level")).toBeNull();
+  await expect(runtime.locator("#game-canvas")).toHaveAttribute(
+    "data-rts-level-ref",
+    "assets/ThreeAges/Levels/RTS_GameplayProof.level.json",
+    { timeout: 30_000 },
+  );
+  await expect(runtime.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
   await expect(runtime.locator("#game-canvas")).toBeVisible();
   await runtime.close();
 });

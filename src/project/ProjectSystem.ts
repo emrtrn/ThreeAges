@@ -13,6 +13,11 @@ export interface ProjectManifest {
     metadataSchema?: string;
     /** Optional URL of the project's runtime dev server, opened by Play/Test (P). */
     previewUrl?: string;
+    /**
+     * Whether Play/Test adds the editor's current Level as `?level=`.
+     * Defaults to true so generic projects always preview what was just saved.
+     */
+    appendActiveLevelToPreview?: boolean;
     gridSize?: number;
     gridEnabled?: boolean;
     snapRotationDeg?: number;

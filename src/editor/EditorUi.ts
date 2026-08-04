@@ -1300,7 +1300,8 @@ export class EditorUi {
   }
 
   /**
-   * The preview URL with the level being edited attached as `?level=`.
+   * The preview URL, with the level being edited attached as `?level=` unless
+   * the project deliberately pins its runtime map.
    *
    * Play saves *this* scene, so the runtime has to be told which scene that was;
    * without it a runtime that picks its own map (the RTS route reads its preset)
@@ -1315,7 +1316,7 @@ export class EditorUi {
   private playPreviewUrl(): string {
     const configured = this.projectInfo?.manifest.editor.previewUrl ?? "/";
     const activeLevel = this.projectInfo?.manifest.editor.defaultScene;
-    if (!activeLevel) return configured;
+    if (!activeLevel || this.projectInfo?.manifest.editor.appendActiveLevelToPreview === false) return configured;
     // Parsed against the current origin so a relative preview URL ("/?rts") and
     // an absolute one both round-trip; only same-document relative URLs are
     // rewritten back to a relative string.

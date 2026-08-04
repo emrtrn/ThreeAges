@@ -351,6 +351,7 @@ export interface EditorProjectInfo {
       defaultScene: string;
       assetManifest: string;
       previewUrl?: string;
+      appendActiveLevelToPreview?: boolean;
     };
   };
   rootName: string;

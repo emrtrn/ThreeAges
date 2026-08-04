@@ -101,14 +101,10 @@ test("editor authoring smoke: place, transform, undo, save, reload, play", async
   await runtime.waitForLoadState("domcontentloaded");
   await expect(runtime.locator("#game-canvas")).toBeVisible();
   await expect(runtime.locator("#ui-overlay")).toBeVisible();
-  // Play hands the runtime the level it just saved, so the game opens the scene
-  // that was being edited rather than whatever map it would have picked itself.
+  // This project pins its gameplay map in the preset, so Play preserves the
+  // configured URL instead of adding the editor scene as `?level=`.
   const played = new URL(runtime.url());
-  const activeLevel = await page.evaluate(async () => {
-    const response = await fetch("/project.3dgame.json");
-    return ((await response.json()) as { editor: { defaultScene: string } }).editor.defaultScene;
-  });
-  expect(played.searchParams.get("level")).toBe(activeLevel);
+  expect(played.searchParams.get("level")).toBeNull();
   await runtime.close();
 
   expect(pageErrors).toEqual([]);
