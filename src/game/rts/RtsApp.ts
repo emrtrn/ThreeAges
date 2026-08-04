@@ -184,6 +184,7 @@ import { EconomyProductionSystem, producerHasSource } from "./economy/economyPro
 import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTradeSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { TradeSiteSystem } from "./economy/tradeSiteSystem";
+import { MarketSupplySystem } from "./economy/marketSupplySystem";
 import { ForestSystem } from "./economy/forestSystem";
 import { PastureSystem } from "./wildlife/pastureSystem";
 import { PredatorSystem } from "./wildlife/predatorSystem";
@@ -191,6 +192,7 @@ import { WildlifeRetaliationSystem } from "./wildlife/wildlifeRetaliation";
 import { WildlifeSystem } from "./wildlife/wildlifeSystem";
 import { WildlifeView } from "./wildlife/wildlifeView";
 import { Caravan, CaravanSystem, type CaravanDispatch } from "./logistics/caravanSystem";
+import { ProducerCaravanLanes, producerLaneId } from "./logistics/producerCaravanLanes";
 import { CaravanView } from "./logistics/caravanView";
 import { KingdomProgressionSystem, type UpgradableStructure } from "./progression/kingdomProgressionSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
@@ -619,6 +621,11 @@ export class RtsApp {
    * Faz S3 puts a caravan lane on the road between a site and a market.
    */
   private readonly tradeSites: TradeSiteSystem;
+  /**
+   * Supply plan Faz S3: which kingdom (if any) has run a road from a trade site
+   * to one of its Markets, and the caravan lane that follows from it.
+   */
+  private readonly marketSupply: MarketSupplySystem;
   private readonly forests: ForestSystem;
   private readonly depotLogistics: DepotLogisticsSystem;
   private readonly productionLogistics: ProductionLogisticsSystem;
@@ -1140,15 +1147,6 @@ export class RtsApp {
       this.kingdoms,
       this.resourceCapacity,
     );
-    this.caravans = new CaravanSystem(
-      this.options.caravanBalance,
-      this.productionLogistics,
-      this.roads,
-      this.structures,
-      this.centers,
-      this.logisticsOccupation,
-      (producerStructureId) => this.caravanDispatch(producerStructureId),
-    );
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
     const worker = this.options.unitBalance[PLACEHOLDER_WORKER_ID];
     if (!guard || !worker) throw new Error("Missing RTS unit balance definition");
@@ -1179,6 +1177,34 @@ export class RtsApp {
       (structure) => this.territory.ownerAt(structure.x, structure.z) === structure.owner,
       this.resourceCapacity,
     );
+    // Faz S3, and built here rather than beside the trade sites because it needs
+    // the Market that was only just constructed: a supply site is nothing on its
+    // own, it is one end of a road whose other end is a shelf.
+    this.marketSupply = new MarketSupplySystem(
+      this.options.tradeSiteBalance,
+      this.tradeSites,
+      this.roads,
+      this.structures,
+      this.marketTrade.stock,
+      // The same control predicate as the trade itself: a supply lane must not
+      // deliver into a Market its owner no longer holds the ground under.
+      (structure) => this.territory.ownerAt(structure.x, structure.z) === structure.owner,
+    );
+    // One state machine, two lane providers (supply plan §3.4). The producer
+    // line is listed first so its animals keep the roster order they had before
+    // the trade sites existed.
+    this.caravans = new CaravanSystem(this.options.caravanBalance, this.roads, [
+      new ProducerCaravanLanes(
+        this.options.caravanBalance,
+        this.productionLogistics,
+        this.roads,
+        this.structures,
+        this.centers,
+        this.logisticsOccupation,
+        (producerStructureId) => this.caravanDispatch(producerStructureId),
+      ),
+      this.marketSupply,
+    ]);
     this.workerProduction = new WorkerProductionSystem(
       this.units,
       this.centers,
@@ -2846,15 +2872,21 @@ export class RtsApp {
     // tick; an untouched job is refunded here exactly as a cancelled one is.
     this.structureRepair.update(this.structures.all());
     this.economyProduction?.update(dt);
-    // Faz S2: the trade sites fill their own buffers and stop there. Ticked
-    // beside the producers because that is what they are — a facility with an
-    // output rate and a local buffer — and their goods reach a market the same
-    // way a producer's do, down a road, once Faz S3 lands.
+    // Faz S2: the trade sites fill their own buffers. Ticked beside the
+    // producers because that is what they are — a facility with an output rate
+    // and a local buffer — and since Faz S3 their goods reach a market the same
+    // way a producer's reach the stockpile: down a road, on a donkey.
     this.tradeSites.update(dt);
     this.syncForestVisibility();
     // Simulation owns the route state; the animation itself advances above on
     // rendered time, so the speed picker cannot change its playback rate.
-    this.logisticsTransfers.update(this.caravans.update(dt));
+    //
+    // One arrival stream, two receivers: each recognises its own lane prefix and
+    // ignores the other's, which is what keeps a producer's load going to the
+    // wallet and a trade site's to the market shelf (supply plan §3.4).
+    const arrivals = this.caravans.update(dt);
+    this.logisticsTransfers.update(arrivals);
+    this.marketSupply.deliver(arrivals);
     // Only the human kingdom's production is narrated; the AI's own queue events
     // are surfaced by its decision log in a later slice.
     for (const event of this.workerProduction.update(dt)) {
@@ -3723,6 +3755,9 @@ export class RtsApp {
     this.marketTrade.reset();
     this.resourceNodes.reset();
     this.tradeSites.reset();
+    // Every site goes back to nobody; a new match must not open with the last
+    // one's port already claimed.
+    this.marketSupply.reset();
     this.forests.reset();
     this.commandMarkers.clear();
     // A restart is a new match, not a continuation: carrying a cooldown over
@@ -4435,7 +4470,7 @@ export class RtsApp {
       const livestock = this.pasture.snapshots(structure.owner)
         .find((pasture) => pasture.structureId === structure.id);
       const caravan = this.caravans.snapshots()
-        .find((candidate) => candidate.producerStructureId === structure.id) ?? null;
+        .find((candidate) => candidate.laneId === producerLaneId(structure.id)) ?? null;
       const dispatch = this.caravanDispatch(structure.id);
       return {
         kind: "producer",

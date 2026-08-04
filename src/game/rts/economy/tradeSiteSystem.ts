@@ -115,9 +115,39 @@ export class TradeSiteSystem {
     return blockers;
   }
 
+  /**
+   * The balance row behind one authored site, resolved once at construction.
+   *
+   * Saves every caller from re-deriving `balance[siteType]` and re-handling the
+   * "unknown kind" case that this class already refused to be built with.
+   */
+  statsFor(siteId: string): TradeSiteBalanceStats | null {
+    return this.sites.get(siteId)?.stats ?? null;
+  }
+
   /** Goods waiting at one site, or 0 when nothing is authored under that id. */
   bufferedAt(siteId: string): number {
     return this.sites.get(siteId)?.buffered ?? 0;
+  }
+
+  /**
+   * Hand a caravan its load — the twin of
+   * {@link EconomyProductionSystem.withdrawBuffered}, and the only way goods
+   * ever leave a site.
+   *
+   * Taken at *arrival* rather than at departure, exactly as a producer's is, and
+   * for the reason KARAR 5 needs: a donkey turned back by a cut road has to
+   * leave the buffer where it found it, or every severed route would quietly
+   * destroy a load. Returns what it actually got, which may be a partial load
+   * when the site has not finished making one.
+   */
+  withdrawBuffered(siteId: string, maximumAmount: number): number {
+    const site = this.sites.get(siteId);
+    if (!site || site.buffered <= 0) return 0;
+    if (!Number.isFinite(maximumAmount) || maximumAmount <= 0) return 0;
+    const amount = Math.min(site.buffered, maximumAmount);
+    site.buffered -= amount;
+    return amount;
   }
 
   snapshots(): readonly TradeSiteSnapshot[] {

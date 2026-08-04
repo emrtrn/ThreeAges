@@ -233,6 +233,7 @@ import { PastureSystem, penGeometryFor } from "../src/game/rts/wildlife/pastureS
 import { WildlifeRetaliationSystem, type WildlifeStrike } from "../src/game/rts/wildlife/wildlifeRetaliation";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
 import { TradeSiteSystem } from "../src/game/rts/economy/tradeSiteSystem";
+import { MarketSupplySystem } from "../src/game/rts/economy/marketSupplySystem";
 import { ForestSystem } from "../src/game/rts/economy/forestSystem";
 import { KingdomProgressionSystem, townUnlocksAvailable } from "../src/game/rts/progression/kingdomProgressionSystem";
 import {
@@ -245,6 +246,7 @@ import { ProductionLogisticsSystem } from "../src/game/rts/economy/productionLog
 import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
 import { Caravan, CaravanSystem } from "../src/game/rts/logistics/caravanSystem";
+import { ProducerCaravanLanes, producerLaneId } from "../src/game/rts/logistics/producerCaravanLanes";
 import { advanceCaravanRoute, startCaravanRoute } from "../src/game/rts/logistics/caravanRoute";
 import { isCaravanVisible } from "../src/game/rts/logistics/caravanView";
 import {
@@ -40569,7 +40571,7 @@ function instantCaravanArrivals(links: ProductionLogisticsSystem) {
     .filter((link) => link.status === "linked")
     .map((link) => ({
       caravanId: `fixture:${link.structureId}`,
-      producerStructureId: link.structureId,
+      laneId: producerLaneId(link.structureId),
       owner: link.owner,
       carryCapacity: Number.POSITIVE_INFINITY,
     }));
@@ -40667,15 +40669,17 @@ check("V4 Faz 3: linked producers receive automatic non-population caravans", ()
   const before = population.snapshot().current;
   const links = new ProductionLogisticsSystem(structures, roads, new DepotLogisticsSystem(structures, roads, centers));
   assert.equal(links.snapshots()[0]?.status, "linked", "the farm touches the centre road ring");
-  const caravans = new CaravanSystem(
-    shippedCaravanBalance(),
-    links,
-    roads,
-    structures,
-    centers,
-    undefined,
-    () => ({ carryCapacity: 30, ready: true, canReceive: true }),
-  );
+  const caravans = new CaravanSystem(shippedCaravanBalance(), roads, [
+    new ProducerCaravanLanes(
+      shippedCaravanBalance(),
+      links,
+      roads,
+      structures,
+      centers,
+      undefined,
+      () => ({ carryCapacity: 30, ready: true, canReceive: true }),
+    ),
+  ]);
   caravans.update(shippedCaravanBalance().loadSeconds);
   caravans.update(1);
   const caravan = caravans.snapshots()[0] ?? assert.fail("the linked producer receives its automatic donkey");
@@ -40690,7 +40694,7 @@ check("V4 Faz 5: a caravan waits for a full producer load and pauses when storag
   const roads = roadGraphOf([[{ x: -2, z: 0 }, { x: 2, z: 0 }]]);
   const caravan = new Caravan(
     "caravan:dispatch",
-    1,
+    producerLaneId(1),
     "player",
     { x: -2, z: 0 },
     { x: 2, z: 0 },
@@ -40809,7 +40813,7 @@ check("V4 Faz 4: resources reach the wallet only when the caravan arrives", () =
   transfer.update([]);
   assert.equal(kingdoms.get("player").wallet.amount("food"), 0, "a road link alone never credits the wallet");
   const carryCapacity = (farm.economy?.workerCapacity ?? 0) * (farm.economy?.perWorkerPerMinute ?? 0);
-  transfer.update([{ caravanId: "test-arrival", producerStructureId: farm.id, owner: "player", carryCapacity }]);
+  transfer.update([{ caravanId: "test-arrival", laneId: producerLaneId(farm.id), owner: "player", carryCapacity }]);
   assert.equal(
     kingdoms.get("player").wallet.amount("food"),
     Math.min(buffered, carryCapacity),
@@ -40861,7 +40865,9 @@ check("V4 Faz 4: an occupied depot sends its caravan to the command centre", () 
     occupation,
   );
   assert.equal(links.snapshots()[0]?.status, "linked", "the centre remains a legal endpoint");
-  const caravans = new CaravanSystem(shippedCaravanBalance(), links, roads, structures, centers, occupation);
+  const caravans = new CaravanSystem(shippedCaravanBalance(), roads, [
+    new ProducerCaravanLanes(shippedCaravanBalance(), links, roads, structures, centers, occupation),
+  ]);
   caravans.update(0);
   const caravan = caravans.snapshots()[0] ?? assert.fail("linked producer has a caravan");
   const centerRoad = roadCellTouchingFootprint(roads, 0, 0, centerStats.footprint.width, centerStats.footprint.depth)
@@ -46542,7 +46548,7 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
     logistics: "linked",
     caravanStorageFull: true,
     caravan: {
-      id: "caravan:1:0", producerStructureId: 1, owner: "player", x: 0, z: 0,
+      id: "caravan:producer:1:player:0", laneId: "producer:1", owner: "player", x: 0, z: 0,
       destinationX: 4, destinationZ: 0, facing: 0, speed: 0, carryCapacity: 30, phase: "loading",
     },
     production: {
@@ -47035,6 +47041,16 @@ check("Faz M2: trading moves stock and price, and never counts as production inc
   assert.equal(wallet.amount("gold"), 200, "a refused trade spends nothing");
   connected = true;
 
+  // Faz S3 put a supply chain under the buy side of this project's data, so the
+  // shelf has to be stocked before a buy can be about anything else. Stood up by
+  // hand here on purpose: what this test is for is the *trade*, and a fixture
+  // that ran a road and four donkeys to prove a price index moved would be
+  // testing the caravan instead. One lot each — the supply lane's own contract
+  // is checked where it lives, in the Faz S3 checks below.
+  const shelfLot = marketStats.market?.lotSize ?? assert.fail("market lot size missing");
+  trade.stock.credit("player", "stone", shelfLot);
+  trade.stock.credit("player", "food", shelfLot);
+
   // A buy: gold out, a lot in, and the price of what was bought goes up.
   //
   // The amount is taken from the Market's own quote rather than written here
@@ -47241,13 +47257,18 @@ check("Faz S1: this project's market data is a valid, revertible supply switch",
   assert.throws(() => validateMarketBalance({ ...priced, stocked: "wood" }, "test"), GameDataError);
   assert.throws(() => validateMarketBalance({ ...priced, stocked: [7] }, "test"), GameDataError);
 
-  // Faz S1's own acceptance, and the reason it is safe to ship: the machinery is
-  // in, the rule is not. Faz S3 fills this list in one line — and the same line
-  // takes it back out. When S3 lands, this flips to the S3 assertion that every
-  // priced resource is stocked; until then an early fill would close all three
-  // buy buttons with no supply chain to open them.
-  assert.deepEqual(market.stocked, [],
-    "Faz S1 ships the supply switch off: no resource is gated yet");
+  // Faz S3 turned the switch on, and this is where it stays honest. S1 pinned the
+  // opposite (`stocked === []`) so the machinery could ship before the rule; the
+  // two assertions traded places in one line of data, and the same line takes it
+  // back out again.
+  //
+  // The template's own choice, not a validator rule: `stocked` = `basePrice`, so
+  // all three buy buttons hang off a supply chain. A fork may exempt a resource,
+  // but this turns red when it does — which is exactly the point. Leaving a
+  // priced resource unstocked is a real design decision (that buy button mints
+  // goods from nothing again), and it should have to be made on purpose.
+  assert.deepEqual([...market.stocked].sort(), Object.keys(market.basePrice).sort(),
+    "this template gates every priced resource on delivered supply");
 });
 
 const shippedTradeSiteBalance = () => validateTradeSiteBalance(
@@ -47290,15 +47311,18 @@ check("Faz S2: this project's supply table answers every buy button the market o
   const buildings = shippedBuildingBalance();
   const market = buildings["market"]?.market ?? assert.fail("the market building is missing");
 
-  // The §3.6 catcher. A priced resource with no site is a buy button that can
-  // never open once Faz S3 flips `stocked` on — and the failure mode is silence:
-  // wood is the most-bought line in the game, and dropping it from this table
-  // would leave the player unable to buy the very thing this plan's own roads
-  // consume. Checked against `basePrice` rather than `stocked` because S1 ships
-  // that list empty on purpose; when S3 fills it the two sets coincide.
+  // The §3.6 catcher, and since Faz S3 flipped `stocked` on it bites for real: a
+  // gated resource with no site is a buy button that can never open, and the
+  // failure mode is silence. Wood is the most-bought line in the game, and
+  // dropping it from this table would leave the player unable to buy the very
+  // thing this plan's own roads consume.
   const supplied = new Set(Object.values(sites).map((site) => site.resourceId));
   for (const resourceId of Object.keys(market.basePrice)) {
     assert.ok(supplied.has(resourceId), `every priced resource has a supply site (${resourceId} has none)`);
+  }
+  for (const resourceId of market.stocked) {
+    assert.ok(supplied.has(resourceId),
+      `every stocked resource has a supply site (${resourceId} is gated with nothing to fill it)`);
   }
   for (const [id, site] of Object.entries(sites)) {
     assert.ok(
@@ -47501,6 +47525,223 @@ check("Faz S2: the shipped level authors the supply table's sites in fair pairs"
   }
 });
 
+/**
+ * Faz S3's fixture: one river port, one player Market, one road between them.
+ *
+ * The geometry is chosen so the two ends *touch* the road rather than sit on it —
+ * a dock and a footprint are both ground a road may not be paved across, so the
+ * lane has to connect the way the match connects it. The enemy's Market hangs off
+ * a southern branch of the same network, which is what lets the exclusivity check
+ * cut one kingdom's route without touching the other's.
+ */
+function supplyLaneFixture() {
+  const buildings = shippedBuildingBalance();
+  const sites = shippedTradeSiteBalance();
+  const marketStats = buildings["market"] ?? assert.fail("the market building is missing");
+  const roads = roadGraphOf([
+    [{ x: 6, z: 0 }, { x: 16, z: 0 }],
+    [{ x: 6, z: 0 }, { x: 6, z: -16 }],
+  ]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { gold: 1000000 }, 20);
+  const trade = new MarketTradeSystem(buildings, structures, kingdoms, () => true);
+  const playerMarket = structures.place("player", marketStats, 20, 0);
+  structures.advanceConstruction(playerMarket, marketStats.constructionSeconds);
+  const tradeSites = new TradeSiteSystem(sites, [{ id: "port", siteType: "river_port", x: 0, z: 0 }]);
+  const port = sites["river_port"] ?? assert.fail("the river port site type is missing");
+  const supply = new MarketSupplySystem(sites, tradeSites, roads, structures, trade.stock, () => true);
+  const caravans = new CaravanSystem(shippedCaravanBalance(), roads, [supply]);
+  /** Ticks the lane and returns the exact simulated time, for derived assertions. */
+  const run = (seconds: number): number => {
+    const step = 0.1;
+    const frames = Math.round(seconds / step);
+    for (let frame = 0; frame < frames; frame += 1) {
+      tradeSites.update(step);
+      supply.deliver(caravans.update(step));
+    }
+    return frames * step;
+  };
+  const addEnemyMarket = () => {
+    const market = structures.place("enemy", marketStats, 6, -20);
+    structures.advanceConstruction(market, marketStats.constructionSeconds);
+    return market;
+  };
+  return { buildings, sites, port, marketStats, roads, units, structures, kingdoms, trade, tradeSites, supply, caravans, run, addEnemyMarket };
+}
+
+check("Faz S3: a supply lane carries a trade site's goods onto the market shelf, and nowhere else", () => {
+  const fixture = supplyLaneFixture();
+  const { trade, supply, tradeSites, port, roads, run } = fixture;
+  const lotSize = fixture.marketStats.market?.lotSize ?? assert.fail("market lot size missing");
+  const wallet = fixture.kingdoms.get("player").wallet;
+
+  // §2's opening sentence, and the thing that was impossible before this plan:
+  // the buy button is dark on a market nobody has supplied.
+  assert.equal(trade.buy("player", "food"), "out-of-stock", "an unsupplied market cannot sell what it does not have");
+  assert.equal(supply.snapshots()[0]?.status, "linked", "the road out to the port links it");
+  assert.equal(supply.snapshots()[0]?.owner, "player", "and the kingdom that drew it holds the site");
+
+  // The route the animals walk is the committed road and nothing else: a lane
+  // that shortcut over bare ground would make every severed road cosmetic.
+  const lane = supply.lanes()[0] ?? assert.fail("a linked site offers a caravan lane");
+  const route = roads.route(lane.source, lane.destination ?? assert.fail("a linked lane has an endpoint"))
+    ?? assert.fail("the lane's own endpoints do not route");
+  const committed = new Set(roads.all().map((cell) => `${cell.x}:${cell.z}`));
+  for (const cell of route) {
+    assert.ok(committed.has(`${cell.x}:${cell.z}`), `the supply route leaves the road at (${cell.x}, ${cell.z})`);
+  }
+
+  // Long enough for the fleet to make several trips at any sane tuning of the
+  // table; the assertions below are all derived from it rather than from a
+  // stopwatch.
+  const seconds = run(300);
+
+  const delivered = trade.stock.amount("player", "food");
+  assert.ok(delivered >= lotSize, `the lane delivered at least one lot (got ${delivered})`);
+  // §1's whole point: goods on the shelf are goods somebody carried, and they are
+  // still bought with gold. A caravan that credited the wallet would have made
+  // the site a remote farm and the Market decorative.
+  assert.equal(wallet.amount("food"), 0, "a supply caravan never credits the wallet");
+
+  // Conservation, derived from the table so no magnitude is pinned: everything
+  // the site has produced is either still in its buffer or on the shelf. This is
+  // the check that catches a load being counted twice — four donkeys leaving on
+  // one load and each delivering it would show up right here — and equally the
+  // one that catches a load quietly vanishing on a turned-back trip.
+  const produced = (port.perMinute / 60) * seconds;
+  assert.ok(tradeSites.bufferedAt("port") < port.bufferCapacity,
+    "the fixture keeps the lane moving, so nothing was lost to a stalled buffer");
+  assert.ok(
+    Math.abs(delivered + tradeSites.bufferedAt("port") - produced) < 1e-6,
+    `goods are neither minted nor lost in transit (${delivered} shelved + ${tradeSites.bufferedAt("port")} buffered vs ${produced} produced)`,
+  );
+  // ...and the lane is production-bound, not fleet-bound: a site cannot deliver
+  // more than it made, however many animals its row asks for.
+  assert.ok(delivered <= produced + 1e-6, "a lane never delivers more than its site produced");
+
+  // The buy finally goes through, and takes exactly one lot off the shelf.
+  const before = trade.stock.amount("player", "food");
+  assert.equal(trade.buy("player", "food"), "traded");
+  assert.equal(wallet.amount("food"), lotSize, "one lot arrives in the stockpile");
+  assert.equal(trade.stock.amount("player", "food"), before - lotSize, "and exactly one lot leaves the shelf");
+
+  // KARAR 7-A survives the supply chain: selling it back does not refill the shelf.
+  const shelved = trade.stock.amount("player", "food");
+  assert.equal(trade.sell("player", "food"), "traded");
+  assert.equal(trade.stock.amount("player", "food"), shelved, "a sale takes goods out of the game, not onto the shelf");
+});
+
+check("Faz S3: a fleet never claims more load than its site is holding", () => {
+  const fixture = supplyLaneFixture();
+  const { tradeSites, supply, caravans, port } = fixture;
+  assert.ok(port.caravanCount > 1, "the fixture's site runs a fleet, so there is something to stagger");
+
+  // The invariant behind {@link CaravanLaneProvider.dispatch}'s `claimed`, and it
+  // holds at every instant rather than on average: a load is only taken out of
+  // the buffer on arrival (KARAR 5), so goods that an outbound animal is already
+  // carrying are still sitting in the buffer — and must not be counted a second
+  // time by the next animal to load.
+  //
+  // Written as an inequality over live state rather than as a departure
+  // schedule, because the schedule is tuning and this is not: whatever
+  // `perMinute`, `carryCapacity` and `caravanCount` are set to, a site can never
+  // have promised more than it holds. Without it a four-animal lane leaves as a
+  // herd on the first single load, and on the shipped map's distances the buffer
+  // then swings into its cap and stalls production between waves.
+  const step = 0.1;
+  for (let frame = 0; frame < 3000; frame += 1) {
+    tradeSites.update(step);
+    supply.deliver(caravans.update(step));
+    const outbound = caravans.snapshots().filter((caravan) => caravan.phase === "outbound").length;
+    assert.ok(
+      tradeSites.bufferedAt("port") >= port.carryCapacity * outbound - 1e-6,
+      `${outbound} animals are carrying ${port.carryCapacity * outbound} from a buffer holding ${tradeSites.bufferedAt("port")}`,
+    );
+  }
+  assert.ok(fixture.trade.stock.amount("player", "food") > 0, "and the lane delivered while staying honest");
+});
+
+check("Faz S3: cutting the supply road stops the shelf, frees the site, and repairing it resumes", () => {
+  const fixture = supplyLaneFixture();
+  const { trade, supply, tradeSites, roads, run } = fixture;
+  run(200);
+  const shelved = trade.stock.amount("player", "food");
+  assert.ok(shelved > 0, "the lane was working before it was cut");
+
+  // §2 item 7 — the tactical payoff. One road cell removed between the port and
+  // the market: the animals go home, the goods stay where they are, and the shelf
+  // stops growing. Nothing is destroyed; the supply is what breaks.
+  assert.equal(roads.remove([{ x: 10, z: 0 }]), 1, "the fixture actually cut the road");
+  const buffered = tradeSites.bufferedAt("port");
+  run(200);
+  assert.equal(trade.stock.amount("player", "food"), shelved, "a severed road stops the shelf from growing");
+  assert.ok(tradeSites.bufferedAt("port") > buffered, "while the site itself keeps working, with nowhere to send it");
+
+  // KARAR 4-A's release: the claim lives on the route, so losing the road loses
+  // the site. That is what makes cutting one a way to take it.
+  assert.equal(supply.snapshots()[0]?.owner, null, "a site nobody can reach belongs to nobody");
+  assert.equal(supply.snapshots()[0]?.status, "unlinked-market", "the road is still there; the market at the end of it is not");
+
+  const repair = roads.plan({ x: 8, z: 0 }, { x: 12, z: 0 }, []) ?? assert.fail("the cut cell is repavable");
+  roads.commit(repair);
+  run(200);
+  assert.ok(trade.stock.amount("player", "food") > shelved, "a repaired road resumes the flow on its own");
+  assert.equal(supply.snapshots()[0]?.owner, "player", "and the kingdom that repaired it holds the site again");
+});
+
+check("Faz S3: a trade site is exclusive, and supplies only the kingdom holding it", () => {
+  const fixture = supplyLaneFixture();
+  const { trade, supply, roads, run, addEnemyMarket } = fixture;
+  run(120);
+  assert.equal(supply.snapshots()[0]?.owner, "player", "the player's road got there first");
+
+  // A second kingdom runs its own road to the same port. KARAR 4-A: arriving
+  // second buys nothing — the shelf that fills is still the holder's.
+  addEnemyMarket();
+  const enemyBefore = trade.stock.amount("enemy", "food");
+  run(200);
+  assert.equal(supply.snapshots()[0]?.owner, "player", "a later arrival does not take a held site");
+  assert.equal(supply.statusFor("port", "enemy"), "claimed-by-enemy", "and the panel can say why");
+  assert.equal(supply.statusFor("port", "player"), "linked");
+  assert.equal(trade.stock.amount("enemy", "food"), enemyBefore,
+    "a site supplies the kingdom it is linked to and no other");
+  assert.ok(trade.stock.amount("player", "food") > 0, "while the holder's shelf keeps filling");
+
+  // Cut the holder's road only. The enemy's southern branch is untouched, so the
+  // site changes hands — the plan's "the way to take a rival's port is to cut the
+  // road to it", with no new combat rule behind it.
+  assert.equal(roads.remove([{ x: 10, z: 0 }]), 1);
+  const playerHeld = trade.stock.amount("player", "food");
+  run(200);
+  assert.equal(supply.snapshots()[0]?.owner, "enemy", "a released site goes to whoever still reaches it");
+  assert.equal(trade.stock.amount("player", "food"), playerHeld, "and the kingdom that lost the road stops being supplied");
+  assert.ok(trade.stock.amount("enemy", "food") > enemyBefore, "while the new holder's shelf starts filling");
+});
+
+check("Faz S3: a supply lane costs no population and a besieged market receives nothing", () => {
+  const fixture = supplyLaneFixture();
+  const { trade, structures, units, sites, tradeSites, roads, run } = fixture;
+
+  // V4's population test, twinned (KARAR 3-A): a trade site hires nobody and its
+  // animals are not Units, so a kingdom's population must be untouched by a lane
+  // that has been running all match.
+  const population = new PopulationSystem("player", units, structures, 10);
+  const before = population.snapshot().current;
+  run(200);
+  assert.ok(trade.stock.amount("player", "food") > 0, "the lane really ran");
+  assert.equal(population.snapshot().current, before, "a supply lane never enters the population roster");
+
+  // KR-M4 reaches the supply side too: a Market on ground its owner has lost
+  // cannot receive, so the road is intact and the delivery still stops. Distinct
+  // from a cut road on purpose — different problem, different sentence, and the
+  // claim is *kept*, because the road is what holds a site (KARAR 4-A).
+  const besieged = new MarketSupplySystem(sites, tradeSites, roads, structures, trade.stock, () => false);
+  const site = besieged.snapshots()[0] ?? assert.fail("the fixture authors a site");
+  assert.equal(site.status, "outside-control", "a besieged market is named, not silently unlinked");
+  assert.equal(besieged.lanes().length, 0, "and no caravan sets out for it");
+});
+
 check("Faz M4: the AI trades toward the age it is short for, and stops once it can pay", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -47598,11 +47839,23 @@ check("Faz M4: the AI trades toward the age it is short for, and stops once it c
   assert.equal(besieged.manager.update(blackboard(short)), "no-market");
   assert.equal(besieged.kingdoms.get("enemy").wallet.amount("gold"), 0);
 
-  // Gold covered but stone short: now it buys, and pays from gold it does not
-  // owe the age. Spending the age's own gold would only move the shortfall.
+  // Faz S3, and §3.9's prediction checked rather than trusted: with the supply
+  // gate on and a bare shelf, the AI's buy is refused — and it takes that exactly
+  // as it takes "cannot afford", with no code of its own for the new reason.
+  // Delayed, not broken, which is the whole claim behind KARAR 9-A.
   const buying = { food: 900, wood: 900, stone: 0, gold: 400 };
+  const starved = setup(buying);
+  assert.equal(starved.manager.update(blackboard(buying)), "saving",
+    "an unsupplied market delays the AI instead of jamming it");
+  assert.equal(starved.kingdoms.get("enemy").wallet.amount("stone"), 0);
+
+  // Gold covered, stone short, and a caravan has been. Now it buys, and pays from
+  // gold it does not owe the age: spending the age's own gold would only move the
+  // shortfall.
   const buyer = setup(buying);
+  buyer.trade.stock.credit("enemy", "stone", marketLot);
   assert.equal(buyer.manager.update(blackboard(buying)), "traded");
+  assert.equal(buyer.trade.stock.amount("enemy", "stone"), 0, "the lot came off the shelf a caravan filled");
   assert.equal(buyer.kingdoms.get("enemy").wallet.amount("stone"), marketLot);
   assert.equal(buyer.kingdoms.get("enemy").wallet.amount("gold"), buying.gold - openingBuy("stone"),
     "one lot of stone at the opening rate");

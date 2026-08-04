@@ -1,14 +1,16 @@
 # ThreeAges RTS - Pazar Arzi ve Ticaret Noktalari Plani
 
 Olusturulma tarihi: 2026-08-04
-Durum: **Faz S0, S1 ve S2 kapandi (2026-08-04).** Dokuz kararin dokuzu da onerildigi
-gibi kilitlendi, §3.7'nin harita cozumu **uc nokta-simetrik cift (alti nokta)** olarak
-secildi ve alti marker'in konumu olculup sabitlendi (§7 Faz S0). Kod yazilirken
-hicbiri yeniden tartisilmaz. **S1 (stok cekirdegi) bitti** - makine iceride,
-kural henuz degil (`stocked: []`). **S2 (arz noktasi haritada) de bitti** - alti
-nokta authorlandi, tamponlari doluyor ve duruyor; ekonomi hala bit bit S0
-oncesiyle ayni. **Siradaki: S3** (baglanti ve kervan) - ve S2'nin **gorsel kabulu
-kullanicida acik** (§7 Faz S2).
+Durum: **Faz S0, S1, S2 ve S3 kapandi (2026-08-04).** Dokuz kararin dokuzu da
+onerildigi gibi kilitlendi, §3.7'nin harita cozumu **uc nokta-simetrik cift
+(alti nokta)** olarak secildi ve alti marker'in konumu olculup sabitlendi (§7 Faz
+S0). **S1** stok cekirdegini, **S2** arz noktalarini haritaya koydu; ikisi de
+ekonomiyi degistirmedi. **S3 ile plan canlandi**: `CaravanSystem` bir hat (lane)
+soyutlamasina alindi, `MarketSupplySystem` ikinci hat saglayicisi oldu, teslim
+cuzdana degil **pazar stoguna** iniyor ve `stocked` listesi uc kaynagi da
+kapsiyor - yani **pazarda ne varsa o kadar alinir**. **Siradaki: S4** (AI
+paritesi). Iki gorsel/oynanis kabulu kullanicida acik: S2'nin mesh yerlesimi
+(§7 Faz S2) ve S3'un oynanis kabulu (§7 Faz S3); ikisi de S4'u bloke etmez.
 
 S0 sirasinda haritanin ve balans verisinin olculmesi, planin dort ifadesini
 duzeltti; hepsi asagida ilgili bolume islendi:
@@ -857,28 +859,112 @@ mi". Bir de tuning degil **iliski** olarak: oduncu kampi arz noktasinin hizi
 (80/dk) sahip olunan `lumber_camp`'in acilis hizinin (3 x 40 = 120/dk) **altinda**
 kalmalidir (§3.6) - iki taraf da tablodan turetiliyor.
 
-### Faz S3 - Baglanti ve kervan
+### Faz S3 - Baglanti ve kervan -> **KOD TAMAM (2026-08-04), oynanis kabulu kullanicida**
 
 Onkosul: yok. V4 Faz 3-4 tamamlandi (§3.4); Faz 5'in gorsel kabulu bu plani
-engellemez.
+engellemedi.
 
-- [ ] `CaravanSystem` `CaravanLane` soyutlamasina alinir (§3.4). **Uretici hatti
-  davranisi bit bit korunur** - bu adim tek basina, hicbir yeni oynanis
-  eklemeden yesil kosmalidir.
-- [ ] `marketSupplySystem.ts`: arz noktasi -> pazar durum cozumu
+- [x] `CaravanSystem` `CaravanLane` soyutlamasina alindi (§3.4). Yeni dosyalar:
+  `logistics/caravanLane.ts` (hat + saglayici sozlesmesi) ve
+  `logistics/producerCaravanLanes.ts` (V4 hatti, **kural degismeden** tasindi -
+  `destinationFor` dahil). Bu adim tek basina kosuldu ve **1298 check yesil**
+  dondu: sifir oynanis degisikligi.
+- [x] `marketSupplySystem.ts`: arz noktasi -> pazar durum cozumu
   (`unlinked-road` / `unlinked-market` / `outside-control` / `claimed-by-enemy` /
   `linked`), ikinci hat saglayicisi olarak.
-- [ ] Teslim **stoga** (cuzdana degil); `laneId` uzerinden ayrisir.
-- [ ] `buildings.json` `"stocked": ["food", "wood", "stone"]`'a cevrilir - S1'de
-  bilincli olarak bos birakilan liste (KARAR 8) burada dolar ve plan bu tek
-  satirla **canlanir**. Ayni satirla geri de alinir.
-- [ ] Munhasirlik (KARAR 4-A secildiyse): ilk baglayan tutar, rota kopunca
-  serbest kalir.
-- [ ] Yol kesilince V4 KARAR 5 davranisi aynen gecerli: esek eve doner, yuk
-  arz noktasinin tamponuna geri yazilir.
+- [x] Teslim **stoga** (cuzdana degil); `laneId` uzerinden ayrisir.
+  `TradeSiteSystem.withdrawBuffered` eklendi (ureticinin ikizi, **varista**
+  cekiyor).
+- [x] `buildings.json` `"stocked": ["food", "wood", "stone"]`'a cevrildi. S1'in
+  `stocked === []` testi ile S3'un "her fiyatlanan kaynak stoklu" testi §7 Faz
+  S1'de ongoruldugu gibi **yer degistirdi**.
+- [x] Munhasirlik (KARAR 4-A): ilk baglayan tutar, **rota** kopunca serbest
+  kalir. Kontrol (kusatma) sahipligi dusurmez - yalnizca teslimi durdurur.
+- [x] Yol kesilince V4 KARAR 5 davranisi aynen gecerli: esek eve doner, yuk
+  arz noktasinin tamponunda kalir (varista cekildigi icin geri yazilacak bir sey
+  yok).
 
-Kabul: yol cekilir, esekler limandan pazara yurur, **stok dolar ve alis dugmesi
-acilir**. Bu, planin tasarimsal kabulu - maci oynayan kullanici verir.
+Kabul: `tsc --noEmit`, `test:engine` (**1303 check**), `build:verify`,
+`check:assets` - **dordu de yesil**. Oynanis kabulu (yol cekilir, esekler
+limandan pazara yurur, stok dolar ve alis dugmesi acilir) **maci oynayan
+kullanicida**.
+
+Kirmiziya donebilirlik yapildi: dort kasitli mutasyon, dordu de yakalandi -
+filonun tek yuke uzusmesi, tamponu bosaltmayan cekim, kopan yolda ayakta kalan
+sahiplik, rafa hic ulasmayan teslim. Her biri hedefledigi assertion'la kirmizi
+dondu ve geri alindi.
+
+#### S3'te olculenler - kodun ortaya cikardigi uc sey
+
+**1. Filo kilitlenmesi (`claimed`).** Plan §3.8 "dort esek bir lotu ~63 saniyeye
+indirir" diyor. Kod yazilinca gorundu ki V4'un `dispatch` sozlesmesi bunu
+veremezdi: `CaravanSystem` yuk durumunu **hat basina bir kez** soruyordu ve
+`spawnPerProducer: 1` oldugu icin bu hic fark etmemisti. Dort esekle fark her
+seyi belirliyor - dordu de ayni "bir tam yuk hazir" cevabini alip **birlikte**
+cikiyor ve aralarinda tek yuk tasiyorlardi.
+
+Sebep V4'un dogru bir kurali: yuk tampondan **varista** dusulur (KARAR 5 - geri
+donen esek yuku birakti yerde birakmali). Yani yoldaki yuk hala tamponda
+gorunur. Cozum `dispatch(lane, claimed)`: saglayiciya "bu hatta kac esek zaten
+dusulmemis yuk tasiyor" soylenir, ve arz noktasi `buffered >= carryCapacity *
+(claimed + 1)` ister. Uretici hatti `claimed`'i **gormezden gelir** - V4
+davranisi birebir korunur.
+
+Onemli olan sey: **korunum testi bunu yakalamadi.** `withdrawBuffered` kismi yuk
+dondurdugu icin hicbir sey kaybolmuyordu, yalnizca debi tekliyordu. Yakalayan
+sey bir esitsizlik oldu: `buffered >= carryCapacity * outbound`, her karede.
+Kisa test rotasinda (10 birim) fark gorunmuyor; haritanin gercek mesafelerinde
+(gidis-donus 70-140 sn) tampon tavana vurup uretimi durduruyor - yani §3.8'in
+uyardigi "ilan edilen hiz bir yalan olur" durumu.
+
+**2. El degistiren arz noktasinin esekleri.** Munhasirlik testi yazilana kadar
+gorunmedi: hat kimligi `supply:<siteId>` oldugu icin, arz noktasi el
+degistirdiginde **eski sahibinin esekleri ayni hatta kaliyordu**. `owner`
+kervanda kuruluma sabitlendigi icin her varis `owner mismatch` ile sessizce
+dusuyordu - yani nokta el degistiriyor ama yeni sahip **hicbir zaman mal
+alamiyordu**. Ayrica dusman akincisi icin bayrak da yanlis kaliyordu
+(`isCaravanAttackable`). Cozum: kervan kimligine sahip eklendi
+(`caravan:<lane>:<owner>:<index>`), boylece eski filo mevcut "eve yuru" yolundan
+emekliye ayriliyor ve yenisi doguyor. Yeni kural degil, var olan makinenin
+dogru anahtarlanmasi.
+
+**3. `outside-control` ne demek oldu.** §7'nin durum listesi bu adi tasiyordu
+ama karsiligi yaziliyken secildi: **teslim alacak pazarin kontrol disi olmasi**
+(KR-M4'un ayni yuklemi). Munhasirlik bundan **ayri** tutuldu: kusatilan pazar
+teslim alamaz ama arz noktasini kaybetmez, cunku noktayi tutan sey **yol**dur
+(KARAR 4-A). Ikisini birlestirmek, bir pazari kusatmayi ayni anda rakibin
+limanini almak yapardi - plan bunun yolu olarak yol kesmeyi secmisti.
+
+Ayrica `claimed-by-enemy` bir **noktanin** durumu olamaz (noktanin tek sahibi
+vardir); soran kralliga gore bir olgudur. `snapshots()` dort durumu uretir,
+`statusFor(siteId, owner)` besincisini.
+
+#### Planin harfinden bir sapma (bilincli, dar)
+
+**`CaravanLane.destination` null olabilir.** §3.4'un taslaginda zorunlu. Ama V4,
+deposu ve merkezi ayni anda kalmamis bir kralligin yoldaki esegini **eve
+yurutuyordu**; hedefi cozulemeyen hatti listeden dusurmek onlari yolun ortasinda
+silerdi. §7 Faz S3'un kendi kurali ("uretici hatti davranisi bit bit korunur")
+taslak imzadan agir bastigi icin alan null'lanabilir birakildi ve `CaravanSystem`
+hedefi olmayan hattan kervan **dogurmaz**, ama o hattin `source`'unu eve yuruyus
+icin kullanir.
+
+#### S3'ten sonra acik kalan tek sey - ve neden kapsam disi birakildi
+
+`RTS_BLOCKOUT_MAP` ve `RTS_CoreMatch` hala `tradeSites: []` (S2'nin notu). S3
+`stocked`'i doldurdugu icin **o iki haritada pazarin alis tarafi kalicidir
+kapali**. Etkilenen tek yol `?preset=debug_fast` (levelRef'i yok, kod
+blockout'una duser); shipped varsayilan `gameplay_proof` ve `siege_test`'in
+ikisi de `RTS_GameplayProof`'u aciyor, `RTS_CoreMatch` ise `main.ts:119`'un
+dedigi gibi preset degil kod-ayna test verisi.
+
+S2'nin verdigi iki secenekten **acikca kapsam disi** secildi, ve gerekcesi
+S2'nin kendi gerekcesi: alti konum `RTS_GameplayProof`'un nehrine, korularina ve
+deposit'lerine gore olculdu; o haritalarda ayni olcum yok ve **munhasir** bir
+kaynagi olculmemis zemine gozle koymak §3.7'nin "maci belirler" dedigi
+asimetrinin ta kendisidir. Bir debug preset'inin alis dugmesi, olculmemis bir
+haritaya munhasir liman koymaktan ucuz bir bedeldir. Kullanici tersini isterse
+is, S0'un olcum turunu o iki harita icin tekrarlamaktir - kod degil, olcum.
 
 ### Faz S4 - AI paritesi
 
@@ -962,16 +1048,16 @@ gorulur ve geri alinir (V1/V3/V4 aliskanligi).
 ## 11. Uygulama Sirasi
 
 ```text
-S0 (TAMAM) -> S1 (TAMAM) -> S2 (TAMAM) -> S3 -> S4 -> S5 -> S6
+S0 (TAMAM) -> S1 (TAMAM) -> S2 (TAMAM) -> S3 (TAMAM) -> S4 -> S5 -> S6
 ```
 
 Hicbir faz artik baska bir plani beklemiyor (§3.4). S1 ve S2 birbirinden
-bagimsizdi; ikisi de bitti, S3 acik.
-S2'nin gorsel kabulu hala kullanicidadir ve S3'u **bloke etmez**: rihtimin yeri
-S3'un rota hesabini degistirmez, yalnizca mesh'lerin gorunumunu degistirir.
+bagimsizdi; ikisi de bitti. S3 de bitti ve kendi icindeki ikiye ayrilma
+korundu: once `CaravanLane` genellestirmesi hicbir oynanis degistirmeden yesil
+kostu (1298 check), sonra ikinci hat takildi (1303 check). Kural en sonda tek
+satirla (`stocked` listesi) yururluge girdi - ve ayni satirla geri alinabilir.
 
-S3 kendi icinde ikiye ayrilir ve bu ayrim korunmalidir: once `CaravanLane`
-genellestirmesi **hicbir oynanis degistirmeden** yesil kosar, sonra ikinci hat
-takilir. Kural ise S3'un sonunda tek satirla (`stocked` listesi) yururluge
-girer, yani planin gercekten canlandigi an oradadir - ve ayni satirla geri
-alinabilir.
+Iki acik kabul de S4'u bloke etmez: S2'nin mesh yerlesimi rota hesabini
+degistirmez, S3'un ayar kabulu (`caravanCount`, `perMinute`) ise AI paritesinin
+konusu degil - S4 dusmanin **yolunun** var olup olmadigini olcer, ne kadar hizli
+aktigini degil.

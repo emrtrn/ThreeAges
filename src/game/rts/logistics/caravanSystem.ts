@@ -4,20 +4,19 @@ import { Vector3 } from "three";
 import type { CaravanBalance, UnitArmorClass } from "../../data/gameDataTypes";
 import type { CombatTarget } from "../combat/combatTarget";
 import type { RoadCell, RoadGraph } from "../roads/roadGraph";
-import { roadCellTouchingFootprint } from "../economy/depotLogisticsSystem";
-import type { LogisticsOccupationSystem } from "../economy/logisticsOccupationSystem";
-import type { ProductionLogisticsSystem } from "../economy/productionLogisticsSystem";
-import type { CommandCenterSystem } from "../structures/commandCenterSystem";
-import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { UnitOwner } from "../units/unit";
 import { HealthComponent } from "../units/health";
+import type { CaravanDispatch, CaravanLaneProvider } from "./caravanLane";
 import { advanceCaravanRoute, startCaravanRoute, type CaravanRouteState } from "./caravanRoute";
+
+export type { CaravanDispatch, CaravanLane, CaravanLaneProvider } from "./caravanLane";
 
 export type CaravanPhase = "loading" | "outbound" | "unloading" | "inbound";
 
 export interface CaravanSnapshot {
   readonly id: string;
-  readonly producerStructureId: number;
+  /** The lane this animal runs; how its arrival is routed back to a system. */
+  readonly laneId: string;
   readonly owner: UnitOwner;
   readonly x: number;
   readonly z: number;
@@ -31,20 +30,19 @@ export interface CaravanSnapshot {
   readonly phase: CaravanPhase;
 }
 
-/** One actual arrival at a store endpoint; this is the sole Faz 4 transfer key. */
+/**
+ * One actual arrival at a store endpoint; this is the sole transfer key.
+ *
+ * Keyed by lane rather than by producer id (supply plan §3.4): a trade site is
+ * not a {@link PlacedStructure} and has no numeric id, so the thing both kinds
+ * of delivery have in common is the lane they arrived on. Each receiving system
+ * recognises its own prefix and ignores the rest.
+ */
 export interface CaravanArrival {
   readonly caravanId: string;
-  readonly producerStructureId: number;
+  readonly laneId: string;
   readonly owner: UnitOwner;
   readonly carryCapacity: number;
-}
-
-/** Whether one producer has enough buffered output to send its automatic donkey. */
-export interface CaravanDispatch {
-  readonly carryCapacity: number;
-  readonly ready: boolean;
-  /** False only when the kingdom store cannot accept this resource at all. */
-  readonly canReceive: boolean;
 }
 
 /**
@@ -69,7 +67,7 @@ export class Caravan implements CombatTarget {
 
   constructor(
     readonly id: string,
-    readonly producerStructureId: number,
+    readonly laneId: string,
     readonly owner: UnitOwner,
     source: RoadCell,
     destination: RoadCell,
@@ -137,7 +135,7 @@ export class Caravan implements CombatTarget {
     return arrivedAtStore
       ? {
         caravanId: this.id,
-        producerStructureId: this.producerStructureId,
+        laneId: this.laneId,
         owner: this.owner,
         carryCapacity: this.carryCapacity,
       }
@@ -204,7 +202,7 @@ export class Caravan implements CombatTarget {
   snapshot(): CaravanSnapshot {
     return {
       id: this.id,
-      producerStructureId: this.producerStructureId,
+      laneId: this.laneId,
       owner: this.owner,
       x: this.position.x,
       z: this.position.z,
@@ -235,65 +233,84 @@ export class Caravan implements CombatTarget {
   }
 }
 
-/** Maintains the automatic caravan roster from the existing producer-link graph. */
+/**
+ * Maintains the automatic caravan roster over every lane its providers offer.
+ *
+ * The one state machine in the game for "a pack animal on a road", and
+ * deliberately the only one (supply plan §9): it knows loading, travel,
+ * unloading, the death window and the walk home, and it knows nothing at all
+ * about *why* a lane exists. Producers and trade sites are two providers behind
+ * the same door — see {@link CaravanLaneProvider}.
+ */
 export class CaravanSystem {
   private readonly caravans = new Map<string, Caravan>();
 
   constructor(
     private readonly balance: CaravanBalance,
-    private readonly links: ProductionLogisticsSystem,
     private readonly roads: RoadGraph,
-    private readonly structures: PlacedStructureSystem,
-    private readonly centers: CommandCenterSystem,
-    private readonly occupation?: LogisticsOccupationSystem,
-    private readonly dispatchForProducer: (producerStructureId: number) => CaravanDispatch | null = () => null,
+    private readonly providers: readonly CaravanLaneProvider[],
   ) {}
 
   update(deltaSeconds: number): readonly CaravanArrival[] {
     const active = new Set<string>();
     const arrivals: CaravanArrival[] = [];
-    const links = this.links.snapshots();
+    const lanes = this.providers.flatMap((provider) => provider.lanes().map((lane) => ({ lane, provider })));
     for (const [id, caravan] of this.caravans) {
       if (!caravan.health.depleted) continue;
       caravan.beginDeath();
       if (caravan.updateDeath(deltaSeconds)) this.caravans.delete(id);
       else active.add(id);
     }
-    for (const link of links) {
-      if (link.status !== "linked" || !link.roadCell) continue;
-      const destination = this.destinationFor(link.owner, link.depotStructureId);
-      if (!destination || !this.roads.route(link.roadCell, destination)) continue;
-      const dispatch = this.dispatchForProducer(link.structureId)
-        ?? { carryCapacity: 1, ready: false, canReceive: false };
-      for (let index = 0; index < this.balance.spawnPerProducer; index += 1) {
-        const id = `caravan:${link.structureId}:${index}`;
+    for (const { lane, provider } of lanes) {
+      const destination = lane.destination;
+      if (!destination || !this.roads.route(lane.source, destination)) continue;
+      // Loads already committed on this lane: an outbound animal is carrying
+      // goods its source has not written off yet, so the next one to load must
+      // not be told the same goods are available (see
+      // {@link CaravanLaneProvider.dispatch}). Counted before the fleet runs and
+      // raised again as each animal is released within this same tick.
+      let claimed = this.outboundOn(lane.id);
+      for (let index = 0; index < lane.caravanCount; index += 1) {
+        // The owner is part of the identity, not just a field on the body. A
+        // trade site changes hands when its holder's road is cut (KARAR 4-A),
+        // and the animals standing on it do not change sides with it: keying on
+        // the owner retires the old kingdom's fleet down the walk-home path
+        // below and raises the new one's, instead of leaving a caravan whose
+        // deliveries the site would then refuse forever — and whose flag an
+        // enemy raider would still read as the wrong kingdom's.
+        const id = `caravan:${lane.id}:${lane.owner}:${index}`;
         active.add(id);
+        const dispatch = provider.dispatch(lane, claimed)
+          ?? { carryCapacity: 1, ready: false, canReceive: false };
         let caravan = this.caravans.get(id);
         if (!caravan) {
-          caravan = new Caravan(id, link.structureId, link.owner, link.roadCell, destination, this.balance, this.roads, dispatch.carryCapacity);
+          caravan = new Caravan(id, lane.id, lane.owner, lane.source, destination, this.balance, this.roads, dispatch.carryCapacity);
           this.caravans.set(id, caravan);
         }
         if (caravan.health.depleted) continue;
         if (!dispatch.canReceive && caravan.phase === "outbound") {
-          caravan.beginReturnHome(link.roadCell);
+          caravan.beginReturnHome(lane.source);
           if (!caravan.updateReturnHome(deltaSeconds)) active.add(id);
           continue;
         }
-        const arrival = caravan.update(deltaSeconds, link.roadCell, destination, dispatch);
+        const loading = caravan.phase === "loading";
+        const arrival = caravan.update(deltaSeconds, lane.source, destination, dispatch);
+        if (loading && caravan.phase === "outbound") claimed += 1;
         if (arrival) arrivals.push(arrival);
       }
     }
-    // A changed topology leaves the producer's snapshot in an unlinked state,
-    // so it never reached the loop above. Keep the old body long enough to walk
-    // home (KARAR 5) instead of deleting it mid-road.
+    // A changed topology drops the lane out of the loop above — a producer gone
+    // unlinked, or a supply road cut so the trade site is no longer claimed.
+    // Keep the old body long enough to walk home (KARAR 5) instead of deleting
+    // it mid-road; a lane that still knows its source is all that needs.
     for (const caravan of this.caravans.values()) {
       if (active.has(caravan.id)) continue;
       if (caravan.health.depleted) {
         continue;
       }
-      const link = links.find((candidate) => candidate.structureId === caravan.producerStructureId);
-      if (!link?.roadCell) continue;
-      caravan.beginReturnHome(link.roadCell);
+      const lane = lanes.find((candidate) => candidate.lane.id === caravan.laneId)?.lane;
+      if (!lane) continue;
+      caravan.beginReturnHome(lane.source);
       if (!caravan.updateReturnHome(deltaSeconds)) active.add(caravan.id);
     }
     for (const id of this.caravans.keys()) {
@@ -314,14 +331,16 @@ export class CaravanSystem {
     this.caravans.clear();
   }
 
-  private destinationFor(owner: UnitOwner, depotStructureId: number | null): RoadCell | null {
-    if (depotStructureId !== null && (this.occupation?.isUsable(depotStructureId) ?? true)) {
-      const depot = this.structures.all().find((structure) => structure.id === depotStructureId);
-      if (depot) return roadCellTouchingFootprint(this.roads, depot.x, depot.z, depot.stats.footprint.width, depot.stats.footprint.depth);
+  /**
+   * Animals on this lane that hold an undelivered load. Only `outbound` counts:
+   * `inbound` is the empty walk home, and by the tick an arrival turns
+   * `unloading` its withdrawal is already in this update's arrival list.
+   */
+  private outboundOn(laneId: string): number {
+    let count = 0;
+    for (const caravan of this.caravans.values()) {
+      if (caravan.laneId === laneId && caravan.phase === "outbound" && !caravan.health.depleted) count += 1;
     }
-    const center = this.centers.get(owner);
-    return center
-      ? roadCellTouchingFootprint(this.roads, center.position.x, center.position.z, center.stats.footprint.width, center.stats.footprint.depth)
-      : null;
+    return count;
   }
 }

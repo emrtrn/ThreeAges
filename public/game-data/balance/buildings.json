@@ -817,7 +817,7 @@
       "indexMin": 0.3,
       "indexMax": 4,
       "commission": 0.15,
-      "stocked": []
+      "stocked": ["food", "wood", "stone"]
     },
     "progression": {
       "settlement": [
