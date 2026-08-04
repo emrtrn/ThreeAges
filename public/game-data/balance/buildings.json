@@ -816,7 +816,8 @@
       "priceStep": 0.02,
       "indexMin": 0.3,
       "indexMax": 4,
-      "commission": 0.15
+      "commission": 0.15,
+      "stocked": []
     },
     "progression": {
       "settlement": [

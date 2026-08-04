@@ -4850,6 +4850,7 @@ export class RtsApp {
       "untraded-resource": `${label} Pazar'da işlem görmüyor.`,
       "no-completed-market": "Önce tamamlanmış bir Pazar kurun.",
       disconnected: "Pazar kontrol alanınızın dışında kaldı; ticaret durdu.",
+      "out-of-stock": `Pazarda ${lot} ${label} yok; bir arz noktasına yol çekin.`,
       "insufficient-gold": `${lot} ${label} için ${quote?.buyPrice ?? 0} altın gerekir.`,
       "insufficient-resources": `Satmak için ${lot} ${label} gerekir.`,
       "storage-full": "Depolama kapasitesi dolu; Depo kurun veya yükseltin.",

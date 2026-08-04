@@ -1144,6 +1144,11 @@ function describeMarket(
 ): SelectionPanelContent {
   const { trade } = detail;
   const commissionPercent = Math.round(trade.commission * 100);
+  // One line per stocked resource, and none at all when this project stocks
+  // nothing — an empty `stocked` list must leave the panel exactly as it was.
+  const stockLines = Object.entries(trade.stock).map(
+    ([resourceId, held]) => `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)} / lot ${trade.lotSize}`,
+  );
   return {
     title,
     summary,
@@ -1152,10 +1157,15 @@ function describeMarket(
       detail.connected
         ? "Fiyat ve endeks, aşağıdaki Al/Sat kartlarında."
         : "Kontrol Dışı — bu Pazar ticaret yapamaz.",
+      ...stockLines,
     ],
     actions: trade.prices.flatMap((price) => [
-      tradeAction("buy", price.resourceId, price.buyPrice, trade.lotSize, price.index, detail.connected),
-      tradeAction("sell", price.resourceId, price.sellPrice, trade.lotSize, price.index, detail.connected),
+      tradeAction(
+        "buy", price.resourceId, price.buyPrice, trade.lotSize, price.index, detail.connected,
+        trade.stock[price.resourceId] ?? null,
+      ),
+      // The sell button never sees the stock: selling is unchanged (KARAR 7-A).
+      tradeAction("sell", price.resourceId, price.sellPrice, trade.lotSize, price.index, detail.connected, null),
     ]),
     actionLayout: "market",
     hint: "",
@@ -1166,11 +1176,20 @@ function describeMarket(
 }
 
 /**
- * One trade button. Only the control gate is decided here — that rule is a fact
- * the trade system already handed over. Whether the player can *afford* it is
- * deliberately left to the click, exactly as the age and worker buttons leave
- * it: stock moves every tick, and a button that greys out from under a reaching
- * hand is worse than one that answers with a reason.
+ * One trade button. Only the control gate and the supply gate are decided here,
+ * and both are facts the trade system already handed over. Whether the player
+ * can *afford* it is deliberately left to the click, exactly as the age and
+ * worker buttons leave it: the wallet moves every tick, and a button that greys
+ * out from under a reaching hand is worse than one that answers with a reason.
+ *
+ * Stock is the exception, and the reason it is worth the difference: an empty
+ * market is not a thing the player can fix by clicking harder or waiting a
+ * second — it is fixed by drawing a road, somewhere else entirely. A dark
+ * button that names the missing supply is the whole point of the mechanic
+ * (§2.1), so it is stated up front rather than on refusal.
+ *
+ * `stock` is null for every sell button and for any resource this project does
+ * not gate — "not stocked" and "stocked but empty" must not look alike.
  */
 function tradeAction(
   direction: "buy" | "sell",
@@ -1179,17 +1198,25 @@ function tradeAction(
   lotSize: number,
   index: number,
   connected: boolean,
+  stock: number | null,
 ): SelectionAction {
   const buying = direction === "buy";
   const goldLabel = resourceLabel("gold");
+  const supplied = stock === null || stock >= lotSize;
   return {
     id: `${buying ? TRADE_BUY_ACTION_PREFIX : TRADE_SELL_ACTION_PREFIX}${resourceId}`,
     label: `${lotSize} ${resourceLabel(resourceId)} ${buying ? "Al" : "Sat"}`,
     // Signed against the player's gold, so the two directions cannot be
     // mistaken for each other at a glance.
     cost: `${buying ? "-" : "+"}${price} ${goldLabel}`,
-    enabled: connected,
-    reason: connected ? null : "Kontrol Dışı: bu Pazar ticaret yapamaz.",
+    enabled: connected && supplied,
+    reason: !connected
+      ? "Kontrol Dışı: bu Pazar ticaret yapamaz."
+      : supplied
+        ? null
+        // Names the shortfall, not just the state: "128/200" tells the player
+        // whether a road is already working or was never drawn.
+        : `Pazarda stok yok: ${Math.floor(stock ?? 0)}/${lotSize}. Bir arz noktasına yol çekin.`,
     hint: `${resourceLabel(resourceId)} endeksi ×${index.toFixed(2)}. ${buying ? "Alım" : "Satım"} fiyatı: ${price} ${goldLabel}.`,
   };
 }

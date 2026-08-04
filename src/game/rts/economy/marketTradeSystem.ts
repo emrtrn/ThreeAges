@@ -30,6 +30,7 @@ import type { PlacedStructure, PlacedStructureSystem } from "../structures/place
 import type { UnitOwner } from "../units/unit";
 
 import { MarketPrices, NUMERAIRE_RESOURCE_ID, type MarketPriceSnapshot } from "./marketPricing";
+import { MarketStock } from "./marketStock";
 import type { ResourceCapacitySystem } from "./resourceCapacitySystem";
 
 /**
@@ -42,6 +43,7 @@ export type MarketTradeResult =
   | "untraded-resource"
   | "no-completed-market"
   | "disconnected"
+  | "out-of-stock"
   | "insufficient-gold"
   | "insufficient-resources"
   | "storage-full";
@@ -52,6 +54,13 @@ export interface MarketTradeSnapshot {
   /** The house's spread at this market, 0..1. */
   readonly commission: number;
   readonly prices: readonly MarketPriceSnapshot[];
+  /**
+   * Goods on hand for the resources this project marks as stocked (KARAR 8),
+   * keyed by resource id. A resource *absent* from this record buys the old
+   * way — out of gold alone — so the panel reads "no key" as "not gated",
+   * never as "empty".
+   */
+  readonly stock: Readonly<Record<string, number>>;
 }
 
 /**
@@ -69,6 +78,14 @@ export class MarketTradeSystem {
   /** KR-M2: one price table per kingdom, created on first use. */
   private readonly pricesByOwner = new Map<UnitOwner, MarketPrices>();
   private readonly balance: MarketBalance | null;
+  /**
+   * Goods on hand, per kingdom (supply plan Faz S1). Owned here rather than
+   * injected so that {@link reset} clears prices and stock together — a new
+   * match must not start with the last one's deliveries still sitting on the
+   * counter. Public because the supply chain (Faz S3) credits it on arrival;
+   * it is the one thing outside this class allowed to make stock grow.
+   */
+  readonly stock = new MarketStock();
 
   constructor(
     buildingBalance: BuildingBalance,
@@ -94,11 +111,24 @@ export class MarketTradeSystem {
     const balance = this.balance;
     if (!balance) return null;
     const commission = this.commissionFor(owner);
+    // Only stocked resources get a key, and every one of them gets one even at
+    // zero: the panel needs "empty" and "not gated" to be different states, and
+    // an omitted zero would collapse them into the same missing key.
+    const stock: Record<string, number> = {};
+    for (const resourceId of balance.stocked) {
+      stock[resourceId] = this.stock.amount(owner, resourceId);
+    }
     return {
       lotSize: balance.lotSize,
       commission,
       prices: this.pricesFor(owner).snapshot(commission),
+      stock,
     };
+  }
+
+  /** True when this project's data makes the resource's buy side need supply. */
+  requiresStock(resourceId: string): boolean {
+    return this.balance?.stocked.includes(resourceId) ?? false;
   }
 
   /**
@@ -122,6 +152,18 @@ export class MarketTradeSystem {
    * touched and the index moves only after it agrees, so a refused trade leaves
    * the market exactly as it found it — a rejected buy that had already pushed
    * the price up would let a broke player move the market for free.
+   *
+   * The supply plan changes exactly one thing here: a *stocked* resource is also
+   * taken off the market's own shelf, so a lot bought is a lot somebody carried
+   * (§1). Everything else — the gates, their order, the price move — is
+   * untouched, and a resource this project leaves unstocked still buys out of
+   * gold alone.
+   *
+   * `out-of-stock` is checked before storage and gold because the gates read
+   * outside-in: whether the goods exist at all is the market's business and
+   * comes first; whether this kingdom can hold them or pay for them is the
+   * kingdom's, and there is no sense telling a player they are short of gold for
+   * a lot that was never on the shelf.
    */
   buy(owner: UnitOwner, resourceId: string): MarketTradeResult {
     const prices = this.pricesFor(owner);
@@ -130,6 +172,10 @@ export class MarketTradeSystem {
     if (gate) return gate;
     const price = prices.buyPrice(resourceId, this.commissionFor(owner));
     if (price === null) return "untraded-resource";
+    const stocked = this.requiresStock(resourceId);
+    if (stocked && this.stock.amount(owner, resourceId) < prices.lotSize) {
+      return "out-of-stock";
+    }
     const { wallet } = this.kingdoms.get(owner);
     if (this.capacity && this.capacity.availableFor(owner, resourceId, wallet.amount(resourceId)) < prices.lotSize) {
       return "storage-full";
@@ -137,11 +183,25 @@ export class MarketTradeSystem {
     if (!wallet.exchange(NUMERAIRE_RESOURCE_ID, price, resourceId, prices.lotSize)) {
       return "insufficient-gold";
     }
+    // Cannot come up short: the check above proved the shelf holds a lot, and
+    // the only thing between the two is a wallet exchange, which touches no
+    // stock. Drawing down after the wallet agrees keeps the refusal paths
+    // above free of anything to undo.
+    if (stocked) this.stock.withdraw(owner, resourceId, prices.lotSize);
     prices.recordBuy(resourceId);
     return "traded";
   }
 
-  /** Sell one lot of a resource for gold. */
+  /**
+   * Sell one lot of a resource for gold.
+   *
+   * Deliberately untouched by the supply plan (KARAR 7-A): a sale takes goods
+   * out of the game and must not land on the market's shelf. Crediting stock
+   * here would let a kingdom fill its own market with no road and no caravan —
+   * not for profit, which {@link assertNoArbitrage} already forbids, but by
+   * skipping the supply chain altogether, which is the one thing the plan is
+   * for.
+   */
   sell(owner: UnitOwner, resourceId: string): MarketTradeResult {
     const prices = this.pricesFor(owner);
     if (!prices.trades(resourceId)) return "untraded-resource";
@@ -165,9 +225,10 @@ export class MarketTradeSystem {
     return this.tradeGate(owner) === null;
   }
 
-  /** A new match trades at the opening rate across the board. */
+  /** A new match trades at the opening rate, with every market's shelf bare. */
   reset(): void {
     for (const prices of this.pricesByOwner.values()) prices.reset();
+    this.stock.reset();
   }
 
   /**

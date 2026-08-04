@@ -1103,7 +1103,46 @@ export function validateMarketBalance(value: unknown, where: string): MarketBala
     throw new GameDataError(`${basePriceWhere}: must price at least one tradable resource`);
   }
   assertNoArbitrage(priceStep, indexMin, commission, where);
-  return { lotSize, basePrice, priceStep, indexMin, indexMax, commission };
+  return { lotSize, basePrice, priceStep, indexMin, indexMax, commission, stocked: validateStocked(data, basePrice, where) };
+}
+
+/**
+ * Which resources need a delivered supply before they can be bought (supply
+ * plan KARAR 8).
+ *
+ * The one rule worth enforcing is containment: a `stocked` id that is not
+ * priced names a buy button that does not exist, so the supply chain built to
+ * feed it would fill a market nobody can buy from — a mistake that costs a
+ * player a road and shows up as nothing at all. Absent means "none", which is
+ * the pre-supply behaviour and the mechanic's revert switch.
+ */
+function validateStocked(
+  data: Record<string, unknown>,
+  basePrice: Record<string, number>,
+  where: string,
+): string[] {
+  const raw = data["stocked"];
+  if (raw === undefined) return [];
+  const stockedWhere = `${where}.stocked`;
+  if (!Array.isArray(raw)) {
+    throw new GameDataError(`${stockedWhere}: must be an array of resource ids`);
+  }
+  const stocked: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string" || entry.length === 0) {
+      throw new GameDataError(`${stockedWhere}: every entry must be a non-empty resource id`);
+    }
+    if (!Object.prototype.hasOwnProperty.call(basePrice, entry)) {
+      throw new GameDataError(
+        `${stockedWhere}: "${entry}" is not priced in ${where}.basePrice, so it has no buy button to gate`,
+      );
+    }
+    if (stocked.includes(entry)) {
+      throw new GameDataError(`${stockedWhere}: duplicate resource id "${entry}"`);
+    }
+    stocked.push(entry);
+  }
+  return stocked;
 }
 
 /**

@@ -1,9 +1,24 @@
 # ThreeAges RTS - Pazar Arzi ve Ticaret Noktalari Plani
 
 Olusturulma tarihi: 2026-08-04
-Durum: **Faz S0 acik.** Dokuz karar da onerileriyle birlikte §4'te duruyor;
-hicbiri kilitlenmedi. Kod yazilmadan once kullanicinin onlari kilitlemesi
-beklenir.
+Durum: **Faz S0 ve S1 kapandi (2026-08-04).** Dokuz kararin dokuzu da onerildigi gibi
+kilitlendi, §3.7'nin harita cozumu **uc nokta-simetrik cift (alti nokta)** olarak
+secildi ve alti marker'in konumu olculup sabitlendi (§7 Faz S0). Kod yazilirken
+hicbiri yeniden tartisilmaz. **S1 (stok cekirdegi) de bitti** - makine iceride,
+kural henuz degil (`stocked: []`), yani oyun bit bit S0 oncesiyle ayni oynaniyor.
+**Siradaki: S2** (arz noktasi haritada).
+
+S0 sirasinda haritanin ve balans verisinin olculmesi, planin dort ifadesini
+duzeltti; hepsi asagida ilgili bolume islendi:
+
+1. Limanin mesh merkezi uc nehir blocker'inin **icinde** - marker mesh merkezine
+   konamaz (§3.3).
+2. "Nokta-simetrik cift" haritanin **mevcut** konvansiyonu degil; yalnizca geyik
+   ve sigir icin gecerli (§3.7).
+3. `carryCapacity` `logistics.json`'da **yok**; bina basina `buildings.json`'da
+   duruyor, ve `moveSpeed` 2.2 degil **1.76** (§3.8, §6.1, §6.4).
+4. Bir lot tek esekle 3.4 degil **4.2 dakika**, dort esekle ~50 degil **~63
+   saniye** (§3.8).
 
 Bu plan **wildlife V-serisinin bir parcasi degildir** (V5 "yapilmayacak" olarak
 kapanmisti). Pazar cizgisinin devamidir: kodda `Faz M1..M6` diye anilan pazar
@@ -111,6 +126,27 @@ anda haritanin merkez gecidini kapatmak demektir.
 Manifest yedi liman varyanti tasiyor (`port-firstage-level1..3`,
 `port-secondage-level1..3`, `dock-firstage`), yani cag/seviye gorseli ileride
 bedavaya gelir.
+
+**S0 duzeltmesi - limanin mesh merkezi yol/bina icin kapali bir hucrede.**
+Olculdu: `port-secondage-level3`'un merkezi `(4.61, 17.91)`, ve uc nehir
+blocker'inin ucunun de kutusuna giriyor:
+
+| Blocker | Merkez | Kutu |
+| --- | --- | --- |
+| River Blocker 23 | `(5.2, 11.0)` | x[0.2, 10.2] z[6.0, 16.0] |
+| River Blocker 24 | `(8.0, 15.2)` | x[3.0, 13.0] z[10.2, 20.2] |
+| River Blocker 25 | `(11.1, 19.0)` | x[6.1, 16.1] z[14.0, 24.0] |
+
+Bu blocker'lar yalnizca yuruyusu kesmiyor: `RtsApp.navigationBlockers()`
+(`RtsApp.ts:3780`) **ve** `occupancyBlockers()` (`:3789`) ikisi de
+`spatial.navigationBlockers`'i iceriyor, yani ayni kutular **yol hucresi ve bina
+footprint'i** yerlesimini de reddediyor.
+
+Sonuc: arz noktasi marker'i mesh merkezine konamaz. Marker rihtimin **kara
+tarafindaki apronudur** ve kiyiya cekilir; mesh yerinde kalir. Olculen en yakin
+temiz 8x8 rihtim `(-1, 20)` - mesh merkezinden 6.0 birim (3 yol hucresi). §7 Faz
+S0 bunu kilitledi. Checklist'teki "liman zaten yerinde" ifadesi bu yuzden yalnizca
+**mesh** icin dogruydu, marker icin degil.
 
 ### 3.4 Zincirin tamami hazir - is bir bagimlilik degil, bir genellestirme
 
@@ -236,52 +272,82 @@ olan noktalar kumesidir - ama ayni kosegen **nehrin kendisidir**. `(11.26, 11.26
 noktasi River Blocker 24'un `(3..13, 10.2..20.2)` kutusunun **icindedir**. Oraya
 arz noktasi konamaz; orasi bir yer degil, bir duvardir.
 
-Dogru cozum haritanin kendi konvansiyonudur: sigir suruleri, kurt inleri ve
-stratejik noktalar hepsi **merkeze gore nokta-simetrik ciftler** halinde
-authorlanmistir. Arz noktalari da oyle olur - her tur icin bir cift, biri her
-yakada:
+Dogru cozum arz noktalarini **merkeze gore nokta-simetrik ciftler** halinde
+authorlamaktir - her tur icin bir cift, biri her yakada.
 
-| Tur | Oyuncu yakasi | Dusman yakasi (nokta-simetrik) |
-| --- | --- | --- |
-| Liman | `(4.61, 17.91)` - mevcut mesh | `(-4.61, -17.91)` |
-| Oduncu kampi | author edilecek | negatifi |
-| Tas sahasi | author edilecek | negatifi |
+**S0 duzeltmesi - bu haritanin mevcut konvansiyonu degil, yeni bir kuraldir.**
+Once "sigir suruleri, kurt inleri ve stratejik noktalar hepsi nokta-simetrik"
+yaziyordu. Olculdu, ve yalnizca yarisi dogru:
 
-`(-4.61, -17.91)` olculdu: en yakin uc blocker'in (16, 17, 18) hicbirinin
-kutusuna girmiyor, yani su kenarinda ama karada.
+| Cift | Oyuncu yakasi | Dusman yakasi | Tam nokta-simetrik mi? |
+| --- | --- | --- | --- |
+| Geyik suruleri | `(-30, 22)` | `(30, -22)` | **Evet** |
+| Sigir suruleri | `(-18, 14)` | `(18, -14)` | **Evet** |
+| Kurt inleri | `(-45, -6)` | `(28, 6)` | Hayir |
+| Stratejik noktalar | `(-25.7, -44.6)` | `(34, 54)` | Hayir |
+| Guvenli deposit'ler | `(-22.9, 40.8)` tas | `(34, -20)` tas | Hayir |
+| Korular | 3 cift, yaka-yaka | (ayni) | Yaklasik, tam degil |
 
-Bu, KARAR 4'un (munhasirlik) on kosuludur: paylasilan bir kaynakta asimetri
-gecikmedir, munhasir bir kaynakta **maci belirler**. Ciftler halinde
-authorlandiginda her krallik dogal olarak kendi ucunu tutar, ve rakibinkini
-almak **nehri gecmeyi** gerektirir - yani uc gecidin birinden. Ekonomik hedef
-boylece haritanin zaten var olan askeri darbogazina baglanir; yeni bir
-mekanik icat edilmez.
+Yani harita **yaka dengesi**ni tutarli sekilde gozetiyor (her turden bir ornek
+her yakada), ama **tam nokta-simetri** yalnizca geyik ve sigirda var. Arz
+noktalarinin ciftlenmesi bu yuzden bir *tekrar* degil, kasitli bir **yeni
+kural**dir - ve gerekcesi haritanin aliskanligi degil, KARAR 4-A'dir: munhasir
+bir kaynak asimetrik duramaz, cunku paylasilan bir kaynakta asimetri gecikmedir,
+munhasir bir kaynakta **maci belirler**.
 
-**Acik soru (KARAR 4 ile birlikte kilitlenir):** uc cift = alti arz noktasi mi,
-yoksa daha az sayida ve daha cok tartisilan bir kume mi? Alti nokta her tarafa
-kendi ucunu verir ve kavga yalnizca baskindan cikar; uc gecide konan uc **ortak**
-nokta ise her lotu tartismali kilar ama ekonomiyi askeri darbogaza fazla
-baglayabilir. Olculen veri ikisini de destekliyor; secim kullanicinin.
+Bunun §8'e etkisi: "every trade site has a point-symmetric twin" testi mevcut bir
+sozlesmeyi degil, yeni bir sozlesmeyi pinler; yalnizca `tradeSites` uzerinde
+kosar (herd/deposit/stratejik nokta o testin kapsaminda **degildir**) ve elle
+authorlanmis koordinatlar icin kucuk bir tolerans tasir.
+
+Ciftler halinde authorlandiginda her krallik dogal olarak kendi ucunu tutar, ve
+rakibinkini almak **nehri gecmeyi** gerektirir - yani uc gecidin birinden.
+Ekonomik hedef boylece haritanin zaten var olan askeri darbogazina baglanir; yeni
+bir mekanik icat edilmez.
+
+**S0'da kapandi: uc cift = alti arz noktasi.** Alternatif, uc gecide konan uc
+**ortak** nokta idi: her lotu tartismali kilardi ama ekonomiyi askeri darbogaza
+fazla baglardi - ve pratikte uc degil **iki** gecit demekti, cunku orta gecit
+(`dock-firstage` koprusu) kapsam disi. Secilen cozum alti noktadir; konumlar §7
+Faz S0'da kilitlendi.
 
 ### 3.8 Olculen debi - naif ayarla bir lot ~4 dakika surer
 
-`logistics.json`: `carryCapacity: 30`, `moveSpeed: 2.2`, `loadSeconds: 2`,
-`spawnPerProducer: 1`. `market.lotSize: 100`.
+**S0 duzeltmesi - iki sayi ve bir alanin yeri yanlisti.** Once "`logistics.json`:
+`carryCapacity: 30`, `moveSpeed: 2.2`" yaziyordu. Olculen gercek:
 
-Mevcut limandan oyuncu merkezine (62.7 birim, §3.7) tek esekle:
+| Alan | Plan once ne diyordu | Gercek | Nerede |
+| --- | --- | --- | --- |
+| `moveSpeed` | 2.2 | **1.76** | `logistics.json` |
+| `loadSeconds` | 2 | 2 (dogru) | `logistics.json` |
+| `spawnPerProducer` | 1 | 1 (dogru) | `logistics.json` |
+| `carryCapacity` | `logistics.json`'da 30 | **`logistics.json`'da yok** | `buildings.json`, bina x kademe basina: 20/25/30/35/45/50/55 |
 
-- Tek yon: 62.7 / 2.2 = **28.5 sn**
-- Gidis-donus + iki duraklama: 57 + 4 = **61 sn**
-- Debi: 30 birim / 61 sn = **~29.5 birim/dk**
-- Bir lot (100 birim): **~3.4 dakika**
+`carryCapacity`'nin yeri yalnizca bir dizin hatasi degil, §6.1'e is dusuren bir
+bulgudur: yuk miktari **kervanin degil, hattin ucundaki ureticinin** alanidir ve
+kademeyle buyur. Arz noktasi kademeli bir bina olmadigi icin miras alacagi bir
+deger yoktur - bu yuzden **kendi `carryCapacity`'sini tasir** (§6.1, S0'da
+kilitlendi). `market.lotSize: 100` dogruydu.
+
+Mevcut limandan oyuncu merkezine (62.7 birim, §3.7) tek esekle, gercek sayilarla:
+
+- Tek yon: 62.7 / 1.76 = **35.6 sn**
+- Gidis-donus + iki duraklama: 71.2 + 4 = **75.2 sn**
+- Debi: 30 birim / 75.2 sn = **~23.9 birim/dk**
+- Bir lot (100 birim): **~4.2 dakika**
 
 Uc kaynak icin ayni anda: uc ayri hat, uc ayri filo. Tek esekli ayarla oyuncu
-dakikada ~0.3 lot alabilir - yani pazar pratikte kapalidir.
+dakikada ~0.24 lot alabilir - yani pazar pratikte kapalidir.
 
 Bu, "sinirsiz alim" ile "pratikte hic alim yok" arasinda ikincisine cok yakin
 duruyor. Sonuc bir tasarim hatasi degil, bir **ayar** sorusudur ve plan buna
-kendi tunable'ini vermelidir (§6): arz noktasi kendi `caravanCount`'unu ve kendi
-uretim hizini tasir. Dort esekle ayni lot ~50 saniyeye iner.
+kendi tunable'ini vermelidir (§6): arz noktasi kendi `caravanCount`'unu, kendi
+`carryCapacity`'sini ve kendi uretim hizini tasir. Dort esekle ayni lot **~63
+saniyeye** iner.
+
+Duzeltmenin sonucu degistirmedigine dikkat: yanlis sayilarla da dogru sayilarla
+da tek esek "pratikte hic", dort esek "oynanabilir" veriyor. Degisen yalnizca
+buyukluk (~%25) - yani §6.1'in tunable'lari ayni gerekceyle ayni yerde duruyor.
 
 Iki knob birbirine bagli ve bu bilincli: `perMinute` filonun tasiyabileceginin
 uzerine cikarsa tampon surekli dolu kalir ve ilan edilen hiz bir yalan olur.
@@ -290,8 +356,10 @@ uretim `buffer-full`'a duser ve panel bunu soyler. Oyuncu bunu "ikinci esek ekle
 ya da pazari yaklastir" diye okur - ureticide ne okuyorsa.
 
 Not: V4'un `carryCapacity <= localBufferCapacity` kurali arz noktasi icin de
-gecerlidir - tampon 30'un altina inerse esek her seferinde tamponu bosaltir ve
-"tampon dolu" baskisi kaybolur.
+gecerlidir - tampon arz noktasinin kendi `carryCapacity`'sinin altina inerse esek
+her seferinde tamponu bosaltir ve "tampon dolu" baskisi kaybolur. Arz noktasinda
+iki alan da **ayni tabloda** (`trade-sites.json`) durdugu icin bu kural tek
+dosyadan dogrulanir; ureticide iki tablo gerekiyordu.
 
 ### 3.9 AI zaten pazardan aliyor - ve stok gelince ne olacagi belli
 
@@ -326,11 +394,25 @@ girer.
 Sonuc: bu mekanikte altin icin yapilacak **hicbir sey yoktur**. Kullanicinin
 sorusuna cevap §4 KARAR 5'te.
 
-## 4. Tasarim Kararlari (Faz S0 - **ACIK**)
+## 4. Tasarim Kararlari (Faz S0 - **KILITLENDI**, 2026-08-04)
 
-Dokuz soru, dokuz oneri. Hicbiri kilitlenmedi.
+Dokuz soru, dokuz oneri. **Dokuzunun da onerisi kabul edildi.** Alternatifler
+(B secenekleri) kayit icin duruyor - neyin neden secilmedigini ileride okumak
+icin, yeniden acmak icin degil.
 
-### KARAR 1 - Stok kralliga mi, binaya mi ait? -> **A onerilir**
+| Karar | Kilit |
+| --- | --- |
+| 1 - Stok kimin | **A** - krallik basina tek havuz |
+| 2 - Tukenir mi | **A** - yenilenebilir, hiz sinirli (`capacity` opsiyonel alan olarak semada durur) |
+| 3 - Isci | **A** - hayir, isci istemez |
+| 4 - Munhasirlik | **A** - munhasir; ilk baglayan tutar (§3.7 on kosuluyla, o da secildi) |
+| 5 - Altin | **Hicbir sey** - bu planda altin icin yapilacak is yok |
+| 6 - Yikilan pazar | **A** - stok kralliga ait, durur |
+| 7 - Satilan mal | **A** - hayir, stoga girmez |
+| 8 - Hangi kaynak stoklu | **Ucu de**; mekanizma veriden (`stocked` listesi) |
+| 9 - AI paritesi | **A** - harita authoring, sifir AI kodu |
+
+### KARAR 1 - Stok kralliga mi, binaya mi ait? -> **A KILITLENDI**
 
 - **A - Krallik basina tek stok havuzu. ONERILEN.** Fiyat tablosu (KR-M2) ve
   komisyon (`commissionFor`) zaten krallik basina; stok da oyle olursa panel
@@ -340,7 +422,7 @@ Dokuz soru, dokuz oneri. Hicbiri kilitlenmedi.
   zengin, ama ayni panel yari-krallik yari-bina olur ve oyuncu hangi sayinin
   neye ait oldugunu okuyamaz (§3.2).
 
-### KARAR 2 - Arz noktasi tukenir mi? -> **A onerilir**
+### KARAR 2 - Arz noktasi tukenir mi? -> **A KILITLENDI**
 
 - **A - Yenilenebilir, hiz sinirli. ONERILEN.** Nehir baliklanir, saha kazilir;
   sinir **debi**dir, miktar degil. Planin butun gerilimi buradan gelir.
@@ -350,14 +432,14 @@ Dokuz soru, dokuz oneri. Hicbiri kilitlenmedi.
 Veri yine de `capacity`'yi **istege bagli** tasimalidir, boylece bir fork sonlu
 saha authorlayabilir. Sablon `null` (yenilenebilir) gonderir.
 
-### KARAR 3 - Arz noktasi isci ister mi? -> **A onerilir**
+### KARAR 3 - Arz noktasi isci ister mi? -> **A KILITLENDI**
 
 - **A - Hayir. ONERILEN.** Limanin kendi balikcilari, sahanin kendi kazicilari
   vardir. Nufus saymaz, isci atanmaz. Karar tek bir seydir: **yolu cekmek**.
 - **B - Isci atanir.** O zaman arz noktasi sadece "uzaktaki bir tarla"dir; pazar
   hicbir sey eklemez ve nufus tavanina yeni bir musteri gelir.
 
-### KARAR 4 - Ayni arz noktasini iki krallik birden kullanabilir mi? -> **A onerilir, §3.7 kosuluyla**
+### KARAR 4 - Ayni arz noktasini iki krallik birden kullanabilir mi? -> **A KILITLENDI** (§3.7 kosulu da secildi)
 
 - **A - Munhasir. ONERILEN.** Yolu ilk degdiren krallik noktayi tutar; rota
   koptugu anda (`route()` `null`) nokta serbest kalir. Rakipten almanin yolu
@@ -369,7 +451,7 @@ saha authorlayabilir. Sablon `null` (yenilenebilir) gonderir.
 **A'nin on kosulu §3.7'dir.** Munhasir bir kaynak asimetrik duramaz - ve nehir
 iki kralligi ayirdigi icin bugunku tek liman, tanimi geregi asimetriktir.
 
-### KARAR 5 - Altin icin ne yapilacak? -> **Hicbir sey (bu planda)**
+### KARAR 5 - Altin icin ne yapilacak? -> **Hicbir sey (bu planda). KILITLENDI**
 
 Kullanicinin sordugu sey. Cevap uc parcali:
 
@@ -383,13 +465,13 @@ Kullanicinin sordugu sey. Cevap uc parcali:
    Uzaklik odul olur, yol kesme altini keser. Bu, bu planin **dogal devamidir**
    ve ayni `CaravanSystem`'e biner - ama ayri bir plandir, kapsam disi.
 
-### KARAR 6 - Pazar yikilinca / kopunca stok ne olur? -> **A onerilir**
+### KARAR 6 - Pazar yikilinca / kopunca stok ne olur? -> **A KILITLENDI**
 
 - **A - Stok kralliga ait, durur. ONERILEN.** (KARAR 1-A'nin dogal sonucu.)
   Kopan sey **ikmal**dir, stok degil.
 - **B - Stok kaybolur.** KARAR 1-B secilirse zorunlu olur.
 
-### KARAR 7 - Satilan mal alinabilir stoga eklenir mi? -> **A onerilir**
+### KARAR 7 - Satilan mal alinabilir stoga eklenir mi? -> **A KILITLENDI**
 
 - **A - Hayir. ONERILEN.** Satis, mali oyunun disina cikarir. B secilirse bir
   krallik **hicbir yol cekmeden** kendi stogunu doldurabilir - yani planin
@@ -397,7 +479,7 @@ Kullanicinin sordugu sey. Cevap uc parcali:
   bunu zaten garanti eder. Sorun kar degil, **arz zincirinin atlanmasi**dir.)
 - **B - Evet, satilan mal stoga girer.**
 
-### KARAR 8 - Hangi kaynak stok ister? -> **Ucu de; mekanizma veriden. ONERILEN**
+### KARAR 8 - Hangi kaynak stok ister? -> **Ucu de; mekanizma veriden. KILITLENDI**
 
 `MarketBalance`'a `stocked: readonly string[]` eklenir. Icindeki her id
 `basePrice`'ta bulunmak zorundadir (validator). Sablon
@@ -412,7 +494,7 @@ kaynagi disarida birakmak isterse tek satir veri degistirir, hicbir kod
 degismez. Bos liste de gecerlidir ve bugunku davranisi verir - yani plan tek
 satirla geri alinabilir.
 
-### KARAR 9 - AI paritesi nasil saglanir? -> **A onerilir**
+### KARAR 9 - AI paritesi nasil saglanir? -> **A KILITLENDI**
 
 - **A - Harita authoring. ONERILEN.** Dusmanin arz noktasi, mevcut
   `enemyBaseRoute` / `enemyExpansions` iskeletiyle bagli sekilde authorlanir.
@@ -421,7 +503,7 @@ satirla geri alinabilir.
   intent, yeni bir yol planlayicisi ve yeni bir debug satiri - kapsami iki
   katina cikarir.
 
-### Kapsam disi (bu plana sizmayacaklar)
+### Kapsam disi (bu plana sizmayacaklar) - **S0'da teyit edildi**
 
 - Altin ticaret kervani / tarafsiz ticaret sehri (KARAR 5'in 3. maddesi)
 - Dorduncu bir kaynak ya da yeni bir kaynak turu - uc kaynak, uc arz noktasi
@@ -462,7 +544,7 @@ satirla geri alinabilir.
 | `public/game-data/balance/trade-sites.json` | **Yeni.** Uc arz noktasi turu (liman / oduncu kampi / tas sahasi): uretim hizi, tampon, kervan sayisi (§6) |
 | `public/game-data/balance/buildings.json` | `market.stocked` - S1'de `[]`, S3'te `["food", "wood", "stone"]` |
 | `public/assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json` | **Yeni.** `BP_RTS_ResourceNode` deseni |
-| `public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json` | Uc turun marker'lari, §3.7'nin secilen cozumune gore (cift halinde ise alti adet) |
+| `public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json` | **Alti** marker (uc tur x iki yaka) ve dusman yakasinin liman mesh'i; koordinatlar §7 Faz S0'da kilitli |
 | `public/assets/manifest.json` | Yalniz yeni marker Actor girdisi (liman mesh'leri zaten kayitli) |
 
 ### 5.3 Allowlist notu
@@ -480,12 +562,19 @@ gider. Bu, allowlist isini tamamen disarida birakir.
 
 ### 6.1 `trade-sites.json`
 
+`carryCapacity` **S0'da eklendi**: §3.8'in olctugu gibi bu alan bugun
+`logistics.json`'da yok, `buildings.json`'da bina x kademe basina duruyor. Arz
+noktasi kademeli bir bina olmadigi icin miras alacagi bir deger yok, bu yuzden
+kendi degerini tasir - ve boylece `bufferCapacity >= carryCapacity` kurali tek
+tablodan dogrulanabilir.
+
 ```jsonc
 {
   "river_port": {
     "label": "Nehir Limani",
     "resourceId": "food",
     "perMinute": 60,
+    "carryCapacity": 30,
     "bufferCapacity": 120,
     "caravanCount": 4,
     "dock": { "width": 8, "depth": 8 }
@@ -494,6 +583,7 @@ gider. Bu, allowlist isini tamamen disarida birakir.
     "label": "Bagimsiz Oduncu Kampi",
     "resourceId": "wood",
     "perMinute": 80,
+    "carryCapacity": 30,
     "bufferCapacity": 120,
     "caravanCount": 4,
     "dock": { "width": 8, "depth": 8 }
@@ -502,6 +592,7 @@ gider. Bu, allowlist isini tamamen disarida birakir.
     "label": "Tas Sahasi",
     "resourceId": "stone",
     "perMinute": 40,
+    "carryCapacity": 30,
     "bufferCapacity": 120,
     "caravanCount": 4,
     "dock": { "width": 8, "depth": 8 }
@@ -512,9 +603,10 @@ gider. Bu, allowlist isini tamamen disarida birakir.
 | Alan | Deger | Gerekce |
 | --- | --- | --- |
 | `perMinute` | 60 / 80 / 40 | Siralama talebi izler (§3.6): odun en cok alinan, tas en pahali (`basePrice` 20, digerlerinin iki kati - ayni altin daha az birim tas alir, o yuzden daha yavas dolmasi yeterlidir). Odunun 80'i, sahip olunan `lumber_camp`'in 120/dk'sinin **altinda** kalir; arz noktasi koru kesmenin yerini almaz, korusu tukenmis ya da henuz kamp kuramamis kralligin cikis kapisi olur |
-| `bufferCapacity` | 120 | `carryCapacity` (30) x `caravanCount` (4) - butun kervan filosu ayni anda yuklenebilir, ve V4'un `carryCapacity <= bufferCapacity` kurali saglanir |
-| `caravanCount` | 4 | §3.8'in olcusu: 4 esek bir lotu ~50 saniyeye indirir. Tek esekle ~3.4 dakika, ki bu "pratikte hic" demektir |
-| `dock` | 8x8 | Pazarin footprint'i ile ayni; yolun degecegi kenar yeterince genis |
+| `carryCapacity` | 30 | Ureticinin orta kademesiyle ayni (`buildings.json` 20..55 arasi verir). Arz noktasi yukselmedigi icin tek bir deger yeter; 30 filo aritmetigini de temiz tutar |
+| `bufferCapacity` | 120 | `carryCapacity` (30) x `caravanCount` (4) - butun kervan filosu ayni anda yuklenebilir, ve V4'un `carryCapacity <= bufferCapacity` kurali saglanir. Iki alan da bu tabloda oldugu icin iliski **tek dosyadan** turetilir |
+| `caravanCount` | 4 | §3.8'in olcusu: 4 esek bir lotu ~63 saniyeye indirir. Tek esekle ~4.2 dakika, ki bu "pratikte hic" demektir |
+| `dock` | 8x8 | Pazarin footprint'i ile ayni; yolun degecegi kenar yeterince genis. Alti konumun altisi da bu olcuyle temiz olculdu (§7 Faz S0) |
 | `capacity` | (yok) | KARAR 2-A: yenilenebilir. Istege bagli alan olarak semada durur |
 
 Uc tur de ayni `bufferCapacity`/`caravanCount`'u tasiyor; ayrisan tek sey hizdir.
@@ -548,51 +640,113 @@ tasir. Hicbir kaynak profili degismez.
 
 ### 6.4 `logistics.json`'a dokunulmuyor
 
-Ayni yuk esegi, ayni hiz, ayni kapasite. Filo buyuklugu arz noktasinin kendi
-`caravanCount`'undadir, cunku bu bir **lojistik hatti** ozelligidir, hayvanin
-degil.
+Ayni yuk esegi, ayni hiz (`moveSpeed: 1.76`), ayni yukleme suresi. Filo
+buyuklugu arz noktasinin kendi `caravanCount`'undadir, cunku bu bir **lojistik
+hatti** ozelligidir, hayvanin degil.
+
+**S0 duzeltmesi.** Burada once "ayni kapasite" yaziyordu, ama miras alinacak bir
+kapasite yok: `carryCapacity` `logistics.json`'da bulunmuyor, `buildings.json`'da
+bina x kademe basina duruyor (§3.8). Yani yuk miktari zaten hayvanin degil,
+**hattin ucundaki tesisin** alani - ve arz noktasi kademelenmedigi icin kendi
+sabit degerini tasir (§6.1). Bu, §6.4'un kuralini bozmuyor, ayni kurali
+`carryCapacity`'ye de uyguluyor: dosya yine degismiyor.
 
 ## 7. Fazlar ve Checklist
 
-### Faz S0 - Karar kilidi
+### Faz S0 - Karar kilidi -> **TAMAM (2026-08-04)**
 
-- [ ] KARAR 1 (stok kimin) kilitlendi.
-- [ ] KARAR 2 (tukenir mi) kilitlendi.
-- [ ] KARAR 3 (isci) kilitlendi.
-- [ ] KARAR 4 (munhasirlik) kilitlendi.
-- [ ] KARAR 5 (altin) kilitlendi.
-- [ ] KARAR 6 (yikilan pazar) kilitlendi.
-- [ ] KARAR 7 (satilan mal) kilitlendi.
-- [ ] KARAR 8 (hangi kaynak stoklu) kilitlendi.
-- [ ] KARAR 9 (AI paritesi) kilitlendi.
-- [ ] §3.7'nin harita cozumu secildi: **uc nokta-simetrik cift (alti nokta)** mi,
-  yoksa **uc ortak nokta** mi? Nehir iki yakayi ayirdigi icin bu, "her tarafin
-  kendi ucu var" ile "her lot tartismali" arasindaki secimdir.
-- [ ] Oduncu kampi ve tas sahasi icin harita konumlari secildi (liman zaten
-  yerinde). Hicbiri nehir gecidini kapatmiyor.
-- [ ] §4 kapsam disi listesi teyit edildi.
+- [x] KARAR 1 (stok kimin) kilitlendi. -> **A**, krallik basina tek havuz.
+- [x] KARAR 2 (tukenir mi) kilitlendi. -> **A**, yenilenebilir; `capacity`
+  opsiyonel alan olarak semada durur.
+- [x] KARAR 3 (isci) kilitlendi. -> **A**, isci istemez.
+- [x] KARAR 4 (munhasirlik) kilitlendi. -> **A**, ilk baglayan tutar.
+- [x] KARAR 5 (altin) kilitlendi. -> **Hicbir sey**; altin kervani ayri plan.
+- [x] KARAR 6 (yikilan pazar) kilitlendi. -> **A**, stok durur.
+- [x] KARAR 7 (satilan mal) kilitlendi. -> **A**, stoga girmez.
+- [x] KARAR 8 (hangi kaynak stoklu) kilitlendi. -> **Ucu de**, liste olarak.
+- [x] KARAR 9 (AI paritesi) kilitlendi. -> **A**, harita authoring.
+- [x] §3.7'nin harita cozumu secildi. -> **Uc nokta-simetrik cift (alti nokta).**
+  Uc ortak nokta secilmedi: orta gecit kapsam disi oldugu icin pratikte uc degil
+  iki nokta olurdu, ve ekonomi askeri darbogaza fazla baglanirdi.
+- [x] Alti marker konumu secildi ve olculdu (asagidaki tablo). Liman **yerinde
+  degildi**: mesh merkezi uc blocker'in icinde, marker kiyiya cekildi (§3.3).
+- [x] §4 kapsam disi listesi teyit edildi - hicbiri sizmayacak. Cag/seviye gorsel
+  yukseltmesi de disarida kaldi.
+- [x] **Ek kilit (§3.8'in bulgusu):** arz noktasi kendi `carryCapacity`'sini
+  tasir; `logistics.json` degismez (§6.1, §6.4).
 
-Kabul: dokuz kararin hicbiri kod yazilirken yeniden tartisilmaz.
+#### Kilitlenen marker konumlari
 
-### Faz S1 - Stok cekirdegi (oynanis yok)
+Alti konumun altisi da olculdu: 8x8 rihtim hicbir nehir blocker'i, agac, deposit,
+build anchor, expansion marker ya da suru ile cakismiyor; hicbiri bir nehir
+gecidine 16 birimden yakin degil (yani hicbiri gecit kapatmiyor).
 
-- [ ] `marketStock.ts`: krallik x kaynak stogu; `credit` / `withdraw` /
-  `amount`; negatif ve NaN reddi.
-- [ ] `MarketBalance.stocked` tipi + validator (`basePrice`'ta olmayan id
-  reddedilir; bos liste gecerlidir).
-- [ ] `MarketTradeResult`'a `out-of-stock`; `buy()` stoklu kaynakta stok
-  yetmiyorsa **cuzdana dokunmadan** reddeder ve endeksi **oynatmaz**
-  (`marketTradeSystem.ts:126`'nin mevcut sirasi korunur).
-- [ ] Panel stogu gosterir; dugme kapaliysa nedeni yazar.
-- [ ] `buildings.json` bu fazda **`"stocked": []`** gonderir.
+| Tur | `resourceId` | Oyuncu yakasi | Dusman yakasi | Kendi merkezinden yol | Karsi merkezden |
+| --- | --- | --- | --- | --- | --- |
+| Liman | `food` | `(-1, 20)` | `(1, -20)` | 120 / 112 odun | 196 / 204 odun |
+| Oduncu kampi | `wood` | `(-8, 50)` | `(8, -50)` | 84 / 84 odun | 268 / 276 odun |
+| Tas sahasi | `stone` | `(-28, 6)` | `(28, -6)` | 92 / 84 odun | 220 / 228 odun |
+
+Konumlarin gerekceleri:
+
+- **Liman.** Mesh `(4.61, 17.91)`'de kalir; marker onun kara tarafindaki
+  apronudur, 6.0 birim (3 hucre) uzakta. Kiyiya en yakin temiz simetrik 8x8
+  budur (§3.3). Dusman yakasi icin ayni mesh `(-4.61, -17.91)`'e aynalanir.
+- **Oduncu kampi.** Merkezi koru ciftinin kenarinda: `(-8, 50)` south-grove'a
+  8.9 birim, aynasi `(8, -50)` north-grove'a 6.3 birim. Kralligin **kendi**
+  korusunun dibi degil - orasi yol karari uretmezdi. 84 odunla en ucuz hat,
+  ki §3.6'nin kisir dongusune (odun almak icin odun harcamak) karsi kasitli.
+- **Tas sahasi.** `(-28, 6)`, mevcut `external_stone` deposit'ine 11.7 birim -
+  yani harita zaten orayi "tas bolgesi" diye okutuyor. Ileri bir konum
+  (z-x = 34, nehre yakin), 92 odun.
+
+Ayrica olculdu ve KARAR 9-A icin **isi kolaylastiriyor**: dusman yakasindaki
+liman `(1, -20)` `enemy_west production` marker'ina 9.8 birim, oduncu kampi
+`(8, -50)` `enemy_west depot`'a 10.2 birim. Yani AI'nin authored yol iskeleti
+zaten bu noktalarin yanindan geciyor; parite icin cekilecek yol kisa.
+
+Kabul: dokuz kararin hicbiri kod yazilirken yeniden tartisilmaz. **Verildi.**
+Gorsel kabul (olcek, rihtimin yola degdigi kenar) S2'ye ait ve kullanicidadir.
+
+### Faz S1 - Stok cekirdegi (oynanis yok) -> **TAMAM (2026-08-04)**
+
+- [x] `marketStock.ts`: krallik x kaynak stogu; `credit` / `withdraw` /
+  `amount`; negatif ve NaN reddi. Withdraw **atomiktir** - yetmezse hicbir sey
+  kimildamaz, cuzdanin `exchange`'iyle ayni sozlesme.
+- [x] `MarketBalance.stocked` tipi + validator (`basePrice`'ta olmayan id
+  reddedilir; bos liste gecerlidir; alan **istege bagli** ve yoklugu `[]`
+  demektir, yani eski veri dokunulmadan calisir).
+- [x] `MarketTradeResult`'a `out-of-stock`; `buy()` stoklu kaynakta stok
+  yetmiyorsa **cuzdana dokunmadan** reddeder ve endeksi **oynatmaz**.
+- [x] Panel stogu gosterir; dugme kapaliysa nedeni yazar - ve **eksigi**
+  adlandirir ("Pazarda stok yok: 99/100"), cunku oyuncunun bilmesi gereken sey
+  yolun calisip calismadigi.
+- [x] `buildings.json` bu fazda **`"stocked": []`** gonderir.
+- [x] AI dogrulandi (§3.9): `out-of-stock` `no-completed-market`/`disconnected`
+  olmadigi icin `aiTradeManager.ts:152`'de kod degismeden `saving`'e dusuyor.
 
 Kabul: makine tamdir ama **hicbir kaynak stoklu degildir**, yani oyun bit bit
-bugunku gibi oynanir. `tsc`, `test:engine`, `build:verify` yesil.
+bugunku gibi oynanir. `tsc --noEmit`, `test:engine` (1294 check), `build:verify`,
+`check:assets` - **dordu de yesil.**
+
+Kirmiziya donebilirlik yapildi: alti kasitli mutasyon, altisi da yakalandi -
+stok kapisinin kaldirilmasi, stogun dusulmemesi, satisin stogu doldurmasi
+(KARAR 7-A), validator'un fiyatsiz id kabul etmesi, panelin bos rafi
+gormezden gelmesi, stogun eksiye inmesi. Her biri hedefledigi assertion'la
+kirmizi dondu ve geri alindi.
+
+**S1'de olcuyu degistiren bir sey:** `marketStock.ts` ilk yazildiginda bir
+`snapshotFor` tasiyordu; panelin onu hic cagirmadigi ortaya cikti (panel kaydi
+`balance.stocked` uzerinden kuruluyor, cunku **stoklu ama bos** ile **stoklu
+degil** ayri gorunmek zorunda). Olu kod birakmak yerine kaldirildi ve neden
+olmadigi dosyaya yazildi.
 
 Bos liste tesaduf degil, planin geri alma kolu (KARAR 8): uc kaynak da stoklu
 oldugu icin (§3.6) listeyi erken doldurmak, arz zinciri gelene kadar pazarin
 alis tarafini **tamamen** kapatirdi. Liste S3'un basinda tek satirla doldurulur
-ve gerekirse ayni satirla geri alinir.
+ve gerekirse ayni satirla geri alinir. §8'in "every priced resource is stocked"
+testi de bu yuzden S1'de **yok**: S1'in kendi testi tam tersini pinliyor
+(`stocked === []`), ve S3 o satiri doldururken bu iki test yer degistirir.
 
 ### Faz S2 - Arz noktasi haritada (ekonomi degismedi)
 
@@ -600,16 +754,24 @@ ve gerekirse ayni satirla geri alinir.
 - [ ] `RtsTradeSiteDefinition` + `rtsLevelAdapter` okumasi + blockout alani.
 - [ ] `trade-sites.json` + `TradeSiteBalance` + `validateTradeSiteBalance` +
   editor Data Table girdisi.
-- [ ] Level'da uc turun de marker'i, §3.7'nin secilen cozumune gore (cift
-  halinde ise alti marker): liman, bagimsiz oduncu kampi, tas sahasi.
-- [ ] Oduncu kampi ve tas sahasi icin gorsel secimi. Liman hazir
-  (`port-secondage-level3`); digerleri icin mevcut mesh kataloğundan secilir,
-  yeni varlik uretilmez.
+- [ ] Level'da alti marker: liman `(-1,20)`/`(1,-20)`, oduncu kampi
+  `(-8,50)`/`(8,-50)`, tas sahasi `(-28,6)`/`(28,-6)` (§7 Faz S0'da kilitli).
+  Liman mesh'i `(4.61,17.91)`'de kalir; dusman yakasi icin `(-4.61,-17.91)`'e
+  aynalanir.
+- [ ] Oduncu kampi ve tas sahasi icin gorsel secimi (her biri iki kez, iki
+  yakada). Liman mesh'i hazir (`port-secondage-level3`); digerleri icin mevcut
+  mesh katalogundan secilir, yeni varlik uretilmez.
 - [ ] `tradeSiteSystem.ts`: tampon dolar, hicbir yere gitmez.
 - [ ] Marker'in ayagi altindaki zemin: nokta build/road blocker uretir mi?
   Rihtimin ustune bina kurulamamali (deposit kurali, `liveNodeBlockers` ikizi).
 - [ ] Hicbir arz noktasi bir nehir gecidini kapatmiyor (§3.3/§3.7) - marker'lar
-  authorlandiktan sonra uc gecidin de yuruyus genisligi korunur.
+  authorlandiktan sonra uc gecidin de yuruyus genisligi korunur. S0'da alti
+  konum icin **on olcum yapildi** (en yakin gecit 16.5 birim), ama olcum 8x8
+  rihtimi baz aldi; secilen **mesh'ler** daha genis olabilir, o yuzden bu madde
+  gorsel authoring'den sonra tekrar dogrulanir.
+- [ ] Liman marker'i mesh merkezinde **degil** (§3.3): mesh uc blocker'in icinde
+  kaliyor. Marker `(-1, 20)`'de, mesh `(4.61, 17.91)`'de - ikisinin birlikte
+  dogru gorunup gorunmedigi gorsel kabulun parcasidir.
 
 Kabul: `?rts` Play'de uc arz noktasi da haritadadir, panelde gorulur, tamponu
 dolar ve **durur**. Ekonomi S1 oncesiyle bit bit ayni. **Gorsel kabul
@@ -677,13 +839,13 @@ pinlenmez.**
 | "every stocked resource is priced" | `stocked` ⊆ `basePrice` anahtarlari - validator sozlesmesi |
 | "every stocked resource has a supply site in this project's data" | `trade-sites.json` her stoklu kaynagi karsilar; yoksa alis kalici olarak olu demektir. **Odunun sessizce dusmesini yakalayan test budur** (§3.6) |
 | "every priced resource is stocked in this project's data" | Sablonun kendi tercihi: `basePrice` = `stocked`. Bir kaynak fiyatlanip stoksuz birakilirsa suite kirmizi doner ve bu **bilincli** bir karar olmak zorunda kalir |
-| "a trade site buffer holds at least one caravan load" | `bufferCapacity >= carryCapacity`, **iki tablodan hesaplanarak** |
+| "a trade site buffer holds at least one caravan load" | `bufferCapacity >= carryCapacity`, **ayni tablodan** (§6.1): S0'da olculdu ki `carryCapacity` `logistics.json'da yok, o yuzden arz noktasi kendi degerini tasir |
 | "a supply route uses only committed road cells" | V4 `route()` sozlesmesinin bu rota turunde de gecerliligi |
 | "generalising the caravan lane leaves producer logistics unchanged" | §3.4 refactor'u: mevcut V4 kervan/transfer testleri **degismeden** gecer |
 | "a severed supply road stops the stock from growing" | Kopru hucresi `remove` edilince stok artmaz |
 | "a trade site supplies only the kingdom it is linked to" | `owner` esitligi; dusman limani oyuncunun pazarina yuruyemez |
 | "trade sites never consume population" | V4'un nufus testinin ikizi |
-| "every trade site has a point-symmetric twin" | §3.7: nehir iki kralligi ayirdigi icin adalet ciftlerle saglanir. Sigir/kurt/stratejik nokta testlerinin ayni kalibi - **haritanin** sozlesmesi, sayinin degil |
+| "every trade site has a point-symmetric twin" | §3.7: nehir iki kralligi ayirdigi icin adalet ciftlerle saglanir. **Yalnizca `tradeSites` uzerinde kosar** ve kucuk bir tolerans tasir - S0'da olculdu ki tam nokta-simetri haritada yalnizca geyik ve sigirda var (kurt/stratejik nokta/deposit ciftleri simetrik degil), yani bu mevcut bir kalibin tekrari degil KARAR 4-A'nin getirdigi **yeni** bir sozlesmedir |
 | "no trade site blocks a river crossing" | §3.3/§3.7: uc gecidin yuruyus genisligi arz noktasi authorlandiktan sonra da korunur |
 | "the market still cannot mint gold" | **Mevcut test**, degismeden gecmeli |
 
@@ -720,11 +882,11 @@ gorulur ve geri alinir (V1/V3/V4 aliskanligi).
 ## 11. Uygulama Sirasi
 
 ```text
-S0 -> S1 -> S2 -> S3 -> S4 -> S5 -> S6
+S0 (TAMAM) -> S1 (TAMAM) -> S2 -> S3 -> S4 -> S5 -> S6
 ```
 
 Hicbir faz artik baska bir plani beklemiyor (§3.4). S1 ve S2 birbirinden
-bagimsizdir; sirasi degistirilebilir ve ikisi de S0 biter bitmez baslatilabilir.
+bagimsizdir; S1 bitti, S2 acik.
 S2'nin gorsel kabulunun erken alinmasi riski azaltir (arz noktalarinin
 olcegi/konumu).
 

@@ -396,6 +396,17 @@ export interface MarketBalance {
   readonly indexMax: number;
   /** Spread taken by the house at market level 1, 0..1. Levels lower it. */
   readonly commission: number;
+  /**
+   * Resources whose *buy* side requires stock a supply caravan actually
+   * delivered (supply plan KARAR 8). Every id must also appear in
+   * {@link basePrice}; a resource left out of this list buys the old way, out of
+   * gold alone.
+   *
+   * A list rather than a flag so a fork can exempt one resource by editing one
+   * line of data and no code. The empty list is valid and gives the pre-supply
+   * behaviour, which is what makes the whole mechanic revertible in one line.
+   */
+  readonly stocked: readonly string[];
 }
 
 /** Territory source and bounded expansion rule supplied by a completed structure. */

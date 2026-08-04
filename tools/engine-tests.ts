@@ -225,6 +225,7 @@ import {
 import { structureMaterialGroup } from "../src/game/rts/structures/structureDeformation";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { MarketPrices } from "../src/game/rts/economy/marketPricing";
+import { MarketStock } from "../src/game/rts/economy/marketStock";
 import { MarketTradeSystem } from "../src/game/rts/economy/marketTradeSystem";
 import { EconomyProductionSystem, producerHasSource } from "../src/game/rts/economy/economyProductionSystem";
 import { PastureSystem, penGeometryFor } from "../src/game/rts/wildlife/pastureSystem";
@@ -46974,7 +46975,11 @@ check("Faz M0: the market validator refuses tunings that mint gold", () => {
     indexMax: 4,
     commission: 0.15,
   };
-  assert.deepEqual(validateMarketBalance(good, "test"), good, "a sane tuning passes through unchanged");
+  // `stocked` is the one field the validator supplies rather than echoes: absent
+  // means "gate nothing", which is the behaviour every market had before the
+  // supply plan, so old data keeps working untouched.
+  assert.deepEqual(validateMarketBalance(good, "test"), { ...good, stocked: [] },
+    "a sane tuning passes through unchanged, with the supply gate defaulted off");
 
   // The arbitrage guard is the whole point: 3% commission against a 2% step is
   // profitable to round-trip at the floor, and must not reach a match.
@@ -47100,6 +47105,147 @@ check("Faz M2: trading moves stock and price, and never counts as production inc
   // A restart is a new market, not a continuation of the last one's spree.
   trade.reset();
   assert.deepEqual(trade.snapshotFor("player")!.prices.map((price) => price.index), [1, 1, 1]);
+});
+
+check("Faz S1: the stock core holds goods per kingdom and never goes negative", () => {
+  const stock = new MarketStock();
+  assert.equal(stock.amount("player", "wood"), 0, "an untouched market holds nothing");
+
+  stock.credit("player", "wood", 30);
+  stock.credit("player", "wood", 30);
+  assert.equal(stock.amount("player", "wood"), 60, "deliveries add up");
+  assert.equal(stock.amount("enemy", "wood"), 0, "KARAR 1-A: one pool per kingdom, not one for the map");
+  assert.equal(stock.amount("player", "stone"), 0, "and one per resource within it");
+
+  // Atomic: a withdrawal that cannot be paid moves nothing at all, the same
+  // contract the wallet's exchange keeps on the gold side.
+  assert.equal(stock.withdraw("player", "wood", 61), false, "a short shelf refuses");
+  assert.equal(stock.amount("player", "wood"), 60, "and the refusal took nothing with it");
+  assert.equal(stock.withdraw("player", "wood", 60), true, "exactly what is there can be taken");
+  assert.equal(stock.amount("player", "wood"), 0, "down to empty, never past it");
+  assert.equal(stock.withdraw("player", "wood", 1), false, "an empty shelf owes nothing");
+
+  // Programmer errors, not game states: a delivery that quietly vanished would
+  // surface as a market that never fills, with nothing pointing at the cause.
+  assert.throws(() => stock.credit("player", "wood", 0), RangeError);
+  assert.throws(() => stock.credit("player", "wood", -5), RangeError);
+  assert.throws(() => stock.credit("player", "wood", Number.NaN), RangeError);
+  assert.throws(() => stock.credit("player", "", 5), RangeError);
+  assert.throws(() => stock.withdraw("player", "wood", -5), RangeError);
+  assert.throws(() => stock.withdraw("player", "wood", Number.NaN), RangeError);
+
+  stock.credit("player", "food", 12);
+  stock.reset();
+  assert.equal(stock.amount("player", "food"), 0, "a new match starts every shelf bare");
+});
+
+check("Faz S1: a stocked resource needs delivered supply, an unstocked one does not", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const marketStats = buildings["market"] ?? assert.fail("the market building is missing");
+  const baseMarket = marketStats.market ?? assert.fail("market tuning missing");
+  const lotSize = baseMarket.lotSize;
+
+  // Only `wood` is gated, so the same fixture proves both halves of KARAR 8:
+  // the rule bites where the data says it does, and nowhere else.
+  const stockedBuildings = {
+    ...buildings,
+    market: { ...marketStats, market: { ...baseMarket, stocked: ["wood"] } },
+  };
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { gold: 100000 }, 20);
+  const trade = new MarketTradeSystem(stockedBuildings, structures, kingdoms, () => true);
+  const wallet = kingdoms.get("player").wallet;
+  const market = structures.place("player", marketStats, 0, 0);
+  structures.advanceConstruction(market, marketStats.constructionSeconds);
+
+  // An empty shelf refuses, and — the part worth pinning — it refuses *before*
+  // charging: a rejected buy that had moved the index would let a player with
+  // no supply push the price around for free.
+  const before = trade.snapshotFor("player")!;
+  assert.equal(trade.buy("player", "wood"), "out-of-stock");
+  assert.equal(wallet.amount("gold"), 100000, "a refused buy spends no gold");
+  assert.equal(wallet.amount("wood"), 0, "and delivers no goods");
+  assert.deepEqual(trade.snapshotFor("player")!.prices, before.prices, "nor moves the price index");
+
+  // KARAR 8: a resource left out of `stocked` keeps the pre-supply behaviour
+  // exactly. This is the test that catches the mechanic quietly going global.
+  assert.equal(trade.buy("player", "stone"), "traded", "an unstocked resource still buys out of gold alone");
+  assert.equal(wallet.amount("stone"), lotSize);
+
+  // Part of a lot is still not a lot — the shelf is not drawn down, and the
+  // refusal names the same state as an empty one.
+  trade.stock.credit("player", "wood", lotSize - 1);
+  assert.equal(trade.buy("player", "wood"), "out-of-stock", "a partial lot cannot be bought");
+  assert.equal(trade.stock.amount("player", "wood"), lotSize - 1, "and the refusal leaves the shelf alone");
+
+  // One more unit and it clears. The amount removed is derived from the tuning,
+  // never pinned: a retuned lot must not turn this into a test of arithmetic
+  // nobody changed.
+  trade.stock.credit("player", "wood", 1);
+  const stockBeforeBuy = trade.stock.amount("player", "wood");
+  const quoted = trade.snapshotFor("player")!.prices.find((price) => price.resourceId === "wood")!;
+  const goldBeforeBuy = wallet.amount("gold");
+  assert.equal(trade.buy("player", "wood"), "traded");
+  assert.equal(trade.stock.amount("player", "wood"), stockBeforeBuy - lotSize,
+    "buying a lot removes exactly one lot from stock");
+  assert.equal(wallet.amount("wood"), lotSize, "and exactly one lot reaches the wallet");
+  assert.equal(wallet.amount("gold"), goldBeforeBuy - quoted.buyPrice, "still charged what it was quoted");
+
+  // KARAR 7-A: selling takes goods out of the game. If a sale refilled the
+  // shelf, a kingdom could stock its own market with no road and no caravan —
+  // which is precisely what this plan exists to remove.
+  const stockBeforeSell = trade.stock.amount("player", "wood");
+  assert.equal(trade.sell("player", "wood"), "traded", "selling is untouched by the supply rule");
+  assert.equal(trade.stock.amount("player", "wood"), stockBeforeSell, "selling never touches the stock");
+
+  // The shelf is per kingdom and per match.
+  trade.stock.credit("player", "wood", lotSize);
+  assert.equal(trade.snapshotFor("player")!.stock["wood"], lotSize, "the panel is handed the live shelf");
+  assert.equal(trade.snapshotFor("player")!.stock["stone"], undefined,
+    "an unstocked resource gets no key at all, so 'ungated' cannot read as 'empty'");
+  trade.reset();
+  assert.equal(trade.stock.amount("player", "wood"), 0, "a restart clears the shelf with the prices");
+});
+
+check("Faz S1: this project's market data is a valid, revertible supply switch", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const market = buildings["market"]?.market ?? assert.fail("the market building is missing");
+
+  // The validator contract: every gated resource has a buy button to gate. A
+  // `stocked` id that is not priced would send a player to build a supply road
+  // for a market they can never buy from — a mistake with no symptom.
+  for (const resourceId of market.stocked) {
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(market.basePrice, resourceId),
+      `every stocked resource is priced (${resourceId} is not)`,
+    );
+  }
+  const priced = { lotSize: 100, basePrice: { wood: 10 }, priceStep: 0.02, indexMin: 0.3, indexMax: 4, commission: 0.15 };
+  assert.deepEqual(validateMarketBalance(priced, "test").stocked, [],
+    "an omitted list means 'gate nothing', which is the pre-supply behaviour");
+  assert.deepEqual(validateMarketBalance({ ...priced, stocked: [] }, "test").stocked, [], "and so does an empty one");
+  assert.deepEqual(validateMarketBalance({ ...priced, stocked: ["wood"] }, "test").stocked, ["wood"]);
+  assert.throws(
+    () => validateMarketBalance({ ...priced, stocked: ["gold"] }, "test"),
+    (error: unknown) => error instanceof GameDataError && /not priced/.test((error as Error).message),
+    "gating a resource with no buy button is refused, and the error names it",
+  );
+  assert.throws(() => validateMarketBalance({ ...priced, stocked: ["wood", "wood"] }, "test"), GameDataError);
+  assert.throws(() => validateMarketBalance({ ...priced, stocked: "wood" }, "test"), GameDataError);
+  assert.throws(() => validateMarketBalance({ ...priced, stocked: [7] }, "test"), GameDataError);
+
+  // Faz S1's own acceptance, and the reason it is safe to ship: the machinery is
+  // in, the rule is not. Faz S3 fills this list in one line — and the same line
+  // takes it back out. When S3 lands, this flips to the S3 assertion that every
+  // priced resource is stocked; until then an early fill would close all three
+  // buy buttons with no supply chain to open them.
+  assert.deepEqual(market.stocked, [],
+    "Faz S1 ships the supply switch off: no resource is gated yet");
 });
 
 check("Faz M4: the AI trades toward the age it is short for, and stops once it can pay", () => {
@@ -47314,6 +47460,9 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
               { resourceId: "wood", index: 1.2, buyPrice: 138, sellPrice: 102, atFloor: false, atCeiling: false },
               { resourceId: "stone", index: 0.3, buyPrice: 35, sellPrice: 25, atFloor: true, atCeiling: false },
             ],
+            // Faz S1's default: this project gates nothing yet, so the panel
+            // must read exactly as it did before the supply plan existed.
+            stock: {},
           },
           ...detail,
         },
@@ -47357,6 +47506,40 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   // The commission has to be explained somewhere, or losing money on an instant
   // round trip reads as a bug rather than the rule that stops infinite gold.
   assert.match(healthy.tooltip ?? "", /komisyon/i);
+
+  // Faz S1: with nothing stocked the panel is bit for bit the old one — no stock
+  // line, no dark button. This is the assertion that would catch the supply rule
+  // leaking into a project that never opted in.
+  assert.equal(healthy.lines.length, 2, "an unstocked market grows no extra lines");
+  assert.equal(action(healthy, "trade-buy:wood").enabled, true);
+
+  // ...and once a resource *is* gated, the empty shelf darkens its buy button and
+  // says so. The shortfall is named rather than just the state: a player needs to
+  // know whether a road is already delivering or was never drawn.
+  const stockedTrade = (wood: number) => ({
+    lotSize: 100,
+    commission: 0.15,
+    prices: [
+      { resourceId: "wood", index: 1.2, buyPrice: 138, sellPrice: 102, atFloor: false, atCeiling: false },
+      { resourceId: "stone", index: 0.3, buyPrice: 35, sellPrice: 25, atFloor: true, atCeiling: false },
+    ],
+    stock: { wood },
+  });
+  const empty = marketPanel({ trade: stockedTrade(0) });
+  assert.match(empty.lines.join(" | "), /Odun stoğu: 0 \/ lot 100/, "the shelf is on the panel");
+  assert.equal(action(empty, "trade-buy:wood").enabled, false, "an empty shelf darkens its own buy button");
+  assert.match(action(empty, "trade-buy:wood").reason ?? "", /Pazarda stok yok: 0\/100/);
+  // KARAR 7-A: selling is never gated by stock, and the ungated resource is
+  // untouched — one dark button must not darken the row it sits in.
+  assert.equal(action(empty, "trade-sell:wood").enabled, true, "selling wood needs no market stock");
+  assert.equal(action(empty, "trade-buy:stone").enabled, true, "an ungated resource stays open");
+
+  const partial = marketPanel({ trade: stockedTrade(99) });
+  assert.equal(action(partial, "trade-buy:wood").enabled, false, "part of a lot is not a lot");
+  assert.match(action(partial, "trade-buy:wood").reason ?? "", /99\/100/, "and the panel names how short it is");
+  const full = marketPanel({ trade: stockedTrade(100) });
+  assert.equal(action(full, "trade-buy:wood").enabled, true, "one full lot opens the button");
+  assert.equal(action(full, "trade-buy:wood").reason, null);
 });
 
 check("§69: the AI stops deciding once the match is over", () => {
