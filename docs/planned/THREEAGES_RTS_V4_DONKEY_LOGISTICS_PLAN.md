@@ -1,7 +1,7 @@
 # ThreeAges RTS V4 - Yuk Esegi ve Gorunur Lojistik Plani
 
 Olusturulma tarihi: 2026-08-04
-Durum: **Faz 2 tamamlandi (2026-08-04).** Faz 0'daki alti kararin hepsi §4'teki onerilen
+Durum: **Faz 5 kod ve gorsel/tasarimsal kabul olarak tamamlandi (2026-08-04); Faz 6'nin UI ve AI kod dogrulamasi tamamlandi, kabul maci bekliyor.** Faz 3'un gorsel kabulu kullanici tarafindan verildi. Faz 0'daki alti kararin hepsi §4'teki onerilen
 secenekle kapandi: **1-B, 2-A, 3-B, 4-A, 5-A, 6-A.** Kapsam disi listesi (§4
 sonu) teyit edildi. Bu kararlar kod yazilirken yeniden tartisilmaz.
 
@@ -266,8 +266,9 @@ doner.
 - **A - `animals.json`.** Tek hayvan tablosu, ama §3.7 geregi avlanma alanlari
   uydurulur.
 - **B - Kendi tablosu (`balance/logistics.json`). ONERILEN.** Kervan bir hayvan
-  degil, bir **lojistik birimidir**; tasidigi alanlar `carryCapacity`,
-  `moveSpeed`, `maxHealth`, `walkClipSpeed`. Sidecar yine hayvan sidecar'idir
+  degil, bir **lojistik birimidir**; hareket/direnc alanlari `moveSpeed`,
+  `maxHealth`, `walkClipSpeed` buradadir. Yuk kapasitesi ise hizmet ettigi
+  yapinin canli seviye ekonomisinden turetilir. Sidecar yine hayvan sidecar'idir
   (art ortak, veri ayri).
 
 ### KARAR 4 - Vurulan kervanin yuku ne olur? -> **A [KILITLI]**
@@ -317,7 +318,7 @@ doner.
 | `src/game/rts/ui/rtsNotifications.ts` (mevcut kanal) | "Kervan vuruldu" bildirimi |
 | `src/game/rts/vision/fogVisibilityBinder.ts` | Kervanin sis kurali: kendi kervanin her zaman gorunur, dusmanınki yalniz gorus alaninda (hayvan kurali) |
 | `src/game/data/gameDataTypes.ts` | `CaravanBalance` tipi (KARAR 3-B) |
-| `src/game/data/validateGameData.ts` | `validateCaravanBalance`: pozitif alanlar, `carryCapacity <= localBufferCapacity` gibi anlamsizlik reddi |
+| `src/game/data/validateGameData.ts` | `validateCaravanBalance`: yalniz hayvan hareket/direnc verisini dogrular; yuk kapasitesi yapinin canli ekonomisidir |
 | `tools/engine-tests.ts` | §8'deki sozlesme testleri |
 
 ### 5.2 Veri ve varlik
@@ -350,18 +351,17 @@ calisma zamaninda uretilir. **Yeni marker tipi gerekmez.**
 | Alan | Deger | Gerekce |
 | --- | --- | --- |
 | `label` | Yuk Esegi | |
-| `carryCapacity` | ~~40~~ **30** | Yazilan deger 30: `buildings.json`'daki **en kucuk** tampon tarlanin Lv1 degeri olan 30, ve kural `carryCapacity <= localBufferCapacity`. 40 yazilsaydi tarlayi her sefer bosaltirdi. Tek sefer bir tarlayi bosaltir, bir kampi (80-350) bosaltmaz |
-| `moveSpeed` | ~~6~~ **2.2** | 6, oynatma orani tavanini (`maxPlaybackRate 1.8`) asiyordu: 6 / 1.2 = 5x, yani garanti ayak kaymasi - ustelik `runThreshold` (0.55 x moveSpeed) uzerinde kaldigi icin yuk esegi **dortnal** klibine dusuyordu. 2.2 / 1.4 = 1.57 ile tavanin altinda kalir ve kervan hala bir gecikmedir. Faz 3'un gorsel kabulu son sozu soyler |
+| `carryCapacity` | **Yapidan turetilir** | Tam dolu yapinin mevcut seviye dakika uretimi. Tampon bu degerden kucukse esek ancak `buffer-full` oldugunda elindeki miktarla cikar; sabit hayvan tablosu sayisi yoktur |
+| `moveSpeed` | **1.76** | Onceki 2.2'nin %20 altinda. Sunum `forceWalk` ile bu hizda dahi kosu degil yurume klibini kullanir |
 | `walkClipSpeed` | ~~1.2~~ **1.4** | §3.6/V1 §3.8: otlama degil yuruyus hizi. 0.22 olcekli toynakli ailenin komsulariyla (inek 1.1, boga 1.2, erkek geyik 1.4) ayni bantta |
 | `maxHealth` | 45 | Isci civari; bir okcunun birkac atisiyla duser |
 | `armorClass` | `light` | Hayvan kurali |
 | `loadSeconds` | 2 | Yukleme/bosaltma duraklamasi; kervan "isliyor" gorunur |
 | `spawnPerProducer` | 1 | Bagli uretici basina bir esek (KARAR 2-A) |
 
-**`carryCapacity` uyarisi.** Deger `localBufferCapacity`'yi asmamalidir; asarsa
-tampon hicbir zaman dolmaz ve §3.8'in butun baskisi kaybolur. Validator bunu
-reddeder, test bunu **iki tablodan hesaplayarak** dogrular (§8) - magnitude
-pinlenmez.
+**Yuk esigi.** Esek, tampon yapinin mevcut seviye dakika uretimine ulasana kadar
+yerinde bekler. Tampon dolar veya kaynak biterse kalan miktarla cikabilir; bu,
+isci gelmeden bos kervan turu atilmasini engeller.
 
 ### 6.2 Neden `units.json`'a girmiyor
 
@@ -439,46 +439,69 @@ cevrilerek yeni rota sozlesmesinin kirmizi kaniti alindi, sonra geri alindi.
 
 ### Faz 3 - Kervan haritada yuruyor (ekonomi degismedi)
 
-- [ ] `caravanSystem.ts` + `caravanRoute.ts`: bagli her uretici icin bir kervan;
+- [x] `caravanSystem.ts` + `caravanRoute.ts`: bagli her uretici icin bir kervan;
   `loading -> outbound -> unloading -> inbound` dongusu.
-- [ ] `caravanView.ts` + `RtsApp` mount: sunum **render delta'sinda**,
+- [x] `caravanView.ts` + `RtsApp` mount: sunum **render delta'sinda**,
   simulasyon **simulasyon delta'sinda** (hayvan kurali, `RtsApp.ts:1881` ve
   `:2751` ayrimi).
-- [ ] Zemine oturtma (`syncUnitsToGround` yuzeyi).
-- [ ] Nufus saymaz, nav blocker uretmez - test (§8).
-- [ ] Transfer **hala anlik**: bu fazda esek yalniz yuruyor.
+- [x] Zemine oturtma (`syncUnitsToGround` yuzeyi).
+- [x] Nufus saymaz, nav blocker uretmez - test (§8).
+- [x] Transfer **hala anlik**: bu fazda esek yalniz yuruyor.
 
 Kabul: `?rts` Play rotasinda esekler yollarda gidip geliyor; HUD/ekonomi
-V4 oncesiyle **bit bit ayni**. Gorsel kabul kullanicidadir (olcek, hiz, ayak
-kaymasi - V1 §3.8'in `walkClipSpeed` dersi burada sinanir).
+V4 oncesiyle **bit bit ayni**. Kod gate'i 2026-08-04'te yesil: `npx tsc --noEmit`,
+`npm run test:engine` (1285 kontrol), `npm run build:verify` ve `npm run
+check:assets`. Rota yonu gecici olarak tersine cevrilerek yeni surekli-rota
+sozlesmesinin kirmizi kaniti alindi, sonra geri alindi. Gorsel kabul kullanici
+tarafindan 2026-08-04'te verildi (olcek, hiz, ayak kaymasi - V1 §3.8'in
+`walkClipSpeed` dersi burada sinandi).
 
 ### Faz 4 - Transfer kervana baglanir (KARAR 1-B)
 
-- [ ] `LogisticsTransferSystem` yalniz kervan varista `withdrawBuffered` cagirir;
+- [x] `LogisticsTransferSystem` yalniz kervan varista `withdrawBuffered` cagirir;
   `availableFor` cagrisi ve cuzdan tavani aynen korunur.
-- [ ] `buffer-full` gercek bir durum olur; uretici paneli bunu soyler.
-- [ ] Isgal edilmis depo (§3.11) hedef secimine dahil: kervan merkeze doner.
+- [x] `buffer-full` gercek bir durum olur; uretici paneli bunu soyler.
+- [x] Isgal edilmis depo (§3.11) hedef secimine dahil: kervan merkeze doner.
 
 Kabul: uzak kamp yakin kamptan gorunur olcude yavas gelir; tampon dolar ve
-uretim durur. Bu, planin **tasarimsal** kabulu - gorsel degil, hissedilen
-kabuldur ve maci oynayan kullanici verir.
+uretim durur. Kod gate'i 2026-08-04'te yesil: `npx tsc --noEmit`, `npm run
+test:engine` (1287 kontrol), `npm run build:verify` ve `npm run check:assets`.
+Kredi cagrisi gecici kaldirilarak varis-aktarim sozlesmesinin kirmizi kaniti
+alindi, sonra geri alindi. Gorsel ve hissedilen kabul kullanici tarafindan
+2026-08-04'te verildi; Faz 5 baslayabilir.
 
 ### Faz 5 - Saldiri ve yol kesme
 
-- [ ] Kervan `combatTargets()`'a **duruma bagli** girer (§3.5); agresif asker
+- [x] Kervan `combatTargets()`'a **duruma bagli** girer (§3.5); agresif asker
   ana kavgayi birakip kervan kovalamaz.
-- [ ] Olum: `Death` klibi, yuk KARAR 4'e gore islenir, bildirim.
-- [ ] Yol kesilince KARAR 5 davranisi; `unlinked-*` durumu zaten dogru.
-- [ ] Sis: kendi kervanin daima gorunur, dusmanınki gorus alaninda (hayvan
+- [x] Olum: `Death` klibi, yuk KARAR 4'e gore islenir, bildirim.
+- [x] Yol kesilince KARAR 5 davranisi; `unlinked-*` durumu zaten dogru.
+- [x] Sis: kendi kervanin daima gorunur, dusmanınki gorus alaninda (hayvan
   kurali, `isWildlifeVisible` ikizi).
+
+Kabul: Kod gate'i 2026-08-04'te yesil: `npx tsc --noEmit`, `npm run
+test:engine` (1290 kontrol), `npm run build:verify` ve `npm run check:assets`.
+`test:engine`, yol kesiminde kervanin yalniz committed yol uzerinden eve
+donmesini; olum penceresini ve kendi/dusman sis kuralini pinler. Gorsel kabul
+kullanici tarafindan 2026-08-04'te verildi: dusman gorusundeki kervan
+vurulabildi, `Death` klibi/bildirimi goruldu ve kesilen yolda kervan geri
+dondu.
 
 ### Faz 6 - UI, AI ve kabul maci
 
-- [ ] Uretici panelinde kervan satiri; bildirim metinleri.
-- [ ] AI dogrulamasi: AI hicbir sey ogrenmedi ama ekonomisi tutarli
-  (§3.12) - AI'nin gelirinin kesilmedigi, yalnizca geciktigi olculur.
+- [x] Uretici panelinde kervan satiri: yol bekleme, yuk esigi, teslim, donus
+  ve stok dolu bekleme Turkce gorunur; bildirim metinleri korunur.
+- [x] AI dogrulamasi: AI hicbir sey ogrenmedi ama ekonomisi tutarli
+  (§3.12) - ayni esik, rota ve stok kurallari dusman kervanina da uygulanir;
+  gelir kesilmez, yalnizca gecikir.
 - [ ] Kabul maci: bir bastan sona mac; oyuncu en az bir kez depo yerini
   kervan yuzunden degistirir ve en az bir kez kervan vurur/vurulur.
+
+Kod gate'i 2026-08-04'te yesil: `npx tsc --noEmit`, `npm run test:engine`
+(1291 kontrol), `npm run build:verify` ve `npm run check:assets`.
+Uretici satiri stok doldugunda `Kervan: Stok dolu, ureticide bekliyor`, kismi
+yukte ise esik/miktar bilgisini gosterir. Son kabul maci interaktiftir; bu
+satir otomatik testle kapatilmaz.
 
 ## 8. Test ve Gate
 
@@ -491,8 +514,12 @@ pinlenmez.**
 | "a caravan route is deterministic" | Ayni girdi ayni dizi - headless AI ile oyuncu ayni yolu gorur |
 | "a severed road leaves the producer without a route" | Kopru hucresi `remove` edilince `route()` `null`, uretici `unlinked-*` |
 | "caravans never consume population" | Kervanli maçta `PopulationSystem.snapshot()` degismez (V1'in nufus testinin ikizi) |
-| "a caravan carries no more than its producer can buffer" | `carryCapacity <= localBufferCapacity` **iki tablodan hesaplanarak**; magnitude yok |
+| "a caravan waits for a full producer load" | Tampon esige ulasmadan esek yerinde kalir; `buffer-full` ve biten kaynak kismi yuk icin istisnadir |
 | "wood only reaches the wallet when the caravan arrives" (Faz 4) | Kervan yoldayken cuzdan artmaz; varista tam `min(buffer, carryCapacity)` kadar artar - miktar tablodan turetilir |
+| "the nearest usable depot beats the farther command centre" | Hedef, ayni yol agindaki depo ve merkez adaylari arasinda rota mesafesiyle secilir |
+| "storage full pauses the caravan" | Kuresel stokta yer yokken yeni tur baslamaz; yoldaki esek eve doner |
+| "an enemy caravan uses same delayed automatic shipment" | Oyuncu ve AI ayni yuk esigi/stok sinirinda calisir; AI'ya ozel gelir yolu yoktur |
+| "producer panel names full-store caravan hold" | UI, tam stoklu ureticide esegin bekledigini Turkce ve acikca yazar |
 | "a caravan belongs to its producer's kingdom" | `owner` esitligi; dusman kervani oyuncunun deposuna gitmez |
 | "an occupied depot does not receive caravans" | §3.11 otoritesi kervanda da gecerli |
 | "wildlife sidecars name clips the shipped animal models actually carry" | **Mevcut test**, Donkey ile genisletilir |

@@ -31,6 +31,7 @@ export type RtsNotificationKind =
   | "resource-depleted"
   | "logistics-cut"
   | "logistics-restored"
+  | "caravan-destroyed"
   | "outpost-under-attack"
   | "center-under-attack"
   | "worker-under-attack"
@@ -73,6 +74,7 @@ const RULES: Readonly<Record<RtsNotificationKind, NotificationRule>> = {
   // transition, never polled, so it needs no cooldown — and it is info, not
   // alert, so the feed colours it as good news rather than a fresh warning.
   "logistics-restored": { severity: "info", displaySeconds: 6, cooldownSeconds: 0 },
+  "caravan-destroyed": { severity: "alert", displaySeconds: 8, cooldownSeconds: 8 },
   "outpost-under-attack": { severity: "alert", displaySeconds: 6, cooldownSeconds: 12 },
   "center-under-attack": { severity: "alert", displaySeconds: 8, cooldownSeconds: 10 },
   // V3 §3.10. The one notice that is not a convenience: a wolf in unscouted

@@ -110,7 +110,6 @@ import {
   validateCaravanBalance,
   validateGamePreset,
   validateGameVersion,
-  smallestProducerBufferCapacity,
   validateMarketBalance,
   validateMissionScript,
   validateResourceBalance,
@@ -242,6 +241,9 @@ import { AiExpansionCoordinator, AI_MAX_EXPANSION_PLANS } from "../src/game/rts/
 import { ProductionLogisticsSystem } from "../src/game/rts/economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
+import { Caravan, CaravanSystem } from "../src/game/rts/logistics/caravanSystem";
+import { advanceCaravanRoute, startCaravanRoute } from "../src/game/rts/logistics/caravanRoute";
+import { isCaravanVisible } from "../src/game/rts/logistics/caravanView";
 import {
   COMMAND_CENTER_STORAGE_CAPACITY,
   ResourceCapacitySystem,
@@ -40558,33 +40560,25 @@ const shippedBuildingBalance = () => validateBuildingBalance(
   JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
 );
 
-check("V4 Faz 1: a caravan carries no more than its producer can buffer", () => {
+/** Synthetic arrival stream for transfer-only fixtures that do not mount caravans. */
+function instantCaravanArrivals(links: ProductionLogisticsSystem) {
+  return links.snapshots()
+    .filter((link) => link.status === "linked")
+    .map((link) => ({
+      caravanId: `fixture:${link.structureId}`,
+      producerStructureId: link.structureId,
+      owner: link.owner,
+      carryCapacity: Number.POSITIVE_INFINITY,
+    }));
+}
+
+check("V4 Faz 1: caravan tuning owns movement, not a fixed cargo size", () => {
   // Computed from both shipped tables rather than pinned, so the contract holds
   // at any tuning: the bound is whatever the weakest producer's buffer happens
   // to be after the next balance pass, and the check moves with it.
-  const buildings = shippedBuildingBalance();
-  const smallest = smallestProducerBufferCapacity(buildings)
-    ?? assert.fail("no producer in the shipped table carries a local buffer");
   const caravan = shippedCaravanBalance();
-  assert.ok(
-    caravan.carryCapacity <= smallest,
-    `a caravan lifts ${caravan.carryCapacity} but the smallest producer only holds ${smallest} — `
-    + "that building would be emptied every visit and its buffer could never fill",
-  );
-  // The same bound the runtime loader applies at boot. Data one unit past it is
-  // refused by the validator, not merely noticed here.
-  assert.throws(
-    () => validateCaravanBalance(
-      { caravan: { ...caravan, carryCapacity: smallest + 1 } },
-      { maxCarryCapacity: smallest },
-    ),
-    GameDataError,
-    "a load past the smallest buffer is refused with a field message",
-  );
-  assert.ok(
-    validateCaravanBalance({ caravan }, { maxCarryCapacity: smallest }),
-    "and the shipped load passes the same gate",
-  );
+  assert.equal("carryCapacity" in caravan, false, "each producer now determines its own shipment threshold");
+  assert.ok(caravan.moveSpeed < 2.2, "the donkey moves slower than the first visual pass");
 });
 
 check("V4 Faz 1: the caravan validator refuses data that could never make sense", () => {
@@ -40592,7 +40586,6 @@ check("V4 Faz 1: the caravan validator refuses data that could never make sense"
   const refuse = (patch: Record<string, unknown>, why: string): void => {
     assert.throws(() => validateCaravanBalance({ caravan: { ...caravan, ...patch } }), GameDataError, why);
   };
-  refuse({ carryCapacity: 0 }, "a caravan that carries nothing moves no resource at all");
   refuse({ moveSpeed: 0 }, "a caravan that never arrives starves the producer it serves");
   refuse({ walkClipSpeed: 0 }, "a walk clip with no reference speed cannot be calibrated");
   refuse({ maxHealth: 0 }, "a caravan has to be a thing that can be killed");
@@ -40617,6 +40610,10 @@ check("V4 Faz 1: the caravan is art from the wildlife pack, but never a row in t
   const actorRef = rtsCaravanActorRef(shippedRtsContentCatalog())
     ?? assert.fail("the catalog maps no caravan Actor");
   assert.ok(existsSync(`public/${actorRef}`), `${actorRef} exists on disk`);
+  assert.ok(
+    rtsContentCatalogRefs(shippedRtsContentCatalog()).includes(actorRef),
+    "the logistics Actor is included in the presentation preflight load set",
+  );
 
   // The Actor points at a mesh the manifest ships, and that mesh has a sidecar —
   // the pairing the wildlife clip test then checks clip by clip.
@@ -40634,6 +40631,247 @@ check("V4 Faz 1: the caravan is art from the wildlife pack, but never a row in t
     existsSync(`public/${mesh.path.replace(/\.gltf$/, ".skeleton.json")}`),
     `${mesh.path} carries the skeleton sidecar its clips are resolved through`,
   );
+});
+
+check("V4 Faz 3: a caravan follows road cells through its full continuous route", () => {
+  const route = [{ x: 0, z: 0 }, { x: 2, z: 0 }, { x: 2, z: 2 }];
+  const first = advanceCaravanRoute(route, startCaravanRoute(route), 2, 0.5);
+  assert.deepEqual(first.state, { waypointIndex: 0, x: 1, z: 0, facing: Math.PI / 2 });
+  assert.equal(first.arrived, false);
+  const last = advanceCaravanRoute(route, first.state, 2, 1.5);
+  assert.deepEqual(last.state, { waypointIndex: 2, x: 2, z: 2, facing: 0 });
+  assert.equal(last.arrived, true, "a large simulation step cannot skip the road endpoint");
+});
+
+check("V4 Faz 3: linked producers receive automatic non-population caravans", () => {
+  const buildings = shippedBuildingBalance();
+  const roads = new RoadGraph(validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  ));
+  const centerStats = buildings.command_center ?? assert.fail("command centre definition missing");
+  const farmStats = buildings.farm ?? assert.fail("farm definition missing");
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 0, centerStats.maxHealth, centerStats);
+  roads.commit(centerAccessRoadPlan(roads, { x: 0, z: 0, footprint: centerStats.footprint }));
+  const structures = new PlacedStructureSystem();
+  const farm = structures.place("player", farmStats, 0, 16);
+  structures.advanceConstruction(farm, farmStats.constructionSeconds);
+  const branch = roads.plan({ x: 0, z: 6 }, { x: 0, z: 12 }, []);
+  assert.ok(branch);
+  roads.commit(branch);
+  const units = new UnitSystem();
+  const population = new PopulationSystem("player", units, structures, 10);
+  const before = population.snapshot().current;
+  const links = new ProductionLogisticsSystem(structures, roads, new DepotLogisticsSystem(structures, roads, centers));
+  assert.equal(links.snapshots()[0]?.status, "linked", "the farm touches the centre road ring");
+  const caravans = new CaravanSystem(
+    shippedCaravanBalance(),
+    links,
+    roads,
+    structures,
+    centers,
+    undefined,
+    () => ({ carryCapacity: 30, ready: true, canReceive: true }),
+  );
+  caravans.update(shippedCaravanBalance().loadSeconds);
+  caravans.update(1);
+  const caravan = caravans.snapshots()[0] ?? assert.fail("the linked producer receives its automatic donkey");
+  assert.equal(caravan.phase, "outbound");
+  assert.ok(caravan.speed > 0, "the donkey moves after loading");
+  assert.equal(population.snapshot().current, before, "a caravan never enters the Unit population roster");
+  structures.clear();
+  centers.clear();
+});
+
+check("V4 Faz 5: a caravan waits for a full producer load and pauses when storage is full", () => {
+  const roads = roadGraphOf([[{ x: -2, z: 0 }, { x: 2, z: 0 }]]);
+  const caravan = new Caravan(
+    "caravan:dispatch",
+    1,
+    "player",
+    { x: -2, z: 0 },
+    { x: 2, z: 0 },
+    shippedCaravanBalance(),
+    roads,
+    60,
+  );
+  const waiting = { carryCapacity: 60, ready: false, canReceive: true };
+  caravan.update(20, { x: -2, z: 0 }, { x: 2, z: 0 }, waiting);
+  assert.equal(caravan.phase, "loading", "a partial producer buffer leaves its donkey at home");
+  assert.equal(caravan.position.x, -2, "an unready load cannot start a cosmetic round trip");
+  const ready = { carryCapacity: 60, ready: true, canReceive: true };
+  caravan.update(shippedCaravanBalance().loadSeconds, { x: -2, z: 0 }, { x: 2, z: 0 }, ready);
+  assert.equal(caravan.phase, "outbound", "a full minute-sized load releases the donkey");
+  caravan.beginReturnHome({ x: -2, z: 0 });
+  caravan.updateReturnHome(10);
+  caravan.update(20, { x: -2, z: 0 }, { x: 2, z: 0 }, { ...ready, canReceive: false, ready: false });
+  assert.equal(caravan.phase, "loading", "a full global store holds the completed return at home");
+});
+
+check("V4 Faz 6: an enemy caravan uses the same delayed automatic shipment", () => {
+  const roads = roadGraphOf([[{ x: -2, z: 0 }, { x: 2, z: 0 }]]);
+  const caravan = new Caravan(
+    "caravan:enemy",
+    7,
+    "enemy",
+    { x: -2, z: 0 },
+    { x: 2, z: 0 },
+    shippedCaravanBalance(),
+    roads,
+    30,
+  );
+  const waiting = { carryCapacity: 30, ready: false, canReceive: true };
+  caravan.update(10, { x: -2, z: 0 }, { x: 2, z: 0 }, waiting);
+  assert.equal(caravan.phase, "loading", "the AI gets no instant-income exception");
+  const ready = { carryCapacity: 30, ready: true, canReceive: true };
+  caravan.update(shippedCaravanBalance().loadSeconds, { x: -2, z: 0 }, { x: 2, z: 0 }, ready);
+  const arrival = caravan.update(10, { x: -2, z: 0 }, { x: 2, z: 0 }, ready);
+  assert.equal(arrival?.owner, "enemy", "the automatic arrival still credits the producer's kingdom");
+});
+
+check("V4 Faz 5: a cut-road caravan returns without crossing bare ground", () => {
+  const roads = roadGraphOf([[{ x: -6, z: 0 }, { x: 6, z: 0 }]]);
+  const caravan = new Caravan(
+    "caravan:return",
+    1,
+    "player",
+    { x: -6, z: 0 },
+    { x: 6, z: 0 },
+    shippedCaravanBalance(),
+    roads,
+    30,
+  );
+  const dispatch = { carryCapacity: 30, ready: true, canReceive: true };
+  caravan.update(shippedCaravanBalance().loadSeconds, { x: -6, z: 0 }, { x: 6, z: 0 }, dispatch);
+  caravan.update(1, { x: -6, z: 0 }, { x: 6, z: 0 }, dispatch);
+  assert.equal(caravan.phase, "outbound", "the donkey has left its producer before the cut");
+  assert.equal(roads.remove([{ x: 2, z: 0 }]), 1, "the forward road tile is cut");
+  caravan.beginReturnHome({ x: -6, z: 0 });
+  assert.equal(caravan.updateReturnHome(30), true, "the existing road behind it is enough to return home");
+  assert.equal(caravan.phase, "loading", "a returned caravan waits at its producer until repair");
+  assert.equal(caravan.position.x, -6, "the return ends on the producer road cell");
+});
+
+check("V4 Faz 5: a killed caravan plays its death window and respects moving-unit fog", () => {
+  const roads = roadGraphOf([[{ x: -2, z: 0 }, { x: 2, z: 0 }]]);
+  const caravan = new Caravan(
+    "caravan:death",
+    1,
+    "player",
+    { x: -2, z: 0 },
+    { x: 2, z: 0 },
+    shippedCaravanBalance(),
+    roads,
+    30,
+  );
+  caravan.health.damage(caravan.health.max);
+  assert.equal(caravan.beginDeath(), true, "the first lethal hit starts the Death presentation");
+  assert.equal(caravan.beginDeath(), false, "a dead caravan cannot restart its Death clip");
+  assert.equal(caravan.updateDeath(1), false, "the body remains long enough to be seen falling");
+  assert.equal(caravan.updateDeath(1), true, "the fixed fallback window eventually releases the body");
+  assert.equal(isCaravanVisible("player", 0, 0, () => false, "player"), true, "your own caravan is never fogged");
+  assert.equal(isCaravanVisible("enemy", 0, 0, () => false, "player"), false, "an enemy caravan outside vision is hidden");
+});
+
+check("V4 Faz 4: resources reach the wallet only when the caravan arrives", () => {
+  const buildings = shippedBuildingBalance();
+  const roadBalance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const depotStats = buildings.depot ?? assert.fail("depot definition missing");
+  const farmStats = buildings.farm ?? assert.fail("farm definition missing");
+  const units = new UnitSystem();
+  for (let index = 0; index < 3; index += 1) units.spawn("player", -2 + index * 2, 17, RTS_TEST_WORKER_STATS);
+  const structures = new PlacedStructureSystem();
+  const depot = structures.place("player", depotStats, 0, 0);
+  const farm = structures.place("player", farmStats, 0, 10);
+  structures.advanceConstruction(depot, depotStats.constructionSeconds);
+  structures.advanceConstruction(farm, farmStats.constructionSeconds);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+  const roads = new RoadGraph(roadBalance);
+  const route = roads.plan({ x: 4, z: 0 }, { x: 4, z: 10 }, []);
+  assert.ok(route);
+  roads.commit(route);
+  const links = new ProductionLogisticsSystem(structures, roads, new DepotLogisticsSystem(structures, roads));
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 0 }, 20);
+  const transfer = new LogisticsTransferSystem(production, links, kingdoms);
+  for (let frame = 0; frame < 900; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    production.update(1 / 60);
+  }
+  const buffered = production.snapshots("player")[0]?.localBuffer ?? 0;
+  assert.ok(buffered > 0, "the linked farm has goods waiting for its donkey");
+  transfer.update([]);
+  assert.equal(kingdoms.get("player").wallet.amount("food"), 0, "a road link alone never credits the wallet");
+  const carryCapacity = (farm.economy?.workerCapacity ?? 0) * (farm.economy?.perWorkerPerMinute ?? 0);
+  transfer.update([{ caravanId: "test-arrival", producerStructureId: farm.id, owner: "player", carryCapacity }]);
+  assert.equal(
+    kingdoms.get("player").wallet.amount("food"),
+    Math.min(buffered, carryCapacity),
+    "arrival withdraws at most one donkey load",
+  );
+  transfer.update([]);
+  assert.equal(
+    kingdoms.get("player").wallet.amount("food"),
+    Math.min(buffered, carryCapacity),
+    "nothing else reaches the wallet while the donkey is away",
+  );
+  structures.clear();
+  units.clear();
+});
+
+check("V4 Faz 4: an occupied depot sends its caravan to the command centre", () => {
+  const buildings = shippedBuildingBalance();
+  const roads = new RoadGraph(validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  ));
+  const centerStats = buildings.command_center ?? assert.fail("command centre definition missing");
+  const depotStats = buildings.depot ?? assert.fail("depot definition missing");
+  const farmStats = buildings.farm ?? assert.fail("farm definition missing");
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 0, centerStats.maxHealth, centerStats);
+  roads.commit(centerAccessRoadPlan(roads, { x: 0, z: 0, footprint: centerStats.footprint }));
+  const branch = roads.plan({ x: 0, z: 6 }, { x: 0, z: 18 }, []);
+  assert.ok(branch);
+  roads.commit(branch);
+  const structures = new PlacedStructureSystem();
+  const depot = structures.place("player", depotStats, 4, 12);
+  const farm = structures.place("player", farmStats, 0, 22);
+  structures.advanceConstruction(depot, depotStats.constructionSeconds);
+  structures.advanceConstruction(farm, farmStats.constructionSeconds);
+  const depots = new DepotLogisticsSystem(structures, roads, centers);
+  const openLinks = new ProductionLogisticsSystem(
+    structures,
+    roads,
+    depots,
+  );
+  assert.equal(openLinks.snapshots()[0]?.depotStructureId, depot.id, "the nearest usable depot beats the farther command centre");
+  const occupation = new LogisticsOccupationSystem(depots);
+  occupation.setOccupier(depot.id, "enemy");
+  const links = new ProductionLogisticsSystem(
+    structures,
+    roads,
+    depots,
+    undefined,
+    occupation,
+  );
+  assert.equal(links.snapshots()[0]?.status, "linked", "the centre remains a legal endpoint");
+  const caravans = new CaravanSystem(shippedCaravanBalance(), links, roads, structures, centers, occupation);
+  caravans.update(0);
+  const caravan = caravans.snapshots()[0] ?? assert.fail("linked producer has a caravan");
+  const centerRoad = roadCellTouchingFootprint(roads, 0, 0, centerStats.footprint.width, centerStats.footprint.depth)
+    ?? assert.fail("the centre road ring has no endpoint");
+  const depotRoad = roadCellTouchingFootprint(roads, depot.x, depot.z, depot.stats.footprint.width, depot.stats.footprint.depth);
+  assert.deepEqual(
+    { x: caravan.destinationX, z: caravan.destinationZ },
+    centerRoad,
+    "the unusable depot is skipped in favour of the centre road",
+  );
+  assert.notDeepEqual({ x: caravan.destinationX, z: caravan.destinationZ }, depotRoad, "the caravan does not stop at the occupied depot");
+  structures.clear();
+  centers.clear();
 });
 
 check("RTS road graph finds obstacle-free cells, charges new segments, and keeps alternate connectivity", () => {
@@ -41066,16 +41304,12 @@ check("RTS full storage leaves linked production in its local buffer until capac
   const storage = new ResourceCapacitySystem(structures);
   const foodCeiling = storage.capacityFor("player").food ?? 0;
   const kingdoms = new KingdomRegistry(["player"], units, structures, { food: foodCeiling - 1 }, 20);
-  const transfers = new LogisticsTransferSystem(
-    production,
-    new ProductionLogisticsSystem(structures, roads, new DepotLogisticsSystem(structures, roads)),
-    kingdoms,
-    storage,
-  );
+  const links = new ProductionLogisticsSystem(structures, roads, new DepotLogisticsSystem(structures, roads));
+  const transfers = new LogisticsTransferSystem(production, links, kingdoms, storage);
   for (let frame = 0; frame < 900; frame += 1) {
     updateUnitMovement(units.all(), 1 / 60);
     production.update(1 / 60);
-    transfers.update();
+    transfers.update(instantCaravanArrivals(links));
   }
   assert.equal(kingdoms.get("player").wallet.amount("food"), foodCeiling, "delivery stops at the depot-backed limit");
   assert.ok((production.snapshots("player")[0]?.localBuffer ?? 0) > 0, "excess output remains locally buffered");
@@ -41162,7 +41396,7 @@ check("RTS logistics transfers linked buffers globally and stops when the road i
   for (let frame = 0; frame < 900; frame += 1) {
     updateUnitMovement(units.all(), 1 / 60);
     production.update(1 / 60);
-    transfer.update();
+    transfer.update(instantCaravanArrivals(links));
   }
   assert.equal(wallet.amount("food"), 0, "unlinked output remains local");
   assert.ok((production.snapshots()[0]?.localBuffer ?? 0) > 0);
@@ -41173,7 +41407,7 @@ check("RTS logistics transfers linked buffers globally and stops when the road i
     wallet.advance(1 / 60);
     updateUnitMovement(units.all(), 1 / 60);
     production.update(1 / 60);
-    transfer.update();
+    transfer.update(instantCaravanArrivals(links));
   }
   assert.ok(wallet.amount("food") > 0, "linked output reaches global stock");
   assert.equal(production.snapshots()[0]?.localBuffer, 0, "linked buffer flushes every tick");
@@ -41182,7 +41416,7 @@ check("RTS logistics transfers linked buffers globally and stops when the road i
   for (let frame = 0; frame < 120; frame += 1) {
     wallet.advance(1 / 60);
     production.update(1 / 60);
-    transfer.update();
+    transfer.update(instantCaravanArrivals(links));
   }
   assert.equal(wallet.amount("food"), beforeCut, "road loss stops global credit");
   assert.ok((production.snapshots()[0]?.localBuffer ?? 0) > 0, "disconnected output returns to local storage");
@@ -42549,7 +42783,7 @@ check("RTS workers, production and logistics never cross kingdoms", () => {
     "the enemy farm touches the road but must not deliver into the player's depot",
   );
   const transfers = new LogisticsTransferSystem(production, links, kingdoms);
-  transfers.update();
+  transfers.update(instantCaravanArrivals(links));
   assert.equal(kingdoms.get("enemy").wallet.amount("food"), 400, "no credit without an own-kingdom depot");
 
   // Give the enemy its own depot touching that same island; now it may deliver.
@@ -42558,7 +42792,7 @@ check("RTS workers, production and logistics never cross kingdoms", () => {
   const relinked = links.snapshots().find((link) => link.owner === "enemy") ?? assert.fail("enemy link missing");
   assert.equal(relinked.status, "linked");
   assert.equal(relinked.depotStructureId, enemyDepot.id, "a producer resolves to its own kingdom's depot");
-  transfers.update();
+  transfers.update(instantCaravanArrivals(links));
   assert.ok(kingdoms.get("enemy").wallet.amount("food") > 400, "the enemy's output reaches the enemy's stock");
   assert.equal(kingdoms.get("player").wallet.amount("food"), 400, "and never the player's");
 
@@ -42942,7 +43176,7 @@ function aiTestWorld(
     wildlife.update(dt, units.all().map((unit) => unit.position));
     workerConstruction.update(dt);
     production.update(dt);
-    transfers.update();
+    transfers.update(instantCaravanArrivals(logistics));
     workerProduction.update(dt);
     barracksProduction.update(dt);
     for (const event of progression.update(dt)) {
@@ -46299,6 +46533,25 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   assert.match(producer.lines.join(" | "), /Durum: Tampon dolu/);
   assert.match(producer.lines.join(" | "), /Lojistik: Depo Yok/);
   assert.match(producer.tooltip ?? "", /Depo gerekli/, "the tooltip resolves the state it reports");
+
+  const fullStoreProducer = structure({
+    kind: "producer",
+    logistics: "linked",
+    caravanStorageFull: true,
+    caravan: {
+      id: "caravan:1:0", producerStructureId: 1, owner: "player", x: 0, z: 0,
+      destinationX: 4, destinationZ: 0, facing: 0, speed: 0, carryCapacity: 30, phase: "loading",
+    },
+    production: {
+      structureId: 1, owner: "player", structureLabel: "Tarla", resourceId: "food",
+      assignedWorkers: 3, workingWorkers: 3, workerCapacity: 3,
+      perWorkerPerMinute: 10, productionPerMinute: 30, maximumProductionPerMinute: 30,
+      localBuffer: 30, localBufferCapacity: 30,
+      lastProductionTick: 0, lastTransferTick: 0, totalProduced: 0, totalTransferred: 0,
+      sourceRemaining: null, status: "buffer-full",
+    },
+  });
+  assert.match(fullStoreProducer.lines.join(" | "), /Kervan: Stok dolu, üreticide bekliyor/);
 
   const depot = structure({
     kind: "depot", status: "linked", componentId: 3, linkedProducers: 2, occupied: true,

@@ -34,15 +34,6 @@ export class ProductionLogisticsSystem {
       for (const cell of component.cells) componentByCell.set(this.key(cell), component.id);
     }
     const mainComponentByOwner = this.depots.mainComponentIds();
-    // Roads are unowned in AI-1, so a single component can touch both kingdoms.
-    // Key by owner too: a producer may only use its own active depot.
-    const depotByComponent = new Map<string, number>();
-    for (const depot of this.depots.snapshots()) {
-      if (depot.componentId === null || depot.status !== "linked") continue;
-      const key = `${depot.owner}:${depot.componentId}`;
-      const existing = depotByComponent.get(key);
-      if (existing === undefined || depot.structureId < existing) depotByComponent.set(key, depot.structureId);
-    }
     return this.structures.all()
       .filter((structure) => structure.construction.complete && structure.economy)
       .map((structure) => {
@@ -56,13 +47,19 @@ export class ProductionLogisticsSystem {
           structure.stats.footprint.depth,
         );
         const componentId = roadCell ? componentByCell.get(this.key(roadCell)) ?? null : null;
-        const depotStructureId = componentId === null
-          ? null
-          : depotByComponent.get(`${structure.owner}:${componentId}`) ?? null;
         const mainComponentId = mainComponentByOwner.get(structure.owner);
-        const connectedToCenter = componentId !== null
-          && mainComponentId !== undefined
-          && componentId === mainComponentId;
+        const endpoint = roadCell === null ? null : this.depots.endpointsFor(structure.owner)
+          .filter((candidate) => candidate.structureId === null
+            || (this.occupation?.isUsable(candidate.structureId) ?? true))
+          .map((candidate) => ({ candidate, route: this.roads.route(roadCell, candidate.roadCell) }))
+          .filter((candidate): candidate is { candidate: { structureId: number | null; roadCell: RoadCell }; route: readonly RoadCell[] } => candidate.route !== null)
+          .sort((a, b) => a.route.length - b.route.length
+            || (a.candidate.structureId ?? -1) - (b.candidate.structureId ?? -1))[0]?.candidate ?? null;
+        const depotStructureId = endpoint?.structureId ?? null;
+        const occupiedDepotOnComponent = componentId !== null && this.occupation !== undefined
+          && this.depots.snapshots().some((depot) => depot.owner === structure.owner
+            && depot.componentId === componentId
+            && !this.occupation!.isUsable(depot.structureId));
         const controlled = this.territory?.ownsFootprint(
           structure.owner, structure.x, structure.z, structure.stats.footprint.width, structure.stats.footprint.depth,
         ) ?? true;
@@ -77,14 +74,10 @@ export class ProductionLogisticsSystem {
             ? "outside-control"
             : componentId === null
               ? "unlinked-road"
-              : this.occupation !== undefined && depotStructureId !== null && !this.occupation.isUsable(depotStructureId)
-                // A producer on the centre's road component can still deliver
-                // directly to the centre when this particular depot is occupied.
-                ? connectedToCenter
-                  ? "linked"
-                  : "depot-occupied"
-                : connectedToCenter || depotStructureId !== null
-                  ? "linked"
+              : endpoint !== null
+                ? "linked"
+                : occupiedDepotOnComponent
+                  ? "depot-occupied"
                   : mainComponentId !== undefined
                     ? "unlinked-main-network"
                     : "unlinked-depot",

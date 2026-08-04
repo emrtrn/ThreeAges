@@ -23,6 +23,7 @@ import type { UnitStance } from "../units/unit";
 import type { EconomyBuildingSnapshot, EconomyProductionStatus } from "../economy/economyProductionSystem";
 import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
 import type { DepotNodeStatus } from "../economy/depotLogisticsSystem";
+import type { CaravanSnapshot } from "../logistics/caravanSystem";
 import type { BarracksQueueSnapshot } from "../structures/barracksProductionSystem";
 import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
 import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
@@ -102,6 +103,10 @@ export interface ProducerDetailView {
   readonly kind: "producer";
   readonly production: EconomyBuildingSnapshot;
   readonly logistics: ProducerLogisticsStatus | null;
+  /** The automatic donkey, if this producer currently has a linked road. */
+  readonly caravan: CaravanSnapshot | null;
+  /** True when the global resource store has no capacity for the next load. */
+  readonly caravanStorageFull: boolean;
   /**
    * Present only on a pasture. Its crew are shepherds — they leave to fetch
    * animals rather than standing at the building — so "İşçiler: 0/2" would be
@@ -1025,7 +1030,7 @@ function describeProducer(
   summary: string,
   detail: ProducerDetailView,
 ): SelectionPanelContent {
-  const { production, logistics, livestock } = detail;
+  const { production, logistics, livestock, caravan, caravanStorageFull } = detail;
   return {
     title,
     summary,
@@ -1043,6 +1048,7 @@ function describeProducer(
         : [`Düğüm: ${production.sourceRemaining.toFixed(1)} kaldı`]),
       `Durum: ${PRODUCTION_STATUS_LABEL[production.status]}`,
       `Lojistik: ${logistics ? LOGISTICS_LABEL[logistics] : "Bekleniyor"}`,
+      caravanLine(production, logistics, caravan, caravanStorageFull),
     ],
     // Staffing a producer is a world gesture (select workers, right-click it),
     // so there is no verb here a button could carry.
@@ -1052,6 +1058,23 @@ function describeProducer(
       ? LOGISTICS_REASON[logistics]
       : "Yapı tamamlanınca lojistik bağlantısı hesaplanır.",
   };
+}
+
+function caravanLine(
+  production: EconomyBuildingSnapshot,
+  logistics: ProducerLogisticsStatus | null,
+  caravan: CaravanSnapshot | null,
+  storageFull: boolean,
+): string {
+  if (logistics !== "linked" || !caravan) return "Kervan: Yol bağlantısı bekleniyor";
+  if (storageFull) return "Kervan: Stok dolu, üreticide bekliyor";
+  const threshold = caravan.carryCapacity.toFixed(1);
+  switch (caravan.phase) {
+    case "outbound": return `Kervan: Teslim noktasına gidiyor (yük eşiği ${threshold})`;
+    case "unloading": return "Kervan: Teslim noktasında boşaltıyor";
+    case "inbound": return "Kervan: Üreticiye dönüyor";
+    case "loading": return `Kervan: Yük bekliyor (${production.localBuffer.toFixed(1)}/${threshold})`;
+  }
 }
 
 function describeMilitary(

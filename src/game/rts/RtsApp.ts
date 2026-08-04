@@ -52,6 +52,7 @@ import type {
   AiProfile,
   AnimalBalance,
   BuildingBalance,
+  CaravanBalance,
   ResourceBalance,
   RoadBalance,
   SettlementAge,
@@ -178,7 +179,7 @@ import {
 } from "./ui/rtsSelectionView";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
-import { EconomyProductionSystem } from "./economy/economyProductionSystem";
+import { EconomyProductionSystem, producerHasSource } from "./economy/economyProductionSystem";
 import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTradeSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { ForestSystem } from "./economy/forestSystem";
@@ -187,6 +188,8 @@ import { PredatorSystem } from "./wildlife/predatorSystem";
 import { WildlifeRetaliationSystem } from "./wildlife/wildlifeRetaliation";
 import { WildlifeSystem } from "./wildlife/wildlifeSystem";
 import { WildlifeView } from "./wildlife/wildlifeView";
+import { Caravan, CaravanSystem, type CaravanDispatch } from "./logistics/caravanSystem";
+import { CaravanView } from "./logistics/caravanView";
 import { KingdomProgressionSystem, type UpgradableStructure } from "./progression/kingdomProgressionSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { type ProducerLogisticsStatus, ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
@@ -396,6 +399,8 @@ export interface RtsAppOptions {
   readonly resourceBalance: ResourceBalance;
   /** Huntable species stats; consumed by {@link WildlifeSystem}. */
   readonly animalBalance: AnimalBalance;
+  /** V4 autonomous donkey stats; intentionally separate from huntable animals. */
+  readonly caravanBalance: CaravanBalance;
   /** Faz 6 Settlement -> Town cost, prerequisites and upgrade duration. */
   readonly ageBalance: AgeBalance;
   /** Preset-owned initial stockpile for Phase 2 construction reservations. */
@@ -524,6 +529,8 @@ export class RtsApp {
   private readonly predators: PredatorSystem;
   private readonly wildlifeRoot = new Group();
   private readonly wildlifeView = new WildlifeView(this.wildlifeRoot);
+  private readonly caravanRoot = new Group();
+  private readonly caravanView = new CaravanView(this.caravanRoot);
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
   private readonly structureDamageModelLoader: GltfModelLoader;
@@ -606,6 +613,7 @@ export class RtsApp {
   private readonly forests: ForestSystem;
   private readonly depotLogistics: DepotLogisticsSystem;
   private readonly productionLogistics: ProductionLogisticsSystem;
+  private readonly caravans: CaravanSystem;
   private readonly logisticsOccupation: LogisticsOccupationSystem;
   private readonly resourceCapacity: ResourceCapacitySystem;
   private readonly logisticsTransfers: LogisticsTransferSystem;
@@ -1122,6 +1130,15 @@ export class RtsApp {
       this.kingdoms,
       this.resourceCapacity,
     );
+    this.caravans = new CaravanSystem(
+      this.options.caravanBalance,
+      this.productionLogistics,
+      this.roads,
+      this.structures,
+      this.centers,
+      this.logisticsOccupation,
+      (producerStructureId) => this.caravanDispatch(producerStructureId),
+    );
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
     const worker = this.options.unitBalance[PLACEHOLDER_WORKER_ID];
     if (!guard || !worker) throw new Error("Missing RTS unit balance definition");
@@ -1632,6 +1649,7 @@ export class RtsApp {
     this.structures.clear();
     this.centers.clear();
     this.wildlifeView.dispose();
+    this.caravanView.dispose();
     this.actorVisuals?.dispose();
     this.mapArt.dispose();
     // Faz E: release the authored world's GPU resources so restart/dispose leaves
@@ -1716,6 +1734,7 @@ export class RtsApp {
     // Wildlife sits with the units rather than with the ground overlays: it is a
     // moving body on the field, and the fog binder treats it the same way.
     this.scene.add(this.wildlifeRoot);
+    this.scene.add(this.caravanRoot);
     this.scene.add(this.units.root);
     this.scene.add(this.projectiles.root);
     this.scene.add(this.firebrands.root);
@@ -1884,6 +1903,7 @@ export class RtsApp {
     // on the start screen — a herd fogged from the binder's schedule would graze
     // in plain sight until the first simulation tick.
     this.wildlifeView.sync(this.wildlife.all(), dt, null, this.playerVisibilityTest(), PLAYER_OWNER);
+    this.caravanView.sync(this.caravans.all(), dt, this.playerVisibilityTest(), PLAYER_OWNER);
     // §59: the grid is a simulation fact and `updateFogOfWar` owns it; how far
     // the drawn frontier has eased toward it is presentation, so it runs here on
     // the rendered delta. Same reason as the wildlife above — at §38's 8x test
@@ -2647,7 +2667,49 @@ export class RtsApp {
       ...this.centers.all(),
       ...this.structures.all(),
       ...this.predators.hostile(),
+      // A donkey is only offered while it is actually travelling and the other
+      // kingdom can see it. This mirrors the predator's state-gated target list:
+      // an army does not peel away from its fight to chase a loading caravan in
+      // fog, but an ambush on a road it controls is a real tactical choice.
+      ...this.caravans.all().filter((caravan) => this.isCaravanAttackable(caravan)),
     ];
+  }
+
+  private isCaravanAttackable(caravan: Caravan): boolean {
+    if (caravan.health.depleted || caravan.dying) return false;
+    if (caravan.phase !== "outbound" && caravan.phase !== "inbound") return false;
+    const observer = caravan.owner === PLAYER_OWNER ? AI_OWNER : PLAYER_OWNER;
+    return this.vision?.isVisible(observer, caravan.position.x, caravan.position.z) ?? true;
+  }
+
+  /**
+   * A caravan's load is a property of the producer it serves, not a global
+   * donkey tuning. This reads the live age × level economy row, so upgrades
+   * immediately raise the next trip's threshold without respawning the animal.
+   */
+  private caravanDispatch(producerStructureId: number): CaravanDispatch | null {
+    const producer = this.economyProduction?.snapshots()
+      .find((snapshot) => snapshot.structureId === producerStructureId);
+    if (!producer) return null;
+    const wallet = this.kingdoms.get(producer.owner).wallet;
+    const canReceive = this.resourceCapacity.availableFor(
+      producer.owner,
+      producer.resourceId,
+      wallet.amount(producer.resourceId),
+    ) > 0;
+    const carryCapacity = Math.max(1, producer.maximumProductionPerMinute);
+    return {
+      carryCapacity,
+      canReceive,
+      // A partial trip is allowed only when the producer has truly stopped:
+      // a full buffer or a spent source. An idle/arriving worker has not made a
+      // shipment yet, so its donkey remains visibly parked.
+      ready: canReceive
+        && producer.localBuffer > 0
+        && (producer.localBuffer >= carryCapacity
+          || producer.status === "buffer-full"
+          || !producerHasSource(producer.status)),
+    };
   }
 
   private commitRallyPoint(x: number, y: number): void {
@@ -2765,7 +2827,9 @@ export class RtsApp {
     this.structureRepair.update(this.structures.all());
     this.economyProduction?.update(dt);
     this.syncForestVisibility();
-    this.logisticsTransfers.update();
+    // Simulation owns the route state; the animation itself advances above on
+    // rendered time, so the speed picker cannot change its playback rate.
+    this.logisticsTransfers.update(this.caravans.update(dt));
     // Only the human kingdom's production is narrated; the AI's own queue events
     // are surfaced by its decision log in a later slice.
     for (const event of this.workerProduction.update(dt)) {
@@ -2888,6 +2952,16 @@ export class RtsApp {
    */
   private resolveCombatHit(hit: CombatHit): void {
     this.debugOverlay?.recordHit(hit);
+    if (hit.target instanceof Caravan && hit.change.depleted && hit.target.beginDeath()) {
+      this.units.clearAttackTargets(hit.target);
+      if (hit.target.owner === PLAYER_OWNER) {
+        this.notifications.post({
+          kind: "caravan-destroyed",
+          subject: hit.target.id,
+          text: "Kervan vuruldu: taşıdığı yük kayboldu.",
+        });
+      }
+    }
     if (hit.target instanceof Unit) {
       retaliateAgainstAttack(hit.target, hit.attacker, this.navigation);
     }
@@ -3439,6 +3513,9 @@ export class RtsApp {
     for (const animal of this.wildlife.all()) {
       animal.position.y = this.groundSurface.heightAt(animal.position.x, animal.position.z);
     }
+    for (const caravan of this.caravans.all()) {
+      caravan.position.y = this.groundSurface.heightAt(caravan.position.x, caravan.position.z);
+    }
   }
 
   /**
@@ -3586,6 +3663,7 @@ export class RtsApp {
     this.economyProduction?.reset();
     this.logisticsOccupation.reset();
     this.logisticsTransfers.reset();
+    this.caravans.reset();
     this.pasture.reset();
     this.workerConstruction.reset();
     // Dropped rather than refunded: `kingdoms.reset()` below restores every
@@ -3826,6 +3904,8 @@ export class RtsApp {
       this.units.refreshPresentations();
       this.wildlifeView.setPresentationFactory((species, moveSpeed, walkClipSpeed) =>
         this.actorVisuals?.createAnimalPresentation(species, moveSpeed, walkClipSpeed) ?? null);
+      this.caravanView.setPresentationFactory((moveSpeed, walkClipSpeed) =>
+        this.actorVisuals?.createCaravanPresentation(moveSpeed, walkClipSpeed) ?? null);
       this.placement.setPreviewFactory((buildingId, width, depth) =>
         this.buildingVisuals.createPreviewForBuilding(
           buildingId,
@@ -4328,11 +4408,16 @@ export class RtsApp {
     if (production) {
       const livestock = this.pasture.snapshots(structure.owner)
         .find((pasture) => pasture.structureId === structure.id);
+      const caravan = this.caravans.snapshots()
+        .find((candidate) => candidate.producerStructureId === structure.id) ?? null;
+      const dispatch = this.caravanDispatch(structure.id);
       return {
         kind: "producer",
         production,
         logistics: this.productionLogistics.snapshots()
           .find((producer) => producer.structureId === structure.id)?.status ?? null,
+        caravan,
+        caravanStorageFull: dispatch !== null && !dispatch.canReceive,
         livestock: livestock
           ? {
             pennedAnimals: livestock.pennedAnimals,

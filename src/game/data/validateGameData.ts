@@ -2017,29 +2017,21 @@ export function validateRoadBalance(value: unknown): RoadBalance {
  * (`balance/logistics.json`).
  *
  * Every magnitude here stays tunable; what is refused is data that cannot mean
- * anything. A caravan with no capacity carries nothing and the wallet never
- * moves; one with no speed never arrives, so the producer it serves is starved
+ * anything. A caravan with no speed never arrives, so the producer it serves is starved
  * by arithmetic rather than by design; a fractional `spawnPerProducer` is half a
  * donkey. `loadSeconds` is the one field allowed to be zero — a pause of nothing
  * is a legal (if brisk) tuning, not a broken one.
  *
- * `maxCarryCapacity` is the cross-table half, passed in by the loader because
- * this file cannot see `buildings.json` on its own. It is the smallest
- * `localBufferCapacity` any producer has: above it a caravan lifts a whole
- * building's buffer in one trip, the buffer never fills, and the `buffer-full`
- * pressure the whole plan rests on (V4 §3.8) quietly stops existing. Optional so
- * the editor's Data Table can still validate the file on its own terms.
+ * Cargo capacity is derived from the served producer's live age × level economy
+ * row, so a building upgrade cannot leave an old global donkey number behind.
  */
-export function validateCaravanBalance(
-  value: unknown,
-  context?: { readonly maxCarryCapacity?: number },
-): CaravanBalance {
+export function validateCaravanBalance(value: unknown): CaravanBalance {
   const where = "balance/logistics.json";
   const obj = asObject(value, where);
   const caravanWhere = `${where}.caravan`;
   const caravan = asObject(obj["caravan"], caravanWhere);
   const positive = (
-    key: "carryCapacity" | "moveSpeed" | "walkClipSpeed" | "maxHealth" | "spawnPerProducer",
+    key: "moveSpeed" | "walkClipSpeed" | "maxHealth" | "spawnPerProducer",
   ): number => {
     const amount = requireFiniteNumber(caravan, key, caravanWhere);
     if (amount <= 0) throw new GameDataError(`${caravanWhere}.${key}: must be > 0`);
@@ -2055,18 +2047,8 @@ export function validateCaravanBalance(
   if (armorClass !== "light" && armorClass !== "heavy") {
     throw new GameDataError(`${caravanWhere}.armorClass: must be "light" or "heavy"`);
   }
-  const carryCapacity = positive("carryCapacity");
-  const maxCarryCapacity = context?.maxCarryCapacity;
-  if (maxCarryCapacity !== undefined && carryCapacity > maxCarryCapacity) {
-    throw new GameDataError(
-      `${caravanWhere}.carryCapacity: ${carryCapacity} exceeds the smallest producer buffer `
-      + `(${maxCarryCapacity}) — a caravan that outgrows a building's localBufferCapacity empties `
-      + "it every visit, so the buffer never fills and production is never held back by distance",
-    );
-  }
   return {
     label: requireString(caravan, "label", caravanWhere),
-    carryCapacity,
     moveSpeed: positive("moveSpeed"),
     walkClipSpeed: positive("walkClipSpeed"),
     maxHealth: positive("maxHealth"),

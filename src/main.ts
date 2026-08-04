@@ -17,7 +17,7 @@ import {
   readBootOptionsFromUrl,
   snapshotRuntimeConfig,
 } from "@/game/core/runtimeConfig";
-import { loadAgeBalance, loadAiBalance, loadAnimalBalance, loadBuildingBalance, loadGamePreset, loadMissionScript, loadResourceBalance, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
+import { loadAgeBalance, loadAiBalance, loadAnimalBalance, loadBuildingBalance, loadCaravanBalance, loadGamePreset, loadMissionScript, loadResourceBalance, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
 import { loadRtsContentCatalog } from "@/game/rts/content/rtsContentLoader";
 import {
   readStoredVictoryCondition,
@@ -182,6 +182,7 @@ async function main(): Promise<void> {
       loadRoadBalance(),
       loadAiBalance(),
     ]);
+    const caravanBalance = await loadCaravanBalance();
     // The Actor pack is how the RTS renders, so the catalog loads on every start.
     // A catalog that fails to load is fatal to the route on purpose: it is the
     // mapping from gameplay ids to art, and there is no second art path left to
@@ -273,6 +274,7 @@ async function main(): Promise<void> {
       buildingBalance,
       resourceBalance,
       animalBalance,
+      caravanBalance,
       ageBalance,
       roadBalance,
       aiBalance,

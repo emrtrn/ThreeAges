@@ -22,7 +22,6 @@ import {
   validateResourceBalance,
   validateRoadBalance,
   validateUnitBalance,
-  smallestProducerBufferCapacity,
 } from "./validateGameData";
 import type { AgeBalance, AiBalance, AnimalBalance, BuildingBalance, CaravanBalance, GamePreset, GameVersion, ResourceBalance, RoadBalance, UnitBalance } from "./gameDataTypes";
 import type { MissionScript } from "../rts/tutorial/missionScript";
@@ -118,20 +117,13 @@ export async function loadAiBalance(): Promise<AiBalance> {
 /**
  * Load and validate `public/game-data/balance/logistics.json` — V4's pack animal.
  *
- * Takes the building table rather than reading it again because the caravan's
- * one cross-file rule lives there: a load bigger than the smallest producer
- * buffer would empty that building every visit, and the distance pressure the
- * caravan exists to create would never be felt. Passing the tables in keeps the
- * rule with the validator, where a bad tuning names its own field.
+ * Movement and durability are authored here; each trip's cargo is derived from
+ * the producer's live economy tier at runtime.
  */
-export async function loadCaravanBalance(buildings: BuildingBalance): Promise<CaravanBalance> {
+export async function loadCaravanBalance(): Promise<CaravanBalance> {
   const url = `${GAME_DATA_ROOT}/balance/logistics.json`;
-  const maxCarryCapacity = smallestProducerBufferCapacity(buildings);
-  const balance = validateCaravanBalance(
-    await fetchJson(url),
-    maxCarryCapacity === undefined ? {} : { maxCarryCapacity },
-  );
-  log.debug(`loaded caravan balance (${balance.carryCapacity} per trip at ${balance.moveSpeed}/s)`);
+  const balance = validateCaravanBalance(await fetchJson(url));
+  log.debug(`loaded caravan balance (${balance.moveSpeed}/s)`);
   return balance;
 }
 

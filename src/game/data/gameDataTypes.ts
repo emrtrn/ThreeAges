@@ -1105,13 +1105,6 @@ export interface RoadAutoConnect {
  */
 export interface CaravanBalance {
   readonly label: string;
-  /**
-   * Resource units one trip carries. Capped against the *smallest* producer
-   * buffer in `buildings.json` at load: a caravan that can lift more than a
-   * building can hold empties it in one visit, and the `buffer-full` pressure
-   * V4 is built on never appears.
-   */
-  readonly carryCapacity: number;
   /** Road speed, in world units/s. Deliberately unhurried: a caravan *is* the delay. */
   readonly moveSpeed: number;
   /**

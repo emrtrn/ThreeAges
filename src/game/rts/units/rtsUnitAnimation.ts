@@ -23,6 +23,8 @@ export type RtsAnimationRole = "idle" | "walk" | "run" | "work" | "attack" | "de
 export interface RtsAnimationInput {
   /** Observed ground speed in world units/s, measured from real displacement. */
   readonly planarSpeed: number;
+  /** Some non-combat movers (the pack donkey) never visually run. */
+  readonly forceWalk?: boolean;
   /** True while a live target is inside weapon range. */
   readonly attacking: boolean;
   /** True once the defeat pose has begun. */
@@ -147,7 +149,7 @@ export function classifyRtsAnimation(
 ): RtsAnimationRole {
   if (input.dying) return "death";
   if (input.attacking) return "attack";
-  if (input.planarSpeed >= tuning.runSpeed) return "run";
+  if (!input.forceWalk && input.planarSpeed >= tuning.runSpeed) return "run";
   if (input.planarSpeed > tuning.walkSpeed) return "walk";
   if (input.working) return "work";
   return "idle";

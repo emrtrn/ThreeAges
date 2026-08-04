@@ -59,6 +59,8 @@ export interface RtsPresentationUpdate {
   readonly deltaSeconds: number;
   /** Observed ground speed (units/s), measured from actual displacement. */
   readonly planarSpeed: number;
+  /** Keep a deliberately unhurried mover on its walk clip at any travel speed. */
+  readonly forceWalk?: boolean;
   /** True while a live target is inside weapon range — i.e. blows are landing. */
   readonly attacking: boolean;
   /** True once the defeat pose has begun. */

@@ -20,6 +20,12 @@ export interface DepotNodeSnapshot {
   readonly status: DepotNodeStatus;
 }
 
+/** A legal warehouse road endpoint; null id is the owner's command centre. */
+export interface LogisticsEndpoint {
+  readonly structureId: number | null;
+  readonly roadCell: RoadCell;
+}
+
 /** Read-only depot-to-road node projection, recomputed from mutable world state. */
 export class DepotLogisticsSystem {
   constructor(
@@ -76,6 +82,31 @@ export class DepotLogisticsSystem {
               : "unlinked-main-network",
         };
       });
+  }
+
+  /**
+   * Every road-connected store a producer may choose between. The command centre
+   * is deliberately in this list: a depot is an alternative endpoint, not a
+   * rule that forces a longer trip just because one exists elsewhere.
+   */
+  endpointsFor(owner: UnitOwner): readonly LogisticsEndpoint[] {
+    const endpoints: LogisticsEndpoint[] = [];
+    for (const center of this.centers?.all() ?? []) {
+      if (center.owner !== owner) continue;
+      const roadCell = roadCellTouchingFootprint(
+        this.roads,
+        center.position.x,
+        center.position.z,
+        center.stats.footprint.width,
+        center.stats.footprint.depth,
+      );
+      if (roadCell) endpoints.push({ structureId: null, roadCell });
+    }
+    for (const depot of this.snapshots()) {
+      if (depot.owner !== owner || depot.status !== "linked" || !depot.roadCell) continue;
+      endpoints.push({ structureId: depot.structureId, roadCell: depot.roadCell });
+    }
+    return endpoints;
   }
 
   private componentIds(): Map<string, number> {

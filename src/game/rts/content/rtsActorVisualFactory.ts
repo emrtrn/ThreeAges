@@ -15,7 +15,7 @@ import { isMeshComponentKind, normalizeActorScriptDef, type ActorScriptDef } fro
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import type { SettlementAge } from "@/game/data/gameDataTypes";
-import { rtsAnimalActorRef, rtsBuildingActorRef, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
+import { rtsAnimalActorRef, rtsBuildingActorRef, rtsCaravanActorRef, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
 import {
   RtsActorPresentationError,
   parseRtsEffectManifestPaths,
@@ -247,6 +247,26 @@ export class RtsActorVisualFactory {
       moveSpeed,
       // Animals carry an authored model scale, so the engine's "walk clip is
       // natural at half move speed" default would leave them sliding.
+      walkClipSpeed,
+      wheelSpins: [],
+    });
+  }
+
+  /** V4's non-unit donkey uses the logistics catalog section, not `animals`. */
+  createCaravanPresentation(moveSpeed?: number, walkClipSpeed?: number): RtsPresentationHandle | null {
+    const actorRef = rtsCaravanActorRef(this.catalog);
+    if (!actorRef || !this.ready) return null;
+    const root = this.createActorVisual(actorRef);
+    if (!root) return null;
+    const pickTargets = collectRtsPickTargets(root);
+    if (pickTargets.length === 0) return null;
+    const def = this.definitions.get(actorRef);
+    return createRtsUnitPresentation({
+      root,
+      pickTargets,
+      selectionRadius: readRtsSelectionRadius(def),
+      animation: def ? this.animationSourceFor(root) : null,
+      moveSpeed,
       walkClipSpeed,
       wheelSpins: [],
     });

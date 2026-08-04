@@ -46,6 +46,7 @@ export function producerHasSource(status: EconomyProductionStatus): boolean {
 
 export interface EconomyBuildingSnapshot {
   readonly structureId: number;
+  readonly owner: UnitOwner;
   readonly structureLabel: string;
   readonly resourceId: string;
   readonly assignedWorkers: number;
@@ -53,6 +54,8 @@ export interface EconomyBuildingSnapshot {
   readonly workerCapacity: number;
   readonly perWorkerPerMinute: number;
   readonly productionPerMinute: number;
+  /** Full staffed/stocked output at this building's current age × level. */
+  readonly maximumProductionPerMinute: number;
   readonly localBuffer: number;
   readonly localBufferCapacity: number;
   readonly lastProductionTick: number;
@@ -197,6 +200,7 @@ export class EconomyProductionSystem {
           .filter((assignment) => assignment.state === "producing" || assignment.state === "gathering").length;
         return {
           structureId: producer.structure.id,
+          owner: producer.structure.owner,
           structureLabel: producer.structure.stats.label,
           resourceId: economy.resourceId,
           assignedWorkers: producer.assignments.size,
@@ -210,6 +214,9 @@ export class EconomyProductionSystem {
             : economy.requiresLivestock
               ? this.livestockYield(producer.structure) * (economy.perAnimalPerMinute ?? 0)
               : workingWorkers * (economy.perWorkerPerMinute ?? 0),
+          maximumProductionPerMinute: economy.requiresLivestock
+            ? (economy.livestockCapacity ?? 0) * (economy.perAnimalPerMinute ?? 0)
+            : economy.workerCapacity * (economy.perWorkerPerMinute ?? 0),
           localBuffer: producer.localBuffer,
           localBufferCapacity: economy.localBufferCapacity,
           lastProductionTick: producer.lastProductionTick,

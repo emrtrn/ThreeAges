@@ -73,6 +73,10 @@ export function rtsContentCatalogRefs(catalog: RtsContentCatalog): readonly RtsA
     for (const ref of Object.values(entry.ownerActorRefs ?? {})) refs.add(ref);
   }
   for (const entry of Object.values(catalog.animals)) refs.add(entry.actorRef);
+  // Logistics shares the wildlife art pack but not its species table. It still
+  // has to be in the Actor preflight set: otherwise the catalog validates yet
+  // `createCaravanPresentation` has no loaded definition to instantiate.
+  if (catalog.logistics.caravan?.actorRef) refs.add(catalog.logistics.caravan.actorRef);
   for (const entry of Object.values(catalog.buildings)) {
     if (entry.constructionActorRef) refs.add(entry.constructionActorRef);
     for (const ref of Object.values(entry.levels)) refs.add(ref);

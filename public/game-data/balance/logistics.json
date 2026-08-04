@@ -1,8 +1,7 @@
 {
   "caravan": {
     "label": "Yük Eşeği",
-    "carryCapacity": 30,
-    "moveSpeed": 2.2,
+    "moveSpeed": 1.76,
     "walkClipSpeed": 1.4,
     "maxHealth": 45,
     "armorClass": "light",
