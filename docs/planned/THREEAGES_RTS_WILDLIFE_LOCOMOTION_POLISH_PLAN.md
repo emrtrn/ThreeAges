@@ -1,7 +1,9 @@
 # ThreeAges RTS - Yaban Hayati Hareket Cilasi Plani (donus + duraklama)
 
 Olusturulma tarihi: 2026-08-04
-Durum: **Faz 0 acik** - §4'teki bes soru kullanicida.
+Durum: **Faz 0 kilitli, Faz 1 ve Faz 2 uygulandi** (2026-08-04). Bes sorunun
+besi de **A** cevaplandi (§4). Kalan: kullanici gorsel kabulu, Faz 3 (Q3 = B,
+ayri madde olarak ertelendi) ve Faz 4'un tam mac kabulu.
 Onkosul: V1 (`...WILDLIFE_AND_HUNTING_PLAN.md`), V2
 (`...V2_PASTURE_AND_TAMING_PLAN.md`) ve V3'un Faz 3'u
 (`...V3_PREDATOR_PRESSURE_PLAN.md`) tamamlandi; hepsinin gorsel kabulu verildi.
@@ -143,68 +145,103 @@ bagimsiz: sigir da geyik de kurt da ayni sure duruyor. Balans tablosuna
 tasinmasi bu planin en ucuz maddesi ve §2.5'in ("tur farki veriden gelir")
 kosulu.
 
-## 4. Tasarim Kararlari (Faz 0 - **kullanicida**)
+### 3.9 Olcum tekrari - **once / sonra** (2026-08-04)
 
-Bes soru. Her birinde bir **oneri** var ve gerekcesi yazili; kullanici kilitler,
-sonra kod yazilir.
+Ayni kosu tekrarlandi: 36000 tick, 1/30 s (1200 s), tek hayvan, sabit tohum.
+"Tehdit altinda" = surunun cemberinin disinda, 14 birim uzakta duran dort kisi
+(rim `fleeRadius` icinde kalir, yani bolt sik olur ama hayvan aralarda otlama
+noktalarina da varir).
 
-### Q1 - Donus hizi nereden gelir?
+| olcu | once | sonra |
+| --- | --- | --- |
+| deer / rahat - ortalama kalkis donusu | 117.8 derece | **7.2 derece** |
+| deer / rahat - 90 derece ustu kalkis | 84 / 113 | **0 / 110** |
+| wolf / rahat - ortalama kalkis donusu | 125.0 derece | **9.8 derece** |
+| wolf / rahat - 90 derece ustu kalkis | 93 / 119 | **0 / 132** |
+| deer / tehdit - ortalama kalkis donusu | 103.5 derece | **7.3 derece** |
+| deer / tehdit - 90 derece ustu kalkis | 49 / 86 | **0 / 135** |
+| **deer / tehdit - sifir duraklama** | **53 / 85** | **0 / 64** |
+| deer / tehdit - ortalama duraklama | 1.71 s | **6.65 s** |
+| deer / rahat - ortalama duraklama | 4.71 s | 4.73 s |
+| wolf / rahat - ortalama duraklama | 4.77 s | **3.50 s** |
+| tek tick'te en buyuk donus (deer) | 179.9 derece | **7.33 derece** |
+| ayni, turun butcesi (220/30) | - | 7.33 derece |
 
-- **A (oneri): `animals.json`'a tur basina `turnRateDegPerSecond`.** Sigir agir,
-  tilki cevik olur; §2.1 ve §2.5 birlikte karsilanir. Validator pozitif ve
-  makul bir ust sinir (ornegin 720) zorunlu kilar.
-- B: tek bir paylasilan sabit. Ucuz ama §2.5'i vermiyor ve ilk tuning turunda
-  zaten tur basina bolunecek.
-- C: `moveSpeed`'ten turetilen bir formul. Kod, veri yerine tahmin uretir; repo
-  bu deseni `walkClipSpeed`'te bilerek reddetmisti (Deer ve Cow ayni klipten
-  farkli sayi authorluyor).
+Okunacak dort sey:
 
-### Q2 - Hayvan yururken mi doner, yerinde mi?
+1. **Tek tick'te 90 derece ustu donus sifira indi** - §7 Faz 1'in kabul maddesi.
+   Olculen en buyuk tek-tick donusu turun kendi butcesine **tam olarak** esit
+   (7.33 = 220/30), yani cap gercekten baglayici.
+2. **Kacis sonrasi sifir duraklama kapandi** (53/85 -> 0/64) - §7 Faz 2'nin
+   kabul maddesi. Plan "rahat sururunkine yaklasir" diyordu; KARAR 4'un
+   soluklanmasi yuzunden **ustune cikti** (6.65 s > 4.73 s), ki istenen his de
+   budur: kacan hayvan varinca daha uzun durur.
+3. **Rahat surunun duraklamasi degismedi** (4.71 -> 4.73 s): geyigin araligi
+   zaten 2.5-7 idi ve tabloya oldugu gibi tasindi, yani bu yol bozulmadi.
+4. **Kurdun duraklamasi kisaldi** (4.77 -> 3.50 s), cunku kurt artik paylasilan
+   2.5-7'yi degil kendi 2-5'ini kullaniyor - §2.5 tek satirda gorunuyor.
 
-- **A (oneri): esik.** Aci kucukse (< bir `pivotThreshold`) **yururken** doner -
-  yay cizer, dogal. Buyukse **once yerinde doner**, sonra yurur. §3.1'in
-  kuyrugu agir oldugu icin (kalkislarin %80'i 90 derecenin ustu) yalniz yay
-  cizmek hayvani cemberin yarisini tarayarak yururken birakir, ki bu da yeni bir
-  "neden oraya gitti" sorusudur.
-- B: her zaman yururken don (saf `rotateYawToward`). En az kod, ama yukaridaki
-  kuyruk yuzunden en cok yay.
-- C: her zaman yerinde don. Okunakli ama hayvani her kalkista birkac saniye
-  cakili birakir; suru statik gorunur.
+Kalkis sayisinin tehdit altinda artmasi (86 -> 135) pivotun yan urunu: yerinde
+donus bir "duruyor -> yuruyor" gecisi daha uretir. O gecislerde olculen aci
+kucuk, cunku donusu zaten pivot yapmistir.
 
-Not: A secilirse yerinde donus **duraklamanin devami** olarak gosterilir
-(hiz 0, rol `idle`/`work`), yani yeni bir animasyon rolu gerektirmez.
+## 4. Tasarim Kararlari (Faz 0 - **KILITLI**, 2026-08-04)
 
-### Q3 - Duran hayvan ne yapiyor?
+Bes sorunun **besi de A** cevaplandi. Asagida her karar ve uygulamada ne haline
+geldigi yazili.
 
-- **A (oneri, ucuz): yaban hayati sunuma bir "aktivite" bildirir**, hizdan
-  turetilmez. Otcul -> `work` (Eating), etcil -> `idle`. §3.3'un kapisi acilir,
-  yeni klip **rolu** eklenmez, iki allowlist yuzeyi **dokunulmaz**.
-- B (zengin): `animationSet`'e ikinci bir bosta rolu (`idle_alert` ->
-  `Idle_2_HeadLow` / `Idle_Headlow`) eklenir; etcil duraklamanin bir kismini
-  kolacan ederek gecirir. §3.4'un sanatini gercekten kullanan tek secenek, ama
-  §3.7'nin iki allowlist yuzeyine dokunur ve kendi testini hak eder.
-- C: bugunku gibi birak. §2.2 dusurulur.
+### KARAR 1 (Q1 = A) - Donus hizi turden gelir
 
-Oneri **A, sonra ayri bir madde olarak B** - once "kurt ot yemesin" kabulu
-alinir, sonra "kurt kolacan etsin" eklenir. Iki belirsizligi ayni maça sokmamak,
-V3 KARAR 4'un ayni gerekcesi.
+`animals.json`'a tur basina `turnRateDegPerSecond`. Sigir agir (110), tilki cevik
+(360); §2.1 ve §2.5 birlikte karsilanir. `validateGameData` pozitif olmasini ve
+**720** ust sinirini zorlar - ustu, yarim saniyede tam tur, yani gene anlik
+sicrama.
 
-### Q4 - Kacis sonrasi duraklama (§3.2) bir hata mi, bir ayar mi?
+Reddedilenler: tek paylasilan sabit (§2.5'i vermiyor, ilk tuning turunda zaten
+bolunecekti) ve `moveSpeed`'ten turetme (kod veri yerine tahmin uretir; repo bu
+deseni `walkClipSpeed`'te bilerek reddetmisti).
 
-- **A (oneri): hata; duzeltilir ve ustune bir "soluklanma" eklenir.** Bolt
-  bitince `restSeconds = 0` yerine turun kendi duraklama araligindan bir deger
-  yazilir; istege bagli olarak `fleeRecoverySeconds` ile iliskilendirilir -
-  kacan hayvan varinca **daha uzun** durur, ki dogru his de budur.
-- B: yalniz sifiri kaldir, soluklanma ekleme. Daha az yuzey, daha az his.
+### KARAR 2 (Q2 = A) - Esik: kucuk aci yururken, buyuk aci yerinde
 
-### Q5 - RTS birimleri (§3.6) bu plana dahil mi?
+`PIVOT_THRESHOLD_DEG = 45` (`wildlifeRoaming.ts`). Esigin altinda hayvan
+**yururken** doner ve yay cizer; ustunde **once yerinde doner**, sonra yurur.
+Esik durum bilgisi tasimayan bir karsilastirma: her tick donus butcesi
+harcandikca aci kuculur, yani pivot kendi kendini bitirir.
 
-- **A (oneri): hayir, kapsam disi.** Bu plan yaban hayatidir. Birimin donusu
-  emir hissini, savas hedeflemesini ve formasyonu etkiler; ayri bir plan ve ayri
-  bir kabul maci hak eder. `rotateYawToward` paylasildigi icin o plan **bedava**
-  baslar.
-- B: ayni pakette yap. Tek dokunusta tutarli bir dunya, ama iki farkli kabul
-  olcusunu ayni maca sokar.
+Yerinde donus **duraklamanin devami** olarak gosterilir (hiz 0, aktivite
+degismez), yani yeni bir animasyon rolu gerekmedi.
+
+Pivot yalniz otlama dalinda. Surme (`advanceLed`) ve kovalama (`advanceHunt`)
+donus hizina tabi ama **pivotsuz**: kosede durup nisan alan bir surulen hayvan
+suruden dusuyordu, duran bir yirtici da her kovalamayi kaybederdi (§9).
+
+### KARAR 3 (Q3 = A) - Aktivite bildirilir; kolacan (B) ayri madde
+
+`WildlifeAnimal.activity` (`"moving" | "grazing" | "alert"`) sunuma bildirilir;
+`wildlifeView` artik `working`'i hizdan turetmiyor. Otcul -> `work` (Eating),
+etcil -> `idle`. **Hicbir allowlist yuzeyine dokunulmadi** (§5.3).
+
+Ucuncu deger (`alert`) bugun yalnizca "otlamiyor" demek, ama §3.4'un
+kullanilmayan `Idle_2_HeadLow` klibinin baglanacagi yeri simdiden aciyor - Faz 3
+bu seami yeniden yazmadan eklenebilir.
+
+**Faz 3 (B) bilinçli olarak ertelendi**: once "kurt ot yemesin" kabulu alinir,
+sonra "kurt kolacan etsin" eklenir. Iki belirsizligi ayni maca sokmamak, V3
+KARAR 4'un ayni gerekcesi.
+
+### KARAR 4 (Q4 = A) - Sifir duraklama bir hataydi; soluklanma eklendi
+
+Bolt bitince `state.restSeconds = 0` yerine
+`rollRestSeconds(profile, random) + profile.fleeRecoverySeconds` yazilir. Kacan
+hayvan varinca **daha uzun** durur; olculdu (§3.9), tehdit altindaki geyigin
+ortalama duraklamasi 1.71 s -> 6.65 s.
+
+### KARAR 5 (Q5 = A) - RTS birimleri kapsam disi
+
+`unitMovement.ts:149` bu planda **degistirilmedi**. Birimin donusu emir hissini,
+savas hedeflemesini ve formasyonu etkiler; ayri bir plan ve ayri bir kabul maci
+hak eder. `rotateYawToward` artik hem TPS karakteri hem yaban hayati tarafindan
+paylasildigi icin o plan bedava baslar.
 
 **Kapsam disi (bu plana sizmayacaklar):**
 
@@ -271,39 +308,50 @@ Gerekceler:
 
 ## 7. Fazlar ve Checklist
 
-### Faz 0 - Karar kilidi **[ACIK - kullanicida]**
+### Faz 0 - Karar kilidi **[TAMAM]**
 
-- [ ] §4'teki Q1-Q5 cevaplanir; bolum "KARAR" olarak yeniden yazilir ve
-  gerekceler kayda gecer.
-- [ ] Kararlarin §2'yi degistirdigi yerler guncellenir (ozellikle Q3 = C
-  secilirse §2.2 dusurulur).
+- [x] §4'teki Q1-Q5 cevaplandi (besi de **A**); bolum "KARAR 1-5" olarak yeniden
+  yazildi ve gerekceler kayda gecti.
+- [x] §2 degismedi: Q3 = A secildigi icin §2.2 dusurulmedi, yalniz "kolacan"
+  yerine "otlamaz" olarak karsilandi (Faz 3 kalan is).
 
-### Faz 1 - Donus hizi (davranis degismez, yalniz aci zamana yayilir)
+### Faz 1 - Donus hizi **[TAMAM, gorsel kabul bekliyor]**
 
-- [ ] `rotateYawToward`'in evi tespit edilir ve **paylasilir**; ikinci bir kopya
-  yazilmaz (§3.5).
-- [ ] `RoamProfile`'a donus hizi; `wildProfileFor` onu tasir.
-- [ ] Uc dalin ucu de (`advanceRoam` yurume, `advanceLed`, `advanceHunt`)
-  facing'i **atamak** yerine **cevirmek** ile gunceller.
-- [ ] Q2 = A ise: esigin ustundeki aci once yerinde donulur (hiz 0), sonra
-  yurunur.
-- [ ] `animals.json` + tipler + validator.
-- [ ] Kabul: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`,
-  `npm run check:assets` yesil; **olcum** tekrarlanir ve tek karelik 90+ derece
-  donuslerin sayisi sifira iner.
+- [x] `rotateYawToward`'in evi **`src/game/playerMovement.ts`** cikti (engine'de
+  degil). Tasinmadi, **paylasildi**: `wildlifeRoaming.ts` onu ve
+  `shortestYawDeltaDeg`'i import ediyor. Tek yeni sey bir birim koprusu -
+  `transform.rotation` derece, yaban hayati facing'i radyan (§3.5).
+- [x] `RoamProfile.turnRateDegPerSecond`; `wildProfileFor` **ve**
+  `penProfileFor` (pastureSystem) onu tasir.
+- [x] Uc dalin ucu de facing'i **atamak** yerine **cevirmek** ile gunceller.
+  Kapsam onerilenden genis: `advanceRoam`'in yurume dali disinda **yakalanma**
+  ve **bolt** dallari da cape tabi, cunku §2.1 istisna tanimiyor - kalkis
+  karesinde 120 derece sicrayan bir govde, oyuncunun en cok baktigi anda fixi
+  geri alirdi.
+- [x] Q2 = A: `PIVOT_THRESHOLD_DEG = 45` ustundeki aci once yerinde donulur
+  (hiz 0), sonra yurunur.
+- [x] `animals.json` (alti turun hepsi) + `AnimalBalanceStats` + validator
+  (`turnRateDegPerSecond` pozitif, ust sinir 720).
+- [x] Kabul: `npx tsc --noEmit` ve `npm run test:engine` yesil kosuldu;
+  `npm run check:assets` PASS. **Olcum tekrarlandi (§3.9)**: tek karelik 90+
+  derece donusler **84/113 -> 0/110**. `build:verify` icin §8'in notuna bak.
 - [ ] **Kullanici gorsel kabulu:** hayvanlar donerken donuyor, kayarak degil.
 
-### Faz 2 - Duraklamanin anlami
+### Faz 2 - Duraklamanin anlami **[TAMAM, gorsel kabul bekliyor]**
 
-- [ ] §3.2 kapanir: kacis sonrasi varista da duraklama olur (Q4).
-- [ ] Duraklama araligi tur basina veriden gelir (§3.8).
-- [ ] Q3'e gore: duran otcul otlar, duran etcil otlamaz.
-- [ ] Kabul: olcum tekrarlanir; tehdit altindaki geyigin **sifir duraklamasi**
-  55/95'ten 0'a iner ve ortalama duraklama rahat sururunkine yaklasir.
+- [x] §3.2 kapandi: bolt bitisi artik turun araligindan bir duraklama +
+  `fleeRecoverySeconds` yaziyor (KARAR 4).
+- [x] Duraklama araligi tur basina veriden geliyor (`restSeconds: {min,max}`);
+  `REST_SECONDS_MIN/MAX` sabitleri silindi (§3.8).
+- [x] Q3 = A: `WildlifeAnimal.activity` yayinlaniyor, `wildlifeView` `working`'i
+  hizdan turetmeyi birakti. Duran otcul otlar, duran etcil otlamaz.
+- [x] Kabul: olcum tekrarlandi (§3.9); tehdit altindaki geyigin **sifir
+  duraklamasi 53/85 -> 0/64**, ortalama duraklama 1.71 s -> 6.65 s (rahat
+  sururunun ustune cikti, soluklanma yuzunden - beklenen yon).
 - [ ] **Kullanici gorsel kabulu:** hayvanin bir noktaya neden gittigi ekrandan
   okunuyor.
 
-### Faz 3 - Kolacan (yalniz Q3 = B ise)
+### Faz 3 - Kolacan (Q3 = B) **[ERTELENDI - KARAR 3]**
 
 - [ ] `animationSet`'e ikinci bosta rolu; **iki** allowlist yuzeyi (§3.7).
 - [ ] Rol zinciri ve fallback: klibi olmayan model eski davranisa duser.
@@ -312,47 +360,72 @@ Gerekceler:
 - [ ] Kabul: kurt duraklamasinin bir kismini basini kaldirip bakarak geciriyor.
 - [ ] **Kullanici gorsel kabulu.**
 
-### Faz 4 - Butun halinde kabul
+### Faz 4 - Butun halinde kabul **[testler gecti, tam mac bekliyor]**
 
-- [ ] V3'un kurt davranisi bozulmamis: devriye, kovalama, yuvaya donus - donus
-  hizi kovalamayi **yavaslatmiyor** (§9'un ilk riski).
-- [ ] V2'nin surme kolu bozulmamis: coban pesindeki hayvan hala yetisiyor.
-- [ ] V1'in avi bozulmamis: kacan hayvan hala yakalanabiliyor - §3.7'nin
-  yakalanabilirlik esitsizligi **donus suresini bilmiyor**, yani bu risk
-  olculmeli (§9).
+- [x] V3'un kurt davranisi bozulmamis: V3 Faz 2/3'un devriye, kovalama ve yuvaya
+  donus testleri yesil kaldi. Kovalama dalinda **pivot yok** ve yirticinin donus
+  hizi otcullerin ustunde authorlandi (300/360'a karsi 110-220) - §9'un ilk
+  riskinin onlemi veriden geliyor, koddan degil.
+- [x] V2'nin surme kolu bozulmamis: `advanceLed` donus hizina tabi ama pivotsuz,
+  pastura/surme testleri yesil kaldi.
+- [x] V1'in avi bozulmamis: **yeni bir test bunu olcuyor** ("locomotion Faz 4: a
+  turn rate does not put prey out of a hunter's reach") - en yavas isci bir
+  geyigi bir dakika icinde hala koseye sikistiriyor. §9'un dedigi gibi
+  `validateGameData`'nin esitsizligi donus suresini bilmiyor, o yuzden bu
+  **ancak** testle yakalanabilirdi.
 - [ ] Tam mac; **kullanici gorsel kabulu**.
 
 ## 8. Test ve Gate
 
 CLAUDE.md kurali: **ayar degil sozlesme**. Hicbir test bir buyuklugu pinlemez.
+Hepsi `tools/engine-tests.ts`'te.
 
-- [ ] **Donus sinirlidir (Faz 1):** hicbir tick'te facing degisimi turun kendi
-  `turnRateDegPerSecond * dt`'sini asmaz - uc hareket dalinin **ucunde de**,
-  tablodan **hesaplanarak**.
-- [ ] **Donus tamamlanir (Faz 1):** yeterli sure verilen bir hayvan hedef
-  yonunu **tutturur**; donus hizi bir hayvani hedefine varmaktan alikoymaz
-  (sonsuz yay yok).
-- [ ] **Yon dogrudur (Faz 1):** kisa yoldan donulur - 350 dereceye giden bir
-  hayvan 10 derece geri doner, 350 derece ileri degil.
-- [ ] **Duraklama her varista olur (Faz 2):** kacis **sonrasi** varista da
-  duraklama > 0; bugunku sifir yolu bir testle kapatilir.
-- [ ] **Duraklama turden gelir (Faz 2):** iki turun duraklama araligi farkliysa
-  gozlenen duraklamalar da farklidir - tablodan hesaplanarak, sureye
-  pinlenmeden.
-- [ ] **Duran hayvanin isi turundendir (Faz 2/3):** otcul `work`, etcil `idle`
-  (veya Q3=B'de kolacan) - **hicbir** turde etcil `Eating` oynatmaz.
-- [ ] **Hiz yalani yok (regresyon):** bildirilen `speed` her tick'te gercek yer
-  degistirmeye esit kalir - V3 Faz 3'te olculen 0 farkin korunmasi.
-- [ ] **Yakalanabilirlik (Faz 4):** donus hizi eklendikten sonra da bir avci bir
-  geyigi yakalayabiliyor; `validateGameData`'nin esitsizligi donus suresini
-  bilmiyorsa bu **ancak** testle yakalanir (§9).
-- [ ] **Validator:** sifir/negatif/asiri `turnRateDegPerSecond`, ters duraklama
-  araligi (`min > max`), negatif duraklama - hepsi **dosya ve alan adiyla**
-  reddedilir.
+- [x] **Donus sinirlidir (Faz 1):** *"no movement branch turns a body faster than
+  its species' rate"*. Alti turun **hepsi** icin, uc hareket dalinin **ucunde
+  de**, butce `turnRateDegPerSecond * dt`'den **hesaplanarak**.
+- [x] **Donus tamamlanir (Faz 1):** *"a turn finishes, and takes the short way
+  round"*. Tam arkasindaki hedefe konan bir geyik oraya **variyor**; sure de
+  tablodan turetiliyor (yarim tur + kendi yurume hizinda mesafe).
+- [x] **Yon dogrudur (Faz 1):** ayni test - 350 dereceye giden hayvan 10 derece
+  **geri** donuyor.
+- [x] **Duraklama her varista olur (Faz 2):** *"every arrival earns a pause, the
+  one after a bolt included"*. Iki katman: bolt bitisinde `restSeconds > 0` ve
+  `>= restSeconds.min + fleeRecoverySeconds` (tablodan turetilmis), ustune uzun
+  bir tehditli kosuda **sifir duraklamali varis sayisi = 0**.
+- [x] **Duraklama turden gelir (Faz 2):** *"how long an animal stands comes from
+  its species"*. Her turun gozlenen duraklamalari **kendi** araliginda; ayrica
+  authorlanan ortalamasi buyuk olan turun gozlenen ortalamasi da buyuk. Kosu
+  uzunlugu da tablodan turetiliyor, yani `restSeconds` yukari cekilince test
+  ornekleme yapmayi birakmiyor.
+- [x] **Duran hayvanin isi turundendir (Faz 2):** *"a standing animal's job comes
+  from what it is, not from its speed"*. Alti turun hepsi icin: otcul `work`,
+  etcil `idle` - **hicbir** turde etcil `Eating` rolune ulasmiyor. Hem
+  `activity` hem `wildlifeView`'in gonderdigi `working` hem de
+  `classifyRtsAnimation`'in donen rolu ayni cumleyi kuruyor.
+- [x] **Hiz yalani yok (regresyon):** var olan rim testi korundu ve gecti.
+- [x] **Yakalanabilirlik (Faz 4):** *"a turn rate does not put prey out of a
+  hunter's reach"*.
+- [x] **Validator:** sifir ve **721** `turnRateDegPerSecond` (720'nin kendisi
+  legal - sinir bir sinir, bir buyukluk degil), negatif `restSeconds.min/max`,
+  eksik `restSeconds`, ters aralik (`min > max`) - hepsi **dosya ve alan adiyla**
+  reddediliyor. `{min: 0, max: 0}` bilinçli olarak legal: hic yerlesmeyen bir tur
+  bir mizactir, bozuk veri degil.
 
-Kapi: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`,
-`npm run check:assets`. Olcek testi: `animals.json`'daki her buyukluk
-olceklenip suite yeniden kosulur; **yesil kalmalidir**.
+Kapi: `npx tsc --noEmit` ve `npm run test:engine` bu degisiklikle **yesil
+kosuldu**; `npm run check:assets` PASS.
+
+**Not (2026-08-04):** `build:verify` bu planin isi yuzunden degil, ayni anda
+suren V3 Faz 5 (yirtici besleme) calismasi yuzunden su an kirmizi -
+`predatorSystem.ts` yarim bir refactor'de (`aggressors()` -> `hostile()` yeniden
+adlandirmasi ve eksik `chewOn`/`hold`/`beginMeal` uyeleri). O dosyaya
+dokunulmadi. O is oturunca tam kapi tekrar kosulmali.
+
+Olcek testi: `restSeconds` x3 ve `turnRateDegPerSecond` x2 ile turetilmis kosu
+uzunluklari her turde 61-88 varis uretiyor (testlerin kendi esigi 20), yani
+sozlesmeler tuning'e degil sekle bagli. `animals.json`'in **tumunu** x1.25
+olceklemek ise bu planla ilgisiz, **onceden var olan** bir capraz-dosya bagini
+kiriyor: `wolf.roamRadius` (14) `outpost.controlRadius`'un (16) altinda kalmak
+zorunda ve 17.5'e cikiyor. O bagi bu plan eklemedi.
 
 Gorsel kabul kullanicidadir; otomatik kani uretilmez (CLAUDE.md).
 
@@ -369,18 +442,26 @@ Gorsel kabul kullanicidadir; otomatik kani uretilmez (CLAUDE.md).
 
 ## 10. Tamamlanma Kapisi
 
-- [ ] §2'deki 7 madde uctan uca calisir.
-- [ ] §8'deki tum sozlesme testleri gecer; olcek testi yesil kalir.
-- [ ] `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`,
-  `npm run check:assets` yesil.
-- [ ] §3.1 ve §3.2'nin olcumleri **tekrarlanir** ve plan dosyasina "once/sonra"
-  olarak yazilir.
+- [x] §2'deki 7 madde uctan uca calisir - 2. maddenin "kolacan" yarisi haric
+  ("etcil durdugunda otlamaz" verildi, "kolacan eder" Faz 3'te).
+- [x] §8'deki tum sozlesme testleri gecer; olcek testi (bu planin alanlari
+  uzerinde) yesil kalir - §8'in notuna bak.
+- [x] `npx tsc --noEmit`, `npm run test:engine`, `npm run check:assets` yesil.
+  `build:verify` eszamanli V3 Faz 5 calismasi yuzunden bekliyor (§8 notu).
+- [x] §3.1 ve §3.2'nin olcumleri **tekrarlandi** ve §3.9'a "once/sonra" olarak
+  yazildi.
 - [ ] Kullanici gorsel kabulu verdi.
-- [ ] §4 kapsam disi listesinden hicbir sey sizmadi.
+- [x] §4 kapsam disi listesinden hicbir sey sizmadi: ivme profili, navigasyon,
+  IK/egim, separation, look-at ve yeni klip uretimi - hicbirine dokunulmadi;
+  RTS birimleri (KARAR 5) da kapsam disinda birakildi.
 
 ## 11. Uygulama Sirasi
 
 Faz 0 -> 1 -> 2 -> (Q3 = B ise 3) -> 4.
+
+**Yurutuldu:** Faz 0 (kararlar) -> Faz 1 (donus) -> Faz 2 (duraklama +
+aktivite) -> Faz 4'un otomatik yarisi. Faz 3 KARAR 3 geregi ertelendi; Faz 4'un
+tam mac kabulu ve Faz 1/2'nin gorsel kabulu kullanicida.
 
 Faz 1 once gelmelidir: duraklamanin anlami donus duzelmeden **gorulemez** -
 bugun hayvan zaten duruyor (rahat surude 4.86 s), ama kalkis anindaki tek

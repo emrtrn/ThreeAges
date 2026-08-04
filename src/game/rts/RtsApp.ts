@@ -2627,20 +2627,21 @@ export class RtsApp {
   /**
    * Every damageable thing on the field, for target acquisition.
    *
-   * Wildlife enters this list by **state, never by species** (V3 §3.4): only the
-   * predators that are actually hunting somebody. `nearestHostile` compares
-   * owners alone and an animal is `"wild"`, so a roster-wide entry would make
-   * every grazing deer hostile to both kingdoms — half the army would break off
-   * a raid to chase venison. A wolf that gives up leaves the list on the same
-   * tick; a Guard already trading blows with it keeps its own target, which is
-   * how a started fight finishes rather than being called off mid-swing.
+   * Wildlife enters this list by **state, never by species** (V3 §3.4): a
+   * predator that is hunting somebody, or one standing on a kingdom's ground.
+   * `nearestHostile` compares owners alone and an animal is `"wild"`, so a
+   * roster-wide entry would make every grazing deer hostile to both kingdoms —
+   * half the army would break off a raid to chase venison. Both states are ones
+   * an animal walks out of again; a Guard already trading blows with one keeps
+   * its own target, which is how a started fight finishes rather than being
+   * called off mid-swing.
    */
   private combatTargets() {
     return [
       ...this.units.all(),
       ...this.centers.all(),
       ...this.structures.all(),
-      ...this.predators.aggressors(),
+      ...this.predators.hostile(),
     ];
   }
 

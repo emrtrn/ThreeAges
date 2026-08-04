@@ -486,6 +486,10 @@ export function penGeometryFor(structure: PlacedStructure): PenGeometry {
  * fix (`RoamProfile.walkSpeed`). Only the flight trigger is closed: penned
  * livestock has nothing left to run from, and an animal that still bolted would
  * be spooked all day by the workers who own it.
+ *
+ * The turn rate and the pause range carry over untouched for the same reason:
+ * they say what *animal* this is, and a cow does not become a different one for
+ * standing in a barn yard.
  */
 export function penProfileFor(pen: PenGeometry, stats: AnimalBalanceStats): RoamProfile {
   return {
@@ -495,5 +499,8 @@ export function penProfileFor(pen: PenGeometry, stats: AnimalBalanceStats): Roam
     fleeRadius: 0,
     fleeSeconds: stats.fleeSeconds,
     fleeRecoverySeconds: stats.fleeRecoverySeconds,
+    turnRateDegPerSecond: stats.turnRateDegPerSecond,
+    restSecondsMin: stats.restSeconds.min,
+    restSecondsMax: stats.restSeconds.max,
   };
 }

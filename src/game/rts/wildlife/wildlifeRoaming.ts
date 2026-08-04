@@ -15,12 +15,58 @@
  * would be the most expensive way to solve the least important problem.
  */
 
-/** Seconds an animal stands and grazes between moves. */
-const REST_SECONDS_MIN = 2.5;
-const REST_SECONDS_MAX = 7;
+import { rotateYawToward, shortestYawDeltaDeg } from "../../playerMovement";
 
 /** Close enough to a grazing spot to stop and eat, in world units. */
 const ARRIVE_EPSILON = 0.15;
+
+const RAD_TO_DEG = 180 / Math.PI;
+const DEG_TO_RAD = Math.PI / 180;
+
+/**
+ * Beyond this much misalignment an animal turns on the spot before it walks —
+ * locomotion polish Q2 = A.
+ *
+ * Under it the body turns *while* walking and draws an arc, which is what a
+ * living thing does with a small correction. Over it an arc is the wrong answer:
+ * measured, 80% of departures were past 90 degrees, and turning those while
+ * walking sweeps the animal halfway round its own circle on the way to a spot it
+ * could have faced first — a second "why did it go there".
+ *
+ * A plain threshold rather than a state flag on purpose. Each tick spends the
+ * turn budget and the misalignment shrinks, so the pivot ends itself; nothing
+ * has to remember that it started.
+ */
+const PIVOT_THRESHOLD_DEG = 45;
+
+/**
+ * Step a facing (radians) toward a target by at most one tick's turn budget.
+ *
+ * The bridge to {@link rotateYawToward} rather than a second implementation of
+ * it — that function already owns shortest-path turning and its normalisation,
+ * and the locomotion plan §3.5 is explicit that wildlife shares the TPS
+ * character's turn rather than growing its own copy. All that differs is units:
+ * `transform.rotation` is authored in degrees, wildlife facing is the radian
+ * `Math.atan2` hands back.
+ */
+function turnFacingToward(currentRad: number, targetRad: number, maxDeltaDeg: number): number {
+  return rotateYawToward(currentRad * RAD_TO_DEG, targetRad * RAD_TO_DEG, maxDeltaDeg) * DEG_TO_RAD;
+}
+
+/** How far, in degrees, a facing is from where it wants to point. */
+function facingErrorDeg(currentRad: number, targetRad: number): number {
+  return Math.abs(shortestYawDeltaDeg(currentRad * RAD_TO_DEG, targetRad * RAD_TO_DEG));
+}
+
+/** One tick's worth of turning for this species, in degrees. */
+function turnBudgetDeg(profile: RoamProfile, deltaSeconds: number): number {
+  return profile.turnRateDegPerSecond * deltaSeconds;
+}
+
+/** A fresh pause from this species' own range (§3.8). */
+function rollRestSeconds(profile: RoamProfile, random: () => number): number {
+  return profile.restSecondsMin + random() * (profile.restSecondsMax - profile.restSecondsMin);
+}
 
 /**
  * Closer than this and the animal is caught rather than frightened: it stops
@@ -115,6 +161,21 @@ export interface RoamProfile {
   readonly fleeSeconds: number;
   /** How long the animal is winded afterwards; see {@link RoamState.recoverySeconds}. */
   readonly fleeRecoverySeconds: number;
+  /**
+   * How fast this species may swing its body round, in degrees per second.
+   *
+   * The whole of the locomotion plan's Faz 1. Before it, facing was *assigned*
+   * from `atan2` in all three movement branches, so a departure turned the body
+   * 120 degrees in a single tick — measured, on 80% of departures. Every branch
+   * now *steps* the facing instead, and the rate is the one thing that decides
+   * how a species reads: a bull at 110 and a fox at 360 are different animals
+   * before either of them has moved a metre.
+   */
+  readonly turnRateDegPerSecond: number;
+  /** Shortest pause at a grazing spot; per species (§3.8), no longer a shared constant. */
+  readonly restSecondsMin: number;
+  /** Longest pause at a grazing spot. */
+  readonly restSecondsMax: number;
 }
 
 /** A person close enough to frighten an animal. */
@@ -234,7 +295,7 @@ export function initialRoamState(profile: RoamProfile, random: () => number): Ro
   return {
     targetX: point.x,
     targetZ: point.z,
-    restSeconds: REST_SECONDS_MIN + random() * (REST_SECONDS_MAX - REST_SECONDS_MIN),
+    restSeconds: rollRestSeconds(profile, random),
     fleeSeconds: 0,
     recoverySeconds: 0,
     fleeDirX: 0,
@@ -317,7 +378,14 @@ export function advanceLed(
   const dx = lead.x - current.x;
   const dz = lead.z - current.z;
   const distance = Math.hypot(dx, dz);
-  const facing = distance < 1e-4 ? current.facing : Math.atan2(dx, dz);
+  // Rate-limited like every other branch, but deliberately *without* the pivot
+  // {@link advanceRoam} uses: a driven animal that stopped to square up every
+  // time its shepherd rounded a corner would fall out of the drive, and
+  // `DRIVE_FOLLOW_GAP` is already the buffer that keeps it in contact. It arcs
+  // behind him instead, which is what following somebody looks like.
+  const facing = distance < 1e-4
+    ? current.facing
+    : turnFacingToward(current.facing, Math.atan2(dx, dz), turnBudgetDeg(profile, deltaSeconds));
   if (!lead.follow || distance <= DRIVE_FOLLOW_GAP) {
     return { x: current.x, z: current.z, facing, speed: 0 };
   }
@@ -419,7 +487,11 @@ export function advanceHunt(
   return {
     x: held.x,
     z: held.z,
-    facing: Math.atan2(dx, dz),
+    // Rate-limited, and like the drive without a pivot: a predator that stopped
+    // to square up would lose every chase, which is the risk §9 names. What
+    // keeps the chase working is the data instead — a predator's turn rate is
+    // authored above its prey's, so it out-turns what it is running at.
+    facing: turnFacingToward(current.facing, Math.atan2(dx, dz), turnBudgetDeg(profile, deltaSeconds)),
     // What it actually covered: a predator at the end of its leash is being held
     // still, and a Gallop clip played over a stationary body is the foot slide
     // this field exists to prevent.
@@ -478,7 +550,11 @@ export function advanceRoam(
     return {
       x: current.x,
       z: current.z,
-      facing: Math.atan2(threat.x - current.x, threat.z - current.z),
+      facing: turnFacingToward(
+        current.facing,
+        Math.atan2(threat.x - current.x, threat.z - current.z),
+        turnBudgetDeg(profile, deltaSeconds),
+      ),
       speed: 0,
     };
   }
@@ -503,7 +579,20 @@ export function advanceRoam(
       const point = randomPointInHerd(profile, random);
       state.targetX = point.x;
       state.targetZ = point.z;
-      state.restSeconds = 0;
+      // A real pause, plus a breather — locomotion polish Q4 = A.
+      //
+      // This line used to write `0`, and that one zero was why a herd with
+      // anybody near it never grazed: the arrival tick decremented it straight
+      // past zero, so the animal picked its next spot in the same frame it
+      // reached this one. Measured, a threatened deer took *no* pause on 53 of
+      // 85 arrivals — which is every herd in a real match, because a real match
+      // has people in it.
+      //
+      // `fleeRecoverySeconds` on top rather than a plain roll: an animal that
+      // has just bolted is winded, and standing longer at the end of it is both
+      // the feel the plan asks for and the same number the rest of the flight
+      // is already measured in.
+      state.restSeconds = rollRestSeconds(profile, random) + profile.fleeRecoverySeconds;
     }
     // The heading this bolt committed to when it started. A bolt in progress is
     // never re-aimed: whatever has since become the nearest body, the animal is
@@ -522,9 +611,19 @@ export function advanceRoam(
       // Where the body is actually going, which along the rim is not where it is
       // trying to go: facing the escape while travelling the tangent would slide
       // the feet sideways for the whole run.
-      facing: travelled > 1e-4
-        ? Math.atan2(bolted.x - current.x, bolted.z - current.z)
-        : Math.atan2(awayX, awayZ),
+      //
+      // Rate-limited too, and never pivoted: taking fright is the one moment an
+      // animal has no time to square up, so it swings round as it runs. The cap
+      // still applies because §2.1 admits no exception — a body that snapped
+      // 120 degrees on the take-off frame would undo the fix at exactly the
+      // moment the player is most likely to be watching it.
+      facing: turnFacingToward(
+        current.facing,
+        travelled > 1e-4
+          ? Math.atan2(bolted.x - current.x, bolted.z - current.z)
+          : Math.atan2(awayX, awayZ),
+        turnBudgetDeg(profile, deltaSeconds),
+      ),
       // Report what it actually covered, not what it tried to: an animal running
       // along the rim of its ground moves slower than flat out, and the gallop
       // clip has to be played at the speed the feet are travelling.
@@ -543,9 +642,22 @@ export function advanceRoam(
       const point = randomPointInHerd(profile, random);
       state.targetX = point.x;
       state.targetZ = point.z;
-      state.restSeconds = REST_SECONDS_MIN + random() * (REST_SECONDS_MAX - REST_SECONDS_MIN);
+      state.restSeconds = rollRestSeconds(profile, random);
     }
     return { x: current.x, z: current.z, facing: current.facing, speed: 0 };
+  }
+
+  const targetFacing = Math.atan2(dx, dz);
+  const facing = turnFacingToward(current.facing, targetFacing, turnBudgetDeg(profile, deltaSeconds));
+  // Square up before setting off — Q2 = A, and the branch §3.1 measured.
+  //
+  // Shown as speed 0 on purpose, which is what makes this cost nothing in
+  // presentation: a pivoting animal is an animal that has not finished standing
+  // still, so it stays on the pose it was already holding rather than needing a
+  // turn clip nobody has authored. The misalignment is read *before* this tick's
+  // turn is spent, so an animal already inside the threshold never stalls.
+  if (facingErrorDeg(current.facing, targetFacing) > PIVOT_THRESHOLD_DEG) {
+    return { x: current.x, z: current.z, facing, speed: 0 };
   }
 
   const step = Math.min(profile.walkSpeed * deltaSeconds, distance);
@@ -563,7 +675,7 @@ export function advanceRoam(
   return {
     x: walked.x,
     z: walked.z,
-    facing: Math.atan2(dx, dz),
+    facing,
     // Report the speed actually achieved: a tick that lands exactly on the
     // target, or one shortened by the rail, travelled less than a full step, and
     // the clip should say so.

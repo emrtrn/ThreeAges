@@ -10,7 +10,9 @@ ve evcillestirme tamamlandi (2026-08-03, gorsel kabul dahil)**:
 `THREEAGES_RTS_V2_PASTURE_AND_TAMING_PLAN.md`. **V3 - Yirtici baskisi basladi
 (2026-08-03)** ve kendi plan dosyasindan yurutuluyor:
 `THREEAGES_RTS_V3_PREDATOR_PRESSURE_PLAN.md` (§12); Faz 0 karar kilidi acik.
-V4 onu izler. **V5 (suvari / Cag 3) yapilmayacaktir.**
+**V4 - Esek lojistiginin plani yazildi (2026-08-04)** ve kendi dosyasindan
+yurutulur: `THREEAGES_RTS_V4_DONKEY_LOGISTICS_PLAN.md` (§12); Faz 0'da alti
+karar kullanicida. **V5 (suvari / Cag 3) yapilmayacaktir.**
 Kapsam: `public/assets/ThreeAges/Animals/` altindaki 12 animasyonlu hayvan
 modelini, oyunun ekonomi/savas/lojistik cercevesine oturan gercek RTS
 sistemlerine cevirmek. V1 hedefi **avlanma**dir; kalan turler icin yol haritasi
@@ -1164,7 +1166,13 @@ geyik de avlar - harita canli gorunur, bedava atmosfer.
 Maliyet: dusuk (V1 altyapisi uzerine). Onkosul: §3.9'daki karsilik verme
 yolunun dogrulanmasi.
 
-### V4 - Esek lojistigi (Donkey) - en yuksek getirili madde
+### V4 - Esek lojistigi (Donkey) - en yuksek getirili madde - **PLANI YAZILDI**
+
+**Plani yazildi (2026-08-04):**
+`docs/planned/THREEAGES_RTS_V4_DONKEY_LOGISTICS_PLAN.md`. Faz 0 karar kilidi
+acik (alti soru: transferi kervan mi tasir, kervan otomatik mi satin alinan mi,
+verinin yeri, vurulan yukun akibeti, kesilen yolda kervanin davranisi, agil
+baglantisi). Asagidaki gerekce kayit icin durur.
 
 Oyunun **zaten** yollari, depolari, `carryCapacity`'si ve bir yol grafigi
 vardir; ama kaynak tasima `ProductionLogisticsSystem` icinde **soyut** olarak

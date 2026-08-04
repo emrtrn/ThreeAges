@@ -621,15 +621,19 @@ kendi surulerininkini (2.83) asamaz.
     Ikisi de sozlesme testiyle pinlendi (buyukluk degil: "bolt yonunu
     degistirmez" ve "kosarken hiz sifir olmaz").
 
-### Faz 4 - Karsilik: asker ve Karakol kurdu vurur **[KOD TAMAM - gorsel kabul kullanicida]**
+### Faz 4 - Karsilik: asker ve Karakol kurdu vurur **[TAMAM 2026-08-04]**
 
 - [x] `combatTargets()` saldirgan durumdaki yirticiyi icerir - **tur degil
-  durum** (§3.4). Durumun sahibi `PredatorSystem.aggressors()`: her tick'te
-  yeniden kurulan, o an bir kurbani olan yirticilerin listesi. Kapiyi kimin
-  actigi onemli - liste `WildlifeSystem`'den degil **yirtici sisteminden** gelir,
-  cunku "hedef secmis olmak" o sistemin bildigi tek sey. Kovalamaya **henuz
-  baslamis** kurt da listede: eskortun saldiriyi karsilamasi icin ilk isirigin
-  dusmesini beklemesi gerekmemeli.
+  durum** (§3.4). Durumun sahibi `PredatorSystem.hostile()`: her tick'te yeniden
+  kurulan liste. Kapiyi kimin actigi onemli - liste `WildlifeSystem`'den degil
+  **yirtici sisteminden** gelir, cunku "hedef secmis olmak" o sistemin bildigi
+  tek sey. Iki hal var ve ikisi de hayvanin **cikabilecegi** bir hal:
+  - **Birini avliyor olmak.** Kovalamaya henuz baslamis kurt da sayilir:
+    eskortun saldiriyi karsilamasi icin ilk isirigin dusmesini beklemesi
+    gerekmemeli.
+  - **Bir kralligin toprakinda duruyor olmak** (oyun sonrasi eklendi, asagida).
+    Otlayan hayvan hangi zemine girerse girsin ikisinde de yok: bolgendeki geyik,
+    henuz yakalamadigin bir hayvan, bir tehdit degil.
 - [x] `retaliateAgainstAttack` saldirgani `CombatTarget`'a genisledi (§3.5).
   Govde zaten yalnizca ortak sozlesmeyi okuyordu; tek istisna olan `dying`
   `CombatTarget`'a **istege bagli** alan olarak eklendi (yalnizca `Unit`'in bir
@@ -644,29 +648,51 @@ kendi surulerininkini (2.83) asamaz.
   anahtarlanmadi**: bir akin bir ekibi birden yakalar ve dort isci dort satir
   demek olurdu - `MAX_ACTIVE_NOTIFICATIONS`'in tamami, yani Merkez uyarisini
   disari iten bir isci uyarisi. Tek satir kac kisi oldugunu soyluyor.
-- [x] Karakol'un kurdu vurdugu dogrulandi - **sifir yeni kod** (§3.13): kurt
-  `combatTargets()`'a girer girmez `structureDefense` onu `nearestHostile`'da
-  buluyor ve `resolveDamage` `light` carpanini (1.2) kendi tablosundan
-  uyguluyor. Test bunu iki tablodan **hesaplayarak** pinliyor.
-  **Ama bir sey cikti ve buraya yaziliyor** (asagida).
-- [ ] Kabul: muhafiz eskortlu avci guvende; Karakol menzilindeki kurt duser;
-  saldiri sessiz degil. **Kullanici gorsel kabulu.**
+- [x] Karakol'un kurdu vurdugu dogrulandi - savunma tarafinda **sifir yeni kod**
+  (§3.13): kurt `combatTargets()`'a girer girmez `structureDefense` onu
+  `nearestHostile`'da buluyor ve `resolveDamage` `light` carpanini (1.2) kendi
+  tablosundan uyguluyor. Test bunu iki tablodan **hesaplayarak** pinliyor.
+  **Ama ilk gorsel tur bunun kagit uzerinde kaldigini gosterdi** - asagidaki
+  "tecavuz hali" maddesi.
+- [x] Kabul, kismi: **kullanici dort maddeden ucunu onayladi (2026-08-04)** -
+  bildirim akisinda "Isciniz saldiri altinda!" cikiyor; hareket emri altindaki
+  asker yoluna devam ediyor ve asker kurda yalnizca bir isci saldiri altindayken
+  gidiyor; eskortsuz isci isiriliyor, **donup karsilik veriyor**, sonra dusuyor.
+  Eskort maddesi de kabul edildi ve gerekcesiyle: bir muhafiz uc kurdu
+  oldururken iscinin olebilmesi **istenen** denge ("olmasi gereken bu").
+- [x] Kabul, kalan: **Karakol menzilindeki kurt duser.** Ilk turda dusmuyordu;
+  "tecavuz hali" eklendikten sonra **kullanici gorsel kabulu verildi
+  (2026-08-04)** - yuvanin yanina dikilen Karakol paki temizliyor.
 
-**Karakol'un atisi bedava, ama gonderilen sayilarla neredeyse hic tetiklenmiyor.**
-Kod yolu §3.13'un dedigi gibi ucretsiz; engel **geometri**. Saldirgan bir kurt,
-KARAR 1 geregi, **sahipsiz** zeminde duran bir iscinin yanindadir; Karakol ise
+**Karakol'un atisi bedavaydi ama tetigi hic cekilmiyordu - engel geometri.**
+Ilk turun bulgusu, ve yalnizca oynayarak cikti. Saldirgan bir kurt, KARAR 1
+geregi, **sahipsiz** zeminde duran bir iscinin yanindadir; Karakol ise
 `territory.controlRadius` **16**'ya kadar her noktanin sahibidir ve
 `defense.attackRange`'i **12**'dir. Yani vurabilecegi her nokta zaten kendi
-bolgesi, ve kendi bolgesinde saldirgan kurt olamaz. Ikisi arasindaki 4 birim,
-§2.7'yi pratikte kagit uzerinde birakiyor.
+bolgesi, ve kendi bolgesinde saldirgan kurt olamaz. Kullanicinin gordugu tam
+olarak buydu ve ikinci bir yuzu vardi: yuvanin yanina Karakol dikildiginde
+kurtlar **ok yemiyor**, isciler de KARAR 1 sayesinde isirilmiyor - yani pak
+"bir anda evcillesmis" gibi duruyor.
 
-Uc secenek var ve ucu de **kullanicinin**: (a) oldugu gibi birakmak - §2.3
-(bolge icindeki isci dokunulmaz) Karakol'un V3'teki asil degeri zaten ve o
-tanim geregi calisiyor; (b) `attackRange`'i `controlRadius`'un ustune cekmek -
-ayar isi, ama Karakol'un PvP menzilini de degistirir; (c) "durum"un tanimini
-genisletip **bolgeye giren** yirticiyi de hedeflenebilir saymak - o zaman ussune
-dalan kurt vurulur, ama bu §7'nin yazdigi seyin otesinde bir tasarim karari,
-bu yuzden yapilmadi. Kabul macinda olculur.
+**Cozum: durumun ikinci hali - bir kralligin toprakina giren yirtici.** Ayni
+`ownerAt` okumasi, isaret ters cevrilmis: sahipsiz zemin iscinin alinabildigi
+yer, **sahipli** zemin kurdun vurulabildigi yer. Uc secenek arasindan bu
+secildi, cunku:
+
+- `attackRange`'i `controlRadius`'un ustune cekmek (ayar) Karakol'un **PvP**
+  menzilini de degistirirdi - kurt icin verilen bir karar askeri dengeyi
+  tasiyamaz.
+- Oldugu gibi birakmak §2.7'yi kalici olarak kagit uzerinde birakirdi ve
+  "evcillesmis pak" gorunumunu de birakirdi.
+- Tecavuz hali **tur degil durum** olmayi surduruyor: hayvan senin zemininden
+  cikarak o halden cikar, ve otlayan hayvan hicbir zemine girmekle hedef olmaz.
+  §9'un ilk riski (ordunun yarisi geyik kovalar) dokunulmadan gecerli kalir.
+
+Bedeli kabul edildi: yuvanin ustune Karakol dikmek artik paki **temizlemenin
+yolu**. KARAR 3 zaten "temizlenen bolge kalici olarak guvenlidir" diyor, yani
+bu oyunun kendi sozune uyuyor - ama Faz 7'nin harita isi bunu olcmeli: yuvalar
+oyuncunun bir gun gecmek zorunda kalacagi yerlerde kalmali, tek bir Karakol'la
+oyundan cikarilabilecek kadar ucuz olmamali.
 
 **§2.4'un ikinci yarisi acik.** "Bildirim akisinda bir uyari cikar" teslim
 edildi; "oyuncu kamerayi oraya goturebilir" icin bildirim akisinda tiklanabilir
@@ -674,14 +700,68 @@ bir odak yok - hicbir bildirim turunde yok, yani V3'e ait bir eksik degil.
 Faz 4'un checklist'i yalnizca bildirimi istiyordu; kamera odagi genel bir HUD
 isi olarak birakildi.
 
-### Faz 5 - Kurt geyik avlar
+### Faz 5 - Kurt geyik avlar **[KOD TAMAM - gorsel kabul kullanicida]**
 
-- [ ] Kurt `preySpecies` icindeki yabani hayvani hedefler ve oldurur.
-- [ ] Olen geyik normal les olur - avci kulubesi onu **toplayabilir** (bedava:
-  `remainingNear` les farki bilmiyor).
-- [ ] Kurt geyik yerken/oldurdukten sonra devriyeye doner (`rehome`, §3.6).
+- [x] Kurt `preySpecies` icindeki yabani hayvani hedefler ve oldurur. Hedef
+  secimi **tek** fonksiyonda kaldi ve kovalama/isirik govdesi **tek** kod:
+  iki kurbanin da sordugu sey `position` ve `health`. Ayrisan sey kurbanin
+  cevresi, o yuzden secim etiketli (`worker` / `prey`) - yalnizca insan
+  bildirim ureti r, yalnizca insan kurdu orduya hedef yapar, yalnizca av geride
+  yenecek bir sey birakir.
+- [x] **Insan avin onunde gelir**, ve bu siralama **tam** (geri donusu yok):
+  geyigi kovalayan kurdun yanindan gecen isci kovalamayi devralir, ama kurt
+  hicbir zaman isciyi birakip geyige donmez - yani oncelik, "tutulan kurban"
+  kuralinin engellemek icin var oldugu salinima donusemez. Gerekce §1'in
+  kendisi: kurt, eskortun **nedeni**; venizonunu once bitiren bir kurt tam da
+  tehdit olmasi gereken anda dekor olurdu.
+- [x] Olen geyik normal les olur - avci kulubesi onu **toplayabilir** ve bu
+  gercekten bedava cikti: `remainingNear`, `reserveNearest` ve `harvest`
+  hayvanin **nasil** oldugunu bilmiyor. Kurt lesten et **yemiyor**: molasi
+  zaman, et degil - aksi halde pak, oyuncunun soyabilecegi bir rakip degil bir
+  yiyecek **kuyusu** olurdu.
+- [x] Kurt oldurdugu geyigin **ustunde** kaliyor, sonra devriyeye doner.
+  §3.6'nin onerdigi `rehome` **yeniden tartildi** - §3.6'nin istedigi yerde,
+  bitmis bir oldurmenin uzerinde - ve cevap **guclendi**: her lese tasinan bir
+  yuva, paki harita boyunca birer geyiklik adimlarla yurutur ve yuvanin tutmak
+  icin konuldugu koridor ucuncu ogunde arkada kalir. Yuva sabit; donus, Faz
+  3'un yuvaya nisanlanmis kovalamasi.
+- [x] **Mola** (yeni). Bu, §2.8'in "zamanla kuculur"unu gercekten zamanla yapan
+  sey: bir onceki govde dustugu karede yenisine baslayan bir pak, cayiri
+  oyuncunun ilk oldurmeyi fark etmesinden once bosaltir. Suresi **yeni bir
+  balans alani degil**, turun kendi `restSeconds`'i - otlamayan bir hayvanin
+  authorlanmis ama kullanilmayan tek alani, ve "iki hareket arasinda ne kadar
+  durur" bu tur icin tam olarak yemek demek. Molada `feeding` bayragi aciliyor,
+  yani hayvan `grazing` aktivitesine dusuyor ve sidecar'in zaten tasidigi
+  `Eating` klibi lesin uzerinde oynuyor - "kurt geyigi yiyor" bunun icin bedava.
+- [x] Les **kelepceye takilmiyor**: mola boyunca kurt lese nisanlanmis bir
+  kovalamada tutuluyor. Birakilsa Faz 3'un tuzagina duserdi - otlama modu
+  hayvani devriye cemberine kelepceler, cember disinda kalan bir les de kurdu
+  tek karede rimme geri ziplatirdi.
+- [x] **Geyik avlayan kurt orduya hedef degildir.** Faz 4'un "birini avliyor
+  olmak" hali yalnizca **insan** kovalayana uygulaniyor. Uc cayir oteden geyik
+  kovalayan kurt kimseyi tehdit etmiyor; listeye girseydi §2.9'un harcamayi
+  reddettigi eskort onun pesine giderdi - §9'un ilk riski, roster yerine av
+  yolundan gelmis olurdu. Kendi zeminindeki kurt icin cevap degismedi (tecavuz).
 - [ ] Kabul: oyuncu mudahale etmezse kurt bolgesinin yanindaki geyik surusu
-  zamanla kuculur; harita canli gorunur.
+  zamanla kuculur; harita canli gorunur. **Kullanici gorsel kabulu.**
+
+**Haritada ne gorunecegi olculdu, umulmadi.** Yuvalar (-28, -6) / (28, 6),
+kovalama tasmasi 26; her kralligin geyik surusu (-30, 22) / (30, -22), suru
+cemberi 10. Yuvadan suru merkezine 28.07, yani surunun **yakin yarisi** (18.07
+ile 26 arasi) tasmanin icinde: kurtlar surunun kendilerine bakan kenarini
+yiyor, tamamini degil. Merkez stag surusu (0, 16) yuvadan 35.6, cemberiyle
+birlikte en yakin stag 25.6 - yani tam sinirda, ara sira. Yeni marker, yeni
+yerlesim, yeni harita isi **gerekmedi**; Faz 2'nin koridor yerlesimi §2.8'i
+zaten besliyor.
+
+**Faz 4'un bir testi Faz 5 yuzunden yalan soylemeye basladi ve duzeltildi.**
+"Yuvanin yanina dikilen Karakol paki temizler" testi, kulenin otlayan hayvana ok
+atmadigini yanina koydugu **geyiklerle** kanitliyordu. Faz 5'ten sonra o geyik
+avdir: yarasi artik kule hakkinda hicbir sey soylemez, cunku onu kurtlar yemis
+olabilir. Seyirciler `cow`'a cevrildi - `preySpecies` disinda, yani bir yarayi
+aciklayabilecek tek sey yeniden ok. Test ayrica bunu **iddia ediyor** (tur
+listede degil), yani ilerideki bir tuning turu listeye sigir eklerse test
+sessizce zayiflamak yerine kirmizi yanar.
 
 ### Faz 6 - Fox: tarla tamponundan hirsizlik **[YOK - V3.1'e ertelendi]**
 
@@ -777,12 +857,34 @@ CLAUDE.md kurali: **ayar degil sozlesme**. Hicbir test bir buyuklugu pinlemez.
   surdugu degil.
 - [x] **Karakol (Faz 4):** menzildeki kurt Karakol atesinden hasar alir ve `light`
   carpani uygulanir - `buildings.json`'dan **hesaplanarak**; ayni menzildeki
-  otlayan geyik ise dokunulmadan kaliyor. Testin kasitla **iddia etmedigi** sey,
-  bunun gercek bir macta ne siklikta oldugu: §7 Faz 4'teki `controlRadius` /
-  `attackRange` notu.
-- [ ] **Av (Faz 5):** kurt yalniz `preySpecies`'teki yabani hayvani oldurur;
-  evcil hayvana ve binaya dokunmaz (Q5 = A).
-- [ ] **Les (Faz 5):** kurdun oldurdugu geyik avci kulubesi tarafindan toplanabilir.
+  otlayan geyik ise dokunulmadan kaliyor. Bu testin kapsadigi sey durumun
+  **avlanma** yarisi, ve testin icine yazildi ki bu yari tek basina gercek bir
+  macta neredeyse hic tetiklenmiyor.
+- [x] **Tecavuz hali (Faz 4, oynayarak bulundu):** yuvanin yanina dikilen Karakol
+  paki **temizliyor** - uc kurt da oluyor, yanlarindaki geyikler tek ok yemiyor,
+  ve temizlenen yuva bir daha kimsenin hedefi olmuyor (KARAR 3). Testte **hic
+  isci yok**: kule sahip oldugu zemini savunmak icin yeme ihtiyac duymamali.
+  Bulgunun kendisi de bir assertion oldu, hatirada birakilmadi:
+  `controlRadius > attackRange`, yani kule vurdugundan **oteye** sahip - ilk turda
+  hicbir okun atilmamasinin nedeni budur.
+- [x] **Av (Faz 5):** kurt yalniz `preySpecies`'teki yabani hayvani oldurur.
+  Iki muafiyet **iki ayri kural** tarafindan veriliyor, o yuzden ikisi de ayri
+  olculuyor: listede olmayan tur (`preySpecies` reddediyor) ve bir kralligin
+  sahip oldugu hayvan (sahiplik onu yabani ekonomiden tumuyle cikariyor - avci
+  kulubesinin okudugu ayni satir). Sahipli hayvan kasitla bir **geyik**:
+  validator tameable turu ava yazmayi zaten yasakliyor, yani sahiplik
+  kontrolunun gercekten sinandigi tek kurulum bu. Bina hic gecmiyor - yapi bu
+  sistemin okudugu hicbir listede yok. Testte **hic isci yok**: §2.8'in iddiasi
+  oyuncu bakmadiginda da bir seyler oldugudur.
+- [x] **Les (Faz 5):** kurdun oldurdugu geyik avci kulubesi tarafindan
+  toplanabilir - lesin eti hayvanin tam `meatCapacity`'si, `remainingNear` onu
+  sayiyor ve `harvest` tek yukte butunuyle cikariyor. Pinlenen sey buyukluk
+  degil turun kendi tablosu; kurdun **yemedigi** de burada pinlendi.
+- [x] **Mola ve yuva (Faz 5):** kurt oldurdugu govdenin uzerinde duruyor
+  (`speed` sifir, aktivite `grazing`, hicbir sey isirilmiyor), mola turun kendi
+  `restSeconds`'inden **kisa degil**, mola boyunca surunun geri kalani
+  dokunulmamis kaliyor; sonunda cayir bosaliyor ama **birer birer**, ve yuva
+  bittiginde hala yerinde - `rehome` reddi bir assertion olarak duruyor.
 - [ ] **Harita adaleti (Faz 7):** iki kralligin kurt yuvalarina yuruyus mesafeleri
   kumesi ayni; **hesaplanir**, pinlenmez.
 - [ ] **AI (Faz 7):** kurt bolgesinde isci kaybeden AI o bolgeyi surekli
@@ -816,13 +918,23 @@ cikiyor; (2) Faz 3'un notuna dusulen orman/teslimat fixture'i ("one 40-wood tree
 reaches camp in four 10-wood deliveries") ayni sekilde. Ikisi de fixture'in
 sabit sayisi, kodun sozlesmesi degil - Faz 7'nin harita/AI isine.
 
+Faz 5'te olcek testi (x0.6, uc tablo birden) **V3'te yine hicbir sey bulmadi**:
+Faz 1-5'in on alti testinin hepsi olceklenmis veriyle yesil - yeni ucu de
+mesafelerini iki turun kendi yaricaplarindan, oldurme suresini `damage` ve
+`attacksPerMinute`'ten, mola alt sinirini `restSeconds`'ten hesapladigi icin.
+Suite yine tek yerde kirmizi yandi ve o da **V3'e ait degil**: V2'nin
+`pastureDriveFixture`'i (bu testte tek bir kurt yok, `PredatorSystem` hic
+kurulmuyor) `remainingNear` esitligini kaciriyor, cunku kulubenin `gatherRadius`'u
+kuculunce authorlanmis sabit mesafedeki hayvanlar erisimin icine/disina kayiyor -
+Faz 3 ve Faz 4'un notlarina dusulen ayni sinif, ayni yer, Faz 7'nin isi.
+
 Gorsel kabul kullanicidadir; otomatik kani uretilmez (CLAUDE.md).
 
 ## 9. Riskler ve Onlemler
 
 | Risk | Onlem |
 | --- | --- |
-| **Ordunun yarisi geyik kovalar** (§3.4). Yaban hayati `combatTargets()`'a topluca girerse her muhafiz her hayvani hedefler. | Listeye giren sey **tur degil durum**: yalniz saldirgan yirtici. Otlayan hayvanin hicbir kosulda hedeflenmedigi bir testle pinlenir. |
+| **Ordunun yarisi geyik kovalar** (§3.4). Yaban hayati `combatTargets()`'a topluca girerse her muhafiz her hayvani hedefler. | Listeye giren sey **tur degil durum**: avlayan ya da bir kralligin toprakinda duran yirtici. Otlayan hayvan **hangi zeminde olursa olsun** listeye girmez ve bu testle pinlenir - test ayrica naif listeyi ayni muhafiza vererek riskin gercek oldugunu gosterir. |
 | **Kurt haritanin yarisini kovalar.** `pursuitRadius` bir tasma degil bir tasima olursa kurt oyuncunun merkezine kadar gelir. | `pursuitRadius` yuvadan olculur ve validator harita olceginde bir degeri reddeder; yetisemeyen kurt devriyeye doner (`rehome`). |
 | **Erken oyun cezasi cok sert.** Ilk bes dakikada isci kaybeden oyuncu geri donemeyebilir. | Hasar oyuncuya **zaman** birakacak sekilde ayarlandi (§6: ~12.5 s) ve bildirim (§3.10) oynanisin parcasi sayildi. Kabul macinda olculur; sertse `damage` degil `acquisitionRadius` dusurulur - tepki suresi degil, karsilasma sikligi. |
 | **Kurt yuvalari erken temizlenip oyundan cikar** (Q3 = A'nin bedeli). | Yuvalar oyuncunun **gecmek zorunda kalacagi** yerlere konur (dis maden, stag surusu, agil koridoru). Faz 7'nin harita isi bunu olcer. |

@@ -547,6 +547,21 @@ export interface AnimalPredatorBalance {
 }
 
 /**
+ * How long a species stands between moves — locomotion polish plan §3.8.
+ *
+ * A range rather than a number so a herd does not step off in lockstep, and
+ * per-species rather than the one shared `2.5..7` this replaced: a cow settling
+ * for as long as a fox is the same "one rule for six animals" flatness the turn
+ * rate fixes for rotation.
+ */
+export interface AnimalRestBalance {
+  /** Shortest pause; zero is legal (a species that never settles). */
+  readonly min: number;
+  /** Longest pause; never below {@link min}. */
+  readonly max: number;
+}
+
+/**
  * One huntable species. Wildlife is a *finite* food source that moves, which is
  * why its numbers live here rather than in `resources.json`: a deposit profile
  * is split safe/external by placement, while an animal carries its own yield
@@ -594,6 +609,21 @@ export interface AnimalBalanceStats {
   readonly huntSeconds: number;
   /** How far from its herd's centre the animal may wander. */
   readonly roamRadius: number;
+  /**
+   * How fast this species may turn its body, in degrees per second.
+   *
+   * Authored per species rather than shared or derived, which is the whole of
+   * the locomotion plan's §2.5: a bull swinging round as fast as a fox is the
+   * tell that nothing here knows what animal it is drawing. Deriving it from
+   * `moveSpeed` was refused for the reason `walkClipSpeed` was — the model's
+   * authored scale means speed does not predict how a body reads on screen.
+   *
+   * Required of every species: a default would ship a new animal turning like
+   * whatever the default happened to be, because nobody wrote the line.
+   */
+  readonly turnRateDegPerSecond: number;
+  /** Seconds this species stands at a grazing spot before picking the next. */
+  readonly restSeconds: AnimalRestBalance;
   /**
    * Whether a herder may drive this species into a Pasture instead of killing it
    * (V2 §4.1).
@@ -1055,4 +1085,48 @@ export interface RoadBalance {
 export interface RoadAutoConnect {
   /** Max newly created road cells an auto access road may add; 0 disables it. */
   readonly maxCells: number;
+}
+
+/**
+ * The pack animal that walks a producer's output down the road (V4 KARAR 3-B).
+ *
+ * It has its own table rather than a row in `animals.json` because it is not a
+ * huntable species: a caravan neither grazes nor bolts, so every field that
+ * table requires of a species — `fleeRadius`, `huntSeconds`, `roamRadius` — would
+ * have to be invented for it, and invented numbers in a balance table mislead
+ * the next person to tune it. It is not a row in `units.json` either: it is
+ * never selected, never ordered, never queued and never counted against
+ * population, so joining that table would drag the roster UI, group selection
+ * and the population paths into seeing it (V4 §6.2).
+ *
+ * Art is shared with the wildlife pack all the same — the donkey's clips come
+ * from its `*.skeleton.json` sidecar exactly as a deer's do. Data separate,
+ * art common.
+ */
+export interface CaravanBalance {
+  readonly label: string;
+  /**
+   * Resource units one trip carries. Capped against the *smallest* producer
+   * buffer in `buildings.json` at load: a caravan that can lift more than a
+   * building can hold empties it in one visit, and the `buffer-full` pressure
+   * V4 is built on never appears.
+   */
+  readonly carryCapacity: number;
+  /** Road speed, in world units/s. Deliberately unhurried: a caravan *is* the delay. */
+  readonly moveSpeed: number;
+  /**
+   * Ground speed the donkey's walk clip reads naturally at, in world units/s.
+   *
+   * Authored for the same reason {@link AnimalBalanceStats.walkClipSpeed} is:
+   * the model carries an authored scale, so the engine's "half of moveSpeed"
+   * default would play the clip at a rate the feet do not agree with.
+   */
+  readonly walkClipSpeed: number;
+  readonly maxHealth: number;
+  /** How a caravan takes damage; livestock-soft, like every other animal. */
+  readonly armorClass: Exclude<UnitArmorClass, "structure">;
+  /** Seconds spent standing at each end of the trip, loading or unloading. */
+  readonly loadSeconds: number;
+  /** Caravans a linked producer keeps on the road (V4 KARAR 2-A: automatic). */
+  readonly spawnPerProducer: number;
 }

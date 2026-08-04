@@ -70,8 +70,29 @@ export function wildProfileFor(stats: AnimalBalanceStats, x: number, z: number):
     fleeRadius: stats.fleeRadius,
     fleeSeconds: stats.fleeSeconds,
     fleeRecoverySeconds: stats.fleeRecoverySeconds,
+    turnRateDegPerSecond: stats.turnRateDegPerSecond,
+    restSecondsMin: stats.restSeconds.min,
+    restSecondsMax: stats.restSeconds.max,
   };
 }
+
+/**
+ * What an animal is doing right now, as presentation needs to know it —
+ * locomotion polish Q3 = A.
+ *
+ * Reported rather than derived from speed, and that is the entire point. The
+ * view used to send `working: speed <= 0`, which put *every* standing animal on
+ * the `work` role and so on its asset's `Eating` clip — a wolf that grazed
+ * whenever it stopped patrolling. Speed alone cannot answer this, because the
+ * answer is a fact about the species: a standing herbivore is eating, a standing
+ * predator is watching.
+ *
+ * Three values rather than a boolean so the second idle clip (§3.4's unused
+ * `Idle_2_HeadLow`) has somewhere to attach later without another rewrite of
+ * this seam. Today `alert` simply means "not grazing", which is enough to close
+ * §2.2.
+ */
+export type WildlifeActivity = "moving" | "grazing" | "alert";
 
 /** One authored herd: a species, a centre, and how many animals stand in it. */
 export interface RtsHerdDefinition {
@@ -92,6 +113,8 @@ export interface WildlifeAnimalSnapshot {
   readonly facing: number;
   /** Ground speed this tick — what the animation selector reads. */
   readonly speed: number;
+  /** What it is doing, which is what decides the clip when it is standing. */
+  readonly activity: WildlifeActivity;
   readonly dead: boolean;
   /** Food left on the carcass; the species' full `meatCapacity` while it lives. */
   readonly remainingMeat: number;
@@ -162,6 +185,18 @@ export class WildlifeAnimal implements CombatTarget {
    */
   attacking = false;
   /**
+   * True while this predator is standing over game it has just brought down
+   * (V3 Faz 5). Written by {@link PredatorSystem}.
+   *
+   * A state rather than a derived one because nothing else can tell it: a wolf
+   * holding still beside a carcass and a wolf holding still on patrol look
+   * identical to every other field on this class, and only one of them is
+   * eating. It is also the brake on §2.8 — a pack that started its next kill on
+   * the frame the last one dropped would clear a meadow faster than a player
+   * could notice it was happening.
+   */
+  feeding = false;
+  /**
    * Blows landed so far. Each increment is one `Attack_Headbutt` to play — the
    * unit rule (`attackCount`), so the clip is driven by the blow rather than by
    * a duration the animation guessed for itself.
@@ -191,6 +226,25 @@ export class WildlifeAnimal implements CombatTarget {
 
   get dead(): boolean {
     return this.health.depleted;
+  }
+
+  /**
+   * What this animal is doing, for presentation — see {@link WildlifeActivity}.
+   *
+   * Read off `predator` rather than off a second authored flag: whether a
+   * species hunts is already the thing that makes it a carnivore, and asking the
+   * table twice would let the two answers disagree. A pivoting animal reports a
+   * standing activity, which is deliberate — the turn on the spot is the
+   * continuation of the pause, not a new pose.
+   */
+  get activity(): WildlifeActivity {
+    if (this.speed > 0) return "moving";
+    // A predator on its kill is the one carnivore that *is* grazing, and saying
+    // so is what puts it on the `Eating` clip its sidecar already carries — the
+    // whole of "the wolf eats the deer" for the price of the flag the pause
+    // needed anyway.
+    if (this.feeding) return "grazing";
+    return this.stats.predator ? "alert" : "grazing";
   }
 
   /** True once it has been killed and picked clean; nothing is left to hunt here. */
@@ -280,6 +334,7 @@ export class WildlifeAnimal implements CombatTarget {
       z: this.position.z,
       facing: this.facing,
       speed: this.speed,
+      activity: this.activity,
       dead: this.dead,
       remainingMeat: this.remainingMeat,
       owner: this.owner,

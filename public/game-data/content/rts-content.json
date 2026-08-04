@@ -255,6 +255,11 @@
       "actorRef": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Fox.actor.json"
     }
   },
+  "logistics": {
+    "caravan": {
+      "actorRef": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Donkey.actor.json"
+    }
+  },
   "ui": {},
   "damage": {
     "defaults": {

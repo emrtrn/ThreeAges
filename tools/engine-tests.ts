@@ -107,8 +107,10 @@ import {
   validateAiBalance,
   validateAnimalBalance,
   validateBuildingBalance,
+  validateCaravanBalance,
   validateGamePreset,
   validateGameVersion,
+  smallestProducerBufferCapacity,
   validateMarketBalance,
   validateMissionScript,
   validateResourceBalance,
@@ -119,6 +121,7 @@ import {
   RtsContentCatalogError,
   type RtsCollapseStyle,
   rtsAnimalActorRef,
+  rtsCaravanActorRef,
   rtsBuildingActorRef,
   rtsUnitActorRef,
   rtsUnitOwnerActorRefIsAuthored,
@@ -375,6 +378,7 @@ import { WildlifeView, isWildlifeVisible } from "../src/game/rts/wildlife/wildli
 import {
   CAUGHT_DISTANCE,
   advanceHunt,
+  advanceLed,
   advanceRoam,
   initialRoamState,
   makeWildlifeRng,
@@ -30412,24 +30416,28 @@ check("V3 Faz 4: the army is offered a hunting wolf and never a grazing herd", (
   // list the previous pass left behind, which is the one frame of lag `RtsApp`
   // accepts to keep a chase from trailing the worker it is aimed at.
   const tick = (): void => {
-    updateUnitEngagement(units.all(), { navigation, targets: [...units.all(), ...predators.aggressors()] });
+    updateUnitEngagement(units.all(), { navigation, targets: [...units.all(), ...predators.hostile()] });
     predators.update(step);
     wildlife.update(step, units.all().map((unit) => unit.position));
   };
 
   const herder = units.spawn("player", meadowX, 0, RTS_TEST_UNIT_STATS);
   for (let index = 0; index < 40; index += 1) tick();
-  assert.deepEqual([...predators.aggressors()], [], "a pack that is hunting nobody is nobody's enemy");
+  assert.deepEqual(
+    [...predators.hostile()],
+    [],
+    "a pack hunting nobody, on nobody's ground, is nobody's enemy",
+  );
   assert.equal(herder.attackTarget, null, "and a Guard standing inside a herd acquires nothing");
 
   // Now give the wolf a reason: a worker on unowned ground inside its
   // acquisition circle, which is the whole of KARAR 1.
   const worker = units.spawn("player", predator.acquisitionRadius * 0.6, 0, RTS_TEST_WORKER_STATS);
   assert.equal(territory.ownerAt(worker.position.x, worker.position.z), "neutral");
-  for (let index = 0; index < 400 && predators.aggressors().length === 0; index += 1) tick();
-  assert.deepEqual([...predators.aggressors()], [wolf], "the one animal hunting somebody is the one on offer");
+  for (let index = 0; index < 400 && predators.hostile().length === 0; index += 1) tick();
+  assert.deepEqual([...predators.hostile()], [wolf], "the one animal hunting somebody is the one on offer");
   assert.equal(
-    predators.aggressors().some((animal) => animal.stats.predator === undefined),
+    predators.hostile().some((animal) => animal.stats.predator === undefined),
     false,
     "and nothing that merely grazes ever joins it",
   );
@@ -30439,7 +30447,7 @@ check("V3 Faz 4: the army is offered a hunting wolf and never a grazing herd", (
   // state is the current one, not a mark it carries for the rest of the match.
   worker.health.damage(worker.health.max);
   tick();
-  assert.deepEqual([...predators.aggressors()], [], "a wolf that has given up is off the list again");
+  assert.deepEqual([...predators.hostile()], [], "a wolf that has given up is off the list again");
 
   // Vacuity guard: hand the same Guard the naive list §3.4 warns about and it
   // picks an animal at once. So the meadow was safe because of the *state* rule
@@ -30472,7 +30480,7 @@ check("V3 Faz 4: the wolf's bite is answered — the worker turns on it and an u
   const step = 0.25;
   let bites = 0;
   const tick = (): void => {
-    updateUnitEngagement(units.all(), { navigation, targets: [...units.all(), ...predators.aggressors()] });
+    updateUnitEngagement(units.all(), { navigation, targets: [...units.all(), ...predators.hostile()] });
     updateUnitMovement(units.all(), step, { navigation });
     for (const strike of predators.update(step)) {
       // Exactly what `RtsApp.updateSimulation` does with the strikes it gets back.
@@ -30516,7 +30524,7 @@ check("V3 Faz 4: the wolf's bite is answered — the worker turns on it and an u
   // One more pass to read the list: the kill lands at the bottom of a tick, after
   // the predator pass that published the list has already run.
   tick();
-  assert.equal(predators.aggressors().length, 0, "and a carcass is nobody's target either");
+  assert.equal(predators.hostile().length, 0, "and a carcass is nobody's target either");
   territory.dispose();
 });
 
@@ -30526,12 +30534,11 @@ check("V3 Faz 4: the Karakol shoots a hunting wolf with the arrows it already ha
   // `combatTargets()` list the army does and `resolveDamage` already looks the
   // wolf's armour class up in the building's own counter table.
   //
-  // What this test deliberately does *not* claim is that the shot happens often.
-  // A hunting wolf stands, by KARAR 1, beside a worker on unowned ground — and
-  // the shipped Karakol owns every point within its `territory.controlRadius`,
-  // which is wider than its `defense.attackRange`. The contract below is free;
-  // whether the two radii let it fire in a real match is tuning, and §7 Faz 4
-  // records it as such.
+  // This is the *hunting* half of the state, and on its own it is nearly
+  // unreachable in a real match: a hunting wolf stands, by KARAR 1, beside a
+  // worker on unowned ground, while the tower owns every point inside
+  // `controlRadius` (16) and only shoots to `attackRange` (12). The tower's
+  // useful case is the trespass half, pinned in the test below this one.
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
@@ -30564,17 +30571,17 @@ check("V3 Faz 4: the Karakol shoots a hunting wolf with the arrows it already ha
     defense.attackRange * 0.5 < predator.acquisitionRadius,
     "and inside the wolf's acquisition circle, or nothing would ever start",
   );
-  for (let index = 0; index < 400 && predators.aggressors().length === 0; index += 1) {
+  for (let index = 0; index < 400 && predators.hostile().length === 0; index += 1) {
     predators.update(step);
     wildlife.update(step, units.all().map((unit) => unit.position));
   }
-  assert.equal(predators.aggressors().length, 1, "the wolf is hunting, so the tower may see it");
+  assert.equal(predators.hostile().length, 1, "the wolf is hunting, so the tower may see it");
   assert.ok(combatDistance(outpost.position, wolf) <= defense.attackRange, "and it stands inside the volley");
 
   const before = wolf.health.current;
   defenseSystem.update(
     structures.all(),
-    [...units.all(), ...structures.all(), ...predators.aggressors()],
+    [...units.all(), ...structures.all(), ...predators.hostile()],
     0,
   );
   // Derived from both tables: the volley is worth what the Karakol's own counter
@@ -30590,6 +30597,320 @@ check("V3 Faz 4: the Karakol shoots a hunting wolf with the arrows it already ha
   }
   structures.clear();
   territory.dispose();
+});
+
+check("V3 Faz 4: a Karakol raised beside a den clears it — a wolf on owned ground is answerable", () => {
+  // The half of the state that makes §2.7 true in a match rather than on paper,
+  // and it was found by playing: with only "is it hunting" on the list, a tower
+  // built next to a den never loosed an arrow and the pack stood around ignoring
+  // the workers walking past it — KARAR 1 protects them, so the wolves read as
+  // having been tamed by the building. Trespass is the answer, and it is still a
+  // *state*: the animal walks out of it by walking off your ground.
+  //
+  // Nothing here spawns a worker. That is the point — the tower must not need
+  // bait to defend the ground it owns.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const outpostStats = buildings.outpost ?? assert.fail("outpost definition missing");
+  const defense = outpostStats.defense ?? assert.fail("outpost defense missing");
+  const control = outpostStats.territory ?? assert.fail("outpost territory missing");
+  const animals = shippedAnimalBalance();
+  const stats = animals.wolf ?? assert.fail("wolf balance missing");
+  // The finding itself, as an assertion rather than a memory: the tower owns
+  // further than it shoots, which is why the hunting state alone could not fire.
+  assert.ok(
+    control.controlRadius > defense.attackRange,
+    "a Karakol owns further than it shoots, so a wolf kept outside its territory is out of its reach too",
+  );
+  // The bystanders are cattle rather than deer, and Faz 5 is why: a deer standing
+  // in a den is *prey*, so a wound on one would no longer say anything about the
+  // tower — the wolves would have eaten it. Cattle are outside the wolf's
+  // `preySpecies` (KARAR 5), which leaves the arrow as the only thing that could
+  // possibly have hurt them.
+  const bystander = "cow";
+  assert.equal(
+    (stats.predator ?? assert.fail("wolf predator block missing")).preySpecies.includes(bystander),
+    false,
+    `the wolf hunts ${bystander}, so a wound on one proves nothing about the tower`,
+  );
+  const wildlife = new WildlifeSystem(animals, [
+    { id: "den", species: "wolf", x: 0, z: 0, count: 3 },
+    { id: "meadow", species: bystander, x: 0, z: 0, count: 2 },
+  ]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const outpost = structures.place("player", outpostStats, 0, 0);
+  structures.advanceConstruction(outpost, outpostStats.constructionSeconds);
+  const territory = new TerritoryControlSystem(
+    () => [{ owner: "player" as const, x: 0, z: 0, radius: control.controlRadius }],
+  );
+  territory.refresh();
+  const predators = new PredatorSystem(units, wildlife, (x, z) => territory.ownerAt(x, z));
+  const defenseSystem = new StructureDefenseSystem();
+  const step = 0.25;
+  const wolves = wildlife.all().filter((animal) => animal.stats.id === "wolf");
+  assert.equal(wolves.length, 3, "a den is a pack, and the tower has to see all of it");
+  // The patrol circle sits inside the control area by the data itself, so every
+  // wolf is on the player's ground wherever the herd RNG scattered it.
+  assert.ok(
+    stats.roamRadius < control.controlRadius,
+    "the den's patrol circle fits inside the tower's ground at this tuning",
+  );
+
+  predators.update(step);
+  assert.equal(predators.hostile().length, wolves.length, "every wolf on the player's ground is answerable");
+  assert.equal(
+    predators.hostile().some((animal) => animal.stats.predator === undefined),
+    false,
+    "and the cattle grazing on the same ground are not — livestock you have not caught is not a threat",
+  );
+
+  for (let index = 0; index < 4000 && wolves.some((wolf) => !wolf.dead); index += 1) {
+    predators.update(step);
+    wildlife.update(step, units.all().map((unit) => unit.position));
+    defenseSystem.update(
+      structures.all(),
+      [...units.all(), ...structures.all(), ...predators.hostile()],
+      step,
+    );
+  }
+  assert.ok(wolves.every((wolf) => wolf.dead), "the Karakol clears the den it was built against");
+  for (const grazer of wildlife.all().filter((animal) => animal.stats.id === bystander)) {
+    assert.equal(grazer.health.current, grazer.health.max, "and never turned an arrow on the herd beside them");
+  }
+  // KARAR 3's promise, now that the tower can actually keep it: cleared ground
+  // stays cleared, and with nothing left alive there is nothing left to answer.
+  predators.update(step);
+  assert.deepEqual([...predators.hostile()], [], "a cleared den is nobody's target");
+  structures.clear();
+  territory.dispose();
+});
+
+/**
+ * A den with game standing in it, and nobody on the field — V3 Faz 5.
+ *
+ * No units at all, deliberately: §2.8's claim is that the map does something
+ * while the player is looking elsewhere, so a fixture that needed a worker to
+ * start the hunt would be proving a different sentence. Every distance comes
+ * from the two species' own radii, so a table-wide rescale moves the herd and
+ * the eye together instead of quietly putting one out of the other's reach.
+ */
+function predatorMeadowFixture(extra: readonly RtsHerdDefinition[] = []) {
+  const animals = shippedAnimalBalance();
+  const stats = animals.wolf ?? assert.fail("wolf balance missing");
+  const predator = stats.predator ?? assert.fail("wolf predator block missing");
+  const preyId = predator.preySpecies[0] ?? assert.fail("the wolf names no prey");
+  const preyStats = animals[preyId] ?? assert.fail(`unknown prey "${preyId}"`);
+  // The herd shares the den's centre, so wherever the herd RNG scatters it every
+  // animal is inside the wolf's eye. Stated as an assertion rather than assumed:
+  // a species whose meadow outgrew the predator's acquisition circle would make
+  // every result below a question about the seed.
+  assert.ok(
+    preyStats.roamRadius < predator.acquisitionRadius,
+    `a ${preyId} meadow (${preyStats.roamRadius}) is wider than the wolf's eye (${predator.acquisitionRadius})`,
+  );
+  const wildlife = new WildlifeSystem(animals, [
+    { id: "den", species: "wolf", x: 0, z: 0, count: 1 },
+    { id: "meadow", species: preyId, x: 0, z: 0, count: 3 },
+    ...extra,
+  ]);
+  const wolf = wildlife.all().find((animal) => animal.stats.id === "wolf") ?? assert.fail("no wolf");
+  wolf.position.set(0, 0, 0);
+  const units = new UnitSystem();
+  // Nobody owns any ground here: the whole map is neutral, so the only rule that
+  // can explain a bite is the prey rule.
+  const territory = new TerritoryControlSystem(() => []);
+  territory.refresh();
+  const predators = new PredatorSystem(units, wildlife, (x, z) => territory.ownerAt(x, z));
+  const step = 0.25;
+  const tick = (): void => {
+    predators.update(step);
+    wildlife.update(step, units.all().map((unit) => unit.position));
+  };
+  const preyOf = (species: string) => wildlife.all().filter((animal) => animal.stats.id === species);
+  return { animals, stats, predator, preyId, preyStats, wildlife, wolf, units, territory, predators, step, tick, preyOf };
+}
+
+check("V3 Faz 5: a wolf pulls down the game it names as prey and nothing else", () => {
+  // KARAR 5, and the two halves of it are refused by different rules, so both are
+  // measured. A species the table never listed is safe because `preySpecies` says
+  // so; an animal a kingdom owns is safe because ownership takes it out of the
+  // wild economy entirely — the same line the hunting camp reads, so a penned
+  // animal is no more a wolf's dinner than it is a hunter's.
+  //
+  // The owned animal is a *deer* on purpose. The validator forbids listing a
+  // tameable species as prey, so the only way to put an owned animal in front of
+  // a wolf that genuinely wants it is to hand it a pen it would never have been
+  // driven into — which is exactly the case the ownership check exists for.
+  const shipped = shippedAnimalBalance();
+  const bystanderId = Object.values(shipped)
+    .find((entry) => !entry.predator
+      && !(shipped.wolf?.predator?.preySpecies ?? []).includes(entry.id))
+    ?.id ?? assert.fail("no species outside the wolf's prey list");
+  const field = predatorMeadowFixture([{ id: "bystanders", species: bystanderId, x: 0, z: 0, count: 1 }]);
+  const { wildlife, wolf, predator, preyId, preyStats, tick, preyOf } = field;
+
+  const penned = preyOf(preyId)[0] ?? assert.fail("no prey spawned");
+  assert.ok(
+    wildlife.tame(penned.id, "player", wildProfileFor(preyStats, 0, 0)),
+    "the fixture needs one owned animal standing in the wolf's own circle",
+  );
+  const bystander = preyOf(bystanderId)[0] ?? assert.fail("no bystander spawned");
+  assert.equal(
+    predator.preySpecies.includes(bystanderId),
+    false,
+    `the bystander species "${bystanderId}" is meant to be off the wolf's list`,
+  );
+
+  // Long enough for a chase and a kill at this tuning, and no longer: the wolf
+  // bites `damage` at `attacksPerMinute`, so what a kill costs in seconds is
+  // arithmetic on the table rather than a number typed in here.
+  const secondsPerKill = (preyStats.maxHealth / predator.damage) * (60 / predator.attacksPerMinute);
+  const budget = Math.ceil((secondsPerKill * 8) / field.step);
+  let ticks = 0;
+  while (ticks < budget && !preyOf(preyId).some((animal) => animal.owner === "wild" && animal.dead)) {
+    tick();
+    ticks += 1;
+  }
+
+  assert.ok(
+    preyOf(preyId).some((animal) => animal.owner === "wild" && animal.dead),
+    `the wolf never brought down a ${preyId} in ${(ticks * field.step).toFixed(1)} seconds`,
+  );
+  assert.equal(
+    penned.health.current,
+    penned.health.max,
+    "a kingdom's animal is nobody's prey, whatever species it is (KARAR 5)",
+  );
+  assert.equal(
+    bystander.health.current,
+    bystander.health.max,
+    `a ${bystanderId} is not on the list, so it grazed through the whole hunt untouched`,
+  );
+  assert.equal(wolf.dead, false, "and the hunt cost the hunter nothing — game does not fight back");
+  field.territory.dispose();
+});
+
+check("V3 Faz 5: what a wolf kills is meat a hunting camp can still take", () => {
+  // The free half of §2.8, and it is free because nothing in the hunt knows how
+  // an animal died: `remainingNear` counts carcasses, a claim resolves one, and
+  // `harvest` butchers it. This pins that it stayed free — a wolf that consumed
+  // what it killed, or one whose kill left the wild roster, would turn the pack
+  // into a food *sink* instead of a competitor the player can rob.
+  const field = predatorMeadowFixture();
+  const { wildlife, predator, preyId, preyStats, tick, preyOf } = field;
+  const secondsPerKill = (preyStats.maxHealth / predator.damage) * (60 / predator.attacksPerMinute);
+  const budget = Math.ceil((secondsPerKill * 8) / field.step);
+  let ticks = 0;
+  while (ticks < budget && !preyOf(preyId).some((animal) => animal.dead)) {
+    tick();
+    ticks += 1;
+  }
+  const carcass = preyOf(preyId).find((animal) => animal.dead) ?? assert.fail("the wolf killed nothing");
+
+  assert.equal(
+    carcass.remainingMeat,
+    preyStats.meatCapacity,
+    "the wolf's meal is time, not meat: the carcass is worth what the animal was",
+  );
+  // A camp built over the den, sized from the herd it would have been built for.
+  const reach = { x: 0, z: 0, radius: preyStats.roamRadius + predator.pursuitRadius };
+  assert.ok(
+    wildlife.remainingNear(reach) >= carcass.remainingMeat,
+    "the camp counts a wolf-killed carcass exactly as it counts one of its own",
+  );
+  const claim = wildlife.reserveNearest(1, reach) ?? assert.fail("a hunter could claim nothing");
+  const claimed = wildlife.animalById(claim.id) ?? assert.fail("the claim resolves to nothing");
+  // Claim whatever is nearest, then insist the *carcass* itself can be worked:
+  // the hunter's own claim register is what decides which, and it has no opinion
+  // about who did the killing.
+  wildlife.releaseReservation(1);
+  carcass.reservedByWorkerId = 1;
+  const taken = wildlife.harvest({
+    workerId: 1,
+    sourceId: carcass.id,
+    amount: preyStats.meatCapacity,
+    deltaSeconds: field.step,
+  });
+  assert.equal(taken.amount, preyStats.meatCapacity, "and it butchers for the full carcass in one load");
+  assert.equal(carcass.spent, true, "which leaves nothing on it");
+  assert.ok(claimed, "the claim resolved to a real animal");
+  field.territory.dispose();
+});
+
+check("V3 Faz 5: a wolf eats what it killed before it hunts again, and its den never moves", () => {
+  // Two rules in one run, both about *pace*. The pause is what makes §2.8 read as
+  // a meadow thinning rather than as a meadow vanishing — without it the pack
+  // starts its next kill on the frame the last body drops. And the den staying
+  // put is Faz 3's rejected `rehome`, re-weighed where §3.6 asked for it: over a
+  // finished kill. It got stronger, not weaker — a den that walked to each
+  // carcass would carry the pack off the ground it was placed to hold.
+  const field = predatorMeadowFixture();
+  const { wolf, predator, preyId, preyStats, tick, preyOf } = field;
+  const den = { x: wolf.homeX, z: wolf.homeZ };
+  const secondsPerKill = (preyStats.maxHealth / predator.damage) * (60 / predator.attacksPerMinute);
+  const budget = Math.ceil((secondsPerKill * 8) / field.step);
+  let ticks = 0;
+  while (ticks < budget && !wolf.feeding) {
+    tick();
+    ticks += 1;
+  }
+  assert.ok(wolf.feeding, `the wolf never settled onto a kill in ${(ticks * field.step).toFixed(1)} seconds`);
+  assert.equal(
+    preyOf(preyId).filter((animal) => animal.dead).length,
+    1,
+    "one kill, one meal",
+  );
+
+  // While it eats it holds still, on its kill, and takes nothing else down. The
+  // pause is the species' own `restSeconds`, so its length is read off the table
+  // rather than pinned here.
+  const woundedBefore = preyOf(preyId)
+    .filter((animal) => !animal.dead)
+    .map((animal) => animal.health.current);
+  const strikesBefore = wolf.strikeCount;
+  const restedAt = { x: wolf.position.x, z: wolf.position.z };
+  let mealTicks = 0;
+  while (wolf.feeding && mealTicks < budget) {
+    assert.equal(wolf.speed, 0, "a wolf on its kill stands over it");
+    assert.equal(wolf.activity, "grazing", "and reads as eating, which is what puts it on the Eating clip");
+    assert.equal(wolf.attacking, false, "it is not biting anything while it eats");
+    // Checked here rather than after the loop: the tick that *ends* the meal is
+    // allowed to move the wolf, because finishing a meal hands it straight back
+    // to the hunt — which is the behaviour the sweep below relies on.
+    assert.ok(
+      Math.hypot(wolf.position.x - restedAt.x, wolf.position.z - restedAt.z) < 1e-6,
+      "it never drifted off the body it was eating",
+    );
+    tick();
+    mealTicks += 1;
+  }
+  assert.ok(
+    mealTicks * field.step >= preyStats.restSeconds.min - field.step,
+    `the meal lasted ${(mealTicks * field.step).toFixed(2)}s, under the species' own shortest pause`,
+  );
+  assert.equal(wolf.strikeCount, strikesBefore, "and nothing else was bitten during it");
+  assert.deepEqual(
+    preyOf(preyId).filter((animal) => !animal.dead).map((animal) => animal.health.current),
+    woundedBefore,
+    "the rest of the herd is untouched while the wolf is busy",
+  );
+
+  // The herd empties in the end, but one at a time — and the den is where it was.
+  let sweep = 0;
+  while (sweep < budget * 6 && preyOf(preyId).some((animal) => !animal.dead)) {
+    tick();
+    sweep += 1;
+  }
+  assert.ok(preyOf(preyId).every((animal) => animal.dead), "left alone, the pack does empty the meadow");
+  assert.equal(wolf.homeX, den.x, "the den did not walk with the wolf");
+  assert.equal(wolf.homeZ, den.z, "the den did not walk with the wolf");
+  assert.ok(
+    Math.hypot(wolf.position.x - den.x, wolf.position.z - den.z) <= predator.pursuitRadius + 1e-6,
+    "and the wolf itself never left the leash it hunts on",
+  );
+  field.territory.dispose();
 });
 
 check("a bolt commits to one heading instead of re-aiming at whoever is nearest", () => {
@@ -30612,8 +30933,14 @@ check("a bolt commits to one heading instead of re-aiming at whoever is nearest"
   let pose = { x: 0, z: 0, facing: 0 };
   const first = advanceRoam(state, pose, profile, step, random, { x: -deer.fleeRadius * 0.5, z: 0 });
   assert.ok(first.speed > 0, "the deer took fright and ran");
+  // Measured on the *ground track* rather than on `facing`, and that is a real
+  // distinction since the locomotion polish plan's Faz 1: facing is now stepped
+  // toward where the body is going at `turnRateDegPerSecond`, so it lags for a
+  // few ticks after the animal takes fright. What must not change is where the
+  // bolt is carrying it — the commitment lives in `fleeDirX/Z`, and the heading
+  // it travels is the only thing that ever showed the re-aiming bug.
+  const committed = Math.atan2(first.x - pose.x, first.z - pose.z);
   pose = { x: first.x, z: first.z, facing: first.facing };
-  const committed = first.facing;
 
   // Now a *nearer* body appears on the far side, outside the caught range. The
   // old code turned the deer around here, mid-stride. Kept short on purpose: the
@@ -30621,9 +30948,10 @@ check("a bolt commits to one heading instead of re-aiming at whoever is nearest"
   for (let tick = 0; tick < 5; tick += 1) {
     const nearer = { x: pose.x + CAUGHT_DISTANCE * 1.5, z: 0 };
     const next = advanceRoam(state, pose, profile, step, random, nearer);
+    const travelled = Math.atan2(next.x - pose.x, next.z - pose.z);
     assert.ok(
-      Math.abs(next.facing - committed) < 1e-6,
-      `a bolt in progress turned from ${committed} to ${next.facing} because something closer appeared`,
+      Math.abs(travelled - committed) < 1e-6,
+      `a bolt in progress turned from ${committed} to ${travelled} because something closer appeared`,
     );
     assert.ok(next.speed > 0, "and it is still running");
     pose = { x: next.x, z: next.z, facing: next.facing };
@@ -30667,6 +30995,346 @@ check("an animal bolting straight at its own rim runs along it rather than stand
     );
     pose = { x: next.x, z: next.z, facing: next.facing };
   }
+});
+
+/** Shortest turn between two wildlife facings (radians in, degrees out). */
+const wildlifeTurnDeg = (fromRad: number, toRad: number): number => {
+  const delta = (toRad - fromRad) * (180 / Math.PI);
+  return Math.abs(((((delta + 180) % 360) + 360) % 360) - 180);
+};
+
+check("locomotion Faz 1: no movement branch turns a body faster than its species' rate", () => {
+  // The plan's first contract, and it is checked against the table rather than
+  // against a number written here: scale every `turnRateDegPerSecond` in
+  // `animals.json` and this still holds, because the budget is computed from
+  // whatever the file says. What it refuses is the thing §3.1 measured — a body
+  // swinging 120 degrees inside one tick, on 80% of departures.
+  //
+  // All three branches, because the fault was one line repeated three times
+  // (`facing: Math.atan2(...)` in the roam walk, the drive and the chase), and a
+  // test that only covered grazing would have let two of them come back.
+  const animals = shippedAnimalBalance();
+  const step = 1 / 30;
+  for (const stats of Object.values(animals)) {
+    const profile = wildProfileFor(stats, 0, 0);
+    // A hair of slack for the radian/degree round trip, not for the rule.
+    const budget = stats.turnRateDegPerSecond * step + 1e-9;
+    const random = makeWildlifeRng(wildlifeSeed(`turn:${stats.id}`));
+    const state = initialRoamState(profile, random);
+
+    // Grazing, with somebody moving about inside the flee radius so the caught,
+    // bolting, resting and walking branches are all exercised in one run.
+    let pose = { x: 0, z: 0, facing: 0 };
+    for (let tick = 0; tick < 3000; tick += 1) {
+      const angle = tick * 0.31;
+      const threat = { x: Math.cos(angle) * 3, z: Math.sin(angle) * 3 };
+      const next = advanceRoam(state, pose, profile, step, random, threat);
+      assert.ok(
+        wildlifeTurnDeg(pose.facing, next.facing) <= budget,
+        `${stats.id} grazing turned ${wildlifeTurnDeg(pose.facing, next.facing).toFixed(2)} deg in one tick, past its ${budget.toFixed(2)} budget`,
+      );
+      pose = { x: next.x, z: next.z, facing: next.facing };
+    }
+
+    // Being driven: the shepherd is deliberately teleported to the far side, the
+    // input that used to spin a cow through 180 degrees in a frame.
+    pose = { x: 0, z: 0, facing: 0 };
+    for (let tick = 0; tick < 200; tick += 1) {
+      const side = tick % 20 < 10 ? 1 : -1;
+      const next = advanceLed(pose, { x: side * 5, z: side * 5, follow: true }, profile, step);
+      assert.ok(
+        wildlifeTurnDeg(pose.facing, next.facing) <= budget,
+        `${stats.id} being driven turned past its budget`,
+      );
+      pose = { x: next.x, z: next.z, facing: next.facing };
+    }
+
+    // Chasing, with the quarry jumping across the predator every few ticks.
+    pose = { x: 0, z: 0, facing: 0 };
+    const chaseState = initialRoamState(profile, random);
+    for (let tick = 0; tick < 200; tick += 1) {
+      const side = tick % 20 < 10 ? 1 : -1;
+      const next = advanceHunt(chaseState, pose, profile, step, {
+        x: side * 6,
+        z: side * 6,
+        pursuitRadius: profile.roamRadius * 2,
+      });
+      assert.ok(
+        wildlifeTurnDeg(pose.facing, next.facing) <= budget,
+        `${stats.id} chasing turned past its budget`,
+      );
+      pose = { x: next.x, z: next.z, facing: next.facing };
+    }
+  }
+});
+
+check("locomotion Faz 1: a turn finishes, and takes the short way round", () => {
+  // The other half of a rate: a cap that never converges is a body that arcs
+  // forever and never reaches the spot it set out for. Neither the duration nor
+  // the heading is pinned — what is asserted is that the animal *gets there*.
+  const deer = shippedAnimalBalance().deer ?? assert.fail("deer balance missing");
+  const profile = wildProfileFor(deer, 0, 0);
+  const step = 1 / 30;
+
+  // Facing due +z with the target dead behind it: the worst turn there is, and
+  // the one §3.1 says happens on four departures in five.
+  const random = makeWildlifeRng(wildlifeSeed("turn-completes"));
+  const state = initialRoamState(profile, random);
+  state.targetX = 0;
+  state.targetZ = -4;
+  state.restSeconds = 0;
+  let pose = { x: 0, z: 0, facing: 0 };
+  // Generous enough to cover the worst turn plus the walk, and derived from the
+  // table so a retune cannot make it too tight: half a turn at this species'
+  // rate, then the distance at its own grazing pace.
+  const ticks = Math.ceil(
+    ((180 / deer.turnRateDegPerSecond) + (4 / profile.walkSpeed)) / step,
+  ) + 30;
+  let moved = false;
+  for (let tick = 0; tick < ticks; tick += 1) {
+    const next = advanceRoam(state, pose, profile, step, random, null);
+    if (next.speed > 0) moved = true;
+    pose = { x: next.x, z: next.z, facing: next.facing };
+    if (state.targetX !== 0 || state.targetZ !== -4) break; // arrived and re-targeted
+  }
+  assert.ok(moved, "the animal did set off rather than pivoting forever");
+  assert.ok(
+    Math.hypot(pose.x - 0, pose.z - -4) < 0.2,
+    `a turn rate must not stop an animal reaching its spot; it stopped ${Math.hypot(pose.x, pose.z + 4).toFixed(2)} away`,
+  );
+
+  // Shortest path. Facing 0 with the target 10 degrees *anticlockwise*: the
+  // animal turns back through 10, never forward through 350.
+  const shortWay = makeWildlifeRng(wildlifeSeed("short-way"));
+  const shortState = initialRoamState(profile, shortWay);
+  const target = -10 * (Math.PI / 180);
+  shortState.targetX = Math.sin(target) * 4;
+  shortState.targetZ = Math.cos(target) * 4;
+  shortState.restSeconds = 0;
+  const stepped = advanceRoam(shortState, { x: 0, z: 0, facing: 0 }, profile, step, shortWay, null);
+  assert.ok(
+    stepped.facing < 0,
+    `a 350-degree target is a 10-degree turn back, not a 350-degree turn forward (got ${stepped.facing})`,
+  );
+  assert.ok(
+    wildlifeTurnDeg(stepped.facing, target) < wildlifeTurnDeg(0, target),
+    "and the step closed the gap rather than opening it",
+  );
+});
+
+check("locomotion Faz 2: every arrival earns a pause, the one after a bolt included", () => {
+  // §3.2, as a test. `advanceRoam` used to write `restSeconds = 0` when a bolt
+  // ended, and the arrival tick decremented that straight past zero — so the
+  // animal picked its next spot in the same frame it reached this one. Measured
+  // over 1200 seconds, a threatened deer took no pause on 53 of 85 arrivals,
+  // which is every herd in a real match because a real match has people in it.
+  const deer = shippedAnimalBalance().deer ?? assert.fail("deer balance missing");
+  const profile = wildProfileFor(deer, 0, 0);
+  const step = 1 / 30;
+  const random = makeWildlifeRng(wildlifeSeed("post-bolt-rest"));
+  const state = initialRoamState(profile, random);
+
+  // Drive one whole bolt: frightened from just inside the flee radius, then run
+  // until the flight timer expires.
+  let pose = { x: 0, z: 0, facing: 0 };
+  const threat = { x: -deer.fleeRadius * 0.5, z: 0 };
+  assert.ok(deer.fleeRadius * 0.5 > CAUGHT_DISTANCE, "the threat frightens rather than catches");
+  for (let tick = 0; tick < Math.ceil(deer.fleeSeconds / step) + 2; tick += 1) {
+    const next = advanceRoam(state, pose, profile, step, random, threat);
+    pose = { x: next.x, z: next.z, facing: next.facing };
+    if (state.fleeSeconds <= 0) break;
+  }
+  assert.equal(state.fleeSeconds, 0, "the bolt ran its course");
+  assert.ok(
+    state.restSeconds > 0,
+    "an animal that has just bolted owes itself a pause when it arrives, not a zero timer",
+  );
+  // The breather, derived rather than pinned: the pause banked after a bolt is
+  // this species' own shortest pause plus the time it spends winded, so a
+  // retuning of either moves the expectation with it.
+  assert.ok(
+    state.restSeconds >= deer.restSeconds.min + deer.fleeRecoverySeconds - 1e-9,
+    "and it is longer than an ordinary one, because it is blown",
+  );
+
+  // End to end: over a long threatened run no arrival takes a zero pause.
+  const longRandom = makeWildlifeRng(wildlifeSeed("no-zero-pause"));
+  const longState = initialRoamState(profile, longRandom);
+  const ring = [{ x: 14, z: 0 }, { x: -14, z: 0 }, { x: 0, z: 14 }, { x: 0, z: -14 }];
+  let longPose = { x: 0, z: 0, facing: 0 };
+  let standing = 0;
+  let arrivals = 0;
+  let zeroPauses = 0;
+  // Long enough for a useful number of arrivals *at any tuning*: one cycle is a
+  // pause (its longest, plus the post-bolt breather) and a walk across the herd's
+  // ground, all read from the table. A fixed tick count would silently stop
+  // sampling the moment somebody lengthened `restSeconds`.
+  const cycleSeconds = deer.restSeconds.max + deer.fleeRecoverySeconds
+    + (profile.roamRadius * 2) / profile.walkSpeed;
+  const runTicks = Math.ceil((40 * cycleSeconds) / step);
+  for (let tick = 0; tick < runTicks; tick += 1) {
+    const nearest = ring.reduce((best, point) =>
+      Math.hypot(point.x - longPose.x, point.z - longPose.z)
+        < Math.hypot(best.x - longPose.x, best.z - longPose.z) ? point : best);
+    const beforeX = longState.targetX;
+    const beforeZ = longState.targetZ;
+    const wasFleeing = longState.fleeSeconds > 0;
+    const next = advanceRoam(longState, longPose, profile, step, longRandom, nearest);
+    if (!wasFleeing && (longState.targetX !== beforeX || longState.targetZ !== beforeZ)) {
+      arrivals += 1;
+      if (standing === 0) zeroPauses += 1;
+      standing = 0;
+    }
+    standing = next.speed <= 0 ? standing + 1 : 0;
+    longPose = { x: next.x, z: next.z, facing: next.facing };
+  }
+  assert.ok(arrivals > 20, `the run has to contain arrivals to say anything (${arrivals})`);
+  assert.equal(zeroPauses, 0, `${zeroPauses} of ${arrivals} arrivals took no pause at all`);
+});
+
+check("locomotion Faz 2: how long an animal stands comes from its species", () => {
+  // §2.5 for the pause half: the shared `2.5..7` constant made a cow settle for
+  // exactly as long as a fox. Bounds are read from each species' own row, so
+  // this asserts the *derivation* and never a duration — retune the table and it
+  // still holds.
+  const animals = shippedAnimalBalance();
+  const step = 1 / 30;
+  const observed = new Map<string, number[]>();
+  for (const stats of Object.values(animals)) {
+    const profile = wildProfileFor(stats, 0, 0);
+    const random = makeWildlifeRng(wildlifeSeed(`rest:${stats.id}`));
+    const state = initialRoamState(profile, random);
+    let pose = { x: 0, z: 0, facing: 0 };
+    let standing = 0;
+    const pauses: number[] = [];
+    // Undisturbed, so every pause is a plain roll rather than one carrying the
+    // post-bolt breather. The run length is derived from this species' own
+    // numbers for the reason above: a fixed one stops sampling as soon as the
+    // table is retuned upward.
+    const cycleSeconds = stats.restSeconds.max + (profile.roamRadius * 2) / profile.walkSpeed;
+    const runTicks = Math.ceil((40 * cycleSeconds) / step);
+    for (let tick = 0; tick < runTicks; tick += 1) {
+      const beforeX = state.targetX;
+      const next = advanceRoam(state, pose, profile, step, random, null);
+      if (state.targetX !== beforeX && standing > 0) {
+        pauses.push(standing * step);
+        standing = 0;
+      }
+      standing = next.speed <= 0 ? standing + 1 : 0;
+      pose = { x: next.x, z: next.z, facing: next.facing };
+    }
+    assert.ok(pauses.length > 20, `${stats.id} produced too few pauses to judge`);
+    for (const pause of pauses) {
+      // The upper bound carries the pivot: a departure spends its turn standing
+      // still, and that time is part of what the player sees as the pause. Half a
+      // turn at this species' rate is the most it can ever add.
+      const pivotCeiling = 180 / stats.turnRateDegPerSecond;
+      assert.ok(
+        pause >= stats.restSeconds.min - step
+        && pause <= stats.restSeconds.max + pivotCeiling + step,
+        `${stats.id} stood ${pause.toFixed(2)}s, outside its own ${stats.restSeconds.min}..${stats.restSeconds.max} range`,
+      );
+    }
+    observed.set(stats.id, pauses);
+  }
+  // And the table really does distinguish them, or everything above is vacuous.
+  const cow = animals.cow ?? assert.fail("cow balance missing");
+  const fox = animals.fox ?? assert.fail("fox balance missing");
+  const authoredMean = (range: { min: number; max: number }): number => (range.min + range.max) / 2;
+  assert.ok(
+    authoredMean(cow.restSeconds) > authoredMean(fox.restSeconds),
+    "the shipped table has to separate a settled grazer from a restless one for this to mean anything",
+  );
+  const mean = (values: number[]): number => values.reduce((sum, v) => sum + v, 0) / values.length;
+  assert.ok(
+    mean(observed.get("cow") ?? []) > mean(observed.get("fox") ?? []),
+    "so the cow is observed standing longer than the fox",
+  );
+});
+
+check("locomotion Faz 2: a standing animal's job comes from what it is, not from its speed", () => {
+  // §3.3, the reason a wolf grazed. `wildlifeView` sent `working: speed <= 0`,
+  // `classifyRtsAnimation` returns `work` before `idle`, and every species'
+  // `work` clip is `Eating` — so the predator V3 added spent its whole patrol
+  // eating grass. Speed cannot answer this; the species can.
+  const animals = shippedAnimalBalance();
+  const wildlife = new WildlifeSystem(animals, Object.values(animals).map((stats, index) => ({
+    id: `herd:${stats.id}`,
+    species: stats.id,
+    x: index * 60,
+    z: 0,
+    count: 1,
+  })));
+  const field = new Group();
+  const view = new WildlifeView(field);
+  const working = new Map<string, boolean>();
+  let animalUnderTest = "";
+  view.setPresentationFactory(() => {
+    const species = animalUnderTest;
+    return {
+      root: new Object3D(),
+      pickTargets: [],
+      selectionRadius: 0.5,
+      dispose: () => {},
+      update: (input) => { working.set(species, input.working === true); },
+    };
+  });
+
+  for (const animal of wildlife.all()) {
+    animalUnderTest = animal.stats.id;
+    animal.speed = 0; // standing, which is the only case in question
+    const carnivore = animal.stats.predator !== undefined;
+    assert.equal(
+      animal.activity,
+      carnivore ? "alert" : "grazing",
+      `a standing ${animal.stats.id} is ${carnivore ? "watching" : "eating"}`,
+    );
+    view.sync([animal], 1 / 30, null);
+    assert.equal(
+      working.get(animal.stats.id),
+      !carnivore,
+      `${animal.stats.id} must ${carnivore ? "not " : ""}be sent to the work role while standing`,
+    );
+    // And the role that flag produces: no carnivore may ever reach `work`, which
+    // is the clip slot every sidecar fills with `Eating`.
+    const tuning = rtsLocomotionTuning(animal.stats.moveSpeed, {
+      walkClipSpeed: animal.stats.walkClipSpeed,
+    });
+    const role = classifyRtsAnimation(
+      { planarSpeed: 0, deltaSeconds: 1 / 30, working: !carnivore },
+      tuning,
+    );
+    assert.equal(role, carnivore ? "idle" : "work", `${animal.stats.id} standing plays the ${role} role`);
+  }
+  view.dispose();
+});
+
+check("locomotion Faz 4: a turn rate does not put prey out of a hunter's reach", () => {
+  // §9's first risk, as a measurement rather than a hope. `validateGameData`'s
+  // catchability inequality compares a bolt against what a hunter closes while
+  // the animal is winded — and it knows nothing about turning. If the turn rate
+  // changed the effective escape distance, only a run can say so.
+  const deer = shippedAnimalBalance().deer ?? assert.fail("deer balance missing");
+  const profile = wildProfileFor(deer, 0, 0);
+  const step = 1 / 30;
+  const random = makeWildlifeRng(wildlifeSeed("catchable"));
+  const state = initialRoamState(profile, random);
+  let pose = { x: 0, z: 0, facing: 0 };
+  // The slowest thing that may hunt, so passing here passes for every worker.
+  const hunterSpeed = 6;
+  let hunter = { x: profile.roamRadius, z: 0 };
+  let caught = false;
+  for (let tick = 0; tick < 60 * 30; tick += 1) {
+    const next = advanceRoam(state, pose, profile, step, random, hunter);
+    pose = { x: next.x, z: next.z, facing: next.facing };
+    const dx = pose.x - hunter.x;
+    const dz = pose.z - hunter.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance <= CAUGHT_DISTANCE) { caught = true; break; }
+    const walk = Math.min(hunterSpeed * step, distance);
+    hunter = { x: hunter.x + (dx / distance) * walk, z: hunter.z + (dz / distance) * walk };
+  }
+  assert.ok(caught, "a hunter still corners a deer inside a minute after the turn rate landed");
 });
 
 check("V3 Faz 1: every shipped species owns a sidecar and an actor", () => {
@@ -31366,13 +32034,15 @@ check("the animal validator refuses data that could never make sense", () => {
     fleeRecoverySeconds: 3,
     huntSeconds: 5,
     roamRadius: 10,
+    turnRateDegPerSecond: 220,
+    restSeconds: { min: 2.5, max: 7 },
     tameable: false,
   };
   assert.ok(validateAnimalBalance({ deer: sane }).deer, "the sane shape passes");
 
   for (const key of [
     "meatCapacity", "maxHealth", "moveSpeed", "walkClipSpeed", "fleeRadius", "roamRadius",
-    "fleeSeconds", "fleeRecoverySeconds", "huntSeconds",
+    "fleeSeconds", "fleeRecoverySeconds", "huntSeconds", "turnRateDegPerSecond",
   ] as const) {
     assert.throws(
       () => validateAnimalBalance({ deer: { ...sane, [key]: 0 } }),
@@ -31380,6 +32050,49 @@ check("the animal validator refuses data that could never make sense", () => {
       `a zero ${key} is refused, naming the field`,
     );
   }
+
+  // Locomotion polish §8. Both ends of the turn rate: zero is covered above (an
+  // animal that can never face its target), and the ceiling is the same instant
+  // snap the plan removed, only spelled as a number.
+  assert.throws(
+    () => validateAnimalBalance({ deer: { ...sane, turnRateDegPerSecond: 721 } }),
+    /turnRateDegPerSecond: 721 exceeds 720/,
+    "a turn rate past half a turn per second is refused, naming the field",
+  );
+  assert.ok(
+    validateAnimalBalance({ deer: { ...sane, turnRateDegPerSecond: 720 } }).deer,
+    "and the ceiling itself is legal, so the bound is a bound rather than a magnitude",
+  );
+  // The pause range. A negative pause is the §3.2 fault reintroduced from the
+  // table — a timer that has already expired on arrival — and an inverted range
+  // is a range nothing can pick a number out of.
+  for (const key of ["min", "max"] as const) {
+    assert.throws(
+      () => validateAnimalBalance({ deer: { ...sane, restSeconds: { ...sane.restSeconds, [key]: -1 } } }),
+      new RegExp(`restSeconds\\.${key}: must be >= 0`),
+      `a negative restSeconds.${key} is refused, naming the field`,
+    );
+    const { [key]: _dropped, ...partial } = sane.restSeconds;
+    assert.throws(
+      () => validateAnimalBalance({ deer: { ...sane, restSeconds: partial } }),
+      /must be a finite number/,
+      `a restSeconds missing ${key} is refused`,
+    );
+  }
+  assert.throws(
+    () => validateAnimalBalance({ deer: { ...sane, restSeconds: { min: 7, max: 2 } } }),
+    /restSeconds: min 7 must not exceed max 2/,
+    "an inverted pause range is refused, naming the file and the field",
+  );
+  assert.ok(
+    validateAnimalBalance({ deer: { ...sane, restSeconds: { min: 0, max: 0 } } }).deer,
+    "a species that never settles is a temperament, not bad data",
+  );
+  assert.throws(
+    () => validateAnimalBalance({ deer: { ...sane, restSeconds: undefined } }),
+    /restSeconds/,
+    "a species that never answers how long it pauses is refused",
+  );
   // A herd that roams the whole map is the "one global pool" failure again.
   assert.throws(
     () => validateAnimalBalance({ deer: { ...sane, roamRadius: 70 } }),
@@ -39818,6 +40531,92 @@ check("RTS simulation speed multiplies time in safe fixed-size slices", () => {
   assert.deepEqual(accelerated, [1 / 15, 1 / 15]);
   assert.equal(accelerated.reduce((total, step) => total + step, 0), 8 / 60);
   assert.throws(() => simulationSteps(1 / 60, 3 as never, 1 / 15), /Unsupported RTS simulation speed/);
+});
+
+const shippedCaravanBalance = () => validateCaravanBalance(
+  JSON.parse(readFileSync("public/game-data/balance/logistics.json", "utf8")) as unknown,
+);
+
+const shippedBuildingBalance = () => validateBuildingBalance(
+  JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+);
+
+check("V4 Faz 1: a caravan carries no more than its producer can buffer", () => {
+  // Computed from both shipped tables rather than pinned, so the contract holds
+  // at any tuning: the bound is whatever the weakest producer's buffer happens
+  // to be after the next balance pass, and the check moves with it.
+  const buildings = shippedBuildingBalance();
+  const smallest = smallestProducerBufferCapacity(buildings)
+    ?? assert.fail("no producer in the shipped table carries a local buffer");
+  const caravan = shippedCaravanBalance();
+  assert.ok(
+    caravan.carryCapacity <= smallest,
+    `a caravan lifts ${caravan.carryCapacity} but the smallest producer only holds ${smallest} — `
+    + "that building would be emptied every visit and its buffer could never fill",
+  );
+  // The same bound the runtime loader applies at boot. Data one unit past it is
+  // refused by the validator, not merely noticed here.
+  assert.throws(
+    () => validateCaravanBalance(
+      { caravan: { ...caravan, carryCapacity: smallest + 1 } },
+      { maxCarryCapacity: smallest },
+    ),
+    GameDataError,
+    "a load past the smallest buffer is refused with a field message",
+  );
+  assert.ok(
+    validateCaravanBalance({ caravan }, { maxCarryCapacity: smallest }),
+    "and the shipped load passes the same gate",
+  );
+});
+
+check("V4 Faz 1: the caravan validator refuses data that could never make sense", () => {
+  const caravan = shippedCaravanBalance();
+  const refuse = (patch: Record<string, unknown>, why: string): void => {
+    assert.throws(() => validateCaravanBalance({ caravan: { ...caravan, ...patch } }), GameDataError, why);
+  };
+  refuse({ carryCapacity: 0 }, "a caravan that carries nothing moves no resource at all");
+  refuse({ moveSpeed: 0 }, "a caravan that never arrives starves the producer it serves");
+  refuse({ walkClipSpeed: 0 }, "a walk clip with no reference speed cannot be calibrated");
+  refuse({ maxHealth: 0 }, "a caravan has to be a thing that can be killed");
+  refuse({ loadSeconds: -1 }, "loading cannot take negative time");
+  refuse({ spawnPerProducer: 1.5 }, "half a donkey is not a caravan");
+  refuse({ spawnPerProducer: 0 }, "a producer with no caravan would never ship anything");
+  refuse({ armorClass: "structure" }, "a pack animal is not a building");
+  refuse({ label: "" }, "the table entry has to name itself");
+  // Zero is the one legal floor: a brisk tuning, not a broken one.
+  assert.ok(
+    validateCaravanBalance({ caravan: { ...caravan, loadSeconds: 0 } }).loadSeconds === 0,
+    "an instant load is a tuning choice the validator allows",
+  );
+});
+
+check("V4 Faz 1: the caravan is art from the wildlife pack, but never a row in the species table", () => {
+  const animals = shippedAnimalBalance();
+  // KARAR 3-B, checked rather than trusted: a `donkey` species would drag the
+  // grazing/fleeing/hunting fields onto something that does none of them.
+  assert.equal(animals["donkey"], undefined, "the caravan has no huntable-species row");
+
+  const actorRef = rtsCaravanActorRef(shippedRtsContentCatalog())
+    ?? assert.fail("the catalog maps no caravan Actor");
+  assert.ok(existsSync(`public/${actorRef}`), `${actorRef} exists on disk`);
+
+  // The Actor points at a mesh the manifest ships, and that mesh has a sidecar —
+  // the pairing the wildlife clip test then checks clip by clip.
+  const actor = JSON.parse(readFileSync(`public/${actorRef}`, "utf8")) as {
+    components?: { props?: { assetId?: string } }[];
+  };
+  const assetId = actor.components?.find((component) => component.props?.assetId)?.props?.assetId
+    ?? assert.fail("the caravan Actor names no skeletal mesh");
+  const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
+    assets: { id: string; path: string }[];
+  };
+  const mesh = manifest.assets.find((asset) => asset.id === assetId)
+    ?? assert.fail(`the caravan Actor's mesh "${assetId}" is not in the manifest`);
+  assert.ok(
+    existsSync(`public/${mesh.path.replace(/\.gltf$/, ".skeleton.json")}`),
+    `${mesh.path} carries the skeleton sidecar its clips are resolved through`,
+  );
 });
 
 check("RTS road graph finds obstacle-free cells, charges new segments, and keeps alternate connectivity", () => {

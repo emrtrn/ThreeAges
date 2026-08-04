@@ -16,15 +16,29 @@
  * territory is what makes the Karakol and the control area *true by definition*
  * rather than true on the current tuning — the whole claim V3 §1 is built on.
  *
+ * Faz 5 gives it a second thing to want: the wild game its `preySpecies` names.
+ * That half costs the map nothing and buys it a great deal — a herd beside a den
+ * thins whether or not anybody is watching, and every deer the pack takes is one
+ * the player will not (§2.8). It is the same chase, the same bite and the same
+ * carcass the hunting camp already knows how to butcher; what it adds is a pause
+ * over the kill, because a pack that started the next one on the frame the last
+ * body dropped would clear a meadow before the player could read what happened.
+ *
  * Movement is not owned here. This decides who is being chased and writes it to
  * {@link WildlifeAnimal.hunt}; the herd's own tick runs the third movement mode
  * over it, exactly as the pasture writes a `lead` and lets the animal walk it.
  */
+import type { AnimalPredatorBalance } from "../../data/gameDataTypes";
 import type { TerritoryOwner } from "../territory/territoryControlSystem";
 import type { Unit } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { WildlifeAnimal, WildlifeSystem } from "./wildlifeSystem";
-import { CAUGHT_DISTANCE, type HuntQuarry } from "./wildlifeRoaming";
+import {
+  CAUGHT_DISTANCE,
+  makeWildlifeRng,
+  wildlifeSeed,
+  type HuntQuarry,
+} from "./wildlifeRoaming";
 
 /**
  * How close a predator plants itself before biting, in world units.
@@ -36,16 +50,57 @@ import { CAUGHT_DISTANCE, type HuntQuarry } from "./wildlifeRoaming";
  */
 const PREDATOR_STANDOFF = 1.2;
 
-/** One bite that has landed, for narration, the Faz 4 notification and the tests. */
+/**
+ * One bite that has landed **on a person**, for the Faz 4 notification, the
+ * retaliation call and the tests.
+ *
+ * Bites taken out of game (V3 Faz 5) deliberately produce none. A strike is
+ * published so that something outside can *answer* it — a mauled worker turns on
+ * the wolf, the notification feed says so — and a deer has no answer to give: it
+ * is already running, and what becomes of it is written on the carcass rather
+ * than in an event.
+ */
 export interface PredatorStrike {
   readonly predator: WildlifeAnimal;
   readonly victim: Unit;
   readonly damage: number;
 }
 
+/**
+ * What a predator has picked, kept apart by kind rather than by a shared
+ * interface — V3 Faz 5.
+ *
+ * The two bodies answer every question the chase itself asks (`position`,
+ * `health`) identically, so the movement and the biting below are written once.
+ * What differs is everything *around* the bite: only a person makes the wolf a
+ * legitimate target for an army, only a person is worth a notification, and only
+ * game leaves something behind to eat. A tag is what keeps those three rules
+ * from having to guess.
+ */
+type PredatorQuarry =
+  | { readonly kind: "worker"; readonly unit: Unit }
+  | { readonly kind: "prey"; readonly animal: WildlifeAnimal };
+
+/** The id of a held quarry, in whichever namespace its roster uses. */
+type HeldQuarry =
+  | { readonly kind: "worker"; readonly id: number }
+  | { readonly kind: "prey"; readonly id: string };
+
+/** A kill a predator is standing over, and how long it stays there. */
+interface Meal {
+  secondsLeft: number;
+  readonly x: number;
+  readonly z: number;
+}
+
+/** The body of whatever is being chased — the half both kinds share. */
+function bodyOf(quarry: PredatorQuarry): Unit | WildlifeAnimal {
+  return quarry.kind === "worker" ? quarry.unit : quarry.animal;
+}
+
 export class PredatorSystem {
   /**
-   * Which unit each predator is currently after, by id.
+   * What each predator is currently after, by id.
    *
    * Held rather than re-chosen every tick, and that is a behaviour decision, not
    * a cache: a wolf that took the nearest worker each frame would swap victims
@@ -54,17 +109,30 @@ export class PredatorSystem {
    *
    * Keyed by id on both sides so nothing here keeps a dead body alive.
    */
-  private readonly victimIdByAnimalId = new Map<string, number>();
+  private readonly quarryByAnimalId = new Map<string, HeldQuarry>();
+
+  /** The kill each predator is currently eating — see {@link chewOn}. */
+  private readonly mealByAnimalId = new Map<string, Meal>();
 
   /**
-   * The predators that held a victim on the last tick — see {@link aggressors}.
+   * Per-predator pause rolls, seeded from the animal's id.
+   *
+   * Seeded rather than `Math.random` for the reason the herd's own RNG is: how
+   * long a wolf lingers decides how fast a meadow empties, so it is simulation,
+   * and the headless AI has to see the same map the player does.
+   */
+  private readonly feedRngByAnimalId = new Map<string, () => number>();
+
+  /**
+   * The predators that were answerable when the last pass ended — see
+   * {@link hostile}.
    *
    * Rebuilt each pass rather than derived from {@link victimIdByAnimalId} on
-   * demand, because the two answer subtly different questions: the map still
-   * names the worker a wolf was after when he died, while this is the list of
-   * animals that were actually hunting somebody when the pass ended.
+   * demand, because the two answer different questions: the map still names the
+   * worker a wolf was after when he died, and half this list was never in the
+   * map at all (a trespasser hunting nobody).
    */
-  private hunting: WildlifeAnimal[] = [];
+  private hostileNow: WildlifeAnimal[] = [];
 
   constructor(
     private readonly units: UnitSystem,
@@ -88,39 +156,57 @@ export class PredatorSystem {
       throw new RangeError("Predator delta must be a non-negative finite number");
     }
     const strikes: PredatorStrike[] = [];
-    this.hunting = [];
+    this.hostileNow = [];
     let workers: readonly Unit[] | null = null;
     for (const animal of this.wildlife.all()) {
       const predator = animal.stats.predator;
       if (!predator) continue;
-      // Only the animals this system governs have their flag cleared here, so
+      // Only the animals this system governs have their flags cleared here, so
       // the retaliation pass and this one never overwrite each other's answer.
       animal.attacking = false;
+      animal.feeding = false;
       // A carcass hunts nobody, and a tamed predator is its owner's animal
       // rather than a danger on the map (KARAR 5's line, drawn once).
       if (animal.dead || animal.owner !== "wild") {
         this.giveUp(animal);
         continue;
       }
-      const victim = this.victimFor(animal, () => (workers ??= this.huntableWorkers()));
-      if (!victim) {
+      // A predator on its kill picks nothing, which is the whole brake on §2.8.
+      const eating = this.chewOn(animal, predator, deltaSeconds);
+      const quarry = eating
+        ? null
+        : this.victimFor(animal, predator, () => (workers ??= this.huntableWorkers()));
+      // Answerable on either count, and the second one is what makes a Karakol
+      // worth building against a den: KARAR 1 keeps a hunting wolf *outside* the
+      // control area by definition, and the shipped tower owns further
+      // (`controlRadius`) than it can shoot (`attackRange`) — so "is it hunting"
+      // alone would have been a rule the tower could never once satisfy.
+      //
+      // Only a chase after a *person* counts. A wolf running down a deer three
+      // meadows away threatens nobody, and putting it on offer would send the
+      // escort §2.9 refuses to spend off after it — the same half of §9's first
+      // risk, arriving through the hunt instead of through the roster. Trespass
+      // still answers for the wolf on your ground, kill or no kill.
+      if (quarry?.kind === "worker" || this.trespassing(animal)) this.hostileNow.push(animal);
+      if (eating) continue;
+      if (!quarry) {
         this.giveUp(animal);
         continue;
       }
-      this.victimIdByAnimalId.set(animal.id, victim.id);
-      this.hunting.push(animal);
+      this.hold(animal, quarry);
 
+      const body = bodyOf(quarry);
       const gap = Math.hypot(
-        animal.position.x - victim.position.x,
-        animal.position.z - victim.position.z,
+        animal.position.x - body.position.x,
+        animal.position.z - body.position.z,
       );
-      const quarry: HuntQuarry = {
-        x: victim.position.x,
-        z: victim.position.z,
+      const chase: HuntQuarry = {
+        x: body.position.x,
+        z: body.position.z,
         pursuitRadius: predator.pursuitRadius,
         standoff: PREDATOR_STANDOFF,
       };
-      animal.hunt = quarry;
+      animal.hunt = chase;
       if (gap > CAUGHT_DISTANCE) {
         // Still closing. Banking the wind-up would hand a wolf that has just
         // caught up a free bite on arrival — the bull's rule, same reasoning.
@@ -136,66 +222,225 @@ export class PredatorSystem {
       while (animal.strikeSeconds >= interval) {
         animal.strikeSeconds -= interval;
         animal.strikeCount += 1;
-        victim.health.damage(predator.damage);
-        strikes.push({ predator: animal, victim, damage: predator.damage });
-        // What happens to the body happens elsewhere — `updateUnitDeaths` removes
-        // it, and every job system drops a depleted worker on its own next pass.
-        // Here it only means there is nobody left to bite.
-        if (victim.health.depleted) break;
+        body.health.damage(predator.damage);
+        if (quarry.kind === "worker") {
+          strikes.push({ predator: animal, victim: quarry.unit, damage: predator.damage });
+        }
+        if (body.health.depleted) {
+          // What happens to a fallen *worker* happens elsewhere —
+          // `updateUnitDeaths` removes him and every job system drops a depleted
+          // worker on its own next pass — so here his death only means there is
+          // nobody left to bite. Game is the opposite: the carcass stays on the
+          // map as meat (V3 Faz 5), and the wolf stays on the carcass.
+          if (quarry.kind === "prey") this.beginMeal(animal, quarry.animal);
+          break;
+        }
       }
     }
     return strikes;
   }
 
   /**
-   * The predators currently hunting somebody — V3 Faz 4's answer to §3.4.
+   * The predators an army and a tower may answer — V3 Faz 4's answer to §3.4.
    *
    * What the composition root adds to `combatTargets()`, and the reason it is a
    * *list of animals* rather than a species check: wildlife is a
    * {@link CombatTarget} and `nearestHostile` reads owner alone, so handing it
    * the whole roster would make every grazing deer hostile to both kingdoms and
-   * send half an army off after venison mid-raid (§9's first risk). A state
-   * cannot do that. The deer only becomes a target by *becoming a hunter*, and
-   * it stops being one the tick it gives up.
+   * send half an army off after venison mid-raid (§9's first risk). A **state**
+   * cannot do that, and there are two of them here — both ones an animal can
+   * walk out of again:
    *
-   * A predator that is still closing counts, not only one already biting: the
-   * Guard beside a worker being charged must be allowed to meet the wolf rather
-   * than wait for the first bite to land.
+   * - **Hunting somebody.** One that is still closing counts, not only one
+   *   already biting: the Guard beside a charged worker has to be allowed to meet
+   *   the wolf rather than wait for the first bite to land.
+   * - **Standing on a kingdom's ground.** A wolf inside a control area is a
+   *   trespasser, and this is the half that makes §2.7 real. KARAR 1 holds a
+   *   *hunting* wolf outside the control area by construction, while the Karakol
+   *   owns 16 and shoots 12 — so on the first state alone the tower's arrows
+   *   could never once fire, which is exactly how it played. It also answers what
+   *   the pack looked like once a tower went up beside the den: unmolestable
+   *   workers walking past unmolested wolves, "as if they had been tamed".
+   *
+   * Grazing wildlife is in neither, whichever ground it wanders onto: a deer in
+   * your territory is livestock you have not caught, not a threat.
    */
-  aggressors(): readonly WildlifeAnimal[] {
-    return this.hunting;
+  hostile(): readonly WildlifeAnimal[] {
+    return this.hostileNow;
   }
 
   // --- internals ------------------------------------------------------------
 
   /**
-   * The unit this predator is after, or null when it should be patrolling.
+   * Whether this predator is standing on ground some kingdom holds.
    *
-   * A held victim is re-checked rather than re-chosen, so the two questions
-   * "may this still be hunted" and "is there anything to hunt" share one set of
-   * conditions ({@link huntable}) and can never disagree — the way a wolf keeps
-   * chasing a worker who has just stepped into a Karakol's shadow.
+   * The same {@link ownerAt} read KARAR 1 makes about the *victim*, asked about
+   * the animal instead — so the two halves of V3's territory rule are one grid
+   * lookup with the sign flipped: unowned ground is where a worker may be taken,
+   * owned ground is where a wolf may be shot.
    */
-  private victimFor(animal: WildlifeAnimal, workers: () => readonly Unit[]): Unit | null {
-    const predator = animal.stats.predator;
-    if (!predator) return null;
-    const heldId = this.victimIdByAnimalId.get(animal.id);
-    if (heldId !== undefined) {
-      const held = workers().find((unit) => unit.id === heldId);
-      if (held && this.withinLeash(animal, held)) return held;
+  private trespassing(animal: WildlifeAnimal): boolean {
+    return this.ownerAt(animal.position.x, animal.position.z) !== "neutral";
+  }
+
+  /**
+   * What this predator is after, or null when it should be patrolling.
+   *
+   * A held quarry is re-checked rather than re-chosen, so the two questions
+   * "may this still be hunted" and "is there anything to hunt" share one set of
+   * conditions and can never disagree — the way a wolf keeps chasing a worker
+   * who has just stepped into a Karakol's shadow.
+   *
+   * People outrank game, and that ordering is total on purpose: a worker who
+   * walks past a wolf already running down a deer takes the chase over, but
+   * nothing ever hands it back, so the priority cannot become the oscillation
+   * the held quarry exists to prevent. It is also the honest reading of the
+   * feature — §1 sells the wolf as the reason to escort a worker, and a wolf
+   * that finished its venison first would be scenery at the exact moment it was
+   * supposed to be a threat.
+   */
+  private victimFor(
+    animal: WildlifeAnimal,
+    predator: AnimalPredatorBalance,
+    workers: () => readonly Unit[],
+  ): PredatorQuarry | null {
+    const held = this.quarryByAnimalId.get(animal.id);
+    if (held?.kind === "worker") {
+      const unit = workers().find((candidate) => candidate.id === held.id);
+      if (unit && this.withinLeash(animal, predator, unit.position)) return { kind: "worker", unit };
     }
-    let best: Unit | null = null;
+    const worker = this.nearest(animal, predator, workers());
+    if (worker) return { kind: "worker", unit: worker };
+    if (held?.kind === "prey") {
+      const kept = this.wildlife.animalById(held.id);
+      if (kept && this.isPrey(animal, predator, kept) && this.withinLeash(animal, predator, kept.position)) {
+        return { kind: "prey", animal: kept };
+      }
+    }
+    const prey = this.nearest(
+      animal,
+      predator,
+      this.wildlife.all().filter((candidate) => this.isPrey(animal, predator, candidate)),
+    );
+    return prey ? { kind: "prey", animal: prey } : null;
+  }
+
+  /**
+   * Whether this animal is game the hunter is allowed to bring down — KARAR 5,
+   * and the only place that decision is taken.
+   *
+   * `preySpecies` names wild game and nothing else; the table is what refuses a
+   * tameable species there (`validateAnimalBalance`), so livestock cannot be
+   * listed and a driven cow is doubly safe: the owner check below takes an
+   * animal out of the wild economy the moment a shepherd pens it, exactly as it
+   * does for the hunting camp. Buildings never come up — a structure is not on
+   * any roster this system reads.
+   */
+  private isPrey(
+    hunter: WildlifeAnimal,
+    predator: AnimalPredatorBalance,
+    candidate: WildlifeAnimal,
+  ): boolean {
+    return candidate !== hunter
+      && !candidate.dead
+      && candidate.owner === "wild"
+      && predator.preySpecies.includes(candidate.stats.id);
+  }
+
+  /** The nearest of `candidates` inside both the eye and the leash, or null. */
+  private nearest<T extends { readonly position: { readonly x: number; readonly z: number } }>(
+    animal: WildlifeAnimal,
+    predator: AnimalPredatorBalance,
+    candidates: readonly T[],
+  ): T | null {
+    let best: T | null = null;
     let bestDistance = predator.acquisitionRadius * predator.acquisitionRadius;
-    for (const worker of workers()) {
-      if (!this.withinLeash(animal, worker)) continue;
-      const distance = this.distanceSquared(animal, worker);
+    for (const candidate of candidates) {
+      if (!this.withinLeash(animal, predator, candidate.position)) continue;
+      const distance = this.distanceSquared(animal, candidate.position);
       // `<` rather than `<=` so the roster's own order breaks a tie, which keeps
       // acquisition deterministic for the headless AI (the wildlife RNG rule).
       if (distance >= bestDistance) continue;
-      best = worker;
+      best = candidate;
       bestDistance = distance;
     }
     return best;
+  }
+
+  /**
+   * Age the pause a predator takes over its kill, and hold it there.
+   *
+   * Returns whether it is still eating. Two things happen in this window and
+   * both are the point of it. The pack thins a herd at a pace a player can
+   * watch — §2.8 asks for a meadow that empties "over time", and back-to-back
+   * kills would empty one in the time it takes to notice the first — and the
+   * wolf is *visibly* on the body rather than trotting off the instant it
+   * stops moving.
+   *
+   * The carcass is held as a quarry rather than by releasing the animal, and
+   * that is the Faz 3 lesson repeated: grazing clamps a body inside its patrol
+   * circle, so a wolf let go over a kill outside that circle snaps back to the
+   * rim in one frame. Standing still is a chase whose target it has already
+   * reached.
+   *
+   * How long is the species' own `restSeconds` — the pause it already takes
+   * between moves — rather than a new balance field. A carnivore has no grazing
+   * pause to spend it on, so the number was authored and unused; the meal is
+   * exactly what it means for this species.
+   */
+  private chewOn(
+    animal: WildlifeAnimal,
+    predator: AnimalPredatorBalance,
+    deltaSeconds: number,
+  ): boolean {
+    const meal = this.mealByAnimalId.get(animal.id);
+    if (!meal) return false;
+    meal.secondsLeft -= deltaSeconds;
+    if (meal.secondsLeft <= 0) {
+      // Done eating: hand it straight back to the same walk home a called-off
+      // chase takes, in this tick rather than the next, so it may also pick a
+      // fresh target on the way if one has wandered into range.
+      this.giveUp(animal);
+      return false;
+    }
+    animal.feeding = true;
+    animal.hunt = {
+      x: meal.x,
+      z: meal.z,
+      pursuitRadius: predator.pursuitRadius,
+      standoff: PREDATOR_STANDOFF,
+    };
+    return true;
+  }
+
+  /** Settle a predator onto the kill it has just made. */
+  private beginMeal(animal: WildlifeAnimal, prey: WildlifeAnimal): void {
+    this.quarryByAnimalId.delete(animal.id);
+    animal.strikeSeconds = 0;
+    const { min, max } = animal.stats.restSeconds;
+    this.mealByAnimalId.set(animal.id, {
+      secondsLeft: min + this.feedRandom(animal)() * (max - min),
+      x: prey.position.x,
+      z: prey.position.z,
+    });
+  }
+
+  private feedRandom(animal: WildlifeAnimal): () => number {
+    let random = this.feedRngByAnimalId.get(animal.id);
+    if (!random) {
+      random = makeWildlifeRng(wildlifeSeed(`feed:${animal.id}`));
+      this.feedRngByAnimalId.set(animal.id, random);
+    }
+    return random;
+  }
+
+  private hold(animal: WildlifeAnimal, quarry: PredatorQuarry): void {
+    this.quarryByAnimalId.set(
+      animal.id,
+      quarry.kind === "worker"
+        ? { kind: "worker", id: quarry.unit.id }
+        : { kind: "prey", id: quarry.animal.id },
+    );
   }
 
   /**
@@ -224,11 +469,13 @@ export class PredatorSystem {
    * accepts is by construction one the animal can actually reach — without it a
    * wolf would stand at the end of its leash with its teeth in the air.
    */
-  private withinLeash(animal: WildlifeAnimal, victim: Unit): boolean {
-    const predator = animal.stats.predator;
-    if (!predator) return false;
-    const dx = victim.position.x - animal.homeX;
-    const dz = victim.position.z - animal.homeZ;
+  private withinLeash(
+    animal: WildlifeAnimal,
+    predator: AnimalPredatorBalance,
+    victim: { readonly x: number; readonly z: number },
+  ): boolean {
+    const dx = victim.x - animal.homeX;
+    const dz = victim.z - animal.homeZ;
     return dx * dx + dz * dz <= predator.pursuitRadius * predator.pursuitRadius;
   }
 
@@ -244,10 +491,14 @@ export class PredatorSystem {
    * the wrong one: the den is the fixed point the leash, the nest-placement rule
    * and the map-fairness test are all measured from, and a den that walked with
    * the wolf would let a pack drift into a starting control area one chase at a
-   * time.
+   * time. Faz 5 weighed it again where §3.6 asked it to be weighed — over a
+   * finished kill — and the answer got stronger rather than weaker: a den that
+   * moved to each carcass would walk a pack across the map one deer at a time,
+   * and the meadow it was placed to guard would be behind it by the third meal.
    */
   private giveUp(animal: WildlifeAnimal): void {
-    this.victimIdByAnimalId.delete(animal.id);
+    this.quarryByAnimalId.delete(animal.id);
+    this.mealByAnimalId.delete(animal.id);
     animal.strikeSeconds = 0;
     const predator = animal.stats.predator;
     if (!predator || animal.dead || animal.owner !== "wild") {
@@ -260,9 +511,12 @@ export class PredatorSystem {
       : null;
   }
 
-  private distanceSquared(animal: WildlifeAnimal, unit: Unit): number {
-    const dx = animal.position.x - unit.position.x;
-    const dz = animal.position.z - unit.position.z;
+  private distanceSquared(
+    animal: WildlifeAnimal,
+    point: { readonly x: number; readonly z: number },
+  ): number {
+    const dx = animal.position.x - point.x;
+    const dz = animal.position.z - point.z;
     return dx * dx + dz * dz;
   }
 }

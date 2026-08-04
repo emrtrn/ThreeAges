@@ -19,6 +19,7 @@ import {
   validateAiBalance,
   validateBuildingBalance,
   validateAnimalBalance,
+  validateCaravanBalance,
   validateResourceBalance,
   validateRoadBalance,
   validateUnitBalance,
@@ -654,6 +655,19 @@ const AI_FIELDS = [
   { path: "workerTarget.town", label: "İşçi hedefi: Kasaba", min: 0, step: 1 },
 ];
 
+// V4 görünür lojistik: yük eşeği (`balance/logistics.json`). Tek girdi, çünkü
+// kervan bir tür değil bir rol — bu tablo "eşek nasıl bir taşıyıcı" sorusunu
+// yanıtlar, "hangi hayvan" sorusunu değil (o cevap Hayvan Dengesi'nde).
+const LOGISTICS_FIELDS = [
+  { path: "label", label: "Ad" },
+  { path: "carryCapacity", label: "Sefer başına yük", min: 0, step: 5, hint: "Bir seferde taşınan kaynak. Üreticilerin en küçük 'Yerel tampon' değerini aşamaz: aşarsa kervan binayı her gelişinde boşaltır, tampon hiç dolmaz ve uzak üreticinin gecikmesi hissedilmez." },
+  { path: "moveSpeed", label: "Yol hızı", min: 0, step: 0.1, hint: "Kervanın yolda ilerleme hızı. Yavaşlatmak uzak üreticiyi pahalılaştırır — kervan bir gecikmedir." },
+  { path: "walkClipSpeed", label: "Yürüme klibi hızı", min: 0, step: 0.1, hint: "Yürüme animasyonunun doğal göründüğü hız. Yol hızıyla arası açılırsa eşek ayaklarını kaydırarak yürür; ikisini birlikte ayarlayın." },
+  { path: "maxHealth", label: "Can", min: 0, step: 5, hint: "Kervan saldırılabilir bir hedeftir; düşük can baskını ödüllendirir." },
+  { path: "loadSeconds", label: "Yükleme/boşaltma (sn)", min: 0, step: 0.5, hint: "Yolun iki ucunda beklenen süre; kervanın 'çalışıyor' göründüğü an." },
+  { path: "spawnPerProducer", label: "Üretici başına kervan", min: 1, step: 1, hint: "Bağlı her üreticinin yolda tuttuğu eşek sayısı. Tam sayı olmalıdır." },
+];
+
 const ROADS_FIELDS = [
   { path: "cellSize", label: "Hücre boyutu (birim)", min: 0.1, step: 0.1 },
   { path: "woodCostPerCell", label: "Hücre başına odun maliyeti", min: 0, step: 1 },
@@ -772,6 +786,17 @@ export const GAME_EDITOR_CATALOG = {
       path: "game-data/balance/roads.json",
       fields: ROADS_FIELDS,
       validate: asTableValidator(validateRoadBalance),
+    },
+    {
+      id: "logistics",
+      label: "Lojistik Dengesi (Yük Eşeği)",
+      path: "game-data/balance/logistics.json",
+      fields: LOGISTICS_FIELDS,
+      // The cross-table bound (`carryCapacity` vs the smallest producer buffer)
+      // is deliberately not applied here: it needs `buildings.json`, which this
+      // route does not load. The runtime boot does apply it, so a load authored
+      // past the bound is refused where it would actually be played.
+      validate: asTableValidator(validateCaravanBalance),
     },
   ],
 };

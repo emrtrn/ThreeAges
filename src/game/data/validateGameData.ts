@@ -29,6 +29,16 @@ const WORLD_HALF_EXTENT_FOR_VISION_CHECK = 70;
  * this only makes the check stricter than it needs to be, never looser.
  */
 const FASTEST_HUNTER_SPEED = 6;
+
+/**
+ * Ceiling for `turnRateDegPerSecond` — half a full turn per second.
+ *
+ * Chosen as the point where a turn stops being one: at 720 a body sweeps 24
+ * degrees in a single 1/30 s tick, and anything faster is the instant snap the
+ * locomotion plan was written to remove, only spelled as data. The floor (`> 0`)
+ * is the other end — a rate of zero is an animal that can never face its target.
+ */
+const MAX_ANIMAL_TURN_RATE_DEG_PER_SECOND = 720;
 import type {
   AiAgeUpScoring,
   AiArmyComposition,
@@ -43,11 +53,13 @@ import type {
   AnimalBalance,
   AnimalBalanceStats,
   AnimalPredatorBalance,
+  AnimalRestBalance,
   AnimalRetaliationBalance,
   BuildingBalance,
   BuildingPadVisual,
   BuildingProgressionBalance,
   BuildingProgressionTier,
+  CaravanBalance,
   GamePreset,
   GameVersion,
   MarketBalance,
@@ -1131,7 +1143,7 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
     const stats = asObject(raw, statsWhere);
     const positive = (
       key: "meatCapacity" | "maxHealth" | "moveSpeed" | "walkClipSpeed" | "fleeRadius" | "roamRadius"
-        | "fleeSeconds" | "fleeRecoverySeconds" | "huntSeconds",
+        | "fleeSeconds" | "fleeRecoverySeconds" | "huntSeconds" | "turnRateDegPerSecond",
     ) => {
       const amount = requireFiniteNumber(stats, key, statsWhere);
       if (amount <= 0) throw new GameDataError(`${statsWhere}.${key}: must be > 0`);
@@ -1183,6 +1195,18 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
         }
       }
     }
+    // Locomotion polish §6: a turn that takes no time is the single-frame snap
+    // the plan exists to remove, and one past half a turn per second is that
+    // snap again wearing a rate. Between the two the magnitude stays tunable.
+    const turnRateDegPerSecond = positive("turnRateDegPerSecond");
+    if (turnRateDegPerSecond > MAX_ANIMAL_TURN_RATE_DEG_PER_SECOND) {
+      throw new GameDataError(
+        `${statsWhere}.turnRateDegPerSecond: ${turnRateDegPerSecond} exceeds `
+        + `${MAX_ANIMAL_TURN_RATE_DEG_PER_SECOND} — above that a body spins faster than half a `
+        + `turn per second, which reads as the instant snap a turn rate is meant to replace`,
+      );
+    }
+    const restSeconds = validateAnimalRest(stats["restSeconds"], `${statsWhere}.restSeconds`);
     const retaliation = validateAnimalRetaliation(stats["retaliation"], `${statsWhere}.retaliation`);
     const walkClipSpeed = positive("walkClipSpeed");
     const predator = validateAnimalPredator(
@@ -1209,6 +1233,8 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
       fleeRecoverySeconds,
       huntSeconds: positive("huntSeconds"),
       roamRadius,
+      turnRateDegPerSecond,
+      restSeconds,
       tameable,
       ...(tameable
         ? {
@@ -1266,6 +1292,32 @@ function validateAnimalRetaliation(value: unknown, where: string): AnimalRetalia
     return amount;
   };
   return { damage: positive("damage"), attacksPerMinute: positive("attacksPerMinute") };
+}
+
+/**
+ * The pause a species takes at a grazing spot — locomotion polish §3.8.
+ *
+ * Required rather than optional, and both ends judged. Zero is a legal floor (a
+ * species that never truly settles is a temperament), but a negative one is a
+ * timer that has already expired — the animal would step off the instant it
+ * arrived, which is exactly the §3.2 fault this plan removes, reintroduced from
+ * the table. An inverted range is refused for the same reason a `min`/`max` pair
+ * always is: nothing downstream can pick a number out of it, so it becomes a
+ * silent constant rather than a range.
+ */
+function validateAnimalRest(value: unknown, where: string): AnimalRestBalance {
+  const obj = asObject(value, where);
+  const bound = (key: "min" | "max"): number => {
+    const amount = requireFiniteNumber(obj, key, where);
+    if (amount < 0) throw new GameDataError(`${where}.${key}: must be >= 0`);
+    return amount;
+  };
+  const min = bound("min");
+  const max = bound("max");
+  if (min > max) {
+    throw new GameDataError(`${where}: min ${min} must not exceed max ${max}`);
+  }
+  return { min, max };
 }
 
 /**
@@ -1958,6 +2010,96 @@ export function validateRoadBalance(value: unknown): RoadBalance {
     buildingPad: validateBuildingPadVisual(obj["buildingPad"], where),
     ...(autoConnect ? { autoConnect } : {}),
   };
+}
+
+/**
+ * Validate the pack-animal table behind V4's visible logistics
+ * (`balance/logistics.json`).
+ *
+ * Every magnitude here stays tunable; what is refused is data that cannot mean
+ * anything. A caravan with no capacity carries nothing and the wallet never
+ * moves; one with no speed never arrives, so the producer it serves is starved
+ * by arithmetic rather than by design; a fractional `spawnPerProducer` is half a
+ * donkey. `loadSeconds` is the one field allowed to be zero — a pause of nothing
+ * is a legal (if brisk) tuning, not a broken one.
+ *
+ * `maxCarryCapacity` is the cross-table half, passed in by the loader because
+ * this file cannot see `buildings.json` on its own. It is the smallest
+ * `localBufferCapacity` any producer has: above it a caravan lifts a whole
+ * building's buffer in one trip, the buffer never fills, and the `buffer-full`
+ * pressure the whole plan rests on (V4 §3.8) quietly stops existing. Optional so
+ * the editor's Data Table can still validate the file on its own terms.
+ */
+export function validateCaravanBalance(
+  value: unknown,
+  context?: { readonly maxCarryCapacity?: number },
+): CaravanBalance {
+  const where = "balance/logistics.json";
+  const obj = asObject(value, where);
+  const caravanWhere = `${where}.caravan`;
+  const caravan = asObject(obj["caravan"], caravanWhere);
+  const positive = (
+    key: "carryCapacity" | "moveSpeed" | "walkClipSpeed" | "maxHealth" | "spawnPerProducer",
+  ): number => {
+    const amount = requireFiniteNumber(caravan, key, caravanWhere);
+    if (amount <= 0) throw new GameDataError(`${caravanWhere}.${key}: must be > 0`);
+    return amount;
+  };
+  const loadSeconds = requireFiniteNumber(caravan, "loadSeconds", caravanWhere);
+  if (loadSeconds < 0) throw new GameDataError(`${caravanWhere}.loadSeconds: must be >= 0`);
+  const spawnPerProducer = positive("spawnPerProducer");
+  if (!Number.isInteger(spawnPerProducer)) {
+    throw new GameDataError(`${caravanWhere}.spawnPerProducer: must be a whole number of caravans`);
+  }
+  const armorClass = requireString(caravan, "armorClass", caravanWhere);
+  if (armorClass !== "light" && armorClass !== "heavy") {
+    throw new GameDataError(`${caravanWhere}.armorClass: must be "light" or "heavy"`);
+  }
+  const carryCapacity = positive("carryCapacity");
+  const maxCarryCapacity = context?.maxCarryCapacity;
+  if (maxCarryCapacity !== undefined && carryCapacity > maxCarryCapacity) {
+    throw new GameDataError(
+      `${caravanWhere}.carryCapacity: ${carryCapacity} exceeds the smallest producer buffer `
+      + `(${maxCarryCapacity}) — a caravan that outgrows a building's localBufferCapacity empties `
+      + "it every visit, so the buffer never fills and production is never held back by distance",
+    );
+  }
+  return {
+    label: requireString(caravan, "label", caravanWhere),
+    carryCapacity,
+    moveSpeed: positive("moveSpeed"),
+    walkClipSpeed: positive("walkClipSpeed"),
+    maxHealth: positive("maxHealth"),
+    armorClass,
+    loadSeconds,
+    spawnPerProducer,
+  };
+}
+
+/**
+ * The smallest `localBufferCapacity` any producer tier carries — the ceiling
+ * {@link validateCaravanBalance} measures a caravan's load against.
+ *
+ * Derived rather than authored so the bound follows the building table: retune a
+ * farm's buffer down and the caravan check tightens with it, in the same pass,
+ * instead of two files drifting until a caravan quietly starts one-tripping the
+ * smallest producer in the game.
+ */
+export function smallestProducerBufferCapacity(balance: BuildingBalance): number | undefined {
+  let smallest: number | undefined;
+  for (const building of Object.values(balance)) {
+    const capacities = [
+      building.economy?.localBufferCapacity,
+      ...Object.values(building.progression ?? {}).flatMap(
+        (tiers) => (tiers ?? []).map((tier) => tier.economy?.localBufferCapacity),
+      ),
+    ];
+    for (const capacity of capacities) {
+      if (capacity === undefined) continue;
+      if (smallest === undefined || capacity < smallest) smallest = capacity;
+    }
+  }
+  return smallest;
 }
 
 /** Validate the optional auto-connect access-road block (feature off when absent). */

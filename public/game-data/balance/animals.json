@@ -10,6 +10,11 @@
     "fleeRecoverySeconds": 3,
     "huntSeconds": 5,
     "roamRadius": 10,
+    "turnRateDegPerSecond": 220,
+    "restSeconds": {
+      "min": 2.5,
+      "max": 7
+    },
     "tameable": false
   },
   "stag": {
@@ -23,6 +28,11 @@
     "fleeRecoverySeconds": 3,
     "huntSeconds": 8,
     "roamRadius": 10,
+    "turnRateDegPerSecond": 200,
+    "restSeconds": {
+      "min": 3,
+      "max": 8
+    },
     "tameable": false
   },
   "cow": {
@@ -36,6 +46,11 @@
     "fleeRecoverySeconds": 3.5,
     "huntSeconds": 7,
     "roamRadius": 8,
+    "turnRateDegPerSecond": 120,
+    "restSeconds": {
+      "min": 4,
+      "max": 9
+    },
     "tameable": true,
     "tameSeconds": 8,
     "pastureYield": 1,
@@ -52,6 +67,11 @@
     "fleeRecoverySeconds": 3.5,
     "huntSeconds": 11,
     "roamRadius": 8,
+    "turnRateDegPerSecond": 110,
+    "restSeconds": {
+      "min": 4,
+      "max": 9
+    },
     "tameable": true,
     "tameSeconds": 14,
     "pastureYield": 1.6,
@@ -72,6 +92,11 @@
     "fleeRecoverySeconds": 4,
     "huntSeconds": 6,
     "roamRadius": 14,
+    "turnRateDegPerSecond": 300,
+    "restSeconds": {
+      "min": 2,
+      "max": 5
+    },
     "tameable": false,
     "predator": {
       "patrolSpeed": 2.4,
@@ -93,6 +118,11 @@
     "fleeRecoverySeconds": 4,
     "huntSeconds": 3,
     "roamRadius": 12,
+    "turnRateDegPerSecond": 360,
+    "restSeconds": {
+      "min": 1.5,
+      "max": 4
+    },
     "tameable": false
   }
 }

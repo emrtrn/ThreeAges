@@ -54,6 +54,21 @@ export interface RtsAnimalContentEntry {
   readonly actorRef: RtsActorRef;
 }
 
+/**
+ * Art for the things that carry goods rather than live on the map — today, the
+ * pack animal that walks a producer's output down the road (V4).
+ *
+ * Its own section rather than a row under `animals` because the section's keys
+ * are checked against `balance/animals.json`, and a caravan deliberately has no
+ * row there: it is a logistics unit whose numbers live in
+ * `balance/logistics.json` (V4 KARAR 3-B). Sharing the wildlife *art* pack is
+ * not the same as sharing the wildlife *table*.
+ */
+export interface RtsLogisticsContentSection {
+  /** The caravan pack animal; absent leaves the caravan rendering as a placeholder. */
+  readonly caravan?: { readonly actorRef: RtsActorRef };
+}
+
 export interface RtsBuildingContentEntry {
   readonly constructionActorRef?: RtsActorRef;
   /** Completed-building Actor assets keyed by the in-age level ("1", "2", ...). */
@@ -227,6 +242,8 @@ export interface RtsContentCatalog {
   readonly buildings: Readonly<Record<string, RtsBuildingContentEntry>>;
   /** Huntable species art, keyed by the `balance/animals.json` species id. */
   readonly animals: Readonly<Record<string, RtsAnimalContentEntry>>;
+  /** Caravan art (V4). Absent in a catalog authored before V4; never required. */
+  readonly logistics: RtsLogisticsContentSection;
   /** Manifest asset ids. UI migration starts in Faz F, so these are optional now. */
   readonly ui: Readonly<Record<string, string>>;
   /** Health-driven damage/collapse presentation; see {@link rtsBuildingDamagePresentation}. */
@@ -260,6 +277,11 @@ export function rtsUnitActorRef(
 /** Resolve a species' Actor, or null when the catalog does not map it. */
 export function rtsAnimalActorRef(catalog: RtsContentCatalog, species: string): RtsActorRef | null {
   return catalog.animals[species]?.actorRef ?? null;
+}
+
+/** Resolve the caravan pack animal's Actor, or null when the catalog omits it. */
+export function rtsCaravanActorRef(catalog: RtsContentCatalog): RtsActorRef | null {
+  return catalog.logistics.caravan?.actorRef ?? null;
 }
 
 /**
@@ -483,6 +505,26 @@ function validateAnimals(value: unknown, context: RtsContentCatalogValidationCon
     entries[id] = { actorRef: requireActorRef(entry["actorRef"], `${entryWhere}.actorRef`) };
   }
   return entries;
+}
+
+/**
+ * The caravan's art, checked for shape only.
+ *
+ * There is no balance id to cross-check against — the caravan is one role, not a
+ * keyed table — so what this refuses is an unknown key: a `donkey` or `cart`
+ * entry authored beside `caravan` would look mapped and render nothing.
+ */
+function validateLogistics(value: unknown): RtsContentCatalog["logistics"] {
+  if (value === undefined) return {};
+  const where = "rts-content.json.logistics";
+  const section = asObject(value, where);
+  requireExactKeys(section, ["caravan"], where);
+  const raw = section["caravan"];
+  if (raw === undefined) return {};
+  const entryWhere = `${where}.caravan`;
+  const entry = asObject(raw, entryWhere);
+  requireExactKeys(entry, ["actorRef"], entryWhere);
+  return { caravan: { actorRef: requireActorRef(entry["actorRef"], `${entryWhere}.actorRef`) } };
 }
 
 function validateLevels(value: unknown, where: string): Record<string, RtsActorRef> {
@@ -867,7 +909,7 @@ export function validateRtsContentCatalog(
 ): RtsContentCatalog {
   const where = "rts-content.json";
   const obj = asObject(value, where);
-  requireExactKeys(obj, ["schema", "type", "units", "buildings", "animals", "ui", "damage"], where);
+  requireExactKeys(obj, ["schema", "type", "units", "buildings", "animals", "logistics", "ui", "damage"], where);
   if (obj["schema"] !== RTS_CONTENT_CATALOG_SCHEMA) {
     throw new RtsContentCatalogError(`${where}.schema: expected ${RTS_CONTENT_CATALOG_SCHEMA}`);
   }
@@ -881,6 +923,7 @@ export function validateRtsContentCatalog(
     units: validateUnits(obj["units"], context),
     buildings,
     animals: validateAnimals(obj["animals"], context),
+    logistics: validateLogistics(obj["logistics"]),
     ui: validateUi(obj["ui"]),
     damage: validateDamage(obj["damage"], new Set(Object.keys(buildings))),
   };

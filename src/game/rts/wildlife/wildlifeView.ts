@@ -116,10 +116,18 @@ export class WildlifeView {
         // starts each `Attack_Headbutt` — one clip per landed hit, the unit rule.
         attacking: animal.attacking,
         dying: animal.dead,
-        // A standing animal is grazing, and grazing is an in-place job — which is
-        // what puts it on the `work` role and so on the asset's `Eating` clip.
-        // Without this a herd at rest reads as a field of statues.
-        working: !animal.dead && animal.speed <= 0,
+        // A *grazing* animal is on an in-place job, which is what puts it on the
+        // `work` role and so on the asset's `Eating` clip. Without something here
+        // a herd at rest reads as a field of statues.
+        //
+        // Read off the activity rather than off `speed <= 0` — locomotion polish
+        // Q3 = A. The speed test could not tell a resting deer from a resting
+        // wolf, so it fed `working: true` for both and every species' `work` clip
+        // is `Eating`: the predator V3 added spent its whole patrol grazing.
+        // Asking what the animal is *doing* is the only version of this line that
+        // can ever be right, and it leaves `alert` a place to grow a second idle
+        // clip into (§3.4).
+        working: !animal.dead && animal.activity === "grazing",
         attackCount: animal.strikeCount,
         cameraDistanceSquared,
       });
