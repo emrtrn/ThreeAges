@@ -742,6 +742,13 @@ export class RtsApp {
    * the box-mesh render, so a failed/absent terrain never leaves roads invisible.
    */
   private roadPainter: RoadTerrainPainter | null = null;
+  /**
+   * A newly placed structure may also commit its short free access road. Keep
+   * that road's visual/territory reaction pending until the structure pad joins
+   * the same terrain repaint, rather than rebuilding the Landscape twice.
+   */
+  private roadCommitBatchDepth = 0;
+  private roadCommitEffectsPending = false;
   private readonly buildPalette: RtsBuildPalette;
   private readonly selectionPanel = new RtsSelectionPanel((id) => this.runSelectionAction(id));
   /** The building whose demolish is armed and awaiting its confirm click. */
@@ -1234,8 +1241,15 @@ export class RtsApp {
       (structure) => {
         this.applyConstructionVisual(structure);
         this.assignWorkerToConstruction(structure);
-        this.autoConnectRoad(structure);
-        this.syncStructurePads();
+        this.beginRoadCommitBatch();
+        try {
+          this.autoConnectRoad(structure);
+          // The committed access road and this new building pad now share one
+          // restore/repaint + geometry upload when Landscape presentation is on.
+          this.syncStructurePads();
+        } finally {
+          this.endRoadCommitBatch(this.roadPainter !== null);
+        }
         // Construction reserves every footprint for placement, but farms and
         // lumber camps are intentionally omitted from *unit* navigation.
         this.refreshNavigationBlockers();
@@ -1319,11 +1333,7 @@ export class RtsApp {
         ...this.tradeSites.dockBlockers(),
       ],
       () => {
-        this.syncRoadVisuals();
-        // A committed road can link an outpost to its main network, which grows
-        // that outpost's control radius. This lives on the service rather than
-        // the pointer handler so an AI-built road refreshes territory too.
-        this.territory.refresh();
+        this.onRoadTopologyCommitted();
       },
     );
     // Built last among the AI's dependencies: it drives the very same
@@ -3602,6 +3612,37 @@ export class RtsApp {
   private syncRoadVisuals(): void {
     this.roadPlacement.renderNetwork();
     this.roadPainter?.sync(this.roads.all(), this.roads.version);
+  }
+
+  /** Defer a road commit's presentation effects while its structure pad is prepared. */
+  private beginRoadCommitBatch(): void {
+    this.roadCommitBatchDepth += 1;
+  }
+
+  /**
+   * Flush a deferred road commit. With mounted terrain, `syncStructurePads` has
+   * already rendered the current graph and new pad together; mesh-road fallback
+   * still needs its normal network refresh.
+   */
+  private endRoadCommitBatch(terrainAlreadySynced: boolean): void {
+    this.roadCommitBatchDepth = Math.max(0, this.roadCommitBatchDepth - 1);
+    if (this.roadCommitBatchDepth > 0 || !this.roadCommitEffectsPending) return;
+    this.roadCommitEffectsPending = false;
+    if (!terrainAlreadySynced) this.syncRoadVisuals();
+    this.territory.refresh();
+  }
+
+  /** Handles player and AI road changes; only structure placement batches it. */
+  private onRoadTopologyCommitted(): void {
+    if (this.roadCommitBatchDepth > 0) {
+      this.roadCommitEffectsPending = true;
+      return;
+    }
+    this.syncRoadVisuals();
+    // A committed road can link an outpost to its main network, which grows
+    // that outpost's control radius. This lives on the service rather than the
+    // pointer handler so an AI-built road refreshes territory too.
+    this.territory.refresh();
   }
 
   /**

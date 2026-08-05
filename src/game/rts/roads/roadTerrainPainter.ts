@@ -282,6 +282,67 @@ function unionBounds(
 }
 
 /**
+ * Returns the smallest changed rectangle after a restore/repaint pass. The paint
+ * operations still need their previous coverage to guarantee that a removed road
+ * leaves no residue, but the renderer does not need to rebuild every chunk in
+ * that coverage when the final vertex values are unchanged.
+ */
+function changedWeightBounds(
+  data: ForgeLandscapeData,
+  previous: readonly number[][],
+  bounds: LandscapeSplineApplyBounds | null,
+): LandscapeSplineApplyBounds | null {
+  if (!bounds) return null;
+  const { verticesX } = data.size;
+  let changed: LandscapeSplineApplyBounds | null = null;
+  for (let z = bounds.z0; z <= bounds.z1; z += 1) {
+    const row = z * verticesX;
+    for (let x = bounds.x0; x <= bounds.x1; x += 1) {
+      const index = row + x;
+      let differs = false;
+      for (let layer = 0; layer < data.layers.length; layer += 1) {
+        const next = data.layers[layer]!.weights[index]!;
+        if (next !== previous[layer]![index]!) differs = true;
+        previous[layer]![index] = next;
+      }
+      if (!differs) continue;
+      changed = unionBounds(changed, { x0: x, z0: z, x1: x, z1: z });
+    }
+  }
+  return changed;
+}
+
+/** Same final-value dirty tracking for height edits, including adjacent normals. */
+function changedHeightBounds(
+  data: ForgeLandscapeData,
+  previous: number[],
+  bounds: LandscapeSplineApplyBounds | null,
+): LandscapeSplineApplyBounds | null {
+  if (!bounds) return null;
+  const { verticesX, verticesZ } = data.size;
+  let changed: LandscapeSplineApplyBounds | null = null;
+  for (let z = bounds.z0; z <= bounds.z1; z += 1) {
+    const row = z * verticesX;
+    for (let x = bounds.x0; x <= bounds.x1; x += 1) {
+      const index = row + x;
+      const next = data.heights[index]!;
+      if (next === previous[index]!) continue;
+      previous[index] = next;
+      changed = unionBounds(changed, { x0: x, z0: z, x1: x, z1: z });
+    }
+  }
+  if (!changed) return null;
+  // Normals sample one vertex outside their own chunk, so a height change at a
+  // chunk edge also dirties the neighbour's border vertices.
+  return {
+    x0: Math.max(0, changed.x0 - 1),
+    z0: Math.max(0, changed.z0 - 1),
+    x1: Math.min(verticesX - 1, changed.x1 + 1),
+    z1: Math.min(verticesZ - 1, changed.z1 + 1),
+  };
+}
+
+/**
  * Owns a landscape's mount-time paint snapshot and re-derives the road corridor
  * from scratch on every network change. Pure (no render object): each
  * {@link repaint} restores the previously painted region to pristine, applies the
@@ -291,10 +352,13 @@ function unionBounds(
  */
 export class RoadPaintSurface {
   private readonly pristine: number[][];
+  /** Last values submitted to the landscape renderer, for exact dirty bounds. */
+  private readonly rendered: number[][];
   private paintedBounds: LandscapeSplineApplyBounds | null = null;
 
   constructor(private readonly data: ForgeLandscapeData) {
     this.pristine = data.layers.map((layer) => layer.weights.slice());
+    this.rendered = data.layers.map((layer) => layer.weights.slice());
   }
 
   /**
@@ -310,7 +374,7 @@ export class RoadPaintSurface {
       applyLandscapeRectPaint(this.data, rects).bounds,
     );
     this.paintedBounds = painted;
-    return unionBounds(restored, painted);
+    return changedWeightBounds(this.data, this.rendered, unionBounds(restored, painted));
   }
 
   /** Reset every painted vertex back to the mount-time snapshot (idempotent). */
@@ -318,7 +382,7 @@ export class RoadPaintSurface {
     const restored = this.paintedBounds;
     if (restored) this.restore(restored);
     this.paintedBounds = null;
-    return restored;
+    return changedWeightBounds(this.data, this.rendered, restored);
   }
 
   private restore(bounds: LandscapeSplineApplyBounds): void {
@@ -344,10 +408,13 @@ export class RoadPaintSurface {
  */
 export class StructurePadTerrainSurface {
   private readonly pristine: number[];
+  /** Last values submitted to the landscape renderer, for exact dirty bounds. */
+  private readonly rendered: number[];
   private flattenedBounds: LandscapeSplineApplyBounds | null = null;
 
   constructor(private readonly data: ForgeLandscapeData) {
     this.pristine = data.heights.slice();
+    this.rendered = data.heights.slice();
   }
 
   rebuild(rects: readonly LandscapeRectDeform[]): LandscapeSplineApplyBounds | null {
@@ -355,14 +422,14 @@ export class StructurePadTerrainSurface {
     if (restored) this.restore(restored);
     const flattened = applyLandscapeRectDeform(this.data, rects).bounds;
     this.flattenedBounds = flattened;
-    return unionBounds(restored, flattened);
+    return changedHeightBounds(this.data, this.rendered, unionBounds(restored, flattened));
   }
 
   reset(): LandscapeSplineApplyBounds | null {
     const restored = this.flattenedBounds;
     if (restored) this.restore(restored);
     this.flattenedBounds = null;
-    return restored;
+    return changedHeightBounds(this.data, this.rendered, restored);
   }
 
   private restore(bounds: LandscapeSplineApplyBounds): void {

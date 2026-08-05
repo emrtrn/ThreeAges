@@ -1787,6 +1787,141 @@
               -34
             ],
             "pointType": "linear"
+          },
+          {
+            "id": "supply-market-0",
+            "position": [
+              46,
+              0,
+              -34
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-market-1",
+            "position": [
+              46,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-market-2",
+            "position": [
+              44,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-market-3",
+            "position": [
+              44,
+              0,
+              -56
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-port-0",
+            "position": [
+              44,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-port-1",
+            "position": [
+              22,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-port-2",
+            "position": [
+              22,
+              0,
+              -28
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-port-3",
+            "position": [
+              6,
+              0,
+              -28
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-port-4",
+            "position": [
+              6,
+              0,
+              -26
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-timber-0",
+            "position": [
+              6,
+              0,
+              -28
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-timber-1",
+            "position": [
+              6,
+              0,
+              -44
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-stone-0",
+            "position": [
+              6,
+              0,
+              -28
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-stone-1",
+            "position": [
+              18,
+              0,
+              -28
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-stone-2",
+            "position": [
+              18,
+              0,
+              -10
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-stone-3",
+            "position": [
+              22,
+              0,
+              -10
+            ],
+            "pointType": "linear"
           }
         ]
       },

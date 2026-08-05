@@ -1,16 +1,18 @@
 # ThreeAges RTS - Pazar Arzi ve Ticaret Noktalari Plani
 
 Olusturulma tarihi: 2026-08-04
-Durum: **Faz S0, S1, S2 ve S3 kapandi (2026-08-04).** Dokuz kararin dokuzu da
-onerildigi gibi kilitlendi, §3.7'nin harita cozumu **uc nokta-simetrik cift
-(alti nokta)** olarak secildi ve alti marker'in konumu olculup sabitlendi (§7 Faz
-S0). **S1** stok cekirdegini, **S2** arz noktalarini haritaya koydu; ikisi de
-ekonomiyi degistirmedi. **S3 ile plan canlandi**: `CaravanSystem` bir hat (lane)
-soyutlamasina alindi, `MarketSupplySystem` ikinci hat saglayicisi oldu, teslim
-cuzdana degil **pazar stoguna** iniyor ve `stocked` listesi uc kaynagi da
-kapsiyor - yani **pazarda ne varsa o kadar alinir**. **Siradaki: S4** (AI
-paritesi). Iki gorsel/oynanis kabulu kullanicida acik: S2'nin mesh yerlesimi
-(§7 Faz S2) ve S3'un oynanis kabulu (§7 Faz S3); ikisi de S4'u bloke etmez.
+Durum: **Faz S0, S1, S2, S3 (2026-08-04) ve S4 (2026-08-05) kapandi.** Dokuz
+kararin dokuzu da onerildigi gibi kilitlendi, §3.7'nin harita cozumu **uc
+nokta-simetrik cift (alti nokta)** olarak secildi ve alti marker'in konumu
+olculup sabitlendi (§7 Faz S0). **S1** stok cekirdegini, **S2** arz noktalarini
+haritaya koydu; ikisi de ekonomiyi degistirmedi. **S3 ile plan canlandi**:
+`CaravanSystem` bir hat (lane) soyutlamasina alindi, `MarketSupplySystem` ikinci
+hat saglayicisi oldu, teslim cuzdana degil **pazar stoguna** iniyor ve `stocked`
+listesi uc kaynagi da kapsiyor - yani **pazarda ne varsa o kadar alinir**. **S4
+pariteyi kapatti** ve KARAR 9-A'nin sozunu tuttu: dusmanin arz yolu Level'a
+authorlandi, **sifir AI kodu** yazildi. **Siradaki: S5** (saldiri ve kopma). Iki
+gorsel/oynanis kabulu kullanicida acik: S2'nin mesh yerlesimi (§7 Faz S2) ve
+S3'un oynanis kabulu (§7 Faz S3).
 
 S0 sirasinda haritanin ve balans verisinin olculmesi, planin dort ifadesini
 duzeltti; hepsi asagida ilgili bolume islendi:
@@ -966,13 +968,121 @@ asimetrinin ta kendisidir. Bir debug preset'inin alis dugmesi, olculmemis bir
 haritaya munhasir liman koymaktan ucuz bir bedeldir. Kullanici tersini isterse
 is, S0'un olcum turunu o iki harita icin tekrarlamaktir - kod degil, olcum.
 
-### Faz S4 - AI paritesi
+### Faz S4 - AI paritesi -> **TAMAM (2026-08-05)**
 
-- [ ] KARAR 9'un secimi uygulanir (A ise: dusman arz noktasi + authored yol).
-- [ ] AI'nin `out-of-stock` aldiginda kirilmadigi, yalnizca `saving`'e dustugu
-  dogrulanir (§3.9).
-- [ ] AI'nin Cag 2'ye hala ulasabildigi olculur - stok kisiti onu **kilitlemez**,
-  yalnizca geciktirir.
+- [x] KARAR 9-A uygulandi: **sifir AI kodu**. Dusmanin arz yolu, mevcut
+  `rts.route:enemy:base:0` omurgasinin **kuyruguna** on bes nokta eklenerek
+  authorlandi (`RTS_GameplayProof.level.json`). Kuyruk dort ucu bagliyor: once
+  pazar, sonra liman, oduncu kampi ve tas sahasi. Hicbir `.ts` dosyasi
+  degismedi - `AiInfrastructureManager` bu polyline'i zaten yuruyor.
+- [x] AI'nin `out-of-stock` aldiginda kirilmadigi dogrulandi (§3.9). Bu aslinda
+  **S3'te kapanmisti**: `Faz M4` testi zaten "an unsupplied market delays the AI
+  instead of jamming it" diye pinliyor. S4 eksik olan yari eklendi - **dusman
+  sahipli** bir hat ucu ucuna kosuldu (asagida).
+- [x] AI'nin Cag 2'ye hala ulasabildigi **olculdu** (asagida). Kilitlemiyor:
+  alis kapali kalsa da AI 1065.5 saniyede Town'a cikiyor.
+
+#### Authorlanan kuyruk ve olcumleri
+
+Kuyruk, omurganin son noktasindan (`(50,-34)`, oduncu kampi) sonra basliyor:
+
+| Bacak | Noktalar | Yeni hucre | Odun |
+| --- | --- | --- | --- |
+| Pazar | `(46,-34) -> (46,-30) -> (44,-30) -> (44,-56)` | 13 | 52 |
+| Liman | `(44,-30) -> (22,-30) -> (22,-28) -> (6,-28) -> (6,-26)` | 9 | 36 |
+| Oduncu kampi | `(6,-28) -> (6,-44)` | 8 | 32 |
+| Tas sahasi | `(6,-28) -> (18,-28) -> (18,-10) -> (22,-10)` | 11 | 44 |
+
+Ilk uc nokta (`(46,-34) -> (46,-30) -> (44,-30)`) bilerek acik yazildi: omurga
+`(48,-30)`'daki dis yatak yuzunden orada zaten kiviriyor, ve tek bacakla
+`(50,-34) -> (44,-30)` istendiginde A* yeni bir hucreyi `(44,-28)`'e - yani
+authored `gold_mine` yuvasinin ustune - koyuyordu. Uc kisa bacak ayni yere
+**sifir odunla** ve deterministik olarak variyor.
+
+Statik olcum (omurga, RtsApp'in yol blocker kumesiyle bastan sona doseniyor:
+nehir + koru + yatak + rihtim + iki merkez):
+
+| Olcu | Once | Sonra |
+| --- | --- | --- |
+| Omurganin odunu | 108 | **272** (+164) |
+| Omurganin hucresi | 27 | **68** |
+| Pazara degen yol hucresi | **yok** | `(44,-56)` |
+| Limana / oduncu kampina / tas sahasina degen | **yok** | `(6,-26)` / `(6,-44)` / `(22,-10)` |
+| Arz noktasi -> pazar rotasi | - | 68 / 82 / 76 birim |
+
+Uc rota uzunlugu §3.8'in oyuncu icin olctugu 62.7 birime yakin duruyor - yani
+AI'nin hatti oyuncununkinden **kisa degil**, biraz uzun. Kuyrugun hicbir hucresi
+authorlanmis bir bina yuvasina degmiyor, ve oyuncunun uc arz noktasi omurgadan
+**dokunulmadan** kaliyor (ikisi de teste baglandi): munhasir bir kaynakta
+(KARAR 4-A) dusmanin yolunun oyuncunun rihtimina degmesi, o noktayi bedavaya
+dusmana verirdi.
+
+#### Sira bir detay degil, kilitlenmeme sartinin ta kendisi
+
+Kuyruk **sona** eklendi ve testi de bunu pinliyor. `AiInfrastructureManager`
+polyline'i sirayla yuruyor ve `insufficient-resources`'ta bekliyor; arz kuyrugu
+one alinsaydi AI acilis odununu **henuz kurmadigi** bir pazara giden yola
+harcarken kendi ureticileri yolsuz beklerdi - gecikmenin kilide donusmesi tam
+olarak budur. Test bu yuzden bir sayi degil bir **sira** pinliyor: depo, tarla
+ve oduncu kampi yolda olmadan hicbir arz hucresi dosenemez. Kasitli olarak
+kuyrugu basa alarak kirmizi gorulup geri alindi (`leg 4 vs 2`).
+
+#### Olculen: stok kapisi Cag 2'yi kilitlemiyor
+
+Mevcut basi bos AI dunyasi (`aiTestWorld`, kod blockout'u - orada **hic arz
+noktasi yok**, yani alis tarafi bastan sona kapali) 1800 saniye kosuldu:
+
+| Olcu | Sonuc |
+| --- | --- |
+| Town'a cikis | **1065.5 sn** |
+| `tradeStep` dagilimi | `idle` 1480 / `saving` 2084 / `traded` 36 |
+| Kurulan binalar | depo, tarla, oduncu kampi, avci kampi, agil, kisla, karakol, tas ocagi, altin madeni, **pazar**, ev x4, okculuk, + bir genisleme |
+
+Uc sey birden okunuyor. (1) Alis kapaliyken bile AI Town'a cikiyor - kapinin
+kilit olmadigi gozlem, varsayim degil. (2) Otuz alti ticaret **satis**: AI'nin
+gercek acigi altinda ve satis tarafina KARAR 7-A geregi hicbir sey olmadi, yani
+stok kapisi AI'nin en cok kullandigi yonu hic tutmuyor. (3) Kalan `saving`'ler
+kirilma degil bekleme - `AiTradeManager` her tikte yeniden deniyor.
+
+Odun tarafi da ayni yonu veriyor: kuyrugun 164 odunu, AI'nin acilis
+`lumber_camp`'inin (§3.6: 120 odun/dk) **~82 saniyesi**, ve omurga baglandiktan
+**sonra** odeniyor.
+
+#### S4'te olculen iki sey - ikisi de S4'un urunu degil
+
+1. **Dusman merkezine degen yol hucresi yok.** `(38,-38)`'deki merkezin 7
+   birimlik footprint'i 2 birimlik yol izgarasina oturmuyor; en yakin yasal
+   hucre `(38,-32)`, footprint'e 1.5 birim - `roadCellTouchingFootprint`'in 1
+   birimlik toleransinin disinda. Uretim bu yuzden merkeze `autoConnect`
+   yaricapindaki **yerel teslimle** giriyor (`ProductionLogisticsSystem`'in
+   `localEndpoint` yolu), ve pazar mahrecinin merkeze degil **omurgaya**
+   asilmasinin sebebi de budur. S4 buna dokunmadi.
+2. **Omurga zaten bir bina yuvasinin ustunden geciyor.** `(48,-30)`'daki dis
+   yatagin etrafindan dolanirken omurga `(46,-28)`'i dosuyor, ve o hucre
+   authorlanmis `gold_mine` yuvasiyla (`(44,-26)`, 6x6) cakisiyor - yol insa
+   alanini rezerve ettigi icin o yuva, yol once dosenirse reddedilir. **S4
+   oncesinde de boyleydi** (degisiklikler oncesi omurga tek basina dosenip
+   olculdu); S4 kuyrugu bu kumeye hicbir yeni cakisma eklemiyor. Ayri bir is
+   olarak durmali.
+
+#### Testler (§8'e ek olarak bu fazda pinlenenler)
+
+- `Faz S4: the enemy's authored spine reaches its own Market and all three of its
+  trade sites` - omurganin bacak bacak dosenmesi, pazara ve uc noktaya degme,
+  her noktadan pazara rota, oyuncunun noktalarinin **degmemesi**, ve yukaridaki
+  sira sarti.
+- `Faz S4: the AI's own supply lane fills its shelf, and its trade rule spends
+  what arrives` - `owner: "enemy"` ile ucu ucuna: bos rafta `saving`, kervanlar
+  kostuktan sonra rafta bir lot, ve `AiTradeManager` o lotu **satin aliyor**.
+
+Kirmiziya donebilirlik yapildi: uc kasitli mutasyon, ucu de yakalandi - kuyrugun
+kaldirilmasi ("the enemy Market slot has no road cell touching it"), kuyrugun
+basa alinmasi ("the depot must be on the road before the first supply spur"), ve
+`out-of-stock`'un `no-market` diye okunmasi ("before the first delivery the AI
+waits rather than jams"). Her biri geri alindi.
+
+Kabul: `tsc --noEmit`, `test:engine` (**1309 check**), `build:verify`,
+`check:assets` - **dordu de yesil**.
 
 ### Faz S5 - Saldiri ve kopma
 
@@ -1048,7 +1158,7 @@ gorulur ve geri alinir (V1/V3/V4 aliskanligi).
 ## 11. Uygulama Sirasi
 
 ```text
-S0 (TAMAM) -> S1 (TAMAM) -> S2 (TAMAM) -> S3 (TAMAM) -> S4 -> S5 -> S6
+S0 (TAMAM) -> S1 (TAMAM) -> S2 (TAMAM) -> S3 (TAMAM) -> S4 (TAMAM) -> S5 -> S6
 ```
 
 Hicbir faz artik baska bir plani beklemiyor (§3.4). S1 ve S2 birbirinden
@@ -1057,7 +1167,8 @@ korundu: once `CaravanLane` genellestirmesi hicbir oynanis degistirmeden yesil
 kostu (1298 check), sonra ikinci hat takildi (1303 check). Kural en sonda tek
 satirla (`stocked` listesi) yururluge girdi - ve ayni satirla geri alinabilir.
 
-Iki acik kabul de S4'u bloke etmez: S2'nin mesh yerlesimi rota hesabini
-degistirmez, S3'un ayar kabulu (`caravanCount`, `perMinute`) ise AI paritesinin
-konusu degil - S4 dusmanin **yolunun** var olup olmadigini olcer, ne kadar hizli
-aktigini degil.
+Iki acik kabul S4'u bloke etmedi ve etmemesi de dogruydu: S2'nin mesh yerlesimi
+rota hesabini degistirmiyor, S3'un ayar kabulu (`caravanCount`, `perMinute`) ise
+AI paritesinin konusu degildi - S4 dusmanin **yolunun** var olup olmadigini
+olctu, ne kadar hizli aktigini degil. S4 kod degil **veri** oldugu icin (tek
+dosya: Level'in omurga spline'i) S5'in onune de hicbir kod borcu birakmadi.

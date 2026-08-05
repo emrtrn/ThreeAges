@@ -186,6 +186,33 @@ Kanıt:
 - `npx.cmd tsc --noEmit` ve `npm.cmd run build:verify` geçti; build doğrulaması 1305 engine kontrolü ve strict dist denetimini içerdi.
 - Tarayıcı doğrulaması: `rts-building-placement.spec.ts` bu oturumda 124 sn süre sınırına ulaştı; bu nedenle panel metni ve canlı maç kabulü açık kalır.
 
+### 3.2 Yol silme ve yapı kurma anlık takılmaları (2026-08-05)
+
+Authoring Landscape açıkken yol silme ve yapı kurma için hedefli optimizasyon
+uygulandı. Yol ve yapı kuralları, maliyetleri, navigasyon blokları ve boyanın
+görsel sonucu değişmez; yalnızca runtime güncellemesinin kapsamı daraltılır.
+
+1. `RoadPaintSurface` ve `StructurePadTerrainSurface`, restore/repaint sonrası
+   eski geniş kapsama alanını doğrudan render'a göndermek yerine gerçekten değişen
+   vertex dikdörtgenini çıkarır. Uzun yolun ucu silinen izole örnekte render alanı
+   `x=5..59` yerine `x=55..59`; uzaktaki ikinci temel eklenince `x=12..20` yerine
+   `x=44..52` oldu.
+2. `applyLandscapeSplinePaint` ve `applyLandscapeSplineDeform` tüm heightfield'i
+   dolaşmak yerine spline genişliği + falloff'tan çıkarılan güvenli koridor
+   dikdörtgenini tarar. Bu, kısa yolların tam 257x257 grid taramasını önler.
+3. Oyuncunun yeni yapısına otomatik erişim yolu eklendiğinde yol topology callback'i
+   yapı tabanı hazır olana kadar batch edilir; Landscape modunda yol ve pad tek
+   restore/repaint + geometry upload ile işlenir. Terrain olmayan mesh-yol fallback
+   aynı davranışını korur.
+
+Kanıt: `npx.cmd tsc --noEmit`, `npm.cmd run build` ve
+`tests/smoke/rts-road-placement-feedback.spec.ts` geçti. Tam `test:engine`,
+çalışma ağacında mevcut S4 probe'un fonksiyon başlatma sırası hatasıyla
+(`shippedAnimalBalance is not a function`) erken duruyor; bu stutter değişikliğinin
+test sonucu değildir. Sonraki ölçüm: Chrome Performance trace'inde yol silme ve
+yapı kurma event'lerinde `RoadTerrainPainter.sync` ile Landscape geometry upload
+sürelerini önceki kayıtla karşılaştırmak.
+
 ## 4. İlk ölçüm kaydı
 
 Kaynak rapor: `test-results/rts-perf/rts-perf-2026-07-28T12-45-43-721Z.md`  

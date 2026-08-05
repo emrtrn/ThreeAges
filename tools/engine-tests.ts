@@ -21290,6 +21290,20 @@ check("RoadPaintSurface reset restores the exact pristine snapshot", () => {
   assert.deepEqual(data.layers.map((l) => l.weights), pristine);
 });
 
+check("RoadPaintSurface reports only the changed end of a shortened road", () => {
+  const data = createFlatLandscapeData("small");
+  const roads = roadGraphOf([[{ x: -24, z: 0 }, { x: 24, z: 0 }]]);
+  const surface = new RoadPaintSurface(data);
+  const first = surface.repaint(roadGraphToLandscapeSpline(roads.all(), ROAD_PAINT_OPTS));
+  assert.ok(first, "the original long road dirties a corridor");
+
+  roads.remove([{ x: 24, z: 0 }]);
+  const changed = surface.repaint(roadGraphToLandscapeSpline(roads.all(), ROAD_PAINT_OPTS));
+  assert.ok(changed, "removing one end still changes its local paint");
+  assert.ok(changed.x0 > first.x0, "unchanged left-hand road paint is not sent back to the renderer");
+  assert.ok(changed.x0 > 45, "the dirty rectangle stays at the removed road end");
+});
+
 check("Faz 5: an age layer swap promotes the same road with no old-layer residue", () => {
   const segs = roadGraphOf([[{ x: -6, z: 0 }, { x: 6, z: 0 }]]).all();
   const dirtOpts = ROAD_PAINT_OPTS;
@@ -21363,6 +21377,30 @@ check("StructurePadTerrainSurface restores terrain when a building foundation is
   assert.equal(data.heights[center], 6);
   surface.rebuild([]);
   assert.equal(data.heights[center], 2, "removal restores the authored terrain height");
+});
+
+check("StructurePadTerrainSurface reports only a newly added distant foundation", () => {
+  const data = createFlatLandscapeData("small");
+  const surface = new StructurePadTerrainSurface(data);
+  const left = structurePadsToRectDeforms(
+    [{ x: -16, z: 0, width: 4, depth: 4, groundY: 6 }],
+    [0, 0, 0],
+    BUILDING_PAD_VISUAL,
+  );
+  const first = surface.rebuild(left);
+  assert.ok(first, "the first foundation changes terrain height");
+  const both = structurePadsToRectDeforms(
+    [
+      { x: -16, z: 0, width: 4, depth: 4, groundY: 6 },
+      { x: 16, z: 0, width: 4, depth: 4, groundY: 6 },
+    ],
+    [0, 0, 0],
+    BUILDING_PAD_VISUAL,
+  );
+  const changed = surface.rebuild(both);
+  assert.ok(changed, "the added foundation changes terrain height");
+  assert.ok(changed.x0 > first.x0, "unchanged foundation height is not rebuilt");
+  assert.ok(changed.x0 > 40, "normal-expanded dirty bounds remain local to the new pad");
 });
 
 check("a building pad clears its own ground and razing it leaves no residue", () => {
@@ -47484,6 +47522,37 @@ const shippedTradeSiteBalance = () => validateTradeSiteBalance(
   JSON.parse(readFileSync("public/game-data/balance/trade-sites.json", "utf8")) as unknown,
 );
 
+/** The shipped gameplay Level, adapted exactly as `RtsApp` adapts it. */
+function shippedRtsLevel() {
+  const buildings = shippedBuildingBalance();
+  const resources = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  const layout = JSON.parse(
+    readFileSync("public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json", "utf8"),
+  ) as {
+    actors: Array<{
+      classRef: string;
+      position: [number, number, number];
+      variableOverrides?: Record<string, string | number | boolean | string[]>;
+    }>;
+    splines: Parameters<typeof adaptRtsLevel>[1];
+  };
+  const actors = layout.actors.map((instance, index) => ({
+    index,
+    instance,
+    def: normalizeActorScriptDef(
+      JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown,
+      instance.classRef,
+    ),
+  }));
+  return {
+    buildings,
+    resources,
+    level: adaptRtsLevel(actors, layout.splines, { buildings, resources, animals: shippedAnimalBalance() }),
+  };
+}
+
 check("Faz S2: the trade site validator refuses data that could never make sense", () => {
   const sites = shippedTradeSiteBalance();
   const port = sites["river_port"] ?? assert.fail("the river port site type is missing");
@@ -47616,30 +47685,8 @@ check("Faz S2: a trade site fills its own buffer and then stops", () => {
 });
 
 check("Faz S2: the shipped level authors the supply table's sites in fair pairs", () => {
-  const buildings = shippedBuildingBalance();
-  const resources = validateResourceBalance(
-    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
-  );
   const sites = shippedTradeSiteBalance();
-  const layout = JSON.parse(
-    readFileSync("public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json", "utf8"),
-  ) as {
-    actors: Array<{
-      classRef: string;
-      position: [number, number, number];
-      variableOverrides?: Record<string, string | number | boolean | string[]>;
-    }>;
-    splines: Parameters<typeof adaptRtsLevel>[1];
-  };
-  const actors = layout.actors.map((instance, index) => ({
-    index,
-    instance,
-    def: normalizeActorScriptDef(
-      JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown,
-      instance.classRef,
-    ),
-  }));
-  const level = adaptRtsLevel(actors, layout.splines, { buildings, resources, animals: shippedAnimalBalance() });
+  const { buildings, level } = shippedRtsLevel();
 
   // Every kind the table defines is actually on the map. A site type nobody
   // authored is a resource whose buy button can never open, and the table alone
@@ -47949,6 +47996,150 @@ check("Faz S3: a supply lane costs no population and a besieged market receives 
   const site = besieged.snapshots()[0] ?? assert.fail("the fixture authors a site");
   assert.equal(site.status, "outside-control", "a besieged market is named, not silently unlinked");
   assert.equal(besieged.lanes().length, 0, "and no caravan sets out for it");
+});
+
+check("Faz S4: the enemy's authored spine reaches its own Market and all three of its trade sites", () => {
+  const sites = shippedTradeSiteBalance();
+  const { buildings, resources, level } = shippedRtsLevel();
+  const roadBalance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const spine = level.routes.get("rts.route:enemy:base:0") ?? assert.fail("the level authors an enemy base spine");
+
+  // The world a road is actually planned against in `RtsApp`, minus the
+  // buildings that do not exist yet while the spine is being paved: the river,
+  // the groves, the deposits, the docks and the two centres.
+  const centreBlocker = (point: { x: number; z: number }) => ({
+    min: [point.x - 3.5, 0, point.z - 3.5] as [number, number, number],
+    max: [point.x + 3.5, 3, point.z + 3.5] as [number, number, number],
+  });
+  const blockers = [
+    ...level.navigationBlockers,
+    ...new ForestSystem(level.trees).liveTreeBlockers(),
+    ...new ResourceNodeSystem(resources, level.resourceNodes).liveNodeBlockers(),
+    ...new TradeSiteSystem(sites, level.tradeSites).dockBlockers(),
+    centreBlocker(level.playerStart),
+    centreBlocker(level.enemyStart),
+  ];
+
+  const marketFootprint = buildings["market"]?.footprint ?? assert.fail("the market building is missing");
+  const marketAnchor = level.buildAnchors.find((anchor) => anchor.owner === "enemy" && anchor.buildingId === "market")
+    ?? assert.fail("the level authors an enemy Market slot");
+  /** Everything the AI's own base logistics needs before any supply is worth paving. */
+  const logisticsAnchors = ["depot", "farm", "lumber_camp"].map((buildingId) =>
+    level.buildAnchors.find((anchor) => anchor.owner === "enemy" && anchor.buildingId === buildingId)
+      ?? assert.fail(`the level authors an enemy ${buildingId} slot`));
+  const enemySites = level.tradeSites.filter((site) => site.id.startsWith("enemy"));
+  assert.equal(enemySites.length, Object.keys(sites).length,
+    "KARAR 9-A gives the AI one site of every kind the table defines, exactly as the player has");
+
+  const roads = new RoadGraph(roadBalance);
+  const reachedAt = new Map<string, number>();
+  const watch = (label: string, x: number, z: number, width: number, depth: number, leg: number): void => {
+    if (!reachedAt.has(label) && roadCellTouchingFootprint(roads, x, z, width, depth)) reachedAt.set(label, leg);
+  };
+  for (let leg = 0; leg < spine.length - 1; leg += 1) {
+    const from = spine[leg] ?? assert.fail("spine point missing");
+    const to = spine[leg + 1] ?? assert.fail("spine point missing");
+    const plan = roads.plan(from, to, blockers)
+      ?? assert.fail(`the enemy spine cannot be paved: leg ${leg} (${from.x}, ${from.z}) -> (${to.x}, ${to.z})`);
+    roads.commit(plan);
+    for (const anchor of logisticsAnchors) {
+      const footprint = buildings[anchor.buildingId]?.footprint ?? assert.fail("anchor building missing");
+      watch(anchor.buildingId, anchor.x, anchor.z, footprint.width, footprint.depth, leg);
+    }
+    watch("market", marketAnchor.x, marketAnchor.z, marketFootprint.width, marketFootprint.depth, leg);
+    for (const site of level.tradeSites) {
+      const dock = sites[site.siteType]?.dock ?? assert.fail(`unknown site type ${site.siteType}`);
+      watch(site.id, site.x, site.z, dock.width, dock.depth, leg);
+    }
+  }
+
+  // KARAR 9-A itself: the AI never learns to plan a supply road, so the map has
+  // to have run one for it. Without this the enemy Market is a building with no
+  // road, its shelf can never be filled, and every buy the AI attempts is
+  // `out-of-stock` for the whole match — the exact asymmetry §3.9 refuses.
+  const marketCell = roadCellTouchingFootprint(
+    roads, marketAnchor.x, marketAnchor.z, marketFootprint.width, marketFootprint.depth,
+  ) ?? assert.fail("the enemy Market slot has no road cell touching it");
+  for (const site of enemySites) {
+    const dock = sites[site.siteType]?.dock ?? assert.fail(`unknown site type ${site.siteType}`);
+    const cell = roadCellTouchingFootprint(roads, site.x, site.z, dock.width, dock.depth)
+      ?? assert.fail(`the authored spine never reaches "${site.id}"`);
+    assert.ok(roads.route(cell, marketCell), `"${site.id}" has a road cell but no route to the enemy Market`);
+  }
+
+  // The mirror half, and the reason this is parity rather than a handout: the
+  // player's three sites are left bare. A spine that wandered onto one would
+  // hand the player a supply line nobody paid for — and, because a site is
+  // exclusive (KARAR 4-A), would hand it to whichever kingdom the enemy's own
+  // road happened to reach first.
+  for (const site of level.tradeSites.filter((candidate) => !candidate.id.startsWith("enemy"))) {
+    const dock = sites[site.siteType]?.dock ?? assert.fail(`unknown site type ${site.siteType}`);
+    assert.equal(roadCellTouchingFootprint(roads, site.x, site.z, dock.width, dock.depth), null,
+      `the enemy's authored road must not connect the player's "${site.id}"`);
+  }
+
+  // The ordering is the part that makes the answer to §7 Faz S4's third question
+  // structural rather than a stopwatch reading. `AiInfrastructureManager` walks
+  // this polyline in order and waits on `insufficient-resources`, so a supply
+  // spur authored ahead of the base link would have the AI spend its opening
+  // wood on a road to a Market it has not built while its own producers sit
+  // disconnected — which is how a delay becomes a lock.
+  const supplyEnds = ["market", ...enemySites.map((site) => site.id)];
+  const firstSupply = Math.min(...supplyEnds.map((label) =>
+    reachedAt.get(label) ?? assert.fail(`${label} is never reached by the spine`)));
+  for (const anchor of logisticsAnchors) {
+    const leg = reachedAt.get(anchor.buildingId) ?? assert.fail(`${anchor.buildingId} is never reached by the spine`);
+    assert.ok(leg < firstSupply,
+      `the ${anchor.buildingId} must be on the road before the first supply spur (leg ${leg} vs ${firstSupply})`);
+  }
+});
+
+check("Faz S4: the AI's own supply lane fills its shelf, and its trade rule spends what arrives", () => {
+  // §3.9's claim, run end to end for the *enemy* instead of the player: every
+  // system between the dock and the buy button is owner-agnostic, so parity is a
+  // question about the map (the test above) and nothing else. The one thing that
+  // could still have been player-shaped is this path, so it is walked once.
+  const buildings = shippedBuildingBalance();
+  const sites = shippedTradeSiteBalance();
+  const marketStats = buildings["market"] ?? assert.fail("the market building is missing");
+  const lotSize = marketStats.market?.lotSize ?? assert.fail("market lot size missing");
+  const pit = sites["stone_pit"] ?? assert.fail("the stone pit site type is missing");
+  const roads = roadGraphOf([[{ x: 6, z: 0 }, { x: 16, z: 0 }]]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["enemy"], units, structures, { gold: 100000 }, 20);
+  const trade = new MarketTradeSystem(buildings, structures, kingdoms, () => true);
+  const market = structures.place("enemy", marketStats, 20, 0);
+  structures.advanceConstruction(market, marketStats.constructionSeconds);
+  const tradeSites = new TradeSiteSystem(sites, [{ id: "enemy_stone_pit", siteType: "stone_pit", x: 0, z: 0 }]);
+  const supply = new MarketSupplySystem(sites, tradeSites, roads, structures, trade.stock, () => true);
+  const caravans = new CaravanSystem(shippedCaravanBalance(), roads, [supply]);
+  const manager = new AiTradeManager("enemy", trade, new AiDecisionLog());
+
+  const townCost = { food: 600, wood: 350, stone: 150, gold: 150 };
+  const stocks = { food: 900, wood: 900, stone: 0, gold: 400 };
+  const blackboard = aiTestBlackboard({ resourceStocks: stocks, ageCost: townCost, ageAffordable: false });
+
+  assert.equal(supply.snapshots()[0]?.owner, "enemy", "the authored road hands the site to the kingdom that reached it");
+  assert.equal(manager.update(blackboard), "saving", "before the first delivery the AI waits rather than jams");
+  assert.equal(kingdoms.get("enemy").wallet.amount("stone"), 0, "and buys nothing off an empty shelf");
+
+  // Long enough for the fleet to make a lot at any sane tuning of the table.
+  const step = 0.1;
+  for (let frame = 0; frame < Math.round(300 / step); frame += 1) {
+    tradeSites.update(step);
+    supply.deliver(caravans.update(step));
+  }
+  assert.ok(trade.stock.amount("enemy", "stone") >= lotSize,
+    `the AI's own lane delivered a lot (got ${trade.stock.amount("enemy", "stone")})`);
+  assert.ok(pit.perMinute > 0, "the shipped table gives the site something to carry");
+
+  const shelved = trade.stock.amount("enemy", "stone");
+  assert.equal(manager.update(blackboard), "traded", "and the same shortfall that was refused is now bought");
+  assert.equal(trade.stock.amount("enemy", "stone"), shelved - lotSize, "the lot came off the shelf the caravans filled");
+  assert.equal(kingdoms.get("enemy").wallet.amount("stone"), lotSize, "and landed in the AI's stockpile");
 });
 
 check("Faz M4: the AI trades toward the age it is short for, and stops once it can pay", () => {

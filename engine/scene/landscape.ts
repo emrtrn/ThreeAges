@@ -978,6 +978,40 @@ function expandBounds(bounds: LandscapeSplineApplyBounds | null, x: number, z: n
 }
 
 /**
+ * Grid rectangle that can possibly receive influence from these corridor pieces.
+ * The actual blend still asks `bestCorridorSample`, so this is deliberately a
+ * conservative over-approximation. It avoids walking an entire heightfield when
+ * a short road or editor spline only occupies a small part of it.
+ */
+function corridorApplyBounds(
+  data: ForgeLandscapeData,
+  subSegments: readonly LandscapeSplineSubSegment[],
+): LandscapeSplineApplyBounds | null {
+  if (subSegments.length === 0) return null;
+  const { verticesX, verticesZ, spacing } = data.size;
+  const { originX, originZ } = landscapeGridOrigin(data.size);
+  let minX = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxZ = -Infinity;
+  for (const { start, end } of subSegments) {
+    for (const sample of [start, end]) {
+      const reach = Math.max(0, sample.width / 2) + Math.max(0, sample.falloff);
+      minX = Math.min(minX, sample.position[0] - reach);
+      minZ = Math.min(minZ, sample.position[2] - reach);
+      maxX = Math.max(maxX, sample.position[0] + reach);
+      maxZ = Math.max(maxZ, sample.position[2] + reach);
+    }
+  }
+  return {
+    x0: Math.max(0, Math.floor((minX + originX) / spacing)),
+    z0: Math.max(0, Math.floor((minZ + originZ) / spacing)),
+    x1: Math.min(verticesX - 1, Math.ceil((maxX + originX) / spacing)),
+    z1: Math.min(verticesZ - 1, Math.ceil((maxZ + originZ) / spacing)),
+  };
+}
+
+/**
  * Destructively deforms the heightfield toward a spline's corridor (Faz 6 Road
  * Tool). Each deform-enabled segment pulls terrain toward the interpolated
  * control-point height (plus `targetOffset`); `flatten` moves both ways while
@@ -987,19 +1021,21 @@ export function applyLandscapeSplineDeform(
   data: ForgeLandscapeData,
   spline: ForgeLandscapeSpline,
 ): LandscapeSplineApplyResult {
-  const { verticesX, verticesZ, spacing, heightScale } = data.size;
+  const { verticesX, spacing, heightScale } = data.size;
   const { originX, originZ } = landscapeGridOrigin(data.size);
   const scale = heightScale === 0 ? 1 : heightScale;
   const accept = (segment: ForgeLandscapeSplineSegment): boolean =>
     !!segment.deform && segment.deform.enabled && (segment.deform.flatten || segment.deform.raiseTerrain || segment.deform.lowerTerrain);
   if (!spline.segments.some(accept)) return { changed: false, bounds: null };
   const subSegments = splineToPolyline(spline).filter((sub) => accept(sub.segment));
+  const applyBounds = corridorApplyBounds(data, subSegments);
+  if (!applyBounds) return { changed: false, bounds: null };
 
   let changed = false;
   let bounds: LandscapeSplineApplyBounds | null = null;
-  for (let z = 0; z < verticesZ; z += 1) {
+  for (let z = applyBounds.z0; z <= applyBounds.z1; z += 1) {
     const localZ = z * spacing - originZ;
-    for (let x = 0; x < verticesX; x += 1) {
+    for (let x = applyBounds.x0; x <= applyBounds.x1; x += 1) {
       const localX = x * spacing - originX;
       const sample = bestCorridorSample(subSegments, localX, localZ);
       if (!sample) continue;
@@ -1033,7 +1069,7 @@ export function applyLandscapeSplinePaint(
   data: ForgeLandscapeData,
   spline: ForgeLandscapeSpline,
 ): LandscapeSplineApplyResult {
-  const { verticesX, verticesZ, spacing } = data.size;
+  const { verticesX, spacing } = data.size;
   const { originX, originZ } = landscapeGridOrigin(data.size);
   const accept = (segment: ForgeLandscapeSplineSegment): boolean =>
     !!segment.paint &&
@@ -1042,17 +1078,20 @@ export function applyLandscapeSplinePaint(
     data.layers.some((layer) => layer.id === segment.paint!.layerId);
   if (!spline.segments.some(accept)) return { changed: false, bounds: null };
   const subSegments = splineToPolyline(spline).filter((sub) => accept(sub.segment));
+  const applyBounds = corridorApplyBounds(data, subSegments);
+  if (!applyBounds) return { changed: false, bounds: null };
+  const layerIndexById = new Map(data.layers.map((layer, index) => [layer.id, index]));
 
   let changed = false;
   let bounds: LandscapeSplineApplyBounds | null = null;
-  for (let z = 0; z < verticesZ; z += 1) {
+  for (let z = applyBounds.z0; z <= applyBounds.z1; z += 1) {
     const localZ = z * spacing - originZ;
-    for (let x = 0; x < verticesX; x += 1) {
+    for (let x = applyBounds.x0; x <= applyBounds.x1; x += 1) {
       const localX = x * spacing - originX;
       const sample = bestCorridorSample(subSegments, localX, localZ);
       if (!sample) continue;
       const paint = sample.segment.paint!;
-      const activeIndex = data.layers.findIndex((entry) => entry.id === paint.layerId);
+      const activeIndex = layerIndexById.get(paint.layerId) ?? -1;
       if (activeIndex < 0) continue;
       const index = z * verticesX + x;
       const amount = Math.min(1, sample.influence * paint.strength);

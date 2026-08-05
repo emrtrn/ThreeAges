@@ -644,7 +644,7 @@
       "resourceId": "stone",
       "workerCapacity": 3,
       "perWorkerPerMinute": 5,
-      "localBufferCapacity": 40,
+      "localBufferCapacity": 30,
       "requiresResourceNode": true,
       "gatherRadius": 8,
       "carryCapacity": 5
@@ -657,7 +657,7 @@
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 5,
-            "localBufferCapacity": 40
+            "localBufferCapacity": 30
           }
         },
         {
@@ -666,7 +666,7 @@
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 6,
-            "localBufferCapacity": 50
+            "localBufferCapacity": 64
           }
         },
         {
@@ -675,7 +675,7 @@
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 7,
-            "localBufferCapacity": 60
+            "localBufferCapacity": 108
           }
         }
       ],
@@ -686,7 +686,7 @@
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 8,
-            "localBufferCapacity": 80
+            "localBufferCapacity": 128
           }
         },
         {
@@ -695,7 +695,7 @@
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 9,
-            "localBufferCapacity": 100
+            "localBufferCapacity": 180
           }
         },
         {
@@ -704,7 +704,7 @@
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 10,
-            "localBufferCapacity": 120
+            "localBufferCapacity": 200
           }
         }
       ]
@@ -727,7 +727,7 @@
       "resourceId": "gold",
       "workerCapacity": 3,
       "perWorkerPerMinute": 3,
-      "localBufferCapacity": 40,
+      "localBufferCapacity": 18,
       "requiresResourceNode": true,
       "gatherRadius": 8,
       "carryCapacity": 3
@@ -740,7 +740,7 @@
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 3,
-            "localBufferCapacity": 40
+            "localBufferCapacity": 18
           }
         },
         {
@@ -749,7 +749,7 @@
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 4,
-            "localBufferCapacity": 50
+            "localBufferCapacity": 24
           }
         },
         {
@@ -758,7 +758,7 @@
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 5,
-            "localBufferCapacity": 60
+            "localBufferCapacity": 40
           }
         }
       ],
@@ -769,7 +769,7 @@
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 6,
-            "localBufferCapacity": 80
+            "localBufferCapacity": 48
           }
         },
         {
@@ -778,7 +778,7 @@
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 7,
-            "localBufferCapacity": 100
+            "localBufferCapacity": 70
           }
         },
         {
@@ -787,7 +787,7 @@
           "economy": {
             "workerCapacity": 5,
             "perWorkerPerMinute": 8,
-            "localBufferCapacity": 120
+            "localBufferCapacity": 80
           }
         }
       ]
