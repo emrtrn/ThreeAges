@@ -43863,6 +43863,7 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
 
   // Requirements met but the stockpile is short: the AI saves rather than acts.
   const saving = aiTestBlackboard({
+    centerLevel: 3,
     buildingCounts: ageComplete,
     ageMissingBuildingIds: [],
     ageAffordable: false,
@@ -43871,6 +43872,7 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
 
   // Requirements met and paid for: this is the moment the age wins.
   const ready = aiTestBlackboard({
+    centerLevel: 3,
     buildingCounts: ageComplete,
     ageMissingBuildingIds: [],
     ageAffordable: true,
@@ -43883,6 +43885,7 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
 
   // §24: a two-minute upgrade is never started while the base is contested.
   const contested = aiTestBlackboard({
+    centerLevel: 3,
     buildingCounts: ageComplete,
     ageMissingBuildingIds: [],
     ageAffordable: true,
