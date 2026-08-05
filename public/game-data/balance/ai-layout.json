@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "candidateLimit": 8,
+  "zones": {
+    "housing": { "minRadius": 10, "maxRadius": 24 },
+    "logistics": { "minRadius": 10, "maxRadius": 22 },
+    "military": { "minRadius": 18, "maxRadius": 32 },
+    "resource": { "minRadius": 4, "maxRadius": 12 }
+  },
+  "scoring": {
+    "seedTieBreakWeight": 1.25,
+    "distancePenalty": 0.08
+  }
+}

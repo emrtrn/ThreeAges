@@ -106,6 +106,7 @@ import {
   GameDataError,
   validateAgeBalance,
   validateAiBalance,
+  validateAiLayoutBalance,
   validateAnimalBalance,
   validateBuildingBalance,
   validateCaravanBalance,
@@ -271,6 +272,7 @@ import { AiTradeManager } from "../src/game/rts/ai/aiTradeManager";
 import { ArmyManager, type AiObjectiveWatch } from "../src/game/rts/ai/armyManager";
 import { KingdomDirector } from "../src/game/rts/ai/kingdomDirector";
 import { AiBuildManager, AI_ANCHOR_FAILURE_LIMIT } from "../src/game/rts/ai/aiBuildManager";
+import { planSettlementLayout } from "../src/game/rts/ai/settlementLayoutPlanner";
 import { buildOrder, detectBottleneck, nextBuilding } from "../src/game/rts/ai/aiEconomyManager";
 import { scoreIntents } from "../src/game/rts/ai/intentScorer";
 import {
@@ -43509,6 +43511,120 @@ check("ai balance validates cadences, ordered power thresholds and the no-cheat 
   // Attack above every other intent.
   assert.throws(() => validateAiBalance(withScoring({ attack: { developmentFloor: 1.4 } })), GameDataError);
   assert.throws(() => validateAiBalance(withScoring({ attack: { developmentFloor: -0.1 } })), GameDataError);
+});
+
+check("procedural settlement planner keeps safe candidates deterministic and seed-varying", () => {
+  const layout = validateAiLayoutBalance(
+    JSON.parse(readFileSync("public/game-data/balance/ai-layout.json", "utf8")) as unknown,
+  );
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const resources = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  const gameplayProofLayout = JSON.parse(
+    readFileSync("public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json", "utf8"),
+  ) as {
+    actors: Array<{ classRef: string; position: [number, number, number]; variableOverrides?: Record<string, string | number | boolean | string[]> }>;
+    splines: Parameters<typeof adaptRtsLevel>[1];
+  };
+  const gameplayProof = resolveRtsSpatialLayout(adaptRtsLevel(
+    gameplayProofLayout.actors.map((instance, index) => ({
+      index,
+      instance,
+      def: normalizeActorScriptDef(JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown, instance.classRef),
+    })),
+    gameplayProofLayout.splines,
+    { buildings, resources, animals: shippedAnimalBalance() },
+  ));
+  const buildingIds = [...new Set(gameplayProof.enemyBaseAnchors.map((anchor) => anchor.buildingId))].sort();
+  for (const buildingId of buildingIds) {
+    assert.ok(buildings[buildingId], `legacy fallback anchor references a known building: ${buildingId}`);
+    assert.ok(gameplayProof.enemyBaseAnchors.some((anchor) => anchor.buildingId === buildingId),
+      `${buildingId} retains at least one controlled authored fallback`);
+  }
+  assert.ok(gameplayProof.enemyBaseRoute.length >= 2, "the legacy base logistics spine remains available as a transition fallback");
+  const territory = {
+    control: {
+      owner: "enemy" as const,
+      ownsFootprint: (owner: UnitOwner) => owner === "enemy",
+      canPlaceExpansion: (owner: UnitOwner) => owner === "enemy",
+    },
+  };
+  const input = {
+    owner: "enemy" as const,
+    center: gameplayProof.enemyStart,
+    territory,
+    map: gameplayProof,
+    buildings,
+    layout,
+    buildingIds,
+  };
+  const first = planSettlementLayout({ ...input, seed: 173 });
+  const repeat = planSettlementLayout({ ...input, seed: 173 });
+  assert.deepEqual(repeat, first, "the same seed must reproduce keys, order, and coordinates exactly");
+  for (let seed = 173; seed < 183; seed += 1) {
+    const planned = seed === 173 ? first : planSettlementLayout({ ...input, seed });
+    for (const buildingId of buildingIds) {
+      const candidates = planned.candidatesByBuilding.get(buildingId) ?? [];
+      assert.ok(candidates.length > 0, `${buildingId} needs a safe base candidate on gameplay_proof (seed ${seed})`);
+      assert.ok(candidates.length <= layout.candidateLimit, `${buildingId} retains only the configured candidate limit`);
+      assert.ok(candidates.every((candidate, index) => index === 0 || candidates[index - 1]!.score >= candidate.score),
+        `${buildingId} candidates are returned in descending score order`);
+      for (const candidate of candidates) {
+        const stats = buildings[candidate.buildingId] ?? assert.fail(`missing ${candidate.buildingId}`);
+        const halfWidth = stats.footprint.width / 2;
+        const halfDepth = stats.footprint.depth / 2;
+        for (const source of [...gameplayProof.resourceNodes, ...gameplayProof.trees, ...gameplayProof.herds]) {
+          assert.ok(
+            candidate.x - halfWidth >= source.x + 0.8
+              || candidate.x + halfWidth <= source.x - 0.8
+              || candidate.z - halfDepth >= source.z + 0.8
+              || candidate.z + halfDepth <= source.z - 0.8,
+            `${candidate.key} must not bury authored source ${source.id}`,
+          );
+        }
+      }
+    }
+  }
+  assert.ok((first.candidatesByBuilding.get("lumber_camp") ?? []).every((candidate) => candidate.sourceId?.startsWith("forest:")),
+    "lumber candidates are tied to a real forest");
+  const varied = planSettlementLayout({ ...input, seed: 174 });
+  for (const buildingId of ["house", "barracks"]) {
+    assert.notDeepEqual(
+      varied.candidatesByBuilding.get(buildingId)?.map(({ x, z }) => ({ x, z })),
+      first.candidatesByBuilding.get(buildingId)?.map(({ x, z }) => ({ x, z })),
+      `${buildingId} must visibly vary with a different seed`,
+    );
+  }
+  const blocked = first.candidatesByBuilding.get("house")?.[0] ?? assert.fail("house candidate missing");
+  const afterBlock = planSettlementLayout({
+    ...input,
+    seed: 173,
+    placement: { occupied: [buildingFootprintBlocker(buildings.house ?? assert.fail("house missing"), blocked.x, blocked.z)] },
+  });
+  assert.ok(!(afterBlock.candidatesByBuilding.get("house") ?? []).some((candidate) => candidate.key === blocked.key),
+    "a dynamic blocker removes that exact candidate rather than leaking through the pure planner");
+  const outsideControl = planSettlementLayout({
+    ...input,
+    seed: 173,
+    buildingIds: ["house"],
+    territory: {
+      control: {
+        owner: "enemy",
+        ownsFootprint: () => false,
+        canPlaceExpansion: () => false,
+      },
+    },
+  });
+  assert.deepEqual(outsideControl.candidatesByBuilding.get("house"), [],
+    "a candidate outside the owner's control is never returned by the pure planner");
+  assert.deepEqual(validateAiLayoutBalance({ version: 1 }), {
+    ...layout,
+  }, "layout defaults are explicit and testable");
+  assert.throws(() => validateAiLayoutBalance({ version: 1, candidateLimit: 0 }), GameDataError);
+  assert.throws(() => validateAiLayoutBalance({ version: 2 }), GameDataError);
 });
 
 check("V3 Faz 7: the AI records a wolf loss and does not refill that den's work site", () => {

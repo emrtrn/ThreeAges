@@ -46,6 +46,8 @@ import type {
   AgeBalance,
   AiEconomyScoring,
   AiIntent,
+  AiLayoutBalance,
+  AiLayoutZoneBalance,
   AiProfile,
   AiProfileBalance,
   AiScoringBalance,
@@ -1768,6 +1770,78 @@ export function validateAiBalance(value: unknown): AiBalance {
 }
 
 /** §52: every role's base power is data, and a worker may never count as army. */
+/** Safe tuning used when an older authored layout file omits a newly-added knob. */
+export const DEFAULT_AI_LAYOUT_BALANCE: AiLayoutBalance = {
+  version: 1,
+  candidateLimit: 8,
+  zones: {
+    housing: { minRadius: 10, maxRadius: 24 },
+    logistics: { minRadius: 10, maxRadius: 22 },
+    military: { minRadius: 18, maxRadius: 32 },
+    resource: { minRadius: 4, maxRadius: 12 },
+  },
+  scoring: { seedTieBreakWeight: 1.25, distancePenalty: 0.08 },
+};
+
+/** Validate the geometry-only AI settlement-layout tuning table. */
+export function validateAiLayoutBalance(value: unknown): AiLayoutBalance {
+  const where = "balance/ai-layout.json";
+  const obj = asObject(value, where);
+  const allowed = new Set(["version", "candidateLimit", "zones", "scoring"]);
+  for (const key of Object.keys(obj)) {
+    if (!allowed.has(key)) throw new GameDataError(`${where}: unknown field "${key}"`);
+  }
+  if (obj["version"] !== 1) throw new GameDataError(`${where}.version: expected 1`);
+  const candidateLimit = optionalFiniteNumber(obj, "candidateLimit", where, DEFAULT_AI_LAYOUT_BALANCE.candidateLimit);
+  if (!Number.isInteger(candidateLimit) || candidateLimit < 1 || candidateLimit > 32) {
+    throw new GameDataError(`${where}.candidateLimit: must be an integer between 1 and 32`);
+  }
+  const zonesObj = obj["zones"] === undefined ? {} : asObject(obj["zones"], `${where}.zones`);
+  const zones = {
+    housing: validateAiLayoutZone(zonesObj["housing"], `${where}.zones.housing`, DEFAULT_AI_LAYOUT_BALANCE.zones.housing),
+    logistics: validateAiLayoutZone(zonesObj["logistics"], `${where}.zones.logistics`, DEFAULT_AI_LAYOUT_BALANCE.zones.logistics),
+    military: validateAiLayoutZone(zonesObj["military"], `${where}.zones.military`, DEFAULT_AI_LAYOUT_BALANCE.zones.military),
+    resource: validateAiLayoutZone(zonesObj["resource"], `${where}.zones.resource`, DEFAULT_AI_LAYOUT_BALANCE.zones.resource),
+  };
+  for (const key of Object.keys(zonesObj)) {
+    if (!(key in zones)) throw new GameDataError(`${where}.zones: unknown zone "${key}"`);
+  }
+  const scoringObj = obj["scoring"] === undefined ? {} : asObject(obj["scoring"], `${where}.scoring`);
+  const seedTieBreakWeight = optionalFiniteNumber(
+    scoringObj, "seedTieBreakWeight", `${where}.scoring`, DEFAULT_AI_LAYOUT_BALANCE.scoring.seedTieBreakWeight,
+  );
+  const distancePenalty = optionalFiniteNumber(
+    scoringObj, "distancePenalty", `${where}.scoring`, DEFAULT_AI_LAYOUT_BALANCE.scoring.distancePenalty,
+  );
+  for (const key of Object.keys(scoringObj)) {
+    if (key !== "seedTieBreakWeight" && key !== "distancePenalty") {
+      throw new GameDataError(`${where}.scoring: unknown field "${key}"`);
+    }
+  }
+  if (seedTieBreakWeight < 0 || seedTieBreakWeight > 10 || distancePenalty < 0 || distancePenalty > 10) {
+    throw new GameDataError(`${where}.scoring: weights must be between 0 and 10`);
+  }
+  return { version: 1, candidateLimit, zones, scoring: { seedTieBreakWeight, distancePenalty } };
+}
+
+function validateAiLayoutZone(
+  value: unknown,
+  where: string,
+  fallback: AiLayoutZoneBalance,
+): AiLayoutZoneBalance {
+  if (value === undefined) return { ...fallback };
+  const obj = asObject(value, where);
+  for (const key of Object.keys(obj)) {
+    if (key !== "minRadius" && key !== "maxRadius") throw new GameDataError(`${where}: unknown field "${key}"`);
+  }
+  const minRadius = optionalFiniteNumber(obj, "minRadius", where, fallback.minRadius);
+  const maxRadius = optionalFiniteNumber(obj, "maxRadius", where, fallback.maxRadius);
+  if (minRadius < 0 || maxRadius <= 0 || minRadius > maxRadius) {
+    throw new GameDataError(`${where}: expected 0 <= minRadius <= maxRadius`);
+  }
+  return { minRadius, maxRadius };
+}
+
 function validateAiRolePower(value: unknown, where: string): Record<UnitRoleId, number> {
   const obj = asObject(value, where);
   const power = {} as Record<UnitRoleId, number>;

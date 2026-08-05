@@ -1,7 +1,7 @@
 # ThreeAges RTS — Prosedürel Yerleşim Planlayıcısı V1
 
 Oluşturulma tarihi: 2026-08-05  
-Durum: **Planlandı — kod uygulanmadı**
+Durum: **Faz P0 + P1 tamamlandı — P2 taban inşaat entegrasyonu bekliyor**
 
 ## 1. Amaç
 
@@ -238,12 +238,12 @@ Bu bilgi yalnız debug içindir; oyuncu HUD'ına teknik aday listesi taşınmaz.
 
 ### Faz P0 — Sözleşme ve ölçüm
 
-- [ ] Mevcut `gameplay_proof` authored alanını, her bina footprint'i ve kaynak
+- [x] Mevcut `gameplay_proof` authored alanını, her bina footprint'i ve kaynak
   çalışma menziliyle ölç.
-- [ ] Legacy anchor'ların bugün karşıladığı minimum bina sayısını ve lojistik
+- [x] Legacy anchor'ların bugün karşıladığı minimum bina sayısını ve lojistik
   yolunu testte çıkar.
-- [ ] `ai-layout.json` şemasını, validator'ını ve varsayılanlarını ekle.
-- [ ] Aynı seed'in aynı aday listesini, farklı seed'lerin en az bir konut ve
+- [x] `ai-layout.json` şemasını, validator'ını ve varsayılanlarını ekle.
+- [x] Aynı seed'in aynı aday listesini, farklı seed'lerin en az bir konut ve
   bir askerî adayda ayrıştığını gösteren saf test ekle.
 
 Kabul: Henüz AI davranışı değişmeden planlayıcının girdileri, sınırları ve
@@ -251,10 +251,10 @@ deterministikliği test edilir.
 
 ### Faz P1 — Saf taban aday üretimi
 
-- [ ] Konut, lojistik ve askerî halkalar için grid tabanlı aday üret.
-- [ ] Footprint, blocker, sınır ve kontrol alanı filtrelerini saf katmana taşı.
-- [ ] Kaynak binaları için kaynak-etrafı aday üretimini ekle.
-- [ ] Skorlayıp her bina türü için sınırlı, sıralı aday listesi döndür.
+- [x] Konut, lojistik ve askerî halkalar için grid tabanlı aday üret.
+- [x] Footprint, blocker, sınır ve kontrol alanı filtrelerini saf katmana taşı.
+- [x] Kaynak binaları için kaynak-etrafı aday üretimini ekle.
+- [x] Skorlayıp her bina türü için sınırlı, sıralı aday listesi döndür.
 
 Kabul: 10 sabit seed'in her birinde çiftlik, oduncu kampı, depo, ev ve kışla
 için en az bir geçerli aday vardır; hiçbir aday harita engeline veya kaynağın

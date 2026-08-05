@@ -12,6 +12,7 @@
 import { logger } from "../core/logger";
 import {
   validateAiBalance,
+  validateAiLayoutBalance,
   validateAgeBalance,
   validateAnimalBalance,
   validateGamePreset,
@@ -24,7 +25,7 @@ import {
   validateTradeSiteBalance,
   validateUnitBalance,
 } from "./validateGameData";
-import type { AgeBalance, AiBalance, AnimalBalance, BuildingBalance, CaravanBalance, GamePreset, GameVersion, ResourceBalance, RoadBalance, TradeSiteBalance, UnitBalance } from "./gameDataTypes";
+import type { AgeBalance, AiBalance, AiLayoutBalance, AnimalBalance, BuildingBalance, CaravanBalance, GamePreset, GameVersion, ResourceBalance, RoadBalance, TradeSiteBalance, UnitBalance } from "./gameDataTypes";
 import type { MissionScript } from "../rts/tutorial/missionScript";
 
 const log = logger("Data");
@@ -112,6 +113,14 @@ export async function loadAiBalance(): Promise<AiBalance> {
   const url = `${GAME_DATA_ROOT}/balance/ai.json`;
   const balance = validateAiBalance(await fetchJson(url));
   log.debug(`loaded AI balance (director every ${balance.evaluation.directorSeconds}s)`);
+  return balance;
+}
+
+/** Load the deterministic settlement planner's geometry-only tuning. */
+export async function loadAiLayoutBalance(): Promise<AiLayoutBalance> {
+  const url = `${GAME_DATA_ROOT}/balance/ai-layout.json`;
+  const balance = validateAiLayoutBalance(await fetchJson(url));
+  log.debug(`loaded AI layout balance (${balance.candidateLimit} candidates per source)`);
   return balance;
 }
 

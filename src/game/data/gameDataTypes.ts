@@ -1011,6 +1011,38 @@ export interface AiBalance {
 }
 
 /**
+ * `public/game-data/balance/ai-layout.json` — deterministic base-layout tuning.
+ *
+ * This intentionally lives beside, rather than inside, {@link AiBalance}:
+ * `ai.json` decides *what* the AI wants to build, while this table only controls
+ * where a safe candidate is searched for.  Keeping that boundary typed prevents
+ * a layout retune from quietly changing the economy or combat director.
+ */
+export interface AiLayoutBalance {
+  readonly version: 1;
+  /** Number of ranked candidates retained for each building/source pair. */
+  readonly candidateLimit: number;
+  readonly zones: {
+    readonly housing: AiLayoutZoneBalance;
+    readonly logistics: AiLayoutZoneBalance;
+    readonly military: AiLayoutZoneBalance;
+    /** Search radius around a real resource source, tree grove, or herd. */
+    readonly resource: AiLayoutZoneBalance;
+  };
+  readonly scoring: {
+    /** Small deterministic preference that makes otherwise-safe layouts vary by seed. */
+    readonly seedTieBreakWeight: number;
+    /** Penalty per world unit from the zone/source's preferred radius. */
+    readonly distancePenalty: number;
+  };
+}
+
+export interface AiLayoutZoneBalance {
+  readonly minRadius: number;
+  readonly maxRadius: number;
+}
+
+/**
  * Purely presentational tuning for how a committed road network is painted onto
  * an authored Landscape's paint layer (Painted Roads plan, Faz 0). Logistics —
  * topology, cost, connectivity — never reads these; they only shape the corridor
