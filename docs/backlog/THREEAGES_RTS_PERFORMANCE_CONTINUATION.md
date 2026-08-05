@@ -303,6 +303,14 @@ npm.cmd run build:verify
 npx.cmd playwright test tests/smoke/rts-graphics-quality.spec.ts
 ```
 
+Terrain mutation telemetry note: under `?rts&debug`, the existing
+`data-rts-perf` snapshot now carries the latest `RoadTerrainPainter` duration,
+road/pad counts, and the actual `dirtyBounds` upload rectangle. It is
+event-driven and does not time every render frame. A live authored Landscape
+mount read `durationMs=92.9`, `roadSegments=48`, `structurePads=2`,
+`dirtyBounds=(42,46)..(210,214)` without console errors; this is a mount
+baseline, not a road-delete/build interaction comparison.
+
 `build:verify` TypeScript, import denetimi, Vite build, engine testleri ve dist
 denetimini kapsar. Render/kalite kodu değiştiğinde bu kapılar ile ilgili
 Playwright smoke tekrar çalıştırılmalıdır. `git diff --check` de teslimden önce

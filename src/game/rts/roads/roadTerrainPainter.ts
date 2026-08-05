@@ -452,6 +452,21 @@ export interface RoadTerrainPainterTarget {
   readonly layerColors: LandscapeLayerColors;
 }
 
+/** Last event-driven terrain mutation, exposed through the RTS debug perf witness. */
+export interface RoadTerrainPaintSnapshot {
+  /** CPU time for spline conversion, paint/deform and dirty geometry replacement. */
+  readonly durationMs: number;
+  readonly roadVersion: number;
+  readonly roadSegments: number;
+  readonly structurePads: number;
+  /** Vertex rectangle sent to the landscape geometry updater; null means no upload. */
+  readonly dirtyBounds: LandscapeSplineApplyBounds | null;
+}
+
+function paintNow(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
 /**
  * Binds a {@link RoadPaintSurface} to a mounted terrain and pushes the repainted
  * corridor into the render object's chunk geometry. Dirty-checked on
@@ -470,6 +485,7 @@ export class RoadTerrainPainter {
   private pads: readonly StructurePad[] = [];
   /** Last building revision the pads were rebuilt for; `-1` means "never". */
   private padRevision = -1;
+  private lastPaintSnapshot: RoadTerrainPaintSnapshot | null = null;
 
   constructor(
     private readonly target: RoadTerrainPainterTarget,
@@ -506,6 +522,11 @@ export class RoadTerrainPainter {
     this.dirty = true;
   }
 
+  /** Read the latest actual repaint without adding any work to regular frames. */
+  snapshot(): RoadTerrainPaintSnapshot | null {
+    return this.lastPaintSnapshot;
+  }
+
   /** Repaint the terrain for the current network, unless nothing has changed. */
   sync(segments: readonly RoadSegment[], version: number): void {
     if (version !== this.lastVersion) {
@@ -514,6 +535,7 @@ export class RoadTerrainPainter {
     }
     if (!this.dirty) return;
     this.dirty = false;
+    const startedAt = paintNow();
     const spline = roadGraphToLandscapeSpline(segments, {
       cellSize: this.cellSize,
       origin: this.target.position,
@@ -521,10 +543,18 @@ export class RoadTerrainPainter {
     });
     const rects = structurePadsToRectPaints(this.pads, this.target.position, this.padVisual);
     const foundations = structurePadsToRectDeforms(this.pads, this.target.position, this.padVisual);
-    this.refreshGeometry(unionBounds(
+    const dirty = unionBounds(
       this.surface.repaint(spline, rects),
       this.foundationSurface.rebuild(foundations),
-    ));
+    );
+    this.refreshGeometry(dirty);
+    this.lastPaintSnapshot = {
+      durationMs: Math.max(0, paintNow() - startedAt),
+      roadVersion: version,
+      roadSegments: segments.length,
+      structurePads: this.pads.length,
+      dirtyBounds: dirty,
+    };
   }
 
   /** Drop all road/pad paint back to the mount-time snapshot (match restart/dispose). */
@@ -534,7 +564,16 @@ export class RoadTerrainPainter {
     this.pads = [];
     this.dirty = true;
     this.activeLayerId = this.visual.layerId;
-    this.refreshGeometry(unionBounds(this.surface.reset(), this.foundationSurface.reset()));
+    const startedAt = paintNow();
+    const dirty = unionBounds(this.surface.reset(), this.foundationSurface.reset());
+    this.refreshGeometry(dirty);
+    this.lastPaintSnapshot = {
+      durationMs: Math.max(0, paintNow() - startedAt),
+      roadVersion: this.lastVersion,
+      roadSegments: 0,
+      structurePads: 0,
+      dirtyBounds: dirty,
+    };
   }
 
   private refreshGeometry(dirty: LandscapeSplineApplyBounds | null): void {

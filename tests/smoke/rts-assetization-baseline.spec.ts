@@ -146,6 +146,30 @@ test("Landscape Faz 1: the gameplay_proof preset resolves its own authored Level
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
   await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
 
+  // Road/build stutter investigation: the authored-terrain route publishes the
+  // latest event-driven paint scope in the existing debug performance witness.
+  await page.waitForFunction(() => {
+    const raw = document.querySelector("#game-canvas")?.getAttribute("data-rts-perf");
+    if (!raw) return false;
+    try {
+      return JSON.parse(raw).terrainPaint !== null;
+    } catch {
+      return false;
+    }
+  });
+  const terrainPaint = await page.locator("#game-canvas").evaluate((canvas) => {
+    const snapshot = JSON.parse(canvas.getAttribute("data-rts-perf") ?? "{}");
+    return snapshot.terrainPaint as {
+      durationMs: number;
+      roadSegments: number;
+      structurePads: number;
+      dirtyBounds: { x0: number; z0: number; x1: number; z1: number } | null;
+    };
+  });
+  expect(terrainPaint.durationMs).toBeGreaterThanOrEqual(0);
+  expect(terrainPaint.roadSegments).toBeGreaterThanOrEqual(0);
+  expect(terrainPaint.structurePads).toBeGreaterThanOrEqual(0);
+
   expect(errors, "the gameplay proof Level must adapt and boot a match without runtime errors").toEqual([]);
 });
 

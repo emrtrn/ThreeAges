@@ -2025,6 +2025,9 @@ export class RtsApp {
       render,
       memory,
       shadowCasters: this.shadowCasterStats(),
+      // Event-driven terrain work, not a per-frame timer. Browser performance
+      // captures can correlate a road/build hitch with its exact repaint scope.
+      terrainPaint: this.roadPainter?.snapshot() ?? null,
       quality: this.userSettings.graphics.selectedQualityLevel,
       adaptiveEnabled: this.userSettings.graphics.adaptiveOptimizationEnabled,
       adaptiveReductionDepth: this.adaptiveQuality.reductionDepth,
