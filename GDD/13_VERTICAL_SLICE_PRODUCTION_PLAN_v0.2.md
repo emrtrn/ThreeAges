@@ -1329,7 +1329,10 @@ Görevler:
   maliyetini atomik rezerve eder; testte başarılı başlangıç sonrası tüm stok sıfırdır.)
 - [x] Çağ atlama sırasında oyuncu savunmasız kalabiliyor. (Merkez işçi kuyruğu
   yükseltme boyunca durur ve ayrılmış kaynaklar yeni üretime kullanılamaz.)
-- [ ] AI Kasaba çağına ulaşabiliyor.
+- [x] AI Kasaba çağına ulaşabiliyor. (`gameplay_proof` standard açılışıyla
+  `test:engine`: saldırısız 18 sim dakika içinde Kasaba; görsel kabul:
+  oyuncu saldırmadan ve nehri geçmeden AI **14:00**'te Kasaba'ya ulaştı,
+  2026-08-05.)
 - [ ] Kaynak düğümü tükenmesi yeni genişlemeyi teşvik ediyor.
 - [x] Refah oyuncuyu bekleten görünmez kilit oluşturmuyor. (`prosperity` yalnız
   isteğe bağlı debug bilgisidir; `AgeSystem` ve üretim kapıları bu bayrağı okumaz.)
@@ -1540,7 +1543,8 @@ güvenliğiyle puanlar; altı yapı gereksinimi yalnız Yerleşim Lv3→Kasaba
 geçişinin kapısıdır. `test:engine`'e, eksik Kasaba yapıları varken ödenebilir
 Lv3'ün Economy'yi geçtiğini kanıtlayan regresyon eklendi. Böylece debug paneli
 "merkez seviye 3 için hazır" ile gerçek bir yapı/lojistik tıkanmasını birbirinden
-ayırt eder.
+ayırt eder. **Görsel kabul (2026-08-05):** standart `gameplay_proof` maçında
+oyuncu hiç saldırmadan ve nehri geçmeden AI Kasaba'ya **14:00**'te ulaştı.
 
 ### Ekonomi
 

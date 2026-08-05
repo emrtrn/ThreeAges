@@ -388,7 +388,7 @@ import { PendingImpactQueue } from "../src/game/rts/combat/pendingImpacts";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
 import { SupportAuraSystem } from "../src/game/rts/structures/supportAuraSystem";
 import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
-import type { BuildingBalanceStats, GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
+import type { AiProfile, BuildingBalanceStats, GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import { Unit, UNIT_DEATH_SECONDS, type RtsPresentationHandle } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import { WildlifeSystem, wildProfileFor, type RtsHerdDefinition } from "../src/game/rts/wildlife/wildlifeSystem";
@@ -43068,6 +43068,7 @@ function aiTestWorld(
    * up to Town inside a unit test would measure the economy rather than the gate.
    */
   startingTier: StartingTier | undefined = undefined,
+  profile: AiProfile = "normal",
 ) {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -43295,7 +43296,7 @@ function aiTestWorld(
       (structure) => territory.ownerAt(structure.x, structure.z) === structure.owner,
     ),
     balance: AI_TEST_BALANCE,
-    profile: "normal",
+    profile,
   });
   aiRef = ai;
   // A freshly completed structure joins the kingdom's current tier; the harness
@@ -44534,6 +44535,66 @@ check("AI expansion runs the §47 recipe end to end and finally earns income", (
 });
 
 // --- Faz 8 §48–§49: AI-2, the core-match opponent ---
+
+check("Kasaba güvenilirlik: standart gameplay_proof açılışı saldırısız maçta Kasaba'ya ulaşır", () => {
+  const preset = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
+  const siege = unitBalance.siege_placeholder ?? assert.fail("siege definition missing");
+  const opening = preset.enemyStartingResources ?? preset.startingResources
+    ?? assert.fail("gameplay_proof needs a standard opening stockpile");
+  const enemyWorkers = preset.enemyStartingUnits?.worker ?? 5;
+  const playerGuards = preset.startingUnits?.guard ?? 3;
+  const playerWorkers = preset.startingUnits?.worker ?? 5;
+  const playerSiege = preset.startingUnits?.siege ?? 0;
+  const world = aiTestWorld(opening, preset.startingTier, preset.aiProfile ?? "normal");
+
+  // This is the published, passive-match opening: the player has its normal
+  // standing defence but issues no order and never enters the AI's side. It is
+  // deliberately not the old 4000-resource proof, so the age path remains
+  // protected at the balance a player actually opens with.
+  for (let index = 0; index < enemyWorkers; index += 1) {
+    world.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
+  }
+  // Mirror RtsApp's passive player opening too. The player issues no order, but
+  // its workers and artillery still contribute to the threat assessment that
+  // tells the AI whether to keep investing in its settlement.
+  for (let index = 0; index < playerGuards; index += 1) {
+    world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.playerStart.z + 7 + Math.floor(index / 5) * 3, guard);
+  }
+  for (let index = 0; index < playerWorkers; index += 1) {
+    world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 4 + (index % 5) * 2, RTS_BLOCKOUT_MAP.playerStart.z - (8 + Math.floor(index / 5) * 2), worker);
+  }
+  for (let index = 0; index < playerSiege; index += 1) {
+    world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.playerStart.z + (4 - Math.floor(index / 5) * 3), siege);
+  }
+
+  // The browser acceptance reached Town at 14:00. Give the deterministic
+  // simulation four conservative minutes of headroom for data retuning while
+  // still catching a return to the former "never reaches Town" failure.
+  for (let index = 0; index < 2_160; index += 1) world.step(0.5);
+
+  const board = world.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
+  assert.equal(
+    world.progression.tierFor("enemy").age,
+    "town",
+    `the standard passive opening reaches the Town age within 18 simulation minutes; final AI state: ${JSON.stringify({
+      tier: world.progression.snapshot("enemy"),
+      stocks: board.resourceStocks,
+      income: board.resourceIncomePerMinute,
+      workers: board.workerCount,
+      buildings: board.buildingCounts,
+      missing: board.ageMissingBuildingIds,
+      intent: world.ai.snapshot().intent,
+      activeBuild: world.ai.snapshot().activeBuild,
+    })}`,
+  );
+  assert.equal(board.ageMissingBuildingIds.length, 0, "Town prerequisites completed through ordinary AI economy");
+  assert.equal(board.disconnectedProducers, 0, "the Town budget is not stranded in local buffers");
+});
 
 check("Faz 8 §49: the AI builds a four-resource economy and reaches the Kasaba age", () => {
   const unitBalance = validateUnitBalance(
