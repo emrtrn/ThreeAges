@@ -2,7 +2,7 @@
   "cellSize": 2,
   "woodCostPerCell": 4,
   "autoConnect": {
-    "maxCells": 6
+    "maxCells": 4
   },
   "visual": {
     "layerId": "dirt",
@@ -17,7 +17,6 @@
     "jitterSpacingCells": 5,
     "widthVariation": 0.15,
     "cornerRoundness": 0.1
-  
   },
   "buildingPad": {
     "layerId": "dirt",

@@ -376,11 +376,11 @@
     "economy": {
       "resourceId": "food",
       "workerCapacity": 3,
-      "perWorkerPerMinute": 30,
-      "localBufferCapacity": 180,
+      "perWorkerPerMinute": 100,
+      "localBufferCapacity": 1000,
       "requiresGame": true,
       "gatherRadius": 18,
-      "carryCapacity": 15
+      "carryCapacity": 50
     },
     "progression": {
       "settlement": [
@@ -389,9 +389,9 @@
           "maxHealth": 100,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 30,
-            "localBufferCapacity": 180,
-            "carryCapacity": 15
+            "perWorkerPerMinute": 120,
+            "localBufferCapacity": 1000,
+            "carryCapacity": 60
           }
         },
         {
@@ -399,9 +399,9 @@
           "maxHealth": 110,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 40,
-            "localBufferCapacity": 240,
-            "carryCapacity": 20
+            "perWorkerPerMinute": 140,
+            "localBufferCapacity": 1000,
+            "carryCapacity": 70
           }
         },
         {
@@ -409,9 +409,9 @@
           "maxHealth": 120,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 50,
-            "localBufferCapacity": 400,
-            "carryCapacity": 25
+            "perWorkerPerMinute": 160,
+            "localBufferCapacity": 1000,
+            "carryCapacity": 80
           }
         }
       ],
@@ -421,9 +421,9 @@
           "maxHealth": 130,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 60,
-            "localBufferCapacity": 480,
-            "carryCapacity": 30
+            "perWorkerPerMinute": 180,
+            "localBufferCapacity": 1000,
+            "carryCapacity": 90
           }
         },
         {
@@ -431,9 +431,9 @@
           "maxHealth": 140,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 70,
-            "localBufferCapacity": 700,
-            "carryCapacity": 35
+            "perWorkerPerMinute": 200,
+            "localBufferCapacity": 1000,
+            "carryCapacity": 100
           }
         },
         {
@@ -441,9 +441,9 @@
           "maxHealth": 150,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 80,
-            "localBufferCapacity": 800,
-            "carryCapacity": 40
+            "perWorkerPerMinute": 220,
+            "localBufferCapacity": 1000,
+            "carryCapacity": 110
           }
         }
       ]

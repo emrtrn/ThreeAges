@@ -25,6 +25,8 @@ import type { UnitOwner } from "../units/unit";
 import { AiAgeManager } from "./aiAgeManager";
 import { AiBlackboardReader, type AiBlackboard, type AiBlackboardSources } from "./aiBlackboard";
 import { AiBuildManager } from "./aiBuildManager";
+import type { AiBuildPlacementDebug } from "./aiBuildManager";
+import type { AiSiteProvider } from "./aiSiteProvider";
 import { AiDecisionLog } from "./aiDecisionLog";
 import { AiEconomyManager, type AiBottleneck } from "./aiEconomyManager";
 import { AiExpansionCoordinator, AI_MAX_EXPANSION_PLANS } from "./aiExpansionCoordinator";
@@ -46,6 +48,8 @@ export interface AiControllerOptions extends AiBlackboardSources {
   readonly centers: CommandCenterSystem;
   /** §40: the authored slots this kingdom may build on. */
   readonly anchors: readonly RtsBuildAnchor[];
+  /** V1 base-site preference; explicit expansion scopes remain authored. */
+  readonly siteProvider?: AiSiteProvider;
   /**
    * §37: the base road spine. Without it the base depot has no island and every
    * base producer stays stuck on its local buffer, so the AI has no income.
@@ -120,6 +124,7 @@ export interface AiControllerSnapshot {
    * null when it is free. This is what separates "saving up" from "stuck".
    */
   readonly activeBuild: string | null;
+  readonly buildPlacement: AiBuildPlacementDebug;
   readonly blackboard: AiBlackboard | null;
 }
 
@@ -172,6 +177,7 @@ export class AiController {
       options.construction,
       options.structures,
       this.log,
+      options.siteProvider,
     );
     this.economy = new AiEconomyManager(options.balance, this.builds, this.log);
     const depotAnchor = options.anchors.find((anchor) => anchor.buildingId === "depot");
@@ -346,6 +352,7 @@ export class AiController {
       upgradeStep: this.upgrades.currentStep,
       tradeStep: this.trades.currentStep,
       activeBuild: this.builds.activeStructure?.stats.id ?? null,
+      buildPlacement: this.builds.placementDebug,
       blackboard: this.lastBlackboard,
     };
   }

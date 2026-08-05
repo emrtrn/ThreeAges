@@ -70,6 +70,12 @@ export function formatRtsAiDebug(
   // The settlement plan, because it now damps the attack as well as driving the
   // economy: without this line a suppressed Attack reads as a mystery rather than
   // as "the city is 60% built". Needs the balance the targets live in.
+  if (snapshot.buildPlacement.key) {
+    lines.push(
+      `yer adayi: ${snapshot.buildPlacement.source ?? "-"} ${snapshot.buildPlacement.key}`
+      + `${snapshot.buildPlacement.failureReason ? ` · ret ${snapshot.buildPlacement.failureReason}` : ""}`,
+    );
+  }
   if (bb && balance) {
     const development = developmentReadiness(bb, balance);
     lines.push(

@@ -1,18 +1,6 @@
 /**
- * AI build executor — `07_ENEMY_AI_DESIGN_v0.2.md` §17 (BuildManager),
- * §40–§43; plan §38 ("Yapı kuyruğu").
- *
- * §17 is clear that this is an *executing* service, not a decision layer: it
- * never picks a strategy, it turns "I want a farm" into a construction site
- * through the same {@link StructureConstructionService} the player's palette
- * uses (§4).
- *
- * The rules that matter here:
- *  - §40: candidates come from authored map anchors, not a free search.
- *  - §42: exactly one active construction at a time.
- *  - §43: an invalid spot tries the next candidate, then fails with a named
- *    error code. An anchor that keeps failing is blacklisted, which is what
- *    makes plan §39 "AI geçersiz yapı konumunda sonsuz döngüye girmiyor" hold.
+ * AI construction executor. It never chooses an economy strategy; it tries a
+ * bounded site list through the same construction service the player uses.
  */
 import type { RtsBuildAnchor } from "../world/rtsMapBlockout";
 import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
@@ -20,8 +8,9 @@ import type { StructureConstructionService } from "../structures/structureConstr
 import type { UnitOwner } from "../units/unit";
 import type { AiDecisionLog } from "./aiDecisionLog";
 import type { AiFailureReason } from "./aiTypes";
+import type { AiBuildSite, AiSiteProvider, AiSiteSource } from "./aiSiteProvider";
 
-/** §43: an anchor is dropped after this many consecutive rejections. */
+/** A rejected candidate is retired after three consecutive hard failures. */
 export const AI_ANCHOR_FAILURE_LIMIT = 3;
 
 export type AiBuildOutcome =
@@ -30,10 +19,16 @@ export type AiBuildOutcome =
   | { readonly kind: "waiting"; readonly reason: AiFailureReason }
   | { readonly kind: "failed"; readonly reason: AiFailureReason };
 
+export interface AiBuildPlacementDebug {
+  readonly key: string | null;
+  readonly source: AiSiteSource | null;
+  readonly failureReason: string | null;
+}
+
 export class AiBuildManager {
-  /** Anchor key → consecutive failures, for the §43 blacklist. */
-  private readonly anchorFailures = new Map<string, number>();
+  private readonly candidateFailures = new Map<string, number>();
   private active: PlacedStructure | null = null;
+  private lastPlacement: AiBuildPlacementDebug = { key: null, source: null, failureReason: null };
 
   constructor(
     private readonly owner: UnitOwner,
@@ -41,9 +36,9 @@ export class AiBuildManager {
     private readonly construction: StructureConstructionService,
     private readonly structures: PlacedStructureSystem,
     private readonly log: AiDecisionLog,
+    private readonly siteProvider?: AiSiteProvider,
   ) {}
 
-  /** §42: true while a site is still under construction. */
   get busy(): boolean {
     return this.active !== null;
   }
@@ -52,22 +47,21 @@ export class AiBuildManager {
     return this.active;
   }
 
+  get placementDebug(): AiBuildPlacementDebug {
+    return this.lastPlacement;
+  }
+
   /**
-   * Try to start one building. Returns `busy` when §42's single-slot rule
-   * blocks it, `waiting` for a recoverable condition (no resources yet), and
-   * `failed` when every authored anchor has been exhausted.
-   *
-   * `scope` narrows the candidate slots — the expansion recipe passes its own
-   * region anchors so it shares this manager's single build slot and blacklist
-   * (§42/§43) without the base build order ever placing a farm out at the
-   * expansion, or vice versa.
+   * An explicit scope is an authored expansion recipe. Base requests omit it and
+   * therefore use the procedural provider before falling back to legacy anchors.
    */
-  request(buildingId: string, now: number, scope: readonly RtsBuildAnchor[] = this.anchors): AiBuildOutcome {
+  request(buildingId: string, now: number, scope?: readonly RtsBuildAnchor[]): AiBuildOutcome {
     this.syncActive();
     if (this.active) return { kind: "busy" };
 
-    const candidates = this.availableAnchors(buildingId, scope);
+    const candidates = this.availableSites(buildingId, scope);
     if (candidates.length === 0) {
+      this.lastPlacement = { key: null, source: null, failureReason: "no-valid-placement" };
       this.log.record({
         at: now,
         kind: "plan-failed",
@@ -78,56 +72,58 @@ export class AiBuildManager {
     }
 
     let lastReason: AiFailureReason = "no-valid-placement";
-    for (const anchor of candidates) {
-      const result = this.construction.build(this.owner, anchor.buildingId, anchor.x, anchor.z);
+    for (const candidate of candidates) {
+      const result = this.construction.build(this.owner, candidate.buildingId, candidate.x, candidate.z);
       if (result.built) {
-        this.anchorFailures.delete(this.key(anchor));
+        this.candidateFailures.delete(candidate.key);
+        this.lastPlacement = { key: candidate.key, source: candidate.source, failureReason: null };
         this.active = result.structure;
         return { kind: "started", structure: result.structure };
       }
       if (result.reason === "insufficient-resources") {
-        // §38/§43: not the anchor's fault — wait and re-evaluate rather than
-        // burning through candidates and blacklisting perfectly good slots.
+        // A good site must not be blacklisted merely because the wallet is empty.
         return { kind: "waiting", reason: "insufficient-resources" };
       }
       lastReason = this.failureReasonFor(result.reason);
-      this.recordAnchorFailure(anchor, now, result.reason);
+      this.lastPlacement = { key: candidate.key, source: candidate.source, failureReason: result.reason };
+      this.recordCandidateFailure(candidate, now, result.reason);
     }
     return { kind: "failed", reason: lastReason };
   }
 
   reset(): void {
-    this.anchorFailures.clear();
+    this.candidateFailures.clear();
     this.active = null;
+    this.lastPlacement = { key: null, source: null, failureReason: null };
   }
 
-  /** Anchors for a building that are neither taken nor blacklisted. */
-  private availableAnchors(buildingId: string, scope: readonly RtsBuildAnchor[]): readonly RtsBuildAnchor[] {
-    return scope.filter((anchor) => anchor.buildingId === buildingId
-      && (this.anchorFailures.get(this.key(anchor)) ?? 0) < AI_ANCHOR_FAILURE_LIMIT
-      && !this.occupied(anchor));
+  private availableSites(buildingId: string, scope?: readonly RtsBuildAnchor[]): readonly AiBuildSite[] {
+    const sites = scope
+      ? scope.filter((anchor) => anchor.buildingId === buildingId).map(toLegacySite)
+      : this.siteProvider?.sitesFor(buildingId) ?? this.anchors
+        .filter((anchor) => anchor.buildingId === buildingId)
+        .map(toLegacySite);
+    return sites.filter((site) => (this.candidateFailures.get(site.key) ?? 0) < AI_ANCHOR_FAILURE_LIMIT
+      && !this.occupied(site));
   }
 
-  /** An anchor already carrying one of our structures is not a candidate. */
-  private occupied(anchor: RtsBuildAnchor): boolean {
+  private occupied(site: Pick<AiBuildSite, "x" | "z">): boolean {
     return this.structures.ownedBy(this.owner)
-      .some((structure) => structure.x === anchor.x && structure.z === anchor.z);
+      .some((structure) => structure.x === site.x && structure.z === site.z);
   }
 
-  private recordAnchorFailure(anchor: RtsBuildAnchor, now: number, reason: string): void {
-    const key = this.key(anchor);
-    const failures = (this.anchorFailures.get(key) ?? 0) + 1;
-    this.anchorFailures.set(key, failures);
+  private recordCandidateFailure(candidate: AiBuildSite, now: number, reason: string): void {
+    const failures = (this.candidateFailures.get(candidate.key) ?? 0) + 1;
+    this.candidateFailures.set(candidate.key, failures);
     if (failures < AI_ANCHOR_FAILURE_LIMIT) return;
     this.log.record({
       at: now,
       kind: "plan-failed",
-      reason: `${anchor.buildingId} @${anchor.x},${anchor.z} kara listeye alındı (${reason})`,
+      reason: `${candidate.buildingId} @${candidate.x},${candidate.z} kara listeye alındı (${reason})`,
       failureReason: this.failureReasonFor(reason),
     });
   }
 
-  /** Drop the active slot once its site completes or is destroyed. */
   private syncActive(): void {
     if (!this.active) return;
     const live = this.structures.all().includes(this.active);
@@ -143,8 +139,14 @@ export class AiBuildManager {
       default: return "no-valid-placement";
     }
   }
+}
 
-  private key(anchor: RtsBuildAnchor): string {
-    return `${anchor.buildingId}:${anchor.x}:${anchor.z}`;
-  }
+function toLegacySite(anchor: RtsBuildAnchor): AiBuildSite {
+  return {
+    key: `legacy:${anchor.buildingId}:${anchor.x}:${anchor.z}`,
+    buildingId: anchor.buildingId,
+    x: anchor.x,
+    z: anchor.z,
+    source: "legacy",
+  };
 }

@@ -48,6 +48,7 @@ import { logger } from "@/game/core/logger";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import type {
   AiBalance,
+  AiLayoutBalance,
   AgeBalance,
   AiProfile,
   AnimalBalance,
@@ -70,6 +71,8 @@ import {
   type RtsActorLoadReport,
 } from "./content/rtsActorVisualFactory";
 import { AiController } from "./ai/aiController";
+import { SettlementAiSiteProvider } from "./ai/aiSiteProvider";
+import { planSettlementLayout } from "./ai/settlementLayoutPlanner";
 import { formatRtsAiDebug } from "./ai/aiDebugView";
 import { RtsCameraController } from "./camera/rtsCameraController";
 import { RtsInput } from "./input/rtsInput";
@@ -434,6 +437,10 @@ export interface RtsAppOptions {
   readonly roadBalance: RoadBalance;
   /** Data-owned AI cadences, thresholds and intent weights (Faz 5). */
   readonly aiBalance: AiBalance;
+  /** Geometry-only base-layout tuning, intentionally separate from aiBalance. */
+  readonly aiLayoutBalance: AiLayoutBalance;
+  /** URL-published match seed; equal seeds reproduce the AI base plan. */
+  readonly matchSeed: number;
   /** Difficulty profile the enemy kingdom runs with (AI design §70). */
   readonly aiProfile: AiProfile;
   /**
@@ -941,6 +948,7 @@ export class RtsApp {
     // "my edits did not show up" from a guess into a one-glance answer.
     this.canvas.dataset.rtsLevelRef = this.options.levelRef ?? "";
     this.canvas.dataset.rtsLevelError = this.options.levelLoadError ?? "";
+    this.canvas.dataset.rtsMatchSeed = String(this.options.matchSeed);
     // The cursor belongs to the RTS map surface only. HTML controls retain
     // their familiar browser pointer so their click affordance stays explicit.
     this.canvas.dataset.rtsCursor = "default";
@@ -1376,6 +1384,27 @@ export class RtsApp {
     );
     // Built last among the AI's dependencies: it drives the very same
     // construction/production services the player's UI does (AI design §4).
+    const siteProvider = new SettlementAiSiteProvider(
+      planSettlementLayout({
+        seed: this.options.matchSeed,
+        owner: AI_OWNER,
+        center: this.spatial.enemyStart,
+        territory: {
+          control: {
+            owner: AI_OWNER,
+            ownsFootprint: (owner, x, z, width, depth) => this.territory.ownsFootprint(owner, x, z, width, depth),
+            canPlaceExpansion: (owner, x, z, width, depth, maximumGap) =>
+              this.territory.canPlaceExpansion(owner, x, z, width, depth, maximumGap),
+          },
+        },
+        map: this.spatial,
+        buildings: this.options.buildingBalance,
+        placement: { occupied: [...this.centers.navigationBlockers(), ...this.structures.navigationBlockers()] },
+        layout: this.options.aiLayoutBalance,
+        buildingIds: [...new Set(this.spatial.enemyBaseAnchors.map((anchor) => anchor.buildingId))],
+      }),
+      this.spatial.enemyBaseAnchors,
+    );
     this.ai = new AiController({
       owner: AI_OWNER,
       units: this.units,
@@ -1411,6 +1440,7 @@ export class RtsApp {
         : null,
       isPredatorDenLive: (homeX, homeZ) => this.predators.denIsLive(homeX, homeZ),
       anchors: this.spatial.enemyBaseAnchors,
+      siteProvider,
       baseRoute: this.spatial.enemyBaseRoute,
       expansions: this.spatial.enemyExpansions,
       construction: this.structureConstruction,

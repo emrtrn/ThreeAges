@@ -272,6 +272,7 @@ import { AiTradeManager } from "../src/game/rts/ai/aiTradeManager";
 import { ArmyManager, type AiObjectiveWatch } from "../src/game/rts/ai/armyManager";
 import { KingdomDirector } from "../src/game/rts/ai/kingdomDirector";
 import { AiBuildManager, AI_ANCHOR_FAILURE_LIMIT } from "../src/game/rts/ai/aiBuildManager";
+import { SettlementAiSiteProvider } from "../src/game/rts/ai/aiSiteProvider";
 import { planSettlementLayout } from "../src/game/rts/ai/settlementLayoutPlanner";
 import { buildOrder, detectBottleneck, nextBuilding } from "../src/game/rts/ai/aiEconomyManager";
 import { scoreIntents } from "../src/game/rts/ai/intentScorer";
@@ -43071,6 +43072,8 @@ function aiTestWorld(
    */
   startingTier: StartingTier | undefined = undefined,
   profile: AiProfile = "normal",
+  matchSeed = 17,
+  proceduralLayout = false,
 ) {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -43167,6 +43170,27 @@ function aiTestWorld(
         : structure.stats.territory?.controlRadius ?? 0,
     }))));
   territory.refresh();
+  const aiLayout = validateAiLayoutBalance(
+    JSON.parse(readFileSync("public/game-data/balance/ai-layout.json", "utf8")) as unknown,
+  );
+  const siteProvider = proceduralLayout ? new SettlementAiSiteProvider(planSettlementLayout({
+    seed: matchSeed,
+    owner: "enemy",
+    center: RTS_BLOCKOUT_MAP.enemyStart,
+    territory: {
+      control: {
+        owner: "enemy",
+        ownsFootprint: (owner, x, z, width, depth) => territory.ownsFootprint(owner, x, z, width, depth),
+        canPlaceExpansion: (owner, x, z, width, depth, maximumGap) =>
+          territory.canPlaceExpansion(owner, x, z, width, depth, maximumGap),
+      },
+    },
+    map: RTS_BLOCKOUT_MAP,
+    buildings,
+    placement: { occupied: [...centers.navigationBlockers(), ...structures.navigationBlockers()] },
+    layout: aiLayout,
+    buildingIds: [...new Set(RTS_BLOCKOUT_MAP.enemyBaseAnchors.map((anchor) => anchor.buildingId))],
+  }), RTS_BLOCKOUT_MAP.enemyBaseAnchors) : undefined;
   const predators = new PredatorSystem(units, wildlife, (x, z) => territory.ownerAt(x, z));
   const workerConstruction = new WorkerConstructionSystem(
     units,
@@ -43283,6 +43307,7 @@ function aiTestWorld(
     navigation,
     isPredatorDenLive: (homeX, homeZ) => predators.denIsLive(homeX, homeZ),
     anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
+    siteProvider,
     baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
     expansions: RTS_BLOCKOUT_MAP.enemyExpansions,
     construction,
@@ -43394,6 +43419,7 @@ function aiTestSnapshot(overrides: Partial<AiControllerSnapshot> = {}): AiContro
     infrastructureStep: "linked",
     upgradeStep: "idle",
     activeBuild: null,
+    buildPlacement: { key: null, source: null, failureReason: null },
     blackboard: null,
     ...overrides,
   };
@@ -44445,7 +44471,7 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
 
   // --- §34/§37: the opening executes on authored anchors (plan §38) ---
 
-  const opener = aiTestWorld({ food: 400, wood: 600 });
+  const opener = aiTestWorld({ food: 400, wood: 600 }, undefined, "normal", 17, true);
   // The match-start force: workers only, no army — exactly what RtsApp spawns.
   for (let index = 0; index < 5; index += 1) opener.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
   // The player fields a standing defence the AI can see.
@@ -44482,7 +44508,8 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
     0,
     "the AI only ever builds for its own kingdom",
   );
-  // §40: every AI structure sits on an authored anchor, never a free-searched spot.
+  // P2: base construction uses the deterministic layout first. Expansion slots
+  // remain authored, which keeps the recipe's claimed-region contract intact.
   const expansion = AI_TEST_PRIMARY_REGION;
   const authored = [
     ...RTS_BLOCKOUT_MAP.enemyBaseAnchors,
@@ -44490,13 +44517,28 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
     expansion.depot,
     expansion.production,
   ];
-  for (const structure of opener.structures.ownedBy("enemy")) {
-    assert.ok(
-      authored.some((anchor) => anchor.buildingId === structure.stats.id
-        && anchor.x === structure.x && anchor.z === structure.z),
-      `${structure.stats.id} @${structure.x},${structure.z} is not an authored anchor`,
-    );
+  const proceduralBase = opener.structures.ownedBy("enemy").filter((structure) =>
+    !authored.some((anchor) => anchor.buildingId === structure.stats.id
+      && anchor.x === structure.x && anchor.z === structure.z));
+  assert.ok(proceduralBase.length >= 2,
+    "the opening uses multiple planned base locations instead of replaying the authored anchor layout");
+  const variedSeed = aiTestWorld({ food: 400, wood: 600 }, undefined, "normal", 18, true);
+  for (let index = 0; index < 5; index += 1) {
+    variedSeed.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
   }
+  for (let index = 0; index < 4; index += 1) {
+    variedSeed.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 4 + index * 3, RTS_BLOCKOUT_MAP.playerStart.z + 7, guard);
+  }
+  for (let index = 0; index < 600; index += 1) variedSeed.step(0.5);
+  const locationFor = (world: ReturnType<typeof aiTestWorld>, buildingId: string) => world.structures.ownedBy("enemy")
+    .find((structure) => structure.stats.id === buildingId);
+  const movedTypes = ["farm", "lumber_camp", "barracks"].filter((buildingId) => {
+    const left = locationFor(opener, buildingId);
+    const right = locationFor(variedSeed, buildingId);
+    return left && right && (left.x !== right.x || left.z !== right.z);
+  });
+  assert.ok(movedTypes.length >= 2,
+    "the same economic opening builds at least two different valid base locations for a different seed");
   // §42: never more than one construction site open at a time.
   assert.ok(
     opener.structures.ownedBy("enemy").filter((structure) => !structure.construction.complete).length <= 1,
@@ -45597,6 +45639,58 @@ check("Faz 6: the AI's hunting camp anchor is authored on a herd it can work and
       `the hunting camp anchor @${anchor.x},${anchor.z} is off the AI's authored road spine`,
     );
   }
+});
+
+check("AiBuildManager prefers planned sites, blacklists stable keys, then uses legacy fallback", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 10_000, wood: 10_000 }, 20);
+  const navigation = new RtsNavigation();
+  const territory = new TerritoryControlSystem(() => [{ owner: "enemy", x: 0, z: 0, radius: 28 }]);
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings, structures, kingdoms, navigation,
+    () => structures.navigationBlockers(), territory, () => {}, () => {},
+  );
+  const legacy = [{ buildingId: "house", x: -8, z: 0 }];
+  const planned = new SettlementAiSiteProvider({
+    version: 1,
+    seed: 17,
+    candidatesByBuilding: new Map([["house", [{
+      key: "v1:17:house:base:8:0", buildingId: "house", x: 8, z: 0, zone: "housing", score: 1,
+    }]]]),
+  }, legacy);
+  const manager = new AiBuildManager("enemy", legacy, construction, structures, new AiDecisionLog(), planned);
+  const first = manager.request("house", 0);
+  assert.equal(first.kind, "started");
+  assert.equal(first.kind === "started" && first.structure.x, 8, "the procedural candidate wins before the anchor fallback");
+  assert.deepEqual(manager.placementDebug, { key: "v1:17:house:base:8:0", source: "procedural", failureReason: null });
+  if (first.kind === "started") structures.advanceConstruction(first.structure, buildings.house?.constructionSeconds ?? 1);
+
+  const fallbackProvider = new SettlementAiSiteProvider({
+    version: 1,
+    seed: 17,
+    candidatesByBuilding: new Map([["house", [{
+      key: "v1:17:house:base:60:0", buildingId: "house", x: 60, z: 0, zone: "housing", score: 1,
+    }]]]),
+  }, legacy);
+  const fallback = new AiBuildManager("enemy", legacy, construction, structures, new AiDecisionLog(), fallbackProvider);
+  const second = fallback.request("house", 1);
+  assert.equal(second.kind, "started");
+  assert.equal(second.kind === "started" && second.structure.x, -8, "the authored anchor runs only after the planned site is refused");
+  assert.equal(fallback.placementDebug.source, "legacy", "debug state names the controlled fallback");
+
+  const rejected = new AiBuildManager("enemy", [], construction, structures, new AiDecisionLog(), {
+    sitesFor: () => [{ key: "v1:17:house:base:60:0", buildingId: "house", x: 60, z: 0, source: "procedural" }],
+  });
+  for (let attempt = 0; attempt < AI_ANCHOR_FAILURE_LIMIT; attempt += 1) {
+    assert.equal(rejected.request("house", attempt).kind, "failed");
+  }
+  assert.equal(rejected.request("house", 10).kind, "failed", "a stable candidate key is retired instead of retried forever");
+  territory.dispose();
 });
 
 check("AiBuildManager keeps one site, skips taken anchors and blacklists a failing one (§42/§43)", () => {

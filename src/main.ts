@@ -17,7 +17,7 @@ import {
   readBootOptionsFromUrl,
   snapshotRuntimeConfig,
 } from "@/game/core/runtimeConfig";
-import { loadAgeBalance, loadAiBalance, loadAnimalBalance, loadBuildingBalance, loadCaravanBalance, loadGamePreset, loadMissionScript, loadResourceBalance, loadRoadBalance, loadTradeSiteBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
+import { loadAgeBalance, loadAiBalance, loadAiLayoutBalance, loadAnimalBalance, loadBuildingBalance, loadCaravanBalance, loadGamePreset, loadMissionScript, loadResourceBalance, loadRoadBalance, loadTradeSiteBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
 import { loadRtsContentCatalog } from "@/game/rts/content/rtsContentLoader";
 import {
   readStoredVictoryCondition,
@@ -173,7 +173,7 @@ async function main(): Promise<void> {
   // own lightweight runtime — never mixes with the character SceneApp above.
   if (!editorEnabled && params.has("rts")) {
     const { RtsApp } = await import("@/game/rts/RtsApp");
-    const [unitBalance, buildingBalance, resourceBalance, animalBalance, ageBalance, roadBalance, aiBalance] = await Promise.all([
+    const [unitBalance, buildingBalance, resourceBalance, animalBalance, ageBalance, roadBalance, aiBalance, aiLayoutBalance] = await Promise.all([
       loadUnitBalance(),
       loadBuildingBalance(),
       loadResourceBalance(),
@@ -181,8 +181,11 @@ async function main(): Promise<void> {
       loadAgeBalance(),
       loadRoadBalance(),
       loadAiBalance(),
+      loadAiLayoutBalance(),
     ]);
     const caravanBalance = await loadCaravanBalance();
+    const requestedMatchSeed = Number(params.get("seed"));
+    const matchSeed = Number.isSafeInteger(requestedMatchSeed) ? requestedMatchSeed : Date.now();
     const tradeSiteBalance = await loadTradeSiteBalance();
     // The Actor pack is how the RTS renders, so the catalog loads on every start.
     // A catalog that fails to load is fatal to the route on purpose: it is the
@@ -280,6 +283,8 @@ async function main(): Promise<void> {
       ageBalance,
       roadBalance,
       aiBalance,
+      aiLayoutBalance,
+      matchSeed,
       // §72: the preset picks the AI profile; normal is the fair baseline.
       aiProfile: preset?.aiProfile ?? "normal",
       // A bad preset must not turn the fallback RTS route into an unwinnable

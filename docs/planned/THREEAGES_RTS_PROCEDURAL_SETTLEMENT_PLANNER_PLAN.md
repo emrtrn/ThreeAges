@@ -1,7 +1,7 @@
 # ThreeAges RTS — Prosedürel Yerleşim Planlayıcısı V1
 
 Oluşturulma tarihi: 2026-08-05  
-Durum: **Faz P0 + P1 tamamlandı — P2 taban inşaat entegrasyonu bekliyor**
+Durum: **Faz P0 + P1 + P2 tamamlandı — P3 lojistik/yol güvenliği bekliyor**
 
 ## 1. Amaç
 
@@ -262,11 +262,11 @@ için en az bir geçerli aday vardır; hiçbir aday harita engeline veya kaynağ
 
 ### Faz P2 — Taban inşaatına bağlama
 
-- [ ] `AiSiteProvider` arayüzünü ve `AiBuildManager` entegrasyonunu ekle.
-- [ ] Aday anahtarı bazlı karalisteyi uygula.
-- [ ] Yalnız taban yapılarında prosedürel adayları kullan; expansion recipe
+- [x] `AiSiteProvider` arayüzünü ve `AiBuildManager` entegrasyonunu ekle.
+- [x] Aday anahtarı bazlı karalisteyi uygula.
+- [x] Yalnız taban yapılarında prosedürel adayları kullan; expansion recipe
   legacy marker'larda kalır.
-- [ ] Kontrollü authored fallback ve debug nedenini ekle.
+- [x] Kontrollü authored fallback ve debug nedenini ekle.
 
 Kabul: Aynı ekonomik build order, iki farklı seed'de en az iki yapıyı farklı
 ama geçerli konuma kurar; tek seed tekrarında sonuç aynıdır.
