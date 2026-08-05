@@ -488,8 +488,8 @@
           "maxHealth": 110,
           "economy": {
             "workerCapacity": 2,
-            "localBufferCapacity": 120,
-            "livestockCapacity": 5,
+            "localBufferCapacity": 96,
+            "livestockCapacity": 4,
             "perAnimalPerMinute": 12
           }
         },
@@ -498,8 +498,8 @@
           "maxHealth": 120,
           "economy": {
             "workerCapacity": 3,
-            "localBufferCapacity": 168,
-            "livestockCapacity": 6,
+            "localBufferCapacity": 112,
+            "livestockCapacity": 4,
             "perAnimalPerMinute": 14
           }
         }
@@ -510,8 +510,8 @@
           "maxHealth": 130,
           "economy": {
             "workerCapacity": 3,
-            "localBufferCapacity": 256,
-            "livestockCapacity": 8,
+            "localBufferCapacity": 128,
+            "livestockCapacity": 4,
             "perAnimalPerMinute": 16
           }
         },
@@ -520,8 +520,8 @@
           "maxHealth": 140,
           "economy": {
             "workerCapacity": 3,
-            "localBufferCapacity": 360,
-            "livestockCapacity": 10,
+            "localBufferCapacity": 144,
+            "livestockCapacity": 4,
             "perAnimalPerMinute": 18
           }
         },
@@ -530,8 +530,8 @@
           "maxHealth": 150,
           "economy": {
             "workerCapacity": 4,
-            "localBufferCapacity": 480,
-            "livestockCapacity": 12,
+            "localBufferCapacity": 160,
+            "livestockCapacity": 4,
             "perAnimalPerMinute": 20
           }
         }

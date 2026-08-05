@@ -13,6 +13,9 @@ const ICON_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "resource-depleted": "⛏",
   "logistics-cut": "⛓",
   "logistics-restored": "✓",
+  "supply-linked": "✓",
+  "supply-cut": "⛓",
+  "supply-lost": "⚑",
   "caravan-destroyed": "⚔",
   "outpost-under-attack": "⚔",
   "center-under-attack": "⚔",
@@ -39,6 +42,13 @@ const ICON_SRC_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "resource-depleted": "/assets/ui/icons/building-quarry.png",
   "logistics-cut": "/assets/ui/icons/notification_logistics_cut.png",
   "logistics-restored": "/assets/ui/icons/notification_logistics_restored.png",
+  // Supply notices borrow the route icons for the two that are about a road, and
+  // the Market for the one that is about losing the site itself: what a
+  // hand-over costs the player is not a broken road — theirs may be intact — but
+  // the buy button at the other end of it going dark.
+  "supply-linked": "/assets/ui/icons/notification_logistics_restored.png",
+  "supply-cut": "/assets/ui/icons/notification_logistics_cut.png",
+  "supply-lost": "/assets/ui/icons/building-market.png",
   "caravan-destroyed": "/assets/ui/icons/notification_logistics_cut.png",
   "outpost-under-attack": "/assets/ui/icons/building-outpost.png",
   "center-under-attack": "/assets/ui/icons/building-command-center.png",

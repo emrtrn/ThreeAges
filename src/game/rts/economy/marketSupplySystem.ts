@@ -68,6 +68,9 @@ export interface MarketSupplySnapshot {
   readonly siteType: string;
   readonly label: string;
   readonly resourceId: string;
+  /** Where the site stands — what the fog test in {@link marketSupplyLines} asks about. */
+  readonly x: number;
+  readonly z: number;
   /** The kingdom holding this site, or null while nobody's road reaches it. */
   readonly owner: UnitOwner | null;
   readonly roadCell: RoadCell | null;
@@ -79,6 +82,129 @@ export interface MarketSupplySnapshot {
   readonly carryCapacity: number;
   readonly buffered: number;
   readonly bufferCapacity: number;
+}
+
+/**
+ * One kingdom's reading of a trade site — supply plan Faz S5.
+ *
+ * Deliberately *not* {@link MarketSupplyStatus}. That type names what stands
+ * between a site and a market, in the order an engineer fixes it; this one names
+ * what the player has to do about it, and the two do not line up. A besieged
+ * market and a cut road are different rows of the status table and the same
+ * sentence here ("nothing is arriving from a site that used to feed you"),
+ * while `unlinked-road` splits in two depending on whether that road was ever
+ * there.
+ *
+ * - `supplying` — this kingdom holds it and goods are moving.
+ * - `cut` — it fed this kingdom before and does not now. The distinguishing fact
+ *   is history, not geometry: a road that broke and a road never drawn look
+ *   identical in the graph, and only one of them means "repair it".
+ * - `unclaimed` — nobody visibly holds it; the remedy is to pave.
+ * - `rival` — somebody else holds it, and this kingdom has seen the ground.
+ */
+export type MarketSupplyState = "supplying" | "cut" | "unclaimed" | "rival";
+
+/**
+ * The state one *resource's* buy button is in, resolved across every site that
+ * could feed it. See {@link marketSupplyLines}; `absent` is the extra case that
+ * belongs to a resource rather than to a site — no site of that kind is authored
+ * on this map at all, so no road will ever open that button.
+ */
+export type MarketSupplyLineState = MarketSupplyState | "absent";
+
+export interface MarketSupplyLine {
+  readonly resourceId: string;
+  readonly state: MarketSupplyLineState;
+  /** The site the sentence is about; null only when `absent`. */
+  readonly siteId: string | null;
+  readonly siteLabel: string | null;
+}
+
+/**
+ * How one kingdom reads one site.
+ *
+ * **The fog rule, and the reason it is here rather than in the view.** A trade
+ * site is a static world object — the tree/deposit twin (plan Faz S5): its art
+ * is cut against the explored fog like every other authored mesh
+ * (`vision/fogMask.ts`), so what a kingdom *knows* about it has to stop at the
+ * same line. A rival's claim on ground this kingdom has never scouted therefore
+ * reads as `unclaimed`, which is exactly what an unscouted map looks like: go
+ * and pave, and find out. Without this the Market panel would quietly report
+ * enemy activity in the dark — a scouting result for free, from a building
+ * standing in your own base.
+ *
+ * `everSupplied` is the caller's memory, not this module's, because "has this
+ * ever fed me" is a fact about the match rather than about the world: the road
+ * graph cannot recover it once the road is gone, which is the whole reason `cut`
+ * needs to be told.
+ */
+export function siteSupplyState(
+  site: MarketSupplySnapshot,
+  reader: UnitOwner,
+  everSupplied: boolean,
+  explored: boolean,
+): MarketSupplyState {
+  if (site.owner === reader) return site.status === "linked" ? "supplying" : "cut";
+  if (site.owner !== null) return explored ? "rival" : "unclaimed";
+  return everSupplied ? "cut" : "unclaimed";
+}
+
+/**
+ * Rank for {@link marketSupplyLines}: the best news a resource has wins.
+ *
+ * `rival` ranks *last*, below `unclaimed`, and that ordering is load-bearing on
+ * a map authored in point-symmetric pairs (plan §3.7). Two sites feed every
+ * resource, one on each bank; if the opponent holds theirs and the near one is
+ * still free, the sentence the player needs is "pave to yours", not "the enemy
+ * has it". `rival` is the last resort — it means every site that could feed this
+ * resource is somebody else's.
+ */
+const SUPPLY_LINE_RANK: Readonly<Record<MarketSupplyLineState, number>> = {
+  supplying: 0,
+  cut: 1,
+  unclaimed: 2,
+  rival: 3,
+  absent: 4,
+};
+
+/**
+ * One line per stocked resource, for the Market panel — supply plan Faz S5.
+ *
+ * Pure, and given the world rather than reaching for it, so `test:engine` can
+ * hold "a cut road says repair, an unpaved one says pave" to account without a
+ * running match. The panel turns each line into a sentence; it never re-derives
+ * one from the raw snapshots.
+ *
+ * @param resourceIds the market's stocked list, in its own order — a resource
+ *   with no site authored anywhere still gets a line, because "this map has no
+ *   port" is the one supply answer a player can never fix and must be told.
+ */
+export function marketSupplyLines(
+  snapshots: readonly MarketSupplySnapshot[],
+  reader: UnitOwner,
+  resourceIds: readonly string[],
+  options: {
+    /** Sites that have fed `reader` at least once this match. */
+    readonly everSupplied?: ReadonlySet<string>;
+    /** §59's explored test; omitted (fog off) means everything is known. */
+    readonly isExplored?: (x: number, z: number) => boolean;
+  } = {},
+): readonly MarketSupplyLine[] {
+  return resourceIds.map((resourceId) => {
+    let best: MarketSupplyLine = { resourceId, state: "absent", siteId: null, siteLabel: null };
+    for (const site of snapshots) {
+      if (site.resourceId !== resourceId) continue;
+      const state = siteSupplyState(
+        site,
+        reader,
+        options.everSupplied?.has(site.siteId) ?? false,
+        options.isExplored?.(site.x, site.z) ?? true,
+      );
+      if (SUPPLY_LINE_RANK[state] >= SUPPLY_LINE_RANK[best.state]) continue;
+      best = { resourceId, state, siteId: site.siteId, siteLabel: site.label };
+    }
+    return best;
+  });
 }
 
 export class MarketSupplySystem implements CaravanLaneProvider {
@@ -113,6 +239,8 @@ export class MarketSupplySystem implements CaravanLaneProvider {
         siteType: site.siteType,
         label: site.label,
         resourceId: site.resourceId,
+        x: site.x,
+        z: site.z,
         caravanCount: stats.caravanCount,
         carryCapacity: stats.carryCapacity,
         buffered: site.buffered,

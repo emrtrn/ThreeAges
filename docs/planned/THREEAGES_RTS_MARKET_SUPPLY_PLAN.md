@@ -1,7 +1,7 @@
 # ThreeAges RTS - Pazar Arzi ve Ticaret Noktalari Plani
 
 Olusturulma tarihi: 2026-08-04
-Durum: **Faz S0, S1, S2, S3 (2026-08-04) ve S4 (2026-08-05) kapandi.** Dokuz
+Durum: **Faz S0, S1, S2, S3 (2026-08-04), S4 ve S5 (2026-08-05) kapandi.** Dokuz
 kararin dokuzu da onerildigi gibi kilitlendi, §3.7'nin harita cozumu **uc
 nokta-simetrik cift (alti nokta)** olarak secildi ve alti marker'in konumu
 olculup sabitlendi (§7 Faz S0). **S1** stok cekirdegini, **S2** arz noktalarini
@@ -10,7 +10,11 @@ haritaya koydu; ikisi de ekonomiyi degistirmedi. **S3 ile plan canlandi**:
 hat saglayicisi oldu, teslim cuzdana degil **pazar stoguna** iniyor ve `stocked`
 listesi uc kaynagi da kapsiyor - yani **pazarda ne varsa o kadar alinir**. **S4
 pariteyi kapatti** ve KARAR 9-A'nin sozunu tuttu: dusmanin arz yolu Level'a
-authorlandi, **sifir AI kodu** yazildi. **Siradaki: S5** (saldiri ve kopma). Iki
+authorlandi, **sifir AI kodu** yazildi. **S5 kopmayi duyulur kildi**: kesilmenin
+kendisi icin tek satir simulasyon kodu yazilmadi (S3 zaten durduruyordu),
+yazilan sey bir **okuma katmani** oldu - panelin dort ayri tavsiyesi, uc bildirim
+turu, ve sisin cevabi (arz noktasi statik dunya nesnesidir; bilgi de sanati gibi
+kesfedilen zeminde durur). **Siradaki: S6** (UI ve kabul maci). Iki
 gorsel/oynanis kabulu kullanicida acik: S2'nin mesh yerlesimi (§7 Faz S2) ve
 S3'un oynanis kabulu (§7 Faz S3).
 
@@ -1121,12 +1125,110 @@ the AI waits rather than jams"), ve iki marker'in eski yerine geri konmasi
 Kabul: `tsc --noEmit`, `test:engine` (**1310 check**), `build:verify`,
 `check:assets` - **dordu de yesil**.
 
-### Faz S5 - Saldiri ve kopma
+### Faz S5 - Saldiri ve kopma -> **TAMAM (2026-08-05)**
 
-- [ ] Arz yolunun kesilmesi stogu durdurur; panel bunu soyler.
-- [ ] Munhasirlik el degistirir; bildirim.
-- [ ] Sis: arz noktasi sisin altinda nasil gorunur? (Statik dunya nesnesi
-  kurali - agac/deposit ikizi.)
+- [x] Arz yolunun kesilmesi stogu durdurur; **panel bunu soyler**. Kesilmenin
+  kendisi icin tek satir simulasyon kodu yazilmadi - S3 zaten hatti dusuruyor,
+  esekleri eve yuruyor ve rafi durduruyordu. S5'in tamami bir **okuma**
+  katmanidir: `MarketSupplyState` (`supplying` / `cut` / `unclaimed` / `rival`),
+  saf `marketSupplyLines()`, ve `MarketDetailView.supply`.
+- [x] Munhasirlik el degistirir; bildirim. Uc yeni bildirim turu:
+  `supply-linked` (yesil, gecise bagli), `supply-cut` (kirmizi, ureticininki gibi
+  **poll**lanir), `supply-lost` (el degistirme basina **bir kez**). Kural
+  `RtsApp`'te degil saf `ui/rtsSupplyNotices.ts`'te durur, cunku pinlenmeye deger
+  olan sey hangi karenin haber oldugudur.
+- [x] Sis: cevap **iki yarimdir** ve yalnizca ikincisi is cikardi (asagida).
+
+#### S5'te olculenler - kodun ortaya cikardigi dort sey
+
+**1. Panelin tek cumlesi dort durumun ucunde yanlisti.** S5 oncesi her bos raf
+ayni seyi diyordu: "Bir arz noktasına yol çekin." Dort duruma karsi olculdu:
+calisan ama henuz bir lot yapmamis hatta oyuncuyu **zaten sahip oldugu yolun
+ikincisini** cekmeye yolluyor; cektigi ve kaybettigi yolda "onar" yerine "cek"
+diyor; ve o kaynagin arz noktasini hic authorlamamis bir haritada (S3'un acik
+notu: `RTS_BLOCKOUT_MAP`, `RTS_CoreMatch`) **hicbir yere** cikmayan bir yol
+oneriyor. Durum ayrimi susleme degil: her biri **farkli bir eylem** adlandiriyor,
+ve panel testi tam olarak bunu pinliyor.
+
+**2. `cut`, dunyanin tutmadigi bir hafiza istiyor.** Hic cekilmemis yol ile kopan
+yol grafikte **ayni** durumdur (`owner: null`, `unlinked-market`) - S3'un kendi
+testi de bunu boyle pinliyor. Yani "onar" ile "cek" arasindaki fark geometride
+degil tarihte. Cozum `everSuppliedSites`: mac boyunca monotonik bir kume, ve
+S3'un `claims` haritasinin ayni cinsten kardesi - rota kaybolunca geri
+getirilemeyen bir olgu. Monotonik olmasi kasitli: bir nokta seni bir kez
+besledikten sonra "onar" onun icin **her zaman** dogru tavsiyedir, o yuzden
+kumeden hicbir sey cikmaz.
+
+**3. Sisin cevabi ikiye ayrildi - ve gorsel yari zaten hazirdi.** Arz noktasinin
+**sanati** authorlanmis Level `instances`'idir, ve `loadRtsAuthoredWorld` her
+Level instance'ini `FogMask`'e verir: fragment basina, **explored** alfasina gore
+kesilir (GDD 08 §40). Yani agac/deposit ikizi kurali *insaat geregi* zaten
+gecerliydi; yapilan sey onu pinlemek oldu (her marker'in bir rihtim kosegeni
+icinde authorlanmis sanati olmali), cunku deposit'lerin gittigi yol - runtime'da
+mesh uretmek - kendi `visible` yazicisini gerektirir ve sissiz render eder.
+
+Eksik olan yari **bilgi** tarafiydi: panel, oyuncunun **hic kesfetmedigi** zemin
+uzerindeki bir rakip talebini raporlayacakti - kendi ussundeki bir binadan
+bedavaya kesif sonucu. Bu yuzden `siteSupplyState` bir `explored` bayragi alir ve
+kesfedilmemis bir rakip talebi `unclaimed` okur: kesfedilmemis bir harita zaten
+oyle gorunur, git yolu cek ve ogren.
+
+**4. `rival`, `unclaimed`'in *altinda* siralanir.** §3.7'nin ciftlerine karsi
+olculdu: her kaynagin iki noktasi var. Rakip kendi yakasindakini tutuyorken
+oyuncunun kendi yakasindaki hala bostaysa, dogru cumle "kendininkine yol cek"tir;
+"rakibin elinde" ise oyuncuyu **bos duran bir liman icin** savasa yollayan bir
+yalandir. `rival` son caredir - o kaynagi besleyebilecek **her** noktanin
+baskasinda oldugu anlamina gelir. Test bu siralamayi ayri ayri pinliyor.
+
+Bir de bildirimin kapisi iki isi birden yapiyor: yalnizca **daha once beslemis**
+noktalar kotu haber uretir. Bu hem akisi rakibin uc noktasiyla doldurmayi
+onluyor (haritada alti nokta var), hem de - beslenmis olmak yol gerektirdigi, yol
+da zemin gerektirdigi icin - akisi ikinci bir sis testi yazmadan oyuncunun
+kesfettigi alanin icinde tutuyor.
+
+#### S5'in planin harfinden sapmasi (bilincli, dar)
+
+Plan "munhasirlik el degistirir; **bildirim**" diyor, tekil. Iki yon iki ayri
+haber cikti: rakipten **almak** `supply-linked`'in "ele geçirildi" metnini,
+**kaybetmek** `supply-lost`'u aliyor. Tek tur, iyi haberle kotu haberi ayni renge
+boyardi - akis rengi turden aliyor.
+
+Kapsam disi birakilan: arz noktasinin **kendi paneli** (kime ait, tamponu ne, kac
+esek yolda) ve pazar panelinin uc stok satirinin son hali - ikisi de **S6**'nin
+maddeleri. S5 duran bir hatti okunur kilmakta durdu.
+
+#### S5'te pinlenen testler (§8'e ek)
+
+- `Faz S5: a stopped supply names which of the four things to do about it` - dort
+  durum, `rival < unclaimed` siralamasi, `absent`, ve sis kurali (kesfedilmemis
+  rakip talebi `unclaimed` okur; kendi hattin sis altinda da gorunur).
+- `Faz S5: the feed says a lane linked, stopped, or changed hands — and nothing
+  else` - uc gecis, uc metin, "hic yol cekmedigin nokta haber uretmez" kapisi, ve
+  akisin kendi kurallari (poll'lanan kesinti tek satir kalir, baglanti onu
+  aninda emekliye ayirir).
+- `Faz S5: the Market panel turns a stopped lane into the repair that fixes it` -
+  her durumun **farkli** bir eylem adlandirdigi; dolu rafin olu hatta amber
+  okundugu; ve S1'in "arz zinciri olmayan proje aynen eski panel" geri donusu.
+- `Faz S5: a trade site is a static world object, so its art rides the Level's
+  fog mask` - sanatin authorlanmis Level sanati oldugu, yani sis kuralinin
+  kendiliginden gecerli oldugu.
+
+Kirmiziya donebilirlik yapildi: bes kasitli mutasyon, besi de hedefledigi
+assertion'la yakalandi - sis kapisinin kaldirilmasi ("an unexplored site keeps
+its claim to itself"), `everSupplied` kapisinin kaldirilmasi ("a site you never
+paved to raises nothing"), calisan hattin yine "yol cek" demesi, `rival`'in
+`unclaimed`'in ustune cikarilmasi, ve bir arz noktasinin Level sanatinin
+tasinmasi. Her biri geri alindi.
+
+Kabul: `npx tsc --noEmit`, `verify:imports`, `vite build`, `verify:dist
+--strict`, `check:assets` - **hepsi yesil**. `test:engine`: S5'in dort testi de
+yesil (**1313 check**, asagidaki not sartiyla). **Not:** calisma agacinda bu
+plandan bagimsiz, devam eden bir merkez-seviye / `intentScorer` degisikligi var
+(`src/game/rts/ai/intentScorer.ts`, `public/game-data/balance/buildings.json`,
+`GDD/13_...md` ve `engine-tests.ts`'in kendi hunk'i) ve suite **o** testte
+("AI intent scoring reflects the §30 drivers and always names a reason") kirmizi
+duruyor. S5'in dosyalarindan hicbiri o testin okudugu hicbir seye dokunmuyor; o
+degisiklik yesile donduginde suite butunuyle yesil olur.
 
 ### Faz S6 - UI ve kabul maci
 
@@ -1161,6 +1263,10 @@ pinlenmez.**
 | "every trade site has a point-symmetric twin" | §3.7: nehir iki kralligi ayirdigi icin adalet ciftlerle saglanir. **Yalnizca `tradeSites` uzerinde kosar** ve kucuk bir tolerans tasir - S0'da olculdu ki tam nokta-simetri haritada yalnizca geyik ve sigirda var (kurt/stratejik nokta/deposit ciftleri simetrik degil), yani bu mevcut bir kalibin tekrari degil KARAR 4-A'nin getirdigi **yeni** bir sozlesmedir |
 | "no trade site blocks a river crossing" | §3.3/§3.7: uc gecidin yuruyus genisligi arz noktasi authorlandiktan sonra da korunur |
 | "the market still cannot mint gold" | **Mevcut test**, degismeden gecmeli |
+| "a stopped supply names which of the four things to do about it" | S5: dort durumun her birinin **farkli** bir eylem adlandirdigi; `rival`'in `unclaimed`'in altinda siralandigi (§3.7'nin ciftleri yuzunden); ve sis kurali - kesfedilmemis bir rakip talebi `unclaimed` okur |
+| "the feed says a lane linked, stopped, or changed hands — and nothing else" | S5: uc gecis, ve "hic yol cekmedigin nokta haber uretmez" kapisi - akisi hem rakibin uc noktasindan hem de kesfedilmemis zeminden uzak tutan tek kural |
+| "the Market panel turns a stopped lane into the repair that fixes it" | S5: panelin cumlesi durumdan turer; dolu raf + olu hat **amber** okunur; ve arz zinciri olmayan proje aynen S1'in paneli kalir |
+| "a trade site is a static world object, so its art rides the Level's fog mask" | S5: arz noktasinin sanati **authorlanmis Level sanati**dir, yani agac/deposit sis kurali insaat geregi gecerlidir. Runtime'da mesh uretmeye kayilirsa kirmizi doner |
 
 Gate: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`,
 `npm run check:assets`. Her fazin sonunda dordu de yesil.
@@ -1195,7 +1301,8 @@ gorulur ve geri alinir (V1/V3/V4 aliskanligi).
 ## 11. Uygulama Sirasi
 
 ```text
-S0 (TAMAM) -> S1 (TAMAM) -> S2 (TAMAM) -> S3 (TAMAM) -> S4 (TAMAM) -> S5 -> S6
+S0 (TAMAM) -> S1 (TAMAM) -> S2 (TAMAM) -> S3 (TAMAM) -> S4 (TAMAM)
+  -> S5 (TAMAM) -> S6
 ```
 
 Hicbir faz artik baska bir plani beklemiyor (§3.4). S1 ve S2 birbirinden
@@ -1209,3 +1316,10 @@ rota hesabini degistirmiyor, S3'un ayar kabulu (`caravanCount`, `perMinute`) ise
 AI paritesinin konusu degildi - S4 dusmanin **yolunun** var olup olmadigini
 olctu, ne kadar hizli aktigini degil. S4 kod degil **veri** oldugu icin (tek
 dosya: Level'in omurga spline'i) S5'in onune de hicbir kod borcu birakmadi.
+
+S5 de S6'nin onune birakmiyor, ve sebebi ayni cinsten: S5 hicbir simulasyon
+kurali degistirmedi - yalnizca S3'un zaten urettigi durumu okudu. S6'ya kalan
+sey (arz noktasi paneli, pazar panelinin son hali, kabul maci) bu okumanin
+ustune biner; `MarketSupplyLine` ve `siteSupplyState` tam da o panelin
+soracaklaridir. Ayni acik kabuller S5'i de bloke etmedi ve etmemeliydi: S5'in
+her cumlesi durum makinesinden turuyor, mesh'in nerede durdugundan degil.

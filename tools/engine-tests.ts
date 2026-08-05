@@ -233,7 +233,15 @@ import { PastureSystem, penGeometryFor } from "../src/game/rts/wildlife/pastureS
 import { WildlifeRetaliationSystem, type WildlifeStrike } from "../src/game/rts/wildlife/wildlifeRetaliation";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
 import { TradeSiteSystem } from "../src/game/rts/economy/tradeSiteSystem";
-import { MarketSupplySystem } from "../src/game/rts/economy/marketSupplySystem";
+import {
+  MarketSupplySystem,
+  marketSupplyLines,
+  siteSupplyState,
+  type MarketSupplyLine,
+  type MarketSupplySnapshot,
+  type MarketSupplyState,
+} from "../src/game/rts/economy/marketSupplySystem";
+import { supplyNotice } from "../src/game/rts/ui/rtsSupplyNotices";
 import { ForestSystem } from "../src/game/rts/economy/forestSystem";
 import { KingdomProgressionSystem, townUnlocksAvailable } from "../src/game/rts/progression/kingdomProgressionSystem";
 import {
@@ -43818,10 +43826,31 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
 
   // --- Faz 8 §48: the age intent is live, and §24 orders it behind the economy.
   const ageComplete = { farm: 1, lumber_camp: 1, quarry: 1, gold_mine: 1, barracks: 1, outpost: 1 };
+  // Centre levels are not Town transitions. A kingdom at Settlement Lv2 may be
+  // missing every Town building and still has to be able to buy Lv3; otherwise a
+  // failed quarry/outpost slot reads in-game as an inexplicable permanent Lv2.
+  const settlementLevelCost = { food: 200, wood: 200, gold: 50 };
+  const levelThreeReady = aiTestBlackboard({
+    centerLevel: 2,
+    centerLevelUpgradeCost: settlementLevelCost,
+    resourceStocks: settlementLevelCost,
+    ageMissingBuildingIds: ["quarry", "gold_mine", "outpost"],
+    ageAffordable: false,
+  });
+  assert.equal(scoreFor(levelThreeReady, "ageUp").reason, "merkez seviye 3 için hazır");
+  assert.ok(
+    scoreFor(levelThreeReady, "ageUp").score > scoreFor(levelThreeReady, "economy").score,
+    "Settlement Lv3 is not blocked by Town prerequisites",
+  );
+
   // §24: requirements missing → the AI wants the economy that fixes them, not
   // the age. It must not out-score Economy, or a rich AI would stall forever
   // wanting an upgrade it is not allowed to start.
-  const preAge = aiTestBlackboard({ ageMissingBuildingIds: ["quarry", "gold_mine"], ageAffordable: true });
+  const preAge = aiTestBlackboard({
+    centerLevel: 3,
+    ageMissingBuildingIds: ["quarry", "gold_mine"],
+    ageAffordable: true,
+  });
   assert.match(scoreFor(preAge, "ageUp").reason, /çağ gereksinimi eksik/);
   assert.ok(
     scoreFor(preAge, "ageUp").rawScore < scoreFor(preAge, "ageUp").rawScore + 1,
@@ -48251,6 +48280,301 @@ check("Faz S4: every authored enemy slot survives the road the AI paves past it"
   }
 });
 
+/**
+ * A hand-written supply snapshot, for the Faz S5 reading tests.
+ *
+ * Written rather than simulated on purpose: what S5 adds is a *reading* of a
+ * state Faz S3 already produces and already pins end to end (see "cutting the
+ * supply road stops the shelf" and "a trade site is exclusive"). Driving a whole
+ * match to reach `owner: "enemy", status: "linked"` would re-test S3's rule and
+ * leave S5's — which sentence that state earns — resting on it.
+ */
+function supplySnapshotOf(overrides: Partial<MarketSupplySnapshot> = {}): MarketSupplySnapshot {
+  return {
+    siteId: "player_river_port",
+    siteType: "river_port",
+    label: "Nehir Limanı",
+    resourceId: "food",
+    x: -1,
+    z: 20,
+    owner: "player",
+    roadCell: { x: 0, z: 10 },
+    marketRoadCell: { x: 0, z: 0 },
+    marketStructureId: 1,
+    status: "linked",
+    caravanCount: 4,
+    carryCapacity: 30,
+    buffered: 0,
+    bufferCapacity: 120,
+    ...overrides,
+  };
+}
+
+check("Faz S5: a stopped supply names which of the four things to do about it", () => {
+  const port = supplySnapshotOf();
+  const held = new Set<string>();
+
+  // The four states, and the point of splitting them: each has a *different*
+  // remedy. Before S5 one sentence — "draw a road to a trade site" — answered
+  // every empty shelf, and it was the wrong instruction in three of these.
+  assert.equal(siteSupplyState(port, "player", false, true), "supplying");
+  assert.equal(
+    siteSupplyState(supplySnapshotOf({ owner: null, status: "unlinked-market" }), "player", false, true),
+    "unclaimed",
+    "a site nobody has reached is paved to, not repaired",
+  );
+  assert.equal(
+    siteSupplyState(supplySnapshotOf({ owner: null, status: "unlinked-market" }), "player", true, true),
+    "cut",
+    "...but the same geometry, once it has fed you, means your road broke",
+  );
+  assert.equal(
+    siteSupplyState(supplySnapshotOf({ owner: "player", status: "outside-control" }), "player", true, true),
+    "cut",
+    "a besieged market at the end of the lane stops it just as dead",
+  );
+  assert.equal(
+    siteSupplyState(supplySnapshotOf({ owner: "enemy" }), "player", true, true),
+    "rival",
+    "and a site in somebody else's hands is a road to cut, not one to repair",
+  );
+
+  // §3.7's map is authored in point-symmetric pairs, so every resource has two
+  // sites and the *best* one has to win. `rival` ranking below `unclaimed` is the
+  // load-bearing half: with the opponent holding their bank's port and the
+  // player's own still free, "pave to yours" is the true sentence and "the enemy
+  // has it" is a lie that would send the player to war over a spare port.
+  const pair = [
+    supplySnapshotOf({ siteId: "player_port", owner: null, status: "unlinked-road", roadCell: null }),
+    supplySnapshotOf({ siteId: "enemy_port", label: "Nehir Limanı (Doğu)", owner: "enemy", x: 1, z: -20 }),
+  ];
+  assert.equal(marketSupplyLines(pair, "player", ["food"])[0]?.state, "unclaimed");
+  assert.equal(marketSupplyLines(pair, "player", ["food"])[0]?.siteId, "player_port", "and it names the free one");
+  assert.equal(
+    marketSupplyLines([pair[1]!], "player", ["food"])[0]?.state,
+    "rival",
+    "rival is the last resort: every site that could feed this resource is somebody else's",
+  );
+  // Good news outranks everything, including the opponent's twin.
+  assert.equal(marketSupplyLines([pair[1]!, port], "player", ["food"])[0]?.state, "supplying");
+
+  // A resource this map authors no site for is its own answer, and the one no
+  // road can fix. Without it the panel would tell a player to pave toward a port
+  // that was never authored — the failure mode the two unmeasured maps (§S3's
+  // open note, `RTS_BLOCKOUT_MAP` / `RTS_CoreMatch`) would produce today.
+  const lines = marketSupplyLines([port], "player", ["food", "stone"]);
+  assert.equal(lines.length, 2, "every stocked resource gets a line, sited or not");
+  assert.equal(lines[1]?.state, "absent");
+  assert.equal(lines[1]?.siteId, null);
+  assert.deepEqual(marketSupplyLines([port], "player", []), [], "an unstocked project reports nothing");
+
+  // The fog rule (Faz S5's third question), and the reason it is in the rule
+  // rather than in the view: a trade site is a static world object — its art is
+  // cut against the *explored* fog like a tree or a deposit — so what the player
+  // knows about it stops at the same line. A rival's claim on ground nobody has
+  // scouted reads as unclaimed, which is what an unscouted map looks like: pave
+  // out there and find out. Otherwise the Market panel would report enemy
+  // activity in the dark, from a building standing in the player's own base.
+  const unscouted = marketSupplyLines([pair[1]!], "player", ["food"], { isExplored: () => false });
+  assert.equal(unscouted[0]?.state, "unclaimed", "an unexplored site keeps its claim to itself");
+  assert.equal(
+    marketSupplyLines([pair[1]!], "player", ["food"], { isExplored: () => true })[0]?.state,
+    "rival",
+    "and gives it up once the player has been there",
+  );
+  // Fog never hides your *own* supply from you, in either direction: the claim
+  // is yours, and the goods are arriving whether or not a scout is standing there.
+  assert.equal(
+    marketSupplyLines([port], "player", ["food"], { isExplored: () => false })[0]?.state,
+    "supplying",
+  );
+  held.add("player_river_port");
+  assert.equal(
+    marketSupplyLines(
+      [supplySnapshotOf({ owner: null, status: "unlinked-market" })],
+      "player",
+      ["food"],
+      { everSupplied: held, isExplored: () => false },
+    )[0]?.state,
+    "cut",
+    "a road you paved and lost is still yours to repair, scout or no scout",
+  );
+});
+
+check("Faz S5: the feed says a lane linked, stopped, or changed hands — and nothing else", () => {
+  const site = { siteId: "player_river_port", label: "Nehir Limanı", resourceId: "food" };
+  const notify = (state: MarketSupplyState, previous: MarketSupplyState | undefined, everSupplied: boolean) =>
+    supplyNotice(site, state, previous, everSupplied);
+
+  // The payoff moment. A trade site's link is *bought* — the shipped map prices
+  // the shortest of them at 84 wood (§7 Faz S0) — so unlike a producer built
+  // already-linked, the frame it starts flowing is worth saying out loud.
+  const linked = notify("supplying", "unclaimed", false);
+  assert.equal(linked.post?.kind, "supply-linked");
+  assert.match(linked.post?.text ?? "", /Nehir Limanı bağlandı/);
+  assert.match(linked.post?.text ?? "", /Yiyecek/, "and it names what now flows");
+  assert.equal(linked.clearCut, true, "a link retires any live cut warning for the same site");
+  assert.equal(notify("supplying", "supplying", true).post, null, "a steady lane is not news every frame");
+
+  // Three different arrivals, three different sentences — the wording is the
+  // only thing carrying "you took this from somebody" versus "your road is back".
+  assert.match(notify("supplying", "cut", true).post?.text ?? "", /yeniden bağlandı/);
+  assert.match(notify("supplying", "rival", true).post?.text ?? "", /ele geçirildi/);
+
+  // §2 item 7 made audible: the severance itself is Faz S3's, but nothing said
+  // so — a Market looks fine while its shelf quietly stops moving and the cell
+  // that broke is somewhere else on the map, possibly in fog.
+  const cut = notify("cut", "supplying", true);
+  assert.equal(cut.post?.kind, "supply-cut");
+  assert.match(cut.post?.text ?? "", /yolu kesildi/);
+  assert.equal(cut.clearCut, false);
+
+  // KARAR 4-A's hand-over, once per change of hands rather than while it lasts:
+  // the road is what holds a site, so this is an event with a date.
+  const lost = notify("rival", "cut", true);
+  assert.equal(lost.post?.kind, "supply-lost");
+  assert.match(lost.post?.text ?? "", /rakibin eline geçti/);
+  assert.equal(notify("rival", "rival", true).post, null, "and it is not re-raised while it holds");
+
+  // The gate that keeps the feed readable *and* keeps it inside what the player
+  // has scouted. The shipped map authors six sites in point-symmetric pairs
+  // (§3.7); without this, three of them — the opponent's — would warn the player
+  // every fifteen seconds about roads that were never theirs.
+  assert.equal(notify("cut", "unclaimed", false).post, null, "a site you never paved to raises nothing");
+  assert.equal(notify("rival", "unclaimed", false).post, null);
+  assert.equal(notify("unclaimed", undefined, false).post, null);
+
+  // Every notice this rule can raise must key on the site, or two lanes stopping
+  // would collapse into one line and the player would repair one road and think
+  // they were done.
+  for (const [state, previous] of [["cut", "supplying"], ["rival", "cut"], ["supplying", "cut"]] as const) {
+    assert.equal(notify(state, previous, true).post?.subject, site.siteId);
+  }
+
+  // ...and the feed's own rules make the pair behave: the cut is polled, so it
+  // must refresh rather than stack, and the link must clear it on the spot
+  // instead of leaving red and green on screen together.
+  const feed = new RtsNotificationCenter();
+  assert.equal(feed.post(cut.post ?? assert.fail("a cut posts")), "posted");
+  assert.equal(feed.post(cut.post!), "refreshed", "a polled cut is one line, not sixty a second");
+  assert.equal(feed.active()[0]?.severity, "alert");
+  assert.equal(feed.dismiss({ kind: "supply-cut", subject: site.siteId }), true);
+  feed.post(linked.post ?? assert.fail("a link posts"));
+  assert.deepEqual(
+    feed.active().map((entry) => entry.kind),
+    ["supply-linked"],
+    "the recovery stands alone once the warning it answers is retired",
+  );
+  assert.equal(feed.active()[0]?.severity, "info", "a restored lane is green, not another warning");
+});
+
+check("Faz S5: the Market panel turns a stopped lane into the repair that fixes it", () => {
+  const panel = (supply: readonly MarketSupplyLine[], wood: number): SelectionPanelContent =>
+    describeSelection({
+      kind: "structure",
+      structure: {
+        id: 1, label: "Pazar", level: 1, health: 500, maxHealth: 500,
+        detail: {
+          kind: "market",
+          connected: true,
+          supply,
+          trade: {
+            lotSize: 100,
+            commission: 0.15,
+            prices: [{ resourceId: "wood", index: 1, buyPrice: 115, sellPrice: 85, atFloor: false, atCeiling: false }],
+            stock: { wood },
+          },
+        },
+      },
+    }) ?? assert.fail("panel missing");
+  const reason = (supply: readonly MarketSupplyLine[], wood = 0): string =>
+    panel(supply, wood).actions.find((entry) => entry.id === "trade-buy:wood")?.reason ?? "";
+  const shelf = (supply: readonly MarketSupplyLine[], wood: number): SelectionChip =>
+    panel(supply, wood).chips?.find((entry) => entry.id === "stock:wood") ?? assert.fail("no wood shelf");
+  const line = (state: MarketSupplyLine["state"]): MarketSupplyLine => ({
+    resourceId: "wood",
+    state,
+    siteId: state === "absent" ? null : "player_timber_camp",
+    siteLabel: state === "absent" ? null : "Bağımsız Oduncu Kampı",
+  });
+
+  // Every state's sentence names a *different* action. This is the assertion
+  // that the split earns its keep: if two of these read the same, one of the
+  // states is not worth carrying.
+  assert.match(reason([line("cut")]), /Bağımsız Oduncu Kampı ile bağlantı koptu: yolu onarın/);
+  assert.match(reason([line("unclaimed")]), /Bağımsız Oduncu Kampı'na yol çekin/);
+  assert.match(reason([line("rival")]), /rakibin elinde/);
+  assert.match(reason([line("absent")]), /Bu haritada bu kaynağın arz noktası yok/);
+  // The one that was actively wrong before: a lane that is running and has simply
+  // not made a lot yet was told to go and draw a road it already has.
+  assert.match(reason([line("supplying")]), /yük yolda, stok doluyor/);
+  assert.doesNotMatch(reason([line("supplying")]), /yol çekin/);
+  // Every branch still leads with the shortfall — how far off the lot is and why
+  // are two different facts, and the player needs both.
+  for (const state of ["supplying", "cut", "unclaimed", "rival", "absent"] as const) {
+    assert.match(reason([line(state)]), /^Pazarda stok yok: 0\/100\./);
+  }
+
+  // Faz S1's fallback survives: a project with no supply chain wired keeps the
+  // generic advice, because that is all that can honestly be said without
+  // knowing where the goods come from.
+  assert.match(reason([]), /Bir arz noktasına yol çekin/);
+
+  // A full shelf on a dead lane is the one state the number alone reads
+  // backwards — the player sees 240, plans around it, and does not know this is
+  // the last of it. The button stays open (the goods are there) and the badge
+  // turns amber.
+  assert.equal(shelf([line("supplying")], 240).tone, "good");
+  assert.equal(shelf([line("cut")], 240).tone, "warn", "a full shelf with no lane behind it is a warning");
+  assert.equal(shelf([line("rival")], 240).tone, "warn");
+  assert.equal(shelf([line("cut")], 40).tone, "bad", "and a short one is still simply short");
+  assert.equal(
+    panel([line("cut")], 240).actions.find((entry) => entry.id === "trade-buy:wood")?.enabled,
+    true,
+    "goods on the shelf can still be bought after the lane behind them died",
+  );
+  assert.match(shelf([line("cut")], 240).tooltip, /yolu onarın/, "and the badge carries the same remedy");
+});
+
+check("Faz S5: a trade site is a static world object, so its art rides the Level's fog mask", () => {
+  // Faz S5's third question — "how does a trade site look under fog?" — and the
+  // answer is that it is already the tree/deposit twin, on one condition this
+  // pins: its art must be *authored Level art*.
+  //
+  // That is the whole mechanism. Everything in `instances` is handed to
+  // `FogMask` by `loadRtsAuthoredWorld` with no game code naming it (see "§59: an
+  // authored Level placement is masked without game code naming it"), and cut per
+  // fragment against the *explored* alpha — GDD 08 §40's rule for terrain and
+  // permanent natural elements, which is exactly what a site is: authored, never
+  // built, never destroyed (KARAR 3-A).
+  //
+  // The failure this guards against is a plausible one, because deposits took the
+  // other road: give a site a runtime-built mesh the way `rtsMapArt` builds one
+  // per deposit, and it needs its own `visible` writer or it renders in ground
+  // nobody has scouted. A marker with no art at all fails here too — a supply
+  // point the player cannot see is a road drawn at a coordinate.
+  const sites = shippedTradeSiteBalance();
+  const { level } = shippedRtsLevel();
+  const instances = (JSON.parse(
+    readFileSync("public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json", "utf8"),
+  ) as { instances: Array<{ assetId: string; placements: Array<{ position: [number, number, number] }> }> }).instances;
+
+  assert.ok(level.tradeSites.length > 0, "the level authors trade sites at all");
+  for (const site of level.tradeSites) {
+    const dock = sites[site.siteType]?.dock ?? assert.fail(`unknown site type ${site.siteType}`);
+    // One dock diagonal: art that stands further off than the site's own
+    // footprint is decorating somewhere else, and the marker is bare ground.
+    const reach = Math.hypot(dock.width, dock.depth);
+    const art = instances.flatMap((entry) => entry.placements
+      .filter((placement) => Math.hypot(placement.position[0] - site.x, placement.position[2] - site.z) <= reach)
+      .map(() => entry.assetId));
+    assert.ok(
+      art.length > 0,
+      `trade site "${site.id}" has no authored static art within ${reach.toFixed(1)} units, so nothing on the map marks it`,
+    );
+  }
+});
+
 check("Faz M4: the AI trades toward the age it is short for, and stops once it can pay", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -48468,6 +48792,11 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
         detail: {
           kind: "market",
           connected: true,
+          // Faz S5's own default: no supply information at all. The panel must
+          // then read exactly as it did before S5, generic advice included —
+          // this is the fixture that catches the new sentences leaking into a
+          // project whose market has no supply chain behind it.
+          supply: [],
           trade: {
             lotSize: 100,
             commission: 0.15,

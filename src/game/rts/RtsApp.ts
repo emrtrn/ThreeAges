@@ -184,7 +184,13 @@ import { EconomyProductionSystem, producerHasSource } from "./economy/economyPro
 import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTradeSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { TradeSiteSystem } from "./economy/tradeSiteSystem";
-import { MarketSupplySystem } from "./economy/marketSupplySystem";
+import {
+  MarketSupplySystem,
+  marketSupplyLines,
+  siteSupplyState,
+  type MarketSupplyLine,
+  type MarketSupplyState,
+} from "./economy/marketSupplySystem";
 import { ForestSystem } from "./economy/forestSystem";
 import { PastureSystem } from "./wildlife/pastureSystem";
 import { PredatorSystem } from "./wildlife/predatorSystem";
@@ -217,6 +223,7 @@ import { RtsArmyRosterStrip } from "./ui/rtsArmyRosterStrip";
 import { describeArmyRoster } from "./ui/rtsArmyRosterView";
 import { RtsNotificationCenter } from "./ui/rtsNotifications";
 import { RtsNotificationFeed } from "./ui/rtsNotificationFeed";
+import { supplyNotice } from "./ui/rtsSupplyNotices";
 import { RtsAttackWatch } from "./ui/rtsAttackWatch";
 import { formatCostShortfall, formatResourceCost, resourceLabel, RESOURCE_ORDER } from "./ui/resourceLabels";
 import { TerritoryControlSystem } from "./territory/territoryControlSystem";
@@ -794,6 +801,26 @@ export class RtsApp {
    * status.
    */
   private readonly previousLogisticsStatus = new Map<number, ProducerLogisticsStatus>();
+  /**
+   * The trade-site twin of {@link previousLogisticsStatus} — supply plan Faz S5.
+   * Same job, per site id rather than per structure id: the cut is polled, the
+   * link and the hand-over are news only on the frame they happen.
+   *
+   * Not pruned, and it does not need to be: a trade site is authored, so the set
+   * of ids is fixed for the whole match and no id is ever reused by something
+   * else (KARAR 3-A — a site is never built and never destroyed).
+   */
+  private readonly previousSupplyState = new Map<string, MarketSupplyState>();
+  /**
+   * Trade sites that have supplied the player at least once this match.
+   *
+   * Monotonic on purpose. It is what separates "your road broke, repair it" from
+   * "you never paved out there" — a distinction the road graph erases the moment
+   * the road is gone, and one the player needs in both the panel and the warning.
+   * Once a site has fed you, "repair it" stays the right advice for it, so
+   * nothing here ever has to be taken back out.
+   */
+  private readonly everSuppliedSites = new Set<string>();
   /**
    * §53 saldırmazlık window: which of the three one-shot notices has fired.
    * 0 = nothing yet, 1 = "active" posted, 2 = heads-up posted, 3 = "ended"
@@ -3817,6 +3844,11 @@ export class RtsApp {
     this.notifications.reset();
     this.notificationFeed.setNotifications([]);
     this.previousLogisticsStatus.clear();
+    // ...and the supply watch with it (Faz S5). Carrying `everSuppliedSites`
+    // over would open the next match advising the player to *repair* a road they
+    // have not built yet, on a site the new game has handed back to nobody.
+    this.previousSupplyState.clear();
+    this.everSuppliedSites.clear();
     // A fresh match reopens the saldırmazlık window, so its notices must be
     // allowed to fire again from the top.
     this.peaceAnnounceStage = 0;
@@ -4574,6 +4606,10 @@ export class RtsApp {
           kind: "market",
           trade,
           connected: this.territory.ownerAt(structure.x, structure.z) === structure.owner,
+          // Faz S5. Keyed off the stocked list rather than the price list: a
+          // resource that buys freely has no supply chain to report, and a line
+          // for it would invite the panel to advise a road nothing needs.
+          supply: this.marketSupplyLinesFor(structure.owner, Object.keys(trade.stock)),
         };
       }
     }
@@ -4692,7 +4728,59 @@ export class RtsApp {
       if (!livingProducers.has(structureId)) this.previousLogisticsStatus.delete(structureId);
     }
 
+    this.syncSupplyNotifications();
     this.syncUnderAttackNotifications();
+  }
+
+  /**
+   * The Market panel's supply sentences — supply plan Faz S5.
+   *
+   * Reads its fog predicate from the same place {@link syncForestVisibility}
+   * does, and for the same reason: a trade site is a static world object, so
+   * what a kingdom may know about it stops at the ground it has explored. With
+   * the fog flag off the predicate is omitted and everything is known, which is
+   * what "no fog" has to mean.
+   */
+  private marketSupplyLinesFor(owner: UnitOwner, resourceIds: readonly string[]): readonly MarketSupplyLine[] {
+    const vision = this.vision;
+    return marketSupplyLines(this.marketSupply.snapshots(), owner, resourceIds, {
+      everSupplied: this.everSuppliedSites,
+      ...(vision ? { isExplored: (x: number, z: number) => vision.isExplored(owner, x, z) } : {}),
+    });
+  }
+
+  /**
+   * §2 item 7 made audible — supply plan Faz S5.
+   *
+   * The loop and the memory only; which frame is news belongs to
+   * {@link supplyNotice}, where `test:engine` can reach it. Only the human
+   * kingdom is narrated, for the same reason only its producers are.
+   *
+   * The fog predicate is the one from {@link marketSupplyLinesFor}, so the feed
+   * and the panel cannot disagree about who holds a site. It changes nothing
+   * here in practice — every bad-news branch is already gated on having been
+   * supplied, which needs a road, which needs the ground — and passing it anyway
+   * is what keeps that a property of the rule rather than a coincidence of this
+   * call site.
+   */
+  private syncSupplyNotifications(): void {
+    for (const site of this.marketSupply.snapshots()) {
+      const everSupplied = this.everSuppliedSites.has(site.siteId);
+      const state = siteSupplyState(
+        site,
+        PLAYER_OWNER,
+        everSupplied,
+        this.vision?.isExplored(PLAYER_OWNER, site.x, site.z) ?? true,
+      );
+      const previous = this.previousSupplyState.get(site.siteId);
+      this.previousSupplyState.set(site.siteId, state);
+      if (state === "supplying") this.everSuppliedSites.add(site.siteId);
+      // The *pre-update* memory: a site supplying for the first time has never
+      // fed this kingdom yet, and the good-news branch does not consult it.
+      const notice = supplyNotice(site, state, previous, everSupplied);
+      if (notice.clearCut) this.notifications.dismiss({ kind: "supply-cut", subject: site.siteId });
+      if (notice.post) this.notifications.post(notice.post);
+    }
   }
 
   /**

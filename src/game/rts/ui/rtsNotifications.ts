@@ -31,6 +31,13 @@ export type RtsNotificationKind =
   | "resource-depleted"
   | "logistics-cut"
   | "logistics-restored"
+  // The supply chain's three beats (supply plan Faz S5), keyed per trade site.
+  // Separate kinds from the producer pair above rather than a shared one with a
+  // different subject: a producer's cut stops one building, a trade site's
+  // closes a *buy button*, and the two are fixed in different places on the map.
+  | "supply-linked"
+  | "supply-cut"
+  | "supply-lost"
   | "caravan-destroyed"
   | "outpost-under-attack"
   | "center-under-attack"
@@ -74,6 +81,22 @@ const RULES: Readonly<Record<RtsNotificationKind, NotificationRule>> = {
   // transition, never polled, so it needs no cooldown — and it is info, not
   // alert, so the feed colours it as good news rather than a fresh warning.
   "logistics-restored": { severity: "info", displaySeconds: 6, cooldownSeconds: 0 },
+  // Faz S5. The pair above is the model, with one difference that matters: a
+  // trade site's link is *bought* — 84 to 120 wood of road, drawn on purpose — so
+  // the moment it starts flowing is the payoff and gets said out loud, where a
+  // producer built already-linked is not news. Raised on transitions only, hence
+  // no cooldown.
+  "supply-linked": { severity: "info", displaySeconds: 6, cooldownSeconds: 0 },
+  // Polled, exactly as `logistics-cut` is, and only for a site that has fed this
+  // kingdom before: a site nobody ever paved to is not a problem to be nagged
+  // about. Alert, because the thing it stops is a button the player was relying
+  // on and there is no other signal that it stopped.
+  "supply-cut": { severity: "alert", displaySeconds: 8, cooldownSeconds: 15 },
+  // A hand-over is an event, not a condition (KARAR 4-A: the road is what holds a
+  // site), so it fires once per change of hands rather than while it lasts —
+  // re-raising it every fifteen seconds would nag about something the player has
+  // already been told and cannot undo except by taking it back.
+  "supply-lost": { severity: "alert", displaySeconds: 8, cooldownSeconds: 0 },
   "caravan-destroyed": { severity: "alert", displaySeconds: 8, cooldownSeconds: 8 },
   "outpost-under-attack": { severity: "alert", displaySeconds: 6, cooldownSeconds: 12 },
   "center-under-attack": { severity: "alert", displaySeconds: 8, cooldownSeconds: 10 },

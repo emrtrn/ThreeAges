@@ -28,6 +28,7 @@ import type { BarracksQueueSnapshot } from "../structures/barracksProductionSyst
 import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
 import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
+import type { MarketSupplyLine } from "../economy/marketSupplySystem";
 import { formatCostShortfall, formatResourceCost, resourceLabel } from "./resourceLabels";
 import { describeArmyRoster } from "./rtsArmyRosterView";
 
@@ -205,6 +206,15 @@ export interface MarketDetailView {
   readonly trade: MarketTradeSnapshot;
   /** KR-M4: false when the control area under this Market has been taken. */
   readonly connected: boolean;
+  /**
+   * Where each stocked resource's goods are coming from — supply plan Faz S5.
+   *
+   * The empty list is the honest reading of a project with no supply chain at
+   * all, and it leaves the panel exactly as Faz S1 left it: a resource with no
+   * line here keeps the generic "draw a road to a trade site" advice, because
+   * that is all that can truthfully be said about it.
+   */
+  readonly supply: readonly MarketSupplyLine[];
 }
 
 /**
@@ -1406,6 +1416,7 @@ function describeMarket(
 ): SelectionPanelContent {
   const { trade } = detail;
   const commissionPercent = Math.round(trade.commission * 100);
+  const supplyByResource = new Map(detail.supply.map((line) => [line.resourceId, line]));
   // One chip per stocked resource, and none at all when this project stocks
   // nothing — an empty `stocked` list must leave the panel exactly as it was.
   //
@@ -1413,15 +1424,24 @@ function describeMarket(
   // three of them: enough on their own to push the Market body past the six
   // slots the two-column grid holds. Whether a lot can be bought is a yes/no
   // the player scans before pressing a card, which is exactly a chip's job.
-  const stockChips: SelectionChip[] = Object.entries(trade.stock).map(([resourceId, held]) => ({
-    id: `stock:${resourceId}`,
-    icon: CHIP_ICON.delivery,
-    value: `${resourceLabel(resourceId)} ${Math.floor(held)}`,
-    tone: held >= trade.lotSize ? "good" : "bad",
-    tooltip: held >= trade.lotSize
-      ? `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)} — bir lot (${trade.lotSize}) satın alınabilir.`
-      : `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)}/${trade.lotSize}. Bir arz noktasına yol çekin.`,
-  }));
+  const stockChips: SelectionChip[] = Object.entries(trade.stock).map(([resourceId, held]) => {
+    const line = supplyByResource.get(resourceId) ?? null;
+    const buyable = held >= trade.lotSize;
+    // Faz S5: a full shelf whose supply has stopped is warned about rather than
+    // called good. It is the one state the stock number alone reads backwards —
+    // the player sees 240 and plans around it, not knowing the lane behind it
+    // died and this is the last of it.
+    const flowing = line === null || line.state === "supplying";
+    return {
+      id: `stock:${resourceId}`,
+      icon: CHIP_ICON.delivery,
+      value: `${resourceLabel(resourceId)} ${Math.floor(held)}`,
+      tone: buyable ? (flowing ? "good" : "warn") : "bad",
+      tooltip: buyable
+        ? `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)} — bir lot (${trade.lotSize}) satın alınabilir. ${supplyAdvice(line)}`
+        : `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)}/${trade.lotSize}. ${supplyAdvice(line)}`,
+    };
+  });
   return {
     title,
     summary,
@@ -1445,9 +1465,10 @@ function describeMarket(
       tradeAction(
         "buy", price.resourceId, price.buyPrice, trade.lotSize, price.index, detail.connected,
         trade.stock[price.resourceId] ?? null,
+        supplyByResource.get(price.resourceId) ?? null,
       ),
       // The sell button never sees the stock: selling is unchanged (KARAR 7-A).
-      tradeAction("sell", price.resourceId, price.sellPrice, trade.lotSize, price.index, detail.connected, null),
+      tradeAction("sell", price.resourceId, price.sellPrice, trade.lotSize, price.index, detail.connected, null, null),
     ]),
     actionLayout: "market",
     hint: "",
@@ -1472,6 +1493,13 @@ function describeMarket(
  *
  * `stock` is null for every sell button and for any resource this project does
  * not gate — "not stocked" and "stocked but empty" must not look alike.
+ *
+ * `supply` names *why* the shelf is short (Faz S5), which is a different fact
+ * from how short it is and has a different remedy attached. Before it, one
+ * sentence — "draw a road to a trade site" — answered every empty shelf, and it
+ * was wrong advice in three of the four cases: for a lane that is running and
+ * simply has not made a lot yet, for a road the player already paved and lost,
+ * and for a map that authors no site of that kind at all.
  */
 function tradeAction(
   direction: "buy" | "sell",
@@ -1481,6 +1509,7 @@ function tradeAction(
   index: number,
   connected: boolean,
   stock: number | null,
+  supply: MarketSupplyLine | null,
 ): SelectionAction {
   const buying = direction === "buy";
   const goldLabel = resourceLabel("gold");
@@ -1496,11 +1525,45 @@ function tradeAction(
       ? "Kontrol Dışı: bu Pazar ticaret yapamaz."
       : supplied
         ? null
-        // Names the shortfall, not just the state: "128/200" tells the player
-        // whether a road is already working or was never drawn.
-        : `Pazarda stok yok: ${Math.floor(stock ?? 0)}/${lotSize}. Bir arz noktasına yol çekin.`,
+        // Names the shortfall *and* the reason for it: "128/200" says how far off
+        // the lot is, the advice says which of the four different things the
+        // player would have to do about it.
+        : `Pazarda stok yok: ${Math.floor(stock ?? 0)}/${lotSize}. ${supplyAdvice(supply)}`,
     hint: `${resourceLabel(resourceId)} endeksi ×${index.toFixed(2)}. ${buying ? "Alım" : "Satım"} fiyatı: ${price} ${goldLabel}.`,
   };
+}
+
+/**
+ * The remedy sentence behind one resource's shelf — supply plan Faz S5.
+ *
+ * Every branch names a different action, which is the test of whether the state
+ * split earns its keep: repair the road you have, pave one you do not, cut the
+ * rival's, or stop waiting because this map has nowhere to pave to. A null line
+ * (a project with no supply chain wired, or a resource the market does not gate)
+ * falls back to the generic advice this replaced, because that is all that can
+ * honestly be said without knowing where the goods come from.
+ */
+function supplyAdvice(supply: MarketSupplyLine | null): string {
+  if (supply === null) return "Bir arz noktasına yol çekin.";
+  const site = supply.siteLabel ?? "Arz noktası";
+  switch (supply.state) {
+    case "supplying":
+      // Not a problem at all — the lane is running and the lot is still being
+      // carried. Saying "draw a road" here would send the player to build a
+      // second road to a site already delivering on the first.
+      return `${site} bağlı: yük yolda, stok doluyor.`;
+    case "cut":
+      return `${site} ile bağlantı koptu: yolu onarın.`;
+    case "rival":
+      return `${site} rakibin elinde: arz yolunu kesin ya da kendi yolunuzu çekin.`;
+    case "unclaimed":
+      return `${site}'na yol çekin.`;
+    case "absent":
+      // The one answer no road can fix, and the reason `absent` is a state
+      // rather than a missing line: a player who paves the whole map looking
+      // for a port that was never authored has been lied to by this panel.
+      return "Bu haritada bu kaynağın arz noktası yok.";
+  }
 }
 
 /**

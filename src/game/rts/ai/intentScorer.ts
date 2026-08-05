@@ -130,10 +130,12 @@ function scoreEconomy(bb: AiBlackboard, balance: AiBalance): { rawScore: number;
  * §30/§24: RequirementProgress + Affordability + EconomyMaturity
  *          - ImmediateThreat.
  *
- * §24 puts the age behind a working economy rather than in a race with it, so
- * this is a *sum* gated on the requirements: the AI only starts wanting the age
- * once the buildings that prove the economy exist are standing, and only acts on
- * it once the stockpile can pay without emptying itself.
+ * §24 puts the Town transition behind a working economy rather than in a race
+ * with it. Centre levels are deliberately a separate gate: Settlement Lv2 -> Lv3
+ * costs resources only, while the Town transition additionally needs the six
+ * completed buildings. Treating both as one gate lets an AI stay at Lv2 until it
+ * has already built the entire Town city, which is backwards and makes a stalled
+ * prerequisite look like a stalled centre upgrade in the live match.
  *
  * The requirement list is data (`balance/ages.json`), so on this map the score
  * cannot rise until the AI has a farm, lumber camp, quarry, gold mine, barracks
@@ -146,6 +148,28 @@ function scoreAgeUp(bb: AiBlackboard, balance: AiBalance): { rawScore: number; r
   if (bb.ageUpgrading) return { rawScore: 1, reason: "merkez yükseltmesi sürüyor" };
 
   const terms = balance.scoring.ageUp;
+  // Settlement Lv1 -> Lv2 -> Lv3 is the first half of development. Its contract
+  // is cost + safety only (`ages.json`): Town prerequisites do not belong here.
+  // In particular, a missing quarry/gold mine/outpost must keep the Economy
+  // intent alive for the *Town* transition without silently suppressing the
+  // centre Lv3 upgrade that comes before it.
+  if (bb.age === "settlement" && bb.centerLevel < 3) {
+    const cost = bb.centerLevelUpgradeCost;
+    if (!cost) return { rawScore: 0, reason: "merkez seviye yükseltmesi yok" };
+    const affordable = Object.entries(cost).every(([id, amount]) => (bb.resourceStocks[id] ?? 0) >= amount);
+    const economyMaturity = 1 - worstIncomeDeficit(bb, balance).deficit;
+    const rawScore = clamp01(
+      terms.affordability * (affordable ? 1 : 0)
+      + terms.economyMaturity * economyMaturity
+      - terms.immediateThreat * threatLevel(bb, balance),
+    );
+    const reason = bb.baseThreat > 0
+      ? "üs tehdit altında, merkez seviyesi ertelendi"
+      : affordable
+        ? `merkez seviye ${bb.centerLevel + 1} için hazır`
+        : `merkez seviye ${bb.centerLevel + 1} için kaynak biriktiriliyor`;
+    return { rawScore, reason };
+  }
   // Reaching Town is not the end of development, only the end of the *age* half
   // of it. The centre level ladder continues inside Town and every building's
   // stats hang off it (`buildings.json` `progression.town[]`), so an AI that

@@ -1531,6 +1531,17 @@ olan bir niyete karşı duramaz. Hazırlık artık `riskyAttackPowerRatio` →
 `dominancePowerRatio` bandına yayılıyor: yazı tura kavga 0.18, ezici üstünlük
 1.0. (`test:engine` regresyon testi ekli.)
 
+**2026-08-05 Kasaba güvenilirlik düzeltmesi.** Merkez seviye merdiveni ile
+Kasaba geçişi aynı önkoşul puanından geçiyordu: Yerleşim Lv2'deki AI, Lv3 için
+yalnız maliyet ödemesi gerekirken eksik taş ocağı/altın madeni/karakol yüzünden
+"çağ gereksinimi eksik" okuyabiliyor ve ekonomi niyeti altında kalıyordu.
+`scoreAgeUp` artık önce bekleyen Merkez Lv2→Lv3 eylemini kendi maliyeti ve üs
+güvenliğiyle puanlar; altı yapı gereksinimi yalnız Yerleşim Lv3→Kasaba
+geçişinin kapısıdır. `test:engine`'e, eksik Kasaba yapıları varken ödenebilir
+Lv3'ün Economy'yi geçtiğini kanıtlayan regresyon eklendi. Böylece debug paneli
+"merkez seviye 3 için hazır" ile gerçek bir yapı/lojistik tıkanmasını birbirinden
+ayırt eder.
+
 ### Ekonomi
 
 - [x] Dört kaynak için hedef gelirler (`balance/ai.json`
