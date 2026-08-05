@@ -1,7 +1,8 @@
 # ThreeAges RTS - Pazar Arzi ve Ticaret Noktalari Plani
 
 Olusturulma tarihi: 2026-08-04
-Durum: **Faz S0, S1, S2, S3 (2026-08-04), S4 ve S5 (2026-08-05) kapandi.** Dokuz
+Durum: **Faz S0-S5 kapandi; S6'nin UI yarisi da bitti (hepsi 2026-08-04/05).
+Geriye tek bir madde kaldi: kabul maci, ve o kullanicidadir.** Dokuz
 kararin dokuzu da onerildigi gibi kilitlendi, §3.7'nin harita cozumu **uc
 nokta-simetrik cift (alti nokta)** olarak secildi ve alti marker'in konumu
 olculup sabitlendi (§7 Faz S0). **S1** stok cekirdegini, **S2** arz noktalarini
@@ -14,9 +15,12 @@ authorlandi, **sifir AI kodu** yazildi. **S5 kopmayi duyulur kildi**: kesilmenin
 kendisi icin tek satir simulasyon kodu yazilmadi (S3 zaten durduruyordu),
 yazilan sey bir **okuma katmani** oldu - panelin dort ayri tavsiyesi, uc bildirim
 turu, ve sisin cevabi (arz noktasi statik dunya nesnesidir; bilgi de sanati gibi
-kesfedilen zeminde durur). **Siradaki: S6** (UI ve kabul maci). Iki
-gorsel/oynanis kabulu kullanicida acik: S2'nin mesh yerlesimi (§7 Faz S2) ve
-S3'un oynanis kabulu (§7 Faz S3).
+kesfedilen zeminde durur). **S6 arz noktasini konusulabilir hale getirdi**: raf
+lotu her zaman adlandiriyor, ve arz noktasi artik **secilebilir** bir sey - kendi
+paneli kimin oldugunu, tamponunu ve kac esegin yolda oldugunu soyluyor.
+
+S2 ve S3'un gorsel/oynanis kabulleri **kullanici tarafindan verildi
+(2026-08-05)**. Acik kalan tek sey S6'nin **kabul maci**dir.
 
 S0 sirasinda haritanin ve balans verisinin olculmesi, planin dort ifadesini
 duzeltti; hepsi asagida ilgili bolume islendi:
@@ -541,7 +545,9 @@ satirla geri alinabilir.
 | `src/game/rts/world/rtsMapBlockout.ts` | `RtsTradeSiteDefinition` + `tradeSites` alani |
 | `src/game/rts/world/rtsLevelAdapter.ts` | `BP_RTS_TradeSite` marker'inin okunmasi (`resourceId`, `siteId`, rihtim olcusu) |
 | `src/game/rts/RtsApp.ts` | Sistem kurulumu, update sirasi, pazar paneline stok besleme, arz noktasi gorselinin mount'u |
-| `src/game/rts/ui/rtsSelectionView.ts` | `MarketDetailView`'a stok satiri; alis dugmesinin stok yuzunden kapanmasi ve **nedeninin yazilmasi** |
+| `src/game/rts/ui/rtsSelectionView.ts` | `MarketDetailView`'a stok satiri; alis dugmesinin stok yuzunden kapanmasi ve **nedeninin yazilmasi**. S6'da ayrica arz noktasinin kendi paneli (`SelectedTradeSiteView`) |
+| `src/game/rts/world/tradeSiteView.ts` | **Yeni (S6).** Rihtim basina bir pick kutusu: arz noktasinin tiklanacak nesnesi yok (sanati batch'lenmis Level instance'i, ve limanda marker'in uzerinde bile degil). Sis kapisi da burada - liste yalnizca kesfedilmisleri verir |
+| `src/game/rts/selection/selectionSystem.ts` | **Var.** S6'da dorduncu secim turu: arz noktasi. Tek sahip testi olmayan tur - "burasi kimin" panelin ilk sorusu |
 | `src/game/rts/ai/aiTradeManager.ts` | Beklenen degisiklik **yok** (§3.9); yalnizca dogrulanir |
 | `src/game/data/gameDataTypes.ts` | `MarketBalance.stocked`; `TradeSiteBalance` |
 | `src/game/data/validateGameData.ts` | `stocked` girdilerinin `basePrice`'ta bulunmasi; `validateTradeSiteBalance` |
@@ -1230,15 +1236,91 @@ plandan bagimsiz, devam eden bir merkez-seviye / `intentScorer` degisikligi var
 duruyor. S5'in dosyalarindan hicbiri o testin okudugu hicbir seye dokunmuyor; o
 degisiklik yesile donduginde suite butunuyle yesil olur.
 
-### Faz S6 - UI ve kabul maci
+### Faz S6 - UI ve kabul maci -> **UI TAMAM (2026-08-05), kabul maci kullanicida**
 
-- [ ] Pazar panelinde uc stok satiri son halini alir: "Yiyecek: 240 / lot 100".
-- [ ] Arz noktasi paneli: kime ait, tamponu ne, kac esek yolda.
+- [x] Pazar panelinde stok rafi son halini aldi. Plan "Yiyecek: 240 / lot 100"
+  yaziyordu; teslim edilen sey `Yiyecek 240/100` **chip'i** - S1'in olcusu
+  korunarak (asagida). Onemli olan sozlesme tutuldu: **lot her zaman adlandirilir**,
+  yalnizca raf eksikken degil.
+- [x] Arz noktasi paneli: kime ait (`Sizin` / `Rakipte` / `Sahipsiz`), tamponu ne
+  (`Tampon: 96 / 120`), kac esek yolda (`Yolda: 2 / 4 eşek`) - artiya uretim hizi,
+  durum cumlesi ve "tampon dolu" rozeti.
+- [x] Arz noktasi **secilebilir** oldu: yeni `world/tradeSiteView.ts`, rihtim
+  basina bir pick kutusu, `SelectionSystem`'in **dorduncu** secim turu.
 - [ ] Kabul maci: bir bastan sona mac; oyuncu en az bir kez pazarini arz
   noktasina **yakin** kurmayi tercih eder, en az bir kez bir arz yolu kesilir,
   ve **uc hattin ucu de en az bir kez kurulur** - uc kaynagin uc ayri yol karari
   gercekten uc ayri karar mi, yoksa ayni kararin tekrari mi, cevabi burada
-  verilir.
+  verilir. **Bu madde kullanicidadir**; kod tarafinda bekleyen bir sey yok.
+
+#### S6'da olculenler - kodun ortaya cikardigi uc sey
+
+**1. Arz noktasinin tiklanacak bir nesnesi yok.** Sanati authorlanmis Level
+`instances`'i, yani dunya yukleyicisinin paylasilan `InstancedMesh`'lerine
+batch'ledigi seyler; yerlestirme basina raycast edilecek bir `Object3D` **yok**.
+Ustelik liman icin sanat marker'in **uzerinde bile degil**: mesh `(4.61,17.91)`,
+marker `(-1,20)` - cunku marker rihtimin kara tarafidir (§3.3). Yani "limana
+tikla" = "liman modelini raycast et" olamaz.
+
+Oyuncunun aslinda gosterdigi sey **rihtim**: mekanigin tamami onun uzerine kurulu
+(yolun degecegi 8x8 zemin). Cozum rihtim basina hic cizilmeyen bir kutu ve
+`SelectionSystem`'e dorduncu bir pick listesi. Sira da onemli: birim -> yapi ->
+merkez -> **arz noktasi**. Rihtim genis bir zemin parcasi oldugu icin uzerinde ya
+da yaninda duran her sey daha olasi hedeftir.
+
+**2. Sahip testi yok - ve olmamali.** Diger uc secim turu yalnizca oyuncunun
+kendi seyini seciyor. Arz noktasi **secmeye acik**: "burasi kimin" panelin
+cevapladigi **ilk** sorudur, yani rakibin limani okunabilmek icin secilebilmeli.
+Sizinti bundan dogmuyor, cunku iki ayri kapi var: pick listesi yalnizca
+**kesfedilmis** noktalari veriyor, ve panel rakibin tamponunu/filosunu **null**
+gosteriyor - "icini goremiyorum" ile "bos" ayni sey degil (pazarin `stock`
+kaydinin anahtarlanma sebebiyle ayni sebep).
+
+**3. Bir varsayim yanlisti ve testi yazmak yakaladi.** Bu dosyanin ilk hali sis
+kapisi olarak `visible`'i kullaniyordu, gerekcesi "three.js gorunmez nesneleri
+raycast etmez" idi. **Yanlis.** `Raycaster`'in `intersect`'i yalnizca `layers`'i
+test edip dogrudan `raycast`'i cagiriyor (`three.core.js`, `intersect()`); yani
+kesfedilmemis bir arz noktasi piril piril tiklanabilir kaliyordu. Test daha ilk
+kosuda kirmizi dondu. Kapi artik acikca `targetMeshes()`'in kendisi: kutular
+**her zaman** `visible = false` (hicbir cizim ya da golge gecisine girmezler) ve
+liste yalnizca kesfedilmisleri veriyor. Ikisi celiskili degil - ayrik olduklari
+bu fazda olculdu ve teste baglandi.
+
+#### S6'nin planin harfinden sapmasi (bilincli, dar)
+
+Plan stok satirini `"Yiyecek: 240 / lot 100"` diye, **satir** olarak yaziyor. Bu
+cumle S1'den once yazilmisti; S1 satirlari **chip**'e cevirdi ve gerekcesi
+olculmustu (uc ticaret kaynagi uc satir yapiyor, bu tek basina Pazar govdesini
+iki sutunlu izgaranin tuttugu alti yuvanin otesine itiyordu). S6 o olcuyu geri
+almiyor: teslim edilen sey `Yiyecek 240/100` chip'i. Planin **sozlesmesi** -
+lotun her zaman adlandirilmasi - aynen tutuldu; degisen yalnizca tasiyici, ve
+kac lot alinabildigi tooltip'te yazili.
+
+#### S6'da pinlenen testler (§8'e ek)
+
+- `Faz S6: the trade site panel answers whose it is, what is in it, and what is
+  moving` - ucu de; artiya "arz noktasi **hicbir sey** komut etmez" (KARAR 3-A)
+  ve rakibin tamponunun **null** okundugu, sifir degil.
+- `Faz S6: a trade site is clickable on its dock, and only where the player has
+  been` - pick kutusunun rihtim olcusunden **turetildigi**, hic cizilmedigi, ve
+  kapinin liste oldugu.
+- `Faz S6: clicking a dock selects the site, and the next selection replaces it`
+  - ucundan uca: kesfedilmemis rihtim tiklamayi yutmaz; kesfedilmisi secer;
+  sonraki secim onu **degistirir** (secim tek soruya cevap verir).
+
+Kirmiziya donebilirlik yapildi: alti kasitli mutasyon, altisi da hedefledigi
+assertion'la yakalandi - pick kutusunun bastan acik olmasi, sis kapisinin
+yoksayilmasi, rakibin tamponunun 0 gosterilmesi, rafin lot paydasini dusurmesi,
+secim temizliginin arz noktasini unutmasi, ve panele bir "Yik" dugmesi eklenmesi.
+Her biri geri alindi.
+
+Kabul: `npx tsc --noEmit`, `verify:imports`, `vite build`, `verify:dist
+--strict`, `check:assets` - **hepsi yesil**. `test:engine`: S6'nin uc testi de
+yesil (**1316 check**). §7 Faz S5'in notu **hala gecerli**: calisma agacindaki
+merkez-seviye / `intentScorer` isi `3a65f746`'da kirmizi haliyle commit'lendi ve
+suite "AI intent scoring reflects the §30 drivers and always names a reason"
+testinde duruyor. S6'nin dosyalarindan hicbiri o testin okudugu bir seye
+dokunmuyor.
 
 ## 8. Test ve Gate
 
@@ -1267,6 +1349,9 @@ pinlenmez.**
 | "the feed says a lane linked, stopped, or changed hands — and nothing else" | S5: uc gecis, ve "hic yol cekmedigin nokta haber uretmez" kapisi - akisi hem rakibin uc noktasindan hem de kesfedilmemis zeminden uzak tutan tek kural |
 | "the Market panel turns a stopped lane into the repair that fixes it" | S5: panelin cumlesi durumdan turer; dolu raf + olu hat **amber** okunur; ve arz zinciri olmayan proje aynen S1'in paneli kalir |
 | "a trade site is a static world object, so its art rides the Level's fog mask" | S5: arz noktasinin sanati **authorlanmis Level sanati**dir, yani agac/deposit sis kurali insaat geregi gecerlidir. Runtime'da mesh uretmeye kayilirsa kirmizi doner |
+| "the trade site panel answers whose it is, what is in it, and what is moving" | S6: §7'nin uc sorusu; arz noktasinin **hicbir** komut sunmadigi (KARAR 3-A); ve rakibin tamponunun **null** okundugu - "icini goremiyorum" ile "bos" ayni gorunemez |
+| "a trade site is clickable on its dock, and only where the player has been" | S6: pick kutusunun **rihtim olcusunden turetildigi** (tabloyu ayarlamak tiklama alanini geride birakamaz), hic cizilmedigi, ve sis kapisinin `visible` degil **liste** oldugu |
+| "clicking a dock selects the site, and the next selection replaces it" | S6: uctan uca secim; kesfedilmemis rihtim tiklamayi yutmaz, ve secim tek soruya cevap verdigi icin sonraki secim arz noktasini **birakir** |
 
 Gate: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`,
 `npm run check:assets`. Her fazin sonunda dordu de yesil.
@@ -1302,7 +1387,7 @@ gorulur ve geri alinir (V1/V3/V4 aliskanligi).
 
 ```text
 S0 (TAMAM) -> S1 (TAMAM) -> S2 (TAMAM) -> S3 (TAMAM) -> S4 (TAMAM)
-  -> S5 (TAMAM) -> S6
+  -> S5 (TAMAM) -> S6 (UI TAMAM · kabul maci kullanicida)
 ```
 
 Hicbir faz artik baska bir plani beklemiyor (§3.4). S1 ve S2 birbirinden
@@ -1323,3 +1408,13 @@ sey (arz noktasi paneli, pazar panelinin son hali, kabul maci) bu okumanin
 ustune biner; `MarketSupplyLine` ve `siteSupplyState` tam da o panelin
 soracaklaridir. Ayni acik kabuller S5'i de bloke etmedi ve etmemeliydi: S5'in
 her cumlesi durum makinesinden turuyor, mesh'in nerede durdugundan degil.
+
+Ve oyle oldu: S6'nin paneli `siteSupplyState`'i **oldugu gibi** cagiriyor, yani
+akis ile panel ayni cumleyi iki yerde hesaplamiyor. S6'nin tek yeni parcasi
+oyunun geri kalanindan bagimsiz cikti - arz noktasinin **tiklanabilir** olmasi,
+ki bu bir ekonomi sorusu degil bir secim sorusuydu ve oyle de cozuldu.
+
+Geriye kalan tek madde **kabul maci**dir, ve kasten en sona birakilmisti: uc
+kaynagin uc ayri yol kararinin gercekten uc ayri karar mi yoksa ayni kararin
+tekrari mi oldugu, ancak butun zincir - stok, kervan, kopma, panel - ayakta
+oynanarak cevaplanabilir. Kod tarafinda onu bekleyen hicbir sey yok.

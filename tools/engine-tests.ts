@@ -14,6 +14,7 @@ import { KHRMaterialsSpecular } from "@gltf-transform/extensions";
 import {
   BackSide,
   Bone,
+  Box3,
   BoxGeometry,
   DoubleSide,
   Group,
@@ -233,6 +234,7 @@ import { PastureSystem, penGeometryFor } from "../src/game/rts/wildlife/pastureS
 import { WildlifeRetaliationSystem, type WildlifeStrike } from "../src/game/rts/wildlife/wildlifeRetaliation";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
 import { TradeSiteSystem } from "../src/game/rts/economy/tradeSiteSystem";
+import { TradeSiteView } from "../src/game/rts/world/tradeSiteView";
 import {
   MarketSupplySystem,
   marketSupplyLines,
@@ -310,6 +312,7 @@ import {
   type MarketDetailView,
   type MilitaryDetailView,
   type SelectedStructureView,
+  type SelectedTradeSiteView,
   type SelectedUnitView,
   type SelectionAction,
   type SelectionChip,
@@ -48575,6 +48578,192 @@ check("Faz S5: a trade site is a static world object, so its art rides the Level
   }
 });
 
+check("Faz S6: the trade site panel answers whose it is, what is in it, and what is moving", () => {
+  const siteOf = (overrides: Partial<SelectedTradeSiteView> = {}): SelectedTradeSiteView => ({
+    siteId: "player_river_port",
+    label: "Nehir Limanı",
+    resourceId: "food",
+    state: "supplying",
+    holder: "self",
+    perMinute: 60,
+    bufferCapacity: 120,
+    buffered: 96,
+    caravansOnRoad: 2,
+    caravanCount: 4,
+    ...overrides,
+  });
+  const panel = (overrides: Partial<SelectedTradeSiteView> = {}): SelectionPanelContent =>
+    describeSelection({ kind: "trade-site", site: siteOf(overrides) });
+  const chip = (content: SelectionPanelContent, id: string): SelectionChip | undefined =>
+    content.chips?.find((entry) => entry.id === id);
+
+  // §7 Faz S6's three questions, in the order a player asks them.
+  const held = panel();
+  assert.equal(held.title, "Nehir Limanı");
+  assert.equal(chip(held, "holder")?.value, "Sizin", "whose it is");
+  assert.match(held.lines.join(" | "), /Tampon: 96 \/ 120/, "what is in it");
+  assert.match(held.lines.join(" | "), /Yolda: 2 \/ 4 eşek/, "and what is moving");
+  // The authored facts a site carries whatever its state: which resource, how fast.
+  assert.match(held.lines.join(" | "), /Yiyecek arz noktası · 60\/dk/);
+
+  // KARAR 3-A in the shape of the panel: a site is never built, repaired,
+  // demolished or crewed, so it offers **nothing**. The hint has to carry that,
+  // or an empty command deck reads as a half-finished building rather than as
+  // the rule — and the one decision it does involve is made somewhere else, with
+  // the road tool.
+  assert.deepEqual(held.actions, [], "a trade site is inspected, never commanded");
+  assert.match(held.hint, /inşa edilmez, yıkılmaz, işçi istemez/);
+  assert.match(held.hint, /yol/, "and it says where the decision actually is");
+  assert.equal(held.health, null, "a site cannot be hurt, so it carries no health bar");
+
+  // Four states, four different sentences — the S5 reading surfacing on the
+  // panel that names the thing itself. Each names its own remedy.
+  assert.match(panel({ state: "cut" }).summary, /Yolu onarın/);
+  assert.match(panel({ state: "unclaimed", holder: null }).summary, /ilk yolu çeken/);
+  assert.match(panel({ state: "rival", holder: "rival" }).summary, /kendi yolunuzu çekin/);
+  assert.notEqual(panel({ state: "cut" }).summary, panel({ state: "rival", holder: "rival" }).summary);
+
+  // The fog line, one step in from the pick proxy. Standing on explored ground is
+  // enough to see *whose* a site is — that is what a road touching it looks like
+  // from outside — but not to read what is stacked inside it or how many animals
+  // run it. Null rather than zero, for the reason the Market's stock record is
+  // keyed rather than defaulted: "I cannot see in" must not render as "it is empty".
+  const rival = panel({ holder: "rival", state: "rival", buffered: null, caravansOnRoad: null });
+  assert.equal(chip(rival, "holder")?.value, "Rakipte");
+  assert.equal(chip(rival, "holder")?.tone, "bad");
+  assert.doesNotMatch(rival.lines.join(" | "), /Tampon: \d+ \//, "a rival's buffer is not readable");
+  assert.doesNotMatch(rival.lines.join(" | "), /Yolda:/, "nor is its fleet");
+  assert.match(rival.lines.join(" | "), /yalnızca sahibine görünür/, "and the panel says so rather than showing 0");
+  assert.equal(chip(rival, "buffer-full"), undefined, "and no badge reports the inside of it either");
+  // Unheld reads as its own thing, not as the enemy's.
+  assert.equal(chip(panel({ holder: null, state: "unclaimed" }), "holder")?.value, "Sahipsiz");
+  assert.equal(chip(panel({ holder: null, state: "unclaimed" }), "holder")?.tone, "neutral");
+
+  // A full buffer is the throughput signal (plan §3.8): the fleet cannot keep up,
+  // and production has stopped. Both remedies are named because both are real.
+  const stalled = panel({ buffered: 120 });
+  assert.equal(chip(stalled, "buffer-full")?.tone, "warn");
+  assert.match(chip(stalled, "buffer-full")?.tooltip ?? "", /Filoyu büyütün ya da Pazarı yaklaştırın/);
+  assert.equal(chip(panel({ buffered: 119 }), "buffer-full"), undefined, "a buffer under its cap is not a warning");
+});
+
+check("Faz S6: a trade site is clickable on its dock, and only where the player has been", () => {
+  const balance = shippedTradeSiteBalance();
+  const definitions = [
+    { id: "player_river_port", siteType: "river_port", x: -1, z: 20 },
+    { id: "enemy_river_port", siteType: "river_port", x: 1, z: -20 },
+  ];
+  const view = new TradeSiteView(balance, definitions);
+  const dock = balance["river_port"]?.dock ?? assert.fail("the river port site type is missing");
+
+  // A site has no object of its own — its art is a batched Level instance, and
+  // for the port it does not even stand on the marker (§3.3: the mesh is out on
+  // the water, the marker is the landward apron). So what the player points at
+  // is the dock: the ground the road has to touch, which is what the mechanic is
+  // actually about.
+  view.syncExplored();
+  const meshes = view.targetMeshes();
+  assert.equal(meshes.length, definitions.length, "one pick target per authored site");
+  for (const definition of definitions) {
+    const mesh = meshes.find((candidate) => view.siteForObject(candidate) === definition.id)
+      ?? assert.fail(`no pick target for "${definition.id}"`);
+    assert.equal(mesh.position.x, definition.x, "the target stands on the marker, not on the art");
+    assert.equal(mesh.position.z, definition.z);
+    const box = new Box3().setFromObject(mesh);
+    // Derived from the balance row, so retuning a dock cannot leave the click
+    // target behind the ground it is meant to cover.
+    assert.ok(Math.abs((box.max.x - box.min.x) - dock.width) < 1e-6, "the target is as wide as the dock");
+    assert.ok(Math.abs((box.max.z - box.min.z) - dock.depth) < 1e-6, "and as deep");
+  }
+  assert.equal(view.siteForObject(new Mesh()), null, "anything else picks nothing");
+
+  // The boxes are never drawn, and that is not in tension with being pickable:
+  // three.js raycasting does not consult `visible` at all (`Raycaster`'s
+  // `intersect` tests `layers`, then calls `raycast` straight through). Pinned
+  // because the first cut of this file leaned the other way — it used `visible`
+  // as the fog gate, and an unexplored site stayed perfectly clickable.
+  assert.ok(meshes.every((mesh) => !mesh.visible), "a pick box is never rendered");
+
+  // So the fog gate is the *list*, and it has to be: without it a player could
+  // click black ground and read a port's name, owner and rate out of it — the
+  // one surface `fogMask.ts` cannot reach, since the mask cuts pixels and a pick
+  // has none.
+  const fresh = new TradeSiteView(balance, definitions);
+  assert.deepEqual(fresh.targetMeshes(), [], "a site starts unpickable, before any fog pass has run");
+  fresh.syncExplored((x, z) => Math.hypot(x + 1, z - 20) < 5);
+  assert.deepEqual(
+    fresh.targetMeshes().map((mesh) => fresh.siteForObject(mesh)),
+    ["player_river_port"],
+    "only the scouted site can be clicked",
+  );
+  // Fog off means everything is known — the same thing the omitted predicate
+  // means everywhere else in §59.
+  fresh.syncExplored();
+  assert.equal(fresh.targetMeshes().length, definitions.length, "with no fog every site is selectable");
+  fresh.dispose();
+  view.dispose();
+});
+
+check("Faz S6: clicking a dock selects the site, and the next selection replaces it", () => {
+  const balance = shippedTradeSiteBalance();
+  const view = new TradeSiteView(balance, [{ id: "port", siteType: "river_port", x: 0, z: 0 }]);
+  view.object.updateMatrixWorld(true);
+  const units = new UnitSystem();
+  // Straight overhead, so the centre pixel looks down onto the dock at the origin.
+  const camera = new PerspectiveCamera(60, 1, 0.1, 200);
+  camera.position.set(0, 30, 0.001);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const selection = new SelectionSystem(
+    { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement,
+    camera,
+    units,
+    { show: () => {}, hide: () => {} } as unknown as MarqueeOverlay,
+    new PlacedStructureSystem(),
+    new CommandCenterSystem(),
+    view,
+  );
+
+  // Unpickable until a fog pass says otherwise — the proxy's starting state,
+  // proven here through the pointer rather than through the flag.
+  selection.onSelectClick(50, 50, false);
+  assert.equal(selection.selectedTradeSite(), null, "an unscouted dock swallows no click");
+
+  view.syncExplored();
+  selection.onSelectClick(50, 50, false);
+  assert.equal(selection.selectedTradeSite(), "port", "clicking the dock selects the site standing on it");
+
+  // Exclusivity, and the assertion that earns its keep: the panel answers exactly
+  // one question, so every other kind of selection has to *replace* this one. A
+  // stale site id outlives its click and then wins the panel over whatever the
+  // player actually selected next — `selectionView` resolves the site before the
+  // command centre, so a forgotten reset here hides the centre's panel outright.
+  // Spawned well off the dock, with its world matrix brought up to date: units
+  // win the pick over everything, and a raycast reads `matrixWorld`, so a guard
+  // left on the identity matrix sits at the origin — on the dock — and answers a
+  // different question than this one.
+  const guard = units.spawn("player", 30, 30, RTS_TEST_UNIT_STATS);
+  guard.object.updateMatrixWorld(true);
+  selection.selectUnits([guard]);
+  assert.equal(selection.selectedTradeSite(), null, "selecting units drops the site");
+  assert.deepEqual(selection.selected().map((unit) => unit.id), [guard.id]);
+
+  // ...and a click on empty ground clears it like anything else.
+  selection.onSelectClick(50, 50, false);
+  assert.equal(selection.selectedTradeSite(), "port", "the site is selectable again");
+  selection.reset();
+  assert.equal(selection.selectedTradeSite(), null, "a match restart leaves nothing selected");
+
+  // Unlike the three kinds above it, a site is not owner-gated: "whose is this"
+  // is the first thing its panel answers, so a rival's port has to be clickable
+  // to be read at all. What stops it leaking is the fog gate, not an owner test.
+  view.syncExplored(() => false);
+  selection.onSelectClick(50, 50, false);
+  assert.equal(selection.selectedTradeSite(), null, "a site that fell back into fog cannot be picked");
+  view.dispose();
+  units.clear();
+});
+
 check("Faz M4: the AI trades toward the age it is short for, and stops once it can pay", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -48879,7 +49068,7 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   // a lot can be bought is a yes/no the player scans, which is a chip's job.
   const shelf = (content: SelectionPanelContent, resourceId: string): SelectionChip =>
     content.chips?.find((entry) => entry.id === `stock:${resourceId}`) ?? assert.fail(`no ${resourceId} shelf`);
-  assert.equal(shelf(empty, "wood").value, "Odun 0", "the shelf is on the panel");
+  assert.equal(shelf(empty, "wood").value, "Odun 0/100", "the shelf is on the panel");
   assert.equal(shelf(empty, "wood").tone, "bad");
   assert.match(shelf(empty, "wood").tooltip, /0\/100/, "and it names how short it is");
   assert.equal(action(empty, "trade-buy:wood").enabled, false, "an empty shelf darkens its own buy button");
@@ -48896,6 +49085,25 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   assert.equal(action(full, "trade-buy:wood").enabled, true, "one full lot opens the button");
   assert.equal(action(full, "trade-buy:wood").reason, null);
   assert.equal(shelf(full, "wood").tone, "good", "a stocked shelf reads as one at a glance");
+
+  // Faz S6, the shelf's final form: the lot is named *always*, not only while
+  // the shelf is short of one. It is the unit every number on this panel is
+  // denominated in — the button buys one, the price is per one — so a bare
+  // "Odun 240" leaves the player doing the division that decides whether to
+  // press, and doing it again after every purchase.
+  const stocked = marketPanel({ trade: stockedTrade(240) });
+  assert.equal(shelf(stocked, "wood").value, "Odun 240/100", "a full shelf still names the lot");
+  assert.match(shelf(stocked, "wood").tooltip, /2 lot/, "and how many are in it");
+  assert.match(shelf(stocked, "wood").tooltip, /2 × 100/, "spelled out against the lot size");
+  // Derived from the lot size rather than pinned, so retuning `lotSize` cannot
+  // make the badge disagree with the button beside it.
+  const lotSize = shippedBuildingBalance()["market"]?.market?.lotSize
+    ?? assert.fail("market lot size missing");
+  const shipped = marketPanel({
+    trade: { lotSize, commission: 0.15, prices: [], stock: { wood: lotSize * 3 } },
+  });
+  assert.equal(shelf(shipped, "wood").value, `Odun ${lotSize * 3}/${lotSize}`);
+  assert.match(shelf(shipped, "wood").tooltip, /3 lot/);
 });
 
 check("§69: the AI stops deciding once the match is over", () => {

@@ -28,7 +28,7 @@ import type { BarracksQueueSnapshot } from "../structures/barracksProductionSyst
 import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
 import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
-import type { MarketSupplyLine } from "../economy/marketSupplySystem";
+import type { MarketSupplyLine, MarketSupplyState } from "../economy/marketSupplySystem";
 import { formatCostShortfall, formatResourceCost, resourceLabel } from "./resourceLabels";
 import { describeArmyRoster } from "./rtsArmyRosterView";
 
@@ -299,10 +299,47 @@ export interface SelectedStructureView {
   readonly detail: StructureDetailView;
 }
 
+/**
+ * A selected trade site — supply plan Faz S6 ("kime ait, tamponu ne, kaç eşek
+ * yolda").
+ *
+ * Not a {@link SelectedStructureView}, and the differences are all the ways a
+ * site is not a building (KARAR 3-A): it is authored rather than built, so it
+ * has no construction, no health, no owner who paid for it, and **no actions at
+ * all** — the single decision it offers is made somewhere else entirely, with
+ * the road tool. It is the deposit's sibling, promoted to something the panel
+ * can talk about because unlike a deposit it has a *state* worth reading.
+ *
+ * The two nullable fields are the fog line, and they are nullable rather than
+ * zero for the reason the Market's stock record is keyed rather than defaulted:
+ * "a rival holds this and I cannot see inside it" must not render as "it is
+ * empty". A site's buffer and its fleet are its holder's business — the same
+ * rule that keeps an enemy Barracks from showing the player its queue.
+ */
+export interface SelectedTradeSiteView {
+  readonly siteId: string;
+  readonly label: string;
+  readonly resourceId: string;
+  /** Faz S5's reading, from the observing kingdom's point of view. */
+  readonly state: MarketSupplyState;
+  /** Whose it is: the observer's, somebody else's, or nobody's. */
+  readonly holder: "self" | "rival" | null;
+  /** Output rate from `trade-sites.json`; an authored fact, so always shown. */
+  readonly perMinute: number;
+  readonly bufferCapacity: number;
+  /** Goods waiting here — null unless the observer holds the site. */
+  readonly buffered: number | null;
+  /** Animals on this lane right now — null unless the observer holds the site. */
+  readonly caravansOnRoad: number | null;
+  /** The fleet size the site's balance row asks for. */
+  readonly caravanCount: number;
+}
+
 export type RtsSelectionView =
   | { readonly kind: "none" }
   | { readonly kind: "units"; readonly units: readonly SelectedUnitView[] }
-  | { readonly kind: "structure"; readonly structure: SelectedStructureView };
+  | { readonly kind: "structure"; readonly structure: SelectedStructureView }
+  | { readonly kind: "trade-site"; readonly site: SelectedTradeSiteView };
 
 /** A timed job the selection is running, rendered as a labelled progress bar. */
 export interface SelectionProgress {
@@ -579,8 +616,91 @@ export function describeSelection(view: RtsSelectionView): SelectionPanelContent
   if (view.kind === "units") {
     return view.units.length === 0 ? describeSelection({ kind: "none" }) : describeUnits(view.units);
   }
+  if (view.kind === "trade-site") return describeTradeSite(view.site);
   return describeStructure(view.structure);
 }
+
+/**
+ * The trade site panel — supply plan Faz S6.
+ *
+ * Answers the plan's three questions in the order a player asks them: whose is
+ * it, is it filling, and is anything moving. Everything below that ordering is a
+ * consequence of one fact — **there is nothing to command here**. A site is
+ * never built, never repaired, never demolished and hires nobody (KARAR 3-A), so
+ * the panel carries no actions and its hint has to say where the decision
+ * actually lives, or an empty command deck reads as a bug rather than as the
+ * rule.
+ *
+ * No health bar and no portrait for the same reason: a site cannot be hurt, and
+ * an empty frame is more honest than a full one that never moves.
+ */
+function describeTradeSite(site: SelectedTradeSiteView): SelectionPanelContent {
+  const resource = resourceLabel(site.resourceId);
+  const held = site.holder === "self";
+  const lines = [
+    `${resource} arz noktası · ${site.perMinute}/dk üretir`,
+    // The buffer is the site's own throughput story: full means the lane behind
+    // it is too small, which is the reading `bufferFull` exists to prompt.
+    held && site.buffered !== null
+      ? `Tampon: ${Math.floor(site.buffered)} / ${site.bufferCapacity}`
+      : `Tampon: ${site.bufferCapacity} kapasiteli — içi yalnızca sahibine görünür`,
+    held && site.caravansOnRoad !== null
+      ? `Yolda: ${site.caravansOnRoad} / ${site.caravanCount} eşek`
+      : `Filo: ${site.caravanCount} eşek`,
+  ];
+  return {
+    title: site.label,
+    summary: TRADE_SITE_SUMMARY[site.state],
+    lines,
+    chips: [
+      {
+        id: "holder",
+        icon: CHIP_ICON.logistics,
+        value: site.holder === "self" ? "Sizin" : site.holder === "rival" ? "Rakipte" : "Sahipsiz",
+        tone: site.holder === "self" ? "good" : site.holder === "rival" ? "bad" : "neutral",
+        tooltip: TRADE_SITE_HOLDER_TOOLTIP[site.holder === null ? "none" : site.holder],
+      },
+      // The buffer badge only exists for a site the observer holds: a "dolu"
+      // chip on a rival's port would be reporting the inside of something the
+      // player has no claim on.
+      ...(held && site.buffered !== null && site.buffered >= site.bufferCapacity
+        ? [{
+          id: "buffer-full",
+          icon: CHIP_ICON.delivery,
+          value: "Tampon dolu",
+          tone: "warn" as const,
+          // The one number on this panel the player can act on twice over, so
+          // both remedies are named — the same pair a producer's full buffer offers.
+          tooltip: "Üretim durdu: eşekler yetişmiyor. Filoyu büyütün ya da Pazarı yaklaştırın.",
+        }]
+        : []),
+    ],
+    actions: [],
+    // The whole mechanic in one sentence, and it has to be here: a panel with an
+    // empty command deck otherwise reads as an unfinished building.
+    hint: "Arz noktası inşa edilmez, yıkılmaz, işçi istemez. Tek karar: buraya yol çekmek.",
+    tooltip: TRADE_SITE_SUMMARY[site.state],
+    portrait: null,
+    selectionCount: 1,
+    health: null,
+  };
+}
+
+/** One sentence per state — the panel's answer to "why is nothing arriving?". */
+const TRADE_SITE_SUMMARY: Readonly<Record<MarketSupplyState, string>> = {
+  supplying: "Bağlı: yükler Pazarınıza taşınıyor.",
+  cut: "Bağlantı koptu: mal burada birikiyor, Pazara ulaşmıyor. Yolu onarın.",
+  unclaimed: "Sahipsiz: buraya ilk yolu çeken krallık burayı tutar.",
+  rival: "Rakibin elinde: arz yolunu kesin ya da kendi yolunuzu çekin.",
+};
+
+const TRADE_SITE_HOLDER_TOOLTIP: Readonly<Record<"self" | "rival" | "none", string>> = {
+  self: "Bu arz noktası sizin: yolunuz ona değiyor ve yükler Pazarınıza iniyor.",
+  // Named as a consequence rather than as a state, because the remedy is the
+  // information: a site is held by a road, so it is taken by cutting one.
+  rival: "Bu arz noktasını rakip tutuyor. Onun yolunu kesin; rota koptuğu anda nokta serbest kalır.",
+  none: "Bu arz noktasını kimse tutmuyor. Rıhtımına değen ilk yol onu sahiplenir.",
+};
 
 /**
  * The "free the trapped" button, or nothing. Returned as a list so the caller
@@ -1432,13 +1552,19 @@ function describeMarket(
     // the player sees 240 and plans around it, not knowing the lane behind it
     // died and this is the last of it.
     const flowing = line === null || line.state === "supplying";
+    // Faz S6, the shelf's final form: the lot is named *always*, not only while
+    // the shelf is short of one. It is the unit every number on this panel is
+    // denominated in — the button buys one, the price is per one — so a bare
+    // "Yiyecek 240" leaves the player doing the division that decides whether to
+    // press. Reads as the same "have / need" the panel's other chips use.
+    const lots = Math.floor(held / trade.lotSize);
     return {
       id: `stock:${resourceId}`,
       icon: CHIP_ICON.delivery,
-      value: `${resourceLabel(resourceId)} ${Math.floor(held)}`,
+      value: `${resourceLabel(resourceId)} ${Math.floor(held)}/${trade.lotSize}`,
       tone: buyable ? (flowing ? "good" : "warn") : "bad",
       tooltip: buyable
-        ? `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)} — bir lot (${trade.lotSize}) satın alınabilir. ${supplyAdvice(line)}`
+        ? `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)} — ${lots} lot (${lots} × ${trade.lotSize}) satın alınabilir. ${supplyAdvice(line)}`
         : `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)}/${trade.lotSize}. ${supplyAdvice(line)}`,
     };
   });

@@ -184,10 +184,12 @@ import { EconomyProductionSystem, producerHasSource } from "./economy/economyPro
 import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTradeSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { TradeSiteSystem } from "./economy/tradeSiteSystem";
+import { TradeSiteView } from "./world/tradeSiteView";
 import {
   MarketSupplySystem,
   marketSupplyLines,
   siteSupplyState,
+  supplyLaneId,
   type MarketSupplyLine,
   type MarketSupplyState,
 } from "./economy/marketSupplySystem";
@@ -628,6 +630,8 @@ export class RtsApp {
    * Faz S3 puts a caravan lane on the road between a site and a market.
    */
   private readonly tradeSites: TradeSiteSystem;
+  /** Faz S6: the invisible dock boxes that make a trade site clickable. */
+  private readonly tradeSiteView: TradeSiteView;
   /**
    * Supply plan Faz S3: which kingdom (if any) has run a road from a trade site
    * to one of its Markets, and the caravan lane that follows from it.
@@ -995,6 +999,12 @@ export class RtsApp {
     );
     this.resourceNodes = new ResourceNodeSystem(this.options.resourceBalance, this.spatial.resourceNodes);
     this.tradeSites = new TradeSiteSystem(this.options.tradeSiteBalance, this.spatial.tradeSites);
+    // Faz S6: the click targets, built from the same two inputs the system is.
+    // Added to the scene here rather than with the map art because these are not
+    // art — they carry no pixels and load nothing, so there is no asynchronous
+    // step to wait for and no frame in which a site is unselectable.
+    this.tradeSiteView = new TradeSiteView(this.options.tradeSiteBalance, this.spatial.tradeSites);
+    this.scene.add(this.tradeSiteView.object);
     this.forests = new ForestSystem(this.spatial.trees);
     this.wildlife = new WildlifeSystem(this.options.animalBalance, this.spatial.herds);
     this.wildlifeRetaliation = new WildlifeRetaliationSystem(this.units, this.wildlife);
@@ -1118,6 +1128,7 @@ export class RtsApp {
       this.marquee,
       this.structures,
       this.centers,
+      this.tradeSiteView,
     );
     this.commands = new CommandSystem(
       canvas,
@@ -1727,6 +1738,7 @@ export class RtsApp {
     // Same reason, for the art the binder no longer owns: the patched materials
     // outlive this app, so the mask has to be switched off before the texture it
     // reads goes away.
+    this.tradeSiteView.dispose();
     this.fogMask?.dispose();
     this.fogView?.dispose();
     this.ghostStructures?.dispose();
@@ -3690,6 +3702,13 @@ export class RtsApp {
     // Deposits follow the identical rule (depleted or unscouted), so they are
     // refreshed by the same three callers rather than a parallel schedule.
     this.mapArt.syncResourceNodes(this.resourceNodes, isExplored);
+    // Faz S6, and a third caller of the same predicate. These boxes are never
+    // drawn, so this is not a visual act at all: it is what decides whether a
+    // site can be *clicked*, and so what stops a player picking black ground and
+    // reading a port's name, owner and rate out of it. The site's art is already
+    // cut by the fog mask on the same explored alpha; this covers the one
+    // surface a pixel mask cannot, because a pick has no pixels.
+    this.tradeSiteView.syncExplored(isExplored);
   }
 
   /**
@@ -4159,6 +4178,8 @@ export class RtsApp {
         },
       };
     }
+    const tradeSite = this.tradeSiteSelectionView();
+    if (tradeSite) return tradeSite;
     const center = this.selection.selectedCenter();
     if (!center) return { kind: "none" };
     return {
@@ -4180,6 +4201,57 @@ export class RtsApp {
           // action, whether a level-up or the Town transition.
           progression: this.centerProgressionView(PLAYER_OWNER),
         },
+      },
+    };
+  }
+
+  /**
+   * The selected trade site's panel state — supply plan Faz S6.
+   *
+   * Every number is quoted from the system that owns it, never recomputed: the
+   * claim and the state come from {@link MarketSupplySystem} (through Faz S5's
+   * `siteSupplyState`, so the panel and the feed cannot disagree), the fleet
+   * count from the live caravan roster, the rate and the capacities from the
+   * balance row.
+   *
+   * The two nullable fields are the fog line drawn one step further in than the
+   * pick proxy draws it. Standing on explored ground is enough to *see* whose a
+   * site is — that is what the road touching it looks like from outside. It is
+   * not enough to read what is stacked inside it or how many animals are running
+   * it, so a rival's buffer and fleet come back null and the panel says
+   * "unknown" rather than "zero".
+   */
+  private tradeSiteSelectionView(): RtsSelectionView | null {
+    const siteId = this.selection.selectedTradeSite();
+    if (siteId === null) return null;
+    const snapshot = this.marketSupply.snapshots().find((candidate) => candidate.siteId === siteId);
+    if (!snapshot) return null;
+    const state = siteSupplyState(
+      snapshot,
+      PLAYER_OWNER,
+      this.everSuppliedSites.has(siteId),
+      this.vision?.isExplored(PLAYER_OWNER, snapshot.x, snapshot.z) ?? true,
+    );
+    const held = snapshot.owner === PLAYER_OWNER;
+    const laneId = supplyLaneId(siteId);
+    return {
+      kind: "trade-site",
+      site: {
+        siteId,
+        label: snapshot.label,
+        resourceId: snapshot.resourceId,
+        state,
+        // Read off the claim rather than off `state`: `cut` says nothing about
+        // who holds it, and a besieged market leaves the site in the player's
+        // hands (KARAR 4-A) while the lane is stopped.
+        holder: held ? "self" : snapshot.owner !== null ? "rival" : null,
+        perMinute: this.options.tradeSiteBalance[snapshot.siteType]?.perMinute ?? 0,
+        bufferCapacity: snapshot.bufferCapacity,
+        buffered: held ? snapshot.buffered : null,
+        caravansOnRoad: held
+          ? this.caravans.snapshots().filter((caravan) => caravan.laneId === laneId).length
+          : null,
+        caravanCount: snapshot.caravanCount,
       },
     };
   }

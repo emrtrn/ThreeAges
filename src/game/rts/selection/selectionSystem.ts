@@ -32,6 +32,7 @@ import {
 } from "../structures/placedStructureSystem";
 import type { CommandCenter } from "../structures/commandCenter";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
+import type { TradeSiteView } from "../world/tradeSiteView";
 
 /** Height above ground used when projecting a unit to screen (mid-body). */
 const PROJECT_HEIGHT = 1.0;
@@ -40,6 +41,15 @@ export class SelectionSystem implements RtsPointerHandler {
   private readonly selectedUnits = new Set<Unit>();
   private selectedStructureRef: PlacedStructure | null = null;
   private selectedCenterRef: CommandCenter | null = null;
+  /**
+   * The selected trade site, by id — supply plan Faz S6.
+   *
+   * An id rather than an object because a site *is* an id: it has no runtime
+   * instance to hold, only an authored definition and whatever the systems say
+   * about it this frame. Holding the pick proxy instead would tie the selection
+   * to a render object that exists purely to be raycast.
+   */
+  private selectedTradeSiteRef: string | null = null;
   private readonly raycaster = new Raycaster();
   private readonly ndc = new Vector2();
   private readonly scratch = new Vector3();
@@ -51,6 +61,12 @@ export class SelectionSystem implements RtsPointerHandler {
     private readonly marquee: MarqueeOverlay,
     private readonly structures: PlacedStructureSystem,
     private readonly centers: CommandCenterSystem,
+    /**
+     * Faz S6's fourth pick list. Optional because a project need not author any
+     * trade site — and because the sites load with the world, after this system
+     * is built, so a required argument would force the order the other way round.
+     */
+    private readonly tradeSites: TradeSiteView | null = null,
   ) {}
 
   /** Currently selected player units (command surface for later steps). */
@@ -69,6 +85,11 @@ export class SelectionSystem implements RtsPointerHandler {
    * footprint data and no owner-paid cost. */
   selectedCenter(): CommandCenter | null {
     return this.selectedCenterRef;
+  }
+
+  /** The selected trade site's id, if the selection is a trade-site one. */
+  selectedTradeSite(): string | null {
+    return this.selectedTradeSiteRef;
   }
 
   /** Replace the live selection with player units chosen by a HUD command. */
@@ -143,6 +164,18 @@ export class SelectionSystem implements RtsPointerHandler {
     const center = this.raycastCenter(x, y);
     if (center && center.owner === "player") {
       if (!additive) this.selectCenter(center);
+      return;
+    }
+    // Faz S6, and last of the four on purpose: a dock is a wide patch of ground,
+    // so anything standing on or beside it is the likelier target. Unlike the
+    // three above there is no owner test — a trade site belongs to whoever's
+    // road reached it, and "who holds this" is the first thing the panel exists
+    // to answer, so a rival's port must be selectable to be read. Nothing leaks
+    // by it: {@link TradeSiteView.targetMeshes} hands over explored sites only,
+    // and the panel shows a rival's buffer and fleet as unknown, not as zero.
+    const tradeSite = this.raycastTradeSite(x, y);
+    if (tradeSite) {
+      if (!additive) this.selectTradeSite(tradeSite);
       return;
     }
     // Clicked empty ground (or something enemy-owned): clear unless additive.
@@ -251,10 +284,32 @@ export class SelectionSystem implements RtsPointerHandler {
     return first ? this.centers.centerForObject(first.object) : null;
   }
 
+  private raycastTradeSite(x: number, y: number): string | null {
+    if (!this.tradeSites) return null;
+    const { w, h } = this.viewport();
+    this.ndc.set((x / w) * 2 - 1, -(y / h) * 2 + 1);
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    // Not recursive: each proxy is a single mesh, and there is nothing inside it.
+    const hits = this.raycaster.intersectObjects([...this.tradeSites.targetMeshes()], false);
+    const first = hits[0];
+    return first ? this.tradeSites.siteForObject(first.object) : null;
+  }
+
   private selectStructure(structure: PlacedStructure): void {
     this.clear();
     this.selectedStructureRef = structure;
     setStructureSelected(structure, true);
+  }
+
+  /**
+   * No selection ring, and there is nothing to hang one on: the site's art is a
+   * batched Level instance and the proxy is deliberately invisible. The panel
+   * appearing is the whole feedback, as it is for anything the player inspects
+   * rather than commands.
+   */
+  private selectTradeSite(siteId: string): void {
+    this.clear();
+    this.selectedTradeSiteRef = siteId;
   }
 
   private selectCenter(center: CommandCenter): void {
@@ -290,7 +345,12 @@ export class SelectionSystem implements RtsPointerHandler {
     this.clearStructure();
   }
 
-  /** Both building kinds are the same answer to the player, so they clear together. */
+  /**
+   * Both building kinds are the same answer to the player, so they clear
+   * together — and so does the trade site, which joins them for the reason the
+   * whole selection is exclusive: the panel answers exactly one question, and
+   * "a Barracks and a port" is not one.
+   */
   private clearStructure(): void {
     if (this.selectedStructureRef) {
       setStructureSelected(this.selectedStructureRef, false);
@@ -300,5 +360,6 @@ export class SelectionSystem implements RtsPointerHandler {
       this.selectedCenterRef.setSelected(false);
       this.selectedCenterRef = null;
     }
+    this.selectedTradeSiteRef = null;
   }
 }
