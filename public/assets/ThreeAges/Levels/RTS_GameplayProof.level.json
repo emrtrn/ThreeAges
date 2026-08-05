@@ -5477,9 +5477,9 @@
       "position": [
         44,
         0,
-        -26
+        -24
       ],
-      "name": "Enemy gold_mine (44,-26)",
+      "name": "Enemy gold_mine (44,-24)",
       "variableOverrides": {
         "owner": "enemy",
         "buildingId": "gold_mine",
@@ -5559,11 +5559,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
       "position": [
-        50,
+        54,
         0,
-        -44
+        -48
       ],
-      "name": "Enemy house (50,-44)",
+      "name": "Enemy house (54,-48)",
       "variableOverrides": {
         "owner": "enemy",
         "buildingId": "house",
@@ -5587,11 +5587,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
       "position": [
-        54,
+        58,
         0,
-        -44
+        -46
       ],
-      "name": "Enemy house (54,-44)",
+      "name": "Enemy house (58,-46)",
       "variableOverrides": {
         "owner": "enemy",
         "buildingId": "house",
@@ -5617,9 +5617,9 @@
       "position": [
         50,
         0,
-        -48
+        -50
       ],
-      "name": "Enemy house (50,-48)",
+      "name": "Enemy house (50,-50)",
       "variableOverrides": {
         "owner": "enemy",
         "buildingId": "house",

@@ -48142,6 +48142,115 @@ check("Faz S4: the AI's own supply lane fills its shelf, and its trade rule spen
   assert.equal(kingdoms.get("enemy").wallet.amount("stone"), lotSize, "and landed in the AI's stockpile");
 });
 
+check("Faz S4: every authored enemy slot survives the road the AI paves past it", () => {
+  // The gap this closes, found while measuring S4. §40's test judges the *code
+  // blockout's* anchors on empty ground; nothing judged the shipped Level's, and
+  // nothing judged any of them against the road. That matters because the two
+  // are not independent: `AiInfrastructureManager` is a standing concern, so the
+  // spine is paved before most of the build order runs, and a road cell reserves
+  // build space. A slot the road lands on is refused, and §43 blacklists a slot
+  // after `AI_ANCHOR_FAILURE_LIMIT` refusals — permanently, for the whole match.
+  //
+  // Measured on the shipped level before this test existed: the spine's detour
+  // around the grove at (48,-30) paved (46,-28), which sat on the enemy's *only*
+  // gold_mine slot, and three of its six house slots stood on live trees. So the
+  // AI could never mine gold and could never reach the four houses its own
+  // Settlement plan asks for — with nothing anywhere turning red.
+  const sites = shippedTradeSiteBalance();
+  const { buildings, resources, level } = shippedRtsLevel();
+  const roadBalance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const centreBlocker = (point: { x: number; z: number }) => ({
+    min: [point.x - 3.5, 0, point.z - 3.5] as [number, number, number],
+    max: [point.x + 3.5, 3, point.z + 3.5] as [number, number, number],
+  });
+  const forests = new ForestSystem(level.trees);
+  const nodes = new ResourceNodeSystem(resources, level.resourceNodes);
+  const tradeSites = new TradeSiteSystem(sites, level.tradeSites);
+  const standingWorld = [
+    ...level.navigationBlockers,
+    ...forests.liveTreeBlockers(),
+    ...nodes.liveNodeBlockers(),
+    ...tradeSites.dockBlockers(),
+    centreBlocker(level.playerStart),
+    centreBlocker(level.enemyStart),
+  ];
+
+  const roads = new RoadGraph(roadBalance);
+  const spine = level.routes.get("rts.route:enemy:base:0") ?? assert.fail("the level authors an enemy base spine");
+  for (let leg = 0; leg < spine.length - 1; leg += 1) {
+    const plan = roads.plan(spine[leg]!, spine[leg + 1]!, standingWorld) ?? assert.fail(`spine leg ${leg} is unroutable`);
+    roads.commit(plan);
+  }
+
+  const slots = [
+    ...level.buildAnchors
+      .filter((anchor) => anchor.owner === "enemy")
+      .map((anchor) => ({ buildingId: anchor.buildingId, x: anchor.x, z: anchor.z, where: "base" })),
+    ...level.expansions.flatMap((region) => [region.outpost, region.depot, region.production]
+      .map((member) => ({ buildingId: member.buildingId, x: member.x, z: member.z, where: region.id }))),
+  ];
+
+  // Every slot is judged with all the *others* standing, not on an empty map:
+  // the AI's Town plan wants six houses, two farms and two lumber camps at once,
+  // so on this map "can they coexist" is the question, not a stricter version of
+  // it. The road is in the same set for the same reason it is the point of this
+  // test — it is there before the buildings are.
+  for (const slot of slots) {
+    const stats = buildings[slot.buildingId] ?? assert.fail(`unknown anchor building ${slot.buildingId}`);
+    assert.deepEqual(
+      snapToPlacementGrid(slot.x, slot.z),
+      { x: slot.x, z: slot.z },
+      `${slot.where} ${slot.buildingId} @(${slot.x},${slot.z}) is off the placement grid`,
+    );
+    const others = slots
+      .filter((other) => other !== slot)
+      .map((other) => buildingFootprintBlocker(buildings[other.buildingId]!, other.x, other.z));
+    const result = validateBuildingPlacement(stats, slot.x, slot.z, [
+      ...roads.occupancyBlockers(),
+      ...standingWorld,
+      ...others,
+    ]);
+    assert.ok(
+      result.valid,
+      `${slot.where} ${slot.buildingId} @(${slot.x},${slot.z}) is refused once the authored spine is paved (${result.valid ? "" : result.reason})`,
+    );
+  }
+
+  // ...and enough of them survive to satisfy the plan the AI actually runs. A
+  // slot lost to a road is only half the failure; the half that is felt is a
+  // building target the AI can never meet, which shows up as a permanently
+  // damped development score with no visible cause.
+  for (const [buildingId, target] of Object.entries(AI_TEST_BALANCE.economy.buildingTargets.town)) {
+    const authored = slots.filter((slot) => slot.buildingId === buildingId).length;
+    assert.ok(
+      authored >= target,
+      `the Town plan wants ${target}x ${buildingId} but the level authors ${authored} placeable slot(s)`,
+    );
+  }
+
+  // A producer with no road is a producer with no income (Faz 6), so the two
+  // extractors and the two staple producers have to be *reachable*, not merely
+  // placeable. The centre is in this list because everything else hangs off it:
+  // its 8x8 balance footprint is what `roadCellTouchingFootprint` measures, not
+  // the 7-unit nav blocker the mesh uses.
+  const centreFootprint = buildings["command_center"]?.footprint ?? assert.fail("the centre has no balance row");
+  assert.ok(
+    roadCellTouchingFootprint(roads, level.enemyStart.x, level.enemyStart.z, centreFootprint.width, centreFootprint.depth),
+    "the enemy centre has no road cell touching it, so its depots can never join the main network",
+  );
+  for (const buildingId of ["depot", "farm", "lumber_camp", "quarry", "gold_mine"]) {
+    const anchor = slots.find((slot) => slot.where === "base" && slot.buildingId === buildingId)
+      ?? assert.fail(`the level authors no enemy ${buildingId}`);
+    const stats = buildings[buildingId]!;
+    assert.ok(
+      roadCellTouchingFootprint(roads, anchor.x, anchor.z, stats.footprint.width, stats.footprint.depth),
+      `the authored spine never touches the enemy ${buildingId} @(${anchor.x},${anchor.z})`,
+    );
+  }
+});
+
 check("Faz M4: the AI trades toward the age it is short for, and stops once it can pay", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,

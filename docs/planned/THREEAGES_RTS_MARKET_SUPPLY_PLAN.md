@@ -1048,22 +1048,55 @@ Odun tarafi da ayni yonu veriyor: kuyrugun 164 odunu, AI'nin acilis
 `lumber_camp`'inin (§3.6: 120 odun/dk) **~82 saniyesi**, ve omurga baglandiktan
 **sonra** odeniyor.
 
-#### S4'te olculen iki sey - ikisi de S4'un urunu degil
+#### S4'te bulunan gercek hata - ve once yanlis raporlanan bir bulgu
 
-1. **Dusman merkezine degen yol hucresi yok.** `(38,-38)`'deki merkezin 7
-   birimlik footprint'i 2 birimlik yol izgarasina oturmuyor; en yakin yasal
-   hucre `(38,-32)`, footprint'e 1.5 birim - `roadCellTouchingFootprint`'in 1
-   birimlik toleransinin disinda. Uretim bu yuzden merkeze `autoConnect`
-   yaricapindaki **yerel teslimle** giriyor (`ProductionLogisticsSystem`'in
-   `localEndpoint` yolu), ve pazar mahrecinin merkeze degil **omurgaya**
-   asilmasinin sebebi de budur. S4 buna dokunmadi.
-2. **Omurga zaten bir bina yuvasinin ustunden geciyor.** `(48,-30)`'daki dis
-   yatagin etrafindan dolanirken omurga `(46,-28)`'i dosuyor, ve o hucre
-   authorlanmis `gold_mine` yuvasiyla (`(44,-26)`, 6x6) cakisiyor - yol insa
-   alanini rezerve ettigi icin o yuva, yol once dosenirse reddedilir. **S4
-   oncesinde de boyleydi** (degisiklikler oncesi omurga tek basina dosenip
-   olculdu); S4 kuyrugu bu kumeye hicbir yeni cakisma eklemiyor. Ayri bir is
-   olarak durmali.
+**Once geri cekilen bulgu.** S4 ilk raporunda "dusman merkezine degen yol hucresi
+yok" yaziyordu. **Yanlisti, olcum hatasiydi**: gecici harness merkezin
+footprint'ine 7 (nav blocker'in `COMMAND_CENTER_FOOTPRINT` sabiti) veriyordu, ama
+`roadCellTouchingFootprint`'in okudugu sey `CommandCenter.stats.footprint`, yani
+`buildings.json`'daki **8x8** satir. Sekizle hesap tutuyor: `(38,-32)` hucresi
+`|Δz| = 6`, `6 - 4 - 1 = 1` ile tam toleransta - merkez omurganin **ilk
+bacagindan** itibaren yola degiyor. Merkez yerinde kaliyor, degistirilecek bir
+sey yok. (Ders: iki footprint var - blocker'in 7'si, balans satirinin 8'i - ve
+hangi sorunun hangisini okudugu onemli.)
+
+**Gercek hata ise daha buyuktu ve dordu birden yuvaydi.** Omurga `(48,-30)`'daki
+agacin (`enemy-wood-1`) etrafindan dolanmak zorunda - `(50,-30)`'un tek serbest
+komsusu `(50,-28)`, cunku `(48,-30)`, `(50,-32)` ve `(52,-30)` uc ayri agac. Bu
+dolanma `(46,-28)`'i dosuyor ve o hucre dusmanin **tek** `gold_mine` yuvasiyla
+(`(44,-26)`) cakisiyordu. Ayni taramada uc `house` yuvasi da (`(50,-44)`,
+`(54,-44)`, `(50,-48)`) **canli agaclarin** ustunde cikti.
+
+Bunlar sessiz degil, kalici kayiplar: yol insa alanini rezerve ediyor,
+`AiBuildManager` reddedilen bir yuvayi `AI_ANCHOR_FAILURE_LIMIT` (3) denemeden
+sonra **mac boyunca** kara listeye aliyor, ve ne omurganin ne de yuvalarin
+birbirine karsi test edildigi bir yer vardi. Sonuc: AI **hic altin madeni
+kuramiyordu** ve alti ev yuvasindan ucu oluydu - kendi Settlement planinin
+istedigi **dort** eve bile ulasamiyordu (Town plani alti istiyor).
+
+**Duzeltildi - dort marker tasindi** (hepsi olculdu; yol, agac, yatak, rihtim,
+diger yuvalar ve kontrol yaricapi karsisinda dogrulandi):
+
+| Yuva | Once | Sonra | Neden engelliydi |
+| --- | --- | --- | --- |
+| `gold_mine` | `(44,-26)` | **`(44,-24)`** | yol hucresi `(46,-28)` |
+| `house` | `(50,-44)` | **`(54,-48)`** | `enemy-wood-7/8` agaclari |
+| `house` | `(54,-44)` | **`(58,-46)`** | `enemy-wood-8` agaclari |
+| `house` | `(50,-48)` | **`(50,-50)`** | `enemy-wood-7-dense` |
+
+`gold_mine`'in yeni yeri hala `enemy_safe_gold` yatagini (`(42,-20)`) 4.5 birimle
+`gatherRadius: 8` icinde tutuyor, ve yol temasi `(46,-28)`'den geliyor - yani
+madenin **geliri de yolu da** duruyor. Toplam yer degistirme 12.1 birim.
+
+**Boslugun kendisi de kapatildi.** §40'in mevcut testi **kod blockout'unun**
+yuvalarini **bos zeminde** yarguluyor; shipped Level'inkilere ve **yola** karsi
+hicbir sey bakmiyordu. Yeni test
+(`Faz S4: every authored enemy slot survives the road the AI paves past it`)
+omurgayi dosuyor ve sonra her dusman yuvasini - us ve genisleme, hepsi ayni anda
+ayakta - reddedilmedigine karsi olcuyor; ustune AI'nin Town planinin istedigi
+sayida yuva kaldigini ve merkez/depo/tarla/oduncu/tas/altin'in yola **degdigini**
+pinliyor. Iki kasitli geri alma ile kirmizi gorulup geri alindi (yol kaynakli
+`gold_mine @(44,-26)` ve agac kaynakli `house @(50,-48)`).
 
 #### Testler (§8'e ek olarak bu fazda pinlenenler)
 
@@ -1074,14 +1107,18 @@ Odun tarafi da ayni yonu veriyor: kuyrugun 164 odunu, AI'nin acilis
 - `Faz S4: the AI's own supply lane fills its shelf, and its trade rule spends
   what arrives` - `owner: "enemy"` ile ucu ucuna: bos rafta `saving`, kervanlar
   kostuktan sonra rafta bir lot, ve `AiTradeManager` o lotu **satin aliyor**.
+- `Faz S4: every authored enemy slot survives the road the AI paves past it` -
+  yukaridaki bosluk testi; bu plandan dogdu ama kapsami plandan genis, cunku
+  yakaladigi hata da oyleydi.
 
-Kirmiziya donebilirlik yapildi: uc kasitli mutasyon, ucu de yakalandi - kuyrugun
-kaldirilmasi ("the enemy Market slot has no road cell touching it"), kuyrugun
-basa alinmasi ("the depot must be on the road before the first supply spur"), ve
-`out-of-stock`'un `no-market` diye okunmasi ("before the first delivery the AI
-waits rather than jams"). Her biri geri alindi.
+Kirmiziya donebilirlik yapildi: bes kasitli mutasyon, besi de yakalandi -
+kuyrugun kaldirilmasi ("the enemy Market slot has no road cell touching it"),
+kuyrugun basa alinmasi ("the depot must be on the road before the first supply
+spur"), `out-of-stock`'un `no-market` diye okunmasi ("before the first delivery
+the AI waits rather than jams"), ve iki marker'in eski yerine geri konmasi
+(`gold_mine @(44,-26)`, `house @(50,-48)`). Her biri geri alindi.
 
-Kabul: `tsc --noEmit`, `test:engine` (**1309 check**), `build:verify`,
+Kabul: `tsc --noEmit`, `test:engine` (**1310 check**), `build:verify`,
 `check:assets` - **dordu de yesil**.
 
 ### Faz S5 - Saldiri ve kopma
