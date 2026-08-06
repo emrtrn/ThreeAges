@@ -289,6 +289,9 @@ import {
   buildRtsFrameCapture,
   formatRtsFrameCaptureText,
 } from "../src/game/rts/debug/rtsFrameCapture";
+import { buildRtsGpuSweep, rtsGpuSweepTableView } from "../src/game/rts/debug/rtsGpuSweep";
+import { RtsGpuSweepRunner, median } from "../src/game/rts/debug/rtsGpuSweepRunner";
+import { GpuFrameTimer, type GpuTimerContext } from "@engine/perf/gpuTimer";
 import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
 import { updateStructureDestruction } from "../src/game/rts/structures/structureDestruction";
 import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
@@ -580,6 +583,7 @@ import {
   resampleLandscapeData,
 } from "../engine/scene/landscape";
 import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/landscape";
+import { createLandscapeObject, disposeLandscapeObject } from "../engine/render-three/landscape";
 import { buildRiverWaterRibbon } from "../engine/render-three/riverWater";
 import { PLANAR_REFLECTION_EXCLUDED_LAYER, planarReflectionLayerMask } from "../engine/render-three/planarReflectionSource";
 import { resolveRiverWater, riverWaterReflectionGroupKey } from "../engine/scene/riverWater";
@@ -1349,6 +1353,7 @@ import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 
 let checks = 0;
 let skipped = 0;
+let slowSkipped = 0;
 
 /**
  * Iteration filter. `npm run test:engine -- --filter market` sets
@@ -1369,6 +1374,21 @@ const matchesFilter = (label: string): boolean =>
 const timingEnabled = process.env.ENGINE_TESTS_TIMING === "1";
 const timingSuffix = (startedAt: number): string =>
   timingEnabled ? ` (${(performance.now() - startedAt).toFixed(0)}ms)` : "";
+
+/**
+ * Slow tier. Nine headless accelerated-match integration checks account for ~97%
+ * of the suite's wall time (the tenth-slowest check is 353ms); they are declared
+ * with `checkSlow` and skipped in the bare `npm run test:engine` run so the
+ * everyday gate costs seconds instead of minutes.
+ *
+ * They run whenever the suite is asked for them: `--slow` (which `build:verify`
+ * and CI pass, so nothing reaches `main` unchecked) or any `--filter` that
+ * matches their label — that is what makes the "touched AI code, so run
+ * `--filter 'Faz 8'`" rule in CLAUDE.md work.
+ *
+ * Membership is decided by cost alone, never by importance: >1s belongs here.
+ */
+const slowEnabled = process.env.ENGINE_TESTS_SLOW === "1" || testFilters.length > 0;
 
 /**
  * Faz 7 unit fixtures. Deliberately not the shipped `balance/units.json`: these
@@ -1470,6 +1490,14 @@ const check = (label: string, fn: () => void): void => {
   fn();
   checks += 1;
   console.log(`  ok: ${label}${timingSuffix(startedAt)}`);
+};
+/** A `check` that costs seconds — see the slow-tier note above. */
+const checkSlow = (label: string, fn: () => void): void => {
+  if (!slowEnabled) {
+    slowSkipped += 1;
+    return;
+  }
+  check(label, fn);
 };
 const checkAsync = async (label: string, fn: () => Promise<void>): Promise<void> => {
   if (!matchesFilter(label)) {
@@ -21189,6 +21217,68 @@ check("landscape sidecar drops any legacy heightmap import reference on save", (
   };
   const validated = validateLandscapeData(legacy) as Record<string, unknown>;
   assert.equal("heightmapImport" in validated, false);
+});
+
+check("landscape PBR splat blends layer normal/ORM maps with scalar fallbacks", () => {
+  const data = createFlatLandscapeData("small");
+  const albedo = new Texture();
+  const normal = new Texture();
+  const orm = new Texture();
+  const object = createLandscapeObject({
+    id: "pbr-fixture",
+    name: "PBR fixture",
+    hidden: false,
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    data,
+    layerTextures: data.layers.map((layer, index) => ({
+      id: layer.id,
+      texture: index === 0 ? albedo : null,
+      normalTexture: index === 0 ? normal : null,
+      ormTexture: index === 0 ? orm : null,
+      color: "#ffffff",
+      tiling: { x: 1, y: 1 },
+      roughness: index === 0 ? 0.42 : 0.9,
+      metalness: index === 0 ? 0.15 : 0,
+      aoIntensity: index === 0 ? 0.65 : 1,
+    })),
+  } as Parameters<typeof createLandscapeObject>[0]);
+  const mesh = object.children[0] as Mesh;
+  const material = mesh.material as MeshStandardMaterial;
+  assert.equal(material.normalMap, normal, "a layer normal enables Three's derivative-based tangent frame");
+  assert.equal(material.normalScale.x, 0, "the stock single-map sample is neutralized before the splat blend");
+
+  const shader = {
+    uniforms: {} as Record<string, { value: unknown }>,
+    vertexShader: "#include <common>\n#include <uv_vertex>",
+    fragmentShader: [
+      "#include <common>",
+      "void main() {",
+      "#include <color_fragment>",
+      "#include <normal_fragment_maps>",
+      "#include <roughnessmap_fragment>",
+      "#include <metalnessmap_fragment>",
+      "#include <aomap_fragment>",
+      "}",
+    ].join("\n"),
+  };
+  material.onBeforeCompile(shader, null!);
+
+  assert.equal(shader.uniforms.uLayerNormal0?.value, normal, "normal map reaches the splat shader");
+  assert.equal(shader.uniforms.uLayerOrm0?.value, orm, "ORM map reaches the splat shader");
+  assert.equal(shader.uniforms.uLayerRoughness0?.value, 0.42, "roughness scalar survives the resolver");
+  assert.equal(shader.uniforms.uLayerMetalness0?.value, 0.15, "metalness scalar survives the resolver");
+  assert.equal(shader.uniforms.uLayerAoIntensity0?.value, 0.65, "AO scalar survives the resolver");
+  assert.ok(shader.fragmentShader.includes("normal = normalize(tbn * forgeNormal)"));
+  assert.ok(shader.fragmentShader.includes("roughnessFactor = clamp"));
+  assert.ok(shader.fragmentShader.includes("metalnessFactor = clamp"));
+  assert.ok(shader.fragmentShader.includes("reflectedLight.indirectDiffuse *= forgeAo"));
+  assert.ok(shader.fragmentShader.includes("uLayerHasOrm1 > 0.5"), "missing ORM uses the safe vec4(1) fallback");
+
+  disposeLandscapeObject(object);
+  albedo.dispose();
+  normal.dispose();
+  orm.dispose();
 });
 
 check("landscape spline data is allowlisted and rejects broken point links", () => {
@@ -44670,6 +44760,7 @@ check("Debug panel: the perf readout reports the frame, what it draws and what e
     frame: { averageMs: 20, p95Ms: 31.5, sampleCount: 240, over33ms: 3, over50ms: 1, over100ms: 0 },
     render: { drawCalls: 1420, triangles: 2_480_000 },
     memory: { geometries: 830, textures: 96, programs: 41 },
+    gpu: { lastMs: 11.5, averageMs: 10.25, maxMs: 19, samples: 60 },
     shadows: [
       { label: "aktörler", meshes: 210, triangles: 540_000 },
       { label: "harita", meshes: 88, triangles: 9_120 },
@@ -44689,6 +44780,19 @@ check("Debug panel: the perf readout reports the frame, what it draws and what e
   // so the headline number and the millisecond it came from can never disagree.
   assert.match(text, /^50 fps · kare 20\.0 ms · p95 31\.5 ms$/m);
   assert.match(text, /takılma >33ms 3 · >50ms 1 · >100ms 0/);
+  // The GPU line sits right under the frame line because the two together are
+  // what says whether to optimise draw calls or decisions.
+  assert.match(text, /gpu 11\.50 ms · ort 10\.25 · tepe 19\.00/);
+  // A browser with no timer query must say so rather than report zeros: "the
+  // GPU costs nothing" and "this browser will not say" are opposite findings.
+  assert.match(
+    formatRtsPerfDebug({ ...snapshot, gpu: null }).join("\n"),
+    /gpu — bu tarayıcıda zamanlayıcı yok/,
+  );
+  assert.match(
+    formatRtsPerfDebug({ ...snapshot, gpu: { lastMs: 0, averageMs: 0, maxMs: 0, samples: 0 } }).join("\n"),
+    /gpu ölçülüyor…/,
+  );
   // Grouped and compacted: an ungrouped seven-digit triangle count is the number
   // nobody reads, which is how a doubled draw cost goes unnoticed for a week.
   assert.match(text, /çizim 1,420 çağrı · 2\.48M üçgen/);
@@ -44801,7 +44905,212 @@ check("Frame capture: every millisecond of the captured frame is accounted for, 
   assert.deepEqual(empty.rows, []);
 });
 
-check("AI controller runs a headless accelerated match, decides on cadence, and commands its army", () => {
+/** A scriptable stand-in for the timer-query slice of WebGL2. */
+function fakeGpuTimerContext(options: {
+  supported?: boolean;
+  /** Nanosecond result per query, in the order queries are ended. */
+  results?: number[];
+  /** Resolve results only after this many polls each. */
+  latency?: number;
+} = {}) {
+  const results = [...(options.results ?? [])];
+  const state = {
+    disjoint: false,
+    created: 0,
+    deleted: 0,
+    active: false,
+    beginCount: 0,
+    /** query -> pending polls before it resolves, then its value. */
+    queued: new Map<object, { waits: number; value: number }>(),
+  };
+  const gl: GpuTimerContext = {
+    createQuery: () => {
+      state.created += 1;
+      return {} as WebGLQuery;
+    },
+    deleteQuery: () => { state.deleted += 1; },
+    beginQuery: (_target, query) => {
+      assert.equal(state.active, false, "TIME_ELAPSED queries must never nest");
+      state.active = true;
+      state.beginCount += 1;
+      state.queued.set(query, { waits: options.latency ?? 0, value: results.shift() ?? 0 });
+    },
+    endQuery: () => { state.active = false; },
+    getQueryParameter: (query, pname) => {
+      const entry = state.queued.get(query);
+      if (!entry) return pname === 0x8867 ? true : 0;
+      if (pname === 0x8867) {
+        if (entry.waits > 0) { entry.waits -= 1; return false; }
+        return true;
+      }
+      return entry.value;
+    },
+    getParameter: () => state.disjoint,
+    getExtension: (name) =>
+      options.supported === false || name !== "EXT_disjoint_timer_query_webgl2"
+        ? null
+        : { TIME_ELAPSED_EXT: 0x88bf, GPU_DISJOINT_EXT: 0x8fbb },
+    QUERY_RESULT_AVAILABLE: 0x8867,
+    QUERY_RESULT: 0x8866,
+  };
+  return { gl, state };
+}
+
+check("GPU timer: tags late results, drops a disjoint batch, and returns every query on dispose", () => {
+  // A browser without the extension must yield no timer at all — a timer that
+  // reported zeros would read as "the GPU costs nothing".
+  assert.equal(GpuFrameTimer.create(fakeGpuTimerContext({ supported: false }).gl), null);
+  assert.equal(GpuFrameTimer.create(null), null);
+
+  const { gl, state } = fakeGpuTimerContext({
+    results: [4_000_000, 6_000_000, 8_000_000],
+    latency: 1,
+  });
+  const timer = GpuFrameTimer.create(gl, 4) ?? assert.fail("the fake context supports timing");
+
+  // Frame 1: begun and ended, but the GPU has not finished with it yet — the
+  // whole reason samples carry a tag rather than being read back in place.
+  assert.equal(timer.begin(0), true);
+  timer.end();
+  assert.deepEqual(timer.poll(), []);
+  assert.equal(timer.stats().samples, 0, "nothing is averaged before a result exists");
+
+  // Frame 2 goes out while frame 1 is still in flight; both come back below.
+  timer.begin(7);
+  timer.end();
+  const first = timer.poll();
+  assert.deepEqual(first, [{ tag: 0, ms: 4 }], "nanoseconds are reported as milliseconds");
+  const second = timer.poll();
+  assert.deepEqual(second, [{ tag: 7, ms: 6 }], "a late result still knows which frame it measured");
+
+  // Only untagged frames feed the rolling readout: a sweep deliberately draws
+  // abnormal frames, and those must not drag the continuous number around.
+  assert.equal(timer.stats().samples, 1);
+  assert.equal(timer.stats().averageMs, 4);
+
+  // A disjoint event means the results in flight were measured across a GPU
+  // state change and are not durations at all.
+  timer.begin(0);
+  timer.end();
+  state.disjoint = true;
+  assert.deepEqual(timer.poll(), [], "a disjoint batch is discarded, not reported");
+  assert.equal(timer.disjointCount, 1);
+  state.disjoint = false;
+
+  // Queries are pooled rather than allocated per frame, and every one is handed
+  // back — a leaked query per frame is a real leak on a long debug session.
+  const createdBeforeReuse = state.created;
+  for (let index = 0; index < 6; index += 1) {
+    timer.begin(0);
+    timer.end();
+    timer.poll();
+  }
+  assert.ok(state.created <= Math.max(createdBeforeReuse, 4), "the pool is bounded and reused");
+  timer.dispose();
+  assert.equal(state.deleted, state.created, "every query created is deleted");
+});
+
+check("GPU sweep: rows are savings against the baseline, sorted, with noise called noise", () => {
+  const sweep = buildRtsGpuSweep({
+    baselineMs: 10,
+    baselineSamples: 5,
+    steps: [
+      { id: "gölge haritası", gpuMs: 6, samples: 5 },
+      { id: "birimler", gpuMs: 8.5, samples: 5 },
+      { id: "dünya arayüzü", gpuMs: 9.97, samples: 5 },
+      { id: "arazi/harita", gpuMs: 10.04, samples: 3 },
+    ],
+    disjointEvents: 1,
+    speed: 1,
+    matchSeconds: 42,
+    drawCalls: 900,
+    triangles: 1_500_000,
+  });
+
+  // A row is what turning the content off gives back, biggest win first.
+  assert.deepEqual(sweep.rows.map((row) => row.label), [
+    "gölge haritası",
+    "birimler",
+    "dünya arayüzü",
+    "arazi/harita",
+  ]);
+  assert.equal(sweep.rows[0]?.savingMs, 4);
+  assert.equal(sweep.rows[0]?.share, 0.4);
+
+  // Differences under the timer's quantisation are not findings. Reporting
+  // "0.03 ms" as though it were measured is how a table stops being trusted.
+  assert.equal(sweep.rows[2]?.negligible, true, "0.03 ms is inside the noise floor");
+  assert.equal(sweep.rows[3]?.negligible, true, "and so is a slightly negative one");
+  assert.equal(sweep.rows[1]?.negligible, false);
+
+  // The rows must NOT add up — the inverse of the CPU table's rule — and the
+  // view has to say so, or the percentages get read as a budget.
+  const view = rtsGpuSweepTableView(sweep);
+  const savings = sweep.rows.reduce((total, row) => total + row.savingMs, 0);
+  assert.notEqual(Number(savings.toFixed(2)), Number(sweep.baselineMs.toFixed(2)));
+  assert.ok(
+    view.notes.some((note) => note.includes("toplanmaz")),
+    "the table states that its rows do not sum",
+  );
+  assert.ok(view.notes.some((note) => note.includes("vsync")), "and that gpu + cpu is not the frame");
+  assert.ok(
+    view.notes.some((note) => note.includes("geçersiz")),
+    "a sweep interrupted by a disjoint event admits it",
+  );
+  assert.equal(view.rows[2]?.cells[2], "~0", "a noise-floor row shows no false precision");
+  assert.equal(view.title, "GPU dökümü (tarama)");
+});
+
+check("GPU sweep runner: one step at a time, medians, and it cannot hang the match", () => {
+  const runner = new RtsGpuSweepRunner([{ id: "gölgeler" }, { id: "birimler" }]);
+  const context = { speed: 1, matchSeconds: 0, drawCalls: 0, triangles: 0 };
+
+  // Step 0 is the untouched baseline, and its tag is never 0 — that one belongs
+  // to ordinary frames, which must keep feeding the continuous readout.
+  assert.deepEqual(runner.currentStep(), { index: 0, id: "taban", tag: 1 });
+
+  const feed = (tag: number, values: readonly number[]): void => {
+    for (const value of values) {
+      runner.noteFrame();
+      runner.acceptSample(tag, value);
+      runner.advance(context);
+    }
+  };
+  // A warm-up spike in every configuration: the median must ignore it, which an
+  // average could not — a 40 ms first frame would invent a difference.
+  feed(1, [40, 10, 10, 10, 10]);
+  assert.equal(runner.currentStep()?.id, "gölgeler", "a settled step advances");
+
+  feed(2, [30, 6, 6, 6, 6]);
+  feed(3, [28, 9, 9, 9, 9]);
+  const outcome = runner.advance(context);
+  assert.equal(outcome.kind, "done");
+  if (outcome.kind !== "done") return;
+  assert.equal(outcome.sweep.baselineMs, 10);
+  assert.equal(outcome.sweep.rows[0]?.label, "gölgeler");
+  assert.equal(outcome.sweep.rows[0]?.savingMs, 4);
+  assert.equal(runner.currentStep(), null, "a finished sweep asks for no more frames");
+
+  // A driver that never resolves a query must not leave the match paused behind
+  // a table that never appears.
+  const stalled = new RtsGpuSweepRunner([{ id: "gölgeler" }]);
+  for (let frame = 0; frame < 200; frame += 1) {
+    stalled.noteFrame();
+    stalled.advance(context);
+  }
+  assert.equal(stalled.advance(context).kind, "failed", "an unmeasurable sweep gives up");
+
+  // Repeated invalidation gives up rather than re-measuring forever.
+  const disjointed = new RtsGpuSweepRunner([{ id: "gölgeler" }]);
+  for (let attempt = 0; attempt < 5; attempt += 1) disjointed.noteDisjoint();
+  assert.equal(disjointed.advance(context).kind, "failed");
+
+  assert.equal(median([]), 0);
+  assert.equal(median([3, 1, 2]), 2);
+  assert.equal(median([4, 1, 2, 3]), 2.5);
+});
+
+checkSlow("AI controller runs a headless accelerated match, decides on cadence, and commands its army", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
@@ -45153,7 +45462,7 @@ check("a road can reach a command centre, so a connected outpost earns its full 
   assert.equal(roadCellTouchingFootprint(isolated, 0, 0, 6, 6), null, "a tile a clear cell away does not touch");
 });
 
-check("AI expansion runs the §47 recipe end to end and finally earns income", () => {
+checkSlow("AI expansion runs the §47 recipe end to end and finally earns income", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
@@ -45219,7 +45528,7 @@ check("AI expansion runs the §47 recipe end to end and finally earns income", (
 
 // --- Faz 8 §48–§49: AI-2, the core-match opponent ---
 
-check("Kasaba güvenilirlik: standart gameplay_proof açılışı saldırısız maçta Kasaba'ya ulaşır", () => {
+checkSlow("Kasaba güvenilirlik: standart gameplay_proof açılışı saldırısız maçta Kasaba'ya ulaşır", () => {
   const preset = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
@@ -45260,7 +45569,7 @@ check("Kasaba güvenilirlik: standart gameplay_proof açılışı saldırısız 
   assert.equal(board.disconnectedProducers, 0, "the Town budget is not stranded in local buffers");
 });
 
-check("Faz 8 §49: the AI builds a four-resource economy and reaches the Kasaba age", () => {
+checkSlow("Faz 8 §49: the AI builds a four-resource economy and reaches the Kasaba age", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
@@ -45315,7 +45624,7 @@ check("Faz 8 §49: the AI builds a four-resource economy and reaches the Kasaba 
   assert.equal(world.ai.economyMultiplier, 1, "§72: normal profile grants no hidden bonus");
 });
 
-check("Faz 8 §55: the army leaves the economy population headroom", () => {
+checkSlow("Faz 8 §55: the army leaves the economy population headroom", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
@@ -45363,7 +45672,7 @@ check("Faz 8 §55: the army leaves the economy population headroom", () => {
   assert.equal(board.armyComposition.worker, 0, "workers are never part of the army composition");
 });
 
-check("Faz 8 §53: the AI researches Barracks II and fields a mixed army", () => {
+checkSlow("Faz 8 §53: the AI researches Barracks II and fields a mixed army", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
@@ -45410,7 +45719,7 @@ check("Faz 8 §53: the AI researches Barracks II and fields a mixed army", () =>
   // the map's resource layout, not on anything in the AI.
 });
 
-check("Faz 8 §27: an AI whose workers are wiped out rebuilds its economy", () => {
+checkSlow("Faz 8 §27: an AI whose workers are wiped out rebuilds its economy", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
@@ -45514,7 +45823,7 @@ check("Faz 8 §45/§49: the AI runs at most two expansion plans, whatever the ma
   territory.dispose();
 });
 
-check("Faz 8 §49: a finished region rebuilds its own outpost and depot, and repairs its road", () => {
+checkSlow("Faz 8 §49: a finished region rebuilds its own outpost and depot, and repairs its road", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
@@ -45979,7 +46288,7 @@ check("V2 Faz 7: a kingdom fed by a stocked pen is not diagnosed as starving, an
   assert.equal(nextBuilding(empty, AI_TEST_BALANCE), "farm");
 });
 
-check("V2 Faz 7: the AI opens a pasture on the contested cattle and lives off the pen", () => {
+checkSlow("V2 Faz 7: the AI opens a pasture on the contested cattle and lives off the pen", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
@@ -50263,7 +50572,12 @@ check("River Water ribbon follows spline width with arc-length UVs and flow attr
   assert.ok(ribbon.indices.length > 0);
 });
 
-if (testFilters.length === 0) {
+if (testFilters.length === 0 && slowSkipped > 0) {
+  console.log(
+    `[engine-tests] FAST: ${checks} checks passed, ${slowSkipped} slow checks skipped.` +
+      ` Run with --slow for the full suite (build:verify and CI always do).`,
+  );
+} else if (testFilters.length === 0) {
   console.log(`[engine-tests] ${checks} checks passed`);
 } else if (checks === 0) {
   console.error(

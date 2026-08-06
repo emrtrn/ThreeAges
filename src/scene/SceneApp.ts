@@ -1705,7 +1705,11 @@ export class SceneApp {
       else material.dispose();
       this.landscapeBrushCursor = null;
     }
-    for (const layer of this.landscapeLayerMaterialCache.values()) layer.texture?.dispose();
+    for (const layer of this.landscapeLayerMaterialCache.values()) {
+      layer.texture?.dispose();
+      layer.normalTexture?.dispose();
+      layer.ormTexture?.dispose();
+    }
     this.landscapeLayerMaterialCache.clear();
     for (const water of this.riverWaterObjects) {
       this.scene.remove(water);
@@ -6154,8 +6158,13 @@ export class SceneApp {
       return {
         id: layer.id,
         texture: cached?.texture ?? null,
+        normalTexture: cached?.normalTexture ?? null,
+        ormTexture: cached?.ormTexture ?? null,
         color: cached?.baseColor ?? presetColor,
         tiling: { x: base * mat.x, y: base * mat.y },
+        roughness: cached?.roughness ?? 1,
+        metalness: cached?.metalness ?? 0,
+        aoIntensity: cached?.aoIntensity ?? 1,
       };
     });
   }
@@ -12666,6 +12675,8 @@ export class SceneApp {
     const cachedLayer = this.landscapeLayerMaterialCache.get(materialId);
     if (cachedLayer) {
       cachedLayer.texture?.dispose();
+      cachedLayer.normalTexture?.dispose();
+      cachedLayer.ormTexture?.dispose();
       this.landscapeLayerMaterialCache.delete(materialId);
       const landscapes = this.layout.landscapes ?? [];
       for (let index = 0; index < landscapes.length; index += 1) {

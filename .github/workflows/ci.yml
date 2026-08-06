@@ -35,8 +35,10 @@ jobs:
         run: npm ci
 
       # build:verify = verify:imports (source-level module-boundary scan) +
-      # build (tsc --noEmit + vite build) + test:engine + verify:dist --strict.
-      # Single gate, matches the local pre-`[x]` ritual.
+      # build (tsc --noEmit + vite build) + test:engine:slow + verify:dist
+      # --strict. Single gate, matches the local pre-`[x]` ritual. The `:slow`
+      # variant is deliberate: the bare `test:engine` skips the nine
+      # headless-match AI checks for local speed, and CI must not.
       - name: Verify (import graph, type-check, engine tests, build, strict dist scan)
         run: npm run build:verify
 

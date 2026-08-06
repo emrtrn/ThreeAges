@@ -138,8 +138,15 @@ import type { RtsGraphicsQuality } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 import type { RtsPerfCost } from "./debug/formatRtsPerfDebug";
 import { RtsSimulationWitness } from "./debug/rtsSimulationWitness";
-import { buildRtsFrameCapture, type RtsFrameRegionSample } from "./debug/rtsFrameCapture";
-import { RtsFrameCaptureModal } from "./debug/rtsFrameCaptureModal";
+import {
+  buildRtsFrameCapture,
+  rtsFrameCaptureTableView,
+  type RtsFrameRegionSample,
+} from "./debug/rtsFrameCapture";
+import { RtsDebugTableModal } from "./debug/rtsDebugTableModal";
+import { rtsGpuSweepTableView, rtsGpuSweepUnavailableView } from "./debug/rtsGpuSweep";
+import { RtsGpuSweepRunner } from "./debug/rtsGpuSweepRunner";
+import { GpuFrameTimer } from "@engine/perf/gpuTimer";
 import {
   PlacedStructureSystem,
   structureDamageStage,
@@ -572,13 +579,30 @@ export class RtsApp {
   private perfCaptureArmed = false;
   /** Simulation sub-steps the captured frame ran — 8X folds eight into one. */
   private perfCaptureSteps = 0;
-  private readonly frameCaptureModal: RtsFrameCaptureModal | null;
+  private readonly debugTableModal: RtsDebugTableModal | null;
   /**
    * Whether the capture is the one holding the match. Closing must only resume a
    * match *it* paused — otherwise opening a capture during the player's own
    * Escape pause would silently un-pause the game on close.
    */
   private frameCaptureOwnsPause = false;
+  /**
+   * GPU-side frame timing. Null when the debug route is off *or* when the
+   * browser has no timer-query extension — the sweep says so rather than
+   * reporting a table of zeros.
+   */
+  private readonly gpuTimer: GpuFrameTimer | null;
+  /** The running GPU sweep, or null when no sweep is in progress. */
+  private gpuSweep: RtsGpuSweepRunner | null = null;
+  /**
+   * Undoes the sweep step currently applied. Held only between the toggle and
+   * the render on the same frame: the presentation pass rewrites some of the
+   * visibility this touches every frame, so a step that persisted would be
+   * overwritten by the next frame and leak on an interrupted sweep.
+   */
+  private gpuSweepRestore: (() => void) | null = null;
+  /** The configurations of the running sweep; empty when none is running. */
+  private gpuSweepPlan: readonly { readonly id: string; readonly apply: () => () => void }[] = [];
   /** Authored shadow frusta before the active profile scales their coverage. */
   private readonly shadowCameraExtents = new WeakMap<DirectionalLight, {
     readonly left: number;
@@ -1644,12 +1668,23 @@ export class RtsApp {
       onAbandonMission: () => this.abandonMission(),
     });
     this.debugOverlay = this.options.debug
-      ? new RtsDebugOverlay({ onCaptureFrame: () => { this.perfCaptureArmed = true; } })
+      ? new RtsDebugOverlay({
+        // Ignored mid-sweep: arming a capture would pause the match under the
+        // sweep and leave it measuring frames that are never drawn.
+        onCaptureFrame: () => { if (!this.gpuSweep) this.perfCaptureArmed = true; },
+        onSweepGpu: () => this.startGpuSweep(),
+      })
       : null;
     this.debugWitness = this.options.debug ? new RtsSimulationWitness() : null;
     this.perfProfiler = this.options.debug ? new SubsystemProfiler() : null;
-    this.frameCaptureModal = this.options.debug
-      ? new RtsFrameCaptureModal({ onClose: () => this.closeFrameCapture() })
+    // Debug-only on purpose, which is also why adaptive quality cannot depend on
+    // it: that controller runs in the shipping build, where this timer does not
+    // exist. It classifies from frame time and budget as before.
+    this.gpuTimer = this.options.debug
+      ? GpuFrameTimer.create(this.renderer.getContext() as WebGL2RenderingContext)
+      : null;
+    this.debugTableModal = this.options.debug
+      ? new RtsDebugTableModal({ onClose: () => this.closeDebugTable() })
       : null;
     this.debugSpeedControls = this.debugOverlay
       ? new RtsGameSpeedControls(1, (speed) => this.setSimulationSpeed(speed), { mode: "debug" })
@@ -1849,7 +1884,8 @@ export class RtsApp {
     this.debugSpeedControls?.dispose();
     this.debugOverlay?.dispose();
     this.debugWitness?.dispose();
-    this.frameCaptureModal?.dispose();
+    this.debugTableModal?.dispose();
+    this.gpuTimer?.dispose();
     this.unsubscribeWalletChanges?.();
     this.buildPalette.dispose();
     this.selectionPanel.dispose();
@@ -2201,14 +2237,22 @@ export class RtsApp {
     // Authored Post Process (bloom/SMAA) composits the frame when present; otherwise
     // draw straight through the renderer.
     const renderMark = this.perfMark();
-    if (this.postProcessPipeline) this.postProcessPipeline.render(dt);
+    // A sweep step's content is hidden for exactly this render and restored
+    // immediately after, so nothing downstream — selection, picking, the next
+    // frame's presentation pass — ever sees the doctored scene.
+    const sweepStep = this.applyGpuSweepStep();
+    this.gpuTimer?.begin(sweepStep?.tag ?? 0);
+    if (this.postProcessPipeline && !sweepStep?.bypassPostProcess) this.postProcessPipeline.render(dt);
     else this.renderer.render(this.scene, this.cameraController.camera);
+    this.gpuTimer?.end();
+    this.restoreGpuSweepStep();
     // What the CPU spent issuing the frame, not what the GPU spent drawing it:
-    // WebGL is asynchronous, so this is the submission cost. The draw-call and
-    // triangle counts beside it in the panel are the GPU-side half of the story.
+    // WebGL is asynchronous, so this is the submission cost. The GPU's own time
+    // comes back from the timer query a few frames later.
     this.perfMeasure("çizim", renderMark);
     this.perfMeasure("kare", frameMark);
     this.flushPerfFrame();
+    this.collectGpuSamples();
     this.publishPerformanceSnapshot(dt);
   };
 
@@ -2246,7 +2290,7 @@ export class RtsApp {
   private takeFrameCapture(): void {
     this.perfCaptureArmed = false;
     const profiler = this.perfProfiler;
-    const modal = this.frameCaptureModal;
+    const modal = this.debugTableModal;
     if (!profiler || !modal) return;
     const window = new Map(profiler.snapshot().subsystems.map((timing) => [timing.id, timing]));
     const total = this.perfFrameCosts.get(PERF_TOTAL_REGION) ?? 0;
@@ -2265,7 +2309,7 @@ export class RtsApp {
         ...(PERF_DEBUG_ONLY_REGIONS.has(id) ? { debugOnly: true } : {}),
       });
     }
-    modal.show(buildRtsFrameCapture({
+    modal.show(rtsFrameCaptureTableView(buildRtsFrameCapture({
       totalMs: total,
       averageTotalMs: totalWindow?.averageMs ?? 0,
       maxTotalMs: totalWindow?.maxMs ?? 0,
@@ -2274,18 +2318,173 @@ export class RtsApp {
       speed: this.simulationSpeed,
       windowFrames: totalWindow?.samples ?? 0,
       matchSeconds: this.clock.seconds,
-    }));
+    })));
     // Only now, and only if the match was actually running: a capture taken on
     // the start screen has nothing to hold still.
     this.frameCaptureOwnsPause = this.flow.pause();
   }
 
-  /** Close the capture and hand the match back exactly as it was found. */
-  private closeFrameCapture(): void {
-    this.frameCaptureModal?.hide();
+  /** Close the table and hand the match back exactly as it was found. */
+  private closeDebugTable(): void {
+    this.debugTableModal?.hide();
     if (!this.frameCaptureOwnsPause) return;
     this.frameCaptureOwnsPause = false;
     this.flow.resume();
+  }
+
+  /**
+   * The GPU sweep's configurations, in the order they are measured.
+   *
+   * Each one returns its own undo, so a step can never be restored by guesswork
+   * about what it changed. They are applied around the render call alone (see
+   * {@link applyGpuSweepStep}), which is why hiding a root here is safe even
+   * though the presentation pass rewrites some of that visibility every frame.
+   */
+  private gpuSweepSteps(): readonly { readonly id: string; readonly apply: () => () => void }[] {
+    const hide = (objects: readonly (Object3D | null | undefined)[]) => (): (() => void) => {
+      const hidden = objects.filter((object): object is Object3D => !!object && object.visible);
+      for (const object of hidden) object.visible = false;
+      return () => { for (const object of hidden) object.visible = true; };
+    };
+    const steps: { id: string; apply: () => () => void }[] = [
+      {
+        // Not `shadowMap.enabled`, which forces every affected material to
+        // recompile: the recompile would land inside the very frame being timed
+        // and be reported as the cost of shadows. Freezing the update measures
+        // the thing that actually recurs — re-rendering the shadow map.
+        id: "gölge haritası",
+        apply: () => {
+          const previous = this.renderer.shadowMap.autoUpdate;
+          this.renderer.shadowMap.autoUpdate = false;
+          return () => {
+            this.renderer.shadowMap.autoUpdate = previous;
+            this.renderer.shadowMap.needsUpdate = true;
+          };
+        },
+      },
+      {
+        id: "birimler",
+        apply: hide([this.units.root, this.wildlifeRoot, this.caravanRoot]),
+      },
+      {
+        id: "yapılar",
+        apply: hide([
+          this.centers.root,
+          this.structures.root,
+          this.structureDamageVfx.root,
+          this.tradeSiteView?.object,
+        ]),
+      },
+      {
+        id: "arazi/harita",
+        apply: hide([this.groundGroup, this.authoredWorld?.root]),
+      },
+      {
+        id: "mermiler/efektler",
+        apply: hide([this.projectiles.root, this.firebrands.root, this.cannonballs.root]),
+      },
+      {
+        id: "dünya arayüzü",
+        apply: hide([
+          this.territory.root,
+          this.roadDebugView.root,
+          this.placement.root,
+          this.roadPlacement.root,
+          this.commandMarkers.root,
+          this.strategicPointView?.root,
+          this.missionHint?.root,
+          this.ghostStructures?.root,
+          this.fogView?.root,
+        ]),
+      },
+    ];
+    // Only worth a row when there is a chain to bypass; otherwise the step would
+    // measure the untouched frame twice and report the difference as noise.
+    if (this.postProcessPipeline) steps.push({ id: "son işlem (post)", apply: () => () => {} });
+    return steps;
+  }
+
+  /** Begin a sweep, unless one is already running or GPU timing is unavailable. */
+  private startGpuSweep(): void {
+    if (this.gpuSweep) return;
+    if (!this.gpuTimer) {
+      this.debugTableModal?.show(rtsGpuSweepUnavailableView(
+        "Bu tarayıcıda GPU zamanlayıcı eklentisi yok.",
+      ));
+      this.frameCaptureOwnsPause = this.flow.pause();
+      return;
+    }
+    // Closed first: the sweep needs real frames to measure, and a table already
+    // on screen means one is being read rather than drawn.
+    if (this.debugTableModal?.open) this.closeDebugTable();
+    // Paused for the whole sweep, not just to read the result: every step is a
+    // comparison between whole frames, and an army that marched across the map
+    // between the baseline and the last step would be measured as the cost of
+    // whatever happened to be turned off at the time. Rendering continues while
+    // paused, which is all the sweep needs.
+    this.frameCaptureOwnsPause = this.flow.pause();
+    // Built once per sweep: the plan closes over scene roots, and rebuilding it
+    // per frame would allocate a set of closures inside the frames being timed.
+    this.gpuSweepPlan = this.gpuSweepSteps();
+    this.gpuSweep = new RtsGpuSweepRunner(this.gpuSweepPlan.map((step) => ({ id: step.id })));
+  }
+
+  /**
+   * Hide whatever the current sweep step removes, for this render only.
+   * @returns the step's sample tag, or null when no sweep is running.
+   */
+  private applyGpuSweepStep(): { readonly tag: number; readonly bypassPostProcess: boolean } | null {
+    const sweep = this.gpuSweep;
+    const step = sweep?.currentStep();
+    if (!step) return null;
+    // Index 0 is the untouched baseline; the rest map onto the cached plan.
+    const configured = step.index === 0 ? null : this.gpuSweepPlan[step.index - 1];
+    this.gpuSweepRestore = configured ? configured.apply() : null;
+    return { tag: step.tag, bypassPostProcess: step.id === "son işlem (post)" };
+  }
+
+  private restoreGpuSweepStep(): void {
+    const restore = this.gpuSweepRestore;
+    this.gpuSweepRestore = null;
+    restore?.();
+  }
+
+  /**
+   * Drain finished GPU results, feed the running sweep, and finish it when every
+   * configuration has been measured.
+   *
+   * Results lag the frame that produced them, which is why the sweep is driven
+   * from here rather than from the render call: a step only ends once its
+   * samples have actually come back, not once its frames have been drawn.
+   */
+  private collectGpuSamples(): void {
+    const timer = this.gpuTimer;
+    if (!timer) return;
+    const before = timer.disjointCount;
+    const samples = timer.poll();
+    const sweep = this.gpuSweep;
+    if (!sweep) return;
+    if (timer.disjointCount > before) sweep.noteDisjoint();
+    for (const sample of samples) sweep.acceptSample(sample.tag, sample.ms);
+    sweep.noteFrame();
+    const render = readRenderStats(this.renderer);
+    const outcome = sweep.advance({
+      speed: this.simulationSpeed,
+      matchSeconds: this.clock.seconds,
+      drawCalls: render.drawCalls,
+      triangles: render.triangles,
+    });
+    if (outcome.kind === "running") return;
+    this.gpuSweep = null;
+    this.gpuSweepPlan = [];
+    // The match is already held by `startGpuSweep`, so the pause flag is left
+    // exactly as it was: re-pausing here would report "we did not pause it" and
+    // the close would strand the player in a paused match.
+    this.debugTableModal?.show(
+      outcome.kind === "done"
+        ? rtsGpuSweepTableView(outcome.sweep)
+        : rtsGpuSweepUnavailableView(outcome.reason),
+    );
   }
 
   /**
@@ -2330,6 +2529,7 @@ export class RtsApp {
       frame: frameStats,
       render,
       memory,
+      gpu: this.gpuTimer?.stats() ?? null,
       shadows: [
         { label: "aktörler", ...shadowCasters.actors },
         { label: "harita", ...shadowCasters.mapArt },
@@ -3053,7 +3253,7 @@ export class RtsApp {
       // Escape means "undo the thing I am in the middle of", and an open capture
       // is the innermost of those. Handled here rather than with a key listener
       // of its own so it cannot race the pause it would otherwise stack on top of.
-      if (this.frameCaptureModal?.open) this.closeFrameCapture();
+      if (this.debugTableModal?.open) this.closeDebugTable();
       else this.togglePause();
     }
     if (this.input.consumeCommand("toggleBuildPalette")) this.buildPalette.toggleVisible();

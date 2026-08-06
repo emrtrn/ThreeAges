@@ -632,7 +632,7 @@ body {
 
 /* Frozen frame-cost table over a paused match. Centred and modal because it is
    read, not watched — the match behind it is not advancing while it is open. */
-.rts-frame-capture {
+.rts-debug-table {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -651,24 +651,24 @@ body {
   box-shadow: var(--ta-panel-shadow);
 }
 
-.rts-frame-capture[hidden] {
+.rts-debug-table[hidden] {
   display: none;
 }
 
-.rts-frame-capture-header {
+.rts-debug-table-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.rts-frame-capture-header h2 {
+.rts-debug-table-header h2 {
   font: 700 15px/1.2 var(--ta-font-display);
   letter-spacing: 0.04em;
   color: var(--ta-gold);
 }
 
-.rts-frame-capture-close {
+.rts-debug-table-close {
   width: 28px;
   height: 28px;
   color: var(--ta-ink);
@@ -679,44 +679,42 @@ body {
   border-radius: 4px;
 }
 
-.rts-frame-capture-close:hover {
+.rts-debug-table-close:hover {
   color: var(--ta-gold);
   border-color: var(--ta-border-strong);
 }
 
-.rts-frame-capture-meta {
+.rts-debug-table-meta {
   color: var(--ta-ink-muted);
   font-size: 11px;
 }
 
 /* The table is the tall part; only it scrolls, so the header and the close
    button stay reachable however many regions get measured. */
-.rts-frame-capture-scroll {
+.rts-debug-table-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
 }
 
-.rts-frame-capture-table {
+.rts-debug-table-grid {
   width: 100%;
   border-collapse: collapse;
 }
 
-.rts-frame-capture-table th,
-.rts-frame-capture-table td {
+.rts-debug-table-grid th,
+.rts-debug-table-grid td {
   padding: 3px 8px;
   text-align: right;
   white-space: nowrap;
 }
 
-.rts-frame-capture-table th:first-child,
-.rts-frame-capture-table td:first-child,
-.rts-frame-capture-table th:nth-child(2),
-.rts-frame-capture-table td:nth-child(2) {
+.rts-debug-table-grid th[data-align="left"],
+.rts-debug-table-grid td[data-align="left"] {
   text-align: left;
 }
 
-.rts-frame-capture-table thead th {
+.rts-debug-table-grid thead th {
   position: sticky;
   top: 0;
   color: var(--ta-ink-muted);
@@ -725,31 +723,42 @@ body {
   border-bottom: 1px solid var(--ta-border);
 }
 
-.rts-frame-capture-table tbody th {
+.rts-debug-table-grid tbody th {
   font-weight: 400;
 }
 
 /* A share bar behind the row: the expensive one is found before any number has
    been read. Painted as a background gradient so it costs no extra element. */
-.rts-frame-capture-table tbody tr {
+.rts-debug-table-grid tbody tr {
   background:
     linear-gradient(
       to right,
-      rgb(226 185 92 / 16%) var(--rts-capture-share, 0%),
-      transparent var(--rts-capture-share, 0%)
+      rgb(226 185 92 / 16%) var(--rts-table-share, 0%),
+      transparent var(--rts-table-share, 0%)
     );
 }
 
-.rts-frame-capture-table tbody tr[data-rts-capture-kind="remainder"] {
+.rts-debug-table-grid tbody tr[data-rts-table-kind="remainder"] {
   color: var(--ta-ink-muted);
   font-style: italic;
 }
 
-.rts-frame-capture-table tbody tr[data-rts-capture-kind="debug"] {
+.rts-debug-table-grid tbody tr[data-rts-table-kind="debug"] {
   color: var(--ta-alert);
 }
 
-.rts-frame-capture-footer {
+/* A status row (a sweep that could not run) is a sentence, not a measurement. */
+.rts-debug-table-grid tbody tr[data-rts-table-kind="note"] {
+  color: var(--ta-alert);
+}
+
+.rts-debug-table-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rts-debug-table-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -758,12 +767,12 @@ body {
   border-top: 1px solid var(--ta-border);
 }
 
-.rts-frame-capture-footer p {
+.rts-debug-table-footer p {
   color: var(--ta-ink-muted);
   font-size: 11px;
 }
 
-.rts-frame-capture-copy {
+.rts-debug-table-copy {
   flex: 0 0 auto;
   padding: 5px 10px;
   color: var(--ta-btn-ink);

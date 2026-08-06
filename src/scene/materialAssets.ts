@@ -1,4 +1,4 @@
-import { RepeatWrapping, SRGBColorSpace, TextureLoader, type Texture } from "three";
+import { NoColorSpace, RepeatWrapping, SRGBColorSpace, TextureLoader, type Texture } from "three";
 
 import { assetPath, assetRecordById, assetType, type AssetManifest } from "@engine/assets/manifest";
 import { normalizeForgeMaterialDef } from "@engine/assets/material";
@@ -87,6 +87,10 @@ export interface ForgeMaterialLayer {
   baseColor: string;
   /** Base-color (albedo) texture, tiling-wrapped for terrain splatting, or `null`. */
   texture: Texture | null;
+  /** Tangent-space normal map. Kept linear and repeat-wrapped for terrain splatting. */
+  normalTexture: Texture | null;
+  /** Packed AO (R), roughness (G), metalness (B) texture; linear and repeat-wrapped. */
+  ormTexture: Texture | null;
   /**
    * The material's authored UV tiling (`uvTiling.x/y`). For landscape splatting
    * this is a *multiplier* on the terrain's auto tiling base, so the default
@@ -94,13 +98,17 @@ export interface ForgeMaterialLayer {
    * denser.
    */
   tiling: { x: number; y: number };
+  /** Scalar PBR fallbacks/multipliers used when a layer has no ORM texture. */
+  roughness: number;
+  metalness: number;
+  aoIntensity: number;
 }
 
 /**
- * Loads just the albedo inputs of a material for Landscape layer splatting: the
- * base color plus the base-color texture (repeat-wrapped, sRGB). Skips normal /
- * roughness / layer-blend loading that the full material loader does. Returns
- * `null` if the id isn't a material asset or can't be read.
+ * Loads the PBR inputs a material contributes to a Landscape paint layer. The
+ * resolver is shared by editor, Play and authored-world paths so a landscape
+ * never silently loses its normal/ORM maps in one host. Returns `null` if the
+ * id isn't a material asset or can't be read.
  */
 export async function loadForgeMaterialLayer(
   manifest: AssetManifest,
@@ -114,19 +122,33 @@ export async function loadForgeMaterialLayer(
     const response = await fetch(projectFileUrl(assetPath(materialRecord)), { cache: "no-cache" });
     if (!response.ok) return null;
     const def = normalizeForgeMaterialDef(await response.json(), materialRecord.name);
-    let texture: Texture | null = null;
-    if (def.baseColorTexture) {
-      texture = await loadTextureByAssetId(manifest, def.baseColorTexture, textureLoader);
-      texture.colorSpace = SRGBColorSpace;
+    const loadLayerTexture = async (
+      textureId: string | null,
+      colorSpace: typeof SRGBColorSpace | typeof NoColorSpace,
+    ): Promise<Texture | null> => {
+      if (!textureId) return null;
+      const texture = await loadTextureByAssetId(manifest, textureId, textureLoader);
+      texture.colorSpace = colorSpace;
       texture.wrapS = RepeatWrapping;
       texture.wrapT = RepeatWrapping;
       if (options.maxAnisotropy) texture.anisotropy = options.maxAnisotropy;
       texture.needsUpdate = true;
-    }
+      return texture;
+    };
+    const [texture, normalTexture, ormTexture] = await Promise.all([
+      loadLayerTexture(def.baseColorTexture, SRGBColorSpace),
+      loadLayerTexture(def.normalTexture, NoColorSpace),
+      loadLayerTexture(def.ormTexture, NoColorSpace),
+    ]);
     return {
       baseColor: def.baseColor ?? "#ffffff",
       texture,
+      normalTexture,
+      ormTexture,
       tiling: { x: def.uvTiling.x, y: def.uvTiling.y },
+      roughness: def.roughness,
+      metalness: def.metalness,
+      aoIntensity: def.aoIntensity,
     };
   } catch {
     return null;

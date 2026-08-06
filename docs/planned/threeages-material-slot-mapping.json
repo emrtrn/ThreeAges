@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "status": "phase-0-skeleton",
+  "scope": "public/assets/ThreeAges/StaticMeshes/**/*.gltf",
+  "defaultUvw": {
+    "mapType": "box",
+    "position": [0, 0, 0],
+    "rotation": [0, 0, 0],
+    "scale": [1, 1, 1]
+  },
+  "writePolicy": {
+    "preserveExistingSidecars": true,
+    "replaceRequiresExplicitFlag": true,
+    "gltfImmutable": true,
+    "excludeDirectories": ["public/assets/ThreeAges/Environment"]
+  },
+  "sourceSlots": {
+    "Dirt": { "surface": "earth-compacted", "targetMaterial": null },
+    "Fabric": { "surface": "fabric-natural", "targetMaterial": null },
+    "Gold": { "surface": "metal-gold", "targetMaterial": null },
+    "Green": { "surface": null, "targetMaterial": null, "requiresAssetFamilyOverride": true },
+    "Lettuce": { "surface": "produce-lettuce", "targetMaterial": null },
+    "Main": { "surface": null, "targetMaterial": null, "requiresAssetFamilyOverride": true },
+    "Metal": { "surface": "metal-dark", "targetMaterial": null },
+    "Metal_Light": { "surface": "metal-light", "targetMaterial": null },
+    "Orange": { "surface": "produce-orange", "targetMaterial": null },
+    "Red": { "surface": "paint-red", "targetMaterial": null },
+    "Snow": { "surface": "snow", "targetMaterial": null },
+    "Stone": { "surface": null, "targetMaterial": null, "requiresAssetFamilyOverride": true },
+    "Stone_Light": { "surface": "stone-masonry-light", "targetMaterial": null },
+    "Walls": { "surface": "wall-plaster", "targetMaterial": null },
+    "Water": { "surface": "water-center", "targetMaterial": null, "requiresAssetFamilyOverride": true },
+    "Watermelon_DarkGreen": { "surface": "produce-watermelon", "targetMaterial": null },
+    "Wheat": { "surface": "wheat", "targetMaterial": null },
+    "White": { "surface": "paint-white", "targetMaterial": null },
+    "Wood": { "surface": "wood-dark", "targetMaterial": null },
+    "Wood_Light": { "surface": "wood-light", "targetMaterial": null },
+    "Yellow": { "surface": "paint-yellow", "targetMaterial": null }
+  },
+  "assetFamilyOverrides": [
+    {
+      "match": "Resource_*",
+      "slots": {
+        "Stone": "rock-natural",
+        "Green": "foliage-broadleaf"
+      }
+    },
+    {
+      "match": "Mountain_*",
+      "slots": {
+        "Stone": "rock-natural"
+      }
+    },
+    {
+      "match": "TownCenter_SecondAge_Level*",
+      "slots": {
+        "Water": "water-center",
+        "Green": "foliage-broadleaf"
+      }
+    },
+    {
+      "match": "Houses_*|Barracks_*|Archery_*|Storage_*|Mine*",
+      "slots": {
+        "Stone": "stone-masonry",
+        "Green": "foliage-broadleaf",
+        "Main": "roof-clay"
+      }
+    }
+  ],
+  "notes": [
+    "This is intentionally not an apply configuration yet: no ThreeAges target material IDs exist before the texture pilot.",
+    "Main, Stone, Green, and Water remain hard-error candidates until every affected asset family is reviewed against the Phase 0 inventory.",
+    "Product, paint, fabric, metal, snow, and wheat surfaces are catalogued here so no source slot can disappear silently during the later apply step."
+  ]
+}

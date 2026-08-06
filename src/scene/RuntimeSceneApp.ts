@@ -4850,12 +4850,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
               })
             : null;
         if (resolved?.texture) this.landscapeLayerTextures.push(resolved.texture);
+        if (resolved?.normalTexture) this.landscapeLayerTextures.push(resolved.normalTexture);
+        if (resolved?.ormTexture) this.landscapeLayerTextures.push(resolved.ormTexture);
         const mat = resolved?.tiling ?? { x: 1, y: 1 };
         return {
           id: layer.id,
           texture: resolved?.texture ?? null,
+          normalTexture: resolved?.normalTexture ?? null,
+          ormTexture: resolved?.ormTexture ?? null,
           color: resolved?.baseColor ?? presetColor,
           tiling: { x: base * mat.x, y: base * mat.y },
+          roughness: resolved?.roughness ?? 1,
+          metalness: resolved?.metalness ?? 0,
+          aoIntensity: resolved?.aoIntensity ?? 1,
         } satisfies LandscapeLayerTexture;
       }),
     );

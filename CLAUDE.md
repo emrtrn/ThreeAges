@@ -70,16 +70,23 @@ engine/editor.
   Long runs go in the background (`run_in_background`) so work continues while
   they finish; never sit blocked on a suite. `tsc --noEmit` is cheap — always run
   it after editing TypeScript, since the dev server skips type-checking.
-- **`test:engine` takes a filter for iteration.**
-  `npm run test:engine -- --filter market` (comma-separated, case-insensitive
-  substrings matched against check labels, `-f` also works) skips every other
-  check — a ~150x speedup while iterating. A filtered run prints `PARTIAL` and is
-  **never a green build**; a filter matching nothing exits 1 so typos aren't
-  silent. `build:verify` and CI always run it unfiltered.
-  `ENGINE_TESTS_TIMING=1` appends per-check wall time — nine headless-match AI
-  checks account for ~97% of the suite's 161s, so a slow run is almost always
-  those. `docs/planned/ENGINE_TESTS_SPLIT_PLAN.md` carries the measurements and
-  the plan to split the 50k-line file.
+- **`test:engine` has a fast default and a slow tier.** Nine headless
+  accelerated-match AI checks cost ~97% of the suite's 161s (the tenth-slowest
+  check is 353ms), so they are declared with `checkSlow` and the bare run leaves
+  them out:
+  - `npm run test:engine` — **FAST**, ~5s. Prints how many slow checks it
+    skipped. Good enough for `hızlı`, not a full green build.
+  - `npm run test:engine:slow` (or `-- --slow`) — everything, ~161s. This is what
+    `build:verify` and CI run, so nothing reaches `main` unchecked.
+  - `npm run test:engine -- --filter market` — comma-separated, case-insensitive
+    substrings matched against check labels (`-f` also works); everything else is
+    skipped. **A matching filter also runs slow checks**, which is what makes the
+    AI exception above work. Prints `PARTIAL` and is **never a green build**; a
+    filter matching nothing exits 1 so typos aren't silent.
+  A check belongs in `checkSlow` by **cost alone** (>1s), never by importance.
+  `ENGINE_TESTS_TIMING=1` appends per-check wall time — use it before tagging one.
+  `docs/planned/ENGINE_TESTS_SPLIT_PLAN.md` carries the measurements and the plan
+  to split the 50k-line file.
 - **Visual acceptance is the user's call, not a test to build.** When the open
   question is "does it look right in the running game" — is the model visible,
   upright, animating, the right size — finish the code, say plainly what should

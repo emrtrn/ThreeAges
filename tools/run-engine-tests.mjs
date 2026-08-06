@@ -8,6 +8,12 @@
 // Case-insensitive substrings, OR'd against each check's label. A filtered run
 // prints PARTIAL and is never a green build — build:verify and CI run it
 // unfiltered. A filter that matches nothing exits 1 so typos are not silent.
+//
+// Slow tier:
+//   npm run test:engine            # FAST — skips the checkSlow integration checks
+//   npm run test:engine -- --slow  # everything (what build:verify and CI run)
+// Nine headless accelerated-match checks cost ~97% of the suite's wall time, so
+// the bare run leaves them out. Any --filter that matches them runs them anyway.
 import { build } from "esbuild";
 import { tmpdir } from "node:os";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -15,10 +21,13 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const filters = [];
+let slow = false;
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i];
-  if (arg === "--filter" || arg === "-f") {
+  if (arg === "--slow") {
+    slow = true;
+  } else if (arg === "--filter" || arg === "-f") {
     const value = argv[i + 1];
     if (value === undefined || value.startsWith("-")) {
       console.error(`[engine-tests] ${arg} needs a value, e.g. --filter market`);
@@ -37,6 +46,10 @@ for (let i = 0; i < argv.length; i += 1) {
 if (filters.length > 0) {
   process.env.ENGINE_TESTS_FILTER = filters.join(",");
   console.log(`[engine-tests] filter: ${process.env.ENGINE_TESTS_FILTER}`);
+}
+if (slow) {
+  process.env.ENGINE_TESTS_SLOW = "1";
+  console.log("[engine-tests] slow checks included");
 }
 
 const dir = mkdtempSync(join(tmpdir(), "engine-tests-"));

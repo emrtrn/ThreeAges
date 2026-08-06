@@ -13,9 +13,12 @@ belong in game runtime code or data.
   user to look. Use **`tam`** (`npm run build:verify`) before committing, for
   broad changes, or on request. The unfiltered suite costs ~2.5 min, so do not
   run it after every edit.
+- `npm run test:engine` is the FAST tier (~5s): it skips the nine `checkSlow`
+  headless-match AI checks that cost ~97% of the suite. `npm run test:engine:slow`
+  runs everything (~161s) and is what `build:verify` and CI run.
 - `npm run test:engine -- --filter market` runs only the checks whose labels
-  match (comma-separated substrings, `-f` also works). Filtered runs print
-  `PARTIAL` and are never a green build; `build:verify` and CI run unfiltered.
+  match (comma-separated substrings, `-f` also works), slow ones included.
+  Filtered runs print `PARTIAL` and are never a green build.
 - If PowerShell blocks npm/npx shims, use `npm.cmd` and `npx.cmd`.
 
 ## Codex Tools

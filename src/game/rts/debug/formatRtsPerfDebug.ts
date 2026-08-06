@@ -42,6 +42,17 @@ export interface RtsPerfDebugSnapshot {
     readonly textures: number;
     readonly programs: number;
   };
+  /**
+   * GPU time for the same frames, or null where the browser has no timer-query
+   * extension. Null renders as "yok" rather than as zeros: a scene that costs
+   * the GPU nothing and a browser that will not say are opposite findings.
+   */
+  readonly gpu: {
+    readonly lastMs: number;
+    readonly averageMs: number;
+    readonly maxMs: number;
+    readonly samples: number;
+  } | null;
   readonly shadows: readonly RtsPerfShadowBucket[];
   /** Frame regions, in the order they should be shown (not sorted by cost). */
   readonly costs: readonly RtsPerfCost[];
@@ -70,6 +81,9 @@ export function formatRtsPerfDebug(snapshot: RtsPerfDebugSnapshot): string[] {
       ? `${fps.toFixed(0)} fps · kare ${frame.averageMs.toFixed(1)} ms · p95 ${frame.p95Ms.toFixed(1)} ms`
       : "fps ölçülüyor…",
     `takılma >33ms ${frame.over33ms} · >50ms ${frame.over50ms} · >100ms ${frame.over100ms}`,
+    // Directly under the frame line, because the two together answer the only
+    // question that decides what to optimise: CPU-bound or GPU-bound.
+    gpuLine(snapshot.gpu),
     `çizim ${groupThousands(render.drawCalls)} çağrı · ${compactCount(render.triangles)} üçgen`,
     `bellek geo ${groupThousands(memory.geometries)} · doku ${groupThousands(memory.textures)} · shader ${groupThousands(memory.programs)}`,
   ];
@@ -99,6 +113,12 @@ export function formatRtsPerfDebug(snapshot: RtsPerfDebugSnapshot): string[] {
     `sahne ${scene.units} birim · ${scene.structures} yapı · ${scene.caravans} kervan · ${scene.wildlife} hayvan`,
   );
   return lines;
+}
+
+function gpuLine(gpu: RtsPerfDebugSnapshot["gpu"]): string {
+  if (!gpu) return "gpu — bu tarayıcıda zamanlayıcı yok";
+  if (gpu.samples === 0) return "gpu ölçülüyor…";
+  return `gpu ${gpu.lastMs.toFixed(2)} ms · ort ${gpu.averageMs.toFixed(2)} · tepe ${gpu.maxMs.toFixed(2)}`;
 }
 
 /** `1.24M` / `540K` / `812` — triangle counts are unreadable ungrouped. */

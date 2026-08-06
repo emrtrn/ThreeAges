@@ -90,9 +90,16 @@ export type LandscapeLayerColors = Record<string, string>;
 export interface LandscapeLayerTexture {
   id: string;
   texture: Texture | null;
+  /** Tangent-space normal map; `null` falls back to a flat normal. */
+  normalTexture: Texture | null;
+  /** Packed AO/Roughness/Metalness texture; `null` uses scalar PBR values. */
+  ormTexture: Texture | null;
   color: string;
   /** Per-axis UV repeat count across the whole terrain for this layer's texture. */
   tiling: { x: number; y: number };
+  roughness: number;
+  metalness: number;
+  aoIntensity: number;
 }
 
 /** Resolved settings + world transform + sidecar data the binding needs to build a landscape. */
@@ -296,15 +303,28 @@ function buildChunkGeometry(
  * plain vertex-color material renders the tint and the debug view modes.
  */
 function createLandscapeSplatMaterial(layerTextures: LandscapeLayerTexture[]): MeshStandardMaterial {
-  const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
+  const firstNormalTexture = layerTextures.find((layer) => layer.normalTexture)?.normalTexture ?? null;
+  const material = new MeshStandardMaterial({
+    color: new Color("#ffffff"),
+    roughness: 1,
+    metalness: 0,
+    // This enables Three's derivative-based TBN frame. The stock normal sample
+    // is neutralized below; the terrain instead blends all four layer normals.
+    normalMap: firstNormalTexture,
+  });
+  material.normalScale.set(0, 0);
   material.defines = { ...(material.defines ?? {}), USE_UV: "" };
   const texAt = (index: number): Texture | null => layerTextures[index]?.texture ?? null;
+  const normalAt = (index: number): Texture | null => layerTextures[index]?.normalTexture ?? null;
+  const ormAt = (index: number): Texture | null => layerTextures[index]?.ormTexture ?? null;
   const colorAt = (index: number): Color =>
     new Color(layerTextures[index]?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color);
   const tilingAt = (index: number): Vector2 => {
     const t = layerTextures[index]?.tiling;
     return new Vector2(Math.max(0.0001, t?.x ?? 1), Math.max(0.0001, t?.y ?? 1));
   };
+  const scalarAt = (index: number, key: "roughness" | "metalness" | "aoIntensity", fallback: number): number =>
+    Math.min(1, Math.max(0, layerTextures[index]?.[key] ?? fallback));
 
   material.onBeforeCompile = (shader) => {
     for (let index = 0; index < 4; index += 1) {
@@ -312,6 +332,13 @@ function createLandscapeSplatMaterial(layerTextures: LandscapeLayerTexture[]): M
       shader.uniforms[`uLayerColor${index}`] = { value: colorAt(index) };
       shader.uniforms[`uLayerHasTex${index}`] = { value: texAt(index) ? 1 : 0 };
       shader.uniforms[`uLayerTiling${index}`] = { value: tilingAt(index) };
+      shader.uniforms[`uLayerNormal${index}`] = { value: normalAt(index) };
+      shader.uniforms[`uLayerOrm${index}`] = { value: ormAt(index) };
+      shader.uniforms[`uLayerHasNormal${index}`] = { value: normalAt(index) ? 1 : 0 };
+      shader.uniforms[`uLayerHasOrm${index}`] = { value: ormAt(index) ? 1 : 0 };
+      shader.uniforms[`uLayerRoughness${index}`] = { value: scalarAt(index, "roughness", 1) };
+      shader.uniforms[`uLayerMetalness${index}`] = { value: scalarAt(index, "metalness", 0) };
+      shader.uniforms[`uLayerAoIntensity${index}`] = { value: scalarAt(index, "aoIntensity", 1) };
     }
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nattribute vec4 landscapeWeight;\nvarying vec4 vLandscapeWeight;")
@@ -324,6 +351,14 @@ uniform sampler2D uLayerTex0;
 uniform sampler2D uLayerTex1;
 uniform sampler2D uLayerTex2;
 uniform sampler2D uLayerTex3;
+uniform sampler2D uLayerNormal0;
+uniform sampler2D uLayerNormal1;
+uniform sampler2D uLayerNormal2;
+uniform sampler2D uLayerNormal3;
+uniform sampler2D uLayerOrm0;
+uniform sampler2D uLayerOrm1;
+uniform sampler2D uLayerOrm2;
+uniform sampler2D uLayerOrm3;
 uniform vec3 uLayerColor0;
 uniform vec3 uLayerColor1;
 uniform vec3 uLayerColor2;
@@ -336,6 +371,26 @@ uniform vec2 uLayerTiling0;
 uniform vec2 uLayerTiling1;
 uniform vec2 uLayerTiling2;
 uniform vec2 uLayerTiling3;
+uniform float uLayerHasNormal0;
+uniform float uLayerHasNormal1;
+uniform float uLayerHasNormal2;
+uniform float uLayerHasNormal3;
+uniform float uLayerHasOrm0;
+uniform float uLayerHasOrm1;
+uniform float uLayerHasOrm2;
+uniform float uLayerHasOrm3;
+uniform float uLayerRoughness0;
+uniform float uLayerRoughness1;
+uniform float uLayerRoughness2;
+uniform float uLayerRoughness3;
+uniform float uLayerMetalness0;
+uniform float uLayerMetalness1;
+uniform float uLayerMetalness2;
+uniform float uLayerMetalness3;
+uniform float uLayerAoIntensity0;
+uniform float uLayerAoIntensity1;
+uniform float uLayerAoIntensity2;
+uniform float uLayerAoIntensity3;
 varying vec4 vLandscapeWeight;`,
       )
       // Inlined here (not a helper at <common>) because vUv is only in scope
@@ -356,10 +411,50 @@ varying vec4 vLandscapeWeight;`,
   float forgeWeight = vLandscapeWeight.x + vLandscapeWeight.y + vLandscapeWeight.z + vLandscapeWeight.w;
   diffuseColor.rgb = forgeWeight > 0.0001 ? forgeAlbedo / forgeWeight : uLayerColor0;
 }`,
+      )
+      .replace(
+        "#include <normal_fragment_maps>",
+        `#include <normal_fragment_maps>
+{
+  vec3 forgeN0 = uLayerHasNormal0 > 0.5 ? texture2D(uLayerNormal0, vUv * uLayerTiling0).xyz * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);
+  vec3 forgeN1 = uLayerHasNormal1 > 0.5 ? texture2D(uLayerNormal1, vUv * uLayerTiling1).xyz * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);
+  vec3 forgeN2 = uLayerHasNormal2 > 0.5 ? texture2D(uLayerNormal2, vUv * uLayerTiling2).xyz * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);
+  vec3 forgeN3 = uLayerHasNormal3 > 0.5 ? texture2D(uLayerNormal3, vUv * uLayerTiling3).xyz * 2.0 - 1.0 : vec3(0.0, 0.0, 1.0);
+  float forgeWeight = max(0.0001, vLandscapeWeight.x + vLandscapeWeight.y + vLandscapeWeight.z + vLandscapeWeight.w);
+  vec3 forgeNormal = normalize((forgeN0 * vLandscapeWeight.x + forgeN1 * vLandscapeWeight.y + forgeN2 * vLandscapeWeight.z + forgeN3 * vLandscapeWeight.w) / forgeWeight);
+  #ifdef USE_NORMALMAP_TANGENTSPACE
+    normal = normalize(tbn * forgeNormal);
+  #endif
+}`,
+      )
+      .replace(
+        "#include <roughnessmap_fragment>",
+        `#include <roughnessmap_fragment>
+vec4 forgeOrm0 = uLayerHasOrm0 > 0.5 ? texture2D(uLayerOrm0, vUv * uLayerTiling0) : vec4(1.0);
+vec4 forgeOrm1 = uLayerHasOrm1 > 0.5 ? texture2D(uLayerOrm1, vUv * uLayerTiling1) : vec4(1.0);
+vec4 forgeOrm2 = uLayerHasOrm2 > 0.5 ? texture2D(uLayerOrm2, vUv * uLayerTiling2) : vec4(1.0);
+vec4 forgeOrm3 = uLayerHasOrm3 > 0.5 ? texture2D(uLayerOrm3, vUv * uLayerTiling3) : vec4(1.0);
+float forgePbrWeight = max(0.0001, vLandscapeWeight.x + vLandscapeWeight.y + vLandscapeWeight.z + vLandscapeWeight.w);
+roughnessFactor = clamp((forgeOrm0.g * uLayerRoughness0 * vLandscapeWeight.x + forgeOrm1.g * uLayerRoughness1 * vLandscapeWeight.y + forgeOrm2.g * uLayerRoughness2 * vLandscapeWeight.z + forgeOrm3.g * uLayerRoughness3 * vLandscapeWeight.w) / forgePbrWeight, 0.0, 1.0);`,
+      )
+      .replace(
+        "#include <metalnessmap_fragment>",
+        `#include <metalnessmap_fragment>
+metalnessFactor = clamp((forgeOrm0.b * uLayerMetalness0 * vLandscapeWeight.x + forgeOrm1.b * uLayerMetalness1 * vLandscapeWeight.y + forgeOrm2.b * uLayerMetalness2 * vLandscapeWeight.z + forgeOrm3.b * uLayerMetalness3 * vLandscapeWeight.w) / forgePbrWeight, 0.0, 1.0);`,
+      )
+      .replace(
+        "#include <aomap_fragment>",
+        `#include <aomap_fragment>
+float forgeAo = clamp((mix(1.0, forgeOrm0.r, uLayerAoIntensity0) * vLandscapeWeight.x + mix(1.0, forgeOrm1.r, uLayerAoIntensity1) * vLandscapeWeight.y + mix(1.0, forgeOrm2.r, uLayerAoIntensity2) * vLandscapeWeight.z + mix(1.0, forgeOrm3.r, uLayerAoIntensity3) * vLandscapeWeight.w) / forgePbrWeight, 0.0, 1.0);
+reflectedLight.indirectDiffuse *= forgeAo;
+#if defined( USE_ENVMAP ) && defined( STANDARD )
+  float forgeDotNV = saturate(dot(geometryNormal, geometryViewDir));
+  reflectedLight.indirectSpecular *= computeSpecularOcclusion(forgeDotNV, forgeAo, material.roughness);
+#endif`,
       );
   };
   // Distinguish this program from the plain landscape material in three's cache.
-  material.customProgramCacheKey = () => "forge-landscape-splat";
+  material.customProgramCacheKey = () => `forge-landscape-splat-pbr-${firstNormalTexture ? "normal" : "flat"}`;
   return material;
 }
 

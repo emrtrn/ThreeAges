@@ -16,6 +16,7 @@
  *     window peak beside the captured value, so "was this frame typical?" is
  *     answered in the table instead of guessed at.
  */
+import type { RtsDebugTableView } from "./rtsDebugTableView";
 
 /** A measured region, as the app recorded it. `parent` marks it as a leaf. */
 export interface RtsFrameRegionSample {
@@ -152,6 +153,45 @@ export function buildRtsFrameCapture(input: RtsFrameCaptureInput): RtsFrameCaptu
     speed: input.speed,
     windowFrames: input.windowFrames,
     matchSeconds: input.matchSeconds,
+  };
+}
+
+/** The capture as the modal renders it: formatted cells, nothing computed. */
+export function rtsFrameCaptureTableView(capture: RtsFrameCapture): RtsDebugTableView {
+  return {
+    title: "Kare maliyeti (CPU)",
+    meta:
+      `${capture.totalMs.toFixed(2)} ms toplam · ort ${capture.averageTotalMs.toFixed(2)} · ` +
+      `tepe ${capture.maxTotalMs.toFixed(2)} (son ${capture.windowFrames} kare) · ` +
+      `${capture.speed}X, ${capture.simulationSteps} simülasyon adımı · maç ${capture.matchSeconds.toFixed(1)} sn`,
+    columns: [
+      { label: "İşlem", align: "left" },
+      { label: "Grup", align: "left" },
+      { label: "ms", align: "right" },
+      { label: "%", align: "right" },
+      { label: "ort", align: "right" },
+      { label: "tepe", align: "right" },
+    ],
+    rows: capture.rows.map((row) => ({
+      cells: [
+        row.label,
+        row.group ?? "—",
+        row.frameMs.toFixed(2),
+        `${(row.share * 100).toFixed(1)}%`,
+        row.averageMs.toFixed(2),
+        // A leftover has no meaningful peak: the group's worst frame and its
+        // children's worst frames are not the same frame.
+        row.maxMs > 0 ? row.maxMs.toFixed(2) : "—",
+      ],
+      share: row.share,
+      kind: row.kind,
+    })),
+    notes: [
+      "Satırlar bu karenin tamamını böler; toplamları kareye eşittir.",
+      "çizim = karenin GPU'ya gönderilme (CPU) süresi, GPU'nun çizim süresi değil — onun için GPU taramasına bakın.",
+      "tanı yalnızca debug rotasında vardır; oyun sürümünde bu maliyet yoktur.",
+    ],
+    clipboardText: formatRtsFrameCaptureText(capture),
   };
 }
 

@@ -14,6 +14,8 @@ import { formatRtsPerfDebug, type RtsPerfDebugSnapshot } from "./formatRtsPerfDe
 export interface RtsDebugOverlayOptions {
   /** Arms a one-frame cost capture; the app decides when it actually happens. */
   readonly onCaptureFrame?: () => void;
+  /** Starts the multi-frame GPU sweep. */
+  readonly onSweepGpu?: () => void;
 }
 
 export class RtsDebugOverlay {
@@ -32,14 +34,23 @@ export class RtsDebugOverlay {
     this.readout.className = "rts-debug-overlay-readout";
     this.root.append(this.controls, this.readout);
     if (options.onCaptureFrame) {
-      const capture = document.createElement("button");
-      capture.type = "button";
-      capture.className = "rts-debug-capture-button";
-      capture.dataset.rtsDebugAction = "capture-frame";
-      capture.textContent = "Kare maliyeti";
-      capture.title = "Bir sonraki kareyi ölç, maçı duraklat ve dökümü göster";
-      capture.addEventListener("click", () => options.onCaptureFrame?.());
-      this.controls.appendChild(capture);
+      this.controls.appendChild(actionButton(
+        "capture-frame",
+        "Kare maliyeti",
+        "Bir sonraki kareyi ölç, maçı duraklat ve CPU dökümünü göster",
+        () => options.onCaptureFrame?.(),
+      ));
+    }
+    if (options.onSweepGpu) {
+      // Deliberately not "Kare maliyeti (GPU)": this one is a multi-frame sweep
+      // whose rows are differences between frames, not a decomposition of one.
+      // Matching labels would promise an arithmetic the GPU table cannot keep.
+      this.controls.appendChild(actionButton(
+        "sweep-gpu",
+        "GPU dökümü",
+        "İçerik kategorilerini sırayla kapatarak GPU kazançlarını ölç (birkaç saniye sürer)",
+        () => options.onSweepGpu?.(),
+      ));
     }
     const host = document.getElementById("ui-overlay") ?? document.body;
     host.appendChild(this.root);
@@ -61,4 +72,20 @@ export class RtsDebugOverlay {
   dispose(): void {
     this.root.remove();
   }
+}
+
+function actionButton(
+  action: string,
+  label: string,
+  hint: string,
+  onClick: () => void,
+): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "rts-debug-capture-button";
+  button.dataset.rtsDebugAction = action;
+  button.textContent = label;
+  button.title = hint;
+  button.addEventListener("click", onClick);
+  return button;
 }
