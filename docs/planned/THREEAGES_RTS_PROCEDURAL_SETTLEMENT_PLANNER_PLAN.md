@@ -330,6 +330,19 @@ düşüyor; bu nedenle matris henüz kabul kapısı olarak işaretlenmedi. Sonra
 dar dilim, bu başlatılmış fakat personelsiz kalan foundation'ın nedenini ve
 güvenli aday/fallback toparlanmasını kanıtlamalıdır.
 
+Manuel gözlem notu (2026-08-06, kabul henüz açık): İlk iki maçta yerleşim
+görünümü daha çeşitliydi; ancak Kasaba'ya geçiş sırasıyla 20 ve 25 dakikayı
+aştı. İkinci maçta Yerleşim seviye 2 ancak 12. dakikada, Pazar ise 15.
+dakikada kuruldu. Liman/maden/oduncu kampına yollar ulaşmasına rağmen Pazar
+olmadığı için ticaret başlamadı ve bu siteler sahipsiz göründü. Buna karşı
+dar düzeltme uygulanmıştır: güvenli ve karşılanabilir Yerleşim merkezi seviyesi
+hemen öncelik kazanır; tedarikli Pazar, bir sonraki merkez seviyesi için
+eksik kaynağı hedefleyebilir; Pazar yoksa ve bağlı çiftlik + oduncu kampı
+çalışıyorsa sadece bu gerçek ilerleme eksiğini gidermek için erken istenir.
+Bu davranış, merkez seviye skoru ile Pazarın odun açığını kapatan işlem
+regresyonlarıyla otomatik doğrulandı. Düzeltme sonrası yeniden oynanacak
+üç manuel maçın kabulü halen açık.
+
 Kabul: 10/10 deterministik seed, blocker veya sonsuz yapı döngüsü olmadan
 Kasaba yolunu tamamlar; manuel maçlar aynı yerleşim kopyasını tekrar etmez.
 

@@ -314,7 +314,15 @@ export class AiController {
       // intent's business, for the same reason the age it trades for is: a
       // kingdom whose stone deposit was lost mid-plan has to be able to convert
       // its way out while the director is committed elsewhere.
-      this.trades.update(blackboard);
+      const tradeStep = this.trades.update(blackboard);
+      // A Market is normally late economy infrastructure, but it is the only
+      // way a linked port can close a real food/wood centre-level shortfall.
+      // Do not open it on day one: the farm, lumber camp and base depot must be
+      // working first, otherwise the trade request merely steals the opening's
+      // one construction slot and creates an unsupplied building.
+      if (tradeStep === "no-market" && this.marketCanRepairProgression(blackboard)) {
+        this.builds.request("market", blackboard.now);
+      }
       // §37: so is the base link. A base whose producers cannot reach a depot
       // has no income at all, so this outranks the committed plan rather than
       // waiting for the economy intent to come back around — and because it runs
@@ -423,6 +431,12 @@ export class AiController {
     if (!plan || plan.intent !== "ageUp") return;
     if (outcome.kind === "done") this.director.completePlan(plan, this.now, true);
     else if (outcome.kind === "failed") this.director.completePlan(plan, this.now, false, outcome.reason);
+  }
+
+  private marketCanRepairProgression(blackboard: AiBlackboard): boolean {
+    return this.infrastructure.currentStep === "linked"
+      && (blackboard.buildingCounts["farm"] ?? 0) > 0
+      && (blackboard.buildingCounts["lumber_camp"] ?? 0) > 0;
   }
 
   /**

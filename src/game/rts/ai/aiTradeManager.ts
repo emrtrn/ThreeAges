@@ -8,12 +8,12 @@
  *
  * ## What it trades for
  *
- * The Town age, and nothing else. That is deliberate: the age is the one
- * expense with a *fixed, known* four-resource price (`balance/ages.json`), so
- * "how short am I" is a subtraction rather than a heuristic, and the rule stops
- * on its own the moment the cost is covered. An AI trading toward a vague
- * "more stone is good" would keep converting its economy into whatever it was
- * last short of, and pay the spread every time it changed its mind.
+ * The next progression step, and nothing else. That is deliberate: an early
+ * centre level and the Town transition both expose a fixed, known price, so
+ * "how short am I" is a subtraction rather than a heuristic. The rule stops on
+ * its own the moment that cost is covered. An AI trading toward a vague "more
+ * stone is good" would keep converting its economy into whatever it was last
+ * short of, and pay the spread every time it changed its mind.
  *
  * ## The pattern
  *
@@ -44,8 +44,19 @@ export type AiTradeStep =
  * AI would fund a stone shortfall by selling the food the same age cost demands
  * — paying the spread to move the shortfall from one column to another.
  */
-function shortfall(bb: AiBlackboard, resourceId: string): number {
-  return Math.max(0, (bb.ageCost[resourceId] ?? 0) - (bb.resourceStocks[resourceId] ?? 0));
+function shortfall(bb: AiBlackboard, cost: Readonly<Record<string, number>>, resourceId: string): number {
+  return Math.max(0, (cost[resourceId] ?? 0) - (bb.resourceStocks[resourceId] ?? 0));
+}
+
+function progressionCost(bb: AiBlackboard): Readonly<Record<string, number>> | null {
+  if (bb.age === "town") return null;
+  return bb.centerLevel < 3 && bb.centerLevelUpgradeCost !== null
+    ? bb.centerLevelUpgradeCost
+    : bb.ageCost;
+}
+
+function canAfford(bb: AiBlackboard, cost: Readonly<Record<string, number>>): boolean {
+  return Object.entries(cost).every(([resourceId, amount]) => (bb.resourceStocks[resourceId] ?? 0) >= amount);
 }
 
 export class AiTradeManager {
@@ -79,20 +90,21 @@ export class AiTradeManager {
    */
   update(bb: AiBlackboard): AiTradeStep {
     if (!this.trade.enabled) return this.settle("idle");
-    // Already able to pay for the age: the only thing this rule trades for.
-    if (bb.ageAffordable || bb.age === "town") return this.settle("idle");
+    const cost = progressionCost(bb);
+    // Already able to pay for the next progression action, or no action remains.
+    if (!cost || canAfford(bb, cost)) return this.settle("idle");
 
     const snapshot = this.trade.snapshotFor(this.owner);
     if (!snapshot) return this.settle("idle");
     const tradable = snapshot.prices;
-    const goldShort = shortfall(bb, NUMERAIRE_RESOURCE_ID);
+    const goldShort = shortfall(bb, cost, NUMERAIRE_RESOURCE_ID);
 
     // Gold is the numeraire, so a gold shortfall can only be sold into: pick the
     // resource with the most to spare, which is both the one the AI misses least
     // and — because the index has not been pushed down yet — usually its best rate.
     if (goldShort > 0) {
       const best = tradable
-        .map((price) => ({ price, spare: this.spare(bb, price.resourceId, snapshot.lotSize) }))
+        .map((price) => ({ price, spare: this.spare(bb, cost, price.resourceId, snapshot.lotSize) }))
         .filter((candidate) => candidate.spare > 0)
         .sort((left, right) => right.spare - left.spare)[0];
       if (!best) return this.settle("saving");
@@ -102,12 +114,12 @@ export class AiTradeManager {
     // Otherwise the shortfall is in something gold can buy. Largest first: it is
     // the one furthest from letting the age start.
     const wanted = tradable
-      .map((price) => ({ price, short: shortfall(bb, price.resourceId) }))
+      .map((price) => ({ price, short: shortfall(bb, cost, price.resourceId) }))
       .filter((candidate) => candidate.short > 0)
       .sort((left, right) => right.short - left.short)[0];
     if (!wanted) return this.settle("idle");
     // Spending gold the age cost itself needs would just move the shortfall.
-    const spareGold = (bb.resourceStocks[NUMERAIRE_RESOURCE_ID] ?? 0) - (bb.ageCost[NUMERAIRE_RESOURCE_ID] ?? 0);
+    const spareGold = (bb.resourceStocks[NUMERAIRE_RESOURCE_ID] ?? 0) - (cost[NUMERAIRE_RESOURCE_ID] ?? 0);
     if (spareGold < wanted.price.buyPrice) return this.settle("saving");
     return this.execute(bb, "buy", wanted.price.resourceId, wanted.price.buyPrice);
   }
@@ -117,9 +129,14 @@ export class AiTradeManager {
   }
 
   /** Units of a resource that may be sold without eating into the age cost. */
-  private spare(bb: AiBlackboard, resourceId: string, lotSize: number): number {
+  private spare(
+    bb: AiBlackboard,
+    cost: Readonly<Record<string, number>>,
+    resourceId: string,
+    lotSize: number,
+  ): number {
     const spare = (bb.resourceStocks[resourceId] ?? 0)
-      - (bb.ageCost[resourceId] ?? 0)
+      - (cost[resourceId] ?? 0)
       - this.reserve;
     // Only whole lots can be sold, so anything under one is not spare at all.
     return spare >= lotSize ? spare : 0;

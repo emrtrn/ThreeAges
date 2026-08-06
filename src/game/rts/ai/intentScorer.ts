@@ -158,11 +158,12 @@ function scoreAgeUp(bb: AiBlackboard, balance: AiBalance): { rawScore: number; r
     if (!cost) return { rawScore: 0, reason: "merkez seviye yükseltmesi yok" };
     const affordable = Object.entries(cost).every(([id, amount]) => (bb.resourceStocks[id] ?? 0) >= amount);
     const economyMaturity = 1 - worstIncomeDeficit(bb, balance).deficit;
-    const rawScore = clamp01(
-      terms.affordability * (affordable ? 1 : 0)
-      + terms.economyMaturity * economyMaturity
-      - terms.immediateThreat * threatLevel(bb, balance),
-    );
+    // A Settlement level is cost-and-safety only. Once it is affordable on a
+    // quiet base, delaying it behind a still-maturing economy postpones the
+    // worker/production capacity that economy is supposed to unlock.
+    const rawScore = affordable
+      ? clamp01(1 - terms.immediateThreat * threatLevel(bb, balance))
+      : clamp01(terms.economyMaturity * economyMaturity - terms.immediateThreat * threatLevel(bb, balance));
     const reason = bb.baseThreat > 0
       ? "üs tehdit altında, merkez seviyesi ertelendi"
       : affordable

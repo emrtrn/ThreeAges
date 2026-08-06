@@ -44250,6 +44250,8 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
     ageMissingBuildingIds: ["quarry", "gold_mine", "outpost"],
     ageAffordable: false,
   });
+  assert.equal(scoreFor(levelThreeReady, "ageUp").rawScore, 1,
+    "an affordable, safe Settlement level immediately outranks economy work");
   assert.equal(scoreFor(levelThreeReady, "ageUp").reason, "merkez seviye 3 için hazır");
   assert.ok(
     scoreFor(levelThreeReady, "ageUp").score > scoreFor(levelThreeReady, "economy").score,
@@ -49528,7 +49530,7 @@ check("Faz M4: the AI trades toward the age it is short for, and stops once it c
   assert.ok(
     fullOrder.indexOf("market") > fullOrder.indexOf("quarry")
     && fullOrder.indexOf("market") > fullOrder.indexOf("gold_mine"),
-    "the Market is wanted only once the extractors it would otherwise replace are asked for",
+    "the normal Market order preserves the extractor-first economy path",
   );
   assert.equal(fullOrder.at(-1), "house", "growth housing is the lowest-priority want");
 
@@ -49565,6 +49567,16 @@ check("Faz M4: the AI trades toward the age it is short for, and stops once it c
   const openingSell = (resourceId: string) =>
     openingRates.sellPrice(resourceId) ?? assert.fail(`${resourceId} is untraded`);
   const marketLot = marketStats.market?.lotSize ?? assert.fail("market lot size missing");
+  const levelCost = { food: 200, wood: 200 };
+  const levelStocks = { food: 200, wood: 0, stone: 0, gold: 100 };
+  const levelTrade = setup(levelStocks);
+  levelTrade.trade.stock.credit("enemy", "wood", marketLot);
+  assert.equal(levelTrade.manager.update(aiTestBlackboard({
+    resourceStocks: levelStocks,
+    centerLevel: 1,
+    centerLevelUpgradeCost: levelCost,
+    ageAffordable: false,
+  })), "traded", "a supplied Market can close the next centre level's wood shortfall");
 
   const selling = setup(short);
   assert.equal(selling.manager.update(blackboard(short)), "traded");

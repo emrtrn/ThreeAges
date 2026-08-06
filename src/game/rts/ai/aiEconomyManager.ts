@@ -127,9 +127,9 @@ export function buildOrder(bb: AiBlackboard, balance: AiBalance): readonly strin
   // the base is never mining stone while it has nothing to defend itself with.
   if (short("quarry")) order.push("quarry");
   if (short("gold_mine")) order.push("gold_mine");
-  // Faz M4, last on purpose: the Market converts an economy, it does not make
-  // one. Ahead of the extractors it would have the AI buy the stone it could
-  // have mined, at a spread, while its deposits sat untouched.
+  // Faz M4's normal path stays after the extractors: the standing trade manager
+  // may request an earlier Market only when a real progression shortfall proves
+  // the trade route is needed.
   if (short("market")) order.push("market");
   // Everything else the age's plan asks for, in the plan's own key order — the
   // Town Archery Range today. Listing it above would have needed a second age
