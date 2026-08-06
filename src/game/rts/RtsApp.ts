@@ -93,6 +93,7 @@ import {
   loadRtsAuthoredWorld,
 } from "./world/rtsAuthoredWorld";
 import { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
+import type { LandscapeSamplerBudget } from "@engine/render-three/landscape";
 import {
   applyPostProcessToneMapping,
   createPostProcessAntialiasPass,
@@ -3967,6 +3968,14 @@ export class RtsApp {
       }
       this.authoredWorld = handle;
       this.scene.add(handle.root);
+      const landscapeSamplerBudget = handle.landscapes[0]?.object.userData.landscapeSamplerBudget as
+        | LandscapeSamplerBudget
+        | undefined;
+      if (landscapeSamplerBudget) {
+        this.canvas.dataset.rtsLandscapePbr = landscapeSamplerBudget.pbrEnabled ? "full" : "albedo-only";
+        this.canvas.dataset.rtsLandscapeSamplers =
+          `${landscapeSamplerBudget.requiredTextureUnits}/${landscapeSamplerBudget.availableTextureUnits ?? "unknown"}`;
+      }
       // §59/GDD 08 §39: every model the Level authors falls under the fog, with
       // no game code naming it. This is the whole answer to "I placed a prop in
       // the editor and it was visible on ground I had never scouted" — the fog

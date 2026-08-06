@@ -583,7 +583,13 @@ import {
   resampleLandscapeData,
 } from "../engine/scene/landscape";
 import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/landscape";
-import { createLandscapeObject, disposeLandscapeObject } from "../engine/render-three/landscape";
+import {
+  createLandscapeObject,
+  disposeLandscapeObject,
+  LANDSCAPE_PBR_MIN_TEXTURE_UNITS,
+  LANDSCAPE_PBR_TEXTURE_SAMPLERS,
+  resolveLandscapeSamplerBudget,
+} from "../engine/render-three/landscape";
 import { buildRiverWaterRibbon } from "../engine/render-three/riverWater";
 import { PLANAR_REFLECTION_EXCLUDED_LAYER, planarReflectionLayerMask } from "../engine/render-three/planarReflectionSource";
 import { resolveRiverWater, riverWaterReflectionGroupKey } from "../engine/scene/riverWater";
@@ -21275,6 +21281,64 @@ check("landscape PBR splat blends layer normal/ORM maps with scalar fallbacks", 
   assert.ok(shader.fragmentShader.includes("reflectedLight.indirectDiffuse *= forgeAo"));
   assert.ok(shader.fragmentShader.includes("uLayerHasOrm1 > 0.5"), "missing ORM uses the safe vec4(1) fallback");
 
+  disposeLandscapeObject(object);
+  albedo.dispose();
+  normal.dispose();
+  orm.dispose();
+});
+
+check("landscape PBR sampler budget selects an explicit albedo-only fallback", () => {
+  assert.equal(LANDSCAPE_PBR_TEXTURE_SAMPLERS, 12);
+  assert.equal(resolveLandscapeSamplerBudget().pbrEnabled, true, "unknown hosts preserve the full legacy-compatible path");
+  assert.deepEqual(resolveLandscapeSamplerBudget(LANDSCAPE_PBR_MIN_TEXTURE_UNITS), {
+    availableTextureUnits: LANDSCAPE_PBR_MIN_TEXTURE_UNITS,
+    requiredTextureUnits: 12,
+    pbrEnabled: true,
+    fallback: "none",
+  });
+  assert.deepEqual(resolveLandscapeSamplerBudget(LANDSCAPE_PBR_MIN_TEXTURE_UNITS - 1), {
+    availableTextureUnits: LANDSCAPE_PBR_MIN_TEXTURE_UNITS - 1,
+    requiredTextureUnits: 12,
+    pbrEnabled: false,
+    fallback: "albedo-only",
+  });
+
+  const data = createFlatLandscapeData("small");
+  const albedo = new Texture();
+  const normal = new Texture();
+  const orm = new Texture();
+  const object = createLandscapeObject({
+    id: "low-capacity-fixture",
+    name: "Low capacity fixture",
+    hidden: false,
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    data,
+    maxTextureUnits: LANDSCAPE_PBR_MIN_TEXTURE_UNITS - 1,
+    layerTextures: data.layers.map((layer) => ({
+      id: layer.id,
+      texture: albedo,
+      normalTexture: normal,
+      ormTexture: orm,
+      color: "#ffffff",
+      tiling: { x: 1, y: 1 },
+      roughness: 0.7,
+      metalness: 0,
+      aoIntensity: 1,
+    })),
+  } as Parameters<typeof createLandscapeObject>[0]);
+  assert.deepEqual(object.userData.landscapeSamplerBudget, resolveLandscapeSamplerBudget(15));
+  const material = (object.children[0] as Mesh).material as MeshStandardMaterial;
+  assert.equal(material.normalMap, null, "the low-capacity variant does not request Three's normal-map sampler");
+  assert.equal(material.customProgramCacheKey(), "forge-landscape-splat-albedo-only");
+  const shader = {
+    uniforms: {} as Record<string, { value: unknown }>,
+    vertexShader: "#include <common>\n#include <uv_vertex>",
+    fragmentShader: "#include <common>\nvoid main() {\n#include <color_fragment>\n}",
+  };
+  material.onBeforeCompile(shader, null!);
+  assert.equal(shader.uniforms.uLayerOrm0, undefined, "the fallback consumes only four albedo samplers");
+  assert.ok(!shader.fragmentShader.includes("uLayerNormal0"));
   disposeLandscapeObject(object);
   albedo.dispose();
   normal.dispose();

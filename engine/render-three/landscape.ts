@@ -79,6 +79,36 @@ export interface LandscapeDirtyBounds {
 
 export type LandscapeViewMode = "lit" | "height" | "slope" | "layer";
 
+/** Four albedo, four normal and four ORM maps in the full Landscape PBR variant. */
+export const LANDSCAPE_PBR_TEXTURE_SAMPLERS = 12;
+/** Leave room for the host's shadow/environment samplers on the desktop target. */
+export const LANDSCAPE_PBR_MIN_TEXTURE_UNITS = 16;
+
+export interface LandscapeSamplerBudget {
+  availableTextureUnits: number | null;
+  requiredTextureUnits: number;
+  pbrEnabled: boolean;
+  fallback: "none" | "albedo-only";
+}
+
+/**
+ * Chooses the full 12-sampler PBR variant only when the host reports enough
+ * fragment texture units. Unknown capability preserves the legacy/full path;
+ * a known constrained device gets a deliberate four-albedo-sampler fallback.
+ */
+export function resolveLandscapeSamplerBudget(maxTextureUnits?: number): LandscapeSamplerBudget {
+  const availableTextureUnits = Number.isFinite(maxTextureUnits)
+    ? Math.max(0, Math.floor(maxTextureUnits!))
+    : null;
+  const pbrEnabled = availableTextureUnits === null || availableTextureUnits >= LANDSCAPE_PBR_MIN_TEXTURE_UNITS;
+  return {
+    availableTextureUnits,
+    requiredTextureUnits: LANDSCAPE_PBR_TEXTURE_SAMPLERS,
+    pbrEnabled,
+    fallback: pbrEnabled ? "none" : "albedo-only",
+  };
+}
+
 /** Per-layer color override (layerId → hex), resolved from assigned materials. */
 export type LandscapeLayerColors = Record<string, string>;
 
@@ -114,6 +144,8 @@ export interface LandscapeRenderItem extends ResolvedLandscape {
   layerColors?: LandscapeLayerColors;
   /** Per-layer base-color textures for weight-blended splat rendering (lit view). */
   layerTextures?: LandscapeLayerTexture[];
+  /** Renderer fragment texture-unit limit, used to select the safe shader variant. */
+  maxTextureUnits?: number;
 }
 
 const DEFAULT_LAYER_COLOR = new Color(LANDSCAPE_DEFAULT_LAYERS[0]!.color);
@@ -302,8 +334,13 @@ function buildChunkGeometry(
  * Used only in "lit" view when at least one layer has a texture; otherwise the
  * plain vertex-color material renders the tint and the debug view modes.
  */
-function createLandscapeSplatMaterial(layerTextures: LandscapeLayerTexture[]): MeshStandardMaterial {
-  const firstNormalTexture = layerTextures.find((layer) => layer.normalTexture)?.normalTexture ?? null;
+function createLandscapeSplatMaterial(
+  layerTextures: LandscapeLayerTexture[],
+  samplerBudget: LandscapeSamplerBudget,
+): MeshStandardMaterial {
+  const firstNormalTexture = samplerBudget.pbrEnabled
+    ? layerTextures.find((layer) => layer.normalTexture)?.normalTexture ?? null
+    : null;
   const material = new MeshStandardMaterial({
     color: new Color("#ffffff"),
     roughness: 1,
@@ -332,6 +369,7 @@ function createLandscapeSplatMaterial(layerTextures: LandscapeLayerTexture[]): M
       shader.uniforms[`uLayerColor${index}`] = { value: colorAt(index) };
       shader.uniforms[`uLayerHasTex${index}`] = { value: texAt(index) ? 1 : 0 };
       shader.uniforms[`uLayerTiling${index}`] = { value: tilingAt(index) };
+      if (!samplerBudget.pbrEnabled) continue;
       shader.uniforms[`uLayerNormal${index}`] = { value: normalAt(index) };
       shader.uniforms[`uLayerOrm${index}`] = { value: ormAt(index) };
       shader.uniforms[`uLayerHasNormal${index}`] = { value: normalAt(index) ? 1 : 0 };
@@ -351,14 +389,6 @@ uniform sampler2D uLayerTex0;
 uniform sampler2D uLayerTex1;
 uniform sampler2D uLayerTex2;
 uniform sampler2D uLayerTex3;
-uniform sampler2D uLayerNormal0;
-uniform sampler2D uLayerNormal1;
-uniform sampler2D uLayerNormal2;
-uniform sampler2D uLayerNormal3;
-uniform sampler2D uLayerOrm0;
-uniform sampler2D uLayerOrm1;
-uniform sampler2D uLayerOrm2;
-uniform sampler2D uLayerOrm3;
 uniform vec3 uLayerColor0;
 uniform vec3 uLayerColor1;
 uniform vec3 uLayerColor2;
@@ -371,26 +401,6 @@ uniform vec2 uLayerTiling0;
 uniform vec2 uLayerTiling1;
 uniform vec2 uLayerTiling2;
 uniform vec2 uLayerTiling3;
-uniform float uLayerHasNormal0;
-uniform float uLayerHasNormal1;
-uniform float uLayerHasNormal2;
-uniform float uLayerHasNormal3;
-uniform float uLayerHasOrm0;
-uniform float uLayerHasOrm1;
-uniform float uLayerHasOrm2;
-uniform float uLayerHasOrm3;
-uniform float uLayerRoughness0;
-uniform float uLayerRoughness1;
-uniform float uLayerRoughness2;
-uniform float uLayerRoughness3;
-uniform float uLayerMetalness0;
-uniform float uLayerMetalness1;
-uniform float uLayerMetalness2;
-uniform float uLayerMetalness3;
-uniform float uLayerAoIntensity0;
-uniform float uLayerAoIntensity1;
-uniform float uLayerAoIntensity2;
-uniform float uLayerAoIntensity3;
 varying vec4 vLandscapeWeight;`,
       )
       // Inlined here (not a helper at <common>) because vUv is only in scope
@@ -411,6 +421,40 @@ varying vec4 vLandscapeWeight;`,
   float forgeWeight = vLandscapeWeight.x + vLandscapeWeight.y + vLandscapeWeight.z + vLandscapeWeight.w;
   diffuseColor.rgb = forgeWeight > 0.0001 ? forgeAlbedo / forgeWeight : uLayerColor0;
 }`,
+      );
+    if (!samplerBudget.pbrEnabled) return;
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+uniform sampler2D uLayerNormal0;
+uniform sampler2D uLayerNormal1;
+uniform sampler2D uLayerNormal2;
+uniform sampler2D uLayerNormal3;
+uniform sampler2D uLayerOrm0;
+uniform sampler2D uLayerOrm1;
+uniform sampler2D uLayerOrm2;
+uniform sampler2D uLayerOrm3;
+uniform float uLayerHasNormal0;
+uniform float uLayerHasNormal1;
+uniform float uLayerHasNormal2;
+uniform float uLayerHasNormal3;
+uniform float uLayerHasOrm0;
+uniform float uLayerHasOrm1;
+uniform float uLayerHasOrm2;
+uniform float uLayerHasOrm3;
+uniform float uLayerRoughness0;
+uniform float uLayerRoughness1;
+uniform float uLayerRoughness2;
+uniform float uLayerRoughness3;
+uniform float uLayerMetalness0;
+uniform float uLayerMetalness1;
+uniform float uLayerMetalness2;
+uniform float uLayerMetalness3;
+uniform float uLayerAoIntensity0;
+uniform float uLayerAoIntensity1;
+uniform float uLayerAoIntensity2;
+uniform float uLayerAoIntensity3;`,
       )
       .replace(
         "#include <normal_fragment_maps>",
@@ -454,7 +498,9 @@ reflectedLight.indirectDiffuse *= forgeAo;
       );
   };
   // Distinguish this program from the plain landscape material in three's cache.
-  material.customProgramCacheKey = () => `forge-landscape-splat-pbr-${firstNormalTexture ? "normal" : "flat"}`;
+  material.customProgramCacheKey = () => samplerBudget.pbrEnabled
+    ? `forge-landscape-splat-pbr-${firstNormalTexture ? "normal" : "flat"}`
+    : "forge-landscape-splat-albedo-only";
   return material;
 }
 
@@ -465,13 +511,14 @@ function buildLandscapeChunkMeshes(
   activeLayerId: string,
   colors?: LandscapeLayerColors,
   layerTextures?: LandscapeLayerTexture[],
+  samplerBudget: LandscapeSamplerBudget = resolveLandscapeSamplerBudget(),
 ): Mesh[] {
   const { verticesX, verticesZ } = data.size;
   const quadsPerChunk = Math.max(1, data.chunks?.quadsPerChunk || LANDSCAPE_QUADS_PER_CHUNK);
   ensureLandscapeLayers(data);
   const useSplat = viewMode === "lit" && Boolean(layerTextures?.some((layer) => layer.texture));
   const material = useSplat
-    ? createLandscapeSplatMaterial(layerTextures!)
+    ? createLandscapeSplatMaterial(layerTextures!, samplerBudget)
     : new MeshStandardMaterial({
         color: new Color("#ffffff"),
         roughness: 1,
@@ -499,6 +546,8 @@ function buildLandscapeChunkMeshes(
 export function createLandscapeObject(item: LandscapeRenderItem): LandscapeObject {
   const group = new Group();
   group.name = item.name;
+  const samplerBudget = resolveLandscapeSamplerBudget(item.maxTextureUnits);
+  group.userData.landscapeSamplerBudget = samplerBudget;
   const viewMode = item.viewMode ?? "lit";
   const activeLayerId = item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id;
   for (const mesh of buildLandscapeChunkMeshes(
@@ -507,6 +556,7 @@ export function createLandscapeObject(item: LandscapeRenderItem): LandscapeObjec
     activeLayerId,
     item.layerColors,
     item.layerTextures,
+    samplerBudget,
   )) {
     group.add(mesh);
   }

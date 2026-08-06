@@ -398,6 +398,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
       data,
       layerTextures,
       layerColors,
+      maxTextureUnits: renderer.capabilities.maxTextures,
     };
     const object = createLandscapeObject(item);
     root.add(object);

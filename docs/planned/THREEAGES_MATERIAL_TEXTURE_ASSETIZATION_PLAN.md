@@ -1,7 +1,7 @@
 # ThreeAges — Materyal, Tekrarlanabilir Doku ve Yüzey Assetleştirme Planı
 
 Oluşturulma tarihi: 2026-08-06  
-Durum: **Devam ediyor — Faz 0 tamamlanma yolunda; Faz 1 dar çekirdeği uygulandı, browser/capability kabulü açık**
+Durum: **Devam ediyor — Faz 0 tamamlanma yolunda; Faz 1 dar çekirdeği ve desktop capability kapısı kanıtlandı, dört-ORM fixture kabulü açık**
 
 ## Uygulama Günlüğü
 
@@ -11,7 +11,8 @@ Durum: **Devam ediyor — Faz 0 tamamlanma yolunda; Faz 1 dar çekirdeği uygula
   - [x] Ortak Landscape material-layer resolver'ı albedo yanında normal, ORM ve scalar PBR bilgilerini Editor, Play ve authored-world yoluna iletmeye başladı.
   - [x] Landscape splat shader'ı dört normal ile dört ORM katmanını paint ağırlıklarıyla karıştırır; eksik normal/ORM güvenli fallback kullanır.
   - [x] `Assetization Faz E` browser smoke, normal map kullanan gerçek authored Landscape'i mount/restart/dispose ederek console hatası olmadan geçti.
-  - [ ] Sampler capability ölçümü ile dört farklı normal/ORM fixture'ının browser kanıtı sonraki dar Faz 1 diliminde kalır.
+  - [x] Renderer texture-unit limiti Landscape'e aktarılır; 16'nın altındaki bilinen cihazda shader açıkça albedo-only varyanta düşer. RTS browser smoke tam PBR yolunu ve `data-rts-landscape-samplers="12/<limit>"` ölçümünü doğruladı.
+  - [ ] Dört farklı normal/ORM texture ile browser fixture ve görsel blend kabulü, ilk gerçek texture pilotu ile birlikte kalır.
 
 ## 1. Amaç
 

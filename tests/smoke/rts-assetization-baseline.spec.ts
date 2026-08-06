@@ -235,6 +235,8 @@ test("Assetization Faz E: the opt-in Level mounts its authored static world and 
   await expect(page.locator("#game-canvas")).toBeVisible();
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-authored-world", "ready", { timeout: 30_000 });
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-landscape-pbr", "full");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-landscape-samplers", /^12\/\d+$/);
 
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);

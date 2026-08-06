@@ -6116,6 +6116,7 @@ export class SceneApp {
       activeLayerId: this.landscapeSculptSettings.activeLayerId,
       layerColors: this.resolveLandscapeLayerColors(data),
       layerTextures: this.resolveLandscapeLayerTextures(data),
+      maxTextureUnits: this.renderer.capabilities.maxTextures,
     };
   }
 

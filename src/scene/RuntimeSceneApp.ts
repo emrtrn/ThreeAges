@@ -4818,6 +4818,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       position: [...actor.position],
       rotation: readRotation(actor),
       data,
+      maxTextureUnits: this.renderer.capabilities.maxTextures,
     };
     if (layerTextures) {
       item.layerTextures = layerTextures;
