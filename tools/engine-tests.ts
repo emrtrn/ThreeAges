@@ -19348,6 +19348,63 @@ check("ThreeAges wood-dark pilot material names registered BC/N/ORM textures", (
   assert.equal(assetType(materialRecord!), "material");
 });
 
+check("ThreeAges wood-light pilot material names registered BC/N/ORM textures", () => {
+  const material = normalizeForgeMaterialDef(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Materials/M_TA_Wood_Light.material.json", "utf8")),
+    "M_TA_Wood_Light",
+  );
+  assert.equal(material.baseColorTexture, "threeages-tex-wood-light-bc");
+  assert.equal(material.normalTexture, "threeages-tex-wood-light-n");
+  assert.equal(material.ormTexture, "threeages-tex-wood-light-orm");
+  for (const textureId of [material.baseColorTexture, material.normalTexture, material.ormTexture]) {
+    assert.ok(textureId, "the pilot material must not silently fall back to a missing map");
+    const record = assetManifest.assets.find((asset) => asset.id === textureId);
+    assert.ok(record, `pilot material refers to unregistered texture ${textureId}`);
+    assert.equal(assetType(record!), "texture");
+  }
+  const materialRecord = assetManifest.assets.find((asset) => asset.id === "threeages-mat-wood-light");
+  assert.ok(materialRecord, "pilot material itself must be registered");
+  assert.equal(assetType(materialRecord!), "material");
+});
+
+check("ThreeAges roof-clay pilot material names registered BC/N/ORM textures", () => {
+  const material = normalizeForgeMaterialDef(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Materials/M_TA_Roof_Clay.material.json", "utf8")),
+    "M_TA_Roof_Clay",
+  );
+  assert.equal(material.baseColorTexture, "threeages-tex-roof-clay-bc");
+  assert.equal(material.normalTexture, "threeages-tex-roof-clay-n");
+  assert.equal(material.ormTexture, "threeages-tex-roof-clay-orm");
+  for (const textureId of [material.baseColorTexture, material.normalTexture, material.ormTexture]) {
+    assert.ok(textureId, "the pilot material must not silently fall back to a missing map");
+    const record = assetManifest.assets.find((asset) => asset.id === textureId);
+    assert.ok(record, `pilot material refers to unregistered texture ${textureId}`);
+    assert.equal(assetType(record!), "texture");
+  }
+  const materialRecord = assetManifest.assets.find((asset) => asset.id === "threeages-mat-roof-clay");
+  assert.ok(materialRecord, "pilot material itself must be registered");
+  assert.equal(assetType(materialRecord!), "material");
+});
+
+check("ThreeAges wall-plaster pilot material names registered BC/N/ORM textures", () => {
+  const material = normalizeForgeMaterialDef(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Materials/M_TA_Wall_Plaster.material.json", "utf8")),
+    "M_TA_Wall_Plaster",
+  );
+  assert.equal(material.baseColorTexture, "threeages-tex-wall-plaster-bc");
+  assert.equal(material.normalTexture, "threeages-tex-wall-plaster-n");
+  assert.equal(material.ormTexture, "threeages-tex-wall-plaster-orm");
+  for (const textureId of [material.baseColorTexture, material.normalTexture, material.ormTexture]) {
+    assert.ok(textureId, "the pilot material must not silently fall back to a missing map");
+    const record = assetManifest.assets.find((asset) => asset.id === textureId);
+    assert.ok(record, `pilot material refers to unregistered texture ${textureId}`);
+    assert.equal(assetType(record!), "texture");
+  }
+  const materialRecord = assetManifest.assets.find((asset) => asset.id === "threeages-mat-wall-plaster");
+  assert.ok(materialRecord, "pilot material itself must be registered");
+  assert.equal(assetType(materialRecord!), "material");
+});
+
 check("forge material mapping creates matching Three material types and fields", () => {
   const standard = createThreeMaterialFromForgeDef(
     normalizeForgeMaterialDef({
@@ -44856,6 +44913,7 @@ check("Debug panel: the perf readout reports the frame, what it draws and what e
     ],
     quality: { level: "high", adaptiveEnabled: true, reductionDepth: 2 },
     scene: { units: 64, structures: 22, caravans: 3, wildlife: 40 },
+    graph: { objects: 12_480, meshes: 3_210 },
   };
   const text = formatRtsPerfDebug(snapshot).join("\n");
 
@@ -44866,6 +44924,11 @@ check("Debug panel: the perf readout reports the frame, what it draws and what e
   // The GPU line sits right under the frame line because the two together are
   // what says whether to optimise draw calls or decisions.
   assert.match(text, /gpu 11\.50 ms · ort 10\.25 · tepe 19\.00/);
+  // Draw calls and graph size are separate findings and the panel must not let
+  // one stand in for the other: 1,420 calls beside 12,480 walked nodes is a
+  // frame being traversed, not a frame being submitted, and batching further
+  // would not touch it.
+  assert.match(text, /graf 12,480 düğüm · 3,210 mesh \(geçiş başına gezilir\)/);
   // A browser with no timer query must say so rather than report zeros: "the
   // GPU costs nothing" and "this browser will not say" are opposite findings.
   assert.match(

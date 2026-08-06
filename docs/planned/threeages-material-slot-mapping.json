@@ -28,13 +28,13 @@
     "Snow": { "surface": "snow", "targetMaterial": null },
     "Stone": { "surface": null, "targetMaterial": null, "requiresAssetFamilyOverride": true },
     "Stone_Light": { "surface": "stone-masonry-light", "targetMaterial": null },
-    "Walls": { "surface": "wall-plaster", "targetMaterial": null },
+    "Walls": { "surface": "wall-plaster", "targetMaterial": "threeages-mat-wall-plaster" },
     "Water": { "surface": "water-center", "targetMaterial": null, "requiresAssetFamilyOverride": true },
     "Watermelon_DarkGreen": { "surface": "produce-watermelon", "targetMaterial": null },
     "Wheat": { "surface": "wheat", "targetMaterial": null },
     "White": { "surface": "paint-white", "targetMaterial": null },
     "Wood": { "surface": "wood-dark", "targetMaterial": "threeages-mat-wood-dark" },
-    "Wood_Light": { "surface": "wood-light", "targetMaterial": null },
+    "Wood_Light": { "surface": "wood-light", "targetMaterial": "threeages-mat-wood-light" },
     "Yellow": { "surface": "paint-yellow", "targetMaterial": null }
   },
   "assetFamilyOverrides": [

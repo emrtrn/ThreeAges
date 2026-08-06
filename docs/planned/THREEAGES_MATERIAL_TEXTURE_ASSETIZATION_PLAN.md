@@ -15,6 +15,11 @@ Durum: **Devam ediyor — Faz 0 tamamlanma yolunda; Faz 1 dar çekirdeği ve des
   - [ ] Dört farklı normal/ORM texture ile browser fixture ve görsel blend kabulü, ilk gerçek texture pilotu ile birlikte kalır.
   - [x] Faz 3 `wood-dark` pilotu için kullanıcı A varyantını kabul etti. Deterministik 1024² BC/N/ORM seti, manifest texture kayıtları ve `M_TA_Wood_Dark` oluşturuldu; henüz model/Landscape slotuna atanmadı.
   - [x] `wood-dark` Material Editor browser smoke, kayıtlı BC/normal/ORM setini açıp `Ready.` durumuna ulaştı; sayfa hatası üretmedi.
+  - [x] Faz 3 `wood-light` pilotu için kullanıcı A varyantını kabul etti. Deterministik 1024² BC/N/ORM seti, manifest texture kayıtları ve `M_TA_Wood_Light` oluşturuldu; henüz model/Landscape slotuna atanmadı.
+  - [x] `wood-light` Material Editor browser smoke, kayıtlı BC/normal/ORM setini açıp `Ready.` durumuna ulaştı; sayfa hatası üretmedi.
+  - [x] Faz 3 `roof-clay` pilotu, kullanıcının yönlendirmesiyle çizgisiz yalnızca-kil yüzeyine geçirildi. BC/N/ORM seti aynı kimliklerle güncellendi; kiremit çizgileri ve derzleri artık yalnızca model geometrisinden gelir. `Main` belirsiz olduğu için otomatik atama yapılmadı.
+  - [x] Faz 3 `wall-plaster` pilotu, kullanıcının seçtiği beyaz B varyantına geçirildi. BC/N/ORM seti aynı kimliklerle güncellendi; `M_TA_Wall_Plaster` ve güvenli `Walls` slot eşleme hedefi korunuyor. Temsilci model görsel kabulü hâlâ açıktır.
+  - [ ] Kullanıcı, `TownCenter_FirstAge_Level{1,2,3}` sidecar'larında `wood-dark` ve `wood-light` materyallerini manuel atayıp denedi. Bu, gerçek model deneme kanıtıdır; açık görsel kabul ifadesi gelmeden Faz 6 kabulünü kapatmaz.
 
 ## 1. Amaç
 
@@ -599,9 +604,9 @@ River Water'a yabancı görünmez ve spline/foam/reflection koduna bağımlı de
 İlk pilot yüzeyleri:
 
 - [x] `wood-dark`
-- [ ] `wood-light`
-- [ ] `roof-clay`
-- [ ] `wall-plaster`
+- [x] `wood-light`
+- [x] `roof-clay` (kullanıcı çizgisiz yalnızca-kil yüzeyini seçti; temsilci model kabulü açık)
+- [x] `wall-plaster` (kullanıcı B/beyaz plaster seçti; temsilci model kabulü açık)
 - [ ] `stone-masonry`
 - [ ] `rock-natural`
 - [ ] `earth-compacted`

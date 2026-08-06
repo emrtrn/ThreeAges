@@ -2503,6 +2503,7 @@ export class RtsApp {
     const render = readRenderStats(this.renderer);
     const memory = readRenderMemory(this.renderer);
     const shadowCasters = this.shadowCasterStats();
+    const graph = this.sceneGraphStats();
     const frameStats = {
       averageMs: frame.averageFrameTimeMs,
       p95Ms: frame.p95FrameTimeMs,
@@ -2516,6 +2517,7 @@ export class RtsApp {
       render,
       memory,
       shadowCasters,
+      graph,
       // Event-driven terrain work, not a per-frame timer. Browser performance
       // captures can correlate a road/build hitch with its exact repaint scope.
       terrainPaint: this.roadPainter?.snapshot() ?? null,
@@ -2537,6 +2539,7 @@ export class RtsApp {
         { label: "diğer", ...shadowCasters.other },
       ],
       costs: this.perfCosts(),
+      graph,
       quality: {
         level: this.userSettings.graphics.selectedQualityLevel,
         adaptiveEnabled: this.userSettings.graphics.adaptiveOptimizationEnabled,
@@ -2583,6 +2586,25 @@ export class RtsApp {
       });
     }
     return costs;
+  }
+
+  /**
+   * How much graph `renderer.render` has to walk, sampled on the snapshot
+   * cadence rather than per frame — counting it every frame would add a
+   * traversal to the very cost it is there to explain.
+   *
+   * `traverseVisible` deliberately, not `traverse`: three.js abandons an
+   * invisible subtree whole, so a hidden branch is not part of what the frame
+   * pays for and counting it would overstate the finding.
+   */
+  private sceneGraphStats(): { objects: number; meshes: number } {
+    let objects = 0;
+    let meshes = 0;
+    this.scene.traverseVisible((object) => {
+      objects += 1;
+      if ((object as { isMesh?: boolean }).isMesh === true) meshes += 1;
+    });
+    return { objects, meshes };
   }
 
   /** Shadow-caster inventory for a debug performance report, sampled not hot-path. */

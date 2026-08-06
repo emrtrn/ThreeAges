@@ -54,6 +54,18 @@ export interface RtsPerfDebugSnapshot {
     readonly samples: number;
   } | null;
   readonly shadows: readonly RtsPerfShadowBucket[];
+  /**
+   * What `renderer.render` actually walks, per pass. Draw calls say how much
+   * reaches the GPU; this says how much the CPU had to look at to decide that,
+   * and the two come apart completely — instancing collapses a forest into one
+   * draw call while leaving every one of its nodes in the graph. A shadowing
+   * light walks it a second time. Counted over visible subtrees only, because an
+   * invisible parent costs the renderer nothing below it.
+   */
+  readonly graph: {
+    readonly objects: number;
+    readonly meshes: number;
+  };
   /** Frame regions, in the order they should be shown (not sorted by cost). */
   readonly costs: readonly RtsPerfCost[];
   readonly quality: {
@@ -74,7 +86,7 @@ export interface RtsPerfDebugSnapshot {
 const COST_LABEL_WIDTH = 12;
 
 export function formatRtsPerfDebug(snapshot: RtsPerfDebugSnapshot): string[] {
-  const { frame, render, memory, quality, scene } = snapshot;
+  const { frame, render, memory, quality, scene, graph } = snapshot;
   const fps = frame.averageMs > 0 ? 1000 / frame.averageMs : 0;
   const lines = [
     frame.sampleCount > 0
@@ -85,6 +97,10 @@ export function formatRtsPerfDebug(snapshot: RtsPerfDebugSnapshot): string[] {
     // question that decides what to optimise: CPU-bound or GPU-bound.
     gpuLine(snapshot.gpu),
     `çizim ${groupThousands(render.drawCalls)} çağrı · ${compactCount(render.triangles)} üçgen`,
+    // Directly under the draw line, because the pair is the finding: a small
+    // draw count beside a large node count means the frame is being walked, not
+    // submitted, and no amount of further batching would touch it.
+    `graf ${groupThousands(graph.objects)} düğüm · ${groupThousands(graph.meshes)} mesh (geçiş başına gezilir)`,
     `bellek geo ${groupThousands(memory.geometries)} · doku ${groupThousands(memory.textures)} · shader ${groupThousands(memory.programs)}`,
   ];
 

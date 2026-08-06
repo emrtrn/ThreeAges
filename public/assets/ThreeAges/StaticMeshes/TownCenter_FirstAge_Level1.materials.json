@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "slots": [
-    "m-wood-floor-material",
-    "m-wood-pine-material"
+    "threeages-mat-wood-dark",
+    "threeages-mat-wood-light"
   ]
 }
