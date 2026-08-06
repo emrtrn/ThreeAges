@@ -607,7 +607,7 @@ River Water'a yabancı görünmez ve spline/foam/reflection koduna bağımlı de
 - [x] `wood-light`
 - [x] `roof-clay` (kullanıcı çizgisiz yalnızca-kil yüzeyini seçti; temsilci model kabulü açık)
 - [x] `wall-plaster` (kullanıcı B/beyaz plaster seçti; temsilci model kabulü açık)
-- [ ] `stone-masonry`
+- [x] `stone-masonry` (A ana materyal; B kayıtlı yedek, aile override apply açık)
 - [ ] `rock-natural`
 - [ ] `earth-compacted`
 - [ ] `grass-meadow`

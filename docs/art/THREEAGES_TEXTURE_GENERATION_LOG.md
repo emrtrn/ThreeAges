@@ -114,3 +114,19 @@ production preview is `docs/art/previews/T_TA_Wall_Plaster_3x3.png`. The safe
 `Walls` source slot maps to this material, but Phase 4 has not yet applied that
 mapping to any asset sidecar. The Material Editor browser smoke opened it with
 status `Ready.` and no page errors.
+
+## stone-masonry — candidate review
+
+Date: 2026-08-07
+Status: `accepted` — A is primary; B is retained as a registered backup
+
+| Variant | Project copy | 3×3 preview | Review note |
+| --- | --- | --- | --- |
+| A | `docs/art/candidates/T_TA_Stone_Masonry_Candidate_A.png` | `docs/art/candidates/processed/T_TA_Stone_Masonry_Candidate_A_3x3.png` | Open, irregular rough limestone; recommended. |
+| B | `docs/art/candidates/T_TA_Stone_Masonry_Candidate_B.png` | `docs/art/candidates/processed/T_TA_Stone_Masonry_Candidate_B_3x3.png` | Regular gray courses read more like brick than rough stone. |
+
+Built-in image generation plus the local deterministic processor produced the
+1024² candidates. Seam metrics: A `0.00042`; B `0.00025` (threshold `0.01500`).
+Both sets are registered: `threeages-mat-stone-masonry` is primary and
+`threeages-mat-stone-masonry-backup` is the retained B alternative. `Stone`
+remains asset-family-specific, so neither is mapped automatically.
