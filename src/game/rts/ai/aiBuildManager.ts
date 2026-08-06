@@ -27,6 +27,8 @@ export interface AiBuildPlacementDebug {
 
 /** Read-only extra gate for normal (non-expansion) base sites. */
 export type AiBuildSiteFilter = (site: AiBuildSite) => string | null;
+/** Optional deterministic preference within the already-safe planned ordering. */
+export type AiBuildSiteRanker = (site: AiBuildSite) => number | null;
 
 export class AiBuildManager {
   private readonly candidateFailures = new Map<string, number>();
@@ -41,6 +43,7 @@ export class AiBuildManager {
     private readonly log: AiDecisionLog,
     private readonly siteProvider?: AiSiteProvider,
     private readonly baseSiteFilter?: AiBuildSiteFilter,
+    private readonly baseSiteRanker?: AiBuildSiteRanker,
   ) {}
 
   get busy(): boolean {
@@ -114,8 +117,15 @@ export class AiBuildManager {
       : this.siteProvider?.sitesFor(buildingId) ?? this.anchors
         .filter((anchor) => anchor.buildingId === buildingId)
         .map(toLegacySite);
-    return sites.filter((site) => (this.candidateFailures.get(site.key) ?? 0) < AI_ANCHOR_FAILURE_LIMIT
-      && !this.occupied(site));
+    return sites
+      .filter((site) => (this.candidateFailures.get(site.key) ?? 0) < AI_ANCHOR_FAILURE_LIMIT
+        && !this.occupied(site))
+      .map((site, index) => ({ site, index, rank: scope ? null : this.baseSiteRanker?.(site) ?? null }))
+      .sort((left, right) => {
+        if (left.rank === null || right.rank === null) return left.index - right.index;
+        return left.rank - right.rank || left.index - right.index;
+      })
+      .map(({ site }) => site);
   }
 
   private occupied(site: Pick<AiBuildSite, "x" | "z">): boolean {

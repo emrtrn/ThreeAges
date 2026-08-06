@@ -30,6 +30,11 @@ export class SettlementAiSiteProvider implements AiSiteProvider {
       ...this.legacyAnchors.filter((anchor) => anchor.buildingId === buildingId).map(toLegacySite),
     ];
   }
+
+  /** Planned-only view for cross-building decisions such as depot logistics. */
+  plannedSites(): readonly AiBuildSite[] {
+    return [...this.plan.candidatesByBuilding.values()].flatMap((candidates) => candidates.map(toProceduralSite));
+  }
 }
 
 function toProceduralSite(candidate: SettlementSiteCandidate): AiBuildSite {

@@ -25,7 +25,7 @@ import type { UnitOwner } from "../units/unit";
 import { AiAgeManager } from "./aiAgeManager";
 import { AiBlackboardReader, type AiBlackboard, type AiBlackboardSources } from "./aiBlackboard";
 import { AiBuildManager } from "./aiBuildManager";
-import type { AiBuildPlacementDebug, AiBuildSiteFilter } from "./aiBuildManager";
+import type { AiBuildPlacementDebug, AiBuildSiteFilter, AiBuildSiteRanker } from "./aiBuildManager";
 import type { AiSiteProvider } from "./aiSiteProvider";
 import { AiDecisionLog } from "./aiDecisionLog";
 import { AiEconomyManager, type AiBottleneck } from "./aiEconomyManager";
@@ -52,6 +52,8 @@ export interface AiControllerOptions extends AiBlackboardSources {
   readonly siteProvider?: AiSiteProvider;
   /** P3 road preflight for normal planned base candidates. */
   readonly baseSiteFilter?: AiBuildSiteFilter;
+  /** P3 depot preference after road preflight, without changing expansion recipes. */
+  readonly baseSiteRanker?: AiBuildSiteRanker;
   /**
    * §37: the base road spine. Without it the base depot has no island and every
    * base producer stays stuck on its local buffer, so the AI has no income.
@@ -181,6 +183,7 @@ export class AiController {
       this.log,
       options.siteProvider,
       options.baseSiteFilter,
+      options.baseSiteRanker,
     );
     this.economy = new AiEconomyManager(options.balance, this.builds, this.log);
     const depotAnchor = options.anchors.find((anchor) => anchor.buildingId === "depot");

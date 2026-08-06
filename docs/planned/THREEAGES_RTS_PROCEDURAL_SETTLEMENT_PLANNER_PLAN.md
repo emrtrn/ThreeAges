@@ -1,7 +1,7 @@
 # ThreeAges RTS — Prosedürel Yerleşim Planlayıcısı V1
 
 Oluşturulma tarihi: 2026-08-05  
-Durum: **Faz P0 + P1 + P2 tamamlandı — Faz P3 başladı; yol-adayı fallback ve tam lojistik regresyon dilimleri bekliyor**
+Durum: **Faz P0 + P1 + P2 + P3 tamamlandı — authored omurga kontrollü fallback olarak kalıyor; Faz P4 reaktif onarım bekliyor**
 
 ## 1. Amaç
 
@@ -277,12 +277,14 @@ Başlatma notu (2026-08-06): Taban depo isteği artık prosedürel adayları leg
 fallback'ten önce kullanır. Authoring omurgası ana ağ fallback'i olarak korunur;
 tamamlanan prosedürel depo ve üreticiler bu ağa mevcut, ücretli yol servisiyle
 erişim kolu kurar. Bu dilim, gerçek depo/üretici yol bileşenini regression'da
-kanıtlar; yol planı reddedilen adaydan bir sonrakine geçme işi sonraki P3 dilimidir.
+kanıtlar. Depo adayları, merkez ağına yeni yol maliyeti ve planlı üreticilere
+kalan yerel-aktarım mesafesiyle sıralanır; prosedürel footprint authored omurgayı
+route edilemez kılıyorsa aday elenir ve sonraki aday denenir.
 
-- [ ] Depo adayını merkez ve üretici erişimiyle birlikte seç.
+- [x] Depo adayını merkez ve üretici erişimiyle birlikte seç.
 - [x] Planlı üretici/depo bağlantısını mevcut yol servisiyle doğrula.
 - [x] Yol yapımı bir adayı kullanılamaz kılarsa sonraki adaya geç.
-- [ ] Yerel aktarım ve kervan kurallarının prosedürel yerleşimde değişmediğini
+- [x] Yerel aktarım ve kervan kurallarının prosedürel yerleşimde değişmediğini
   regresyonla kanıtla.
 
 Kabul: Taban kaynak üreticilerinin geliri cüzdana ulaşır; yol kesilince mevcut

@@ -72,7 +72,7 @@ import {
 } from "./content/rtsActorVisualFactory";
 import { AiController } from "./ai/aiController";
 import { SettlementAiSiteProvider } from "./ai/aiSiteProvider";
-import { proceduralRoadSiteFailure } from "./ai/aiRoadSiteFilter";
+import { proceduralDepotRoadRank, proceduralRoadSiteFailure } from "./ai/aiRoadSiteFilter";
 import { planSettlementLayout } from "./ai/settlementLayoutPlanner";
 import { formatRtsAiDebug } from "./ai/aiDebugView";
 import { RtsCameraController } from "./camera/rtsCameraController";
@@ -1406,6 +1406,7 @@ export class RtsApp {
       }),
       this.spatial.enemyBaseAnchors,
     );
+    const plannedBaseSites = siteProvider.plannedSites();
     this.ai = new AiController({
       owner: AI_OWNER,
       units: this.units,
@@ -1446,6 +1447,13 @@ export class RtsApp {
         site,
         this.options.buildingBalance,
         this.roadConstruction,
+        this.spatial.enemyBaseRoute,
+      ),
+      baseSiteRanker: (site) => proceduralDepotRoadRank(
+        site,
+        this.options.buildingBalance,
+        this.roadConstruction,
+        plannedBaseSites,
       ),
       baseRoute: this.spatial.enemyBaseRoute,
       expansions: this.spatial.enemyExpansions,

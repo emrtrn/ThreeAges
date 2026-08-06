@@ -31,9 +31,23 @@ export class RoadConstructionService {
     private readonly onCommitted: () => void = () => {},
   ) {}
 
+  /** Shared local hand-off reach, owned by the road balance rather than AI tuning. */
+  get autoConnectMaximumDistance(): number {
+    return this.roads.autoConnectMaximumDistance;
+  }
+
   /** Preview a route and its wood cost without spending. Null when unroutable. */
   plan(start: RoadCell, end: RoadCell): RoadPlan | null {
     return this.roads.plan(start, end, this.blockers());
+  }
+
+  /** Preview a route against one prospective footprint without mutating the graph. */
+  planWithAdditionalBlockers(
+    start: RoadCell,
+    end: RoadCell,
+    additionalBlockers: readonly NavBlocker[],
+  ): RoadPlan | null {
+    return this.roads.plan(start, end, [...this.blockers(), ...additionalBlockers]);
   }
 
   /** Plan, charge the owner's wood for new cells only, and commit the route. */

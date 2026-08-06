@@ -2963,6 +2963,7 @@
         -36
       ],
       "name": "Enemy Start",
+      "scale": 1,
       "variableOverrides": {
         "owner": "enemy"
       }

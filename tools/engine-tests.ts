@@ -273,7 +273,7 @@ import { ArmyManager, type AiObjectiveWatch } from "../src/game/rts/ai/armyManag
 import { KingdomDirector } from "../src/game/rts/ai/kingdomDirector";
 import { AiBuildManager, AI_ANCHOR_FAILURE_LIMIT } from "../src/game/rts/ai/aiBuildManager";
 import { SettlementAiSiteProvider } from "../src/game/rts/ai/aiSiteProvider";
-import { proceduralRoadSiteFailure } from "../src/game/rts/ai/aiRoadSiteFilter";
+import { proceduralDepotRoadRank, proceduralRoadSiteFailure } from "../src/game/rts/ai/aiRoadSiteFilter";
 import { planSettlementLayout } from "../src/game/rts/ai/settlementLayoutPlanner";
 import { buildOrder, detectBottleneck, nextBuilding } from "../src/game/rts/ai/aiEconomyManager";
 import { scoreIntents } from "../src/game/rts/ai/intentScorer";
@@ -34633,6 +34633,19 @@ check("Play-the-level-you-edit: ?level= outranks the preset, and a bad path is r
     editor: { defaultScene: string; previewUrl?: string };
   };
   assert.equal(requireRtsLevelRef(project.editor.defaultScene, "defaultScene"), project.editor.defaultScene);
+
+  // …and it is a real level, not a Playwright fixture. `smoke:browser`'s global
+  // setup repoints `defaultScene` at `layouts/__playwright-smoke*.level.json` for
+  // the duration of the run and its teardown puts the manifest back — so an
+  // interrupted run (or a crash before teardown) leaves the manifest pointing at
+  // a generated fixture, the editor opens that instead of the project's map, and
+  // the next commit carries it. That has already happened twice in this repo's
+  // history, which is exactly why it is an assertion and not a note.
+  assert.ok(
+    !/__playwright-smoke/.test(project.editor.defaultScene),
+    `editor.defaultScene is a Playwright smoke fixture ("${project.editor.defaultScene}") — `
+    + "a smoke run was interrupted before its teardown restored the manifest",
+  );
 });
 
 check("Assetization Faz E: the shipped RTS Core Match Level authors a mountable static world", () => {
@@ -43218,8 +43231,7 @@ function aiTestWorld(
       footprint: center.stats.footprint,
     }));
   }
-  const depots = new DepotLogisticsSystem(structures, roads);
-  const logistics = new ProductionLogisticsSystem(structures, roads, depots);
+  const depots = new DepotLogisticsSystem(structures, roads, centers);
   // Mirrors RtsApp: centres plus any completed outpost, whose radius grows
   // once a road links it to the owner's centre.
   const roadTouches = (x: number, z: number, size: number) => roadCellTouchingFootprint(roads, x, z, size, size);
@@ -43245,6 +43257,10 @@ function aiTestWorld(
         : structure.stats.territory?.controlRadius ?? 0,
     }))));
   territory.refresh();
+  // Mirrors RtsApp's full endpoint contract: a producer inside the data-owned
+  // local reach hands off directly to its centre/depot; remote producers retain
+  // their road-and-caravan route.
+  const logistics = new ProductionLogisticsSystem(structures, roads, depots, territory, undefined, centers);
   const aiLayout = validateAiLayoutBalance(
     JSON.parse(readFileSync("public/game-data/balance/ai-layout.json", "utf8")) as unknown,
   );
@@ -43266,6 +43282,7 @@ function aiTestWorld(
     layout: aiLayout,
     buildingIds: [...new Set(RTS_BLOCKOUT_MAP.enemyBaseAnchors.map((anchor) => anchor.buildingId))],
   }), RTS_BLOCKOUT_MAP.enemyBaseAnchors) : undefined;
+  const plannedBaseSites = siteProvider?.plannedSites() ?? [];
   const predators = new PredatorSystem(units, wildlife, (x, z) => territory.ownerAt(x, z));
   const workerConstruction = new WorkerConstructionSystem(
     units,
@@ -43383,7 +43400,13 @@ function aiTestWorld(
     isPredatorDenLive: (homeX, homeZ) => predators.denIsLive(homeX, homeZ),
     anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
     siteProvider,
-    baseSiteFilter: (site) => proceduralRoadSiteFailure(site, buildings, roadConstruction),
+    baseSiteFilter: (site) => proceduralRoadSiteFailure(site, buildings, roadConstruction, RTS_BLOCKOUT_MAP.enemyBaseRoute),
+    baseSiteRanker: (site) => proceduralDepotRoadRank(
+      site,
+      buildings,
+      roadConstruction,
+      plannedBaseSites,
+    ),
     baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
     expansions: RTS_BLOCKOUT_MAP.enemyExpansions,
     construction,
@@ -43427,7 +43450,7 @@ function aiTestWorld(
     ai.update(dt);
   };
   return {
-    units, structures, centers, kingdoms, ai, workerConstruction, territory, roads, progression,
+    units, structures, centers, kingdoms, ai, workerConstruction, territory, roads, progression, logistics,
     production, resourceNodes, wildlife, pasture, predators, construction, step,
   };
 }
@@ -44637,6 +44660,13 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
     opener.production.snapshots("enemy").some((producer) => producer.totalTransferred > 0),
     "P3: a producer at the procedural settlement pays a completed load into the AI wallet",
   );
+  const proceduralLinks = opener.logistics.snapshots().filter((link) => link.owner === "enemy");
+  assert.ok(proceduralLinks.length > 0 && proceduralLinks.every((link) => link.status === "linked"),
+    "P3: procedural producers keep the same linked-logistics contract");
+  assert.ok(proceduralLinks.some((link) => link.transport === "direct"),
+    "P3: a nearby planned producer still uses the centre/depot local hand-off without a caravan");
+  assert.ok(proceduralLinks.some((link) => link.transport !== "direct"),
+    "P3: a remote planned producer retains the ordinary road-and-caravan route");
   const variedSeed = aiTestWorld({ food: 400, wood: 600 }, undefined, "normal", 18, true);
   for (let index = 0; index < 5; index += 1) {
     variedSeed.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
@@ -45833,21 +45863,28 @@ check("AiBuildManager skips an unroutable planned site and immediately tries the
       sitesFor: () => [
         { key: "v1:17:house:base:8:0", buildingId: "house", x: 8, z: 0, source: "procedural" },
         { key: "v1:17:house:base:12:0", buildingId: "house", x: 12, z: 0, source: "procedural" },
+        { key: "v1:17:house:base:16:0", buildingId: "house", x: 16, z: 0, source: "procedural" },
         { key: "legacy:house:-8:0", buildingId: "house", x: -8, z: 0, source: "legacy" },
       ],
     },
     (site) => site.key === "v1:17:house:base:8:0" ? "road-unreachable" : null,
+    (site) => site.source === "procedural" ? site.x === 8 ? 0 : 20 - site.x : null,
   );
   const first = manager.request("house", 0);
   assert.equal(first.kind, "started");
-  assert.equal(first.kind === "started" && first.structure.x, 12,
-    "a road-rejected planned candidate does not consume the build slot");
+  assert.equal(first.kind === "started" && first.structure.x, 16,
+    "a road-rejected site does not consume the slot and the best remaining route rank wins");
   assert.ok(log.recent().some((entry) => entry.failureReason === "path-blocked"),
     "the rejected route is named for AI debug rather than silently skipped");
   if (first.kind === "started") structures.advanceConstruction(first.structure, buildings.house?.constructionSeconds ?? 1);
   const second = manager.request("house", 1);
   assert.equal(second.kind, "started");
-  assert.equal(second.kind === "started" && second.structure.x, -8,
+  assert.equal(second.kind === "started" && second.structure.x, 12,
+    "the next road-ranked planned candidate is used before the legacy fallback");
+  if (second.kind === "started") structures.advanceConstruction(second.structure, buildings.house?.constructionSeconds ?? 1);
+  const fallback = manager.request("house", 2);
+  assert.equal(fallback.kind, "started");
+  assert.equal(fallback.kind === "started" && fallback.structure.x, -8,
     "the retired road candidate is not retried before the controlled legacy fallback");
   territory.dispose();
 });
