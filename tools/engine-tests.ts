@@ -43266,7 +43266,10 @@ function aiTestWorld(
   const aiLayout = validateAiLayoutBalance(
     JSON.parse(readFileSync("public/game-data/balance/ai-layout.json", "utf8")) as unknown,
   );
-  const siteProvider = proceduralLayout ? new SettlementAiSiteProvider(planSettlementLayout({
+  // Keep the headless harness on the same narrow P4 refresh seam as RtsApp:
+  // a spent source or a later foundation cannot leave an initially-valid base
+  // candidate list frozen for the rest of the match.
+  const settlementPlan = (buildingIds?: readonly string[]) => planSettlementLayout({
     seed: matchSeed,
     owner: "enemy",
     center: RTS_BLOCKOUT_MAP.enemyStart,
@@ -43282,8 +43285,29 @@ function aiTestWorld(
     buildings,
     placement: { occupied: [...centers.navigationBlockers(), ...structures.navigationBlockers()] },
     layout: aiLayout,
-    buildingIds: [...new Set(RTS_BLOCKOUT_MAP.enemyBaseAnchors.map((anchor) => anchor.buildingId))],
-  }), RTS_BLOCKOUT_MAP.enemyBaseAnchors) : undefined;
+    buildingIds: buildingIds ?? [...new Set(RTS_BLOCKOUT_MAP.enemyBaseAnchors.map((anchor) => anchor.buildingId))],
+    isSourceAvailable: (sourceId) => {
+      if (sourceId.startsWith("node:")) {
+        const id = sourceId.slice("node:".length);
+        return resourceNodes.snapshots().some((node) => node.id === id && !node.depleted);
+      }
+      if (sourceId.startsWith("forest:")) {
+        const forestId = sourceId.slice("forest:".length);
+        return forests.snapshots().some((tree) => tree.forestId === forestId && !tree.depleted);
+      }
+      if (sourceId.startsWith("herd:")) {
+        const herdId = sourceId.slice("herd:".length);
+        return wildlife.snapshots().some((animal) => animal.herdId === herdId
+          && !animal.dead && animal.remainingMeat > 0 && animal.owner === null);
+      }
+      return true;
+    },
+  });
+  const siteProvider = proceduralLayout ? new SettlementAiSiteProvider(
+    settlementPlan(),
+    RTS_BLOCKOUT_MAP.enemyBaseAnchors,
+    (buildingId) => settlementPlan([buildingId]),
+  ) : undefined;
   const plannedBaseSites = siteProvider?.plannedSites() ?? [];
   const predators = new PredatorSystem(units, wildlife, (x, z) => territory.ownerAt(x, z));
   const workerConstruction = new WorkerConstructionSystem(
@@ -43495,6 +43519,33 @@ function completeAiSettlementPlan(
   world.territory.refresh();
 }
 
+/** The published passive opening, shared by the legacy and procedural Town gates. */
+function spawnPassiveOpening(
+  world: ReturnType<typeof aiTestWorld>,
+  preset: ReturnType<typeof validateGamePreset>,
+  units: ReturnType<typeof validateUnitBalance>,
+): void {
+  const worker = units.worker_placeholder ?? assert.fail("worker definition missing");
+  const guard = units.guard_placeholder ?? assert.fail("guard definition missing");
+  const siege = units.siege_placeholder ?? assert.fail("siege definition missing");
+  const enemyWorkers = preset.enemyStartingUnits?.worker ?? 5;
+  const playerGuards = preset.startingUnits?.guard ?? 3;
+  const playerWorkers = preset.startingUnits?.worker ?? 5;
+  const playerSiege = preset.startingUnits?.siege ?? 0;
+  for (let index = 0; index < enemyWorkers; index += 1) {
+    world.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
+  }
+  for (let index = 0; index < playerGuards; index += 1) {
+    world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.playerStart.z + 7 + Math.floor(index / 5) * 3, guard);
+  }
+  for (let index = 0; index < playerWorkers; index += 1) {
+    world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 4 + (index % 5) * 2, RTS_BLOCKOUT_MAP.playerStart.z - (8 + Math.floor(index / 5) * 2), worker);
+  }
+  for (let index = 0; index < playerSiege; index += 1) {
+    world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.playerStart.z + (4 - Math.floor(index / 5) * 3), siege);
+  }
+}
+
 /**
  * A §82 panel snapshot with every field present. The panel's fixtures used to be
  * written out by hand and had quietly drifted from the interface — esbuild strips
@@ -43519,6 +43570,7 @@ function aiTestSnapshot(overrides: Partial<AiControllerSnapshot> = {}): AiContro
     expansionPlanAvailable: true,
     infrastructureStep: "linked",
     upgradeStep: "idle",
+    tradeStep: "idle",
     activeBuild: null,
     buildPlacement: { key: null, source: null, failureReason: null },
     blackboard: null,
@@ -44377,6 +44429,30 @@ check("AI debug view exposes the intent, its reason and the decision trail (plan
   assert.match(capped, /çağ: town Lv3 · seviye tavanı/);
 
   // §60/§82: an attacking AI explains which target it picked and why.
+  const settlementDebug = formatRtsAiDebug(
+    aiTestSnapshot({
+      buildPlacement: {
+        key: "v1:17:house:base:8:0",
+        source: "procedural",
+        failureReason: null,
+        settlement: {
+          version: 1,
+          seed: 17,
+          selectedZone: "housing",
+          fallbackUsed: true,
+          remainingCandidatesByBuilding: [
+            { buildingId: "barracks", remaining: 2 },
+            { buildingId: "house", remaining: 3 },
+          ],
+        },
+      },
+    }),
+    [],
+    1,
+  ).join("\n");
+  assert.match(settlementDebug, /yerleşim planı: v1 · seed 17 · bölge housing · fallback kullanıldı/);
+  assert.match(settlementDebug, /kalan prosedürel adaylar: barracks 2 · house 3/);
+
   const attacking = formatRtsAiDebug(
     aiTestSnapshot({
       intent: "attack",
@@ -44854,37 +44930,15 @@ check("Kasaba güvenilirlik: standart gameplay_proof açılışı saldırısız 
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
-  const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
-  const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
-  const siege = unitBalance.siege_placeholder ?? assert.fail("siege definition missing");
   const opening = preset.enemyStartingResources ?? preset.startingResources
     ?? assert.fail("gameplay_proof needs a standard opening stockpile");
-  const enemyWorkers = preset.enemyStartingUnits?.worker ?? 5;
-  const playerGuards = preset.startingUnits?.guard ?? 3;
-  const playerWorkers = preset.startingUnits?.worker ?? 5;
-  const playerSiege = preset.startingUnits?.siege ?? 0;
   const world = aiTestWorld(opening, preset.startingTier, preset.aiProfile ?? "normal");
 
   // This is the published, passive-match opening: the player has its normal
   // standing defence but issues no order and never enters the AI's side. It is
   // deliberately not the old 4000-resource proof, so the age path remains
   // protected at the balance a player actually opens with.
-  for (let index = 0; index < enemyWorkers; index += 1) {
-    world.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
-  }
-  // Mirror RtsApp's passive player opening too. The player issues no order, but
-  // its workers and artillery still contribute to the threat assessment that
-  // tells the AI whether to keep investing in its settlement.
-  for (let index = 0; index < playerGuards; index += 1) {
-    world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.playerStart.z + 7 + Math.floor(index / 5) * 3, guard);
-  }
-  for (let index = 0; index < playerWorkers; index += 1) {
-    world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 4 + (index % 5) * 2, RTS_BLOCKOUT_MAP.playerStart.z - (8 + Math.floor(index / 5) * 2), worker);
-  }
-  for (let index = 0; index < playerSiege; index += 1) {
-    world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.playerStart.z + (4 - Math.floor(index / 5) * 3), siege);
-  }
-
+  spawnPassiveOpening(world, preset, unitBalance);
   // The browser acceptance reached Town at 14:00. Give the deterministic
   // simulation four conservative minutes of headroom for data retuning while
   // still catching a return to the former "never reaches Town" failure.
@@ -45826,11 +45880,28 @@ check("AiBuildManager prefers planned sites, blacklists stable keys, then uses l
       key: "v1:17:house:base:8:0", buildingId: "house", x: 8, z: 0, zone: "housing", score: 1,
     }]]]),
   }, legacy);
-  const manager = new AiBuildManager("enemy", legacy, construction, structures, new AiDecisionLog(), planned);
+  const buildLog = new AiDecisionLog();
+  const manager = new AiBuildManager("enemy", legacy, construction, structures, buildLog, planned);
   const first = manager.request("house", 0);
   assert.equal(first.kind, "started");
   assert.equal(first.kind === "started" && first.structure.x, 8, "the procedural candidate wins before the anchor fallback");
-  assert.deepEqual(manager.placementDebug, { key: "v1:17:house:base:8:0", source: "procedural", failureReason: null });
+  assert.deepEqual(manager.placementDebug, {
+    key: "v1:17:house:base:8:0",
+    source: "procedural",
+    failureReason: null,
+    settlement: {
+      version: 1,
+      seed: 17,
+      selectedZone: "housing",
+      fallbackUsed: false,
+      remainingCandidatesByBuilding: [{ buildingId: "house", remaining: 0 }],
+    },
+  });
+  assert.match(
+    buildLog.latest?.reason ?? "",
+    /house: prosedürel housing adayı seçildi/,
+    "P5 leaves the chosen procedural placement in the decision trail",
+  );
   if (first.kind === "started") structures.advanceConstruction(first.structure, buildings.house?.constructionSeconds ?? 1);
 
   const fallbackProvider = new SettlementAiSiteProvider({
@@ -45880,13 +45951,19 @@ check("AiBuildManager prefers planned sites, blacklists stable keys, then uses l
   assert.equal(repaired.kind === "started" && repaired.structure.x, 12,
     "the refreshed valid candidate repairs the economy without retrying the empty list");
 
-  const rejected = new AiBuildManager("enemy", [], construction, structures, new AiDecisionLog(), {
+  const rejectionLog = new AiDecisionLog();
+  const rejected = new AiBuildManager("enemy", [], construction, structures, rejectionLog, {
     sitesFor: () => [{ key: "v1:17:house:base:60:0", buildingId: "house", x: 60, z: 0, source: "procedural" }],
   });
   for (let attempt = 0; attempt < AI_ANCHOR_FAILURE_LIMIT; attempt += 1) {
     assert.equal(rejected.request("house", attempt).kind, "failed");
   }
   assert.equal(rejected.request("house", 10).kind, "failed", "a stable candidate key is retired instead of retried forever");
+  assert.equal(
+    rejectionLog.recent().filter((entry) => entry.reason.includes("geçerli aday alan kalmadı")).length,
+    1,
+    "an exhausted candidate plan is logged once instead of once per economy retry",
+  );
   territory.dispose();
 });
 

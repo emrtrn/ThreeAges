@@ -8,7 +8,8 @@ import type { StructureConstructionService } from "../structures/structureConstr
 import type { UnitOwner } from "../units/unit";
 import type { AiDecisionLog } from "./aiDecisionLog";
 import type { AiFailureReason } from "./aiTypes";
-import type { AiBuildSite, AiSiteProvider, AiSiteSource } from "./aiSiteProvider";
+import type { AiBuildSite, AiSiteProvider, AiSiteSource, AiSettlementPlanDebug } from "./aiSiteProvider";
+import type { SettlementZone } from "./settlementLayoutPlanner";
 
 /** A rejected candidate is retired after three consecutive hard failures. */
 export const AI_ANCHOR_FAILURE_LIMIT = 3;
@@ -23,6 +24,21 @@ export interface AiBuildPlacementDebug {
   readonly key: string | null;
   readonly source: AiSiteSource | null;
   readonly failureReason: string | null;
+  /** Present only when the base uses the V1 procedural settlement provider. */
+  readonly settlement?: AiSettlementPlacementDebug;
+}
+
+export interface AiSettlementPlacementDebug {
+  readonly version: number;
+  readonly seed: number;
+  readonly selectedZone: SettlementZone | null;
+  readonly fallbackUsed: boolean;
+  readonly remainingCandidatesByBuilding: readonly AiRemainingSettlementCandidates[];
+}
+
+export interface AiRemainingSettlementCandidates {
+  readonly buildingId: string;
+  readonly remaining: number;
 }
 
 /** Read-only extra gate for normal (non-expansion) base sites. */
@@ -32,8 +48,11 @@ export type AiBuildSiteRanker = (site: AiBuildSite) => number | null;
 
 export class AiBuildManager {
   private readonly candidateFailures = new Map<string, number>();
+  /** A depleted plan is named once; the economy may re-evaluate it many times. */
+  private readonly exhaustedBuildingIds = new Set<string>();
   private active: PlacedStructure | null = null;
   private lastPlacement: AiBuildPlacementDebug = { key: null, source: null, failureReason: null };
+  private legacyFallbackUsed = false;
 
   constructor(
     private readonly owner: UnitOwner,
@@ -55,7 +74,8 @@ export class AiBuildManager {
   }
 
   get placementDebug(): AiBuildPlacementDebug {
-    return this.lastPlacement;
+    const settlement = this.settlementDebug();
+    return settlement ? { ...this.lastPlacement, settlement } : this.lastPlacement;
   }
 
   /**
@@ -67,20 +87,24 @@ export class AiBuildManager {
     if (this.active) return { kind: "busy" };
 
     let candidates = this.availableSites(buildingId, scope);
-    // P4: a dynamic blocker or a spent source can invalidate a whole bounded
-    // list. Refresh once for this request only; repeated failure remains named
-    // and finite instead of regenerating candidates in an AI tick loop.
-    if (!scope && candidates.length === 0 && this.siteProvider?.refresh?.(buildingId)) {
+    // P4: a dynamic blocker or a spent source can exhaust the procedural list
+    // while a legacy fallback still exists. Refresh that affected list once
+    // before falling through; repeated failure remains named and finite.
+    if (!scope && !candidates.some((candidate) => candidate.source === "procedural")
+      && this.siteProvider?.refresh?.(buildingId)) {
       candidates = this.availableSites(buildingId);
     }
     if (candidates.length === 0) {
       this.lastPlacement = { key: null, source: null, failureReason: "no-valid-placement" };
-      this.log.record({
-        at: now,
-        kind: "plan-failed",
-        reason: `${buildingId}: geçerli aday alan kalmadı`,
-        failureReason: "no-valid-placement",
-      });
+      if (!this.exhaustedBuildingIds.has(buildingId)) {
+        this.exhaustedBuildingIds.add(buildingId);
+        this.log.record({
+          at: now,
+          kind: "plan-failed",
+          reason: `${buildingId}: geçerli aday alan kalmadı`,
+          failureReason: "no-valid-placement",
+        });
+      }
       return { kind: "failed", reason: "no-valid-placement" };
     }
 
@@ -96,7 +120,10 @@ export class AiBuildManager {
       const result = this.construction.build(this.owner, candidate.buildingId, candidate.x, candidate.z);
       if (result.built) {
         this.candidateFailures.delete(candidate.key);
+        this.exhaustedBuildingIds.delete(candidate.buildingId);
         this.lastPlacement = { key: candidate.key, source: candidate.source, failureReason: null };
+        if (candidate.source === "legacy") this.legacyFallbackUsed = true;
+        this.log.record({ at: now, kind: "plan-succeeded", reason: this.placementDecisionReason(candidate) });
         this.active = result.structure;
         return { kind: "started", structure: result.structure };
       }
@@ -113,8 +140,10 @@ export class AiBuildManager {
 
   reset(): void {
     this.candidateFailures.clear();
+    this.exhaustedBuildingIds.clear();
     this.active = null;
     this.lastPlacement = { key: null, source: null, failureReason: null };
+    this.legacyFallbackUsed = false;
   }
 
   /** Event-driven P4 hook for a razed depot or a producer that lost its source. */
@@ -181,6 +210,43 @@ export class AiBuildManager {
       case "outside-map": return "no-valid-placement";
       default: return "no-valid-placement";
     }
+  }
+
+  private settlementDebug(): AiSettlementPlacementDebug | null {
+    const plan = this.siteProvider?.settlementPlanDebug?.();
+    if (!plan) return null;
+    return {
+      version: plan.version,
+      seed: plan.seed,
+      selectedZone: this.zoneFor(this.lastPlacement.key, plan),
+      fallbackUsed: this.legacyFallbackUsed,
+      remainingCandidatesByBuilding: this.remainingCandidates(plan),
+    };
+  }
+
+  private remainingCandidates(plan: AiSettlementPlanDebug): readonly AiRemainingSettlementCandidates[] {
+    const remaining = new Map<string, number>();
+    for (const candidate of plan.candidates) {
+      if ((this.candidateFailures.get(candidate.key) ?? 0) >= AI_ANCHOR_FAILURE_LIMIT) continue;
+      if (this.occupied(candidate)) continue;
+      remaining.set(candidate.buildingId, (remaining.get(candidate.buildingId) ?? 0) + 1);
+    }
+    return [...new Set(plan.candidates.map((candidate) => candidate.buildingId))]
+      .sort()
+      .map((buildingId) => ({ buildingId, remaining: remaining.get(buildingId) ?? 0 }));
+  }
+
+  private zoneFor(key: string | null, plan: AiSettlementPlanDebug): SettlementZone | null {
+    if (!key) return null;
+    return plan.candidates.find((candidate) => candidate.key === key)?.zone ?? null;
+  }
+
+  private placementDecisionReason(candidate: AiBuildSite): string {
+    const plan = this.siteProvider?.settlementPlanDebug?.();
+    const zone = plan ? this.zoneFor(candidate.key, plan) : null;
+    return candidate.source === "procedural"
+      ? `${candidate.buildingId}: prosedürel ${zone ?? "bilinmeyen"} adayı seçildi (${candidate.key})`
+      : `${candidate.buildingId}: authored fallback seçildi (${candidate.key})`;
   }
 }
 

@@ -1034,6 +1034,12 @@ export interface AiLayoutBalance {
     readonly seedTieBreakWeight: number;
     /** Penalty per world unit from the zone/source's preferred radius. */
     readonly distancePenalty: number;
+    /**
+     * Bounded geometry-only preference for a candidate that keeps the paid
+     * base-to-site connection short.  This deliberately approximates a road
+     * with centre distance so the pure planner never reaches into RoadGraph.
+     */
+    readonly centerDistancePenalty: number;
   };
 }
 

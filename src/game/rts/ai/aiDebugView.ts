@@ -76,6 +76,19 @@ export function formatRtsAiDebug(
       + `${snapshot.buildPlacement.failureReason ? ` · ret ${snapshot.buildPlacement.failureReason}` : ""}`,
     );
   }
+  const settlement = snapshot.buildPlacement.settlement;
+  if (settlement) {
+    lines.push(
+      `yerleşim planı: v${settlement.version} · seed ${settlement.seed}`
+      + `${settlement.selectedZone ? ` · bölge ${settlement.selectedZone}` : ""}`
+      + ` · fallback ${settlement.fallbackUsed ? "kullanıldı" : "kullanılmadı"}`,
+    );
+    lines.push(
+      `kalan prosedürel adaylar: ${settlement.remainingCandidatesByBuilding
+        .map(({ buildingId, remaining }) => `${buildingId} ${remaining}`)
+        .join(" · ") || "-"}`,
+    );
+  }
   if (bb && balance) {
     const development = developmentReadiness(bb, balance);
     lines.push(

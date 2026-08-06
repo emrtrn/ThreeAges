@@ -11,6 +11,7 @@ import { RTS_RESOURCE_NODE_BLOCK_HALF_EXTENT } from "../economy/resourceNodeSyst
 import { RTS_TREE_BLOCK_HALF_EXTENT } from "../economy/forestSystem";
 import {
   RTS_PLACEMENT_GRID_SIZE,
+  buildingFootprintBlocker,
   snapToPlacementGrid,
   validateBuildingPlacement,
   type PlacementControl,
@@ -84,6 +85,16 @@ export function planSettlementLayout(input: SettlementLayoutPlanningInput): Sett
   const occupied = [
     ...input.map.navigationBlockers,
     ...sourceReservationBlockers(input.map),
+    // Reserve only the legacy fallback slots whose value is source/logistics
+    // specific. Reserving every generic house/farm/military slot can erase the
+    // tight base ring a procedural farm needs, while a generic fallback is not
+    // a later source-bound recovery path.
+    ...input.map.enemyBaseAnchors.flatMap((anchor) => {
+      const stats = input.buildings[anchor.buildingId];
+      return stats && (stats.id === "depot" || requiresExternalSource(stats))
+        ? [buildingFootprintBlocker(stats, anchor.x, anchor.z)]
+        : [];
+    }),
     ...(input.placement?.occupied ?? []),
   ];
   const candidatesByBuilding = new Map<string, readonly SettlementSiteCandidate[]>();
@@ -119,6 +130,11 @@ function planBuildingCandidates(
       const key = candidateKey(input.seed, stats.id, source.id || undefined, result.x, result.z);
       const score = roundScore(
         -Math.abs(distance - preferredRadius) * input.layout.scoring.distancePenalty
+        // Resource sites still need a real source, but this soft preference
+        // prevents a seed from repeatedly selecting the far side of that
+        // source and spending the opening wood bank on its access road.
+        -Math.hypot(result.x - input.center.x, result.z - input.center.z)
+          * input.layout.scoring.centerDistancePenalty
         + seededUnit(key) * input.layout.scoring.seedTieBreakWeight,
       );
       candidates.push({

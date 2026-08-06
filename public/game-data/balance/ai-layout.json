@@ -9,6 +9,7 @@
   },
   "scoring": {
     "seedTieBreakWeight": 1.25,
-    "distancePenalty": 0.08
+    "distancePenalty": 0.08,
+    "centerDistancePenalty": 0.08
   }
 }

@@ -311,11 +311,24 @@ geçerli aday varsa ekonomi toparlanır.
 
 ### Faz P5 — Gözlemlenebilirlik ve kabul maçları
 
-- [ ] Debug overlay ve karar günlüğüne plan satırlarını ekle.
+İlerleme notu (2026-08-06): Debug overlay artık plan sürümü/tohumu, seçilen
+bölge, bina başına kalan prosedürel adaylar ve fallback geçmişini gösterir;
+yerleştirme seçimi karar günlüğüne de yazılır. Bu satırlar saf formatter ve
+AI build manager regresyonuyla otomatik doğrulanır.
+
+- [x] Debug overlay ve karar günlüğüne plan satırlarını ekle.
 - [ ] 10 seed'lik hızlandırılmış başsız maç matrisi oluştur.
-- [ ] Mevcut “standart pasif açılış 18 dakika içinde Kasaba” regresyonunu koru.
+- [x] Mevcut “standart pasif açılış 18 dakika içinde Kasaba” regresyonunu koru.
 - [ ] En az üç manuel maçta farklı yerleşim görünümü, Kasaba ilerlemesi ve
   oyuncu baskısına tepkiyi doğrula.
+
+Doğrulama notu (2026-08-06): Standart pasif açılış regresyonu, gerçek
+`gameplay_proof` başlangıç bütçesiyle 18 simülasyon dakikasında Kasaba,
+tüm önkoşullar ve bağlı üretim durumunu doğruluyor. 10-seed prototipinde
+seed 18, prosedürel bir taş ocağı foundation'ı açıkken ekonomi planı timeout'a
+düşüyor; bu nedenle matris henüz kabul kapısı olarak işaretlenmedi. Sonraki
+dar dilim, bu başlatılmış fakat personelsiz kalan foundation'ın nedenini ve
+güvenli aday/fallback toparlanmasını kanıtlamalıdır.
 
 Kabul: 10/10 deterministik seed, blocker veya sonsuz yapı döngüsü olmadan
 Kasaba yolunu tamamlar; manuel maçlar aynı yerleşim kopyasını tekrar etmez.
