@@ -1,7 +1,7 @@
 # ThreeAges RTS — Prosedürel Yerleşim Planlayıcısı V1
 
 Oluşturulma tarihi: 2026-08-05  
-Durum: **Faz P0 + P1 + P2 + P3 tamamlandı — authored omurga kontrollü fallback olarak kalıyor; Faz P4 reaktif onarım bekliyor**
+Durum: **Faz P0 + P1 + P2 + P3 + P4 tamamlandı — authored omurga kontrollü fallback olarak kalıyor; Faz P5 gözlemlenebilirlik ve kabul maçları bekliyor**
 
 ## 1. Amaç
 
@@ -292,10 +292,19 @@ lojistik hata/onarım davranışı korunur.
 
 ### Faz P4 — Reaktif yerleşim onarımı
 
-- [ ] Kaynak tükenmesi, kaybedilmiş aday veya yıkılmış depo için dar kapsamlı
+- [x] Kaynak tükenmesi, kaybedilmiş aday veya yıkılmış depo için dar kapsamlı
   yeniden planlama ekle.
-- [ ] Oyuncu tehdidi altında dış halkayı değil daha güvenli adayı tercih et.
-- [ ] Geçersiz adaylar bittikten sonra fallback veya açık failure reason üret.
+- [x] Oyuncu tehdidi altında dış halkayı değil daha güvenli adayı tercih et.
+- [x] Geçersiz adaylar bittikten sonra fallback veya açık failure reason üret.
+
+Tamamlanma notu (2026-08-06): Kaynak durumu yalnız `source-depleted`
+olduğunda, etkilenen üretici türünün prosedürel adayları canlı kaynak ve
+mevcut blocker'larla yeniden üretilir; boş/missing bir iş yeri bu döngüyü
+tetiklemez. Yıkılan taban deposu mevcut lojistik onarım adımında aynı dar
+yenilemeyi alır. Bir istek aday listesini en fazla bir kez yeniler; devamında
+legacy fallback veya adlandırılmış `no-valid-placement` sonucu döner. Oyuncu
+ordusu tabana yaklaştığında aynı sıralama, daha içeride ve tehdide uzak kalan
+prosedürel konumları tercih eder.
 
 Kabul: Bir kaynak yapısı/depoyu yok etmek AI'ı sonsuz denemeye sokmaz; başka
 geçerli aday varsa ekonomi toparlanır.

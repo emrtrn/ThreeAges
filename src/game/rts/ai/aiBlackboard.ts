@@ -51,6 +51,10 @@ export interface AiBlackboard {
   readonly population: number;
   readonly populationCap: number;
   readonly buildingCounts: Readonly<Record<string, number>>;
+  /** Completed source-bound producers that still have a usable source. */
+  readonly activeBuildingCounts: Readonly<Record<string, number>>;
+  /** Building kinds currently represented only by spent/missing source sites. */
+  readonly sourceDepletedBuildingIds: readonly string[];
   /**
    * §19 ResourceIncome's missing half: how many completed producers *can still
    * work a source* for each resource, keyed by resource id rather than by
@@ -219,9 +223,17 @@ export class AiBlackboardReader {
     // Keyed by resource, not by building: what the economy is short of is a
     // supply, and which building supplies it is data (`balance/buildings.json`).
     const resourceProducerCounts: Record<string, number> = {};
+    const activeBuildingCounts: Record<string, number> = {};
+    const sourceDepletedBuildingIds = new Set<string>();
     for (const producer of production.snapshots(owner)) {
-      if (!producerHasSource(producer.status)) continue;
+      if (!producerHasSource(producer.status)) {
+        // P4 replans exhausted finite sites, not producers that were never
+        // valid at this location (for example an empty pasture pen).
+        if (producer.status === "source-depleted") sourceDepletedBuildingIds.add(producer.buildingId);
+        continue;
+      }
       resourceProducerCounts[producer.resourceId] = (resourceProducerCounts[producer.resourceId] ?? 0) + 1;
+      activeBuildingCounts[producer.buildingId] = (activeBuildingCounts[producer.buildingId] ?? 0) + 1;
     }
 
     const disconnectedProducers = logistics.snapshots()
@@ -252,6 +264,8 @@ export class AiBlackboardReader {
       population: populationSnapshot.used,
       populationCap: populationSnapshot.capacity,
       buildingCounts,
+      activeBuildingCounts,
+      sourceDepletedBuildingIds: [...sourceDepletedBuildingIds].sort(),
       resourceProducerCounts,
       disconnectedProducers,
       expansionStep: context.expansionStep,

@@ -70,6 +70,9 @@ export class AiInfrastructureManager {
         });
         this.step = "depot";
         this.routeFailures = 0;
+        // The footprint is gone; give P4's provider one fresh, source/current-
+        // blocker-aware depot list before the normal planned-first request.
+        this.builds.refreshSites(this.depotAnchor.buildingId);
       }
       // Base depots use the same planned-first provider as every other V1 base
       // building. Expansion recipes are the only callers that pass an explicit

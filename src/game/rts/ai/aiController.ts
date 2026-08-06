@@ -159,6 +159,8 @@ export class AiController {
    * forever (KARAR 3).
    */
   private readonly predatorThreats = new Map<string, { readonly homeX: number; readonly homeZ: number; readonly radius: number }>();
+  /** P4 edge detector: one source-loss event produces one narrow replan. */
+  private readonly depletedProducerIds = new Set<number>();
 
   constructor(private readonly options: AiControllerOptions) {
     this.reader = new AiBlackboardReader(options, options.balance);
@@ -299,6 +301,7 @@ export class AiController {
     if (economyDue) {
       this.economyAccumulator = 0;
       const blackboard = this.readBlackboard();
+      this.refreshDepletedProducerSites(blackboard);
       // §17/§55: the production queues are a standing concern — they keep the
       // population unlocked whatever the director is currently committed to.
       this.production.update(blackboard);
@@ -371,6 +374,7 @@ export class AiController {
     this.lastBlackboard = null;
     this.matchConcluded = false;
     this.predatorThreats.clear();
+    this.depletedProducerIds.clear();
     this.director.reset();
     this.army.reset();
     this.builds.reset();
@@ -385,6 +389,26 @@ export class AiController {
     // reset by the match; only this executor's own view of it resets here.
     this.trades.reset();
     this.log.clear();
+  }
+
+  /** Refresh only newly source-less producer kinds; no per-tick whole-plan work. */
+  private refreshDepletedProducerSites(blackboard: AiBlackboard): void {
+    const liveDepleted = new Set<number>();
+    for (const producer of this.options.production.snapshots(this.options.owner)) {
+      if (producer.status !== "source-depleted") continue;
+      liveDepleted.add(producer.structureId);
+      if (this.depletedProducerIds.has(producer.structureId)) continue;
+      this.depletedProducerIds.add(producer.structureId);
+      this.builds.refreshSites(producer.buildingId);
+      this.log.record({
+        at: blackboard.now,
+        kind: "emergency",
+        reason: `${producer.structureLabel} kaynağını kaybetti, alternatif yer aranıyor`,
+      });
+    }
+    for (const structureId of this.depletedProducerIds) {
+      if (!liveDepleted.has(structureId)) this.depletedProducerIds.delete(structureId);
+    }
   }
 
   /**

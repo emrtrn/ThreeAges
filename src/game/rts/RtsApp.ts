@@ -1385,8 +1385,7 @@ export class RtsApp {
     );
     // Built last among the AI's dependencies: it drives the very same
     // construction/production services the player's UI does (AI design §4).
-    const siteProvider = new SettlementAiSiteProvider(
-      planSettlementLayout({
+    const settlementPlan = (buildingIds?: readonly string[]) => planSettlementLayout({
         seed: this.options.matchSeed,
         owner: AI_OWNER,
         center: this.spatial.enemyStart,
@@ -1402,11 +1401,14 @@ export class RtsApp {
         buildings: this.options.buildingBalance,
         placement: { occupied: [...this.centers.navigationBlockers(), ...this.structures.navigationBlockers()] },
         layout: this.options.aiLayoutBalance,
-        buildingIds: [...new Set(this.spatial.enemyBaseAnchors.map((anchor) => anchor.buildingId))],
-      }),
+        buildingIds: buildingIds ?? [...new Set(this.spatial.enemyBaseAnchors.map((anchor) => anchor.buildingId))],
+        isSourceAvailable: (sourceId) => this.settlementSourceAvailable(sourceId),
+      });
+    const siteProvider = new SettlementAiSiteProvider(
+      settlementPlan(),
       this.spatial.enemyBaseAnchors,
+      (buildingId) => settlementPlan([buildingId]),
     );
-    const plannedBaseSites = siteProvider.plannedSites();
     this.ai = new AiController({
       owner: AI_OWNER,
       units: this.units,
@@ -1449,12 +1451,12 @@ export class RtsApp {
         this.roadConstruction,
         this.spatial.enemyBaseRoute,
       ),
-      baseSiteRanker: (site) => proceduralDepotRoadRank(
+      baseSiteRanker: (site) => (proceduralDepotRoadRank(
         site,
         this.options.buildingBalance,
         this.roadConstruction,
-        plannedBaseSites,
-      ),
+        siteProvider.plannedSites(),
+      ) ?? 0) + this.settlementThreatPenalty(site.x, site.z),
       baseRoute: this.spatial.enemyBaseRoute,
       expansions: this.spatial.enemyExpansions,
       construction: this.structureConstruction,
@@ -3295,6 +3297,39 @@ export class RtsApp {
     if (territoryChanged) this.territory.refresh();
     this.selection.reconcileStructures(this.structures.all());
     this.refreshNavigationBlockers();
+  }
+
+  /** P4 uses live source state without moving source ownership out of the Level. */
+  private settlementSourceAvailable(sourceId: string): boolean {
+    if (sourceId.startsWith("node:")) {
+      const id = sourceId.slice("node:".length);
+      return this.resourceNodes.snapshots().some((node) => node.id === id && !node.depleted);
+    }
+    if (sourceId.startsWith("forest:")) {
+      const forestId = sourceId.slice("forest:".length);
+      return this.forests.snapshots().some((tree) => tree.forestId === forestId && !tree.depleted);
+    }
+    if (sourceId.startsWith("herd:")) {
+      const herdId = sourceId.slice("herd:".length);
+      return this.wildlife.snapshots().some((animal) => animal.herdId === herdId
+        && !animal.dead && animal.remainingMeat > 0 && animal.owner === null);
+    }
+    return true;
+  }
+
+  /**
+   * When raiders close on the base, planned sites nearer them and farther from
+   * the command centre lose the tie-break. The original seed order remains when
+   * no player army is threatening this base.
+   */
+  private settlementThreatPenalty(x: number, z: number): number {
+    const threats = this.units.armyOf(PLAYER_OWNER).filter((unit) => !unit.health.depleted);
+    const nearest = threats.reduce((distance, unit) => Math.min(distance,
+      Math.hypot(unit.position.x - x, unit.position.z - z)), Number.POSITIVE_INFINITY);
+    const threatRadius = 24;
+    if (nearest >= threatRadius) return 0;
+    const outerDistance = Math.hypot(x - this.spatial.enemyStart.x, z - this.spatial.enemyStart.z);
+    return (threatRadius - nearest) * 100 + outerDistance * 2;
   }
 
   private spawnCenters(): void {

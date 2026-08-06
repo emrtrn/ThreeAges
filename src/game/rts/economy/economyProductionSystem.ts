@@ -46,6 +46,7 @@ export function producerHasSource(status: EconomyProductionStatus): boolean {
 
 export interface EconomyBuildingSnapshot {
   readonly structureId: number;
+  readonly buildingId: string;
   readonly owner: UnitOwner;
   readonly structureLabel: string;
   readonly resourceId: string;
@@ -200,6 +201,7 @@ export class EconomyProductionSystem {
           .filter((assignment) => assignment.state === "producing" || assignment.state === "gathering").length;
         return {
           structureId: producer.structure.id,
+          buildingId: producer.structure.stats.id,
           owner: producer.structure.owner,
           structureLabel: producer.structure.stats.label,
           resourceId: economy.resourceId,

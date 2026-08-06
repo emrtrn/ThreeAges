@@ -66,7 +66,13 @@ export class AiBuildManager {
     this.syncActive();
     if (this.active) return { kind: "busy" };
 
-    const candidates = this.availableSites(buildingId, scope);
+    let candidates = this.availableSites(buildingId, scope);
+    // P4: a dynamic blocker or a spent source can invalidate a whole bounded
+    // list. Refresh once for this request only; repeated failure remains named
+    // and finite instead of regenerating candidates in an AI tick loop.
+    if (!scope && candidates.length === 0 && this.siteProvider?.refresh?.(buildingId)) {
+      candidates = this.availableSites(buildingId);
+    }
     if (candidates.length === 0) {
       this.lastPlacement = { key: null, source: null, failureReason: "no-valid-placement" };
       this.log.record({
@@ -109,6 +115,11 @@ export class AiBuildManager {
     this.candidateFailures.clear();
     this.active = null;
     this.lastPlacement = { key: null, source: null, failureReason: null };
+  }
+
+  /** Event-driven P4 hook for a razed depot or a producer that lost its source. */
+  refreshSites(buildingId: string): boolean {
+    return this.siteProvider?.refresh?.(buildingId) ?? false;
   }
 
   private availableSites(buildingId: string, scope?: readonly RtsBuildAnchor[]): readonly AiBuildSite[] {

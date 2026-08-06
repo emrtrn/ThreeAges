@@ -43080,6 +43080,8 @@ function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
     population: AI_TEST_BALANCE.economy.workerTarget.settlement,
     populationCap: 20,
     buildingCounts: {},
+    activeBuildingCounts: {},
+    sourceDepletedBuildingIds: [],
     // Derived, not defaulted to empty: every fixture that stands a producer up
     // means it to be producing, and a hand-written default here would quietly
     // make each of them a base with buildings and no supply.
@@ -43745,6 +43747,14 @@ check("procedural settlement planner keeps safe candidates deterministic and see
   });
   assert.deepEqual(outsideControl.candidatesByBuilding.get("house"), [],
     "a candidate outside the owner's control is never returned by the pure planner");
+  const exhaustedGold = planSettlementLayout({
+    ...input,
+    seed: 173,
+    buildingIds: ["gold_mine"],
+    isSourceAvailable: () => false,
+  });
+  assert.deepEqual(exhaustedGold.candidatesByBuilding.get("gold_mine"), [],
+    "P4 excludes spent sources instead of planning another mine around them");
   assert.deepEqual(validateAiLayoutBalance({ version: 1 }), {
     ...layout,
   }, "layout defaults are explicit and testable");
@@ -45462,6 +45472,14 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
     null,
     "a complete settlement plan stops requesting buildings",
   );
+  assert.ok(
+    buildOrder(bb({
+      buildingCounts: { ...settlementPlan, quarry: 1 },
+      activeBuildingCounts: { ...settlementPlan, quarry: 0 },
+      sourceDepletedBuildingIds: ["quarry"],
+    }), AI_TEST_BALANCE).includes("quarry"),
+    "a spent quarry does not satisfy the settlement target; P4 may seek another site",
+  );
   // Targets are counts, not flags: one of a building the plan wants two of is
   // still a shortfall. This is what makes the AI grow a city rather than a base.
   const townPlan = AI_TEST_BALANCE.economy.buildingTargets.town;
@@ -45827,6 +45845,40 @@ check("AiBuildManager prefers planned sites, blacklists stable keys, then uses l
   assert.equal(second.kind, "started");
   assert.equal(second.kind === "started" && second.structure.x, -8, "the authored anchor runs only after the planned site is refused");
   assert.equal(fallback.placementDebug.source, "legacy", "debug state names the controlled fallback");
+
+  const refreshed = new SettlementAiSiteProvider({
+    version: 1,
+    seed: 17,
+    candidatesByBuilding: new Map([["house", [{
+      key: "v1:17:house:base:8:0", buildingId: "house", x: 8, z: 0, zone: "housing", score: 1,
+    }]]]),
+  }, legacy, () => ({
+    version: 1,
+    seed: 17,
+    candidatesByBuilding: new Map([["house", [{
+      key: "v1:17:house:base:12:0", buildingId: "house", x: 12, z: 0, zone: "housing", score: 1,
+    }]]]),
+  }));
+  assert.equal(refreshed.refresh("house"), true, "P4 accepts a narrow refreshed candidate list");
+  assert.equal(refreshed.sitesFor("house")[0]?.x, 12,
+    "a source-loss/depot event replaces only that building's planned sites");
+
+  const reactive = new SettlementAiSiteProvider({
+    version: 1,
+    seed: 17,
+    candidatesByBuilding: new Map([["house", []]]),
+  }, [], () => ({
+    version: 1,
+    seed: 17,
+    candidatesByBuilding: new Map([["house", [{
+      key: "v1:17:house:base:12:0", buildingId: "house", x: 12, z: 0, zone: "housing", score: 1,
+    }]]]),
+  }));
+  const reactiveManager = new AiBuildManager("enemy", [], construction, structures, new AiDecisionLog(), reactive);
+  const repaired = reactiveManager.request("house", 2);
+  assert.equal(repaired.kind, "started", "an exhausted planned list gets one bounded P4 refresh");
+  assert.equal(repaired.kind === "started" && repaired.structure.x, 12,
+    "the refreshed valid candidate repairs the economy without retrying the empty list");
 
   const rejected = new AiBuildManager("enemy", [], construction, structures, new AiDecisionLog(), {
     sitesFor: () => [{ key: "v1:17:house:base:60:0", buildingId: "house", x: 60, z: 0, source: "procedural" }],

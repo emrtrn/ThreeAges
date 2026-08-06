@@ -58,6 +58,12 @@ export interface SettlementLayoutPlanningInput {
   readonly buildings: BuildingBalance;
   readonly placement?: SettlementPlacementRulesSnapshot;
   readonly layout: AiLayoutBalance;
+  /**
+   * Runtime-only availability gate used by the narrow P4 replan.  Level data
+   * still owns the source's position; this merely prevents a spent node, forest
+   * or herd from justifying another producer at the same place.
+   */
+  readonly isSourceAvailable?: (sourceId: string) => boolean;
   /** Limits a test or a future narrow replan to the relevant building types. */
   readonly buildingIds?: readonly string[];
 }
@@ -95,7 +101,8 @@ function planBuildingCandidates(
   occupied: readonly NavBlocker[],
 ): readonly SettlementSiteCandidate[] {
   const zone = zoneFor(stats);
-  const sources = sourcesFor(stats, input.map);
+  const sources = sourcesFor(stats, input.map)
+    .filter((source) => !source.id || input.isSourceAvailable?.(source.id) !== false);
   // A farm is a resource-zone producer but has no external source; it searches
   // around the base like the other rings. A mine with no matching deposit has no
   // candidate at all, which is the explicit and safe failure state.

@@ -85,8 +85,12 @@ export function buildOrder(bb: AiBlackboard, balance: AiBalance): readonly strin
   const order: string[] = [];
   const targets = balance.economy.buildingTargets[bb.age];
   /** Wanted while the age's plan asks for more of this building than stands. */
-  const short = (buildingId: string): boolean =>
-    (bb.buildingCounts[buildingId] ?? 0) < (targets[buildingId] ?? 0);
+  const short = (buildingId: string): boolean => {
+    const count = bb.sourceDepletedBuildingIds.includes(buildingId)
+      ? (bb.activeBuildingCounts[buildingId] ?? 0)
+      : (bb.buildingCounts[buildingId] ?? 0);
+    return count < (targets[buildingId] ?? 0);
+  };
 
   const headroom = bb.populationCap - bb.population;
   // §37 PopulationBlocked → "Ev planını yüksek öncelikli yap". Deliberately ahead

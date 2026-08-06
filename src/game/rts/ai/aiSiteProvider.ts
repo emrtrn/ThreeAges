@@ -14,14 +14,23 @@ export interface AiBuildSite {
 
 export interface AiSiteProvider {
   sitesFor(buildingId: string): readonly AiBuildSite[];
+  /** Rebuild only the affected candidate list; returns false when unsupported. */
+  refresh?(buildingId: string): boolean;
 }
+
+export type SettlementPlanRefresh = (buildingId: string) => SettlementLayoutPlan;
 
 /** Planned base sites precede the authored anchors retained as the V1 fallback. */
 export class SettlementAiSiteProvider implements AiSiteProvider {
+  private plan: SettlementLayoutPlan;
+
   constructor(
-    private readonly plan: SettlementLayoutPlan,
+    plan: SettlementLayoutPlan,
     private readonly legacyAnchors: readonly RtsBuildAnchor[],
-  ) {}
+    private readonly refreshPlan?: SettlementPlanRefresh,
+  ) {
+    this.plan = plan;
+  }
 
   sitesFor(buildingId: string): readonly AiBuildSite[] {
     const planned = this.plan.candidatesByBuilding.get(buildingId) ?? [];
@@ -34,6 +43,17 @@ export class SettlementAiSiteProvider implements AiSiteProvider {
   /** Planned-only view for cross-building decisions such as depot logistics. */
   plannedSites(): readonly AiBuildSite[] {
     return [...this.plan.candidatesByBuilding.values()].flatMap((candidates) => candidates.map(toProceduralSite));
+  }
+
+  refresh(buildingId: string): boolean {
+    if (!this.refreshPlan) return false;
+    const refreshed = this.refreshPlan(buildingId);
+    if (!refreshed.candidatesByBuilding.has(buildingId)) return false;
+    const candidates = refreshed.candidatesByBuilding.get(buildingId) ?? [];
+    const candidatesByBuilding = new Map(this.plan.candidatesByBuilding);
+    candidatesByBuilding.set(buildingId, candidates);
+    this.plan = { ...this.plan, candidatesByBuilding };
+    return true;
   }
 }
 
