@@ -77,7 +77,8 @@ the automated mirror of the local pre-`[x]` gate:
 - `npm ci` on Node 24 (npm cache enabled via `actions/setup-node`).
 - `npm run build:verify` — `tsc --noEmit` + `vite build` + `test:engine`
   (the engine test suite) + `verify:dist -- --strict` (production bundle must
-  contain no editor/dev-endpoint strings).
+  contain no editor/dev-endpoint strings). CI always runs `test:engine`
+  unfiltered; the local `--filter` shortcut is for iteration only.
 - `npm run check:assets` — asset-manifest health.
 - On success, uploads `dist/` as a 7-day artifact (proof packaging works).
 

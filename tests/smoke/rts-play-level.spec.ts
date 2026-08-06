@@ -50,8 +50,8 @@ test("a level the RTS cannot play falls back to the blockout map with a stated r
   // Still playable, and the overlay names the file and the reason.
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
-  await expect(page.locator(".rts-debug-overlay")).toContainText("seviye REDDEDİLDİ");
-  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+  await expect(page.locator(".rts-debug-sim")).toContainText("seviye REDDEDİLDİ");
+  await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
 
   // A malformed path is refused the same way — named and explained — rather than
   // quietly playing another map or throwing the route away.

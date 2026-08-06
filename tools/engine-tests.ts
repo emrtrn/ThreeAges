@@ -284,6 +284,11 @@ import {
   type AiTargetCandidate,
 } from "../src/game/rts/ai/armyTargeting";
 import { formatRtsAiDebug } from "../src/game/rts/ai/aiDebugView";
+import { formatRtsPerfDebug } from "../src/game/rts/debug/formatRtsPerfDebug";
+import {
+  buildRtsFrameCapture,
+  formatRtsFrameCaptureText,
+} from "../src/game/rts/debug/rtsFrameCapture";
 import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
 import { updateStructureDestruction } from "../src/game/rts/structures/structureDestruction";
 import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
@@ -1343,6 +1348,27 @@ import {
 import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 
 let checks = 0;
+let skipped = 0;
+
+/**
+ * Iteration filter. `npm run test:engine -- --filter market` sets
+ * ENGINE_TESTS_FILTER (comma-separated, case-insensitive substrings, OR'd) and
+ * every check whose label misses them is skipped instead of run. This is a
+ * development convenience only: a filtered run is never a green build, so the
+ * runner labels it PARTIAL and `build:verify`/CI always run unfiltered.
+ */
+const testFilters = (process.env.ENGINE_TESTS_FILTER ?? "")
+  .split(",")
+  .map((part) => part.trim().toLowerCase())
+  .filter((part) => part.length > 0);
+
+const matchesFilter = (label: string): boolean =>
+  testFilters.length === 0 || testFilters.some((needle) => label.toLowerCase().includes(needle));
+
+/** ENGINE_TESTS_TIMING=1 appends each check's wall time — used to find the slow ones. */
+const timingEnabled = process.env.ENGINE_TESTS_TIMING === "1";
+const timingSuffix = (startedAt: number): string =>
+  timingEnabled ? ` (${(performance.now() - startedAt).toFixed(0)}ms)` : "";
 
 /**
  * Faz 7 unit fixtures. Deliberately not the shipped `balance/units.json`: these
@@ -1436,14 +1462,24 @@ const RTS_TEST_UNIT_BALANCE: UnitBalance = {
   worker_placeholder: RTS_TEST_WORKER_STATS,
 };
 const check = (label: string, fn: () => void): void => {
+  if (!matchesFilter(label)) {
+    skipped += 1;
+    return;
+  }
+  const startedAt = performance.now();
   fn();
   checks += 1;
-  console.log(`  ok: ${label}`);
+  console.log(`  ok: ${label}${timingSuffix(startedAt)}`);
 };
 const checkAsync = async (label: string, fn: () => Promise<void>): Promise<void> => {
+  if (!matchesFilter(label)) {
+    skipped += 1;
+    return;
+  }
+  const startedAt = performance.now();
   await fn();
   checks += 1;
-  console.log(`  ok: ${label}`);
+  console.log(`  ok: ${label}${timingSuffix(startedAt)}`);
 };
 
 function listPublicFiles(root: string): string[] {
@@ -44257,6 +44293,17 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
     scoreFor(levelThreeReady, "ageUp").score > scoreFor(levelThreeReady, "economy").score,
     "Settlement Lv3 is not blocked by Town prerequisites",
   );
+  const openingLevel = aiTestBlackboard({
+    centerLevel: 1,
+    centerLevelUpgradeCost: { food: 200, wood: 200 },
+    resourceStocks: { food: 200, wood: 200 },
+  });
+  assert.equal(scoreFor(openingLevel, "ageUp").reason, "merkez seviyesi için açılış üretim hattı kuruluyor",
+    "Lv2 preserves the opening wood until its food and wood routes can sustain the investment");
+  assert.ok(
+    scoreFor(openingLevel, "ageUp").score < scoreFor(openingLevel, "economy").score,
+    "the opening economy wins until both staple producers are connected",
+  );
 
   // §24: requirements missing → the AI wants the economy that fixes them, not
   // the age. It must not out-score Economy, or a rich AI would stall forever
@@ -44618,6 +44665,142 @@ check("AI debug view exposes the intent, its reason and the decision trail (plan
   assert.match(empty, /maç bitti: karar üretimi durdu/, "§69 is visible in the panel");
 });
 
+check("Debug panel: the perf readout reports the frame, what it draws and what each region costs", () => {
+  const snapshot = {
+    frame: { averageMs: 20, p95Ms: 31.5, sampleCount: 240, over33ms: 3, over50ms: 1, over100ms: 0 },
+    render: { drawCalls: 1420, triangles: 2_480_000 },
+    memory: { geometries: 830, textures: 96, programs: 41 },
+    shadows: [
+      { label: "aktörler", meshes: 210, triangles: 540_000 },
+      { label: "harita", meshes: 88, triangles: 9_120 },
+    ],
+    costs: [
+      { label: "kare", averageMs: 20, lastMs: 19.5, maxMs: 48 },
+      { label: "simülasyon", averageMs: 6.5, lastMs: 6, maxMs: 21 },
+      { label: "ai", averageMs: 2.25, lastMs: 0.5, maxMs: 18, nested: true },
+      { label: "çizim", averageMs: 8, lastMs: 8.25, maxMs: 12 },
+    ],
+    quality: { level: "high", adaptiveEnabled: true, reductionDepth: 2 },
+    scene: { units: 64, structures: 22, caravans: 3, wildlife: 40 },
+  };
+  const text = formatRtsPerfDebug(snapshot).join("\n");
+
+  // FPS is derived from the windowed frame time rather than counted separately,
+  // so the headline number and the millisecond it came from can never disagree.
+  assert.match(text, /^50 fps · kare 20\.0 ms · p95 31\.5 ms$/m);
+  assert.match(text, /takılma >33ms 3 · >50ms 1 · >100ms 0/);
+  // Grouped and compacted: an ungrouped seven-digit triangle count is the number
+  // nobody reads, which is how a doubled draw cost goes unnoticed for a week.
+  assert.match(text, /çizim 1,420 çağrı · 2\.48M üçgen/);
+  assert.match(text, /bellek geo 830 · doku 96 · shader 41/);
+  assert.match(text, /aktörler\s+210 mesh · 540K üçgen/);
+  assert.match(text, /kalite high · uyarlanır açık \(-2\)/);
+  assert.match(text, /sahne 64 birim · 22 yapı · 3 kervan · 40 hayvan/);
+
+  // The cost block is the point of the panel: an RTS gets slow either because it
+  // draws too much or because it thinks too much, and only this tells them apart.
+  // Average *and* peak, because an AI that costs 2ms on average and 18ms on its
+  // cadence tick is a stutter, not a budget — an average alone would hide it.
+  assert.match(text, /↳ ai\s+2\.25 \/ 0\.50 \/ 18\.00/);
+  assert.match(text, /^ {2}kare\s+20\.00 \/ 19\.50 \/ 48\.00$/m);
+  // Fixed reading order, not cost order: the parts stay under the whole.
+  const rows = formatRtsPerfDebug(snapshot).filter((line) => /\d \/ \d/.test(line));
+  assert.deepEqual(
+    rows.map((line) => line.trim().replace(/^↳ /, "").split(/\s+/)[0]),
+    ["kare", "simülasyon", "ai", "çizim"],
+  );
+
+  // Before the first window fills there is no frame time to divide into, and an
+  // "Infinity fps" line would be the panel's first impression of the route.
+  const cold = formatRtsPerfDebug({
+    ...snapshot,
+    frame: { averageMs: 0, p95Ms: 0, sampleCount: 0, over33ms: 0, over50ms: 0, over100ms: 0 },
+    costs: [],
+    shadows: [],
+  });
+  assert.equal(cold[0], "fps ölçülüyor…");
+  assert.doesNotMatch(cold.join("\n"), /maliyet/, "no cost block before anything is measured");
+  assert.doesNotMatch(cold.join("\n"), /gölge dökümü/);
+});
+
+check("Frame capture: every millisecond of the captured frame is accounted for, worst first", () => {
+  // A 20 ms frame: 12 in the simulation (9 of it itemised), 5 presenting, 2
+  // drawing, 0.5 on the debug-only witness — and 0.5 of frame-loop glue that no
+  // region measured.
+  const capture = buildRtsFrameCapture({
+    totalMs: 20,
+    averageTotalMs: 18,
+    maxTotalMs: 44,
+    regions: [
+      { id: "simülasyon", frameMs: 12, averageMs: 10, maxMs: 30 },
+      { id: "sunum", frameMs: 5, averageMs: 5, maxMs: 9 },
+      { id: "çizim", frameMs: 2, averageMs: 2.2, maxMs: 4 },
+      { id: "tanı", frameMs: 0.5, averageMs: 0.4, maxMs: 1.1, debugOnly: true },
+      { id: "ai", parent: "simülasyon", frameMs: 6, averageMs: 4, maxMs: 22 },
+      { id: "savaş", parent: "simülasyon", frameMs: 3, averageMs: 3, maxMs: 6 },
+      { id: "birim sunumu", parent: "sunum", frameMs: 4, averageMs: 4, maxMs: 7 },
+    ],
+    simulationSteps: 4,
+    speed: 4,
+    windowFrames: 60,
+    matchSeconds: 91.5,
+  });
+
+  // The whole point of the table: what it lists must add up to the frame it
+  // claims to describe. Parts covering 60% of a frame while saying nothing about
+  // the rest is how you end up optimising the wrong system for a week.
+  const listed = capture.rows.reduce((total, row) => total + row.frameMs, 0);
+  assert.ok(Math.abs(listed - capture.totalMs) < 1e-9, "the rows sum to the frame");
+  const shares = capture.rows.reduce((total, row) => total + row.share, 0);
+  assert.ok(Math.abs(shares - 1) < 1e-9, "and so do the percentages");
+
+  // A decomposed group is never a row of its own — listing `simülasyon` beside
+  // the `ai` inside it would count those 6 ms twice.
+  const labels = capture.rows.map((row) => row.label);
+  assert.ok(!labels.includes("simülasyon"), "a group with children is replaced by them");
+  assert.ok(!labels.includes("sunum"));
+  assert.ok(labels.includes("çizim"), "a group with nothing inside it stays a row");
+
+  // Sorted worst-first, which is the question the table is opened to answer.
+  const times = capture.rows.map((row) => row.frameMs);
+  assert.deepEqual(times, [...times].sort((a, b) => b - a));
+  assert.equal(capture.rows[0]?.label, "ai");
+  assert.equal(capture.rows[0]?.share, 0.3);
+  assert.equal(capture.rows[0]?.group, "simülasyon");
+
+  const simulationRest = capture.rows.find((row) => row.label === "simülasyon (diğer)");
+  assert.equal(simulationRest?.frameMs, 3, "12 ms of step minus the 9 ms itemised inside it");
+  assert.equal(simulationRest?.kind, "remainder");
+  assert.equal(simulationRest?.maxMs, 0, "a leftover has no meaningful peak frame");
+  const unmeasured = capture.rows.find((row) => row.label === "ölçülmeyen");
+  assert.equal(unmeasured?.frameMs, 0.5, "the frame loop's own glue is a row, not a silence");
+
+  // The debug-route-only cost is tagged, so nobody optimises a millisecond the
+  // shipping build never spends.
+  assert.equal(capture.rows.find((row) => row.label === "tanı")?.kind, "debug");
+
+  // A capture that cannot leave the browser gets retyped from memory into the
+  // bug report, so the text form carries the same numbers and the same warning.
+  const text = formatRtsFrameCaptureText(capture);
+  assert.match(text, /kare maliyeti · 20\.00 ms \(ort 18\.00 · tepe 44\.00, son 60 kare\)/);
+  assert.match(text, /hız 4X · 4 simülasyon adımı · maç 91\.5 sn/);
+  assert.match(text, /ai\s+6\.00\s+30\.0%\s+4\.00\s+22\.00/);
+  assert.match(text, /tanı \*/, "the debug-only row keeps its marker in the pasted copy");
+
+  // A frame captured before anything ran must not divide by zero into NaN rows.
+  const empty = buildRtsFrameCapture({
+    totalMs: 0,
+    averageTotalMs: 0,
+    maxTotalMs: 0,
+    regions: [],
+    simulationSteps: 0,
+    speed: 1,
+    windowFrames: 0,
+    matchSeconds: 0,
+  });
+  assert.deepEqual(empty.rows, []);
+});
+
 check("AI controller runs a headless accelerated match, decides on cadence, and commands its army", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
@@ -44774,7 +44957,10 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
   // with no Barracks yet it has nothing to attack with, and its workers must
   // never be walked at the player.
   for (let index = 0; index < 240; index += 1) opener.step(0.5);
-  assert.equal(opener.ai.snapshot().intent, "economy", "the opening is economic, not a rush");
+  assert.ok(
+    opener.ai.snapshot().intent === "economy" || opener.ai.snapshot().intent === "ageUp",
+    "the opening develops its economy or buys its earned centre level, never rushes",
+  );
   assert.equal(
     opener.units.unitsOf("enemy").filter((unit) => unit.attackTarget !== null).length,
     0,
@@ -45040,7 +45226,10 @@ check("Kasaba güvenilirlik: standart gameplay_proof açılışı saldırısız 
   );
   const opening = preset.enemyStartingResources ?? preset.startingResources
     ?? assert.fail("gameplay_proof needs a standard opening stockpile");
-  const world = aiTestWorld(opening, preset.startingTier, preset.aiProfile ?? "normal");
+  // P5: acceptance is about the planned-first base used in the live match, not
+  // merely its authored-anchor fallback. Keep this on the exact preset budget
+  // so a procedural road/depot opening cannot pass a different economy proof.
+  const world = aiTestWorld(opening, preset.startingTier, preset.aiProfile ?? "normal", 17, true);
 
   // This is the published, passive-match opening: the player has its normal
   // standing defence but issues no order and never enters the AI's side. It is
@@ -50074,7 +50263,19 @@ check("River Water ribbon follows spline width with arc-length UVs and flow attr
   assert.ok(ribbon.indices.length > 0);
 });
 
-console.log(`[engine-tests] ${checks} checks passed`);
+if (testFilters.length === 0) {
+  console.log(`[engine-tests] ${checks} checks passed`);
+} else if (checks === 0) {
+  console.error(
+    `[engine-tests] FAILED: --filter ${testFilters.join(",")} matched no checks (${skipped} skipped). Fix the filter.`,
+  );
+  process.exitCode = 1;
+} else {
+  console.log(
+    `[engine-tests] PARTIAL: ${checks} checks passed, ${skipped} skipped by --filter ${testFilters.join(",")}.` +
+      ` Not a green build — run without --filter before committing.`,
+  );
+}
 
 function minimalGlbJson(json: unknown): Uint8Array {
   const encoder = new TextEncoder();

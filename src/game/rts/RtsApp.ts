@@ -30,6 +30,7 @@ import { VfxSubsystem } from "@engine/render-three/vfxSubsystem";
 import { FrameMetricsMonitor } from "@engine/perf/frameMetrics";
 import { AdaptiveQualityController } from "@engine/perf/adaptiveQuality";
 import { classifyBottleneck } from "@engine/perf/bottleneckClassifier";
+import { SubsystemProfiler } from "@engine/core/subsystemProfiler";
 import { evaluatePerfBudget } from "@engine/perf/perfBudget";
 import {
   applyQualityToPostProcess,
@@ -135,6 +136,10 @@ import { RtsMatchClock, formatMatchDuration } from "./match/rtsMatchClock";
 import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
 import type { RtsGraphicsQuality } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
+import type { RtsPerfCost } from "./debug/formatRtsPerfDebug";
+import { RtsSimulationWitness } from "./debug/rtsSimulationWitness";
+import { buildRtsFrameCapture, type RtsFrameRegionSample } from "./debug/rtsFrameCapture";
+import { RtsFrameCaptureModal } from "./debug/rtsFrameCaptureModal";
 import {
   PlacedStructureSystem,
   structureDamageStage,
@@ -267,6 +272,53 @@ import type { AiObjectiveWatch } from "./ai/armyManager";
 const MAX_PIXEL_RATIO = 2;
 const ADAPTIVE_TICK_INTERVAL_SECONDS = 0.5;
 const PERFORMANCE_SNAPSHOT_INTERVAL_SECONDS = 0.5;
+/**
+ * The measured frame regions, and which group each one sits inside.
+ *
+ * One table rather than the marks themselves being the definition: the capture
+ * has to know that `ai` lives inside `simülasyon` to subtract it and report what
+ * the step spent *outside* its named systems. A region measured in the frame
+ * loop but missing here simply falls into that leftover — the arithmetic stays
+ * correct, it just stops being itemised.
+ *
+ * `kare` is not listed: it is the whole frame, the denominator every share is
+ * taken against.
+ */
+const PERF_REGION_PARENTS: Readonly<Record<string, string | undefined>> = {
+  // Top level — these four partition the frame, and what they leave over is the
+  // `ölçülmeyen` row.
+  "simülasyon": undefined,
+  "sunum": undefined,
+  "çizim": undefined,
+  "tanı": undefined,
+  // Inside the simulation step (each runs once per sub-step).
+  "ilerleme": "simülasyon",
+  "birim hareketi": "simülasyon",
+  "hayvanlar": "simülasyon",
+  "inşaat": "simülasyon",
+  "üretim": "simülasyon",
+  "lojistik": "simülasyon",
+  "eğitim kuyruğu": "simülasyon",
+  "ai": "simülasyon",
+  "hud eşitleme": "simülasyon",
+  "savaş": "simülasyon",
+  "görüş": "simülasyon",
+  "zafer koşulu": "simülasyon",
+  // Inside the rendered-frame presentation pass.
+  "zemin oturtma": "sunum",
+  "yapı görselleri": "sunum",
+  "mermiler": "sunum",
+  "birim sunumu": "sunum",
+  "hayvan/kervan sunumu": "sunum",
+  "sis görünümü": "sunum",
+  "panel/görev arayüzü": "sunum",
+  "çevre/bitki": "sunum",
+  "kalite denetimi": "sunum",
+};
+/** Work that only exists because the debug route is open. */
+const PERF_DEBUG_ONLY_REGIONS: ReadonlySet<string> = new Set(["tanı"]);
+/** The whole-frame region; the denominator, never a row. */
+const PERF_TOTAL_REGION = "kare";
 /**
  * How often mission goals are re-checked, in real seconds. Objectives are polled
  * (see `tutorial/missionDirector.ts`) and the poll rebuilds the road/depot graph
@@ -498,6 +550,35 @@ export class RtsApp {
   private readonly adaptiveQuality: AdaptiveQualityController;
   private adaptiveTickAccumulator = 0;
   private performanceSnapshotAccumulator = 0;
+  /**
+   * Per-region frame costs for the `?debug` panel. Null off the debug route, and
+   * every measurement site is a single null check there, so the instrument does
+   * not become the thing it measures.
+   */
+  private readonly perfProfiler: SubsystemProfiler | null;
+  /**
+   * One frame's accumulated cost per region, flushed into the profiler at the
+   * end of the frame. Regions inside the simulation step run once per sub-step
+   * (up to 8 at §38's test speed), and what the panel must report is what the
+   * *frame* paid — not one of its slices.
+   */
+  private readonly perfFrameCosts = new Map<string, number>();
+  /**
+   * Armed by the panel's capture button, disarmed by the frame that answers it.
+   * The capture is taken from the **next** frame rather than the current one:
+   * the click lands between frames, and pausing first would measure a frame with
+   * no simulation in it at all.
+   */
+  private perfCaptureArmed = false;
+  /** Simulation sub-steps the captured frame ran — 8X folds eight into one. */
+  private perfCaptureSteps = 0;
+  private readonly frameCaptureModal: RtsFrameCaptureModal | null;
+  /**
+   * Whether the capture is the one holding the match. Closing must only resume a
+   * match *it* paused — otherwise opening a capture during the player's own
+   * Escape pause would silently un-pause the game on close.
+   */
+  private frameCaptureOwnsPause = false;
   /** Authored shadow frusta before the active profile scales their coverage. */
   private readonly shadowCameraExtents = new WeakMap<DirectionalLight, {
     readonly left: number;
@@ -747,6 +828,8 @@ export class RtsApp {
   private readonly clock = new RtsMatchClock();
   private readonly matchOverlay: RtsMatchOverlay;
   private readonly debugOverlay: RtsDebugOverlay | null;
+  /** The same debug route's hidden simulation readout (smoke-suite witness). */
+  private readonly debugWitness: RtsSimulationWitness | null;
   private readonly navigation = new RtsNavigation();
   private readonly marquee = new MarqueeOverlay();
   private readonly commandMarkers = new CommandMarkerSystem();
@@ -1560,22 +1643,29 @@ export class RtsApp {
         : {}),
       onAbandonMission: () => this.abandonMission(),
     });
-    this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
+    this.debugOverlay = this.options.debug
+      ? new RtsDebugOverlay({ onCaptureFrame: () => { this.perfCaptureArmed = true; } })
+      : null;
+    this.debugWitness = this.options.debug ? new RtsSimulationWitness() : null;
+    this.perfProfiler = this.options.debug ? new SubsystemProfiler() : null;
+    this.frameCaptureModal = this.options.debug
+      ? new RtsFrameCaptureModal({ onClose: () => this.closeFrameCapture() })
+      : null;
     this.debugSpeedControls = this.debugOverlay
       ? new RtsGameSpeedControls(1, (speed) => this.setSimulationSpeed(speed), { mode: "debug" })
       : null;
     if (this.debugSpeedControls) this.debugOverlay?.mountControl(this.debugSpeedControls);
     if (this.options.levelLoadError) {
-      // On screen, not only in the console: someone who just pressed Play and got
-      // an unfamiliar map is looking at the game, and this is the answer to why.
-      this.debugOverlay?.setLevelLines([
+      // Recorded, not only logged: someone who just pressed Play and got an
+      // unfamiliar map has this as the answer to why.
+      this.debugWitness?.setLevelLines([
         `seviye REDDEDİLDİ: ${this.options.levelRef}`,
         `  ! ${this.options.levelLoadError}`,
         "  blokaj haritası ile devam ediliyor",
       ]);
     }
     if (this.options.prosperityDebugEnabled) {
-      this.debugOverlay?.setProgressionLines([
+      this.debugWitness?.setProgressionLines([
         "Refah: bilgi metriği etkin; çağ ve üretim için gereksinim değildir.",
       ]);
     }
@@ -1583,7 +1673,7 @@ export class RtsApp {
     // existed only for the optional debug log, so a card could remain faded
     // after income arrived until any palette click happened to refresh it.
     this.unsubscribeWalletChanges = this.playerKingdom.wallet.subscribe((change: ResourceChange) => {
-      this.debugOverlay?.recordResourceChange(change);
+      this.debugWitness?.recordResourceChange(change);
       this.buildPalette.setAffordability(this.playerKingdom.wallet.snapshot());
     });
     // Composite pointer handler: left button drives selection, while right
@@ -1758,6 +1848,8 @@ export class RtsApp {
     this.matchOverlay.dispose();
     this.debugSpeedControls?.dispose();
     this.debugOverlay?.dispose();
+    this.debugWitness?.dispose();
+    this.frameCaptureModal?.dispose();
     this.unsubscribeWalletChanges?.();
     this.buildPalette.dispose();
     this.selectionPanel.dispose();
@@ -1967,6 +2059,7 @@ export class RtsApp {
     this.frameMetrics.record(rawDeltaMs);
     const dt = Math.max(0, Math.min(rawDeltaMs / 1000, MAX_FRAME_SECONDS));
     this.lastTime = now;
+    const frameMark = this.perfMark();
 
     this.resize();
     this.consumeCommandInput();
@@ -1980,26 +2073,34 @@ export class RtsApp {
     // the map is not playing the match, and freezing it would trap the player
     // staring at whatever the last frame happened to show.
     this.cameraController.update(dt, this.input);
+    this.perfCaptureSteps = 0;
     if (this.match.active && this.flow.running) {
+      const simulationMark = this.perfMark();
       for (const simulationDt of simulationSteps(dt, this.simulationSpeed, MAX_FRAME_SECONDS)) {
         if (!this.match.active) break;
         this.commands.update(simulationDt);
         this.updateSimulation(simulationDt);
+        this.perfCaptureSteps += 1;
       }
+      this.perfMeasure("simülasyon", simulationMark);
     }
-    if (this.debugOverlay) {
-      this.debugOverlay.setElapsedSeconds(this.clock.seconds);
+    if (this.debugWitness) {
+      // Measured like everything else, because on this route it is a real cost:
+      // the hidden readout rebuilds a line per unit per frame, and a panel that
+      // hid the price of its own diagnostics would be lying about the frame.
+      const witnessMark = this.perfMark();
+      this.debugWitness.setElapsedSeconds(this.clock.seconds);
       // §59. Recomputing the source list here costs one array build per rendered
-      // frame, which is why it only happens when the overlay is actually up.
+      // frame, which is why it only happens on the debug route.
       if (this.vision && this.enemyMemory) {
-        this.debugOverlay.setVisionLines(formatVisionDebug(
+        this.debugWitness.setVisionLines(formatVisionDebug(
           this.vision,
           this.enemyMemory,
           this.collectVisionSources().length,
           this.clock.seconds,
         ));
       }
-      this.debugOverlay.setAiLines(
+      this.debugWitness.setAiLines(
         formatRtsAiDebug(
           this.ai.snapshot(),
           this.ai.log.recent(),
@@ -2007,23 +2108,28 @@ export class RtsApp {
           this.options.aiBalance,
         ),
       );
+      this.debugWitness.update(
+        this.units,
+        this.centers,
+        this.match.outcome,
+        this.workerConstruction,
+        this.playerKingdom.wallet,
+        this.economyProduction,
+        this.playerKingdom.population,
+        this.roads,
+        this.depotLogistics,
+        this.productionLogistics,
+      );
+      this.perfMeasure("tanı", witnessMark);
     }
-    this.debugOverlay?.update(
-      this.units,
-      this.centers,
-      this.match.outcome,
-      this.workerConstruction,
-      this.playerKingdom.wallet,
-      this.economyProduction,
-      this.playerKingdom.population,
-      this.roads,
-      this.depotLogistics,
-      this.productionLogistics,
-    );
+    const presentationMark = this.perfMark();
+    const groundMark = this.perfMark();
     this.roadDebugView.refresh();
     // Cheap when nothing was built: two integer compares (see syncStructurePads).
     this.syncStructurePads();
     this.syncUnitsToGround();
+    this.perfMeasure("zemin oturtma", groundMark);
+    const worldArtMark = this.perfMark();
     this.commandMarkers.update(dt);
     // One shared phase for every selected unit and building, on the rendered
     // delta: the rings must breathe together and at the same rate at any game speed.
@@ -2031,18 +2137,23 @@ export class RtsApp {
     this.structures.updateVisualAnimations(dt);
     this.updateStructureDamageVfx(dt);
     this.updateWorldProgressOverlay();
+    this.perfMeasure("yapı görselleri", worldArtMark);
     // Presentation runs on the rendered-frame delta, not the simulation's: a
     // tracer and a health bar should look the same at any game speed.
+    const projectileMark = this.perfMark();
     this.projectiles.update(dt);
     this.firebrands.update(dt);
+    this.perfMeasure("mermiler", projectileMark);
     // Cannonballs are deliberately absent here: they gate damage now, so they
     // are advanced with the simulation in `updateSimulation`, not on this
     // rendered delta.
+    const unitViewMark = this.perfMark();
     this.units.updatePresentation(
       dt,
       this.cameraController.camera.quaternion,
       this.cameraController.camera.position,
     );
+    this.perfMeasure("birim sunumu", unitViewMark);
     // Rendered delta, like the units': a grazing animal should look the same at
     // any game speed. Distance throttling is left to the presentation itself.
     //
@@ -2050,13 +2161,18 @@ export class RtsApp {
     // because this is the loop that creates the bodies and the only one that runs
     // on the start screen — a herd fogged from the binder's schedule would graze
     // in plain sight until the first simulation tick.
+    const herdViewMark = this.perfMark();
     this.wildlifeView.sync(this.wildlife.all(), dt, null, this.playerVisibilityTest(), PLAYER_OWNER);
     this.caravanView.sync(this.caravans.all(), dt, this.playerVisibilityTest(), PLAYER_OWNER);
+    this.perfMeasure("hayvan/kervan sunumu", herdViewMark);
     // §59: the grid is a simulation fact and `updateFogOfWar` owns it; how far
     // the drawn frontier has eased toward it is presentation, so it runs here on
     // the rendered delta. Same reason as the wildlife above — at §38's 8x test
     // speed a fade driven by the simulation would collapse into a pop.
+    const fogViewMark = this.perfMark();
     this.fogView?.advance(dt);
+    this.perfMeasure("sis görünümü", fogViewMark);
+    const hudViewMark = this.perfMark();
     this.selectionPanel.setSelection(this.selectionView());
     // Objectives run on the rendered-frame delta like the rest of the read-only
     // presentation: the story card is paced for a person reading it, not for the
@@ -2067,7 +2183,9 @@ export class RtsApp {
     // would be unreadable exactly when the match is hardest to follow.
     this.notifications.advance(dt);
     this.notificationFeed.setNotifications(this.notifications.active());
+    this.perfMeasure("panel/görev arayüzü", hudViewMark);
     // Keep the authored sky/cloud domes centered on the camera and advance clouds.
+    const environmentMark = this.perfMark();
     this.environment.update(dt);
     // Painted foliage culls per rendered frame against the live quality knob; a
     // no-op for a Level with no foliage or with distance culling disabled.
@@ -2075,13 +2193,100 @@ export class RtsApp {
       this.cameraController.camera.position,
       this.qualitySettings.foliageCullDistanceScale,
     );
+    this.perfMeasure("çevre/bitki", environmentMark);
+    const qualityMark = this.perfMark();
     this.tickAdaptiveQuality(dt);
+    this.perfMeasure("kalite denetimi", qualityMark);
+    this.perfMeasure("sunum", presentationMark);
     // Authored Post Process (bloom/SMAA) composits the frame when present; otherwise
     // draw straight through the renderer.
+    const renderMark = this.perfMark();
     if (this.postProcessPipeline) this.postProcessPipeline.render(dt);
     else this.renderer.render(this.scene, this.cameraController.camera);
+    // What the CPU spent issuing the frame, not what the GPU spent drawing it:
+    // WebGL is asynchronous, so this is the submission cost. The draw-call and
+    // triangle counts beside it in the panel are the GPU-side half of the story.
+    this.perfMeasure("çizim", renderMark);
+    this.perfMeasure("kare", frameMark);
+    this.flushPerfFrame();
     this.publishPerformanceSnapshot(dt);
   };
+
+  /**
+   * Start of a measured region — `0` when the debug profiler is off, so an
+   * un-instrumented run pays one property read per site and nothing else.
+   */
+  private perfMark(): number {
+    return this.perfProfiler ? performance.now() : 0;
+  }
+
+  /** Adds the elapsed time to this frame's tally for `id`. */
+  private perfMeasure(id: string, startMs: number): void {
+    if (!this.perfProfiler) return;
+    this.perfFrameCosts.set(id, (this.perfFrameCosts.get(id) ?? 0) + (performance.now() - startMs));
+  }
+
+  /** Hands the frame's tallies to the rolling profiler and starts the next one. */
+  private flushPerfFrame(): void {
+    if (!this.perfProfiler) return;
+    for (const [id, ms] of this.perfFrameCosts) this.perfProfiler.record(id, ms);
+    this.perfProfiler.endFrame();
+    // After the record, so the captured frame is inside the window it is being
+    // compared against: "is this frame typical" is a question about a window
+    // that includes it.
+    if (this.perfCaptureArmed) this.takeFrameCapture();
+    this.perfFrameCosts.clear();
+  }
+
+  /**
+   * Freeze this frame's costs into a table and hold the match still while it is
+   * read. Deliberately the last thing the frame does: the modal it opens must
+   * not be part of the frame it is describing.
+   */
+  private takeFrameCapture(): void {
+    this.perfCaptureArmed = false;
+    const profiler = this.perfProfiler;
+    const modal = this.frameCaptureModal;
+    if (!profiler || !modal) return;
+    const window = new Map(profiler.snapshot().subsystems.map((timing) => [timing.id, timing]));
+    const total = this.perfFrameCosts.get(PERF_TOTAL_REGION) ?? 0;
+    const totalWindow = window.get(PERF_TOTAL_REGION);
+    const regions: RtsFrameRegionSample[] = [];
+    for (const [id, frameMs] of this.perfFrameCosts) {
+      if (id === PERF_TOTAL_REGION) continue;
+      const timing = window.get(id);
+      const parent = PERF_REGION_PARENTS[id];
+      regions.push({
+        id,
+        ...(parent === undefined ? {} : { parent }),
+        frameMs,
+        averageMs: timing?.averageMs ?? 0,
+        maxMs: timing?.maxMs ?? 0,
+        ...(PERF_DEBUG_ONLY_REGIONS.has(id) ? { debugOnly: true } : {}),
+      });
+    }
+    modal.show(buildRtsFrameCapture({
+      totalMs: total,
+      averageTotalMs: totalWindow?.averageMs ?? 0,
+      maxTotalMs: totalWindow?.maxMs ?? 0,
+      regions,
+      simulationSteps: this.perfCaptureSteps,
+      speed: this.simulationSpeed,
+      windowFrames: totalWindow?.samples ?? 0,
+      matchSeconds: this.clock.seconds,
+    }));
+    // Only now, and only if the match was actually running: a capture taken on
+    // the start screen has nothing to hold still.
+    this.frameCaptureOwnsPause = this.flow.pause();
+  }
+
+  /** Close the capture and hand the match back exactly as it was found. */
+  private closeFrameCapture(): void {
+    this.frameCaptureModal?.hide();
+    if (!this.frameCaptureOwnsPause) return;
+    this.frameCaptureOwnsPause = false;
+    this.flow.resume();
+  }
 
   /**
    * A debug-route-only performance witness for repeatable browser captures.
@@ -2097,19 +2302,20 @@ export class RtsApp {
     const spikes = this.frameMetrics.spikeCounts();
     const render = readRenderStats(this.renderer);
     const memory = readRenderMemory(this.renderer);
+    const shadowCasters = this.shadowCasterStats();
+    const frameStats = {
+      averageMs: frame.averageFrameTimeMs,
+      p95Ms: frame.p95FrameTimeMs,
+      sampleCount: frame.sampleCount,
+      over33ms: spikes.over33ms,
+      over50ms: spikes.over50ms,
+      over100ms: spikes.over100ms,
+    };
     this.canvas.dataset.rtsPerf = JSON.stringify({
-      frame: {
-        averageMs: frame.averageFrameTimeMs,
-        p95Ms: frame.p95FrameTimeMs,
-        sampleCount: frame.sampleCount,
-        windowSeconds: frame.sampleWindowSeconds,
-        over33ms: spikes.over33ms,
-        over50ms: spikes.over50ms,
-        over100ms: spikes.over100ms,
-      },
+      frame: { ...frameStats, windowSeconds: frame.sampleWindowSeconds },
       render,
       memory,
-      shadowCasters: this.shadowCasterStats(),
+      shadowCasters,
       // Event-driven terrain work, not a per-frame timer. Browser performance
       // captures can correlate a road/build hitch with its exact repaint scope.
       terrainPaint: this.roadPainter?.snapshot() ?? null,
@@ -2117,6 +2323,65 @@ export class RtsApp {
       adaptiveEnabled: this.userSettings.graphics.adaptiveOptimizationEnabled,
       adaptiveReductionDepth: this.adaptiveQuality.reductionDepth,
     });
+    // The on-screen panel rides the same sample: one traversal, one set of
+    // counters, so the visible readout and the recorded witness can never
+    // disagree about the frame they are describing.
+    this.debugOverlay?.setPerformance({
+      frame: frameStats,
+      render,
+      memory,
+      shadows: [
+        { label: "aktörler", ...shadowCasters.actors },
+        { label: "harita", ...shadowCasters.mapArt },
+        { label: "diğer", ...shadowCasters.other },
+      ],
+      costs: this.perfCosts(),
+      quality: {
+        level: this.userSettings.graphics.selectedQualityLevel,
+        adaptiveEnabled: this.userSettings.graphics.adaptiveOptimizationEnabled,
+        reductionDepth: this.adaptiveQuality.reductionDepth,
+      },
+      scene: {
+        units: this.units.all().length,
+        structures: this.structures.all().length,
+        caravans: this.caravans.all().length,
+        wildlife: this.wildlife.all().length,
+      },
+    });
+  }
+
+  /**
+   * The measured frame regions, in a fixed reading order rather than the
+   * profiler's cost order: `kare` is the whole frame and the rest are its parts,
+   * so a list that re-sorted itself every half second would make the nesting
+   * unreadable exactly when it matters.
+   */
+  private perfCosts(): RtsPerfCost[] {
+    const profiler = this.perfProfiler;
+    if (!profiler) return [];
+    const timings = new Map(profiler.snapshot().subsystems.map((timing) => [timing.id, timing]));
+    const order: readonly { readonly id: string; readonly nested?: boolean }[] = [
+      { id: "kare" },
+      { id: "simülasyon" },
+      { id: "ai", nested: true },
+      { id: "görüş", nested: true },
+      { id: "sunum" },
+      { id: "çizim" },
+      { id: "tanı" },
+    ];
+    const costs: RtsPerfCost[] = [];
+    for (const entry of order) {
+      const timing = timings.get(entry.id);
+      if (!timing) continue;
+      costs.push({
+        label: entry.id,
+        averageMs: timing.averageMs,
+        lastMs: timing.lastMs,
+        maxMs: timing.maxMs,
+        ...(entry.nested ? { nested: true } : {}),
+      });
+    }
+    return costs;
   }
 
   /** Shadow-caster inventory for a debug performance report, sampled not hot-path. */
@@ -2784,7 +3049,13 @@ export class RtsApp {
   private consumeCommandInput(): void {
     // Drained before the unit orders: pause is about the match, not the
     // selection, and it must answer even when the simulation is frozen.
-    if (this.input.consumeCommand("pause")) this.togglePause();
+    if (this.input.consumeCommand("pause")) {
+      // Escape means "undo the thing I am in the middle of", and an open capture
+      // is the innermost of those. Handled here rather than with a key listener
+      // of its own so it cannot race the pause it would otherwise stack on top of.
+      if (this.frameCaptureModal?.open) this.closeFrameCapture();
+      else this.togglePause();
+    }
     if (this.input.consumeCommand("toggleBuildPalette")) this.buildPalette.toggleVisible();
     if (this.input.consumeCommand("buildCategory1")) this.buildPalette.selectCategoryByIndex(0);
     if (this.input.consumeCommand("buildCategory2")) this.buildPalette.selectCategoryByIndex(1);
@@ -2883,6 +3154,7 @@ export class RtsApp {
     // Aged on the same step as the systems below, which is what makes it a
     // simulation clock rather than a stopwatch: it scales with §38's speed and
     // stops on pause because it is only ever ticked from here (§53).
+    const progressionMark = this.perfMark();
     this.clock.advance(dt);
     this.kingdoms.advance(dt);
     // Centre-led progression: one event stream for level-ups and the Town
@@ -2931,8 +3203,10 @@ export class RtsApp {
         this.announce("progression", "Merkez yıkıldığı için ilerleme iptal edildi; kaynaklar iade edildi.", "refused");
       }
     }
+    this.perfMeasure("ilerleme", progressionMark);
     // Acquisition before movement: a unit that picks up a target this tick
     // should start walking toward it on the same tick, not the next one.
+    const movementMark = this.perfMark();
     updateUnitEngagement(this.units.all(), {
       navigation: this.navigation,
       targets: this.combatTargets(),
@@ -2941,6 +3215,7 @@ export class RtsApp {
     // Moving bodies pass through one another. When an order ends, settle a real
     // idle overlap once instead of continuously pushing the whole stopped group.
     settleStoppedUnitOverlaps(this.units.all(), this.navigation);
+    this.perfMeasure("birim hareketi", movementMark);
     // Wildlife moves on the simulation delta like every other body, so the
     // game-speed control carries it too. Deliberately *not* a navigation
     // agent and deliberately not a nav blocker: a herd is scenery that can be
@@ -2952,6 +3227,7 @@ export class RtsApp {
     // Ahead of the herd's own tick so a lead set this frame moves the animal this
     // frame: the shepherd's position has just been updated above, and a drive that
     // aimed at where he stood last tick would trail a step behind all the way home.
+    const wildlifeMark = this.perfMark();
     this.pasture.update(dt);
     // V3 Faz 3, and ahead of the herd's tick for the same reason the drive is: a
     // quarry chosen this frame has to move the wolf this frame, or every chase
@@ -2972,10 +3248,14 @@ export class RtsApp {
     // standing over the animal after both of them have moved this frame. A bull
     // struck at the top of the tick would be hitting last frame's contact.
     this.wildlifeRetaliation.update(dt);
+    this.perfMeasure("hayvanlar", wildlifeMark);
+    const constructionMark = this.perfMark();
     this.workerConstruction.update(dt);
     // Settle repair jobs whose building was razed or demolished since the last
     // tick; an untouched job is refunded here exactly as a cancelled one is.
     this.structureRepair.update(this.structures.all());
+    this.perfMeasure("inşaat", constructionMark);
+    const productionMark = this.perfMark();
     this.economyProduction?.update(dt);
     // Faz S2: the trade sites fill their own buffers. Ticked beside the
     // producers because that is what they are — a facility with an output rate
@@ -2983,17 +3263,21 @@ export class RtsApp {
     // way a producer's reach the stockpile: down a road, on a donkey.
     this.tradeSites.update(dt);
     this.syncForestVisibility();
+    this.perfMeasure("üretim", productionMark);
     // Simulation owns the route state; the animation itself advances above on
     // rendered time, so the speed picker cannot change its playback rate.
     //
     // One arrival stream, two receivers: each recognises its own lane prefix and
     // ignores the other's, which is what keeps a producer's load going to the
     // wallet and a trade site's to the market shelf (supply plan §3.4).
+    const logisticsMark = this.perfMark();
     const arrivals = this.caravans.update(dt);
     this.logisticsTransfers.update(arrivals);
     this.marketSupply.deliver(arrivals);
+    this.perfMeasure("lojistik", logisticsMark);
     // Only the human kingdom's production is narrated; the AI's own queue events
     // are surfaced by its decision log in a later slice.
+    const trainingMark = this.perfMark();
     for (const event of this.workerProduction.update(dt)) {
       if (event.owner !== PLAYER_OWNER) continue;
       if (event.type === "completed") {
@@ -3011,17 +3295,23 @@ export class RtsApp {
         this.announce("production", `${event.label} çıkışı engelli; ${event.structure.stats.label} çevresini açın.`, "refused");
       }
     }
+    this.perfMeasure("eğitim kuyruğu", trainingMark);
     // The AI decides on the same scaled match delta as every other system, so
     // the game-speed control accelerates it too (plan §38 test mode).
+    const aiMark = this.perfMark();
     this.ai.update(dt);
+    this.perfMeasure("ai", aiMark);
+    const hudMark = this.perfMark();
     this.syncHudBar();
     this.syncAgeUi();
     this.syncEconomyUi();
     this.syncNotifications();
     this.announcePeaceWindow();
+    this.perfMeasure("hud eşitleme", hudMark);
     // Before any blow lands this tick: a unit standing in a Tapınak's field must
     // already be protected when it is hit, not from the tick after. The same
     // pass mends units and clears the protection of everyone who left a field.
+    const combatMark = this.perfMark();
     this.supportAuras.update(this.structures.all(), this.units.all(), dt);
     // Shells fired on an earlier tick land first, so a wall that is about to be
     // finished off by one is already rubble before this tick's guns pick targets.
@@ -3052,19 +3342,24 @@ export class RtsApp {
     });
     updateUnitDeaths(this.units, this.selection, dt);
     this.destroyRuinedStructures();
+    this.perfMeasure("savaş", combatMark);
     // §59, before the objectives below and before anything reads the AI: fog is
     // the lens every other system's enemy reads pass through this tick, so it
     // has to be current first. It runs after the deaths/demolitions above for
     // the same reason §58 does — a dead scout stops revealing on the tick it
     // dies, not the tick after.
+    const visionMark = this.perfMark();
     this.updateFogOfWar();
+    this.perfMeasure("görüş", visionMark);
     // §58, after the deaths and demolitions this tick: a point whose holding
     // outpost just fell has already stopped being held by the time it is scored.
+    const victoryMark = this.perfMark();
     this.updateRegionalVictory(dt);
     const outcome = this.match.update(this.centers);
     // Resolved second, so a centre razed on the same tick keeps the more
     // specific reason — `resolveRegionalControl` is a no-op on a decided match.
     const regional = this.match.resolveRegionalControl(this.regionalVictory?.winner() ?? null);
+    this.perfMeasure("zafer koşulu", victoryMark);
     if (this.match.outcome !== "active" && (outcome !== "active" || regional)) {
       this.log.info(`Match ended: ${this.match.outcome} (${this.match.reason})`);
       this.showMatchResult();
@@ -3113,7 +3408,7 @@ export class RtsApp {
    * here so a delayed shell provokes the same response as an instant one.
    */
   private resolveCombatHit(hit: CombatHit): void {
-    this.debugOverlay?.recordHit(hit);
+    this.debugWitness?.recordHit(hit);
     if (hit.target instanceof Caravan && hit.change.depleted && hit.target.beginDeath()) {
       this.units.clearAttackTargets(hit.target);
       if (hit.target.owner === PLAYER_OWNER) {
@@ -4202,7 +4497,7 @@ export class RtsApp {
         `RTS Actor pack loaded ${report.loaded}/${report.requested} Actors; ${report.failures.length} placeholder(s) in use`,
       );
     }
-    this.debugOverlay?.setPresentationLines(formatRtsActorPresentationDebug(report));
+    this.debugWitness?.setPresentationLines(formatRtsActorPresentationDebug(report));
   }
 
   /**

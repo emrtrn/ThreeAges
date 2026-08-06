@@ -54,8 +54,32 @@ engine/editor.
 - Project data is local: the game/editor read this repo's own `public/`
   (`public/project.3dgame.json`, `public/layouts/*.json`, `public/assets/*`).
   Manifest paths are relative to the public root.
-- After editing TypeScript, run `npx tsc --noEmit`; the dev server skips
-  type-checking.
+- **Verification tiers — the default is `hızlı`, not the full gate.** The full
+  suite costs ~2.5 min (`test:engine`, 1300+ checks) and `build:verify` ~4 min,
+  and running it after every edit is what makes sessions drag. So the user names
+  the tier, and when they don't, assume `hızlı`:
+  - **`hızlı` (default)** — `npx tsc --noEmit` (~9s), plus
+    `npm run test:engine -- --filter <konu>` when a check covers the area
+    touched. Then say plainly what should now be on screen and **ask the user to
+    look**. Do not run the full suite to close out a `hızlı` task. Exception:
+    a change to AI decision/economy code runs `--filter "Faz 8"` (or `AI`) even
+    at `hızlı` — those are the checks a fast run would otherwise skip.
+  - **`tam`** — `npm run build:verify` (`verify:imports` + `tsc` + `vite build` +
+    unfiltered `test:engine` + `verify:dist --strict`). Use before committing,
+    when the change is broad or cross-cutting, or on request.
+  Long runs go in the background (`run_in_background`) so work continues while
+  they finish; never sit blocked on a suite. `tsc --noEmit` is cheap — always run
+  it after editing TypeScript, since the dev server skips type-checking.
+- **`test:engine` takes a filter for iteration.**
+  `npm run test:engine -- --filter market` (comma-separated, case-insensitive
+  substrings matched against check labels, `-f` also works) skips every other
+  check — a ~150x speedup while iterating. A filtered run prints `PARTIAL` and is
+  **never a green build**; a filter matching nothing exits 1 so typos aren't
+  silent. `build:verify` and CI always run it unfiltered.
+  `ENGINE_TESTS_TIMING=1` appends per-check wall time — nine headless-match AI
+  checks account for ~97% of the suite's 161s, so a slow run is almost always
+  those. `docs/planned/ENGINE_TESTS_SPLIT_PLAN.md` carries the measurements and
+  the plan to split the 50k-line file.
 - **Visual acceptance is the user's call, not a test to build.** When the open
   question is "does it look right in the running game" — is the model visible,
   upright, animating, the right size — finish the code, say plainly what should

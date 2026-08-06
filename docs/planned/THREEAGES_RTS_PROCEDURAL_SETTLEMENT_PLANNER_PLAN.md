@@ -343,6 +343,24 @@ Bu davranış, merkez seviye skoru ile Pazarın odun açığını kapatan işlem
 regresyonlarıyla otomatik doğrulandı. Düzeltme sonrası yeniden oynanacak
 üç manuel maçın kabulü halen açık.
 
+Takip gözlemi (2026-08-06): Bir sonraki maçta AI yaklaşık 40. saniyede Lv2'ye
+çıktı; ardından bir depo ve liman/maden/oduncu hattına yollar kurup yaklaşık
+10 dakika ilerlemedi. Kök neden, ilk Lv2'nin başlangıç odununu temel üretim
+hattı tamamlanmadan tüketmesiyle prosedürel oduncu bağlantısının yarım
+kalmasıydı. Lv1 → Lv2 artık yalnızca çiftlik ve oduncu kampı tamamlanmış,
+ikisi de depoya/yola bağlıyken anında öncelik kazanır; Lv2 → Lv3 için bu ek
+kapı yoktur. Standart pasif açılış regresyonu da authored fallback yerine
+prosedürel seed 17 ile gerçek `gameplay_proof` bütçesinde çalıştırıldı ve
+18 simülasyon dakikasında Kasaba'ya ulaştı (1325 motor kontrolü geçti).
+Bu otomatik kanıt, manuel kabulün yerine geçmez.
+
+Düzeltme sonrası manuel gözlem (2026-08-06): Yerleşim düzeni ve gelişim akışı
+artık makul görünüyor. Pazar yaklaşık 3. dakikada tamamlanıp ticaret hatları
+kuruldu; Yerleşim Lv3 yaklaşık 6. dakikada açıldı; Kasaba Çağı 18–20. dakika
+aralığında başladı. Bu, prosedürel açılışın otomatik 18-dakika kanıtıyla
+uyumlu olumlu manuel kanıttır. Oyuncu baskısına tepki için ayrı manuel gözlem
+henüz kayıtlı olmadığından kabul kutusu açık tutulur.
+
 Kabul: 10/10 deterministik seed, blocker veya sonsuz yapı döngüsü olmadan
 Kasaba yolunu tamamlar; manuel maçlar aynı yerleşim kopyasını tekrar etmez.
 

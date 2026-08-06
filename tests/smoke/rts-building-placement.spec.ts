@@ -75,10 +75,10 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
       page.locator(`[data-rts-resource="${resourceId}"] .rts-hud-resource-income`),
     ).toHaveText("+0.0/dk");
   }
-  await expect(page.locator(".rts-debug-overlay")).toContainText("kaynak hareketleri:");
-  await expect(page.locator(".rts-debug-overlay")).toContainText("yollar: 0 düğüm · 0 kenar · 0 ağ");
-  await expect(page.locator(".rts-debug-overlay")).toContainText("depolar: 0");
-  await expect(page.locator(".rts-debug-overlay")).toContainText("üretim bağlantıları: 0");
+  await expect(page.locator(".rts-debug-sim")).toContainText("kaynak hareketleri:");
+  await expect(page.locator(".rts-debug-sim")).toContainText("yollar: 0 düğüm · 0 kenar · 0 ağ");
+  await expect(page.locator(".rts-debug-sim")).toContainText("depolar: 0");
+  await expect(page.locator(".rts-debug-sim")).toContainText("üretim bağlantıları: 0");
   await expect(page.locator(".rts-hud-warning")).toBeHidden();
   // Nothing has happened yet, so the feed must be silent rather than empty-boxed.
   await expect(page.locator(".rts-notification-feed")).toBeHidden();
@@ -121,7 +121,7 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
     /İşçi üretim kuyruğa alındı \(\d+\/\d+\)\.|Yeni işçi Merkez'den çıktı\./,
   );
   await expect(page.locator(".rts-hud-population")).toHaveText("Nüfus: 10/20");
-  await expect(page.locator(".rts-debug-overlay")).toContainText("reserve: food -50");
+  await expect(page.locator(".rts-debug-sim")).toContainText("reserve: food -50");
   expect(errors).toEqual([]);
 });
 
@@ -173,7 +173,7 @@ test("RTS Phase 9 match flow: start, pause, surrender, and restart back into pla
   await expect(overlay).toHaveClass(/is-visible/);
   // §53's clock is part of that witness: an opening spent behind the card would
   // show up here as time already on the board.
-  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active · süre 0:00");
+  await expect(page.locator(".rts-debug-sim")).toContainText("maç: active · süre 0:00");
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(overlay).not.toHaveClass(/is-visible/);
 
@@ -205,7 +205,7 @@ test("RTS Phase 9 match flow: start, pause, surrender, and restart back into pla
   // A resigned match must not be told its centre was razed — it is still standing.
   await expect(page.locator("[data-rts-result-title]")).toHaveText("Yenilgi");
   await expect(page.locator("[data-rts-result-detail]")).toHaveText("Teslim oldunuz.");
-  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: defeat");
+  await expect(page.locator(".rts-debug-sim")).toContainText("maç: defeat");
   // §53: the result screen reports how long the match took — the number Kapı B's
   // "12–25 dakika" box is read against. Asserted as a shape, not a value: what
   // this can prove is that a real duration reaches the card, and a clock wired to
@@ -215,7 +215,7 @@ test("RTS Phase 9 match flow: start, pause, surrender, and restart back into pla
   // Restart returns to a *running* match, not the start screen.
   await page.getByRole("button", { name: "Yeniden Başlat", exact: true }).click();
   await expect(overlay).not.toHaveClass(/is-visible/);
-  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+  await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
   await expect(page.locator(".rts-hud-population")).toHaveText("Nüfus: 9/20");
   // The confirm must not survive the match that armed it.
   await page.keyboard.press("Escape");
@@ -250,7 +250,7 @@ test("RTS Phase 9 pause actually stops the simulation", async ({ page }) => {
   // past the handful of wall seconds this test has taken — a wall-clock
   // stopwatch could not be here yet.
   const clockLine = async (): Promise<string> => {
-    const text = await page.locator(".rts-debug-overlay").innerText();
+    const text = await page.locator(".rts-debug-sim").textContent() ?? "";
     return text.split("\n")[0] ?? "";
   };
   const atPause = await clockLine();
@@ -389,7 +389,7 @@ test("RTS Phase 7 a box-selected group takes a move order and every unit finishe
   await openMatch(page, "/?rts&debug");
   const canvas = page.locator("#game-canvas");
   await expect(canvas).toBeVisible();
-  const overlay = page.locator(".rts-debug-overlay");
+  const overlay = page.locator(".rts-debug-sim");
   await expect(overlay).toContainText("birimler:");
 
   // Pan the starting Guards up off the bottom edge: they stand below the opening

@@ -1,0 +1,182 @@
+/**
+ * The simulation diagnostics that used to fill the visible `?debug` panel.
+ *
+ * They are not on screen any more — the panel is a performance instrument now
+ * (see {@link RtsDebugOverlay}) — but they are still the only place the running
+ * app says out loud what its systems believe, and the browser smoke suite reads
+ * them as its witness (match state, the §53 clock, roads, depots, wallet
+ * movements, fog, the Actor pack, the AI log). So the text is still built and
+ * still in the DOM, just hidden from view: a machine-readable channel, in the
+ * same spirit as the sampled `data-rts-perf` witness on the canvas.
+ *
+ * Debug route only, exactly as before.
+ */
+import { formatMatchDuration } from "../match/rtsMatchClock";
+import type { RtsMatchOutcome } from "../match/rtsMatchState";
+import type { CommandCenterSystem } from "../structures/commandCenterSystem";
+import type { UnitSystem } from "../units/unitSystem";
+import type { CombatHit } from "../units/unitCombat";
+import type { WorkerConstructionSystem } from "../units/workerConstructionSystem";
+import type { ResourceWallet } from "../economy/resourceWallet";
+import type { EconomyProductionSystem } from "../economy/economyProductionSystem";
+import type { PopulationSystem } from "../economy/populationSystem";
+import type { ResourceChange } from "../economy/resourceWallet";
+import type { RoadGraph } from "../roads/roadGraph";
+import type { DepotLogisticsSystem } from "../economy/depotLogisticsSystem";
+import type { ProductionLogisticsSystem } from "../economy/productionLogisticsSystem";
+
+const MAX_DAMAGE_LINES = 6;
+const MAX_RESOURCE_LINES = 8;
+
+export class RtsSimulationWitness {
+  private readonly root = document.createElement("pre");
+  private readonly damageLines: string[] = [];
+  private readonly resourceLines: string[] = [];
+  private aiLines: readonly string[] = [];
+  private progressionLines: readonly string[] = [];
+  private visionLines: readonly string[] = [];
+  private presentationLines: readonly string[] = [];
+  private levelLines: readonly string[] = [];
+  private elapsedSeconds = 0;
+
+  constructor() {
+    this.root.className = "rts-debug-sim";
+    // Present for readers, absent for viewers: the panel above it is what the
+    // developer actually looks at, and this block is what a test interrogates.
+    this.root.hidden = true;
+    const host = document.getElementById("ui-overlay") ?? document.body;
+    host.appendChild(this.root);
+  }
+
+  recordHit(hit: CombatHit): void {
+    const target = "id" in hit.target ? `birim#${hit.target.id}` : `${hit.target.owner} merkez`;
+    this.damageLines.unshift(`-${hit.change.applied}  birim#${hit.attacker.id} -> ${target}`);
+    this.damageLines.length = Math.min(this.damageLines.length, MAX_DAMAGE_LINES);
+  }
+
+  /** AI design §82 panel block, formatted by `formatRtsAiDebug` (plan §39). */
+  setAiLines(lines: readonly string[]): void {
+    this.aiLines = lines;
+  }
+
+  /** Optional, static progression diagnostics such as the Phase 6 Refah flag. */
+  setProgressionLines(lines: readonly string[]): void {
+    this.progressionLines = lines;
+  }
+
+  /**
+   * Why the requested Level is not the one being played. Its own block rather
+   * than a presentation line: the Actor pack reports asynchronously and would
+   * otherwise overwrite this the moment it finished loading.
+   */
+  setLevelLines(lines: readonly string[]): void {
+    this.levelLines = lines;
+  }
+
+  /**
+   * Actor presentation pack health: how much of the pack loaded and which refs
+   * are standing in. Empty when the pack is not in use at all.
+   */
+  setPresentationLines(lines: readonly string[]): void {
+    this.presentationLines = lines;
+  }
+
+  /** §59 fog block, formatted by `formatVisionDebug`. Empty while the flag is off. */
+  setVisionLines(lines: readonly string[]): void {
+    this.visionLines = lines;
+  }
+
+  /**
+   * §53: simulation seconds elapsed. A setter rather than another `update`
+   * parameter — that list is already ten long, and this follows the AI/
+   * progression lines above.
+   *
+   * The clock is here and not in the main HUD on purpose: §51's HUD list has no
+   * clock, so it stays out of Faz 9's scope. It is Kapı B's instrument, and
+   * `?rts&debug` is where §53.3 says the fifteen matches get watched from.
+   */
+  setElapsedSeconds(seconds: number): void {
+    this.elapsedSeconds = seconds;
+  }
+
+  recordResourceChange(change: ResourceChange): void {
+    if (change.kind === "reset") return;
+    const sign = change.delta > 0 ? "+" : "";
+    this.resourceLines.unshift(`${change.kind}: ${change.resourceId} ${sign}${change.delta}`);
+    this.resourceLines.length = Math.min(this.resourceLines.length, MAX_RESOURCE_LINES);
+  }
+
+  update(
+    units: UnitSystem,
+    centers: CommandCenterSystem,
+    outcome: RtsMatchOutcome,
+    workers: WorkerConstructionSystem,
+    wallet: ResourceWallet,
+    production: EconomyProductionSystem | null,
+    population: PopulationSystem,
+    roads: RoadGraph,
+    depots: DepotLogisticsSystem,
+    productionLogistics: ProductionLogisticsSystem,
+  ): void {
+    const lines = [`maç: ${outcome} · süre ${formatMatchDuration(this.elapsedSeconds)}`];
+    for (const center of centers.all()) {
+      lines.push(`merkez ${center.owner}: ${center.health.current}/${center.health.max}`);
+    }
+    lines.push("birimler:");
+    for (const unit of units.all()) {
+      const order = unit.attackTarget
+        ? `saldırı:${unit.attackTarget.owner}`
+        : unit.pathWaypointCount > 0
+          ? `yol:${unit.pathWaypointCount}`
+          : unit.moveTarget
+            ? "hareket"
+            : "boşta";
+      const economyState = unit.role === "worker" ? production?.stateFor(unit) : undefined;
+      const workerState = unit.role === "worker"
+        ? ` ${economyState && economyState !== "idle" ? economyState : workers.stateFor(unit)}`
+        : "";
+      lines.push(
+        `#${unit.id} ${unit.owner}/${unit.role} hp ${unit.health.current}/${unit.health.max} ${order}${workerState}`,
+      );
+    }
+    lines.push("hasar:", ...(this.damageLines.length ? this.damageLines : ["- yok"]));
+    const resources = wallet.snapshot();
+    const populationState = population.snapshot();
+    lines.push(
+      "ekonomi:",
+      ...Object.entries(resources).map(([id, amount]) => `${id}: ${amount} (+${wallet.incomePerMinute(id).toFixed(1)}/dk)`),
+    );
+    lines.push(`nüfus: ${populationState.used}/${populationState.capacity} (mevcut ${populationState.current})`);
+    for (const building of production?.snapshots() ?? []) {
+      lines.push(
+        `${building.structureLabel}: ${building.assignedWorkers}/${building.workerCapacity} işçi (${building.workingWorkers} çalışıyor) · ${building.resourceId} ${building.localBuffer.toFixed(1)}/${building.localBufferCapacity} · üretim +${building.lastProductionTick.toFixed(2)} · aktarım +${building.lastTransferTick.toFixed(2)} · ${building.status}`,
+      );
+    }
+    const roadComponents = roads.components();
+    lines.push(
+      `yollar: ${roads.all().length} düğüm · ${roads.edgeCount()} kenar · ${roadComponents.length} ağ`,
+      ...roadComponents.map((component) => `  ağ#${component.id}: ${component.cells.length} düğüm`),
+    );
+    const depotNodes = depots.snapshots();
+    lines.push(
+      `depolar: ${depotNodes.length}`,
+      ...depotNodes.map((depot) => `  depo#${depot.structureId}: ${depot.status}${depot.componentId ? ` · ağ#${depot.componentId}` : ""}`),
+    );
+    const producerLinks = productionLogistics.snapshots();
+    lines.push(
+      `üretim bağlantıları: ${producerLinks.length}`,
+      ...producerLinks.map((producer) => `  yapı#${producer.structureId} (${producer.resourceId}): ${producer.status}${producer.depotStructureId ? ` · depo#${producer.depotStructureId}` : ""}`),
+    );
+    lines.push("kaynak hareketleri:", ...(this.resourceLines.length ? this.resourceLines : ["- yok"]));
+    if (this.levelLines.length > 0) lines.push("", ...this.levelLines);
+    if (this.presentationLines.length > 0) lines.push("", ...this.presentationLines);
+    if (this.progressionLines.length > 0) lines.push("", ...this.progressionLines);
+    if (this.visionLines.length > 0) lines.push("", ...this.visionLines);
+    if (this.aiLines.length > 0) lines.push("", ...this.aiLines);
+    this.root.textContent = lines.join("\n");
+  }
+
+  dispose(): void {
+    this.root.remove();
+  }
+}

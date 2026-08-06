@@ -35,8 +35,8 @@ test("Actor presentation: the default RTS route renders the authored Actor pack"
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
-  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
-  await expect(page.locator(".rts-debug-overlay")).toContainText("placeholder yok");
+  await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
+  await expect(page.locator(".rts-debug-sim")).toContainText("placeholder yok");
 
   expect(errors, "default RTS boot must not produce console errors").toEqual([]);
 });
@@ -53,7 +53,7 @@ test("Actor presentation Faz 5: a bookmark carrying the removed flag still boots
     await page.goto(url);
     await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-assets", "ready", { timeout: 30_000 });
     await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-placeholders", "0");
-    const overlay = await page.locator(".rts-debug-overlay").textContent();
+    const overlay = await page.locator(".rts-debug-sim").textContent();
     return overlay?.split("\n").find((line) => line.startsWith("sunum:")) ?? "";
   };
 
@@ -88,7 +88,7 @@ test("Play the level you edit: ?level= opens that map, whatever the preset names
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-ref", coreMatch, { timeout: 30_000 });
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
-  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+  await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
 
   expect(errors, "an explicitly named Level must boot a playable match").toEqual([]);
 });
@@ -114,7 +114,7 @@ test("Assetization Faz D: the opt-in authored Level drives the spatial layout of
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
-  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+  await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
 
   expect(errors, "the authored Level must adapt and boot a match without runtime errors").toEqual([]);
 });
@@ -144,7 +144,7 @@ test("Landscape Faz 1: the gameplay_proof preset resolves its own authored Level
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
-  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+  await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
 
   // Road/build stutter investigation: the authored-terrain route publishes the
   // latest event-driven paint scope in the existing debug performance witness.
@@ -239,7 +239,7 @@ test("Assetization Faz E: the opt-in Level mounts its authored static world and 
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
-  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+  await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
 
   // Reloading tears the whole RtsApp down (authored-world dispose included) and
   // rebuilds it: the world must mount again with no runtime errors, the flat-

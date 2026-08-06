@@ -1,172 +1,61 @@
-/** Compact Faz 1 diagnostics, shown only by the `?debug` RTS route. */
-import { formatMatchDuration } from "../match/rtsMatchClock";
-import type { RtsMatchOutcome } from "../match/rtsMatchState";
-import type { CommandCenterSystem } from "../structures/commandCenterSystem";
-import type { UnitSystem } from "../units/unitSystem";
-import type { CombatHit } from "../units/unitCombat";
-import type { WorkerConstructionSystem } from "../units/workerConstructionSystem";
-import type { ResourceWallet } from "../economy/resourceWallet";
-import type { EconomyProductionSystem } from "../economy/economyProductionSystem";
-import type { PopulationSystem } from "../economy/populationSystem";
-import type { ResourceChange } from "../economy/resourceWallet";
-import type { RoadGraph } from "../roads/roadGraph";
-import type { DepotLogisticsSystem } from "../economy/depotLogisticsSystem";
-import type { ProductionLogisticsSystem } from "../economy/productionLogisticsSystem";
+/**
+ * The visible `?debug` panel: a performance instrument, and the speed picker.
+ *
+ * It used to print the whole simulation state, which made it a wall of text
+ * nobody read while the numbers that actually decide whether the match is
+ * playable — frame time, draw calls, what the AI costs per tick — were nowhere
+ * on screen. Those simulation lines still exist, hidden, in
+ * {@link RtsSimulationWitness}; this panel now shows only the speed control
+ * (first, because it is the one thing here you *use* rather than read) and the
+ * performance readout under it.
+ */
+import { formatRtsPerfDebug, type RtsPerfDebugSnapshot } from "./formatRtsPerfDebug";
 
-const MAX_DAMAGE_LINES = 6;
-const MAX_RESOURCE_LINES = 8;
+export interface RtsDebugOverlayOptions {
+  /** Arms a one-frame cost capture; the app decides when it actually happens. */
+  readonly onCaptureFrame?: () => void;
+}
 
 export class RtsDebugOverlay {
   private readonly root = document.createElement("section");
+  /** Above the readout, so a control never moves as the numbers grow a line. */
+  private readonly controls = document.createElement("div");
+  /** Reserved for the speed picker, so a later action cannot get in front of it. */
+  private readonly controlSlot = document.createElement("div");
   private readonly readout = document.createElement("pre");
-  private readonly damageLines: string[] = [];
-  private readonly resourceLines: string[] = [];
-  private aiLines: readonly string[] = [];
-  private progressionLines: readonly string[] = [];
-  private visionLines: readonly string[] = [];
-  private presentationLines: readonly string[] = [];
-  private levelLines: readonly string[] = [];
-  private elapsedSeconds = 0;
 
-  constructor() {
+  constructor(options: RtsDebugOverlayOptions = {}) {
     this.root.className = "rts-debug-overlay";
+    this.controls.className = "rts-debug-overlay-controls";
+    this.controlSlot.className = "rts-debug-overlay-control-slot";
+    this.controls.appendChild(this.controlSlot);
     this.readout.className = "rts-debug-overlay-readout";
-    this.root.appendChild(this.readout);
+    this.root.append(this.controls, this.readout);
+    if (options.onCaptureFrame) {
+      const capture = document.createElement("button");
+      capture.type = "button";
+      capture.className = "rts-debug-capture-button";
+      capture.dataset.rtsDebugAction = "capture-frame";
+      capture.textContent = "Kare maliyeti";
+      capture.title = "Bir sonraki kareyi ölç, maçı duraklat ve dökümü göster";
+      capture.addEventListener("click", () => options.onCaptureFrame?.());
+      this.controls.appendChild(capture);
+    }
     const host = document.getElementById("ui-overlay") ?? document.body;
     host.appendChild(this.root);
   }
 
   /** Keeps temporary test controls inside the same explicitly debug-only surface. */
   mountControl(control: { mount(parent: HTMLElement): void }): void {
-    control.mount(this.root);
-  }
-
-  recordHit(hit: CombatHit): void {
-    const target = "id" in hit.target ? `birim#${hit.target.id}` : `${hit.target.owner} merkez`;
-    this.damageLines.unshift(`-${hit.change.applied}  birim#${hit.attacker.id} -> ${target}`);
-    this.damageLines.length = Math.min(this.damageLines.length, MAX_DAMAGE_LINES);
-  }
-
-  /** AI design §82 panel block, formatted by `formatRtsAiDebug` (plan §39). */
-  setAiLines(lines: readonly string[]): void {
-    this.aiLines = lines;
-  }
-
-  /** Optional, static progression diagnostics such as the Phase 6 Refah flag. */
-  setProgressionLines(lines: readonly string[]): void {
-    this.progressionLines = lines;
+    control.mount(this.controlSlot);
   }
 
   /**
-   * Why the requested Level is not the one being played. Its own block rather
-   * than a presentation line: the Actor pack reports asynchronously and would
-   * otherwise overwrite this the moment it finished loading.
+   * Repaint the readout. The caller decides the cadence — sampled, not every
+   * frame, so watching the frame time cannot become part of it.
    */
-  setLevelLines(lines: readonly string[]): void {
-    this.levelLines = lines;
-  }
-
-  /**
-   * Actor presentation pack health: how much of the pack loaded and which refs
-   * are standing in. Empty when the pack is not in use at all.
-   */
-  setPresentationLines(lines: readonly string[]): void {
-    this.presentationLines = lines;
-  }
-
-  /** §59 fog block, formatted by `formatVisionDebug`. Empty while the flag is off. */
-  setVisionLines(lines: readonly string[]): void {
-    this.visionLines = lines;
-  }
-
-  /**
-   * §53: simulation seconds elapsed. A setter rather than another `update`
-   * parameter — that list is already ten long, and this follows the AI/
-   * progression lines above.
-   *
-   * The clock is here and not in the main HUD on purpose: §51's HUD list has no
-   * clock, so it stays out of Faz 9's scope. It is Kapı B's instrument, and
-   * `?rts&debug` is where §53.3 says the fifteen matches get watched from.
-   */
-  setElapsedSeconds(seconds: number): void {
-    this.elapsedSeconds = seconds;
-  }
-
-  recordResourceChange(change: ResourceChange): void {
-    if (change.kind === "reset") return;
-    const sign = change.delta > 0 ? "+" : "";
-    this.resourceLines.unshift(`${change.kind}: ${change.resourceId} ${sign}${change.delta}`);
-    this.resourceLines.length = Math.min(this.resourceLines.length, MAX_RESOURCE_LINES);
-  }
-
-  update(
-    units: UnitSystem,
-    centers: CommandCenterSystem,
-    outcome: RtsMatchOutcome,
-    workers: WorkerConstructionSystem,
-    wallet: ResourceWallet,
-    production: EconomyProductionSystem | null,
-    population: PopulationSystem,
-    roads: RoadGraph,
-    depots: DepotLogisticsSystem,
-    productionLogistics: ProductionLogisticsSystem,
-  ): void {
-    const lines = [`maç: ${outcome} · süre ${formatMatchDuration(this.elapsedSeconds)}`];
-    for (const center of centers.all()) {
-      lines.push(`merkez ${center.owner}: ${center.health.current}/${center.health.max}`);
-    }
-    lines.push("birimler:");
-    for (const unit of units.all()) {
-      const order = unit.attackTarget
-        ? `saldırı:${unit.attackTarget.owner}`
-        : unit.pathWaypointCount > 0
-          ? `yol:${unit.pathWaypointCount}`
-          : unit.moveTarget
-            ? "hareket"
-            : "boşta";
-      const economyState = unit.role === "worker" ? production?.stateFor(unit) : undefined;
-      const workerState = unit.role === "worker"
-        ? ` ${economyState && economyState !== "idle" ? economyState : workers.stateFor(unit)}`
-        : "";
-      lines.push(
-        `#${unit.id} ${unit.owner}/${unit.role} hp ${unit.health.current}/${unit.health.max} ${order}${workerState}`,
-      );
-    }
-    lines.push("hasar:", ...(this.damageLines.length ? this.damageLines : ["- yok"]));
-    const resources = wallet.snapshot();
-    const populationState = population.snapshot();
-    lines.push(
-      "ekonomi:",
-      ...Object.entries(resources).map(([id, amount]) => `${id}: ${amount} (+${wallet.incomePerMinute(id).toFixed(1)}/dk)`),
-    );
-    lines.push(`nüfus: ${populationState.used}/${populationState.capacity} (mevcut ${populationState.current})`);
-    for (const building of production?.snapshots() ?? []) {
-      lines.push(
-        `${building.structureLabel}: ${building.assignedWorkers}/${building.workerCapacity} işçi (${building.workingWorkers} çalışıyor) · ${building.resourceId} ${building.localBuffer.toFixed(1)}/${building.localBufferCapacity} · üretim +${building.lastProductionTick.toFixed(2)} · aktarım +${building.lastTransferTick.toFixed(2)} · ${building.status}`,
-      );
-    }
-    const roadComponents = roads.components();
-    lines.push(
-      `yollar: ${roads.all().length} düğüm · ${roads.edgeCount()} kenar · ${roadComponents.length} ağ`,
-      ...roadComponents.map((component) => `  ağ#${component.id}: ${component.cells.length} düğüm`),
-    );
-    const depotNodes = depots.snapshots();
-    lines.push(
-      `depolar: ${depotNodes.length}`,
-      ...depotNodes.map((depot) => `  depo#${depot.structureId}: ${depot.status}${depot.componentId ? ` · ağ#${depot.componentId}` : ""}`),
-    );
-    const producerLinks = productionLogistics.snapshots();
-    lines.push(
-      `üretim bağlantıları: ${producerLinks.length}`,
-      ...producerLinks.map((producer) => `  yapı#${producer.structureId} (${producer.resourceId}): ${producer.status}${producer.depotStructureId ? ` · depo#${producer.depotStructureId}` : ""}`),
-    );
-    lines.push("kaynak hareketleri:", ...(this.resourceLines.length ? this.resourceLines : ["- yok"]));
-    if (this.levelLines.length > 0) lines.push("", ...this.levelLines);
-    if (this.presentationLines.length > 0) lines.push("", ...this.presentationLines);
-    if (this.progressionLines.length > 0) lines.push("", ...this.progressionLines);
-    if (this.visionLines.length > 0) lines.push("", ...this.visionLines);
-    if (this.aiLines.length > 0) lines.push("", ...this.aiLines);
-    this.readout.textContent = lines.join("\n");
+  setPerformance(snapshot: RtsPerfDebugSnapshot): void {
+    this.readout.textContent = formatRtsPerfDebug(snapshot).join("\n");
   }
 
   dispose(): void {

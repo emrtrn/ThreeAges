@@ -34,7 +34,7 @@ test("§59: fog builds into the match behind its flag and leaves no trace withou
   // player pressed the button.
   await page.goto("/?rts&debug&flags=fogOfWar");
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
-  const beforeStart = page.locator(".rts-debug-overlay");
+  const beforeStart = page.locator(".rts-debug-sim");
   await expect(beforeStart).toContainText("görüş:");
   const openingText = await beforeStart.textContent();
   const openingPercents = [...(openingText ?? "").matchAll(/keşfedilmiş %([\d.]+)/g)]
@@ -48,7 +48,7 @@ test("§59: fog builds into the match behind its flag and leaves no trace withou
 
   await openMatch(page, "/?rts&debug&flags=fogOfWar");
 
-  const overlay = page.locator(".rts-debug-overlay");
+  const overlay = page.locator(".rts-debug-sim");
   await expect(overlay).toContainText("görüş:");
   await expect(overlay).toContainText("oyuncu: keşfedilmiş");
   await expect(overlay).toContainText("düşman: keşfedilmiş");
@@ -72,9 +72,12 @@ test("§59: fog builds into the match behind its flag and leaves no trace withou
 
   expect(errors, "the flagged path must not throw").toEqual([]);
 
-  // Flag off: not merely hidden — absent, including the debug block.
+  // Flag off: not merely hidden — absent, including the debug block. The visible
+  // panel is asserted alongside it so "no fog block" cannot silently become "no
+  // debug route at all".
   await openMatch(page, "/?rts&debug");
   await expect(page.locator(".rts-debug-overlay")).toBeVisible();
-  await expect(page.locator(".rts-debug-overlay")).not.toContainText("görüş:");
+  await expect(page.locator(".rts-debug-sim")).toContainText("maç:");
+  await expect(page.locator(".rts-debug-sim")).not.toContainText("görüş:");
   expect(errors, "and the default build must still be clean").toEqual([]);
 });

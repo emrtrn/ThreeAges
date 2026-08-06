@@ -8,8 +8,14 @@ belong in game runtime code or data.
 
 - After editing TypeScript, run `npx tsc --noEmit`; the Vite dev server does not
   type-check.
-- For engine/runtime changes, prefer the full local gate when practical:
-  `npx tsc --noEmit`, `npm run test:engine`, and `npm run build:verify`.
+- Verification tiers: the default is **`hızlı`** — `npx tsc --noEmit` plus
+  `npm run test:engine -- --filter <konu>` for the area touched, then ask the
+  user to look. Use **`tam`** (`npm run build:verify`) before committing, for
+  broad changes, or on request. The unfiltered suite costs ~2.5 min, so do not
+  run it after every edit.
+- `npm run test:engine -- --filter market` runs only the checks whose labels
+  match (comma-separated substrings, `-f` also works). Filtered runs print
+  `PARTIAL` and are never a green build; `build:verify` and CI run unfiltered.
 - If PowerShell blocks npm/npx shims, use `npm.cmd` and `npx.cmd`.
 
 ## Codex Tools

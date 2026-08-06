@@ -158,14 +158,22 @@ function scoreAgeUp(bb: AiBlackboard, balance: AiBalance): { rawScore: number; r
     if (!cost) return { rawScore: 0, reason: "merkez seviye yükseltmesi yok" };
     const affordable = Object.entries(cost).every(([id, amount]) => (bb.resourceStocks[id] ?? 0) >= amount);
     const economyMaturity = 1 - worstIncomeDeficit(bb, balance).deficit;
-    // A Settlement level is cost-and-safety only. Once it is affordable on a
-    // quiet base, delaying it behind a still-maturing economy postpones the
-    // worker/production capacity that economy is supposed to unlock.
-    const rawScore = affordable
+    // The first level has one additional bootstrap constraint: consuming the
+    // opening wood before both staple producers have a live route strands a
+    // procedural base with a depot and roads it cannot finish. This is not a
+    // Town prerequisite and it never applies to Lv2 -> Lv3; it merely protects
+    // the income that makes the first investment sustainable.
+    const bootstrapReady = bb.centerLevel > 1
+      || ((bb.buildingCounts["farm"] ?? 0) > 0
+        && (bb.buildingCounts["lumber_camp"] ?? 0) > 0
+        && bb.disconnectedProducers === 0);
+    const rawScore = affordable && bootstrapReady
       ? clamp01(1 - terms.immediateThreat * threatLevel(bb, balance))
       : clamp01(terms.economyMaturity * economyMaturity - terms.immediateThreat * threatLevel(bb, balance));
     const reason = bb.baseThreat > 0
       ? "üs tehdit altında, merkez seviyesi ertelendi"
+      : !bootstrapReady
+        ? "merkez seviyesi için açılış üretim hattı kuruluyor"
       : affordable
         ? `merkez seviye ${bb.centerLevel + 1} için hazır`
         : `merkez seviye ${bb.centerLevel + 1} için kaynak biriktiriliyor`;
