@@ -34328,6 +34328,70 @@ check("Landscape: the gameplay proof Level stays structurally playable as it is 
   assert.ok(path.some((point) => Math.abs(point.x) > 12.5), "the route uses an open flank, not the chokepoint");
 });
 
+check("Landscape: the enemy base depot stands on the centre's free ring, so the base street is stitched once", () => {
+  // The artefact this pins was visible from the camera: two roads running side by
+  // side, one cell apart, between the enemy centre and its depot.
+  //
+  // Both ends are forced. Every centre is seeded a free road ring one cell outside
+  // its footprint (`centerAccessRoadPlan`), and a depot only joins the store while
+  // a road touches it *and* reaches its owner's centre (`DepotLogisticsSystem`). So
+  // if the authored depot anchor stands one placement step too far out, no single
+  // row can touch both: the ring row serves the centre, the depot pays for a row of
+  // its own, and the two run parallel — "çift dikiş", two streets where the base
+  // needs one.
+  //
+  // Nothing here is a coordinate or a distance: seed only the free ring, then ask
+  // the same `roadCellTouchingFootprint` the logistics systems ask. Move either
+  // marker to a spacing the ring cannot reach and this fails, instead of shipping
+  // as a doubled road. The depot may still be moved anywhere the ring reaches.
+  const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
+  const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
+  const roadBalance = validateRoadBalance(JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown);
+  const layout = JSON.parse(readFileSync("public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json", "utf8")) as {
+    actors: Array<{ classRef: string; position: [number, number, number]; variableOverrides?: Record<string, string | number | boolean | string[]> }>;
+    splines: Parameters<typeof adaptRtsLevel>[1];
+  };
+  const spatial = resolveRtsSpatialLayout(adaptRtsLevel(
+    layout.actors.map((instance, index) => ({
+      index,
+      instance,
+      def: normalizeActorScriptDef(JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown, instance.classRef),
+    })),
+    layout.splines,
+    { buildings, resources, animals: shippedAnimalBalance() },
+  ));
+  const centerStats = buildings["command_center"] ?? assert.fail("command centre definition missing");
+  const depotStats = buildings["depot"] ?? assert.fail("depot definition missing");
+  const depotAnchor = spatial.enemyBaseAnchors.find((anchor) => anchor.buildingId === "depot")
+    ?? assert.fail("the enemy base authors a depot anchor");
+
+  const roads = new RoadGraph(roadBalance);
+  roads.commit(centerAccessRoadPlan(roads, {
+    x: spatial.enemyStart.x,
+    z: spatial.enemyStart.z,
+    footprint: centerStats.footprint,
+  }));
+  assert.ok(
+    roadCellTouchingFootprint(roads, depotAnchor.x, depotAnchor.z, depotStats.footprint.width, depotStats.footprint.depth),
+    `the depot anchor at (${depotAnchor.x}, ${depotAnchor.z}) is out of reach of the centre's free ring, `
+    + "so its own access road would run parallel to that ring instead of joining it",
+  );
+
+  // The same spacing seen from the other side: the authored spine may not ask for a
+  // cell the centre now stands on. The graph refuses a blocked cell, the AI counts
+  // that as a route failure and gives up on the rest of the spine (§43), and the
+  // base ends up with no street at all — a silent failure worth one assertion.
+  const centreClearance = centerStats.footprint.width / 2 + roadBalance.cellSize / 2;
+  const centreDepthClearance = centerStats.footprint.depth / 2 + roadBalance.cellSize / 2;
+  for (const point of spatial.enemyBaseRoute) {
+    assert.ok(
+      Math.abs(point.x - spatial.enemyStart.x) >= centreClearance
+      || Math.abs(point.z - spatial.enemyStart.z) >= centreDepthClearance,
+      `base route point (${point.x}, ${point.z}) falls under the enemy centre footprint, so that segment can never be built`,
+    );
+  }
+});
+
 check("Landscape Faz 2: moving a Level marker moves the runtime behaviour it drives (Level is the authority)", () => {
   const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
   const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);

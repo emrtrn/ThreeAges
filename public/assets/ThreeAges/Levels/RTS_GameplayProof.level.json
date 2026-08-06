@@ -1690,15 +1690,6 @@
         "reparamStepsPerSegment": 8,
         "points": [
           {
-            "id": "p0",
-            "position": [
-              38,
-              0,
-              -32
-            ],
-            "pointType": "linear"
-          },
-          {
             "id": "p1",
             "position": [
               38,
@@ -2969,7 +2960,7 @@
       "position": [
         38,
         0,
-        -38
+        -36
       ],
       "name": "Enemy Start",
       "variableOverrides": {
