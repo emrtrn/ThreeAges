@@ -1077,7 +1077,9 @@ import {
 import {
   applyMaterialSlotOverrides,
   collectAssetMaterialElements,
+  normalizeAssetMaterialSlots,
 } from "../src/scene/assetMaterialSlotsLoader";
+import { applyAssetUvwMapping, normalizeAssetUvw } from "../src/scene/assetUvwLoader";
 import {
   createThreeMaterialFromForgeDef,
   EMISSIVE_INTENSITY_SCALE,
@@ -18097,6 +18099,92 @@ check("static mesh material slots follow unique GLB material order across primit
   overrideMaterial.dispose();
 });
 
+/** How far a geometry's UVs actually reach; zero on both axes means one texel. */
+function uvSpread(uv: BufferAttribute | InterleavedBufferAttribute): { u: number; v: number } {
+  let minU = Infinity;
+  let maxU = -Infinity;
+  let minV = Infinity;
+  let maxV = -Infinity;
+  for (let index = 0; index < uv.count; index += 1) {
+    const u = uv.getX(index);
+    const v = uv.getY(index);
+    minU = Math.min(minU, u);
+    maxU = Math.max(maxU, u);
+    minV = Math.min(minV, v);
+    maxV = Math.max(maxV, v);
+  }
+  return { u: maxU - minU, v: maxV - minV };
+}
+
+check("a slot override on a degenerate-UV mesh needs the UVW projection to be visible", () => {
+  // The shipped RTS building kit exports every vertex UV at the same point, so a
+  // material assigned to a slot samples one texel and reads as flat colour. That
+  // is the whole reason the Static Mesh Editor's box projection exists for these
+  // meshes, and the reason the RTS template pipeline runs the two together —
+  // overrides first (the projection also forces the resulting textures to repeat
+  // wrap), projection second.
+  const root = new Object3D();
+  const geometry = new BoxGeometry(2, 2, 2);
+  const uvCount = geometry.getAttribute("position").count;
+  geometry.setAttribute("uv", new Float32BufferAttribute(new Float32Array(uvCount * 2).fill(0), 2));
+  const exported = new MeshStandardMaterial({ name: "Wood" });
+  const assigned = new MeshStandardMaterial({ name: "M_Wood_Pine" });
+  const mesh = new Mesh(geometry, exported);
+  root.add(mesh);
+
+  const uvBefore = geometry.getAttribute("uv");
+  const before = uvSpread(uvBefore);
+  assert.equal(before.u, 0, "fixture must start degenerate, like the shipped kit meshes");
+  assert.equal(before.v, 0);
+
+  applyMaterialSlotOverrides(root, normalizeAssetMaterialSlots({ schema: 1, slots: ["m-wood-pine"] }), (id) =>
+    id === "m-wood-pine" ? assigned : undefined,
+  );
+  applyAssetUvwMapping(
+    root,
+    normalizeAssetUvw({
+      schema: 1,
+      mapType: "box",
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [2, 2, 2],
+    }),
+  );
+
+  assert.equal(mesh.material, assigned, "assigned slot material must survive the projection pass");
+  const after = uvSpread(geometry.getAttribute("uv"));
+  assert.ok(after.u > 0, `box projection must spread U across the mesh, got ${after.u}`);
+  assert.ok(after.v > 0, `box projection must spread V across the mesh, got ${after.v}`);
+
+  geometry.dispose();
+  exported.dispose();
+  assigned.dispose();
+});
+
+check("RTS static mesh material slot sidecars name materials the manifest still has", () => {
+  // A renamed or deleted material is silent everywhere else: the sidecar keeps
+  // the dead id, the slot override resolves to nothing, and the building quietly
+  // renders with its exported flat colour again. Nothing throws, so this is the
+  // only place it can be caught.
+  const directory = "public/assets/ThreeAges/StaticMeshes";
+  const sidecars = readdirSync(directory).filter((name) => name.endsWith(".materials.json"));
+  assert.ok(sidecars.length > 0, "expected authored material slot sidecars under ThreeAges/StaticMeshes");
+  for (const fileName of sidecars) {
+    const slots = normalizeAssetMaterialSlots(
+      JSON.parse(readFileSync(`${directory}/${fileName}`, "utf8")),
+    );
+    for (const materialId of slots.slots.filter((slot) => slot.length > 0)) {
+      const record = assetManifest.assets.find((asset) => asset.id === materialId);
+      assert.ok(record, `${fileName} assigns unknown material id "${materialId}"`);
+      assert.equal(
+        assetType(record!),
+        "material",
+        `${fileName} assigns "${materialId}", which is not a material asset`,
+      );
+    }
+  }
+});
+
 check("skeleton save payload requires a .skeleton.json path and canonical metadata", () => {
   const payload = validateSaveSkeletonPayload({
     path: "assets/characters/Hero.skeleton.json",
@@ -21376,6 +21464,24 @@ check("structurePadsToRectDeforms retains a building's sampled world elevation",
     falloff: 1,
     targetHeight: 6,
   }]);
+});
+
+check("a non-levelling pad paints its ground but never moves it", () => {
+  // Authored footprints (a trade site's dock) take the pad so the player can see
+  // where the site ends, and leave the heightfield alone so the level scenery
+  // standing on it keeps its ground.
+  const pads = [
+    { x: 4, z: -2, width: 6, depth: 4, groundY: 9, flatten: false },
+    { x: -4, z: 2, width: 6, depth: 4, groundY: 9 },
+  ];
+  assert.equal(
+    structurePadsToRectPaints(pads, [0, 0, 0], BUILDING_PAD_VISUAL).length,
+    pads.length,
+    "opting out of levelling does not opt out of the paint",
+  );
+  const foundations = structurePadsToRectDeforms(pads, [0, 0, 0], BUILDING_PAD_VISUAL);
+  assert.equal(foundations.length, 1, "only the levelling pad becomes a foundation");
+  assert.equal(foundations[0]?.centerX, -4, "and it is the one that asked for it");
 });
 
 check("StructurePadTerrainSurface restores terrain when a building foundation is removed", () => {
@@ -48297,6 +48403,23 @@ check("Faz S2: a trade site fills its own buffer and then stops", () => {
     [-1 - port.dock.width / 2, -1 + port.dock.width / 2, 20 - port.dock.depth / 2, 20 + port.dock.depth / 2],
     "the reserve is exactly the authored dock, centred on the marker",
   );
+
+  // What the reserve *looks* like has to be the same rectangle it enforces, or
+  // the painted apron would teach the player a boundary the placement rules do
+  // not honour. One derivation, two consumers.
+  const footprints = system.dockFootprints();
+  assert.equal(footprints.length, blockers.length, "every reserved dock is also a paintable pad");
+  for (const footprint of footprints) {
+    const blocker = blockers.find((candidate) =>
+      candidate.min[0] === footprint.x - footprint.width / 2
+      && candidate.min[2] === footprint.z - footprint.depth / 2,
+    ) ?? assert.fail(`dock ${footprint.id} paints ground it does not reserve`);
+    assert.deepEqual(
+      [blocker.max[0] - blocker.min[0], blocker.max[2] - blocker.min[2]],
+      [footprint.width, footprint.depth],
+      "the pad is the reserve, not a second set of numbers",
+    );
+  }
 
   // Loud rather than silent: a mistyped kind would otherwise stand on the map
   // supplying nothing, and the player's road out to it would be wood spent on a

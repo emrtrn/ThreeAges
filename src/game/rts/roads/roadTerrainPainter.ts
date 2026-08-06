@@ -222,6 +222,19 @@ export interface StructurePad {
   readonly depth: number;
   /** The sampled ground level at placement, in world-space Y. Defaults to terrain origin. */
   readonly groundY?: number;
+  /**
+   * Whether the pad also levels the terrain to {@link groundY}. Defaults to
+   * `true`, which is what a *built* structure wants: it was placed onto the pad,
+   * so the pad may move the ground under it freely.
+   *
+   * Authored footprints set this `false`. A trade site's dock is surrounded by
+   * level scenery baked at authored elevations — the port's jetty, the camp's cut
+   * grove, the pit's rubble — and none of it re-grounds when the heightfield
+   * moves, so flattening its apron would leave those props floating or buried.
+   * Such a footprint takes the paint (which is all the player needs to read where
+   * the site ends) and leaves the authored elevation exactly as it was.
+   */
+  readonly flatten?: boolean;
 }
 
 /**
@@ -250,13 +263,16 @@ export function structurePadsToRectPaints(
 /**
  * Uses the exact same footprint, padding and soft edge as the dirt pad, but
  * turns it into a level foundation at the structure's placement elevation.
+ *
+ * Pads that opted out of levelling (`flatten: false`) are dropped rather than
+ * emitted with a no-op height — see {@link StructurePad.flatten}.
  */
 export function structurePadsToRectDeforms(
   pads: readonly StructurePad[],
   origin: Vec3,
   visual: BuildingPadVisual,
 ): LandscapeRectDeform[] {
-  return pads.map((pad) => ({
+  return pads.filter((pad) => pad.flatten !== false).map((pad) => ({
     centerX: pad.x - origin[0],
     centerZ: pad.z - origin[2],
     halfWidth: Math.max(0, pad.width / 2 + visual.padding),

@@ -116,6 +116,31 @@ export class TradeSiteSystem {
   }
 
   /**
+   * The same dock rectangles as {@link dockBlockers}, in the centre + extents
+   * form the terrain painter speaks, so the ground a site reserves can be
+   * *shown* and not only enforced.
+   *
+   * Without this the dock is invisible: a site's art is authored scenery that
+   * need not sit on the marker at all, so the player has no way to see where the
+   * reserved 8×8 ends — and that edge is precisely what the mechanic asks them to
+   * reach with a road. Painting it with the same pad a built structure gets makes
+   * "how far do I pave?" answerable by looking.
+   *
+   * No elevation is reported, and the pads are deliberately non-levelling: the
+   * heightfield under an authored site belongs to the level, not to us
+   * (`StructurePad.flatten`).
+   */
+  dockFootprints(): readonly { readonly id: string; readonly x: number; readonly z: number; readonly width: number; readonly depth: number }[] {
+    return [...this.sites.values()].map(({ definition, stats }) => ({
+      id: definition.id,
+      x: definition.x,
+      z: definition.z,
+      width: stats.dock.width,
+      depth: stats.dock.depth,
+    }));
+  }
+
+  /**
    * The balance row behind one authored site, resolved once at construction.
    *
    * Saves every caller from re-deriving `balance[siteType]` and re-handling the

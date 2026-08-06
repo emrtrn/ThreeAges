@@ -3670,11 +3670,26 @@ export class RtsApp {
    * any place/cancel/destroy/clear on either side moves it and the pad list is
    * rebuilt exactly once per change. The repaint itself is the road painter's,
    * because a landscape has a single pristine snapshot to restore against.
+   *
+   * The authored trade-site docks ride in the same list. They never change, so
+   * they cost nothing after the first rebuild, and they need to be here rather
+   * than painted once at mount because the painter restores to its pristine
+   * snapshot on every repaint — a dock painted outside this list would be wiped
+   * by the next road the player lays.
    */
   private syncStructurePads(): void {
     const painter = this.roadPainter;
     if (!painter) return;
     painter.setStructurePads(this.structures.version + this.centers.version, () => [
+      // Paint only: the ground under an authored site stays at the level's own
+      // elevation, or the scenery standing on it would come off the terrain.
+      ...this.tradeSites.dockFootprints().map((dock) => ({
+        x: dock.x,
+        z: dock.z,
+        width: dock.width,
+        depth: dock.depth,
+        flatten: false,
+      })),
       ...this.centers.all().map((center) => ({
         x: center.position.x,
         z: center.position.z,

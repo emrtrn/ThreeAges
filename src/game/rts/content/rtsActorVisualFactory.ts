@@ -10,9 +10,10 @@
  * reserved for what genuinely is one — an unreachable manifest, without which no
  * reference can resolve at all.
  */
-import { Group, Mesh, type AnimationClip, type Material, type Object3D, type WebGLRenderer } from "three";
+import { Group, Mesh, TextureLoader, type AnimationClip, type Material, type Object3D, type WebGLRenderer } from "three";
 import { isMeshComponentKind, normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
+import type { AssetManifest } from "@engine/assets/manifest";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import type { SettlementAge } from "@/game/data/gameDataTypes";
 import { rtsAnimalActorRef, rtsBuildingActorRef, rtsCaravanActorRef, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
@@ -35,6 +36,15 @@ import {
   type RtsUnitAnimationSource,
 } from "./rtsUnitPresentation";
 import { loadAssetSkeleton, type AssetSkeletonDef } from "@/scene/assetSkeletonLoader";
+import { applyAssetUvwMapping, loadAssetUvw, type AssetUvwDef } from "@/scene/assetUvwLoader";
+import {
+  applyMaterialSlotOverrides,
+  assignedMaterialSlotIds,
+  hasAssignedMaterialSlots,
+  loadAssetMaterialSlots,
+  type AssetMaterialSlotsDef,
+} from "@/scene/assetMaterialSlotsLoader";
+import { loadForgeMaterial } from "@/scene/materialAssets";
 import type { RtsPresentationHandle, UnitOwner } from "../units/unit";
 
 /**
@@ -102,6 +112,28 @@ export class RtsActorVisualFactory {
    * programs would be compiled for what is one appearance.
    */
   private readonly tintedMaterials = new Map<string, Material>();
+  /**
+   * Forge materials assigned to a mesh asset's slots in the Static Mesh Editor
+   * (`*.materials.json`), cached by material id.
+   *
+   * Shared across every template that names the same id, for the same reason the
+   * tints are: three Town Centre levels all assigned `m-wood-floor-material`, and
+   * loading it once means one set of textures on the GPU and one shader program
+   * instead of three.
+   */
+  private readonly slotMaterials = new Map<string, Material | null>();
+  /** In-flight material loads, deduped by id so concurrent templates share a fetch. */
+  private readonly slotMaterialLoads = new Map<string, Promise<Material | null>>();
+  /** Shared by every slot material's textures; a per-material loader would not cache. */
+  private readonly textureLoader = new TextureLoader();
+  /** Read once from the renderer: the cap `loadForgeMaterial` clamps anisotropy to. */
+  private readonly maxAnisotropy: number;
+  /**
+   * The manifest this pack resolved against, kept because slot assignments name
+   * materials by *id* — resolving one to a file needs the same manifest the mesh
+   * ids came from.
+   */
+  private manifest: AssetManifest | null = null;
   /** Refs that failed to load and now render as the explicit stand-in. */
   private readonly failures = new Map<RtsActorRef, string>();
   private requested = 0;
@@ -112,6 +144,7 @@ export class RtsActorVisualFactory {
     private readonly catalog: RtsContentCatalog,
   ) {
     this.loader = createForgeGltfLoader(renderer);
+    this.maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
   }
 
   /**
@@ -142,6 +175,11 @@ export class RtsActorVisualFactory {
       throw new Error(`RTS Actor manifest fetch failed: ${manifestResponse.status}`);
     }
     const manifestJson = (await manifestResponse.json()) as unknown;
+    // Held for the material-slot sidecars, which name materials by id. Shape is
+    // checked here rather than trusted: a manifest without an `assets` array
+    // simply means no slot override can resolve, which the loader degrades to
+    // "keep the model's own material" instead of throwing the pack away.
+    this.manifest = isAssetManifest(manifestJson) ? manifestJson : null;
     for (const [id, asset] of parseRtsMeshManifest(manifestJson)) {
       this.manifestMeshes.set(id, asset);
     }
@@ -291,8 +329,17 @@ export class RtsActorVisualFactory {
   }
 
   dispose(): void {
-    for (const template of this.templates.values()) disposeTemplate(template.scene);
+    // Slot materials are shared *between* templates, so they are held back from
+    // the per-template sweep and freed once below. Letting the sweep take them
+    // would dispose one material up to as many times as models named it.
+    const shared = new Set<Material>();
+    for (const material of this.slotMaterials.values()) if (material) shared.add(material);
+    for (const template of this.templates.values()) disposeTemplate(template.scene, shared);
     this.templates.clear();
+    for (const material of shared) material.dispose();
+    this.slotMaterials.clear();
+    for (const pending of this.slotMaterialLoads.values()) pending.catch(() => undefined);
+    this.slotMaterialLoads.clear();
     // The tinted copies are this factory's own GPU resources — the templates it
     // disposes above never referenced them, so nothing else will free them.
     for (const material of this.tintedMaterials.values()) material.dispose();
@@ -346,15 +393,88 @@ export class RtsActorVisualFactory {
   private templateFor(assetId: string, path: string): Promise<RtsModelTemplate> {
     let pending = this.templateLoads.get(assetId);
     if (!pending) {
-      // The sidecar rides along with the model: it names which clip is idle,
-      // which is walk, and which clips must have their root motion locked. It
-      // never rejects — a missing sidecar resolves to the empty default, which
-      // simply means "this asset animates nothing".
-      pending = Promise.all([
-        this.loader.loadAsync(projectFileUrl(path)),
-        loadAssetSkeleton(path),
-      ]).then(([gltf, skeleton]) => ({ scene: gltf.scene, animations: gltf.animations, skeleton }));
+      pending = this.buildTemplate(path);
       this.templateLoads.set(assetId, pending);
+    }
+    return pending;
+  }
+
+  /**
+   * One model plus the asset-level authoring that rides along with it.
+   *
+   * None of the three sidecars reject: a missing one resolves to its empty
+   * default, which for the skeleton means "this asset animates nothing", and for
+   * the other two means "render this model exactly as it was exported".
+   */
+  private async buildTemplate(path: string): Promise<RtsModelTemplate> {
+    const [gltf, skeleton, uvw, materialSlots] = await Promise.all([
+      this.loader.loadAsync(projectFileUrl(path)),
+      loadAssetSkeleton(path),
+      loadAssetUvw(path),
+      loadAssetMaterialSlots(path),
+    ]);
+    await this.applyAuthoredSurface(gltf.scene, uvw, materialSlots);
+    return { scene: gltf.scene, animations: gltf.animations, skeleton };
+  }
+
+  /**
+   * Apply what the Static Mesh Editor authored on the *asset*: its material slot
+   * assignments and its UVW projection.
+   *
+   * Done once on the template, before any clone — the presentation tree clones
+   * `Object3D`s, which share geometry, so projecting UVs here reaches every
+   * building placed from this model at the cost of one pass.
+   *
+   * Order is not free. Slot overrides first, projection second: the projection
+   * pass also forces every texture it finds on the current materials to repeat
+   * wrapping, and a material swapped in afterwards would miss that. It is also
+   * the direction that matters for these kit meshes, whose exported UVs are
+   * degenerate (every vertex at one point) — without the projection an assigned
+   * wood material samples a single texel and reads as flat colour, which is
+   * exactly the "material assigned but nothing changed" symptom.
+   */
+  private async applyAuthoredSurface(
+    root: Object3D,
+    uvw: AssetUvwDef,
+    materialSlots: AssetMaterialSlotsDef,
+  ): Promise<void> {
+    if (hasAssignedMaterialSlots(materialSlots)) {
+      await Promise.all(assignedMaterialSlotIds(materialSlots).map((id) => this.slotMaterial(id)));
+      applyMaterialSlotOverrides(
+        root,
+        materialSlots,
+        (materialId) => this.slotMaterials.get(materialId) ?? undefined,
+      );
+    }
+    applyAssetUvwMapping(root, uvw);
+  }
+
+  /**
+   * One load per assigned material id, however many meshes name it.
+   *
+   * A material that cannot be read resolves to null rather than throwing: the
+   * mesh keeps its exported material and the building still renders, which is a
+   * better answer than an entire Actor dropping to a stand-in over one surface.
+   */
+  private slotMaterial(materialId: string): Promise<Material | null> {
+    const cached = this.slotMaterials.get(materialId);
+    if (cached !== undefined) return Promise.resolve(cached);
+    let pending = this.slotMaterialLoads.get(materialId);
+    if (!pending) {
+      const manifest = this.manifest;
+      pending = (manifest
+        ? loadForgeMaterial(manifest, materialId, this.textureLoader, {
+            maxAnisotropy: this.maxAnisotropy,
+          }).catch((error: unknown) => {
+            console.warn(`[rts] material slot "${materialId}" could not load:`, error);
+            return null;
+          })
+        : Promise.resolve(null)
+      ).then((material) => {
+        this.slotMaterials.set(materialId, material);
+        return material;
+      });
+      this.slotMaterialLoads.set(materialId, pending);
     }
     return pending;
   }
@@ -405,11 +525,20 @@ export class RtsActorVisualFactory {
   }
 }
 
-function disposeTemplate(root: Object3D): void {
+function disposeTemplate(root: Object3D, shared: ReadonlySet<Material> = new Set()): void {
   root.traverse((child) => {
     if (!(child instanceof Mesh)) return;
     child.geometry.dispose();
     const materials = Array.isArray(child.material) ? child.material : [child.material];
-    for (const material of materials) material.dispose();
+    for (const material of materials) {
+      // Materials this template does not own (slot overrides shared with other
+      // templates) are the caller's to free, exactly once.
+      if (!shared.has(material)) material.dispose();
+    }
   });
+}
+
+/** Minimal shape guard: enough to resolve a material id, nothing more. */
+function isAssetManifest(value: unknown): value is AssetManifest {
+  return Boolean(value) && Array.isArray((value as AssetManifest).assets);
 }
