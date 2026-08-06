@@ -28384,6 +28384,58 @@
         "bytes": 34186024
       },
       "license": "Unknown"
+    },
+    {
+      "id": "threeages-tex-wood-dark-bc",
+      "name": "T_TA_Wood_Dark_BC",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Wood_Dark_BC.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Dark_BC.png",
+      "tags": ["threeages", "texture", "wood", "albedo", "pilot"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 684341 },
+      "license": "Project-local Imagen candidate A, accepted 2026-08-06"
+    },
+    {
+      "id": "threeages-tex-wood-dark-n",
+      "name": "T_TA_Wood_Dark_N",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Wood_Dark_N.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Dark_BC.png",
+      "tags": ["threeages", "texture", "wood", "normal", "generated"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 852935 },
+      "license": "Deterministic derivative of accepted project-local albedo"
+    },
+    {
+      "id": "threeages-tex-wood-dark-orm",
+      "name": "T_TA_Wood_Dark_ORM",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Wood_Dark_ORM.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Dark_BC.png",
+      "tags": ["threeages", "texture", "wood", "orm", "generated"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 131798 },
+      "license": "Deterministic derivative of accepted project-local albedo"
+    },
+    {
+      "id": "threeages-mat-wood-dark",
+      "name": "M_TA_Wood_Dark",
+      "assetType": "material",
+      "category": "ThreeAges/Materials",
+      "path": "assets/ThreeAges/Materials/M_TA_Wood_Dark.material.json",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Dark_BC.png",
+      "tags": ["threeages", "material", "wood", "pilot"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 720 },
+      "license": "Project-local ThreeAges material pilot"
     }
   ]
 }

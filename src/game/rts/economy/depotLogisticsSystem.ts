@@ -28,6 +28,23 @@ export interface LogisticsEndpoint {
 
 /** Read-only depot-to-road node projection, recomputed from mutable world state. */
 export class DepotLogisticsSystem {
+  /**
+   * Every answer here is a pure function of the road topology, the completed
+   * standing set, and the command centres — nothing else. Callers ask several
+   * times per tick (producer lanes, transfers, the HUD, the occupation sweep,
+   * and `snapshots` itself through {@link endpointsFor}), so each answer is held
+   * against the three versions that can invalidate it rather than rebuilt per
+   * call. A memo that has to be *told* when to expire eventually is not; this one
+   * simply cannot outlive its inputs.
+   */
+  private memo: {
+    readonly key: string;
+    snapshots?: readonly DepotNodeSnapshot[];
+    mainComponentIds?: ReadonlyMap<UnitOwner, number | null>;
+    componentIds?: Map<string, number>;
+    readonly endpointsFor: Map<UnitOwner, readonly LogisticsEndpoint[]>;
+  } | null = null;
+
   constructor(
     private readonly structures: PlacedStructureSystem,
     private readonly roads: RoadGraph,
@@ -35,11 +52,29 @@ export class DepotLogisticsSystem {
     private readonly centers?: CommandCenterSystem,
   ) {}
 
+  /**
+   * The memo slot valid for the current world state, created on first use after
+   * any of its three inputs changed.
+   */
+  private cache(): NonNullable<typeof this.memo> {
+    const key = `${this.roads.version}:${this.structures.completedVersion}:${this.centers?.version ?? 0}`;
+    const memo = this.memo;
+    if (memo && memo.key === key) return memo;
+    const fresh = { key, endpointsFor: new Map<UnitOwner, readonly LogisticsEndpoint[]>() };
+    this.memo = fresh;
+    return fresh;
+  }
+
   /** Centre-road component for each kingdom; null means its centre lost its road. */
   mainComponentIds(): ReadonlyMap<UnitOwner, number | null> {
+    const memo = this.cache();
+    if (memo.mainComponentIds) return memo.mainComponentIds;
     const componentByCell = this.componentIds();
     const result = new Map<UnitOwner, number | null>();
-    if (!this.centers) return result;
+    if (!this.centers) {
+      memo.mainComponentIds = result;
+      return result;
+    }
     for (const center of this.centers.all()) {
       const roadCell = roadCellTouchingFootprint(
         this.roads,
@@ -50,13 +85,16 @@ export class DepotLogisticsSystem {
       );
       result.set(center.owner, roadCell ? componentByCell.get(this.key(roadCell)) ?? null : null);
     }
+    memo.mainComponentIds = result;
     return result;
   }
 
   snapshots(): readonly DepotNodeSnapshot[] {
+    const memo = this.cache();
+    if (memo.snapshots) return memo.snapshots;
     const componentByCell = this.componentIds();
     const mainComponentByOwner = this.mainComponentIds();
-    return this.structures.all()
+    const snapshots: readonly DepotNodeSnapshot[] = this.structures.all()
       .filter((structure) => structure.construction.complete && structure.stats.id === "depot")
       .map((structure) => {
         const roadCell = roadCellTouchingFootprint(
@@ -82,6 +120,8 @@ export class DepotLogisticsSystem {
               : "unlinked-main-network",
         };
       });
+    memo.snapshots = snapshots;
+    return snapshots;
   }
 
   /**
@@ -90,6 +130,9 @@ export class DepotLogisticsSystem {
    * rule that forces a longer trip just because one exists elsewhere.
    */
   endpointsFor(owner: UnitOwner): readonly LogisticsEndpoint[] {
+    const memo = this.cache();
+    const cached = memo.endpointsFor.get(owner);
+    if (cached) return cached;
     const endpoints: LogisticsEndpoint[] = [];
     for (const center of this.centers?.all() ?? []) {
       if (center.owner !== owner) continue;
@@ -106,14 +149,18 @@ export class DepotLogisticsSystem {
       if (depot.owner !== owner || depot.status !== "linked" || !depot.roadCell) continue;
       endpoints.push({ structureId: depot.structureId, roadCell: depot.roadCell });
     }
+    memo.endpointsFor.set(owner, endpoints);
     return endpoints;
   }
 
   private componentIds(): Map<string, number> {
+    const memo = this.cache();
+    if (memo.componentIds) return memo.componentIds;
     const componentByCell = new Map<string, number>();
     for (const component of this.roads.components()) {
       for (const cell of component.cells) componentByCell.set(this.key(cell), component.id);
     }
+    memo.componentIds = componentByCell;
     return componentByCell;
   }
 

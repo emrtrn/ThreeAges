@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_TA_Wood_Dark",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "threeages-tex-wood-dark-bc",
+  "normalTexture": "threeages-tex-wood-dark-n",
+  "maskTexture": null,
+  "roughnessTexture": null,
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": null,
+  "useBaseColorAlphaForOpacity": false,
+  "emissiveTexture": null,
+  "ormTexture": "threeages-tex-wood-dark-orm",
+  "uvTiling": {
+    "x": 1,
+    "y": 1
+  },
+  "roughness": 1,
+  "metalness": 0,
+  "aoIntensity": 0.65,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": null
+}

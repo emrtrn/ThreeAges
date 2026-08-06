@@ -13,6 +13,8 @@ Durum: **Devam ediyor — Faz 0 tamamlanma yolunda; Faz 1 dar çekirdeği ve des
   - [x] `Assetization Faz E` browser smoke, normal map kullanan gerçek authored Landscape'i mount/restart/dispose ederek console hatası olmadan geçti.
   - [x] Renderer texture-unit limiti Landscape'e aktarılır; 16'nın altındaki bilinen cihazda shader açıkça albedo-only varyanta düşer. RTS browser smoke tam PBR yolunu ve `data-rts-landscape-samplers="12/<limit>"` ölçümünü doğruladı.
   - [ ] Dört farklı normal/ORM texture ile browser fixture ve görsel blend kabulü, ilk gerçek texture pilotu ile birlikte kalır.
+  - [x] Faz 3 `wood-dark` pilotu için kullanıcı A varyantını kabul etti. Deterministik 1024² BC/N/ORM seti, manifest texture kayıtları ve `M_TA_Wood_Dark` oluşturuldu; henüz model/Landscape slotuna atanmadı.
+  - [x] `wood-dark` Material Editor browser smoke, kayıtlı BC/normal/ORM setini açıp `Ready.` durumuna ulaştı; sayfa hatası üretmedi.
 
 ## 1. Amaç
 
@@ -596,7 +598,7 @@ River Water'a yabancı görünmez ve spline/foam/reflection koduna bağımlı de
 
 İlk pilot yüzeyleri:
 
-- [ ] `wood-dark`
+- [x] `wood-dark`
 - [ ] `wood-light`
 - [ ] `roof-clay`
 - [ ] `wall-plaster`

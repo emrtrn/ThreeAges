@@ -19329,6 +19329,25 @@ check("starter material assets normalize to the canonical material shape", () =>
   }
 });
 
+check("ThreeAges wood-dark pilot material names registered BC/N/ORM textures", () => {
+  const material = normalizeForgeMaterialDef(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Materials/M_TA_Wood_Dark.material.json", "utf8")),
+    "M_TA_Wood_Dark",
+  );
+  assert.equal(material.baseColorTexture, "threeages-tex-wood-dark-bc");
+  assert.equal(material.normalTexture, "threeages-tex-wood-dark-n");
+  assert.equal(material.ormTexture, "threeages-tex-wood-dark-orm");
+  for (const textureId of [material.baseColorTexture, material.normalTexture, material.ormTexture]) {
+    assert.ok(textureId, "the pilot material must not silently fall back to a missing map");
+    const record = assetManifest.assets.find((asset) => asset.id === textureId);
+    assert.ok(record, `pilot material refers to unregistered texture ${textureId}`);
+    assert.equal(assetType(record!), "texture");
+  }
+  const materialRecord = assetManifest.assets.find((asset) => asset.id === "threeages-mat-wood-dark");
+  assert.ok(materialRecord, "pilot material itself must be registered");
+  assert.equal(assetType(materialRecord!), "material");
+});
+
 check("forge material mapping creates matching Three material types and fields", () => {
   const standard = createThreeMaterialFromForgeDef(
     normalizeForgeMaterialDef({

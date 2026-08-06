@@ -274,3 +274,29 @@ test("Assetization Faz C: Guard Actor Script is discoverable and opens from the 
 
   expect(errors, "opening the authored Actor Script must not produce runtime errors").toEqual([]);
 });
+
+test("Material assetization: accepted wood-dark pilot opens with BC, normal and ORM maps", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await page.locator("[data-content-toggle]").click();
+  await expect(page.locator("[data-content-list]")).toBeVisible();
+  // Entering the folder waits for the asynchronous project catalog to become
+  // available; a root-level search can otherwise race the initial load.
+  await page.locator('button[title="assets/ThreeAges/Materials"]').dispatchEvent("click");
+  await page.locator("[data-content-search]").fill("M_TA_Wood_Dark");
+
+  const material = page.locator('[data-asset-path="assets/ThreeAges/Materials/M_TA_Wood_Dark.material.json"]');
+  await expect(material).toBeVisible();
+  // Asset cards can refresh while their thumbnails settle. Dispatch against the
+  // resolved card so this assertion covers the Material Editor handoff rather
+  // than Playwright's actionability retry loop.
+  await material.dispatchEvent("dblclick");
+  await expect(page.locator(".me-editor-overlay")).toBeVisible();
+  await expect(page.locator("[data-me-title]")).toHaveText("M_TA_Wood_Dark");
+  await expect(page.locator("[data-me-status]")).toHaveText("Ready.");
+
+  expect(errors, "opening the accepted PBR material must not produce runtime errors").toEqual([]);
+});

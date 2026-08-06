@@ -51,6 +51,12 @@ const OVERLAY_LIFT = 0.022;
 
 export class TerritoryControlSystem {
   readonly root = new Group();
+  /**
+   * Monotonic counter of every ownership recompute. `refresh` is the only writer
+   * of the ownership grid, so this is an exact staleness key for anything that
+   * memoises an answer derived from {@link ownsFootprint} — logistics does.
+   */
+  version = 0;
   private readonly ownership = new Map<string, TerritoryOwner>();
   private readonly materials: Record<UnitOwner, MeshBasicMaterial>;
   private readonly meshes: Record<UnitOwner, Mesh<BufferGeometry, MeshBasicMaterial>>;
@@ -88,6 +94,7 @@ export class TerritoryControlSystem {
 
   /** Recompute all ownership cells and their lightweight ground overlay. */
   refresh(): void {
+    this.version += 1;
     this.ownership.clear();
     const extent = this.options.worldHalfExtent;
     const step = this.options.cellSize;

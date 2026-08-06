@@ -42,6 +42,17 @@ interface RoadNode extends RoadCell {
 export class RoadGraph {
   private readonly cells = new Map<string, RoadCell>();
   private revision = 0;
+  /**
+   * Topology answers are pure functions of {@link revision}, and logistics asks
+   * for them far more often than roads change — a producer's link, a depot's
+   * component and a caravan's lane are all re-derived several times per tick
+   * while the network itself changes once every few minutes. Both caches are
+   * therefore keyed on the revision alone and simply go stale together the
+   * moment a cell is committed or removed.
+   */
+  private componentsCache: { revision: number; components: readonly RoadComponent[] } | null = null;
+  private readonly routeCache = new Map<string, readonly RoadCell[] | null>();
+  private routeCacheRevision = -1;
 
   constructor(private readonly balance: RoadBalance) {}
 
@@ -202,6 +213,25 @@ export class RoadGraph {
     const goal = this.snap(to);
     const startKey = this.key(start);
     const goalKey = this.key(goal);
+    if (this.routeCacheRevision !== this.revision) {
+      this.routeCache.clear();
+      this.routeCacheRevision = this.revision;
+    }
+    const cacheKey = `${startKey}>${goalKey}`;
+    const cached = this.routeCache.get(cacheKey);
+    // `null` is a real answer here (no route), so presence is the test, not truth.
+    if (cached !== undefined) return cached;
+    const computed = this.computeRoute(start, startKey, goalKey);
+    this.routeCache.set(cacheKey, computed);
+    return computed;
+  }
+
+  /**
+   * The returned path is shared with every other caller asking for the same pair
+   * until the topology changes, so it is `readonly` in earnest — a caravan that
+   * spliced its own route would be editing everyone's.
+   */
+  private computeRoute(start: RoadCell, startKey: string, goalKey: string): readonly RoadCell[] | null {
     if (!this.cells.has(startKey) || !this.cells.has(goalKey)) return null;
 
     const frontier = [this.node(start)];
@@ -225,19 +255,27 @@ export class RoadGraph {
 
   /** Connected road islands, deterministically ordered for debug and logistics. */
   components(): readonly RoadComponent[] {
-    const unvisited = new Set(this.cells.keys());
+    const cache = this.componentsCache;
+    if (cache && cache.revision === this.revision) return cache.components;
+    const components = this.computeComponents();
+    this.componentsCache = { revision: this.revision, components };
+    return components;
+  }
+
+  private computeComponents(): readonly RoadComponent[] {
+    // Seeds are taken in ascending key order. That is exactly what repeatedly
+    // picking the smallest *remaining* key did, so component ids are unchanged —
+    // but the set is sorted once here instead of once per island, which is what
+    // made this quadratic on a network of any size.
+    const orderedKeys = [...this.cells.keys()].sort();
+    const unvisited = new Set(orderedKeys);
     const components: RoadComponent[] = [];
-    while (unvisited.size > 0) {
-      const startKey = [...unvisited].sort()[0];
-      if (!startKey) break;
+    for (const startKey of orderedKeys) {
+      if (!unvisited.delete(startKey)) continue;
       const start = this.cells.get(startKey);
-      if (!start) {
-        unvisited.delete(startKey);
-        continue;
-      }
+      if (!start) continue;
       const cells: RoadCell[] = [];
       const queue = [start];
-      unvisited.delete(startKey);
       for (let index = 0; index < queue.length; index += 1) {
         const current = queue[index];
         if (!current) continue;

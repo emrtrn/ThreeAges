@@ -33,7 +33,7 @@
     "Watermelon_DarkGreen": { "surface": "produce-watermelon", "targetMaterial": null },
     "Wheat": { "surface": "wheat", "targetMaterial": null },
     "White": { "surface": "paint-white", "targetMaterial": null },
-    "Wood": { "surface": "wood-dark", "targetMaterial": null },
+    "Wood": { "surface": "wood-dark", "targetMaterial": "threeages-mat-wood-dark" },
     "Wood_Light": { "surface": "wood-light", "targetMaterial": null },
     "Yellow": { "surface": "paint-yellow", "targetMaterial": null }
   },

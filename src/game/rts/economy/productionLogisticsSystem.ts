@@ -33,6 +33,17 @@ interface LocalTransferEndpoint {
 
 /** Resolves a producer's physical road contact and its route back to the kingdom's store. */
 export class ProductionLogisticsSystem {
+  /**
+   * Held against every input that can change the answer: the road topology, the
+   * completed standing set, the command centres, who holds which depot, and the
+   * territory grid. Producer lanes, transfers, the HUD's severed-link readout and
+   * the notification poll all ask within the same tick and used to get five full
+   * recomputes — each of which walked the whole road network several times per
+   * producer. Nothing here is allowed to go stale: the key covers every source
+   * this method reads.
+   */
+  private memo: { key: string; snapshots: readonly ProducerLogisticsSnapshot[] } | null = null;
+
   constructor(
     private readonly structures: PlacedStructureSystem,
     private readonly roads: RoadGraph,
@@ -44,12 +55,36 @@ export class ProductionLogisticsSystem {
   ) {}
 
   snapshots(): readonly ProducerLogisticsSnapshot[] {
+    const key = `${this.roads.version}:${this.structures.completedVersion}:${this.centers?.version ?? 0}`
+      + `:${this.occupation?.version ?? 0}:${this.territory?.version ?? 0}`;
+    const memo = this.memo;
+    if (memo && memo.key === key) return memo.snapshots;
+    const snapshots = this.computeSnapshots();
+    this.memo = { key, snapshots };
+    return snapshots;
+  }
+
+  private computeSnapshots(): readonly ProducerLogisticsSnapshot[] {
     const componentByCell = new Map<string, number>();
     for (const component of this.roads.components()) {
       for (const cell of component.cells) componentByCell.set(this.key(cell), component.id);
     }
     const mainComponentByOwner = this.depots.mainComponentIds();
     const localEndpoints = this.localEndpoints();
+    // Both of these were re-derived per producer, and neither depends on the
+    // producer — only on its owner. `depotSnapshots` in particular walked the
+    // whole road network again on every single pass through the loop below.
+    const depotSnapshots = this.occupation === undefined ? [] : this.depots.snapshots();
+    const endpointsByOwner = new Map<UnitOwner, readonly { structureId: number | null; roadCell: RoadCell }[]>();
+    const endpointsFor = (owner: UnitOwner): readonly { structureId: number | null; roadCell: RoadCell }[] => {
+      const cached = endpointsByOwner.get(owner);
+      if (cached) return cached;
+      const usable = this.depots.endpointsFor(owner)
+        .filter((candidate) => candidate.structureId === null
+          || (this.occupation?.isUsable(candidate.structureId) ?? true));
+      endpointsByOwner.set(owner, usable);
+      return usable;
+    };
     return this.structures.all()
       .filter((structure) => structure.construction.complete && structure.economy)
       .map((structure) => {
@@ -68,16 +103,14 @@ export class ProductionLogisticsSystem {
         );
         const componentId = roadCell ? componentByCell.get(this.key(roadCell)) ?? null : null;
         const mainComponentId = mainComponentByOwner.get(structure.owner);
-        const endpoint = localEndpoint || roadCell === null ? null : this.depots.endpointsFor(structure.owner)
-          .filter((candidate) => candidate.structureId === null
-            || (this.occupation?.isUsable(candidate.structureId) ?? true))
+        const endpoint = localEndpoint || roadCell === null ? null : endpointsFor(structure.owner)
           .map((candidate) => ({ candidate, route: this.roads.route(roadCell, candidate.roadCell) }))
           .filter((candidate): candidate is { candidate: { structureId: number | null; roadCell: RoadCell }; route: readonly RoadCell[] } => candidate.route !== null)
           .sort((a, b) => a.route.length - b.route.length
             || (a.candidate.structureId ?? -1) - (b.candidate.structureId ?? -1))[0]?.candidate ?? null;
         const depotStructureId = localEndpoint?.structureId ?? endpoint?.structureId ?? null;
         const occupiedDepotOnComponent = componentId !== null && this.occupation !== undefined
-          && this.depots.snapshots().some((depot) => depot.owner === structure.owner
+          && depotSnapshots.some((depot) => depot.owner === structure.owner
             && depot.componentId === componentId
             && !this.occupation!.isUsable(depot.structureId));
         return {

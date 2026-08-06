@@ -275,6 +275,13 @@ export class PlacedStructureSystem {
    * same contract `RoadGraph.version` gives the painted roads.
    */
   version = 0;
+  /**
+   * Every change to the *completed* standing set: `version`'s membership changes
+   * plus construction completion, which `version` deliberately does not count.
+   * Logistics memoises on this one, because a site finishing its build is
+   * precisely what turns it into a producer or a depot.
+   */
+  completedVersion = 0;
 
   constructor() {
     this.root.name = "rts-placed-structures";
@@ -347,6 +354,7 @@ export class PlacedStructureSystem {
     };
     this.structures.push(structure);
     this.version += 1;
+    this.completedVersion += 1;
     this.registerPickTargets(structure, progressFill);
     this.registerPickTargets(structure, pickVolume);
     this.pickVolumes.set(structure, pickVolume);
@@ -382,7 +390,10 @@ export class PlacedStructureSystem {
   advanceConstruction(structure: PlacedStructure, deltaSeconds: number, workerCount = 1): boolean {
     const justCompleted = structure.construction.advance(deltaSeconds, workerCount);
     structure.progressFill.scale.x = Math.max(0.001, structure.construction.progress);
-    if (justCompleted) this.finishVisual(structure);
+    if (justCompleted) {
+      this.completedVersion += 1;
+      this.finishVisual(structure);
+    }
     return justCompleted;
   }
 
@@ -510,6 +521,7 @@ export class PlacedStructureSystem {
     if (index < 0) return false;
     this.structures.splice(index, 1);
     this.version += 1;
+    this.completedVersion += 1;
     this.disposeStructure(structure);
     return true;
   }
@@ -542,6 +554,7 @@ export class PlacedStructureSystem {
     if (index < 0) return false;
     this.structures.splice(index, 1);
     this.version += 1;
+    this.completedVersion += 1;
     this.beginCollapse(structure);
     return true;
   }
@@ -551,6 +564,7 @@ export class PlacedStructureSystem {
     for (const structure of this.structures) this.disposeStructure(structure);
     this.structures.length = 0;
     this.version += 1;
+    this.completedVersion += 1;
     this.dropAnimations.clear();
     // A restart takes the husks with it: they belong to the finished match. Mid-
     // fall husks never became ruins, so they are announced here — otherwise the
