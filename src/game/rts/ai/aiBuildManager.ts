@@ -25,6 +25,9 @@ export interface AiBuildPlacementDebug {
   readonly failureReason: string | null;
 }
 
+/** Read-only extra gate for normal (non-expansion) base sites. */
+export type AiBuildSiteFilter = (site: AiBuildSite) => string | null;
+
 export class AiBuildManager {
   private readonly candidateFailures = new Map<string, number>();
   private active: PlacedStructure | null = null;
@@ -37,6 +40,7 @@ export class AiBuildManager {
     private readonly structures: PlacedStructureSystem,
     private readonly log: AiDecisionLog,
     private readonly siteProvider?: AiSiteProvider,
+    private readonly baseSiteFilter?: AiBuildSiteFilter,
   ) {}
 
   get busy(): boolean {
@@ -73,6 +77,13 @@ export class AiBuildManager {
 
     let lastReason: AiFailureReason = "no-valid-placement";
     for (const candidate of candidates) {
+      const filterReason = scope ? null : this.baseSiteFilter?.(candidate) ?? null;
+      if (filterReason) {
+        this.lastPlacement = { key: candidate.key, source: candidate.source, failureReason: filterReason };
+        this.retireCandidate(candidate, now, filterReason);
+        lastReason = "path-blocked";
+        continue;
+      }
       const result = this.construction.build(this.owner, candidate.buildingId, candidate.x, candidate.z);
       if (result.built) {
         this.candidateFailures.delete(candidate.key);
@@ -121,6 +132,17 @@ export class AiBuildManager {
       kind: "plan-failed",
       reason: `${candidate.buildingId} @${candidate.x},${candidate.z} kara listeye alındı (${reason})`,
       failureReason: this.failureReasonFor(reason),
+    });
+  }
+
+  /** A route preflight is deterministic for this topology, so skip it at once. */
+  private retireCandidate(candidate: AiBuildSite, now: number, reason: string): void {
+    this.candidateFailures.set(candidate.key, AI_ANCHOR_FAILURE_LIMIT);
+    this.log.record({
+      at: now,
+      kind: "plan-failed",
+      reason: `${candidate.buildingId} @${candidate.x},${candidate.z} road rejected (${reason})`,
+      failureReason: "path-blocked",
     });
   }
 

@@ -273,6 +273,7 @@ import { ArmyManager, type AiObjectiveWatch } from "../src/game/rts/ai/armyManag
 import { KingdomDirector } from "../src/game/rts/ai/kingdomDirector";
 import { AiBuildManager, AI_ANCHOR_FAILURE_LIMIT } from "../src/game/rts/ai/aiBuildManager";
 import { SettlementAiSiteProvider } from "../src/game/rts/ai/aiSiteProvider";
+import { proceduralRoadSiteFailure } from "../src/game/rts/ai/aiRoadSiteFilter";
 import { planSettlementLayout } from "../src/game/rts/ai/settlementLayoutPlanner";
 import { buildOrder, detectBottleneck, nextBuilding } from "../src/game/rts/ai/aiEconomyManager";
 import { scoreIntents } from "../src/game/rts/ai/intentScorer";
@@ -43143,6 +43144,16 @@ function aiTestWorld(
     (owner, x, z) => owner === "enemy" && (aiRef?.workerLocationUnsafe(x, z) ?? false),
   );
   const roads = new RoadGraph(balance);
+  // Mirrors RtsApp: both command centres begin with their free endpoint ring,
+  // so a procedural depot spur has a real main network to join before the
+  // authored base spine reaches its legacy anchors.
+  for (const center of centers.all()) {
+    roads.commit(centerAccessRoadPlan(roads, {
+      x: center.position.x,
+      z: center.position.z,
+      footprint: center.stats.footprint,
+    }));
+  }
   const depots = new DepotLogisticsSystem(structures, roads);
   const logistics = new ProductionLogisticsSystem(structures, roads, depots);
   // Mirrors RtsApp: centres plus any completed outpost, whose radius grows
@@ -43308,6 +43319,7 @@ function aiTestWorld(
     isPredatorDenLive: (homeX, homeZ) => predators.denIsLive(homeX, homeZ),
     anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
     siteProvider,
+    baseSiteFilter: (site) => proceduralRoadSiteFailure(site, buildings, roadConstruction),
     baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
     expansions: RTS_BLOCKOUT_MAP.enemyExpansions,
     construction,
@@ -44522,6 +44534,45 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
       && anchor.x === structure.x && anchor.z === structure.z));
   assert.ok(proceduralBase.length >= 2,
     "the opening uses multiple planned base locations instead of replaying the authored anchor layout");
+  // P3.1: the depot itself must follow the planned base location, then join the
+  // command-centre network through the paid AI road path. A producer that only
+  // sits near that depot is not enough — its own footprint needs a route into
+  // the same committed road component.
+  const depot = opener.structures.ownedBy("enemy")
+    .find((structure) => structure.stats.id === "depot" && structure.construction.complete)
+    ?? assert.fail("P3: the base depot completed");
+  const legacyDepot = RTS_BLOCKOUT_MAP.enemyBaseAnchors.find((anchor) => anchor.buildingId === "depot")
+    ?? assert.fail("the legacy base depot anchor exists");
+  assert.notDeepEqual(
+    { x: depot.x, z: depot.z },
+    { x: legacyDepot.x, z: legacyDepot.z },
+    "P3: base logistics starts from the planned depot rather than the authored fallback",
+  );
+  const depotRoad = roadCellTouchingFootprint(
+    opener.roads, depot.x, depot.z, depot.stats.footprint.width, depot.stats.footprint.depth,
+  );
+  const enemyCenter = opener.centers.get("enemy") ?? assert.fail("enemy command centre exists");
+  const centerRoad = roadCellTouchingFootprint(
+    opener.roads,
+    enemyCenter.position.x,
+    enemyCenter.position.z,
+    enemyCenter.stats.footprint.width,
+    enemyCenter.stats.footprint.depth,
+  );
+  assert.ok(depotRoad && centerRoad && opener.roads.connected(depotRoad, centerRoad),
+    "P3: the planned depot joins the command-centre road component");
+  for (const producer of opener.structures.ownedBy("enemy")
+    .filter((structure) => structure.construction.complete && structure.economy)) {
+    const producerRoad = roadCellTouchingFootprint(
+      opener.roads, producer.x, producer.z, producer.stats.footprint.width, producer.stats.footprint.depth,
+    );
+    assert.ok(producerRoad && depotRoad && opener.roads.connected(producerRoad, depotRoad),
+      `P3: ${producer.stats.id} reaches the planned depot over committed road cells`);
+  }
+  assert.ok(
+    opener.production.snapshots("enemy").some((producer) => producer.totalTransferred > 0),
+    "P3: a producer at the procedural settlement pays a completed load into the AI wallet",
+  );
   const variedSeed = aiTestWorld({ food: 400, wood: 600 }, undefined, "normal", 18, true);
   for (let index = 0; index < 5; index += 1) {
     variedSeed.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
@@ -45690,6 +45741,50 @@ check("AiBuildManager prefers planned sites, blacklists stable keys, then uses l
     assert.equal(rejected.request("house", attempt).kind, "failed");
   }
   assert.equal(rejected.request("house", 10).kind, "failed", "a stable candidate key is retired instead of retried forever");
+  territory.dispose();
+});
+
+check("AiBuildManager skips an unroutable planned site and immediately tries the next one", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 10_000, wood: 10_000 }, 20);
+  const navigation = new RtsNavigation();
+  const territory = new TerritoryControlSystem(() => [{ owner: "enemy", x: 0, z: 0, radius: 28 }]);
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings, structures, kingdoms, navigation,
+    () => structures.navigationBlockers(), territory, () => {}, () => {},
+  );
+  const log = new AiDecisionLog();
+  const manager = new AiBuildManager(
+    "enemy",
+    [{ buildingId: "house", x: -8, z: 0 }],
+    construction,
+    structures,
+    log,
+    {
+      sitesFor: () => [
+        { key: "v1:17:house:base:8:0", buildingId: "house", x: 8, z: 0, source: "procedural" },
+        { key: "v1:17:house:base:12:0", buildingId: "house", x: 12, z: 0, source: "procedural" },
+        { key: "legacy:house:-8:0", buildingId: "house", x: -8, z: 0, source: "legacy" },
+      ],
+    },
+    (site) => site.key === "v1:17:house:base:8:0" ? "road-unreachable" : null,
+  );
+  const first = manager.request("house", 0);
+  assert.equal(first.kind, "started");
+  assert.equal(first.kind === "started" && first.structure.x, 12,
+    "a road-rejected planned candidate does not consume the build slot");
+  assert.ok(log.recent().some((entry) => entry.failureReason === "path-blocked"),
+    "the rejected route is named for AI debug rather than silently skipped");
+  if (first.kind === "started") structures.advanceConstruction(first.structure, buildings.house?.constructionSeconds ?? 1);
+  const second = manager.request("house", 1);
+  assert.equal(second.kind, "started");
+  assert.equal(second.kind === "started" && second.structure.x, -8,
+    "the retired road candidate is not retried before the controlled legacy fallback");
   territory.dispose();
 });
 

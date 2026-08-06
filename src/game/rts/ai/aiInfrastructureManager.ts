@@ -22,7 +22,7 @@
  */
 import type { RtsBuildAnchor, RtsMapPoint } from "../world/rtsMapBlockout";
 import type { RoadConstructionService } from "../roads/roadConstructionService";
-import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
+import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { UnitOwner } from "../units/unit";
 import type { AiBlackboard } from "./aiBlackboard";
 import type { AiBuildManager } from "./aiBuildManager";
@@ -71,7 +71,10 @@ export class AiInfrastructureManager {
         this.step = "depot";
         this.routeFailures = 0;
       }
-      if (!depot) this.builds.request(this.depotAnchor.buildingId, bb.now, [this.depotAnchor]);
+      // Base depots use the same planned-first provider as every other V1 base
+      // building. Expansion recipes are the only callers that pass an explicit
+      // authored scope.
+      if (!depot) this.builds.request(this.depotAnchor.buildingId, bb.now);
       return this.step;
     }
 
@@ -109,6 +112,20 @@ export class AiInfrastructureManager {
       }
       return this.step;
     }
+    const access = this.ensurePlannedAccess();
+    if (access === "waiting") return this.step;
+    if (access === "failed") {
+      this.routeFailures += 1;
+      if (this.routeFailures >= AI_ROUTE_FAILURE_LIMIT) {
+        this.log.record({
+          at: bb.now,
+          kind: "plan-failed",
+          reason: "planned base logistics access could not be built",
+          failureReason: "path-blocked",
+        });
+      }
+      return this.step;
+    }
     this.routeFailures = 0;
     return this.enter("linked", bb, "üs lojistiği bağlandı");
   }
@@ -120,7 +137,41 @@ export class AiInfrastructureManager {
 
   private baseDepot() {
     return this.structures.ownedBy(this.owner)
-      .find((structure) => structure.x === this.depotAnchor.x && structure.z === this.depotAnchor.z);
+      .filter((structure) => structure.stats.id === "depot")
+      .sort((left, right) => this.distanceToBaseDepot(left) - this.distanceToBaseDepot(right) || left.id - right.id)[0];
+  }
+
+  /**
+   * The authored polyline establishes the base network, then every completed
+   * procedural endpoint receives a paid, legal spur to that network. The
+   * player-only free auto-road path is deliberately not used here.
+   */
+  private ensurePlannedAccess(): "connected" | "waiting" | "failed" {
+    const depot = this.baseDepot();
+    if (!depot?.construction.complete) return "failed";
+    const endpoints = [
+      depot,
+      ...this.structures.ownedBy(this.owner)
+        .filter((structure) => structure.construction.complete && structure.economy)
+        .sort((left, right) => left.id - right.id),
+    ];
+    for (const structure of endpoints) {
+      const footprint = {
+        x: structure.x,
+        z: structure.z,
+        width: structure.stats.footprint.width,
+        depth: structure.stats.footprint.depth,
+      };
+      if (this.roads.touchesFootprint(footprint)) continue;
+      const result = this.roads.buildAccessRoad(this.owner, footprint);
+      if (result.built) continue;
+      return result.reason === "insufficient-resources" ? "waiting" : "failed";
+    }
+    return "connected";
+  }
+
+  private distanceToBaseDepot(structure: PlacedStructure): number {
+    return Math.hypot(structure.x - this.depotAnchor.x, structure.z - this.depotAnchor.z);
   }
 
   private enter(step: AiInfrastructureStep, bb: AiBlackboard, reason: string): AiInfrastructureStep {

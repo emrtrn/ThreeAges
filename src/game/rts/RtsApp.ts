@@ -72,6 +72,7 @@ import {
 } from "./content/rtsActorVisualFactory";
 import { AiController } from "./ai/aiController";
 import { SettlementAiSiteProvider } from "./ai/aiSiteProvider";
+import { proceduralRoadSiteFailure } from "./ai/aiRoadSiteFilter";
 import { planSettlementLayout } from "./ai/settlementLayoutPlanner";
 import { formatRtsAiDebug } from "./ai/aiDebugView";
 import { RtsCameraController } from "./camera/rtsCameraController";
@@ -1441,6 +1442,11 @@ export class RtsApp {
       isPredatorDenLive: (homeX, homeZ) => this.predators.denIsLive(homeX, homeZ),
       anchors: this.spatial.enemyBaseAnchors,
       siteProvider,
+      baseSiteFilter: (site) => proceduralRoadSiteFailure(
+        site,
+        this.options.buildingBalance,
+        this.roadConstruction,
+      ),
       baseRoute: this.spatial.enemyBaseRoute,
       expansions: this.spatial.enemyExpansions,
       construction: this.structureConstruction,

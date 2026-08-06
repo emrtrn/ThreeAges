@@ -112,7 +112,10 @@ function centredStemPlan(
   const cells = [root, ...tail.cells];
   const newCells = cells.filter((cell) => !existing.has(key(cell)));
   if (newCells.length > maxNewCells) return null;
-  return { cells, newCells, woodCost: 0 };
+  // The plan is also used by the AI's paid infrastructure builder. Player
+  // placement still commits it through `commitFree`, but retaining the router's
+  // real new-cell cost lets that caller pay for exactly this spur.
+  return { cells, newCells, woodCost: newCells.length * roads.woodCostPerCell };
 }
 
 /** The grid line one road tile outside a footprint face on the side of `toward`. */

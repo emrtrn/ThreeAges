@@ -49,6 +49,11 @@ export class RoadGraph {
     return this.balance.cellSize;
   }
 
+  /** Cost of one newly committed cell; shaped planners use this to price their route. */
+  get woodCostPerCell(): number {
+    return this.balance.woodCostPerCell;
+  }
+
   /** The short access-road reach, reused as the local no-caravan logistics radius. */
   get autoConnectMaximumDistance(): number {
     return (this.balance.autoConnect?.maxCells ?? 0) * this.balance.cellSize;
