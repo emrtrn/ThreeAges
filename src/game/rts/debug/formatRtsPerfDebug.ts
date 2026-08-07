@@ -37,6 +37,20 @@ export interface RtsPerfDebugSnapshot {
     readonly drawCalls: number;
     readonly triangles: number;
   };
+  /**
+   * The drawing buffer actually being shaded — CSS size times the effective
+   * pixel ratio, which the quality profile caps and scales.
+   *
+   * Here because it is the one input to per-pixel cost that no other line
+   * reports, and a frame whose cost survives deleting half the scene's geometry
+   * is asking about pixels, not content. Without it, "is this fill rate" can
+   * only be guessed at.
+   */
+  readonly viewport: {
+    readonly width: number;
+    readonly height: number;
+    readonly pixelRatio: number;
+  };
   readonly memory: {
     readonly geometries: number;
     readonly textures: number;
@@ -85,6 +99,16 @@ export interface RtsPerfDebugSnapshot {
 /** Longest cost label decides the column, so the ms numbers line up. */
 const COST_LABEL_WIDTH = 12;
 
+/** Drawing-buffer line: what is being shaded, and how many pixels that is. */
+function viewportLine(viewport: RtsPerfDebugSnapshot["viewport"]): string {
+  const width = Math.round(viewport.width * viewport.pixelRatio);
+  const height = Math.round(viewport.height * viewport.pixelRatio);
+  return (
+    `çözünürlük ${groupThousands(width)}×${groupThousands(height)} · ` +
+    `oran ${viewport.pixelRatio.toFixed(2)} · ${compactCount(width * height)} piksel`
+  );
+}
+
 export function formatRtsPerfDebug(snapshot: RtsPerfDebugSnapshot): string[] {
   const { frame, render, memory, quality, scene, graph } = snapshot;
   const fps = frame.averageMs > 0 ? 1000 / frame.averageMs : 0;
@@ -97,6 +121,9 @@ export function formatRtsPerfDebug(snapshot: RtsPerfDebugSnapshot): string[] {
     // question that decides what to optimise: CPU-bound or GPU-bound.
     gpuLine(snapshot.gpu),
     `çizim ${groupThousands(render.drawCalls)} çağrı · ${compactCount(render.triangles)} üçgen`,
+    // Beside the draw line on purpose: triangles and pixels are the two things a
+    // frame can be spending itself on, and the pair says which.
+    viewportLine(snapshot.viewport),
     // Directly under the draw line, because the pair is the finding: a small
     // draw count beside a large node count means the frame is being walked, not
     // submitted, and no amount of further batching would touch it.

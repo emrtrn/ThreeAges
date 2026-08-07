@@ -2424,6 +2424,13 @@ export class RtsApp {
     // one is not measuring the other.
     const mapArt = this.authoredWorld?.staticInstanceMeshes ?? [];
     if (mapArt.length > 0) steps.push({ id: "↳ harita sanatı", apply: hide(mapArt) });
+    // The fourth piece, and the only one that is not just its own pixels: a
+    // `sharedPlanar` River Water renders the entire scene a second time, from a
+    // mirrored camera, into a fixed-size target — driven from the ribbon's own
+    // draw, so it disappears exactly when the ribbon does. A row measuring the
+    // water is therefore measuring that nested pass, which is the point.
+    const rivers = this.authoredWorld?.riverWaterObjects ?? [];
+    if (rivers.length > 0) steps.push({ id: "↳ nehir suyu", apply: hide(rivers) });
     // Only worth a row when there is a chain to bypass; otherwise the step would
     // measure the untouched frame twice and report the difference as noise.
     if (this.postProcessPipeline) steps.push({ id: "son işlem (post)", apply: () => () => {} });
@@ -2565,6 +2572,14 @@ export class RtsApp {
       frame: frameStats,
       render,
       memory,
+      // Read back from the renderer rather than recomputed from the profile: the
+      // number that matters is the buffer being shaded, and `resize` is what
+      // last decided it.
+      viewport: {
+        width: this.lastW,
+        height: this.lastH,
+        pixelRatio: this.renderer.getPixelRatio(),
+      },
       gpu: this.gpuTimer?.stats() ?? null,
       shadows: [
         { label: "aktörler", ...shadowCasters.actors },

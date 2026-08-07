@@ -126,6 +126,17 @@ export interface AuthoredWorldHandle {
    */
   readonly foliageRoot: Object3D | null;
   /**
+   * The mounted River Water ribbons, for the same measurement reason as
+   * {@link foliageRoot}.
+   *
+   * Worth its own handle because a water body is not only the pixels it covers:
+   * a `sharedPlanar` reflection re-renders the whole scene from a mirrored
+   * camera into its own fixed-size target, and that cost hides behind the
+   * ribbon's draw. Taking the ribbons off the screen is the only way to take
+   * that nested pass off it too.
+   */
+  readonly riverWaterObjects: readonly Object3D[];
+  /**
    * Advances the foliage distance cull for a rendered frame. A no-op when the
    * Level paints no foliage, or when every Foliage Type disables distance
    * culling, so a shell can call it unconditionally from its frame loop.
@@ -638,6 +649,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     landscapes: mountedLandscapes,
     foliageInstanceCount,
     foliageRoot: foliageBinding?.root ?? null,
+    riverWaterObjects,
     updateFoliageCulling: (cameraPosition, cullDistanceScale = 1) => {
       foliageBinding?.updateCulling(cameraPosition, cullDistanceScale);
     },

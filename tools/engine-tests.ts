@@ -45049,6 +45049,7 @@ check("Debug panel: the perf readout reports the frame, what it draws and what e
   const snapshot = {
     frame: { averageMs: 20, p95Ms: 31.5, sampleCount: 240, over33ms: 3, over50ms: 1, over100ms: 0 },
     render: { drawCalls: 1420, triangles: 2_480_000 },
+    viewport: { width: 1920, height: 1080, pixelRatio: 1.75 },
     memory: { geometries: 830, textures: 96, programs: 41 },
     gpu: { lastMs: 11.5, averageMs: 10.25, maxMs: 19, samples: 60 },
     shadows: [
@@ -45079,6 +45080,11 @@ check("Debug panel: the perf readout reports the frame, what it draws and what e
   // frame being traversed, not a frame being submitted, and batching further
   // would not touch it.
   assert.match(text, /graf 12,480 düğüm · 3,210 mesh \(geçiş başına gezilir\)/);
+  // The drawing buffer, not the CSS size: a profile's pixel-ratio cap is exactly
+  // the thing that makes those two differ, and per-pixel cost is paid on the
+  // former. 1920×1080 at 1.75 is 3360×1890 — nearly four times the pixels of the
+  // 1080p the CSS size would suggest.
+  assert.match(text, /çözünürlük 3,360×1,890 · oran 1\.75 · 6\.35M piksel/);
   // A browser with no timer query must say so rather than report zeros: "the
   // GPU costs nothing" and "this browser will not say" are opposite findings.
   assert.match(
