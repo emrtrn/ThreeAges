@@ -6,11 +6,14 @@
  * connect its outpost with a road (plan §38 "Hazır veya sınırlı rota ile yol
  * bağla") through the same wood cost the player pays (AI design §4).
  *
- * Roads themselves stay unowned — AI-1 has no road capture (AI design §50) — so
- * only the *payer* is owner-scoped here.
+ * A road cell belongs to whoever controls the ground under it, so ownership is
+ * not stored here either — it is {@link RoadGraph}'s live territory query. What
+ * this service adds is the *perspective*: every plan, reach test and access spur
+ * is asked on behalf of one kingdom, so nobody routes through, or joins onto,
+ * land they do not hold.
  */
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
-import { roadCellTouchingFootprint } from "../economy/depotLogisticsSystem";
+import { roadCellsTouchingFootprint } from "../economy/depotLogisticsSystem";
 import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
 import type { UnitOwner } from "../units/unit";
 import { planAutoRoadConnection, type AutoRoadFootprint } from "./autoRoadConnector";
@@ -37,8 +40,8 @@ export class RoadConstructionService {
   }
 
   /** Preview a route and its wood cost without spending. Null when unroutable. */
-  plan(start: RoadCell, end: RoadCell): RoadPlan | null {
-    return this.roads.plan(start, end, this.blockers());
+  plan(start: RoadCell, end: RoadCell, perspective?: UnitOwner): RoadPlan | null {
+    return this.roads.plan(start, end, this.blockers(), perspective);
   }
 
   /** Preview a route against one prospective footprint without mutating the graph. */
@@ -46,13 +49,14 @@ export class RoadConstructionService {
     start: RoadCell,
     end: RoadCell,
     additionalBlockers: readonly NavBlocker[],
+    perspective?: UnitOwner,
   ): RoadPlan | null {
-    return this.roads.plan(start, end, [...this.blockers(), ...additionalBlockers]);
+    return this.roads.plan(start, end, [...this.blockers(), ...additionalBlockers], perspective);
   }
 
   /** Plan, charge the owner's wood for new cells only, and commit the route. */
   build(owner: UnitOwner, start: RoadCell, end: RoadCell): RoadBuildResult {
-    const plan = this.plan(start, end);
+    const plan = this.plan(start, end, owner);
     return this.buildPlanned(owner, plan);
   }
 
@@ -83,12 +87,16 @@ export class RoadConstructionService {
    * road network. The player continues to use the same pure planner with
    * `commitFree`; AI infrastructure uses this wrapper so its wood is charged.
    */
-  planAccessRoad(footprint: AutoRoadFootprint, maxNewCells = Number.MAX_SAFE_INTEGER): RoadPlan | null {
+  planAccessRoad(
+    footprint: AutoRoadFootprint,
+    maxNewCells = Number.MAX_SAFE_INTEGER,
+    perspective?: UnitOwner,
+  ): RoadPlan | null {
     return planAutoRoadConnection(
       this.roads,
       footprint,
-      (start, end) => this.plan(start, end),
-      { maxNewCells },
+      (start, end) => this.plan(start, end, perspective),
+      { maxNewCells, owner: perspective },
     );
   }
 
@@ -98,12 +106,16 @@ export class RoadConstructionService {
     footprint: AutoRoadFootprint,
     maxNewCells = Number.MAX_SAFE_INTEGER,
   ): RoadBuildResult {
-    return this.buildPlanned(owner, this.planAccessRoad(footprint, maxNewCells));
+    return this.buildPlanned(owner, this.planAccessRoad(footprint, maxNewCells, owner));
   }
 
-  /** Whether the committed graph already reaches a structure footprint. */
-  touchesFootprint(footprint: AutoRoadFootprint): boolean {
-    return roadCellTouchingFootprint(this.roads, footprint.x, footprint.z, footprint.width, footprint.depth) !== null;
+  /**
+   * Whether the committed graph already reaches a structure footprint — for the
+   * asking owner, so a neighbour's road brushing the wall is not a link.
+   */
+  touchesFootprint(footprint: AutoRoadFootprint, perspective?: UnitOwner): boolean {
+    return roadCellsTouchingFootprint(this.roads, footprint.x, footprint.z, footprint.width, footprint.depth)
+      .some((cell) => this.roads.passable(cell, perspective));
   }
 
   /**

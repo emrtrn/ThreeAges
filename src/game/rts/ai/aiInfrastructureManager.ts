@@ -97,7 +97,9 @@ export class AiInfrastructureManager {
       // A segment whose cells all exist costs nothing, so planning it first lets
       // an intact leg be skipped without a commit — and therefore without the
       // territory refresh that a commit triggers.
-      const existing = this.roads.plan(from, to);
+      // Asked as this kingdom, so a leg that happens to be paved on ground it
+      // does not hold is not mistaken for a leg it has already built.
+      const existing = this.roads.plan(from, to, this.owner);
       if (existing && existing.woodCost === 0) continue;
       const result = this.roads.build(this.owner, from, to);
       if (result.built) continue;
@@ -165,7 +167,7 @@ export class AiInfrastructureManager {
         width: structure.stats.footprint.width,
         depth: structure.stats.footprint.depth,
       };
-      if (this.roads.touchesFootprint(footprint)) continue;
+      if (this.roads.touchesFootprint(footprint, this.owner)) continue;
       const result = this.roads.buildAccessRoad(this.owner, footprint);
       if (result.built) continue;
       return result.reason === "insufficient-resources" ? "waiting" : "failed";

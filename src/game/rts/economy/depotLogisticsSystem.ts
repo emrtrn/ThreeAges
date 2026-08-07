@@ -42,7 +42,8 @@ export class DepotLogisticsSystem {
     readonly key: string;
     snapshots?: readonly DepotNodeSnapshot[];
     mainComponentIds?: ReadonlyMap<UnitOwner, number | null>;
-    componentIds?: Map<string, number>;
+    /** Component ids as each owner sees them; a border splits the network. */
+    readonly componentIds: Map<UnitOwner, Map<string, number>>;
     readonly endpointsFor: Map<UnitOwner, readonly LogisticsEndpoint[]>;
   } | null = null;
 
@@ -58,10 +59,17 @@ export class DepotLogisticsSystem {
    * any of its three inputs changed.
    */
   private cache(): NonNullable<typeof this.memo> {
-    const key = `${this.roads.version}:${this.structures.completedVersion}:${this.centers?.version ?? 0}`;
+    // Road ownership is territory, and territory moves without a cell being
+    // paved, so the graph's ownership generation is a fourth input here.
+    const key = `${this.roads.version}:${this.roads.ownershipVersion}`
+      + `:${this.structures.completedVersion}:${this.centers?.version ?? 0}`;
     const memo = this.memo;
     if (memo && memo.key === key) return memo;
-    const fresh = { key, endpointsFor: new Map<UnitOwner, readonly LogisticsEndpoint[]>() };
+    const fresh = {
+      key,
+      componentIds: new Map<UnitOwner, Map<string, number>>(),
+      endpointsFor: new Map<UnitOwner, readonly LogisticsEndpoint[]>(),
+    };
     this.memo = fresh;
     return fresh;
   }
@@ -70,42 +78,46 @@ export class DepotLogisticsSystem {
   mainComponentIds(): ReadonlyMap<UnitOwner, number | null> {
     const memo = this.cache();
     if (memo.mainComponentIds) return memo.mainComponentIds;
-    const componentByCell = this.componentIds();
     const result = new Map<UnitOwner, number | null>();
     if (!this.centers) {
       memo.mainComponentIds = result;
       return result;
     }
     for (const center of this.centers.all()) {
-      const roadCell = roadCellTouchingFootprint(
-        this.roads,
+      const roadCell = this.linkCellFor(
+        center.owner,
         center.position.x,
         center.position.z,
         center.stats.footprint.width,
         center.stats.footprint.depth,
       );
-      result.set(center.owner, roadCell ? componentByCell.get(this.key(roadCell)) ?? null : null);
+      result.set(center.owner, roadCell ? this.componentIds(center.owner).get(this.key(roadCell)) ?? null : null);
     }
     memo.mainComponentIds = result;
     return result;
   }
 
+  private linkCellFor(owner: UnitOwner, x: number, z: number, width: number, depth: number): RoadCell | null {
+    return roadLinkCellFor(this.roads, owner, x, z, width, depth);
+  }
+
   snapshots(): readonly DepotNodeSnapshot[] {
     const memo = this.cache();
     if (memo.snapshots) return memo.snapshots;
-    const componentByCell = this.componentIds();
     const mainComponentByOwner = this.mainComponentIds();
     const snapshots: readonly DepotNodeSnapshot[] = this.structures.all()
       .filter((structure) => structure.construction.complete && structure.stats.id === "depot")
       .map((structure) => {
-        const roadCell = roadCellTouchingFootprint(
-          this.roads,
+        const roadCell = this.linkCellFor(
+          structure.owner,
           structure.x,
           structure.z,
           structure.stats.footprint.width,
           structure.stats.footprint.depth,
         );
-        const componentId = roadCell ? componentByCell.get(this.key(roadCell)) ?? null : null;
+        const componentId = roadCell
+          ? this.componentIds(structure.owner).get(this.key(roadCell)) ?? null
+          : null;
         const mainComponentId = mainComponentByOwner.get(structure.owner);
         return {
           structureId: structure.id,
@@ -137,8 +149,8 @@ export class DepotLogisticsSystem {
     const endpoints: LogisticsEndpoint[] = [];
     for (const center of this.centers?.all() ?? []) {
       if (center.owner !== owner) continue;
-      const roadCell = roadCellTouchingFootprint(
-        this.roads,
+      const roadCell = this.linkCellFor(
+        owner,
         center.position.x,
         center.position.z,
         center.stats.footprint.width,
@@ -154,14 +166,16 @@ export class DepotLogisticsSystem {
     return endpoints;
   }
 
-  private componentIds(): Map<string, number> {
+  /** Component id per cell, as `owner` sees the network. */
+  componentIds(owner: UnitOwner): Map<string, number> {
     const memo = this.cache();
-    if (memo.componentIds) return memo.componentIds;
+    const cached = memo.componentIds.get(owner);
+    if (cached) return cached;
     const componentByCell = new Map<string, number>();
-    for (const component of this.roads.components()) {
+    for (const component of this.roads.components(owner)) {
       for (const cell of component.cells) componentByCell.set(this.key(cell), component.id);
     }
-    memo.componentIds = componentByCell;
+    memo.componentIds.set(owner, componentByCell);
     return componentByCell;
   }
 
@@ -214,4 +228,25 @@ export function roadCellTouchingFootprint(
   depth: number,
 ): RoadCell | null {
   return roadCellsTouchingFootprint(roads, x, z, width, depth)[0] ?? null;
+}
+
+/**
+ * The road tile that links a footprint to *its owner's* network, or null.
+ *
+ * The owner-aware form of {@link roadCellTouchingFootprint}, and the one every
+ * logistics query wants. Roads belong to whoever holds the ground under them, so
+ * a neighbour's road running past the far wall is not this building's link —
+ * reading it as one is what let two settlements merge into a single supply
+ * network the moment their borders grew into contact.
+ */
+export function roadLinkCellFor(
+  roads: RoadGraph,
+  owner: UnitOwner,
+  x: number,
+  z: number,
+  width: number,
+  depth: number,
+): RoadCell | null {
+  return roadCellsTouchingFootprint(roads, x, z, width, depth)
+    .find((cell) => roads.passable(cell, owner)) ?? null;
 }

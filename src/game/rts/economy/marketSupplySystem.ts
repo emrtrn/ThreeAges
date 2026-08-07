@@ -30,7 +30,7 @@ import type { CaravanArrival, CaravanDispatch, CaravanLane, CaravanLaneProvider 
 import type { RoadCell, RoadGraph } from "../roads/roadGraph";
 import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { UnitOwner } from "../units/unit";
-import { roadCellTouchingFootprint } from "./depotLogisticsSystem";
+import { roadCellsTouchingFootprint, roadLinkCellFor } from "./depotLogisticsSystem";
 import type { MarketStock } from "./marketStock";
 import type { TradeSiteSystem } from "./tradeSiteSystem";
 
@@ -246,7 +246,11 @@ export class MarketSupplySystem implements CaravanLaneProvider {
         buffered: site.buffered,
         bufferCapacity: site.bufferCapacity,
       };
-      const roadCell = roadCellTouchingFootprint(this.roads, site.x, site.z, stats.dock.width, stats.dock.depth);
+      // A trade site is nobody's ground, so its dock cells stay ownership-blind:
+      // whichever kingdoms have paved up to it are all candidates, and which one
+      // holds it is decided below by who can actually run a route.
+      const dockCells = roadCellsTouchingFootprint(this.roads, site.x, site.z, stats.dock.width, stats.dock.depth);
+      const roadCell = dockCells[0] ?? null;
       if (!roadCell) {
         this.claims.delete(site.id);
         return { ...base, owner: null, roadCell: null, marketRoadCell: null, marketStructureId: null, status: "unlinked-road" as const };
@@ -254,7 +258,16 @@ export class MarketSupplySystem implements CaravanLaneProvider {
       const reachable = markets
         .map((market) => ({ market, cell: this.roadCellFor(market) }))
         .filter((candidate): candidate is { market: PlacedStructure; cell: RoadCell } => candidate.cell !== null)
-        .map((candidate) => ({ ...candidate, route: this.roads.route(roadCell, candidate.cell) }))
+        // Asked from each Market's own side: a trade site is reached over roads
+        // that Market's kingdom may actually use, not over the rival's spine.
+        // Both kingdoms can have a dock cell of their own, so each starts from
+        // the one it may stand on rather than from a single shared tile.
+        .map((candidate) => ({
+          ...candidate,
+          route: dockCells
+            .map((dock) => this.roads.route(dock, candidate.cell, candidate.market.owner))
+            .find((route): route is readonly RoadCell[] => route !== null) ?? null,
+        }))
         .filter((candidate): candidate is { market: PlacedStructure; cell: RoadCell; route: readonly RoadCell[] } => candidate.route !== null);
       if (reachable.length === 0) {
         this.claims.delete(site.id);
@@ -385,8 +398,9 @@ export class MarketSupplySystem implements CaravanLaneProvider {
   }
 
   private roadCellFor(market: PlacedStructure): RoadCell | null {
-    return roadCellTouchingFootprint(
+    return roadLinkCellFor(
       this.roads,
+      market.owner,
       market.x,
       market.z,
       market.stats.footprint.width,

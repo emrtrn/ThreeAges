@@ -39,7 +39,7 @@ import {
 import { updateLandscapeObjectGeometry, type LandscapeLayerColors, type LandscapeObject } from "@engine/render-three/landscape";
 
 import type { BuildingPadVisual, RoadVisual } from "../../data/gameDataTypes";
-import type { RoadCell, RoadDirection, RoadSegment } from "./roadGraph";
+import type { RoadCell, RoadDirection, RoadOwner, RoadSegment } from "./roadGraph";
 
 interface DirStep {
   readonly dx: number;
@@ -68,6 +68,14 @@ export interface RoadSplineOptions {
   readonly origin: Vec3;
   /** Presentational paint tuning (layer, width, falloff, strength, jitter). */
   readonly visual: RoadVisual;
+  /**
+   * The paint layer a cell takes, by the owner of the ground under it. This is
+   * what lets one kingdom's roads reach the Town age's cobblestone while its
+   * neighbour's stay dirt: age is a per-kingdom fact, and a road belongs to
+   * whoever holds the ground it runs over. Defaults to `visual.layerId` for
+   * every owner, which is the single-layer behaviour this had before.
+   */
+  readonly layerForOwner?: (owner: RoadOwner) => string;
 }
 
 /** A degree-2 road cell whose two exits are collinear is an interior straight cell. */
@@ -76,11 +84,6 @@ function isStraightThrough(connections: readonly RoadDirection[]): boolean {
   const hasEW = connections.includes("east") && connections.includes("west");
   const hasNS = connections.includes("north") && connections.includes("south");
   return hasEW || hasNS;
-}
-
-/** Control points are everything that is *not* an interior straight cell. */
-function isControlCell(segment: RoadSegment): boolean {
-  return !isStraightThrough(segment.connections);
 }
 
 /** Deterministic hash of a cell coordinate to `[-1, 1]` (stable across repaints). */
@@ -95,20 +98,67 @@ function hashUnit(x: number, z: number, salt: number): number {
  * Converts a committed road network into a paint-only Landscape spline. Pure and
  * three.js-free. The corridor follows `visual`; with `visual.jitter === 0` (and
  * `widthVariation === 0`) it reduces to dead-straight runs — the Faz 3 baseline.
+ *
+ * Cells are grouped by ground owner and each group is traced on its own, because
+ * an owner boundary is a *paint* boundary: two kingdoms in different ages meet
+ * mid-corridor and the run has to stop there rather than carry one age's layer
+ * across. Tracing per group gets that for free — the neighbour across the border
+ * is simply not in the group's lookup, so it reads as the end of the run — and
+ * costs nothing when everything shares one owner.
  */
 export function roadGraphToLandscapeSpline(
   segments: readonly RoadSegment[],
   options: RoadSplineOptions,
 ): ForgeLandscapeSpline {
+  const { visual } = options;
+  const points: ForgeLandscapeSplinePoint[] = [];
+  const splineSegments: ForgeLandscapeSplineSegment[] = [];
+  const byOwner = new Map<RoadOwner, RoadSegment[]>();
+  for (const segment of segments) {
+    const group = byOwner.get(segment.owner);
+    if (group) group.push(segment);
+    else byOwner.set(segment.owner, [segment]);
+  }
+  // Sorted so the emitted point/segment ids are stable regardless of which
+  // kingdom paved first — the paint result is identical either way, but a stable
+  // spline keeps the dirty-bounds diffing honest.
+  for (const owner of [...byOwner.keys()].sort()) {
+    traceOwnerGroup(byOwner.get(owner)!, owner, options, points, splineSegments);
+  }
+
+  return {
+    id: "rts-roads",
+    name: "RTS Roads",
+    smooth: true,
+    smoothness: visual.cornerRoundness,
+    points,
+    segments: splineSegments,
+  };
+}
+
+/** Trace one owner's cells into `points`/`splineSegments`, painting its layer. */
+function traceOwnerGroup(
+  segments: readonly RoadSegment[],
+  owner: RoadOwner,
+  options: RoadSplineOptions,
+  points: ForgeLandscapeSplinePoint[],
+  splineSegments: ForgeLandscapeSplineSegment[],
+): void {
   const { cellSize, origin, visual } = options;
   const key = (x: number, z: number): string => `${x}:${z}`;
   const byKey = new Map<string, RoadSegment>();
   for (const segment of segments) byKey.set(key(segment.x, segment.z), segment);
 
-  const points: ForgeLandscapeSplinePoint[] = [];
-  const splineSegments: ForgeLandscapeSplineSegment[] = [];
+  /** Exits that stay inside this group; a border exit is not a run to follow. */
+  const exits = (segment: RoadSegment): readonly RoadDirection[] =>
+    segment.connections.filter((dir) => {
+      const step = DIR_STEP[dir];
+      return byKey.has(key(segment.x + step.dx * cellSize, segment.z + step.dz * cellSize));
+    });
+  const isControl = (segment: RoadSegment): boolean => !isStraightThrough(exits(segment));
+
   const pointIdByCell = new Map<string, string>();
-  const paint = { enabled: true, layerId: visual.layerId, strength: visual.strength };
+  const paint = { enabled: true, layerId: options.layerForOwner?.(owner) ?? visual.layerId, strength: visual.strength };
   const local = (cell: RoadCell): Vec3 => [cell.x - origin[0], 0, cell.z - origin[2]];
 
   /** Registers (once) a full-width control point for a cell and returns its id. */
@@ -116,7 +166,7 @@ export function roadGraphToLandscapeSpline(
     const cellKey = key(cell.x, cell.z);
     const existing = pointIdByCell.get(cellKey);
     if (existing) return existing;
-    const id = `n:${cellKey}`;
+    const id = `n:${owner}:${cellKey}`;
     pointIdByCell.set(cellKey, id);
     points.push({ id, position: local(cell), width: visual.width, falloff: visual.falloff });
     return id;
@@ -125,7 +175,7 @@ export function roadGraphToLandscapeSpline(
   /** Registers an interior jitter point (perpendicular offset + width variation). */
   const jitterPoint = (cell: RoadCell, perp: DirStep): string => {
     const cellKey = key(cell.x, cell.z);
-    const id = `j:${cellKey}`;
+    const id = `j:${owner}:${cellKey}`;
     const offset = hashUnit(cell.x, cell.z, 1) * visual.jitter;
     const widthScale = 1 + hashUnit(cell.x, cell.z, 2) * visual.widthVariation;
     points.push({
@@ -139,21 +189,24 @@ export function roadGraphToLandscapeSpline(
 
   let segIndex = 0;
   const addSegment = (startPointId: string, endPointId: string): void => {
-    splineSegments.push({ id: `s${segIndex++}`, startPointId, endPointId, paint: { ...paint } });
+    splineSegments.push({ id: `s:${owner}:${segIndex++}`, startPointId, endPointId, paint: { ...paint } });
   };
 
   const consumed = new Set<string>();
-  const nodes = segments.filter(isControlCell);
+  const nodes = segments.filter(isControl);
 
   for (const node of nodes) {
-    // A lone road cell (no exits) still deserves a dab so no committed cell is
-    // left unpainted; a zero-length self-segment paints a disk of the corridor.
-    if (node.connections.length === 0) {
+    const nodeExits = exits(node);
+    // A lone road cell (no exits *in this group*) still deserves a dab so no
+    // committed cell is left unpainted; a zero-length self-segment paints a disk
+    // of the corridor. A border cell whose only neighbours are the opponent's
+    // lands here too, which is exactly right — its own side ends at the line.
+    if (nodeExits.length === 0) {
       const id = nodePoint(node);
       addSegment(id, id);
       continue;
     }
-    for (const dir of node.connections) {
+    for (const dir of nodeExits) {
       const halfEdge = `${node.x}:${node.z}|${dir}`;
       if (consumed.has(halfEdge)) continue;
       // Walk the straight run in `dir` until the next control cell. Every interior
@@ -167,14 +220,14 @@ export function roadGraphToLandscapeSpline(
         const step = DIR_STEP[d];
         const next = byKey.get(key(cur.x + step.dx * cellSize, cur.z + step.dz * cellSize));
         if (!next) break;
-        if (isControlCell(next)) {
+        if (isControl(next)) {
           end = next;
           arriveDir = d;
           break;
         }
         interior.push(next);
         const back = OPPOSITE[d];
-        const forward = next.connections.find((c) => c !== back);
+        const forward = exits(next).find((c) => c !== back);
         if (!forward) break;
         cur = next;
         d = forward;
@@ -203,15 +256,6 @@ export function roadGraphToLandscapeSpline(
       addSegment(prevId, endId);
     }
   }
-
-  return {
-    id: "rts-roads",
-    name: "RTS Roads",
-    smooth: true,
-    smoothness: visual.cornerRoundness,
-    points,
-    segments: splineSegments,
-  };
 }
 
 /** A standing building's ground footprint, in world XZ (centre + full extents). */
@@ -493,10 +537,16 @@ export class RoadTerrainPainter {
   private readonly surface: RoadPaintSurface;
   private readonly foundationSurface: StructurePadTerrainSurface;
   private lastVersion = -1;
+  /** Ownership generation the last repaint was built for; borders move on their own. */
+  private lastOwnershipVersion = -1;
   /** Set by every input change; cleared by the {@link sync} that consumes it. */
   private dirty = true;
-  /** The paint layer roads currently blend toward; changes with age (Faz 5). */
-  private activeLayerId: string;
+  /**
+   * The paint layer each kingdom's roads blend toward; changes with that
+   * kingdom's age (Faz 5). Ground nobody holds keeps the base layer, so an open
+   * haul road stays a dirt track no matter who is in which age.
+   */
+  private readonly layerByOwner = new Map<RoadOwner, string>();
   /** Ground pads of the currently standing buildings, in world XZ. */
   private pads: readonly StructurePad[] = [];
   /** Last building revision the pads were rebuilt for; `-1` means "never". */
@@ -511,18 +561,23 @@ export class RoadTerrainPainter {
   ) {
     this.surface = new RoadPaintSurface(target.data);
     this.foundationSurface = new StructurePadTerrainSurface(target.data);
-    this.activeLayerId = visual.layerId;
   }
 
   /**
-   * Switch the layer roads paint into (e.g. age promotion dirt→cobblestone). Only
-   * forces a repaint when it actually changes — the caller drives the repaint by
-   * calling {@link sync} next, and the dirty flag guarantees it runs.
+   * Switch the layer *one kingdom's* roads paint into (e.g. age promotion
+   * dirt→cobblestone). Only forces a repaint when it actually changes — the
+   * caller drives the repaint by calling {@link sync} next, and the dirty flag
+   * guarantees it runs.
    */
-  setLayer(layerId: string): void {
-    if (layerId === this.activeLayerId) return;
-    this.activeLayerId = layerId;
+  setLayer(owner: RoadOwner, layerId: string): void {
+    if (this.layerFor(owner) === layerId) return;
+    this.layerByOwner.set(owner, layerId);
     this.dirty = true;
+  }
+
+  /** A kingdom's current road layer; the base layer until it is given one. */
+  private layerFor(owner: RoadOwner): string {
+    return this.layerByOwner.get(owner) ?? this.visual.layerId;
   }
 
   /**
@@ -543,10 +598,17 @@ export class RoadTerrainPainter {
     return this.lastPaintSnapshot;
   }
 
-  /** Repaint the terrain for the current network, unless nothing has changed. */
-  sync(segments: readonly RoadSegment[], version: number): void {
-    if (version !== this.lastVersion) {
+  /**
+   * Repaint the terrain for the current network, unless nothing has changed.
+   *
+   * `ownershipVersion` is a second staleness input, not a nicety: a border that
+   * moves repaints a road nobody touched — the stretch that just fell inside a
+   * kingdom's control takes that kingdom's age layer.
+   */
+  sync(segments: readonly RoadSegment[], version: number, ownershipVersion = 0): void {
+    if (version !== this.lastVersion || ownershipVersion !== this.lastOwnershipVersion) {
       this.lastVersion = version;
+      this.lastOwnershipVersion = ownershipVersion;
       this.dirty = true;
     }
     if (!this.dirty) return;
@@ -555,7 +617,8 @@ export class RoadTerrainPainter {
     const spline = roadGraphToLandscapeSpline(segments, {
       cellSize: this.cellSize,
       origin: this.target.position,
-      visual: { ...this.visual, layerId: this.activeLayerId },
+      visual: this.visual,
+      layerForOwner: (owner) => this.layerFor(owner),
     });
     const rects = structurePadsToRectPaints(this.pads, this.target.position, this.padVisual);
     const foundations = structurePadsToRectDeforms(this.pads, this.target.position, this.padVisual);
@@ -576,10 +639,11 @@ export class RoadTerrainPainter {
   /** Drop all road/pad paint back to the mount-time snapshot (match restart/dispose). */
   reset(): void {
     this.lastVersion = -1;
+    this.lastOwnershipVersion = -1;
     this.padRevision = -1;
     this.pads = [];
     this.dirty = true;
-    this.activeLayerId = this.visual.layerId;
+    this.layerByOwner.clear();
     const startedAt = paintNow();
     const dirty = unionBounds(this.surface.reset(), this.foundationSurface.reset());
     this.refreshGeometry(dirty);
@@ -599,7 +663,9 @@ export class RoadTerrainPainter {
       this.target.data,
       dirty,
       "lit",
-      this.activeLayerId,
+      // Only the weight-debug view modes read this; "lit" ignores it, and there
+      // is no single active layer once each kingdom paints its own.
+      this.visual.layerId,
       this.target.layerColors,
     );
   }

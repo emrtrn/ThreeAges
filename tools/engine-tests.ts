@@ -21609,7 +21609,7 @@ check("roadGraphToLandscapeSpline keeps an L corner as a shared control point", 
   const spline = roadGraphToLandscapeSpline(roads.all(), ROAD_PAINT_OPTS);
   assert.equal(spline.points.length, 3, "two ends + the corner");
   assert.equal(spline.segments.length, 2);
-  const cornerId = `n:0:0`;
+  const cornerId = `n:neutral:0:0`;
   assert.ok(spline.points.some((p) => p.id === cornerId), "corner cell becomes a control point");
   assert.ok(spline.segments.every((s) => s.startPointId === cornerId || s.endPointId === cornerId));
 });
@@ -21620,7 +21620,7 @@ check("roadGraphToLandscapeSpline shares one point across a T junction", () => {
     [{ x: 0, z: 0 }, { x: 0, z: 4 }],
   ]);
   const spline = roadGraphToLandscapeSpline(roads.all(), ROAD_PAINT_OPTS);
-  const junctionId = `n:0:0`;
+  const junctionId = `n:neutral:0:0`;
   const touching = spline.segments.filter((s) => s.startPointId === junctionId || s.endPointId === junctionId);
   assert.equal(touching.length, 3, "three arms meet at the junction point");
   assert.equal(new Set(spline.points.map((p) => p.id)).size, spline.points.length, "point ids are unique");
@@ -42243,6 +42243,133 @@ check("RTS auto-connect paves a free access road from a building placed short of
     null,
     "maxNewCells of 0 disables the feature",
   );
+});
+
+/**
+ * Ground ownership split down the z axis: everything at x < 0 is the player's,
+ * everything at x > 0 the enemy's, and the x = 0 column is unclaimed. Enough to
+ * stand a border in the middle of a road grid without a TerritoryControlSystem
+ * (which needs three.js).
+ */
+function splitOwnership(version = 1) {
+  return {
+    version,
+    ownerAt: (x: number): "player" | "enemy" | "neutral" => (x < 0 ? "player" : x > 0 ? "enemy" : "neutral"),
+  };
+}
+
+check("RTS roads belong to the ground they cross, so two kingdoms keep two networks", () => {
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const roads = new RoadGraph(balance, splitOwnership());
+  // One continuous paved line straight across the border.
+  const spine = roads.plan({ x: -8, z: 0 }, { x: 8, z: 0 }, []);
+  assert.ok(spine, "paving is planned without a perspective, as the map author would");
+  roads.commit(spine);
+
+  assert.equal(roads.ownerAt({ x: -8, z: 0 }), "player", "ground west of the line is the player's");
+  assert.equal(roads.ownerAt({ x: 8, z: 0 }), "enemy", "ground east of it is the enemy's");
+  assert.equal(roads.ownerAt({ x: 0, z: 0 }), "neutral", "the seam belongs to nobody");
+
+  // The cells are physically adjacent, so an ownership-blind read still sees one
+  // network — that is the pre-existing answer and the one debug views want.
+  assert.equal(roads.components().length, 1, "physically the pavement is continuous");
+  assert.equal(roads.connected({ x: -8, z: 0 }, { x: 8, z: 0 }), true);
+
+  // Asked as either kingdom, the far side is unreachable: own and unclaimed
+  // ground is passable, the opponent's is not.
+  assert.equal(roads.connected({ x: -8, z: 0 }, { x: 8, z: 0 }, "player"), false,
+    "the player cannot travel onto enemy-held pavement");
+  assert.equal(roads.connected({ x: 8, z: 0 }, { x: -8, z: 0 }, "enemy"), false,
+    "and the enemy cannot travel onto the player's");
+  assert.equal(roads.route({ x: -8, z: 0 }, { x: 8, z: 0 }, "player"), null);
+  assert.ok(roads.route({ x: -8, z: 0 }, { x: 0, z: 0 }, "player"), "unclaimed ground stays usable by both");
+  assert.ok(roads.route({ x: 8, z: 0 }, { x: 0, z: 0 }, "enemy"), "which is what keeps a haul road to a trade site alive");
+
+  // Each side sees only the stretch it may use, as one island of its own.
+  const playerCells = roads.components("player").flatMap((component) => component.cells);
+  assert.ok(playerCells.every((cell) => cell.x <= 0), "the player's network stops at the seam");
+  assert.ok(roads.components("enemy").flatMap((component) => component.cells).every((cell) => cell.x >= 0));
+
+  // And a route may not be *planned* through ground its owner does not hold,
+  // which is what stops a new road welding the two networks together.
+  assert.equal(roads.plan({ x: -8, z: 4 }, { x: 8, z: 4 }, [], "player"), null,
+    "the player cannot pave across the border");
+  assert.ok(roads.plan({ x: -8, z: 4 }, { x: 0, z: 4 }, [], "player"), "but may pave up to it");
+});
+
+check("RTS auto-connect joins its own network, never the neighbour's road across the border", () => {
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const roads = new RoadGraph(balance, splitOwnership());
+  // The enemy's spine runs down its own side, two cells east of the seam.
+  const enemySpine = roads.plan({ x: 4, z: -8 }, { x: 4, z: 8 }, []);
+  assert.ok(enemySpine);
+  roads.commit(enemySpine);
+
+  // The player drops a 6x6 building hard against the border. The enemy road is
+  // the nearest pavement by a wide margin — and must still be refused.
+  const footprint = { x: -2, z: 0, width: 6, depth: 6 };
+  const router = (start: RoadCell, end: RoadCell) => roads.plan(start, end, [], "player");
+  assert.equal(
+    planAutoRoadConnection(roads, footprint, router, { maxNewCells: 6, owner: "player" }),
+    null,
+    "with no road of its own to reach, the building simply stays unlinked",
+  );
+
+  // Give the player a spine of its own, further away than the enemy's.
+  const playerSpine = roads.plan({ x: -10, z: -8 }, { x: -10, z: 8 }, []);
+  assert.ok(playerSpine);
+  roads.commit(playerSpine);
+  const plan = planAutoRoadConnection(roads, footprint, router, { maxNewCells: 8, owner: "player" });
+  assert.ok(plan, "the farther own-side spine is the one it connects to");
+  assert.ok(plan.cells.every((cell) => cell.x <= 0), "no cell of the access road lands on enemy ground");
+  roads.commit(plan);
+  assert.equal(
+    roads.connected({ x: -10, z: 0 }, { x: 4, z: 0 }, "player"),
+    false,
+    "the two settlements' networks stay separate after the building lands",
+  );
+});
+
+check("RTS road paint takes each kingdom's own age layer, not whoever aged up last", () => {
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const ageLayers = balance.visual.ageLayers ?? assert.fail("road visual must map ages to paint layers");
+  const settlementLayer = ageLayers.settlement ?? assert.fail("settlement road layer missing");
+  const townLayer = ageLayers.town ?? assert.fail("town road layer missing");
+  assert.notEqual(settlementLayer, townLayer, "the ages are meant to look different");
+
+  const roads = new RoadGraph(balance, splitOwnership());
+  const spine = roads.plan({ x: -8, z: 0 }, { x: 8, z: 0 }, []);
+  assert.ok(spine);
+  roads.commit(spine);
+
+  // Only the player has reached the Town age; the enemy is still a settlement.
+  const layerFor = (owner: string): string => (owner === "player" ? townLayer : settlementLayer);
+  const spline = roadGraphToLandscapeSpline(roads.all(), {
+    cellSize: balance.cellSize,
+    origin: [0, 0, 0] as [number, number, number],
+    visual: balance.visual,
+    layerForOwner: layerFor,
+  });
+
+  const pointById = new Map(spline.points.map((point) => [point.id, point]));
+  const layersByOwner = new Map<string, Set<string>>();
+  for (const segment of spline.segments) {
+    const start = pointById.get(segment.startPointId) ?? assert.fail("segment references a missing point");
+    const owner = roads.ownerAt({ x: start.position[0], z: start.position[2] });
+    const seen = layersByOwner.get(owner) ?? new Set<string>();
+    seen.add(segment.paint?.layerId ?? "");
+    layersByOwner.set(owner, seen);
+  }
+  assert.deepEqual([...layersByOwner.get("player") ?? []], [townLayer], "the player's stretch is cobbled");
+  assert.deepEqual([...layersByOwner.get("enemy") ?? []], [settlementLayer], "the enemy's stays dirt");
+  assert.deepEqual([...layersByOwner.get("neutral") ?? []], [settlementLayer],
+    "and unclaimed ground keeps the base layer");
 });
 
 check("RTS command-centre road rings form the only active logistics network", () => {

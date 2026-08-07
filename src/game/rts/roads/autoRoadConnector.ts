@@ -14,7 +14,8 @@
  * {@link RoadConstructionService.commitFree}. Kept free of three.js so it runs
  * under the engine test harness.
  */
-import { roadCellTouchingFootprint } from "../economy/depotLogisticsSystem";
+import { roadCellsTouchingFootprint } from "../economy/depotLogisticsSystem";
+import type { UnitOwner } from "../units/unit";
 import { ROAD_TOUCH_EPSILON, roadCellTouchesFootprint, roadTouchLines } from "./roadFootprintTouch";
 import type { RoadCell, RoadGraph, RoadPlan } from "./roadGraph";
 
@@ -28,6 +29,13 @@ export interface AutoRoadFootprint {
 export interface AutoRoadOptions {
   /** Reject a connection needing more than this many new road cells (range cap). */
   readonly maxNewCells: number;
+  /**
+   * Who is connecting. Without it the search is ownership-blind (the isolated
+   * harnesses); with it only the builder's own and unclaimed road cells are
+   * candidates, so a building dropped along a border joins its own network
+   * rather than welding itself onto the neighbour's.
+   */
+  readonly owner?: UnitOwner | undefined;
 }
 
 /**
@@ -56,10 +64,11 @@ export function planAutoRoadConnection(
   if (options.maxNewCells <= 0) return null;
   // Already touching the network: the adjacent placement that has always worked
   // needs no help, and drawing a zero-length road would only churn the graph.
-  if (roadCellTouchingFootprint(roads, footprint.x, footprint.z, footprint.width, footprint.depth)) {
-    return null;
-  }
-  const target = nearestRoadCell(roads, footprint);
+  // A neighbour's road running past the wall does not count as touching "the
+  // network" — that reading is what used to fuse two settlements on contact.
+  const touching = roadCellsTouchingFootprint(roads, footprint.x, footprint.z, footprint.width, footprint.depth);
+  if (touching.some((cell) => roads.passable(cell, options.owner))) return null;
+  const target = nearestRoadCell(roads, footprint, options.owner);
   if (!target) return null;
   const existing = new Set(roads.all().map((cell) => key(cell)));
   // Preferred shape: a straight stem out of the centre of the face pointing at
@@ -140,13 +149,18 @@ function key(cell: RoadCell): string {
   return `${cell.x}:${cell.z}`;
 }
 
-/** Nearest existing road tile by edge-distance to the footprint, or null when none. */
-function nearestRoadCell(roads: RoadGraph, footprint: AutoRoadFootprint): RoadCell | null {
+/**
+ * Nearest *usable* road tile by edge-distance to the footprint, or null when
+ * none. A tile on the opponent's ground is not a candidate however close it is:
+ * the whole point of the connection is to join a network this owner may use.
+ */
+function nearestRoadCell(roads: RoadGraph, footprint: AutoRoadFootprint, owner?: UnitOwner): RoadCell | null {
   const halfWidth = footprint.width / 2;
   const halfDepth = footprint.depth / 2;
   let best: RoadCell | null = null;
   let bestDistance = Infinity;
   for (const cell of roads.all()) {
+    if (!roads.passable(cell, owner)) continue;
     const distance = Math.hypot(
       Math.max(0, Math.abs(cell.x - footprint.x) - halfWidth),
       Math.max(0, Math.abs(cell.z - footprint.z) - halfDepth),

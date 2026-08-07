@@ -213,11 +213,14 @@ export class RoadPlacementSystem {
     this.previewEnd = this.roads.snapCell(point);
     if (!this.start) {
       this.plan = null;
-      this.reason = this.construction.plan(point, point) ? "choose-start" : "invalid-route";
+      // Previews are asked from this tool's own kingdom, the same perspective
+      // `build` commits with, so a route onto ground it does not hold reads red
+      // in the preview instead of being refused only at the click.
+      this.reason = this.construction.plan(point, point, this.owner) ? "choose-start" : "invalid-route";
       this.renderPreview(null, this.reason === "choose-start" ? PREVIEW_COLOR : INVALID_COLOR);
       return this.state();
     }
-    this.plan = this.construction.plan(this.start, point);
+    this.plan = this.construction.plan(this.start, point, this.owner);
     this.reason = this.plan ? "choose-end" : "invalid-route";
     this.renderPreview(this.plan, this.plan ? PREVIEW_COLOR : INVALID_COLOR);
     return this.state();
@@ -230,7 +233,7 @@ export class RoadPlacementSystem {
     if (!point) return this.state();
     this.previewEnd = this.roads.snapCell(point);
     if (!this.start) {
-      const startPlan = this.construction.plan(point, point);
+      const startPlan = this.construction.plan(point, point, this.owner);
       if (!startPlan) {
         this.reason = "invalid-route";
         this.syncMarkers();

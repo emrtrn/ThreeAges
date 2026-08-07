@@ -48,6 +48,13 @@ const COMMAND_KEYS = {
   KeyI: "selectIdleWorkers",
   /** Send the selected idle workers back into automatic staffing. */
   KeyR: "assignIdleWorkers",
+  /**
+   * Snap the camera back to the player's own centre. Home rather than the letter
+   * the panel sits under: every free letter near the build controls is one hand
+   * position away from the pan keys, and this is the one command a player fires
+   * *because* they are lost — it has to be a key they can find without looking.
+   */
+  Home: "focusCenter",
   /** Faz F build-palette visibility and its four authored category tabs. */
   KeyB: "toggleBuildPalette",
   Digit1: "buildCategory1",

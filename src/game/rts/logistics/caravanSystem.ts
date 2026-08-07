@@ -75,7 +75,10 @@ export class Caravan implements CombatTarget {
     private readonly roads: RoadGraph,
     carryCapacity: number,
   ) {
-    const route = roads.route(source, destination);
+    // Every route this animal ever walks is asked from its own kingdom's side:
+    // a donkey travels its owner's road network, not whatever happens to be
+    // paved between the two ends.
+    const route = roads.route(source, destination, owner);
     if (!route) throw new Error("A linked caravan requires a committed route");
     this.route = route;
     this.routeState = startCaravanRoute(route);
@@ -153,7 +156,7 @@ export class Caravan implements CombatTarget {
     this.returningHome = true;
     if (this.phase === "loading") return;
     const anchor = this.route[this.routeState.waypointIndex];
-    const route = anchor ? this.roads.route(anchor, source) : null;
+    const route = anchor ? this.roads.route(anchor, source, this.owner) : null;
     if (!route) {
       // The cut may be directly beneath the animal. It cannot cross bare ground;
       // retire this presentation and let the still-buffered producer respawn it
@@ -216,7 +219,7 @@ export class Caravan implements CombatTarget {
   }
 
   private beginTravel(phase: Extract<CaravanPhase, "outbound" | "inbound">, from: RoadCell, to: RoadCell): void {
-    const route = this.roads.route(from, to);
+    const route = this.roads.route(from, to, this.owner);
     // The producer was linked when this tick began, but topology can change in
     // between snapshots. Retain the current endpoint instead of crossing bare
     // ground; Faz 5 gives this interruption its player-facing recovery rule.
@@ -263,7 +266,7 @@ export class CaravanSystem {
     }
     for (const { lane, provider } of lanes) {
       const destination = lane.destination;
-      if (!destination || !this.roads.route(lane.source, destination)) continue;
+      if (!destination || !this.roads.route(lane.source, destination, lane.owner)) continue;
       // Loads already committed on this lane: an outbound animal is carrying
       // goods its source has not written off yet, so the next one to load must
       // not be told the same goods are available (see

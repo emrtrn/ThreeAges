@@ -8,6 +8,7 @@
  */
 import type { BuildingBalance } from "../../data/gameDataTypes";
 import type { RoadConstructionService } from "../roads/roadConstructionService";
+import type { UnitOwner } from "../units/unit";
 import type { RtsMapPoint } from "../world/rtsMapBlockout";
 import type { AiBuildSite } from "./aiSiteProvider";
 
@@ -22,6 +23,8 @@ export function proceduralRoadSiteFailure(
   buildings: BuildingBalance,
   roads: RoadConstructionService,
   baseRoute: readonly RtsMapPoint[] = [],
+  /** Whose feasibility this is. Omitted, the preflight stays ownership-blind. */
+  owner?: UnitOwner,
 ): string | null {
   if (site.source !== "procedural") return null;
   const stats = buildings[site.buildingId];
@@ -32,8 +35,9 @@ export function proceduralRoadSiteFailure(
     width: stats.footprint.width,
     depth: stats.footprint.depth,
   };
-  if (!roads.touchesFootprint(footprint) && !roads.planAccessRoad(footprint)) return AI_ROAD_UNREACHABLE;
-  return baseRouteRemainsReachable(roads, footprint, baseRoute) ? null : AI_ROAD_UNREACHABLE;
+  if (!roads.touchesFootprint(footprint, owner)
+    && !roads.planAccessRoad(footprint, undefined, owner)) return AI_ROAD_UNREACHABLE;
+  return baseRouteRemainsReachable(roads, footprint, baseRoute, owner) ? null : AI_ROAD_UNREACHABLE;
 }
 
 /**
@@ -49,6 +53,8 @@ export function proceduralDepotRoadRank(
   buildings: BuildingBalance,
   roads: RoadConstructionService,
   plannedSites: readonly AiBuildSite[],
+  /** Whose spur is being costed. Omitted, the ranking stays ownership-blind. */
+  owner?: UnitOwner,
 ): number | null {
   if (site.source !== "procedural" || site.buildingId !== "depot") return null;
   const depot = buildings.depot;
@@ -58,7 +64,7 @@ export function proceduralDepotRoadRank(
     z: site.z,
     width: depot.footprint.width,
     depth: depot.footprint.depth,
-  });
+  }, undefined, owner);
   if (!access) return null;
   const producerTypes = [...new Set(plannedSites
     .filter((candidate) => candidate.source === "procedural" && buildings[candidate.buildingId]?.economy)
@@ -84,6 +90,7 @@ function baseRouteRemainsReachable(
   roads: RoadConstructionService,
   footprint: Readonly<{ x: number; z: number; width: number; depth: number }>,
   baseRoute: readonly RtsMapPoint[],
+  owner?: UnitOwner,
 ): boolean {
   const blocker = {
     min: [footprint.x - footprint.width / 2, 0, footprint.z - footprint.depth / 2] as [number, number, number],
@@ -92,7 +99,7 @@ function baseRouteRemainsReachable(
   for (let index = 0; index < baseRoute.length - 1; index += 1) {
     const from = baseRoute[index];
     const to = baseRoute[index + 1];
-    if (!from || !to || !roads.planWithAdditionalBlockers(from, to, [blocker])) return false;
+    if (!from || !to || !roads.planWithAdditionalBlockers(from, to, [blocker], owner)) return false;
   }
   return true;
 }

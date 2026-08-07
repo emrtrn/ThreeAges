@@ -4,7 +4,7 @@ import type { PlacedStructureSystem } from "../structures/placedStructureSystem"
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { TerritoryControlSystem } from "../territory/territoryControlSystem";
 import type { UnitOwner } from "../units/unit";
-import { type DepotLogisticsSystem, roadCellTouchingFootprint } from "./depotLogisticsSystem";
+import { type DepotLogisticsSystem, roadLinkCellFor } from "./depotLogisticsSystem";
 import type { LogisticsOccupationSystem } from "./logisticsOccupationSystem";
 
 export type ProducerLogisticsStatus = "outside-control" | "unlinked-road" | "unlinked-depot" | "unlinked-main-network" | "depot-occupied" | "linked";
@@ -55,7 +55,8 @@ export class ProductionLogisticsSystem {
   ) {}
 
   snapshots(): readonly ProducerLogisticsSnapshot[] {
-    const key = `${this.roads.version}:${this.structures.completedVersion}:${this.centers?.version ?? 0}`
+    const key = `${this.roads.version}:${this.roads.ownershipVersion}`
+      + `:${this.structures.completedVersion}:${this.centers?.version ?? 0}`
       + `:${this.occupation?.version ?? 0}:${this.territory?.version ?? 0}`;
     const memo = this.memo;
     if (memo && memo.key === key) return memo.snapshots;
@@ -65,10 +66,6 @@ export class ProductionLogisticsSystem {
   }
 
   private computeSnapshots(): readonly ProducerLogisticsSnapshot[] {
-    const componentByCell = new Map<string, number>();
-    for (const component of this.roads.components()) {
-      for (const cell of component.cells) componentByCell.set(this.key(cell), component.id);
-    }
     const mainComponentByOwner = this.depots.mainComponentIds();
     const localEndpoints = this.localEndpoints();
     // Both of these were re-derived per producer, and neither depends on the
@@ -94,17 +91,22 @@ export class ProductionLogisticsSystem {
           structure.owner, structure.x, structure.z, structure.stats.footprint.width, structure.stats.footprint.depth,
         ) ?? true;
         const localEndpoint = controlled ? this.localEndpointFor(structure, localEndpoints) : null;
-        const roadCell = roadCellTouchingFootprint(
+        // The producer's link is the touching tile *it* may use. A road on the
+        // neighbour's ground running past the wall is not this building's road.
+        const roadCell = roadLinkCellFor(
           this.roads,
+          structure.owner,
           structure.x,
           structure.z,
           structure.stats.footprint.width,
           structure.stats.footprint.depth,
         );
-        const componentId = roadCell ? componentByCell.get(this.key(roadCell)) ?? null : null;
+        const componentId = roadCell
+          ? this.depots.componentIds(structure.owner).get(this.key(roadCell)) ?? null
+          : null;
         const mainComponentId = mainComponentByOwner.get(structure.owner);
         const endpoint = localEndpoint || roadCell === null ? null : endpointsFor(structure.owner)
-          .map((candidate) => ({ candidate, route: this.roads.route(roadCell, candidate.roadCell) }))
+          .map((candidate) => ({ candidate, route: this.roads.route(roadCell, candidate.roadCell, structure.owner) }))
           .filter((candidate): candidate is { candidate: { structureId: number | null; roadCell: RoadCell }; route: readonly RoadCell[] } => candidate.route !== null)
           .sort((a, b) => a.route.length - b.route.length
             || (a.candidate.structureId ?? -1) - (b.candidate.structureId ?? -1))[0]?.candidate ?? null;

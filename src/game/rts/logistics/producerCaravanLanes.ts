@@ -13,7 +13,7 @@
  * producers, and the knowledge of what a producer *is* comes back to the
  * economy's side of the wall.
  */
-import { roadCellTouchingFootprint } from "../economy/depotLogisticsSystem";
+import { roadLinkCellFor } from "../economy/depotLogisticsSystem";
 import type { LogisticsOccupationSystem } from "../economy/logisticsOccupationSystem";
 import type { ProductionLogisticsSystem } from "../economy/productionLogisticsSystem";
 import type { CaravanBalance } from "../../data/gameDataTypes";
@@ -81,11 +81,13 @@ export class ProducerCaravanLanes implements CaravanLaneProvider {
   private destinationFor(owner: UnitOwner, depotStructureId: number | null): RoadCell | null {
     if (depotStructureId !== null && (this.occupation?.isUsable(depotStructureId) ?? true)) {
       const depot = this.structures.all().find((structure) => structure.id === depotStructureId);
-      if (depot) return roadCellTouchingFootprint(this.roads, depot.x, depot.z, depot.stats.footprint.width, depot.stats.footprint.depth);
+      if (depot) {
+        return roadLinkCellFor(this.roads, owner, depot.x, depot.z, depot.stats.footprint.width, depot.stats.footprint.depth);
+      }
     }
     const center = this.centers.get(owner);
     return center
-      ? roadCellTouchingFootprint(this.roads, center.position.x, center.position.z, center.stats.footprint.width, center.stats.footprint.depth)
+      ? roadLinkCellFor(this.roads, owner, center.position.x, center.position.z, center.stats.footprint.width, center.stats.footprint.depth)
       : null;
   }
 }

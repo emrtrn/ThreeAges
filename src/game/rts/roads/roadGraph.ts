@@ -2,15 +2,44 @@
  * Cell-backed road network, deliberately separate from RTS unit navigation.
  * It owns logistics connectivity only; visual placement arrives in the next
  * Phase 4 slice.
+ *
+ * A road cell is not owned by whoever paid for it — it is owned by *the ground it
+ * sits on*. Territory control already answers "whose is this cell" at the very
+ * same 2-unit grid measure the road network snaps to, so ownership needs no
+ * second source of truth and no stored field: it is a query, and it moves on its
+ * own when a kingdom's borders grow or collapse. Ground nobody controls stays
+ * `"neutral"`, which is what keeps a long haul out to a trade site — laid across
+ * open map — usable by the kingdom that built it.
+ *
+ * Every traversal here therefore takes an optional *perspective*: the owner
+ * asking. From owner `O`, cells owned by `O` and neutral cells are passable and
+ * the opponent's are not, so two kingdoms whose roads meet at a border read as
+ * two networks rather than one. Omitting the perspective keeps the old
+ * ownership-blind answer, which is what debug views and isolated harnesses want.
  */
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 
 import type { RoadBalance } from "../../data/gameDataTypes";
+import type { UnitOwner } from "../units/unit";
 import { RTS_WORLD_HALF_EXTENT } from "../world/rtsGround";
 
 export interface RoadCell {
   readonly x: number;
   readonly z: number;
+}
+
+/** Whose ground a road cell stands on; unclaimed ground is public. */
+export type RoadOwner = UnitOwner | "neutral";
+
+/**
+ * The ground-ownership authority a graph reads. `TerritoryControlSystem`
+ * satisfies this structurally; the interface exists so the graph stays
+ * three.js-free (and trivially fakeable under the engine test harness).
+ */
+export interface RoadOwnershipSource {
+  /** Bumped on every ownership recompute; every cached answer keys on it. */
+  readonly version: number;
+  ownerAt(x: number, z: number): RoadOwner;
 }
 
 export type RoadDirection = "north" | "east" | "south" | "west";
@@ -21,6 +50,8 @@ export interface RoadSegment extends RoadCell {
   readonly kind: RoadSegmentKind;
   /** Cardinal exits used by the renderer to shape this road tile. */
   readonly connections: readonly RoadDirection[];
+  /** Ground owner at this cell, re-read live; `"neutral"` without an authority. */
+  readonly owner: RoadOwner;
 }
 
 export interface RoadPlan {
@@ -50,11 +81,19 @@ export class RoadGraph {
    * therefore keyed on the revision alone and simply go stale together the
    * moment a cell is committed or removed.
    */
-  private componentsCache: { revision: number; components: readonly RoadComponent[] } | null = null;
+  private componentsCache = new Map<string, readonly RoadComponent[]>();
+  private componentsCacheRevision = "";
   private readonly routeCache = new Map<string, readonly RoadCell[] | null>();
-  private routeCacheRevision = -1;
+  private routeCacheRevision = "";
 
-  constructor(private readonly balance: RoadBalance) {}
+  constructor(
+    private readonly balance: RoadBalance,
+    /**
+     * Omitted by isolated harnesses, which then see one ownership-blind network —
+     * exactly the behaviour every caller had before ground ownership existed.
+     */
+    private readonly ownership?: RoadOwnershipSource,
+  ) {}
 
   get cellSize(): number {
     return this.balance.cellSize;
@@ -75,19 +114,63 @@ export class RoadGraph {
     return this.revision;
   }
 
+  /**
+   * Staleness key for ownership alone. Borders move without a single cell being
+   * paved, and that changes who may traverse what, so anything memoising a
+   * traversal answer has to watch this alongside {@link version}.
+   */
+  get ownershipVersion(): number {
+    return this.ownership?.version ?? 0;
+  }
+
+  /** Both inputs a cached traversal answer depends on, as one cache generation. */
+  private get stateKey(): string {
+    return `${this.revision}:${this.ownershipVersion}`;
+  }
+
+  /** Ground owner under a cell; `"neutral"` when nobody controls it. */
+  ownerAt(cell: RoadCell): RoadOwner {
+    if (!this.ownership) return "neutral";
+    const snapped = this.snap(cell);
+    return this.ownership.ownerAt(snapped.x, snapped.z);
+  }
+
+  /**
+   * May `perspective` use the ground under this cell? Own and unclaimed ground
+   * yes, the opponent's no. An undefined perspective is the ownership-blind
+   * caller and passes everywhere.
+   *
+   * The parameter is a {@link UnitOwner} rather than a {@link RoadOwner} on
+   * purpose: "neutral" is a property ground can have, never a party that asks,
+   * so a resolved cell owner cannot be handed back in as a perspective by
+   * accident.
+   */
+  passable(cell: RoadCell, perspective?: UnitOwner): boolean {
+    if (perspective === undefined || !this.ownership) return true;
+    const owner = this.ownerAt(cell);
+    return owner === "neutral" || owner === perspective;
+  }
+
   /** Resolve a ground point to the road grid without exposing the grid math to a view. */
   snapCell(point: RoadCell): RoadCell {
     return this.snap(point);
   }
 
-  /** Preview the shortest valid orthogonal route and charge only new cells. */
-  plan(start: RoadCell, end: RoadCell, blockers: readonly NavBlocker[]): RoadPlan | null {
+  /**
+   * Preview the shortest valid orthogonal route and charge only new cells.
+   *
+   * With a perspective, the opponent's ground is as impassable as a blocker: a
+   * kingdom cannot pave through land it does not control, which is what stops a
+   * route from welding itself onto the enemy's network in the first place.
+   */
+  plan(start: RoadCell, end: RoadCell, blockers: readonly NavBlocker[], perspective?: UnitOwner): RoadPlan | null {
     const source = this.snap(start);
     const goal = this.snap(end);
     if (!this.isInside(source) || !this.isInside(goal) || this.isBlocked(source, blockers) || this.isBlocked(goal, blockers)) {
       return null;
     }
-    const route = this.shortestRoute(source, goal, blockers);
+    if (!this.passable(source, perspective) || !this.passable(goal, perspective)) return null;
+    const route = this.shortestRoute(source, goal, blockers, perspective);
     if (!route) return null;
     const newCells = route.filter((cell) => !this.cells.has(this.key(cell)));
     return { cells: route, newCells, woodCost: newCells.length * this.balance.woodCostPerCell };
@@ -123,7 +206,7 @@ export class RoadGraph {
     return [...this.cells.values()]
       .map((cell) => {
         const connections = this.connections(cell);
-        return { ...cell, kind: this.segmentKind(connections), connections };
+        return { ...cell, kind: this.segmentKind(connections), connections, owner: this.ownerAt(cell) };
       })
       .sort((a, b) => a.x - b.x || a.z - b.z);
   }
@@ -180,11 +263,12 @@ export class RoadGraph {
   }
 
   /** True if two road cells share any connected component, including loops. */
-  connected(a: RoadCell, b: RoadCell): boolean {
+  connected(a: RoadCell, b: RoadCell, perspective?: UnitOwner): boolean {
     const start = this.snap(a);
     const goalKey = this.key(this.snap(b));
     const startKey = this.key(start);
     if (!this.cells.has(startKey) || !this.cells.has(goalKey)) return false;
+    if (!this.passable(start, perspective)) return false;
     const visited = new Set<string>([startKey]);
     const queue = [start];
     for (let index = 0; index < queue.length; index += 1) {
@@ -194,6 +278,7 @@ export class RoadGraph {
       for (const neighbor of this.neighbors(current)) {
         const key = this.key(neighbor);
         if (!this.cells.has(key) || visited.has(key)) continue;
+        if (!this.passable(neighbor, perspective)) continue;
         visited.add(key);
         queue.push(neighbor);
       }
@@ -208,20 +293,20 @@ export class RoadGraph {
    * blockers. It is a read-only query for systems that travel on the road
    * network itself, such as a logistics caravan.
    */
-  route(from: RoadCell, to: RoadCell): readonly RoadCell[] | null {
+  route(from: RoadCell, to: RoadCell, perspective?: UnitOwner): readonly RoadCell[] | null {
     const start = this.snap(from);
     const goal = this.snap(to);
     const startKey = this.key(start);
     const goalKey = this.key(goal);
-    if (this.routeCacheRevision !== this.revision) {
+    if (this.routeCacheRevision !== this.stateKey) {
       this.routeCache.clear();
-      this.routeCacheRevision = this.revision;
+      this.routeCacheRevision = this.stateKey;
     }
-    const cacheKey = `${startKey}>${goalKey}`;
+    const cacheKey = `${perspective ?? "*"}|${startKey}>${goalKey}`;
     const cached = this.routeCache.get(cacheKey);
     // `null` is a real answer here (no route), so presence is the test, not truth.
     if (cached !== undefined) return cached;
-    const computed = this.computeRoute(start, startKey, goalKey);
+    const computed = this.computeRoute(start, startKey, goalKey, perspective);
     this.routeCache.set(cacheKey, computed);
     return computed;
   }
@@ -231,8 +316,14 @@ export class RoadGraph {
    * until the topology changes, so it is `readonly` in earnest — a caravan that
    * spliced its own route would be editing everyone's.
    */
-  private computeRoute(start: RoadCell, startKey: string, goalKey: string): readonly RoadCell[] | null {
+  private computeRoute(
+    start: RoadCell,
+    startKey: string,
+    goalKey: string,
+    perspective?: UnitOwner,
+  ): readonly RoadCell[] | null {
     if (!this.cells.has(startKey) || !this.cells.has(goalKey)) return null;
+    if (!this.passable(start, perspective)) return null;
 
     const frontier = [this.node(start)];
     const cameFrom = new Map<string, string | null>([[startKey, null]]);
@@ -246,6 +337,7 @@ export class RoadGraph {
       for (const neighbor of this.neighbors(current)) {
         const node = this.node(neighbor);
         if (!this.cells.has(node.key) || cameFrom.has(node.key)) continue;
+        if (!this.passable(node, perspective)) continue;
         cameFrom.set(node.key, current.key);
         frontier.push(node);
       }
@@ -253,21 +345,34 @@ export class RoadGraph {
     return null;
   }
 
-  /** Connected road islands, deterministically ordered for debug and logistics. */
-  components(): readonly RoadComponent[] {
-    const cache = this.componentsCache;
-    if (cache && cache.revision === this.revision) return cache.components;
-    const components = this.computeComponents();
-    this.componentsCache = { revision: this.revision, components };
+  /**
+   * Connected road islands as `perspective` sees them, deterministically ordered
+   * for debug and logistics. Cells the perspective may not use are left out
+   * entirely rather than merely made impassable, so a component id it gets back
+   * never covers ground it does not hold.
+   */
+  components(perspective?: UnitOwner): readonly RoadComponent[] {
+    if (this.componentsCacheRevision !== this.stateKey) {
+      this.componentsCache.clear();
+      this.componentsCacheRevision = this.stateKey;
+    }
+    const cacheKey = perspective ?? "*";
+    const cached = this.componentsCache.get(cacheKey);
+    if (cached) return cached;
+    const components = this.computeComponents(perspective);
+    this.componentsCache.set(cacheKey, components);
     return components;
   }
 
-  private computeComponents(): readonly RoadComponent[] {
+  private computeComponents(perspective?: UnitOwner): readonly RoadComponent[] {
     // Seeds are taken in ascending key order. That is exactly what repeatedly
     // picking the smallest *remaining* key did, so component ids are unchanged —
     // but the set is sorted once here instead of once per island, which is what
     // made this quadratic on a network of any size.
-    const orderedKeys = [...this.cells.keys()].sort();
+    const orderedKeys = [...this.cells.entries()]
+      .filter(([, cell]) => this.passable(cell, perspective))
+      .map(([key]) => key)
+      .sort();
     const unvisited = new Set(orderedKeys);
     const components: RoadComponent[] = [];
     for (const startKey of orderedKeys) {
@@ -305,7 +410,12 @@ export class RoadGraph {
     return count;
   }
 
-  private shortestRoute(start: RoadCell, goal: RoadCell, blockers: readonly NavBlocker[]): RoadCell[] | null {
+  private shortestRoute(
+    start: RoadCell,
+    goal: RoadCell,
+    blockers: readonly NavBlocker[],
+    perspective?: UnitOwner,
+  ): RoadCell[] | null {
     const startNode = this.node(start);
     const goalKey = this.key(goal);
     const frontier: RoadNode[] = [startNode];
@@ -318,6 +428,7 @@ export class RoadGraph {
       for (const neighbor of this.neighbors(current)) {
         const node = this.node(neighbor);
         if (!this.isInside(node) || this.isBlocked(node, blockers) || cameFrom.has(node.key)) continue;
+        if (!this.passable(node, perspective)) continue;
         cameFrom.set(node.key, current.key);
         frontier.push(node);
       }

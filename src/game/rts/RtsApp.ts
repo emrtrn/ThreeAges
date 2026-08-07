@@ -226,7 +226,7 @@ import { type ProducerLogisticsStatus, ProductionLogisticsSystem } from "./econo
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
 import { ResourceCapacitySystem } from "./economy/resourceCapacitySystem";
-import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
+import { roadLinkCellFor } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { StructureRepairSystem } from "./structures/structureRepairSystem";
 import type { HealthComponent } from "./units/health";
@@ -1111,7 +1111,9 @@ export class RtsApp {
     this.canvas.dataset.rtsContentPlaceholders = "0";
     this.buildingVisuals = new RtsBuildingVisuals(this.actorVisuals);
     this.mapArt = new RtsMapArt(this.renderer);
-    this.roads = new RoadGraph(this.options.roadBalance);
+    // A road belongs to whoever holds the ground it runs over, so the graph reads
+    // ownership straight off territory control rather than storing a payer.
+    this.roads = new RoadGraph(this.options.roadBalance, this.territory);
     this.roadDebugView = new RoadDebugView(this.roads);
     this.roadOverlayVisible = Boolean(this.options.debug);
     this.roadDebugView.root.visible = this.roadOverlayVisible;
@@ -1588,12 +1590,14 @@ export class RtsApp {
         this.options.buildingBalance,
         this.roadConstruction,
         this.spatial.enemyBaseRoute,
+        AI_OWNER,
       ),
       baseSiteRanker: (site) => (proceduralDepotRoadRank(
         site,
         this.options.buildingBalance,
         this.roadConstruction,
         siteProvider.plannedSites(),
+        AI_OWNER,
       ) ?? 0) + this.settlementThreatPenalty(site.x, site.z),
       baseRoute: this.spatial.enemyBaseRoute,
       expansions: this.spatial.enemyExpansions,
@@ -3354,6 +3358,7 @@ export class RtsApp {
       if (this.debugTableModal?.open) this.closeDebugTable();
       else this.togglePause();
     }
+    if (this.input.consumeCommand("focusCenter")) this.focusCameraOnCenter();
     if (this.input.consumeCommand("toggleBuildPalette")) this.buildPalette.toggleVisible();
     if (this.input.consumeCommand("buildCategory1")) this.buildPalette.selectCategoryByIndex(0);
     if (this.input.consumeCommand("buildCategory2")) this.buildPalette.selectCategoryByIndex(1);
@@ -3367,6 +3372,21 @@ export class RtsApp {
     if (!this.input.consumeCommand("attackMove")) return;
     const pointer = this.input.pointerPosition();
     if (pointer) this.commands.issueAttackMoveAt(pointer.x, pointer.y);
+  }
+
+  /**
+   * Snap the camera focus onto the player's own centre (Home).
+   *
+   * Focus only — zoom is left where the player put it, because this answers
+   * "where am I" and not "how close am I". A destroyed centre falls back to the
+   * opening focus rather than doing nothing: the key is pressed by somebody who
+   * is lost, and a silent no-op at the exact moment the base burned down reads
+   * as a broken key rather than as an answer.
+   */
+  private focusCameraOnCenter(): void {
+    const center = this.centers.get(PLAYER_OWNER);
+    if (center) this.cameraController.setFocus(center.position.x, center.position.z);
+    else this.cameraController.setFocus(this.openingFocus.x, this.openingFocus.z);
   }
 
   /**
@@ -3465,16 +3485,18 @@ export class RtsApp {
       if (event.type === "completed") {
         for (const structure of event.structures) this.applyUpgradedVisual(structure);
         this.territory.refresh();
-        if (isPlayer) {
-          this.placement.refreshPreview();
-          // Faz 5: promote the road paint to the new age's layer (dirt→cobblestone
-          // at Town) in one repaint. Topology/logistics are untouched — only the
-          // painted layer changes; a no-op when the age's layer is unchanged.
-          if (this.roadPainter) {
-            this.roadPainter.setLayer(this.roadLayerForAge(event.age));
-            this.syncRoadVisuals();
-          }
+        // Faz 5: promote the road paint to the new age's layer (dirt→cobblestone
+        // at Town) in one repaint. Topology/logistics are untouched — only the
+        // painted layer changes; a no-op when the age's layer is unchanged.
+        //
+        // Driven for *whichever* kingdom aged up, not only the player's: roads
+        // take the age of the kingdom whose ground they cross, so promoting them
+        // all on the player's transition is what used to cobble the enemy's.
+        if (this.roadPainter) {
+          this.roadPainter.setLayer(event.owner, this.roadLayerForAge(event.age));
+          this.syncRoadVisuals();
         }
+        if (isPlayer) this.placement.refreshPreview();
       }
       // §51 wants the AI's age-up called out; only the Town event marks it, since
       // a level-up is not a milestone the player needs warning about.
@@ -4229,8 +4251,11 @@ export class RtsApp {
     );
     this.roadPlacement.setPaintedMode(true);
     this.canvas.dataset.rtsRoads = "painted";
-    // Start on the layer for the player's current age (settlement → dirt).
-    this.roadPainter.setLayer(this.roadLayerForAge(this.ageOf(PLAYER_OWNER)));
+    // Start each kingdom on the layer for its own current age (settlement →
+    // dirt), which also covers a resumed match where one side is already Town.
+    for (const center of this.centers.all()) {
+      this.roadPainter.setLayer(center.owner, this.roadLayerForAge(this.ageOf(center.owner)));
+    }
     // Centres already stand when the terrain mounts, so their pads come with the
     // first paint rather than one building later.
     this.syncStructurePads();
@@ -4312,7 +4337,7 @@ export class RtsApp {
         groundY: structure.groundY,
       })),
     ]);
-    painter.sync(this.roads.all(), this.roads.version);
+    painter.sync(this.roads.all(), this.roads.version, this.roads.ownershipVersion);
   }
 
   /**
@@ -4354,7 +4379,7 @@ export class RtsApp {
    */
   private syncRoadVisuals(): void {
     this.roadPlacement.renderNetwork();
-    this.roadPainter?.sync(this.roads.all(), this.roads.version);
+    this.roadPainter?.sync(this.roads.all(), this.roads.version, this.roads.ownershipVersion);
   }
 
   /** Defer a road commit's presentation effects while its structure pad is prepared. */
@@ -4675,13 +4700,14 @@ export class RtsApp {
    * be placeable at all.
    */
   private outpostConnectedToMainRoad(structure: PlacedStructure): boolean {
-    const outpostRoad = roadCellTouchingFootprint(
-      this.roads, structure.x, structure.z, structure.stats.footprint.width, structure.stats.footprint.depth,
+    const outpostRoad = roadLinkCellFor(
+      this.roads, structure.owner, structure.x, structure.z,
+      structure.stats.footprint.width, structure.stats.footprint.depth,
     );
     const center = this.centers.get(structure.owner);
-    const centerRoad = center && roadCellTouchingFootprint(this.roads, center.position.x, center.position.z, 8, 8);
+    const centerRoad = center && roadLinkCellFor(this.roads, structure.owner, center.position.x, center.position.z, 8, 8);
     if (!outpostRoad || !centerRoad) return false;
-    return this.roads.connected(outpostRoad, centerRoad);
+    return this.roads.connected(outpostRoad, centerRoad, structure.owner);
   }
 
   private refreshNavigationBlockers(): void {
@@ -4711,8 +4737,8 @@ export class RtsApp {
         width: structure.stats.footprint.width,
         depth: structure.stats.footprint.depth,
       },
-      (start, end) => this.roadConstruction.plan(start, end),
-      { maxNewCells },
+      (start, end) => this.roadConstruction.plan(start, end, structure.owner),
+      { maxNewCells, owner: structure.owner },
     );
     if (plan) this.roadConstruction.commitFree(plan);
   }

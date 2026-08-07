@@ -169,7 +169,7 @@ export class AiExpansionManager {
       // A segment whose cells all exist costs nothing, so planning it first lets
       // an intact leg be skipped without a commit — and therefore without the
       // territory refresh a commit triggers, which re-scans the whole world grid.
-      const existing = this.roads.plan(from, to);
+      const existing = this.roads.plan(from, to, this.owner);
       if (existing && existing.woodCost === 0) continue;
       const result = this.roads.build(this.owner, from, to);
       if (result.built) continue;
