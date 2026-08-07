@@ -34,7 +34,7 @@ import {
 import { generateLandscapeFoliageSamples } from "@engine/scene/landscapeFoliage";
 import { makeFoliageRng, rollFoliageInstance } from "@engine/scene/foliagePaint";
 import { readRotation } from "@engine/scene/transform";
-import { createLandscapeObject, landscapeLayerAnisotropy, type LandscapeLayerColors, type LandscapeLayerTexture, type LandscapeObject, type LandscapeRenderItem } from "@engine/render-three/landscape";
+import { createLandscapeObject, type LandscapeLayerColors, type LandscapeLayerTexture, type LandscapeObject, type LandscapeRenderItem } from "@engine/render-three/landscape";
 import { createRiverWaterObject, disposeRiverWaterObject, resolveRiverWater, type RiverWaterObjectLike, type RiverWaterRenderItem } from "@engine/render-three/riverWater";
 import { riverWaterReflectionGroupKey } from "@engine/scene/riverWater";
 import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
@@ -384,9 +384,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
       data,
       assetManifest,
       textureLoader!,
-      // Capped here rather than at the declaration above: `maxAnisotropy` is the
-      // renderer's own figure and river water is entitled to all of it.
-      landscapeLayerAnisotropy(maxAnisotropy),
+      maxAnisotropy,
       landscapeLayerTextures,
       warn,
     );

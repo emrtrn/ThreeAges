@@ -100,41 +100,13 @@ export function resolveLandscapeSamplerBudget(maxTextureUnits?: number): Landsca
   const availableTextureUnits = Number.isFinite(maxTextureUnits)
     ? Math.max(0, Math.floor(maxTextureUnits!))
     : null;
-  // ---- GEÇİCİ ÖLÇÜM — GERİ ALINACAK ----------------------------------------
-  // Kaldıraç 1'in tavanını ölçmek için PBR yolu zorla kapatıldı. Bu satır
-  // kalıcı değildir; ölçüm alınınca aşağıdaki gerçek koşula dönülecek.
-  const pbrEnabled = false;
-  // const pbrEnabled = availableTextureUnits === null || availableTextureUnits >= LANDSCAPE_PBR_MIN_TEXTURE_UNITS;
-  // ---- GEÇİCİ ÖLÇÜM SONU ---------------------------------------------------
+  const pbrEnabled = availableTextureUnits === null || availableTextureUnits >= LANDSCAPE_PBR_MIN_TEXTURE_UNITS;
   return {
     availableTextureUnits,
     requiredTextureUnits: LANDSCAPE_PBR_TEXTURE_SAMPLERS,
     pbrEnabled,
     fallback: pbrEnabled ? "none" : "albedo-only",
   };
-}
-
-/**
- * Anisotropy ceiling for landscape layer textures, deliberately far below what
- * a desktop driver offers.
- *
- * Anisotropic filtering is priced per texture sample, and the landscape is the
- * one surface that multiplies that price: the splat material takes up to twelve
- * samples per pixel ({@link LANDSCAPE_PBR_TEXTURE_SAMPLERS}) and the terrain
- * fills the screen. At a driver maximum of 16 a single ground pixel can approach
- * two hundred texel fetches — nowhere else in the frame does one setting compound
- * like that. Four keeps the grazing-angle sharpness a top-down camera can
- * actually resolve and gives the rest back.
- *
- * Layer textures only. Nothing else is capped here, because nothing else is
- * sampled twelve times over every pixel on screen.
- */
-export const LANDSCAPE_MAX_ANISOTROPY = 4;
-
-/** The anisotropy a landscape layer should use on a renderer reporting `driverMax`. */
-export function landscapeLayerAnisotropy(driverMax: number): number {
-  if (!Number.isFinite(driverMax)) return 1;
-  return Math.max(1, Math.min(LANDSCAPE_MAX_ANISOTROPY, Math.floor(driverMax)));
 }
 
 /** Per-layer color override (layerId → hex), resolved from assigned materials. */

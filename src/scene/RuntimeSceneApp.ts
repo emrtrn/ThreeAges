@@ -217,7 +217,6 @@ import {
   createLandscapeColliderPrimitive,
   createLandscapeObject,
   disposeLandscapeObject,
-  landscapeLayerAnisotropy,
   landscapeSplineMeshAssetIds,
   LANDSCAPE_DEFAULT_LAYERS,
   resolveLandscape,
@@ -4840,7 +4839,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const manifest = this.assetManifest;
     const worldSize = (data.size.verticesX - 1) * data.size.spacing;
     const base = Math.min(128, Math.max(1, Math.round(worldSize / 8)));
-    const maxAnisotropy = landscapeLayerAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
+    const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
     const presetById = new Map(LANDSCAPE_DEFAULT_LAYERS.map((preset) => [preset.id as string, preset]));
     return Promise.all(
       data.layers.map(async (layer) => {

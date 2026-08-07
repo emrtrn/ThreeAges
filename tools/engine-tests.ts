@@ -591,8 +591,6 @@ import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/l
 import {
   createLandscapeObject,
   disposeLandscapeObject,
-  landscapeLayerAnisotropy,
-  LANDSCAPE_MAX_ANISOTROPY,
   LANDSCAPE_PBR_MIN_TEXTURE_UNITS,
   LANDSCAPE_PBR_TEXTURE_SAMPLERS,
   resolveLandscapeSamplerBudget,
@@ -21368,28 +21366,6 @@ check("landscape PBR splat blends layer normal/ORM maps with scalar fallbacks", 
   albedo.dispose();
   normal.dispose();
   orm.dispose();
-});
-
-check("landscape layer anisotropy is capped below whatever the driver offers", () => {
-  // Asserted against the constant, not against 4: the ceiling is a tuning
-  // decision and retuning it must not turn this check red. What may not change
-  // is the rule — the landscape never takes the driver's maximum, because it is
-  // the one surface that pays for filtering twelve times over every pixel.
-  assert.equal(
-    landscapeLayerAnisotropy(16),
-    LANDSCAPE_MAX_ANISOTROPY,
-    "a generous desktop driver is clamped to the landscape ceiling",
-  );
-  assert.ok(LANDSCAPE_MAX_ANISOTROPY < 16, "the ceiling is genuinely below a common driver maximum");
-  // A weak driver is the ceiling's boundary, not its floor: asking for more than
-  // the host offers is how filtering silently falls back to something worse.
-  assert.equal(landscapeLayerAnisotropy(2), 2, "a constrained driver keeps its own smaller maximum");
-  assert.equal(landscapeLayerAnisotropy(1), 1);
-  // Unknown or nonsensical capability must degrade to valid filtering rather
-  // than hand a texture NaN or zero.
-  assert.equal(landscapeLayerAnisotropy(Number.NaN), 1, "unknown capability degrades to no anisotropy");
-  assert.equal(landscapeLayerAnisotropy(0), 1);
-  assert.equal(landscapeLayerAnisotropy(-4), 1);
 });
 
 check("landscape PBR sampler budget selects an explicit albedo-only fallback", () => {
