@@ -181,7 +181,12 @@ export class RtsActorVisualFactory {
     return asset?.assetType === "staticMesh" ? asset.path : null;
   }
 
-  async load(): Promise<void> {
+  /**
+   * `onProgress` feeds the boot curtain (`rtsLoadProgress.ts`). The denominator
+   * is the catalog's ref count, which is only knowable after the manifest fetch
+   * below — hence reported with every tick rather than promised up front.
+   */
+  async load(onProgress?: (loaded: number, total: number) => void): Promise<void> {
     const manifestResponse = await fetch(projectFileUrl("assets/manifest.json"), { cache: "no-cache" });
     if (!manifestResponse.ok) {
       throw new Error(`RTS Actor manifest fetch failed: ${manifestResponse.status}`);
@@ -209,6 +214,7 @@ export class RtsActorVisualFactory {
 
     const refs = rtsContentCatalogRefs(this.catalog);
     this.requested = refs.length;
+    let loaded = 0;
     // In parallel: the pack covers every building at every age and level, and
     // loading it one file at a time put the whole match behind a serial chain of
     // fetches. Models are shared through {@link templateFor}, so concurrency does
@@ -221,6 +227,9 @@ export class RtsActorVisualFactory {
         // entry in the pack is unaffected, and the reason survives to the report.
         this.failures.set(ref, error instanceof Error ? error.message : String(error));
       }
+      // A failed ref still advances the bar: it resolves to the stand-in and the
+      // boot is no longer waiting on it. Progress tracks work, not success.
+      onProgress?.(++loaded, refs.length);
     }));
     this.ready = true;
   }

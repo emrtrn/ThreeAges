@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { startRtsMatch } from "./rtsBoot";
 
 /**
  * Faz 11 §59 "Fog of War", behind the `fogOfWar` flag.
@@ -19,7 +20,7 @@ import { expect, test, type Page } from "@playwright/test";
 async function openMatch(page: Page, route: string): Promise<void> {
   await page.goto(route);
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
-  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await startRtsMatch(page);
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
 }
 

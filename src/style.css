@@ -216,6 +216,122 @@ body {
 }
 
 /*
+ * The boot curtain (rtsLoadingScreen.ts). Sits above the match modal because it
+ * covers the start card too: while the world is still mounting, the card is
+ * standing over a flat placeholder ground and capsule units, and letting it show
+ * through would defeat the whole point of the curtain.
+ */
+.rts-loading-screen {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  /* Painted under the art so a missing/404 background degrades to this rather
+   * than to a transparent hole over the half-built scene. */
+  background: radial-gradient(120% 120% at 50% 35%, #241b12 0%, #0d0a06 100%);
+  opacity: 1;
+  transition: opacity 420ms ease-out;
+  pointer-events: auto;
+  z-index: 40;
+}
+
+.rts-loading-screen.is-hiding {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rts-loading-art {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+/* The plan reserves the bottom fifth of the art for exactly this, so the scrim
+ * only has to finish the job rather than dim the whole image. */
+.rts-loading-art::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(180deg, rgb(8 6 3 / 0%) 55%, rgb(8 6 3 / 78%) 100%);
+}
+
+.rts-loading-panel {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 0 32px 44px;
+}
+
+.rts-loading-title {
+  margin: 0;
+  color: var(--ta-gold);
+  font-family: var(--ta-font-display);
+  font-size: 18px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 6px rgb(0 0 0 / 80%);
+}
+
+.rts-loading-bar {
+  position: relative;
+  width: min(520px, calc(100vw - 64px));
+  height: 10px;
+  overflow: hidden;
+  background: rgb(0 0 0 / 55%);
+  border: 1px solid var(--ta-border);
+  border-radius: 2px;
+}
+
+.rts-loading-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  width: 0;
+  background: var(--ta-btn-bg);
+  transition: width 180ms linear;
+}
+
+/*
+ * Indeterminate is a real state, not a decoration: it means no loader has
+ * reported a denominator yet (plan T1). A sliver that sweeps says "working, size
+ * unknown", where a 0% bar would claim a measurement nobody has taken.
+ */
+.rts-loading-bar[data-rts-loading-mode="indeterminate"] .rts-loading-fill {
+  width: 34%;
+  transition: none;
+  animation: rts-loading-sweep 1.15s ease-in-out infinite;
+}
+
+@keyframes rts-loading-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(294%); }
+}
+
+.rts-loading-status {
+  margin: 0;
+  color: var(--ta-ink-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 4px rgb(0 0 0 / 80%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rts-loading-screen {
+    transition: none;
+  }
+
+  .rts-loading-bar[data-rts-loading-mode="indeterminate"] .rts-loading-fill {
+    animation: none;
+  }
+}
+
+/*
  * The Faz 9 match modal: the start screen, the pause menu and the result screen
  * are one card in one place (see rtsMatchOverlay.ts). It blocks the field
  * whenever the match is not running, which is now also *before* it has begun.

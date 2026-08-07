@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { startRtsMatch } from "./rtsBoot";
 
 /**
  * The editor -> runtime round trip: this project pins Play to its RTS preset.
@@ -49,7 +50,7 @@ test("a level the RTS cannot play falls back to the blockout map with a stated r
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-error", /.+/);
   // Still playable, and the overlay names the file and the reason.
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
-  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await startRtsMatch(page);
   await expect(page.locator(".rts-debug-sim")).toContainText("seviye REDDEDİLDİ");
   await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
 

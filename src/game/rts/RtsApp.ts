@@ -239,6 +239,13 @@ import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
 import { RoadTerrainPainter } from "./roads/roadTerrainPainter";
 import { simulationSteps, type RtsSimulationSpeed } from "./simulation/simulationSpeed";
 import { RtsHudBar } from "./ui/rtsHudBar";
+import { RtsLoadingScreen } from "./ui/rtsLoadingScreen";
+import {
+  RTS_LOAD_TRACK_WEIGHTS,
+  RtsLoadTracker,
+  type RtsLoadTrackDef,
+  type RtsLoadTrackId,
+} from "./loading/rtsLoadProgress";
 import { RtsArmyRosterStrip } from "./ui/rtsArmyRosterStrip";
 import { describeArmyRoster } from "./ui/rtsArmyRosterView";
 import { RtsNotificationCenter } from "./ui/rtsNotifications";
@@ -337,6 +344,16 @@ const PERF_TOTAL_REGION = "kare";
 const MISSION_POLL_SECONDS = 0.25;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
 const MAX_FRAME_SECONDS = 1 / 15;
+/**
+ * How long the boot curtain will wait before opening on an unfinished load
+ * (plan T3). Generous, because on a cold cache over a slow connection a full
+ * Actor pack legitimately takes a while and cutting an honest load short would
+ * show the player exactly the placeholders the curtain exists to hide. It is a
+ * deadlock breaker, not a deadline.
+ */
+const RTS_BOOT_CURTAIN_TIMEOUT_MS = 20_000;
+/** See {@link RtsApp.armFirstLoadedFrame} for why this is two and not one. */
+const FRAMES_BEFORE_CURTAIN_LIFT = 2;
 const SCENE_BACKGROUND = "#20262b";
 /**
  * Height a defensive structure's weapon sits above its ground pivot — the
@@ -972,6 +989,22 @@ export class RtsApp {
   private readonly debugSpeedControls: RtsGameSpeedControls | null;
   private readonly unsubscribeWalletChanges: (() => void) | null;
   private readonly log = logger("System");
+  /**
+   * Boot curtain (plan F1). Covers the window in which the field is standing on
+   * the flat placeholder ground with capsule units on it — both of which stay in
+   * the code as failure fallbacks, so hiding them is the only correct fix.
+   */
+  private readonly loadingScreen: RtsLoadingScreen;
+  private readonly loadTracker: RtsLoadTracker;
+  /**
+   * Asset tracks still outstanding. Separate from the tracker's own bookkeeping
+   * because "every asset is in" is a different moment from "the boot is over":
+   * the first drawn frame sits between them, and that gap is what T2 is about.
+   */
+  private readonly pendingAssetTracks = new Set<RtsLoadTrackId>();
+  private loadTimeoutHandle = 0;
+  /** Frames still to be drawn before the curtain may lift; see {@link armFirstLoadedFrame}. */
+  private pendingFirstFrames = 0;
   private frameHandle = 0;
   private lastTime = 0;
   private readonly handleVisibilityChange = (): void => {
@@ -1116,6 +1149,36 @@ export class RtsApp {
     // Published from the start so "no placeholders" and "not reported yet" are
     // never the same reading for a test or a bug report.
     this.canvas.dataset.rtsContentPlaceholders = "0";
+    // Boot curtain, raised before `buildScene()` below starts any of the loads it
+    // is meant to cover. Which tracks exist is decided here, synchronously and
+    // once: a track that appeared later would make the bar jump backwards as new
+    // work was discovered, so a boot without an Actor pack or without an authored
+    // world simply never declares that track and the rest renormalise over it.
+    this.loadingScreen = new RtsLoadingScreen();
+    const loadTracks: RtsLoadTrackDef[] = [{ id: "mapArt", weight: RTS_LOAD_TRACK_WEIGHTS.mapArt }];
+    if (this.actorVisuals) loadTracks.push({ id: "actors", weight: RTS_LOAD_TRACK_WEIGHTS.actors });
+    if (this.authoredWorldIntended) loadTracks.push({ id: "world", weight: RTS_LOAD_TRACK_WEIGHTS.world });
+    for (const track of loadTracks) this.pendingAssetTracks.add(track.id);
+    // Declared last so it is the final slice of the bar, which is exactly what it
+    // is: the beat after the last promise, spent uploading and compiling.
+    loadTracks.push({ id: "firstFrame", weight: RTS_LOAD_TRACK_WEIGHTS.firstFrame });
+    this.loadTracker = new RtsLoadTracker(loadTracks, (snapshot) => {
+      this.loadingScreen.setProgress(snapshot);
+      if (snapshot.complete) this.finishBootCurtain();
+    });
+    // A one-item denominator for the step tracks. Without it the bar would stay
+    // indeterminate for the whole boot waiting on a count that a step, by
+    // definition, never produces — and the honest percentage the plan is built
+    // around would never appear.
+    this.loadTracker.report("firstFrame", 0, 1);
+    // T3: no single hung fetch may trap the player behind the curtain over a game
+    // that the fallbacks have kept perfectly playable. Whatever has not arrived by
+    // now is not going to decide the boot.
+    this.loadTimeoutHandle = window.setTimeout(() => {
+      this.loadTimeoutHandle = 0;
+      this.log.warn("RTS boot curtain timed out; opening the field with whatever loaded");
+      this.loadTracker.settleAll();
+    }, RTS_BOOT_CURTAIN_TIMEOUT_MS);
     this.buildingVisuals = new RtsBuildingVisuals(this.actorVisuals);
     this.mapArt = new RtsMapArt(this.renderer);
     // A road belongs to whoever holds the ground it runs over, so the graph reads
@@ -1923,6 +1986,9 @@ export class RtsApp {
     if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
     this.frameHandle = 0;
     document.removeEventListener("visibilitychange", this.handleVisibilityChange);
+    if (this.loadTimeoutHandle) window.clearTimeout(this.loadTimeoutHandle);
+    this.loadTimeoutHandle = 0;
+    this.loadingScreen.dispose();
     this.input.detach();
     this.pointer.detach();
     this.marquee.dispose();
@@ -1987,6 +2053,52 @@ export class RtsApp {
     this.renderer.dispose();
   }
 
+  /**
+   * One boot-load finished. Succeeded, failed, or had nothing to do — all three
+   * settle it, because the curtain is waiting on the *work*, and a 404'd Actor
+   * pack is work that is over. Leaving a failed track pending is how a loading
+   * screen turns a degraded boot into no boot at all (plan T3).
+   */
+  private settleAssetTrack(id: RtsLoadTrackId): void {
+    this.loadTracker.settle(id);
+    if (!this.pendingAssetTracks.delete(id)) return;
+    if (this.pendingAssetTracks.size === 0) void this.armFirstLoadedFrame();
+  }
+
+  /**
+   * The plan's T2. Every asset is in memory, and none of it is on the GPU yet:
+   * the first frame that draws the real landscape and the real unit meshes pays
+   * for their upload and their shader compilation. Lifting the curtain on the
+   * last resolved promise would therefore end it precisely at the freeze it was
+   * covering, and the player would watch the pop-in anyway — one beat later.
+   *
+   * So the shaders are compiled behind the curtain (`compileAsync` rather than
+   * `compile`, so the tab stays responsive and the bar keeps animating), and only
+   * then are frames counted. Two, not one: the first is the frame the compile
+   * lands in, the second is the first frame that is honestly cheap.
+   */
+  private async armFirstLoadedFrame(): Promise<void> {
+    if (this.disposed) return;
+    try {
+      await this.renderer.compileAsync(this.scene, this.cameraController.camera);
+    } catch (error) {
+      // A driver without KHR_parallel_shader_compile still draws fine; it just
+      // pays the compile in the frame instead. Worth a line, not a stall.
+      this.log.warn("RTS shader precompile failed; the first frame may hitch", error);
+    }
+    if (this.disposed) return;
+    this.pendingFirstFrames = FRAMES_BEFORE_CURTAIN_LIFT;
+  }
+
+  private finishBootCurtain(): void {
+    if (this.loadTimeoutHandle) window.clearTimeout(this.loadTimeoutHandle);
+    this.loadTimeoutHandle = 0;
+    // Cleared so a load that lands after the timeout opened the curtain cannot
+    // arm a second, pointless precompile against an already-visible field.
+    this.pendingAssetTracks.clear();
+    this.pendingFirstFrames = 0;
+    this.loadingScreen.hide();
+  }
 
   private buildScene(): void {
     // Hemispheric-ish fill: ambient for base visibility, one shadowing key light.
@@ -2292,6 +2404,13 @@ export class RtsApp {
     else this.renderer.render(this.scene, this.cameraController.camera);
     this.gpuTimer?.end();
     this.restoreGpuSweepStep();
+    // T2: the curtain lifts on a frame that has been *drawn* with the loaded
+    // assets in it, counted here rather than promised by the loader. This is the
+    // difference between "the landscape has arrived" and "the landscape is on
+    // screen" — the placeholders live in the gap between those two.
+    if (this.pendingFirstFrames > 0 && --this.pendingFirstFrames === 0) {
+      this.loadTracker.settle("firstFrame");
+    }
     // What the CPU spent issuing the frame, not what the GPU spent drawing it:
     // WebGL is asynchronous, so this is the submission cost. The GPU's own time
     // comes back from the timer query a few frames later.
@@ -4065,6 +4184,10 @@ export class RtsApp {
   }
 
   private async loadMapArt(blockout: import("three").Group): Promise<void> {
+    // One step rather than a count: `mapArt.apply` is a single opaque await, so
+    // the honest thing the bar can say about it is "started" and "done". It
+    // carries a small weight for exactly that reason.
+    this.loadTracker.report("mapArt", 0, 1);
     try {
       // Faz E ridge gate: when the Level authors its own static world, the ridge
       // comes from that (mounted by loadAuthoredWorld). Map art still owns the
@@ -4087,6 +4210,8 @@ export class RtsApp {
     } catch (error) {
       this.log.warn("RTS map art could not be loaded", error);
       this.canvas.dataset.rtsMapArt = "fallback";
+    } finally {
+      this.settleAssetTrack("mapArt");
     }
   }
 
@@ -4106,6 +4231,7 @@ export class RtsApp {
         this.renderer,
         (message, error) => this.log.warn(message, error),
         this.options.levelRef,
+        (loaded, total) => this.loadTracker.report("world", loaded, total),
       );
       if (this.disposed) {
         handle.dispose();
@@ -4188,6 +4314,11 @@ export class RtsApp {
     } catch (error) {
       this.log.warn("RTS authored world could not be loaded", error);
       this.canvas.dataset.rtsAuthoredWorld = "fallback";
+    } finally {
+      // In `finally` so the fallback path opens the curtain too: a Level that
+      // failed to mount leaves the flat ground standing, and the player is
+      // better off looking at it than at a bar that never fills.
+      this.settleAssetTrack("world");
     }
   }
 
@@ -4812,7 +4943,7 @@ export class RtsApp {
   private async loadActorVisuals(): Promise<void> {
     if (!this.actorVisuals) return;
     try {
-      await this.actorVisuals.load();
+      await this.actorVisuals.load((loaded, total) => this.loadTracker.report("actors", loaded, total));
       if (this.disposed) return;
       this.reportActorVisuals(this.actorVisuals.report());
       this.warmStructureDamageEffects();
@@ -4846,6 +4977,11 @@ export class RtsApp {
       // per-Actor inside `load()` and shows as a placeholder instead.
       this.log.warn("RTS Actor presentation pack could not be loaded; using legacy visuals", error);
       this.canvas.dataset.rtsContentAssets = "fallback";
+    } finally {
+      // `finally` covers the pack-wide failure above *and* the `disposed` early
+      // return in the try: neither may leave the curtain waiting on a track that
+      // will never report again.
+      this.settleAssetTrack("actors");
     }
   }
 

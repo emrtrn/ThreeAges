@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { startRtsMatch } from "./rtsBoot";
 
 test("road placement separates the start, route preview, and finish feedback", async ({ page }) => {
   const errors: string[] = [];
@@ -6,7 +7,7 @@ test("road placement separates the start, route preview, and finish feedback", a
 
   await page.goto("/?rts");
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
-  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await startRtsMatch(page);
   await page.getByRole("button", { name: "Lojistik", exact: true }).click();
   await page.getByRole("button", { name: "Yol", exact: true }).click();
 

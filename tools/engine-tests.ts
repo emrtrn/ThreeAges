@@ -1376,6 +1376,7 @@ import {
   templatePath,
 } from "../src/editor/dataTableLayout";
 import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
+import { RTS_LOAD_TRACK_WEIGHTS, RtsLoadTracker } from "../src/game/rts/loading/rtsLoadProgress";
 
 let checks = 0;
 let skipped = 0;
@@ -51805,6 +51806,108 @@ check("River Water ribbon follows spline width with arc-length UVs and flow attr
   assert.ok(ribbon.rapidness.some((value) => value >= 0.8), "segment profile controls authored rapids");
   assert.ok(ribbon.rapidness.some((value) => value > 0), "turns contribute procedural rapids foam data");
   assert.ok(ribbon.indices.length > 0);
+});
+
+/*
+ * Boot curtain progress (THREEAGES_RTS_MAIN_MENU_LOADING_PLAN Faz F1).
+ *
+ * These pin the *contract* the loading screen depends on, never the tuning: the
+ * weights are read from `RTS_LOAD_TRACK_WEIGHTS` rather than restated, so
+ * retuning what share of the bar the Actor pack owns cannot redden the suite.
+ * What must not change is the honesty — no denominator means no percentage, a
+ * failed load still opens the curtain, and a bar reading 100% means a frame has
+ * actually been drawn.
+ */
+check("boot curtain stays indeterminate until every live load reports a denominator", () => {
+  const tracker = new RtsLoadTracker([
+    { id: "actors", weight: RTS_LOAD_TRACK_WEIGHTS.actors },
+    { id: "world", weight: RTS_LOAD_TRACK_WEIGHTS.world },
+    { id: "firstFrame", weight: RTS_LOAD_TRACK_WEIGHTS.firstFrame },
+  ]);
+  assert.equal(tracker.snapshot().determinate, false, "nothing has reported a size yet");
+  tracker.report("firstFrame", 0, 1);
+  tracker.report("actors", 0, 12);
+  assert.equal(tracker.snapshot().determinate, false, "the authored world has still not reported");
+  tracker.report("world", 0, 40);
+  assert.equal(tracker.snapshot().determinate, true, "every live track now knows its size");
+  assert.equal(tracker.snapshot().fraction, 0);
+});
+
+check("boot curtain progress never runs backwards when a denominator grows", () => {
+  const tracker = new RtsLoadTracker([
+    { id: "actors", weight: RTS_LOAD_TRACK_WEIGHTS.actors },
+    { id: "firstFrame", weight: RTS_LOAD_TRACK_WEIGHTS.firstFrame },
+  ]);
+  tracker.report("firstFrame", 0, 1);
+  tracker.report("actors", 4, 4);
+  const before = tracker.snapshot().fraction;
+  // The same loader revising its own size upward: legitimate, and it would drop
+  // the raw ratio from 1.0 to 0.04. The reading may stall, never reverse.
+  tracker.report("actors", 4, 100);
+  assert.ok(tracker.snapshot().fraction >= before, "a bar that slides backwards reads as a bug");
+});
+
+check("a failed boot load settles its track instead of stalling the curtain", () => {
+  let latest = { fraction: 0, determinate: false, complete: false };
+  const tracker = new RtsLoadTracker(
+    [
+      { id: "actors", weight: RTS_LOAD_TRACK_WEIGHTS.actors },
+      { id: "world", weight: RTS_LOAD_TRACK_WEIGHTS.world },
+      { id: "firstFrame", weight: RTS_LOAD_TRACK_WEIGHTS.firstFrame },
+    ],
+    (snapshot) => { latest = snapshot; },
+  );
+  // The authored world 404s before it ever reports a size — the plan's T3.
+  tracker.settle("world");
+  tracker.report("actors", 12, 12);
+  tracker.settle("actors");
+  tracker.settle("firstFrame");
+  assert.equal(latest.complete, true, "a failed load must still open the curtain");
+  assert.equal(latest.fraction, 1);
+});
+
+check("boot curtain reaches 100% only after a frame has actually been drawn", () => {
+  const tracker = new RtsLoadTracker([
+    { id: "actors", weight: RTS_LOAD_TRACK_WEIGHTS.actors },
+    { id: "mapArt", weight: RTS_LOAD_TRACK_WEIGHTS.mapArt },
+    { id: "firstFrame", weight: RTS_LOAD_TRACK_WEIGHTS.firstFrame },
+  ]);
+  tracker.report("firstFrame", 0, 1);
+  tracker.report("actors", 9, 9);
+  tracker.settle("actors");
+  tracker.report("mapArt", 1, 1);
+  tracker.settle("mapArt");
+  // Every asset is in memory and none of it is on the GPU: this is exactly the
+  // window the placeholders would show through, so it may not read as finished.
+  const loaded = tracker.snapshot();
+  assert.equal(loaded.complete, false, "assets in memory is not the same as assets on screen");
+  assert.ok(loaded.fraction < 1, "the first frame owns the last slice of the bar");
+  tracker.settle("firstFrame");
+  assert.equal(tracker.snapshot().complete, true);
+  assert.equal(tracker.snapshot().fraction, 1);
+});
+
+check("boot curtain weights renormalise over the tracks a boot actually declares", () => {
+  // A Level with no authored world never declares that track; the remaining ones
+  // must still span the whole bar rather than leaving a permanent gap.
+  const tracker = new RtsLoadTracker([
+    { id: "mapArt", weight: RTS_LOAD_TRACK_WEIGHTS.mapArt },
+    { id: "firstFrame", weight: RTS_LOAD_TRACK_WEIGHTS.firstFrame },
+  ]);
+  tracker.report("mapArt", 1, 1);
+  tracker.report("firstFrame", 1, 1);
+  assert.equal(tracker.snapshot().fraction, 1, "declared tracks always sum to the full bar");
+  assert.equal(tracker.snapshot().complete, false, "full is not the same as settled");
+  tracker.settleAll();
+  assert.equal(tracker.snapshot().complete, true);
+});
+
+check("an empty boot load is finished rather than a division by zero", () => {
+  const tracker = new RtsLoadTracker([{ id: "world", weight: RTS_LOAD_TRACK_WEIGHTS.world }]);
+  // A Level that authors no models at all is an ordinary Level, not a broken one.
+  tracker.report("world", 0, 0);
+  assert.equal(tracker.snapshot().fraction, 1);
+  assert.equal(tracker.snapshot().determinate, true);
 });
 
 if (testFilters.length === 0 && slowSkipped > 0) {

@@ -171,6 +171,18 @@ export interface AuthoredWorldOptions {
   readonly shadowBounds?: Box3;
   /** Optional sink for non-fatal load diagnostics (a missing optional model). */
   readonly onWarn?: (message: string, error?: unknown) => void;
+  /**
+   * Optional progress sink, for a host that puts a loading curtain over the
+   * mount (the RTS route does; see `rtsLoadProgress.ts`). `total` is the count
+   * of models plus landscapes this call will work through, known only after the
+   * manifest fetch — which is why it is reported alongside every tick rather
+   * than promised up front.
+   *
+   * A plain function type rather than a shared interface on purpose: this module
+   * is engine-side and may not import from `@/game`, and structural typing means
+   * the game's tracker satisfies it without either side owning a common type.
+   */
+  readonly onProgress?: (loaded: number, total: number) => void;
 }
 
 interface ManifestModelEntry {
@@ -316,10 +328,18 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
   const assetManifest = await fetchAssetManifest(resolveUrl);
   const modelEntries = modelEntriesFrom(assetManifest);
   const models = new Map<string, GLTF>();
-  await Promise.all(sceneModelAssetIds(layout).map(async (assetId) => {
+  const modelAssetIds = sceneModelAssetIds(layout);
+  // The two phases a curtain has to sit through. Counted together so the bar
+  // does not fill, reset and fill again as the mount moves from models to
+  // terrain — one load, one denominator.
+  const progressTotal = modelAssetIds.length + (layout.landscapes?.length ?? 0);
+  let progressDone = 0;
+  const tickProgress = (): void => options.onProgress?.(++progressDone, progressTotal);
+  await Promise.all(modelAssetIds.map(async (assetId) => {
     const entry = modelEntries.get(assetId);
     if (!entry) {
       warn(`Authored-world asset is not in the manifest: ${assetId}`);
+      tickProgress();
       return;
     }
     try {
@@ -327,6 +347,9 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     } catch (error) {
       warn(`Authored-world model failed to load: ${assetId}`, error);
     }
+    // Ticked on every outcome, missing and broken included: the curtain is
+    // waiting on the *work*, and a model that failed is work that is over.
+    tickProgress();
   }));
 
   const localBounds = new Map(computeModelLocalBounds(models));
@@ -424,6 +447,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     root.add(object);
     landscapeObjects.push(object);
     mountedLandscapes.push({ data, object, position: actor.position, layerColors });
+    tickProgress();
   }
 
   // Water presentation resolves against the already loaded Landscape sidecar so

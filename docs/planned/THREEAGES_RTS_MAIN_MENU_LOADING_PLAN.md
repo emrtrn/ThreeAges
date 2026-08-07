@@ -1,7 +1,18 @@
 # ThreeAges RTS - Ana Menu ve Yukleme Ekrani Plani
 
 Olusturulma tarihi: 2026-08-08
-Durum: **Plan yazildi, kod yazilmadi. F1-F4 planli, baslanmadi.**
+Durum: **F1 kod olarak bitti (2026-08-08); gorsel kabul kullanicidadir.
+F2-F4 planli, baslanmadi.** Perde, gercek sayaci ve alti engine check'i ayakta;
+sekiz RTS smoke spec'i perdeyi bekleyecek sekilde guncellendi. Ana menu (F2) ve
+menude on-yukleme (F3) henuz yok - yani bugun perde hala §2.1'deki yedi await
+adimindan *sonra* aciliyor, ilk bos canvas penceresi kapanmadi. Onu kapatan sey
+F2'dir.
+
+F1 sirasinda planin bir ifadesi duzeltildi: §5'in "firstFrame" izi paydasiz
+dusunulmustu, ama paydasiz bir iz butun cubugu boot boyunca *belirsiz* modda
+birakiyor (determinate kurali her canli izin paydasini sart kosuyor). Iz artik
+tek adimlik bir payda ile bildiriliyor (`report("firstFrame", 0, 1)`); yuzde bu
+sayede gorunuyor. §7.1'e islendi.
 
 Bu plan bir gorsel sikayetle basladi: "oyun acilista landscape gostermeden once
 duz bir zemin gosteriyor, birimlerden once kapsul gosteriyor." Kod okununca
@@ -94,7 +105,7 @@ RtsApp'te kalir; onlar calisan bir macin parcasidir.
 
 ## 3. Hedef akis
 
-```
+```text
 /?rts acilir
    |
    v
@@ -167,8 +178,9 @@ bilinmiyor. Cozum: KARAR 6'daki indeterminate -> determinate gecisi.
 
 **T2 - %100 hazir demek degil.** Son promise cozuldukten sonra GPU upload ve
 ilk karenin shader derlemesi var; cubuk %100'de donar, sonra ekran acilir.
-Cozum: son dilim buna ayrilir - `renderer.compile()` + iki `requestAnimationFrame`
-beklenir, perde **gercekten cizilmis ilk kareden sonra** kalkar.
+Cozum: son dilim buna ayrilir - `renderer.compileAsync()` + iki cizilmis kare
+beklenir, perde **gercekten cizilmis ilk kareden sonra** kalkar. (`compile()`
+degil: o senkron, ve perdeyi tam is yaparken dondururdu.)
 
 **T3 - Hata yollari perdeyi kapatmali.** `dataset.rtsAuthoredWorld = "fallback"`
 ve actor pack'in `catch`'i (`RtsApp.ts:4821`) de "bitti" sayilir. Ustune sert
@@ -178,13 +190,25 @@ bir timeout (~20 sn): tek bir olu fetch oyuncuyu perdede kilitlemez.
 
 ## 7. Fazlar
 
-### 7.1 F1 - Yukleme ekrani + ilerleme cekirdegi
+### 7.1 F1 - Yukleme ekrani + ilerleme cekirdegi — **BITTI (2026-08-08)**
 
 - `src/game/rts/ui/rtsLoadingScreen.ts`: tam ekran katman, arka plan gorseli,
   ilerleme cubugu, `data-rts-loading` witness'i (`loading` / `done`).
   `#ui-overlay` altina baglanir (mevcut kartlarin yaptigi gibi,
   `rtsMatchOverlay.ts:303`).
-- Kucuk bir toplayici: agirlikli izler, `report(track, done, total)`.
+- `src/game/rts/loading/rtsLoadProgress.ts`: agirlikli izler,
+  `report(track, done, total)` / `settle(track)` / `settleAll()`. DOM'suz, cunku
+  cubugun aritmetigi engine check'iyle pinlenebilecek tek parcasi - alti check
+  yazildi (indeterminate gecisi, monotonluk, hatanin perdeyi acmasi, ilk kare
+  son dilimi, agirlik renormalizasyonu, bos yuk).
+- **Plan duzeltmesi:** `firstFrame` izi paydasiz tasarlanmisti; determinate
+  kurali her canli izin paydasini sart kostugu icin bu, cubugu boot boyunca
+  belirsiz modda birakiyordu. Iz artik tek adimlik payda ile bildiriliyor
+  (`report("firstFrame", 0, 1)`), tipki `mapArt` gibi.
+- **T2 `compile()` degil `compileAsync()` ile yapildi.** `compile` senkron ve
+  ana thread'i kilitliyor - perde tam da is yaparken donardi. `compileAsync`
+  (three 0.184) `KHR_parallel_shader_compile` kullaniyor, cubuk akmaya devam
+  ediyor.
 - Opsiyonel `onProgress` gecisleri:
   - `RtsActorVisualFactory.load(onProgress?)`
   - `AuthoredWorldOptions.onProgress?` (`src/scene/authoredWorld.ts` - engine
@@ -226,18 +250,22 @@ kapanista `npm run build:verify`.
 
 ## 8. Dokunulacak dosyalar
 
-| Dosya | Is |
-| --- | --- |
-| `src/game/rts/ui/rtsLoadingScreen.ts` | **yeni** |
-| `src/game/rts/ui/rtsMainMenu.ts` | **yeni** |
-| `src/main.ts` | boot yeniden sirali; dort reload silinir |
-| `src/game/rts/match/rtsMatchOverlay.ts` | kurulum karti ayrilir |
-| `src/game/rts/RtsApp.ts` | perde baglantisi, `onProgress` yayilimi |
-| `src/game/rts/content/rtsActorVisualFactory.ts` | opsiyonel `onProgress` |
-| `src/scene/authoredWorld.ts` | opsiyonel `onProgress` (engine, geriye uyumlu) |
-| `src/game/rts/world/rtsAuthoredWorld.ts` | `onProgress` gecisi |
-| `src/style.css` | perde + menu stilleri |
-| `tests/smoke/rts-*.spec.ts` | §9 |
+| Dosya | Is | Faz |
+| --- | --- | --- |
+| `src/game/rts/ui/rtsLoadingScreen.ts` | **yeni** - perde (DOM) | F1 ✅ |
+| `src/game/rts/loading/rtsLoadProgress.ts` | **yeni** - sayac (DOM'suz) | F1 ✅ |
+| `src/game/rts/RtsApp.ts` | perde baglantisi, `onProgress` yayilimi, ilk-kare sayaci | F1 ✅ |
+| `src/game/rts/content/rtsActorVisualFactory.ts` | opsiyonel `onProgress` | F1 ✅ |
+| `src/scene/authoredWorld.ts` | opsiyonel `onProgress` (engine, geriye uyumlu) | F1 ✅ |
+| `src/game/rts/world/rtsAuthoredWorld.ts` | `onProgress` gecisi | F1 ✅ |
+| `src/style.css` | perde stilleri | F1 ✅ |
+| `tools/engine-tests.ts` | alti sayac check'i | F1 ✅ |
+| `tests/smoke/rtsBoot.ts` | **yeni** - `waitForRtsBoot` / `startRtsMatch` | F1 ✅ |
+| `tests/smoke/rts-*.spec.ts` (7 dosya) | 15 tiklama yardimciya baglandi | F1 ✅ |
+| `src/game/rts/ui/rtsMainMenu.ts` | **yeni** | F2 |
+| `src/main.ts` | boot yeniden sirali; dort reload silinir | F2/F3 |
+| `src/game/rts/match/rtsMatchOverlay.ts` | kurulum karti ayrilir | F2 |
+| `src/style.css` | menu stilleri | F2 |
 
 ## 9. Smoke etkisi
 
@@ -256,9 +284,19 @@ await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
 ```
 
 Karar: **`.rts-match-overlay` sinif adi ve `"Maçı Başlat"` etiketi korunur**, ki
-degisiklik minimum olsun. Eklenecek tek sey, tiklamadan sonra
-`data-rts-loading="done"` beklemektir - artik tiklama maci degil yuklemeyi
-baslatiyor.
+degisiklik minimum olsun.
+
+**F1'de yapildi.** Perde tam ekran ve tiklamayi yutuyor. Playwright bunu zaten
+yeniden deneyerek asardi - yani spec'ler muhtemelen yine gecerdi - ama gectikleri
+gun degil *gecmedikleri* gun onemli: hata "element intercepts pointer events"
+diye butonu isaret ederdi, gercekte yavas olan yuklemeyken. Bu yuzden 15 cagri
+noktasi ortak bir yardimciya baglandi:
+
+- **yeni** `tests/smoke/rtsBoot.ts` - `waitForRtsBoot(page)` (once
+  `data-rts-ground` ile RtsApp'in var oldugunu dogrular, ki perde kontrolu
+  bosuna gecmesin; sonra perdenin `done` olmasini/DOM'dan cikmasini bekler) ve
+  `startRtsMatch(page)`.
+- 7 spec dosyasindaki 15 `"Maçı Başlat"` tiklamasi `startRtsMatch(page)` oldu.
 
 ## 10. Gorsel varliklar
 

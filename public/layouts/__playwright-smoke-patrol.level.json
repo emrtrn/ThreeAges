@@ -909,6 +909,7 @@
             2.41,
             38.17
           ],
+          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -923,6 +924,7 @@
             1.68,
             69.98
           ],
+          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -937,6 +939,7 @@
             0.38,
             84.54
           ],
+          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -951,6 +954,7 @@
             -1.21,
             82.97
           ],
+          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -965,6 +969,7 @@
             -1.21,
             81.88
           ],
+          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -979,6 +984,7 @@
             -1.21,
             85.04
           ],
+          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -993,6 +999,7 @@
             -1.21,
             85.58
           ],
+          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -1007,6 +1014,7 @@
             1.98,
             59.65
           ],
+          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -1021,6 +1029,7 @@
             0.73,
             32.93
           ],
+          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -1036,6 +1045,7 @@
             -36.01
           ],
           "scaleLocked": true,
+          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -1051,6 +1061,7 @@
             3.22
           ],
           "scaleLocked": true,
+          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -1063,45 +1074,15 @@
     },
     {
       "assetId": "naturemega-dead-tree-1",
-      "placements": [
-        {
-          "position": [
-            -63.8,
-            1.51,
-            -48.04
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "naturemega-dead-tree-2",
-      "placements": [
-        {
-          "position": [
-            -53.19,
-            0.32,
-            -51.32
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "naturemega-dead-tree-3",
-      "placements": [
-        {
-          "position": [
-            -50.66,
-            0.37,
-            -52.38
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "naturemega-dead-tree-4",
@@ -1113,325 +1094,23 @@
     },
     {
       "assetId": "naturemega-common-tree-1",
-      "placements": [
-        {
-          "position": [
-            -60.63,
-            1.56,
-            -37.11
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -47.84,
-            0.31,
-            -53.91
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -42,
-            0.24,
-            -66.1
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -37.84,
-            0.26,
-            -48.68
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -64.48,
-            4.31,
-            -29.83
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -57.38,
-            1.71,
-            -28.97
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -45.76,
-            0.36,
-            -59.25
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "naturemega-common-tree-2",
-      "placements": [
-        {
-          "position": [
-            -60.94,
-            1.8,
-            -34.22
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -46.4,
-            0.26,
-            -44.88
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -46.41,
-            0.4,
-            -57.43
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -33.79,
-            0.25,
-            -51.82
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -43.53,
-            0.26,
-            -41.82
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -60.98,
-            2.86,
-            -30.79
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -61.66,
-            0.51,
-            -45.45
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -44.84,
-            0.28,
-            -49.91
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "naturemega-common-tree-3",
-      "placements": [
-        {
-          "position": [
-            -58.09,
-            0.49,
-            -36.85
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -38.61,
-            0.33,
-            -58.14
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -38.2,
-            0.26,
-            -52.99
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -31.81,
-            0.24,
-            -57.88
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -56.98,
-            0.84,
-            -32.56
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -64.36,
-            0.15,
-            -50.76
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -41.9,
-            0.26,
-            -56.98
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "naturemega-common-tree-4",
-      "placements": [
-        {
-          "position": [
-            -52.09,
-            0.24,
-            -49.58
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -41.16,
-            0.25,
-            -50.58
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -36.22,
-            0.24,
-            -62.54
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -32.46,
-            0.24,
-            -64.15
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -62.21,
-            2.97,
-            -27.25
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -60.24,
-            0.07,
-            -42.28
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "naturemega-common-tree-5",
-      "placements": [
-        {
-          "position": [
-            -48.69,
-            0.26,
-            -50.33
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -35.32,
-            0.26,
-            -56.05
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -41.25,
-            0.25,
-            -46.27
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -62.53,
-            2.04,
-            -43.66
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -60.35,
-            0.9,
-            -39.57
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "naturemega-clover-2",
@@ -1592,7 +1271,7 @@
         {
           "position": [
             -28,
-            0,
+            0.11,
             6
           ],
           "scaleLocked": true,
@@ -1618,6 +1297,238 @@
             0
           ],
           "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "houses-firstage-2-level3",
+      "placements": []
+    },
+    {
+      "assetId": "houses-firstage-2-level1",
+      "placements": []
+    },
+    {
+      "assetId": "houses-firstage-2-level2",
+      "placements": []
+    },
+    {
+      "assetId": "resource-pinetree-group",
+      "placements": [
+        {
+          "position": [
+            -42.46,
+            -0.03,
+            -54.04
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 6
+        },
+        {
+          "position": [
+            -43.77,
+            -0.03,
+            -44.43
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -52,
+            0
+          ],
+          "scale": 6
+        },
+        {
+          "position": [
+            -39.91,
+            -0.03,
+            -64.26
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 6
+        },
+        {
+          "position": [
+            -28.55,
+            -0.03,
+            -65.12
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 6
+        },
+        {
+          "position": [
+            -30.46,
+            -0.03,
+            -55.3
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            25.5,
+            0
+          ],
+          "scale": 6
+        },
+        {
+          "position": [
+            -17.1,
+            -0.03,
+            -63.33
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            25.5,
+            0
+          ],
+          "scale": 6
+        },
+        {
+          "position": [
+            -7.85,
+            -0.03,
+            -64.1
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -2,
+            0
+          ],
+          "scale": 6
+        },
+        {
+          "position": [
+            2.7,
+            -0.03,
+            -64.88
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -2,
+            0
+          ],
+          "scale": 6
+        },
+        {
+          "position": [
+            13.46,
+            -0.03,
+            -64.59
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -2,
+            0
+          ],
+          "scale": 6
+        },
+        {
+          "position": [
+            24.29,
+            -0.03,
+            -63.32
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90.5,
+            0
+          ],
+          "scale": 6
+        },
+        {
+          "position": [
+            49.7,
+            -0.03,
+            -63.72
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90.5,
+            0
+          ],
+          "scale": 6
+        },
+        {
+          "position": [
+            60.56,
+            -0.03,
+            -63.39
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90.5,
+            0
+          ],
+          "scale": 6
+        },
+        {
+          "position": [
+            62.47,
+            -0.03,
+            -52.68
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90.5,
+            0
+          ],
+          "scale": 6
+        }
+      ]
+    },
+    {
+      "assetId": "resource-pinetree",
+      "placements": [
+        {
+          "position": [
+            -52.93,
+            -0.1,
+            -28.3
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 6
+        },
+        {
+          "position": [
+            -56.56,
+            0.39,
+            -33.02
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 6
+        },
+        {
+          "position": [
+            -53.76,
+            -0.07,
+            -31.25
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 6
         }
       ]
     }
@@ -1692,15 +1603,6 @@
         ],
         "reparamStepsPerSegment": 8,
         "points": [
-          {
-            "id": "p0",
-            "position": [
-              38,
-              0,
-              -32
-            ],
-            "pointType": "linear"
-          },
           {
             "id": "p1",
             "position": [
@@ -1788,6 +1690,141 @@
               50,
               0,
               -34
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-market-0",
+            "position": [
+              46,
+              0,
+              -34
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-market-1",
+            "position": [
+              46,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-market-2",
+            "position": [
+              44,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-market-3",
+            "position": [
+              44,
+              0,
+              -56
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-port-0",
+            "position": [
+              44,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-port-1",
+            "position": [
+              22,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-port-2",
+            "position": [
+              22,
+              0,
+              -28
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-port-3",
+            "position": [
+              6,
+              0,
+              -28
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-port-4",
+            "position": [
+              6,
+              0,
+              -26
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-timber-0",
+            "position": [
+              6,
+              0,
+              -28
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-timber-1",
+            "position": [
+              6,
+              0,
+              -44
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-stone-0",
+            "position": [
+              6,
+              0,
+              -28
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-stone-1",
+            "position": [
+              18,
+              0,
+              -28
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-stone-2",
+            "position": [
+              18,
+              0,
+              -10
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "supply-stone-3",
+            "position": [
+              22,
+              0,
+              -10
             ],
             "pointType": "linear"
           }
@@ -2813,7 +2850,6 @@
           "intensity": 0.7
         }
       ],
-      "reflectionMode": "sharedPlanar",
       "reflectionQuality": "high",
       "reflectionStrength": 0.9
     }
@@ -2837,9 +2873,10 @@
       "position": [
         38,
         0,
-        -38
+        -36
       ],
       "name": "Enemy Start",
+      "scale": 1,
       "variableOverrides": {
         "owner": "enemy"
       }
@@ -2942,7 +2979,6 @@
       "variableOverrides": {
         "treeId": "player-wood-1",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -2958,7 +2994,6 @@
       "variableOverrides": {
         "treeId": "player-wood-1-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -2974,7 +3009,6 @@
       "variableOverrides": {
         "treeId": "player-wood-2",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -2990,7 +3024,6 @@
       "variableOverrides": {
         "treeId": "player-wood-2-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3006,7 +3039,6 @@
       "variableOverrides": {
         "treeId": "player-wood-3",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3022,7 +3054,6 @@
       "variableOverrides": {
         "treeId": "player-wood-3-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3037,7 +3068,6 @@
       "variableOverrides": {
         "treeId": "player-wood-4",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3053,7 +3083,6 @@
       "variableOverrides": {
         "treeId": "player-wood-4-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3069,7 +3098,6 @@
       "variableOverrides": {
         "treeId": "player-wood-5",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3085,7 +3113,6 @@
       "variableOverrides": {
         "treeId": "player-wood-5-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3101,7 +3128,6 @@
       "variableOverrides": {
         "treeId": "player-wood-6",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3117,7 +3143,6 @@
       "variableOverrides": {
         "treeId": "player-wood-6-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3132,7 +3157,6 @@
       "variableOverrides": {
         "treeId": "player-wood-7",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3147,7 +3171,6 @@
       "variableOverrides": {
         "treeId": "player-wood-7-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3163,7 +3186,6 @@
       "variableOverrides": {
         "treeId": "player-wood-8",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3179,7 +3201,6 @@
       "variableOverrides": {
         "treeId": "player-wood-8-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3194,7 +3215,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-1",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3209,7 +3229,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-1-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3224,7 +3243,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-2",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3239,7 +3257,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-2-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3254,7 +3271,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-3",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3269,7 +3285,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-3-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3284,7 +3299,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-4",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3299,7 +3313,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-5",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3314,7 +3327,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-5-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3329,7 +3341,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-6",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3344,7 +3355,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-6-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3359,7 +3369,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-7",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3374,7 +3383,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-7-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3389,7 +3397,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-8",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3404,7 +3411,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-8-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3419,7 +3425,6 @@
       "variableOverrides": {
         "treeId": "west-wood-1",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3434,7 +3439,6 @@
       "variableOverrides": {
         "treeId": "west-wood-1-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3449,7 +3453,6 @@
       "variableOverrides": {
         "treeId": "west-wood-2",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3464,7 +3467,6 @@
       "variableOverrides": {
         "treeId": "west-wood-2-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3479,7 +3481,6 @@
       "variableOverrides": {
         "treeId": "west-wood-3",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3495,7 +3496,6 @@
       "variableOverrides": {
         "treeId": "west-wood-3-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3510,7 +3510,6 @@
       "variableOverrides": {
         "treeId": "west-wood-4",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3525,7 +3524,6 @@
       "variableOverrides": {
         "treeId": "west-wood-4-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3541,7 +3539,6 @@
       "variableOverrides": {
         "treeId": "west-wood-5",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3557,7 +3554,6 @@
       "variableOverrides": {
         "treeId": "west-wood-5-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3573,7 +3569,6 @@
       "variableOverrides": {
         "treeId": "west-wood-6",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3588,7 +3583,6 @@
       "variableOverrides": {
         "treeId": "west-wood-6-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3603,7 +3597,6 @@
       "variableOverrides": {
         "treeId": "east-wood-1",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3618,7 +3611,6 @@
       "variableOverrides": {
         "treeId": "east-wood-1-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3633,7 +3625,6 @@
       "variableOverrides": {
         "treeId": "east-wood-2",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3648,7 +3639,6 @@
       "variableOverrides": {
         "treeId": "east-wood-2-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3663,7 +3653,6 @@
       "variableOverrides": {
         "treeId": "east-wood-3",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3678,7 +3667,6 @@
       "variableOverrides": {
         "treeId": "east-wood-3-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3693,7 +3681,6 @@
       "variableOverrides": {
         "treeId": "east-wood-4",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3708,7 +3695,6 @@
       "variableOverrides": {
         "treeId": "east-wood-4-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3723,7 +3709,6 @@
       "variableOverrides": {
         "treeId": "east-wood-5",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3738,7 +3723,6 @@
       "variableOverrides": {
         "treeId": "east-wood-5-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3753,7 +3737,6 @@
       "variableOverrides": {
         "treeId": "east-wood-6",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3768,7 +3751,6 @@
       "variableOverrides": {
         "treeId": "east-wood-6-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3783,7 +3765,6 @@
       "variableOverrides": {
         "treeId": "north-wood-1",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3798,7 +3779,6 @@
       "variableOverrides": {
         "treeId": "north-wood-1-dense",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3813,7 +3793,6 @@
       "variableOverrides": {
         "treeId": "north-wood-2",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3828,7 +3807,6 @@
       "variableOverrides": {
         "treeId": "north-wood-2-dense",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3843,7 +3821,6 @@
       "variableOverrides": {
         "treeId": "north-wood-3",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3859,7 +3836,6 @@
       "variableOverrides": {
         "treeId": "north-wood-3-a",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3875,7 +3851,6 @@
       "variableOverrides": {
         "treeId": "north-wood-3-b",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3891,7 +3866,6 @@
       "variableOverrides": {
         "treeId": "north-wood-3-c",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3906,7 +3880,6 @@
       "variableOverrides": {
         "treeId": "north-wood-3-dense",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3921,7 +3894,6 @@
       "variableOverrides": {
         "treeId": "north-wood-4",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -3936,7 +3908,6 @@
       "variableOverrides": {
         "treeId": "north-wood-4-dense",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -3951,7 +3922,6 @@
       "variableOverrides": {
         "treeId": "north-wood-5",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3967,7 +3937,6 @@
       "variableOverrides": {
         "treeId": "north-wood-5-a",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3982,7 +3951,6 @@
       "variableOverrides": {
         "treeId": "north-wood-5-dense",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -3997,7 +3965,6 @@
       "variableOverrides": {
         "treeId": "south-wood-1",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4012,7 +3979,6 @@
       "variableOverrides": {
         "treeId": "south-wood-1-dense",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4027,7 +3993,6 @@
       "variableOverrides": {
         "treeId": "south-wood-2",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4043,7 +4008,6 @@
       "variableOverrides": {
         "treeId": "south-wood-2-dense",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4059,7 +4023,6 @@
       "variableOverrides": {
         "treeId": "south-wood-3",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4075,7 +4038,6 @@
       "variableOverrides": {
         "treeId": "south-wood-3-dense",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4091,7 +4053,6 @@
       "variableOverrides": {
         "treeId": "south-wood-4",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4107,7 +4068,6 @@
       "variableOverrides": {
         "treeId": "south-wood-4-dense",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4123,7 +4083,6 @@
       "variableOverrides": {
         "treeId": "south-wood-5",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4139,7 +4098,6 @@
       "variableOverrides": {
         "treeId": "south-wood-5-dense",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4154,7 +4112,6 @@
       "variableOverrides": {
         "treeId": "player-wood-9",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4169,7 +4126,6 @@
       "variableOverrides": {
         "treeId": "player-wood-9-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4185,7 +4141,6 @@
       "variableOverrides": {
         "treeId": "player-wood-10",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4201,7 +4156,6 @@
       "variableOverrides": {
         "treeId": "player-wood-10-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4216,7 +4170,6 @@
       "variableOverrides": {
         "treeId": "player-wood-11",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4231,7 +4184,6 @@
       "variableOverrides": {
         "treeId": "player-wood-11-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4247,7 +4199,6 @@
       "variableOverrides": {
         "treeId": "player-wood-12",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4263,7 +4214,6 @@
       "variableOverrides": {
         "treeId": "player-wood-12-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4279,7 +4229,6 @@
       "variableOverrides": {
         "treeId": "player-wood-13",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4295,7 +4244,6 @@
       "variableOverrides": {
         "treeId": "player-wood-13-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4311,7 +4259,6 @@
       "variableOverrides": {
         "treeId": "player-wood-14",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4327,7 +4274,6 @@
       "variableOverrides": {
         "treeId": "player-wood-14-dense",
         "forestId": "player-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4342,7 +4288,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-9",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4357,7 +4302,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-9-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4372,7 +4316,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-10",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4387,7 +4330,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-10-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4402,7 +4344,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-11",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4417,7 +4358,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-11-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4432,7 +4372,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-12",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4447,7 +4386,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-12-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4462,7 +4400,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-13",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4477,7 +4414,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-13-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4492,7 +4428,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-14",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4507,7 +4442,6 @@
       "variableOverrides": {
         "treeId": "enemy-wood-14-dense",
         "forestId": "enemy-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4522,7 +4456,6 @@
       "variableOverrides": {
         "treeId": "west-wood-7",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4538,7 +4471,6 @@
       "variableOverrides": {
         "treeId": "west-wood-7-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4553,7 +4485,6 @@
       "variableOverrides": {
         "treeId": "west-wood-8",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4568,7 +4499,6 @@
       "variableOverrides": {
         "treeId": "west-wood-8-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4583,7 +4513,6 @@
       "variableOverrides": {
         "treeId": "west-wood-9",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4598,7 +4527,6 @@
       "variableOverrides": {
         "treeId": "west-wood-9-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4613,7 +4541,6 @@
       "variableOverrides": {
         "treeId": "west-wood-10",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4628,7 +4555,6 @@
       "variableOverrides": {
         "treeId": "west-wood-10-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4643,7 +4569,6 @@
       "variableOverrides": {
         "treeId": "west-wood-11",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4658,7 +4583,6 @@
       "variableOverrides": {
         "treeId": "west-wood-11-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4673,7 +4597,6 @@
       "variableOverrides": {
         "treeId": "west-wood-12",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4688,7 +4611,6 @@
       "variableOverrides": {
         "treeId": "west-wood-12-dense",
         "forestId": "west-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4703,7 +4625,6 @@
       "variableOverrides": {
         "treeId": "east-wood-7",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4718,7 +4639,6 @@
       "variableOverrides": {
         "treeId": "east-wood-7-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4733,7 +4653,6 @@
       "variableOverrides": {
         "treeId": "east-wood-8",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4748,7 +4667,6 @@
       "variableOverrides": {
         "treeId": "east-wood-8-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4763,7 +4681,6 @@
       "variableOverrides": {
         "treeId": "east-wood-9",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4778,7 +4695,6 @@
       "variableOverrides": {
         "treeId": "east-wood-9-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4793,7 +4709,6 @@
       "variableOverrides": {
         "treeId": "east-wood-10",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4808,7 +4723,6 @@
       "variableOverrides": {
         "treeId": "east-wood-10-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4823,7 +4737,6 @@
       "variableOverrides": {
         "treeId": "east-wood-11",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4838,7 +4751,6 @@
       "variableOverrides": {
         "treeId": "east-wood-11-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4853,7 +4765,6 @@
       "variableOverrides": {
         "treeId": "east-wood-12",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4868,7 +4779,6 @@
       "variableOverrides": {
         "treeId": "east-wood-12-dense",
         "forestId": "east-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4883,7 +4793,6 @@
       "variableOverrides": {
         "treeId": "north-wood-6",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4898,7 +4807,6 @@
       "variableOverrides": {
         "treeId": "north-wood-6-dense",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4913,7 +4821,6 @@
       "variableOverrides": {
         "treeId": "north-wood-7",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4928,7 +4835,6 @@
       "variableOverrides": {
         "treeId": "north-wood-7-dense",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -4943,7 +4849,6 @@
       "variableOverrides": {
         "treeId": "north-wood-8",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4958,7 +4863,6 @@
       "variableOverrides": {
         "treeId": "north-wood-8-dense",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -4973,7 +4877,6 @@
       "variableOverrides": {
         "treeId": "north-wood-9",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -4988,7 +4891,6 @@
       "variableOverrides": {
         "treeId": "north-wood-9-dense",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -5003,7 +4905,6 @@
       "variableOverrides": {
         "treeId": "north-wood-10",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -5018,7 +4919,6 @@
       "variableOverrides": {
         "treeId": "north-wood-10-dense",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -5034,7 +4934,6 @@
       "variableOverrides": {
         "treeId": "north-wood-10-dense-a",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -5050,7 +4949,6 @@
       "variableOverrides": {
         "treeId": "north-wood-10-dense-b",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -5065,7 +4963,6 @@
       "variableOverrides": {
         "treeId": "north-wood-11",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -5080,7 +4977,6 @@
       "variableOverrides": {
         "treeId": "north-wood-11-dense",
         "forestId": "north-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -5095,7 +4991,6 @@
       "variableOverrides": {
         "treeId": "south-wood-6",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -5110,7 +5005,6 @@
       "variableOverrides": {
         "treeId": "south-wood-6-dense",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -5126,7 +5020,6 @@
       "variableOverrides": {
         "treeId": "south-wood-7",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -5141,7 +5034,6 @@
       "variableOverrides": {
         "treeId": "south-wood-7-dense",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -5156,7 +5048,6 @@
       "variableOverrides": {
         "treeId": "south-wood-8",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -5171,7 +5062,6 @@
       "variableOverrides": {
         "treeId": "south-wood-8-dense",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -5187,7 +5077,6 @@
       "variableOverrides": {
         "treeId": "south-wood-9",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -5203,7 +5092,6 @@
       "variableOverrides": {
         "treeId": "south-wood-9-dense",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "pine"
       }
     },
@@ -5218,7 +5106,6 @@
       "variableOverrides": {
         "treeId": "south-wood-10",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -5234,7 +5121,6 @@
       "variableOverrides": {
         "treeId": "south-wood-10-dense",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree1"
       }
     },
@@ -5249,7 +5135,6 @@
       "variableOverrides": {
         "treeId": "south-wood-11",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -5264,7 +5149,6 @@
       "variableOverrides": {
         "treeId": "south-wood-11-dense",
         "forestId": "south-grove",
-        "capacity": 60,
         "variant": "tree2"
       }
     },
@@ -5345,9 +5229,9 @@
       "position": [
         44,
         0,
-        -26
+        -24
       ],
-      "name": "Enemy gold_mine (44,-26)",
+      "name": "Enemy gold_mine (44,-24)",
       "variableOverrides": {
         "owner": "enemy",
         "buildingId": "gold_mine",
@@ -5427,11 +5311,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
       "position": [
-        50,
+        54,
         0,
-        -44
+        -48
       ],
-      "name": "Enemy house (50,-44)",
+      "name": "Enemy house (54,-48)",
       "variableOverrides": {
         "owner": "enemy",
         "buildingId": "house",
@@ -5455,11 +5339,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
       "position": [
-        54,
+        58,
         0,
-        -44
+        -46
       ],
-      "name": "Enemy house (54,-44)",
+      "name": "Enemy house (58,-46)",
       "variableOverrides": {
         "owner": "enemy",
         "buildingId": "house",
@@ -5485,9 +5369,9 @@
       "position": [
         50,
         0,
-        -48
+        -50
       ],
-      "name": "Enemy house (50,-48)",
+      "name": "Enemy house (50,-50)",
       "variableOverrides": {
         "owner": "enemy",
         "buildingId": "house",
@@ -6089,16 +5973,16 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        10.97,
+        -29.5,
         0,
-        38.04
+        -58.8
       ],
       "name": "Herd central-stag",
       "scale": 1,
       "variableOverrides": {
         "herdId": "central-stag",
         "species": "stag",
-        "count": 4
+        "count": 2
       }
     },
     {
@@ -6134,21 +6018,6 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        -7.13,
-        0,
-        -33.14
-      ],
-      "name": "Herd central-bull",
-      "scale": 1,
-      "variableOverrides": {
-        "herdId": "central-bull",
-        "species": "bull",
-        "count": 3
-      }
-    },
-    {
-      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
-      "position": [
         -45,
         0,
         -6
@@ -6179,9 +6048,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
       "position": [
-        -1,
+        3.58,
         0,
-        20
+        19.26
       ],
       "name": "TradeSite player_river_port",
       "scale": 1,
@@ -6193,9 +6062,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
       "position": [
-        1,
+        -1.19,
         0,
-        -20
+        -20.17
       ],
       "name": "TradeSite enemy_river_port",
       "scale": 1,

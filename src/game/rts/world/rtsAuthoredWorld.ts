@@ -60,6 +60,8 @@ export function loadRtsAuthoredWorld(
   renderer: WebGLRenderer,
   onWarn?: (message: string, error?: unknown) => void,
   levelPath?: string,
+  /** Boot-curtain progress; see `AuthoredWorldOptions.onProgress`. */
+  onProgress?: (loaded: number, total: number) => void,
 ): Promise<AuthoredWorldHandle> {
   return buildAuthoredWorld({
     layout,
@@ -68,5 +70,6 @@ export function loadRtsAuthoredWorld(
     shadowBounds: RTS_SHADOW_BOUNDS,
     ...(onWarn ? { onWarn } : {}),
     ...(levelPath ? { levelPath } : {}),
+    ...(onProgress ? { onProgress } : {}),
   });
 }

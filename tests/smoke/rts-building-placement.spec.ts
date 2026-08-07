@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { startRtsMatch } from "./rtsBoot";
 
 /**
  * Faz 9 §51: the match opens behind a start screen, so nothing is simulated
@@ -8,7 +9,7 @@ import { expect, test, type Page } from "@playwright/test";
 async function openMatch(page: Page, route: string): Promise<void> {
   await page.goto(route);
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
-  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await startRtsMatch(page);
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
 }
 
@@ -180,7 +181,7 @@ test("RTS Phase 9 match flow: start, pause, surrender, and restart back into pla
   // §53's clock is part of that witness: an opening spent behind the card would
   // show up here as time already on the board.
   await expect(page.locator(".rts-debug-sim")).toContainText("maç: active · süre 0:00");
-  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await startRtsMatch(page);
   await expect(overlay).not.toHaveClass(/is-visible/);
 
   // Escape pauses a running match...

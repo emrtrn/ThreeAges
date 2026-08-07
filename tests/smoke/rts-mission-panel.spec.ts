@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { startRtsMatch } from "./rtsBoot";
 
 test.use({ viewport: { width: 1366, height: 768 } });
 
@@ -8,7 +9,7 @@ test("story mission card states the objective plainly and can be collapsed", asy
 
   await page.goto("/?rts&mission=frontier_road");
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
-  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await startRtsMatch(page);
 
   const panel = page.locator("[data-rts-mission]");
   await expect(panel).toBeVisible();

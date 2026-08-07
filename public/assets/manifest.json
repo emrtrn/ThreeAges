@@ -28516,10 +28516,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Wood_Dark_BC.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Dark_BC.png",
-      "tags": ["threeages", "texture", "wood", "albedo", "pilot"],
+      "tags": [
+        "threeages",
+        "texture",
+        "wood",
+        "albedo",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 684341 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 684341
+      },
       "license": "Project-local Imagen candidate A, accepted 2026-08-06"
     },
     {
@@ -28529,10 +28546,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Wood_Dark_N.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Dark_BC.png",
-      "tags": ["threeages", "texture", "wood", "normal", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "wood",
+        "normal",
+        "generated"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 852935 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 852935
+      },
       "license": "Deterministic derivative of accepted project-local albedo"
     },
     {
@@ -28542,10 +28576,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Wood_Dark_ORM.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Dark_BC.png",
-      "tags": ["threeages", "texture", "wood", "orm", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "wood",
+        "orm",
+        "generated"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 131798 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 131798
+      },
       "license": "Deterministic derivative of accepted project-local albedo"
     },
     {
@@ -28555,10 +28606,26 @@
       "category": "ThreeAges/Materials",
       "path": "assets/ThreeAges/Materials/M_TA_Wood_Dark.material.json",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Dark_BC.png",
-      "tags": ["threeages", "material", "wood", "pilot"],
+      "tags": [
+        "threeages",
+        "material",
+        "wood",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 720 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 720
+      },
       "license": "Project-local ThreeAges material pilot"
     },
     {
@@ -28568,10 +28635,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Wood_Light_BC.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Light_BC.png",
-      "tags": ["threeages", "texture", "wood", "albedo", "pilot"],
+      "tags": [
+        "threeages",
+        "texture",
+        "wood",
+        "albedo",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 969193 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 969193
+      },
       "license": "Project-local Imagen candidate A, accepted 2026-08-06"
     },
     {
@@ -28581,10 +28665,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Wood_Light_N.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Light_BC.png",
-      "tags": ["threeages", "texture", "wood", "normal", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "wood",
+        "normal",
+        "generated"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1079187 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1079187
+      },
       "license": "Deterministic derivative of accepted project-local albedo"
     },
     {
@@ -28594,10 +28695,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Wood_Light_ORM.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Light_BC.png",
-      "tags": ["threeages", "texture", "wood", "orm", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "wood",
+        "orm",
+        "generated"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 258696 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 258696
+      },
       "license": "Deterministic derivative of accepted project-local albedo"
     },
     {
@@ -28607,10 +28725,26 @@
       "category": "ThreeAges/Materials",
       "path": "assets/ThreeAges/Materials/M_TA_Wood_Light.material.json",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wood_Light_BC.png",
-      "tags": ["threeages", "material", "wood", "pilot"],
+      "tags": [
+        "threeages",
+        "material",
+        "wood",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 724 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 724
+      },
       "license": "Project-local ThreeAges material pilot"
     },
     {
@@ -28620,10 +28754,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Roof_Clay_BC.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Roof_Clay_BC.png",
-      "tags": ["threeages", "texture", "roof", "clay", "albedo", "pilot"],
+      "tags": [
+        "threeages",
+        "texture",
+        "roof",
+        "clay",
+        "albedo",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1714933 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1714933
+      },
       "license": "Project-local plain-clay Imagen candidate, selected by user 2026-08-07"
     },
     {
@@ -28633,10 +28785,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Roof_Clay_N.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Roof_Clay_BC.png",
-      "tags": ["threeages", "texture", "roof", "clay", "normal", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "roof",
+        "clay",
+        "normal",
+        "generated"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 2074061 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2074061
+      },
       "license": "Deterministic derivative of accepted project-local albedo"
     },
     {
@@ -28646,10 +28816,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Roof_Clay_ORM.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Roof_Clay_BC.png",
-      "tags": ["threeages", "texture", "roof", "clay", "orm", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "roof",
+        "clay",
+        "orm",
+        "generated"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 729161 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 729161
+      },
       "license": "Deterministic derivative of accepted project-local albedo"
     },
     {
@@ -28659,10 +28847,27 @@
       "category": "ThreeAges/Materials",
       "path": "assets/ThreeAges/Materials/M_TA_Roof_Clay.material.json",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Roof_Clay_BC.png",
-      "tags": ["threeages", "material", "roof", "clay", "pilot"],
+      "tags": [
+        "threeages",
+        "material",
+        "roof",
+        "clay",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 720 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 720
+      },
       "license": "Project-local ThreeAges material pilot"
     },
     {
@@ -28672,10 +28877,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Wall_Plaster_BC.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wall_Plaster_BC.png",
-      "tags": ["threeages", "texture", "wall", "plaster", "albedo", "pilot"],
+      "tags": [
+        "threeages",
+        "texture",
+        "wall",
+        "plaster",
+        "albedo",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1540120 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1540120
+      },
       "license": "Project-local Imagen candidate B, selected by user 2026-08-07"
     },
     {
@@ -28685,10 +28908,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Wall_Plaster_N.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wall_Plaster_BC.png",
-      "tags": ["threeages", "texture", "wall", "plaster", "normal", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "wall",
+        "plaster",
+        "normal",
+        "generated"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1888906 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1888906
+      },
       "license": "Deterministic derivative of accepted project-local albedo"
     },
     {
@@ -28698,10 +28939,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Wall_Plaster_ORM.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wall_Plaster_BC.png",
-      "tags": ["threeages", "texture", "wall", "plaster", "orm", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "wall",
+        "plaster",
+        "orm",
+        "generated"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 586696 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 586696
+      },
       "license": "Deterministic derivative of accepted project-local albedo"
     },
     {
@@ -28711,35 +28970,748 @@
       "category": "ThreeAges/Materials",
       "path": "assets/ThreeAges/Materials/M_TA_Wall_Plaster.material.json",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Wall_Plaster_BC.png",
-      "tags": ["threeages", "material", "wall", "plaster", "pilot"],
+      "tags": [
+        "threeages",
+        "material",
+        "wall",
+        "plaster",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 732 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 732
+      },
       "license": "Project-local ThreeAges material pilot"
     },
-    {"id":"threeages-tex-stone-masonry-a-bc","name":"T_TA_Stone_Masonry_A_BC","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_BC.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_BC.png","tags":["threeages","texture","stone","masonry","albedo","primary"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1374842},"license":"Project-local Imagen candidate A, primary 2026-08-07"},
-    {"id":"threeages-tex-stone-masonry-a-n","name":"T_TA_Stone_Masonry_A_N","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_N.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_BC.png","tags":["threeages","texture","stone","normal","generated"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1660995},"license":"Deterministic derivative"},
-    {"id":"threeages-tex-stone-masonry-a-orm","name":"T_TA_Stone_Masonry_A_ORM","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_ORM.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_BC.png","tags":["threeages","texture","stone","orm","generated"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":520601},"license":"Deterministic derivative"},
-    {"id":"threeages-mat-stone-masonry","name":"M_TA_Stone_Masonry","assetType":"material","category":"ThreeAges/Materials","path":"assets/ThreeAges/Materials/M_TA_Stone_Masonry.material.json","thumbnail":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_BC.png","tags":["threeages","material","stone","masonry","primary"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":622},"license":"Project-local primary stone masonry"},
-    {"id":"threeages-tex-stone-masonry-b-bc","name":"T_TA_Stone_Masonry_B_BC","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_BC.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_BC.png","tags":["threeages","texture","stone","masonry","albedo","backup"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1153927},"license":"Project-local Imagen candidate B, backup 2026-08-07"},
-    {"id":"threeages-tex-stone-masonry-b-n","name":"T_TA_Stone_Masonry_B_N","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_N.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_BC.png","tags":["threeages","texture","stone","normal","generated","backup"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1347099},"license":"Deterministic derivative"},
-    {"id":"threeages-tex-stone-masonry-b-orm","name":"T_TA_Stone_Masonry_B_ORM","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_ORM.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_BC.png","tags":["threeages","texture","stone","orm","generated","backup"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":340073},"license":"Deterministic derivative"},
-    {"id":"threeages-mat-stone-masonry-backup","name":"M_TA_Stone_Masonry_Backup","assetType":"material","category":"ThreeAges/Materials","path":"assets/ThreeAges/Materials/M_TA_Stone_Masonry_Backup.material.json","thumbnail":"assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_BC.png","tags":["threeages","material","stone","masonry","backup"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":629},"license":"Project-local backup stone masonry"},
-    {"id":"threeages-tex-rock-natural-bc","name":"T_TA_Rock_Natural_BC","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Rock_Natural_BC.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Rock_Natural_BC.png","tags":["threeages","texture","rock","albedo","pilot"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1226352},"license":"Project-local Imagen candidate A, accepted by user 2026-08-07"},
-    {"id":"threeages-tex-rock-natural-n","name":"T_TA_Rock_Natural_N","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Rock_Natural_N.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Rock_Natural_BC.png","tags":["threeages","texture","rock","normal","generated"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1487123},"license":"Deterministic derivative"},
-    {"id":"threeages-tex-rock-natural-orm","name":"T_TA_Rock_Natural_ORM","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Rock_Natural_ORM.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Rock_Natural_BC.png","tags":["threeages","texture","rock","orm","generated"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":435399},"license":"Deterministic derivative"},
-    {"id":"threeages-mat-rock-natural","name":"M_TA_Rock_Natural","assetType":"material","category":"ThreeAges/Materials","path":"assets/ThreeAges/Materials/M_TA_Rock_Natural.material.json","thumbnail":"assets/ThreeAges/Textures/T_TA_Rock_Natural_BC.png","tags":["threeages","material","rock","pilot"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":612},"license":"Project-local ThreeAges natural-rock pilot"},
-    {"id":"threeages-tex-earth-compacted-bc","name":"T_TA_Earth_Compacted_BC","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Earth_Compacted_BC.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Earth_Compacted_BC.png","tags":["threeages","texture","earth","albedo"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1010482},"license":"Project-local Imagen candidate B accepted by user"},
-    {"id":"threeages-tex-earth-compacted-n","name":"T_TA_Earth_Compacted_N","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Earth_Compacted_N.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Earth_Compacted_BC.png","tags":["threeages","texture","earth","normal"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1220952},"license":"Deterministic derivative"},
-    {"id":"threeages-tex-earth-compacted-orm","name":"T_TA_Earth_Compacted_ORM","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Earth_Compacted_ORM.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Earth_Compacted_BC.png","tags":["threeages","texture","earth","orm"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":316828},"license":"Deterministic derivative"},
-    {"id":"threeages-mat-earth-compacted","name":"M_TA_Earth_Compacted","assetType":"material","category":"ThreeAges/Materials","path":"assets/ThreeAges/Materials/M_TA_Earth_Compacted.material.json","thumbnail":"assets/ThreeAges/Textures/T_TA_Earth_Compacted_BC.png","tags":["threeages","material","earth"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":459},"license":"Project-local earth material"},
-    {"id":"threeages-tex-grass-meadow-bc","name":"T_TA_Grass_Meadow_BC","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.png","tags":["threeages","texture","grass","meadow","albedo","pilot"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1337275},"license":"Project-local Imagen candidate A, accepted by user 2026-08-07"},
-    {"id":"threeages-tex-grass-meadow-n","name":"T_TA_Grass_Meadow_N","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Grass_Meadow_N.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.png","tags":["threeages","texture","grass","normal","generated"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1457957},"license":"Deterministic derivative"},
-    {"id":"threeages-tex-grass-meadow-orm","name":"T_TA_Grass_Meadow_ORM","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Grass_Meadow_ORM.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.png","tags":["threeages","texture","grass","orm","generated"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":488571},"license":"Deterministic derivative"},
-    {"id":"threeages-mat-grass-meadow","name":"M_TA_Grass_Meadow","assetType":"material","category":"ThreeAges/Materials","path":"assets/ThreeAges/Materials/M_TA_Grass_Meadow.material.json","thumbnail":"assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.png","tags":["threeages","material","grass","meadow","pilot"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":459},"license":"Project-local ThreeAges meadow material pilot"},
-    {"id":"threeages-tex-road-gravel-bc","name":"T_TA_Road_Gravel_BC","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.png","tags":["threeages","texture","road","gravel","albedo","pilot"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1625070},"license":"Project-local Imagen candidate A, accepted by user 2026-08-07"},
-    {"id":"threeages-tex-road-gravel-n","name":"T_TA_Road_Gravel_N","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Road_Gravel_N.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.png","tags":["threeages","texture","road","normal","generated"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":1741928},"license":"Deterministic derivative"},
-    {"id":"threeages-tex-road-gravel-orm","name":"T_TA_Road_Gravel_ORM","assetType":"texture","category":"ThreeAges/Textures","path":"assets/ThreeAges/Textures/T_TA_Road_Gravel_ORM.png","thumbnail":"assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.png","tags":["threeages","texture","road","orm","generated"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":681740},"license":"Deterministic derivative"},
-    {"id":"threeages-mat-road-gravel","name":"M_TA_Road_Gravel","assetType":"material","category":"ThreeAges/Materials","path":"assets/ThreeAges/Materials/M_TA_Road_Gravel.material.json","thumbnail":"assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.png","tags":["threeages","material","road","gravel","pilot"],"placeable":false,"placement":{"surface":"floor","snapToWall":false,"allowRotation":false,"allowScale":false},"runtime":{"loadGroup":"ThreeAges-Textures","castShadow":false,"receiveShadow":false,"collision":false,"bytes":457},"license":"Project-local ThreeAges road material pilot"}
+    {
+      "id": "threeages-tex-stone-masonry-a-bc",
+      "name": "T_TA_Stone_Masonry_A_BC",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_BC.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "masonry",
+        "albedo",
+        "primary"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1374842
+      },
+      "license": "Project-local Imagen candidate A, primary 2026-08-07"
+    },
+    {
+      "id": "threeages-tex-stone-masonry-a-n",
+      "name": "T_TA_Stone_Masonry_A_N",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_N.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "normal",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1660995
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-tex-stone-masonry-a-orm",
+      "name": "T_TA_Stone_Masonry_A_ORM",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_ORM.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "orm",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 520601
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-mat-stone-masonry",
+      "name": "M_TA_Stone_Masonry",
+      "assetType": "material",
+      "category": "ThreeAges/Materials",
+      "path": "assets/ThreeAges/Materials/M_TA_Stone_Masonry.material.json",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_A_BC.png",
+      "tags": [
+        "threeages",
+        "material",
+        "stone",
+        "masonry",
+        "primary"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 622
+      },
+      "license": "Project-local primary stone masonry"
+    },
+    {
+      "id": "threeages-tex-stone-masonry-b-bc",
+      "name": "T_TA_Stone_Masonry_B_BC",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_BC.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "masonry",
+        "albedo",
+        "backup"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1153927
+      },
+      "license": "Project-local Imagen candidate B, backup 2026-08-07"
+    },
+    {
+      "id": "threeages-tex-stone-masonry-b-n",
+      "name": "T_TA_Stone_Masonry_B_N",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_N.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "normal",
+        "generated",
+        "backup"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1347099
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-tex-stone-masonry-b-orm",
+      "name": "T_TA_Stone_Masonry_B_ORM",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_ORM.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "orm",
+        "generated",
+        "backup"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 340073
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-mat-stone-masonry-backup",
+      "name": "M_TA_Stone_Masonry_Backup",
+      "assetType": "material",
+      "category": "ThreeAges/Materials",
+      "path": "assets/ThreeAges/Materials/M_TA_Stone_Masonry_Backup.material.json",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Masonry_B_BC.png",
+      "tags": [
+        "threeages",
+        "material",
+        "stone",
+        "masonry",
+        "backup"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 629
+      },
+      "license": "Project-local backup stone masonry"
+    },
+    {
+      "id": "threeages-tex-rock-natural-bc",
+      "name": "T_TA_Rock_Natural_BC",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Rock_Natural_BC.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Rock_Natural_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "rock",
+        "albedo",
+        "pilot"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1226352
+      },
+      "license": "Project-local Imagen candidate A, accepted by user 2026-08-07"
+    },
+    {
+      "id": "threeages-tex-rock-natural-n",
+      "name": "T_TA_Rock_Natural_N",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Rock_Natural_N.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Rock_Natural_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "rock",
+        "normal",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1487123
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-tex-rock-natural-orm",
+      "name": "T_TA_Rock_Natural_ORM",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Rock_Natural_ORM.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Rock_Natural_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "rock",
+        "orm",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 435399
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-mat-rock-natural",
+      "name": "M_TA_Rock_Natural",
+      "assetType": "material",
+      "category": "ThreeAges/Materials",
+      "path": "assets/ThreeAges/Materials/M_TA_Rock_Natural.material.json",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Rock_Natural_BC.png",
+      "tags": [
+        "threeages",
+        "material",
+        "rock",
+        "pilot"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 612
+      },
+      "license": "Project-local ThreeAges natural-rock pilot"
+    },
+    {
+      "id": "threeages-tex-earth-compacted-bc",
+      "name": "T_TA_Earth_Compacted_BC",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Earth_Compacted_BC.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Earth_Compacted_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "earth",
+        "albedo"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1010482
+      },
+      "license": "Project-local Imagen candidate B accepted by user"
+    },
+    {
+      "id": "threeages-tex-earth-compacted-n",
+      "name": "T_TA_Earth_Compacted_N",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Earth_Compacted_N.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Earth_Compacted_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "earth",
+        "normal"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1220952
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-tex-earth-compacted-orm",
+      "name": "T_TA_Earth_Compacted_ORM",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Earth_Compacted_ORM.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Earth_Compacted_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "earth",
+        "orm"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 316828
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-mat-earth-compacted",
+      "name": "M_TA_Earth_Compacted",
+      "assetType": "material",
+      "category": "ThreeAges/Materials",
+      "path": "assets/ThreeAges/Materials/M_TA_Earth_Compacted.material.json",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Earth_Compacted_BC.png",
+      "tags": [
+        "threeages",
+        "material",
+        "earth"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 459
+      },
+      "license": "Project-local earth material"
+    },
+    {
+      "id": "threeages-tex-grass-meadow-bc",
+      "name": "T_TA_Grass_Meadow_BC",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "grass",
+        "meadow",
+        "albedo",
+        "pilot"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1337275
+      },
+      "license": "Project-local Imagen candidate A, accepted by user 2026-08-07"
+    },
+    {
+      "id": "threeages-tex-grass-meadow-n",
+      "name": "T_TA_Grass_Meadow_N",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Grass_Meadow_N.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "grass",
+        "normal",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1457957
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-tex-grass-meadow-orm",
+      "name": "T_TA_Grass_Meadow_ORM",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Grass_Meadow_ORM.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "grass",
+        "orm",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 488571
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-mat-grass-meadow",
+      "name": "M_TA_Grass_Meadow",
+      "assetType": "material",
+      "category": "ThreeAges/Materials",
+      "path": "assets/ThreeAges/Materials/M_TA_Grass_Meadow.material.json",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Grass_Meadow_BC.png",
+      "tags": [
+        "threeages",
+        "material",
+        "grass",
+        "meadow",
+        "pilot"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 459
+      },
+      "license": "Project-local ThreeAges meadow material pilot"
+    },
+    {
+      "id": "threeages-tex-road-gravel-bc",
+      "name": "T_TA_Road_Gravel_BC",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "road",
+        "gravel",
+        "albedo",
+        "pilot"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1625070
+      },
+      "license": "Project-local Imagen candidate A, accepted by user 2026-08-07"
+    },
+    {
+      "id": "threeages-tex-road-gravel-n",
+      "name": "T_TA_Road_Gravel_N",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Road_Gravel_N.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "road",
+        "normal",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1741928
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-tex-road-gravel-orm",
+      "name": "T_TA_Road_Gravel_ORM",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Road_Gravel_ORM.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "road",
+        "orm",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 681740
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-mat-road-gravel",
+      "name": "M_TA_Road_Gravel",
+      "assetType": "material",
+      "category": "ThreeAges/Materials",
+      "path": "assets/ThreeAges/Materials/M_TA_Road_Gravel.material.json",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Road_Gravel_BC.png",
+      "tags": [
+        "threeages",
+        "material",
+        "road",
+        "gravel",
+        "pilot"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 457
+      },
+      "license": "Project-local ThreeAges road material pilot"
+    }
   ]
 }
