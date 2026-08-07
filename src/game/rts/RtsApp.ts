@@ -2062,7 +2062,7 @@ export class RtsApp {
   private settleAssetTrack(id: RtsLoadTrackId): void {
     this.loadTracker.settle(id);
     if (!this.pendingAssetTracks.delete(id)) return;
-    if (this.pendingAssetTracks.size === 0) void this.armFirstLoadedFrame();
+    if (this.pendingAssetTracks.size === 0) this.armFirstLoadedFrame();
   }
 
   /**
@@ -2072,21 +2072,30 @@ export class RtsApp {
    * last resolved promise would therefore end it precisely at the freeze it was
    * covering, and the player would watch the pop-in anyway — one beat later.
    *
-   * So the shaders are compiled behind the curtain (`compileAsync` rather than
-   * `compile`, so the tab stays responsive and the bar keeps animating), and only
-   * then are frames counted. Two, not one: the first is the frame the compile
-   * lands in, the second is the first frame that is honestly cheap.
+   * So the shaders are compiled behind the curtain, and only then are frames
+   * counted. Two, not one: the first is the frame the compile lands in, the
+   * second is the first frame that is honestly cheap.
+   *
+   * **Not `compileAsync()`** — the same r184 hazard `RuntimeSceneApp` already
+   * documents (see its `warmRuntimeShaders`). `compileAsync` runs the identical
+   * synchronous `compile()` first and only then polls the materials for driver
+   * readiness on a `setTimeout` loop; that poll reads `currentProgram.isReady()`
+   * without checking that `currentProgram` exists, so one material without a
+   * program throws *inside the timer*, outside this method's `await`/`catch`.
+   * The promise then never settles, `pendingFirstFrames` is never armed, and the
+   * curtain hangs until the T3 timeout — the exact failure the curtain exists to
+   * prevent. Since the expensive half runs synchronously either way, the async
+   * version was buying nothing but that deadlock.
    */
-  private async armFirstLoadedFrame(): Promise<void> {
+  private armFirstLoadedFrame(): void {
     if (this.disposed) return;
     try {
-      await this.renderer.compileAsync(this.scene, this.cameraController.camera);
+      this.renderer.compile(this.scene, this.cameraController.camera);
     } catch (error) {
-      // A driver without KHR_parallel_shader_compile still draws fine; it just
-      // pays the compile in the frame instead. Worth a line, not a stall.
+      // A driver that refuses the preload still draws fine; it just pays the
+      // compile in the frame instead. Worth a line, not a stall.
       this.log.warn("RTS shader precompile failed; the first frame may hitch", error);
     }
-    if (this.disposed) return;
     this.pendingFirstFrames = FRAMES_BEFORE_CURTAIN_LIFT;
   }
 

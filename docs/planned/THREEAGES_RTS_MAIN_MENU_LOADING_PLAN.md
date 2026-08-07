@@ -178,9 +178,19 @@ bilinmiyor. Cozum: KARAR 6'daki indeterminate -> determinate gecisi.
 
 **T2 - %100 hazir demek degil.** Son promise cozuldukten sonra GPU upload ve
 ilk karenin shader derlemesi var; cubuk %100'de donar, sonra ekran acilir.
-Cozum: son dilim buna ayrilir - `renderer.compileAsync()` + iki cizilmis kare
-beklenir, perde **gercekten cizilmis ilk kareden sonra** kalkar. (`compile()`
-degil: o senkron, ve perdeyi tam is yaparken dondururdu.)
+Cozum: son dilim buna ayrilir - `renderer.compile()` + iki cizilmis kare
+beklenir, perde **gercekten cizilmis ilk kareden sonra** kalkar.
+
+**`compileAsync()` degil** (bu ilk yazilista tersi secilmisti; §7.1'e bakiniz).
+three r184'te `compileAsync` once ayni senkron `compile()`'i kosuyor, sonra
+`setTimeout` dongusuyle materyallerin surucu hazirligini yokluyor - ve o yoklama
+`currentProgram.isReady()`'yi `currentProgram` var mi diye bakmadan cagiriyor.
+Programsiz tek bir materyal timer'in *icinde* firlatiyor; hata `await`/`catch`
+zincirinin disinda kaliyor, promise hic cozulmuyor, ilk-kare sayaci hic
+kurulmuyor ve perde T3 timeout'una (20 sn) kadar asili kaliyor. Pahali yari
+zaten iki durumda da senkron kostugu icin async surum bu kilitlenmeden baska
+hicbir sey kazandirmiyordu. `RuntimeSceneApp.warmRuntimeShaders()` ayni tuzagi
+zaten belgelemis; RTS rotasi simdi onunla ayni karari veriyor.
 
 **T3 - Hata yollari perdeyi kapatmali.** `dataset.rtsAuthoredWorld = "fallback"`
 ve actor pack'in `catch`'i (`RtsApp.ts:4821`) de "bitti" sayilir. Ustune sert
@@ -205,10 +215,12 @@ bir timeout (~20 sn): tek bir olu fetch oyuncuyu perdede kilitlemez.
   kurali her canli izin paydasini sart kostugu icin bu, cubugu boot boyunca
   belirsiz modda birakiyordu. Iz artik tek adimlik payda ile bildiriliyor
   (`report("firstFrame", 0, 1)`), tipki `mapArt` gibi.
-- **T2 `compile()` degil `compileAsync()` ile yapildi.** `compile` senkron ve
-  ana thread'i kilitliyor - perde tam da is yaparken donardi. `compileAsync`
-  (three 0.184) `KHR_parallel_shader_compile` kullaniyor, cubuk akmaya devam
-  ediyor.
+- **T2 once `compileAsync()` ile yapildi; bu bir hataydi ve geri alindi
+  (2026-08-08).** Gerekce "compile senkron, perdeyi dondururdu" idi - ama
+  `compileAsync` de ayni `compile()`'i kosuyor, ustune bir de kilitlenen bir
+  hazirlik yoklamasi ekliyor. Semptom: perde ~20 saniye asili kalip T3
+  timeout'uyla aciliyor. Ayrinti §6/T2'de. `armFirstLoadedFrame()` artik senkron
+  ve `renderer.compile()` cagiriyor.
 - Opsiyonel `onProgress` gecisleri:
   - `RtsActorVisualFactory.load(onProgress?)`
   - `AuthoredWorldOptions.onProgress?` (`src/scene/authoredWorld.ts` - engine
