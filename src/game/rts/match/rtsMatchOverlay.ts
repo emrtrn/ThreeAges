@@ -639,7 +639,7 @@ export class RtsMatchOverlay {
     if (this.handlers.onFogOfWar) this.setFogOfWar(fogOfWar);
     if (this.handlers.onAiProfile) this.setAiProfile(aiProfile);
     this.render(
-      "Üç Çağ: Sınır Krallıkları",
+      "Sınır Krallıkları",
       "Ekonomini kur, yolunu bağla ve düşman merkezini yık.",
       [{ label: "Maçı Başlat", action: this.handlers.onStart, primary: true, key: "start" }],
       "neutral",
