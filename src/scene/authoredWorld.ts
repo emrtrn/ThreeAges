@@ -117,6 +117,15 @@ export interface AuthoredWorldHandle {
   /** How many foliage instances this world mounted (0 when the Level paints none). */
   readonly foliageInstanceCount: number;
   /**
+   * The painted foliage's own subtree, or null when the Level paints none.
+   *
+   * Exposed for measurement, not for editing: a diagnostic that wants to know
+   * what ground cover costs has to be able to take it off the screen for one
+   * frame, and the alternative — finding it by node name under `root` — breaks
+   * silently the day the group is renamed.
+   */
+  readonly foliageRoot: Object3D | null;
+  /**
    * Advances the foliage distance cull for a rendered frame. A no-op when the
    * Level paints no foliage, or when every Foliage Type disables distance
    * culling, so a shell can call it unconditionally from its frame loop.
@@ -628,6 +637,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     landscapeCount: landscapeObjects.length,
     landscapes: mountedLandscapes,
     foliageInstanceCount,
+    foliageRoot: foliageBinding?.root ?? null,
     updateFoliageCulling: (cameraPosition, cullDistanceScale = 1) => {
       foliageBinding?.updateCulling(cameraPosition, cullDistanceScale);
     },

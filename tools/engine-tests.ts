@@ -289,8 +289,8 @@ import {
   buildRtsFrameCapture,
   formatRtsFrameCaptureText,
 } from "../src/game/rts/debug/rtsFrameCapture";
-import { buildRtsGpuSweep, rtsGpuSweepTableView } from "../src/game/rts/debug/rtsGpuSweep";
-import { RtsGpuSweepRunner, median } from "../src/game/rts/debug/rtsGpuSweepRunner";
+import { buildRtsGpuSweep, median, rtsGpuSweepTableView } from "../src/game/rts/debug/rtsGpuSweep";
+import { RtsGpuSweepRunner } from "../src/game/rts/debug/rtsGpuSweepRunner";
 import { GpuFrameTimer, type GpuTimerContext } from "@engine/perf/gpuTimer";
 import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
 import { updateStructureDestruction } from "../src/game/rts/structures/structureDestruction";
@@ -45307,14 +45307,18 @@ check("GPU timer: tags late results, drops a disjoint batch, and returns every q
 });
 
 check("GPU sweep: rows are savings against the baseline, sorted, with noise called noise", () => {
+  // A run where the machine held still: every bracket reads the same, so the
+  // pairing is a no-op and the arithmetic is the plain difference.
+  const steady = (gpuMs: number, samples: number) =>
+    ({ gpuMs, samples, baselineBeforeMs: 10, baselineAfterMs: 10 });
   const sweep = buildRtsGpuSweep({
-    baselineMs: 10,
-    baselineSamples: 5,
+    baselines: [10, 10, 10, 10, 10],
+    baselineSamples: 25,
     steps: [
-      { id: "gölge haritası", gpuMs: 6, samples: 5 },
-      { id: "birimler", gpuMs: 8.5, samples: 5 },
-      { id: "dünya arayüzü", gpuMs: 9.97, samples: 5 },
-      { id: "arazi/harita", gpuMs: 10.04, samples: 3 },
+      { id: "gölge haritası", ...steady(6, 5) },
+      { id: "birimler", ...steady(8.5, 5) },
+      { id: "dünya arayüzü", ...steady(9.97, 5) },
+      { id: "arazi/harita", ...steady(10.04, 3) },
     ],
     disjointEvents: 1,
     speed: 1,
@@ -45355,6 +45359,66 @@ check("GPU sweep: rows are savings against the baseline, sorted, with noise call
   );
   assert.equal(view.rows[2]?.cells[2], "~0", "a noise-floor row shows no false precision");
   assert.equal(view.title, "GPU dökümü (tarama)");
+
+  // A steady run says so, and does not carry the drift warning.
+  assert.equal(sweep.baselineRuns, 5);
+  assert.equal(sweep.baselineDriftMs, 0);
+  assert.equal(sweep.baselineDrifted, false);
+  assert.equal(sweep.rows.every((row) => !row.unstable), true);
+  assert.ok(!view.notes.some((note) => note.includes("güç durumu değiştirdi")));
+});
+
+check("GPU sweep: a GPU that changes clock mid-run cannot be read as content cost", () => {
+  // The measured failure this bracketing exists for. A single baseline taken
+  // first (3.90 ms) against steps measured later (11+ ms) reported hiding two
+  // near-empty roots as a 7 ms *increase* — a physically impossible finding
+  // that the driver's disjoint flag never fires on, because each duration is a
+  // true duration of a frame drawn by a slower GPU.
+  const sweep = buildRtsGpuSweep({
+    baselines: [3.9, 3.9, 3.88, 4.05, 11.2, 11.66],
+    baselineSamples: 30,
+    steps: [
+      { id: "gölge haritası", gpuMs: 3.9, samples: 5, baselineBeforeMs: 3.9, baselineAfterMs: 3.9 },
+      { id: "birimler", gpuMs: 1.76, samples: 5, baselineBeforeMs: 3.9, baselineAfterMs: 3.88 },
+      { id: "yapılar", gpuMs: 3.88, samples: 5, baselineBeforeMs: 3.88, baselineAfterMs: 4.05 },
+      { id: "arazi/harita", gpuMs: 4.05, samples: 5, baselineBeforeMs: 4.05, baselineAfterMs: 11.2 },
+      { id: "mermiler/efektler", gpuMs: 11.66, samples: 5, baselineBeforeMs: 11.2, baselineAfterMs: 11.66 },
+    ],
+    disjointEvents: 0,
+    speed: 1,
+    matchSeconds: 82.2,
+    drawCalls: 337,
+    triangles: 1_637_937,
+  });
+
+  // The real finding was measured inside a bracket that barely moved, so it
+  // survives the drift intact and stays at the top of the table.
+  const units = sweep.rows[0];
+  assert.equal(units?.label, "birimler");
+  assert.equal(units?.unstable, false);
+  assert.equal(Number(units?.savingMs.toFixed(2)), 2.13);
+
+  // The rows whose brackets straddled the clock change are published as
+  // unstable rather than as a number, and sort below the ones that are real.
+  const unstable = sweep.rows.filter((row) => row.unstable).map((row) => row.label);
+  assert.deepEqual(unstable, ["arazi/harita", "mermiler/efektler"]);
+  assert.deepEqual(sweep.rows.slice(-2).map((row) => row.label), ["arazi/harita", "mermiler/efektler"]);
+
+  const view = rtsGpuSweepTableView(sweep);
+  // Nothing in the table may read as "hiding content made the frame slower".
+  assert.equal(view.rows.some((row) => row.cells[2]?.startsWith("-")), false);
+  assert.equal(view.rows.at(-1)?.cells[2], "belirsiz");
+  assert.equal(view.rows.at(-1)?.cells[3], "—");
+
+  // And the run as a whole admits the machine moved under it.
+  assert.equal(sweep.baselineDrifted, true);
+  assert.equal(Number(sweep.baselineDriftMs.toFixed(2)), 7.78);
+  assert.ok(
+    view.notes.some((note) => note.includes("güç durumu değiştirdi")),
+    "a drifted run names the cause rather than publishing the numbers straight",
+  );
+  assert.ok(view.notes.some((note) => note.includes("belirsiz")));
+  assert.ok(view.clipboardText.includes("belirsiz"), "the pasted copy carries the caveat too");
 });
 
 check("GPU sweep runner: one step at a time, medians, and it cannot hang the match", () => {
@@ -45362,8 +45426,9 @@ check("GPU sweep runner: one step at a time, medians, and it cannot hang the mat
   const context = { speed: 1, matchSeconds: 0, drawCalls: 0, triangles: 0 };
 
   // Step 0 is the untouched baseline, and its tag is never 0 — that one belongs
-  // to ordinary frames, which must keep feeding the continuous readout.
-  assert.deepEqual(runner.currentStep(), { index: 0, id: "taban", tag: 1 });
+  // to ordinary frames, which must keep feeding the continuous readout. A
+  // baseline carries no plan index; that is how the app knows to hide nothing.
+  assert.deepEqual(runner.currentStep(), { index: 0, id: "taban", tag: 1, planIndex: null });
 
   const feed = (tag: number, values: readonly number[]): void => {
     for (const value of values) {
@@ -45375,17 +45440,58 @@ check("GPU sweep runner: one step at a time, medians, and it cannot hang the mat
   // A warm-up spike in every configuration: the median must ignore it, which an
   // average could not — a 40 ms first frame would invent a difference.
   feed(1, [40, 10, 10, 10, 10]);
-  assert.equal(runner.currentStep()?.id, "gölgeler", "a settled step advances");
+  // Two steps schedule five measurements: baseline, step, baseline, step,
+  // baseline. `planIndex` must track the caller's list, not the schedule
+  // position — indexing the plan by position is what this pins.
+  assert.deepEqual(runner.currentStep(), { index: 1, id: "gölgeler", tag: 2, planIndex: 0 });
 
   feed(2, [30, 6, 6, 6, 6]);
-  feed(3, [28, 9, 9, 9, 9]);
+  assert.deepEqual(runner.currentStep(), { index: 2, id: "taban", tag: 3, planIndex: null });
+
+  feed(3, [10, 10, 10, 10, 10]);
+  assert.deepEqual(runner.currentStep(), { index: 3, id: "birimler", tag: 4, planIndex: 1 });
+
+  feed(4, [28, 9, 9, 9, 9]);
+  assert.equal(runner.currentStep()?.id, "taban", "and it closes on a baseline, not a step");
+
+  feed(5, [10, 10, 10, 10, 10]);
   const outcome = runner.advance(context);
   assert.equal(outcome.kind, "done");
   if (outcome.kind !== "done") return;
   assert.equal(outcome.sweep.baselineMs, 10);
+  assert.equal(outcome.sweep.baselineRuns, 3, "measured before, between and after");
+  assert.equal(outcome.sweep.baselineSamples, 15);
   assert.equal(outcome.sweep.rows[0]?.label, "gölgeler");
   assert.equal(outcome.sweep.rows[0]?.savingMs, 4);
+  assert.equal(outcome.sweep.rows[1]?.savingMs, 1);
   assert.equal(runner.currentStep(), null, "a finished sweep asks for no more frames");
+
+  // A baseline that produces nothing must not contribute a zero to its
+  // neighbour's bracket — the step beside it would be reported as saving half
+  // the frame. The other side stands in instead.
+  const gappy = new RtsGpuSweepRunner([{ id: "gölgeler" }]);
+  for (const value of [10, 10, 10, 10, 10]) {
+    gappy.noteFrame();
+    gappy.acceptSample(1, value);
+    gappy.advance(context);
+  }
+  for (const value of [6, 6, 6, 6, 6]) {
+    gappy.noteFrame();
+    gappy.acceptSample(2, value);
+    gappy.advance(context);
+  }
+  // Draw out the closing baseline without ever answering it, past the runner's
+  // per-step frame budget, so it is written off rather than measured.
+  for (let frame = 0; frame < 60; frame += 1) {
+    gappy.noteFrame();
+    gappy.advance(context);
+  }
+  const gapOutcome = gappy.advance(context);
+  assert.equal(gapOutcome.kind, "done");
+  if (gapOutcome.kind !== "done") return;
+  assert.equal(gapOutcome.sweep.rows[0]?.savingMs, 4, "the surviving baseline covers both sides");
+  assert.equal(gapOutcome.sweep.rows[0]?.bracketDriftMs, 0);
+  assert.equal(gapOutcome.sweep.baselineRuns, 1);
 
   // A driver that never resolves a query must not leave the match paused behind
   // a table that never appears.

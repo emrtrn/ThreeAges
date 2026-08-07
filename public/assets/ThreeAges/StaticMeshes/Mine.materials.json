@@ -1,6 +1,10 @@
 {
   "schema": 1,
   "slots": [
-    "m-gravel-material"
+    "threeages-mat-rock-natural",
+    "",
+    "",
+    "threeages-mat-wood-dark",
+    "threeages-mat-wood-light"
   ]
 }

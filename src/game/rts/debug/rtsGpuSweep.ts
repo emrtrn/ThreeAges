@@ -19,6 +19,28 @@
  *  - **Small rows are noise.** Browsers quantise timer results, so anything near
  *    the noise floor is reported as such rather than as a precise small number.
  *
+ * ## Why every step is bracketed by its own baseline
+ *
+ * An A/B across time only holds while the machine stays the same, and over a
+ * multi-second sweep it does not: a paused, cheap scene lets the GPU drop into a
+ * lower power state, and the same frame then measures several times slower at
+ * the end of the run than at the start. Measured against a single baseline taken
+ * first, that drift is indistinguishable from content cost — and it shows up
+ * with the wrong sign, as categories whose removal "costs" 7 ms.
+ *
+ * The driver's own disjoint flag does not catch it. A disjoint event says the
+ * result is garbage; a clock change says nothing at all, because each individual
+ * duration is still a true duration — of a frame drawn by a slower GPU.
+ *
+ * So the baseline is not measured once. It is measured before and after every
+ * step, and a row is compared against the **mean of its own two neighbours**.
+ * Any drift that is linear across a bracket cancels out, and what does not
+ * cancel is visible as the gap between the two, which is reported per row: when
+ * a bracket moved as much as the saving it is supposed to explain, the row is
+ * published as `belirsiz` rather than as a number. This costs roughly twice the
+ * frames of an unbracketed sweep, which is the right trade for a table whose
+ * whole purpose is to be believed.
+ *
  * Pure and DOM-free: the arithmetic and the wording are unit-tested, and the
  * modal only renders what comes out of here.
  */
@@ -31,11 +53,20 @@ export interface RtsGpuSweepStepResult {
   readonly gpuMs: number;
   /** Samples the median came from — a thin step is worth distrusting. */
   readonly samples: number;
+  /** Untouched frame measured immediately *before* this step. */
+  readonly baselineBeforeMs: number;
+  /** Untouched frame measured immediately *after* it. */
+  readonly baselineAfterMs: number;
 }
 
 export interface RtsGpuSweepInput {
-  /** The untouched frame every step is compared against. */
-  readonly baselineMs: number;
+  /**
+   * Every baseline median, in measurement order: one before the first step, one
+   * between each pair, one after the last. Their spread is the sweep's own
+   * error bar.
+   */
+  readonly baselines: readonly number[];
+  /** Samples behind all of those baselines together. */
   readonly baselineSamples: number;
   readonly steps: readonly RtsGpuSweepStepResult[];
   /** Times results were thrown away mid-sweep by a GPU disjoint event. */
@@ -51,18 +82,29 @@ export interface RtsGpuSweepRow {
   readonly label: string;
   /** Frame time with this category off. */
   readonly withoutMs: number;
-  /** baseline − without: what turning it off gives back. Can be negative. */
+  /** bracket mean − without: what turning it off gives back. Can be negative. */
   readonly savingMs: number;
-  /** Saving as a fraction of the baseline frame. */
+  /** Saving as a fraction of the headline baseline. */
   readonly share: number;
   readonly samples: number;
   /** True when the saving is inside the measurement's noise floor. */
   readonly negligible: boolean;
+  /** How far this row's own two baselines disagreed. */
+  readonly bracketDriftMs: number;
+  /** The bracket moved at least as much as the saving: not a finding. */
+  readonly unstable: boolean;
 }
 
 export interface RtsGpuSweep {
+  /** Median across every baseline measured, not just the first. */
   readonly baselineMs: number;
   readonly baselineSamples: number;
+  /** How many times the untouched frame was measured. */
+  readonly baselineRuns: number;
+  /** Spread across those measurements — the GPU's drift over the run. */
+  readonly baselineDriftMs: number;
+  /** Drift large enough that the run's absolute numbers are not comparable. */
+  readonly baselineDrifted: boolean;
   readonly rows: readonly RtsGpuSweepRow[];
   readonly disjointEvents: number;
   readonly speed: number;
@@ -78,22 +120,66 @@ export interface RtsGpuSweep {
  */
 export const GPU_SWEEP_NOISE_FLOOR_MS = 0.1;
 
+/**
+ * Baseline spread, as a fraction of the baseline, past which the machine changed
+ * under the measurement. Bracketing still rescues the individual rows, so this
+ * is a warning on the run rather than a rejection of it — but the absolute
+ * `kapalıyken ms` column stops being comparable between top and bottom.
+ */
+export const GPU_SWEEP_DRIFT_TOLERANCE = 0.25;
+
+/**
+ * Median, not mean: the first frame of a configuration pays for pipeline warm-up
+ * and shader state that the steady state does not, and one such frame drags a
+ * five-sample average far enough to invent a difference.
+ */
+export function median(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]!
+    : (sorted[middle - 1]! + sorted[middle]!) / 2;
+}
+
 export function buildRtsGpuSweep(input: RtsGpuSweepInput): RtsGpuSweep {
+  const baselineMs = median(input.baselines);
+  const baselineDriftMs = input.baselines.length > 1
+    ? Math.max(...input.baselines) - Math.min(...input.baselines)
+    : 0;
   const rows = input.steps.map((step) => {
-    const savingMs = input.baselineMs - step.gpuMs;
+    // The mean of the two neighbours, so a baseline that slid linearly across
+    // the bracket contributes nothing to the difference.
+    const paired = (step.baselineBeforeMs + step.baselineAfterMs) / 2;
+    const savingMs = paired - step.gpuMs;
+    const bracketDriftMs = Math.abs(step.baselineBeforeMs - step.baselineAfterMs);
+    const negligible = Math.abs(savingMs) < GPU_SWEEP_NOISE_FLOOR_MS;
     return {
       label: step.id,
       withoutMs: step.gpuMs,
       savingMs,
-      share: input.baselineMs > 0 ? savingMs / input.baselineMs : 0,
+      share: baselineMs > 0 ? savingMs / baselineMs : 0,
       samples: step.samples,
-      negligible: Math.abs(savingMs) < GPU_SWEEP_NOISE_FLOOR_MS,
+      negligible,
+      bracketDriftMs,
+      // A row whose own bracket wandered as far as its saving has not measured
+      // the content; it has measured the wander.
+      unstable: !negligible && bracketDriftMs >= Math.abs(savingMs),
     };
   });
-  rows.sort((a, b) => b.savingMs - a.savingMs);
+  // Trustworthy rows first, each group biggest win first. Sorting an unstable
+  // row into the middle by a number we have just declared meaningless would put
+  // it above findings that are real.
+  rows.sort((a, b) => {
+    if (a.unstable !== b.unstable) return a.unstable ? 1 : -1;
+    return b.savingMs - a.savingMs;
+  });
   return {
-    baselineMs: input.baselineMs,
+    baselineMs,
     baselineSamples: input.baselineSamples,
+    baselineRuns: input.baselines.length,
+    baselineDriftMs,
+    baselineDrifted: baselineMs > 0 && baselineDriftMs / baselineMs > GPU_SWEEP_DRIFT_TOLERANCE,
     rows,
     disjointEvents: input.disjointEvents,
     speed: input.speed,
@@ -103,24 +189,67 @@ export function buildRtsGpuSweep(input: RtsGpuSweepInput): RtsGpuSweep {
   };
 }
 
-export function rtsGpuSweepTableView(sweep: RtsGpuSweep): RtsDebugTableView {
+/** The `kazanç` cell: a number only when the row earned the right to show one. */
+function savingCell(row: RtsGpuSweepRow): string {
+  if (row.unstable) return "belirsiz";
+  if (row.negligible) return "~0";
+  return row.savingMs.toFixed(2);
+}
+
+function shareCell(row: RtsGpuSweepRow): string {
+  if (row.unstable || row.negligible) return "—";
+  return `${(row.share * 100).toFixed(1)}%`;
+}
+
+function rowKind(row: RtsGpuSweepRow): string {
+  if (row.unstable) return "note";
+  if (row.negligible) return "remainder";
+  return "region";
+}
+
+function sweepMeta(sweep: RtsGpuSweep): string {
+  return (
+    `taban ${sweep.baselineMs.toFixed(2)} ms GPU ` +
+    `(${sweep.baselineRuns} ölçüm · ${sweep.baselineSamples} örnek · ` +
+    `sürüklenme ${sweep.baselineDriftMs.toFixed(2)} ms) · ` +
+    `${sweep.drawCalls} çizim çağrısı · ${sweep.triangles} üçgen · ` +
+    `${sweep.speed}X · maç ${sweep.matchSeconds.toFixed(1)} sn`
+  );
+}
+
+function sweepNotes(sweep: RtsGpuSweep): string[] {
   const notes = [
     "Her satır, o içerik kapatılarak ölçülen tam karedir; değer kazanç (taban − kapalı) demektir.",
+    "Taban her adımın önünde ve ardında yeniden ölçülür; satır kendi iki tabanının ortasıyla karşılaştırılır, böylece tarama boyunca GPU saatinin kayması satırdan düşer.",
     "Satırlar toplanmaz: bir şeyi kapatmak geri kalanın overdraw ve durum değişimini de değiştirir.",
     `Tarayıcı GPU sürelerini yuvarlar; ±${GPU_SWEEP_NOISE_FLOOR_MS.toFixed(1)} ms altı farklar gürültü sayılır.`,
     "GPU süresi vsync/present beklemesini içermez; cpu + gpu kare süresine eşit olmak zorunda değildir.",
   ];
+  if (sweep.rows.some((row) => row.unstable)) {
+    notes.push(
+      "«belirsiz» satırlarda o adımın kendi taban çifti, ölçülen kazanç kadar oynadı — o satır bir bulgu değil, ölçümün kendi gürültüsüdür.",
+    );
+  }
+  if (sweep.baselineDrifted) {
+    notes.push(
+      `Taban ölçümleri tarama boyunca ${sweep.baselineDriftMs.toFixed(2)} ms kaydı ` +
+        `(tabanın %${((sweep.baselineDriftMs / sweep.baselineMs) * 100).toFixed(0)}'i): ` +
+        "GPU büyük olasılıkla güç durumu değiştirdi. Eşleştirme satırları kurtarır, ama " +
+        "«kapalıyken ms» sütunu üst ve alt satırlar arasında karşılaştırılamaz.",
+    );
+  }
   if (sweep.disjointEvents > 0) {
     notes.push(
       `${sweep.disjointEvents} kez GPU zamanlayıcısı geçersiz kılındı (güç durumu değişimi); o ölçümler atılıp tekrarlandı.`,
     );
   }
+  return notes;
+}
+
+export function rtsGpuSweepTableView(sweep: RtsGpuSweep): RtsDebugTableView {
   return {
     title: "GPU dökümü (tarama)",
-    meta:
-      `taban ${sweep.baselineMs.toFixed(2)} ms GPU (${sweep.baselineSamples} örnek) · ` +
-      `${sweep.drawCalls} çizim çağrısı · ${sweep.triangles} üçgen · ` +
-      `${sweep.speed}X · maç ${sweep.matchSeconds.toFixed(1)} sn`,
+    meta: sweepMeta(sweep),
     columns: [
       { label: "İçerik", align: "left" },
       { label: "kapalıyken ms", align: "right" },
@@ -132,21 +261,22 @@ export function rtsGpuSweepTableView(sweep: RtsGpuSweep): RtsDebugTableView {
       cells: [
         row.label,
         row.withoutMs.toFixed(2),
-        row.negligible ? "~0" : row.savingMs.toFixed(2),
-        row.negligible ? "—" : `${(row.share * 100).toFixed(1)}%`,
+        savingCell(row),
+        shareCell(row),
         String(row.samples),
       ],
-      share: Math.max(0, row.share),
-      kind: row.negligible ? "remainder" : "region",
+      share: row.unstable ? 0 : Math.max(0, row.share),
+      kind: rowKind(row),
     })),
-    notes,
+    notes: sweepNotes(sweep),
     clipboardText: formatRtsGpuSweepText(sweep),
   };
 }
 
 export function formatRtsGpuSweepText(sweep: RtsGpuSweep): string {
   const lines = [
-    `GPU dökümü · taban ${sweep.baselineMs.toFixed(2)} ms (${sweep.baselineSamples} örnek)`,
+    `GPU dökümü · taban ${sweep.baselineMs.toFixed(2)} ms ` +
+      `(${sweep.baselineRuns} ölçüm · ${sweep.baselineSamples} örnek · sürüklenme ${sweep.baselineDriftMs.toFixed(2)} ms)`,
     `${sweep.drawCalls} çizim çağrısı · ${sweep.triangles} üçgen · ${sweep.speed}X · maç ${sweep.matchSeconds.toFixed(1)} sn`,
     "",
     `${"içerik".padEnd(22)}${"kapalı".padStart(10)}${"kazanç".padStart(10)}${"%".padStart(8)}${"örnek".padStart(8)}`,
@@ -155,15 +285,18 @@ export function formatRtsGpuSweepText(sweep: RtsGpuSweep): string {
     lines.push(
       row.label.padEnd(22) +
         row.withoutMs.toFixed(2).padStart(10) +
-        (row.negligible ? "~0" : row.savingMs.toFixed(2)).padStart(10) +
-        (row.negligible ? "—" : `${(row.share * 100).toFixed(1)}%`).padStart(8) +
+        savingCell(row).padStart(10) +
+        shareCell(row).padStart(8) +
         String(row.samples).padStart(8),
     );
   }
-  lines.push(
-    "",
-    "Satırlar kazançtır ve toplanmaz — bir içeriği kapatmak kalanların maliyetini de değiştirir.",
-  );
+  lines.push("", "Satırlar kazançtır ve toplanmaz — bir içeriği kapatmak kalanların maliyetini de değiştirir.");
+  if (sweep.rows.some((row) => row.unstable)) {
+    lines.push("«belirsiz» satırlarda taban çifti kazanç kadar oynadı; o satır bir bulgu değildir.");
+  }
+  if (sweep.baselineDrifted) {
+    lines.push(`Taban tarama boyunca ${sweep.baselineDriftMs.toFixed(2)} ms kaydı; GPU güç durumu değiştirmiş olabilir.`);
+  }
   if (sweep.disjointEvents > 0) {
     lines.push(`${sweep.disjointEvents} kez zamanlayıcı geçersiz kılındı; o ölçümler tekrarlandı.`);
   }

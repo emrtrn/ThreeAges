@@ -48,7 +48,7 @@ export class RtsDebugOverlay {
       this.controls.appendChild(actionButton(
         "sweep-gpu",
         "GPU dökümü",
-        "İçerik kategorilerini sırayla kapatarak GPU kazançlarını ölç (birkaç saniye sürer)",
+        "İçerik kategorilerini sırayla kapatarak GPU kazançlarını ölç; taban her adımın iki yanında yeniden ölçülür (on saniye kadar sürer)",
         () => options.onSweepGpu?.(),
       ));
     }

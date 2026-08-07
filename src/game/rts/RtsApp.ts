@@ -2384,6 +2384,8 @@ export class RtsApp {
         ]),
       },
       {
+        // Everything the Level authored, plus the flat fallback ground: the
+        // whole floor of the world as one number.
         id: "arazi/harita",
         apply: hide([this.groundGroup, this.authoredWorld?.root]),
       },
@@ -2406,6 +2408,16 @@ export class RtsApp {
         ]),
       },
     ];
+    // `arazi/harita` above is the floor as a whole, and when it dominates the
+    // frame that is the end of the finding rather than the start of one: the row
+    // bundles a full-screen multi-layer terrain shader together with every
+    // authored prop and every painted plant. These split it, and like every
+    // other row they are savings rather than parts — the total is not their sum,
+    // and what they leave over is the map art.
+    const terrain = this.authoredWorld?.landscapes.map((mounted) => mounted.object) ?? [];
+    if (terrain.length > 0) steps.push({ id: "↳ arazi (landscape)", apply: hide(terrain) });
+    const painted = this.authoredWorld?.foliageRoot;
+    if (painted) steps.push({ id: "↳ bitki örtüsü", apply: hide([painted]) });
     // Only worth a row when there is a chain to bypass; otherwise the step would
     // measure the untouched frame twice and report the difference as noise.
     if (this.postProcessPipeline) steps.push({ id: "son işlem (post)", apply: () => () => {} });
@@ -2430,6 +2442,12 @@ export class RtsApp {
     // between the baseline and the last step would be measured as the cost of
     // whatever happened to be turned off at the time. Rendering continues while
     // paused, which is all the sweep needs.
+    //
+    // Pausing does not make the run safe on its own, and this is where that
+    // shows: a still, cheap scene is exactly what lets the GPU drop a power
+    // state, and the untouched frame then measures several times slower at the
+    // end of the sweep than at the start. The schedule bracketing each step
+    // with its own baselines is what survives that; see `rtsGpuSweep`.
     this.frameCaptureOwnsPause = this.flow.pause();
     // Built once per sweep: the plan closes over scene roots, and rebuilding it
     // per frame would allocate a set of closures inside the frames being timed.
@@ -2445,8 +2463,10 @@ export class RtsApp {
     const sweep = this.gpuSweep;
     const step = sweep?.currentStep();
     if (!step) return null;
-    // Index 0 is the untouched baseline; the rest map onto the cached plan.
-    const configured = step.index === 0 ? null : this.gpuSweepPlan[step.index - 1];
+    // The schedule interleaves untouched baselines between the steps, so which
+    // configuration to apply comes from the step itself rather than from its
+    // position: `null` is a baseline frame, and the rest index the cached plan.
+    const configured = step.planIndex === null ? null : this.gpuSweepPlan[step.planIndex];
     this.gpuSweepRestore = configured ? configured.apply() : null;
     return { tag: step.tag, bypassPostProcess: step.id === "son işlem (post)" };
   }

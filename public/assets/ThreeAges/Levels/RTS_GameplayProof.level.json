@@ -909,6 +909,7 @@
             2.41,
             38.17
           ],
+          "hidden": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -923,6 +924,7 @@
             1.68,
             69.98
           ],
+          "hidden": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -937,6 +939,7 @@
             0.38,
             84.54
           ],
+          "hidden": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -951,6 +954,7 @@
             -1.21,
             82.97
           ],
+          "hidden": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -965,6 +969,7 @@
             -1.21,
             81.88
           ],
+          "hidden": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -979,6 +984,7 @@
             -1.21,
             85.04
           ],
+          "hidden": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -993,6 +999,7 @@
             -1.21,
             85.58
           ],
+          "hidden": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -1007,6 +1014,7 @@
             1.98,
             59.65
           ],
+          "hidden": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -1021,6 +1029,7 @@
             0.73,
             32.93
           ],
+          "hidden": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -1035,6 +1044,7 @@
             -1.62,
             -36.01
           ],
+          "hidden": true,
           "scaleLocked": true,
           "rotationYDeg": 0,
           "rotation": [
@@ -1050,6 +1060,7 @@
             -4.48,
             3.22
           ],
+          "hidden": true,
           "scaleLocked": true,
           "rotationYDeg": 0,
           "rotation": [
@@ -1592,7 +1603,7 @@
         {
           "position": [
             -28,
-            0,
+            0.11,
             6
           ],
           "scaleLocked": true,

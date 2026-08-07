@@ -8,8 +8,14 @@
  * the awkward parts testable: results lag by frames and arrive tagged, a step
  * can be invalidated halfway through, and both of those are logic bugs waiting
  * to happen if they only exist inside a render loop.
+ *
+ * The schedule alternates — baseline, step, baseline, step, … , baseline — so
+ * every measured configuration is bracketed by an untouched frame on each side.
+ * {@link buildRtsGpuSweep} explains why that is worth twice the frames: it is
+ * the only thing standing between this table and a GPU that quietly changes
+ * clock speed halfway through the run.
  */
-import { buildRtsGpuSweep, type RtsGpuSweep, type RtsGpuSweepStepResult } from "./rtsGpuSweep";
+import { buildRtsGpuSweep, median, type RtsGpuSweep, type RtsGpuSweepStepResult } from "./rtsGpuSweep";
 
 /** Samples a step needs before the sweep moves on. Median, so an odd count. */
 const SAMPLES_PER_STEP = 5;
@@ -22,9 +28,23 @@ const MAX_FRAMES_PER_STEP = 40;
 /** Disjoint events tolerated before the sweep gives up rather than looping. */
 const MAX_DISJOINT_RETRIES = 3;
 
+/** Row label for the untouched frame. Repeated: there is one between each step. */
+export const GPU_SWEEP_BASELINE_ID = "taban";
+
 export interface RtsGpuSweepStepPlan {
   /** Shown as the row label; also the tag the app toggles on. */
   readonly id: string;
+}
+
+/** One scheduled measurement: either an untouched frame, or one caller step. */
+interface ScheduledStep {
+  readonly id: string;
+  /**
+   * Index into the caller's configured steps, or null for a baseline frame.
+   * Carried explicitly rather than derived from the schedule position, because
+   * the schedule interleaves baselines and the two no longer line up.
+   */
+  readonly planIndex: number | null;
 }
 
 export type RtsGpuSweepOutcome =
@@ -40,8 +60,8 @@ export interface RtsGpuSweepContext {
 }
 
 export class RtsGpuSweepRunner {
-  /** Index 0 is the untouched baseline; the rest each disable one category. */
-  private readonly plan: readonly RtsGpuSweepStepPlan[];
+  /** Baseline, step, baseline, step, … , baseline. */
+  private readonly schedule: readonly ScheduledStep[];
   private readonly samples: number[][] = [];
   private stepIndex = 0;
   private framesInStep = 0;
@@ -49,8 +69,13 @@ export class RtsGpuSweepRunner {
   private finished: RtsGpuSweepOutcome = { kind: "running" };
 
   constructor(steps: readonly RtsGpuSweepStepPlan[]) {
-    this.plan = [{ id: "taban" }, ...steps];
-    this.samples = this.plan.map(() => []);
+    const schedule: ScheduledStep[] = [{ id: GPU_SWEEP_BASELINE_ID, planIndex: null }];
+    for (const [index, step] of steps.entries()) {
+      schedule.push({ id: step.id, planIndex: index });
+      schedule.push({ id: GPU_SWEEP_BASELINE_ID, planIndex: null });
+    }
+    this.schedule = schedule;
+    this.samples = schedule.map(() => []);
   }
 
   /**
@@ -58,11 +83,16 @@ export class RtsGpuSweepRunner {
    * The returned index is also the sample tag: 0 is reserved for ordinary
    * frames, so the tag is `index + 1`.
    */
-  currentStep(): { readonly index: number; readonly id: string; readonly tag: number } | null {
+  currentStep(): {
+    readonly index: number;
+    readonly id: string;
+    readonly tag: number;
+    readonly planIndex: number | null;
+  } | null {
     if (this.finished.kind !== "running") return null;
-    const step = this.plan[this.stepIndex];
+    const step = this.schedule[this.stepIndex];
     if (!step) return null;
-    return { index: this.stepIndex, id: step.id, tag: this.stepIndex + 1 };
+    return { index: this.stepIndex, id: step.id, tag: this.stepIndex + 1, planIndex: step.planIndex };
   }
 
   /** Count a drawn frame, whether or not it produced a sample. */
@@ -121,44 +151,54 @@ export class RtsGpuSweepRunner {
     }
     this.stepIndex += 1;
     this.framesInStep = 0;
-    if (this.stepIndex < this.plan.length) return this.finished;
+    if (this.stepIndex < this.schedule.length) return this.finished;
 
-    const steps: RtsGpuSweepStepResult[] = [];
-    for (const [index, step] of this.plan.entries()) {
-      if (index === 0) continue;
-      steps.push({
-        id: step.id,
-        gpuMs: median(this.samples[index] ?? []),
-        samples: (this.samples[index] ?? []).length,
-      });
-    }
-    this.finished = {
-      kind: "done",
-      sweep: buildRtsGpuSweep({
-        baselineMs: median(this.samples[0] ?? []),
-        baselineSamples: (this.samples[0] ?? []).length,
-        steps,
-        disjointEvents: this.disjointEvents,
-        speed: context.speed,
-        matchSeconds: context.matchSeconds,
-        drawCalls: context.drawCalls,
-        triangles: context.triangles,
-      }),
-    };
+    this.finished = { kind: "done", sweep: this.build(context) };
     return this.finished;
   }
-}
 
-/**
- * Median, not mean: the first frame of a configuration pays for pipeline warm-up
- * and shader state that the steady state does not, and one such frame drags a
- * five-sample average far enough to invent a difference.
- */
-export function median(values: readonly number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[middle]!
-    : (sorted[middle - 1]! + sorted[middle]!) / 2;
+  /**
+   * Fold the schedule back into the caller's step order, pairing each one with
+   * the baselines drawn either side of it.
+   */
+  private build(context: RtsGpuSweepContext): RtsGpuSweep {
+    // Medians of the untouched frames, in measurement order. `null` where a
+    // baseline produced nothing, so a missing one is filled in rather than
+    // silently contributing a zero to its neighbour's bracket.
+    const baselines: (number | null)[] = [];
+    const measured: { id: string; gpuMs: number; samples: number }[] = [];
+    let baselineSamples = 0;
+    for (const [index, step] of this.schedule.entries()) {
+      const bucket = this.samples[index] ?? [];
+      if (step.planIndex === null) {
+        baselines.push(bucket.length > 0 ? median(bucket) : null);
+        baselineSamples += bucket.length;
+        continue;
+      }
+      measured.push({ id: step.id, gpuMs: median(bucket), samples: bucket.length });
+    }
+    const present = baselines.filter((value): value is number => value !== null);
+    const headline = median(present);
+    // A step keeps its own bracket; where one side is missing the other stands
+    // in for it, and where both are the run's median does.
+    const at = (position: number, fallback: number): number =>
+      baselines[position] ?? fallback;
+    const steps: RtsGpuSweepStepResult[] = measured.map((step, index) => ({
+      id: step.id,
+      gpuMs: step.gpuMs,
+      samples: step.samples,
+      baselineBeforeMs: at(index, at(index + 1, headline)),
+      baselineAfterMs: at(index + 1, at(index, headline)),
+    }));
+    return buildRtsGpuSweep({
+      baselines: present,
+      baselineSamples,
+      steps,
+      disjointEvents: this.disjointEvents,
+      speed: context.speed,
+      matchSeconds: context.matchSeconds,
+      drawCalls: context.drawCalls,
+      triangles: context.triangles,
+    });
+  }
 }
