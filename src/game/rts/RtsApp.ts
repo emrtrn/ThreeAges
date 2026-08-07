@@ -2418,6 +2418,12 @@ export class RtsApp {
     if (terrain.length > 0) steps.push({ id: "↳ arazi (landscape)", apply: hide(terrain) });
     const painted = this.authoredWorld?.foliageRoot;
     if (painted) steps.push({ id: "↳ bitki örtüsü", apply: hide([painted]) });
+    // The third piece of the floor, and the one the first two leave standing:
+    // every Static Mesh placement and spline-generated batch the Level authored.
+    // Painted foliage is a separate system from a *placed* tree, and measuring
+    // one is not measuring the other.
+    const mapArt = this.authoredWorld?.staticInstanceMeshes ?? [];
+    if (mapArt.length > 0) steps.push({ id: "↳ harita sanatı", apply: hide(mapArt) });
     // Only worth a row when there is a chain to bypass; otherwise the step would
     // measure the untouched frame twice and report the difference as noise.
     if (this.postProcessPipeline) steps.push({ id: "son işlem (post)", apply: () => () => {} });
