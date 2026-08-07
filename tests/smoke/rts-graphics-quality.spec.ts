@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { startRtsMatch } from "./rtsBoot";
 
 test("RTS graphics profile and adaptive preference apply and persist", async ({ page }) => {
   const errors: string[] = [];
@@ -6,8 +7,7 @@ test("RTS graphics profile and adaptive preference apply and persist", async ({ 
   await page.addInitScript(() => localStorage.removeItem("forge.userSettings"));
 
   await page.goto("/?rts&debug");
-  await expect(page.locator("[data-rts-match-action='start']")).toBeVisible({ timeout: 30_000 });
-  await page.locator("[data-rts-match-action='start']").click();
+  await startRtsMatch(page);
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-perf", /.+/);
   const performanceWitness = JSON.parse(await page.locator("#game-canvas").getAttribute("data-rts-perf") ?? "null");

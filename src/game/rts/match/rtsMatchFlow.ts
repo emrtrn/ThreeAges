@@ -15,10 +15,16 @@ export type RtsMatchPhase = "start" | "playing" | "paused";
 
 export class RtsMatchFlow {
   /**
-   * A match does not run until the player says so (§51 "basit başlatma
-   * ekranı"). Booting straight into a live match means the opening — the one
-   * part of an RTS that is pure economy and pure decision — is already being
-   * spent while the player is still reading the screen.
+   * A match does not run until it has been asked for. Booting straight into a
+   * live match means the opening — the one part of an RTS that is pure economy
+   * and pure decision — is already being spent before anyone is watching it.
+   *
+   * *Who* asks changed with `THREEAGES_RTS_MAIN_MENU_LOADING_PLAN.md` Faz F2.
+   * §51's in-app start card is gone: the player answers in the main menu, before
+   * `RtsApp` is built at all, and what holds this phase afterwards is the boot
+   * curtain (`RtsApp.beginMatchWhenBooted`). The reason is the same one §51 gave,
+   * only sharper — the seconds this phase protects used to be spent behind a
+   * card, and would otherwise now be spent behind an opaque curtain.
    */
   private phaseValue: RtsMatchPhase = "start";
 

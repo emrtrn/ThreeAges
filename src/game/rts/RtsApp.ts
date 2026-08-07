@@ -257,17 +257,12 @@ import { TerritoryControlSystem } from "./territory/territoryControlSystem";
 import { StrategicPointSystem } from "./objectives/strategicPointSystem";
 import { StrategicPointView } from "./objectives/strategicPointView";
 import { RegionalVictorySystem } from "./objectives/regionalVictorySystem";
-import {
-  victoryChoiceForFlag,
-  type VictoryConditionChoice,
-} from "./match/victoryConditionChoice";
 import { VisionSystem, type VisionSource } from "./vision/visionSystem";
 import {
   EnemyMemorySystem,
   commandCenterMemoryId,
   type ObservableStructure,
 } from "./vision/enemyMemorySystem";
-import { fogChoiceForFlag, type FogOfWarChoice } from "./vision/fogOfWarChoice";
 import { FogMask } from "./vision/fogMask";
 import { FogView } from "./vision/fogView";
 import { GhostStructureView } from "./vision/ghostStructureView";
@@ -282,7 +277,6 @@ import { MissionHintView } from "./tutorial/missionHintView";
 import { missionBuildVerdict, type MissionBuildRefusal } from "./tutorial/missionBuildPolicy";
 import type { MissionWorldSnapshot } from "./tutorial/missionPredicates";
 import type { MissionScript } from "./tutorial/missionScript";
-import type { MissionModeChoice } from "./tutorial/missionModeChoice";
 import type { AiObjectiveWatch } from "./ai/armyManager";
 
 const MAX_PIXEL_RATIO = 2;
@@ -445,39 +439,11 @@ export interface RtsAppOptions {
    */
   readonly regionalVictoryEnabled?: boolean;
   /**
-   * §78.1: called when the start card's victory condition differs from the one
-   * this app was built with, so the host can re-boot the match with the chosen
-   * flag. Supplying it is what puts the picker on the card at all.
-   *
-   * A callback rather than a `location.reload()` here because §13 makes the flag
-   * read-only after it resolves, and the objective systems are constructed once,
-   * in the constructor, ahead of the AI that reads them. Rebuilding them mid-life
-   * would mean a second construction order to keep correct forever; re-resolving
-   * the match setup is the same one-way path every other flag already takes, and
-   * it happens at the only moment nothing has been played yet.
-   */
-  readonly onVictoryConditionChange?: (choice: VictoryConditionChoice) => void;
-  /**
    * §59 (Faz 11): unknown / explored / visible layers, for both kingdoms.
    * Symmetric on purpose — see `ai/aiVisionFilter.ts`. On by default since the
-   * system graduated; the start card and a preset are the two doors that close it.
+   * system graduated; the main menu and a preset are the two doors that close it.
    */
   readonly fogOfWarEnabled?: boolean;
-  /**
-   * §59: the start card's fog row picked a different match. Same store-and-reboot
-   * shape as {@link onVictoryConditionChange}, and for the same §13 reason — the
-   * vision system and its five view layers are constructed once, ahead of the AI
-   * filter that reads them. Supplying it is what puts the row on the card at all.
-   */
-  readonly onFogOfWarChange?: (choice: FogOfWarChoice) => void;
-  /**
-   * §72: the start card's difficulty row picked a different opponent. Same
-   * store-and-reboot shape as the two above, and the same §13 reason — the
-   * profile's economy multiplier and reaction delay are read into `AiController`
-   * at construction, ahead of everything that plans against them. Supplying it
-   * is what puts the row on the card at all.
-   */
-  readonly onAiProfileChange?: (choice: AiProfile) => void;
   /**
    * The gameplay-id -> Actor mapping the whole presentation hangs from. `main.ts`
    * always supplies it; it stays optional only for the harnesses that drive an
@@ -542,12 +508,6 @@ export interface RtsAppOptions {
    * for an ordinary match, which is the default in every route.
    */
   readonly missionScript?: MissionScript;
-  /**
-   * The start card's mode row picked a different match type. Like
-   * {@link onVictoryConditionChange} this is a *boot* concern — the chain has to
-   * be loaded before the app exists — so the host stores it and re-boots.
-   */
-  readonly onMissionModeChange?: (choice: MissionModeChoice) => void;
   /**
    * The story offer has been answered: the chain was finished or abandoned. The
    * host records it so a returning player is not asked again.
@@ -872,16 +832,6 @@ export class RtsApp {
    * that let "train three Guards" clear itself before the Barracks existed.
    */
   private playerUnitsTrained: Record<string, number> = {};
-  /**
-   * §78.1: what the start card has selected. Seeded from the *resolved* flag so
-   * a match booted with `?flags=regionalVictory` opens on the matching row, and
-   * only ever read while the start card is up.
-   */
-  private victoryCondition: VictoryConditionChoice;
-  /** §59: the fog row's selection, seeded from the resolved flag for the same reason. */
-  private fogOfWar: FogOfWarChoice;
-  /** §72: the difficulty row's selection, seeded from the profile in force. */
-  private aiProfileChoice: AiProfile;
   private readonly match = new RtsMatchState();
   /** §51: whether the simulation should be running; `match` owns who won. */
   private readonly flow = new RtsMatchFlow();
@@ -1005,6 +955,12 @@ export class RtsApp {
   private loadTimeoutHandle = 0;
   /** Frames still to be drawn before the curtain may lift; see {@link armFirstLoadedFrame}. */
   private pendingFirstFrames = 0;
+  /**
+   * Whether the boot curtain has opened. Also the match's own start gun (plan
+   * F2): with the start card gone there is nothing left for the player to press,
+   * so "the field is visible" is what "the match may begin" now means.
+   */
+  private curtainLifted = false;
   private frameHandle = 0;
   private lastTime = 0;
   private readonly handleVisibilityChange = (): void => {
@@ -1264,11 +1220,6 @@ export class RtsApp {
       this.strategicPointView = null;
       this.objectiveTracker = null;
     }
-    this.victoryCondition = victoryChoiceForFlag(this.options.regionalVictoryEnabled === true);
-    this.fogOfWar = fogChoiceForFlag(this.options.fogOfWarEnabled === true);
-    // §72: seeded from the profile this app was actually built with, so a preset
-    // asking for `hard` opens the card on "Zor" instead of contradicting it.
-    this.aiProfileChoice = this.options.aiProfile;
     // Same "absent means nothing exists" construction rule as §58 above: without
     // a script there is no director and no card, so an ordinary match never pays
     // for the mode and can never be changed by it.
@@ -1738,7 +1689,6 @@ export class RtsApp {
     this.hudBar.mountUtilityControl(this.gameSpeedControls);
     this.hudBar.mountStatusControl(this.armyRoster);
     this.matchOverlay = new RtsMatchOverlay({
-      onStart: this.beginMatch,
       onResume: this.resumeMatch,
       onRestart: this.restartMatch,
       onSurrender: this.surrenderMatch,
@@ -1751,28 +1701,6 @@ export class RtsApp {
       },
       onGraphicsQuality: (quality) => this.setGraphicsQuality(quality),
       onGraphicsAdaptive: (enabled) => this.setGraphicsAdaptive(enabled),
-      // Regional victory is a free-match rule. A story chain owns its objective,
-      // so the picker is absent there as well as the regional systems being
-      // absent from the runtime (the host forces its flag off at boot).
-      ...(this.options.onVictoryConditionChange && !this.options.missionScript
-        ? { onVictoryCondition: (choice: VictoryConditionChoice) => { this.victoryCondition = choice; } }
-        : {}),
-      // Faz 2 mode row. Like the picker above it is only built when the host can
-      // act on it, because the choice changes what the *boot* loads and a running
-      // app cannot start a chain it was never given.
-      ...(this.options.onMissionModeChange
-        ? { onMissionMode: (choice: MissionModeChoice) => { this.options.onMissionModeChange?.(choice); } }
-        : {}),
-      // §59. Deferred to "Maçı Başlat" like the victory condition rather than
-      // rebooting on the click, because the fog row is one the player may well
-      // toggle twice while reading its hint.
-      ...(this.options.onFogOfWarChange
-        ? { onFogOfWar: (choice: FogOfWarChoice) => { this.fogOfWar = choice; } }
-        : {}),
-      // §72, deferred to "Maçı Başlat" for the same reason as the two above.
-      ...(this.options.onAiProfileChange
-        ? { onAiProfile: (choice: AiProfile) => { this.aiProfileChoice = choice; } }
-        : {}),
       onAbandonMission: () => this.abandonMission(),
     });
     this.debugOverlay = this.options.debug
@@ -1965,18 +1893,24 @@ export class RtsApp {
     this.log.info(
       `RTS runtime started${this.options.debug ? " (debug)" : ""}`,
     );
-    // The runtime is live but the match is not: §51's start screen holds the
-    // simulation until the player asks for it. The scene still renders behind
-    // the card, so the opening position is something they can look at first.
-    this.matchOverlay.showStart(
-      this.victoryCondition,
-      // The row reflects the match that actually booted, not a stored preference:
-      // a card claiming "Hikâye turu" over a match with no chain would be lying.
-      this.missions ? "story" : "free",
-      this.fogOfWar,
-      this.aiProfileChoice,
-    );
     this.frameHandle = requestAnimationFrame(this.onFrame);
+    // The runtime is live; the match waits for the curtain. §51's start screen is
+    // gone — the player already answered its one question in the main menu, before
+    // any of this was built (plan F2) — so what holds the simulation now is the
+    // boot itself. Starting it here instead would run the AI's opening seconds
+    // behind an opaque curtain, on a field the player has not been shown yet.
+    this.beginMatchWhenBooted();
+  }
+
+  /**
+   * Start the match at the first moment both halves are true: the runtime is
+   * running, and the curtain is off the field. Either can land first — a boot
+   * whose assets were all cached completes the curtain before `start()` is even
+   * called — so both entry points ask, and whichever is second wins.
+   */
+  private beginMatchWhenBooted(): void {
+    if (!this.running || !this.curtainLifted || this.disposed) return;
+    this.beginMatch();
   }
 
   dispose(): void {
@@ -2100,6 +2034,8 @@ export class RtsApp {
   }
 
   private finishBootCurtain(): void {
+    if (this.curtainLifted) return;
+    this.curtainLifted = true;
     if (this.loadTimeoutHandle) window.clearTimeout(this.loadTimeoutHandle);
     this.loadTimeoutHandle = 0;
     // Cleared so a load that lands after the timeout opened the curtain cannot
@@ -2107,6 +2043,7 @@ export class RtsApp {
     this.pendingAssetTracks.clear();
     this.pendingFirstFrames = 0;
     this.loadingScreen.hide();
+    this.beginMatchWhenBooted();
   }
 
   private buildScene(): void {
@@ -4609,43 +4546,19 @@ export class RtsApp {
     return this.vision ? (x, z) => this.vision!.isVisible(PLAYER_OWNER, x, z) : undefined;
   }
 
-  /** §51: leave the start screen and let the simulation run. */
+  /**
+   * §51: let the simulation run.
+   *
+   * This used to be the start card's button handler, and most of it was the
+   * machinery for a choice made *after* the app was built: if the card asked for
+   * a rule this app had not been constructed with, it handed the choice back to
+   * the host and the host reloaded the page. All of that went with plan F2 — the
+   * menu now runs before construction, so by the time this is reached every
+   * choice is already baked in and there is nothing left to reconcile. §13's
+   * "flags are read-only once resolved" holds by construction rather than by a
+   * reload.
+   */
   private readonly beginMatch = (): void => {
-    // §78.1: the choice is committed here, at match setup, and never again. If it
-    // asks for a different rule set than this app was built with, the host
-    // re-resolves the boot instead — nothing has been played yet, so there is no
-    // match state to lose, and §13's "read-only once resolved" stays intact.
-    const victoryChanged =
-      this.options.onVictoryConditionChange !== undefined &&
-      this.victoryCondition !== victoryChoiceForFlag(this.options.regionalVictoryEnabled === true);
-    const fogChanged =
-      this.options.onFogOfWarChange !== undefined &&
-      this.fogOfWar !== fogChoiceForFlag(this.options.fogOfWarEnabled === true);
-    // §72: same test against the value this app was built with, not against a
-    // default — the profile came from the preset unless the player overrode it.
-    const profileChanged =
-      this.options.onAiProfileChange !== undefined &&
-      this.aiProfileChoice !== this.options.aiProfile;
-    if (victoryChanged || fogChanged || profileChanged) {
-      // All of them are handed over before returning, not one per reboot. The
-      // host stores each choice and asks for a reload; `location.reload()` only
-      // queues the navigation, so the later stores still land — and a player who
-      // changed three rows must not have to come back and change two of them
-      // again on a card that reopened having forgotten them.
-      if (victoryChanged) {
-        this.log.info(`RTS match setup: victory condition -> ${this.victoryCondition}`);
-        this.options.onVictoryConditionChange?.(this.victoryCondition);
-      }
-      if (fogChanged) {
-        this.log.info(`RTS match setup: fog of war -> ${this.fogOfWar}`);
-        this.options.onFogOfWarChange?.(this.fogOfWar);
-      }
-      if (profileChanged) {
-        this.log.info(`RTS match setup: AI profile -> ${this.aiProfileChoice}`);
-        this.options.onAiProfileChange?.(this.aiProfileChoice);
-      }
-      return;
-    }
     if (!this.flow.begin()) return;
     this.matchOverlay.hide();
     this.log.info("RTS match started");

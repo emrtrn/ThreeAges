@@ -1,12 +1,18 @@
 # ThreeAges RTS - Ana Menu ve Yukleme Ekrani Plani
 
 Olusturulma tarihi: 2026-08-08
-Durum: **F1 kod olarak bitti (2026-08-08); gorsel kabul kullanicidadir.
-F2-F4 planli, baslanmadi.** Perde, gercek sayaci ve alti engine check'i ayakta;
-sekiz RTS smoke spec'i perdeyi bekleyecek sekilde guncellendi. Ana menu (F2) ve
-menude on-yukleme (F3) henuz yok - yani bugun perde hala §2.1'deki yedi await
-adimindan *sonra* aciliyor, ilk bos canvas penceresi kapanmadi. Onu kapatan sey
-F2'dir.
+Durum: **F1 ve F2 kod olarak bitti (2026-08-08); gorsel kabul kullanicidadir.
+F3-F4 planli, baslanmadi.**
+
+F2 ile ana menu ayri bir asama oldu: `?rts` artik once perde, sonra menu, sonra
+mac aciyor. Dort `location.reload()` silindi, baslangic karti `RtsApp`'ten cikip
+menuye tasindi, `RtsApp` maci perde kalkinca kendisi basliyor. Ilk bos siyah
+canvas penceresi de kapandi - perde artik `main()`'in **ilk await'inden once**
+kuruluyor.
+
+Kalan: F3 (menu ekrandayken on-yukleme; su an mac yuklemesi tiklamadan *sonra*
+basliyor, yani ikinci perde hala uzun) ve F4 (dogrulama; §9'daki spec sirasi
+borcu).
 
 F1 sirasinda planin bir ifadesi duzeltildi: §5'in "firstFrame" izi paydasiz
 dusunulmustu, ama paydasiz bir iz butun cubugu boot boyunca *belirsiz* modda
@@ -232,18 +238,33 @@ bir timeout (~20 sn): tek bir olu fetch oyuncuyu perdede kilitlemez.
 
 F1 tek basina bugunku boot'un uzerinde calisir; menu olmadan da bir kazanctir.
 
-### 7.2 F2 - Ana menu
+### 7.2 F2 - Ana menu — **BITTI (2026-08-08)**
 
-- Kurulum kartini `RtsMatchOverlay`'den ayir: `buildSetup()`
-  (`rtsMatchOverlay.ts:319`) ve baslangic kartinin govdesi bagimsiz olarak
-  kullanilabilir hale gelir. Duraklama/sonuc kartlari yerinde kalir (§2.4).
-- `src/game/rts/ui/rtsMainMenu.ts`: arka plan gorseli + ortada o kart.
-- Dort `location.reload()` silinir (§2.3); secimler menunun state'i olur ve
-  `new RtsApp(...)` cagrisina parametre olarak akar. `sessionStorage` yazimi
-  korunur (yenileme sonrasi hatirlanmasi icin), ama artik **reload tetiklemez**.
-- KARAR 2/3'un gecisi: menu teardown -> `history.pushState` -> yukleme perdesi
-  -> `new RtsApp(...)` -> `rts.start()`.
-- KARAR 4'un atlatma yolu.
+- Kurulum kartini `RtsMatchOverlay`'den ayirdik: satirlar, radyolar ve uc
+  dropdown `src/game/rts/match/rtsMatchSetup.ts`'e (`RtsMatchSetup`) tasindi.
+  Duraklama/sonuc kartlari `RtsMatchOverlay`'de kaldi (§2.4); `showStart`, dort
+  opsiyonel handler ve `setupPopulated` mekanizmasi silindi.
+- `src/game/rts/ui/rtsMainMenu.ts`: tam ekran katman, arka plan gorseli, ortada
+  o kart. `.rts-match-overlay` / `.rts-match-card` sinif adlarini **bilerek**
+  odunc aliyor - modal derisi ve §9'un smoke kancalari o adlara bagli.
+- **Dort `location.reload()` silindi** (§2.3). Menu `RtsApp`'ten once kostugu
+  icin uzlastirilacak bir sey kalmadi: `beginMatch()` 40 satirdan 4 satira indi.
+  `sessionStorage` yazimi korundu ama artik yalnizca *yeni sekmenin* son kurulumu
+  hatirlamasi icin - hicbir sey yeniden yuklenmiyor.
+- **Baslangic karti yok; maci perde basliyor.** `RtsApp.start()` artik kart
+  gostermiyor; `finishBootCurtain()` maci baslatiyor (`beginMatchWhenBooted`).
+  Bunun yeri onemli: maci `start()`'ta baslatmak, AI'nin ilk saniyelerini oyuncuya
+  hic gosterilmemis bir alanda, opak perdenin arkasinda oynatirdi.
+- KARAR 2/3: menu teardown -> `history.pushState` -> ikinci perde ->
+  `new RtsApp(...)` -> `rts.start()`. URL parametreleri
+  `src/game/rts/match/rtsMatchSetupUrl.ts`'te: `mode`, `victory`, `fog`,
+  `difficulty`, `seed`.
+- KARAR 4 + KARAR 3'un atlatma yolu ayni kapida: `urlPinsMatchSetup()` -
+  `?level=` (editor Play) **veya** `?mode=` (paylasilan link / yenileme) menuyu
+  atlar.
+- **Perde `main()`'in ilk await'inden once kuruluyor.** `bootFoundation()` bir
+  preset cekiyor; perdeyi ondan sonra kurmak, kapatmak istedigimiz ilk bos
+  pencereyi acik birakirdi. Kabul kriteri 1 bu satirla karsilaniyor.
 
 ### 7.3 F3 - Menude on-yukleme
 
@@ -274,10 +295,16 @@ kapanista `npm run build:verify`.
 | `tools/engine-tests.ts` | alti sayac check'i | F1 ✅ |
 | `tests/smoke/rtsBoot.ts` | **yeni** - `waitForRtsBoot` / `startRtsMatch` | F1 ✅ |
 | `tests/smoke/rts-*.spec.ts` (7 dosya) | 15 tiklama yardimciya baglandi | F1 ✅ |
-| `src/game/rts/ui/rtsMainMenu.ts` | **yeni** | F2 |
-| `src/main.ts` | boot yeniden sirali; dort reload silinir | F2/F3 |
-| `src/game/rts/match/rtsMatchOverlay.ts` | kurulum karti ayrilir | F2 |
-| `src/style.css` | menu stilleri | F2 |
+| `src/game/rts/ui/rtsMainMenu.ts` | **yeni** - menu (DOM) | F2 ✅ |
+| `src/game/rts/match/rtsMatchSetup.ts` | **yeni** - kurulum satirlari (DOM) | F2 ✅ |
+| `src/game/rts/match/rtsMatchSetupUrl.ts` | **yeni** - URL <-> kurulum, menu atlama | F2 ✅ |
+| `src/main.ts` | boot yeniden sirali; dort reload silindi; perde ilk await'ten once | F2 ✅ |
+| `src/game/rts/match/rtsMatchOverlay.ts` | kurulum karti + `showStart` cikarildi | F2 ✅ |
+| `src/game/rts/RtsApp.ts` | dort handler silindi; mac perde kalkinca basliyor | F2 ✅ |
+| `src/style.css` | menu stilleri | F2 ✅ |
+| `tests/smoke/rtsBoot.ts` | bekleme tiklamanin **oteki** tarafina gecti | F2 ✅ |
+| `src/main.ts` | ayardan bagimsiz yukleri menu acikken baslat | F3 |
+| `tests/smoke/rts-*.spec.ts` | tiklama oncesi canvas iddialarinin sirasi (§9) | F4 |
 
 ## 9. Smoke etkisi
 
@@ -310,6 +337,22 @@ noktasi ortak bir yardimciya baglandi:
   `startRtsMatch(page)`.
 - 7 spec dosyasindaki 15 `"Maçı Başlat"` tiklamasi `startRtsMatch(page)` oldu.
 
+**F2'de kapi tasindi.** F1'de `"Maçı Başlat"` tam kurulmus bir `RtsApp` icindeki
+kartin butonuydu; F2'de ayni buton `RtsApp`'i **kuran** sey. Yani beklenecek boot
+tiklamanin oncesinde degil sonrasinda. `rtsBoot.ts` buna gore ucе bolundu -
+`waitForRtsMenu` / `waitForRtsBoot` / `startRtsMatch` - ve perde kontrolu
+`querySelectorAll` ile *butun* perdelerin `done` olmasini ariyor (devir aninda
+menunun ve macin perdeleri kisa bir an birlikte DOM'da).
+`rts-graphics-quality.spec.ts` yardimciyi atlayip butona dogrudan tikliyordu;
+o cagri da `startRtsMatch(page)` oldu.
+
+**F4'e kalan borc — spec sirasi.** Bazi spec'ler tiklamadan *once* canvas
+iddiasi yapiyor (`rts-assetization-baseline.spec.ts:19` `data-rts-content-assets`
+= `ready`, `:23` `data-rts-content-placeholders`, `:55-56` ayni ikisi). Menu
+oncesinde `RtsApp` yok, dolayisiyla o oznitelikler de yok: bu iddialar
+`startRtsMatch(page)`'in **altina** tasinmali. Mekanik bir degisiklik, ama
+suite kosulmadan yapilmadi - F4 kosarken tek seferde.
+
 ## 10. Gorsel varliklar
 
 Ikisi de `public/assets/ui/` altina (yaninda `arma.png`, `frame.png`,
@@ -322,6 +365,10 @@ Ikisi de `public/assets/ui/` altina (yaninda `arma.png`, `frame.png`,
 
 1920x1080, `object-fit: cover`. Gorseller gelene kadar ikisi de duz renk
 placeholder ile calisir; dosya birakildiginda baska hicbir sey degismez.
+
+**Ikisi de yerinde (2026-08-08):** `loading-background.jpg` (370 KB) ve
+`menu-background.jpg` (611 KB). Yani placeholder gradient'leri artik yalnizca
+sigorta - dosya silinirse ekran bos kalmaz, koyu bir zemine duser.
 
 Uretim prompt'lari: `THREEAGES_RTS_MENU_ART_PROMPTS.md`.
 

@@ -743,6 +743,52 @@ body {
   text-shadow: 0 1px 2px rgb(39 0 0 / 85%);
 }
 
+/*
+ * The main menu (rtsMainMenu.ts, plan F2). It borrows `.rts-match-overlay` and
+ * `.rts-match-card` for the modal skin and the smoke hooks, and everything below
+ * is the difference between a card floating over a live field and a card that
+ * *is* the screen: art instead of a scrim, and a card sized so the background
+ * still reads around it (plan §10 reserves the middle ~40%/70% for exactly this).
+ *
+ * Declared after the overlay's own rules so the single-class selectors below win
+ * on source order, which is how the scrim is replaced rather than layered over.
+ */
+.rts-main-menu {
+  /* No scrim: there is no field behind this one, so a dark wash over the art
+   * would only be dimming the picture it sits on. Painted under the art for the
+   * same reason as the curtain's — a missing file degrades to this. */
+  background: radial-gradient(120% 120% at 50% 30%, #241b12 0%, #0d0a06 100%);
+  /* Above the boot curtain: the menu replaces it rather than sharing the screen,
+   * and during the handover neither may show through the other. */
+  z-index: 45;
+}
+
+.rts-main-menu-art {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+/* The card sits over the art, so it needs its own ground to stay readable no
+ * matter what the artist put behind it. */
+.rts-main-menu .rts-main-menu-card {
+  position: relative;
+  width: min(560px, calc(100vw - 32px));
+  background:
+    linear-gradient(180deg, rgb(13 10 6 / 82%) 0%, rgb(13 10 6 / 92%) 100%),
+    var(--ta-surface-raised);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 55%);
+}
+
+.rts-main-menu .rts-main-menu-card h1 {
+  font-family: var(--ta-font-display);
+  font-size: 30px;
+  letter-spacing: 0.06em;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 70%);
+}
+
 /* Performance readout + speed picker, intentionally only with ?rts&debug. */
 .rts-debug-overlay {
   position: absolute;

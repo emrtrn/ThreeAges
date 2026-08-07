@@ -21,15 +21,17 @@ import { loadAgeBalance, loadAiBalance, loadAiLayoutBalance, loadAnimalBalance, 
 import { loadRtsContentCatalog } from "@/game/rts/content/rtsContentLoader";
 import {
   readStoredVictoryCondition,
+  victoryChoiceEnablesRegional,
+  victoryChoiceForFlag,
   victoryConditionFlagOverride,
   writeStoredVictoryCondition,
-  type VictoryConditionChoice,
 } from "@/game/rts/match/victoryConditionChoice";
 import {
+  fogChoiceEnablesFog,
+  fogChoiceForFlag,
   fogOfWarFlagOverride,
   readStoredFogOfWar,
   writeStoredFogOfWar,
-  type FogOfWarChoice,
 } from "@/game/rts/vision/fogOfWarChoice";
 import {
   readStoredAiProfile,
@@ -42,6 +44,13 @@ import {
   resolveMissionMode,
   writeMissionMode,
 } from "@/game/rts/tutorial/missionModeChoice";
+import type { RtsMatchSetupValues } from "@/game/rts/match/rtsMatchSetup";
+import {
+  matchSetupSearch,
+  readMatchSetupFromUrl,
+  urlPinsMatchSetup,
+} from "@/game/rts/match/rtsMatchSetupUrl";
+import { RtsLoadingScreen } from "@/game/rts/ui/rtsLoadingScreen";
 import { resolveRtsLevelRef } from "@/game/rts/world/rtsLevelRef";
 import type { GamePreset } from "@/game/data/gameDataTypes";
 
@@ -165,18 +174,82 @@ async function bootFoundation(): Promise<BootFoundationResult> {
 }
 
 async function main(): Promise<void> {
-  const { preset, levelAssetsEnabled, prosperityDebugEnabled, regionalVictoryEnabled, fogOfWarEnabled } =
-    await bootFoundation();
-
   const params = new URLSearchParams(location.search);
   const canvas = requireElement<HTMLCanvasElement>("game-canvas");
   const editorEnabled = params.has("editor");
+  const rtsRoute = !editorEnabled && params.has("rts");
+  // Plan acceptance criterion 1: the RTS route must never show a bare black
+  // canvas. The curtain goes up here, *before the first await* — `bootFoundation`
+  // fetches a preset, and everything after it fetches more, so any later mount
+  // point would still leave the first empty window uncovered. This one belongs to
+  // the menu; `RtsApp` raises a second one of its own for the match load (plan
+  // §3: the curtain appears twice, and both appearances are short).
+  let bootCurtain = rtsRoute ? new RtsLoadingScreen() : null;
+
+  const { preset, levelAssetsEnabled, prosperityDebugEnabled, regionalVictoryEnabled, fogOfWarEnabled } =
+    await bootFoundation();
+
   const scriptMessageTraceLimit = import.meta.env.DEV && params.has("debug") ? 20 : 0;
 
   // RTS game route (Vertical Slice Plan v0.2 Faz 1). Gated behind ?rts so the
   // character runtime + editor stay the default until the RTS is promoted. Its
   // own lightweight runtime — never mixes with the character SceneApp above.
-  if (!editorEnabled && params.has("rts")) {
+  if (rtsRoute) {
+    const setupStorage = matchSetupStorage();
+    const requestedMatchSeed = Number(params.get("seed"));
+    const matchSeed = Number.isSafeInteger(requestedMatchSeed) ? requestedMatchSeed : Date.now();
+    // What the menu opens on: the *resolved* boot state, not a table of defaults.
+    // `regionalVictoryEnabled` / `fogOfWarEnabled` already came through
+    // defaults → preset → `?flags=` → stored choice inside `bootFoundation`, so
+    // seeding from them is what keeps a `?flags=regionalVictory` URL or a §72
+    // test preset from being quietly contradicted by the menu it opens.
+    const seededSetup: RtsMatchSetupValues = {
+      missionMode: resolveMissionMode(setupStorage, missionSeenStorage()),
+      victoryCondition: victoryChoiceForFlag(regionalVictoryEnabled),
+      fogOfWar: fogChoiceForFlag(fogOfWarEnabled),
+      aiProfile: resolveAiProfile(readStoredAiProfile(setupStorage), preset?.aiProfile),
+    };
+    const urlSetup = readMatchSetupFromUrl(params, seededSetup);
+    // KARAR 3/4: a URL that already describes a match has answered the menu's
+    // only question — a shared link, a refresh after the transition below, or the
+    // editor's Play button handing over a Level to try.
+    let setup = urlSetup;
+    if (!urlPinsMatchSetup(params)) {
+      const { RtsMainMenu } = await import("@/game/rts/ui/rtsMainMenu");
+      const menu = new RtsMainMenu(urlSetup);
+      // The menu is what the player is looking at now, so the curtain that was
+      // covering the boot has nothing left to cover. Removed rather than faded:
+      // the menu is already painted over it, so a fade would only be a layer
+      // swallowing clicks for another 400ms.
+      bootCurtain?.dispose();
+      bootCurtain = null;
+      setup = await menu.choose();
+      // §78.1's storage survives, but nothing reloads any more (plan §2.3): these
+      // exist so a *new tab* opens on the match you last set up, not so the boot
+      // can read back its own choice one navigation later.
+      writeMissionMode(setupStorage, setup.missionMode);
+      writeStoredVictoryCondition(setupStorage, setup.victoryCondition);
+      writeStoredFogOfWar(setupStorage, setup.fogOfWar);
+      writeStoredAiProfile(setupStorage, setup.aiProfile);
+      // Declining the tur is an answer too, so it counts as having met the offer.
+      if (setup.missionMode === "free") markMissionSeen(missionSeenStorage());
+      // KARAR 3: the address follows the screen. The transition is not a
+      // navigation (KARAR 2), so without this the URL would still say "menu"
+      // while a match was being played, and the link the player copied would open
+      // something else.
+      history.pushState(null, "", matchSetupSearch(params, setup, matchSeed));
+      // The second curtain (plan §3), raised before the awaits below rather than
+      // after them, for the same reason as the first: the gap it covers is the
+      // one where nothing is on screen yet.
+      bootCurtain = new RtsLoadingScreen();
+    }
+    // The menu is the last word on both flags: it ran before anything was
+    // constructed, so unlike the old start card there is no already-resolved
+    // state for it to disagree with (plan §2.3, and why the four
+    // `location.reload()` calls are gone).
+    const regionalVictoryChosen = victoryChoiceEnablesRegional(setup.victoryCondition);
+    const fogOfWarChosen = fogChoiceEnablesFog(setup.fogOfWar);
+
     const { RtsApp } = await import("@/game/rts/RtsApp");
     const [unitBalance, buildingBalance, resourceBalance, animalBalance, ageBalance, roadBalance, aiBalance, aiLayoutBalance] = await Promise.all([
       loadUnitBalance(),
@@ -189,27 +262,22 @@ async function main(): Promise<void> {
       loadAiLayoutBalance(),
     ]);
     const caravanBalance = await loadCaravanBalance();
-    const requestedMatchSeed = Number(params.get("seed"));
-    const matchSeed = Number.isSafeInteger(requestedMatchSeed) ? requestedMatchSeed : Date.now();
     const tradeSiteBalance = await loadTradeSiteBalance();
     // The Actor pack is how the RTS renders, so the catalog loads on every start.
     // A catalog that fails to load is fatal to the route on purpose: it is the
     // mapping from gameplay ids to art, and there is no second art path left to
     // quietly fall back to — a match booted without it would be an art-less match.
     const contentCatalog = await loadRtsContentCatalog(unitBalance, buildingBalance, animalBalance);
-    // Story/tutorial chain (Hikâye / Öğretici Tur Modu, Faz 1). Opt-in through
-    // `?mission=<id>` until Faz 2 gives the start card a mode row; until then an
-    // ordinary match is what every URL without the parameter still gets.
+    // Story/tutorial chain (Hikâye / Öğretici Tur Modu, Faz 1-2). The menu's mode
+    // row decides, defaulting to the tur for a player who has never resolved the
+    // offer and to free play for one who has; `?mission=<id>` still pins one
+    // explicitly — a dev door, and the way a second chain would be tried before
+    // the menu knows about it.
     //
     // A script that fails to load must not take the match down with it: the mode
     // is guidance layered over a match that is perfectly playable without it, so
     // a bad file costs the player their objectives and nothing else.
-    // `?mission=<id>` still pins one explicitly — a dev door, and the way a
-    // second chain would be tried before the card knows about it. Otherwise the
-    // start card's mode row decides, defaulting to the tur for a player who has
-    // never resolved the offer and to free play for one who has.
-    const missionMode = resolveMissionMode(matchSetupStorage(), missionSeenStorage());
-    const missionId = params.get("mission") ?? missionScriptIdForMode(missionMode);
+    const missionId = params.get("mission") ?? missionScriptIdForMode(setup.missionMode);
     let missionScript: Awaited<ReturnType<typeof loadMissionScript>> | undefined;
     if (missionId) {
       try {
@@ -222,7 +290,7 @@ async function main(): Promise<void> {
     // free-match win condition, so allowing both would let a player finish the
     // round before the teaching chain is complete. Keep the saved free-match
     // preference intact, but never construct the regional systems for a story.
-    const storyModeRegionalVictoryEnabled = !missionScript && regionalVictoryEnabled;
+    const storyModeRegionalVictoryEnabled = !missionScript && regionalVictoryChosen;
     // `?level=` (what the editor's Play button passes) outranks the preset's map,
     // so the level being edited is the level that opens. See `rtsLevelRef.ts`.
     //
@@ -259,21 +327,7 @@ async function main(): Promise<void> {
       debug: params.has("debug"),
       prosperityDebugEnabled,
       regionalVictoryEnabled: storyModeRegionalVictoryEnabled,
-      fogOfWarEnabled,
-      // §78.1: store the choice and re-run this boot, which resolves the flag
-      // through the same defaults → preset → URL → choice path as a cold start.
-      // A reload rather than an in-place rebuild because §13 fixes flags at
-      // resolve time; the cost is one reload of a start screen nobody has played.
-      onVictoryConditionChange: (choice: VictoryConditionChoice) => {
-        writeStoredVictoryCondition(matchSetupStorage(), choice);
-        location.reload();
-      },
-      // §59: same store-and-reload shape, and the same §13 reason — the vision
-      // system and its view layers resolve once, at construction.
-      onFogOfWarChange: (choice: FogOfWarChoice) => {
-        writeStoredFogOfWar(matchSetupStorage(), choice);
-        location.reload();
-      },
+      fogOfWarEnabled: fogOfWarChosen,
       contentCatalog,
       ...(authoredLevel && levelRef
         ? { level: authoredLevel.definition, levelLayout: authoredLevel.layout, levelRef }
@@ -290,11 +344,10 @@ async function main(): Promise<void> {
       aiBalance,
       aiLayoutBalance,
       matchSeed,
-      // §72: the start card's difficulty row outranks the preset, which outranks
-      // the fair baseline. Unlike the two rows above this is not a flag, so it
-      // resolves here rather than through `flagOverrides` — but the precedence
-      // and the "unchosen leaves the preset alone" rule are the same.
-      aiProfile: resolveAiProfile(readStoredAiProfile(matchSetupStorage()), preset?.aiProfile),
+      // §72: the menu's difficulty row outranks the preset, which outranks the
+      // fair baseline — the chain `seededSetup` already walked, with the menu's
+      // answer on top of it.
+      aiProfile: setup.aiProfile,
       // A bad preset must not turn the fallback RTS route into an unwinnable
       // no-build state; mirror the standard core-match stockpile.
       startingResources: preset?.startingResources ?? { food: 500, wood: 500 },
@@ -309,23 +362,13 @@ async function main(): Promise<void> {
       // Same opt-in shape: without it the match opens at Settlement Lv1.
       ...(preset?.startingTier ? { startingTier: preset.startingTier } : {}),
       ...(missionScript ? { missionScript } : {}),
-      // Same store-and-reload shape as the victory condition: what the mode row
-      // changes is which chain the *boot* loads, and §13 fixes that at resolve
-      // time. One reload of a start screen nobody has played yet.
-      onMissionModeChange: (choice) => {
-        writeMissionMode(matchSetupStorage(), choice);
-        // Declining is an answer too, so it counts as having met the offer.
-        if (choice === "free") markMissionSeen(missionSeenStorage());
-        location.reload();
-      },
-      // §72: same store-and-reload shape as the rows above — the profile is read
-      // into the AI controller at construction, so it is a boot concern.
-      onAiProfileChange: (choice) => {
-        writeStoredAiProfile(matchSetupStorage(), choice);
-        location.reload();
-      },
       onMissionResolved: () => markMissionSeen(missionSeenStorage()),
     });
+    // `RtsApp` mounts a curtain of its own in its constructor, so this one has
+    // been handed over rather than dropped — no frame between them shows the
+    // half-built field the two exist to hide.
+    bootCurtain?.dispose();
+    bootCurtain = null;
     rts.start();
     return;
   }
@@ -371,4 +414,15 @@ async function main(): Promise<void> {
   app.start();
 }
 
-void main();
+/**
+ * A boot that dies behind the curtain would leave the player watching a progress
+ * bar for a load that is never coming — the RTS route raises its curtain before
+ * the first `await` now (plan F2), so every failure after that point is a failure
+ * with something painted over it. Taking the curtain down is not error handling:
+ * the rejection is re-thrown so `installGlobalErrorHandlers` still reports it. It
+ * only makes sure the failure is *visible* rather than disguised as a slow load.
+ */
+void main().catch((error: unknown) => {
+  for (const curtain of document.querySelectorAll(".rts-loading-screen")) curtain.remove();
+  throw error;
+});
