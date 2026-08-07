@@ -19,6 +19,10 @@ Durum: **Devam ediyor — Faz 0 tamamlanma yolunda; Faz 1 dar çekirdeği ve des
   - [x] `wood-light` Material Editor browser smoke, kayıtlı BC/normal/ORM setini açıp `Ready.` durumuna ulaştı; sayfa hatası üretmedi.
   - [x] Faz 3 `roof-clay` pilotu, kullanıcının yönlendirmesiyle çizgisiz yalnızca-kil yüzeyine geçirildi. BC/N/ORM seti aynı kimliklerle güncellendi; kiremit çizgileri ve derzleri artık yalnızca model geometrisinden gelir. `Main` belirsiz olduğu için otomatik atama yapılmadı.
   - [x] Faz 3 `wall-plaster` pilotu, kullanıcının seçtiği beyaz B varyantına geçirildi. BC/N/ORM seti aynı kimliklerle güncellendi; `M_TA_Wall_Plaster` ve güvenli `Walls` slot eşleme hedefi korunuyor. Temsilci model görsel kabulü hâlâ açıktır.
+  - [x] Faz 3 `grass-meadow` pilotu için kullanıcı A varyantını kabul etti. Deterministik 1024² BC/N/ORM seti, manifest texture kayıtları ve `M_TA_Grass_Meadow` oluşturuldu; Landscape `grass` katmanına henüz atanmadı.
+  - [x] `grass-meadow` Material Editor browser smoke, kayıtlı BC/normal/ORM setini açıp `Ready.` durumuna ulaştı; sayfa hatası üretmedi.
+  - [x] Faz 3 `road-gravel` pilotu için kullanıcı A varyantını kabul etti. Deterministik 1024² BC/N/ORM seti, manifest texture kayıtları ve `M_TA_Road_Gravel` oluşturuldu; Landscape legacy `snow` yol katmanına henüz atanmadı.
+  - [x] `road-gravel` Material Editor browser smoke, kayıtlı BC/normal/ORM setini açıp `Ready.` durumuna ulaştı; sayfa hatası üretmedi.
   - [ ] Kullanıcı, `TownCenter_FirstAge_Level{1,2,3}` sidecar'larında `wood-dark` ve `wood-light` materyallerini manuel atayıp denedi. Bu, gerçek model deneme kanıtıdır; açık görsel kabul ifadesi gelmeden Faz 6 kabulünü kapatmaz.
 
 ## 1. Amaç
@@ -563,10 +567,10 @@ Su hareketi modelin seçim/picking, shadow, fog ve takım tint davranışını b
 
 ### Faz 0 — Envanter ve sözleşme testleri
 
-- [ ] 128 modelin slot, primitive, UV, bounds ve sidecar envanterini otomatik çıkar.
-- [ ] Kaynak slot → hedef yüzey config'ini oluştur.
+- [x] 128 modelin slot, primitive, UV, bounds ve sidecar envanterini otomatik çıkar.
+- [x] Kaynak slot → hedef yüzey config'ini oluştur.
 - [ ] Belirsiz `Main`, `Stone`, `Green` slotlarını asset ailesi istisnalarıyla çöz.
-- [ ] Mevcut 6 sidecar'ı preserve/replace listesi olarak kaydet.
+- [x] Mevcut 6 sidecar'ı preserve/replace listesi olarak kaydet.
 - [ ] `Environment` dışlama ve GLTF değişmezlik kontrolünü teste bağla.
 - [ ] Texture/material naming ve manifest id standardını kilitle.
 
@@ -575,13 +579,13 @@ dosya yazmaz ve scope dışına çıkmaz.
 
 ### Faz 1 — Landscape normal + ORM altyapısı
 
-- [ ] Shared Landscape material-layer resolver'ı normal/ORM/scalar PBR ile genişlet.
-- [ ] SceneApp, RuntimeSceneApp ve authored-world çözümleme yollarını hizala.
-- [ ] Dört normal haritasını ağırlıklı ve normalize biçimde karıştır.
-- [ ] Dört ORM haritasını paint ağırlıklarıyla PBR chunk'larına uygula.
-- [ ] Eksik-map fallback ve doğru color-space ayarlarını ekle.
-- [ ] Texture cache/dispose ve scene rebuild regresyonlarını ekle.
-- [ ] Sampler/capability ölçümü ve albedo-only düşük-capability fallback'ini ekle.
+- [x] Shared Landscape material-layer resolver'ı normal/ORM/scalar PBR ile genişlet.
+- [x] SceneApp, RuntimeSceneApp ve authored-world çözümleme yollarını hizala.
+- [x] Dört normal haritasını ağırlıklı ve normalize biçimde karıştır.
+- [x] Dört ORM haritasını paint ağırlıklarıyla PBR chunk'larına uygula.
+- [x] Eksik-map fallback ve doğru color-space ayarlarını ekle.
+- [x] Texture cache/dispose ve scene rebuild regresyonlarını ekle.
+- [x] Sampler/capability ölçümü ve albedo-only düşük-capability fallback'ini ekle.
 
 Kabul: Dört katmana farklı normal/roughness test fixture'ı verildiğinde editor,
 Play ve RTS authored world aynı yüzey ayrımını gösterir; console/shader hatası ve
@@ -608,8 +612,8 @@ River Water'a yabancı görünmez ve spline/foam/reflection koduna bağımlı de
 - [x] `roof-clay` (kullanıcı çizgisiz yalnızca-kil yüzeyini seçti; temsilci model kabulü açık)
 - [x] `wall-plaster` (kullanıcı B/beyaz plaster seçti; temsilci model kabulü açık)
 - [x] `stone-masonry` (A ana materyal; B kayıtlı yedek, aile override apply açık)
-- [ ] `rock-natural`
-- [ ] `earth-compacted`
+- [x] `rock-natural` (A kullanıcı kabulü; kaynak kaya/dağ override apply açık)
+- [x] `earth-compacted` (B kullanıcı kabulü; Landscape/road temsilci kabulü açık)
 - [ ] `grass-meadow`
 - [ ] `road-gravel`
 - [ ] `tree-bark`

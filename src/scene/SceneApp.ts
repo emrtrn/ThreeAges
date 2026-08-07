@@ -184,6 +184,7 @@ import {
   applyLandscapeSplinePaint,
   landscapeSplineMeshAssetIds,
   splineToPolyline,
+  landscapeLayerAnisotropy,
   resolveLandscape,
   uniqueLandscapeId,
   uniqueLandscapeName,
@@ -6186,7 +6187,9 @@ export class SceneApp {
       .map((layer) => layer.material)
       .filter((id): id is string => Boolean(id) && !this.landscapeLayerMaterialCache.has(id!));
     if (pending.length === 0) return;
-    const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    // Same ceiling as the runtime: the editor viewport draws the same splat
+    // material over the same full-screen terrain, and WYSIWYG covers filtering too.
+    const maxAnisotropy = landscapeLayerAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
     let loadedAny = false;
     await Promise.all(
       Array.from(new Set(pending)).map(async (materialId) => {

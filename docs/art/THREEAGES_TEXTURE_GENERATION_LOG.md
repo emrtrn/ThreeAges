@@ -130,3 +130,81 @@ Built-in image generation plus the local deterministic processor produced the
 Both sets are registered: `threeages-mat-stone-masonry` is primary and
 `threeages-mat-stone-masonry-backup` is the retained B alternative. `Stone`
 remains asset-family-specific, so neither is mapped automatically.
+
+## grass-meadow — candidate review
+
+Date: 2026-08-07
+Status: `accepted` — Variant A approved by the user; it is registered but not
+yet assigned to the Landscape `grass` layer.
+
+Shared constraints: square seamless Landscape albedo for the ThreeAges RTS,
+stylized low-poly medieval-fantasy palette, orthographic full-frame surface,
+warm natural meadow greens, medium-low contrast, low visual noise and no
+directional lighting, cast shadows, AO baking, landmarks, paths, flowers,
+rocks, borders, text, logos or watermarks.
+
+| Variant | Project copy | 3×3 preview | Review note |
+| --- | --- | --- | --- |
+| A | `docs/art/candidates/T_TA_Grass_Meadow_Candidate_A.png` | `docs/art/candidates/processed/T_TA_Grass_Meadow_Candidate_A_3x3.png` | **Accepted.** More stylized clustered-blade read and broader meadow variation. |
+| B | `docs/art/candidates/T_TA_Grass_Meadow_Candidate_B.png` | `docs/art/candidates/processed/T_TA_Grass_Meadow_Candidate_B_3x3.png` | Finer, more uniform turf read with lower contrast. |
+
+Built-in image generation plus the local deterministic processor produced 1024²
+BC/N/ORM candidate sets. Seam metrics: A `0.00104`; B `0.00137` (threshold
+`0.01500`). The submitted A prompt requests soft clustered blades and subtle
+irregular meadow variation; B requests small interwoven turf with diffuse
+mottling. Both meet the automatic seam gate, but visual pilot selection remains
+the acceptance authority. The accepted production records are
+`threeages-tex-grass-meadow-{bc,n,orm}` and `threeages-mat-grass-meadow`; the
+production preview is `docs/art/previews/T_TA_Grass_Meadow_3x3.png`. The focused
+Material Editor browser smoke opened the registered material with status
+`Ready.` and no page errors.
+
+## tree-bark — candidate review
+
+Date: 2026-08-07
+Status: `candidate` — explicit visual selection is pending; neither candidate is
+a runtime asset or manifest entry.
+
+Shared constraints: square seamless trunk-bark albedo for ThreeAges RTS trees,
+stylized low-poly medieval-fantasy palette, orthographic full-frame surface,
+medium-low contrast and no baked lighting, roots, branches, moss, lichen,
+landmarks, perspective, text, logos or watermarks. The subtle vertical bark
+rhythm is intentional for tree trunks, but must remain repeat-safe.
+
+| Variant | Project copy | 3×3 preview | Review note |
+| --- | --- | --- | --- |
+| A | `docs/art/candidates/T_TA_Tree_Bark_Candidate_A.png` | `docs/art/candidates/processed/T_TA_Tree_Bark_Candidate_A_3x3.png` | Dark warm-brown, larger plate rhythm and subtly vertical fissures. |
+| B | `docs/art/candidates/T_TA_Tree_Bark_Candidate_B.png` | `docs/art/candidates/processed/T_TA_Tree_Bark_Candidate_B_3x3.png` | Cooler gray-brown, finer overlapping-scale rhythm. |
+
+Built-in image generation plus the local deterministic processor produced 1024²
+BC/N/ORM candidate sets. Seam metrics: A `0.00043`; B `0.00063` (threshold
+`0.01500`). A uses layered bark plates; B uses softer interlocking bark scales.
+Both meet the automatic seam gate, but visual pilot selection remains the
+acceptance authority.
+
+## road-gravel — candidate review
+
+Date: 2026-08-07
+Status: `accepted` — Variant A approved by the user; it is registered but not
+yet assigned to the Landscape legacy `snow` road layer.
+
+Shared constraints: square seamless Landscape road albedo for the ThreeAges RTS,
+stylized low-poly medieval-fantasy palette, orthographic full-frame surface,
+restrained warm beige/tan/gray gravel, medium-low contrast and low visual noise;
+no direction, cast shadows, AO baking, cobble pattern, ruts, grass, puddles,
+landmarks, borders, text, logos or watermarks.
+
+| Variant | Project copy | 3×3 preview | Review note |
+| --- | --- | --- | --- |
+| A | `docs/art/candidates/T_TA_Road_Gravel_Candidate_A.png` | `docs/art/candidates/processed/T_TA_Road_Gravel_Candidate_A_3x3.png` | **Accepted.** Warmer packed-earth base with more visible small-pebble variation. |
+| B | `docs/art/candidates/T_TA_Road_Gravel_Candidate_B.png` | `docs/art/candidates/processed/T_TA_Road_Gravel_Candidate_B_3x3.png` | Lighter, finer and more uniform gravel read. |
+
+Built-in image generation plus the local deterministic processor produced 1024²
+BC/N/ORM candidate sets. Seam metrics: A `0.00107`; B `0.00184` (threshold
+`0.01500`). A uses a small irregular mixed gravel prompt; B uses finer compacted
+gravel and dusty soil. Both meet the automatic seam gate, but visual pilot
+selection remains the acceptance authority. The accepted production records are
+`threeages-tex-road-gravel-{bc,n,orm}` and `threeages-mat-road-gravel`; the
+production preview is `docs/art/previews/T_TA_Road_Gravel_3x3.png`. The focused
+Material Editor browser smoke opened the registered material with status
+`Ready.` and no page errors.

@@ -213,6 +213,7 @@ import {
 import { ForestSystem } from "./economy/forestSystem";
 import { PastureSystem } from "./wildlife/pastureSystem";
 import { PredatorSystem } from "./wildlife/predatorSystem";
+import { PredatorResponseSystem } from "./wildlife/predatorResponseSystem";
 import { WildlifeRetaliationSystem } from "./wildlife/wildlifeRetaliation";
 import { WildlifeSystem } from "./wildlife/wildlifeSystem";
 import { WildlifeView } from "./wildlife/wildlifeView";
@@ -656,6 +657,7 @@ export class RtsApp {
   private readonly pasture: PastureSystem;
   private readonly wildlifeRetaliation: WildlifeRetaliationSystem;
   private readonly predators: PredatorSystem;
+  private readonly predatorResponse: PredatorResponseSystem;
   private readonly wildlifeRoot = new Group();
   private readonly wildlifeView = new WildlifeView(this.wildlifeRoot);
   private readonly caravanRoot = new Group();
@@ -1133,6 +1135,11 @@ export class RtsApp {
       this.wildlife,
       (x, z) => this.territory.ownerAt(x, z),
     );
+    // The active half of the answer to a mauling: the passive one (a struck
+    // worker turning on the wolf, an idle soldier inside his nine-unit
+    // acquisition circle) is why a garrison could watch a worker die from what
+    // the player reads as arm's length.
+    this.predatorResponse = new PredatorResponseSystem(this.units, this.navigation);
     this.kingdoms = new KingdomRegistry(
       KINGDOM_OWNERS,
       this.units,
@@ -3455,7 +3462,8 @@ export class RtsApp {
     // V3 Faz 3, and ahead of the herd's tick for the same reason the drive is: a
     // quarry chosen this frame has to move the wolf this frame, or every chase
     // trails one step behind the worker it is aimed at.
-    for (const strike of this.predators.update(dt)) {
+    const predatorStrikes = this.predators.update(dt);
+    for (const strike of predatorStrikes) {
       // V3 Faz 4, closing V1 §3.9's debt. Every other blow in the match reaches
       // `resolveCombatHit` and gets a defensive answer out of it; the wolf's does
       // not, because `updateUnitCombat` never landed it. So the call is made here
@@ -3466,6 +3474,11 @@ export class RtsApp {
       retaliateAgainstAttack(strike.victim, strike.predator, this.navigation);
       this.ai.reportPredatorStrike(strike);
     }
+    // And the garrison answers it. Run every tick rather than only on a bite,
+    // because half of what it does is the walk back to the post once the wolf
+    // is dead. Owner-agnostic: the AI's workers are covered by the AI's
+    // soldiers on the same terms, with no AI-side code.
+    this.predatorResponse.update(predatorStrikes);
     this.wildlife.update(dt, this.units.all().map((unit) => unit.position));
     // Last of the three, and it has to be: a blow lands on whoever is *still*
     // standing over the animal after both of them have moved this frame. A bull

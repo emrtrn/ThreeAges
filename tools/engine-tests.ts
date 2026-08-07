@@ -405,6 +405,11 @@ import { Unit, UNIT_DEATH_SECONDS, type RtsPresentationHandle } from "../src/gam
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import { WildlifeSystem, wildProfileFor, type RtsHerdDefinition } from "../src/game/rts/wildlife/wildlifeSystem";
 import { PredatorSystem, type PredatorStrike } from "../src/game/rts/wildlife/predatorSystem";
+import {
+  PREDATOR_ALARM_RADIUS,
+  PREDATOR_RESPONDER_LIMIT,
+  PredatorResponseSystem,
+} from "../src/game/rts/wildlife/predatorResponseSystem";
 import { WildlifeView, isWildlifeVisible } from "../src/game/rts/wildlife/wildlifeView";
 import {
   CAUGHT_DISTANCE,
@@ -586,6 +591,8 @@ import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/l
 import {
   createLandscapeObject,
   disposeLandscapeObject,
+  landscapeLayerAnisotropy,
+  LANDSCAPE_MAX_ANISOTROPY,
   LANDSCAPE_PBR_MIN_TEXTURE_UNITS,
   LANDSCAPE_PBR_TEXTURE_SAMPLERS,
   resolveLandscapeSamplerBudget,
@@ -21363,6 +21370,28 @@ check("landscape PBR splat blends layer normal/ORM maps with scalar fallbacks", 
   orm.dispose();
 });
 
+check("landscape layer anisotropy is capped below whatever the driver offers", () => {
+  // Asserted against the constant, not against 4: the ceiling is a tuning
+  // decision and retuning it must not turn this check red. What may not change
+  // is the rule — the landscape never takes the driver's maximum, because it is
+  // the one surface that pays for filtering twelve times over every pixel.
+  assert.equal(
+    landscapeLayerAnisotropy(16),
+    LANDSCAPE_MAX_ANISOTROPY,
+    "a generous desktop driver is clamped to the landscape ceiling",
+  );
+  assert.ok(LANDSCAPE_MAX_ANISOTROPY < 16, "the ceiling is genuinely below a common driver maximum");
+  // A weak driver is the ceiling's boundary, not its floor: asking for more than
+  // the host offers is how filtering silently falls back to something worse.
+  assert.equal(landscapeLayerAnisotropy(2), 2, "a constrained driver keeps its own smaller maximum");
+  assert.equal(landscapeLayerAnisotropy(1), 1);
+  // Unknown or nonsensical capability must degrade to valid filtering rather
+  // than hand a texture NaN or zero.
+  assert.equal(landscapeLayerAnisotropy(Number.NaN), 1, "unknown capability degrades to no anisotropy");
+  assert.equal(landscapeLayerAnisotropy(0), 1);
+  assert.equal(landscapeLayerAnisotropy(-4), 1);
+});
+
 check("landscape PBR sampler budget selects an explicit albedo-only fallback", () => {
   assert.equal(LANDSCAPE_PBR_TEXTURE_SAMPLERS, 12);
   assert.equal(resolveLandscapeSamplerBudget().pbrEnabled, true, "unknown hosts preserve the full legacy-compatible path");
@@ -30961,6 +30990,151 @@ check("V3 Faz 4: the wolf's bite is answered — the worker turns on it and an u
   // the predator pass that published the list has already run.
   tick();
   assert.equal(predators.hostile().length, 0, "and a carcass is nobody's target either");
+  territory.dispose();
+});
+
+check("Kurt alarmı: bir işçi ısırıldığında en yakın iki boştaki asker olay yerine gider", () => {
+  // The complaint this answers: a garrison watching a worker be mauled from what
+  // the player reads as arm's length. Both existing answers are passive — the
+  // struck worker turns on the wolf, and a soldier who happens to be standing
+  // idle inside his nine-unit acquisition circle joins in — so every soldier
+  // posted just outside that circle does nothing at all. Every responder below
+  // is deliberately placed beyond it, so nothing here can be explained by the
+  // passive path: if the alarm does not carry, none of them move.
+  const animals = shippedAnimalBalance();
+  const stats = animals.wolf ?? assert.fail("wolf balance missing");
+  const predator = stats.predator ?? assert.fail("wolf predator block missing");
+  const wildlife = new WildlifeSystem(animals, [{ id: "den", species: "wolf", x: 0, z: 0, count: 1 }]);
+  const wolf = wildlife.all()[0] ?? assert.fail("no wolf spawned");
+  wolf.position.set(0, 0, 0);
+  const units = new UnitSystem();
+  const territory = new TerritoryControlSystem(() => []);
+  territory.refresh();
+  const predators = new PredatorSystem(units, wildlife, (x, z) => territory.ownerAt(x, z));
+  const navigation = new RtsNavigation();
+  const response = new PredatorResponseSystem(units, navigation);
+  const step = 0.25;
+  let bites = 0;
+  const tick = (): void => {
+    updateUnitEngagement(units.all(), { navigation, targets: [...units.all(), ...predators.hostile()] });
+    updateUnitMovement(units.all(), step, { navigation });
+    const strikes = predators.update(step);
+    for (const strike of strikes) retaliateAgainstAttack(strike.victim, strike.predator, navigation);
+    bites += strikes.length;
+    // Exactly where `RtsApp.updateSimulation` runs it: on the same strikes the
+    // worker's own retaliation was fed, every tick so the walk home is driven too.
+    response.update(strikes);
+    wildlife.update(step, units.all().map((unit) => unit.position));
+    updateUnitCombat(units.all(), step);
+  };
+
+  const worker = units.spawn("player", 8, 0, RTS_TEST_WORKER_STATS);
+  // A soldier already under a movement order — nearest of all, and the one that
+  // must not answer: a transit order outranks an automatic response, here
+  // exactly as it does in the passive path.
+  const courier = units.spawn("player", 8, 10, RTS_TEST_UNIT_STATS);
+  courier.setMoveTarget(8, 60);
+  const near = units.spawn("player", 8, 13, RTS_TEST_UNIT_STATS);
+  const second = units.spawn("player", 8, 15, RTS_TEST_UNIT_STATS);
+  const third = units.spawn("player", 8, 20, RTS_TEST_UNIT_STATS);
+  // Out of earshot: the alarm is a radius, not the whole roster.
+  const deaf = units.spawn("player", 8, PREDATOR_ALARM_RADIUS + 6, RTS_TEST_UNIT_STATS);
+  const posts = [near, second, third, deaf].map((unit) => ({ unit, post: unit.position.clone() }));
+  for (const { unit, post } of posts) {
+    assert.ok(
+      post.distanceTo(worker.position) > unit.attack.acquisitionRange,
+      `${post.z} is inside the passive acquisition circle, so this test proves nothing`,
+    );
+  }
+
+  for (let index = 0; index < 400 && bites === 0; index += 1) tick();
+  assert.ok(bites > 0, "the wolf reached the worker and drew blood");
+  assert.equal(near.attackTarget, wolf, "the nearest unoccupied soldier answers the bite");
+  assert.equal(second.attackTarget, wolf, "and so does the second nearest");
+  assert.equal(
+    [near, second, third, deaf, courier].filter((unit) => unit.attackTarget === wolf).length,
+    PREDATOR_RESPONDER_LIMIT,
+    "two answer a wolf, not the garrison: a den must not be able to drain a barracks",
+  );
+  assert.equal(third.attackTarget, null, "the third nearest is left at his post");
+  assert.equal(deaf.attackTarget, null, "and the one out of earshot never heard it");
+  assert.equal(courier.attackTarget, null, "the soldier under a movement order keeps walking");
+
+  // §2.6 with the escort actually arriving: the worker is saved rather than
+  // avenged, which is the whole difference between this and the passive answer.
+  for (let index = 0; index < 4000 && !wolf.dead; index += 1) tick();
+  assert.equal(wolf.dead, true, "the responders brought the wolf down");
+  assert.ok(!worker.health.depleted, "and reached him in time — the worker lives");
+  for (const { unit, post } of posts.filter((entry) => entry.unit === third || entry.unit === deaf)) {
+    assert.ok(
+      unit.position.distanceTo(post) < 1e-6,
+      "a soldier who was not called never left his post",
+    );
+  }
+
+  // The walk back: a rescue that stripped the ground it was called from would
+  // simply move the problem, so the responders return to where they stood.
+  const called = posts.filter((entry) => entry.unit === near || entry.unit === second);
+  for (let index = 0; index < 4000; index += 1) {
+    tick();
+    if (called.every((entry) => entry.unit.position.distanceTo(entry.post) < 2)) break;
+  }
+  for (const { unit, post } of called) {
+    assert.ok(
+      unit.position.distanceTo(post) < 2,
+      `a responder ended ${unit.position.distanceTo(post).toFixed(2)} from the post he was called off`,
+    );
+  }
+  territory.dispose();
+});
+
+check("Kurt alarmı: çağrılan asker kurdun kaydığı yere kadar takip eder", () => {
+  // An attack order is pathed once, when it is issued, and a wolf does not wait
+  // where it was when the call went out. Without the responder's own re-plan the
+  // rescue ends as a soldier standing on the spot the wolf used to be, target in
+  // hand, doing nothing — which is the exact silhouette being complained about.
+  const animals = shippedAnimalBalance();
+  const stats = animals.wolf ?? assert.fail("wolf balance missing");
+  const wildlife = new WildlifeSystem(animals, [{ id: "den", species: "wolf", x: 0, z: 0, count: 1 }]);
+  const wolf = wildlife.all()[0] ?? assert.fail("no wolf spawned");
+  wolf.position.set(0, 0, 0);
+  const units = new UnitSystem();
+  const territory = new TerritoryControlSystem(() => []);
+  territory.refresh();
+  const predators = new PredatorSystem(units, wildlife, (x, z) => territory.ownerAt(x, z));
+  const navigation = new RtsNavigation();
+  const response = new PredatorResponseSystem(units, navigation);
+  const step = 0.25;
+
+  const worker = units.spawn("player", 8, 0, RTS_TEST_WORKER_STATS);
+  const guard = units.spawn("player", 8, 14, RTS_TEST_UNIT_STATS);
+  assert.ok(
+    guard.position.distanceTo(worker.position) > guard.attack.acquisitionRange,
+    "the guard has to be out of passive range for this to be the response's doing",
+  );
+
+  let dispatched = false;
+  for (let index = 0; index < 400 && !dispatched; index += 1) {
+    updateUnitEngagement(units.all(), { navigation, targets: [...units.all(), ...predators.hostile()] });
+    updateUnitMovement(units.all(), step, { navigation });
+    const strikes = predators.update(step);
+    response.update(strikes);
+    wildlife.update(step, units.all().map((unit) => unit.position));
+    dispatched = guard.attackTarget === wolf;
+  }
+  assert.equal(dispatched, true, "the bite dispatched the guard");
+
+  // Now move the wolf out from under the planned route, as a chase after the
+  // next worker would. The guard's baked path is stale from this frame on.
+  wolf.position.set(-14, 0, 6);
+  wolf.hunt = null;
+  let closed = false;
+  for (let index = 0; index < 4000 && !closed; index += 1) {
+    updateUnitMovement(units.all(), step, { navigation });
+    response.update([]);
+    closed = combatDistance(guard.position, wolf) <= guard.attack.range;
+  }
+  assert.equal(closed, true, "the responder re-planned and closed on where the wolf actually is");
   territory.dispose();
 });
 
