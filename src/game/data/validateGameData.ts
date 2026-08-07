@@ -2249,8 +2249,10 @@ export function validateTradeSiteBalance(value: unknown): TradeSiteBalance {
     if (capacity !== undefined && (typeof capacity !== "number" || !Number.isFinite(capacity) || capacity <= 0)) {
       throw new GameDataError(`${siteWhere}.capacity: must be a finite number > 0, or absent for a renewable site`);
     }
+    const icon = optionalUiAssetPath(site, "icon", siteWhere);
     sites[id] = {
       label: requireString(site, "label", siteWhere),
+      ...(icon ? { icon } : {}),
       resourceId,
       perMinute: positive("perMinute"),
       carryCapacity,

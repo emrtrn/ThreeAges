@@ -34556,6 +34556,9 @@ check("Faz B UI icons are data-driven and every shipped reference exists", () =>
   const tables = [
     validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown),
     validateUnitBalance(JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown),
+    // Trade sites are neither built nor trained, but their selection panel shows
+    // the same portrait frame, so their artwork is held to the same rule.
+    validateTradeSiteBalance(JSON.parse(readFileSync("public/game-data/balance/trade-sites.json", "utf8")) as unknown),
   ];
   assert.equal(tables[1].worker_placeholder?.icon, "/assets/ui/icons/unit-worker.png");
   assert.equal(tables[1].worker_placeholder?.portrait, undefined, "selection artwork reuses the unit icon");
@@ -49705,6 +49708,10 @@ check("Faz S2: the trade site validator refuses data that could never make sense
   refuse({ label: "" }, "the table entry has to name itself");
   refuse({ resourceId: "gold" }, "gold is the numeraire, so no buy button exists for a supply chain to feed");
   refuse({ dock: { width: 0, depth: 8 } }, "a dock with no extent is a landing no road can touch");
+  refuse(
+    { icon: "/assets/art/river-port.png" },
+    "panel artwork stays inside /assets/ui/icons/ like every other data-owned icon",
+  );
   refuse({ capacity: 0 }, "a finite site with nothing in it is spent before the match starts");
   // The one relationship, and the reason it lives in this table (plan §3.8): a
   // buffer under one load empties on every arrival, so the site can never report
@@ -50865,6 +50872,16 @@ check("Faz S6: the trade site panel answers whose it is, what is in it, and what
   assert.equal(chip(stalled, "buffer-full")?.tone, "warn");
   assert.match(chip(stalled, "buffer-full")?.tooltip ?? "", /Filoyu büyütün ya da Pazarı yaklaştırın/);
   assert.equal(chip(panel({ buffered: 119 }), "buffer-full"), undefined, "a buffer under its cap is not a warning");
+
+  // The portrait answers "which of the three is this?", which is the question a
+  // supply notification naming a site immediately raises. It is data-owned like
+  // every other panel icon: a balance row with artwork fills the frame, one
+  // without leaves it empty rather than borrowing somebody else's picture.
+  assert.equal(held.portrait, null, "a site with no authored artwork leaves the frame empty");
+  assert.equal(
+    panel({ icon: "/assets/ui/icons/trade-site-river-port.png" }).portrait,
+    "/assets/ui/icons/trade-site-river-port.png",
+  );
 });
 
 check("Faz S6: a trade site is clickable on its dock, and only where the player has been", () => {

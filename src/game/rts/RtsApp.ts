@@ -4975,6 +4975,7 @@ export class RtsApp {
       site: {
         siteId,
         label: snapshot.label,
+        icon: this.options.tradeSiteBalance[snapshot.siteType]?.icon,
         resourceId: snapshot.resourceId,
         state,
         // Read off the claim rather than off `state`: `cut` says nothing about

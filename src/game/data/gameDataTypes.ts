@@ -1217,6 +1217,8 @@ export interface CaravanBalance {
 export interface TradeSiteBalanceStats {
   /** Shown wherever the site is named in the UI. */
   readonly label: string;
+  /** Selection-panel artwork, same constrained path as a building's or unit's. */
+  readonly icon?: UiAssetPath;
   /** Which resource this site supplies; must have a market price to be buyable. */
   readonly resourceId: string;
   /** Units produced into the local buffer per minute, independent of workers. */

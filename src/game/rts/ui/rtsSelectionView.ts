@@ -319,6 +319,8 @@ export interface SelectedStructureView {
 export interface SelectedTradeSiteView {
   readonly siteId: string;
   readonly label: string;
+  /** Panel artwork from the site's balance row; absent leaves the frame empty. */
+  readonly icon?: string | undefined;
   readonly resourceId: string;
   /** Faz S5's reading, from the observing kingdom's point of view. */
   readonly state: MarketSupplyState;
@@ -631,8 +633,11 @@ export function describeSelection(view: RtsSelectionView): SelectionPanelContent
  * actually lives, or an empty command deck reads as a bug rather than as the
  * rule.
  *
- * No health bar and no portrait for the same reason: a site cannot be hurt, and
- * an empty frame is more honest than a full one that never moves.
+ * No health bar for the same reason: a site cannot be hurt, and an empty bar is
+ * more honest than a full one that never moves. The portrait is the exception —
+ * it identifies *which* of the three sites this is, which is a question the
+ * player asks the moment a supply notification names one, so it is shown when
+ * the balance row authors artwork and left empty when it does not.
  */
 function describeTradeSite(site: SelectedTradeSiteView): SelectionPanelContent {
   const resource = resourceLabel(site.resourceId);
@@ -680,7 +685,7 @@ function describeTradeSite(site: SelectedTradeSiteView): SelectionPanelContent {
     // empty command deck otherwise reads as an unfinished building.
     hint: "Arz noktası inşa edilmez, yıkılmaz, işçi istemez. Tek karar: buraya yol çekmek.",
     tooltip: TRADE_SITE_SUMMARY[site.state],
-    portrait: null,
+    portrait: site.icon ?? null,
     selectionCount: 1,
     health: null,
   };
