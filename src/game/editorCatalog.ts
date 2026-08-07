@@ -453,10 +453,24 @@ const BUILDINGS_FIELDS = [
   },
   { path: "defense.attackRange", label: "Savunma: Menzil", min: 0, step: 0.5, hint: "Karakol'un ateş açtığı menzil (birim)." },
   { path: "defense.attackCooldown", label: "Savunma: Atış aralığı (sn)", min: 0, step: 0.1, hint: "İki yaylım arasındaki saniye; küçük değer = daha hızlı ateş." },
-  { path: "defense.arrowsPerVolley", label: "Savunma: Yaylım başına ok", min: 0, step: 1, hint: "Her atışta fırlatılan ok sayısı." },
+  { path: "defense.arrowsPerVolley", label: "Savunma: Yaylım başına atış", min: 0, step: 1, hint: "Her yaylımda fırlatılan mermi sayısı (ok ya da gülle)." },
   { path: "defense.damageMultipliers.light", label: "Savunma: Hasar çarpanı: Hafif", min: 0, step: 0.05, hint: "Hafif zırhlı birimlere karşı hasar çarpanı." },
   { path: "defense.damageMultipliers.heavy", label: "Savunma: Hasar çarpanı: Ağır", min: 0, step: 0.05, hint: "Ağır zırhlı birimlere karşı hasar çarpanı." },
   { path: "defense.damageMultipliers.structure", label: "Savunma: Hasar çarpanı: Yapı", min: 0, step: 0.05, hint: "Binalara karşı hasar çarpanı." },
+  // Same pairing rule as the unit block above: the burst only means anything on
+  // a "cannonball" weapon, and the validator refuses the pair otherwise.
+  {
+    path: "defense.attackVfx",
+    label: "Savunma: Silah gösterimi",
+    enum: ["arrow", "cannonball"],
+    hint: "arrow: düz ok izi, hasar anında düşer. cannonball: Topçu'nun güllesi — hasarı gülle varana kadar bekler.",
+  },
+  {
+    path: "defense.impactEffect",
+    label: "Savunma: İsabet efekti",
+    assetOptions: "effect",
+    hint: "Gülle düştüğü noktada patlatılan Content Drawer efekt varlığı. Yalnızca 'cannonball' silahında geçerlidir.",
+  },
   // Progression tiers and upgrade levels (any index). These per-tier values are
   // the ones the running match resolves to (age × level); they override the
   // matching base-block fields above, so this is where the live numbers live.
@@ -495,9 +509,41 @@ const BUILDINGS_FIELDS = [
     label: "Yerleşim tier: Savunma hasarı",
     min: 0,
     step: 1,
-    hint: "Bu seviyede Karakol'un ok başına hasarı. Oyunda kullanılan değer budur.",
+    hint: "Bu seviyede Karakol'un atış başına hasarı. Oyunda kullanılan değer budur.",
   },
   { path: "progression.town.[].defense.attackDamage", label: "Kasaba tier: Savunma hasarı", min: 0, step: 1 },
+  // The rest of the tier's defense block is optional: fill it only to change the
+  // *weapon* at that tier — which is what turns the Town Karakol's bow into a
+  // gun. Left empty, the tier keeps the base block's cadence, volley and table.
+  {
+    path: "progression.town.[].defense.attackCooldown",
+    label: "Kasaba tier: Savunma atış aralığı (sn)",
+    min: 0,
+    step: 0.1,
+    hint: "Bu seviyedeki yaylım aralığı. Boş bırakılırsa temel savunma bloğundaki değer geçerlidir.",
+  },
+  {
+    path: "progression.town.[].defense.arrowsPerVolley",
+    label: "Kasaba tier: Yaylım başına atış",
+    min: 0,
+    step: 1,
+    hint: "Bu seviyedeki mermi sayısı. Top tek gülle atar; boş bırakılırsa temel blok geçerlidir.",
+  },
+  { path: "progression.town.[].defense.damageMultipliers.light", label: "Kasaba tier: Savunma çarpanı: Hafif", min: 0, step: 0.05 },
+  { path: "progression.town.[].defense.damageMultipliers.heavy", label: "Kasaba tier: Savunma çarpanı: Ağır", min: 0, step: 0.05 },
+  { path: "progression.town.[].defense.damageMultipliers.structure", label: "Kasaba tier: Savunma çarpanı: Yapı", min: 0, step: 0.05 },
+  {
+    path: "progression.town.[].defense.attackVfx",
+    label: "Kasaba tier: Silah gösterimi",
+    enum: ["arrow", "cannonball"],
+    hint: "Kasaba çağındaki Karakol topa geçer: 'cannonball'. Boş bırakılırsa temel bloktaki silah kullanılır.",
+  },
+  {
+    path: "progression.town.[].defense.impactEffect",
+    label: "Kasaba tier: İsabet efekti",
+    assetOptions: "effect",
+    hint: "Gülle patlaması için Content Drawer efekt varlığı. Yalnızca 'cannonball' silahında geçerlidir.",
+  },
   {
     path: "progression.settlement.[].tradeCommission",
     label: "Yerleşim tier: Ticaret komisyonu (0-1)",
@@ -597,6 +643,13 @@ const BUILDINGS_FIELDS = [
 
 const RESOURCES_FIELDS = [
   { path: "label", label: "Ad" },
+  {
+    path: "tree.capacity",
+    label: "Ağaç: Kapasite",
+    min: 0,
+    step: 5,
+    hint: "Haritadaki HER ağacın tuttuğu odun. Ağaç işaretçisinde ayrıca ayarlanmaz; buradaki tek sayı hepsi için geçerlidir. Kesim hızı burada değil, Oduncu Kampı'nın seviye tablosundadır.",
+  },
   { path: "safeNode.capacity", label: "Güvenli düğüm: Kapasite", min: 0, step: 1 },
   { path: "safeNode.perWorkerPerMinute", label: "Güvenli düğüm: İşçi başı/dk", min: 0, step: 0.5 },
   { path: "externalNode.capacity", label: "Dış düğüm: Kapasite", min: 0, step: 1 },

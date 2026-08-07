@@ -338,6 +338,13 @@ const MISSION_POLL_SECONDS = 0.25;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
 const MAX_FRAME_SECONDS = 1 / 15;
 const SCENE_BACKGROUND = "#20262b";
+/**
+ * Height a defensive structure's weapon sits above its ground pivot — the
+ * Karakol's fighting platform. Shared by both weapons on purpose: the bow it
+ * carries in the Settlement age and the gun it is handed on reaching Town fire
+ * from the same parapet, and two numbers here would read as two towers.
+ */
+const TOWER_MUZZLE_HEIGHT = 3.2;
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
 const PLACEHOLDER_WORKER_ID = "worker_placeholder";
 const PLACEHOLDER_SIEGE_ID = "siege_placeholder";
@@ -3655,16 +3662,29 @@ export class RtsApp {
         impacts: this.pendingImpacts,
       },
     );
-    this.structureDefense.update(this.structures.all(), this.combatTargets(), dt, (hit) => {
+    this.structureDefense.update(this.structures.all(), this.combatTargets(), dt, (shot) => {
+      // The Town-age Karakol fires the Topçu's gun rather than its bow, so it
+      // gets the Topçu's presentation whole: a lobbed ball, an authored blast
+      // where it lands, and — through the flight time returned here — a blow
+      // that waits for both.
+      if (shot.defense.attackVfx === "cannonball") {
+        return this.cannonballs.spawn(
+          shot.attacker.position,
+          combatImpactPoint(shot.attacker.position, shot.target),
+          shot.defense.impactEffect ?? null,
+          TOWER_MUZZLE_HEIGHT,
+        );
+      }
       // A completed Karakol is two Archer attacks at once. Offset the two
       // tracers very slightly so the volley reads as two arrows rather than one.
       this.projectiles.spawn(
-        hit.attacker.owner,
-        hit.attacker.position,
-        hit.target.position,
-        3.2,
-        hit.arrowIndex === 0 ? -0.14 : 0.14,
+        shot.attacker.owner,
+        shot.attacker.position,
+        shot.target.position,
+        TOWER_MUZZLE_HEIGHT,
+        shot.shotIndex === 0 ? -0.14 : 0.14,
       );
+      return 0;
     });
     updateUnitDeaths(this.units, this.selection, dt);
     this.destroyRuinedStructures();
@@ -4574,8 +4594,10 @@ export class RtsApp {
     this.firebrands.clear();
     this.cannonballs.clear();
     // The shells those guns had in the air belong to the match that just ended;
-    // landing them on a fresh field would damage whatever now stands there.
+    // landing them on a fresh field would damage whatever now stands there. The
+    // towers' guns keep their own queue, so it is emptied alongside.
     this.pendingImpacts.clear();
+    this.structureDefense.clear();
     // The units it was tracking are gone with the match; the readout must not
     // keep answering for them.
     this.supportAuras.clear();

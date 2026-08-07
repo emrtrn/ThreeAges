@@ -17,6 +17,7 @@
 import type {
   AgeBalance,
   BuildingBalanceStats,
+  BuildingDefenseBalance,
   EconomyProductionBalance,
   SettlementAge,
   StartingResources,
@@ -46,7 +47,7 @@ export interface UpgradableStructure {
   territoryControlRadius: number | null;
   territoryConnectedControlRadius: number | null;
   economy: EconomyProductionBalance | null;
-  defenseAttackDamage: number | null;
+  defense: BuildingDefenseBalance | null;
   marketCommission: number | null;
   queueCapacity: number | null;
   storageCapacity: StartingResources | null;
@@ -364,7 +365,13 @@ export class KingdomProgressionSystem {
       structure.economy = structure.stats.economy
         ? { ...structure.stats.economy, ...tier.economy }
         : null;
-      structure.defenseAttackDamage = tier.defense?.attackDamage ?? structure.stats.defense?.attackDamage ?? null;
+      // Spread over the base block rather than replacing it: a tier that only
+      // raises the damage keeps the bow it was already firing, while the Town
+      // Karakol's tier restates cadence, volley and counter table and so hands
+      // the same tower a gun.
+      structure.defense = structure.stats.defense
+        ? { ...structure.stats.defense, ...tier.defense }
+        : null;
       structure.marketCommission = tier.tradeCommission ?? structure.stats.market?.commission ?? null;
       structure.queueCapacity = tier.queueCapacity ?? null;
       structure.storageCapacity = tier.storageCapacity ?? null;

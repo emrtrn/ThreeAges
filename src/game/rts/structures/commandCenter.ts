@@ -21,6 +21,7 @@ import { TEAM_COLOR, createTeamRing } from "../team/teamColors";
 import { createSelectionRing } from "../selection/selectionRing";
 import type {
   BuildingBalanceStats,
+  BuildingDefenseBalance,
   EconomyProductionBalance,
   StartingResources,
 } from "../../data/gameDataTypes";
@@ -83,7 +84,7 @@ export class CommandCenter implements UpgradableStructure {
   // applier writes every field it knows about, so they exist and stay null.
   populationCapacityBonus = 0;
   economy: EconomyProductionBalance | null = null;
-  defenseAttackDamage: number | null = null;
+  defense: BuildingDefenseBalance | null = null;
   marketCommission: number | null = null;
   storageCapacity: StartingResources | null = null;
   territoryConnectedControlRadius: number | null = null;

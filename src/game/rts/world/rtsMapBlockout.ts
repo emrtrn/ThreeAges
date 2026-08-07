@@ -168,7 +168,15 @@ const ENEMY_START: RtsMapPoint = { x: 38, z: -38 };
 
 const TREE_VARIANTS: readonly RtsTreeDefinition["variant"][] = ["pine", "tree1", "tree2"];
 
-/** Double each authored grove's density and per-tree yield without turning it into one static resource mesh. */
+/**
+ * Double each authored grove's density and per-tree yield without turning it
+ * into one static resource mesh.
+ *
+ * The `capacity` these literals produce applies only to a level-less match (the
+ * headless test worlds). Every shipped forest is stamped instead from
+ * `resources.json` → `wood.tree.capacity` when the Level is adapted, which is
+ * the one place to retune wood; keep this fallback roughly in step with it.
+ */
 function denseForestTrees(trees: readonly RtsTreeDefinition[]): readonly RtsTreeDefinition[] {
   return trees.flatMap((tree, index) => {
     const offset = index % 2 === 0 ? { x: 2, z: -2 } : { x: -2, z: 2 };

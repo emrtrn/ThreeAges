@@ -34377,11 +34377,19 @@ check("unit balance validates combat stats for stable unit ids", () => {
       .sort((left, right) => right[1] - left[1])[0]![0];
   assert.equal(bestClass("guard_placeholder"), "heavy", "the Guard is the front-line answer to other heavies");
   assert.equal(bestClass("archer_placeholder"), "light", "the Archer punishes light units");
-  assert.equal(bestClass("siege_placeholder"), "structure", "siege exists to break buildings");
+  // The Topçu is deliberately *not* read through `bestClass`. It is the one
+  // weapon with no soft column — a shell answers whatever it is pointed at —
+  // so the highest column would only report which way a tie broke. Its two
+  // real claims are stated instead, and both must survive a retune.
+  const siege = balance["siege_placeholder"]!;
   assert.ok(
-    balance["siege_placeholder"]!.damageMultipliers.structure
-      > balance["guard_placeholder"]!.damageMultipliers.structure * 4,
+    siege.damageMultipliers.structure > balance["guard_placeholder"]!.damageMultipliers.structure * 4,
     "plan §46: siege is *necessary* against buildings, not merely better",
+  );
+  assert.ok(
+    Math.min(siege.damageMultipliers.light, siege.damageMultipliers.heavy)
+      > Math.max(...Object.values(balance["archer_placeholder"]!.damageMultipliers)),
+    "and it answers massed bodies too: one shell beats the Archer's best column against every armour class",
   );
   assert.ok(
     balance["archer_placeholder"]!.attackRange > balance["guard_placeholder"]!.attackRange * 3,
@@ -34585,14 +34593,17 @@ check("Faz 6 stone and gold data defines finite safe and richer external deposit
     }
   }
   for (const resource of Object.values(resources)) {
+    // Wood is in this table too, as a tree yield rather than a deposit pair, so
+    // the deposit relationship is asserted over the resources that have one.
+    if (!resource.safeNode || !resource.externalNode) continue;
     assert.ok(resource.externalNode.capacity > resource.safeNode.capacity,
       `${resource.id}: expansion must offer more total material than the safe deposit`);
     assert.ok(resource.safeNode.capacity > 0 && resource.externalNode.perWorkerPerMinute > 0);
   }
 
   const raw = JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as Record<string, unknown>;
-  assert.throws(() => validateResourceBalance({ gold: raw.gold }), GameDataError,
-    "both Faz 6 resources are required");
+  assert.throws(() => validateResourceBalance({ wood: raw.wood, gold: raw.gold }), GameDataError,
+    "both Faz 6 deposit resources are required");
   assert.throws(() => validateResourceBalance({
     ...raw,
     stone: { ...(raw.stone as object), externalNode: { capacity: 300, perWorkerPerMinute: 7 } },
@@ -34601,6 +34612,40 @@ check("Faz 6 stone and gold data defines finite safe and richer external deposit
     ...raw,
     gold: { ...(raw.gold as object), safeNode: { capacity: 0, perWorkerPerMinute: 3 } },
   }), GameDataError, "empty deposits are invalid data, not an exhausted starting state");
+});
+
+check("wood is balanced as a per-tree capacity, and only as a capacity", () => {
+  const raw = JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as Record<string, unknown>;
+  const resources = validateResourceBalance(raw);
+
+  // Shape, not magnitude: wood is worked as trees, so it carries a tree yield
+  // and no deposit profile at all. The rate a camp cuts at is the building's
+  // business (`buildings.json` progression tiers), which is why there is no
+  // `perWorkerPerMinute` here to disagree with it.
+  const wood = resources.wood ?? assert.fail("wood must be in the resource balance");
+  assert.ok(wood.tree && wood.tree.capacity > 0, "wood defines what one tree holds");
+  assert.equal(wood.safeNode, undefined, "wood is grown, not deposited");
+  assert.equal(wood.externalNode, undefined, "wood is grown, not deposited");
+  assert.ok(!("perWorkerPerMinute" in (wood.tree as object)),
+    "cutting speed belongs to the lumber camp's tiers, not to the tree");
+
+  assert.throws(() => validateResourceBalance({ ...raw, wood: { label: "Odun" } }), GameDataError,
+    "a resource must say how it is worked");
+  assert.throws(() => validateResourceBalance({
+    ...raw,
+    wood: { label: "Odun", tree: { capacity: 60 }, safeNode: { capacity: 1, perWorkerPerMinute: 1 } },
+  }), GameDataError, "trees and deposits are exclusive shapes");
+  assert.throws(() => validateResourceBalance({ ...raw, wood: { label: "Odun", tree: { capacity: 0 } } }),
+    GameDataError, "a tree that holds nothing is a blocker with no yield");
+  assert.throws(() => validateResourceBalance({ stone: raw.stone, gold: raw.gold }), GameDataError,
+    "every authored tree needs this number, so it is required");
+
+  // A wood *deposit* is authoring nonsense, and both doors say so rather than
+  // letting an undefined capacity through: the level adapter names the marker,
+  // and the node system refuses to build one.
+  assert.throws(() => new ResourceNodeSystem(resources, [
+    { id: "bad-wood", resourceId: "wood", kind: "safe", x: 0, z: 0 },
+  ]), /not deposited but grown/);
 });
 
 check("Faz 6 assigns all four resources to distinct core-match decisions", () => {
@@ -34931,7 +34976,20 @@ check("Assetization Faz D: shipped RTS Core Match Level reproduces the full lega
   assert.deepEqual(fromLevel.playerStart, legacy.playerStart);
   assert.deepEqual(fromLevel.enemyStart, legacy.enemyStart);
   assert.deepEqual(fromLevel.resourceNodes, legacy.resourceNodes);
-  assert.deepEqual(fromLevel.trees, legacy.trees);
+  // Trees are mirrored by their authored identity — where each one stands, which
+  // grove it belongs to, which model it wears. Yield is deliberately left out of
+  // the comparison: the Level path stamps every tree with `wood.tree.capacity`
+  // from the balance table, while `RTS_BLOCKOUT_MAP` is a hand-written fallback
+  // carrying its own literal, so comparing the two would turn a tuning edit in
+  // `resources.json` into a red build. What must hold is asserted instead: the
+  // shipped forest takes its yield from the table, at whatever the table says.
+  const withoutCapacity = (trees: readonly { readonly capacity: number }[]) =>
+    trees.map(({ capacity: _capacity, ...rest }) => rest);
+  assert.deepEqual(withoutCapacity(fromLevel.trees), withoutCapacity(legacy.trees));
+  const treeCapacity = resources.wood?.tree?.capacity ?? assert.fail("wood tree capacity");
+  for (const tree of fromLevel.trees) {
+    assert.equal(tree.capacity, treeCapacity, `tree "${tree.id}" is stamped from the resource balance`);
+  }
   assert.deepEqual(fromLevel.strategicPoints, legacy.strategicPoints);
   assert.deepEqual(fromLevel.navigationBlockers, legacy.navigationBlockers);
   assert.deepEqual(fromLevel.enemyBaseRoute, legacy.enemyBaseRoute);
@@ -38398,18 +38456,123 @@ check("a completed outpost fires two Archer-strength arrows at hostile units in 
   const defenseSystem = new StructureDefenseSystem();
   const arrows: number[] = [];
 
-  defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], 0, (hit) => {
-    arrows.push(hit.arrowIndex);
+  defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], 0, (shot) => {
+    arrows.push(shot.shotIndex);
+    // The base block is the bow, so nothing here is in flight — the tracer is
+    // decoration over a blow already struck.
+    assert.equal(shot.defense.attackVfx ?? "arrow", "arrow", "a Settlement Karakol shoots arrows");
+    return 0;
   });
 
+  const volley = defense.arrowsPerVolley;
   const damagePerArrow = defense.attackDamage * defense.damageMultipliers.heavy;
-  assert.equal(enemy.health.current, enemy.health.max - damagePerArrow * 2);
+  assert.equal(enemy.health.current, enemy.health.max - damagePerArrow * volley);
   assert.equal(friendly.health.current, friendly.health.max, "outpost never fires on its owner");
-  assert.deepEqual(arrows, [0, 1], "one volley visibly contains two arrows");
+  assert.deepEqual(
+    arrows,
+    Array.from({ length: volley }, (_, index) => index),
+    "one volley visibly contains every arrow its data names",
+  );
   defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], defense.attackCooldown / 2);
-  assert.equal(enemy.health.current, enemy.health.max - damagePerArrow * 2, "volley respects Archer cadence");
+  assert.equal(enemy.health.current, enemy.health.max - damagePerArrow * volley, "volley respects Archer cadence");
   defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], defense.attackCooldown / 2);
-  assert.equal(enemy.health.current, enemy.health.max - damagePerArrow * 4);
+  assert.equal(enemy.health.current, enemy.health.max - damagePerArrow * volley * 2);
+});
+
+check("a Karakol trades its bow for the Topçu's gun on reaching Town", () => {
+  // The whole point of the Town tier's weapon swap, asserted as a *relationship*
+  // rather than as numbers: the tower's gun is the artillery piece's gun. If the
+  // two are ever retuned apart, this is the check that says so.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const units = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const outpostStats = buildings.outpost ?? assert.fail("outpost definition missing");
+  const base = outpostStats.defense ?? assert.fail("outpost defense missing");
+  const siege = units["siege_placeholder"] ?? assert.fail("siege unit missing");
+  const progression = outpostStats.progression ?? assert.fail("outpost progression missing");
+
+  assert.equal(base.attackVfx ?? "arrow", "arrow", "the Settlement Karakol shoots arrows");
+  for (const tier of progression.settlement) {
+    assert.equal(tier.defense?.attackVfx, undefined, "no Settlement level swaps the weapon");
+  }
+  const town = progression.town[0] ?? assert.fail("Town Lv1 tier missing");
+  const gun = town.defense ?? assert.fail("Town Lv1 defense missing");
+  assert.equal(gun.attackVfx, "cannonball", "the Town Karakol shoots the Topçu's ball");
+  assert.equal(gun.impactEffect, siege.impactEffect, "and bursts into the same authored blast");
+  assert.equal(gun.attackDamage, siege.attackDamage, "with the artillery piece's own damage");
+  assert.deepEqual(gun.damageMultipliers, siege.damageMultipliers, "and its counter table");
+  assert.equal(gun.attackCooldown, siege.attackCooldown, "and its cadence");
+  assert.equal(gun.arrowsPerVolley, 1, "a gun fires one ball, not a bow's volley");
+
+  // The design claim, derived from both tables rather than pinned: one shell
+  // kills any single unit that can walk under the tower. The exception is
+  // deliberate and asserted as one — an artillery piece is the only body on the
+  // field built to survive a shell, and the mirror match would otherwise be
+  // decided by whoever fired first.
+  for (const [id, stats] of Object.entries(units)) {
+    const perShell = gun.attackDamage * gun.damageMultipliers[stats.armorClass];
+    if (id === "siege_placeholder") {
+      assert.ok(
+        perShell < stats.maxHealth,
+        `a ${stats.label} is the one body a shell does not one-shot: ${perShell} against ${stats.maxHealth}`,
+      );
+      continue;
+    }
+    assert.ok(
+      perShell >= stats.maxHealth,
+      `one shell must kill a ${stats.label}: ${perShell} damage against ${stats.maxHealth} health`,
+    );
+  }
+});
+
+check("a Town Karakol's shell holds its blow until the ball lands", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const outpostStats = buildings.outpost ?? assert.fail("outpost definition missing");
+  const gun = outpostStats.progression?.town[0]?.defense ?? assert.fail("Town Lv1 defense missing");
+  const structures = new PlacedStructureSystem();
+  const outpost = structures.place("player", outpostStats, 0, 0);
+  structures.advanceConstruction(outpost, outpostStats.constructionSeconds);
+  // What the progression sweep writes on reaching Town: the base block with the
+  // tier's weapon over it.
+  outpost.defense = { ...outpostStats.defense!, ...gun };
+  const units = new UnitSystem();
+  const enemy = units.spawn("enemy", 6, 0, RTS_TEST_UNIT_STATS);
+  const defenseSystem = new StructureDefenseSystem();
+  const flight = 0.7;
+  const shots: string[] = [];
+
+  defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], 0, (shot) => {
+    shots.push(shot.defense.attackVfx ?? "arrow");
+    return flight;
+  });
+  assert.deepEqual(shots, ["cannonball"], "one ball leaves the parapet");
+  assert.equal(enemy.health.current, enemy.health.max, "and the target is untouched while it is in the air");
+
+  defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], flight / 2);
+  assert.equal(enemy.health.current, enemy.health.max, "still in the air halfway through the flight");
+  defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], flight / 2);
+  const expected = gun.attackDamage * gun.damageMultipliers[RTS_TEST_UNIT_STATS.armorClass];
+  assert.equal(
+    enemy.health.current,
+    Math.max(0, enemy.health.max - expected),
+    "the blow lands with the ball, not with the muzzle flash",
+  );
+
+  // A restart empties the barrel: a shell from the last match may not damage
+  // whatever now stands where it was aimed.
+  const nextEnemy = units.spawn("enemy", 6, 0, RTS_TEST_UNIT_STATS);
+  defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], gun.attackCooldown, () => flight);
+  assert.equal(nextEnemy.health.current, nextEnemy.health.max, "the next shell is still climbing");
+  defenseSystem.clear();
+  defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], flight * 2);
+  assert.equal(nextEnemy.health.current, nextEnemy.health.max, "a cleared queue lands nothing");
+  structures.clear();
+  units.clear();
 });
 
 check("a selected outpost prioritizes its player-ordered enemy inside the extended range", () => {
@@ -49863,16 +50026,32 @@ check("Faz S2: the shipped level authors the supply table's sites in fair pairs"
 
   // KARAR 4-A's precondition (§3.7), and a *new* contract rather than an echo of
   // an existing one: the river splits the two kingdoms, so an exclusive resource
-  // that stands on one bank alone does not delay a match, it decides it. Measured
-  // with a tolerance because the positions are hand-authored.
-  const TWIN_TOLERANCE = 0.5;
+  // that stands on one bank alone does not delay a match, it decides it.
+  //
+  // The tolerance is one dock diagonal rather than a hand-picked epsilon, and
+  // that is the whole reason this check survives map authoring: a dock has to
+  // meet the *actual* bank, and the river is not drawn point-symmetrically, so a
+  // port nudged onto real terrain is still the same site mirrored — it is a
+  // second port on the other side that is not. Measuring in the site's own
+  // footprint says exactly that, and it re-derives itself if the dock is retuned.
   assert.ok(level.tradeSites.length > 0, "the level authors trade sites at all");
   assert.equal(level.tradeSites.length % 2, 0, "trade sites come in pairs");
   for (const site of level.tradeSites) {
+    const dock = sites[site.siteType] ?? assert.fail(`unknown site type ${site.siteType}`);
+    const tolerance = Math.hypot(dock.dock.width, dock.dock.depth);
     const twin = level.tradeSites.find((candidate) => candidate.id !== site.id
       && candidate.siteType === site.siteType
-      && Math.hypot(candidate.x + site.x, candidate.z + site.z) <= TWIN_TOLERANCE);
+      && Math.hypot(candidate.x + site.x, candidate.z + site.z) <= tolerance);
     assert.ok(twin, `trade site "${site.id}" has no point-symmetric twin of its own kind`);
+    // What the loosened tolerance must not let through: a pair that mirrors
+    // loosely but still lands both docks in reach of the same kingdom. Each site
+    // belongs to the half it stands in, so it has to be the nearer one for the
+    // kingdom that starts there.
+    const own = Math.hypot(site.x - level.playerStart.x, site.z - level.playerStart.z);
+    const other = Math.hypot(site.x - level.enemyStart.x, site.z - level.enemyStart.z);
+    const twinOwn = Math.hypot(twin.x - level.playerStart.x, twin.z - level.playerStart.z);
+    assert.notEqual(own < other, twinOwn < Math.hypot(twin.x - level.enemyStart.x, twin.z - level.enemyStart.z),
+      `trade sites "${site.id}" and "${twin.id}" are both closer to the same kingdom`);
   }
 
   // §3.3/§3.7: the three river crossings are the whole military shape of this

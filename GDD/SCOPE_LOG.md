@@ -187,6 +187,47 @@ Format:
   `public/game-data/balance/units.json`,
   `public/game-data/presets/siege_test.json`, `tools/engine-tests.ts`.
 
+### SL-010 — Karakol Kasaba Çağı'nda okunu bırakıp Topçu'nun topunu alıyor (2026-08-07)
+
+- **Karar:** Karakol'un savunma silahı artık çağa bağlı: Yerleşim'de ok
+  (2 ok/yaylım, 1.6 sn), Kasaba'da **Topçu birliğinin topu** — aynı hasar (34),
+  aynı çarpan tablosu (hafif 4 / ağır 4 / yapı 2.5), aynı atış aralığı (5.5 sn),
+  tek gülle. Bunun için `defense` bloğu progression tier'ında **tamamen**
+  geçersiz kılınabilir hale geldi (`attackVfx`, `impactEffect`, `attackCooldown`,
+  `arrowsPerVolley`, `damageMultipliers`); önceden yalnızca `attackDamage`
+  tier'a taşınabiliyordu.
+- **Kapsam etkisi:** Dahil (mevcut kule yuvası, mevcut gülle sunumu; yeni sistem
+  yok — veri sözleşmesinin genişlemesi + tek sunum dalı).
+- **Gerekçe:** Kasaba kulesi 18 hasar × 1.2 çarpanla bir birliği öldürmek için
+  4-5 el ateş ediyordu; oyuncunun gördüğü şey alevler içinde yürümeye devam eden
+  bir asker oluyordu — kule "vuruyor ama işe yaramıyor" diye okunuyordu. Topçu
+  zaten **bilerek** birliklere karşı etkili kılınmıştı (`12 §33`); Kasaba
+  kulesine aynı silahı vermek hem sunumu (lob + patlama) hem de "bir el = bir
+  ceset" okumasını tek kararla getiriyor. Kuleye ok ile top arasında ayrı bir
+  denge ekseni açmak yerine silah **paylaşılıyor**, böylece top yeniden
+  ayarlandığında kule de onunla birlikte hareket ediyor — bu ilişki
+  `test:engine` içinde sözleşme olarak korunuyor.
+- **Yan etki ve çözümü:** (1) Gülle bir uçuş süresine sahip olduğu için kulenin
+  hasarı da beklemek zorunda; `StructureDefenseSystem` artık `unitCombat` ile
+  aynı sözleşmeyi kullanıyor (sunum katmanı uçuş süresini döner, hasar top
+  düşünce iner). Kendi kuyruğunu tutuyor çünkü birimlerin `PendingImpactQueue`'su
+  `CombatHit` üretiyor ve onun saldıranı `Unit` — binayı oraya sokmak misilleme
+  kurallarını sessizce değiştirirdi. (2) `PlacedStructure.defenseAttackDamage`
+  (tek sayı) yerine `PlacedStructure.defense` (tüm blok) tutuluyor; silah
+  değişimi bir sayı değişimi değil. (3) Tier ladder'ı hasarın artmasını
+  şart koştuğu için Kasaba Lv2/Lv3 topu 38/42'ye çıkıyor — taban top (Lv1)
+  Topçu ile birebir aynı. (4) Topçu birliğinin kendisi (180 can, ağır)
+  tek el ile ölmeyen tek gövde; kasıtlı, aksi halde top-top karşılaşmasını
+  ilk ateş eden kazanırdı. (5) `unit balance` kontrolündeki "siege exists to
+  break buildings" iddiası (en yüksek çarpan sütunu = yapı) verinin bugünkü
+  tasarımıyla çelişiyordu ve `main`'de zaten kırmızıydı; Topçu'nun yumuşak
+  sütunu olmadığı için iddia iki gerçek ilişkiye çevrildi (yapıya karşı
+  *gerekli* olmak + Okçu'nun en iyi sütununu her sınıfta geçmek).
+- **İlgili:** `12 §33`, `06 §9.1`, `public/game-data/balance/buildings.json`,
+  `src/game/rts/combat/structureDefenseSystem.ts`,
+  `src/game/rts/combat/cannonballSystem.ts`,
+  `src/game/data/validateGameData.ts`, `tools/engine-tests.ts`.
+
 ---
 
 ## 3. Referans — Scope-Cut Sırası

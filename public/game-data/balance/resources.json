@@ -1,4 +1,10 @@
 {
+  "wood": {
+    "label": "Odun",
+    "tree": {
+      "capacity": 120
+    }
+  },
   "stone": {
     "label": "Taş",
     "safeNode": {

@@ -54,7 +54,11 @@ const MAX_FLIGHT_SECONDS = 1.6;
  */
 const ARC_RATIO = 0.24;
 const MIN_ARC = 1.1;
-/** Height the ball leaves the barrel at; the barrel sits low on the carriage. */
+/**
+ * Height the ball leaves the barrel at on a wheeled gun; the barrel sits low on
+ * the carriage. A gun mounted somewhere else — the Karakol's parapet — passes
+ * its own height to {@link CannonballSystem.spawn}.
+ */
 const LAUNCH_HEIGHT = 0.95;
 
 const BALL_RADIUS = 0.24;
@@ -129,12 +133,21 @@ export class CannonballSystem {
    * than looked up on landing, because by then the shot is the only thing left
    * that remembers which unit fired it.
    *
+   * `launchHeight` is how far above `from` the muzzle sits, so the same gun can
+   * be carried by a wheeled carriage or built into a tower's parapet without the
+   * caller having to pre-bake the offset into `from`.
+   *
    * Returns the shot's flight time in seconds (0 for a dropped shot). This is
    * not decoration any more: the gun's damage is held until the ball lands, so
    * the caller schedules the blow on exactly the number returned here.
    */
-  spawn(from: Vector3, to: Vector3, impactEffectId: string | null = null): number {
-    const start = new Vector3(from.x, from.y + LAUNCH_HEIGHT, from.z);
+  spawn(
+    from: Vector3,
+    to: Vector3,
+    impactEffectId: string | null = null,
+    launchHeight = LAUNCH_HEIGHT,
+  ): number {
+    const start = new Vector3(from.x, from.y + launchHeight, from.z);
     const end = to.clone();
     const distance = start.distanceTo(end);
     if (distance < 0.01) return 0;

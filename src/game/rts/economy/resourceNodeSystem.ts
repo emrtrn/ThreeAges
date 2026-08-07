@@ -79,6 +79,12 @@ export class ResourceNodeSystem implements ResourceSource {
       const resource = balance[definition.resourceId];
       if (!resource) throw new Error(`Resource node "${definition.id}" references unknown resource "${definition.resourceId}"`);
       const profile = definition.kind === "safe" ? resource.safeNode : resource.externalNode;
+      // A resource worked as trees (wood) has no deposit profile at all. Dropping
+      // a `BP_RTS_ResourceNode` on one is an authoring mistake that used to reach
+      // here as an undefined capacity; it is named at the marker instead.
+      if (!profile) {
+        throw new Error(`Resource node "${definition.id}" works "${definition.resourceId}", which is not deposited but grown`);
+      }
       this.nodes.set(definition.id, { definition, capacity: profile.capacity, remaining: profile.capacity });
     }
   }

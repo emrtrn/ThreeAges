@@ -252,7 +252,16 @@
             "connectedControlRadius": 32
           },
           "defense": {
-            "attackDamage": 14
+            "attackDamage": 34,
+            "attackCooldown": 5.5,
+            "arrowsPerVolley": 1,
+            "damageMultipliers": {
+              "light": 4,
+              "heavy": 4,
+              "structure": 2.5
+            },
+            "attackVfx": "cannonball",
+            "impactEffect": "rts-fx-explosion"
           }
         },
         {
@@ -263,7 +272,16 @@
             "connectedControlRadius": 36
           },
           "defense": {
-            "attackDamage": 16
+            "attackDamage": 38,
+            "attackCooldown": 5.5,
+            "arrowsPerVolley": 1,
+            "damageMultipliers": {
+              "light": 4,
+              "heavy": 4,
+              "structure": 2.5
+            },
+            "attackVfx": "cannonball",
+            "impactEffect": "rts-fx-explosion"
           }
         },
         {
@@ -274,7 +292,16 @@
             "connectedControlRadius": 40
           },
           "defense": {
-            "attackDamage": 18
+            "attackDamage": 42,
+            "attackCooldown": 5.5,
+            "arrowsPerVolley": 1,
+            "damageMultipliers": {
+              "light": 4,
+              "heavy": 4,
+              "structure": 2.5
+            },
+            "attackVfx": "cannonball",
+            "impactEffect": "rts-fx-explosion"
           }
         }
       ]

@@ -20,7 +20,12 @@ import {
 } from "three";
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
-import type { BuildingBalanceStats, EconomyProductionBalance, StartingResources } from "../../data/gameDataTypes";
+import type {
+  BuildingBalanceStats,
+  BuildingDefenseBalance,
+  EconomyProductionBalance,
+  StartingResources,
+} from "../../data/gameDataTypes";
 import type { UnitOwner } from "../units/unit";
 import { HealthComponent } from "../units/health";
 import { createTeamRing } from "../team/teamColors";
@@ -232,8 +237,14 @@ export interface PlacedStructure {
   territoryConnectedControlRadius: number | null;
   /** Active absolute economy stats after the current age × level tier resolves. */
   economy: EconomyProductionBalance | null;
-  /** Active per-arrow damage; range/cooldown remain on the static defense block. */
-  defenseAttackDamage: number | null;
+  /**
+   * The weapon this structure is firing right now, resolved from the active
+   * age × level tier over the static `stats.defense` block. It is the whole
+   * block rather than a damage number because a tier may hand the Karakol a
+   * different weapon — the Town-age cannon — and cadence, volley size, counter
+   * table and muzzle flash all belong to the weapon, not to the tier.
+   */
+  defense: BuildingDefenseBalance | null;
   /** Active Market commission for the current tier. */
   marketCommission: number | null;
   /** Active military production queue capacity for the current tier. */
@@ -345,7 +356,7 @@ export class PlacedStructureSystem {
       territoryControlRadius: stats.territory?.controlRadius ?? null,
       territoryConnectedControlRadius: stats.territory?.connectedControlRadius ?? null,
       economy: stats.economy ?? null,
-      defenseAttackDamage: stats.defense?.attackDamage ?? null,
+      defense: stats.defense ?? null,
       // The market system retains its legacy level ladder fallback until this
       // structure is completed and the active progression tier is applied.
       marketCommission: null,

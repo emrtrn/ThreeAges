@@ -58,6 +58,7 @@ import type {
   AnimalRestBalance,
   AnimalRetaliationBalance,
   BuildingBalance,
+  BuildingDefenseVfx,
   BuildingPadVisual,
   BuildingProgressionBalance,
   BuildingProgressionTier,
@@ -323,6 +324,52 @@ const MANIFEST_ASSET_ID = /^[a-zA-Z][a-zA-Z0-9_.-]*$/;
 const UNIT_ARMOR_CLASSES: readonly UnitArmorClass[] = ["light", "heavy", "structure"];
 /** A unit's own armour is what attackers hit; only buildings are "structure". */
 const UNIT_SELF_ARMOR_CLASSES: readonly UnitArmorClass[] = ["light", "heavy"];
+
+const BUILDING_DEFENSE_VFX: readonly BuildingDefenseVfx[] = ["arrow", "cannonball"];
+
+/**
+ * The presentation half of a defensive structure's weapon, shared by the base
+ * `defense` block and by every progression-tier override of it. Stated once so
+ * a gun authored in a Town tier is refused for exactly the reasons a gun
+ * authored at the base would be.
+ */
+function validateDefenseWeaponVfx(
+  data: Record<string, unknown>,
+  where: string,
+): { attackVfx?: BuildingDefenseVfx; impactEffect?: string } {
+  const attackVfx = data["attackVfx"];
+  if (attackVfx !== undefined && !BUILDING_DEFENSE_VFX.includes(attackVfx as BuildingDefenseVfx)) {
+    throw new GameDataError(`${where}.attackVfx: must be one of ${BUILDING_DEFENSE_VFX.join(", ")}`);
+  }
+  const impactEffect = data["impactEffect"];
+  if (impactEffect !== undefined) {
+    // Shape only, as on a unit: whether the id resolves is the manifest's
+    // business, and the balance validator never reads the asset manifest.
+    if (typeof impactEffect !== "string" || !MANIFEST_ASSET_ID.test(impactEffect)) {
+      throw new GameDataError(`${where}.impactEffect: must be a manifest asset id`);
+    }
+    // A burst needs a landing to burst at, and only the lobbed shot has one.
+    if (attackVfx !== "cannonball") {
+      throw new GameDataError(
+        `${where}.impactEffect: only a defense with attackVfx "cannonball" has an impact to show`,
+      );
+    }
+  }
+  return {
+    ...(attackVfx ? { attackVfx: attackVfx as BuildingDefenseVfx } : {}),
+    ...(impactEffect === undefined ? {} : { impactEffect: impactEffect as string }),
+  };
+}
+
+/** An optional numeric override that, when present, must be a positive number. */
+function positiveOverride(data: Record<string, unknown>, key: string, where: string): number | undefined {
+  const value = data[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new GameDataError(`${where}.${key}: must be a number > 0`);
+  }
+  return value;
+}
 
 /** GDD 12 §33: every attacker states a multiplier for every armour class. */
 function validateDamageMultipliers(value: unknown, where: string): UnitDamageMultipliers {
@@ -728,6 +775,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
         attackRange,
         arrowsPerVolley,
         damageMultipliers: validateDamageMultipliers(defenseData["damageMultipliers"], `${defenseWhere}.damageMultipliers`),
+        ...validateDefenseWeaponVfx(defenseData, defenseWhere),
       };
     }
     const auraRaw = stats["aura"];
@@ -981,9 +1029,32 @@ function validateBuildingProgression(
       let defense: BuildingProgressionTier["defense"];
       if (defenseRaw !== undefined) {
         if (!base.defense) throw new GameDataError(`${entryWhere}.defense: requires a base defense definition`);
-        const attackDamage = requireFiniteNumber(asObject(defenseRaw, `${entryWhere}.defense`), "attackDamage", `${entryWhere}.defense`);
-        if (attackDamage <= previousDamage) throw new GameDataError(`${entryWhere}.defense.attackDamage: must increase by tier`);
-        defense = { attackDamage };
+        const defenseWhere = `${entryWhere}.defense`;
+        const defenseData = asObject(defenseRaw, defenseWhere);
+        const attackDamage = requireFiniteNumber(defenseData, "attackDamage", defenseWhere);
+        if (attackDamage <= previousDamage) throw new GameDataError(`${defenseWhere}.attackDamage: must increase by tier`);
+        // Everything below is optional: a tier that only grows the number says
+        // nothing about the weapon and keeps the base block's. A tier that
+        // *changes* weapon — the Town Karakol's gun — restates the cadence,
+        // volley size and counter table it fires with, because a cannon
+        // inheriting a bow's 1.6s two-arrow volley is not the weapon authored.
+        const attackCooldown = positiveOverride(defenseData, "attackCooldown", defenseWhere);
+        const attackRange = positiveOverride(defenseData, "attackRange", defenseWhere);
+        const arrowsPerVolley = positiveOverride(defenseData, "arrowsPerVolley", defenseWhere);
+        if (arrowsPerVolley !== undefined && !Number.isInteger(arrowsPerVolley)) {
+          throw new GameDataError(`${defenseWhere}.arrowsPerVolley: must be a positive integer`);
+        }
+        const multipliersRaw = defenseData["damageMultipliers"];
+        defense = {
+          attackDamage,
+          ...(attackCooldown === undefined ? {} : { attackCooldown }),
+          ...(attackRange === undefined ? {} : { attackRange }),
+          ...(arrowsPerVolley === undefined ? {} : { arrowsPerVolley }),
+          ...(multipliersRaw === undefined
+            ? {}
+            : { damageMultipliers: validateDamageMultipliers(multipliersRaw, `${defenseWhere}.damageMultipliers`) }),
+          ...validateDefenseWeaponVfx(defenseData, defenseWhere),
+        };
         previousDamage = attackDamage;
       }
 
@@ -1454,7 +1525,16 @@ function validateAnimalPredator(
   };
 }
 
-/** Validate Faz 6's finite stone/gold deposit profiles. */
+/**
+ * Validate Faz 6's finite stone/gold deposit profiles and wood's per-tree yield.
+ *
+ * The two shapes are exclusive by construction: `tree` opts an entry out of the
+ * deposit pair entirely rather than sitting alongside it. Allowing both would
+ * make "which number does a wood deposit marker use" a real question, and the
+ * honest answer is that a wood deposit marker is authoring nonsense — wood comes
+ * from trees. Refusing it here means `ResourceNodeSystem` and the level adapter
+ * can each narrow to the one shape they understand and fail loudly otherwise.
+ */
 export function validateResourceBalance(value: unknown): ResourceBalance {
   const where = "balance/resources.json";
   const obj = asObject(value, where);
@@ -1465,6 +1545,25 @@ export function validateResourceBalance(value: unknown): ResourceBalance {
     }
     const statsWhere = `${where}."${id}"`;
     const stats = asObject(raw, statsWhere);
+    const label = requireString(stats, "label", statsWhere);
+    const hasTree = stats.tree !== undefined;
+    const hasNodes = stats.safeNode !== undefined || stats.externalNode !== undefined;
+    if (hasTree && hasNodes) {
+      throw new GameDataError(`${statsWhere}: a resource is worked as trees or as deposits, never both`);
+    }
+    if (!hasTree && !hasNodes) {
+      throw new GameDataError(`${statsWhere}: needs either a "tree" block or safeNode/externalNode deposits`);
+    }
+    if (hasTree) {
+      const treeWhere = `${statsWhere}.tree`;
+      const treeData = asObject(stats.tree, treeWhere);
+      const capacity = requireFiniteNumber(treeData, "capacity", treeWhere);
+      // A tree that holds nothing is a blocker with no yield: it reserves build
+      // space and a worker's trip, and hands back zero wood.
+      if (capacity <= 0) throw new GameDataError(`${treeWhere}.capacity: must be > 0`);
+      resources[id] = { id, label, tree: { capacity } };
+      continue;
+    }
     const node = (key: "safeNode" | "externalNode") => {
       const nodeWhere = `${statsWhere}.${key}`;
       const nodeData = asObject(stats[key], nodeWhere);
@@ -1480,15 +1579,17 @@ export function validateResourceBalance(value: unknown): ResourceBalance {
     if (externalNode.capacity <= safeNode.capacity) {
       throw new GameDataError(`${statsWhere}.externalNode.capacity: must exceed safeNode.capacity`);
     }
-    resources[id] = {
-      id,
-      label: requireString(stats, "label", statsWhere),
-      safeNode,
-      externalNode,
-    };
+    resources[id] = { id, label, safeNode, externalNode };
   }
   for (const id of ["stone", "gold"]) {
-    if (!resources[id]) throw new GameDataError(`${where}: missing required resource "${id}"`);
+    if (!resources[id]?.safeNode) {
+      throw new GameDataError(`${where}: missing required deposit resource "${id}"`);
+    }
+  }
+  // Every authored tree is stamped with this one number, so a level with a
+  // forest in it cannot load without it.
+  if (!resources.wood?.tree) {
+    throw new GameDataError(`${where}: missing required tree resource "wood"`);
   }
   return resources;
 }

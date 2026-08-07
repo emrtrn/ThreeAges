@@ -336,7 +336,15 @@ export interface BuildingProgressionTier {
     | "livestockCapacity" | "perAnimalPerMinute">;
   readonly territory?: Pick<TerritoryBuildingBalance, "controlRadius" | "connectedControlRadius">;
   readonly tradeCommission?: number;
-  readonly defense?: Pick<BuildingDefenseBalance, "attackDamage">;
+  /**
+   * The tier's live weapon. `attackDamage` is required and must climb by tier;
+   * everything else is an optional override of the base `defense` block, which
+   * is what lets the Karakol trade its bow for a gun on reaching Town — a
+   * different weapon is a different cadence, volley size and counter table, not
+   * just a bigger number.
+   */
+  readonly defense?: Pick<BuildingDefenseBalance, "attackDamage">
+    & Partial<Omit<BuildingDefenseBalance, "attackDamage">>;
   /** Queue capacity supplied by military production structures at this tier. */
   readonly queueCapacity?: number;
   /** Global stock capacity this completed depot contributes, keyed by resource id. */
@@ -468,18 +476,36 @@ export interface BuildingAuraBalance {
  */
 export const MAX_AURA_DAMAGE_RESISTANCE = 0.75;
 
+/**
+ * What weapon a defensive structure is showing.
+ *
+ * - `arrow`: straight tracers, one per shot in the volley, over a blow that has
+ *   already been struck. The Karakol's Settlement-age bow.
+ * - `cannonball`: the same lobbed iron ball the Topçu throws, and the same
+ *   contract — the tower's damage waits for the ball to land, so the blast and
+ *   the death happen together. The Karakol's Town-age gun.
+ */
+export type BuildingDefenseVfx = "arrow" | "cannonball";
+
 /** Data-owned stationary ranged attack for a completed defensive structure. */
 export interface BuildingDefenseBalance {
-  /** Damage of one arrow before the target armour multiplier. */
+  /** Damage of one shot before the target armour multiplier. */
   readonly attackDamage: number;
   /** Seconds between volleys. */
   readonly attackCooldown: number;
   /** Maximum ground-plane distance from which the structure can fire. */
   readonly attackRange: number;
-  /** Number of arrows fired at its chosen target in one volley. */
+  /** Number of shots fired at its chosen target in one volley. */
   readonly arrowsPerVolley: number;
   /** The same soft-counter table used by mobile ranged attackers. */
   readonly damageMultipliers: UnitDamageMultipliers;
+  /** Weapon shown for this volley; absent means `arrow`. */
+  readonly attackVfx?: BuildingDefenseVfx;
+  /**
+   * Authored burst played where a shell lands. Only meaningful with
+   * {@link attackVfx} `cannonball`, exactly as on a unit's `impactEffect`.
+   */
+  readonly impactEffect?: string;
 }
 
 /** `public/game-data/balance/buildings.json` — keyed by stable building id. */
@@ -498,15 +524,45 @@ export interface ResourceNodeBalance {
   readonly perWorkerPerMinute: number;
 }
 
-/** Data contract for one finite Faz 6 resource type. */
+/**
+ * How much one authored tree holds before it is felled.
+ *
+ * Deliberately capacity and nothing else. A deposit's `perWorkerPerMinute` sits
+ * beside its capacity because the pile itself meters the work; a forest does
+ * not — the lumber camp's own progression tiers decide how fast its workers
+ * cut, so a rate here would be a second, quieter answer to a question
+ * `buildings.json` already answers.
+ */
+export interface ResourceTreeBalance {
+  /** Total wood in one tree before it is exhausted and removed. */
+  readonly capacity: number;
+}
+
+/**
+ * Data contract for one finite Faz 6 resource type.
+ *
+ * A resource is worked either as *deposits* (stone, gold: piles placed by
+ * `BP_RTS_ResourceNode`, whose capacity depends on whether the pile is safe or
+ * external) or as *trees* (wood: individual trunks placed by `BP_RTS_Tree`).
+ * The two are mutually exclusive and `validateResourceBalance` refuses an entry
+ * that claims both or neither, which is what keeps these optionals from meaning
+ * "might be missing" at the call sites that narrow them.
+ */
 export interface ResourceBalanceStats {
   readonly id: string;
   readonly label: string;
-  readonly safeNode: ResourceNodeBalance;
-  readonly externalNode: ResourceNodeBalance;
+  /** Deposit resources only; absent on a tree resource. */
+  readonly safeNode?: ResourceNodeBalance;
+  /** Deposit resources only; absent on a tree resource. */
+  readonly externalNode?: ResourceNodeBalance;
+  /** Tree resources only; absent on a deposit resource. */
+  readonly tree?: ResourceTreeBalance;
 }
 
-/** `public/game-data/balance/resources.json` — finite stone and gold deposits. */
+/**
+ * `public/game-data/balance/resources.json` — finite stone and gold deposits,
+ * and the per-tree wood yield every authored tree is stamped with.
+ */
 export type ResourceBalance = Readonly<Record<string, ResourceBalanceStats>>;
 
 /**

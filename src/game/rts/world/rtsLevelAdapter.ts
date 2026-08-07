@@ -121,6 +121,19 @@ export function adaptRtsLevel(
   const walkableDecks: RtsWalkableDeck[] = [];
   const anchors: RtsLevelBuildAnchor[] = [];
   const expansionMembers = new Map<string, ExpansionMembers>();
+  /**
+   * The one wood yield every authored tree is stamped with. Read on demand so a
+   * treeless level still loads against a resource table that omits wood, and so
+   * the failure — when a level does have a forest — names the missing balance
+   * field rather than whichever tree happened to be adapted first.
+   */
+  const treeCapacity = (): number => {
+    const capacity = balance.resources.wood?.tree?.capacity;
+    if (capacity === undefined) {
+      throw new RtsLevelError('balance/resources.json is missing "wood".tree.capacity, which every tree needs');
+    }
+    return capacity;
+  };
   for (const volume of blockingVolumes) {
     const deck = blockingVolumeWalkableDeck(volume);
     if (deck) walkableDecks.push(deck);
@@ -138,14 +151,21 @@ export function adaptRtsLevel(
       starts.set(owner, point);
     } else if (def.name === "BP_RTS_ResourceNode") {
       const id = values.nodeId; const resourceId = values.resourceId; const kind = values.kind;
-      if (typeof id !== "string" || !id || typeof resourceId !== "string" || !balance.resources[resourceId]) throw new RtsLevelError("invalid resource marker");
+      // A deposit profile, not merely a known resource: wood is in the resource
+      // table too now, and it is grown rather than deposited.
+      if (typeof id !== "string" || !id || typeof resourceId !== "string" || !balance.resources[resourceId]?.safeNode) throw new RtsLevelError("invalid resource marker");
       if (kind !== "safe" && kind !== "external") throw new RtsLevelError(`resource ${id} has invalid kind`);
       if (nodes.some((node) => node.id === id)) throw new RtsLevelError(`duplicate resource node ${id}`);
       nodes.push({ id, resourceId, kind, ...point });
     } else if (def.name === "BP_RTS_Tree") {
       const id = requireText(values, "treeId", "Tree");
       const forestId = requireText(values, "forestId", "Tree");
-      const capacity = requirePositiveNumber(values, "capacity", `Tree ${id}`);
+      // Yield is a balance number, not a per-marker one, exactly as a deposit's
+      // is: the marker says where a tree stands and which model it wears, and
+      // `resources.json` says what every tree holds. Authoring it per instance
+      // meant a forest could only be retuned by editing hundreds of actors, and
+      // in practice every one of them carried the same number anyway.
+      const capacity = treeCapacity();
       const variant = values.variant;
       if (variant !== "pine" && variant !== "tree1" && variant !== "tree2") throw new RtsLevelError(`Tree ${id} has invalid variant`);
       if (trees.some((tree) => tree.id === id)) throw new RtsLevelError(`duplicate tree ${id}`);
