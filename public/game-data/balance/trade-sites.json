@@ -3,27 +3,36 @@
     "label": "Nehir Limanı",
     "resourceId": "food",
     "perMinute": 60,
-    "carryCapacity": 30,
+    "carryCapacity": 60,
     "bufferCapacity": 120,
-    "caravanCount": 4,
-    "dock": { "width": 8, "depth": 8 }
+    "caravanCount": 1,
+    "dock": {
+      "width": 4,
+      "depth": 4
+    }
   },
   "timber_camp": {
     "label": "Bağımsız Oduncu Kampı",
     "resourceId": "wood",
     "perMinute": 80,
-    "carryCapacity": 30,
+    "carryCapacity": 80,
     "bufferCapacity": 120,
-    "caravanCount": 4,
-    "dock": { "width": 8, "depth": 8 }
+    "caravanCount": 1,
+    "dock": {
+      "width": 4,
+      "depth": 4
+    }
   },
   "stone_pit": {
     "label": "Taş Sahası",
     "resourceId": "stone",
     "perMinute": 40,
-    "carryCapacity": 30,
-    "bufferCapacity": 120,
-    "caravanCount": 4,
-    "dock": { "width": 8, "depth": 8 }
+    "carryCapacity": 40,
+    "bufferCapacity": 80,
+    "caravanCount": 1,
+    "dock": {
+      "width": 4,
+      "depth": 4
+    }
   }
 }

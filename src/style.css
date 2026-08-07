@@ -91,6 +91,7 @@ body {
    raised index finger to make an HTML action distinct from a map command. */
 .ui-interactive button:not(:disabled),
 .ui-interactive .rts-match-setup-option,
+.ui-interactive select:not(:disabled),
 .ui-interactive input[type="radio"]:not(:disabled) {
   cursor: url("/assets/ui/cursors/cursor_pointer.png") 3 2, pointer;
 }
@@ -515,16 +516,71 @@ body {
 }
 
 /*
- * The rule the player is opting into, in the muted register of an explanation —
- * it must not compete with the title, but §78.1 exists because this text was
- * missing entirely, so it is not allowed to be decoration either.
+ * One match type and, beside it, the rules of that match. The row wraps rather
+ * than scrolls: on a narrow window the dropdowns drop under their mode instead
+ * of pushing "Maçı Başlat" off the card.
  */
-.rts-match-card p.rts-match-setup-hint {
-  max-width: 42ch;
-  margin-top: 10px;
+.rts-match-setup-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  align-items: center;
+}
+
+.rts-match-setup-row .rts-match-setup-option {
+  min-width: 8.5em;
+}
+
+.rts-match-setup-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+/*
+ * The caption is the quiet half: the answer the player picked belongs to the
+ * control, and the rule behind it is one hover away (`title`), which is why the
+ * cursor says "help" here and "pointer" on the dropdown itself.
+ */
+.rts-match-setup-field {
+  display: flex;
+  gap: 6px;
+  align-items: center;
   color: var(--ta-ink-muted);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: help;
+}
+
+.rts-match-setup-field select {
+  padding: 3px 6px;
+  color: var(--ta-ink);
+  font: inherit;
   font-size: 12px;
-  line-height: 1.45;
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: pointer;
+  background: rgb(17 11 6 / 55%);
+  border: 1px solid rgb(226 185 92 / 35%);
+  border-radius: 4px;
+}
+
+.rts-match-setup-field select:hover {
+  border-color: rgb(226 185 92 / 60%);
+}
+
+.rts-match-setup-field select:focus-visible {
+  outline: 2px solid var(--ta-gold);
+  outline-offset: 1px;
+}
+
+/* Native dropdown lists inherit nothing from the card; give them the card's ink
+   on the card's ground so an open menu is not white-on-white. */
+.rts-match-setup-field select option {
+  color: var(--ta-ink);
+  background: #1b120a;
 }
 
 .rts-match-card button {

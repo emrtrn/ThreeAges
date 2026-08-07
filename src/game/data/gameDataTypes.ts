@@ -18,8 +18,17 @@ export interface GameVersion {
   balanceVersion: string;
 }
 
-/** AI opponent tuning profile (plan §72). Only "normal" exists in Ürün A. */
-export type AiProfile = "easy" | "normal" | "hard";
+/**
+ * AI opponent tuning profiles (plan §72), as a value rather than a bare union.
+ *
+ * The preset validator and the start card's difficulty row both need the list at
+ * runtime, and two hand-written copies of it is how a fourth profile ends up
+ * offered on the card but rejected by the validator. Declared here, next to the
+ * type it derives, so there is one place to add one.
+ */
+export const AI_PROFILES = ["easy", "normal", "hard"] as const;
+
+export type AiProfile = (typeof AI_PROFILES)[number];
 
 /** Starting stockpile a preset grants (plan §72). Keys are resource ids; the
  *  Ürün A economy uses food/wood/population, later products add stone/gold. */

@@ -8,7 +8,7 @@
  * exact same way (tests feed readFileSync content).
  */
 import { isFeatureFlag } from "../core/featureFlags";
-import { AI_TARGET_WEIGHTS, MAX_AURA_DAMAGE_RESISTANCE } from "./gameDataTypes";
+import { AI_PROFILES, AI_TARGET_WEIGHTS, MAX_AURA_DAMAGE_RESISTANCE } from "./gameDataTypes";
 import type { MissionGoal, MissionGuide, MissionScript, MissionStep } from "../rts/tutorial/missionScript";
 
 /**
@@ -155,8 +155,6 @@ function requireFiniteNumber(
   }
   return value;
 }
-
-const AI_PROFILES: readonly AiProfile[] = ["easy", "normal", "hard"];
 
 export function validateGameVersion(value: unknown): GameVersion {
   const where = "version.json";

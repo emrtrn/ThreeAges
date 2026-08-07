@@ -75,6 +75,13 @@ import {
   writeStoredFogOfWar,
   type FogOfWarStorage,
 } from "../src/game/rts/vision/fogOfWarChoice";
+import {
+  DEFAULT_AI_PROFILE,
+  readStoredAiProfile,
+  resolveAiProfile,
+  writeStoredAiProfile,
+  type AiProfileStorage,
+} from "../src/game/rts/match/aiProfileChoice";
 import { MissionDirector } from "../src/game/rts/tutorial/missionDirector";
 import {
   isGoalMet,
@@ -402,6 +409,7 @@ import { PendingImpactQueue } from "../src/game/rts/combat/pendingImpacts";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
 import { SupportAuraSystem } from "../src/game/rts/structures/supportAuraSystem";
 import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
+import { AI_PROFILES } from "../src/game/data/gameDataTypes";
 import type { AiProfile, BuildingBalanceStats, GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import { Unit, UNIT_DEATH_SECONDS, type RtsPresentationHandle } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
@@ -38817,6 +38825,71 @@ check("§59: fog is the default match, and the start card's row is the only door
   assert.equal(fogChoiceForFlag(false), "off");
 });
 
+check("§72: the start card's difficulty outranks the preset, and only when the player picked one", () => {
+  const stored = (value: string | null): AiProfileStorage => ({
+    getItem: () => value,
+    setItem: () => {},
+  });
+
+  // Nothing chosen: the preset decides, in both directions. This is the whole
+  // reason `readStoredAiProfile` returns null rather than the baseline — a §72
+  // preset asking for `hard` must not be levelled down for every player who
+  // never opened the card.
+  assert.equal(readStoredAiProfile(stored(null)), null);
+  assert.equal(resolveAiProfile(readStoredAiProfile(stored(null)), "hard"), "hard");
+  assert.equal(resolveAiProfile(readStoredAiProfile(stored(null)), "easy"), "easy");
+  // Neither said anything: the fair baseline, which is also what a preset-less
+  // fallback boot plays against.
+  assert.equal(resolveAiProfile(null, undefined), DEFAULT_AI_PROFILE);
+  assert.equal(resolveAiProfile(null, null), DEFAULT_AI_PROFILE);
+  assert.equal(DEFAULT_AI_PROFILE, "normal", "§72: normal is the fair baseline");
+
+  // Chosen: it wins over the preset either way, including *down* from a hard
+  // preset — the row is the only door a player has, since difficulty is not a
+  // flag and `?flags=` cannot express it at all.
+  assert.equal(resolveAiProfile(readStoredAiProfile(stored("easy")), "hard"), "easy");
+  assert.equal(resolveAiProfile(readStoredAiProfile(stored("hard")), "easy"), "hard");
+
+  // Corrupt or stale storage is not a choice; it must not decide a match.
+  assert.equal(readStoredAiProfile(stored("insane")), null);
+  assert.equal(readStoredAiProfile(stored("")), null);
+  assert.equal(readStoredAiProfile(null), null, "storage-less browsers still boot");
+  const throwing: AiProfileStorage = {
+    getItem: () => {
+      throw new Error("blocked");
+    },
+    setItem: () => {
+      throw new Error("blocked");
+    },
+  };
+  assert.equal(readStoredAiProfile(throwing), null);
+  assert.doesNotThrow(() => writeStoredAiProfile(throwing, "hard"));
+
+  // The card can only offer profiles the preset validator would also accept, and
+  // the tuning table has to carry every one of them. One list (`AI_PROFILES`)
+  // feeds all three, so this is the check that it stays the only one.
+  const basePreset = { ...readPresetJson("gameplay_proof") as Record<string, unknown> };
+  const aiBalanceRaw = JSON.parse(
+    readFileSync("public/game-data/balance/ai.json", "utf8"),
+  ) as { profiles: Record<string, unknown> };
+  for (const profile of AI_PROFILES) {
+    assert.equal(
+      validateGamePreset({ ...basePreset, aiProfile: profile }, "gameplay_proof").aiProfile,
+      profile,
+      `the card offers "${profile}", so a preset must be able to name it`,
+    );
+    assert.ok(
+      aiBalanceRaw.profiles[profile],
+      `balance/ai.json must tune "${profile}"`,
+    );
+  }
+  assert.throws(
+    () => validateGamePreset({ ...basePreset, aiProfile: "insane" }, "gameplay_proof"),
+    /aiProfile/,
+    "an unknown profile names the field it came from",
+  );
+});
+
 /**
  * Hikâye / Öğretici Tur Modu, Faz 1 — the three properties the mode rests on.
  *
@@ -49737,6 +49810,80 @@ check("Faz S2: the shipped level authors the supply table's sites in fair pairs"
   }
 });
 
+check("a road reaches a footprint from all four sides, whatever the grid phase", () => {
+  const roadBalance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const step = roadBalance.cellSize;
+  const sites = shippedTradeSiteBalance();
+  const buildings = shippedBuildingBalance();
+  const { level } = shippedRtsLevel();
+
+  // Buildings snap to the placement grid, so their phase is always zero; an
+  // authored trade site's is whatever the level says, which is the case that was
+  // broken — a dock at z = 19.73 could only be reached from two of its sides.
+  const footprints = [
+    ...level.tradeSites.map((site) => {
+      const dock = sites[site.siteType] ?? assert.fail(`unknown site type ${site.siteType}`);
+      return { label: site.id, x: site.x, z: site.z, width: dock.dock.width, depth: dock.dock.depth };
+    }),
+    ...Object.entries(buildings).map(([id, stats]) => ({
+      label: id,
+      x: 0,
+      z: 0,
+      width: stats.footprint.width,
+      depth: stats.footprint.depth,
+    })),
+  ];
+  const sides = [
+    { name: "east", dx: 1, dz: 0 },
+    { name: "west", dx: -1, dz: 0 },
+    { name: "south", dx: 0, dz: 1 },
+    { name: "north", dx: 0, dz: -1 },
+  ];
+
+  for (const footprint of footprints) {
+    const reserved = [{
+      min: [footprint.x - footprint.width / 2, 0, footprint.z - footprint.depth / 2] as [number, number, number],
+      max: [footprint.x + footprint.width / 2, 3, footprint.z + footprint.depth / 2] as [number, number, number],
+    }];
+    for (const side of sides) {
+      const roads = new RoadGraph(roadBalance);
+      // Walk out along the side until the *router* accepts a tile. Deliberately
+      // asked of `plan` rather than derived here: the contract is that the
+      // nearest tile a player can actually pave on each side counts as touching,
+      // so re-deriving that tile with the touch geometry would only ask the fix
+      // to agree with itself.
+      let paved: RoadCell | null = null;
+      for (let distance = 1; distance <= 8 && !paved; distance += 1) {
+        const candidate = {
+          x: Math.round(footprint.x / step) * step + side.dx * distance * step,
+          z: Math.round(footprint.z / step) * step + side.dz * distance * step,
+        };
+        const plan = roads.plan(candidate, candidate, reserved);
+        if (plan) paved = candidate;
+      }
+      assert.ok(paved, `${footprint.label}: no pavable tile at all on its ${side.name} side`);
+      const plan = roads.plan(paved, paved, reserved);
+      assert.ok(plan);
+      roads.commit(plan);
+
+      const touching = roadCellTouchingFootprint(
+        roads,
+        footprint.x,
+        footprint.z,
+        footprint.width,
+        footprint.depth,
+      );
+      assert.deepEqual(
+        touching,
+        paved,
+        `${footprint.label}: a road on its ${side.name} side must count as connected`,
+      );
+    }
+  }
+});
+
 /**
  * Faz S3's fixture: one river port, one player Market, one road between them.
  *
@@ -49745,14 +49892,30 @@ check("Faz S2: the shipped level authors the supply table's sites in fair pairs"
  * lane has to connect the way the match connects it. The enemy's Market hangs off
  * a southern branch of the same network, which is what lets the exclusivity check
  * cut one kingdom's route without touching the other's.
+ *
+ * Where that road starts is *derived* from the dock's authored size rather than
+ * written down. A literal put the spine one cell clear of an 8-wide dock and no
+ * cells clear of a 4-wide one, so shrinking the dock in `trade-sites.json` — a
+ * tuning the table exists to allow — unlinked the fixture's port and failed
+ * three checks that have nothing to say about dock sizes.
  */
-function supplyLaneFixture() {
+function supplyLaneFixture(portOverrides: Partial<ReturnType<typeof shippedTradeSiteBalance>[string]> = {}) {
   const buildings = shippedBuildingBalance();
-  const sites = shippedTradeSiteBalance();
+  const shippedSites = shippedTradeSiteBalance();
   const marketStats = buildings["market"] ?? assert.fail("the market building is missing");
+  const shippedPort = shippedSites["river_port"] ?? assert.fail("the river port site type is missing");
+  // Overrides exist for the checks whose *subject* is a tuning — a fleet lane's
+  // staggering has nothing to prove on a one-animal row — so they can state the
+  // shape they need instead of hoping the shipped table keeps supplying it.
+  const port = { ...shippedPort, ...portOverrides };
+  const sites = { ...shippedSites, river_port: port };
+  // `roadGraphOf` lays its cells on a 2-unit grid; this is the first line on it
+  // that clears a dock centred on the origin.
+  const CELL = 2;
+  const spineX = Math.ceil((port.dock.width / 2 + CELL / 2) / CELL) * CELL;
   const roads = roadGraphOf([
-    [{ x: 6, z: 0 }, { x: 16, z: 0 }],
-    [{ x: 6, z: 0 }, { x: 6, z: -16 }],
+    [{ x: spineX, z: 0 }, { x: 16, z: 0 }],
+    [{ x: spineX, z: 0 }, { x: spineX, z: -16 }],
   ]);
   const units = new UnitSystem();
   const structures = new PlacedStructureSystem();
@@ -49761,7 +49924,6 @@ function supplyLaneFixture() {
   const playerMarket = structures.place("player", marketStats, 20, 0);
   structures.advanceConstruction(playerMarket, marketStats.constructionSeconds);
   const tradeSites = new TradeSiteSystem(sites, [{ id: "port", siteType: "river_port", x: 0, z: 0 }]);
-  const port = sites["river_port"] ?? assert.fail("the river port site type is missing");
   const supply = new MarketSupplySystem(sites, tradeSites, roads, structures, trade.stock, () => true);
   const caravans = new CaravanSystem(shippedCaravanBalance(), roads, [supply]);
   /** Ticks the lane and returns the exact simulated time, for derived assertions. */
@@ -49775,7 +49937,7 @@ function supplyLaneFixture() {
     return frames * step;
   };
   const addEnemyMarket = () => {
-    const market = structures.place("enemy", marketStats, 6, -20);
+    const market = structures.place("enemy", marketStats, spineX, -20);
     structures.advanceConstruction(market, marketStats.constructionSeconds);
     return market;
   };
@@ -49845,7 +50007,10 @@ check("Faz S3: a supply lane carries a trade site's goods onto the market shelf,
 });
 
 check("Faz S3: a fleet never claims more load than its site is holding", () => {
-  const fixture = supplyLaneFixture();
+  // The fleet is the fixture's, not the table's: this check is about what
+  // several animals on one lane do to each other, so a table tuned down to one
+  // animal must not quietly turn it into a check of nothing.
+  const fixture = supplyLaneFixture({ caravanCount: 4 });
   const { tradeSites, supply, caravans, port } = fixture;
   assert.ok(port.caravanCount > 1, "the fixture's site runs a fleet, so there is something to stagger");
 
@@ -50062,7 +50227,11 @@ check("Faz S4: the AI's own supply lane fills its shelf, and its trade rule spen
   const marketStats = buildings["market"] ?? assert.fail("the market building is missing");
   const lotSize = marketStats.market?.lotSize ?? assert.fail("market lot size missing");
   const pit = sites["stone_pit"] ?? assert.fail("the stone pit site type is missing");
-  const roads = roadGraphOf([[{ x: 6, z: 0 }, { x: 16, z: 0 }]]);
+  // Derived, not written down, for {@link supplyLaneFixture}'s reason: a literal
+  // here silently unlinks the pit the first time its dock is retuned smaller.
+  const CELL = 2;
+  const spineX = Math.ceil((pit.dock.width / 2 + CELL / 2) / CELL) * CELL;
+  const roads = roadGraphOf([[{ x: spineX, z: 0 }, { x: 16, z: 0 }]]);
   const units = new UnitSystem();
   const structures = new PlacedStructureSystem();
   const kingdoms = new KingdomRegistry(["enemy"], units, structures, { gold: 100000 }, 20);

@@ -15,6 +15,7 @@
  * under the engine test harness.
  */
 import { roadCellTouchingFootprint } from "../economy/depotLogisticsSystem";
+import { ROAD_TOUCH_EPSILON, roadCellTouchesFootprint, roadTouchLines } from "./roadFootprintTouch";
 import type { RoadCell, RoadGraph, RoadPlan } from "./roadGraph";
 
 export interface AutoRoadFootprint {
@@ -94,14 +95,14 @@ function centredStemPlan(
   maxNewCells: number,
 ): RoadPlan | null {
   const step = roads.cellSize;
-  const halfRoad = step / 2;
   const alongZ = Math.abs(target.z - footprint.z) >= Math.abs(target.x - footprint.x);
   const root = alongZ
-    ? { x: snap(footprint.x, step), z: faceLine(footprint.z, footprint.depth, target.z, halfRoad, step) }
-    : { x: faceLine(footprint.x, footprint.width, target.x, halfRoad, step), z: snap(footprint.z, step) };
-  // Snapping an odd-sized centre can nudge the root just off the touch tolerance;
-  // if so this shape does not apply and the caller falls back.
-  if (!touchesFootprint(root, footprint, halfRoad)) return null;
+    ? { x: snap(footprint.x, step), z: faceLine(footprint.z, footprint.depth, target.z, step) }
+    : { x: faceLine(footprint.x, footprint.width, target.x, step), z: snap(footprint.z, step) };
+  // The cross-axis coordinate is still snapped, so an off-grid centre can push
+  // the root off the face; if so this shape does not apply and the caller falls
+  // back to the perimeter search.
+  if (!roadCellTouchesFootprint(root, footprint, step)) return null;
   // A blocked or off-map root cannot anchor a road; single-cell plan validates it.
   if (!plan(root, root)) return null;
   const outward = alongZ
@@ -118,17 +119,17 @@ function centredStemPlan(
   return { cells, newCells, woodCost: newCells.length * roads.woodCostPerCell };
 }
 
-/** The grid line one road tile outside a footprint face on the side of `toward`. */
-function faceLine(centre: number, size: number, toward: number, halfRoad: number, step: number): number {
-  const sign = Math.sign(toward - centre) || 1;
-  return snap(centre + sign * (size / 2 + halfRoad), step);
-}
-
-function touchesFootprint(cell: RoadCell, footprint: AutoRoadFootprint, halfRoad: number): boolean {
-  return Math.hypot(
-    Math.max(0, Math.abs(cell.x - footprint.x) - footprint.width / 2 - halfRoad),
-    Math.max(0, Math.abs(cell.z - footprint.z) - footprint.depth / 2 - halfRoad),
-  ) <= halfRoad;
+/**
+ * The first pavable grid line outside a footprint face, on the side of `toward`.
+ *
+ * Taken from {@link roadTouchLines} rather than rounded out from the edge: on a
+ * grid-aligned face the two agree, and off one `Math.round` picks the wrong side
+ * of a .5 (it rounds -1.5 to -1), landing the stem's root inside the footprint
+ * where the router refuses it.
+ */
+function faceLine(centre: number, size: number, toward: number, step: number): number {
+  const lines = roadTouchLines(centre, size, step);
+  return toward >= centre ? lines.max : lines.min;
 }
 
 function snap(value: number, step: number): number {
@@ -172,21 +173,14 @@ function nearestRoadCell(roads: RoadGraph, footprint: AutoRoadFootprint): RoadCe
  */
 function perimeterAnchors(roads: RoadGraph, footprint: AutoRoadFootprint, target: RoadCell): RoadCell[] {
   const step = roads.cellSize;
-  const halfRoad = step / 2;
-  const halfWidth = footprint.width / 2;
-  const halfDepth = footprint.depth / 2;
-  const startX = Math.round((footprint.x - halfWidth - step) / step) * step;
-  const startZ = Math.round((footprint.z - halfDepth - step) / step) * step;
-  const endX = footprint.x + halfWidth + step;
-  const endZ = footprint.z + halfDepth + step;
+  // The touch lines *are* the perimeter: every grid cell they bracket either
+  // meets the footprint or lies inside it, so there is nothing left to filter.
+  const xLines = roadTouchLines(footprint.x, footprint.width, step);
+  const zLines = roadTouchLines(footprint.z, footprint.depth, step);
   const anchors: RoadCell[] = [];
-  for (let x = startX; x <= endX + 1e-6; x += step) {
-    for (let z = startZ; z <= endZ + 1e-6; z += step) {
-      const touching = Math.hypot(
-        Math.max(0, Math.abs(x - footprint.x) - halfWidth - halfRoad),
-        Math.max(0, Math.abs(z - footprint.z) - halfDepth - halfRoad),
-      ) <= halfRoad;
-      if (touching) anchors.push({ x, z });
+  for (let x = xLines.min; x <= xLines.max + ROAD_TOUCH_EPSILON; x += step) {
+    for (let z = zLines.min; z <= zLines.max + ROAD_TOUCH_EPSILON; z += step) {
+      anchors.push({ x, z });
     }
   }
   anchors.sort((a, b) =>

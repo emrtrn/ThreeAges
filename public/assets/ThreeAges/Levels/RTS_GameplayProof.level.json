@@ -6310,16 +6310,11 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
       "position": [
-        0.73,
+        3.58,
         0,
-        19.73
+        19.26
       ],
       "name": "TradeSite player_river_port",
-      "rotation": [
-        0,
-        -62.5,
-        0
-      ],
       "scale": 1,
       "variableOverrides": {
         "siteId": "player_river_port",
@@ -6334,11 +6329,6 @@
         -20.17
       ],
       "name": "TradeSite enemy_river_port",
-      "rotation": [
-        0,
-        27,
-        0
-      ],
       "scale": 1,
       "variableOverrides": {
         "siteId": "enemy_river_port",

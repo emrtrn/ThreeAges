@@ -447,6 +447,14 @@ export interface RtsAppOptions {
    */
   readonly onFogOfWarChange?: (choice: FogOfWarChoice) => void;
   /**
+   * §72: the start card's difficulty row picked a different opponent. Same
+   * store-and-reboot shape as the two above, and the same §13 reason — the
+   * profile's economy multiplier and reaction delay are read into `AiController`
+   * at construction, ahead of everything that plans against them. Supplying it
+   * is what puts the row on the card at all.
+   */
+  readonly onAiProfileChange?: (choice: AiProfile) => void;
+  /**
    * The gameplay-id -> Actor mapping the whole presentation hangs from. `main.ts`
    * always supplies it; it stays optional only for the harnesses that drive an
    * `RtsApp` without art, which then render the code-side boxes throughout.
@@ -848,6 +856,8 @@ export class RtsApp {
   private victoryCondition: VictoryConditionChoice;
   /** §59: the fog row's selection, seeded from the resolved flag for the same reason. */
   private fogOfWar: FogOfWarChoice;
+  /** §72: the difficulty row's selection, seeded from the profile in force. */
+  private aiProfileChoice: AiProfile;
   private readonly match = new RtsMatchState();
   /** §51: whether the simulation should be running; `match` owns who won. */
   private readonly flow = new RtsMatchFlow();
@@ -1184,6 +1194,9 @@ export class RtsApp {
     }
     this.victoryCondition = victoryChoiceForFlag(this.options.regionalVictoryEnabled === true);
     this.fogOfWar = fogChoiceForFlag(this.options.fogOfWarEnabled === true);
+    // §72: seeded from the profile this app was actually built with, so a preset
+    // asking for `hard` opens the card on "Zor" instead of contradicting it.
+    this.aiProfileChoice = this.options.aiProfile;
     // Same "absent means nothing exists" construction rule as §58 above: without
     // a script there is no director and no card, so an ordinary match never pays
     // for the mode and can never be changed by it.
@@ -1682,6 +1695,10 @@ export class RtsApp {
       ...(this.options.onFogOfWarChange
         ? { onFogOfWar: (choice: FogOfWarChoice) => { this.fogOfWar = choice; } }
         : {}),
+      // §72, deferred to "Maçı Başlat" for the same reason as the two above.
+      ...(this.options.onAiProfileChange
+        ? { onAiProfile: (choice: AiProfile) => { this.aiProfileChoice = choice; } }
+        : {}),
       onAbandonMission: () => this.abandonMission(),
     });
     this.debugOverlay = this.options.debug
@@ -1883,6 +1900,7 @@ export class RtsApp {
       // a card claiming "Hikâye turu" over a match with no chain would be lying.
       this.missions ? "story" : "free",
       this.fogOfWar,
+      this.aiProfileChoice,
     );
     this.frameHandle = requestAnimationFrame(this.onFrame);
   }
@@ -4418,12 +4436,17 @@ export class RtsApp {
     const fogChanged =
       this.options.onFogOfWarChange !== undefined &&
       this.fogOfWar !== fogChoiceForFlag(this.options.fogOfWarEnabled === true);
-    if (victoryChanged || fogChanged) {
-      // Both are handed over before returning, not one per reboot. The host
-      // stores each choice and asks for a reload; `location.reload()` only queues
-      // the navigation, so the second store still lands — and a player who
-      // changed both rows must not have to come back and change one of them again
-      // on a card that reopened having forgotten it.
+    // §72: same test against the value this app was built with, not against a
+    // default — the profile came from the preset unless the player overrode it.
+    const profileChanged =
+      this.options.onAiProfileChange !== undefined &&
+      this.aiProfileChoice !== this.options.aiProfile;
+    if (victoryChanged || fogChanged || profileChanged) {
+      // All of them are handed over before returning, not one per reboot. The
+      // host stores each choice and asks for a reload; `location.reload()` only
+      // queues the navigation, so the later stores still land — and a player who
+      // changed three rows must not have to come back and change two of them
+      // again on a card that reopened having forgotten them.
       if (victoryChanged) {
         this.log.info(`RTS match setup: victory condition -> ${this.victoryCondition}`);
         this.options.onVictoryConditionChange?.(this.victoryCondition);
@@ -4431,6 +4454,10 @@ export class RtsApp {
       if (fogChanged) {
         this.log.info(`RTS match setup: fog of war -> ${this.fogOfWar}`);
         this.options.onFogOfWarChange?.(this.fogOfWar);
+      }
+      if (profileChanged) {
+        this.log.info(`RTS match setup: AI profile -> ${this.aiProfileChoice}`);
+        this.options.onAiProfileChange?.(this.aiProfileChoice);
       }
       return;
     }

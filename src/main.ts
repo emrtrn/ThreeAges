@@ -32,6 +32,11 @@ import {
   type FogOfWarChoice,
 } from "@/game/rts/vision/fogOfWarChoice";
 import {
+  readStoredAiProfile,
+  resolveAiProfile,
+  writeStoredAiProfile,
+} from "@/game/rts/match/aiProfileChoice";
+import {
   markMissionSeen,
   missionScriptIdForMode,
   resolveMissionMode,
@@ -285,8 +290,11 @@ async function main(): Promise<void> {
       aiBalance,
       aiLayoutBalance,
       matchSeed,
-      // §72: the preset picks the AI profile; normal is the fair baseline.
-      aiProfile: preset?.aiProfile ?? "normal",
+      // §72: the start card's difficulty row outranks the preset, which outranks
+      // the fair baseline. Unlike the two rows above this is not a flag, so it
+      // resolves here rather than through `flagOverrides` — but the precedence
+      // and the "unchosen leaves the preset alone" rule are the same.
+      aiProfile: resolveAiProfile(readStoredAiProfile(matchSetupStorage()), preset?.aiProfile),
       // A bad preset must not turn the fallback RTS route into an unwinnable
       // no-build state; mirror the standard core-match stockpile.
       startingResources: preset?.startingResources ?? { food: 500, wood: 500 },
@@ -308,6 +316,12 @@ async function main(): Promise<void> {
         writeMissionMode(matchSetupStorage(), choice);
         // Declining is an answer too, so it counts as having met the offer.
         if (choice === "free") markMissionSeen(missionSeenStorage());
+        location.reload();
+      },
+      // §72: same store-and-reload shape as the rows above — the profile is read
+      // into the AI controller at construction, so it is a boot concern.
+      onAiProfileChange: (choice) => {
+        writeStoredAiProfile(matchSetupStorage(), choice);
         location.reload();
       },
       onMissionResolved: () => markMissionSeen(missionSeenStorage()),

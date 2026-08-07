@@ -5,6 +5,7 @@
  */
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
+import { roadCellFootprintGap, roadCellTouchesFootprint } from "../roads/roadFootprintTouch";
 import type { RoadCell, RoadGraph } from "../roads/roadGraph";
 import type { UnitOwner } from "../units/unit";
 
@@ -170,18 +171,40 @@ export class DepotLogisticsSystem {
 }
 
 /**
- * Returns the deterministic road tile whose footprint touches a structure.
+ * Every committed road tile that meets a structure, on any of its four sides,
+ * nearest first.
  *
- * The tolerance is half a road cell rather than zero because a road tile can
- * never *overlap* a footprint — the footprint is a nav blocker, so the graph
- * refuses to route through it. "Touching" therefore means the nearest legal
- * tile outside the footprint, and whether one lands exactly on the edge depends
- * on how the footprint's half-width falls on the 2-unit road grid.
+ * Which tiles those are is {@link roadCellTouchesFootprint}'s grid-aware answer;
+ * the gap is only the ordering, so a caller that wants one cell gets a stable
+ * one. The order is fully determined (gap, then x, then z), because a lane
+ * endpoint that moved between ticks would re-route every caravan on it.
+ */
+export function roadCellsTouchingFootprint(
+  roads: RoadGraph,
+  x: number,
+  z: number,
+  width: number,
+  depth: number,
+): readonly RoadCell[] {
+  const footprint = { x, z, width, depth };
+  const cellSize = roads.cellSize;
+  return roads.all()
+    .filter((cell) => roadCellTouchesFootprint(cell, footprint, cellSize))
+    .map((cell) => ({ cell, gap: roadCellFootprintGap(cell, footprint, cellSize) }))
+    .sort((a, b) => a.gap - b.gap || a.cell.x - b.cell.x || a.cell.z - b.cell.z)
+    .map((candidate) => ({ x: candidate.cell.x, z: candidate.cell.z }));
+}
+
+/**
+ * The deterministic road tile that touches a structure, or null when none does.
  *
- * Even footprints (depot/farm/outpost, 6) happen to line up; the 7-unit command
- * centre does not, and with a zero tolerance *no* tile could ever touch it —
- * which silently made {@link RtsApp.outpostConnectedToMainRoad} always false and
- * withheld the outpost's connected control radius from both kingdoms.
+ * A road tile can never *overlap* a footprint — the footprint is a nav blocker,
+ * so the graph refuses to route through it — which is why "touching" means the
+ * first legal tile outside it rather than an adjacent one. Where that tile falls
+ * depends on how the footprint's centre lands on the road grid, so the test is
+ * derived from the grid ({@link roadTouchLines}) instead of measured with a
+ * tolerance. See `roadFootprintTouch.ts` for why the tolerance version cut two
+ * sides off every off-grid trade site.
  */
 export function roadCellTouchingFootprint(
   roads: RoadGraph,
@@ -190,18 +213,5 @@ export function roadCellTouchingFootprint(
   width: number,
   depth: number,
 ): RoadCell | null {
-  const halfRoad = roads.cellSize / 2;
-  const halfWidth = width / 2;
-  const halfDepth = depth / 2;
-  return roads.all()
-    .map((cell) => ({
-      cell,
-      distance: Math.hypot(
-        Math.max(0, Math.abs(cell.x - x) - halfWidth - halfRoad),
-        Math.max(0, Math.abs(cell.z - z) - halfDepth - halfRoad),
-      ),
-    }))
-    .filter((candidate) => candidate.distance <= halfRoad)
-    .sort((a, b) => a.distance - b.distance || a.cell.x - b.cell.x || a.cell.z - b.cell.z)
-    .map((candidate) => ({ x: candidate.cell.x, z: candidate.cell.z }))[0] ?? null;
+  return roadCellsTouchingFootprint(roads, x, z, width, depth)[0] ?? null;
 }
