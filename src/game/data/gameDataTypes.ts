@@ -260,6 +260,19 @@ export interface BuildingBalanceStats {
   /** The earliest settlement age in which this building may be placed. */
   readonly requiredAge?: SettlementAge;
   /**
+   * Minimum global centre level *within {@link requiredAge}* the owner must have
+   * reached before this building may be placed (1..3). Omitted means Lv1 — the
+   * building opens the moment its age does, which is the default every structure
+   * had before the field existed.
+   *
+   * Centre-led progression: the gate is a statement about the whole kingdom's
+   * tier, not about one building, and it is data so the food ladder (the Tarla
+   * behind the Avcı Kulübesi and the Ağıl) can be retuned without a code change.
+   * A later age clears the gate outright: reaching Kasaba is never *less*
+   * developed than Yerleşim Lv3.
+   */
+  readonly requiredSettlementLevel?: number;
+  /**
    * Durability of the placed structure, following the GDD §37 health classes
    * (`12_BALANCE_AND_GAME_DATA.md`). Required rather than optional: a building
    * without it would be silently invulnerable, which is the failure this data

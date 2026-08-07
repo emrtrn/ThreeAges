@@ -17,6 +17,17 @@
  * The animal itself is still not a navigation agent (Faz 2's decision, kept). It
  * follows the shepherd's live position, and the shepherd is the one who walks a
  * planned route.
+ *
+ * **V2 Faz 8 — the pen is a feeding line, not a yard.** What arrives at the barn
+ * stops being a simulated animal: it takes a numbered stall in a row along the
+ * building's front, faces the wall, and plays its `Eating` clip there for good
+ * (`WildlifeAnimal.stall`). So this file owns the *positions* of a pasture's
+ * livestock as well as its count, and that is the whole of the change — the
+ * roster, the ownership, the breeding and the razing rule are all Faz 4/5's,
+ * unmoved. Raze the pasture and each of those bodies becomes a wild animal again
+ * exactly where it was standing, which is why the row is authored here rather
+ * than by the renderer: it is a simulation position that presentation reads, not
+ * a decoration presentation invents.
  */
 import { Vector3 } from "three";
 
@@ -24,22 +35,32 @@ import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
-import type { AnimalBalanceStats } from "../../data/gameDataTypes";
 import type { WildlifeAnimal, WildlifeSystem } from "./wildlifeSystem";
-import { CAUGHT_DISTANCE, type RoamProfile } from "./wildlifeRoaming";
+import { CAUGHT_DISTANCE, type WildlifeStall } from "./wildlifeRoaming";
 
 export type ShepherdState = "moving-to-animal" | "calming" | "driving";
 
 /**
- * How wide a ring the pen's yard is, in world units.
+ * Which face of the building the animals line up along, as a unit vector in
+ * world space.
  *
- * Its *inner* radius is the building's own half-diagonal, so penned animals
- * graze around the barn rather than inside it; this is only how far out the yard
- * then reaches. Small on purpose: a pen that sprawled would read as a herd that
- * merely happens to live near a building, which is the picture the pasture is
- * meant to replace.
+ * A constant rather than data because a {@link PlacedStructure} has no rotation:
+ * every building on this map is axis-aligned, so "the front" is a fact about the
+ * art, not about the placement. One constant is therefore the whole of it — if
+ * the pasture's model is ever re-authored facing another way, this is the line
+ * that follows it.
  */
-const PEN_RING_WIDTH = 3;
+const PEN_FACE_X = 1;
+const PEN_FACE_Z = 0;
+
+/** How far clear of the footprint edge the first row of animals stands. */
+const PEN_STAND_OFF = 1.4;
+
+/** Shoulder to shoulder along the face — a cow is about a unit wide at this scale. */
+const PEN_SLOT_SPACING = 1.8;
+
+/** And how far back the next row stands, when a tier's pen outgrows one face. */
+const PEN_ROW_SPACING = 2.4;
 
 /** Close enough to the shepherd to start calming; the contact distance an animal is caught at. */
 const CONTACT_RANGE = CAUGHT_DISTANCE;
@@ -51,6 +72,14 @@ interface ShepherdAssignment {
   readonly worker: Unit;
   readonly pasture: PastureRecord;
   readonly animalId: string;
+  /**
+   * The place in the line this drive is for, claimed at hiring.
+   *
+   * Claimed that early rather than on arrival so two shepherds can never walk
+   * two animals into the same stall — the pen's capacity already bounds how many
+   * drives may be running, and this is the same bound said as a position.
+   */
+  readonly slot: number;
   state: ShepherdState;
   /** Seconds of calming banked so far, against the species' `tameSeconds`. */
   calmedSeconds: number;
@@ -60,8 +89,8 @@ interface ShepherdAssignment {
 
 interface PastureRecord {
   readonly structure: PlacedStructure;
-  readonly penned: Set<string>;
-  readonly pen: PenGeometry;
+  /** Which animal stands in which stall, so a gap in the row is never re-used twice. */
+  readonly penned: Map<string, number>;
   /**
    * Seconds of gestation banked per species standing in this pen.
    *
@@ -191,24 +220,24 @@ export class PastureSystem {
       // A razed pasture frees its herd where it stood rather than deleting it:
       // the animals were driven in one at a time and are still standing there.
       // Whoever burned the barn now has to hunt them.
-      for (const animalId of record.penned) this.wildlife.returnToWild(animalId);
+      //
+      // Faz 8 is what makes "where it stood" a picture rather than a phrase: the
+      // bodies were parked in a row, so a burnt pasture leaves a line of animals
+      // that turn back into wildlife on the spot and scatter from there. Nothing
+      // here has to pass positions along — the animal already holds the only copy.
+      for (const animalId of record.penned.keys()) this.wildlife.returnToWild(animalId);
       this.pastures.delete(record.structure.id);
     }
     for (const structure of this.structures.all()) {
       if (!structure.construction.complete || !structure.economy?.requiresLivestock) continue;
       if (this.pastures.has(structure.id)) continue;
-      this.pastures.set(structure.id, {
-        structure,
-        penned: new Set(),
-        pen: penGeometryFor(structure),
-        gestation: new Map(),
-      });
+      this.pastures.set(structure.id, { structure, penned: new Map(), gestation: new Map() });
     }
   }
 
   /** Forget animals that died or were freed, so the pen count is what is standing there. */
   private prunePen(pasture: PastureRecord): void {
-    for (const animalId of [...pasture.penned]) {
+    for (const animalId of [...pasture.penned.keys()]) {
       const animal = this.wildlife.animalById(animalId);
       if (animal && !animal.dead && animal.owner === pasture.structure.owner) continue;
       pasture.penned.delete(animalId);
@@ -216,8 +245,8 @@ export class PastureSystem {
   }
 
   /**
-   * Advance gestation and, when a species comes to term, put a newborn in the
-   * yard.
+   * Advance gestation and, when a species comes to term, stand a newborn in the
+   * next free stall.
    *
    * Committed animals — penned plus the ones shepherds are walking home — are
    * what the capacity bounds, not just the penned ones. Counting only the pen
@@ -244,11 +273,20 @@ export class PastureSystem {
         pasture.gestation.set(species, elapsed);
         continue;
       }
+      const slot = this.freeSlot(pasture);
+      // No stall, no calf: the committed count above already refuses a birth the
+      // pen has no room for, and this is the same refusal said in positions — the
+      // two must agree or a newborn would appear standing on its parent. Held at
+      // term like the capacity gate, so the calf arrives on the tick a stall does.
+      if (slot === null) {
+        pasture.gestation.set(species, term);
+        continue;
+      }
+      const stall = penStalls(pasture.structure)[slot];
+      if (!stall) continue;
       pasture.gestation.set(species, 0);
-      const parent = residents.find((animal) => animal.stats.id === species);
-      if (!parent) continue;
-      const born = this.wildlife.bear(species, pasture.structure.owner, penProfileFor(pasture.pen, parent.stats));
-      if (born) pasture.penned.add(born.id);
+      const born = this.wildlife.bear(species, pasture.structure.owner, stall);
+      if (born) pasture.penned.set(born.id, slot);
     }
     // A species that has left the pen entirely forgets its progress, so a pen
     // restocked with a different animal does not inherit a stranger's timer.
@@ -302,6 +340,10 @@ export class PastureSystem {
     let hired = 0;
     for (const worker of candidates) {
       if (hired >= openings) return;
+      // Recomputed per hire, because the assignment written below is itself what
+      // takes a stall out of circulation.
+      const slot = this.freeSlot(pasture);
+      if (slot === null) return;
       const animal = this.wildlife.reserveForTaming(
         worker.id,
         pasture.structure.x,
@@ -320,6 +362,7 @@ export class PastureSystem {
         worker,
         pasture,
         animalId: animal.id,
+        slot,
         state: "moving-to-animal",
         calmedSeconds: 0,
         approach,
@@ -354,18 +397,18 @@ export class PastureSystem {
       if (assignment.calmedSeconds < (animal.stats.tameSeconds ?? 0)) return;
       worker.setWorking(false);
       assignment.state = "driving";
-      assignment.approach = this.penApproach(assignment.pasture, worker);
+      assignment.approach = this.penApproach(assignment, worker);
       const path = this.navigation.plan(worker.position, assignment.approach);
       if (path) worker.setMovePath(path);
     }
 
     if (assignment.state === "driving") {
       // The animal follows the shepherd, at its own walking pace — see
-      // `advanceLed`. He may well reach the yard first and stand there waiting;
+      // `advanceLed`. He may well reach the stall first and stand there waiting;
       // that is what leading looks like, and it is also why arrival is measured
       // on the animal rather than on him.
       animal.lead = { x: worker.position.x, z: worker.position.z, follow: true };
-      if (this.isHome(assignment.pasture, animal)) {
+      if (this.isHome(assignment, animal)) {
         this.pen(assignment, animal);
         return;
       }
@@ -402,12 +445,17 @@ export class PastureSystem {
     const { pasture, worker } = assignment;
     const owner = pasture.structure.owner;
     const capacity = pasture.structure.economy?.livestockCapacity ?? 0;
+    const stall = penStalls(pasture.structure)[assignment.slot];
     // The last word on capacity, and the reason it is checked here as well as at
     // hiring: a birth can take the final slot while this animal is still walking.
     // Refused, it simply stays wild where it stands.
-    if (pasture.penned.size < capacity
-      && this.wildlife.tame(animal.id, owner, penProfileFor(pasture.pen, animal.stats))) {
-      pasture.penned.add(animal.id);
+    //
+    // `tame` is where the animal stops being a simulated one: from this call it
+    // holds a stall and nothing else, so the drive's last act is to hand over a
+    // position rather than to start any new behaviour.
+    if (stall && pasture.penned.size < capacity
+      && this.wildlife.tame(animal.id, owner, stall)) {
+      pasture.penned.set(animal.id, assignment.slot);
     } else {
       animal.lead = null;
     }
@@ -421,28 +469,71 @@ export class PastureSystem {
     worker.setWorking(false);
   }
 
-  /** Home is the yard the animal is about to graze in, not the building's pivot. */
-  private isHome(pasture: PastureRecord, animal: WildlifeAnimal): boolean {
-    const dx = animal.position.x - pasture.structure.x;
-    const dz = animal.position.z - pasture.structure.z;
-    return Math.hypot(dx, dz) <= pasture.pen.roamRadius;
+  /**
+   * Home is this drive's own stall, not the building.
+   *
+   * Measured against the stall rather than a radius around the barn because the
+   * animal is handed over here: a tolerance of `CONTACT_RANGE` is exactly the
+   * `DRIVE_FOLLOW_GAP` it trails the shepherd by, so it takes over one stride
+   * short of its post and walks the rest in itself ({@link advanceStalled}).
+   * A wider arrival test would drop it further out and make the last steps a
+   * slide; a tighter one could never fire, because the shepherd standing *on*
+   * the stall is what keeps the animal a stride behind it.
+   */
+  private isHome(assignment: ShepherdAssignment, animal: WildlifeAnimal): boolean {
+    const stall = penStalls(assignment.pasture.structure)[assignment.slot];
+    if (!stall) return false;
+    return Math.hypot(animal.position.x - stall.x, animal.position.z - stall.z) <= CONTACT_RANGE;
   }
 
-  private penApproach(pasture: PastureRecord, worker: Unit): Vector3 {
-    const halfW = pasture.structure.stats.footprint.width / 2;
-    const halfD = pasture.structure.stats.footprint.depth / 2;
+  /**
+   * Where the shepherd walks to end the drive: his animal's own place in the
+   * line, or — if nothing can path there — the nearest reachable footprint edge.
+   *
+   * The fallback is kept from Faz 4 rather than dropped, because the stall is a
+   * point outside the building that the map may still have made unreachable
+   * (another building dropped against that face, a cliff). Arriving at the wrong
+   * side of the barn ends the drive one stride late; failing to arrive at all
+   * strands a calmed animal in the field.
+   */
+  private penApproach(assignment: ShepherdAssignment, worker: Unit): Vector3 {
+    const { structure } = assignment.pasture;
+    const halfW = structure.stats.footprint.width / 2;
+    const halfD = structure.stats.footprint.depth / 2;
     const gap = CONTACT_RANGE * 0.7;
+    const stall = penStalls(structure)[assignment.slot];
     const edges = [
-      new Vector3(pasture.structure.x + halfW + gap, 0, pasture.structure.z),
-      new Vector3(pasture.structure.x - halfW - gap, 0, pasture.structure.z),
-      new Vector3(pasture.structure.x, 0, pasture.structure.z + halfD + gap),
-      new Vector3(pasture.structure.x, 0, pasture.structure.z - halfD - gap),
+      new Vector3(structure.x + halfW + gap, 0, structure.z),
+      new Vector3(structure.x - halfW - gap, 0, structure.z),
+      new Vector3(structure.x, 0, structure.z + halfD + gap),
+      new Vector3(structure.x, 0, structure.z - halfD - gap),
     ].sort((a, b) => worker.position.distanceToSquared(a) - worker.position.distanceToSquared(b));
-    return edges.find((point) => this.navigation.plan(worker.position, point) !== null) ?? edges[0]!;
+    const candidates = stall ? [new Vector3(stall.x, 0, stall.z), ...edges] : edges;
+    return candidates.find((point) => this.navigation.plan(worker.position, point) !== null)
+      ?? candidates[0]!;
+  }
+
+  /**
+   * The lowest stall nobody stands in and nobody is walking an animal toward;
+   * null when the line is full.
+   *
+   * Lowest rather than next, so a pen that loses its second animal fills that
+   * gap before it grows a fifth place — the row stays a row.
+   */
+  private freeSlot(pasture: PastureRecord): number | null {
+    const capacity = pasture.structure.economy?.livestockCapacity ?? 0;
+    const taken = new Set<number>([
+      ...pasture.penned.values(),
+      ...this.crewOf(pasture).map((assignment) => assignment.slot),
+    ]);
+    for (let slot = 0; slot < capacity; slot += 1) {
+      if (!taken.has(slot)) return slot;
+    }
+    return null;
   }
 
   private pennedOf(pasture: PastureRecord): readonly WildlifeAnimal[] {
-    return [...pasture.penned]
+    return [...pasture.penned.keys()]
       .map((id) => this.wildlife.animalById(id))
       .filter((animal): animal is WildlifeAnimal => animal !== null);
   }
@@ -452,55 +543,49 @@ export class PastureSystem {
   }
 }
 
-/** Where a pasture's yard is, independent of which species ends up standing in it. */
-export interface PenGeometry {
-  readonly homeX: number;
-  readonly homeZ: number;
-  readonly roamInnerRadius: number;
-  readonly roamRadius: number;
+/**
+ * Every standing place a pasture has, in slot order — the feeding line itself.
+ *
+ * Derived from the footprint and the tier's `livestockCapacity` rather than
+ * authored, for the same reason the yard was: it is where the building
+ * physically is, not a balance decision. A tier that widens the pen simply
+ * returns more places, and the ones already occupied keep their coordinates, so
+ * an upgrade never shuffles the animals already standing there.
+ *
+ * The row runs along one face, shoulder to shoulder, and wraps to a second row
+ * further out once a face is full — which is what keeps a pen of eight from
+ * becoming a line stretching off the building into the fields.
+ */
+export function penStalls(structure: PlacedStructure): readonly WildlifeStall[] {
+  const capacity = structure.economy?.livestockCapacity ?? 0;
+  const half = Math.abs(PEN_FACE_X) * structure.stats.footprint.width / 2
+    + Math.abs(PEN_FACE_Z) * structure.stats.footprint.depth / 2;
+  // The face's own width, which is the other footprint side: how many animals fit
+  // in one row before the pen has to grow a second.
+  const faceWidth = Math.abs(PEN_FACE_X) * structure.stats.footprint.depth
+    + Math.abs(PEN_FACE_Z) * structure.stats.footprint.width;
+  // Gaps, not bodies: four animals at 1.8 span 5.4 and stand comfortably along a
+  // six-wide face, which `faceWidth / spacing` alone would have refused.
+  const perRow = Math.max(1, Math.floor(faceWidth / PEN_SLOT_SPACING) + 1);
+  // Along the face, ninety degrees from its normal.
+  const alongX = -PEN_FACE_Z;
+  const alongZ = PEN_FACE_X;
+  // Every animal looks into the pen, and all of them the same way: facings that
+  // converged on the building's centre would fan the row out into a semicircle.
+  const facing = Math.atan2(-PEN_FACE_X, -PEN_FACE_Z);
+  const stalls: WildlifeStall[] = [];
+  for (let slot = 0; slot < capacity; slot += 1) {
+    const row = Math.floor(slot / perRow);
+    const column = slot % perRow;
+    const inThisRow = Math.min(perRow, capacity - row * perRow);
+    const out = half + PEN_STAND_OFF + row * PEN_ROW_SPACING;
+    const along = (column - (inThisRow - 1) / 2) * PEN_SLOT_SPACING;
+    stalls.push({
+      x: structure.x + PEN_FACE_X * out + alongX * along,
+      z: structure.z + PEN_FACE_Z * out + alongZ * along,
+      facing,
+    });
+  }
+  return stalls;
 }
 
-/**
- * The yard a pasture's animals graze in: a ring around the building, never over
- * it, and always inside the building's own reach so a penned animal cannot
- * wander out of the pasture that owns it.
- *
- * Derived from the footprint rather than authored, because it is not a balance
- * decision — it is where the building physically is.
- */
-export function penGeometryFor(structure: PlacedStructure): PenGeometry {
-  const inner = Math.hypot(structure.stats.footprint.width / 2, structure.stats.footprint.depth / 2);
-  return {
-    homeX: structure.x,
-    homeZ: structure.z,
-    roamInnerRadius: inner,
-    roamRadius: inner + PEN_RING_WIDTH,
-  };
-}
-
-/**
- * One species' grazing profile inside that yard.
- *
- * `walkSpeed` stays the species' own `walkClipSpeed` — the pen changes where an
- * animal walks, never how fast, because that equality is the whole foot-slide
- * fix (`RoamProfile.walkSpeed`). Only the flight trigger is closed: penned
- * livestock has nothing left to run from, and an animal that still bolted would
- * be spooked all day by the workers who own it.
- *
- * The turn rate and the pause range carry over untouched for the same reason:
- * they say what *animal* this is, and a cow does not become a different one for
- * standing in a barn yard.
- */
-export function penProfileFor(pen: PenGeometry, stats: AnimalBalanceStats): RoamProfile {
-  return {
-    ...pen,
-    walkSpeed: stats.walkClipSpeed,
-    fleeSpeed: stats.moveSpeed,
-    fleeRadius: 0,
-    fleeSeconds: stats.fleeSeconds,
-    fleeRecoverySeconds: stats.fleeRecoverySeconds,
-    turnRateDegPerSecond: stats.turnRateDegPerSecond,
-    restSecondsMin: stats.restSeconds.min,
-    restSecondsMax: stats.restSeconds.max,
-  };
-}

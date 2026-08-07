@@ -2959,7 +2959,6 @@
           "intensity": 0.7
         }
       ],
-      "reflectionMode": "sharedPlanar",
       "reflectionQuality": "high",
       "reflectionStrength": 0.9
     }
@@ -6349,7 +6348,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_TradeSite.actor.json",
       "position": [
-        -7.38,
+        -8,
         0,
         50
       ],

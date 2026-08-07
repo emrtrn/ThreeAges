@@ -398,6 +398,63 @@ export function advanceLed(
   };
 }
 
+/** One standing place in a pasture's feeding line: where, and which way to look. */
+export interface WildlifeStall {
+  readonly x: number;
+  readonly z: number;
+  /** Which way it stands once it arrives — into the pen, so the row reads as a row. */
+  readonly facing: number;
+}
+
+/**
+ * Advance a penned animal: walk into your place in the line, then stand there.
+ *
+ * This is the whole "behaviour" a stalled animal has, and saying it in eight
+ * lines is the point. Livestock stopped being a roaming animal the moment it was
+ * driven home — no grazing target, no rest timer, no fear, no herd ground — so
+ * what remains is a body walking its last few steps and then an animated mesh
+ * standing at a trough. Everything else about the pen is bookkeeping the
+ * {@link PastureSystem} does, not thinking this animal does.
+ *
+ * The walk-in exists so arrival is not a teleport: a shepherd hands the animal
+ * over a stride or two short of its stall (`DRIVE_FOLLOW_GAP`), and snapping
+ * that gap would pop the body sideways on the frame the drive ends. At
+ * `walkSpeed` those two strides play at clip rate 1 like every other walk.
+ *
+ * Facing is turned toward the stall's own heading only *after* it stands there,
+ * for the same reason a person turns to the table after reaching it rather than
+ * while walking to it.
+ */
+export function advanceStalled(
+  current: { readonly x: number; readonly z: number; readonly facing: number },
+  stall: WildlifeStall,
+  profile: RoamProfile,
+  deltaSeconds: number,
+): RoamPose {
+  if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
+    throw new RangeError("Stall delta must be a non-negative finite number");
+  }
+  const dx = stall.x - current.x;
+  const dz = stall.z - current.z;
+  const distance = Math.hypot(dx, dz);
+  const budget = turnBudgetDeg(profile, deltaSeconds);
+  if (distance <= ARRIVE_EPSILON) {
+    return {
+      x: stall.x,
+      z: stall.z,
+      facing: turnFacingToward(current.facing, stall.facing, budget),
+      speed: 0,
+    };
+  }
+  const step = Math.min(profile.walkSpeed * deltaSeconds, distance);
+  return {
+    x: current.x + (dx / distance) * step,
+    z: current.z + (dz / distance) * step,
+    facing: turnFacingToward(current.facing, Math.atan2(dx, dz), budget),
+    speed: deltaSeconds > 0 ? step / deltaSeconds : 0,
+  };
+}
+
 /**
  * What a predator is running at, and how far its den will let it go — V3 §3.6.
  *

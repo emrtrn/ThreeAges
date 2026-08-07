@@ -21075,16 +21075,18 @@
       "license": "Project-local RTS presentation asset"
     },
     {
-      "id": "threeages-rts-pasture-actor",
-      "name": "BP RTS Pasture.Actor",
+      "id": "threeages-rts-pasture-firstage-t1-actor",
+      "name": "BP RTS Pasture FirstAge T1.Actor",
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Buildings",
-      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture.actor.json",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T1.actor.json",
       "tags": [
         "threeages",
         "rts",
         "building",
-        "pasture"
+        "pasture",
+        "settlement",
+        "tier1"
       ],
       "placeable": false,
       "placement": {
@@ -21098,21 +21100,23 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 525
+        "bytes": 537
       },
       "license": "Project-local RTS presentation asset"
     },
     {
-      "id": "threeages-rts-huntingcamp-actor",
-      "name": "BP RTS HuntingCamp.Actor",
+      "id": "threeages-rts-pasture-firstage-t2-actor",
+      "name": "BP RTS Pasture FirstAge T2.Actor",
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Buildings",
-      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp.actor.json",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T2.actor.json",
       "tags": [
         "threeages",
         "rts",
         "building",
-        "hunting-camp"
+        "pasture",
+        "settlement",
+        "tier2"
       ],
       "placeable": false,
       "placement": {
@@ -21126,7 +21130,127 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 533
+        "bytes": 537
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-pasture-firstage-t3-actor",
+      "name": "BP RTS Pasture FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "pasture",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 537
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-huntingcamp-firstage-t1-actor",
+      "name": "BP RTS HuntingCamp FirstAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "hunting-camp",
+        "settlement",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 545
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-huntingcamp-firstage-t2-actor",
+      "name": "BP RTS HuntingCamp FirstAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "hunting-camp",
+        "settlement",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 545
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-huntingcamp-firstage-t3-actor",
+      "name": "BP RTS HuntingCamp FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "hunting-camp",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 545
       },
       "license": "Project-local RTS presentation asset"
     },

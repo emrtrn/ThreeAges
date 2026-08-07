@@ -1,4 +1,5 @@
 import {
+  Box3,
   HalfFloatType,
   Matrix4,
   NoToneMapping,
@@ -39,6 +40,68 @@ const QUALITY_SETTINGS: Record<PlanarReflectionQuality, { resolution: number; mi
 };
 
 /**
+ * Fraction of the viewport a group's water must cover before its reflection is
+ * worth a whole extra scene render.
+ *
+ * There is a real measurement behind this number. A Level authored one river at
+ * `sharedPlanar/high` and a strategic camera that barely showed it — often only
+ * a sliver at the screen edge, and in game mode the reflection was not visible
+ * at all. It still cost **7.3 ms of GPU and 8.7 ms of CPU per frame**, over half
+ * the frame, because the only condition on the nested render was a 4 ms
+ * interval. Turning it off halved the frame time.
+ *
+ * Frustum culling alone does not catch this: a river ribbon follows a long
+ * spline, so its bounds stay on screen long after the water itself stops being
+ * worth resolving. What the cost has to be gated on is how much of the screen
+ * the result will actually occupy.
+ */
+export const PLANAR_REFLECTION_MIN_SCREEN_COVERAGE = 0.01;
+
+/**
+ * Fraction of the viewport `bounds` projects onto, clipped to the screen — or
+ * `null` when it cannot be answered from a projection alone.
+ *
+ * `null` means "a corner is at or behind the eye", where the perspective divide
+ * stops being meaningful and a box can wrap around the viewer. The caller must
+ * read that as *render*, never as *skip*: a cheap gate is allowed to cost a
+ * frame it did not have to, and is not allowed to drop one it did.
+ *
+ * The screen-aligned bound of a projected box overestimates a diagonal or curved
+ * body, which errs the same way on purpose.
+ */
+export function planarReflectionScreenCoverage(bounds: Box3, viewProjection: Matrix4): number | null {
+  if (bounds.isEmpty()) return 0;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const corner = new Vector4();
+  for (let index = 0; index < 8; index += 1) {
+    corner.set(
+      index & 1 ? bounds.max.x : bounds.min.x,
+      index & 2 ? bounds.max.y : bounds.min.y,
+      index & 4 ? bounds.max.z : bounds.min.z,
+      1,
+    );
+    corner.applyMatrix4(viewProjection);
+    if (corner.w <= 0) return null;
+    const x = corner.x / corner.w;
+    const y = corner.y / corner.w;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  // Clipped against the [-1, 1] cube, so a body mostly off-screen is charged
+  // only for the part of the screen it can actually reach.
+  const width = Math.min(maxX, 1) - Math.max(minX, -1);
+  const height = Math.min(maxY, 1) - Math.max(minY, -1);
+  if (width <= 0 || height <= 0) return 0;
+  // NDC spans 2×2, so that is the whole viewport.
+  return (width * height) / 4;
+}
+
+/**
  * One horizontal planar-reflection render source shared by every consumer in a
  * River Water Body group. It intentionally owns no visible geometry: consumers
  * call {@link update} during their draw, while this source hides all consumers
@@ -54,6 +117,9 @@ export class PlanarReflectionSource {
   private readonly minUpdateMs: number;
   private lastUpdateAt = -Infinity;
   private rendering = false;
+  /** Scratch for the per-frame coverage gate, which must not allocate. */
+  private readonly consumerBounds = new Box3();
+  private readonly viewProjection = new Matrix4();
 
   constructor(planeY: number, quality: PlanarReflectionQuality) {
     const settings = QUALITY_SETTINGS[quality];
@@ -85,6 +151,10 @@ export class PlanarReflectionSource {
   /** Updates at most once per profile interval, even when several ribbons draw in one frame. */
   update(renderer: WebGLRenderer, scene: Scene, camera: Camera): void {
     if (this.rendering) return;
+    // Before the interval check, and without stamping `lastUpdateAt`: a frame
+    // skipped for being invisible must not also postpone the frame after it.
+    const coverage = this.screenCoverage(camera);
+    if (coverage !== null && coverage < PLANAR_REFLECTION_MIN_SCREEN_COVERAGE) return;
     const now = performance.now();
     if (now - this.lastUpdateAt < this.minUpdateMs) return;
     this.lastUpdateAt = now;
@@ -94,6 +164,26 @@ export class PlanarReflectionSource {
     } finally {
       this.rendering = false;
     }
+  }
+
+  /**
+   * How much of the screen this group's water covers this frame.
+   *
+   * Runs before the reflection rather than after, so the frame that brings water
+   * back on screen is the frame that refreshes it — there is no stale capture to
+   * see on the way in. Hidden consumers are left out: a body that is not drawn
+   * cannot show a reflection.
+   */
+  private screenCoverage(camera: Camera): number | null {
+    const bounds = this.consumerBounds.makeEmpty();
+    for (const consumer of this.consumers) {
+      if (consumer.visible) bounds.expandByObject(consumer);
+    }
+    const viewProjection = this.viewProjection.multiplyMatrices(
+      camera.projectionMatrix,
+      camera.matrixWorldInverse,
+    );
+    return planarReflectionScreenCoverage(bounds, viewProjection);
   }
 
   private renderReflection(renderer: WebGLRenderer, scene: Scene, camera: Camera): void {

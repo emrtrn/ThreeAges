@@ -140,6 +140,29 @@ export function townUnlocksAvailable(snapshot: { readonly age: SettlementAge }):
   return snapshot.age === "town";
 }
 
+/**
+ * The whole placement gate for one building, read off its data
+ * (`requiredAge` + `requiredSettlementLevel`) against an owner's live tier.
+ *
+ * Both halves in one call, because they are one question and answering it in
+ * two places is how the palette and the click handler came to disagree about
+ * the age gate before. A later age clears the level gate outright — Kasaba Lv1
+ * is not *less* developed than Yerleşim Lv3, and a Tarla the settlement had
+ * open must not shut on the kingdom that advanced past it.
+ *
+ * Written against the two fields rather than `BuildingBalanceStats` so the AI
+ * and the tests can ask it about a plain literal.
+ */
+export function buildingUnlocked(
+  stats: { readonly requiredAge?: SettlementAge | undefined; readonly requiredSettlementLevel?: number | undefined },
+  tier: { readonly age: SettlementAge; readonly level: number },
+): boolean {
+  const requiredAge = stats.requiredAge ?? "settlement";
+  if (ageRank(tier.age) < ageRank(requiredAge)) return false;
+  if (ageRank(tier.age) > ageRank(requiredAge)) return true;
+  return tier.level >= (stats.requiredSettlementLevel ?? 1);
+}
+
 export class KingdomProgressionSystem {
   private readonly states = new Map<UnitOwner, OwnerState>();
 

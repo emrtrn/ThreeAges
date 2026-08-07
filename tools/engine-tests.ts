@@ -125,6 +125,7 @@ import {
   rtsAnimalActorRef,
   rtsCaravanActorRef,
   rtsBuildingActorRef,
+  rtsBuildingActorRefLadder,
   rtsUnitActorRef,
   rtsUnitOwnerActorRefIsAuthored,
   validateRtsContentCatalog,
@@ -147,6 +148,7 @@ import {
   buildActorPresentationTree,
   findActorComponentNode,
   fitPresentationToFootprint,
+  presentationExtent,
   tintedCopy,
 } from "../src/game/rts/content/rtsActorPresentationTree";
 import {
@@ -231,7 +233,7 @@ import { MarketPrices } from "../src/game/rts/economy/marketPricing";
 import { MarketStock } from "../src/game/rts/economy/marketStock";
 import { MarketTradeSystem } from "../src/game/rts/economy/marketTradeSystem";
 import { EconomyProductionSystem, producerHasSource } from "../src/game/rts/economy/economyProductionSystem";
-import { PastureSystem, penGeometryFor } from "../src/game/rts/wildlife/pastureSystem";
+import { PastureSystem, penStalls } from "../src/game/rts/wildlife/pastureSystem";
 import { WildlifeRetaliationSystem, type WildlifeStrike } from "../src/game/rts/wildlife/wildlifeRetaliation";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
 import { TradeSiteSystem } from "../src/game/rts/economy/tradeSiteSystem";
@@ -246,7 +248,7 @@ import {
 } from "../src/game/rts/economy/marketSupplySystem";
 import { supplyNotice } from "../src/game/rts/ui/rtsSupplyNotices";
 import { ForestSystem } from "../src/game/rts/economy/forestSystem";
-import { KingdomProgressionSystem, townUnlocksAvailable } from "../src/game/rts/progression/kingdomProgressionSystem";
+import { buildingUnlocked, KingdomProgressionSystem, townUnlocksAvailable } from "../src/game/rts/progression/kingdomProgressionSystem";
 import {
   DepotLogisticsSystem,
   roadCellTouchingFootprint,
@@ -596,7 +598,12 @@ import {
   resolveLandscapeSamplerBudget,
 } from "../engine/render-three/landscape";
 import { buildRiverWaterRibbon } from "../engine/render-three/riverWater";
-import { PLANAR_REFLECTION_EXCLUDED_LAYER, planarReflectionLayerMask } from "../engine/render-three/planarReflectionSource";
+import {
+  PLANAR_REFLECTION_EXCLUDED_LAYER,
+  PLANAR_REFLECTION_MIN_SCREEN_COVERAGE,
+  planarReflectionLayerMask,
+  planarReflectionScreenCoverage,
+} from "../engine/render-three/planarReflectionSource";
 import { resolveRiverWater, riverWaterReflectionGroupKey } from "../engine/scene/riverWater";
 import {
   evaluateLandscapeSplineSegment,
@@ -30559,10 +30566,13 @@ check("V3 Faz 2: fear is typed by what an animal is, not by who is nearby", () =
   const wolves = wildlife.all().filter((animal) => animal.stats.id === "wolf");
   const deer = wildlife.all().filter((animal) => animal.stats.id === "deer");
   const cattle = wildlife.all().filter((animal) => animal.stats.id === "cow");
-  // Penned where they stand: the pen's yard is the herd circle they are already
-  // in, so this changes ownership without moving anybody.
+  // Penned where they stand: a stall on the spot each cow is already standing
+  // on, so this changes ownership without moving anybody.
   for (const cow of cattle) {
-    assert.ok(wildlife.tame(cow.id, "player", wildProfileFor(animals.cow!, -4, 0)), "cattle pen");
+    assert.ok(
+      wildlife.tame(cow.id, "player", { x: cow.position.x, z: cow.position.z, facing: cow.facing }),
+      "cattle pen",
+    );
   }
 
   const startedAt = new Map(wildlife.all().map((animal) => [animal.id, animal.position.clone()]));
@@ -30587,12 +30597,11 @@ check("V3 Faz 2: fear is typed by what an animal is, not by who is nearby", () =
   }
   // The prey moved, and it moved *away* from the danger it started beside.
   assert.ok(deer.some((animal) => moved(animal) > 0), "deer react to what is standing beside them");
-  // Livestock: unmoved by the worker and unmoved by the pack (V2's rule kept).
+  // Livestock: unmoved by the worker and unmoved by the pack (V2's rule kept,
+  // and V2 Faz 8 makes it literal — a stalled animal does not move at all, so
+  // "it did not flee" is the same measurement as "it stood exactly still").
   for (const cow of cattle) {
-    assert.ok(
-      Math.hypot(cow.position.x + 4, cow.position.z) <= animals.cow!.roamRadius + 1e-6,
-      "penned livestock is frightened by nothing, predator included",
-    );
+    assert.equal(moved(cow), 0, "penned livestock is frightened by nothing, predator included");
   }
 });
 
@@ -31339,7 +31348,7 @@ check("V3 Faz 5: a wolf pulls down the game it names as prey and nothing else", 
 
   const penned = preyOf(preyId)[0] ?? assert.fail("no prey spawned");
   assert.ok(
-    wildlife.tame(penned.id, "player", wildProfileFor(preyStats, 0, 0)),
+    wildlife.tame(penned.id, "player", { x: penned.position.x, z: penned.position.z, facing: 0 }),
     "the fixture needs one owned animal standing in the wolf's own circle",
   );
   const bystander = preyOf(bystanderId)[0] ?? assert.fail("no bystander spawned");
@@ -33340,21 +33349,45 @@ check("V2 Faz 4: a shepherd walks out, calms an animal, drives it home, and the 
     penned.length < wildlife.all().length || wildlife.all().length === capacity,
     "capacity is what stopped it, not running out of cattle",
   );
+  // V2 Faz 8: penned is a *place in a line*, not a flag and no longer a yard to
+  // wander. Every assertion below is computed from the same `penStalls` the
+  // runtime posts them at, so a re-authored footprint, spacing or capacity keeps
+  // this true — what is pinned is that the pen is a row and that each animal is
+  // standing in its own place in it.
+  const stalls = penStalls(structure);
+  assert.equal(stalls.length, capacity, "the pasture offers exactly one stall per animal it may hold");
+  const occupied = new Set<number>();
   for (const animal of penned) {
-    // Penned, which is a place and not a flag: it grazes in the yard around its
-    // pasture. Derived from the footprint, so this holds at any building size.
-    const distance = Math.hypot(animal.position.x - structure.x, animal.position.z - structure.z);
-    const yard = penGeometryFor(structure);
+    const slot = stalls.findIndex((stall) =>
+      Math.hypot(animal.position.x - stall.x, animal.position.z - stall.z) < 1e-6);
+    assert.ok(slot >= 0, `a penned animal stands on a stall, not somewhere in a yard (${animal.position.x.toFixed(2)}, ${animal.position.z.toFixed(2)})`);
+    assert.equal(occupied.has(slot), false, "and no two animals were driven into the same stall");
+    occupied.add(slot);
+    // Compared as an angle rather than as a number: facing is normalised on its
+    // way through the shared turn helper, so "the same heading" and "the same
+    // radian" are not the same test.
+    const offBy = animal.facing - (stalls[slot]?.facing ?? 0);
     assert.ok(
-      distance >= yard.roamInnerRadius - 1e-6 && distance <= yard.roamRadius + 1e-6,
-      `a penned animal grazes in the yard, not in the barn (${distance.toFixed(2)})`,
+      Math.abs(Math.atan2(Math.sin(offBy), Math.cos(offBy))) < 1e-3,
+      "it faces into the pen, like the rest of the row",
+    );
+    // The whole of Faz 8's claim: what stands there is an animated body, not an
+    // animal that thinks. No speed, no lead, no roaming — and the activity that
+    // puts it on the asset's `Eating` clip.
+    assert.equal(animal.speed, 0, "a stalled animal is not moving");
+    assert.equal(animal.activity, "grazing", "and is on its eating clip, not an idle pose");
+    assert.notEqual(animal.stall, null, "penning is what replaced its behaviour, not something layered over it");
+    assert.equal(animal.lead, null, "a penned animal is no longer being led by anyone");
+    assert.equal(animal.stats.id, cow.id, "the tameable species is what was taken");
+    const distance = Math.hypot(animal.position.x - structure.x, animal.position.z - structure.z);
+    assert.ok(
+      distance > Math.hypot(structure.stats.footprint.width / 2, structure.stats.footprint.depth / 2) - 1e-6,
+      `a penned animal stands outside the barn, not in it (${distance.toFixed(2)})`,
     );
     assert.ok(
       distance < (structure.economy?.gatherRadius ?? 0),
       "and never outside the reach of the pasture that owns it",
     );
-    assert.equal(animal.lead, null, "a penned animal is no longer being led by anyone");
-    assert.equal(animal.stats.id, cow.id, "the tameable species is what was taken");
   }
   // The crew is released once the pen is full: shepherds are workers, and §55's
   // rule that nothing may hold a worker forever applies to herding too.
@@ -33579,6 +33612,17 @@ check("V2 Faz 5: razing a pasture frees its herd instead of deleting it", () => 
   const penned = pasture.pennedAnimals(structure);
   assert.ok(penned.length > 0, "there is a herd to free");
   const ids = penned.map((animal) => animal.id);
+  // Where each body was standing in the line, taken *before* the barn comes
+  // down: V2 Faz 8's rule is that the animation's post is the spawn point, so
+  // this is the only witness that can tell a freed animal from a re-spawned one.
+  const stood = new Map(penned.map((animal) => [animal.id, animal.position.clone()]));
+  const stalls = penStalls(structure);
+  for (const animal of penned) {
+    assert.ok(
+      stalls.some((stall) => Math.hypot(animal.position.x - stall.x, animal.position.z - stall.z) < 1e-6),
+      "the pen really is a row of stalls before it burns",
+    );
+  }
 
   structures.destroy(structure);
   fixture.tick();
@@ -33588,6 +33632,16 @@ check("V2 Faz 5: razing a pasture frees its herd instead of deleting it", () => 
     const animal = wildlife.animalById(id) ?? assert.fail(`animal ${id} vanished with the building`);
     assert.equal(animal.owner, "wild", "its livestock is wild again");
     assert.equal(animal.lead, null, "and nobody is leading it");
+    // The AI comes back on where the animated body was, not at the barn's pivot
+    // and not back at the herd it was driven from. One tick of grazing has run,
+    // so it is measured as "it started from the stall" rather than "it is still
+    // standing on it".
+    assert.equal(animal.stall, null, "it is a thinking animal again, not a body at a post");
+    const from = stood.get(id) ?? assert.fail(`no recorded stall for ${id}`);
+    assert.ok(
+      Math.hypot(animal.roamProfile.homeX - from.x, animal.roamProfile.homeZ - from.z) < 1e-6,
+      "the herd it now grazes is centred on the stall it was freed from",
+    );
     // Wild again means huntable again: the opponent who razed the barn now has
     // to run the cattle down like any other herd.
     assert.ok(
@@ -33601,6 +33655,100 @@ check("V2 Faz 5: razing a pasture frees its herd instead of deleting it", () => 
       "and settles on the ground it is standing on",
     );
   }
+  fixture.territory.dispose();
+});
+
+// --- Pasture V2 Faz 8: the pen is a feeding line, and the line is not AI ---
+
+check("V2 Faz 8: a pasture's stalls are one evenly spaced row in front of the building", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const pastureStats = buildings.pasture ?? assert.fail("pasture balance missing");
+  const structures = new PlacedStructureSystem();
+  const structure = structures.place("player", pastureStats, 10, -4);
+  const capacity = structure.economy?.livestockCapacity ?? assert.fail("pen capacity missing");
+  const stalls = penStalls(structure);
+
+  assert.equal(stalls.length, capacity, "one place per animal the tier's pen may hold");
+  const halfDiagonal = Math.hypot(
+    structure.stats.footprint.width / 2,
+    structure.stats.footprint.depth / 2,
+  );
+  const spacings = new Set<string>();
+  for (const [index, stall] of stalls.entries()) {
+    // Outside the barn and inside the pasture's own reach: the two bounds the
+    // yard used to carry, kept, because they are what stops a stall being drawn
+    // through the wall or out in a neighbour's field.
+    const distance = Math.hypot(stall.x - structure.x, stall.z - structure.z);
+    assert.ok(distance > halfDiagonal, `stall ${index} stands clear of the footprint`);
+    assert.ok(distance < (structure.economy?.gatherRadius ?? 0), `stall ${index} is inside the pasture's reach`);
+    assert.equal(stall.facing, stalls[0]?.facing, "the whole row looks the same way, into the pen");
+    if (index > 0) {
+      const previous = stalls[index - 1]!;
+      spacings.add(Math.hypot(stall.x - previous.x, stall.z - previous.z).toFixed(6));
+    }
+  }
+  // A queue, which is the picture the phase exists for: consecutive places are
+  // one fixed gap apart. Two distinct gaps are allowed rather than one, because a
+  // tier whose pen outgrows the face wraps to a second row and the step between
+  // rows is the second value — so raising `livestockCapacity` stays a tuning
+  // decision rather than a red build.
+  assert.ok(spacings.size <= 2, `the row is evenly spaced (gaps: ${[...spacings].join(", ")})`);
+  assert.equal(
+    new Set(stalls.map((stall) => `${stall.x.toFixed(4)}:${stall.z.toFixed(4)}`)).size,
+    capacity,
+    "and no two animals are sent to the same spot",
+  );
+  // Nothing stands inside anything else, which is the assertion a spacing test is
+  // really for — a cow is about a unit across at this scale.
+  for (const [index, stall] of stalls.entries()) {
+    for (const other of stalls.slice(index + 1)) {
+      assert.ok(
+        Math.hypot(stall.x - other.x, stall.z - other.z) >= 1.5,
+        "no two stalls overlap",
+      );
+    }
+  }
+});
+
+check("V2 Faz 8: a penned animal stops being simulated — it stands, eats, and ignores the field", () => {
+  const fixture = filledPastureFixture();
+  const { structure, pasture, wildlife, units } = fixture;
+  const penned = pasture.pennedAnimals(structure);
+  assert.ok(penned.length > 0, "the pen filled, or this proves nothing");
+  const parked = penned.map((animal) => ({ animal, at: animal.position.clone() }));
+
+  // Everything that moves a wild animal, all at once: a crowd standing on top of
+  // the pen (fright), a predator warning fired straight at it (V3's threat), and
+  // a lead as if a shepherd had grabbed it. None of them is a state a penned
+  // animal can enter, and this is the test that says so rather than a comment.
+  for (const { animal } of parked) {
+    animal.fleeFromPredator({ x: animal.position.x, z: animal.position.z });
+    animal.lead = { x: animal.position.x + 20, z: animal.position.z, follow: true };
+  }
+  for (let index = 0; index < 6; index += 1) units.spawn("player", structure.x, structure.z, RTS_TEST_WORKER_STATS);
+  const crowd = units.all().map((unit) => unit.position);
+  for (let index = 0; index < 600; index += 1) {
+    wildlife.update(0.25, crowd);
+    pasture.update(0.25);
+  }
+
+  for (const { animal, at } of parked) {
+    assert.equal(
+      Math.hypot(animal.position.x - at.x, animal.position.z - at.z),
+      0,
+      "150 seconds of crowds, predators and a lead moved it not one unit",
+    );
+    assert.equal(animal.speed, 0, "so its clip is a standing one");
+    assert.equal(animal.activity, "grazing", "and the standing one is `Eating`");
+    assert.equal(animal.owner, "player", "it is still the kingdom's animal throughout");
+  }
+  assert.equal(
+    pasture.pennedAnimals(structure).length,
+    penned.length,
+    "and the pen still holds exactly what it held",
+  );
   fixture.territory.dispose();
 });
 
@@ -33834,8 +33982,8 @@ check("V2 Faz 4: your own livestock is never fogged, and the opponent's still is
   const [mine, theirs] = wildlife.all();
   if (!mine || !theirs) return assert.fail("the two herds did not spawn");
   // Both penned, one to each kingdom, and nobody can see either point.
-  wildlife.tame(mine.id, "player", { homeX: -30, homeZ: -30, roamRadius: 2, walkSpeed: 1, fleeSpeed: 1, fleeRadius: 0, fleeSeconds: 0, fleeRecoverySeconds: 0 });
-  wildlife.tame(theirs.id, "enemy", { homeX: 30, homeZ: 30, roamRadius: 2, walkSpeed: 1, fleeSpeed: 1, fleeRadius: 0, fleeSeconds: 0, fleeRecoverySeconds: 0 });
+  wildlife.tame(mine.id, "player", { x: -30, z: -30, facing: 0 });
+  wildlife.tame(theirs.id, "enemy", { x: 30, z: 30, facing: 0 });
   view.setPresentationFactory(() => ({
     root: new Object3D(),
     pickTargets: [],
@@ -37176,6 +37324,80 @@ check("Actor presentation Faz 3: fitting a multi-mesh Actor keeps every authored
   wheat.getWorldPosition(wheatWorld);
   const after = (wheatWorld.x - fitted.min.x) / (fitted.max.x - fitted.min.x);
   assert.ok(Math.abs(before - after) < 1e-6, "the wheat keeps its place within the field");
+});
+
+check("Actor presentation Faz 3: one level ladder is fitted with one scale, so levelling up grows the building", () => {
+  // The pack models a ladder as one building: the finished form, and earlier
+  // levels that are literally a corner of it in the same coordinate space. Here,
+  // a 2x2 finished model and the 1x1 back-left quarter that precedes it.
+  const finished = () => {
+    const actor = new Group();
+    const box = new Mesh(new BoxGeometry(2, 1, 2), new MeshBasicMaterial());
+    box.position.set(0, 0.5, 0);
+    actor.add(box);
+    return actor;
+  };
+  const partial = () => {
+    const actor = new Group();
+    const box = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
+    box.position.set(-0.5, 0.5, -0.5);
+    actor.add(box);
+    return actor;
+  };
+
+  const ladder = presentationExtent(finished());
+  assert.deepEqual(ladder, { width: 2, depth: 2 });
+
+  const grown = finished();
+  const early = partial();
+  fitPresentationToFootprint(grown, 6, 6, ladder);
+  fitPresentationToFootprint(early, 6, 6, ladder);
+
+  assert.ok(Math.abs(grown.scale.x - early.scale.x) < 1e-9, "every rung is scaled by the same factor");
+  const grownBounds = new Box3().setFromObject(grown);
+  const earlyBounds = new Box3().setFromObject(early);
+  assert.ok(Math.abs((grownBounds.max.x - grownBounds.min.x) - 6 * 0.86) < 1e-6, "the finished model fills the footprint");
+  // Half the model, half the size, and standing exactly where it will stand once
+  // the rest is built — the two facts the reported bug broke together.
+  assert.ok(Math.abs((earlyBounds.max.x - earlyBounds.min.x) - 3 * 0.86) < 1e-6, "an early level stays half the size");
+  assert.ok(Math.abs(earlyBounds.min.x - grownBounds.min.x) < 1e-6, "and keeps the corner the artist put it in");
+  assert.ok(Math.abs(earlyBounds.min.z - grownBounds.min.z) < 1e-6);
+  assert.ok(Math.abs(earlyBounds.max.x - (grownBounds.min.x + grownBounds.max.x) / 2) < 1e-6);
+  // Partial or not, a model stands on the foundation rather than at the height
+  // the finished one would reach.
+  assert.ok(Math.abs(earlyBounds.min.y - 0.18) < 1e-6, "an early level still stands on the foundation");
+  assert.ok(Math.abs(grownBounds.min.y - 0.18) < 1e-6);
+
+  // Without a reference every model is its own, which is what made a quarter of a
+  // building render at the full building's size — and made levelling up shrink it.
+  const alone = partial();
+  fitPresentationToFootprint(alone, 6, 6);
+  const aloneBounds = new Box3().setFromObject(alone);
+  assert.ok(Math.abs((aloneBounds.max.x - aloneBounds.min.x) - 6 * 0.86) < 1e-6);
+});
+
+check("Actor presentation Faz 3: a building's ladder is exactly the refs its per-level lookup can return", () => {
+  const catalog = shippedRtsContentCatalog();
+  for (const buildingId of Object.keys(catalog.buildings)) {
+    for (const age of ["settlement", "town"] as const) {
+      for (const state of ["completed", "construction"] as const) {
+        const ladder = rtsBuildingActorRefLadder(catalog, buildingId, state, age);
+        assert.ok(ladder.length > 0, `${buildingId} @${age} has no ladder to scale against`);
+        for (let level = 1; level <= 3; level += 1) {
+          const ref = rtsBuildingActorRef(catalog, buildingId, state, level, age);
+          assert.ok(
+            ref && ladder.includes(ref),
+            `${buildingId} @${age} level ${level} resolves to a ref outside its own ladder`,
+          );
+        }
+      }
+    }
+  }
+  // The hunting camp is why this exists: three distinct settlement models whose
+  // level 1 is a fraction of level 3, so the ladder — not the model — has to set
+  // the scale.
+  assert.equal(new Set(rtsBuildingActorRefLadder(catalog, "hunting_camp", "completed", "settlement")).size, 3);
+  assert.equal(new Set(rtsBuildingActorRefLadder(catalog, "hunting_camp", "completed", "town")).size, 1);
 });
 
 check("Actor presentation Faz 3: construction, completed, preview and the centre share one Actor selection path", () => {
@@ -46630,6 +46852,78 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   );
 });
 
+check("the opening food is the hunt and the pen: the Tarla waits for the centre's second level", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const farm = buildings.farm ?? assert.fail("farm definition missing");
+
+  // The contract, not the tuning: *which* level is data, but the food economy
+  // has to open on the two finite sources and reach the endless one later. A
+  // retune may move the Tarla to Lv3; it may not move it to Lv1 without this
+  // saying so, because that is the design decision, not a magnitude.
+  assert.ok(
+    (farm.requiredSettlementLevel ?? 1) > 1,
+    "the Tarla is gated behind a centre level",
+  );
+  for (const id of ["hunting_camp", "pasture"] as const) {
+    const stats = buildings[id] ?? assert.fail(`${id} definition missing`);
+    assert.equal(stats.requiredAge ?? "settlement", "settlement");
+    assert.equal(stats.requiredSettlementLevel ?? 1, 1, `${id} is open from the first second`);
+  }
+
+  // The gate itself: shut below its level, open at it, and never re-shut by an
+  // age that is strictly further along.
+  assert.equal(buildingUnlocked(farm, { age: "settlement", level: 1 }), false);
+  assert.equal(buildingUnlocked(farm, { age: "settlement", level: farm.requiredSettlementLevel ?? 1 }), true);
+  assert.equal(buildingUnlocked(farm, { age: "town", level: 1 }), true, "a later age clears the level gate");
+  const archery = buildings.archery_range ?? assert.fail("archery_range definition missing");
+  assert.equal(buildingUnlocked(archery, { age: "settlement", level: 3 }), false, "the age gate still holds");
+
+  // The AI is bound by the same data, and drops the want rather than parking the
+  // §42 build slot on a request that cannot succeed.
+  const openingOrder = buildOrder(aiTestBlackboard({ centerLevel: 1 }), AI_TEST_BALANCE, buildings);
+  assert.ok(!openingOrder.includes("farm"), "a locked Tarla is not wanted at the opening tier");
+  assert.equal(openingOrder[0], "lumber_camp");
+  assert.ok(
+    openingOrder.includes("hunting_camp") && openingOrder.includes("pasture"),
+    "the hunt and the pen are what the opening food plan asks for",
+  );
+  assert.ok(
+    buildOrder(
+      aiTestBlackboard({ centerLevel: farm.requiredSettlementLevel ?? 1 }),
+      AI_TEST_BALANCE,
+      buildings,
+    ).includes("farm"),
+    "the want returns with the level that opens it",
+  );
+
+  // And the enforcement is the construction service both kingdoms share, so an
+  // authored expansion recipe naming the Tarla by id is refused too — as a wait
+  // ("locked-tier"), never as a bad site.
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 500, wood: 500 }, 20);
+  const navigation = new RtsNavigation();
+  const territory = new TerritoryControlSystem(() => [{ owner: "player", x: 0, z: 0, radius: 20 }]);
+  territory.refresh();
+  let level = 1;
+  const construction = new StructureConstructionService(
+    buildings, structures, kingdoms, navigation, () => structures.navigationBlockers(), territory,
+    () => {}, () => {}, undefined, () => [], () => [], () => 0,
+    (_owner, stats) => buildingUnlocked(stats, { age: "settlement", level }),
+  );
+  const early = construction.build("player", "farm", 0, 0);
+  assert.equal(early.built, false);
+  assert.equal(early.built === false && early.reason, "locked-tier");
+  assert.equal(kingdoms.get("player").wallet.amount("wood"), 500, "a refused build spends nothing");
+  assert.equal(construction.build("player", "hunting_camp", 12, 0).built, true, "the hunt is open at Lv1");
+  level = farm.requiredSettlementLevel ?? 1;
+  assert.equal(construction.build("player", "farm", 0, 0).built, true, "and the Tarla opens with the level");
+  territory.dispose();
+  structures.clear();
+});
+
 check("Faz 6: a kingdom fed by hunting is not diagnosed as starving, and a spent camp is", () => {
   // Everything but the food source is settled, so what these three fixtures
   // measure is only which building the food came from and whether it still has a
@@ -50927,6 +51221,47 @@ check("River Water Body resolves defaults and only saves presentation fields", (
   assert.notEqual(riverWaterReflectionGroupKey(shared, -1.5), riverWaterReflectionGroupKey(shared, -1.4));
   assert.equal(PLANAR_REFLECTION_EXCLUDED_LAYER, 31);
   assert.equal(planarReflectionLayerMask(0xffffffff) >>> 0, 0x7fffffff);
+});
+
+check("Planar reflection skips its nested scene render when the water is not worth it", () => {
+  // The measured defect this gate exists for: one river authored at
+  // `sharedPlanar/high`, a strategic camera that barely showed it, and a nested
+  // full-scene render every frame regardless — 7.3 ms of GPU and 8.7 ms of CPU,
+  // over half the frame, for a reflection that was not visible in game mode.
+  const camera = new PerspectiveCamera(50, 16 / 9, 0.1, 1000);
+  camera.position.set(0, 0, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const viewProjection = new Matrix4().multiplyMatrices(
+    camera.projectionMatrix,
+    camera.matrixWorldInverse,
+  );
+  const coverage = (min: Vector3, max: Vector3) =>
+    planarReflectionScreenCoverage(new Box3(min, max), viewProjection);
+
+  // Filling the view is worth rendering; a body far off to the side is not on
+  // screen at all, and both must come out as numbers rather than as `null`.
+  const ahead = coverage(new Vector3(-8, -8, -1), new Vector3(8, 8, 1));
+  assert.ok(ahead !== null && ahead > 0.5, `expected a large coverage, got ${ahead}`);
+  assert.equal(coverage(new Vector3(400, -1, -1), new Vector3(402, 1, 1)), 0);
+
+  // The case that was costing the frame: a sliver on screen. It must fall under
+  // the gate, or the defect survives its own regression test.
+  const sliver = coverage(new Vector3(-0.05, -0.05, -0.5), new Vector3(0.05, 0.05, 0.5));
+  assert.ok(sliver !== null && sliver > 0, "a sliver is still on screen");
+  assert.ok(
+    sliver < PLANAR_REFLECTION_MIN_SCREEN_COVERAGE,
+    `a sliver must not buy a whole scene render (${sliver})`,
+  );
+
+  // Straddling the eye is where the perspective divide stops meaning anything —
+  // a box can wrap around the viewer and project inside-out. The gate answers
+  // `null` there, and `update` reads `null` as *render*: a cheap test may cost a
+  // frame it did not owe, never drop one it did.
+  assert.equal(coverage(new Vector3(-5, -5, -5), new Vector3(5, 5, 20)), null);
+
+  // An empty group covers nothing, and must not read as "cannot tell".
+  assert.equal(planarReflectionScreenCoverage(new Box3().makeEmpty(), viewProjection), 0);
 });
 
 check("River Water ribbon follows spline width with arc-length UVs and flow attributes", () => {

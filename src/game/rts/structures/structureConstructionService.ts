@@ -24,6 +24,16 @@ import type { PlacedStructure, PlacedStructureSystem } from "./placedStructureSy
 
 export type StructureBuildFailure =
   | "unknown-building"
+  /**
+   * The owner's centre tier does not open this building yet
+   * (`requiredAge` + `requiredSettlementLevel`).
+   *
+   * Not a placement reason: it is true of every square on the map, so it is
+   * refused here rather than by {@link validateBuildingPlacement}, and callers
+   * must treat it as "not yet" rather than "bad site" — a Tarla anchor
+   * blacklisted at Yerleşim Lv1 would still be blacklisted at Lv2.
+   */
+  | "locked-tier"
   | "outside-map"
   | "outside-control"
   | "blocked"
@@ -63,6 +73,18 @@ export class StructureConstructionService {
     private readonly liveUnits: () => readonly Unit[] = () => [],
     /** Samples the current rendered ground so foundations retain their build elevation. */
     private readonly groundHeightAt: (x: number, z: number) => number = () => 0,
+    /**
+     * The centre-led tier gate, asked once per build attempt. Both kingdoms pass
+     * through here, which is what makes "the AI builds under the player's rules"
+     * a fact of the code rather than a promise each caller keeps separately —
+     * the palette and the AI's want list both filter earlier, for their own UX
+     * and planning reasons, but neither is the enforcement.
+     *
+     * Omitted, every building is unlocked: the headless placement tests have no
+     * progression system, and a default that locked them would refuse builds for
+     * a reason those tests never opted into.
+     */
+    private readonly isUnlocked: (owner: UnitOwner, stats: BuildingBalanceStats) => boolean = () => true,
   ) {}
 
   /**
@@ -96,6 +118,9 @@ export class StructureConstructionService {
     const stats = this.buildings[buildingId];
     if (!stats || buildingId === "command_center") {
       return { built: false, reason: "unknown-building", result: null };
+    }
+    if (!this.isUnlocked(owner, stats)) {
+      return { built: false, reason: "locked-tier", result: null };
     }
     const result = this.validate(owner, buildingId, x, z);
     if (!result) return { built: false, reason: "unknown-building", result: null };

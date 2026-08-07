@@ -24,6 +24,11 @@ export type AiFailureReason =
   | "path-blocked"
   | "territory-invalid"
   | "required-node-missing"
+  /**
+   * The kingdom's centre tier does not open this building yet. A wait, never a
+   * bad site: the plan retries it unchanged once the centre levels up.
+   */
+  | "not-yet-unlocked"
   | "timeout"
   | "superseded";
 

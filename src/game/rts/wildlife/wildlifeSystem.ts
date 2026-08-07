@@ -33,6 +33,7 @@ import {
   advanceHunt,
   advanceLed,
   advanceRoam,
+  advanceStalled,
   initialRoamState,
   makeWildlifeRng,
   randomPointInHerd,
@@ -42,6 +43,7 @@ import {
   type RoamState,
   type ThreatPoint,
   type WildlifeLead,
+  type WildlifeStall,
 } from "./wildlifeRoaming";
 
 /** Below this, a carcass counts as picked clean rather than carrying a rounding crumb. */
@@ -169,6 +171,22 @@ export class WildlifeAnimal implements CombatTarget {
    */
   lead: WildlifeLead | null = null;
   /**
+   * Where this animal stands in its pasture's feeding line, once a shepherd has
+   * brought it home — pasture plan V2 Faz 8.
+   *
+   * Set, this animal has no behaviour left: {@link update} takes the
+   * {@link advanceStalled} branch above everything else, so it does not graze,
+   * does not roam, does not bolt and cannot be led anywhere. What remains on the
+   * field is an animated body at a fixed post — the pen is livestock, not a herd
+   * that happens to live near a barn, and a cow wandering its own yard was the
+   * picture that said otherwise.
+   *
+   * Cleared, the animal is an animal again from the position it was standing in,
+   * which is the whole of "razing a pasture turns the herd loose where it stood"
+   * ({@link returnToWild}).
+   */
+  stall: WildlifeStall | null = null;
+  /**
    * Where this predator is running, set by {@link PredatorSystem} (V3 Faz 3).
    *
    * The third movement mode's handle, and deliberately the same shape as
@@ -241,6 +259,10 @@ export class WildlifeAnimal implements CombatTarget {
    */
   get activity(): WildlifeActivity {
     if (this.speed > 0) return "moving";
+    // Standing at its stall is standing at a trough: the pen's animals are on
+    // the `Eating` clip for as long as they are penned, whatever species the
+    // table lets a kingdom tame.
+    if (this.stall) return "grazing";
     // A predator on its kill is the one carnivore that *is* grazing, and saying
     // so is what puts it on the `Eating` clip its sidecar already carries — the
     // whole of "the wolf eats the deer" for the price of the flag the pause
@@ -290,6 +312,22 @@ export class WildlifeAnimal implements CombatTarget {
   update(deltaSeconds: number, threat: ThreatPoint | null = null): void {
     if (this.dead) {
       this.speed = 0;
+      return;
+    }
+    if (this.stall) {
+      // Above every other branch on purpose: a penned animal is out of the
+      // simulation's hands entirely. Threats, hunts and leads are all ignored
+      // rather than merely unlikely, so nothing that walks past the barn can
+      // start a cow thinking again.
+      const stalled = advanceStalled(
+        { x: this.position.x, z: this.position.z, facing: this.facing },
+        this.stall,
+        this.profile,
+        deltaSeconds,
+      );
+      this.position.set(stalled.x, this.position.y, stalled.z);
+      this.facing = stalled.facing;
+      this.speed = stalled.speed;
       return;
     }
     if (this.lead) {
@@ -510,24 +548,29 @@ export class WildlifeSystem implements ResourceSource {
   }
 
   /**
-   * Hand a calmed animal to a kingdom and re-home it in its pasture's yard.
+   * Hand a calmed animal to a kingdom and post it at its place in the pen's line.
    *
    * This is the one call that takes an animal out of the wild economy: from here
    * `huntable` refuses it, so the hunting camp next door stops counting it as
    * meat and can never shoot it. Its claim is dropped at the same moment — the
    * shepherd's job is done, and a claim left behind would keep the next shepherd
    * away from an animal nobody is walking any more.
+   *
+   * V2 Faz 8 changed what it is handed: a {@link WildlifeStall} rather than a
+   * yard to graze. The roam profile is left exactly as it was, because from here
+   * nothing reads it — until the pen is razed, when {@link returnToWild} builds a
+   * fresh one from wherever this animal is standing.
    */
-  tame(animalId: string, owner: UnitOwner, pen: RoamProfile): boolean {
+  tame(animalId: string, owner: UnitOwner, stall: WildlifeStall): boolean {
     const animal = this.byId.get(animalId);
     if (!animal || animal.dead || animal.owner !== "wild") return false;
     animal.owner = owner;
     animal.lead = null;
     // A kingdom's animal hunts nobody: cleared here as well as in
-    // {@link PredatorSystem}, because this is the call that moves its den and a
-    // chase surviving it would be aimed from the new pen.
+    // {@link PredatorSystem}, because a chase surviving the drive would be aimed
+    // out of the pen this animal can no longer leave.
     animal.hunt = null;
-    animal.rehome(pen);
+    animal.stall = stall;
     if (animal.reservedByWorkerId !== null) this.releaseReservation(animal.reservedByWorkerId);
     return true;
   }
@@ -540,30 +583,43 @@ export class WildlifeSystem implements ResourceSource {
    * instead would be the cheaper code and the worse rule — the plan is explicit
    * that razing a pasture *frees* the herd rather than destroying it, and an
    * opponent who burns your barn should have to hunt the cattle down.
+   *
+   * The animal comes back to life at the post it was standing at, because the
+   * stall is cleared without moving the body: the burnt pen's line *is* the herd's
+   * spawn pattern, which is the only place either half of the pasture keeps the
+   * other's positions (V2 Faz 8).
    */
   returnToWild(animalId: string): boolean {
     const animal = this.byId.get(animalId);
     if (!animal || animal.owner === "wild") return false;
     animal.owner = "wild";
     animal.lead = null;
+    animal.stall = null;
     animal.rehome(wildProfileFor(animal.stats, animal.position.x, animal.position.z));
     return true;
   }
 
   /**
    * Add an animal born in a pen (Faz 5's breeding), already owned and already
-   * standing in its pasture's yard.
+   * standing at its own place in the line.
    *
    * Ids are minted rather than authored, and they must stay unique for the life
    * of the match: presentation keys its bodies on them, and a reused id would
    * hand a newborn the art of an animal that is no longer there.
+   *
+   * Placed exactly on its stall rather than walked in: nobody drove this one
+   * anywhere, so there is no arrival to animate — it is simply another body in
+   * the row from the frame it exists.
    */
-  bear(species: string, owner: UnitOwner, pen: RoamProfile): WildlifeAnimal | null {
+  bear(species: string, owner: UnitOwner, stall: WildlifeStall): WildlifeAnimal | null {
     const stats = this.balance[species];
     if (!stats) return null;
     const id = `born:${species}:${this.bornCount += 1}`;
-    const animal = new WildlifeAnimal(id, id, stats, pen);
+    const animal = new WildlifeAnimal(id, id, stats, wildProfileFor(stats, stall.x, stall.z));
     animal.owner = owner;
+    animal.stall = stall;
+    animal.position.set(stall.x, animal.position.y, stall.z);
+    animal.facing = stall.facing;
     this.animals.push(animal);
     this.byId.set(id, animal);
     return animal;

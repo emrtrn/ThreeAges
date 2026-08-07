@@ -132,16 +132,40 @@
     },
     "hunting_camp": {
       "levels": {
-        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp.actor.json",
-        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp.actor.json",
-        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp.actor.json"
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T1.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T2.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T3.actor.json"
+      },
+      "ages": {
+        "settlement": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T3.actor.json"
+        },
+        "town": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T3.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T3.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_HuntingCamp_FirstAge_T3.actor.json"
+        }
       }
     },
     "pasture": {
       "levels": {
-        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture.actor.json",
-        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture.actor.json",
-        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture.actor.json"
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T1.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T2.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T3.actor.json"
+      },
+      "ages": {
+        "settlement": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T1.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T2.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T3.actor.json"
+        },
+        "town": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T3.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T3.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Pasture_FirstAge_T3.actor.json"
+        }
       }
     },
     "quarry": {

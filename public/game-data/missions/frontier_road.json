@@ -22,8 +22,8 @@
     },
     {
       "id": "food_flowing",
-      "title": "Tarla Kur",
-      "why": "Yiyecek işçi ve asker eğitir; tarla da aynı yola değmeli.",
+      "title": "Avcı Kulübesi Kur",
+      "why": "İlk yiyecek avdan gelir: kulübeyi geyiklerin yanına kur, o da yola değsin. Tarla Merkez Lv2'de açılır.",
       "goal": {
         "kind": "producer-linked",
         "resourceId": "food",
@@ -32,7 +32,7 @@
       "guide": {
         "action": {
           "kind": "build",
-          "buildingId": "farm"
+          "buildingId": "hunting_camp"
         }
       }
     },
@@ -152,8 +152,8 @@
     },
     {
       "id": "second_farm",
-      "title": "İkinci Tarla Kur",
-      "why": "Aynı şey yiyecekte: tek tarla ne ordu besler ne çağ atlatır.",
+      "title": "Tarla Kur",
+      "why": "Merkez 2. seviyeye çıktı: Tarla artık açık. Av eninde sonunda biter, tarla bitmez.",
       "goal": {
         "kind": "producer-linked",
         "resourceId": "food",

@@ -16,7 +16,7 @@ import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import type { AssetManifest } from "@engine/assets/manifest";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import type { SettlementAge } from "@/game/data/gameDataTypes";
-import { rtsAnimalActorRef, rtsBuildingActorRef, rtsCaravanActorRef, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
+import { rtsAnimalActorRef, rtsBuildingActorRef, rtsBuildingActorRefLadder, rtsCaravanActorRef, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
 import {
   RtsActorPresentationError,
   parseRtsEffectManifestPaths,
@@ -26,7 +26,13 @@ import {
   validateRtsPresentationActor,
   type RtsMeshAsset,
 } from "./rtsContentValidation";
-import { buildActorPresentationTree, fitPresentationToFootprint, tintedCopy } from "./rtsActorPresentationTree";
+import {
+  buildActorPresentationTree,
+  fitPresentationToFootprint,
+  presentationExtent,
+  tintedCopy,
+  type PresentationExtent,
+} from "./rtsActorPresentationTree";
 import { createRtsActorPlaceholder } from "./rtsActorPlaceholder";
 import { bindRtsWheelSpins } from "./rtsPresentationMotion";
 import {
@@ -136,6 +142,12 @@ export class RtsActorVisualFactory {
   private manifest: AssetManifest | null = null;
   /** Refs that failed to load and now render as the explicit stand-in. */
   private readonly failures = new Map<RtsActorRef, string>();
+  /**
+   * The extent every level of one building+age+state is fitted against, keyed by
+   * that triple. Measuring it means building each rung's tree once; the cache is
+   * what keeps that off the path a placement preview walks every frame.
+   */
+  private readonly ladderExtents = new Map<string, PresentationExtent | null>();
   private requested = 0;
   private ready = false;
 
@@ -324,8 +336,46 @@ export class RtsActorVisualFactory {
     const visual = this.createActorVisual(actorRef);
     if (!visual) return null;
     visual.userData.rtsSharedModel = true;
-    fitPresentationToFootprint(visual, footprintWidth, footprintDepth);
+    fitPresentationToFootprint(
+      visual,
+      footprintWidth,
+      footprintDepth,
+      this.ladderExtent(buildingId, state, age),
+    );
     return visual;
+  }
+
+  /**
+   * The largest ground-plane extent in this building's level ladder at this age.
+   *
+   * Every rung is fitted against it rather than against itself, which is what
+   * makes levelling up an increase in size instead of a re-fit of whatever the
+   * artist happened to model for that level. Null when nothing in the ladder
+   * measures — then each model falls back to being its own reference, the old
+   * behaviour, which is still right for a single-model building.
+   */
+  private ladderExtent(
+    buildingId: string,
+    state: "construction" | "completed",
+    age: SettlementAge,
+  ): PresentationExtent | null {
+    const key = `${buildingId}|${state}|${age}`;
+    const cached = this.ladderExtents.get(key);
+    if (cached !== undefined) return cached;
+    let width = 0;
+    let depth = 0;
+    for (const ref of rtsBuildingActorRefLadder(this.catalog, buildingId, state, age)) {
+      // Built and thrown away: the clone shares its templates' geometry and
+      // materials, so measuring costs nodes, not GPU memory.
+      const rung = this.createActorVisual(ref);
+      if (!rung) continue;
+      const extent = presentationExtent(rung);
+      width = Math.max(width, extent.width);
+      depth = Math.max(depth, extent.depth);
+    }
+    const extent = width > 0 && depth > 0 ? { width, depth } : null;
+    this.ladderExtents.set(key, extent);
+    return extent;
   }
 
   dispose(): void {
@@ -351,6 +401,7 @@ export class RtsActorVisualFactory {
     this.definitions.clear();
     this.manifestMeshes.clear();
     this.failures.clear();
+    this.ladderExtents.clear();
     this.requested = 0;
     this.ready = false;
   }

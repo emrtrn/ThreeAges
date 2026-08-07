@@ -271,6 +271,14 @@ const BUILDINGS_FIELDS = [
     hint: "Bu binanın inşa edilebilmesi için gereken en düşük çağ. Boşsa Yerleşim çağından itibaren kurulabilir.",
   },
   {
+    path: "requiredSettlementLevel",
+    label: "Gerekli merkez kademesi (çağ içi 1-3)",
+    min: 1,
+    max: 3,
+    step: 1,
+    hint: "Bu binanın açılması için gereken çağ (requiredAge) içindeki asgari Merkez seviyesi. Boşsa çağın açıldığı anda kurulabilir. Örnek: Tarla = Yerleşim Lv2, ilk yiyecek Avcı Kulübesi ve Ağıl.",
+  },
+  {
     path: "maxHealth",
     label: "Can (temel)",
     min: 1,

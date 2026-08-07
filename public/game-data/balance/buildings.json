@@ -291,6 +291,7 @@
       "wood": 40
     },
     "constructionSeconds": 20,
+    "requiredSettlementLevel": 2,
     "maxHealth": 100,
     "visionRadius": 8,
     "economy": {

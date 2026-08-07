@@ -170,6 +170,18 @@ export function buildActorPresentationTree(
   return root;
 }
 
+/** Ground-plane size of a presentation tree, measured before it is fitted. */
+export interface PresentationExtent {
+  readonly width: number;
+  readonly depth: number;
+}
+
+/** The X/Z extent of a whole presentation tree, in the Actor's own units. */
+export function presentationExtent(model: Object3D): PresentationExtent {
+  const bounds = new Box3().setFromObject(model);
+  return { width: bounds.max.x - bounds.min.x, depth: bounds.max.z - bounds.min.z };
+}
+
 /**
  * Scale a whole Actor into its gameplay footprint and stand it on the foundation.
  *
@@ -177,19 +189,34 @@ export function buildActorPresentationTree(
  * lifted, so a multi-mesh Actor keeps every authored local offset: the wheat
  * stays where the author put it relative to the field instead of each mesh being
  * independently squeezed into the same box.
+ *
+ * `reference` is what the scale is derived *from*, and it is the difference
+ * between a building that grows and one that only changes shape. The art pack
+ * models a level ladder as one building in one coordinate space — the hunting
+ * camp's level 1 is literally the back-left quarter of the finished camp — so
+ * fitting each level to its own bounds blows the small ones up until every level
+ * fills the same square: level 1 rendered twice its intended size, sitting off
+ * its pad by twice its authored offset, and levelling up made the camp *shrink*.
+ * Passing the ladder's largest extent scales every level by the same factor, so
+ * a partial model stays partial and stays exactly where it will be once the
+ * building is finished. Omitted, the model is its own reference, which is the
+ * right answer for anything that has no siblings to agree with.
  */
 export function fitPresentationToFootprint(
   model: Object3D,
   footprintWidth: number,
   footprintDepth: number,
+  reference: PresentationExtent | null = null,
 ): void {
-  const sourceBounds = new Box3().setFromObject(model);
-  const sourceWidth = sourceBounds.max.x - sourceBounds.min.x;
-  const sourceDepth = sourceBounds.max.z - sourceBounds.min.z;
-  if (sourceWidth <= 0 || sourceDepth <= 0) return;
-  const scale = Math.min(footprintWidth / sourceWidth, footprintDepth / sourceDepth) * MODEL_FOOTPRINT_FILL;
+  const own = presentationExtent(model);
+  if (own.width <= 0 || own.depth <= 0) return;
+  const source = reference && reference.width > 0 && reference.depth > 0 ? reference : own;
+  const scale = Math.min(footprintWidth / source.width, footprintDepth / source.depth) * MODEL_FOOTPRINT_FILL;
   model.scale.multiplyScalar(scale);
   model.updateMatrixWorld(true);
+  // The lift is always measured on the model itself: a level that is only part of
+  // the building still has to stand on the foundation, not float at the height
+  // the finished one would.
   const fittedBounds = new Box3().setFromObject(model);
   model.position.y += FOUNDATION_TOP - fittedBounds.min.y;
 }

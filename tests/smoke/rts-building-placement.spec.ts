@@ -110,7 +110,13 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
     "Karakolu kontrol alanının hemen dışındaki nötr bir konuma yerleştirin.",
   );
   await page.getByRole("button", { name: "İptal", exact: true }).click();
-  await page.getByRole("button", { name: "Tarla", exact: true }).click();
+  // The opening food is the hunt and the pen: the Tarla is on the palette from
+  // the first second, shut, and says what it is waiting for. So the placement
+  // flow below is driven by the building the tier actually opens.
+  await page.getByRole("button", { name: "Ekonomi", exact: true }).click();
+  await expect(page.locator('[data-rts-building="farm"]')).toBeDisabled();
+  await expect(page.locator('[data-rts-building="farm"]')).toHaveAttribute("title", "Yerleşim Lv2'de açılır.");
+  await page.getByRole("button", { name: "Avcı Kulübesi", exact: true }).click();
   await expect(page.locator(".rts-build-status")).toHaveText("Haritada konum seçin.");
   await page.getByRole("button", { name: "İptal", exact: true }).click();
   await selectCommandCenter(page);

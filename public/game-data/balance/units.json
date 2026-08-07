@@ -73,8 +73,8 @@
     "chaseRange": 15,
     "visionRadius": 16,
     "damageMultipliers": {
-      "light": 0.35,
-      "heavy": 0.3,
+      "light": 4,
+      "heavy": 4,
       "structure": 2.5
     },
     "trainingSeconds": 18,

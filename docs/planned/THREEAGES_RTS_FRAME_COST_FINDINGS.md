@@ -1,11 +1,13 @@
 # ThreeAges RTS Kare Maliyeti — Bulgular ve Devam Notları
 
 Oluşturulma tarihi: 2026-08-07
-Durum: CPU tarafı çözüldü ve ölçüldü. GPU tarafı **açık** — ve bu oturumdaki GPU
-teşhislerinin çoğu yanlıştı; nedenleri aşağıda kayıtlı.
+Son güncelleme: 2026-08-07 (ikinci oturum)
+Durum: **CPU tarafı çözüldü. GPU tarafı da çözüldü — §8.** Sebep, kimsenin
+göremediği bir planar su yansımasıydı: karenin yarısı. §1-§7 birinci oturumun
+kaydıdır ve bir kısmı §8 tarafından geçersiz kılınmıştır; hangi bölümün
+geçersiz olduğu kendi başlığında yazar.
 Kapsam: `?debug` kare maliyeti tablosundan yola çıkan darboğaz avı; lojistik
-memoizasyonu (teslim edildi), arazi/GPU araştırması (sonuçsuz, ama elenmişler
-değerli).
+memoizasyonu (teslim edildi), arazi/GPU araştırması (ikinci oturumda çözüldü).
 
 Bu doküman iki şey için var: teslim edilen işin ne olduğunu kaydetmek, ve
 **aynı çıkmazlara tekrar girilmesini önlemek.** İkinci kısım daha uzun, çünkü bu
@@ -142,6 +144,9 @@ hipotezlerin kendisinden daha öğreticiydi.
 
 ### 4.1 `arazi/harita` sweep kovası "arazi" demek DEĞİL
 
+**ÇÖZÜLDÜ (§8.2).** Kova bölündü; içindeki sakin nehir suyunun planar
+yansımasıydı. Aşağısı bu maddenin neden doğru teşhis edildiğini kaydeder.
+
 **En önemli madde.** `src/game/rts/RtsApp.ts:2389` civarındaki GPU sweep adımı:
 
 ```ts
@@ -206,6 +211,13 @@ fragment işiyle değil (§4.3 ile de tutarlı). Ama bu **temiz biçimde
 ölçülmedi** — §4.1 ve §4.2 geçerliyken ölçülemezdi de. Beşinci bir hipotez
 üretmeden önce kovayı bölün ve sabit kameradan ölçün.
 
+**İkinci oturum eki — fill-rate artık ölçüldü.** Pencere alanı yarıya indirildi
+(2.05M → 1.03M piksel, `oran 1.00`, yani gizli HiDPI çarpanı yok): GPU tabanı
+16.89 → 13.99 ms, yani **−%17**. Piksel başına maliyet en fazla ~2.8 ms/Mpiksel;
+tam pencerede karenin en çok üçte biri fill'dir. Gerçek ama ikincil — `renderScale`
+düşürmek birkaç ms alır, görüntüyü bozar ve asıl sebebi (§8) yerinde bırakır.
+Hipotez ölü değil, rütbesi düştü.
+
 ### 4.5 `çizim` satırı ne ölçüyor
 
 `çizim`, `renderer.render()` etrafındaki duvar süresidir — GPU'nun çizme süresi
@@ -252,17 +264,112 @@ kullanmayın — commit edilmemiş her şeyi atar; hedefli Edit kullanın.
 
 ---
 
-## 7. Bir sonraki oturum için sıra
+## 7. Bir sonraki oturum için sıra — TAMAMLANDI
 
-1. **Sweep kovasını böl** (`RtsApp.ts`, `gpuSweepPlan`): `arazi/harita` yerine
-   arazi mesh'i / bitki örtüsü / nehir suyu / statik harita sanatı. Bu bir
-   teşhis aracı işidir, optimizasyon değil, ve onsuz ilerlemek körlemesinedir.
-2. **Sabit kamera protokolüyle yeniden ölç.** Tek oturum, tek kamera, önce/sonra.
-3. Ancak o zaman hedef seç. Baş şüpheli **alfa harmanlı bitki örtüsü
-   overdraw'ı** — 11 ms onun büyüklük sırasıdır — ama bu bir tahmindir ve bu
-   dokümanın konusu tahminlerin nasıl gittiğidir.
+1. ~~**Sweep kovasını böl**~~ — yapıldı (§8.3). Dört satır da eklendi.
+2. ~~**Sabit kamera protokolüyle yeniden ölç.**~~ — yapıldı.
+3. ~~Baş şüpheli **alfa harmanlı bitki örtüsü overdraw'ı**~~ — **yanlıştı.**
+   Ölçüldü: 0.62-0.74 ms. Doküman kendi konusuna sadık kaldı; bu beşinci
+   tahmindi ve o da tutmadı. Gerçek sebep §8.
 
-## 8. Yararlı komutlar
+---
+
+## 8. ÇÖZÜM — kimsenin görmediği su yansıması
+
+### 8.1 Ölçüm
+
+Level'ın tek `riverWaters` aktörü `reflectionMode: sharedPlanar`,
+`reflectionQuality: high` ile yazılmıştı. Kapatınca, **daha fazla içerikle**:
+
+| | yansıma açık | yansıma kapalı |
+| --- | --- | --- |
+| GPU taban (sweep) | 13.99 ms | **6.65 ms** (−52%) |
+| `çizim` ort | 16.90 ms | **8.17 ms** (−52%) |
+| kare ort | 21.55 ms | **13.39 ms** (−38%) |
+| draw call | 590 | 703 (*daha çok*) |
+| üçgen | 1.68M | 2.06M (*daha çok*) |
+
+### 8.2 Neden hiçbir deney onu bulamadı
+
+`PlanarReflectionSource` (`engine/render-three/planarReflectionSource.ts`)
+`high`'da 512×512, MSAA ×2, half-float bir hedefe **tüm sahneyi aynalanmış bir
+kameradan baştan render eder**, ve tek kapısı `minUpdateMs: 4` — yani pratikte
+her kare. Bunun üç sonucu, bu dokümandaki her başarısız deneyi açıklar:
+
+- Maliyeti **geçiş ve draw call başınadır, üçgen başına değil** → 1.13M üçgen
+  (sahnenin %54'ü) silmek 0.24 ms getirdi.
+- Hedef boyutu **construction'da sabitlenir** → pencereyi yarılamak (2.05M →
+  1.03M piksel) GPU'nun yalnızca %17'sini aldı; fill-rate hipotezi böyle
+  ölçülüp rütbesi düştü (bkz. §4.4: en fazla ~2.8 ms/Mpiksel).
+- Şeridin **kendi çiziminden** tetiklenir ve şerit `authoredWorld.root`
+  altındadır → `arazi/harita` kovasının içinde ama landscape / bitki örtüsü /
+  harita sanatı satırlarının hiçbirinde değil. Kova ile alt satırlarının toplamı
+  arasındaki o inatçı ~7-10 ms boşluk buydu.
+
+**Ve görünmüyordu.** Editörde görünen yansıma oyun modunda görünmüyordu; kamera
+ya nehre bakmıyordu ya da ufak bir dilimini görüyordu. Uzun bir spline şeridinin
+sınır kutusu büyük olduğu için frustum'da sayılıyor ve tam sahne render'ını yine
+tetikliyor.
+
+### 8.3 Bu oturumda inşa edilen araçlar
+
+- **GPU taraması artık köşeli.** Taban bir kez değil, **her adımın iki yanında**
+  ölçülür; satır kendi çiftinin ortasıyla karşılaştırılır. Sebebi: duraklatılmış
+  ucuz bir sahne GPU'yu düşük güç durumuna sokuyor, tek tabanlı tarama sonraki
+  adımları 3 kat yavaş okuyor ve tablo "içeriği kapatmak 7 ms *ekledi*" diyordu.
+  Sürücünün disjoint bayrağı bunu görmez — her süre gerçekten bir süredir,
+  sadece yavaşlamış bir GPU'nun. Kendi kazancı kadar oynayan satır artık
+  `belirsiz` basılır, tur sürüklenmesi meta satırında raporlanır.
+- **Dört alt satır:** `↳ arazi (landscape)`, `↳ bitki örtüsü`,
+  `↳ harita sanatı`, `↳ nehir suyu`. (§7.1'in istediği bölme.)
+- **`çözünürlük W×H · oran R · N piksel`** satırı overlay'de. Piksel başına
+  maliyet sorusunu tahminden çıkarır.
+
+### 8.4 Yeni ölçüm tuzakları
+
+- **Canlı CPU sayısını taramanın *duraklatılmış* tabanıyla kıyaslamayın.** Bu
+  oturumda tam bir tur boyunca "CPU-bound'sun" sonucuna bu hatadan varıldı;
+  §4.5 baştan doğruydu. İki canlı sayı yan yana konduğunda `çizim` her zaman
+  GPU'yu yakından takip etti.
+- **İç içe `renderer.render()`, `info.autoReset` yüzünden sayaçları karenin
+  ortasında sıfırlar.** Yansıma açıkken okunan `çizim N çağrı · M üçgen`
+  değerleri eksiktir. Taramanın GPU süreleri etkilenmez.
+
+### 8.5 Motor kusuru — kapatıldı
+
+`PlanarReflectionSource.update()`'in tek koşulu `minUpdateMs` idi: ekran
+kaplaması, mesafe, frustum sorulmuyordu. Frustum culling tek başına yetmez —
+nehir şeridi uzun bir spline izler, sınır kutusu suyun kendisi çözülemez hale
+geldikten çok sonra da ekranda kalır.
+
+Eklenen kapı (`engine/render-three/planarReflectionSource.ts`):
+
+- `planarReflectionScreenCoverage(bounds, viewProjection)` — saf fonksiyon,
+  tüketicilerin ekrana düşen payını `[-1,1]` küpüne kırparak döner. Projeksiyonun
+  eksene hizalı sınırı eğri bir gövdeyi olduğundan büyük gösterir; bu **bilerek**
+  öyle.
+- Bir köşe gözün arkasındaysa `null` döner ve çağıran bunu **çiz** diye okur:
+  ucuz bir kapı, borçlu olmadığı bir kareyi ödeyebilir; borçlu olduğunu asla
+  düşüremez.
+- `PLANAR_REFLECTION_MIN_SCREEN_COVERAGE = 0.01` — ekranın %1'i.
+- Kapı `minUpdateMs`'ten **önce** çalışır ve `lastUpdateAt`'i damgalamaz:
+  görünmediği için atlanan bir kare, ondan sonrakini de ertelememeli.
+- Kapı yansımadan önce çalıştığı için, suyu ekrana geri getiren kare aynı
+  zamanda onu tazeleyen karedir — girişte bayat yakalama görünmez.
+
+Motor kontrolü: *"Planar reflection skips its nested scene render when the water
+is not worth it"* — dolu görüş, ekran dışı, dilim, gözü saran kutu ve boş grup.
+
+### 8.6 Kalan iş
+
+- **Proje kararı (veri):** bu Level'ın nehri için `low` (kaynak hiç kurulmaz,
+  `src/scene/authoredWorld.ts`) ya da `medium` (256², MSAA yok, ~30 Hz). Kapı
+  artık maliyeti kendiliğinden kısıyor, ama kamera suya *baktığında* `high` yine
+  tam bedelini ister; bu Level için `medium` muhtemelen doğru yazım.
+- Yeni taban (~6.65 ms GPU) üzerinde en büyük kalem **birimler: 3.46 ms (%52).**
+  Bir sonraki hedef orasıdır.
+
+## 9. Yararlı komutlar
 
 ```bash
 npx tsc --noEmit                                  # ~9 sn, her düzenlemeden sonra

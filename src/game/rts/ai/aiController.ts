@@ -12,7 +12,7 @@
  * touches no renderer or DOM, so engine tests can also step a whole match
  * headlessly at any rate (§80 determinism).
  */
-import type { AiBalance, AiProfile, UnitRoleId } from "../../data/gameDataTypes";
+import type { AiBalance, AiProfile, BuildingBalance, UnitRoleId } from "../../data/gameDataTypes";
 import type { BarracksProductionSystem } from "../structures/barracksProductionSystem";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { StructureConstructionService } from "../structures/structureConstructionService";
@@ -43,6 +43,13 @@ import type { AiArmyMission, AiExpansionStep, AiIntent, AiIntentScore, AiPlan } 
 
 export interface AiControllerOptions extends AiBlackboardSources {
   readonly balance: AiBalance;
+  /**
+   * The same building table the player's palette reads, so the AI is bound by
+   * the tier gate (`requiredAge` + `requiredSettlementLevel`) rather than only
+   * by its own per-age target counts — §4's "AI builds through the player's
+   * rules". Optional: the headless order tests compose this without a table.
+   */
+  readonly buildings?: BuildingBalance;
   readonly profile: AiProfile;
   readonly navigation: RtsNavigation;
   readonly centers: CommandCenterSystem;
@@ -187,7 +194,7 @@ export class AiController {
       options.baseSiteFilter,
       options.baseSiteRanker,
     );
-    this.economy = new AiEconomyManager(options.balance, this.builds, this.log);
+    this.economy = new AiEconomyManager(options.balance, this.builds, this.log, options.buildings ?? null);
     const depotAnchor = options.anchors.find((anchor) => anchor.buildingId === "depot");
     if (!depotAnchor) {
       // A base with no depot slot can never earn income (§37), so this is a map

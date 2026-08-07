@@ -172,7 +172,7 @@ import { KingdomRegistry } from "./kingdom/kingdomRegistry";
 import { RoadConstructionService } from "./roads/roadConstructionService";
 import { planAutoRoadConnection } from "./roads/autoRoadConnector";
 import { centerAccessRoadPlan } from "./roads/centerAccessRoad";
-import { RtsBuildPalette } from "./ui/rtsBuildPalette";
+import { buildingUnlockRequirement, RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { RtsSelectionPanel } from "./ui/rtsSelectionPanel";
 import { RtsWorldProgressOverlay, type RtsWorldProgressEntry } from "./ui/rtsWorldProgressOverlay";
 import {
@@ -220,7 +220,7 @@ import { WildlifeView } from "./wildlife/wildlifeView";
 import { Caravan, CaravanSystem, type CaravanDispatch } from "./logistics/caravanSystem";
 import { ProducerCaravanLanes, producerLaneId } from "./logistics/producerCaravanLanes";
 import { CaravanView } from "./logistics/caravanView";
-import { KingdomProgressionSystem, type UpgradableStructure } from "./progression/kingdomProgressionSystem";
+import { buildingUnlocked, KingdomProgressionSystem, type UpgradableStructure } from "./progression/kingdomProgressionSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { type ProducerLogisticsStatus, ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
@@ -1474,6 +1474,12 @@ export class RtsApp {
       ],
       () => this.units.all(),
       (x, z) => this.groundSurface.heightAt(x, z),
+      // The centre-led tier gate, enforced for both kingdoms at the one door
+      // every build goes through. The palette greys its cards and the AI drops
+      // the want from its order, but an expansion recipe naming a Tarla by id
+      // reaches the service without passing either — so this is where "Yerleşim
+      // Lv2" is actually true.
+      (owner, stats) => buildingUnlocked(stats, this.progression.tierFor(owner)),
     );
     this.roadConstruction = new RoadConstructionService(
       this.roads,
@@ -1526,6 +1532,10 @@ export class RtsApp {
     );
     this.ai = new AiController({
       owner: AI_OWNER,
+      // The player's own building table: the AI's wants are filtered by the same
+      // tier gate the palette locks its cards with, so a Tarla it cannot build
+      // never takes the build slot from the hunt that opens the food economy.
+      buildings: this.options.buildingBalance,
       units: this.units,
       structures: this.structures,
       centers: this.centers,
@@ -1607,13 +1617,12 @@ export class RtsApp {
     this.buildPalette = new RtsBuildPalette(
       this.options.buildingBalance,
       (id) => {
-        const requiredAge = this.options.buildingBalance[id]?.requiredAge;
-        if (requiredAge === "town" && this.progression.tierFor(PLAYER_OWNER).age !== "town") {
+        const stats = this.options.buildingBalance[id];
+        if (stats && !buildingUnlocked(stats, this.progression.tierFor(PLAYER_OWNER))) {
           // Named from the data, not spelled out: the Okçuluk Alanı is only the
-          // first Town-gated building, and the second would have been refused
-          // under its neighbour's name.
-          const label = this.options.buildingBalance[id]?.label ?? id;
-          this.buildPalette.setActionMessage(`${label} Kasaba Çağında açılır.`);
+          // first Town-gated building and the Tarla only the first level-gated
+          // one, and the next would have been refused under its neighbour's name.
+          this.buildPalette.setActionMessage(`${stats.label} ${buildingUnlockRequirement(stats)}`);
           return;
         }
         if (!this.beginMissionGatedPlacement(id)) return;
@@ -5902,7 +5911,7 @@ export class RtsApp {
   }
 
   private syncAgeUi(): void {
-    this.buildPalette.setAgeState(this.progression.snapshot(PLAYER_OWNER));
+    this.buildPalette.setTierState(this.progression.snapshot(PLAYER_OWNER));
   }
 
 }

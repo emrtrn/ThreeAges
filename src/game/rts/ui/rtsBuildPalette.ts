@@ -20,7 +20,7 @@
  * own panel can do.
  */
 import type { BuildingBalance, StartingResources } from "../../data/gameDataTypes";
-import { townUnlocksAvailable, type ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
+import { buildingUnlocked, type ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { RoadPlacementState } from "../roads/roadPlacementSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
 
@@ -98,6 +98,26 @@ function categoryGroups(category: BuildCategory): readonly BuildGroup[] {
   return category.groups ?? [{ title: "", buildingIds: category.buildingIds ?? [] }];
 }
 
+/**
+ * The tier a shut card is waiting for, as one sentence.
+ *
+ * Exported because the card's tooltip and the click refusal are the same claim
+ * reaching the player through two surfaces, and a player told "Kasaba Çağında
+ * açılır" by one and "Yerleşim Lv2" by the other has been told the gate is
+ * arbitrary. The age names are the two the data ships; a fork relabelling them
+ * changes `ages.json`, which is the same string this reads through its caller.
+ */
+export function buildingUnlockRequirement(stats: {
+  readonly requiredAge?: BuildingBalance[string]["requiredAge"] | undefined;
+  readonly requiredSettlementLevel?: number | undefined;
+}): string {
+  const ageLabel = stats.requiredAge === "town" ? "Kasaba" : "Yerleşim";
+  const level = stats.requiredSettlementLevel ?? 1;
+  return level > 1
+    ? `${ageLabel} Lv${level}'de açılır.`
+    : `${ageLabel} Çağında açılır.`;
+}
+
 export class RtsBuildPalette {
   private readonly root = document.createElement("section");
   private readonly status = document.createElement("p");
@@ -109,8 +129,11 @@ export class RtsBuildPalette {
       readonly cost: HTMLSpanElement;
       readonly price: StartingResources;
       readonly requiredAge: BuildingBalance[string]["requiredAge"];
-      /** Age-gated shut. Held so the tooltip can outrank the price. */
+      readonly requiredSettlementLevel: BuildingBalance[string]["requiredSettlementLevel"];
+      /** Tier-gated shut. Held so the tooltip can outrank the price. */
       locked: boolean;
+      /** What the lock is waiting for, in the player's words, or "" while open. */
+      lockedReason: string;
       affordable: boolean;
     }
   >();
@@ -225,7 +248,7 @@ export class RtsBuildPalette {
     this.root.appendChild(this.roadHint);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setState({ activeBuildingId: null, result: null });
-    this.setAgeState({ age: "settlement" });
+    this.setTierState({ age: "settlement", level: 1 });
     this.selectCategory(this.activeCategory);
   }
 
@@ -259,7 +282,9 @@ export class RtsBuildPalette {
       cost,
       price: stats.cost,
       requiredAge: stats.requiredAge,
+      requiredSettlementLevel: stats.requiredSettlementLevel,
       locked: false,
+      lockedReason: "",
       affordable: true,
     });
     return button;
@@ -328,17 +353,22 @@ export class RtsBuildPalette {
   }
 
   /**
-   * What the age milestone means, before the player owns a building to click.
+   * What the centre's tier means, before the player owns a building to click.
    * The age resets every existing building to Level 1 and also opens any
-   * building whose data declares Town as its first available age.
+   * building whose data declares Town as its first available age; a *level*
+   * inside an age opens the buildings that age staged behind it — the Tarla
+   * behind the Yerleşim Lv2 milestone, so the opening food is the Avcı Kulübesi
+   * and the Ağıl.
    *
-   * The gate is the age and nothing else ({@link townUnlocksAvailable}): a
-   * centre *level* upgrade running inside Kasaba must not shut a door the age
-   * already opened.
+   * One gate, read from the data by {@link buildingUnlocked}, so the card and
+   * the click handler cannot answer differently. An in-flight upgrade is not
+   * consulted: the tier only moves on commit, so a Lv-up running inside Kasaba
+   * must not shut a door the age already opened.
    */
-  setAgeState(snapshot: Pick<ProgressionSnapshot, "age">): void {
+  setTierState(snapshot: Pick<ProgressionSnapshot, "age" | "level">): void {
     for (const entry of this.buildButtons.values()) {
-      entry.locked = entry.requiredAge === "town" && !townUnlocksAvailable(snapshot);
+      entry.locked = !buildingUnlocked(entry, { age: snapshot.age, level: snapshot.level });
+      entry.lockedReason = entry.locked ? buildingUnlockRequirement(entry) : "";
       entry.button.disabled = entry.locked;
       this.syncTitle(entry);
     }
@@ -409,9 +439,15 @@ export class RtsBuildPalette {
    * hovering a shut Okçuluk Alanı was told a price, which reads as "save up"
    * when the answer is "reach Kasaba".
    */
-  private syncTitle(entry: { button: HTMLButtonElement; price: StartingResources; locked: boolean; affordable: boolean }): void {
+  private syncTitle(entry: {
+    button: HTMLButtonElement;
+    price: StartingResources;
+    locked: boolean;
+    lockedReason: string;
+    affordable: boolean;
+  }): void {
     entry.button.title = entry.locked
-      ? "Kasaba Çağında açılır."
+      ? entry.lockedReason
       : entry.affordable
         ? ""
         : `Kaynak yetersiz: ${formatResourceCost(entry.price)} gerekir.`;

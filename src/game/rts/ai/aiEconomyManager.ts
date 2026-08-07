@@ -12,7 +12,8 @@
  * Both are pure over the blackboard so plan §39's "AI beş ardışık maçta
  * açılışını tamamlıyor" is testable without running a renderer.
  */
-import type { AiBalance } from "../../data/gameDataTypes";
+import type { AiBalance, BuildingBalance } from "../../data/gameDataTypes";
+import { buildingUnlocked } from "../progression/kingdomProgressionSystem";
 import type { AiBlackboard } from "./aiBlackboard";
 import type { AiBuildManager } from "./aiBuildManager";
 import type { AiDecisionLog } from "./aiDecisionLog";
@@ -81,11 +82,31 @@ export function detectBottleneck(bb: AiBlackboard, balance: AiBalance): AiBottle
  * together with the spine it needs, and two owners would double-book the §42
  * build slot.
  */
-export function buildOrder(bb: AiBlackboard, balance: AiBalance): readonly string[] {
+export function buildOrder(
+  bb: AiBlackboard,
+  balance: AiBalance,
+  /**
+   * The building table, when the caller has one, so the AI is bound by the same
+   * tier gate the player's palette is (§4: the AI builds through the player's
+   * rules, never a parallel path). Optional because the pure-order tests drive
+   * this over a blackboard alone; absent, nothing is gated, which is the
+   * behaviour every caller had before the Tarla moved behind Yerleşim Lv2.
+   */
+  buildings: BuildingBalance | null = null,
+): readonly string[] {
   const order: string[] = [];
   const targets = balance.economy.buildingTargets[bb.age];
-  /** Wanted while the age's plan asks for more of this building than stands. */
+  const tier = { age: bb.age, level: bb.centerLevel };
+  /**
+   * Wanted while the age's plan asks for more of this building than stands —
+   * and the kingdom's tier actually opens it. A locked want is dropped rather
+   * than merely deprioritised: it would otherwise sit at the head of the order
+   * spending the §42 build slot on a request that can never succeed, which is
+   * how one gated building freezes every want underneath it.
+   */
   const short = (buildingId: string): boolean => {
+    const stats = buildings?.[buildingId];
+    if (stats && !buildingUnlocked(stats, tier)) return false;
     const count = bb.sourceDepletedBuildingIds.includes(buildingId)
       ? (bb.activeBuildingCounts[buildingId] ?? 0)
       : (bb.buildingCounts[buildingId] ?? 0);
@@ -98,14 +119,21 @@ export function buildOrder(bb: AiBlackboard, balance: AiBalance): readonly strin
   // relieved even by a house the settlement plan did not ask for, or the plan
   // itself becomes the thing that wedges the AI at its cap.
   if (headroom <= balance.economy.populationPressureBuffer) order.push("house");
+  // Still the first food *want*, and now frequently not the first food *built*:
+  // the Tarla sits behind Yerleşim Lv2, so at the opening tier `short` drops it
+  // and the order falls straight through to the hunt below. It keeps this
+  // position for the tier that opens it, where the Town transition still
+  // requires a farm by name.
   if (short("farm")) order.push("farm");
   if (short("lumber_camp")) order.push("lumber_camp");
   // Additive food off a source that runs out, so it sits behind both staples and
-  // ahead of everything else. Behind the farm because the Town transition
-  // requires one by name, and an AI that opened on game alone would be gated on
-  // a building it had never built. Ahead of the military because a herd is the
-  // one asset on the map whose value only decays: the camp's whole yield is
-  // fixed at what the herd holds, so a camp built late is a camp built smaller.
+  // ahead of everything else. Behind the farm in the *listing* because the Town
+  // transition requires one by name, and an AI that opened on game alone would
+  // be gated on a building it had never built — but the farm's own level gate is
+  // what makes this the opening food source in practice. Ahead of the military
+  // because a herd is the one asset on the map whose value only decays: the
+  // camp's whole yield is fixed at what the herd holds, so a camp built late is
+  // a camp built smaller.
   if (short("hunting_camp")) order.push("hunting_camp");
   // Beside the camp, for a sharper version of the camp's own reason. A herd is
   // the one asset on the map that only ever gets smaller, and cattle are the
@@ -149,8 +177,12 @@ export function buildOrder(bb: AiBlackboard, balance: AiBalance): readonly strin
 }
 
 /** The single most wanted building, or null when the base is complete. */
-export function nextBuilding(bb: AiBlackboard, balance: AiBalance): string | null {
-  return buildOrder(bb, balance)[0] ?? null;
+export function nextBuilding(
+  bb: AiBlackboard,
+  balance: AiBalance,
+  buildings: BuildingBalance | null = null,
+): string | null {
+  return buildOrder(bb, balance, buildings)[0] ?? null;
 }
 
 export class AiEconomyManager {
@@ -162,6 +194,8 @@ export class AiEconomyManager {
     private readonly balance: AiBalance,
     private readonly builds: AiBuildManager,
     private readonly log: AiDecisionLog,
+    /** The building table the tier gate is read from; see {@link buildOrder}. */
+    private readonly buildings: BuildingBalance | null = null,
   ) {}
 
   get bottleneck(): AiBottleneck {
@@ -181,7 +215,7 @@ export class AiEconomyManager {
   update(bb: AiBlackboard): void {
     this.reportBottleneck(detectBottleneck(bb, this.balance), bb.now);
 
-    for (const wanted of buildOrder(bb, this.balance)) {
+    for (const wanted of buildOrder(bb, this.balance, this.buildings)) {
       // §38: only Housing may dip into the safety stock, because housing is what
       // the stock exists to guarantee.
       const reserve = wanted === "house" ? 0 : AI_WOOD_SAFETY_STOCK;

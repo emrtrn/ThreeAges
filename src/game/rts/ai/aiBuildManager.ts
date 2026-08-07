@@ -131,6 +131,13 @@ export class AiBuildManager {
         // A good site must not be blacklisted merely because the wallet is empty.
         return { kind: "waiting", reason: "insufficient-resources" };
       }
+      if (result.reason === "locked-tier") {
+        // Same shape as an empty wallet and for the same reason: the refusal is
+        // about the kingdom, not about this square. Blacklisting here would
+        // retire the Tarla anchors at Yerleşim Lv1 and leave them retired for
+        // the whole match — the site is fine, the centre is simply too young.
+        return { kind: "waiting", reason: "not-yet-unlocked" };
+      }
       lastReason = this.failureReasonFor(result.reason);
       this.lastPlacement = { key: candidate.key, source: candidate.source, failureReason: result.reason };
       this.recordCandidateFailure(candidate, now, result.reason);
@@ -205,6 +212,7 @@ export class AiBuildManager {
   private failureReasonFor(reason: string): AiFailureReason {
     switch (reason) {
       case "insufficient-resources": return "insufficient-resources";
+      case "locked-tier": return "not-yet-unlocked";
       case "outside-control": return "territory-invalid";
       case "blocked":
       case "outside-map": return "no-valid-placement";

@@ -539,6 +539,20 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     if (requiredAge !== undefined && !SETTLEMENT_AGES.includes(requiredAge)) {
       throw new GameDataError(`${statsWhere}.requiredAge: must be one of ${SETTLEMENT_AGES.join(", ")}`);
     }
+    // The level half of the same gate. Refused outside 1..3 rather than clamped:
+    // a "level 4" building would be one no tier ever opens, and a silent clamp
+    // would ship it as unlocked from the start — the opposite of what was meant.
+    const requiredSettlementLevelRaw = stats["requiredSettlementLevel"];
+    let requiredSettlementLevel: number | undefined;
+    if (requiredSettlementLevelRaw !== undefined) {
+      if (typeof requiredSettlementLevelRaw !== "number"
+        || !Number.isInteger(requiredSettlementLevelRaw)
+        || requiredSettlementLevelRaw < 1
+        || requiredSettlementLevelRaw > 3) {
+        throw new GameDataError(`${statsWhere}.requiredSettlementLevel: must be an integer in 1..3`);
+      }
+      requiredSettlementLevel = requiredSettlementLevelRaw;
+    }
     const maxHealth = requireFiniteNumber(stats, "maxHealth", statsWhere);
     if (maxHealth <= 0) {
       throw new GameDataError(`${statsWhere}.maxHealth: must be > 0`);
@@ -766,6 +780,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
       constructionSeconds,
       ...(requiredAge ? { requiredAge } : {}),
+      ...(requiredSettlementLevel !== undefined ? { requiredSettlementLevel } : {}),
       maxHealth,
       visionRadius,
       ...(populationCapacity ? { populationCapacity } : {}),

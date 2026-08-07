@@ -320,6 +320,32 @@ export function rtsBuildingActorRef(
   return entry?.ages?.[age]?.[key] ?? entry?.levels[key] ?? null;
 }
 
+/**
+ * Every Actor this building can resolve to at one age — its whole level ladder.
+ *
+ * The presentation layer needs the siblings, not just the level it is drawing:
+ * the ladder is modelled as one building in one coordinate space, so the scale
+ * that makes level 1 the right size is the one derived from the largest model in
+ * its own ladder. Resolution mirrors {@link rtsBuildingActorRef} exactly — the
+ * age override wins per level key, the age-agnostic table fills the rest — so a
+ * ref the ladder omits is a ref the lookup cannot return either.
+ */
+export function rtsBuildingActorRefLadder(
+  catalog: RtsContentCatalog,
+  buildingId: string,
+  state: "construction" | "completed",
+  age: SettlementAge = "settlement",
+): readonly RtsActorRef[] {
+  const entry = catalog.buildings[buildingId];
+  if (!entry) return [];
+  // A dedicated construction Actor answers for every level, so it is its own
+  // ladder rather than one rung of the completed building's.
+  if (state === "construction" && entry.constructionActorRef) return [entry.constructionActorRef];
+  const byLevel = new Map<string, RtsActorRef>(Object.entries(entry.levels));
+  for (const [key, ref] of Object.entries(entry.ages?.[age] ?? {})) byLevel.set(key, ref);
+  return [...byLevel.values()];
+}
+
 function isRepeatingSlot(slot: RtsDamageSlotName): boolean {
   return (RTS_DAMAGE_REPEATING_SLOTS as readonly string[]).includes(slot);
 }
