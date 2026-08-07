@@ -1765,9 +1765,9 @@
           {
             "id": "supply-port-4",
             "position": [
-              6,
+              2,
               0,
-              -26
+              -20
             ],
             "pointType": "linear"
           },
@@ -1785,7 +1785,7 @@
             "position": [
               6,
               0,
-              -44
+              -46
             ],
             "pointType": "linear"
           },
@@ -1819,7 +1819,7 @@
           {
             "id": "supply-stone-3",
             "position": [
-              22,
+              24,
               0,
               -10
             ],
