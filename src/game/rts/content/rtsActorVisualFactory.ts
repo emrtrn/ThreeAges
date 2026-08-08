@@ -35,6 +35,7 @@ import {
 } from "./rtsActorPresentationTree";
 import { createRtsActorPlaceholder } from "./rtsActorPlaceholder";
 import { bindRtsWheelSpins } from "./rtsPresentationMotion";
+import { bindRtsCargoSways, bindRtsCargoVisuals } from "./rtsCargoVisual";
 import {
   collectRtsPickTargets,
   createRtsUnitPresentation,
@@ -328,6 +329,10 @@ export class RtsActorVisualFactory {
       moveSpeed,
       walkClipSpeed,
       wheelSpins: [],
+      // The one carrier the project has: its panniers are hidden until the
+      // logistics view reports an outbound load.
+      cargoVisuals: def ? bindRtsCargoVisuals(def, root) : [],
+      cargoSways: def ? bindRtsCargoSways(def, root) : [],
     });
   }
 

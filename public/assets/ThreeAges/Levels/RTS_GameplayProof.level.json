@@ -6015,9 +6015,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
       "position": [
-        -45,
+        -53.48,
         0,
-        -6
+        -13.25
       ],
       "name": "Herd west-wolves",
       "scale": 1,

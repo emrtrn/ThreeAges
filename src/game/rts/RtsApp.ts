@@ -3710,7 +3710,12 @@ export class RtsApp {
       if (event.type === "completed") {
         const role = this.options.unitBalance[event.unitId]?.role;
         if (role) this.tallyTrainedUnit(role);
-        this.announce("production", `${event.label} ${event.structure.stats.label}'ndan çıktı.`);
+        // "<yapı>: <birlik> hazır." rather than "<birlik> <yapı>'ndan çıktı.":
+        // the ablative `-ndan` is only correct for a label that already ends in
+        // a possessive ("Okçuluk Alanı'ndan"), and wrong for one that does not
+        // ("Kışla'dan"). Kışla trains the Guard and the Siege gun, so two of the
+        // three trainable units said it wrong.
+        this.announce("production", `${event.structure.stats.label}: ${event.label} hazır.`);
       } else {
         this.announce("production", `${event.label} çıkışı engelli; ${event.structure.stats.label} çevresini açın.`, "refused");
       }

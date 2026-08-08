@@ -116,7 +116,7 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   // flow below is driven by the building the tier actually opens.
   await page.getByRole("button", { name: "Ekonomi", exact: true }).click();
   await expect(page.locator('[data-rts-building="farm"]')).toBeDisabled();
-  await expect(page.locator('[data-rts-building="farm"]')).toHaveAttribute("title", "Yerleşim Lv2'de açılır.");
+  await expect(page.locator('[data-rts-building="farm"]')).toHaveAttribute("title", "Yerleşim Lv2 ile açılır.");
   await page.getByRole("button", { name: "Avcı Kulübesi", exact: true }).click();
   await expect(page.locator(".rts-build-status")).toHaveText("Haritada konum seçin.");
   await page.getByRole("button", { name: "İptal", exact: true }).click();

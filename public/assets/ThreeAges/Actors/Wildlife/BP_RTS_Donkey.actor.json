@@ -37,6 +37,66 @@
         ]
       },
       "parent": "root"
+    },
+    {
+      "id": "cargoLeft",
+      "component": "StaticMeshComponent",
+      "props": {
+        "assetId": "barrel",
+        "position": [
+          -0.15,
+          0.5,
+          -0.2
+        ],
+        "scale": [
+          3,
+          3,
+          3
+        ],
+        "rtsCargoVisibility": "loaded",
+        "rtsCargoSway": {
+          "axis": "x",
+          "degrees": 6,
+          "stride": 0.82,
+          "phase": 0
+        },
+        "rotation": [
+          90,
+          0,
+          0
+        ]
+      },
+      "parent": "root"
+    },
+    {
+      "id": "cargoRight",
+      "component": "StaticMeshComponent",
+      "props": {
+        "assetId": "barrel",
+        "position": [
+          0.15,
+          0.5,
+          -0.2
+        ],
+        "scale": [
+          3,
+          3,
+          3
+        ],
+        "rtsCargoVisibility": "loaded",
+        "rtsCargoSway": {
+          "axis": "x",
+          "degrees": 6,
+          "stride": 0.82,
+          "phase": 0.5
+        },
+        "rotation": [
+          90,
+          0,
+          0
+        ]
+      },
+      "parent": "root"
     }
   ],
   "interfaces": [],

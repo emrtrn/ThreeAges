@@ -57,6 +57,7 @@ export class CaravanView {
         attacking: false,
         dying: caravan.dying,
         working: isLoading(caravan.phase),
+        carrying: isCaravanCarrying(caravan.phase),
         attackCount: 0,
         cameraDistanceSquared: null,
       });
@@ -104,4 +105,17 @@ export class CaravanView {
 
 function isLoading(phase: CaravanPhase): boolean {
   return phase === "loading" || phase === "unloading";
+}
+
+/**
+ * Whether the animal's authored cargo should be on its back this frame.
+ *
+ * The load is picked up when the outbound leg begins and is gone once the store
+ * has taken it, so `unloading` still counts: the donkey stands at the depot with
+ * its barrels until the phase turns to `inbound`, and walks home empty. That
+ * makes the round trip readable at a glance without the simulation gaining a
+ * single field — {@link CaravanPhase} already knew all of this.
+ */
+export function isCaravanCarrying(phase: CaravanPhase): boolean {
+  return phase === "outbound" || phase === "unloading";
 }

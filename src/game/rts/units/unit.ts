@@ -70,6 +70,15 @@ export interface RtsPresentationUpdate {
   /** Blows landed so far; each increment is one swing to play (Faz D). */
   readonly attackCount: number;
   /**
+   * Whether this presentation is carrying a load right now.
+   *
+   * Only Actors that author `rtsCargoVisibility` react — for everything else the
+   * field is inert. Omitted means "this caller does not model cargo", which
+   * leaves any authored cargo node exactly as the Actor authored it rather than
+   * silently hiding it.
+   */
+  readonly carrying?: boolean | undefined;
+  /**
    * Squared distance from the camera, or null when the caller does not know it.
    *
    * Presentations may spend less time on units the player can barely see. Null

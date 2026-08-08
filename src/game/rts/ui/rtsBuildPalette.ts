@@ -113,8 +113,12 @@ export function buildingUnlockRequirement(stats: {
 }): string {
   const ageLabel = stats.requiredAge === "town" ? "Kasaba" : "Yerleşim";
   const level = stats.requiredSettlementLevel ?? 1;
+  // "Lv2 ile" rather than "Lv2'de": the locative harmonises with the level
+  // number, so `'de` is right for Lv2 (ikide) and wrong for Lv3 (üçte → `'te`).
+  // No building requires Lv3 today, which is exactly why the bug would have
+  // arrived with a tuning pass rather than with a code change.
   return level > 1
-    ? `${ageLabel} Lv${level}'de açılır.`
+    ? `${ageLabel} Lv${level} ile açılır.`
     : `${ageLabel} Çağında açılır.`;
 }
 

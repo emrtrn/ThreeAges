@@ -1079,7 +1079,11 @@ function centerProgressionAction(view: CenterProgressionView): SelectionAction {
     : unaffordableReason;
   return {
     id: CENTER_LEVEL_UP_ACTION,
-    label: `${targetLabel}'ye Yükselt`,
+    // "Yükselt: <kademe>" rather than "<kademe>'ye Yükselt": the dative comes
+    // from the level number, so `'ye` is right for Lv2 (ikiye) and wrong for
+    // Lv3 (üçe → `'e`). Both levels ship in `ages.json`, so the old form was
+    // live-wrong on every Lv2→Lv3 upgrade.
+    label: `Yükselt: ${targetLabel}`,
     cost,
     enabled: reason === null,
     active: snapshot.upgrading,
@@ -1688,7 +1692,12 @@ function supplyAdvice(supply: MarketSupplyLine | null): string {
     case "rival":
       return `${site} rakibin elinde: arz yolunu kesin ya da kendi yolunuzu çekin.`;
     case "unclaimed":
-      return `${site}'na yol çekin.`;
+      // Phrased like its three siblings — site first, then the verb — rather
+      // than `${site}'na`. A case suffix cannot be attached in code: it changes
+      // with the label's last vowel and with whether that label already carries
+      // a possessive ending, so `-na` is only right for the three sites this
+      // map happens to ship (all ending in one).
+      return `${site} sahipsiz: buraya yol çekin.`;
     case "absent":
       // The one answer no road can fix, and the reason `absent` is a state
       // rather than a missing line: a player who paves the whole map looking

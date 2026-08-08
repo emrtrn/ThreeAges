@@ -14,6 +14,7 @@
 import { isMeshComponentKind, type ActorScriptDef } from "@engine/scene/actorScript";
 import type { SettlementAge } from "@/game/data/gameDataTypes";
 import { readRtsActorMotions } from "./rtsPresentationMotion";
+import { readRtsActorCargoSways, readRtsActorCargoVisuals } from "./rtsCargoVisual";
 import {
   RTS_DAMAGE_SLOTS,
   rtsBuildingActorRef,
@@ -132,6 +133,15 @@ export function validateRtsPresentationActor(
   // a load failure here rather than a wheel that turns oddly on the field.
   const motions = readRtsActorMotions(def);
   if ("problem" in motions) throw new RtsActorPresentationError(ref, motions.problem);
+
+  // Same rule for the other authored presentation prop: a mistyped cargo flag is
+  // a load that is never shown, which looks exactly like the bug it was added to
+  // fix, so it fails here where the message names the Actor.
+  const cargo = readRtsActorCargoVisuals(def);
+  if ("problem" in cargo) throw new RtsActorPresentationError(ref, cargo.problem);
+
+  const sways = readRtsActorCargoSways(def);
+  if ("problem" in sways) throw new RtsActorPresentationError(ref, sways.problem);
 
   const meshNodes = def.components.filter((node) => isMeshComponentKind(node.component));
   if (meshNodes.length === 0) {

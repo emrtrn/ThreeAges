@@ -43,6 +43,12 @@ import {
 } from "../units/rtsUnitAnimation";
 import type { RtsPresentationHandle, RtsPresentationUpdate } from "../units/unit";
 import { advanceRtsWheelSpins, type RtsWheelSpinBinding } from "./rtsPresentationMotion";
+import {
+  advanceRtsCargoSway,
+  applyRtsCargoVisibility,
+  type RtsCargoSwayBinding,
+  type RtsCargoVisualBinding,
+} from "./rtsCargoVisual";
 
 /** Everything an animated instance needs from the asset it was cloned from. */
 export interface RtsUnitAnimationSource {
@@ -83,6 +89,18 @@ export interface RtsUnitPresentationOptions {
    * what this exists for.
    */
   readonly wheelSpins?: readonly RtsWheelSpinBinding[] | undefined;
+  /**
+   * Authored cargo meshes already bound to their runtime nodes. Empty or omitted
+   * for anything that never carries a visible load; the caravan pack animal is
+   * what this exists for.
+   */
+  readonly cargoVisuals?: readonly RtsCargoVisualBinding[] | undefined;
+  /**
+   * Authored load sways already bound to their runtime nodes, each carrying the
+   * small phase state it advances. Independent of {@link cargoVisuals}: anything
+   * that hangs off a body may rock, whether or not it appears and disappears.
+   */
+  readonly cargoSways?: readonly RtsCargoSwayBinding[] | undefined;
 }
 
 /** Crossfade length between locomotion clips: long enough to blend, short enough to obey. */
@@ -130,6 +148,12 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private pendingSeconds = 0;
   /** Authored wheel pivots, turned by measured travel rather than by a clip. */
   private readonly wheelSpins: readonly RtsWheelSpinBinding[];
+  /** Authored cargo meshes, shown and hidden by the carrier's reported load. */
+  private readonly cargoVisuals: readonly RtsCargoVisualBinding[];
+  /** Authored load sways, rocked by measured travel rather than by a clip. */
+  private readonly cargoSways: readonly RtsCargoSwayBinding[];
+  /** Last load state applied, so an unchanged frame touches no node at all. */
+  private carrying: boolean | null = null;
 
   constructor(options: RtsUnitPresentationOptions) {
     this.root = options.root;
@@ -137,6 +161,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     this.selectionRadius = options.selectionRadius;
     this.tuning = rtsLocomotionTuning(options.moveSpeed ?? 1, { walkClipSpeed: options.walkClipSpeed });
     this.wheelSpins = options.wheelSpins ?? [];
+    this.cargoVisuals = options.cargoVisuals ?? [];
+    this.cargoSways = options.cargoSways ?? [];
 
     const animation = options.animation;
     if (!animation || animation.clips.length === 0) return;
@@ -179,6 +205,14 @@ class RtsUnitPresentation implements RtsPresentationHandle {
    * however often the mixer was actually stepped.
    */
   update(state: RtsPresentationUpdate): void {
+    // First, and above every early return: whether a load is on the animal's back
+    // is a fact about this frame, not an animation to advance. A paused frame, a
+    // far-away frame and a frame where the mixer is skipped must all still show
+    // the right cargo, and the change guard is what keeps that free.
+    if (state.carrying !== undefined && state.carrying !== this.carrying) {
+      this.carrying = state.carrying;
+      applyRtsCargoVisibility(this.cargoVisuals, state.carrying);
+    }
     if (state.deltaSeconds <= 0) return;
     // Before the animator, and outside its early return: a siege engine is static
     // meshes on pivots with no mixer at all, so gating the wheels on an animator
@@ -186,6 +220,10 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // throttled one — the throttle is there to skip mixer evaluation, and adding a
     // float to a rotation is not what it was protecting.
     advanceRtsWheelSpins(this.wheelSpins, state.planarSpeed, state.deltaSeconds);
+    // Alongside the wheels, and for the same reasons: measured speed, full delta,
+    // outside the animator's early return. A pack animal's load must rock whether
+    // or not the asset it hangs on ships a single clip.
+    advanceRtsCargoSway(this.cargoSways, state.planarSpeed, state.deltaSeconds);
 
     const animator = this.animator;
     if (!animator) return;

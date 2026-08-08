@@ -163,6 +163,14 @@ import {
   bindRtsWheelSpins,
   readRtsActorMotions,
 } from "../src/game/rts/content/rtsPresentationMotion";
+import {
+  advanceRtsCargoSway,
+  applyRtsCargoVisibility,
+  bindRtsCargoSways,
+  bindRtsCargoVisuals,
+  readRtsActorCargoSways,
+  readRtsActorCargoVisuals,
+} from "../src/game/rts/content/rtsCargoVisual";
 import { createRtsActorPlaceholder, isRtsActorPlaceholder } from "../src/game/rts/content/rtsActorPlaceholder";
 import {
   collectRtsPickTargets,
@@ -268,7 +276,7 @@ import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccu
 import { Caravan, CaravanSystem } from "../src/game/rts/logistics/caravanSystem";
 import { ProducerCaravanLanes, producerLaneId } from "../src/game/rts/logistics/producerCaravanLanes";
 import { advanceCaravanRoute, startCaravanRoute } from "../src/game/rts/logistics/caravanRoute";
-import { isCaravanVisible } from "../src/game/rts/logistics/caravanView";
+import { isCaravanCarrying, isCaravanVisible } from "../src/game/rts/logistics/caravanView";
 import {
   COMMAND_CENTER_STORAGE_CAPACITY,
   ResourceCapacitySystem,
@@ -314,6 +322,7 @@ import {
   resourceLabel,
 } from "../src/game/rts/ui/resourceLabels";
 import { RtsNotificationCenter, MAX_ACTIVE_NOTIFICATIONS } from "../src/game/rts/ui/rtsNotifications";
+import { buildingUnlockRequirement } from "../src/game/rts/ui/rtsBuildPalette";
 import { RtsAttackWatch } from "../src/game/rts/ui/rtsAttackWatch";
 import {
   armyRosterSignature,
@@ -36119,6 +36128,222 @@ check("Siege Faz 3: wheelSpin metadata is validated, bound to its pivot, and tur
   assert.ok(Math.abs(pivot!.rotation.x - (before - 5)) < 1e-9, "direction -1 turns the other way by the same amount");
 });
 
+check("Caravan cargo: authored load meshes are validated, bound, and shown for exactly the loaded legs", () => {
+  const defWith = (visibility: unknown, onMesh = true) => normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_Pack",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "body", component: "SkeletalMeshComponent", parent: "root", props: { assetId: "donkey" } },
+      onMesh
+        ? { id: "cargoLeft", component: "StaticMeshComponent", parent: "root", props: { assetId: "barrel", rtsCargoVisibility: visibility } }
+        : { id: "cargoLeft", component: "Transform", parent: "root", props: { rtsCargoVisibility: visibility } },
+    ],
+  }, "BP_Pack");
+
+  const good = readRtsActorCargoVisuals(defWith("loaded"));
+  assert.deepEqual("cargo" in good ? good.cargo : null, [["cargoLeft", "loaded"]], "a well-formed cargo flag is read off its mesh");
+  assert.ok("cargo" in readRtsActorCargoVisuals(defWith("empty")), "the empty-leg half is authorable too");
+
+  // Each of these is a load that would never appear, which looks exactly like
+  // the empty-donkey bug the prop exists to fix.
+  for (const [value, why] of [
+    ["full", "an unknown visibility"],
+    [true, "a boolean"],
+    [{ kind: "loaded" }, "an object"],
+  ] as const) {
+    const read = readRtsActorCargoVisuals(defWith(value));
+    assert.ok("problem" in read && read.problem.includes("cargoLeft"), `${why} is refused, naming the component`);
+  }
+
+  // The prop on a bare Transform with nothing under it is the shape of a typo.
+  const empty = readRtsActorCargoVisuals(defWith("loaded", false));
+  assert.ok("problem" in empty && empty.problem.includes("needs a mesh"), "a cargo flag with nothing to draw is refused");
+
+  // Broken metadata fails the Actor like a missing mesh does, rather than
+  // rendering a donkey whose panniers never show.
+  const meshes = new Map([
+    ["donkey", { path: "d.gltf", assetType: "skeletalMesh" as const }],
+    ["barrel", { path: "b.gltf", assetType: "staticMesh" as const }],
+  ]);
+  assert.throws(
+    () => validateRtsPresentationActor(defWith("full"), "assets/A.actor.json", meshes),
+    RtsActorPresentationError,
+    "a bad cargo flag fails the Actor load",
+  );
+  validateRtsPresentationActor(defWith("loaded"), "assets/A.actor.json", meshes);
+
+  // Plain Actor Script data, so the editor's save round-trip must return it
+  // unchanged — nothing allowlists it.
+  const roundTripped = normalizeActorScriptDef(
+    JSON.parse(JSON.stringify(defWith("loaded"))) as unknown,
+    "BP_Pack",
+  );
+  assert.equal(
+    roundTripped.components.find((node) => node.id === "cargoLeft")?.props.rtsCargoVisibility,
+    "loaded",
+    "normalize -> save -> normalize keeps the cargo prop intact",
+  );
+
+  // Bound through the authored component id in userData, so a bone of the same
+  // name could never be shown or hidden instead.
+  const def = defWith("loaded");
+  const tree = buildActorPresentationTree(def, "BP_Pack", () => undefined);
+  const node = findActorComponentNode(tree, "cargoLeft");
+  assert.ok(node, "the cargo node is found by component id");
+  const bindings = bindRtsCargoVisuals(def, tree);
+  assert.equal(bindings.length, 1);
+  assert.equal(bindings[0]!.node, node);
+
+  applyRtsCargoVisibility(bindings, true);
+  assert.equal(node!.visible, true, "a loaded carrier shows its load");
+  applyRtsCargoVisibility(bindings, false);
+  assert.equal(node!.visible, false, "and hides it once the load is gone");
+
+  // The mirrored half: bare panniers authored for the way home.
+  const emptyDef = defWith("empty");
+  const emptyTree = buildActorPresentationTree(emptyDef, "BP_Pack", () => undefined);
+  const emptyNode = findActorComponentNode(emptyTree, "cargoLeft")!;
+  applyRtsCargoVisibility(bindRtsCargoVisuals(emptyDef, emptyTree), true);
+  assert.equal(emptyNode.visible, false, "an empty-leg mesh hides while the load is on");
+
+  // The trip itself: loaded from the moment the outbound leg starts until the
+  // store has taken the delivery. No simulation field was added for this.
+  assert.equal(isCaravanCarrying("loading"), false, "waiting at the producer, still empty");
+  assert.equal(isCaravanCarrying("outbound"), true, "walking to the store, loaded");
+  assert.equal(isCaravanCarrying("unloading"), true, "standing at the store, still loaded");
+  assert.equal(isCaravanCarrying("inbound"), false, "walking home, empty");
+});
+
+check("Caravan cargo: the shipped donkey Actor carries authored panniers that ride its back", () => {
+  const ref = "assets/ThreeAges/Actors/Wildlife/BP_RTS_Donkey.actor.json";
+  const def = normalizeActorScriptDef(JSON.parse(readFileSync(`public/${ref}`, "utf8")) as unknown, ref);
+  const manifest = parseRtsMeshManifest(
+    JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
+  );
+  validateRtsPresentationActor(def, ref as RtsActorRef, manifest);
+
+  const read = readRtsActorCargoVisuals(def);
+  assert.ok("cargo" in read && read.cargo.length === 2, "the donkey authors a load on both flanks");
+  assert.ok(
+    "cargo" in read && read.cargo.every(([, visibility]) => visibility === "loaded"),
+    "both are outbound-only cargo",
+  );
+  // Mirrored, not stacked: two loads at the same X would read as one lump.
+  const flanks = def.components
+    .filter((node) => node.props.rtsCargoVisibility !== undefined)
+    .map((node) => (node.props.position as number[])[0]!);
+  assert.equal(flanks.length, 2);
+  assert.ok(flanks[0]! * flanks[1]! < 0, "one load hangs on each side of the animal");
+  assert.ok(Math.abs(flanks[0]! + flanks[1]!) < 1e-9, "and they are mirrored about its spine");
+
+  // The whole point of the sway is differential motion: the Donkey's own torso
+  // barely moves in Walk, so two loads rocking together would read no better
+  // than two loads rocking not at all.
+  const sways = readRtsActorCargoSways(def);
+  assert.ok("sways" in sways && sways.sways.length === 2, "both panniers rock");
+  const phases = "sways" in sways ? sways.sways.map(([, sway]) => sway.phase).sort() : [];
+  assert.deepEqual(phases, [0, 0.5], "and they alternate, half a cycle apart");
+  assert.ok(
+    "sways" in sways && sways.sways.every(([, sway]) => sway.stride === sways.sways[0]![1].stride),
+    "at one shared stride, so the pair stays a gait rather than two rhythms",
+  );
+});
+
+check("Caravan cargo: the load sway is driven by travelled distance and settles when the carrier stops", () => {
+  const swayDef = (sway: unknown, onMesh = true) => normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_Pack",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      onMesh
+        ? { id: "cargoLeft", component: "StaticMeshComponent", parent: "root", props: { assetId: "barrel", rtsCargoSway: sway } }
+        : { id: "cargoLeft", component: "Transform", parent: "root", props: { rtsCargoSway: sway } },
+    ],
+  }, "BP_Pack");
+  const good = { axis: "x", degrees: 6, stride: 0.82, phase: 0 };
+
+  assert.ok("sways" in readRtsActorCargoSways(swayDef(good)), "a well-formed sway is read off its mesh");
+  // Each of these is a load that would rock at an absurd rate, about no axis at
+  // all, or come off the animal entirely.
+  for (const [value, why] of [
+    [{ ...good, axis: "w" }, "an axis that is not x/y/z"],
+    [{ ...good, degrees: 0 }, "a zero amplitude"],
+    [{ ...good, degrees: 90 }, "an amplitude past a quarter turn"],
+    [{ ...good, degrees: Number.NaN }, "a non-finite amplitude"],
+    [{ ...good, stride: 0 }, "a zero stride"],
+    [{ ...good, stride: -0.8 }, "a negative stride"],
+    [{ ...good, phase: 1 }, "a phase outside [0, 1)"],
+    ["cargoSway", "a string instead of an object"],
+  ] as const) {
+    const read = readRtsActorCargoSways(swayDef(value));
+    assert.ok("problem" in read && read.problem.includes("cargoLeft"), `${why} is refused, naming the component`);
+  }
+  const orphan = readRtsActorCargoSways(swayDef(good, false));
+  assert.ok("problem" in orphan && orphan.problem.includes("needs a mesh"), "a sway with nothing to rock is refused");
+  assert.throws(
+    () => validateRtsPresentationActor(
+      swayDef({ ...good, stride: 0 }),
+      "assets/A.actor.json",
+      new Map([["barrel", { path: "b.gltf", assetType: "staticMesh" as const }]]),
+    ),
+    RtsActorPresentationError,
+    "a bad sway fails the Actor load like a bad wheel does",
+  );
+
+  // The authored orientation is the axis the rock is applied *on top of*, not
+  // something it overwrites: these panniers lie on their sides.
+  const laid = normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_Pack",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "cargoLeft", component: "StaticMeshComponent", parent: "root", props: { assetId: "barrel", rotation: [90, 0, 0], rtsCargoSway: good } },
+    ],
+  }, "BP_Pack");
+  const tree = buildActorPresentationTree(laid, "BP_Pack", () => undefined);
+  const node = findActorComponentNode(tree, "cargoLeft")!;
+  const authored = node.quaternion.clone();
+  const bindings = bindRtsCargoSways(laid, tree);
+  assert.equal(bindings.length, 1);
+
+  // A standing carrier is a still one — the same rule the wheels follow, and what
+  // keeps the barrels from stirring through the seconds spent unloading.
+  advanceRtsCargoSway(bindings, 0, 1);
+  assert.ok(node.quaternion.angleTo(authored) < 1e-9, "a stopped carrier holds the authored orientation");
+
+  // Distance, not time: half a stride is half a cycle, so the load is back at
+  // rest angle having passed through its peak. Walking the same distance in ten
+  // small steps must land in the same place as one large one.
+  const travel = (speed: number, steps: number, seconds: number) => {
+    const fresh = bindRtsCargoSways(laid, buildActorPresentationTree(laid, "BP_Pack", () => undefined));
+    // Warm the ease-in to full strength first, so the comparison is of phase.
+    for (let i = 0; i < 200; i += 1) advanceRtsCargoSway(fresh, speed, 0.05);
+    fresh[0]!.phase = 0;
+    for (let i = 0; i < steps; i += 1) advanceRtsCargoSway(fresh, speed, seconds / steps);
+    return fresh[0]!;
+  };
+  const coarse = travel(1.64, 1, 0.25);
+  const fine = travel(1.64, 10, 0.25);
+  assert.ok(Math.abs(coarse.phase - fine.phase) < 1e-6, "phase depends on distance covered, not on frame count");
+  const doubleSpeed = travel(3.28, 10, 0.125);
+  assert.ok(Math.abs(coarse.phase - doubleSpeed.phase) < 1e-6, "and twice the speed for half the time is the same step");
+
+  // 6 degrees is the peak, reached a quarter of the way through the cycle.
+  const peak = travel(1.64, 40, (0.82 / 4) / 1.64);
+  assert.ok(
+    Math.abs(peak.node.quaternion.angleTo(peak.base) - 6 * (Math.PI / 180)) < 1e-3,
+    "a quarter stride in, the load sits at its authored peak angle",
+  );
+
+  // And it eases back rather than freezing mid-swing when the animal halts.
+  for (let i = 0; i < 40; i += 1) advanceRtsCargoSway([peak], 0, 0.05);
+  assert.ok(peak.node.quaternion.angleTo(peak.base) < 1e-3, "and settles back to rest within a second of stopping");
+});
+
 check("Siege Faz 3: both shipped Siege Actors are a chassis, a barrel and two independently pivoted wheels", () => {
   const manifest = parseRtsMeshManifest(
     JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
@@ -48298,6 +48523,75 @@ check("either kingdom can win: a destroyed player centre is a defeat (plan §39)
   assert.equal(match.outcome, "active");
 });
 
+check("Lokalizasyon: no player-facing text attaches a Turkish case suffix to an interpolated value", () => {
+  // Turkish case endings agree with the *last vowel* of the word they attach to,
+  // and take a buffer consonant when that word already carries a possessive. A
+  // suffix written into a template literal therefore encodes an assumption about
+  // a value the template does not own — a building label, an age name, a level
+  // number — and is wrong for every value that does not match it.
+  //
+  // Four sites did this, and two were wrong against the data that ships today:
+  //
+  //   `${label}'ndan çıktı`   → "Okçuluk Alanı'ndan" ok, "Kışla'ndan" wrong
+  //   `${tier}'ye Yükselt`    → "Lv2'ye" ok, "Lv3'ye" wrong (üçe → 'e)
+  //   `Lv${level}'de açılır`  → "Lv2'de" ok, "Lv3'de" wrong (üçte → 'te)
+  //   `${site}'na yol çekin`  → ok only while every trade site ends in -ı
+  //
+  // The rule is the contract, not the wording: a value the code interpolates is
+  // followed by a space or a boundary, never by a case ending. That keeps the
+  // sentence correct at any tuning, and it is the shape the localization plan
+  // (§10) needs anyway — a suffix cannot survive translation into a language
+  // that has none.
+  const suffixed = /\}'?[a-zçğıöşü]/u;
+  for (const file of [
+    "src/game/rts/RtsApp.ts",
+    "src/game/rts/ui/rtsBuildPalette.ts",
+    "src/game/rts/ui/rtsSelectionView.ts",
+    "src/game/rts/ui/rtsHudBar.ts",
+    "src/game/rts/ui/rtsObjectiveTracker.ts",
+    "src/game/rts/ui/rtsMissionPanel.ts",
+    "src/game/rts/ui/rtsSupplyNotices.ts",
+    "src/game/rts/match/rtsMatchOverlay.ts",
+    "src/game/rts/match/rtsMatchSetup.ts",
+  ]) {
+    readFileSync(file, "utf8").split(/\r?\n/).forEach((line, index) => {
+      // Comments are prose about the code and may quote the broken forms above;
+      // only what the player can read is under the rule. `}px` and `}'s` are the
+      // two innocent neighbours the pattern would otherwise catch.
+      const code = line.replace(/\/\/.*$/, "");
+      if (code.trimStart().startsWith("*")) return;
+      const hit = code.match(suffixed)?.[0];
+      if (hit === undefined || hit === "}p" || hit === "}'s") return;
+      assert.fail(`${file}:${index + 1} attaches "${hit}" to an interpolated value: ${line.trim()}`);
+    });
+  }
+
+  // The derivation half: the one suffix-free format that is exported runs
+  // against every age and every level the balance data actually defines, so a
+  // fork that renames an age or adds a tier is covered by the same check rather
+  // than by a literal nobody updates.
+  const ages = validateAgeBalance(
+    JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
+  );
+  const levels = new Set<number>([1]);
+  for (const age of [ages.settlement, ages.town]) {
+    for (const tier of age.levelUpgrades ?? []) levels.add(tier.level);
+  }
+  assert.ok(levels.size > 1, "the balance data must define a level-up for this check to bite");
+  for (const requiredAge of ["settlement", "town"] as const) {
+    for (const level of levels) {
+      const sentence = buildingUnlockRequirement({ requiredAge, requiredSettlementLevel: level });
+      assert.doesNotMatch(
+        sentence,
+        /\d'[a-zçğıöşü]/u,
+        `unlock requirement suffixes the level number: "${sentence}"`,
+      );
+      const label = requiredAge === "town" ? "Kasaba" : "Yerleşim";
+      assert.ok(sentence.startsWith(label), `"${sentence}" must name the age it waits on`);
+    }
+  }
+});
+
 check("Faz 9 §51: the build lock agrees with the wallet that takes the money", () => {
   assert.equal(canAffordCost({ wood: 80 }, { wood: 80 }), true, "exact change buys it");
   assert.equal(canAffordCost({ wood: 80 }, { wood: 79 }), false);
@@ -50958,7 +51252,7 @@ check("Faz S5: the Market panel turns a stopped lane into the repair that fixes 
   // that the split earns its keep: if two of these read the same, one of the
   // states is not worth carrying.
   assert.match(reason([line("cut")]), /Bağımsız Oduncu Kampı ile bağlantı koptu: yolu onarın/);
-  assert.match(reason([line("unclaimed")]), /Bağımsız Oduncu Kampı'na yol çekin/);
+  assert.match(reason([line("unclaimed")]), /Bağımsız Oduncu Kampı sahipsiz: buraya yol çekin/);
   assert.match(reason([line("rival")]), /rakibin elinde/);
   assert.match(reason([line("absent")]), /Bu haritada bu kaynağın arz noktası yok/);
   // The one that was actively wrong before: a lane that is running and has simply
