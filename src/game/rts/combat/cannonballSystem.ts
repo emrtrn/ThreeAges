@@ -29,12 +29,14 @@
  * {@link CannonballSystem.setImpactHandler}, on the frame the ball arrives.
  */
 import {
+  Box3,
   ConeGeometry,
   Group,
   IcosahedronGeometry,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  Object3D,
   Vector3,
   type BufferGeometry,
 } from "three";
@@ -61,7 +63,7 @@ const MIN_ARC = 1.1;
  */
 const LAUNCH_HEIGHT = 0.95;
 
-const BALL_RADIUS = 0.24;
+const BALL_RADIUS = 0.18;
 const SMOKE_RADIUS = 0.16;
 const SMOKE_LENGTH = 1.1;
 
@@ -82,7 +84,8 @@ export type CannonballImpactHandler = (effectId: string | null, position: Vector
 
 interface Cannonball {
   readonly group: Group;
-  readonly ball: Mesh;
+  /** The iron itself: the procedural stand-in, or a clone of the authored model. */
+  readonly ball: Object3D;
   readonly smoke: Mesh;
   readonly smokeMaterial: MeshBasicMaterial;
   readonly from: Vector3;
@@ -96,6 +99,36 @@ interface Cannonball {
   impactEffectId: string | null;
 }
 
+/**
+ * Wrap an authored ball model so it tumbles about its own centre at the size the
+ * shot needs to read at.
+ *
+ * The holder exists because the tumble writes `ball.rotation` directly: a model
+ * whose geometry sits off its own origin would orbit that origin instead of
+ * spinning, which reads as a shell wobbling on an invisible string. Recentring
+ * inside a holder fixes that without touching the asset.
+ */
+function fitBallModel(template: Object3D): Object3D {
+  const holder = new Group();
+  const model = template.clone(true);
+  const bounds = new Box3().setFromObject(model);
+  const size = bounds.getSize(new Vector3());
+  const largest = Math.max(size.x, size.y, size.z);
+  const scale = largest > 0 ? (BALL_RADIUS * 2) / largest : 1;
+  model.scale.multiplyScalar(scale);
+  model.position.sub(bounds.getCenter(new Vector3()).multiplyScalar(scale));
+  model.traverse((child) => {
+    if (child instanceof Mesh) {
+      child.castShadow = true;
+      // A shell is in the air for under two seconds and is never a surface
+      // anything else is drawn against; receiving shadows is pure cost.
+      child.receiveShadow = false;
+    }
+  });
+  holder.add(model);
+  return holder;
+}
+
 export class CannonballSystem {
   readonly root = new Group();
   private readonly live: Cannonball[] = [];
@@ -106,6 +139,8 @@ export class CannonballSystem {
   private readonly ballMaterial = new MeshStandardMaterial({ color: BALL_COLOR, roughness: 0.45, metalness: 0.6 });
   private readonly scratchAhead = new Vector3();
   private impactHandler: CannonballImpactHandler | null = null;
+  /** Authored ball art, already centred and sized; null keeps the procedural one. */
+  private ballTemplate: Object3D | null = null;
 
   constructor() {
     this.root.name = "rts-cannonballs";
@@ -115,6 +150,26 @@ export class CannonballSystem {
     smoke.rotateX(Math.PI / 2);
     smoke.translate(0, 0, -SMOKE_LENGTH / 2);
     this.smokeGeometry = smoke;
+  }
+
+  /**
+   * Draw the shell as an authored model instead of the procedural sphere.
+   *
+   * The model is centred on its own bounds and scaled to {@link BALL_RADIUS},
+   * because a shell's *readability* is a gameplay fact — the player has to see
+   * the shot coming — while its modelled size is whatever the artist exported.
+   * Sizing here rather than in the Actor data keeps that promise for any model
+   * this is ever handed.
+   *
+   * Called once, when the presentation pack finishes loading. Shots already in
+   * the pool were built around the old mesh, so the pool is emptied rather than
+   * left to hand out sphere and model alternately.
+   */
+  setBallModel(template: Object3D | null): void {
+    this.ballTemplate = template ? fitBallModel(template) : null;
+    this.clear();
+    for (const shot of this.pool) shot.smokeMaterial.dispose();
+    this.pool.length = 0;
   }
 
   /** Who plays the authored burst when a shell arrives; one handler for all guns. */
@@ -238,7 +293,9 @@ export class CannonballSystem {
       opacity: 0.4,
       depthWrite: false,
     });
-    const ball = new Mesh(this.ballGeometry, this.ballMaterial);
+    const ball = this.ballTemplate
+      ? this.ballTemplate.clone(true)
+      : new Mesh(this.ballGeometry, this.ballMaterial);
     const smoke = new Mesh(this.smokeGeometry, smokeMaterial);
     group.add(ball, smoke);
     return {

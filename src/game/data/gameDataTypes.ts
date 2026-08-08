@@ -169,6 +169,21 @@ export interface UnitBalanceStats {
   maxHealth: number;
   /** Ground speed in world units/s; must be positive. */
   readonly moveSpeed: number;
+  /**
+   * How fast this unit may swing its body round, in degrees per second.
+   *
+   * Optional, and omitted means *instant*: a soldier is a body that pivots on
+   * its own feet, and a turn rate on one would be a slow-motion effect nobody
+   * asked for. What this exists for is the wheeled gun, which has to describe an
+   * arc rather than spin on the spot — a carriage that snaps to a new heading in
+   * one frame reads as a bug however good its model is.
+   *
+   * Facing is presentation only: nothing in targeting, movement or damage reads
+   * which way a unit points, so a slow turn costs the unit no reach and gives
+   * its enemy no opening. It lives in balance data all the same, because "how
+   * heavy is this thing" is a tuning answer, not an art one.
+   */
+  readonly turnRateDegPerSecond?: number;
   readonly attackType: UnitAttackType;
   /**
    * Base damage of one hit, before the target's armour-class multiplier. The

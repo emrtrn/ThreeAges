@@ -74,7 +74,7 @@ export function updateUnitCombat(
     // In range and about to shoot: face what is being shot at. A unit that
     // reached its firing position has stopped moving, so nothing else is going
     // to turn it, and the Topçu's barrel has to point down its own line of fire.
-    unit.faceTowards(target.position.x, target.position.z);
+    unit.faceTowards(target.position.x, target.position.z, dt);
     const ranged = unit.attack.ranged;
     const damage = unit.attack.tryFire(target);
     if (damage !== null) {

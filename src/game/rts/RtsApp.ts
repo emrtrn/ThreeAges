@@ -21,6 +21,7 @@ import {
   Mesh,
   type Object3D,
   Scene,
+  Vector3,
   type WebGLRenderer,
 } from "three";
 
@@ -883,6 +884,8 @@ export class RtsApp {
   private readonly projectiles = new ProjectileSystem();
   private readonly firebrands = new FirebrandSystem();
   private readonly cannonballs = new CannonballSystem();
+  /** Where the firing gun's barrel tip is; reused per shot, never held past `spawn`. */
+  private readonly scratchMuzzle = new Vector3();
   /** Artillery damage waiting on the ball that is carrying it (see §21 wiring below). */
   private readonly pendingImpacts = new PendingImpactQueue();
   private readonly structureDefense = new StructureDefenseSystem();
@@ -3820,12 +3823,19 @@ export class RtsApp {
     // rather than joining it — and it lands on a soldier as readily as on a
     // wall, which is why this one is not gated on the target class.
     if (attackVfx === "cannonball") {
+      // Off the barrel's tip when the Actor marks one, so the ball appears where
+      // the smoke would be rather than out of the carriage's axle. A gun whose
+      // art marks no muzzle keeps the old behaviour whole: its own position, and
+      // the projectile system's default launch height.
+      const muzzle = shot.attacker.muzzleWorldPosition(this.scratchMuzzle);
       return this.cannonballs.spawn(
-        shot.attacker.position,
+        muzzle ?? shot.attacker.position,
         combatImpactPoint(shot.attacker.position, shot.target),
         // The blast belongs to the gun, not to what it hit: the same shell is
         // the same explosion on a wall and on a soldier.
         shot.attacker.stats.impactEffect ?? null,
+        // The muzzle's world position already *is* the launch height.
+        muzzle ? 0 : undefined,
       );
     }
     if (shot.ranged) {
@@ -4912,6 +4922,12 @@ export class RtsApp {
       await this.actorVisuals.load((loaded, total) => this.loadTracker.report("actors", loaded, total));
       if (this.disposed) return;
       this.reportActorVisuals(this.actorVisuals.report());
+      // The shell's art, which no Actor references because a shot in flight is a
+      // pooled mesh rather than a placed Actor. A catalog that maps no such prop
+      // leaves the system on its procedural iron sphere.
+      const cannonball = await this.actorVisuals.loadPropModel("cannonball");
+      if (this.disposed) return;
+      if (cannonball) this.cannonballs.setBallModel(cannonball);
       this.warmStructureDamageEffects();
       this.units.setPresentationFactory((owner, stats) =>
         this.actorVisuals?.createUnitPresentation(

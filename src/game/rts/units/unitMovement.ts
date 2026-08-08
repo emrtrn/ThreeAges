@@ -140,13 +140,22 @@ export function updateUnitMovement(
       continue;
     }
 
+    // Turn first, then travel. Everything on legs has no authored turn rate, so
+    // it snaps and rolls straight past this in one frame, exactly as before. A
+    // wheeled gun sent back the way it came stops where it stands, comes about,
+    // and only then rolls — a carriage that drifted onto the new heading while
+    // moving would carve a long arc across the field instead of turning.
+    if (!unit.steerToHeading(Math.atan2(scratchDir.x, scratchDir.z), dt)) {
+      // Deliberately standing still is not a stall, so the congestion clock is
+      // not advanced: counting a pivot as blocked ground would re-plan the route
+      // out from under a gun that is doing exactly what it was told.
+      continue;
+    }
+
     const step = Math.min(dist, unit.speed * dt);
     scratchDir.multiplyScalar(step / dist);
     pos.x += scratchDir.x;
     pos.z += scratchDir.z;
-    // Face the heading (capsule is radially symmetric, but this keeps facing
-    // meaningful once directional models replace the placeholder).
-    unit.object.rotation.y = Math.atan2(scratchDir.x, scratchDir.z);
 
     trackCongestion(unit, target, dist, step, dt, units, options.navigation);
   }

@@ -26,6 +26,9 @@ import {
 import type { Object3D } from "three";
 import type { UnitBalanceStats, UnitRoleId } from "../../data/gameDataTypes";
 import { combatDistance, type CombatTarget } from "../combat/combatTarget";
+// Shortest-path yaw stepping, shared with the TPS character and with wildlife
+// rather than reimplemented: one turn helper, three callers.
+import { rotateYawToward, shortestYawDeltaDeg } from "../../playerMovement";
 // Body tint and the ground ring read from one source, so a unit can never wear
 // one team's colour on its body and another's underneath it.
 import { TEAM_COLOR, createTeamRing } from "../team/teamColors";
@@ -106,6 +109,17 @@ export interface RtsPresentationHandle {
    * gameplay time: nothing else about the unit's removal changes.
    */
   readonly deathSeconds?: number | undefined;
+  /**
+   * The node this unit's weapon fires from, when its Actor marks one.
+   *
+   * Presentation reporting a fact about its art, exactly as {@link deathSeconds}
+   * is: the simulation still decides *that* a shot happens and what it hits, and
+   * only the point the shell is drawn leaving from comes from here. Null or
+   * absent leaves the shot spawning from the unit's own position at the
+   * projectile system's default launch height, which is what every weapon did
+   * before any Actor marked a muzzle.
+   */
+  readonly muzzle?: Object3D | null | undefined;
   dispose(): void;
 }
 
@@ -143,6 +157,24 @@ const GUN_WHEEL_COLOR = "#6b4a2c";
  * player mostly sees a siege line in.
  */
 const GUN_ELEVATION = 0.34;
+
+const RAD_TO_DEG = 180 / Math.PI;
+const DEG_TO_RAD = Math.PI / 180;
+
+/**
+ * Facing error, in degrees, beyond which a unit that turns at a rate comes to a
+ * stop and turns on the spot before travelling again.
+ *
+ * This is what separates a vehicle from a body: a soldier drifts onto a new
+ * heading while walking, but a gun carriage sent back the way it came must not
+ * describe a long curve across the field — it stops, comes about, and only then
+ * rolls. Small corrections stay under the threshold on purpose, or the gun would
+ * stutter to a halt every time a crowd nudged its heading by a degree.
+ *
+ * Inert for anything with no authored `turnRateDegPerSecond`: those units snap,
+ * so their error is zero the instant they are asked to turn and they never stop.
+ */
+export const UNIT_PIVOT_THRESHOLD_DEG = 30;
 
 let nextUnitId = 1;
 
@@ -647,12 +679,65 @@ export class Unit {
    * gun that shells a wall while pointing somewhere else reads as broken, and an
    * Archer loosing arrows over its shoulder reads no better.
    */
-  faceTowards(x: number, z: number): void {
+  faceTowards(x: number, z: number, deltaSeconds = 0): void {
     const dx = x - this.object.position.x;
     const dz = z - this.object.position.z;
     // Standing exactly on the target leaves no heading to take; keep the last one.
     if (dx * dx + dz * dz < 1e-6) return;
-    this.object.rotation.y = Math.atan2(dx, dz);
+    this.faceHeading(Math.atan2(dx, dz), deltaSeconds);
+  }
+
+  /**
+   * Point the body at a heading, at no more than this unit's authored turn rate.
+   *
+   * A unit with no `turnRateDegPerSecond` snaps, which is every unit that walks
+   * on legs: a soldier pivots on its own feet and a limiter on one would read as
+   * slow motion. A wheeled gun states a rate and swings round over several
+   * frames instead, because a carriage describes an arc.
+   *
+   * `deltaSeconds` of 0 also snaps. That is the honest answer for a caller with
+   * no frame to spend — a unit being placed, a formation being laid out — rather
+   * than leaving it facing wherever it was built.
+   */
+  faceHeading(headingRad: number, deltaSeconds = 0): number {
+    const rate = this.stats.turnRateDegPerSecond;
+    if (rate === undefined || deltaSeconds <= 0) {
+      this.object.rotation.y = headingRad;
+      return 0;
+    }
+    this.object.rotation.y = rotateYawToward(
+      this.object.rotation.y * RAD_TO_DEG,
+      headingRad * RAD_TO_DEG,
+      rate * deltaSeconds,
+    ) * DEG_TO_RAD;
+    return Math.abs(shortestYawDeltaDeg(this.object.rotation.y * RAD_TO_DEG, headingRad * RAD_TO_DEG));
+  }
+
+  /**
+   * Turn toward a heading, and say whether the body may travel this frame.
+   *
+   * False is a unit still coming about: it has spent the frame turning and has
+   * bought no ground, which is the whole of "turn first, then move". Everything
+   * that snaps answers true on the frame it is asked, so this changes nothing
+   * for any unit that authors no turn rate.
+   */
+  steerToHeading(headingRad: number, deltaSeconds: number): boolean {
+    return this.faceHeading(headingRad, deltaSeconds) <= UNIT_PIVOT_THRESHOLD_DEG;
+  }
+
+  /**
+   * Where this unit's weapon fires from, in world space, or null when its art
+   * marks no muzzle.
+   *
+   * Read off the presentation's last rendered transform, which is a frame behind
+   * the simulation. That is deliberate and invisible: a gun that has just turned
+   * would otherwise need its whole hierarchy re-solved mid-tick to move the
+   * spawn point by a few centimetres.
+   */
+  muzzleWorldPosition(out: Vector3): Vector3 | null {
+    const muzzle = this.presentation?.muzzle;
+    if (!muzzle) return null;
+    return muzzle.getWorldPosition(out);
   }
 
   /**

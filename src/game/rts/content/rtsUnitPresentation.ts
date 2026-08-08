@@ -43,6 +43,7 @@ import {
 } from "../units/rtsUnitAnimation";
 import type { RtsPresentationHandle, RtsPresentationUpdate } from "../units/unit";
 import { advanceRtsWheelSpins, type RtsWheelSpinBinding } from "./rtsPresentationMotion";
+import { advanceRtsGunRecoils, type RtsGunRecoilBinding } from "./rtsGunMotion";
 import {
   advanceRtsCargoSway,
   applyRtsCargoVisibility,
@@ -101,6 +102,16 @@ export interface RtsUnitPresentationOptions {
    * that hangs off a body may rock, whether or not it appears and disappears.
    */
   readonly cargoSways?: readonly RtsCargoSwayBinding[] | undefined;
+  /**
+   * Authored barrel recoils already bound to their runtime nodes. Empty or
+   * omitted for anything without a gun on it.
+   */
+  readonly gunRecoils?: readonly RtsGunRecoilBinding[] | undefined;
+  /**
+   * The node this Actor fires from, or null when it marks none — the shell then
+   * leaves from the unit's own position, as it did before muzzles were authored.
+   */
+  readonly muzzle?: Object3D | null | undefined;
 }
 
 /** Crossfade length between locomotion clips: long enough to blend, short enough to obey. */
@@ -152,6 +163,10 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private readonly cargoVisuals: readonly RtsCargoVisualBinding[];
   /** Authored load sways, rocked by measured travel rather than by a clip. */
   private readonly cargoSways: readonly RtsCargoSwayBinding[];
+  /** Authored barrel pivots, kicked by the unit's shot counter rather than by a clip. */
+  private readonly gunRecoils: readonly RtsGunRecoilBinding[];
+  /** See {@link RtsPresentationHandle.muzzle}: null for anything that marks none. */
+  readonly muzzle: Object3D | null;
   /** Last load state applied, so an unchanged frame touches no node at all. */
   private carrying: boolean | null = null;
 
@@ -163,6 +178,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     this.wheelSpins = options.wheelSpins ?? [];
     this.cargoVisuals = options.cargoVisuals ?? [];
     this.cargoSways = options.cargoSways ?? [];
+    this.gunRecoils = options.gunRecoils ?? [];
+    this.muzzle = options.muzzle ?? null;
 
     const animation = options.animation;
     if (!animation || animation.clips.length === 0) return;
@@ -224,6 +241,11 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // outside the animator's early return. A pack animal's load must rock whether
     // or not the asset it hangs on ships a single clip.
     advanceRtsCargoSway(this.cargoSways, state.planarSpeed, state.deltaSeconds);
+    // And alongside both: a gun is static meshes on pivots with no mixer, so its
+    // barrel would never kick if this waited for the animator. Driven by the shot
+    // counter, not by measured speed — the one presentation motion here that a
+    // standing unit is *supposed* to have.
+    advanceRtsGunRecoils(this.gunRecoils, state.attackCount, state.deltaSeconds);
 
     const animator = this.animator;
     if (!animator) return;

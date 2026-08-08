@@ -246,6 +246,16 @@ export interface RtsContentCatalog {
   readonly logistics: RtsLogisticsContentSection;
   /** Manifest asset ids. UI migration starts in Faz F, so these are optional now. */
   readonly ui: Readonly<Record<string, string>>;
+  /**
+   * Manifest asset ids for art the runtime draws that no Actor references — a
+   * projectile in flight, which is a pooled mesh rather than a placed Actor.
+   *
+   * Keyed by a well-known slot name the drawing system asks for, so the model
+   * stays swappable from data. Absent in a catalog authored before props
+   * existed, which resolves as "no prop art" and leaves the system on the
+   * procedural stand-in it shipped with.
+   */
+  readonly props: Readonly<Record<string, string>>;
   /** Health-driven damage/collapse presentation; see {@link rtsBuildingDamagePresentation}. */
   readonly damage: RtsDamageSection;
 }
@@ -915,17 +925,26 @@ function validateDamage(value: unknown, buildingIds: ReadonlySet<string>): RtsDa
   };
 }
 
-function validateUi(value: unknown): RtsContentCatalog["ui"] {
-  const where = "rts-content.json.ui";
+function validateSlotAssetIds(value: unknown, where: string): Readonly<Record<string, string>> {
   const rawEntries = asObject(value, where);
   const entries: Record<string, string> = {};
   for (const [slot, assetId] of Object.entries(rawEntries)) {
     if (!/^[a-z][a-zA-Z0-9]*$/.test(slot)) {
-      throw new RtsContentCatalogError(`${where}: invalid UI slot "${slot}"`);
+      throw new RtsContentCatalogError(`${where}: invalid slot "${slot}"`);
     }
     entries[slot] = requireManifestAssetId(assetId, `${where}."${slot}"`);
   }
   return entries;
+}
+
+/**
+ * The manifest asset the catalog maps a prop slot to, or null when it maps none.
+ *
+ * Null is a supported answer, not a failure: the runtime's procedural stand-in
+ * is what a project that authors no prop art keeps drawing.
+ */
+export function rtsPropAssetId(catalog: RtsContentCatalog, slot: string): string | null {
+  return catalog.props[slot] ?? null;
 }
 
 /** Validate the reference-only `public/game-data/content/rts-content.json` contract. */
@@ -935,7 +954,7 @@ export function validateRtsContentCatalog(
 ): RtsContentCatalog {
   const where = "rts-content.json";
   const obj = asObject(value, where);
-  requireExactKeys(obj, ["schema", "type", "units", "buildings", "animals", "logistics", "ui", "damage"], where);
+  requireExactKeys(obj, ["schema", "type", "units", "buildings", "animals", "logistics", "ui", "props", "damage"], where);
   if (obj["schema"] !== RTS_CONTENT_CATALOG_SCHEMA) {
     throw new RtsContentCatalogError(`${where}.schema: expected ${RTS_CONTENT_CATALOG_SCHEMA}`);
   }
@@ -950,7 +969,10 @@ export function validateRtsContentCatalog(
     buildings,
     animals: validateAnimals(obj["animals"], context),
     logistics: validateLogistics(obj["logistics"]),
-    ui: validateUi(obj["ui"]),
+    ui: validateSlotAssetIds(obj["ui"], `${where}.ui`),
+    // Optional: a catalog written before props existed is still valid, and
+    // resolves to no prop art rather than to a load failure.
+    props: obj["props"] === undefined ? {} : validateSlotAssetIds(obj["props"], `${where}.props`),
     damage: validateDamage(obj["damage"], new Set(Object.keys(buildings))),
   };
 }

@@ -437,6 +437,18 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (moveSpeed <= 0) {
       throw new GameDataError(`${statsWhere}.moveSpeed: must be > 0`);
     }
+    // Optional: omitted is an instant turn, which is what a body on legs does.
+    // A stated one must be a rate a unit can finish a turn at — zero or negative
+    // is a unit that can never face anything again, and past a full turn per
+    // second the limiter is doing nothing a snap did not already do.
+    const rawTurnRate = stats["turnRateDegPerSecond"];
+    let turnRateDegPerSecond: number | undefined;
+    if (rawTurnRate !== undefined) {
+      turnRateDegPerSecond = requireFiniteNumber(stats, "turnRateDegPerSecond", statsWhere);
+      if (turnRateDegPerSecond <= 0) {
+        throw new GameDataError(`${statsWhere}.turnRateDegPerSecond: must be > 0, or omitted for an instant turn`);
+      }
+    }
     const attackDamage = requireFiniteNumber(stats, "attackDamage", statsWhere);
     if (attackDamage <= 0) {
       throw new GameDataError(`${statsWhere}.attackDamage: must be > 0`);
@@ -531,6 +543,7 @@ export function validateUnitBalance(value: unknown): UnitBalance {
       armorClass: armorClass as Exclude<UnitArmorClass, "structure">,
       maxHealth,
       moveSpeed,
+      ...(turnRateDegPerSecond !== undefined ? { turnRateDegPerSecond } : {}),
       attackType: attackType as UnitAttackType,
       attackDamage,
       attackCooldown,

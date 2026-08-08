@@ -16,7 +16,7 @@ import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import type { AssetManifest } from "@engine/assets/manifest";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import type { SettlementAge } from "@/game/data/gameDataTypes";
-import { rtsAnimalActorRef, rtsBuildingActorRef, rtsBuildingActorRefLadder, rtsCaravanActorRef, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
+import { rtsAnimalActorRef, rtsBuildingActorRef, rtsBuildingActorRefLadder, rtsCaravanActorRef, rtsPropAssetId, rtsUnitActorRef, type RtsActorRef, type RtsContentCatalog } from "./rtsContentCatalog";
 import {
   RtsActorPresentationError,
   parseRtsEffectManifestPaths,
@@ -35,6 +35,7 @@ import {
 } from "./rtsActorPresentationTree";
 import { createRtsActorPlaceholder } from "./rtsActorPlaceholder";
 import { bindRtsWheelSpins } from "./rtsPresentationMotion";
+import { bindRtsGunRecoils, bindRtsMuzzle } from "./rtsGunMotion";
 import { bindRtsCargoSways, bindRtsCargoVisuals } from "./rtsCargoVisual";
 import {
   collectRtsPickTargets,
@@ -177,6 +178,27 @@ export class RtsActorVisualFactory {
   }
 
   /** Same, for a static mesh — the debris models an effect's renderer names. */
+  /**
+   * Load the model the catalog maps a prop slot to, or null when it maps none.
+   *
+   * Props are art the runtime draws that no Actor references — a shell in
+   * flight is a pooled mesh, not a placed Actor — so they cannot come through
+   * the pack walk, which only visits Actors. They go through the same template
+   * cache all the same, so a prop that happened to share a model with an Actor
+   * shares its download too.
+   *
+   * Callable only after {@link load}: the manifest is what resolves the id.
+   */
+  async loadPropModel(slot: string): Promise<Object3D | null> {
+    const assetId = rtsPropAssetId(this.catalog, slot);
+    if (assetId === null) return null;
+    const asset = this.manifestMeshes.get(assetId);
+    if (!asset || asset.assetType !== "staticMesh") return null;
+    const template = this.templates.get(assetId) ?? await this.templateFor(assetId, asset.path);
+    this.templates.set(assetId, template);
+    return template.scene;
+  }
+
   staticMeshAssetPath(assetId: string): string | null {
     const asset = this.manifestMeshes.get(assetId);
     return asset?.assetType === "staticMesh" ? asset.path : null;
@@ -278,6 +300,10 @@ export class RtsActorVisualFactory {
       animation: def ? this.animationSourceFor(root) : null,
       moveSpeed,
       wheelSpins: def ? bindRtsWheelSpins(def, root) : [],
+      // The siege engine is what these two exist for: a barrel that kicks when
+      // the gun goes off, and the point its shell is drawn leaving from.
+      gunRecoils: def ? bindRtsGunRecoils(def, root) : [],
+      muzzle: def ? bindRtsMuzzle(def, root) : null,
     });
   }
 

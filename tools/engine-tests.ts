@@ -133,6 +133,7 @@ import {
   rtsCaravanActorRef,
   rtsBuildingActorRef,
   rtsBuildingActorRefLadder,
+  rtsPropAssetId,
   rtsUnitActorRef,
   rtsUnitOwnerActorRefIsAuthored,
   validateRtsContentCatalog,
@@ -163,6 +164,13 @@ import {
   bindRtsWheelSpins,
   readRtsActorMotions,
 } from "../src/game/rts/content/rtsPresentationMotion";
+import {
+  advanceRtsGunRecoils,
+  bindRtsGunRecoils,
+  bindRtsMuzzle,
+  readRtsActorGunRecoils,
+  readRtsActorMuzzle,
+} from "../src/game/rts/content/rtsGunMotion";
 import {
   advanceRtsCargoSway,
   applyRtsCargoVisibility,
@@ -35568,6 +35576,21 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
   }, context);
   assert.equal(validPilot.units.guard_placeholder?.actorRef, "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json");
   assert.equal(validPilot.buildings.barracks?.levels["1"], "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T1.actor.json");
+  // `props` is optional, so a catalog written before it existed still boots — and
+  // resolves to no prop art, which is the runtime's procedural stand-in rather
+  // than a load failure.
+  assert.deepEqual(validPilot.props, {}, "a catalog with no props section is valid");
+  assert.equal(rtsPropAssetId(validPilot, "cannonball"), null, "and maps no prop");
+  const withProps = validateRtsContentCatalog(
+    { schema: 2, type: "rtsContentCatalog", animals: {}, damage: minimalDamageSection(), units: {}, buildings: {}, ui: {}, props: { cannonball: "cannon-ball" } },
+    context,
+  );
+  assert.equal(rtsPropAssetId(withProps, "cannonball"), "cannon-ball", "an authored prop resolves to its manifest asset id");
+  assert.throws(
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", animals: {}, damage: minimalDamageSection(), units: {}, buildings: {}, ui: {}, props: { cannonball: "assets/x.glb" } }, context),
+    RtsContentCatalogError,
+    "a prop must name a manifest asset id, not a path",
+  );
 
   assert.throws(
     () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", animals: {}, damage: minimalDamageSection(), units: { unknown: { actorRef: "assets/A.actor.json" } }, buildings: {}, ui: {} }, context),
@@ -36128,6 +36151,126 @@ check("Siege Faz 3: wheelSpin metadata is validated, bound to its pivot, and tur
   assert.ok(Math.abs(pivot!.rotation.x - (before - 5)) < 1e-9, "direction -1 turns the other way by the same amount");
 });
 
+check("Siege gun: the barrel's recoil and the muzzle are validated, bound, and driven by the shot counter", () => {
+  const defWith = (recoil: unknown, muzzle: unknown = true, withBarrel = true) => normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_Gun",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "chassis", component: "StaticMeshComponent", parent: "root", props: { assetId: "shape-cube" } },
+      { id: "barrelPivot", component: "Transform", parent: "root", props: { rotation: [-14, 0, 0], rtsGunRecoil: recoil } },
+      ...(withBarrel
+        ? [
+          { id: "barrel", component: "StaticMeshComponent", parent: "barrelPivot", props: { assetId: "shape-cylinder" } },
+          { id: "muzzle", component: "Transform", parent: "barrelPivot", props: { position: [0, 0, 1.8], rtsMuzzle: muzzle } },
+        ]
+        : []),
+    ],
+  }, "BP_Gun");
+
+  const sound = { axis: "x", degrees: -13, recoverSeconds: 0.7 };
+  const good = readRtsActorGunRecoils(defWith(sound));
+  assert.deepEqual("recoils" in good ? good.recoils[0] : null, ["barrelPivot", sound], "a well-formed recoil is read off its pivot");
+
+  // Each of these is a barrel that would swing off its trunnions, never move, or
+  // still be settling when the next shot goes off.
+  for (const [recoil, why] of [
+    [{ axis: "w", degrees: -13, recoverSeconds: 0.7 }, "an axis that is not x/y/z"],
+    [{ axis: "x", degrees: 0, recoverSeconds: 0.7 }, "a kick of zero"],
+    [{ axis: "x", degrees: -90, recoverSeconds: 0.7 }, "a kick past the limit"],
+    [{ axis: "x", degrees: Number.NaN, recoverSeconds: 0.7 }, "a non-finite kick"],
+    [{ axis: "x", degrees: -13, recoverSeconds: 0 }, "a zero recovery"],
+    [{ axis: "x", degrees: -13, recoverSeconds: 60 }, "a recovery longer than any reload"],
+  ] as const) {
+    const read = readRtsActorGunRecoils(defWith(recoil));
+    assert.ok("problem" in read, `${why} is refused`);
+    assert.ok("problem" in read && read.problem.includes("barrelPivot"), "and the failure names the component");
+  }
+
+  // A recoil pivot with nothing under it is a rename or a reparent, and presents
+  // as a gun that fires without moving — the bug the prop exists to fix.
+  const orphan = readRtsActorGunRecoils(defWith(sound, true, false));
+  assert.ok("problem" in orphan && orphan.problem.includes("needs a barrel component"), "recoil without a barrel is refused");
+
+  // One muzzle, or the runtime silently fires from whichever component order put
+  // first — and a marker that is not literally `true` is a typo, not a muzzle.
+  assert.deepEqual(readRtsActorMuzzle(defWith(sound)), { muzzle: "muzzle" });
+  assert.deepEqual(readRtsActorMuzzle(defWith(sound, null)), { muzzle: null }, "an Actor may mark no muzzle at all");
+  const notTrue = readRtsActorMuzzle(defWith(sound, "yes"));
+  assert.ok("problem" in notTrue && notTrue.problem.includes("must be true"), "a non-true rtsMuzzle is refused");
+  const twoMuzzles = normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_Gun",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "muzzleA", component: "Transform", parent: "root", props: { rtsMuzzle: true } },
+      { id: "muzzleB", component: "Transform", parent: "root", props: { rtsMuzzle: true } },
+    ],
+  }, "BP_Gun");
+  assert.ok("problem" in readRtsActorMuzzle(twoMuzzles), "two muzzles on one Actor are refused");
+
+  // Broken metadata fails the Actor the way a missing mesh does — a placeholder
+  // named by ref and component, not a barrel that silently never moves.
+  const meshes = new Map([
+    ["shape-cube", { path: "a.glb", assetType: "staticMesh" as const }],
+    ["shape-cylinder", { path: "b.glb", assetType: "staticMesh" as const }],
+  ]);
+  assert.throws(
+    () => validateRtsPresentationActor(defWith({ axis: "x", degrees: 0, recoverSeconds: 0.7 }), "assets/A.actor.json", meshes),
+    RtsActorPresentationError,
+    "a bad recoil fails the Actor load",
+  );
+  assert.throws(
+    () => validateRtsPresentationActor(defWith(sound, "yes"), "assets/A.actor.json", meshes),
+    RtsActorPresentationError,
+    "a bad muzzle marker fails the Actor load",
+  );
+
+  // Plain Actor Script data, so the editor's save round-trip returns both props
+  // unchanged — there is no allowlist protecting them.
+  const roundTripped = normalizeActorScriptDef(JSON.parse(JSON.stringify(defWith(sound))) as unknown, "BP_Gun");
+  assert.deepEqual(roundTripped.components.find((node) => node.id === "barrelPivot")?.props.rtsGunRecoil, sound);
+  assert.equal(roundTripped.components.find((node) => node.id === "muzzle")?.props.rtsMuzzle, true);
+
+  const def = defWith(sound);
+  const tree = buildActorPresentationTree(def, "BP_Gun", () => undefined);
+  const pivot = findActorComponentNode(tree, "barrelPivot")!;
+  const rest = pivot.quaternion.clone();
+  const bindings = bindRtsGunRecoils(def, tree);
+  assert.equal(bindings.length, 1);
+  assert.equal(bindings[0]!.node, pivot);
+  assert.equal(bindRtsMuzzle(def, tree), findActorComponentNode(tree, "muzzle"));
+
+  // A gun that is not firing does not move, however many frames pass. This is
+  // the whole reason the kick reads the shot counter rather than a clock.
+  for (let i = 0; i < 30; i += 1) advanceRtsGunRecoils(bindings, 0, 1 / 60);
+  // 1e-6, not 0: `angleTo` of a unit quaternion with itself is ~3e-8 in floating
+  // point, so a tighter bound would be measuring `acos`, not the barrel.
+  assert.ok(pivot.quaternion.angleTo(rest) < 1e-6, "an idle gun holds its authored elevation");
+
+  // One shot: the barrel swings off the rest pose and comes back to it exactly,
+  // so a thousand shots cannot accumulate a drift out of the carriage.
+  advanceRtsGunRecoils(bindings, 1, 1 / 60);
+  let peak = 0;
+  for (let i = 0; i < 60; i += 1) {
+    advanceRtsGunRecoils(bindings, 1, 1 / 60);
+    peak = Math.max(peak, pivot.quaternion.angleTo(rest));
+  }
+  assert.ok(peak > 0.9 * 13 * (Math.PI / 180), `the kick reaches its authored 13 degrees (peaked at ${peak})`);
+  assert.ok(peak <= 13 * (Math.PI / 180) + 1e-9, "and never exceeds it");
+  assert.ok(pivot.quaternion.angleTo(rest) < 1e-6, "and the barrel is back on its rest pose within the recovery window");
+
+  // The same count again is the same shot, not a second one: re-triggering every
+  // frame would freeze the barrel at the start of its kick for as long as the gun
+  // was firing — the bug the animated units' `attackCount` guard exists for.
+  advanceRtsGunRecoils(bindings, 1, 1 / 60);
+  assert.ok(pivot.quaternion.angleTo(rest) < 1e-6, "a repeated shot count does not restart the kick");
+  advanceRtsGunRecoils(bindings, 2, 1 / 60);
+  assert.ok(pivot.quaternion.angleTo(rest) > 1e-6, "and the next shot does");
+});
+
 check("Caravan cargo: authored load meshes are validated, bound, and shown for exactly the loaded legs", () => {
   const defWith = (visibility: unknown, onMesh = true) => normalizeActorScriptDef({
     schema: 1,
@@ -36344,7 +36487,7 @@ check("Caravan cargo: the load sway is driven by travelled distance and settles 
   assert.ok(peak.node.quaternion.angleTo(peak.base) < 1e-3, "and settles back to rest within a second of stopping");
 });
 
-check("Siege Faz 3: both shipped Siege Actors are a chassis, a barrel and two independently pivoted wheels", () => {
+check("Siege Faz 3: both shipped Siege Actors are a chassis, a barrel and four independently pivoted wheels", () => {
   const manifest = parseRtsMeshManifest(
     JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
   );
@@ -36355,19 +36498,31 @@ check("Siege Faz 3: both shipped Siege Actors are a chassis, a barrel and two in
     const def = normalizeActorScriptDef(JSON.parse(readFileSync(`public/${ref}`, "utf8")) as unknown, ref);
     validateRtsPresentationActor(def, ref, manifest);
 
-    // Four separate meshes, not one baked model: this is what lets the barrel be
-    // elevated and the wheels be turned without re-exporting anything.
+    // Separate meshes, not one baked model: this is what lets the barrel be
+    // elevated and the wheels be turned without re-exporting anything. The gun
+    // is a four-wheeled carriage whose front and rear pairs are different parts,
+    // so the mesh list is six and the axles disagree about radius by design.
     const meshes = def.components.filter((node) => node.component === "StaticMeshComponent").map((node) => node.id);
-    assert.deepEqual([...meshes].sort(), ["barrel", "chassis", "leftWheel", "rightWheel"], `${ref} authors four mesh components`);
-    assert.equal(def.components.find((node) => node.id === "barrel")?.parent, "turretPivot", "the barrel hangs off its own pivot");
+    assert.deepEqual(
+      [...meshes].sort(),
+      ["barrel", "chassis", "frontLeftWheel", "frontRightWheel", "rearLeftWheel", "rearRightWheel"],
+      `${ref} authors a chassis, a barrel and four wheels`,
+    );
+    assert.equal(def.components.find((node) => node.id === "barrel")?.parent, "barrelPivot", "the barrel hangs off its own pivot");
 
     const motions = readRtsActorMotions(def);
     assert.ok("motions" in motions, `${ref} wheel metadata validates`);
     const byPivot = new Map("motions" in motions ? motions.motions : []);
-    assert.deepEqual([...byPivot.keys()].sort(), ["leftWheelPivot", "rightWheelPivot"], "both wheels spin, and only the wheels");
-    // Same radius on both sides, or the two wheels would disagree about how far
-    // the engine has travelled and visibly drift apart.
-    assert.equal(byPivot.get("leftWheelPivot")!.radius, byPivot.get("rightWheelPivot")!.radius);
+    assert.deepEqual(
+      [...byPivot.keys()].sort(),
+      ["frontLeftWheelPivot", "frontRightWheelPivot", "rearLeftWheelPivot", "rearRightWheelPivot"],
+      "all four wheels spin, and only the wheels",
+    );
+    // Same radius across each axle, or the pair would disagree about how far the
+    // engine has travelled and visibly drift apart. Front vs rear may differ —
+    // they are different wheels — and each still rolls its own circumference.
+    assert.equal(byPivot.get("frontLeftWheelPivot")!.radius, byPivot.get("frontRightWheelPivot")!.radius);
+    assert.equal(byPivot.get("rearLeftWheelPivot")!.radius, byPivot.get("rearRightWheelPivot")!.radius);
     for (const [pivotId, motion] of byPivot) {
       const wheel = def.components.find((node) => node.parent === pivotId);
       assert.ok(wheel, `${pivotId} carries a wheel`);
@@ -36431,8 +36586,13 @@ check("Siege Faz 3: the authored wheel radius is the radius the wheel mesh actua
       // The wheel is turned onto its rolling axis, so its diameter is the largest
       // of the three extents whichever way it was oriented.
       const diameter = Math.max(...size);
+      // 2%, not an exact float: the radius is a number a person types into the
+      // Actor, and a hand-authored 0.373 against a mesh's 0.37232 is a fifth of a
+      // millimetre of skate on a wheel the size of a shield. What this still
+      // catches is every mismatch that reads on screen — including the 100x miss
+      // in the note above, which is off by four orders of magnitude.
       assert.ok(
-        Math.abs(diameter - motion.radius * 2) < 1e-6,
+        Math.abs(diameter - motion.radius * 2) < diameter * 0.02,
         `${ref} ${wheelId}: mesh diameter ${diameter} must be twice the authored radius ${motion.radius}`,
       );
     }
@@ -36443,7 +36603,143 @@ check("Siege Faz 3: the authored wheel radius is the radius the wheel mesh actua
     assert.ok(chassis[0] > 0.8 && chassis[0] < 3, `${ref} chassis is ${chassis[0]} wide, which is not a vehicle`);
     assert.ok(chassis[2] > 0.8 && chassis[2] < 4, `${ref} chassis is ${chassis[2]} deep, which is not a vehicle`);
     const barrel = sizeOf("barrel");
-    assert.ok(Math.max(...barrel) > 0.5 && Math.max(...barrel) < 2.5, `${ref} barrel length ${Math.max(...barrel)} is not a gun`);
+    assert.ok(Math.max(...barrel) > 0.5 && Math.max(...barrel) < 4, `${ref} barrel length ${Math.max(...barrel)} is not a gun`);
+  }
+});
+
+check("Siege gun: an authored turn rate makes the carriage swing round instead of snapping", () => {
+  // Facing is presentation, so nothing else in the suite would notice a gun that
+  // pivots on the spot — and a wheeled carriage that changes heading in one frame
+  // is the single loudest tell that a model is being flown rather than driven.
+  const heading = (unit: Unit) => unit.object.rotation.y;
+  const snapping = new Unit("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const heavy = new Unit("player", 0, 0, { ...RTS_TEST_UNIT_STATS, turnRateDegPerSecond: 90 });
+
+  // Everything on legs keeps the instant turn it always had: a limiter on a
+  // soldier would read as slow motion, so the field is omitted and it snaps.
+  snapping.faceTowards(0, -1, 1 / 60);
+  assert.ok(Math.abs(Math.abs(heading(snapping)) - Math.PI) < 1e-9, "an unauthored unit still faces about-turns instantly");
+
+  // 90°/s over one 60Hz frame is 1.5°, and the gun is asked for 180°.
+  heavy.faceTowards(0, -1, 1 / 60);
+  assert.ok(
+    Math.abs(heading(heavy) - 1.5 * (Math.PI / 180)) < 1e-9,
+    `one frame of turn is one frame's budget, not the whole turn (got ${heading(heavy)})`,
+  );
+
+  // And it does arrive: two seconds of budget is 180°, so the turn completes
+  // rather than easing forever toward a heading it never reaches.
+  for (let i = 0; i < 120; i += 1) heavy.faceTowards(0, -1, 1 / 60);
+  assert.ok(Math.abs(Math.abs(heading(heavy)) - Math.PI) < 1e-6, "and the turn finishes inside its own rate");
+
+  // A caller with no frame to spend — a unit being placed, a formation laid out —
+  // gets the snap rather than a gun left facing wherever it was built.
+  const placed = new Unit("player", 0, 0, { ...RTS_TEST_UNIT_STATS, turnRateDegPerSecond: 90 });
+  placed.faceTowards(0, -1);
+  assert.ok(Math.abs(Math.abs(heading(placed)) - Math.PI) < 1e-9, "a zero delta places the body at its heading");
+
+  // Turn first, then travel. This is the half that makes a carriage read as a
+  // vehicle: sent back the way it came, it must buy no ground at all until it has
+  // come about, rather than carving a long arc across the field while turning.
+  const gun = new Unit("player", 0, 0, { ...RTS_TEST_UNIT_STATS, turnRateDegPerSecond: 90 });
+  gun.setMoveTarget(0, -12);
+  const startZ = gun.position.z;
+  for (let i = 0; i < 30; i += 1) updateUnitMovement([gun], 1 / 60, {});
+  assert.equal(gun.position.z, startZ, "half a second into a 180-degree turn, the gun has not moved");
+  assert.ok(Math.abs(heading(gun)) > 0.1, "but it has been turning the whole time");
+
+  // And once it is round, it travels: the pivot is a gate, not a freeze.
+  for (let i = 0; i < 120; i += 1) updateUnitMovement([gun], 1 / 60, {});
+  assert.ok(gun.position.z < startZ - 1, `the gun rolls once it faces its destination (z ${gun.position.z})`);
+
+  // A body on legs never stops for this, however sharp the reversal: it has no
+  // authored rate, so its facing error is zero on the frame it is asked to turn.
+  const soldier = new Unit("player", 0, 0, RTS_TEST_UNIT_STATS);
+  soldier.setMoveTarget(0, -12);
+  updateUnitMovement([soldier], 1 / 60, {});
+  assert.ok(soldier.position.z < 0, "a unit with no turn rate reverses without pausing");
+
+  // The shipped Topçu is the unit this exists for, and it must actually carry a
+  // rate — an unauthored one would snap and nothing above would fail.
+  const units = JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as Record<string, Record<string, unknown>>;
+  const siege = Object.entries(units).find(([, stats]) => stats.role === "siege")?.[1];
+  assert.ok(siege, "the balance table still ships a siege unit");
+  assert.ok(
+    typeof siege!.turnRateDegPerSecond === "number" && siege!.turnRateDegPerSecond > 0,
+    "the wheeled gun authors a turn rate",
+  );
+  // Slower than a body pivoting on its feet, and not so slow it cannot come
+  // about at all — derived from the table, so any tuning of it stays green.
+  assert.ok(
+    (siege!.turnRateDegPerSecond as number) < 360,
+    "and it is slower than one full turn a second, which is what a snap already was",
+  );
+});
+
+check("Siege gun: the shipped muzzle rides the barrel and sits at the barrel model's mouth", () => {
+  // The bug this pins: the muzzle is a hand-authored offset, and the barrel mesh
+  // it belongs to gets nudged by eye during an art pass. Anchored to the wrong
+  // parent, or left at the old offset, the shell keeps leaving from thin air
+  // beside the gun — which looks like a physics bug, not an authoring one, and
+  // nothing else in the suite would say a word.
+  const barrelBounds = (path: string) => {
+    const buffer = readFileSync(path);
+    const json = JSON.parse(buffer.subarray(20, 20 + buffer.readUInt32LE(12)).toString("utf8")) as {
+      nodes: { translation?: number[]; scale?: number[]; mesh?: number }[];
+      meshes: { primitives: { attributes: { POSITION: number } }[] }[];
+      accessors: { min?: number[]; max?: number[] }[];
+    };
+    const node = json.nodes.find((entry) => entry.mesh !== undefined)!;
+    const offset = node.translation ?? [0, 0, 0];
+    const scale = node.scale ?? [1, 1, 1];
+    const min = [Infinity, Infinity, Infinity];
+    const max = [-Infinity, -Infinity, -Infinity];
+    for (const primitive of json.meshes[node.mesh!]!.primitives) {
+      const accessor = json.accessors[primitive.attributes.POSITION]!;
+      for (let axis = 0; axis < 3; axis += 1) {
+        min[axis] = Math.min(min[axis]!, accessor.min![axis]! * scale[axis]! + offset[axis]!);
+        max[axis] = Math.max(max[axis]!, accessor.max![axis]! * scale[axis]! + offset[axis]!);
+      }
+    }
+    return { min, max };
+  };
+
+  const manifest = parseRtsMeshManifest(
+    JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
+  );
+  for (const ref of [
+    "assets/ThreeAges/Actors/Units/BP_RTS_Siege.actor.json",
+    "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Siege.actor.json",
+  ]) {
+    const def = normalizeActorScriptDef(JSON.parse(readFileSync(`public/${ref}`, "utf8")) as unknown, ref);
+    const read = readRtsActorMuzzle(def);
+    assert.ok("muzzle" in read && read.muzzle !== null, `${ref} marks a muzzle`);
+    const muzzle = def.components.find((node) => node.id === ("muzzle" in read ? read.muzzle : null))!;
+
+    // Parented to the barrel *mesh*, not to the pivot above it: that is what makes
+    // the offset below live in the model's own space, and what makes the muzzle
+    // follow the barrel when the barrel is moved.
+    assert.equal(muzzle.parent, "barrel", `${ref} hangs its muzzle off the barrel mesh`);
+    const barrel = def.components.find((node) => node.id === "barrel")!;
+    const bounds = barrelBounds(`public/${manifest.get(barrel.props.assetId as string)!.path}`);
+    const at = muzzle.props.position as number[];
+
+    // The model's length runs along its own +X, so the mouth is the far +X end.
+    // The tolerance is the gun's own bore, not a magic number: anywhere inside
+    // the last tenth of the barrel is the mouth, and anything short of that is
+    // the shell being born inside the metal.
+    const length = bounds.max[0]! - bounds.min[0]!;
+    assert.ok(
+      at[0]! > bounds.max[0]! - length * 0.1 && at[0]! < bounds.max[0]! + length * 0.1,
+      `${ref} muzzle x ${at[0]} is not at the barrel mouth (${bounds.max[0]})`,
+    );
+    // And on the bore's axis rather than off the side of the barrel.
+    for (const axis of [1, 2] as const) {
+      assert.ok(
+        at[axis]! >= bounds.min[axis]! && at[axis]! <= bounds.max[axis]!,
+        `${ref} muzzle axis ${axis} at ${at[axis]} is outside the barrel`,
+      );
+    }
   }
 });
 
@@ -36508,7 +36804,7 @@ check("Unit Actors Faz 2: all eight shipped unit Actors still present as one sel
       assert.equal(pickTargets.length, expectedMeshes, `${ref} exposes one pick target per mesh component`);
       assert.ok(pickTargets.length > 0, `${ref} is selectable at all`);
       if (role === "Siege") {
-        assert.equal(pickTargets.length, 4, "the siege engine is picked by chassis, barrel or either wheel");
+        assert.equal(pickTargets.length, 6, "the siege engine is picked by chassis, barrel or any of its four wheels");
       }
 
       // The ring size is authored, and must stay inside the range the Details

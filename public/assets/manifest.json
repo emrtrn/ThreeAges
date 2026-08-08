@@ -29712,6 +29712,144 @@
         "bytes": 457
       },
       "license": "Project-local ThreeAges road material pilot"
+    },
+    {
+      "id": "cannon-ball",
+      "name": "Cannon Ball",
+      "assetType": "staticMesh",
+      "category": "Birimler",
+      "path": "assets/ThreeAges/Birimler/cannon_ball.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Birimler",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4016584
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "cannon-barrel",
+      "name": "Cannon Barrel",
+      "assetType": "staticMesh",
+      "category": "Birimler",
+      "path": "assets/ThreeAges/Birimler/cannon_barrel.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Birimler",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4335764
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "cannon-chassis",
+      "name": "Cannon Chassis",
+      "assetType": "staticMesh",
+      "category": "Birimler",
+      "path": "assets/ThreeAges/Birimler/cannon_chassis.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Birimler",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4742904
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "cannon-wheel-front",
+      "name": "Cannon Wheel Front",
+      "assetType": "staticMesh",
+      "category": "Birimler",
+      "path": "assets/ThreeAges/Birimler/cannon_wheel_front.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Birimler",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4021668
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "cannon-wheel-rear",
+      "name": "Cannon Wheel Rear",
+      "assetType": "staticMesh",
+      "category": "Birimler",
+      "path": "assets/ThreeAges/Birimler/cannon_wheel_rear.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Birimler",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4026560
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "meshy-ai-meshy-merged-animations",
+      "name": "Meshy AI Meshy Merged Animations",
+      "assetType": "skeletalMesh",
+      "category": "SkeletalMeshes",
+      "path": "assets/starter-content/SkeletalMeshes/Meshy_AI_Meshy_Merged_Animations.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "SkeletalMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1779236
+      },
+      "license": "Unknown"
     }
   ]
 }

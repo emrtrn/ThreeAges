@@ -225,6 +225,7 @@ const UNITS_FIELDS = [
   { path: "armorClass", label: "Zırh sınıfı", enum: ["light", "heavy"] },
   { path: "maxHealth", label: "Can", min: 1, step: 1 },
   { path: "moveSpeed", label: "Hareket hızı", min: 0, step: 0.1 },
+  { path: "turnRateDegPerSecond", label: "Dönüş hızı (derece/sn)", min: 0, step: 5, hint: "Gövdenin saniyede kaç derece dönebileceği. Boş bırakılırsa birim anında döner — bacakları olan her birim için doğrusu budur. Tekerlekli top gibi bir gövdenin yerinde dönmek yerine yay çizmesi için doldurulur. Yön yalnızca görseldir: yavaş dönmek menzil ya da hasar kaybettirmez." },
   { path: "attackType", label: "Saldırı tipi", enum: ["melee", "ranged"] },
   { path: "attackDamage", label: "Saldırı hasarı", min: 0, step: 1 },
   { path: "attackCooldown", label: "Saldırı bekleme (sn)", min: 0, step: 0.1 },

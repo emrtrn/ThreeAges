@@ -65,6 +65,7 @@
     "armorClass": "heavy",
     "maxHealth": 180,
     "moveSpeed": 3.8,
+    "turnRateDegPerSecond": 70,
     "attackType": "ranged",
     "attackDamage": 34,
     "attackCooldown": 5.5,

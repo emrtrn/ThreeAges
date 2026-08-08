@@ -285,6 +285,9 @@
     }
   },
   "ui": {},
+  "props": {
+    "cannonball": "cannon-ball"
+  },
   "damage": {
     "defaults": {
       "collapseStyle": "inPlace",

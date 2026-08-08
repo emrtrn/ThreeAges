@@ -15,6 +15,7 @@ import { isMeshComponentKind, type ActorScriptDef } from "@engine/scene/actorScr
 import type { SettlementAge } from "@/game/data/gameDataTypes";
 import { readRtsActorMotions } from "./rtsPresentationMotion";
 import { readRtsActorCargoSways, readRtsActorCargoVisuals } from "./rtsCargoVisual";
+import { readRtsActorGunRecoils, readRtsActorMuzzle } from "./rtsGunMotion";
 import {
   RTS_DAMAGE_SLOTS,
   rtsBuildingActorRef,
@@ -142,6 +143,15 @@ export function validateRtsPresentationActor(
 
   const sways = readRtsActorCargoSways(def);
   if ("problem" in sways) throw new RtsActorPresentationError(ref, sways.problem);
+
+  // And the gun's two props, for the same reason: a barrel that never kicks and
+  // a shell that keeps leaving from the axle are both silent on the field, so
+  // they fail here where the message names the Actor and the component.
+  const recoils = readRtsActorGunRecoils(def);
+  if ("problem" in recoils) throw new RtsActorPresentationError(ref, recoils.problem);
+
+  const muzzle = readRtsActorMuzzle(def);
+  if ("problem" in muzzle) throw new RtsActorPresentationError(ref, muzzle.problem);
 
   const meshNodes = def.components.filter((node) => isMeshComponentKind(node.component));
   if (meshNodes.length === 0) {
