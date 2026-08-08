@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { startRtsMatch } from "./rtsBoot";
+import { startRtsMatch, waitForRtsBoot } from "./rtsBoot";
 
 /**
  * Actor presentation browser witness.
@@ -16,15 +16,11 @@ test("Actor presentation: the default RTS route renders the authored Actor pack"
 
   await page.goto("/?rts&debug");
   await expect(page.locator("#game-canvas")).toBeVisible();
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-assets", "ready", { timeout: 30_000 });
-  // Zero stand-ins is the shipped state, published as a number so "healthy" and
-  // "not reported yet" can never read the same. A broken Actor would leave
-  // `data-rts-content-assets="placeholder"` and a non-zero count here.
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-placeholders", "0");
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
 
   // No flag was passed, and there is no longer one to pass: the removed
-  // `contentAssets` id is not part of the resolved flag state at all.
+  // `contentAssets` id is not part of the resolved flag state at all. Readable on
+  // the menu because it is the *boot's* resolved config, not the match's.
   const flagIds = await page.evaluate(() => {
     const forge = (window as unknown as {
       __forge?: { config?: { flags?: Record<string, unknown> } };
@@ -34,6 +30,15 @@ test("Actor presentation: the default RTS route renders the authored Actor pack"
   expect(flagIds, "the Actor pack must not depend on a feature flag").not.toContain("contentAssets");
 
   await startRtsMatch(page);
+  // The pack's witnesses are read on *this* side of the door. Since the menu (plan
+  // F2) the click is what constructs `RtsApp`, and every `data-rts-*` attribute is
+  // stamped by it — asked for any earlier they are simply absent, and the test
+  // would time out blaming the Actor pack for the menu still being open.
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-assets", "ready", { timeout: 30_000 });
+  // Zero stand-ins is the shipped state, published as a number so "healthy" and
+  // "not reported yet" can never read the same. A broken Actor would leave
+  // `data-rts-content-assets="placeholder"` and a non-zero count here.
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-placeholders", "0");
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
   await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
@@ -50,8 +55,13 @@ test("Actor presentation Faz 5: a bookmark carrying the removed flag still boots
   // in `?flags=` is ignored, so the route opens and builds exactly the same pack.
   // The debug overlay's presentation line carries the loaded/requested counts, so
   // comparing it across the two routes compares what each of them actually built.
+  // Starting the match is part of the measurement, not setup around it: both the
+  // pack counts and the debug overlay that reports them belong to `RtsApp`, which
+  // since F2 exists only past the menu. So each route is driven all the way into
+  // its match before its presentation line is read.
   const presentationLine = async (url: string): Promise<string> => {
     await page.goto(url);
+    await startRtsMatch(page);
     await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-assets", "ready", { timeout: 30_000 });
     await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-content-placeholders", "0");
     const overlay = await page.locator(".rts-debug-sim").textContent();
@@ -63,7 +73,7 @@ test("Actor presentation Faz 5: a bookmark carrying the removed flag still boots
   expect(plain).toMatch(/^sunum: \d+\/\d+ Actor · placeholder yok$/);
   expect(staleBookmark, "the removed flag is ignored, not fatal").toBe(plain);
 
-  await startRtsMatch(page);
+  // The stale-bookmark route is the one still on screen, and it is in a match.
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
   expect(errors, "an unknown flag must not disturb the RTS match").toEqual([]);
@@ -76,18 +86,25 @@ test("Play the level you edit: ?level= opens that map, whatever the preset names
   const coreMatch = "assets/ThreeAges/Levels/RTS_CoreMatch.level.json";
   // `gameplay_proof` names RTS_GameplayProof, so if the preset were still winning
   // this would open the wrong map — the failure the parameter exists to prevent.
+  // `?level=` is also the menu's skip condition (plan KARAR 4, `urlPinsMatchSetup`):
+  // an author handed a map to try is not asked which match they want, so this route
+  // boots straight into the match and there is no button to press.
   await page.goto(`/?rts&debug&preset=gameplay_proof&level=${coreMatch}`);
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored", { timeout: 30_000 });
+  await waitForRtsBoot(page);
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-ref", coreMatch);
 
   // No `flags=levelAssets` above: naming a Level explicitly is the opt-in. The
-  // preset's own map stays behind the flag, unchanged.
+  // preset's own map stays behind the flag, unchanged. Without `?level=` this route
+  // does open on the menu, so the match has to be started before it can be asked
+  // which map it resolved.
   await page.goto("/?rts&debug&preset=gameplay_proof");
+  await startRtsMatch(page);
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "blockout");
 
   await page.goto(`/?rts&debug&preset=gameplay_proof&level=${coreMatch}`);
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-ref", coreMatch, { timeout: 30_000 });
-  await startRtsMatch(page);
+  await waitForRtsBoot(page);
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-ref", coreMatch);
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
 
@@ -99,8 +116,10 @@ test("Assetization Faz D: the opt-in authored Level drives the spatial layout of
   page.on("pageerror", (error) => errors.push(error.message));
 
   // Default boot resolves the legacy blockout — even though the default preset
-  // carries a levelRef, the levelAssets gate keeps it opt-in.
+  // carries a levelRef, the levelAssets gate keeps it opt-in. Which Level was
+  // resolved is a fact about the built match, so the match is built first.
   await page.goto("/?rts&debug");
+  await startRtsMatch(page);
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "blockout");
 
   // With the flag on, the default preset's shipped Level loads and its markers
@@ -109,10 +128,10 @@ test("Assetization Faz D: the opt-in authored Level drives the spatial layout of
   // changed once (core_match → gameplay_proof).
   await page.goto("/?rts&debug&flags=levelAssets");
   await expect(page.locator("#game-canvas")).toBeVisible();
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored", { timeout: 30_000 });
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
 
   await startRtsMatch(page);
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
   await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
@@ -128,6 +147,7 @@ test("Landscape Faz 1: the gameplay_proof preset resolves its own authored Level
   // gate keeps it opt-in, so the legacy blockout fallback still drives the match
   // on the flat placeholder ground.
   await page.goto("/?rts&debug&preset=gameplay_proof");
+  await startRtsMatch(page);
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "blockout");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-ground", "flat");
 
@@ -136,13 +156,13 @@ test("Landscape Faz 1: the gameplay_proof preset resolves its own authored Level
   // wired end to end (preset levelRef -> loader -> RtsApp), not core_match's file.
   await page.goto("/?rts&debug&preset=gameplay_proof&flags=levelAssets");
   await expect(page.locator("#game-canvas")).toBeVisible();
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored", { timeout: 30_000 });
-  // Faz 4: the Level's authored Landscape mounts and retires the flat ground, so
-  // the match now renders on the sculpted terrain rather than the placeholder plane.
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-ground", "landscape", { timeout: 30_000 });
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
 
   await startRtsMatch(page);
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
+  // Faz 4: the Level's authored Landscape mounts and retires the flat ground, so
+  // the match now renders on the sculpted terrain rather than the placeholder plane.
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-ground", "landscape", { timeout: 30_000 });
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
   await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
@@ -179,8 +199,8 @@ test("Landscape Faz 5: command and build placement picking work over the mounted
   page.on("pageerror", (error) => errors.push(error.message));
 
   await page.goto("/?rts&debug&preset=gameplay_proof&flags=levelAssets");
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-ground", "landscape", { timeout: 30_000 });
   await startRtsMatch(page);
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-ground", "landscape", { timeout: 30_000 });
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
 
   // V1 keeps a flat playable field: command, road and building placement all
@@ -227,6 +247,7 @@ test("Assetization Faz E: the opt-in Level mounts its authored static world and 
   // Default boot authors no world: the levelAssets gate keeps the Level's static
   // instances + sun off, so the legacy code sun and RtsMapArt ridge stay.
   await page.goto("/?rts&debug");
+  await startRtsMatch(page);
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-authored-world", "disabled");
 
   // With the flag on, the shipped Level's sun + ridge instances mount through the
@@ -234,12 +255,11 @@ test("Assetization Faz E: the opt-in Level mounts its authored static world and 
   // light change reaches runtime without code change" (Faz E acceptance).
   await page.goto("/?rts&debug&flags=levelAssets");
   await expect(page.locator("#game-canvas")).toBeVisible();
+  await startRtsMatch(page);
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-authored-world", "ready", { timeout: 30_000 });
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-landscape-pbr", "full");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-landscape-samplers", /^12\/\d+$/);
-
-  await startRtsMatch(page);
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
   await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
@@ -248,8 +268,8 @@ test("Assetization Faz E: the opt-in Level mounts its authored static world and 
   // rebuilds it: the world must mount again with no runtime errors, the flat-
   // ground match still booting — the "dispose/restart leaves no leak" acceptance.
   await page.goto("/?rts&debug&flags=levelAssets");
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-authored-world", "ready", { timeout: 30_000 });
   await startRtsMatch(page);
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-authored-world", "ready", { timeout: 30_000 });
   await expect(page.locator(".rts-hud-bar")).toBeVisible();
 
   expect(errors, "mounting and disposing the authored world must not produce runtime errors").toEqual([]);

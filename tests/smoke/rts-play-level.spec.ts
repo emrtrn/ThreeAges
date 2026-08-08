@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { startRtsMatch } from "./rtsBoot";
+import { waitForRtsBoot } from "./rtsBoot";
 
 /**
  * The editor -> runtime round trip: this project pins Play to its RTS preset.
@@ -45,19 +45,22 @@ test("a level the RTS cannot play falls back to the blockout map with a stated r
   // The starter character scene has no Kingdom Start markers. Naming it is a
   // normal authoring mistake (or a mid-edit state), so it must degrade rather
   // than leave the player looking at nothing.
+  // `?level=` pins the match, so this route skips the menu entirely (plan KARAR 4)
+  // and boots straight through the curtain into a playable match — there is no
+  // "Maçı Başlat" to press, only a load to wait out.
   await page.goto("/?rts&debug&level=assets/starter-content/Levels/Playground.level.json");
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "invalid", { timeout: 30_000 });
+  await waitForRtsBoot(page);
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "invalid");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-error", /.+/);
-  // Still playable, and the overlay names the file and the reason.
-  await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
-  await startRtsMatch(page);
+  // Still playable, and the debug block names the file and the reason.
   await expect(page.locator(".rts-debug-sim")).toContainText("seviye REDDEDİLDİ");
   await expect(page.locator(".rts-debug-sim")).toContainText("maç: active");
 
   // A malformed path is refused the same way — named and explained — rather than
   // quietly playing another map or throwing the route away.
   await page.goto("/?rts&debug&level=/etc/passwd.level.json");
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "invalid", { timeout: 30_000 });
+  await waitForRtsBoot(page);
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "invalid");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-ref", "/etc/passwd.level.json");
 
   expect(errors, "a refused level must not throw past the boot path").toEqual([]);

@@ -21,6 +21,22 @@ test("§58: the regional victory tracker runs behind its flag and leaves no trac
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
+  // Two facts about the boot this test needs to state rather than inherit, both
+  // re-applied on every navigation because each leg below is its own boot.
+  await page.addInitScript(() => {
+    // Regional victory is an alternate *free-match* route: `main.ts` refuses to
+    // construct its systems for a story match, because a teaching chain owns the
+    // objective. A browser that has never been offered the tur defaults to story,
+    // so the flag alone would resolve into a match that is designed not to have a
+    // tracker. This is the returning player the free-play default is written for.
+    localStorage.setItem("threeages.missionSeen", "1");
+    // Since the menu (plan F2) every "Maçı Başlat" records the resolved setup, and
+    // a stored choice is the last word in the boot's precedence chain — ahead of an
+    // absent `?flags=`. Left alone, the flag-off leg would inherit the flagged
+    // leg's condition through the tab's own session and never test anything.
+    sessionStorage.removeItem("threeages.victoryCondition");
+  });
+
   await openMatch(page, "/?rts&flags=regionalVictory");
   const tracker = page.locator("[data-rts-objectives]");
   await expect(tracker).toBeVisible();

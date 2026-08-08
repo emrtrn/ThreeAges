@@ -1,8 +1,12 @@
 # ThreeAges RTS - Ana Menu ve Yukleme Ekrani Plani
 
 Olusturulma tarihi: 2026-08-08
-Durum: **F1, F2, F3 ve (planda olmayan) F5 kod olarak bitti (2026-08-08);
-gorsel kabul kullanicidadir. F4 (dogrulama) kaldi.**
+Durum: **F1, F2, F3, F4 ve (planda olmayan) F5 bitti (2026-08-08); gorsel kabul
+kullanicidadir.** F4 iki yeni is cikardi (§7.4): §9'un spec sirasi borcu odendi,
+ve menunun *kendi* getirdigi iki spec kirilmasi duzeltildi. Ayrica F4, bu planla
+ilgisi olmayan bir smoke drift'ini ortaya cikardi - `rts-building-placement`
+build palette'in sekme tabanli yeni haline karsi bayat; ayrintisi ve neden
+burada duzeltilmedigi §7.4'te.
 
 F2 ile ana menu ayri bir asama oldu: `?rts` artik once perde, sonra menu, sonra
 mac aciyor. Dort `location.reload()` silindi, baslangic karti `RtsApp`'ten cikip
@@ -19,7 +23,7 @@ F5 (§7.5) planin disindan geldi: menu bir asama olduktan sonra tek yonlu
 kalmasi tutarsizdi, artik duraklatma ve sonuc kartlarinda "Ana Menü" var ve rota
 menu → mac → menu diye donuyor.
 
-Kalan: F4 (dogrulama; §9'daki spec sirasi borcu).
+Kalan: yok (kod tarafinda). Gorsel kabul (§11 madde 8) kullanicidadir.
 
 F1 sirasinda planin bir ifadesi duzeltildi: §5'in "firstFrame" izi paydasiz
 dusunulmustu, ama paydasiz bir iz butun cubugu boot boyunca *belirsiz* modda
@@ -301,10 +305,80 @@ Uygulama (`src/main.ts`, `preloadRtsMatchData()`):
   `preload ?? preloadRtsMatchData()` ile tiklama yerine kapida basliyor -
   ortusecek bir menuleri yok, davranis degismedi.
 
-### 7.4 F4 - Dogrulama
+### 7.4 F4 - Dogrulama — **BITTI (2026-08-08)**
 
-`npx tsc --noEmit`, `npm run test:engine`, smoke spec guncellemesi (§9), ve
-kapanista `npm run build:verify`.
+Otomatik kapilar yesil:
+
+| Kapi | Sonuc |
+| --- | --- |
+| `npx tsc --noEmit` | temiz |
+| `npm run test:engine` | 1353 check (fast; 9 slow atlandi) |
+| `npm run build:verify` | gecti - 1362 check (slow dahil), `verify:dist --strict` PASS |
+
+**§9'un spec sirasi borcu odendi, ama borc planda yazilandan genisti.** Plan tek
+bir dosyada dort satir isaret ediyordu; gercekte kural sudur: **her `data-rts-*`
+taniginı ve `.rts-debug-sim`'i `RtsApp` damgaliyor, `RtsApp` ise F2'den beri
+tiklamadan once yok.** Yani tiklama oncesi yapilan her canvas iddiasi tasinmak
+zorundaydi (`rts-assetization-baseline`'da yedi testin tamami,
+`rts-building-placement`'ta §53 saati).
+
+Ve tasima **tek yonlu degil**: `?level=` / `?mode=` tasiyan rotalar
+`urlPinsMatchSetup` yuzunden menuyu **atliyor**, orada basilacak buton yok.
+O rotalar `startRtsMatch` degil `waitForRtsBoot` cagirmali - `rts-play-level`'in
+iki `?level=` bacagi ve `rts-assetization-baseline`'in "Play the level you edit"
+testi boyle duzeltildi. Yani §9'un "iddialari tiklamanin altina tasi" recetesi
+rotanin menusu olup olmadigina gore ikiye ayriliyor.
+
+**Iki testin *dayanagi* degisti; bunlar mekanik tasima degil:**
+
+- `rts-fog-of-war` "hicbir sey tiklanmadan once" sisi okuyordu. O an eski
+  baslangic kartina aitti (kartin arkasinda sahne zaten ciziliyordu). F2 o **ani**
+  kaldirdi: tiklamadan once hicbir sey kurulmuyor, ve perde ilk cizilmis kareden
+  once kalkmiyor (T2). Blok silindi; ayni iddialar zaten mac baslar baslamaz
+  kosuyordu. **Bu bir kapsam kaybidir**, yer degistirme degil.
+- `rts-building-placement` §53 saatini `süre 0:00` diye tiklamadan once
+  olcuyordu. Mac artik perde kalkinca basliyor (F2, bilerek), o yuzden olcum
+  perdenin oteki tarafina gecti ve `süre 0:0\d` oldu - kendi boot'u boyunca
+  tiklayan bir maci hala yakalar, ama tam sifiri artik pinlemiyor.
+
+**Menunun kendi getirdigi iki kirilma (bunlar gercek regresyon, spec bayatligi
+degil):** F2'den beri her "Maçı Başlat" cozulmus kurulumu session storage'a
+**kosulsuz** yaziyor (`main.ts`, `writeStoredVictoryCondition` /
+`writeStoredFogOfWar`), ve precedence zincirinde **stored choice son sozu
+soyluyor** - yani ayni sekmede acilan ikinci rota, `?flags=` tasimasa bile
+oncekinin secimini miras aliyor. `rts-fog-of-war` ve `rts-regional-victory`'nin
+"bayrak kapaliyken iz birakmiyor" bacaklari tam olarak bundan dusuyordu. Ikisi de
+`addInitScript` ile ilgili anahtari her gezinmede temizliyor.
+
+`rts-regional-victory` ayrica **hikaye modu kapisina** takiliyordu: temiz bir
+tarayicida `resolveMissionMode` "story" donuyor, `main.ts` ise bir hikaye maci
+icin bolgesel zafer sistemlerini **bilerek** kurmuyor. Bu kapi F2 oncesinde de
+aynen vardi (`git show da7c3bfc:src/main.ts`), yani bu planin urunu degil; test
+sadece "serbest mac" oldugunu soylemiyordu. Artik `threeages.missionSeen` ile
+donen-oyuncu varsayimini acikca kuruyor.
+
+**Bu planla ilgisi olmayan kalan kirmizilar (bilerek duzeltilmedi):**
+
+- `rts-building-placement` (7 testin 6'si) - build palette **sekme tabanli**
+  yeniden yazildi: `.rts-build-category` artik yok (`rts-build-tab` /
+  `rts-build-category-panel`), ve "Ev" gibi butonlar ancak kendi sekmesi seciliyken
+  var. Ustune HUD metni ("Boşta işçi: 5" -> "Boşta: 8") ve secim paneli
+  ("Seçim yok" -> "✕") degismis. Bunlari yesile boyamak, testleri **degismis bir
+  UI'a yeniden taban almaktir**; "8 bosta isci dogru mu" sorusu bu planin
+  cevaplayacagi bir soru degil.
+- `rts-play-level`'in editor Play testi - `[data-project-name]` "loading level"de
+  asili kaliyor; editor manifest yolu, RTS rotasi degil.
+- `rts-assetization-baseline` "Landscape Faz 5" - **ortam**: headless yazilim
+  render'inda sahne **1 fps** (kare ~1080 ms) kosuyor, debug overlay'in takilma
+  okumasi buyuyup "Yerleşim" sekmesinin ustune biniyor ve tiklamayi yutuyor.
+  (Yan bulgu: `.rts-debug-overlay-readout` etkilesimsiz bir `<pre>`, ama
+  `pointer-events` almiyor degil - yavas makinede oyun UI'indan tiklama caliyor.
+  Kucuk ve savunulabilir bir CSS duzeltmesi, ama 1 fps'te test yine de sonraki
+  adimlarda dusecegi icin bu kosunun caresi o degil.)
+
+Yani **§11 madde 7 ("sekiz RTS smoke spec'i yesil") bugun karsilanmiyor**: alti
+spec dosyasi yesil, `rts-building-placement` ve `rts-play-level` degil - ve
+ikisinin de sebebi bu planin disinda.
 
 ### 7.5 F5 - Mactan ana menuye donus — **BITTI (2026-08-08)**
 
@@ -369,7 +443,11 @@ olmasi tutarsizdi - maci birakmanin tek yolu sayfayi yenilemekti.
 | `src/game/rts/match/rtsMatchSetupUrl.ts` | `menuSearch()` - kurulum parametrelerini dusur | F5 ✅ |
 | `src/main.ts` | rota donguye girdi: menu → mac → menu | F5 ✅ |
 | `tools/engine-tests.ts` | iki URL gidis-donus check'i | F5 ✅ |
-| `tests/smoke/rts-*.spec.ts` | tiklama oncesi canvas iddialarinin sirasi (§9) | F4 |
+| `tests/smoke/rts-assetization-baseline.spec.ts` | yedi testin canvas iddialari tiklamanin altina; `?level=` bacagi `waitForRtsBoot` | F4 ✅ |
+| `tests/smoke/rts-play-level.spec.ts` | `?level=` menuyu atliyor: `startRtsMatch` -> `waitForRtsBoot` | F4 ✅ |
+| `tests/smoke/rts-building-placement.spec.ts` | §53 saati perdenin oteki tarafina | F4 ✅ |
+| `tests/smoke/rts-fog-of-war.spec.ts` | tiklama oncesi blok kaldirildi; stored fog her gezinmede temizleniyor | F4 ✅ |
+| `tests/smoke/rts-regional-victory.spec.ts` | serbest mac acikca kuruluyor; stored victory temizleniyor | F4 ✅ |
 
 ## 9. Smoke etkisi
 
@@ -448,6 +526,8 @@ Uretim prompt'lari: `THREEAGES_RTS_MENU_ART_PROMPTS.md`.
 5. Actor pack veya authored world yuklenemezse perde yine kalkar ve oyun
    fallback gorunumuyle oynanabilir kalir (T3).
 6. `?level=` ile gelen editor Play istegi menuyu atlar (KARAR 4).
-7. Sekiz RTS smoke spec'i yesil.
+7. Sekiz RTS smoke spec'i yesil. **(F4: alti yesil. `rts-building-placement` ve
+   `rts-play-level`'in editor testi, bu planin disindaki UI/editor drift'i
+   yuzunden kirmizi - gerekcesi §7.4'te.)**
 8. **Gorsel kabul kullanicidadir**: perdenin, menunun ve gecisin nasil
    gorundugu ekrana bakilarak onaylanir (CLAUDE.md "Visual acceptance").

@@ -28,25 +28,24 @@ test("§59: fog builds into the match behind its flag and leaves no trace withou
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
-  // The start screen first, before anything is clicked. Fog is otherwise only
-  // computed from the simulation tick, which is gated on a running match — so
-  // this screen once rendered the fog texture's initial all-unknown fill with
-  // nothing hidden on top of it, and the whole map was readable before the
-  // player pressed the button.
-  await page.goto("/?rts&debug&flags=fogOfWar");
-  await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
-  const beforeStart = page.locator(".rts-debug-sim");
-  await expect(beforeStart).toContainText("görüş:");
-  const openingText = await beforeStart.textContent();
-  const openingPercents = [...(openingText ?? "").matchAll(/keşfedilmiş %([\d.]+)/g)]
-    .map((match) => Number(match[1]));
-  expect(openingPercents, "both kingdoms are already fogged on the start screen")
-    .toHaveLength(2);
-  for (const percent of openingPercents) {
-    expect(percent, "a base is revealed before the match begins").toBeGreaterThan(0);
-    expect(percent, "but only a base — the map is not open").toBeLessThan(60);
-  }
+  // Since the menu (plan F2) every "Maçı Başlat" records the resolved setup, and a
+  // stored choice outranks an absent `?flags=` in the boot's precedence chain. Both
+  // legs below run in one tab, so without this the flag-off leg would inherit the
+  // flagged leg's fog through session storage and the "leaves no trace" half of
+  // this test would be asserting against a match that was asked for fog. Re-applied
+  // on every navigation, which is why it is an init script rather than one call.
+  await page.addInitScript(() => sessionStorage.removeItem("threeages.fogOfWar"));
 
+  // This test used to open with a "before anything is clicked" reading, taken off
+  // the start card that used to sit inside a fully built `RtsApp`: the scene was
+  // already rendering behind it, so a fog texture left at its all-unknown fill with
+  // nothing drawn on top would have shown the whole map to a player who had not
+  // started yet. The main menu (plan F2) removed the moment rather than the check —
+  // nothing is constructed until the click, and the curtain over the load does not
+  // lift until the first frame is drawn (T2), so there is no longer any instant at
+  // which an unfogged map could be on screen. What was worth asserting there is the
+  // opening state itself, and that survives below: the match is read the moment it
+  // is playable, and both kingdoms must already be fogged down to their own base.
   await openMatch(page, "/?rts&debug&flags=fogOfWar");
 
   const overlay = page.locator(".rts-debug-sim");

@@ -174,15 +174,19 @@ test("RTS Phase 9 match flow: start, pause, surrender, and restart back into pla
   page.on("pageerror", (error) => errors.push(error.message));
   const overlay = page.locator(".rts-match-overlay");
 
-  // §51: the start screen holds the match. The debug panel is the honest witness
-  // that nothing is being simulated behind the card.
+  // §51: the menu holds the match — and since plan F2 it holds it by not having
+  // built one yet, so "nothing is simulated before the player commits" is now
+  // structural rather than something the debug panel can be asked about.
   await page.goto("/?rts&debug");
   await expect(overlay).toHaveClass(/is-visible/);
-  // §53's clock is part of that witness: an opening spent behind the card would
-  // show up here as time already on the board.
-  await expect(page.locator(".rts-debug-sim")).toContainText("maç: active · süre 0:00");
   await startRtsMatch(page);
   await expect(overlay).not.toHaveClass(/is-visible/);
+  // §53's clock is what carries the claim forward past the menu. The match now
+  // starts when the curtain lifts, deliberately (F2: starting it at construction
+  // would play the AI's opening behind an opaque screen), so the first reading on
+  // the far side of that curtain must still be within the opening seconds. A match
+  // ticked through its own load would arrive here with the whole boot on the board.
+  await expect(page.locator(".rts-debug-sim")).toContainText(/maç: active · süre 0:0\d/);
 
   // Escape pauses a running match...
   await page.keyboard.press("Escape");
