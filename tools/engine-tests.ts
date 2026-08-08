@@ -1377,6 +1377,7 @@ import {
 } from "../src/editor/dataTableLayout";
 import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 import { RTS_LOAD_TRACK_WEIGHTS, RtsLoadTracker } from "../src/game/rts/loading/rtsLoadProgress";
+import { matchSetupSearch, menuSearch, urlPinsMatchSetup } from "../src/game/rts/match/rtsMatchSetupUrl";
 
 let checks = 0;
 let skipped = 0;
@@ -51908,6 +51909,50 @@ check("an empty boot load is finished rather than a division by zero", () => {
   tracker.report("world", 0, 0);
   assert.equal(tracker.snapshot().fraction, 1);
   assert.equal(tracker.snapshot().determinate, true);
+});
+
+/**
+ * "Ana Menü" leaves a match without a page load, so the address has to be walked
+ * back by hand — and the thing that makes a URL a *menu* URL is precisely what
+ * `urlPinsMatchSetup` refuses. The round trip is the contract: whatever
+ * `matchSetupSearch` pins, `menuSearch` must un-pin, or the player lands on a
+ * menu that one refresh throws them back out of.
+ */
+check("leaving a match un-pins the setup its URL was carrying", () => {
+  const params = new URLSearchParams("?rts&debug&preset=gameplay_proof");
+  const setup = {
+    missionMode: "free",
+    victoryCondition: "military",
+    fogOfWar: "off",
+    aiProfile: "fair",
+  } as const;
+  const matchSearch = matchSetupSearch(params, setup, 4242);
+  const matchParams = new URLSearchParams(matchSearch);
+  assert.equal(urlPinsMatchSetup(matchParams), true, "a match URL skips the menu");
+
+  const menuParams = new URLSearchParams(menuSearch(matchParams));
+  assert.equal(urlPinsMatchSetup(menuParams), false, "a menu URL must not skip the menu");
+  assert.equal(menuParams.get("seed"), null, "the next match from the menu is a new match");
+  // Everything the route understands besides the setup is the tab's context, not
+  // the match's, and survives the trip back.
+  assert.equal(menuParams.has("rts"), true);
+  assert.equal(menuParams.has("debug"), true);
+  assert.equal(menuParams.get("preset"), "gameplay_proof");
+});
+
+/**
+ * KARAR 4's edge, kept explicit because it looks like a bug otherwise: `?level=`
+ * pins too, and `menuSearch` deliberately keeps it. An author who came from the
+ * editor's Play button is still trying that map, so the URL keeps saying so and
+ * the match they start next is still that map — the in-page button is how they
+ * reach the menu, not the address bar.
+ */
+check("leaving a match keeps the level the editor handed over", () => {
+  const params = new URLSearchParams("?rts&level=Levels/RTS_CoreMatch&mode=story&seed=7");
+  const menuParams = new URLSearchParams(menuSearch(params));
+  assert.equal(menuParams.get("level"), "Levels/RTS_CoreMatch");
+  assert.equal(menuParams.get("mode"), null, "the setup still goes");
+  assert.equal(urlPinsMatchSetup(menuParams), true, "?level= is still a pin, by design");
 });
 
 if (testFilters.length === 0 && slowSkipped > 0) {

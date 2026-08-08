@@ -54,6 +54,12 @@ export interface RtsMatchOverlayHandlers {
   readonly onGraphicsAdaptive?: (enabled: boolean) => void;
   /** Faz 2 "serbest oyuna çevir": end a live chain without ending the match. */
   readonly onAbandonMission?: () => void;
+  /**
+   * Leave this match for the main menu. Optional because the card cannot know
+   * whether the host has a menu behind it — an `?rts` boot does, and a host that
+   * does not would otherwise show a button that goes nowhere.
+   */
+  readonly onExitToMenu?: () => void;
 }
 
 /**
@@ -310,6 +316,13 @@ export class RtsMatchOverlay {
         ? [{ label: "Serbest oyuna çevir", action: this.handlers.onAbandonMission, key: "abandon-mission" }]
         : []),
       { label: "Yeniden Başlat", action: this.handlers.onRestart, key: "restart" },
+      // Between restart and surrender because that is what it is: another way to
+      // stop playing *this* match, weightier than starting it over and lighter
+      // than resigning it. Unconfirmed for the same reason restart is — it costs
+      // the match, not the record.
+      ...(this.handlers.onExitToMenu
+        ? [{ label: "Ana Menü", action: this.handlers.onExitToMenu, key: "exit-to-menu" }]
+        : []),
       this.surrenderArmed
         ? { label: "Teslim olmayı onayla", action: this.handlers.onSurrender, key: "surrender", danger: true }
         : { label: "Teslim Ol", action: this.armSurrender, key: "surrender" },
@@ -332,7 +345,16 @@ export class RtsMatchOverlay {
     this.render(
       text.title,
       text.detail,
-      [{ label: "Yeniden Başlat", action: this.handlers.onRestart, primary: true, key: "restart" }],
+      [
+        { label: "Yeniden Başlat", action: this.handlers.onRestart, primary: true, key: "restart" },
+        // A decided match cannot be paused (`togglePause` refuses once the match
+        // is over), so without this the result card is the one screen with no way
+        // back to the menu — the player would have to reload the page to leave a
+        // match they just finished.
+        ...(this.handlers.onExitToMenu
+          ? [{ label: "Ana Menü", action: this.handlers.onExitToMenu, key: "exit-to-menu" }]
+          : []),
+      ],
       outcome,
       false,
       durationSeconds,

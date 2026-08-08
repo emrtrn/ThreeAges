@@ -100,6 +100,29 @@ export function matchSetupSearch(
   return `?${next.toString().replace(/=(?=&|$)/g, "")}`;
 }
 
+/**
+ * The address the *menu* should be at — the inverse of {@link matchSetupSearch},
+ * for the pause card's "Ana Menü".
+ *
+ * Only the five setup parameters are dropped, and dropping them is the point:
+ * `mode` is what {@link urlPinsMatchSetup} reads, so leaving it behind would put
+ * the player on a menu whose own URL says "skip the menu" — one refresh and they
+ * are back in the match they just left. The seed goes with it because the next
+ * match started from the menu is a new match, not a re-run of that one.
+ *
+ * Everything else the route understands (`?rts`, `?debug`, `?preset=`, `?flags=`,
+ * `?mission=`) survives — `?level=` included, and that one is deliberate even
+ * though it also pins: an author who arrived from the editor's Play button is
+ * still trying that map, so the URL keeps saying so and the next match they start
+ * is still that map. A refresh takes them straight back into it, which is KARAR 4
+ * doing its job; the in-page button is how they reach the menu.
+ */
+export function menuSearch(params: URLSearchParams): string {
+  const next = new URLSearchParams(params);
+  for (const key of Object.values(MATCH_SETUP_PARAMS)) next.delete(key);
+  return `?${next.toString().replace(/=(?=&|$)/g, "")}`;
+}
+
 function pick<T extends string>(
   raw: string | null,
   allowed: readonly T[],

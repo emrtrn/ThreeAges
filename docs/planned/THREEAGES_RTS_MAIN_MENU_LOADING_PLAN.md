@@ -1,8 +1,8 @@
 # ThreeAges RTS - Ana Menu ve Yukleme Ekrani Plani
 
 Olusturulma tarihi: 2026-08-08
-Durum: **F1 ve F2 kod olarak bitti (2026-08-08); gorsel kabul kullanicidadir.
-F3-F4 planli, baslanmadi.**
+Durum: **F1, F2, F3 ve (planda olmayan) F5 kod olarak bitti (2026-08-08);
+gorsel kabul kullanicidadir. F4 (dogrulama) kaldi.**
 
 F2 ile ana menu ayri bir asama oldu: `?rts` artik once perde, sonra menu, sonra
 mac aciyor. Dort `location.reload()` silindi, baslangic karti `RtsApp`'ten cikip
@@ -10,9 +10,16 @@ menuye tasindi, `RtsApp` maci perde kalkinca kendisi basliyor. Ilk bos siyah
 canvas penceresi de kapandi - perde artik `main()`'in **ilk await'inden once**
 kuruluyor.
 
-Kalan: F3 (menu ekrandayken on-yukleme; su an mac yuklemesi tiklamadan *sonra*
-basliyor, yani ikinci perde hala uzun) ve F4 (dogrulama; §9'daki spec sirasi
-borcu).
+F3 ile mac yuklemesi tiklamadan *once* basliyor: menu ekrandayken sekiz balance
+JSON, caravan, tradeSite, Actor katalogu ve `RtsApp` chunk'i cekiliyor, seri
+duran iki balance cagrisi da `Promise.all`'a katildi (§2.1 adim 3-4). Tiklamadan
+sonra yalniz ayara bagli olanlar kaliyor: mission script + level JSON.
+
+F5 (§7.5) planin disindan geldi: menu bir asama olduktan sonra tek yonlu
+kalmasi tutarsizdi, artik duraklatma ve sonuc kartlarinda "Ana Menü" var ve rota
+menu → mac → menu diye donuyor.
+
+Kalan: F4 (dogrulama; §9'daki spec sirasi borcu).
 
 F1 sirasinda planin bir ifadesi duzeltildi: §5'in "firstFrame" izi paydasiz
 dusunulmustu, ama paydasiz bir iz butun cubugu boot boyunca *belirsiz* modda
@@ -266,7 +273,7 @@ F1 tek basina bugunku boot'un uzerinde calisir; menu olmadan da bir kazanctir.
   preset cekiyor; perdeyi ondan sonra kurmak, kapatmak istedigimiz ilk bos
   pencereyi acik birakirdi. Kabul kriteri 1 bu satirla karsilaniyor.
 
-### 7.3 F3 - Menude on-yukleme
+### 7.3 F3 - Menude on-yukleme — **BITTI (2026-08-08)**
 
 Menu ekranda dururken, **ayardan bagimsiz** olan her sey arka planda cekilir:
 8 balance JSON + caravan + tradeSite (§2.1 adim 3-4 buraya `Promise.all`
@@ -276,10 +283,63 @@ mission script) tiklama aninda baslar.
 Bu, ikinci perdenin neden kisa olacaginin tek sebebidir; KARAR 2 de buradan
 cikar.
 
+Uygulama (`src/main.ts`, `preloadRtsMatchData()`):
+
+- On-yuk tek bir fonksiyon oldu; `Promise.all` artik on bir dal tasiyor - sekiz
+  balance + caravan + tradeSite + **`import("@/game/rts/RtsApp")`**. Modul
+  chunk'i da ayardan bagimsizdir ve tiklamanin bekledigi tek en buyuk parcaydi,
+  o yuzden o da menunun altina girdi. `loadRtsContentCatalog` ikinci adim olarak
+  kaliyor: unit/building/animal tablolarindan **turetiliyor**, onlardan once
+  baslayamaz.
+- Baslatma noktasi menunun **kendi chunk'i geldikten sonra**
+  (`import("@/game/rts/ui/rtsMainMenu")` await'inin ardindan). Oncesinde
+  baslatmak, oyuncunun bekledigi ilk seyi mac yukunun arkasina kuyruklardi.
+- `preload.catch(() => {})` sadece "sahipsiz rejection" damgasi icin; gercek
+  `await` asagida durdugu icin olu bir katalog fetch'i **eskisiyle ayni yerde**
+  firlatiyor (katalog hatasi rotaya hala olumcul).
+- Menusuz yollar (paylasilan link, yenileme, editor Play) ayni fonksiyonu
+  `preload ?? preloadRtsMatchData()` ile tiklama yerine kapida basliyor -
+  ortusecek bir menuleri yok, davranis degismedi.
+
 ### 7.4 F4 - Dogrulama
 
 `npx tsc --noEmit`, `npm run test:engine`, smoke spec guncellemesi (§9), ve
 kapanista `npm run build:verify`.
+
+### 7.5 F5 - Mactan ana menuye donus — **BITTI (2026-08-08)**
+
+Planda yoktu; F3'ten sonra kullanici istedi. Menu bir asama oldugu anda tek yonlu
+olmasi tutarsizdi - maci birakmanin tek yolu sayfayi yenilemekti.
+
+- Duraklatma karti: **"Ana Menü"** butonu, "Yeniden Başlat" ile "Teslim Ol"
+  arasinda (`rtsMatchOverlay.ts`, `key: "exit-to-menu"`). Onaysiz, cunku restart
+  gibi maci harciyor, sicile yenilgi yazmiyor.
+- **Sonuc kartina da eklendi.** Bitmis bir mac duraklatilamiyor
+  (`togglePause`, `!this.match.active` erken donusu), yani sonuc karti menuye
+  cikisi olmayan tek ekran olurdu.
+- `RtsApp` kendini yikmiyor: `onExitToMenu` opsiyonel bir host handler'i
+  (`RtsAppOptions`). Cagri, uygulamanin kendi overlay'inin click listener'i
+  icinden geliyor; orada `dispose()` cagirmak, event'in hala uzerinde
+  dagitildigi elementi silmek olurdu. Host bir promise cozuyor, yikim bir
+  microtask sonra bos stack'te oluyor. Handler verilmezse buton hic kurulmuyor.
+- `main.ts` artik **donguye giriyor**: menu → mac → menu → mac, tek sayfada.
+  `RtsApp` her turda yikilip yeniden kuruluyor; `preload` **kurulmuyor**, bu
+  yuzden ikinci mac veriyi bellekten aciyor.
+- `RtsApp.dispose()` bes boot witness'ini de siliyor (`rtsGround`, `rtsMapArt`,
+  `rtsAuthoredWorld`, `rtsContentAssets`, `rtsContentPlaceholders`). Canvas
+  uygulamayi asiyor; birakilsalardi menu, bir onceki macin boot'unu bu macinki
+  gibi ilan eden bir canvas uzerinde otururdu.
+- URL: `menuSearch(params)` (`rtsMatchSetupUrl.ts`) - `matchSetupSearch`'in
+  tersi. Bes kurulum parametresini dusuruyor; `mode` dustugu icin menude
+  yapilan yenileme oyuncuyu yeni terk ettigi maca geri atmiyor, `seed` dustugu
+  icin sonraki mac gercekten yeni bir mac. `?level=` **bilerek kaliyor**
+  (KARAR 4): editorden gelen yazar hala o haritayi deniyor.
+- Iki engine check'i: `matchSetupSearch` → `menuSearch` gidis-donusu ve
+  `?level=`'in kalmasi.
+- Renderer: `dispose()` WebGL context'ini oldurmuyor (`forceContextLoss` yok),
+  yeni `RtsApp` ayni canvas uzerinde yeni bir `WebGLRenderer` kuruyor - ilk
+  boot'un zaten yaptigi sey (`engine/render-three/renderer.ts` destek yoklamasi
+  context'i aciyor, `WebGLRenderer` ayni context'i devraliyor).
 
 ## 8. Dokunulacak dosyalar
 
@@ -303,7 +363,12 @@ kapanista `npm run build:verify`.
 | `src/game/rts/RtsApp.ts` | dort handler silindi; mac perde kalkinca basliyor | F2 ✅ |
 | `src/style.css` | menu stilleri | F2 ✅ |
 | `tests/smoke/rtsBoot.ts` | bekleme tiklamanin **oteki** tarafina gecti | F2 ✅ |
-| `src/main.ts` | ayardan bagimsiz yukleri menu acikken baslat | F3 |
+| `src/main.ts` | ayardan bagimsiz yukleri menu acikken baslat (`preloadRtsMatchData`) | F3 ✅ |
+| `src/game/rts/match/rtsMatchOverlay.ts` | duraklatma + sonuc kartina "Ana Menü" | F5 ✅ |
+| `src/game/rts/RtsApp.ts` | `onExitToMenu` host handler'i; `dispose()` witness'lari siliyor | F5 ✅ |
+| `src/game/rts/match/rtsMatchSetupUrl.ts` | `menuSearch()` - kurulum parametrelerini dusur | F5 ✅ |
+| `src/main.ts` | rota donguye girdi: menu → mac → menu | F5 ✅ |
+| `tools/engine-tests.ts` | iki URL gidis-donus check'i | F5 ✅ |
 | `tests/smoke/rts-*.spec.ts` | tiklama oncesi canvas iddialarinin sirasi (§9) | F4 |
 
 ## 9. Smoke etkisi

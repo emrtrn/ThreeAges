@@ -513,6 +513,16 @@ export interface RtsAppOptions {
    * host records it so a returning player is not asked again.
    */
   readonly onMissionResolved?: () => void;
+  /**
+   * The player asked to leave this match and go back to the main menu (pause and
+   * result cards). Reported rather than acted on: the host owns the app's
+   * lifetime, so it is the only thing that may dispose it and re-open the menu —
+   * this app cannot tear itself down from inside its own click handler.
+   *
+   * Omitted by a host that has no menu to return to, and the button then does not
+   * exist at all rather than existing and doing nothing.
+   */
+  readonly onExitToMenu?: () => void;
 }
 
 function createRtsUserSettingsStore(): UserSettingsStore | null {
@@ -1702,6 +1712,8 @@ export class RtsApp {
       onGraphicsQuality: (quality) => this.setGraphicsQuality(quality),
       onGraphicsAdaptive: (enabled) => this.setGraphicsAdaptive(enabled),
       onAbandonMission: () => this.abandonMission(),
+      // Built only when the host offered a menu to go back to (§ "Ana Menü").
+      ...(this.options.onExitToMenu ? { onExitToMenu: this.exitToMenu } : {}),
     });
     this.debugOverlay = this.options.debug
       ? new RtsDebugOverlay({
@@ -1917,6 +1929,16 @@ export class RtsApp {
     this.disposed = true;
     this.running = false;
     delete this.canvas.dataset.rtsCursor;
+    // The canvas outlives this app — "Ana Menü" hands it straight to the menu —
+    // so the boot witnesses go with the match they described. Left behind, they
+    // would sit on the menu claiming a loaded world and an Actor pack that were
+    // disposed a moment ago, and anything that waits on them (the smoke suite,
+    // the debug readout) would read the *previous* match's boot as this one's.
+    delete this.canvas.dataset.rtsGround;
+    delete this.canvas.dataset.rtsMapArt;
+    delete this.canvas.dataset.rtsAuthoredWorld;
+    delete this.canvas.dataset.rtsContentAssets;
+    delete this.canvas.dataset.rtsContentPlaceholders;
     if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
     this.frameHandle = 0;
     document.removeEventListener("visibilitychange", this.handleVisibilityChange);
@@ -4567,6 +4589,23 @@ export class RtsApp {
   private readonly resumeMatch = (): void => {
     if (!this.flow.resume()) return;
     this.matchOverlay.hide();
+  };
+
+  /**
+   * "Ana Menü": hand the route back to the host, which disposes this app and
+   * re-opens the menu.
+   *
+   * Deliberately not `this.dispose()`. The call arrives from a click listener on
+   * an overlay this app owns, and disposing mid-listener would delete the element
+   * the event is still being dispatched on. The host resolves a promise instead,
+   * so the teardown happens one microtask later, on an empty stack.
+   *
+   * Unconfirmed, like "Yeniden Başlat" and unlike "Teslim Ol": both throw the
+   * current match away, and neither writes a defeat into the record.
+   */
+  private readonly exitToMenu = (): void => {
+    this.log.info("Leaving the match for the main menu");
+    this.options.onExitToMenu?.();
   };
 
   /**
