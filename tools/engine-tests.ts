@@ -8017,30 +8017,75 @@ check("grid navigation keeps narrow-corner waypoints outside capsule clearance",
   }
 });
 
-check("grid navigation adds clearance cost so corridor routes prefer the middle", () => {
+// Pinned on the baked penalty table, not on emitted waypoints: a flat grid's
+// final path is string-pulled, so wherever the taut line is already clear the
+// clearance cost stays a search preference and never reaches the output.
+check("grid navigation adds clearance cost so cells near a corridor wall cost more", () => {
   const wallL: Aabb3 = { min: [-4, 0, -5], max: [-2, 2, 5] };
   const wallR: Aabb3 = { min: [2, 0, -5], max: [4, 2, 5] };
-  const path = findGridPath({
-    start: [-1.5, 0, -4],
-    goal: [-1.5, 0, 4],
+  const grid = buildNavGrid({
     agent: { radius: 0, height: 1.8 },
     blockers: [wallL, wallR],
     bounds: [{ min: [-4, -1, -6], max: [4, 3, 6] }],
+    footY: 0,
     cellSize: 0.5,
     safetyMargin: 0,
   });
-  assert.equal(path.status, "success");
+  assert.ok(grid);
+  const penaltyAt = (x: number, z: number): number => {
+    const col = Math.round((x - grid.originX) / grid.cellSize);
+    const row = Math.round((z - grid.originZ) / grid.cellSize);
+    return grid.penalty[row * grid.cols + col]!;
+  };
+  assert.equal(penaltyAt(0, 0), 0, "corridor middle must be free of clearance cost");
+  assert.ok(penaltyAt(-1.5, 0) > 0, "a cell hugging the wall must carry clearance cost");
+  assert.ok(penaltyAt(-1.5, 0) > penaltyAt(-1, 0));
+  assert.ok(penaltyAt(-1, 0) > penaltyAt(-0.5, 0));
+});
+
+check("grid navigation string-pulls a flat-grid route instead of emitting the A* staircase", () => {
+  const straight = findGridPath({
+    start: [-4, 0, -4],
+    goal: [4, 0, 1],
+    agent: { radius: 0.25, height: 1.8 },
+    blockers: [],
+    bounds: [{ min: [-5, -1, -5], max: [5, 3, 5] }],
+    cellSize: 0.5,
+    safetyMargin: 0,
+  });
+  assert.equal(straight.status, "success");
+  // Open ground on a shallow diagonal is where 8-neighbour A* alternates E/NE
+  // every cell; taut, it is one segment.
+  assert.deepEqual(straight.points, [[-4, 0, -4], [4, 0, 1]]);
+
+  // A heightfield grid must keep the conservative cell route: `segmentSafe` there
+  // cannot see floor holes, ledge erosion or step limits.
+  const heightfield = buildNavGrid({
+    agent: { radius: 0.25, height: 1.8 },
+    blockers: [],
+    bounds: [{ min: [-5, -1, -5], max: [5, 3, 5] }],
+    footY: 0,
+    cellSize: 0.5,
+    safetyMargin: 0,
+    sampleFloorY: () => 0,
+  });
+  assert.ok(heightfield);
+  assert.equal(heightfield.flatFloor, false);
+  const stepped = searchNavGrid(heightfield, [-4, 0, -4], [4, 0, 1]);
+  assert.equal(stepped.status, "success");
   assert.ok(
-    path.points.some((point) => Math.abs(point[0]) <= 0.5 && Math.abs(point[2]) <= 3),
-    `expected route to move toward corridor center: ${JSON.stringify(path.points)}`,
+    stepped.points.length > straight.points.length,
+    `heightfield route should not be pulled taut: ${JSON.stringify(stepped.points)}`,
   );
 });
 
 check("grid navigation compression keeps grid points when a shortcut would cross a blocker", () => {
   const wall: Aabb3 = { min: [-0.25, 0, 0], max: [0.1, 2, 0.35] };
+  // The goal is chosen so the taut start→goal line runs straight through the
+  // wall: string-pulling must refuse it and keep a corner waypoint instead.
   const path = findGridPath({
     start: [-0.45, 0, 0.3],
-    goal: [2.3, 0, 1.55],
+    goal: [2.3, 0, 0.2],
     agent: { radius: 0, height: 1.8 },
     blockers: [wall],
     bounds: [{ min: [-2, -1, -2], max: [4, 3, 4] }],
@@ -8049,8 +8094,8 @@ check("grid navigation compression keeps grid points when a shortcut would cross
   });
   assert.equal(path.status, "success");
   assert.ok(
-    path.points.some((point) => point[0] === -0.5 && point[2] === 0.5),
-    `expected start-cell waypoint to guard the corner: ${JSON.stringify(path.points)}`,
+    path.points.length > 2,
+    `expected a corner waypoint around the wall: ${JSON.stringify(path.points)}`,
   );
   for (let i = 0; i < path.points.length - 1; i += 1) {
     assert.equal(
@@ -38296,7 +38341,7 @@ check("Tarla ekibi tarlanin icinde calisir, maden ekibi kapisinda durur", () => 
   for (const worker of crew) {
     assert.ok(
       Math.abs(worker.position.x - field.x) < halfW && Math.abs(worker.position.z - field.z) < halfD,
-      "a farmhand works inside the field, not beside it",
+      `a farmhand works inside the field, not beside it: ${worker.position.x},${worker.position.z}`,
     );
   }
   // Distinct posts, or the crew spends the match shoving each other off one.

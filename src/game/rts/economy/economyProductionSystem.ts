@@ -71,6 +71,12 @@ export interface EconomyBuildingSnapshot {
 interface WorkerAssignment {
   readonly worker: Unit;
   approach: Vector3;
+  /**
+   * How close to {@link approach} counts as arrived. See
+   * {@link EconomyProductionSystem.arrivalRadiusFor}: a door approach is reached
+   * loosely, an interior work post tightly.
+   */
+  arriveRadius: number;
   readonly source: "automatic" | "manual";
   state: Exclude<EconomyWorkerState, "idle">;
   sourceId: string | null;
@@ -415,7 +421,7 @@ export class EconomyProductionSystem {
     let workingWorkers = 0;
     for (const assignment of [...producer.assignments.values()]) {
       if (assignment.state === "moving") {
-        if (assignment.worker.position.distanceTo(assignment.approach) > WORK_RANGE) {
+        if (assignment.worker.position.distanceTo(assignment.approach) > assignment.arriveRadius) {
           // Congestion recovery can eventually drop a path. Without this retry,
           // the worker remained logically assigned forever: it was neither
           // producing nor selectable as idle, even though it stood beside the
@@ -766,6 +772,7 @@ export class EconomyProductionSystem {
       const assignment: WorkerAssignment = {
         worker,
         approach: target.approach,
+        arriveRadius: WORK_RANGE,
         source,
         state: "moving-to-source",
         sourceId: target.sourceId,
@@ -783,7 +790,15 @@ export class EconomyProductionSystem {
     const path = this.navigation.plan(worker.position, approach);
     if (!path) return false;
     worker.setMovePath(path);
-    const assignment: WorkerAssignment = { worker, approach, source, state: "moving", sourceId: null, cargoAmount: 0 };
+    const assignment: WorkerAssignment = {
+      worker,
+      approach,
+      arriveRadius: this.arrivalRadiusFor(producer.structure, approach),
+      source,
+      state: "moving",
+      sourceId: null,
+      cargoAmount: 0,
+    };
     producer.assignments.set(worker.id, assignment);
     this.assignmentByWorker.set(worker.id, producer);
     return true;
@@ -938,5 +953,27 @@ export class EconomyProductionSystem {
       if (point) return point;
     }
     return null;
+  }
+
+  /**
+   * How close to its approach point a worker must get before it stops and starts
+   * working.
+   *
+   * A door approach sits outside the building, so {@link WORK_RANGE} is the right
+   * tolerance: anywhere in front of the door is at the door. An interior work post
+   * is not like that. It is inset from the fence by only
+   * `half extent * (1 - FIELD_POST_INSET)` — less than `WORK_RANGE` at the current
+   * farm size — so the same tolerance lets a farmhand stop short and work the
+   * crop from outside the field, which is exactly what it looks like on screen.
+   * Interior posts therefore get a tolerance derived from that inset, so it stays
+   * correct if either the inset or a footprint is retuned.
+   */
+  private arrivalRadiusFor(structure: PlacedStructure, approach: Vector3): number {
+    const halfW = structure.stats.footprint.width / 2;
+    const halfD = structure.stats.footprint.depth / 2;
+    const inside = Math.abs(approach.x - structure.x) < halfW && Math.abs(approach.z - structure.z) < halfD;
+    if (!inside) return WORK_RANGE;
+    const fenceMargin = Math.min(halfW, halfD) * (1 - FIELD_POST_INSET);
+    return Math.min(WORK_RANGE, fenceMargin * 0.8);
   }
 }
