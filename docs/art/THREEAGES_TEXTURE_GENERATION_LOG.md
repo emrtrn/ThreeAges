@@ -96,6 +96,44 @@ unattached because `Main` is an ambiguous source slot pending the Phase 4
 asset-family review. The Material Editor browser smoke opened it with status
 `Ready.` and no page errors.
 
+## stone-cut-light — candidate production
+
+Date: 2026-08-09
+Status: `created` — Variant A is registered; visual acceptance is pending.
+
+The built-in image generator produced a pale, warm limestone cut-stone tile with
+restrained mortar seams and no dominant landmark. The deterministic processor
+created the 1024² BC/N/ORM set and 3×3 preview from
+`docs/art/candidates/T_TA_Stone_Cut_Light_Candidate_A.png`.
+
+- Seam metric: vertical `0.00000`, horizontal `0.00025`, maximum `0.00025`
+  (threshold `0.01500`).
+- Production records: `threeages-tex-stone-cut-light-{bc,n,orm}` and
+  `threeages-mat-stone-cut-light`.
+- Preview: `docs/art/previews/T_TA_Stone_Cut_Light_3x3.png`.
+
+## water-center — candidate production
+
+Date: 2026-08-09
+Status: `created` — Variant A is registered; visual acceptance is pending.
+
+The built-in image generator produced a calm, low-noise blue-green water base
+intended to sit beneath a future moving normal layer; it contains no shoreline,
+foam, reflection, or directional wave landmark. The deterministic processor
+created the 1024² BC/N/ORM set and 3×3 preview from
+`docs/art/candidates/T_TA_Water_Center_Candidate_A.png`.
+
+The first derived normal was visually too flat. `T_TA_Water_Center_N` now
+reuses the existing tileable River Water normal, so the Town Center keeps a
+visible shared water motion language without adopting spline, foam, or
+reflection behavior.
+
+- Seam metric: vertical `0.00000`, horizontal `0.00037`, maximum `0.00037`
+  (threshold `0.01500`).
+- Production records: `threeages-tex-water-center-{bc,n,orm}` and
+  `threeages-mat-water-center`.
+- Preview: `docs/art/previews/T_TA_Water_Center_3x3.png`.
+
 ## wall-plaster — candidate review
 
 Date: 2026-08-06
@@ -124,6 +162,7 @@ Status: `accepted` — A is primary; B is retained as a registered backup
 | --- | --- | --- | --- |
 | A | `docs/art/candidates/T_TA_Stone_Masonry_Candidate_A.png` | `docs/art/candidates/processed/T_TA_Stone_Masonry_Candidate_A_3x3.png` | Open, irregular rough limestone; recommended. |
 | B | `docs/art/candidates/T_TA_Stone_Masonry_Candidate_B.png` | `docs/art/candidates/processed/T_TA_Stone_Masonry_Candidate_B_3x3.png` | Regular gray courses read more like brick than rough stone. |
+| C | `docs/art/candidates/T_TA_Stone_Masonry_Candidate_C.png` | `docs/art/previews/T_TA_Stone_Masonry_C_3x3.png` | Town-road alternative: cool gray, tightly fitted rough cobbles, inspired by `M_CobbleStone_Rough`; registered separately as `M_TA_Stone_Road`. |
 
 Built-in image generation plus the local deterministic processor produced the
 1024² candidates. Seam metrics: A `0.00042`; B `0.00025` (threshold `0.01500`).

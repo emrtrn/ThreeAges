@@ -1133,8 +1133,10 @@ import {
 } from "../src/scene/assetMaterialSlotsLoader";
 import { applyAssetUvwMapping, normalizeAssetUvw } from "../src/scene/assetUvwLoader";
 import {
+  advanceForgeMaterialAnimations,
   createThreeMaterialFromForgeDef,
   EMISSIVE_INTENSITY_SCALE,
+  hasForgeMaterialNormalMotion,
 } from "../engine/render-three/materials";
 import {
   actorInstanceEntityId,
@@ -19541,6 +19543,58 @@ check("ThreeAges foliage-pine pilot material names registered BC/N/ORM textures"
   const materialRecord = assetManifest.assets.find((asset) => asset.id === "threeages-mat-foliage-pine");
   assert.ok(materialRecord, "pilot material itself must be registered");
   assert.equal(assetType(materialRecord!), "material");
+});
+
+check("ThreeAges Town Center water material registers normal motion and all three Water slots", () => {
+  const material = normalizeForgeMaterialDef(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Materials/M_TA_Water_Center.material.json", "utf8")),
+    "M_TA_Water_Center",
+  );
+  assert.equal(material.normalTexture, "threeages-tex-water-center-n");
+  assert.ok(material.normalMotion, "water must opt into the generic two-sample normal animation");
+  assert.ok(material.normalMotion!.primaryVelocity.x > 0);
+  assert.ok(material.normalMotion!.secondaryVelocity.x < 0);
+  for (const textureId of [material.baseColorTexture, material.normalTexture, material.ormTexture]) {
+    assert.ok(assetManifest.assets.some((asset) => asset.id === textureId));
+  }
+  const waterSlotByLevel: Record<number, number> = { 1: 1, 2: 2, 3: 2 };
+  for (const level of [1, 2, 3]) {
+    const slots = normalizeAssetMaterialSlots(
+      JSON.parse(readFileSync(`public/assets/ThreeAges/StaticMeshes/TownCenter_SecondAge_Level${level}.materials.json`, "utf8")),
+    );
+    assert.equal(slots.slots[waterSlotByLevel[level]], "threeages-mat-water-center");
+  }
+});
+
+check("forge normal motion patches the normal shader and updates a shared time uniform", () => {
+  const material = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Animated Normal",
+      normalTexture: "normal",
+      normalMotion: {
+        primaryVelocity: { x: 0.01, y: 0.02 },
+        secondaryTiling: { x: 1.5, y: 1.25 },
+        secondaryVelocity: { x: -0.02, y: 0.01 },
+        strength: 0.7,
+      },
+    }),
+    { normalTexture: new Texture() },
+  );
+  assert.ok(material instanceof MeshStandardMaterial);
+  assert.equal(hasForgeMaterialNormalMotion(material), true);
+  assert.match(material.customProgramCacheKey(), /forge-normal-motion-v1/);
+  const shader = {
+    uniforms: {},
+    fragmentShader: "#include <normal_pars_fragment>\nvoid main() {\n#include <normal_fragment_maps>\n}",
+  };
+  material.onBeforeCompile?.(shader as never, {} as never);
+  assert.match(shader.fragmentShader, /forgeNormalMotionTime/);
+  advanceForgeMaterialAnimations(12.5);
+  assert.equal((shader.uniforms as Record<string, { value: number }>).forgeNormalMotionTime?.value, 12.5);
+  material.dispose();
 });
 
 check("forge material mapping creates matching Three material types and fields", () => {

@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_TA_Stone_Road",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "threeages-tex-stone-road-bc",
+  "normalTexture": "threeages-tex-stone-road-n",
+  "maskTexture": null,
+  "roughnessTexture": null,
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": null,
+  "useBaseColorAlphaForOpacity": false,
+  "emissiveTexture": null,
+  "ormTexture": "threeages-tex-stone-road-orm",
+  "uvTiling": {
+    "x": 2,
+    "y": 2
+  },
+  "roughness": 0.88,
+  "metalness": 0,
+  "aoIntensity": 0.65,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": null
+}

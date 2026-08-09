@@ -257,6 +257,8 @@ test("Assetization Faz E: the opt-in Level mounts its authored static world and 
   await expect(page.locator("#game-canvas")).toBeVisible();
   await startRtsMatch(page);
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-authored-world", "ready", { timeout: 30_000 });
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-authored-slot-materials", /^[1-9]\d*$/);
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-authored-uvw-mappings", /^[1-9]\d*$/);
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-landscape-pbr", "full");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-landscape-samplers", /^12\/\d+$/);
@@ -485,4 +487,32 @@ test("Material assetization: foliage-pine candidate opens with BC, normal and OR
   await expect(page.locator("[data-me-title]")).toHaveText("M_TA_Foliage_Pine");
   await expect(page.locator("[data-me-status]")).toHaveText("Ready.");
   expect(errors, "opening the foliage-pine candidate PBR material must not produce runtime errors").toEqual([]);
+});
+
+test("Material assetization: Town Center water opens with normal motion enabled", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await page.locator("[data-content-toggle]").click();
+  await expect(page.locator("[data-content-list]")).toBeVisible();
+  await page.locator('button[title="assets/ThreeAges/Materials"]').dispatchEvent("click");
+  await page.locator("[data-content-search]").fill("M_TA_Water_Center");
+
+  const material = page.locator('[data-asset-path="assets/ThreeAges/Materials/M_TA_Water_Center.material.json"]');
+  await expect(material).toBeVisible();
+  await material.dispatchEvent("dblclick");
+  await expect(page.locator(".me-editor-overlay")).toBeVisible();
+  await expect(page.locator("[data-me-title]")).toHaveText("M_TA_Water_Center");
+  await expect(page.locator("[data-me-status]")).toHaveText("Ready.");
+  await expect(page.locator('[data-me-field="normalMotionEnabled"]')).toBeChecked();
+  const preview = page.locator("[data-me-preview] canvas");
+  await expect(preview).toBeVisible();
+  const before = await preview.screenshot();
+  await page.waitForTimeout(1_200);
+  const after = await preview.screenshot();
+  expect(Buffer.compare(before, after), "the preview pixels must change while the water normal moves").not.toBe(0);
+
+  expect(errors, "opening the animated Town Center water material must not produce runtime errors").toEqual([]);
 });

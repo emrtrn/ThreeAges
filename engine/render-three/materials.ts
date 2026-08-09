@@ -15,6 +15,7 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type {
   ForgeMaterialDef,
   ForgeMaterialLayerBlend,
+  ForgeMaterialNormalMotion,
   ForgeMaterialSide,
 } from "../assets/material";
 import { configureForgeTexture } from "./textureConfig";
@@ -66,6 +67,26 @@ export function isRenderableMesh(
  * 1000). It is the counterpart to the bloom strength scale in `postProcess.ts`.
  */
 export const EMISSIVE_INTENSITY_SCALE = 1000;
+
+interface NormalMotionState {
+  time: { value: number };
+  primaryVelocity: { value: Vector2 };
+  secondaryTiling: { value: Vector2 };
+  secondaryVelocity: { value: Vector2 };
+  strength: { value: number };
+}
+
+const normalMotionStates = new Map<MeshStandardMaterial, NormalMotionState>();
+
+/** Updates all live authored normal-motion materials once per rendered frame. */
+export function advanceForgeMaterialAnimations(elapsedSeconds: number): void {
+  const time = Math.max(0, elapsedSeconds);
+  for (const state of normalMotionStates.values()) state.time.value = time;
+}
+
+export function hasForgeMaterialNormalMotion(material: Material | null | undefined): boolean {
+  return material instanceof MeshStandardMaterial && normalMotionStates.has(material);
+}
 
 export function createThreeMaterialFromForgeDef(
   def: ForgeMaterialDef,
@@ -169,10 +190,79 @@ export function createThreeMaterialFromForgeDef(
     if (def.layerBlend) {
       applyLayerBlendMaterial(material, def.layerBlend, textures, options);
     }
+    if (def.normalMotion && textures.normalTexture) {
+      applyNormalMotionMaterial(material, def.normalMotion);
+    }
   }
 
   material.needsUpdate = true;
   return material;
+}
+
+function applyNormalMotionMaterial(
+  material: MeshStandardMaterial,
+  motion: ForgeMaterialNormalMotion,
+): void {
+  const state: NormalMotionState = {
+    time: { value: 0 },
+    primaryVelocity: { value: new Vector2(motion.primaryVelocity.x, motion.primaryVelocity.y) },
+    secondaryTiling: { value: new Vector2(motion.secondaryTiling.x, motion.secondaryTiling.y) },
+    secondaryVelocity: { value: new Vector2(motion.secondaryVelocity.x, motion.secondaryVelocity.y) },
+    strength: { value: motion.strength },
+  };
+  normalMotionStates.set(material, state);
+  material.addEventListener("dispose", () => normalMotionStates.delete(material));
+
+  const priorPatch = material.onBeforeCompile;
+  const priorCacheKey = material.customProgramCacheKey;
+  material.onBeforeCompile = (shader, renderer) => {
+    priorPatch?.(shader, renderer);
+    patchNormalMotionShader(shader, state);
+  };
+  material.customProgramCacheKey = () =>
+    `${priorCacheKey ? `${priorCacheKey.call(material)}|` : ""}forge-normal-motion-v1`;
+  material.needsUpdate = true;
+}
+
+function patchNormalMotionShader(shader: ShaderPatch, state: NormalMotionState): void {
+  const normalChunk = "#include <normal_fragment_maps>";
+  if (!shader.fragmentShader.includes(normalChunk)) return;
+  shader.uniforms.forgeNormalMotionTime = state.time;
+  shader.uniforms.forgeNormalMotionPrimaryVelocity = state.primaryVelocity;
+  shader.uniforms.forgeNormalMotionSecondaryTiling = state.secondaryTiling;
+  shader.uniforms.forgeNormalMotionSecondaryVelocity = state.secondaryVelocity;
+  shader.uniforms.forgeNormalMotionStrength = state.strength;
+  shader.fragmentShader = shader.fragmentShader.replace(
+    "#include <normal_pars_fragment>",
+    `uniform float forgeNormalMotionTime;
+uniform vec2 forgeNormalMotionPrimaryVelocity;
+uniform vec2 forgeNormalMotionSecondaryTiling;
+uniform vec2 forgeNormalMotionSecondaryVelocity;
+uniform float forgeNormalMotionStrength;
+#include <normal_pars_fragment>`,
+  );
+  shader.fragmentShader = shader.fragmentShader.replace(
+    normalChunk,
+    `#ifdef USE_NORMALMAP_TANGENTSPACE
+  vec3 forgeNormalA = texture2D(
+    normalMap,
+    vNormalMapUv + forgeNormalMotionPrimaryVelocity * forgeNormalMotionTime
+  ).xyz * 2.0 - 1.0;
+  vec3 forgeNormalB = texture2D(
+    normalMap,
+    vNormalMapUv * forgeNormalMotionSecondaryTiling + forgeNormalMotionSecondaryVelocity * forgeNormalMotionTime
+  ).xyz * 2.0 - 1.0;
+  #ifdef USE_PACKED_NORMALMAP
+    forgeNormalA = vec3(forgeNormalA.xy, sqrt(saturate(1.0 - dot(forgeNormalA.xy, forgeNormalA.xy))));
+    forgeNormalB = vec3(forgeNormalB.xy, sqrt(saturate(1.0 - dot(forgeNormalB.xy, forgeNormalB.xy))));
+  #endif
+  vec3 mapN = normalize(mix(forgeNormalA, forgeNormalB, 0.5));
+  mapN.xy *= normalScale * forgeNormalMotionStrength;
+  normal = normalize(tbn * normalize(mapN));
+#else
+  #include <normal_fragment_maps>
+#endif`,
+  );
 }
 
 function applyLayerBlendMaterial(

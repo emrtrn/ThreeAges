@@ -1,9 +1,20 @@
 # ThreeAges — Materyal, Tekrarlanabilir Doku ve Yüzey Assetleştirme Planı
 
 Oluşturulma tarihi: 2026-08-06  
-Durum: **Devam ediyor — Faz 0 tamamlanma yolunda; Faz 1 dar çekirdeği ve desktop capability kapısı kanıtlandı, dört-ORM fixture kabulü açık**
+Durum: **Devam ediyor — Faz 0 tamamlanma yolunda; Faz 1 dar çekirdeği ve desktop capability kapısı kanıtlandı, Faz 2 kodu hazır; görsel kabul açık**
 
 ## Uygulama Günlüğü
+
+- 2026-08-09 — RTS authored-world prop materyal paritesi tamamlandı.
+  - [x] Play'in generic authored-world yükleyicisi artık yerleştirilen static meshlerin `*.materials.json` sidecar'larını ve başvurdukları Forge materyallerini yükleyip instanced prop grubuna uygular.
+  - [x] Aynı yükleyici `*.uvw.json` projeksiyonunu instance oluşturmadan önce uygular; aksi halde materyal rengi görünse bile tüm doku mapleri düz renk örnekleniyordu.
+  - [x] Aynı resolver spline üretimi ve foliage instance yollarına da verildi; RTS browser smoke gerçek Level'da en az bir slot materyalinin çözüldüğünü ve yeniden başlatma paritesini doğruluyor.
+
+- 2026-08-09 — Faz 2 basit Town Center su dili uygulandı.
+  - [x] Genel materyale opsiyonel iki örnekli normal hareketi, Material Editor alanları, save validator allowlist'i ve render zamanı bağlandı.
+  - [x] `M_TA_Water_Center`, iki kayan normal örneğiyle çalışacak şekilde tanımlandı; yalnız `TownCenter_SecondAge_Level1/2/3` üçüncü (`Water`) slotuna sidecar ile bağlandı.
+  - [x] Odaklı TypeScript ve engine testleri, shader cache anahtarı ile paylaşılan time uniform yaşam döngüsünü doğruladı.
+  - [ ] Editor/RTS içindeki görsel hareket kabulü kullanıcı gözlemiyle açık bırakıldı.
 
 - 2026-08-06 — Faz 0 + Faz 1 dar çekirdeği başlatıldı.
   - [x] Read-only `npm run inventory:threeages-materials` aracı 128 model / 489 primitive, 72 tam UV'li, 56 UV'siz ve 6 tam mevcut sidecar ailesini doğruladı; kaynak GLTF veya sidecar yazmadı.
@@ -599,11 +610,11 @@ texture sızıntısı yoktur.
 
 ### Faz 2 — Generic normal hareketi ve Town Center suyu
 
-- [ ] Materyal şemasına opsiyonel çift-normal hareket alanını ekle.
-- [ ] Normalizer, Material Editor, save validator ve renderer'ı güncelle.
-- [ ] Program cache ve time uniform yaşam döngüsünü test et.
-- [ ] ThreeAges su normalini ve `M_TA_Water_Center` materyalini oluştur.
-- [ ] Üç Second Age Town Center `Water` slotunu bu materyale bağla.
+- [x] Materyal şemasına opsiyonel çift-normal hareket alanını ekle.
+- [x] Normalizer, Material Editor, save validator ve renderer'ı güncelle.
+- [x] Program cache ve time uniform yaşam döngüsünü test et.
+- [x] ThreeAges su normalini ve `M_TA_Water_Center` materyalini oluştur.
+- [x] Üç Second Age Town Center `Water` slotunu bu materyale bağla.
 - [ ] Static Mesh Editor preview ve RTS runtime hareket paritesini doğrula.
 
 Kabul: Su normal detayı iki yönde kesintisiz hareket eder; yüzey donuk değildir,
@@ -625,7 +636,7 @@ River Water'a yabancı görünmez ve spline/foam/reflection koduna bağımlı de
 - [ ] `tree-bark` (A adayı hazır; kullanıcı görsel kabulü ve temsilci model denemesi açık)
 - [ ] `foliage-broadleaf` (A adayı hazır; kullanıcı görsel kabulü ve temsilci model denemesi açık)
 - [ ] `foliage-pine` (A adayı hazır; kullanıcı görsel kabulü ve temsilci model denemesi açık)
-- [ ] `water-center`
+- [x] `water-center`
 
 Her yüzey için:
 

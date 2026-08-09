@@ -43,7 +43,15 @@ import type { AssetManifest } from "@engine/assets/manifest";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { RoomLayout, Vec3 } from "@engine/scene/layout";
-import { loadForgeMaterialLayer } from "./materialAssets";
+import {
+  applyMaterialSlotOverrides,
+  assignedMaterialSlotIds,
+  hasAssignedMaterialSlots,
+  loadAssetMaterialSlotsFromUrl,
+  type AssetMaterialSlotsDef,
+} from "./assetMaterialSlotsLoader";
+import { applyAssetUvwMapping, loadAssetUvwFromUrl } from "./assetUvwLoader";
+import { loadForgeMaterial, loadForgeMaterialLayer } from "./materialAssets";
 import {
   buildSceneInstancedModel,
   buildSceneLightObject,
@@ -102,6 +110,10 @@ export interface AuthoredWorldHandle {
    * mount the world.
    */
   readonly staticInstanceMeshes: readonly InstancedMesh[];
+  /** Distinct Forge materials resolved from placed static-mesh slot sidecars. */
+  readonly staticSlotMaterialCount: number;
+  /** Placed mesh assets whose UVW sidecar was applied before instancing. */
+  readonly staticUvwMappingCount: number;
   /**
    * How many Landscape terrains this world mounted. A shell reads this to retire
    * its own flat placeholder ground once an authored terrain is standing in for
@@ -216,6 +228,68 @@ function modelEntriesFrom(manifest: AssetManifest): Map<string, ManifestModelEnt
     }
   }
   return models;
+}
+
+interface AuthoredWorldMaterialSlots {
+  readonly slotsByAssetId: Map<string, AssetMaterialSlotsDef>;
+  readonly materialsById: Map<string, Material>;
+}
+
+/**
+ * Static mesh material slots are authored beside the GLTF, not inside the Level.
+ * Resolve them before instance groups build so every host of this generic world
+ * (including the RTS preview route) renders the same surfaces as the editor.
+ */
+async function loadAuthoredWorldMaterialSlots(
+  assetIds: readonly string[],
+  manifest: AssetManifest,
+  textureLoader: TextureLoader,
+  resolveUrl: (path: string) => string,
+  maxAnisotropy: number,
+  warn: (message: string, error?: unknown) => void,
+): Promise<AuthoredWorldMaterialSlots> {
+  const slotsByAssetId = new Map<string, AssetMaterialSlotsDef>();
+  await Promise.all(assetIds.map(async (assetId) => {
+    const asset = assetRecordById(manifest, assetId);
+    if (!asset) return;
+    const slots = await loadAssetMaterialSlotsFromUrl(assetPath(asset), resolveUrl);
+    if (hasAssignedMaterialSlots(slots)) slotsByAssetId.set(assetId, slots);
+  }));
+
+  const materialsById = new Map<string, Material>();
+  const materialIds = new Set<string>();
+  for (const slots of slotsByAssetId.values()) {
+    for (const materialId of assignedMaterialSlotIds(slots)) materialIds.add(materialId);
+  }
+  await Promise.all([...materialIds].map(async (materialId) => {
+    try {
+      materialsById.set(
+        materialId,
+        await loadForgeMaterial(manifest, materialId, textureLoader, { maxAnisotropy, resolveUrl }),
+      );
+    } catch (error) {
+      warn(`Authored-world material slot failed to load: ${materialId}`, error);
+    }
+  }));
+  return { slotsByAssetId, materialsById };
+}
+
+/** Apply the same per-mesh UVW sidecars the editor applies before instancing. */
+async function applyAuthoredWorldUvwMappings(
+  assetIds: readonly string[],
+  manifest: AssetManifest,
+  models: ReadonlyMap<string, GLTF>,
+  resolveUrl: (path: string) => string,
+): Promise<number> {
+  const applied = await Promise.all(assetIds.map(async (assetId) => {
+    const asset = assetRecordById(manifest, assetId);
+    const gltf = models.get(assetId);
+    if (!asset || !gltf) return false;
+    const uvw = await loadAssetUvwFromUrl(assetPath(asset), resolveUrl);
+    applyAssetUvwMapping(gltf.scene, uvw);
+    return uvw.mapType !== null;
+  }));
+  return applied.filter(Boolean).length;
 }
 
 /**
@@ -352,6 +426,31 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     tickProgress();
   }));
 
+  // Sidecars repair or generate mesh UVs before instancing. Without this, an
+  // assigned Forge material still reaches Play but every map samples as a flat
+  // colour — the exact Editor/RTS mismatch this host must prevent.
+  const staticUvwMappingCount = await applyAuthoredWorldUvwMappings(
+    modelAssetIds,
+    assetManifest,
+    models,
+    resolveUrl,
+  );
+
+  const materialTextureLoader = new TextureLoader();
+  const authoredMaterials = await loadAuthoredWorldMaterialSlots(
+    modelAssetIds,
+    assetManifest,
+    materialTextureLoader,
+    resolveUrl,
+    renderer.capabilities.getMaxAnisotropy(),
+    warn,
+  );
+  const applyAuthoredMaterialSlots = (assetId: string, group: Group): void => {
+    const slots = authoredMaterials.slotsByAssetId.get(assetId);
+    if (!slots) return;
+    applyMaterialSlotOverrides(group, slots, (materialId) => authoredMaterials.materialsById.get(materialId));
+  };
+
   const localBounds = new Map(computeModelLocalBounds(models));
   // Register procedural `shape:<type>` primitives so a shape instance mounts like
   // any other, instead of throwing on the synthetic (unmanifested) asset id.
@@ -371,6 +470,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
       castShadow: settings.staticObjectsCastShadow,
       receiveShadow: settings.staticObjectsReceiveShadow,
     });
+    applyAuthoredMaterialSlots(instance.assetId, built.group);
     root.add(built.group);
     instancedMeshes.push(...built.meshes);
   }
@@ -387,6 +487,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
       models,
       castShadow: settings.staticObjectsCastShadow,
       receiveShadow: settings.staticObjectsReceiveShadow,
+      applyMaterialSlots: applyAuthoredMaterialSlots,
     });
     if (built?.missingAssetIds.length) {
       warn(`Authored-world spline generator mesh missing: ${built.missingAssetIds.join(", ")}`);
@@ -597,6 +698,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     binding.rebuild(renderData, {
       getType: (id) => foliage.types.get(id) ?? null,
       getModel: (assetId) => models.get(assetId) ?? null,
+      applyMaterialSlots: applyAuthoredMaterialSlots,
     });
     root.add(binding.root);
     foliageBinding = binding;
@@ -638,6 +740,9 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
       });
     };
     collect(root);
+    for (const material of authoredMaterials.materialsById.values()) {
+      collectMaterialTextures(material, materials, textures);
+    }
     // The loaded glTF templates are not children of `root` (the instanced meshes
     // reference their geometry), so free them explicitly too — dispose is
     // idempotent, so any geometry shared with an instanced mesh is safe to repeat.
@@ -669,6 +774,8 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     navigationBlockers: [],
     directionalLights,
     staticInstanceMeshes: instancedMeshes,
+    staticSlotMaterialCount: authoredMaterials.materialsById.size,
+    staticUvwMappingCount,
     landscapeCount: landscapeObjects.length,
     landscapes: mountedLandscapes,
     foliageInstanceCount,

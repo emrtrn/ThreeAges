@@ -28,7 +28,18 @@ export function defaultAssetMaterialSlots(): AssetMaterialSlotsDef {
 }
 
 export async function loadAssetMaterialSlots(modelPath: string): Promise<AssetMaterialSlotsDef> {
-  const url = projectFileUrl(materialSlotsSidecarPath(modelPath));
+  return loadAssetMaterialSlotsFromUrl(modelPath, projectFileUrl);
+}
+
+/**
+ * Generic-runtime variant: the caller owns URL resolution rather than assuming
+ * the editor project's public root.
+ */
+export async function loadAssetMaterialSlotsFromUrl(
+  modelPath: string,
+  resolveUrl: (path: string) => string,
+): Promise<AssetMaterialSlotsDef> {
+  const url = resolveUrl(materialSlotsSidecarPath(modelPath));
   try {
     const response = await fetch(url, { cache: "no-cache" });
     if (!response.ok) return defaultAssetMaterialSlots();

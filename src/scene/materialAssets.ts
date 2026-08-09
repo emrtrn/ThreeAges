@@ -12,7 +12,7 @@ export async function loadForgeMaterial(
   manifest: AssetManifest,
   materialId: string,
   textureLoader = new TextureLoader(),
-  options: { maxAnisotropy?: number } = {},
+  options: { maxAnisotropy?: number; resolveUrl?: (path: string) => string } = {},
 ): Promise<ForgeThreeMaterial> {
   const materialRecord = assetRecordById(manifest, materialId);
   if (!materialRecord || assetType(materialRecord) !== "material") {
@@ -21,7 +21,8 @@ export async function loadForgeMaterial(
   // Revalidate against the dev server (matches the Material Editor's loader). Without
   // this the browser can serve a stale heuristic-cached material JSON, so a layer
   // blend / mask edited and saved in the editor never reaches the scene or Play.
-  const response = await fetch(projectFileUrl(assetPath(materialRecord)), { cache: "no-cache" });
+  const resolveUrl = options.resolveUrl ?? projectFileUrl;
+  const response = await fetch(resolveUrl(assetPath(materialRecord)), { cache: "no-cache" });
   if (!response.ok) {
     throw new Error(`Material asset failed: ${response.status} ${response.statusText}`);
   }
@@ -30,52 +31,52 @@ export async function loadForgeMaterial(
     def,
     {
       baseColorTexture: def.baseColorTexture
-        ? await loadTextureByAssetId(manifest, def.baseColorTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.baseColorTexture, textureLoader, resolveUrl)
         : null,
       normalTexture: def.normalTexture
-        ? await loadTextureByAssetId(manifest, def.normalTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.normalTexture, textureLoader, resolveUrl)
         : null,
       roughnessTexture: def.roughnessTexture
-        ? await loadTextureByAssetId(manifest, def.roughnessTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.roughnessTexture, textureLoader, resolveUrl)
         : null,
       metalnessTexture: def.metalnessTexture
-        ? await loadTextureByAssetId(manifest, def.metalnessTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.metalnessTexture, textureLoader, resolveUrl)
         : null,
       aoTexture: def.aoTexture
-        ? await loadTextureByAssetId(manifest, def.aoTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.aoTexture, textureLoader, resolveUrl)
         : null,
       opacityTexture: def.opacityTexture
-        ? await loadTextureByAssetId(manifest, def.opacityTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.opacityTexture, textureLoader, resolveUrl)
         : null,
       emissiveTexture: def.emissiveTexture
-        ? await loadTextureByAssetId(manifest, def.emissiveTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.emissiveTexture, textureLoader, resolveUrl)
         : null,
       ormTexture: def.ormTexture
-        ? await loadTextureByAssetId(manifest, def.ormTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.ormTexture, textureLoader, resolveUrl)
         : null,
       layer1BaseColorTexture: def.layerBlend?.layer1.baseColorTexture
-        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.baseColorTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.baseColorTexture, textureLoader, resolveUrl)
         : null,
       layer1NormalTexture: def.layerBlend?.layer1.normalTexture
-        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.normalTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.normalTexture, textureLoader, resolveUrl)
         : null,
       layer1RoughnessTexture: def.layerBlend?.layer1.roughnessTexture
-        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.roughnessTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.roughnessTexture, textureLoader, resolveUrl)
         : null,
       layer1MetalnessTexture: def.layerBlend?.layer1.metalnessTexture
-        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.metalnessTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.metalnessTexture, textureLoader, resolveUrl)
         : null,
       layer1OpacityTexture: def.layerBlend?.layer1.opacityTexture
-        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.opacityTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.opacityTexture, textureLoader, resolveUrl)
         : null,
       layer1EmissiveTexture: def.layerBlend?.layer1.emissiveTexture
-        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.emissiveTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.emissiveTexture, textureLoader, resolveUrl)
         : null,
       layer1AoTexture: def.layerBlend?.layer1.aoTexture
-        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.aoTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.aoTexture, textureLoader, resolveUrl)
         : null,
       layerBlendMaskTexture: def.layerBlend?.maskTexture
-        ? await loadTextureByAssetId(manifest, def.layerBlend.maskTexture, textureLoader)
+        ? await loadTextureByAssetId(manifest, def.layerBlend.maskTexture, textureLoader, resolveUrl)
         : null,
     },
     options,
@@ -159,10 +160,11 @@ async function loadTextureByAssetId(
   manifest: AssetManifest,
   textureId: string,
   loader: TextureLoader,
+  resolveUrl: (path: string) => string = projectFileUrl,
 ) {
   const record = assetRecordById(manifest, textureId);
   if (!record || assetType(record) !== "texture") {
     throw new Error(`Texture asset not found: ${textureId}`);
   }
-  return loader.loadAsync(projectFileUrl(assetPath(record)));
+  return loader.loadAsync(resolveUrl(assetPath(record)));
 }

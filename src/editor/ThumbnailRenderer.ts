@@ -277,6 +277,7 @@ function thumbnailPreviewToMaterialDef(preview: ThumbnailMaterialPreview): Forge
     side: preview.side,
     emissive: preview.emissive,
     emissiveIntensity: preview.emissiveIntensity,
+    normalMotion: null,
     layerBlend: preview.layerBlend ?? null,
   };
 }

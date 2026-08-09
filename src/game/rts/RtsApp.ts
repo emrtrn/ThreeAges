@@ -26,6 +26,7 @@ import {
 } from "three";
 
 import { createSceneRenderer, readRenderMemory, readRenderStats } from "@engine/render-three/renderer";
+import { advanceForgeMaterialAnimations } from "@engine/render-three/materials";
 import { GltfModelLoader } from "@engine/render-three/gltfModelLoader";
 import { VfxSubsystem } from "@engine/render-three/vfxSubsystem";
 import { FrameMetricsMonitor } from "@engine/perf/frameMetrics";
@@ -1940,6 +1941,8 @@ export class RtsApp {
     delete this.canvas.dataset.rtsGround;
     delete this.canvas.dataset.rtsMapArt;
     delete this.canvas.dataset.rtsAuthoredWorld;
+    delete this.canvas.dataset.rtsAuthoredSlotMaterials;
+    delete this.canvas.dataset.rtsAuthoredUvwMappings;
     delete this.canvas.dataset.rtsContentAssets;
     delete this.canvas.dataset.rtsContentPlaceholders;
     if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
@@ -2369,6 +2372,7 @@ export class RtsApp {
     // A sweep step's content is hidden for exactly this render and restored
     // immediately after, so nothing downstream — selection, picking, the next
     // frame's presentation pass — ever sees the doctored scene.
+    advanceForgeMaterialAnimations(now / 1000);
     const sweepStep = this.applyGpuSweepStep();
     this.gpuTimer?.begin(sweepStep?.tag ?? 0);
     if (this.postProcessPipeline && !sweepStep?.bypassPostProcess) this.postProcessPipeline.render(dt);
@@ -4222,6 +4226,8 @@ export class RtsApp {
       }
       this.authoredWorld = handle;
       this.scene.add(handle.root);
+      this.canvas.dataset.rtsAuthoredSlotMaterials = String(handle.staticSlotMaterialCount);
+      this.canvas.dataset.rtsAuthoredUvwMappings = String(handle.staticUvwMappingCount);
       const landscapeSamplerBudget = handle.landscapes[0]?.object.userData.landscapeSamplerBudget as
         | LandscapeSamplerBudget
         | undefined;

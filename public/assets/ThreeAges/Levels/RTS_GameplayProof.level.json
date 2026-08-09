@@ -1531,6 +1531,33 @@
           "scale": 6
         }
       ]
+    },
+    {
+      "assetId": "towncenter-secondage-level3",
+      "placements": [
+        {
+          "position": [
+            -12.04,
+            0.01,
+            20.38
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "towncenter-secondage-level2",
+      "placements": []
+    },
+    {
+      "assetId": "towncenter-secondage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "towncenter-firstage-level1",
+      "placements": []
     }
   ],
   "characters": [],

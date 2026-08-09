@@ -3158,6 +3158,30 @@ function validateForgeMaterialLayerBlend(
   };
 }
 
+function validateForgeMaterialNormalMotion(value: unknown): Record<string, unknown> | null {
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("material.normalMotion must be an object or null");
+  }
+  const input = value as Record<string, unknown>;
+  const velocity = (candidate: unknown, label: string): Record<string, number> => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw new Error(`${label} must be an object`);
+    }
+    const vector = candidate as Record<string, unknown>;
+    return {
+      x: validateOptionalNumber(vector.x, `${label}.x`, -10, 10) ?? 0,
+      y: validateOptionalNumber(vector.y, `${label}.y`, -10, 10) ?? 0,
+    };
+  };
+  return {
+    primaryVelocity: velocity(input.primaryVelocity, "material.normalMotion.primaryVelocity"),
+    secondaryTiling: validateUvTiling(input.secondaryTiling, "material.normalMotion.secondaryTiling"),
+    secondaryVelocity: velocity(input.secondaryVelocity, "material.normalMotion.secondaryVelocity"),
+    strength: validateOptionalNumber(input.strength, "material.normalMotion.strength", 0.05, 4) ?? 0.65,
+  };
+}
+
 export function validateForgeMaterialDef(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("material def must be an object");
@@ -3201,6 +3225,7 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     );
   const maskTexture = legacyMaskConsumedByLayerBlend ? null : legacyMaskTexture;
   const ormTexture = validateTextureRef(input.ormTexture, "material.ormTexture") ?? maskTexture;
+  const normalMotion = validateForgeMaterialNormalMotion(input.normalMotion);
 
   return {
     schema: 1,
@@ -3229,6 +3254,7 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     emissive: validateColorHex(input.emissive ?? "#000000", "material.emissive"),
     emissiveIntensity:
       validateOptionalNumber(input.emissiveIntensity, "material.emissiveIntensity", 0, 20) ?? 0,
+    normalMotion,
     layerBlend,
   };
 }

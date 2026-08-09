@@ -20504,7 +20504,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 532
+        "bytes": 732
       },
       "license": "Project-local RTS presentation asset"
     },
@@ -28551,7 +28551,7 @@
         "texture",
         "wood",
         "normal",
-        "generated"
+        "river-normal"
       ],
       "placeable": false,
       "placement": {
@@ -29858,10 +29858,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Tree_Bark_BC.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Tree_Bark_BC.png",
-      "tags": ["threeages", "texture", "tree", "bark", "albedo", "pilot"],
+      "tags": [
+        "threeages",
+        "texture",
+        "tree",
+        "bark",
+        "albedo",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1211895},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1211895
+      },
       "license": "Project-local Imagen candidate A; visual acceptance pending"
     },
     {
@@ -29871,10 +29889,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Tree_Bark_N.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Tree_Bark_BC.png",
-      "tags": ["threeages", "texture", "tree", "bark", "normal", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "tree",
+        "bark",
+        "normal",
+        "generated"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1354391},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1354391
+      },
       "license": "Deterministic derivative"
     },
     {
@@ -29884,10 +29920,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Tree_Bark_ORM.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Tree_Bark_BC.png",
-      "tags": ["threeages", "texture", "tree", "bark", "orm", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "tree",
+        "bark",
+        "orm",
+        "generated"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 390654},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 390654
+      },
       "license": "Deterministic derivative"
     },
     {
@@ -29897,10 +29951,27 @@
       "category": "ThreeAges/Materials",
       "path": "assets/ThreeAges/Materials/M_TA_Tree_Bark.material.json",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Tree_Bark_BC.png",
-      "tags": ["threeages", "material", "tree", "bark", "pilot"],
+      "tags": [
+        "threeages",
+        "material",
+        "tree",
+        "bark",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 435},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 435
+      },
       "license": "Project-local ThreeAges tree-bark material pilot"
     },
     {
@@ -29910,10 +29981,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Foliage_Broadleaf_BC.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Foliage_Broadleaf_BC.png",
-      "tags": ["threeages", "texture", "foliage", "broadleaf", "albedo", "pilot"],
+      "tags": [
+        "threeages",
+        "texture",
+        "foliage",
+        "broadleaf",
+        "albedo",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1103290},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1103290
+      },
       "license": "Project-local Imagen candidate A; visual acceptance pending"
     },
     {
@@ -29923,10 +30012,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Foliage_Broadleaf_N.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Foliage_Broadleaf_BC.png",
-      "tags": ["threeages", "texture", "foliage", "broadleaf", "normal", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "foliage",
+        "broadleaf",
+        "normal",
+        "generated"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1193997},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1193997
+      },
       "license": "Deterministic derivative"
     },
     {
@@ -29936,10 +30043,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Foliage_Broadleaf_ORM.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Foliage_Broadleaf_BC.png",
-      "tags": ["threeages", "texture", "foliage", "broadleaf", "orm", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "foliage",
+        "broadleaf",
+        "orm",
+        "generated"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 366010},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 366010
+      },
       "license": "Deterministic derivative"
     },
     {
@@ -29949,10 +30074,27 @@
       "category": "ThreeAges/Materials",
       "path": "assets/ThreeAges/Materials/M_TA_Foliage_Broadleaf.material.json",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Foliage_Broadleaf_BC.png",
-      "tags": ["threeages", "material", "foliage", "broadleaf", "pilot"],
+      "tags": [
+        "threeages",
+        "material",
+        "foliage",
+        "broadleaf",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 467},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 467
+      },
       "license": "Project-local ThreeAges broadleaf-foliage material pilot"
     },
     {
@@ -29962,10 +30104,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Foliage_Pine_BC.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Foliage_Pine_BC.png",
-      "tags": ["threeages", "texture", "foliage", "pine", "albedo", "pilot"],
+      "tags": [
+        "threeages",
+        "texture",
+        "foliage",
+        "pine",
+        "albedo",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1666860},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1666860
+      },
       "license": "Project-local Imagen candidate A; visual acceptance pending"
     },
     {
@@ -29975,10 +30135,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Foliage_Pine_N.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Foliage_Pine_BC.png",
-      "tags": ["threeages", "texture", "foliage", "pine", "normal", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "foliage",
+        "pine",
+        "normal",
+        "generated"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1810441},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1810441
+      },
       "license": "Deterministic derivative"
     },
     {
@@ -29988,10 +30166,28 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Foliage_Pine_ORM.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Foliage_Pine_BC.png",
-      "tags": ["threeages", "texture", "foliage", "pine", "orm", "generated"],
+      "tags": [
+        "threeages",
+        "texture",
+        "foliage",
+        "pine",
+        "orm",
+        "generated"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 678485},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 678485
+      },
       "license": "Deterministic derivative"
     },
     {
@@ -30001,11 +30197,401 @@
       "category": "ThreeAges/Materials",
       "path": "assets/ThreeAges/Materials/M_TA_Foliage_Pine.material.json",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Foliage_Pine_BC.png",
-      "tags": ["threeages", "material", "foliage", "pine", "pilot"],
+      "tags": [
+        "threeages",
+        "material",
+        "foliage",
+        "pine",
+        "pilot"
+      ],
       "placeable": false,
-      "placement": {"surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false},
-      "runtime": {"loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 447},
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 447
+      },
       "license": "Project-local ThreeAges pine-foliage material pilot"
+    },
+    {
+      "id": "threeages-tex-stone-cut-light-bc",
+      "name": "T_TA_Stone_Cut_Light_BC",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Cut_Light_BC.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Cut_Light_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "cut",
+        "light",
+        "albedo",
+        "pilot"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1323138
+      },
+      "license": "Project-local Imagen candidate A; visual acceptance pending"
+    },
+    {
+      "id": "threeages-tex-stone-cut-light-n",
+      "name": "T_TA_Stone_Cut_Light_N",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Cut_Light_N.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Cut_Light_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "cut",
+        "light",
+        "normal",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1409767
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-tex-stone-cut-light-orm",
+      "name": "T_TA_Stone_Cut_Light_ORM",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Cut_Light_ORM.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Cut_Light_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "cut",
+        "light",
+        "orm",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 447442
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-mat-stone-cut-light",
+      "name": "M_TA_Stone_Cut_Light",
+      "assetType": "material",
+      "category": "ThreeAges/Materials",
+      "path": "assets/ThreeAges/Materials/M_TA_Stone_Cut_Light.material.json",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Cut_Light_BC.png",
+      "tags": [
+        "threeages",
+        "material",
+        "stone",
+        "cut",
+        "light",
+        "pilot"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 541
+      },
+      "license": "Project-local ThreeAges light-cut-stone material pilot"
+    },
+    {
+      "id": "threeages-tex-water-center-bc",
+      "name": "T_TA_Water_Center_BC",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Water_Center_BC.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Water_Center_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "water",
+        "center",
+        "albedo",
+        "pilot"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 813667
+      },
+      "license": "Project-local Imagen candidate A; visual acceptance pending"
+    },
+    {
+      "id": "threeages-tex-water-center-n",
+      "name": "T_TA_Water_Center_N",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Water_Center_N.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Water_Center_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "water",
+        "center",
+        "normal",
+        "river-normal"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 128538
+      },
+      "license": "Starter-content derivative"
+    },
+    {
+      "id": "threeages-tex-water-center-orm",
+      "name": "T_TA_Water_Center_ORM",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Water_Center_ORM.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Water_Center_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "water",
+        "center",
+        "orm",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 131014
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-mat-water-center",
+      "name": "M_TA_Water_Center",
+      "assetType": "material",
+      "category": "ThreeAges/Materials",
+      "path": "assets/ThreeAges/Materials/M_TA_Water_Center.material.json",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Water_Center_BC.png",
+      "tags": [
+        "threeages",
+        "material",
+        "water",
+        "center",
+        "pilot"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 532
+      },
+      "license": "Project-local ThreeAges Town Center water material pilot"
+    },
+    {
+      "id": "threeages-tex-stone-road-bc",
+      "name": "T_TA_Stone_Road_BC",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Road_BC.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Road_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "road",
+        "cobblestone",
+        "albedo"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1184584
+      },
+      "license": "Project-local Stone Masonry candidate C"
+    },
+    {
+      "id": "threeages-tex-stone-road-n",
+      "name": "T_TA_Stone_Road_N",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Road_N.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Road_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "road",
+        "normal",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1276862
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-tex-stone-road-orm",
+      "name": "T_TA_Stone_Road_ORM",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Stone_Road_ORM.png",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Road_BC.png",
+      "tags": [
+        "threeages",
+        "texture",
+        "stone",
+        "road",
+        "orm",
+        "generated"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 358792
+      },
+      "license": "Deterministic derivative"
+    },
+    {
+      "id": "threeages-mat-stone-road",
+      "name": "M_TA_Road_Stone",
+      "assetType": "material",
+      "category": "ThreeAges/Materials",
+      "path": "assets/ThreeAges/Materials/M_TA_Road_Stone.material.json",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Stone_Road_BC.png",
+      "tags": [
+        "threeages",
+        "material",
+        "stone",
+        "road",
+        "cobblestone"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 524
+      },
+      "license": "Project-local ThreeAges stone-road material"
     }
   ]
 }

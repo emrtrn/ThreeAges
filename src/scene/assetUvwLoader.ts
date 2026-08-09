@@ -59,7 +59,15 @@ export function defaultAssetUvw(): AssetUvwDef {
 }
 
 export async function loadAssetUvw(modelPath: string): Promise<AssetUvwDef> {
-  const url = projectFileUrl(uvwSidecarPath(modelPath));
+  return loadAssetUvwFromUrl(modelPath, projectFileUrl);
+}
+
+/** Generic-runtime variant: the host supplies public-path resolution. */
+export async function loadAssetUvwFromUrl(
+  modelPath: string,
+  resolveUrl: (path: string) => string,
+): Promise<AssetUvwDef> {
+  const url = resolveUrl(uvwSidecarPath(modelPath));
   try {
     const response = await fetch(url, { cache: "no-cache" });
     if (!response.ok) return defaultAssetUvw();
