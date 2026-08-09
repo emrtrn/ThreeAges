@@ -89,6 +89,13 @@ interface RepairJob {
  * building is — a scratch and a wreck repair at the same speed, they just have
  * different amounts to cover.
  */
+/**
+ * Largest health shortfall a finished repair treats as float rounding rather than
+ * as damage. Health is authored in whole points, so anything at this scale cannot
+ * be a wound — it is the residue of summing per-tick slices.
+ */
+const REPAIR_ROUNDING_EPSILON = 1e-6;
+
 export function healthPerWorkerSecond(structure: PlacedStructure): number {
   const seconds = structure.stats.constructionSeconds * REPAIR_FRACTION_OF_BUILD;
   return seconds > 0 ? structure.health.max / seconds : structure.health.max;
@@ -174,6 +181,14 @@ export class StructureRepairSystem {
     // more to restore, and the alternative is a crew kneeling at an intact
     // building. The unspent remainder is committed: the health was delivered.
     if (job.restoredHealth < job.healthToRestore && structure.health.ratio < 1) return "repairing";
+    // Absorb the rounding residue, and only that. Summing the per-tick slices back
+    // up undershoots full health by a few parts in 1e13, and the shortfall is
+    // permanent: the bar never fills and the building keeps offering a repair for
+    // damage no player can see. The epsilon is what keeps this from being a
+    // giveaway — a building that took *real* damage mid-repair is left short by
+    // that damage, because the order was only ever paid for the earlier wound.
+    const residue = structure.health.max - structure.health.current;
+    if (residue > 0 && residue < REPAIR_ROUNDING_EPSILON) structure.health.heal(residue);
     this.settle(structure.id, job);
     return "done";
   }

@@ -16,7 +16,7 @@
  * slice — the RTS keeps its nav authority in markers/balance, not in level art.
  * Landscape, atmosphere and post-process are future extensions of this same host.
  */
-import { Box3, Group, Mesh, RepeatWrapping, TextureLoader, Vector3, type DirectionalLight, type Material, type Object3D, type Texture, type WebGLRenderer } from "three";
+import { Box3, Float32BufferAttribute, Group, Mesh, RepeatWrapping, TextureLoader, Vector3, type DirectionalLight, type Material, type Object3D, type Texture, type WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { InstancedMesh } from "three";
 
@@ -40,6 +40,7 @@ import { riverWaterReflectionGroupKey } from "@engine/scene/riverWater";
 import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import { createFlatLandscapeData, LANDSCAPE_DEFAULT_LAYERS, resolveLandscape, type ForgeLandscapeData } from "@engine/scene/landscape";
 import type { AssetManifest } from "@engine/assets/manifest";
+import { isRenderableMesh } from "@engine/render-three/materials";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { LayoutPlacement, RoomLayout, Vec3 } from "@engine/scene/layout";
@@ -52,6 +53,13 @@ import {
 } from "./assetMaterialSlotsLoader";
 import { applyAssetUvwMapping, loadAssetUvwFromUrl } from "./assetUvwLoader";
 import { loadForgeMaterial, loadForgeMaterialLayer } from "./materialAssets";
+import {
+  createEmptyMeshPaintData,
+  meshPaintDataPath,
+  normalizeMeshPaintData,
+  type LayoutMeshPaintData,
+  type LayoutMeshPaintPlacement,
+} from "@engine/scene/meshPaint";
 import {
   buildSceneInstancedModel,
   buildSceneLightObject,
@@ -114,6 +122,12 @@ export interface AuthoredWorldHandle {
   readonly staticSlotMaterialCount: number;
   /** Placed mesh assets whose UVW sidecar was applied before instancing. */
   readonly staticUvwMappingCount: number;
+  /**
+   * Placements that took Mesh Paint vertex colours from the Level's sidecar. Each
+   * one is a batch of its own (paint lives on the geometry an InstancedMesh shares),
+   * so this doubles as the count of batches the paint cost.
+   */
+  readonly meshPaintedPlacementCount: number;
   /**
    * How many Landscape terrains this world mounted. A shell reads this to retire
    * its own flat placeholder ground once an authored terrain is standing in for
@@ -241,23 +255,48 @@ function placementMaterialSlotIds(layout: RoomLayout): string[] {
   return [...ids];
 }
 
+/** One batch to build for an asset: its placements plus what they share. */
+export interface PlacementBatch {
+  /** Forge material id overriding the asset's own, or null for the asset default. */
+  readonly materialId: string | null;
+  /** Set only for a painted batch, which is always exactly one placement. */
+  readonly paintedPlacementIndex: number | null;
+  readonly placements: LayoutPlacement[];
+}
+
 /**
- * Splits an asset's placements into one bucket per `materialSlot` override, with
- * `null` keying the un-overridden ones. Insertion order is the layout's, so the
- * common all-default case yields exactly one bucket and one batch — the same
- * single `InstancedMesh` this built before overrides were honoured.
+ * Splits an asset's placements into the batches that can share one `InstancedMesh`.
+ *
+ * Two things force a split. A `materialSlot` override changes the material, and a
+ * Mesh Paint entry changes the *geometry* — vertex colours live on the geometry an
+ * InstancedMesh shares across all its instances, so a painted placement can only
+ * ever be a batch of one. Everything else stays together: a Level with no overrides
+ * and no paint yields exactly one batch per asset, the single mesh this built
+ * before either was honoured.
  */
-function groupPlacementsByMaterialSlot(
+export function planPlacementBatches(
   placements: readonly LayoutPlacement[],
-): Map<string | null, LayoutPlacement[]> {
-  const groups = new Map<string | null, LayoutPlacement[]>();
-  for (const placement of placements) {
-    const key = placement.materialSlot ?? null;
-    const group = groups.get(key);
-    if (group) group.push(placement);
-    else groups.set(key, [placement]);
+  paintedPlacements: MeshPaintByPlacement | undefined,
+): PlacementBatch[] {
+  const batches: PlacementBatch[] = [];
+  const sharedByMaterial = new Map<string | null, PlacementBatch>();
+  for (let index = 0; index < placements.length; index += 1) {
+    const placement = placements[index]!;
+    const materialId = placement.materialSlot ?? null;
+    if (paintedPlacements?.has(index)) {
+      batches.push({ materialId, paintedPlacementIndex: index, placements: [placement] });
+      continue;
+    }
+    const shared = sharedByMaterial.get(materialId);
+    if (shared) {
+      shared.placements.push(placement);
+      continue;
+    }
+    const batch: PlacementBatch = { materialId, paintedPlacementIndex: null, placements: [placement] };
+    sharedByMaterial.set(materialId, batch);
+    batches.push(batch);
   }
-  return groups;
+  return batches;
 }
 
 interface AuthoredWorldMaterialSlots {
@@ -384,6 +423,86 @@ async function resolveLandscapeLayerTextures(
  * that serves its project files from elsewhere keeps one URL policy. A missing
  * sidecar is the normal "this Level paints no foliage" case, not a failure.
  */
+/**
+ * The Level's placement-scoped Mesh Paint sidecar (`<level>.meshpaint.json`), or
+ * empty when it paints none. Fetched through this host's `resolveUrl` for the same
+ * reason the foliage sidecar is — one URL policy for a fork that serves its project
+ * files from elsewhere. A missing sidecar is the normal case, not a failure.
+ */
+async function fetchAuthoredMeshPaint(
+  levelPath: string,
+  resolveUrl: (path: string) => string,
+  warn: (message: string, error?: unknown) => void,
+): Promise<LayoutMeshPaintData> {
+  try {
+    const response = await fetch(resolveUrl(meshPaintDataPath(levelPath)), { cache: "no-cache" });
+    if (!response.ok) return createEmptyMeshPaintData();
+    return normalizeMeshPaintData(await response.json());
+  } catch (error) {
+    warn(`Authored-world mesh paint sidecar failed to load: ${meshPaintDataPath(levelPath)}`, error);
+    return createEmptyMeshPaintData();
+  }
+}
+
+/**
+ * Paint entries for one asset, indexed by placement then by
+ * `<meshName>|<primitiveIndex>` — the key {@link applyMeshPaintToBatch} rebuilds
+ * while walking the glTF in the same order the instanced builder does.
+ */
+export type MeshPaintByPlacement = Map<number, Map<string, LayoutMeshPaintPlacement>>;
+
+function indexMeshPaintByAsset(data: LayoutMeshPaintData): Map<string, MeshPaintByPlacement> {
+  const byAsset = new Map<string, MeshPaintByPlacement>();
+  for (const entry of data.placements) {
+    if (entry.colors.length === 0) continue;
+    const byPlacement = byAsset.get(entry.target.assetId) ?? new Map<number, Map<string, LayoutMeshPaintPlacement>>();
+    const byMesh = byPlacement.get(entry.target.placementIndex) ?? new Map<string, LayoutMeshPaintPlacement>();
+    byMesh.set(`${entry.target.meshName}|${entry.target.primitiveIndex}`, entry);
+    byPlacement.set(entry.target.placementIndex, byMesh);
+    byAsset.set(entry.target.assetId, byPlacement);
+  }
+  return byAsset;
+}
+
+/**
+ * Writes one placement's painted vertex colours onto a single-placement batch.
+ *
+ * Mesh Paint is per *placement*, and an `InstancedMesh` has one geometry for all of
+ * its instances — so a painted placement can only be its own batch, which is what
+ * the caller arranges. The geometry is cloned first: the builder hands out the glTF
+ * template's geometry, and writing the attribute in place would paint every other
+ * placement of the same asset with it.
+ *
+ * The (meshName, primitiveIndex) key is rebuilt by walking `gltf.scene` in the same
+ * order {@link createInstancedModelGroup} walks it, so `meshes[i]` is the batch for
+ * the i-th renderable mesh. A vertex-count mismatch means the source GLB changed
+ * under the paint; the entry is skipped rather than corrupting the buffer.
+ */
+function applyMeshPaintToBatch(
+  gltf: GLTF,
+  meshes: readonly InstancedMesh[],
+  byMesh: Map<string, LayoutMeshPaintPlacement>,
+): void {
+  const primitiveIndexByMeshName = new Map<string, number>();
+  let meshIndex = 0;
+  gltf.scene.traverse((object) => {
+    if (!isRenderableMesh(object)) return;
+    const batch = meshes[meshIndex];
+    meshIndex += 1;
+    if (!batch) return;
+    const meshName = object.name || "__unnamed_mesh";
+    const primitiveIndex = primitiveIndexByMeshName.get(meshName) ?? 0;
+    primitiveIndexByMeshName.set(meshName, primitiveIndex + 1);
+    const paint = byMesh.get(`${meshName}|${primitiveIndex}`);
+    if (!paint) return;
+    if (batch.geometry.getAttribute("position")?.count !== paint.vertexCount) return;
+    const geometry = batch.geometry.clone();
+    geometry.setAttribute("color", new Float32BufferAttribute(paint.colors, 4));
+    geometry.userData.forgeMeshPaintClone = true;
+    batch.geometry = geometry;
+  });
+}
+
 async function fetchAuthoredFoliage(
   levelPath: string,
   manifest: AssetManifest,
@@ -493,6 +612,13 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
   // any other, instead of throwing on the synthetic (unmanifested) asset id.
   registerSceneShapeModels(layout, models, localBounds);
 
+  // Mesh Paint lives in a sidecar keyed off the Level file, so a world mounted
+  // without `levelPath` simply has none — the same rule painted foliage follows.
+  const meshPaintByAsset = options.levelPath
+    ? indexMeshPaintByAsset(await fetchAuthoredMeshPaint(options.levelPath, resolveUrl, warn))
+    : new Map<string, MeshPaintByPlacement>();
+  let meshPaintedPlacementCount = 0;
+
   const root = new Group();
   root.name = "authored-world";
   const instancedMeshes: InstancedMesh[] = [];
@@ -500,28 +626,37 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     if (instance.placements.length === 0) continue;
     const gltf = models.get(instance.assetId);
     if (!gltf) continue; // missing model already warned; keep the rest of the world
-    // A placement may override the asset's material (`materialSlot`) — the editor's
-    // Details "Material" assignment. Placements are batched per override so an
-    // overridden one still rides an InstancedMesh rather than becoming a loose
-    // clone: the editor and `RuntimeSceneApp` pull overridden placements *out* of
-    // the batch, but this world is mounted by hosts that batch by the thousand and
-    // apply per-mesh rules (fog of war, reflection probes) to `staticInstanceMeshes`.
-    // One extra batch per distinct material keeps both properties.
-    for (const [materialId, placements] of groupPlacementsByMaterialSlot(instance.placements)) {
+    // A placement can carry two things the asset itself does not: a `materialSlot`
+    // override (the editor's Details "Material" assignment) and Mesh Paint vertex
+    // colours. Both are honoured by batching rather than by cloning: the editor and
+    // `RuntimeSceneApp` pull such placements *out* of the instanced mesh, but this
+    // world is mounted by hosts that batch by the thousand and apply per-mesh rules
+    // (fog of war, reflection probes) to `staticInstanceMeshes` — a loose clone
+    // would fall outside all of them.
+    const paintedPlacements = meshPaintByAsset.get(instance.assetId);
+    for (const batch of planPlacementBatches(instance.placements, paintedPlacements)) {
       const built = buildSceneInstancedModel({
         assetId: instance.assetId,
         gltf,
-        placements,
+        placements: batch.placements,
         castShadow: settings.staticObjectsCastShadow,
         receiveShadow: settings.staticObjectsReceiveShadow,
       });
-      const override = materialId === null ? undefined : authoredMaterials.materialsById.get(materialId);
+      const override =
+        batch.materialId === null ? undefined : authoredMaterials.materialsById.get(batch.materialId);
       if (override) {
         // An override replaces every slot on the asset, so the sidecar's per-slot
         // assignment does not also apply — same precedence the editor uses.
         for (const mesh of built.meshes) mesh.material = override;
-      } else if (materialId === null) {
+      } else if (batch.materialId === null) {
         applyAuthoredMaterialSlots(instance.assetId, built.group);
+      }
+      if (batch.paintedPlacementIndex !== null) {
+        const byMesh = paintedPlacements?.get(batch.paintedPlacementIndex);
+        if (byMesh) {
+          applyMeshPaintToBatch(gltf, built.meshes, byMesh);
+          meshPaintedPlacementCount += 1;
+        }
       }
       root.add(built.group);
       instancedMeshes.push(...built.meshes);
@@ -829,6 +964,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     staticInstanceMeshes: instancedMeshes,
     staticSlotMaterialCount: authoredMaterials.materialsById.size,
     staticUvwMappingCount,
+    meshPaintedPlacementCount,
     landscapeCount: landscapeObjects.length,
     landscapes: mountedLandscapes,
     foliageInstanceCount,

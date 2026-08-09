@@ -1555,13 +1555,27 @@
   ],
   "characters": [],
   "worldSettings": {
-    "staticObjectsCastShadow": true
+    "staticObjectsCastShadow": true,
+    "backgroundColor": "#ffffff"
   },
   "skyAtmosphere": {
     "rayleigh": 1,
     "turbidity": 2,
     "mie": 0.004,
     "skyLightCapture": {
+      "intensity": 1
+    }
+  },
+  "postProcess": {
+    "toneMapping": "neutral",
+    "bloom": {
+      "threshold": 1,
+      "intensity": 1,
+      "radius": 1
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1,
       "intensity": 1
     }
   },
@@ -1581,7 +1595,7 @@
         0
       ],
       "color": "#ffffff",
-      "intensity": 2,
+      "intensity": 1,
       "castShadow": true
     }
   ],

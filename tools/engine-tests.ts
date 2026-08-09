@@ -1198,8 +1198,13 @@ import {
   postProcessToneMappingExposure,
   resolvePostProcess,
   scaledBloomResolution,
+  writesSceneDepth,
   POST_PROCESS_DEFAULTS,
 } from "../engine/render-three/postProcess";
+import {
+  planPlacementBatches,
+  type MeshPaintByPlacement,
+} from "../src/scene/authoredWorld";
 import {
   applyReflectionEnvironment,
   resolveReflection,
@@ -17588,6 +17593,38 @@ check("foliageDataPath derives a sibling sidecar path", () => {
   assert.equal(foliageDataPath("/layouts/foo.layout.json"), "layouts/foo.foliage.json");
 });
 
+check("authored world batches a painted placement on its own", () => {
+  // Mesh Paint is per placement but vertex colours live on the geometry an
+  // InstancedMesh shares across every instance in it — so a painted placement can
+  // only ever be a batch of one. Everything unpainted still merges by material,
+  // which is what keeps a Level's thousands of props on a handful of draws.
+  const placements: LayoutPlacement[] = [
+    { assetId: "rock", position: [0, 0, 0] },
+    { assetId: "rock", position: [1, 0, 0] },
+    { assetId: "rock", position: [2, 0, 0], materialSlot: "mirror-material" },
+    { assetId: "rock", position: [3, 0, 0] },
+  ];
+  const painted: MeshPaintByPlacement = new Map([[1, new Map()]]);
+
+  const plain = planPlacementBatches(placements, undefined);
+  assert.equal(plain.length, 2, "one batch per distinct material when nothing is painted");
+  assert.deepEqual(
+    plain.map((batch) => [batch.materialId, batch.placements.length, batch.paintedPlacementIndex]),
+    [[null, 3, null], ["mirror-material", 1, null]],
+  );
+
+  const withPaint = planPlacementBatches(placements, painted);
+  // Placement 1 is pulled out; 0 and 3 still share the default-material batch.
+  assert.deepEqual(
+    withPaint.map((batch) => [batch.materialId, batch.placements.length, batch.paintedPlacementIndex]),
+    [[null, 2, null], [null, 1, 1], ["mirror-material", 1, null]],
+  );
+  // The painted batch must carry the *layout* index, or the paint entry it looks
+  // up belongs to a different placement.
+  const paintedBatch = withPaint.find((batch) => batch.paintedPlacementIndex !== null);
+  assert.equal(paintedBatch?.placements[0]?.position[0], 1);
+});
+
 check("mesh paint sidecar normalizes placement-scoped RGBA arrays", () => {
   const target = { assetId: "rock", placementIndex: 2, meshName: "Rock", primitiveIndex: 0 };
   const data = normalizeMeshPaintData({
@@ -19267,6 +19304,9 @@ check("material save payload requires a material path and canonical fields", () 
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    // Emitted for every material, like the other optional fields: null here means
+    // "no animated normal", which is what a stone surface wants. Only water opts in.
+    normalMotion: null,
     layerBlend: {
       layer1: {
         baseColor: "#f0f8ff",
@@ -20042,6 +20082,7 @@ check("content-new resolves to typed stub files and folders", () => {
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    normalMotion: null,
     layerBlend: null,
   });
   const metal = resolveContentNewFile({
@@ -20077,6 +20118,7 @@ check("content-new resolves to typed stub files and folders", () => {
     side: "front",
     emissive: "#000000",
     emissiveIntensity: 0,
+    normalMotion: null,
     layerBlend: null,
   });
 
@@ -24604,6 +24646,39 @@ check("scaledBloomResolution scales the bloom target and guards bad input", () =
   assert.deepEqual(scaledBloomResolution(800, 600, 0), [800, 600]);
   assert.deepEqual(scaledBloomResolution(800, 600, Number.NaN), [800, 600]);
   assert.deepEqual(scaledBloomResolution(1, 1, 0.1), [1, 1]);
+});
+
+check("AO skips what the beauty pass never writes depth for", () => {
+  // GTAO renders its G-buffer with an overridden opaque material, so anything it
+  // is allowed to see punches a solid depth wall whatever its own material says.
+  // The rule: no beauty-pass depth ⇒ no AO-pass depth. Overlays and pick volumes
+  // opt out by writing no depth, which they already do to draw correctly.
+  const solid = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
+  assert.equal(writesSceneDepth(solid), true);
+
+  const overlay = new Mesh(
+    new PlaneGeometry(1, 1),
+    new MeshBasicMaterial({ transparent: true, opacity: 0.18, depthWrite: false }),
+  );
+  assert.equal(writesSceneDepth(overlay), false);
+
+  // A fully transparent pick volume: visible so raycasts hit it, invisible on
+  // screen. It drew a dark cube around every RTS building before this rule.
+  const pickVolume = new Mesh(
+    new BoxGeometry(2, 3, 2),
+    new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+  );
+  assert.equal(writesSceneDepth(pickVolume), false);
+
+  // One opaque slot is real surface, so a mixed multi-material mesh stays in.
+  const mixed = new Mesh(new BoxGeometry(1, 1, 1), [
+    new MeshBasicMaterial({ depthWrite: false }),
+    new MeshStandardMaterial(),
+  ]);
+  assert.equal(writesSceneDepth(mixed), true);
+
+  // Non-meshes carry no material to ask; the pass's own type checks decide them.
+  assert.equal(writesSceneDepth(new Group()), true);
 });
 
 check("createPostProcessAntialiasPass creates SMAA only when enabled", () => {
@@ -43750,7 +43825,11 @@ check("Yapı tamiri: fiyat ve süre, inşaatın yarısının hasar oranıyla öl
   const missingRatio = missing / site.health.max;
   const quote = quoteStructureRepair(site) ?? assert.fail("a damaged building must quote a repair");
 
-  assert.equal(quote.missingHealth, missing);
+  // Close, not equal: both sides are floats derived from `max * ratio`, so they
+  // agree to ~1e-13 and only exactly when the health table happens to divide
+  // cleanly. Pinning strict equality made this check a hostage to the durability
+  // numbers rather than to the rule it exists to state.
+  assertClose(quote.missingHealth, missing, "the quote is for exactly the health that is missing");
   assertClose(
     quote.workerSeconds,
     house.constructionSeconds * REPAIR_FRACTION_OF_BUILD * missingRatio,

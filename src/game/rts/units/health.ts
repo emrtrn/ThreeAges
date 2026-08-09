@@ -65,8 +65,15 @@ export class HealthComponent {
   heal(amount: number): HealthChange {
     this.assertAmount(amount, "Healing");
     const previous = this.currentValue;
-    const applied = Math.min(amount, this.maxValue - previous);
-    this.currentValue += applied;
+    const headroom = this.maxValue - previous;
+    const applied = Math.min(amount, headroom);
+    // A heal that covers the whole headroom lands *exactly* on max, rather than on
+    // `previous + (max - previous)` — which in floating point undershoots by a few
+    // parts in 1e13 whenever `previous` came from a fractional damage roll. That
+    // residue never heals away: the building sits a hair under full forever, so its
+    // health bar never fills and it keeps quoting a repair for damage no one can
+    // see. The comparison is `>=` so an over-heal takes the same exact path.
+    this.currentValue = applied >= headroom ? this.maxValue : previous + applied;
     return { applied, previous, current: this.currentValue, depleted: false };
   }
 

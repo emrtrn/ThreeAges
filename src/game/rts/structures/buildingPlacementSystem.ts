@@ -11,8 +11,8 @@ import {
   BufferGeometry,
   Color,
   Group,
-  LineBasicMaterial,
-  LineLoop,
+  DoubleSide,
+  Float32BufferAttribute,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -35,6 +35,80 @@ const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 const VALID_COLOR = new Color("#7dc86d");
 const INVALID_COLOR = new Color("#d65b55");
 
+/** Outline width in world units — a real measure, unlike a line's ignored `linewidth`. */
+const FRAME_THICKNESS = 0.16;
+/**
+ * How far the draped outline clears the ground. Tiny on purpose: `polygonOffset`
+ * does the depth-fighting work, and this only keeps the ribbon from being buried
+ * by the chord error between two terrain samples.
+ */
+const FRAME_LIFT = 0.015;
+/** World-unit spacing between ring samples — how closely the outline follows a slope. */
+const FRAME_SAMPLE_STEP = 0.5;
+
+/** One position on the outline ribbon: the paired outer and inner edge points. */
+interface PlacementFrameSample {
+  readonly outerX: number;
+  readonly outerZ: number;
+  readonly innerX: number;
+  readonly innerZ: number;
+}
+
+/**
+ * Walks the footprint rectangle counter-clockwise, emitting paired outer/inner
+ * points at most {@link FRAME_SAMPLE_STEP} apart. Corners are exact (the outer and
+ * inner rectangles miter there), and each edge starts at its own corner without
+ * repeating the previous edge's end, so the ring closes cleanly.
+ */
+function placementFrameRing(halfWidth: number, halfDepth: number): PlacementFrameSample[] {
+  const half = FRAME_THICKNESS * 0.5;
+  const outerW = halfWidth + half;
+  const outerD = halfDepth + half;
+  // A footprint thinner than the outline itself would invert the inner rectangle.
+  const innerW = Math.max(halfWidth - half, 0);
+  const innerD = Math.max(halfDepth - half, 0);
+  const corners: readonly (readonly [number, number])[] = [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ];
+  const samples: PlacementFrameSample[] = [];
+  for (let corner = 0; corner < corners.length; corner += 1) {
+    const [sx, sz] = corners[corner]!;
+    const [ex, ez] = corners[(corner + 1) % corners.length]!;
+    const startX = sx * outerW;
+    const startZ = sz * outerD;
+    const spanX = ex * outerW - startX;
+    const spanZ = ez * outerD - startZ;
+    const steps = Math.max(1, Math.ceil(Math.hypot(spanX, spanZ) / FRAME_SAMPLE_STEP));
+    // `t < steps` (not `<=`) leaves the end corner to the next edge's start.
+    for (let step = 0; step < steps; step += 1) {
+      const t = step / steps;
+      samples.push({
+        outerX: startX + spanX * t,
+        outerZ: startZ + spanZ * t,
+        innerX: (sx + (ex - sx) * t) * innerW,
+        innerZ: (sz + (ez - sz) * t) * innerD,
+      });
+    }
+  }
+  return samples;
+}
+
+/** Two triangles per ring segment, wrapping the last segment back to the first. */
+function placementFrameIndices(sampleCount: number): number[] {
+  const indices: number[] = [];
+  for (let index = 0; index < sampleCount; index += 1) {
+    const outer = index * 2;
+    const inner = outer + 1;
+    const nextOuter = ((index + 1) % sampleCount) * 2;
+    const nextInner = nextOuter + 1;
+    indices.push(outer, inner, nextInner, outer, nextInner, nextOuter);
+  }
+  return indices;
+}
+
 export interface BuildingPlacementState {
   readonly activeBuildingId: string | null;
   readonly result: PlacementResult | null;
@@ -47,7 +121,8 @@ export class BuildingPlacementSystem {
   private readonly hit = new Vector3();
   private active: { id: string; stats: BuildingBalanceStats } | null = null;
   private ghost: Object3D | null = null;
-  private placementFrame: LineLoop | null = null;
+  private placementFrame: Mesh | null = null;
+  private frameRing: PlacementFrameSample[] = [];
   private previewFactory: ((buildingId: string, footprintWidth: number, footprintDepth: number) => Object3D | null) | null = null;
   /**
    * §51 "Karakol kontrol alanı önizlemesi". An outpost is bought for the ground
@@ -120,6 +195,9 @@ export class BuildingPlacementSystem {
     this.result = this.construction.validate(this.owner, this.active.id, point.x, point.z);
     if (!this.result) return this.state();
     this.root.position.set(this.result.x, this.ground.heightAt(this.result.x, this.result.z), this.result.z);
+    // The outline is draped in world terms, so it has to be re-sampled wherever
+    // the footprint lands — the root's own height only tracks the centre.
+    this.updatePlacementFrameHeights();
     this.setGhostValid(this.result.valid);
     return this.state();
   }
@@ -185,32 +263,84 @@ export class BuildingPlacementSystem {
     this.rebuildPlacementFrame(stats);
   }
 
+  /**
+   * Builds the footprint outline as a **ribbon mesh**, not a line.
+   *
+   * `LineBasicMaterial.linewidth` is ignored by every desktop WebGL driver, so a
+   * `LineLoop` outline is always one device pixel however far the camera is —
+   * which reads as a shimmering hairline over textured ground and cannot be made
+   * to read as a border. A ribbon is real geometry: its width is an authored world
+   * measure, and every vertex can be dropped onto the terrain
+   * ({@link updatePlacementFrameHeights}), which a flat loop at a fixed local `y`
+   * could not do once the field stopped being a flat plane — one corner sank into
+   * a slope while the opposite one floated over it.
+   *
+   * The vertex count is fixed at build time (the outline only moves, never
+   * changes shape), so the per-pointer-move update rewrites positions in place
+   * and never reallocates.
+   */
   private rebuildPlacementFrame(stats: BuildingBalanceStats): void {
     if (this.placementFrame) {
       this.root.remove(this.placementFrame);
       this.placementFrame.geometry.dispose();
       disposeMaterial(this.placementFrame.material);
     }
-    const halfWidth = stats.footprint.width * 0.5;
-    const halfDepth = stats.footprint.depth * 0.5;
-    const frame = new LineLoop(
-      new BufferGeometry().setFromPoints([
-        new Vector3(-halfWidth, 0, -halfDepth),
-        new Vector3(halfWidth, 0, -halfDepth),
-        new Vector3(halfWidth, 0, halfDepth),
-        new Vector3(-halfWidth, 0, halfDepth),
-      ]),
-      new LineBasicMaterial({
+    this.frameRing = placementFrameRing(
+      stats.footprint.width * 0.5,
+      stats.footprint.depth * 0.5,
+    );
+    const geometry = new BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new Float32BufferAttribute(new Float32Array(this.frameRing.length * 6), 3),
+    );
+    geometry.setIndex(placementFrameIndices(this.frameRing.length));
+    const frame = new Mesh(
+      geometry,
+      new MeshBasicMaterial({
         color: VALID_COLOR,
         transparent: true,
         opacity: 0.95,
         depthWrite: false,
+        side: DoubleSide,
+        // Beats z-fighting with the ground without lifting the ribbon off it —
+        // a lift is what makes an overlay float on one slope and sink on the next.
+        polygonOffset: true,
+        polygonOffsetFactor: -4,
+        polygonOffsetUnits: -4,
       }),
     );
     frame.name = "rts-building-placement-frame";
-    frame.position.y = 0.08;
+    // The ribbon is rebuilt in world-height terms every move, so a bounding
+    // sphere computed once would be wrong the moment the ground changed.
+    frame.frustumCulled = false;
+    frame.renderOrder = 3;
     this.placementFrame = frame;
     this.root.add(frame);
+    this.updatePlacementFrameHeights();
+  }
+
+  /**
+   * Drapes the outline over the terrain: each ring vertex takes the ground height
+   * under its own world position, expressed relative to the root's (which sits at
+   * the footprint centre's height). On flat ground this is a no-op that writes the
+   * same y everywhere.
+   */
+  private updatePlacementFrameHeights(): void {
+    const frame = this.placementFrame;
+    if (!frame) return;
+    const attribute = frame.geometry.getAttribute("position");
+    const originX = this.root.position.x;
+    const originY = this.root.position.y;
+    const originZ = this.root.position.z;
+    for (let index = 0; index < this.frameRing.length; index += 1) {
+      const sample = this.frameRing[index]!;
+      const outerY = this.ground.heightAt(originX + sample.outerX, originZ + sample.outerZ) - originY;
+      const innerY = this.ground.heightAt(originX + sample.innerX, originZ + sample.innerZ) - originY;
+      attribute.setXYZ(index * 2, sample.outerX, outerY + FRAME_LIFT, sample.outerZ);
+      attribute.setXYZ(index * 2 + 1, sample.innerX, innerY + FRAME_LIFT, sample.innerZ);
+    }
+    attribute.needsUpdate = true;
   }
 
   /**
@@ -248,7 +378,7 @@ export class BuildingPlacementSystem {
 
   private setGhostValid(valid: boolean): void {
     const color = valid ? VALID_COLOR : INVALID_COLOR;
-    if (this.placementFrame?.material instanceof LineBasicMaterial) {
+    if (this.placementFrame?.material instanceof MeshBasicMaterial) {
       this.placementFrame.material.color.copy(color);
     }
     // The radius follows the ghost's verdict: a red disc reads as "this ground

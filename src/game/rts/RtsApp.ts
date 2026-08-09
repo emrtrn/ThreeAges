@@ -117,6 +117,7 @@ import {
   resolvePostProcess,
 } from "@engine/render-three/postProcess";
 import type { AuthoredWorldHandle } from "@/scene/authoredWorld";
+import { applySceneBackgroundAndAmbient, resolveSceneWorldSettings } from "@/scene/SceneRuntimeCore";
 import type { RoomLayout } from "@engine/scene/layout";
 import { UnitSystem } from "./units/unitSystem";
 import { Unit } from "./units/unit";
@@ -643,8 +644,10 @@ export class RtsApp {
   /** The code-side sun, kept so an authored directional light can retire it. */
   private codeSun: DirectionalLight | null = null;
   /**
-   * The code-side fallback ambient, kept so an authored Sky Light (IBL) can retire
-   * it — otherwise the hardcoded fill stacks on the sky bounce and washes the field.
+   * The scene's ambient fill. Starts as a code-side fallback so the start screen is
+   * lit before any Level exists, then the authored World Settings take it over
+   * (`applySceneBackgroundAndAmbient`, which updates this light in place). Null once
+   * a Level authors `ambientIntensity: 0`.
    */
   private codeAmbient: AmbientLight | null = null;
   /**
@@ -2109,8 +2112,10 @@ export class RtsApp {
 
   private buildScene(): void {
     // Hemispheric-ish fill: ambient for base visibility, one shadowing key light.
-    // Kept referenced so an authored Sky Light (IBL) can retire it once a Level's
-    // sky provides the ambient bounce (see loadAuthoredWorld).
+    // A boot-time fallback only: the Level's World Settings take this light over the
+    // moment the authored world lands (see loadAuthoredWorld). Kept for the phase
+    // before that, and for a Level that fails to load — the alternative is a dark
+    // field on the start screen.
     this.codeAmbient = new AmbientLight(0xffffff, 0.65);
     this.scene.add(this.codeAmbient);
     const sun = new DirectionalLight(0xffffff, 1.6);
@@ -4261,6 +4266,7 @@ export class RtsApp {
       this.scene.add(handle.root);
       this.canvas.dataset.rtsAuthoredSlotMaterials = String(handle.staticSlotMaterialCount);
       this.canvas.dataset.rtsAuthoredUvwMappings = String(handle.staticUvwMappingCount);
+      this.canvas.dataset.rtsAuthoredMeshPaint = String(handle.meshPaintedPlacementCount);
       const landscapeSamplerBudget = handle.landscapes[0]?.object.userData.landscapeSamplerBudget as
         | LandscapeSamplerBudget
         | undefined;
@@ -4304,13 +4310,21 @@ export class RtsApp {
       this.applyAuthoredPostProcess(layout);
       this.environment.applyFog(layout);
       this.environment.applyClouds(layout);
-      // Retire the fallback ambient once the authored sky supplies the IBL bounce,
-      // mirroring the code-sun swap above — otherwise the two ambients stack.
-      if (this.codeAmbient && this.environment.hasAuthoredSkyLight(layout)) {
-        this.scene.remove(this.codeAmbient);
-        this.codeAmbient.dispose();
-        this.codeAmbient = null;
-      }
+      // Editor↔Runtime parity: hand the ambient fill and the background over to the
+      // Level's World Settings — the same call `RuntimeSceneApp` makes, so what the
+      // World Settings panel shows in the viewport is what the match renders.
+      //
+      // The ambient is *not* retired when the Level authors a Sky Light. Forge adds
+      // the two (World Settings fill + sky IBL bounce) and the editor viewport shows
+      // them added, so retiring one here would make the panel lie about the result.
+      // A Level that wants sky bounce alone says so by authoring `ambientIntensity: 0`,
+      // which drops the light entirely.
+      this.codeAmbient = applySceneBackgroundAndAmbient({
+        scene: this.scene,
+        ambientLight: this.codeAmbient,
+        settings: resolveSceneWorldSettings(layout),
+        ambientName: "rts-world-ambient",
+      });
       // Retire the flat placeholder ground only once an authored Landscape has
       // actually mounted — a terrain now covers the field, and the two overlapping
       // at y=0 would z-fight. A Landscape-less world (or a failed load) keeps it.

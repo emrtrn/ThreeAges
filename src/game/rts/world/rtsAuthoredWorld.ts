@@ -12,6 +12,7 @@ import { Box3, Vector3, type WebGLRenderer } from "three";
 import type { LayoutLightActor, RoomLayout } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { buildAuthoredWorld, type AuthoredWorldHandle } from "@/scene/authoredWorld";
+import { DEFAULT_SCENE_SUN_ID } from "@/scene/SceneRuntimeCore";
 import { RTS_WORLD_HALF_EXTENT } from "./rtsGround";
 
 /**
@@ -45,7 +46,18 @@ export function levelHasAuthoredSun(layout: RoomLayout): boolean {
  * Atmosphere sun disc + Sky Light capture, so Play matches the editor.
  */
 export function levelAuthoredSun(layout: RoomLayout): LayoutLightActor | null {
-  return (layout.lights ?? []).find((light) => light.type === "directional") ?? null;
+  const lights = layout.lights ?? [];
+  // Same precedence as `RuntimeSceneApp.sunLightActor`: the canonical scene sun
+  // wins over layout order, and only then does "first directional" decide. A Level
+  // with a second directional light (a fill, a moon) would otherwise orient the sky
+  // dome's sun disc and the Sky Light capture off whichever one happens to sit
+  // first in the array — and that order is a save-file detail, not an authoring
+  // decision, so the editor and the match could disagree on where the sun is.
+  return (
+    lights.find((light) => light.type === "directional" && light.id === DEFAULT_SCENE_SUN_ID) ??
+    lights.find((light) => light.type === "directional") ??
+    null
+  );
 }
 
 /**

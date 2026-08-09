@@ -46,8 +46,47 @@ const OVERLAY_COLOR: Record<UnitOwner, Color> = {
 /** Default phase-four starting territory radius, measured in world units. */
 export const COMMAND_CENTER_CONTROL_RADIUS = 28;
 
-/** Ground clearance for the overlay quads, in world units. */
-const OVERLAY_LIFT = 0.022;
+/**
+ * Ground clearance for the overlay quads, in world units.
+ *
+ * Deliberately tiny — `polygonOffset` on the overlay materials is what keeps the
+ * quads out of a depth fight with the terrain. A *lift* cannot do that job on
+ * sloped ground: raise it enough to clear the chord error on a steep cell and it
+ * visibly hovers on a flat one; lower it and the cell's middle sinks under the
+ * terrain and gets clipped away, which is what turned the overlay into a mottled
+ * patchwork once the field stopped being a plane. This is here only to absorb the
+ * residual chord error between the four subdivided samples.
+ */
+const OVERLAY_LIFT = 0.006;
+
+/**
+ * How many sub-quads each cell is split into per axis.
+ *
+ * A cell sampled only at its four corners spans the terrain as a flat chord, so
+ * its middle dips below any ground that curves upward under it. Splitting 2×2
+ * quarters that error for four extra triangles per cell — cheap next to sampling
+ * every cell's height in the first place.
+ */
+const OVERLAY_SUBDIVISIONS = 2;
+
+/**
+ * A ground overlay material. `polygonOffset` — not a vertical lift — is what wins
+ * the depth comparison against the terrain drawn underneath it, so the overlay can
+ * sit almost exactly on the ground at any slope. `depthWrite: false` keeps it out
+ * of the depth buffer for everything drawn after, which also excludes it from the
+ * ambient-occlusion pass (see `writesSceneDepth` in the post-process pipeline).
+ */
+function createOverlayMaterial(color: Color, opacity: number): MeshBasicMaterial {
+  return new MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
+  });
+}
 
 export class TerritoryControlSystem {
   readonly root = new Group();
@@ -72,8 +111,8 @@ export class TerritoryControlSystem {
     }
     this.root.name = "rts-territory-overlay";
     this.materials = {
-      player: new MeshBasicMaterial({ color: OVERLAY_COLOR.player, transparent: true, opacity: 0.18, depthWrite: false }),
-      enemy: new MeshBasicMaterial({ color: OVERLAY_COLOR.enemy, transparent: true, opacity: 0.14, depthWrite: false }),
+      player: createOverlayMaterial(OVERLAY_COLOR.player, 0.18),
+      enemy: createOverlayMaterial(OVERLAY_COLOR.enemy, 0.14),
     };
     this.meshes = {
       player: this.createOverlayMesh("player"),
@@ -182,22 +221,38 @@ export class TerritoryControlSystem {
   }
 
   /**
-   * Two triangles for one cell, each corner lifted to its own terrain height so
-   * the quad tilts with the slope it covers rather than cutting into it.
+   * One cell as an {@link OVERLAY_SUBDIVISIONS}² grid of quads, every vertex
+   * sampled at its own terrain height so the patch bends with the slope it covers
+   * instead of spanning it as one flat chord.
    */
   private pushCell(target: number[], x: number, z: number, half: number): void {
-    const x0 = x - half;
-    const x1 = x + half;
-    const z0 = z - half;
-    const z1 = z + half;
-    const y00 = this.groundHeightAt(x0, z0) + OVERLAY_LIFT;
-    const y10 = this.groundHeightAt(x1, z0) + OVERLAY_LIFT;
-    const y01 = this.groundHeightAt(x0, z1) + OVERLAY_LIFT;
-    const y11 = this.groundHeightAt(x1, z1) + OVERLAY_LIFT;
-    target.push(
-      x0, y00, z0, x0, y01, z1, x1, y11, z1,
-      x0, y00, z0, x1, y11, z1, x1, y10, z0,
-    );
+    const steps = OVERLAY_SUBDIVISIONS;
+    const span = (half * 2) / steps;
+    // One row of heights is reused as the next row's near edge, so a cell costs
+    // (steps + 1)² samples rather than 4 per sub-quad.
+    const heights: number[] = [];
+    for (let row = 0; row <= steps; row += 1) {
+      for (let column = 0; column <= steps; column += 1) {
+        heights.push(this.groundHeightAt(x - half + column * span, z - half + row * span) + OVERLAY_LIFT);
+      }
+    }
+    const heightAt = (row: number, column: number): number => heights[row * (steps + 1) + column]!;
+    for (let row = 0; row < steps; row += 1) {
+      for (let column = 0; column < steps; column += 1) {
+        const x0 = x - half + column * span;
+        const x1 = x0 + span;
+        const z0 = z - half + row * span;
+        const z1 = z0 + span;
+        const y00 = heightAt(row, column);
+        const y10 = heightAt(row, column + 1);
+        const y01 = heightAt(row + 1, column);
+        const y11 = heightAt(row + 1, column + 1);
+        target.push(
+          x0, y00, z0, x0, y01, z1, x1, y11, z1,
+          x0, y00, z0, x1, y11, z1, x1, y10, z0,
+        );
+      }
+    }
   }
 
   private uploadOverlay(owner: UnitOwner, positions: readonly number[]): void {
