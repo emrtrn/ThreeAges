@@ -87,7 +87,7 @@
       "stone": 20,
       "gold": 10
     },
-    "populationCost": 3,
+    "populationCost": 2,
     "structureAttackVfx": "cannonball",
     "impactEffect": "rts-fx-explosion"
   },

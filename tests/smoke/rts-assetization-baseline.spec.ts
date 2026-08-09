@@ -426,3 +426,63 @@ test("Material assetization: accepted road-gravel pilot opens with BC, normal an
 
   expect(errors, "opening the accepted road PBR material must not produce runtime errors").toEqual([]);
 });
+
+test("Material assetization: tree-bark candidate opens with BC, normal and ORM maps", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await page.locator("[data-content-toggle]").click();
+  await expect(page.locator("[data-content-list]")).toBeVisible();
+  await page.locator('button[title="assets/ThreeAges/Materials"]').dispatchEvent("click");
+  await page.locator("[data-content-search]").fill("M_TA_Tree_Bark");
+
+  const material = page.locator('[data-asset-path="assets/ThreeAges/Materials/M_TA_Tree_Bark.material.json"]');
+  await expect(material).toBeVisible();
+  await material.dispatchEvent("dblclick");
+  await expect(page.locator(".me-editor-overlay")).toBeVisible();
+  await expect(page.locator("[data-me-title]")).toHaveText("M_TA_Tree_Bark");
+  await expect(page.locator("[data-me-status]")).toHaveText("Ready.");
+
+  expect(errors, "opening the tree-bark candidate PBR material must not produce runtime errors").toEqual([]);
+});
+
+test("Material assetization: foliage-broadleaf candidate opens with BC, normal and ORM maps", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await page.locator("[data-content-toggle]").click();
+  await expect(page.locator("[data-content-list]")).toBeVisible();
+  await page.locator('button[title="assets/ThreeAges/Materials"]').dispatchEvent("click");
+  await page.locator("[data-content-search]").fill("M_TA_Foliage_Broadleaf");
+
+  const material = page.locator('[data-asset-path="assets/ThreeAges/Materials/M_TA_Foliage_Broadleaf.material.json"]');
+  await expect(material).toBeVisible();
+  await material.dispatchEvent("dblclick");
+  await expect(page.locator(".me-editor-overlay")).toBeVisible();
+  await expect(page.locator("[data-me-title]")).toHaveText("M_TA_Foliage_Broadleaf");
+  await expect(page.locator("[data-me-status]")).toHaveText("Ready.");
+
+  expect(errors, "opening the foliage-broadleaf candidate PBR material must not produce runtime errors").toEqual([]);
+});
+
+test("Material assetization: foliage-pine candidate opens with BC, normal and ORM maps", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await page.locator("[data-content-toggle]").click();
+  await expect(page.locator("[data-content-list]")).toBeVisible();
+  await page.locator('button[title="assets/ThreeAges/Materials"]').dispatchEvent("click");
+  await page.locator("[data-content-search]").fill("M_TA_Foliage_Pine");
+  const material = page.locator('[data-asset-path="assets/ThreeAges/Materials/M_TA_Foliage_Pine.material.json"]');
+  await expect(material).toBeVisible();
+  await material.dispatchEvent("dblclick");
+  await expect(page.locator(".me-editor-overlay")).toBeVisible();
+  await expect(page.locator("[data-me-title]")).toHaveText("M_TA_Foliage_Pine");
+  await expect(page.locator("[data-me-status]")).toHaveText("Ready.");
+  expect(errors, "opening the foliage-pine candidate PBR material must not produce runtime errors").toEqual([]);
+});

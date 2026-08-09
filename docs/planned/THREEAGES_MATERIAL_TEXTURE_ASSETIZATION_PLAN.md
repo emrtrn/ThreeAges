@@ -23,6 +23,12 @@ Durum: **Devam ediyor — Faz 0 tamamlanma yolunda; Faz 1 dar çekirdeği ve des
   - [x] `grass-meadow` Material Editor browser smoke, kayıtlı BC/normal/ORM setini açıp `Ready.` durumuna ulaştı; sayfa hatası üretmedi.
   - [x] Faz 3 `road-gravel` pilotu için kullanıcı A varyantını kabul etti. Deterministik 1024² BC/N/ORM seti, manifest texture kayıtları ve `M_TA_Road_Gravel` oluşturuldu; Landscape legacy `snow` yol katmanına henüz atanmadı.
   - [x] `road-gravel` Material Editor browser smoke, kayıtlı BC/normal/ORM setini açıp `Ready.` durumuna ulaştı; sayfa hatası üretmedi.
+  - [ ] Faz 3 `tree-bark` için tek A adayı üretildi (`docs/planned/threeages-texture-candidates/T_TA_Tree_Bark_Candidate_A.png`). Deterministik 1024² BC/N/ORM seti, 3×3 preview, manifest texture kayıtları ve `M_TA_Tree_Bark` hazır; adayın görsel kabulü ve bir ağaç gövdesinde temsilci model denemesi açık.
+  - [x] `tree-bark` Material Editor browser smoke, kayıtlı BC/normal/ORM setini açıp `Ready.` durumuna ulaştı; sayfa hatası üretmedi.
+  - [ ] Faz 3 `foliage-broadleaf` için tek A adayı üretildi (`docs/planned/threeages-texture-candidates/T_TA_Foliage_Broadleaf_Candidate_A.png`). Deterministik 1024² BC/N/ORM seti, 3×3 preview, manifest texture kayıtları ve `M_TA_Foliage_Broadleaf` hazır; adayın görsel kabulü ve bir geniş yapraklı ağaçta temsilci model denemesi açık.
+  - [x] `foliage-broadleaf` Material Editor browser smoke, kayıtlı BC/normal/ORM setini açıp `Ready.` durumuna ulaştı; sayfa hatası üretmedi.
+  - [ ] Faz 3 `foliage-pine` için tek A adayı üretildi (`docs/planned/threeages-texture-candidates/T_TA_Foliage_Pine_Candidate_A.png`). Deterministik 1024² BC/N/ORM seti, 3×3 preview, manifest texture kayıtları ve `M_TA_Foliage_Pine` hazır; adayın görsel kabulü ve bir çamda temsilci model denemesi açık.
+  - [x] `foliage-pine` Material Editor browser smoke, kayıtlı BC/normal/ORM setini açıp `Ready.` durumuna ulaştı; sayfa hatası üretmedi.
   - [ ] Kullanıcı, `TownCenter_FirstAge_Level{1,2,3}` sidecar'larında `wood-dark` ve `wood-light` materyallerini manuel atayıp denedi. Bu, gerçek model deneme kanıtıdır; açık görsel kabul ifadesi gelmeden Faz 6 kabulünü kapatmaz.
 
 ## 1. Amaç
@@ -616,9 +622,9 @@ River Water'a yabancı görünmez ve spline/foam/reflection koduna bağımlı de
 - [x] `earth-compacted` (B kullanıcı kabulü; Landscape/road temsilci kabulü açık)
 - [ ] `grass-meadow`
 - [ ] `road-gravel`
-- [ ] `tree-bark`
-- [ ] `foliage-broadleaf`
-- [ ] `foliage-pine`
+- [ ] `tree-bark` (A adayı hazır; kullanıcı görsel kabulü ve temsilci model denemesi açık)
+- [ ] `foliage-broadleaf` (A adayı hazır; kullanıcı görsel kabulü ve temsilci model denemesi açık)
+- [ ] `foliage-pine` (A adayı hazır; kullanıcı görsel kabulü ve temsilci model denemesi açık)
 - [ ] `water-center`
 
 Her yüzey için:

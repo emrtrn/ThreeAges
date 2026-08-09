@@ -19489,6 +19489,60 @@ check("ThreeAges wall-plaster pilot material names registered BC/N/ORM textures"
   assert.equal(assetType(materialRecord!), "material");
 });
 
+check("ThreeAges tree-bark pilot material names registered BC/N/ORM textures", () => {
+  const material = normalizeForgeMaterialDef(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Materials/M_TA_Tree_Bark.material.json", "utf8")),
+    "M_TA_Tree_Bark",
+  );
+  assert.equal(material.baseColorTexture, "threeages-tex-tree-bark-bc");
+  assert.equal(material.normalTexture, "threeages-tex-tree-bark-n");
+  assert.equal(material.ormTexture, "threeages-tex-tree-bark-orm");
+  for (const textureId of [material.baseColorTexture, material.normalTexture, material.ormTexture]) {
+    assert.ok(textureId, "the pilot material must not silently fall back to a missing map");
+    const record = assetManifest.assets.find((asset) => asset.id === textureId);
+    assert.ok(record, `pilot material refers to unregistered texture ${textureId}`);
+    assert.equal(assetType(record!), "texture");
+  }
+  const materialRecord = assetManifest.assets.find((asset) => asset.id === "threeages-mat-tree-bark");
+  assert.ok(materialRecord, "pilot material itself must be registered");
+  assert.equal(assetType(materialRecord!), "material");
+});
+
+check("ThreeAges foliage-broadleaf pilot material names registered BC/N/ORM textures", () => {
+  const material = normalizeForgeMaterialDef(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Materials/M_TA_Foliage_Broadleaf.material.json", "utf8")),
+    "M_TA_Foliage_Broadleaf",
+  );
+  assert.equal(material.baseColorTexture, "threeages-tex-foliage-broadleaf-bc");
+  assert.equal(material.normalTexture, "threeages-tex-foliage-broadleaf-n");
+  assert.equal(material.ormTexture, "threeages-tex-foliage-broadleaf-orm");
+  for (const textureId of [material.baseColorTexture, material.normalTexture, material.ormTexture]) {
+    assert.ok(textureId, "the pilot material must not silently fall back to a missing map");
+    const record = assetManifest.assets.find((asset) => asset.id === textureId);
+    assert.ok(record, `pilot material refers to unregistered texture ${textureId}`);
+    assert.equal(assetType(record!), "texture");
+  }
+  const materialRecord = assetManifest.assets.find((asset) => asset.id === "threeages-mat-foliage-broadleaf");
+  assert.ok(materialRecord, "pilot material itself must be registered");
+  assert.equal(assetType(materialRecord!), "material");
+});
+
+check("ThreeAges foliage-pine pilot material names registered BC/N/ORM textures", () => {
+  const material = normalizeForgeMaterialDef(JSON.parse(readFileSync("public/assets/ThreeAges/Materials/M_TA_Foliage_Pine.material.json", "utf8")), "M_TA_Foliage_Pine");
+  assert.equal(material.baseColorTexture, "threeages-tex-foliage-pine-bc");
+  assert.equal(material.normalTexture, "threeages-tex-foliage-pine-n");
+  assert.equal(material.ormTexture, "threeages-tex-foliage-pine-orm");
+  for (const textureId of [material.baseColorTexture, material.normalTexture, material.ormTexture]) {
+    assert.ok(textureId, "the pilot material must not silently fall back to a missing map");
+    const record = assetManifest.assets.find((asset) => asset.id === textureId);
+    assert.ok(record, `pilot material refers to unregistered texture ${textureId}`);
+    assert.equal(assetType(record!), "texture");
+  }
+  const materialRecord = assetManifest.assets.find((asset) => asset.id === "threeages-mat-foliage-pine");
+  assert.ok(materialRecord, "pilot material itself must be registered");
+  assert.equal(assetType(materialRecord!), "material");
+});
+
 check("forge material mapping creates matching Three material types and fields", () => {
   const standard = createThreeMaterialFromForgeDef(
     normalizeForgeMaterialDef({
