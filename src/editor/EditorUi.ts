@@ -29,7 +29,11 @@ import {
   type ShapePrimitiveType,
 } from "@engine/scene/shapes";
 import { writePlayCameraPose } from "@/play/cameraHandoff";
-import { ThumbnailRenderer, type ThumbnailMaterialPreview } from "./ThumbnailRenderer";
+import {
+  ThumbnailRenderer,
+  type ThumbnailMaterialPreview,
+  type ThumbnailModelPreview,
+} from "./ThumbnailRenderer";
 import {
   createProjectContent,
   deleteProjectContent,
@@ -47,7 +51,11 @@ import {
 } from "@/project/ProjectAssetTree";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { attachDebugStats } from "@/scene/debugStats";
-import { loadAssetMaterialSlots } from "@/scene/assetMaterialSlotsLoader";
+import {
+  assignedMaterialSlotIds,
+  loadAssetMaterialSlots,
+} from "@/scene/assetMaterialSlotsLoader";
+import { loadAssetUvw } from "@/scene/assetUvwLoader";
 import {
   getGameEditorCatalog,
   type EditorDataTableDef,
@@ -363,7 +371,7 @@ export class EditorUi {
   private toolButtons = new Map<EditorTool, HTMLButtonElement>();
   private readonly thumbnailRenderer = new ThumbnailRenderer();
   private readonly materialPreviewCache = new Map<string, Promise<ThumbnailMaterialPreview | undefined>>();
-  private readonly modelMaterialPreviewCache = new Map<string, Promise<ThumbnailMaterialPreview | undefined>>();
+  private readonly modelMaterialPreviewCache = new Map<string, Promise<ThumbnailModelPreview>>();
   /** `*.effect.json` path -> renderer summary for the Content Browser card. */
   private readonly effectSummaryCache = new Map<string, Promise<ContentEffectSummary | null>>();
   private activeTool: EditorTool = "move";
@@ -2798,22 +2806,33 @@ export class EditorUi {
     return this.resolveMaterialPreviewById(item.editable?.id, item.path);
   }
 
-  private resolveModelDefaultMaterialPreview(item: BrowserAssetItem): Promise<ThumbnailMaterialPreview | undefined> {
+  private resolveModelThumbnailPreview(item: BrowserAssetItem): Promise<ThumbnailModelPreview> {
     const key = item.editable?.id ?? item.path;
     let cached = this.modelMaterialPreviewCache.get(key);
     if (!cached) {
-      cached = this.resolveModelDefaultMaterialPreviewUncached(item);
+      cached = this.resolveModelThumbnailPreviewUncached(item);
       this.modelMaterialPreviewCache.set(key, cached);
     }
     return cached;
   }
 
-  private async resolveModelDefaultMaterialPreviewUncached(
+  private async resolveModelThumbnailPreviewUncached(
     item: BrowserAssetItem,
-  ): Promise<ThumbnailMaterialPreview | undefined> {
-    const slots = await loadAssetMaterialSlots(item.path);
-    const materialId = slots.slots[0];
-    return materialId ? this.resolveMaterialPreviewById(materialId) : undefined;
+  ): Promise<ThumbnailModelPreview> {
+    const [slots, uvw] = await Promise.all([
+      loadAssetMaterialSlots(item.path),
+      loadAssetUvw(item.path),
+    ]);
+    const materialIds = [...new Set(assignedMaterialSlotIds(slots))];
+    const materials = (await Promise.all(
+      materialIds.map(async (id) => {
+        const preview = await this.resolveMaterialPreviewById(id);
+        return preview ? { id, preview } : null;
+      }),
+    )).filter(
+      (entry): entry is { id: string; preview: ThumbnailMaterialPreview } => entry !== null,
+    );
+    return { slots, uvw, materials };
   }
 
   private async resolveMaterialPreviewById(
@@ -2892,10 +2911,10 @@ export class EditorUi {
     thumb: HTMLElement,
   ): Promise<void> {
     try {
-      const material = await this.resolveModelDefaultMaterialPreview(item);
+      const preview = await this.resolveModelThumbnailPreview(item);
       const imageUrl = await this.thumbnailRenderer.renderModel(
         projectFileUrl(item.path),
-        material,
+        preview,
       );
       if (!thumb.isConnected) return;
       thumb.replaceChildren();
@@ -2940,10 +2959,14 @@ export class EditorUi {
         onStatus: (message, tone) => this.setStatus(message, tone),
         onMaterialSlotsSaved: (assetId) => {
           this.modelMaterialPreviewCache.delete(assetId);
+          this.thumbnailRenderer.clearCache();
           this.renderContentAssets();
           void this.app.refreshAssetMaterialSlots(assetId);
         },
         onAssetUvwSaved: (assetId) => {
+          this.modelMaterialPreviewCache.delete(assetId);
+          this.thumbnailRenderer.clearCache();
+          this.renderContentAssets();
           void this.app.refreshAssetUvwMapping(assetId);
         },
         onCollisionSaved: () => {

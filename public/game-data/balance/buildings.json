@@ -20,29 +20,29 @@
         {
           "level": 2,
           "maxHealth": 350,
-          "queueCapacity": 7
+          "queueCapacity": 6
         },
         {
           "level": 3,
           "maxHealth": 400,
-          "queueCapacity": 9
+          "queueCapacity": 7
         }
       ],
       "town": [
         {
           "level": 1,
           "maxHealth": 500,
-          "queueCapacity": 12
+          "queueCapacity": 8
         },
         {
           "level": 2,
           "maxHealth": 600,
-          "queueCapacity": 16
+          "queueCapacity": 9
         },
         {
           "level": 3,
           "maxHealth": 800,
-          "queueCapacity": 20
+          "queueCapacity": 10
         }
       ]
     }
@@ -57,7 +57,7 @@
     "cost": {
       "wood": 40
     },
-    "constructionSeconds": 20,
+    "constructionSeconds": 10,
     "maxHealth": 100,
     "visionRadius": 8,
     "populationCapacity": 5,
@@ -108,7 +108,7 @@
     "cost": {
       "wood": 60
     },
-    "constructionSeconds": 30,
+    "constructionSeconds": 10,
     "maxHealth": 100,
     "visionRadius": 10,
     "progression": {
@@ -188,7 +188,7 @@
     "cost": {
       "wood": 100
     },
-    "constructionSeconds": 30,
+    "constructionSeconds": 20,
     "maxHealth": 500,
     "visionRadius": 30,
     "territory": {
@@ -317,7 +317,7 @@
     "cost": {
       "wood": 40
     },
-    "constructionSeconds": 20,
+    "constructionSeconds": 10,
     "requiredSettlementLevel": 2,
     "maxHealth": 100,
     "visionRadius": 8,
@@ -351,9 +351,9 @@
           "level": 3,
           "maxHealth": 120,
           "economy": {
-            "workerCapacity": 4,
+            "workerCapacity": 3,
             "perWorkerPerMinute": 30,
-            "localBufferCapacity": 240
+            "localBufferCapacity": 180
           }
         }
       ],
@@ -371,18 +371,18 @@
           "level": 2,
           "maxHealth": 140,
           "economy": {
-            "workerCapacity": 5,
+            "workerCapacity": 4,
             "perWorkerPerMinute": 50,
-            "localBufferCapacity": 500
+            "localBufferCapacity": 400
           }
         },
         {
           "level": 3,
           "maxHealth": 150,
           "economy": {
-            "workerCapacity": 5,
+            "workerCapacity": 4,
             "perWorkerPerMinute": 60,
-            "localBufferCapacity": 600
+            "localBufferCapacity": 480
           }
         }
       ]
@@ -398,14 +398,14 @@
     "cost": {
       "wood": 60
     },
-    "constructionSeconds": 25,
+    "constructionSeconds": 10,
     "maxHealth": 100,
     "visionRadius": 10,
     "economy": {
       "resourceId": "food",
       "workerCapacity": 3,
       "perWorkerPerMinute": 100,
-      "localBufferCapacity": 1000,
+      "localBufferCapacity": 600,
       "requiresGame": true,
       "gatherRadius": 18,
       "carryCapacity": 50
@@ -417,9 +417,9 @@
           "maxHealth": 100,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 120,
-            "localBufferCapacity": 1000,
-            "carryCapacity": 60
+            "perWorkerPerMinute": 100,
+            "localBufferCapacity": 600,
+            "carryCapacity": 50
           }
         },
         {
@@ -427,19 +427,19 @@
           "maxHealth": 110,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 140,
-            "localBufferCapacity": 1000,
-            "carryCapacity": 70
+            "perWorkerPerMinute": 110,
+            "localBufferCapacity": 660,
+            "carryCapacity": 55
           }
         },
         {
           "level": 3,
           "maxHealth": 120,
           "economy": {
-            "workerCapacity": 4,
-            "perWorkerPerMinute": 160,
-            "localBufferCapacity": 1000,
-            "carryCapacity": 80
+            "workerCapacity": 3,
+            "perWorkerPerMinute": 120,
+            "localBufferCapacity": 720,
+            "carryCapacity": 60
           }
         }
       ],
@@ -449,29 +449,29 @@
           "maxHealth": 130,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 180,
-            "localBufferCapacity": 1000,
-            "carryCapacity": 90
+            "perWorkerPerMinute": 130,
+            "localBufferCapacity": 1040,
+            "carryCapacity": 65
           }
         },
         {
           "level": 2,
           "maxHealth": 140,
           "economy": {
-            "workerCapacity": 5,
-            "perWorkerPerMinute": 200,
-            "localBufferCapacity": 1000,
-            "carryCapacity": 100
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 140,
+            "localBufferCapacity": 1120,
+            "carryCapacity": 70
           }
         },
         {
           "level": 3,
           "maxHealth": 150,
           "economy": {
-            "workerCapacity": 5,
-            "perWorkerPerMinute": 220,
-            "localBufferCapacity": 1000,
-            "carryCapacity": 110
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 150,
+            "localBufferCapacity": 1200,
+            "carryCapacity": 75
           }
         }
       ]
@@ -487,7 +487,7 @@
     "cost": {
       "wood": 70
     },
-    "constructionSeconds": 30,
+    "constructionSeconds": 10,
     "maxHealth": 100,
     "visionRadius": 10,
     "economy": {
@@ -525,7 +525,7 @@
           "level": 3,
           "maxHealth": 120,
           "economy": {
-            "workerCapacity": 3,
+            "workerCapacity": 2,
             "localBufferCapacity": 112,
             "livestockCapacity": 4,
             "perAnimalPerMinute": 14
@@ -539,7 +539,7 @@
           "economy": {
             "workerCapacity": 3,
             "localBufferCapacity": 128,
-            "livestockCapacity": 4,
+            "livestockCapacity": 6,
             "perAnimalPerMinute": 16
           }
         },
@@ -549,7 +549,7 @@
           "economy": {
             "workerCapacity": 3,
             "localBufferCapacity": 144,
-            "livestockCapacity": 4,
+            "livestockCapacity": 6,
             "perAnimalPerMinute": 18
           }
         },
@@ -557,9 +557,9 @@
           "level": 3,
           "maxHealth": 150,
           "economy": {
-            "workerCapacity": 4,
+            "workerCapacity": 3,
             "localBufferCapacity": 160,
-            "livestockCapacity": 4,
+            "livestockCapacity": 6,
             "perAnimalPerMinute": 20
           }
         }
@@ -576,7 +576,7 @@
     "cost": {
       "wood": 80
     },
-    "constructionSeconds": 35,
+    "constructionSeconds": 10,
     "maxHealth": 100,
     "visionRadius": 9,
     "economy": {
@@ -614,9 +614,9 @@
           "level": 3,
           "maxHealth": 118,
           "economy": {
-            "workerCapacity": 4,
+            "workerCapacity": 3,
             "perWorkerPerMinute": 80,
-            "localBufferCapacity": 640,
+            "localBufferCapacity": 480,
             "carryCapacity": 40
           }
         }
@@ -636,9 +636,9 @@
           "level": 2,
           "maxHealth": 140,
           "economy": {
-            "workerCapacity": 5,
+            "workerCapacity": 4,
             "perWorkerPerMinute": 120,
-            "localBufferCapacity": 1200,
+            "localBufferCapacity": 960,
             "carryCapacity": 60
           }
         },
@@ -646,9 +646,9 @@
           "level": 3,
           "maxHealth": 960,
           "economy": {
-            "workerCapacity": 5,
+            "workerCapacity": 4,
             "perWorkerPerMinute": 140,
-            "localBufferCapacity": 1400,
+            "localBufferCapacity": 1120,
             "carryCapacity": 70
           }
         }
@@ -665,7 +665,7 @@
     "cost": {
       "wood": 120
     },
-    "constructionSeconds": 40,
+    "constructionSeconds": 20,
     "maxHealth": 200,
     "visionRadius": 9,
     "economy": {
@@ -694,16 +694,16 @@
           "economy": {
             "workerCapacity": 3,
             "perWorkerPerMinute": 6,
-            "localBufferCapacity": 64
+            "localBufferCapacity": 36
           }
         },
         {
           "level": 3,
           "maxHealth": 240,
           "economy": {
-            "workerCapacity": 4,
+            "workerCapacity": 3,
             "perWorkerPerMinute": 7,
-            "localBufferCapacity": 108
+            "localBufferCapacity": 42
           }
         }
       ],
@@ -714,25 +714,25 @@
           "economy": {
             "workerCapacity": 4,
             "perWorkerPerMinute": 8,
-            "localBufferCapacity": 128
+            "localBufferCapacity": 64
           }
         },
         {
           "level": 2,
           "maxHealth": 280,
           "economy": {
-            "workerCapacity": 5,
+            "workerCapacity": 4,
             "perWorkerPerMinute": 9,
-            "localBufferCapacity": 180
+            "localBufferCapacity": 72
           }
         },
         {
           "level": 3,
           "maxHealth": 300,
           "economy": {
-            "workerCapacity": 5,
+            "workerCapacity": 4,
             "perWorkerPerMinute": 10,
-            "localBufferCapacity": 200
+            "localBufferCapacity": 80
           }
         }
       ]
@@ -748,7 +748,7 @@
     "cost": {
       "wood": 120
     },
-    "constructionSeconds": 45,
+    "constructionSeconds": 20,
     "maxHealth": 200,
     "visionRadius": 9,
     "economy": {
@@ -784,9 +784,9 @@
           "level": 3,
           "maxHealth": 240,
           "economy": {
-            "workerCapacity": 4,
+            "workerCapacity": 3,
             "perWorkerPerMinute": 5,
-            "localBufferCapacity": 40
+            "localBufferCapacity": 30
           }
         }
       ],
@@ -804,18 +804,18 @@
           "level": 2,
           "maxHealth": 280,
           "economy": {
-            "workerCapacity": 5,
+            "workerCapacity": 4,
             "perWorkerPerMinute": 7,
-            "localBufferCapacity": 70
+            "localBufferCapacity": 56
           }
         },
         {
           "level": 3,
           "maxHealth": 300,
           "economy": {
-            "workerCapacity": 5,
+            "workerCapacity": 4,
             "perWorkerPerMinute": 8,
-            "localBufferCapacity": 80
+            "localBufferCapacity": 64
           }
         }
       ]
@@ -831,7 +831,7 @@
     "cost": {
       "wood": 20
     },
-    "constructionSeconds": 50,
+    "constructionSeconds": 20,
     "maxHealth": 100,
     "visionRadius": 12,
     "market": {
@@ -947,7 +947,7 @@
     "cost": {
       "wood": 140
     },
-    "constructionSeconds": 55,
+    "constructionSeconds": 30,
     "maxHealth": 400,
     "visionRadius": 12,
     "progression": {
@@ -960,29 +960,29 @@
         {
           "level": 2,
           "maxHealth": 450,
-          "queueCapacity": 10
+          "queueCapacity": 6
         },
         {
           "level": 3,
           "maxHealth": 500,
-          "queueCapacity": 15
+          "queueCapacity": 7
         }
       ],
       "town": [
         {
           "level": 1,
           "maxHealth": 550,
-          "queueCapacity": 20
+          "queueCapacity": 8
         },
         {
           "level": 2,
           "maxHealth": 600,
-          "queueCapacity": 25
+          "queueCapacity": 9
         },
         {
           "level": 3,
           "maxHealth": 700,
-          "queueCapacity": 30
+          "queueCapacity": 10
         }
       ]
     }
@@ -998,7 +998,7 @@
       "wood": 140,
       "stone": 40
     },
-    "constructionSeconds": 55,
+    "constructionSeconds": 30,
     "requiredAge": "town",
     "maxHealth": 500,
     "visionRadius": 14,
@@ -1008,17 +1008,17 @@
         {
           "level": 1,
           "maxHealth": 500,
-          "queueCapacity": 20
+          "queueCapacity": 8
         },
         {
           "level": 2,
           "maxHealth": 600,
-          "queueCapacity": 25
+          "queueCapacity": 9
         },
         {
           "level": 3,
           "maxHealth": 700,
-          "queueCapacity": 30
+          "queueCapacity": 10
         }
       ]
     }

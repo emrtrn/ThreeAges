@@ -70,3 +70,29 @@ test("Content Drawer exposes toolbar, breadcrumb, history, and view controls", a
   await toggle.click();
   await expect(drawer).toHaveClass(/open/);
 });
+
+test("Content Drawer renders a sidecar-material static-mesh thumbnail", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await page.locator("[data-content-toggle]").click();
+
+  const folderPath = "assets/ThreeAges/StaticMeshes";
+  const folder = page.locator(`button.folder-row[title="${folderPath}"]`);
+  await expect(folder).toBeVisible({ timeout: 30_000 });
+  await folder.click();
+
+  // Dock has two authored material slots and a box UVW sidecar. The thumbnail
+  // has to become a real rendered image rather than retaining its model extension
+  // placeholder while those sidecars resolve.
+  const dock = page.locator('[data-asset-path="assets/ThreeAges/StaticMeshes/Dock_FirstAge.gltf"]');
+  const thumbnail = dock.locator("[data-asset-thumb] img");
+  await expect(thumbnail).toBeVisible({ timeout: 30_000 });
+  await expect(thumbnail).toHaveAttribute("src", /^data:image\/png;base64,/);
+  await expect(thumbnail).toHaveJSProperty("complete", true);
+  await expect(thumbnail).toHaveJSProperty("naturalWidth", 192);
+
+  expect(errors, "sidecar-backed Content Drawer thumbnail must not produce page errors").toEqual([]);
+});

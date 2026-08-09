@@ -156,6 +156,7 @@ export class DataTableEditor {
       }
       this.fullDoc = raw;
       this.doc = entryRoot;
+      for (const entryId of Object.keys(this.doc)) this.applyDerivedFields(entryId);
       this.titleEl.textContent = this.options.def.label;
       this.renderEntries();
       this.setStatus(`Hazır — ${Object.keys(this.doc).length} girdi.`);
@@ -309,6 +310,7 @@ export class DataTableEditor {
         return;
       }
       this.doc[entryId] = structuredClone(defaultEntry);
+      this.applyDerivedFields(entryId);
       this.replaceEntrySection(entryId);
       this.markDirty();
       this.setStatus(`"${entryId}" varsayılana döndürüldü — kaydetmek için Kaydet'e basın.`, "info");
@@ -324,6 +326,16 @@ export class DataTableEditor {
    */
   private metaFor(path: string): EditorDataTableFieldMeta | undefined {
     return this.fieldMeta.get(path) ?? this.fieldMeta.get(templatePath(path));
+  }
+
+  /** Apply game-authored computed fields within one entry without owning their rules. */
+  private applyDerivedFields(entryId: string): void {
+    const entry = this.doc[entryId];
+    if (!isPlainObject(entry) && !Array.isArray(entry)) return;
+    for (const leaf of collectLeaves(entry, "", "", this.blockParents, this.listPaths)) {
+      const derive = this.metaFor(leaf.path)?.derive;
+      if (derive) (leaf.container as Record<string | number, unknown>)[leaf.key] = derive(leaf.container as Record<string | number, unknown>);
+    }
   }
 
   private renderLeaf(leaf: Leaf, entryId: string): HTMLElement {
@@ -372,11 +384,11 @@ export class DataTableEditor {
       }
     }
     input.className = "dte-field-input";
-    if (meta?.readonly) {
+    if (meta?.readonly === true || (typeof meta?.readonly === "function" && meta.readonly(leaf.container as Record<string | number, unknown>))) {
       input.disabled = true;
       if (!row.title) row.title = "Bu alan yapısaldır ve düzenlenemez.";
     } else {
-      input.addEventListener("change", () => this.commitLeaf(leaf, input));
+      input.addEventListener("change", () => this.commitLeaf(leaf, input, entryId));
     }
     row.append(input);
     return row;
@@ -494,7 +506,7 @@ export class DataTableEditor {
   }
 
   /** Coerce the input back to the leaf's original JS type and write it into the doc. */
-  private commitLeaf(leaf: Leaf, input: HTMLInputElement | HTMLSelectElement): void {
+  private commitLeaf(leaf: Leaf, input: HTMLInputElement | HTMLSelectElement, entryId: string): void {
     const container = leaf.container as Record<string | number, unknown>;
     if (leaf.type === "boolean") {
       container[leaf.key] = (input as HTMLInputElement).checked;
@@ -509,6 +521,8 @@ export class DataTableEditor {
     } else {
       container[leaf.key] = input.value;
     }
+    this.applyDerivedFields(entryId);
+    this.replaceEntrySection(entryId);
     this.markDirty();
   }
 

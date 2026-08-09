@@ -5,6 +5,11 @@ Durum: **Devam ediyor — Faz 0 tamamlanma yolunda; Faz 1 dar çekirdeği ve des
 
 ## Uygulama Günlüğü
 
+- 2026-08-09 — Content Drawer model thumbnail materyal paritesi tamamlandı.
+  - [x] Model kartı artık ilk slotu düz renge çevirmek yerine `*.materials.json` içindeki tüm atanmış materyal slotlarını ve bağlı PBR doku setlerini uygular.
+  - [x] Thumbnail render yolu `*.uvw.json` projeksiyonunu da kullanır; model/slot/UVW kaydı kaydedildiğinde önbellek silinip kart anında yeniden çizilir.
+  - [x] Browser smoke, iki materyal slotlu ve box UVW'li `Dock_FirstAge.gltf` kartının gerçek PNG thumbnail ürettiğini doğrular.
+
 - 2026-08-09 — RTS authored-world prop materyal paritesi tamamlandı.
   - [x] Play'in generic authored-world yükleyicisi artık yerleştirilen static meshlerin `*.materials.json` sidecar'larını ve başvurdukları Forge materyallerini yükleyip instanced prop grubuna uygular.
   - [x] Aynı yükleyici `*.uvw.json` projeksiyonunu instance oluşturmadan önce uygular; aksi halde materyal rengi görünse bile tüm doku mapleri düz renk örnekleniyordu.

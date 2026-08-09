@@ -85,7 +85,13 @@ export interface EditorDataTableFieldMeta {
   readonly assetOptions?: string;
   /** Renders the input disabled — for structural/identity fields the validator
    *  would reject edits to anyway (tier level indices, entry ids). */
-  readonly readonly?: boolean;
+  readonly readonly?: boolean | ((container: Readonly<Record<string | number, unknown>>) => boolean);
+  /**
+   * Computes a display-only value from the leaf's parent object. The game
+   * catalog owns the rule; the editor merely applies it after related edits so
+   * its form stays generic.
+   */
+  readonly derive?: (container: Readonly<Record<string | number, unknown>>) => string | number | boolean;
   /** Tooltip on the field, e.g. explaining that a value is only the level-1 base. */
   readonly hint?: string;
   /** Per-element names for a scalar array (`[]` path), e.g. `["X", "Y", "Z"]` for

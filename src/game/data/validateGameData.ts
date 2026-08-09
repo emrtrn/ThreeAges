@@ -664,6 +664,10 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       if (!Number.isInteger(workerCapacity) || workerCapacity <= 0) {
         throw new GameDataError(`${economyWhere}.workerCapacity: must be a positive integer`);
       }
+      if (perWorkerPerMinute !== undefined
+        && localBufferCapacity !== workerCapacity * perWorkerPerMinute * 2) {
+        throw new GameDataError(`${economyWhere}.localBufferCapacity: must equal workerCapacity × perWorkerPerMinute × 2`);
+      }
       if ((perWorkerPerMinute !== undefined && perWorkerPerMinute <= 0) || localBufferCapacity <= 0) {
         throw new GameDataError(`${economyWhere}: production rate and local buffer capacity must be > 0`);
       }
@@ -968,6 +972,9 @@ function validateBuildingProgression(
             && localBufferCapacity === previousBuffer
             && (livestockCapacity ?? previousLivestockCapacity) === previousLivestockCapacity)) {
           throw new GameDataError(`${economyWhere}: no value may shrink and at least one core value must increase by tier`);
+        }
+        if (!livestock && localBufferCapacity !== workerCapacity * rate * 2) {
+          throw new GameDataError(`${economyWhere}.localBufferCapacity: must equal workerCapacity × perWorkerPerMinute × 2`);
         }
         if (!livestock) {
           for (const field of ["livestockCapacity", "perAnimalPerMinute"] as const) {

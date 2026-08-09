@@ -28,6 +28,11 @@ import type {
 } from "@engine/assets/material";
 import { createThreeMaterialFromForgeDef } from "@engine/render-three/materials";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
+import {
+  applyMaterialSlotOverrides,
+  type AssetMaterialSlotsDef,
+} from "@/scene/assetMaterialSlotsLoader";
+import { applyAssetUvwMapping, type AssetUvwDef } from "@/scene/assetUvwLoader";
 
 export interface ThumbnailMaterialPreview {
   materialType: ForgeMaterialType;
@@ -62,6 +67,19 @@ export interface ThumbnailMaterialPreview {
   emissiveIntensity: number;
 }
 
+/**
+ * Sidecar-backed model preview state. Keeping it as one immutable input makes
+ * the renderer cache reflect both material-slot and UVW edits.
+ */
+export interface ThumbnailModelPreview {
+  slots: AssetMaterialSlotsDef;
+  uvw: AssetUvwDef;
+  materials: ReadonlyArray<{
+    id: string;
+    preview: ThumbnailMaterialPreview;
+  }>;
+}
+
 export class ThumbnailRenderer {
   private readonly loader: GLTFLoader;
   private readonly textureLoader = new TextureLoader();
@@ -80,11 +98,11 @@ export class ThumbnailRenderer {
     this.loader = createForgeGltfLoader(this.renderer);
   }
 
-  renderModel(url: string, material?: ThumbnailMaterialPreview): Promise<string> {
-    const cacheKey = material ? `model:${url}:${materialCacheKey(material)}` : url;
+  renderModel(url: string, preview?: ThumbnailModelPreview): Promise<string> {
+    const cacheKey = preview ? `model:${url}:${modelPreviewCacheKey(preview)}` : url;
     let cached = this.cache.get(cacheKey);
     if (!cached) {
-      cached = this.renderModelUncached(url, material);
+      cached = this.renderModelUncached(url, preview);
       this.cache.set(cacheKey, cached);
     }
     return cached;
@@ -111,7 +129,7 @@ export class ThumbnailRenderer {
 
   private async renderModelUncached(
     url: string,
-    materialPreview?: ThumbnailMaterialPreview,
+    modelPreview?: ThumbnailModelPreview,
   ): Promise<string> {
     const gltf = await this.loader.loadAsync(url);
     const model = gltf.scene.clone(true);
@@ -128,13 +146,15 @@ export class ThumbnailRenderer {
     scene.add(fillLight);
 
     const group = new Group();
-    const material = materialPreview
-      ? await this.createMaterialFromPreview(materialPreview)
-      : null;
-    if (material) {
-      model.traverse((object) => {
-        if (object instanceof Mesh) object.material = material;
-      });
+    const previewMaterials = new Map<string, Material>();
+    if (modelPreview) {
+      applyAssetUvwMapping(model, modelPreview.uvw);
+      for (const { id, preview } of modelPreview.materials) {
+        previewMaterials.set(id, await this.createMaterialFromPreview(preview));
+      }
+      applyMaterialSlotOverrides(model, modelPreview.slots, (materialId) =>
+        previewMaterials.get(materialId),
+      );
     }
     group.add(model);
     scene.add(group);
@@ -160,7 +180,7 @@ export class ThumbnailRenderer {
     this.renderer.setClearColor(0x191b1f, 1);
     this.renderer.render(scene, camera);
     const imageUrl = this.renderer.domElement.toDataURL("image/png");
-    disposeMaterial(material);
+    previewMaterials.forEach((material) => disposeMaterial(material));
     return imageUrl;
   }
 
@@ -248,6 +268,14 @@ function disposeMaterial(material: Material | null): void {
 
 function materialCacheKey(material: ThumbnailMaterialPreview): string {
   return JSON.stringify(material);
+}
+
+function modelPreviewCacheKey(preview: ThumbnailModelPreview): string {
+  return JSON.stringify({
+    slots: preview.slots,
+    uvw: preview.uvw,
+    materials: preview.materials.map(({ id, preview: material }) => [id, materialCacheKey(material)]),
+  });
 }
 
 function thumbnailPreviewToMaterialDef(preview: ThumbnailMaterialPreview): ForgeMaterialDef {

@@ -33239,6 +33239,16 @@ check("V2 Faz 3: the pasture's data shape is enforced, and the per-worker rate s
     /perWorkerPerMinute/,
     "and so is a farm tier without one",
   );
+  refuses(
+    (data) => { data.farm.economy.localBufferCapacity = 61; },
+    /localBufferCapacity: must equal workerCapacity/,
+    "a worker producer's base camp buffer is derived from its staffing and rate",
+  );
+  refuses(
+    (data) => { data.farm.progression.settlement[1].economy.localBufferCapacity = 121; },
+    /localBufferCapacity: must equal workerCapacity/,
+    "and a tier's camp buffer follows the same derived rule",
+  );
 
   // The animals-table rule in the other direction: a livestock field on a
   // building that has no pen is refused rather than silently dropped.

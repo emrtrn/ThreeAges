@@ -262,6 +262,14 @@ const UNITS_FIELDS = [
   },
 ];
 
+const usesWorkerProduction = (economy: Readonly<Record<string | number, unknown>>): boolean =>
+  typeof economy["perWorkerPerMinute"] === "number";
+
+const workerCampBufferCapacity = (economy: Readonly<Record<string | number, unknown>>): number =>
+  usesWorkerProduction(economy)
+    ? Number(economy["workerCapacity"]) * Number(economy["perWorkerPerMinute"]) * 2
+    : Number(economy["localBufferCapacity"]);
+
 const BUILDINGS_FIELDS = [
   { path: "label", label: "Ad", hint: "Binanın oyunda ve arayüzde görünen adı." },
   { path: "icon", label: "İkon yolu", hint: "Yapı paletindeki simgenin dosya yolu (public köküne göre)." },
@@ -359,10 +367,12 @@ const BUILDINGS_FIELDS = [
   },
   {
     path: "economy.localBufferCapacity",
-    label: "Ekonomi: Kamp deposu (temel)",
+    label: "Ekonomi: Kamp deposu (işçi üretiminde otomatik)",
     min: 0,
     step: 1,
-    hint: "Lojistik toplayana kadar binada biriken maks. kaynak; dolduğunda üretim durur.",
+    readonly: usesWorkerProduction,
+    derive: workerCampBufferCapacity,
+    hint: "İşçi sayısı × işçi başı toplama/dk × 2. Lojistik toplayana kadar binada biriken maks. kaynak; dolduğunda üretim durur.",
   },
   {
     path: "economy.gatherRadius",
@@ -572,10 +582,12 @@ const BUILDINGS_FIELDS = [
   },
   {
     path: "progression.settlement.[].economy.localBufferCapacity",
-    label: "Yerleşim tier: Kamp deposu",
+    label: "Yerleşim tier: Kamp deposu (işçi üretiminde otomatik)",
     min: 0,
     step: 1,
-    hint: "Bu seviyede lojistik toplayana kadar biriken maks. kaynak.",
+    readonly: usesWorkerProduction,
+    derive: workerCampBufferCapacity,
+    hint: "İşçi sayısı × işçi başı toplama/dk × 2. Bu seviyede lojistik toplayana kadar biriken maks. kaynak.",
   },
   {
     path: "progression.settlement.[].economy.carryCapacity",
@@ -614,10 +626,12 @@ const BUILDINGS_FIELDS = [
   },
   {
     path: "progression.town.[].economy.localBufferCapacity",
-    label: "Kasaba tier: Kamp deposu",
+    label: "Kasaba tier: Kamp deposu (işçi üretiminde otomatik)",
     min: 0,
     step: 1,
-    hint: "Bu seviyede lojistik toplayana kadar biriken maks. kaynak.",
+    readonly: usesWorkerProduction,
+    derive: workerCampBufferCapacity,
+    hint: "İşçi sayısı × işçi başı toplama/dk × 2. Bu seviyede lojistik toplayana kadar biriken maks. kaynak.",
   },
   {
     path: "progression.town.[].economy.carryCapacity",
