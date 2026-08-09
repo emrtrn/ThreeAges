@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { startRtsMatch } from "./rtsBoot";
 
-test("road placement separates the start, route preview, and finish feedback", async ({ page }) => {
+test("road placement finishes its route on the second left-click", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
@@ -17,11 +17,12 @@ test("road placement separates the start, route preview, and finish feedback", a
   const canvas = page.locator("#game-canvas");
   await canvas.click({ position: { x: 640, y: 420 } });
   await expect(page.locator(".rts-build-status")).toHaveText("Yol çiziliyor");
-  await expect(page.locator(".rts-build-road-hint")).toHaveText("Ucu seçin · Sağ tık: bitir");
+  await expect(page.locator(".rts-build-road-hint")).toHaveText("Ucu seçin · Sol tık: yolu kur");
 
   await canvas.hover({ position: { x: 720, y: 420 } });
-  await expect(page.locator(".rts-build-road-hint")).toContainText(/Sağ tık: bitir · \d+ hücre · \d+ Odun/);
-  await canvas.click({ button: "right", position: { x: 720, y: 420 } });
+  await expect(page.locator(".rts-build-road-hint")).toContainText(/Sol tık: yolu kur · \d+ hücre · \d+ Odun/);
+  await canvas.click({ position: { x: 720, y: 420 } });
   await expect(page.locator(".rts-build-road-hint")).toBeHidden();
+  await expect(page.locator(".rts-build-status")).toHaveText("Bir yapı seçin.");
   expect(errors).toEqual([]);
 });

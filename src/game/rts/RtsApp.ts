@@ -1838,9 +1838,9 @@ export class RtsApp {
         }
       },
       onCommandClick: (x, y) => {
-        // Both placement tools persist after a successful left-click so players
-        // can keep building. A contextual right-click exits the active tool
-        // before it can be interpreted as a unit command.
+        // A contextual right-click cancels an unfinished placement before it can
+        // be interpreted as a unit command. Successful building and road
+        // placement already disarm themselves after their single confirmation.
         if (this.rallyPointPending) {
           this.rallyPointPending = false;
           this.buildPalette.setActionMessage("Toplanma noktası seçimi iptal edildi.");
@@ -3039,11 +3039,9 @@ export class RtsApp {
    * button, nothing happens, and the pacing rule reads as a broken UI.
    */
   /**
-   * The second gate, and the one that actually catches the reported problem: an
-   * RTS palette stays armed after a successful placement, so without a check
-   * here the player could keep clicking the map and put down four Farms without
-   * ever touching the palette again. Placement mode is also disarmed on refusal,
-   * so the next click selects rather than silently trying again.
+   * The second mission gate runs again at confirmation time. The selected
+   * building can have become unavailable while its preview was following the
+   * pointer, so a refused confirmation disarms the tool and says why.
    */
   private confirmMissionGatedPlacement(x: number, y: number): void {
     const buildingId = this.placement.state().activeBuildingId;

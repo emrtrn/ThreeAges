@@ -91,10 +91,11 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   const roadCanvas = page.locator("#game-canvas");
   await roadCanvas.click({ position: { x: 640, y: 420 } });
   await expect(page.locator(".rts-build-status")).toHaveText("Yol çiziliyor");
-  await expect(page.locator(".rts-build-road-hint")).toHaveText("Ucu seçin · Sağ tık: bitir");
+  await expect(page.locator(".rts-build-road-hint")).toHaveText("Ucu seçin · Sol tık: yolu kur");
   await roadCanvas.hover({ position: { x: 720, y: 420 } });
-  await expect(page.locator(".rts-build-road-hint")).toContainText(/Sağ tık: bitir · \d+ hücre · \d+ Odun/);
-  await roadCanvas.click({ button: "right", position: { x: 640, y: 420 } });
+  await expect(page.locator(".rts-build-road-hint")).toContainText(/Sol tık: yolu kur · \d+ hücre · \d+ Odun/);
+  await roadCanvas.click({ position: { x: 720, y: 420 } });
+  await expect(page.locator(".rts-build-status")).toHaveText("Bir yapı seçin.");
   await page.getByRole("button", { name: "Yerleşim", exact: true }).click();
 
   await page.getByRole("button", { name: "Ev", exact: true }).click();
@@ -363,7 +364,7 @@ test("RTS Phase 9 the Barracks panel gates the Archer and the Ram behind a tier-
   await page.locator("#game-canvas").hover({ position: site });
   await expect(page.locator(".rts-build-status")).toHaveText("Geçerli konum — yerleştirmek için tıklayın.");
   await page.locator("#game-canvas").click({ position: site });
-  await page.locator("#game-canvas").click({ button: "right", position: site });
+  await expect(page.locator(".rts-build-status")).toHaveText("Bir yapı seçin.");
   // Wait out construction, then select it. Retried rather than slept: the site
   // reads as a construction panel until it finishes, and "Kuyruk:" is the first
   // thing only a finished Barracks says.

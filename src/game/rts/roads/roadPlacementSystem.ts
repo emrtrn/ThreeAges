@@ -253,12 +253,10 @@ export class RoadPlacementSystem {
       this.renderPreview(state.plan, INVALID_COLOR);
       return this.state();
     }
-    this.start = build.plan.cells.at(-1) ?? null;
-    this.plan = null;
-    this.previewEnd = null;
-    this.reason = "choose-end";
-    this.clearPreview();
-    this.syncMarkers();
+    // Road drawing is a single route, rather than a chained brush. Erase mode
+    // intentionally does not take this path, so it remains armed for removing
+    // individual tiles one by one.
+    this.cancel();
     return this.state();
   }
 

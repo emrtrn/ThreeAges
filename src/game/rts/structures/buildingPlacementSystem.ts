@@ -212,9 +212,9 @@ export class BuildingPlacementSystem {
       this.setGhostValid(false);
       return this.state();
     }
-    // Keep build mode active like an RTS palette; the following preview will be
-    // invalid if it overlaps the site just created.
-    this.result = null;
+    // A building choice is one purchase, not a brush: after a successful site
+    // creation the next building must be chosen from the palette explicitly.
+    this.cancel();
     return this.state();
   }
 

@@ -401,13 +401,13 @@ export class RtsBuildPalette {
     }
     this.status.textContent = state.start ? "Yol çiziliyor" : "Yol çizimi";
     this.roadHint.textContent = state.plan
-      ? `Sağ tık: bitir · ${state.plan.newCells.length} hücre · ${state.plan.woodCost} Odun`
+      ? `Sol tık: yolu kur · ${state.plan.newCells.length} hücre · ${state.plan.woodCost} Odun`
       : state.reason === "invalid-route"
         ? "Geçersiz rota · başka kare seç"
         : state.reason === "insufficient-resources"
           ? "Kaynak yetersiz · rota çizilemedi"
           : state.start
-            ? "Ucu seçin · Sağ tık: bitir"
+            ? "Ucu seçin · Sol tık: yolu kur"
             : "Sol tık: başlangıç seç · Sağ tık: çık";
   }
 
