@@ -1563,11 +1563,12 @@
     "turbidity": 2,
     "mie": 0.004,
     "skyLightCapture": {
-      "intensity": 1
+      "intensity": 0.6
     }
   },
   "postProcess": {
-    "toneMapping": "neutral",
+    "toneMapping": "aces",
+    "antialias": "smaa",
     "bloom": {
       "threshold": 1,
       "intensity": 1,
@@ -1576,7 +1577,7 @@
     "ao": {
       "enabled": true,
       "radius": 1,
-      "intensity": 1
+      "intensity": 0.8
     }
   },
   "lights": [
@@ -1595,7 +1596,7 @@
         0
       ],
       "color": "#ffffff",
-      "intensity": 1,
+      "intensity": 5,
       "castShadow": true
     }
   ],

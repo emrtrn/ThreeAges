@@ -35804,6 +35804,28 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
   }, context);
   assert.equal(validPilot.units.guard_placeholder?.actorRef, "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json");
   assert.equal(validPilot.buildings.barracks?.levels["1"], "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_FirstAge_T1.actor.json");
+  const crewedPilot = validateRtsContentCatalog({
+    schema: 2,
+    type: "rtsContentCatalog",
+    animals: {},
+    damage: minimalDamageSection(),
+    units: {
+      guard_placeholder: { actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json" },
+      siege_placeholder: {
+        actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Siege.actor.json",
+        crew: { unitId: "guard_placeholder", slots: [{ position: [-0.7, 0, -1.4] }, { position: [0.7, 0, -1.4] }] },
+      },
+    },
+    buildings: {},
+    ui: {},
+  }, context);
+  assert.deepEqual(crewedPilot.units.siege_placeholder?.crew?.slots.map((slot) => slot.position), [[-0.7, 0, -1.4], [0.7, 0, -1.4]], "crew slots remain authored local positions");
+  assert.ok(rtsContentCatalogRefs(crewedPilot).includes("assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json"), "crew Actors join the preflight load set");
+  assert.throws(
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", animals: {}, damage: minimalDamageSection(), units: { siege_placeholder: { actorRef: "assets/Siege.actor.json", crew: { unitId: "siege_placeholder", slots: [{ position: [0, 0, 0] }] } } }, buildings: {}, ui: {} }, context),
+    RtsContentCatalogError,
+    "a unit cannot recursively crew itself",
+  );
   // `props` is optional, so a catalog written before it existed still boots — and
   // resolves to no prop art, which is the runtime's procedural stand-in rather
   // than a load failure.

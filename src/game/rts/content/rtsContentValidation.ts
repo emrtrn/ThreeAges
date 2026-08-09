@@ -73,6 +73,13 @@ export function rtsContentCatalogRefs(catalog: RtsContentCatalog): readonly RtsA
     // here would load the pack "successfully" and then fail per enemy unit at
     // spawn time, when the manifest is no longer being reported on.
     for (const ref of Object.values(entry.ownerActorRefs ?? {})) refs.add(ref);
+    if (entry.crew) {
+      const crew = catalog.units[entry.crew.unitId];
+      if (crew) {
+        refs.add(crew.actorRef);
+        for (const ref of Object.values(crew.ownerActorRefs ?? {})) refs.add(ref);
+      }
+    }
   }
   for (const entry of Object.values(catalog.animals)) refs.add(entry.actorRef);
   // Logistics shares the wildlife art pack but not its species table. It still

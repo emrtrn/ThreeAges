@@ -305,6 +305,13 @@ Hedef tercihi diğer rollerin tersidir: topçu, menzilindeki **yapıyı** yakın
 askere yeğler. Askeri cevaplamak koruma hattının işidir; topçunun 0.35 çarpanıyla
 harcadığı her tekrar süresi kaybedilmiş bir güllesidir.
 
+**Sunum kararı (2026-08-09):** Topçu `2` nüfusluk tek bir oyun birimidir; iki
+muhafız mürettebatı topun görsel köküne bağlıdır. Mürettebat top ile birlikte
+hareket eder, döner ve topçu seçildiğinde onun parçası olarak seçilir; ayrı HP,
+hedef, çarpışma, komut veya nüfus maliyeti taşımaz. İlk sürüm mevcut yürüyüş
+klibini kullanır; eğilme/tutma/itme klibi geldiğinde yalnızca bu sunum katmanı
+değiştirilecektir.
+
 ### 9.2 Vertical slice kapsamı
 
 İlk vertical slice için tek kuşatma birimi yeterlidir.

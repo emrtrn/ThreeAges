@@ -18,6 +18,13 @@
       "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Siege.actor.json",
       "ownerActorRefs": {
         "enemy": "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_Siege.actor.json"
+      },
+      "crew": {
+        "unitId": "guard_placeholder",
+        "slots": [
+          { "position": [ -0.72, 0, -1.42 ] },
+          { "position": [ 0.72, 0, -1.42 ] }
+        ]
       }
     },
     "worker_placeholder": {

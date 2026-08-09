@@ -40,6 +40,21 @@ export interface RtsUnitContentEntry {
    * never changes cost, health, AI, or navigation.
    */
   readonly ownerActorRefs?: Readonly<Partial<Record<UnitOwner, RtsActorRef>>>;
+  /**
+   * Presentation-only crew that rides with this unit. Crew members are meshes
+   * parented to the unit's Actor: they do not become independently selectable,
+   * targetable, or population-counted simulation units.
+   */
+  readonly crew?: {
+    readonly unitId: string;
+    readonly slots: readonly RtsCrewSlot[];
+  };
+}
+
+/** One locally authored crew position, in the parent unit Actor's space. */
+export interface RtsCrewSlot {
+  readonly position: readonly [number, number, number];
+  readonly rotation?: readonly [number, number, number];
 }
 
 /**
@@ -509,15 +524,50 @@ function validateUnits(value: unknown, context: RtsContentCatalogValidationConte
     }
     const entryWhere = `${where}."${id}"`;
     const entry = asObject(raw, entryWhere);
-    requireExactKeys(entry, ["actorRef", "ownerActorRefs"], entryWhere);
+    requireExactKeys(entry, ["actorRef", "ownerActorRefs", "crew"], entryWhere);
     entries[id] = {
       actorRef: requireActorRef(entry["actorRef"], `${entryWhere}.actorRef`),
       ...(entry["ownerActorRefs"] === undefined
         ? {}
         : { ownerActorRefs: validateOwnerActorRefs(entry["ownerActorRefs"], `${entryWhere}.ownerActorRefs`) }),
+      ...(entry["crew"] === undefined
+        ? {}
+        : { crew: validateCrew(entry["crew"], `${entryWhere}.crew`, context, id) }),
     };
   }
   return entries;
+}
+
+function validateCrew(
+  value: unknown,
+  where: string,
+  context: RtsContentCatalogValidationContext,
+  hostUnitId: string,
+): NonNullable<RtsUnitContentEntry["crew"]> {
+  const raw = asObject(value, where);
+  requireExactKeys(raw, ["unitId", "slots"], where);
+  const unitId = raw["unitId"];
+  if (typeof unitId !== "string" || !context.unitBalance[unitId]) {
+    throw new RtsContentCatalogError(`${where}.unitId: must name a known unit balance id`);
+  }
+  if (unitId === hostUnitId) throw new RtsContentCatalogError(`${where}.unitId: a unit cannot crew itself`);
+  if (!Array.isArray(raw["slots"]) || raw["slots"].length === 0) {
+    throw new RtsContentCatalogError(`${where}.slots: must contain at least one local slot`);
+  }
+  const slots = raw["slots"].map((slot, index) => {
+    const slotWhere = `${where}.slots[${index}]`;
+    const entry = asObject(slot, slotWhere);
+    requireExactKeys(entry, ["position", "rotation"], slotWhere);
+    const vector = (key: "position" | "rotation"): [number, number, number] => {
+      const input = entry[key];
+      if (!Array.isArray(input) || input.length !== 3 || input.some((part) => typeof part !== "number" || !Number.isFinite(part))) {
+        throw new RtsContentCatalogError(`${slotWhere}.${key}: must be three finite numbers`);
+      }
+      return [input[0] as number, input[1] as number, input[2] as number];
+    };
+    return { position: vector("position"), ...(entry["rotation"] === undefined ? {} : { rotation: vector("rotation") }) };
+  });
+  return { unitId, slots };
 }
 
 /**

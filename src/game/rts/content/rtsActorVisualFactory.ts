@@ -286,13 +286,17 @@ export class RtsActorVisualFactory {
     if (!actorRef || !this.ready) return null;
     const root = this.createActorVisual(actorRef);
     if (!root) return null;
-    const pickTargets = collectRtsPickTargets(root);
-    if (pickTargets.length === 0) return null;
     // A ref that failed to load has no def, and `createActorVisual` has already
     // handed back the stand-in. Returning null here instead would drop the unit
     // to the legacy code body — art that looks finished — which is how a missing
     // enemy variant used to pass unnoticed.
     const def = this.definitions.get(actorRef);
+    const crew = this.createUnitCrew(unitId, owner);
+    for (const member of crew) root.add(member.root);
+    // Crew meshes are pick targets for the parent unit: clicking a man at the
+    // trail selects the cannon, never an invisible extra Guard.
+    const pickTargets = collectRtsPickTargets(root);
+    if (pickTargets.length === 0) return null;
     return createRtsUnitPresentation({
       root,
       pickTargets,
@@ -304,7 +308,36 @@ export class RtsActorVisualFactory {
       // the gun goes off, and the point its shell is drawn leaving from.
       gunRecoils: def ? bindRtsGunRecoils(def, root) : [],
       muzzle: def ? bindRtsMuzzle(def, root) : null,
+      crew,
     });
+  }
+
+  /**
+   * Build a unit's authored crew as child visuals. The whole group follows the
+   * parent root, which makes selection, targeting, death and turning remain the
+   * one authoritative siege unit rather than three loosely coupled units.
+   */
+  private createUnitCrew(unitId: string, owner: UnitOwner): readonly { root: Object3D; animation: RtsUnitAnimationSource | null }[] {
+    const spec = this.catalog.units[unitId]?.crew;
+    if (!spec) return [];
+    const crewRef = rtsUnitActorRef(this.catalog, spec.unitId, owner);
+    if (!crewRef) return [];
+    const members: { root: Object3D; animation: RtsUnitAnimationSource | null }[] = [];
+    for (const slot of spec.slots) {
+      const root = this.createActorVisual(crewRef);
+      if (!root) continue;
+      root.position.fromArray(slot.position);
+      if (slot.rotation) {
+        root.rotation.set(
+          slot.rotation[0] * Math.PI / 180,
+          slot.rotation[1] * Math.PI / 180,
+          slot.rotation[2] * Math.PI / 180,
+        );
+      }
+      const crewDef = this.definitions.get(crewRef);
+      members.push({ root, animation: crewDef ? this.animationSourceFor(root) : null });
+    }
+    return members;
   }
 
   /**

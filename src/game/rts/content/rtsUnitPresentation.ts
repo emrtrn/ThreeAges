@@ -112,6 +112,65 @@ export interface RtsUnitPresentationOptions {
    * leaves from the unit's own position, as it did before muzzles were authored.
    */
   readonly muzzle?: Object3D | null | undefined;
+  /** Visual-only riders/crew parented to this unit's root. */
+  readonly crew?: readonly RtsAttachedCrewPresentation[] | undefined;
+}
+
+/** An independently animated visual attached to a unit, never a simulation unit. */
+export interface RtsAttachedCrewPresentation {
+  readonly root: Object3D;
+  readonly animation: RtsUnitAnimationSource | null;
+}
+
+class RtsAttachedCrewAnimator {
+  private animator: CrossfadeAnimator | null = null;
+  private target: Object3D | null = null;
+  private animationSet: RtsAnimationSet = {};
+  private readonly tuning: RtsLocomotionTuning;
+
+  constructor(crew: RtsAttachedCrewPresentation, moveSpeed: number) {
+    this.tuning = rtsLocomotionTuning(moveSpeed);
+    const source = crew.animation;
+    if (!source || source.clips.length === 0) return;
+    this.target = source.target;
+    this.animator = new CrossfadeAnimator(source.target, source.clips, { rootMotion: source.skeleton.rootMotion });
+    this.animationSet = source.skeleton.animationSet;
+    const idle = this.animationSet.idle;
+    if (idle) this.animator.play(idle, 0);
+  }
+
+  update(state: RtsPresentationUpdate): void {
+    if (!this.animator || state.deltaSeconds <= 0) return;
+    // Crew has no separate combat or death state: it is part of the gun. It
+    // follows the gun's measured movement until purpose-built push animations
+    // are authored, at which point this small visual driver is the only seam.
+    const selection = selectRtsAnimation(
+      {
+        planarSpeed: state.planarSpeed,
+        ...(state.forceWalk === undefined ? {} : { forceWalk: state.forceWalk }),
+        attacking: false,
+        dying: false,
+        working: false,
+        attackCount: 0,
+      },
+      this.animationSet,
+      this.animator.clips,
+      this.tuning,
+    );
+    if (selection) {
+      this.animator.play(selection.clip, LOCOMOTION_FADE_SECONDS);
+      this.animator.setPlaybackRate(selection.playbackRate);
+    }
+    this.animator.update(state.deltaSeconds);
+  }
+
+  dispose(): void {
+    if (!this.animator) return;
+    this.animator.mixer.stopAllAction();
+    if (this.target) this.animator.mixer.uncacheRoot(this.target);
+    this.animator = null;
+    this.target = null;
+  }
 }
 
 /** Crossfade length between locomotion clips: long enough to blend, short enough to obey. */
@@ -169,6 +228,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   readonly muzzle: Object3D | null;
   /** Last load state applied, so an unchanged frame touches no node at all. */
   private carrying: boolean | null = null;
+  /** Crew mixers are visual children of this one unit, never independent units. */
+  private readonly crew: readonly RtsAttachedCrewAnimator[];
 
   constructor(options: RtsUnitPresentationOptions) {
     this.root = options.root;
@@ -180,6 +241,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     this.cargoSways = options.cargoSways ?? [];
     this.gunRecoils = options.gunRecoils ?? [];
     this.muzzle = options.muzzle ?? null;
+    this.crew = (options.crew ?? []).map((member) => new RtsAttachedCrewAnimator(member, options.moveSpeed ?? 1));
 
     const animation = options.animation;
     if (!animation || animation.clips.length === 0) return;
@@ -246,6 +308,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // counter, not by measured speed — the one presentation motion here that a
     // standing unit is *supposed* to have.
     advanceRtsGunRecoils(this.gunRecoils, state.attackCount, state.deltaSeconds);
+    for (const crew of this.crew) crew.update(state);
 
     const animator = this.animator;
     if (!animator) return;
@@ -319,6 +382,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   }
 
   dispose(): void {
+    for (const crew of this.crew) crew.dispose();
     if (this.animator) {
       // Both halves matter: stopping ends the actions, uncaching releases the
       // mixer's per-root binding cache. Without the second, every unit that ever

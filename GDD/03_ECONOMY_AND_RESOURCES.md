@@ -852,7 +852,7 @@ Amaç:
 | Muhafız | 1 |
 | Okçu | 1 |
 | Süvari | 2 |
-| Kuşatma birimi | 3 |
+| Kuşatma birimi | 2 |
 
 Kesin değerler daha sonra belirlenir.
 
