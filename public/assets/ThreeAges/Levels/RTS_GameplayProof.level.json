@@ -1591,8 +1591,8 @@
       ],
       "name": "Directional Light",
       "rotation": [
-        -55,
-        35,
+        -160,
+        0,
         0
       ],
       "color": "#ffffff",

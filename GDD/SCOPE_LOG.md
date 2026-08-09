@@ -146,7 +146,7 @@ Format:
 - **Karar:** `06 §110`'daki "koçbaşı mı, mancınık mı" açık sorusu **topçu**
   lehine kapatıldı. `siege_placeholder` artık menzilli (`attackType: "ranged"`,
   menzil 15) ve gülleyi lob ederek atıyor; kimliği (yapıya 2.50, birime 0.35) ve
-  kapısı (Kasaba + Kışla Lv2, 3 nüfus) değişmedi.
+  kapısı (Kasaba + Kışla Lv2, 2 nüfus) değişmedi.
 - **Kapsam etkisi:** Dahil (aynı birim yuvası, aynı veri sözleşmesi; melee →
   ranged bir denge + sunum değişikliği).
 - **Gerekçe:** Koçbaşı kuşatmayı bir *yürüme* problemine çeviriyordu: duvara

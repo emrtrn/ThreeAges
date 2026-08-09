@@ -1356,8 +1356,8 @@ Muhafız, Okçu ve Kuşatma arasında okunabilir bir karşıtlık sistemi oluşt
 - [x] Okçu verisi oluştur. (`archer_placeholder`: 75 sağlık, `ranged` 7 menzil,
   `light` zırh; Kışla T2 gerektirir.)
 - [x] Kuşatma birimi verisi oluştur. (`siege_placeholder` Koçbaşı: 220 sağlık,
-  28 taban hasar × 2.5 yapı çarpanı = ~70 yapı hasarı, 4.2 hız, 3 nüfus.)
-- [x] Nüfus maliyetleri ekle. (`populationCost`: İşçi/Muhafız/Okçu 1, Kuşatma 3.)
+  28 taban hasar × 2.5 yapı çarpanı = ~70 yapı hasarı, 4.2 hız, 2 nüfus.)
+- [x] Nüfus maliyetleri ekle. (`populationCost`: İşçi/Muhafız/Okçu 1, Kuşatma 2.)
 - [x] Hedef sınıfları ekle. (`UnitArmorClass` = light/heavy/structure;
   `damageMultipliers` GDD 12 §33 yumuşak karşıtlık tablosunu veriye taşır.
   Her yapı ve Merkez `structure` sınıfı taşır.)

@@ -47490,7 +47490,7 @@ checkSlow("Faz 8 §55: the army leaves the economy population headroom", () => {
   assert.equal(board.armyComposition.worker, 0, "workers are never part of the army composition");
 });
 
-checkSlow("Faz 8 §53: the AI researches Barracks II and fields a mixed army", () => {
+checkSlow("Faz 8 §53: the AI fields a Town mixed army including Topçu", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
@@ -47518,6 +47518,10 @@ checkSlow("Faz 8 §53: the AI researches Barracks II and fields a mixed army", (
 
   assert.ok(board.armyComposition.guard > 0, "§53: Guards are still the line");
   assert.ok(board.armyComposition.archer > 0, "§53: and the AI actually diversifies into Archers");
+  assert.ok(
+    board.armyComposition.siege > 0,
+    "§53: the affordable Town composition includes a Topçu rather than stopping at Archers",
+  );
 
   // §4/§45: the gate stayed in the data. Centre-led progression is per owner, so
   // the AI advancing its own kingdom's tier never touches the player's — there is

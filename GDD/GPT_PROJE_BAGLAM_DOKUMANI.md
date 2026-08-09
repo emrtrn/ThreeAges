@@ -439,7 +439,7 @@ Süvari vertical slice çekirdeğinde yoktur.
 
 - Muhafız: 110 sağlık, 12 hasar, yakın dövüş, 1 nüfus
 - Okçu: 75 sağlık, 10 hasar, 7 menzil, 1 nüfus
-- Topçu: 180 sağlık, 34 hasar, 15 menzil, 3 nüfus
+- Topçu: 180 sağlık, 34 hasar, 15 menzil, 2 nüfus
 - İşçi: 50 sağlık, sembolik yakın dövüş hasarı, 1 nüfus
 
 Kesin sayılar `public/game-data/balance/units.json` dosyasından okunmalıdır.
