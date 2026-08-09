@@ -554,6 +554,15 @@ function rtsGraphicsQuality(level: GraphicsPreferences["selectedQualityLevel"]):
   return level === "low" ? "low" : level === "high" || level === "ultra" ? "high" : "medium";
 }
 
+/**
+ * River reflections are deliberately a High-only visual: the shared `medium`
+ * source is already a full extra scene render, while the old `high` source was
+ * disproportionately costly for a top-down RTS camera.
+ */
+function riverReflectionQuality(quality: RtsGraphicsQuality): "medium" | null {
+  return quality === "high" ? "medium" : null;
+}
+
 type ShadowCasterCategory = "actors" | "mapArt" | "other";
 
 function shadowCasterCategory(object: Object3D): ShadowCasterCategory {
@@ -1060,6 +1069,9 @@ export class RtsApp {
     // protects the match when many structures take damage on the same frame.
     this.structureDamageVfx.setMaxActiveInstances(Math.round(48 * settings.particleDensity));
     this.renderer.shadowMap.enabled = settings.shadowsEnabled;
+    this.authoredWorld?.setRiverWaterReflectionQuality(
+      riverReflectionQuality(rtsGraphicsQuality(this.userSettings.graphics.selectedQualityLevel)),
+    );
     this.scene.traverse((object) => {
       if (!(object instanceof DirectionalLight) || !object.castShadow) return;
       const camera = object.shadow.camera;
@@ -4255,6 +4267,7 @@ export class RtsApp {
         (message, error) => this.log.warn(message, error),
         this.options.levelRef,
         (loaded, total) => this.loadTracker.report("world", loaded, total),
+        riverReflectionQuality(rtsGraphicsQuality(this.userSettings.graphics.selectedQualityLevel)),
       );
       if (this.disposed) {
         handle.dispose();

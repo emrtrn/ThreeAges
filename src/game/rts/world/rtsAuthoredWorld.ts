@@ -14,6 +14,7 @@ import { projectFileUrl } from "@/project/ProjectSystem";
 import { buildAuthoredWorld, type AuthoredWorldHandle } from "@/scene/authoredWorld";
 import { DEFAULT_SCENE_SUN_ID } from "@/scene/SceneRuntimeCore";
 import { RTS_WORLD_HALF_EXTENT } from "./rtsGround";
+import type { PlanarReflectionQuality } from "@engine/render-three/planarReflectionSource";
 
 /**
  * Shadow frustum coverage for the field's sun. The X/Z extent spans the whole
@@ -74,6 +75,7 @@ export function loadRtsAuthoredWorld(
   levelPath?: string,
   /** Boot-curtain progress; see `AuthoredWorldOptions.onProgress`. */
   onProgress?: (loaded: number, total: number) => void,
+  riverReflectionQuality?: PlanarReflectionQuality | null,
 ): Promise<AuthoredWorldHandle> {
   return buildAuthoredWorld({
     layout,
@@ -83,5 +85,6 @@ export function loadRtsAuthoredWorld(
     ...(onWarn ? { onWarn } : {}),
     ...(levelPath ? { levelPath } : {}),
     ...(onProgress ? { onProgress } : {}),
+    ...(riverReflectionQuality !== undefined ? { riverReflectionQuality } : {}),
   });
 }

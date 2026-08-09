@@ -32,6 +32,11 @@ export interface PlanarReflectionBinding {
   readonly textureMatrix: Matrix4;
 }
 
+/** A visible surface sampling a {@link PlanarReflectionSource}. */
+interface PlanarReflectionConsumer extends Object3D {
+  setPlanarReflectionBinding?(binding: PlanarReflectionBinding | null): void;
+}
+
 export type PlanarReflectionQuality = "medium" | "high";
 
 const QUALITY_SETTINGS: Record<PlanarReflectionQuality, { resolution: number; minUpdateMs: number }> = {
@@ -109,12 +114,13 @@ export function planarReflectionScreenCoverage(bounds: Box3, viewProjection: Mat
  */
 export class PlanarReflectionSource {
   readonly textureMatrix = new Matrix4();
+  /** Kept stable so a consumer can retain the matrix while the target changes. */
   readonly binding: PlanarReflectionBinding;
-  private readonly renderTarget: WebGLRenderTarget;
+  private renderTarget: WebGLRenderTarget | null;
   private readonly planeY: number;
   private readonly reflectionCameras = new WeakMap<Camera, Camera>();
-  private readonly consumers = new Set<Object3D>();
-  private readonly minUpdateMs: number;
+  private readonly consumers = new Set<PlanarReflectionConsumer>();
+  private minUpdateMs = Infinity;
   private lastUpdateAt = -Infinity;
   private rendering = false;
   /** Scratch for the per-frame coverage gate, which must not allocate. */
@@ -125,18 +131,25 @@ export class PlanarReflectionSource {
     const settings = QUALITY_SETTINGS[quality];
     this.planeY = planeY;
     this.minUpdateMs = settings.minUpdateMs;
-    this.renderTarget = new WebGLRenderTarget(settings.resolution, settings.resolution, {
-      samples: quality === "high" ? 2 : 0,
-      type: HalfFloatType,
-    });
+    this.renderTarget = this.createRenderTarget(quality);
     this.binding = {
       texture: this.renderTarget.texture,
       textureMatrix: this.textureMatrix,
     };
   }
 
+  private createRenderTarget(quality: PlanarReflectionQuality): WebGLRenderTarget {
+    const settings = QUALITY_SETTINGS[quality];
+    return new WebGLRenderTarget(settings.resolution, settings.resolution, {
+      samples: quality === "high" ? 2 : 0,
+      type: HalfFloatType,
+    });
+  }
+
   addConsumer(object: Object3D): void {
-    this.consumers.add(object);
+    const consumer = object as PlanarReflectionConsumer;
+    this.consumers.add(consumer);
+    consumer.setPlanarReflectionBinding?.(this.renderTarget ? this.binding : null);
   }
 
   removeConsumer(object: Object3D): void {
@@ -145,12 +158,40 @@ export class PlanarReflectionSource {
 
   dispose(): void {
     this.consumers.clear();
-    this.renderTarget.dispose();
+    this.renderTarget?.dispose();
+    this.renderTarget = null;
+  }
+
+  /** Changes the runtime graphics tier without rebuilding the authored world. */
+  setQuality(quality: PlanarReflectionQuality | null): void {
+    const current = this.renderTarget;
+    if (quality === null) {
+      if (!current) return;
+      current.dispose();
+      this.renderTarget = null;
+      this.notifyConsumers(null);
+      return;
+    }
+    const settings = QUALITY_SETTINGS[quality];
+    if (current && current.width === settings.resolution) {
+      this.minUpdateMs = settings.minUpdateMs;
+      return;
+    }
+    current?.dispose();
+    this.renderTarget = this.createRenderTarget(quality);
+    (this.binding as { texture: Texture }).texture = this.renderTarget.texture;
+    this.minUpdateMs = settings.minUpdateMs;
+    this.lastUpdateAt = -Infinity;
+    this.notifyConsumers(this.binding);
+  }
+
+  private notifyConsumers(binding: PlanarReflectionBinding | null): void {
+    for (const consumer of this.consumers) consumer.setPlanarReflectionBinding?.(binding);
   }
 
   /** Updates at most once per profile interval, even when several ribbons draw in one frame. */
   update(renderer: WebGLRenderer, scene: Scene, camera: Camera): void {
-    if (this.rendering) return;
+    if (this.rendering || !this.renderTarget) return;
     // Before the interval check, and without stamping `lastUpdateAt`: a frame
     // skipped for being invisible must not also postpone the frame after it.
     const coverage = this.screenCoverage(camera);

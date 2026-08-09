@@ -1569,16 +1569,39 @@
   "postProcess": {
     "toneMapping": "aces",
     "antialias": "smaa",
+    "exposure": 1,
     "bloom": {
+      "enabled": true,
       "threshold": 1,
       "intensity": 1,
       "radius": 1
     },
+    "vignette": {
+      "enabled": true,
+      "intensity": 1,
+      "offset": 1
+    },
+    "chromaticAberration": {
+      "amount": 0.1
+    },
+    "grain": {
+      "enabled": true,
+      "intensity": 0.2
+    },
+    "dof": {
+      "focusDistance": 40,
+      "aperture": 1,
+      "maxBlur": 1
+    },
     "ao": {
       "enabled": true,
       "radius": 1,
-      "intensity": 0.8
-    }
+      "intensity": 0.6
+    },
+    "saturation": 1.1,
+    "contrast": 1,
+    "temperature": 0,
+    "tint": 0
   },
   "lights": [
     {
@@ -2890,8 +2913,9 @@
           "intensity": 0.7
         }
       ],
-      "reflectionQuality": "high",
-      "reflectionStrength": 0.9
+      "reflectionMode": "sharedPlanar",
+      "reflectionQuality": "medium",
+      "reflectionStrength": 0.6
     }
   ],
   "actors": [

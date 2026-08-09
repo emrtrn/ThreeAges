@@ -19,7 +19,7 @@ import type {
   Vec3,
 } from "@engine/scene/layout";
 import type { ResolvedRiverWater } from "@engine/scene/riverWater";
-import type { PlanarReflectionSource } from "./planarReflectionSource";
+import type { PlanarReflectionBinding, PlanarReflectionSource } from "./planarReflectionSource";
 
 export { resolveRiverWater, RIVER_WATER_DEFAULTS, uniqueRiverWaterId, type ResolvedRiverWater } from "@engine/scene/riverWater";
 
@@ -353,6 +353,7 @@ export interface RiverWaterRenderItem extends ResolvedRiverWater {
 
 export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   readonly isRiverWaterObject = true;
+  private readonly authoredReflectionStrength: number;
 
   constructor(item: RiverWaterRenderItem, normalMap: Texture | null) {
     const ribbon = buildRiverWaterRibbon(item.spline, {
@@ -408,6 +409,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       side: DoubleSide,
     });
     super(geometry, material);
+    this.authoredReflectionStrength = item.reflectionStrength;
     this.name = item.name;
     this.position.set(...item.position);
     this.rotation.set(
@@ -432,6 +434,12 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       this.material.uniforms["time"]!.value = performance.now() / 1000;
       item.reflectionSource?.update(renderer, scene, camera);
     };
+  }
+
+  setPlanarReflectionBinding(binding: PlanarReflectionBinding | null): void {
+    this.material.uniforms["reflectionTexture"]!.value = binding?.texture ?? null;
+    this.material.uniforms["reflectionTextureMatrix"]!.value = binding?.textureMatrix ?? new Matrix4();
+    this.material.uniforms["reflectionStrength"]!.value = binding ? this.authoredReflectionStrength : 0;
   }
 
   dispose(): void {

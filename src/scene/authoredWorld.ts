@@ -37,7 +37,7 @@ import { readRotation } from "@engine/scene/transform";
 import { createLandscapeObject, type LandscapeLayerColors, type LandscapeLayerTexture, type LandscapeObject, type LandscapeRenderItem } from "@engine/render-three/landscape";
 import { createRiverWaterObject, disposeRiverWaterObject, resolveRiverWater, type RiverWaterObjectLike, type RiverWaterRenderItem } from "@engine/render-three/riverWater";
 import { riverWaterReflectionGroupKey } from "@engine/scene/riverWater";
-import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
+import { PlanarReflectionSource, type PlanarReflectionQuality } from "@engine/render-three/planarReflectionSource";
 import { createFlatLandscapeData, LANDSCAPE_DEFAULT_LAYERS, resolveLandscape, type ForgeLandscapeData } from "@engine/scene/landscape";
 import type { AssetManifest } from "@engine/assets/manifest";
 import { isRenderableMesh } from "@engine/render-three/materials";
@@ -162,6 +162,8 @@ export interface AuthoredWorldHandle {
    * that nested pass off it too.
    */
   readonly riverWaterObjects: readonly Object3D[];
+  /** Applies the runtime graphics tier to every authored river reflection. */
+  setRiverWaterReflectionQuality(quality: PlanarReflectionQuality | null): void;
   /**
    * Advances the foliage distance cull for a rendered frame. A no-op when the
    * Level paints no foliage, or when every Foliage Type disables distance
@@ -179,6 +181,8 @@ export interface AuthoredWorldOptions {
   readonly layout: RoomLayout;
   /** GL context for the KTX2/DRACO-aware glTF loader. */
   readonly renderer: WebGLRenderer;
+  /** Runtime override for River Water planar reflections; null disables them. */
+  readonly riverReflectionQuality?: PlanarReflectionQuality | null;
   /** Resolves a public-root-relative asset path to a fetchable URL. */
   readonly resolveUrl: (path: string) => string;
   /**
@@ -765,11 +769,23 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     }
     let reflectionSource: PlanarReflectionSource | null = null;
     const planeY = landscape.actor.position[1] + resolved.surfaceLevel;
-    const reflectionKey = riverWaterReflectionGroupKey(resolved, planeY);
-    if (reflectionKey && resolved.reflectionQuality !== "low") {
+    // A game shell may cap this authored visual by its graphics menu. The editor
+    // leaves it undefined and therefore retains the per-river authored choice.
+    const reflectionQuality = options.riverReflectionQuality === undefined
+      ? (resolved.reflectionQuality === "low" ? null : resolved.reflectionQuality)
+      : options.riverReflectionQuality;
+    const reflectionKey = reflectionQuality
+      ? riverWaterReflectionGroupKey({ ...resolved, reflectionQuality }, planeY)
+      : resolved.reflectionMode === "sharedPlanar"
+        ? `${resolved.reflectionGroup ?? "river"}:${planeY.toFixed(3)}:disabled`
+        : null;
+    if (reflectionKey) {
       reflectionSource = riverReflectionSourceByKey.get(reflectionKey) ?? null;
       if (!reflectionSource) {
-        reflectionSource = new PlanarReflectionSource(planeY, resolved.reflectionQuality);
+        // Keep the source available while disabled, so a player can raise the
+        // graphics setting during a live match without reloading map assets.
+        reflectionSource = new PlanarReflectionSource(planeY, reflectionQuality ?? "medium");
+        if (reflectionQuality === null) reflectionSource.setQuality(null);
         riverReflectionSourceByKey.set(reflectionKey, reflectionSource);
         riverReflectionSources.push(reflectionSource);
       }
@@ -970,6 +986,9 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     foliageInstanceCount,
     foliageRoot: foliageBinding?.root ?? null,
     riverWaterObjects,
+    setRiverWaterReflectionQuality: (quality) => {
+      for (const source of riverReflectionSources) source.setQuality(quality);
+    },
     updateFoliageCulling: (cameraPosition, cullDistanceScale = 1) => {
       foliageBinding?.updateCulling(cameraPosition, cullDistanceScale);
     },
