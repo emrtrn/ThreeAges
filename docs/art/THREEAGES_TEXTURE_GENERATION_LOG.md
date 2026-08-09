@@ -96,6 +96,42 @@ unattached because `Main` is an ambiguous source slot pending the Phase 4
 asset-family review. The Material Editor browser smoke opened it with status
 `Ready.` and no page errors.
 
+## wood-dark and wood-light - production revision
+
+Date: 2026-08-09
+Status: `created` - user-directed visual re-acceptance is pending.
+
+The prior production albedos read as timber boards/parquet. Both were replaced
+with C candidates that retain only a continuous, low-contrast natural wood
+surface: no plank edges, joins, board-end seams, rectangular segments, or
+repeating grid. `wood-dark` is now a readable medium chestnut rather than the
+previous near-black brown; `wood-light` is pale honey oak. The material and
+manifest IDs are unchanged.
+
+- Sources: `docs/art/candidates/T_TA_Wood_Dark_Candidate_C.png` and
+  `docs/art/candidates/T_TA_Wood_Light_Candidate_C.png`.
+- Output: existing `T_TA_Wood_{Dark,Light}_{BC,N,ORM}.png` production files
+  and `docs/art/previews/T_TA_Wood_{Dark,Light}_3x3.png` previews.
+- Seam metrics: dark `0.00115`; light `0.00207` (threshold `0.01500`).
+
+## metal-dark and metal-bronze - candidate production
+
+Date: 2026-08-09
+Status: `created` - both material and manifest registrations are ready; model
+mapping remains open.
+
+Built-in image generation produced two seamless-looking metal albedo candidates:
+`metal-dark` is aged forged charcoal iron, while `metal-bronze` is muted warm
+bronze with restrained patina. The deterministic processor produced 1024x1024
+BC/N/ORM sets and 3x3 previews for both. Their ORM B channel is explicitly
+packed as metalness `1.0`; AO and roughness remain height-derived.
+
+- Output: `docs/art/candidates/processed/T_TA_Metal_{Dark,Bronze}_{BC,N,ORM}.png`
+  and matching `_3x3.png` previews.
+- Production: `T_TA_Metal_{Dark,Bronze}_{BC,N,ORM}.png` in `Textures`, plus
+  `M_TA_Metal_Dark` and `M_TA_Metal_Bronze` in `Materials`.
+- Seam metrics: dark `0.00092`; bronze `0.00056` (threshold `0.01500`).
+
 ## stone-cut-light — candidate production
 
 Date: 2026-08-09

@@ -19453,6 +19453,41 @@ check("ThreeAges wood-light pilot material names registered BC/N/ORM textures", 
   assert.equal(assetType(materialRecord!), "material");
 });
 
+for (const metal of [
+  {
+    label: "dark metal",
+    materialFile: "M_TA_Metal_Dark",
+    materialId: "threeages-mat-metal-dark",
+    texturePrefix: "threeages-tex-metal-dark",
+  },
+  {
+    label: "bronze metal",
+    materialFile: "M_TA_Metal_Bronze",
+    materialId: "threeages-mat-metal-bronze",
+    texturePrefix: "threeages-tex-metal-bronze",
+  },
+] as const) {
+  check(`ThreeAges ${metal.label} material names registered metallic BC/N/ORM textures`, () => {
+    const material = normalizeForgeMaterialDef(
+      JSON.parse(readFileSync(`public/assets/ThreeAges/Materials/${metal.materialFile}.material.json`, "utf8")),
+      metal.materialFile,
+    );
+    assert.equal(material.baseColorTexture, `${metal.texturePrefix}-bc`);
+    assert.equal(material.normalTexture, `${metal.texturePrefix}-n`);
+    assert.equal(material.ormTexture, `${metal.texturePrefix}-orm`);
+    assert.equal(material.metalness, 1);
+    for (const textureId of [material.baseColorTexture, material.normalTexture, material.ormTexture]) {
+      assert.ok(textureId, "the metal material must not silently fall back to a missing map");
+      const record = assetManifest.assets.find((asset) => asset.id === textureId);
+      assert.ok(record, `metal material refers to unregistered texture ${textureId}`);
+      assert.equal(assetType(record!), "texture");
+    }
+    const materialRecord = assetManifest.assets.find((asset) => asset.id === metal.materialId);
+    assert.ok(materialRecord, "metal material itself must be registered");
+    assert.equal(assetType(materialRecord!), "material");
+  });
+}
+
 check("ThreeAges roof-clay pilot material names registered BC/N/ORM textures", () => {
   const material = normalizeForgeMaterialDef(
     JSON.parse(readFileSync("public/assets/ThreeAges/Materials/M_TA_Roof_Clay.material.json", "utf8")),

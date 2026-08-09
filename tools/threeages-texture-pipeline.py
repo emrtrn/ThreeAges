@@ -80,13 +80,13 @@ def normal_from_height(height: np.ndarray, strength: float) -> np.ndarray:
     return clamp01(normal * 0.5 + 0.5)
 
 
-def orm_from_height(height: np.ndarray) -> np.ndarray:
+def orm_from_height(height: np.ndarray, metalness_value: float) -> np.ndarray:
     height_image = Image.fromarray(np.rint(height * 255).astype(np.uint8), "L")
     blurred = np.asarray(height_image.filter(ImageFilter.GaussianBlur(radius=3)), dtype=np.float32) / 255.0
     cavity = clamp01(blurred - height)
     ao = 1.0 - cavity * 0.35
     roughness = clamp01(0.68 + (1.0 - height) * 0.18)
-    metalness = np.zeros_like(height)
+    metalness = np.full_like(height, metalness_value)
     return np.stack((ao, roughness, metalness), axis=-1)
 
 
@@ -112,6 +112,12 @@ def main() -> int:
     parser.add_argument("--name", required=True, help="Output basename, for example T_TA_Wood_Dark_Candidate_A.")
     parser.add_argument("--size", type=positive_power_of_two, default=1024)
     parser.add_argument("--normal-strength", type=float, default=3.0)
+    parser.add_argument(
+        "--orm-metalness",
+        type=float,
+        default=0.0,
+        help="Constant metalness value packed into the ORM B channel (0..1).",
+    )
     parser.add_argument("--edge-band", type=int, default=24)
     parser.add_argument("--seam-threshold", type=float, default=0.015)
     parser.add_argument("--overwrite", action="store_true")
@@ -120,6 +126,8 @@ def main() -> int:
 
     if not 0.1 <= args.normal_strength <= 12:
         parser.error("--normal-strength must be between 0.1 and 12")
+    if not 0.0 <= args.orm_metalness <= 1.0:
+        parser.error("--orm-metalness must be between 0 and 1")
     if not 1 <= args.edge_band <= 256:
         parser.error("--edge-band must be between 1 and 256")
     if not 0 < args.seam_threshold <= 0.25:
@@ -145,7 +153,7 @@ def main() -> int:
     albedo = Image.fromarray(np.rint(rgb * 255).astype(np.uint8), "RGB")
     height = luminance(rgb)
     normal = Image.fromarray(np.rint(normal_from_height(height, args.normal_strength) * 255).astype(np.uint8), "RGB")
-    orm = Image.fromarray(np.rint(orm_from_height(height) * 255).astype(np.uint8), "RGB")
+    orm = Image.fromarray(np.rint(orm_from_height(height, args.orm_metalness) * 255).astype(np.uint8), "RGB")
     outputs = {
         "baseColor": output_dir / f"{args.name}_BC.png",
         "normal": output_dir / f"{args.name}_N.png",
@@ -157,6 +165,7 @@ def main() -> int:
         "input": source_path.relative_to(PROJECT_ROOT).as_posix(),
         "size": args.size,
         "normalStrength": args.normal_strength,
+        "ormMetalness": args.orm_metalness,
         "edgeBand": args.edge_band,
         "seamError": seam,
         "outputs": {key: path.relative_to(PROJECT_ROOT).as_posix() for key, path in outputs.items()},

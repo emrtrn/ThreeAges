@@ -42,7 +42,7 @@ import { createFlatLandscapeData, LANDSCAPE_DEFAULT_LAYERS, resolveLandscape, ty
 import type { AssetManifest } from "@engine/assets/manifest";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
-import type { RoomLayout, Vec3 } from "@engine/scene/layout";
+import type { LayoutPlacement, RoomLayout, Vec3 } from "@engine/scene/layout";
 import {
   applyMaterialSlotOverrides,
   assignedMaterialSlotIds,
@@ -230,6 +230,36 @@ function modelEntriesFrom(manifest: AssetManifest): Map<string, ManifestModelEnt
   return models;
 }
 
+/** Every distinct Forge material id a placement in this Level overrides its asset with. */
+function placementMaterialSlotIds(layout: RoomLayout): string[] {
+  const ids = new Set<string>();
+  for (const instance of layout.instances) {
+    for (const placement of instance.placements) {
+      if (placement.materialSlot) ids.add(placement.materialSlot);
+    }
+  }
+  return [...ids];
+}
+
+/**
+ * Splits an asset's placements into one bucket per `materialSlot` override, with
+ * `null` keying the un-overridden ones. Insertion order is the layout's, so the
+ * common all-default case yields exactly one bucket and one batch — the same
+ * single `InstancedMesh` this built before overrides were honoured.
+ */
+function groupPlacementsByMaterialSlot(
+  placements: readonly LayoutPlacement[],
+): Map<string | null, LayoutPlacement[]> {
+  const groups = new Map<string | null, LayoutPlacement[]>();
+  for (const placement of placements) {
+    const key = placement.materialSlot ?? null;
+    const group = groups.get(key);
+    if (group) group.push(placement);
+    else groups.set(key, [placement]);
+  }
+  return groups;
+}
+
 interface AuthoredWorldMaterialSlots {
   readonly slotsByAssetId: Map<string, AssetMaterialSlotsDef>;
   readonly materialsById: Map<string, Material>;
@@ -239,9 +269,15 @@ interface AuthoredWorldMaterialSlots {
  * Static mesh material slots are authored beside the GLTF, not inside the Level.
  * Resolve them before instance groups build so every host of this generic world
  * (including the RTS preview route) renders the same surfaces as the editor.
+ *
+ * `placementMaterialIds` carries the *other* way a Level assigns a material: the
+ * per-placement `materialSlot` override, which lives in the Level rather than
+ * beside the asset. Both end up in the same `materialsById` map, so both are
+ * disposed with the world.
  */
 async function loadAuthoredWorldMaterialSlots(
   assetIds: readonly string[],
+  placementMaterialIds: readonly string[],
   manifest: AssetManifest,
   textureLoader: TextureLoader,
   resolveUrl: (path: string) => string,
@@ -257,7 +293,7 @@ async function loadAuthoredWorldMaterialSlots(
   }));
 
   const materialsById = new Map<string, Material>();
-  const materialIds = new Set<string>();
+  const materialIds = new Set<string>(placementMaterialIds);
   for (const slots of slotsByAssetId.values()) {
     for (const materialId of assignedMaterialSlotIds(slots)) materialIds.add(materialId);
   }
@@ -439,6 +475,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
   const materialTextureLoader = new TextureLoader();
   const authoredMaterials = await loadAuthoredWorldMaterialSlots(
     modelAssetIds,
+    placementMaterialSlotIds(layout),
     assetManifest,
     materialTextureLoader,
     resolveUrl,
@@ -463,16 +500,32 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     if (instance.placements.length === 0) continue;
     const gltf = models.get(instance.assetId);
     if (!gltf) continue; // missing model already warned; keep the rest of the world
-    const built = buildSceneInstancedModel({
-      assetId: instance.assetId,
-      gltf,
-      placements: instance.placements,
-      castShadow: settings.staticObjectsCastShadow,
-      receiveShadow: settings.staticObjectsReceiveShadow,
-    });
-    applyAuthoredMaterialSlots(instance.assetId, built.group);
-    root.add(built.group);
-    instancedMeshes.push(...built.meshes);
+    // A placement may override the asset's material (`materialSlot`) — the editor's
+    // Details "Material" assignment. Placements are batched per override so an
+    // overridden one still rides an InstancedMesh rather than becoming a loose
+    // clone: the editor and `RuntimeSceneApp` pull overridden placements *out* of
+    // the batch, but this world is mounted by hosts that batch by the thousand and
+    // apply per-mesh rules (fog of war, reflection probes) to `staticInstanceMeshes`.
+    // One extra batch per distinct material keeps both properties.
+    for (const [materialId, placements] of groupPlacementsByMaterialSlot(instance.placements)) {
+      const built = buildSceneInstancedModel({
+        assetId: instance.assetId,
+        gltf,
+        placements,
+        castShadow: settings.staticObjectsCastShadow,
+        receiveShadow: settings.staticObjectsReceiveShadow,
+      });
+      const override = materialId === null ? undefined : authoredMaterials.materialsById.get(materialId);
+      if (override) {
+        // An override replaces every slot on the asset, so the sidecar's per-slot
+        // assignment does not also apply — same precedence the editor uses.
+        for (const mesh of built.meshes) mesh.material = override;
+      } else if (materialId === null) {
+        applyAuthoredMaterialSlots(instance.assetId, built.group);
+      }
+      root.add(built.group);
+      instancedMeshes.push(...built.meshes);
+    }
   }
 
   // Procedural spline generator output (instances / rigid segments / deform mesh).

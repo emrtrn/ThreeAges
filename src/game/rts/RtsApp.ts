@@ -18,6 +18,8 @@ import {
   DirectionalLight,
   GridHelper,
   Group,
+  type InstancedMesh,
+  Matrix4,
   Mesh,
   type Object3D,
   Scene,
@@ -95,6 +97,16 @@ import {
   loadRtsAuthoredWorld,
 } from "./world/rtsAuthoredWorld";
 import { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
+import {
+  applyProbeEnvMapToObject,
+  bakeSphereReflectionCapture,
+  disposeSphereReflectionCaptureBake,
+  resolveSphereReflectionCapture,
+  selectNearestReflectionCapture,
+  type ReflectionCaptureProbe,
+  type SphereReflectionCaptureBake,
+} from "@engine/render-three/reflectionCapture";
+import { readRotation } from "@engine/scene/transform";
 import type { LandscapeSamplerBudget } from "@engine/render-three/landscape";
 import {
   applyPostProcessToneMapping,
@@ -641,6 +653,18 @@ export class RtsApp {
    * route matches the editor. Constructed in the constructor once the renderer exists.
    */
   private readonly environment: AuthoredEnvironment;
+  /**
+   * Baked Sphere Reflection Captures from the Level's `reflectionCaptures`, in
+   * probe order (hidden probes are skipped, not held as holes — nothing here
+   * indexes back into the layout). Empty when the Level places none.
+   */
+  private reflectionCaptureBakes: SphereReflectionCaptureBake[] = [];
+  /**
+   * The authored static meshes whose material this swapped for a probe envMap
+   * clone, kept so dispose can hand them their original material back and free
+   * the clones (the clones are ours; the bases belong to the authored world).
+   */
+  private reflectionCaptureMeshes: InstancedMesh[] = [];
   /**
    * Authored Post Process composer (SMAA + bloom + tone mapping) built from the
    * Level's postProcess actor; null when the Level authors no effect passes, in
@@ -2002,6 +2026,15 @@ export class RtsApp {
     this.caravanView.dispose();
     this.actorVisuals?.dispose();
     this.mapArt.dispose();
+    // Before the authored world goes: hand each probe-covered mesh its original
+    // material back (which frees our envMap clones), then free the baked PMREM
+    // targets. Restoring first matters — the authored world only knows how to
+    // dispose the materials it created, and a clone left in place would be both
+    // leaked and pointing at a target we are about to release.
+    for (const mesh of this.reflectionCaptureMeshes) applyProbeEnvMapToObject(mesh, null);
+    this.reflectionCaptureMeshes = [];
+    for (const bake of this.reflectionCaptureBakes) disposeSphereReflectionCaptureBake(bake);
+    this.reflectionCaptureBakes = [];
     // Faz E: release the authored world's GPU resources so restart/dispose leaves
     // no leaked geometry, materials or shadow maps behind.
     this.authoredWorld?.dispose();
@@ -4299,6 +4332,9 @@ export class RtsApp {
           material.dispose();
         }
       }
+      // Last, once the whole world is standing — terrain, roads, props, sky — so
+      // the probes capture what the player will actually see reflected.
+      this.buildAuthoredReflectionCaptures(layout, handle);
       this.canvas.dataset.rtsAuthoredWorld = "ready";
     } catch (error) {
       this.log.warn("RTS authored world could not be loaded", error);
@@ -4309,6 +4345,115 @@ export class RtsApp {
       // better off looking at it than at a bar that never fills.
       this.settleAssetTrack("world");
     }
+  }
+
+  /**
+   * Editor↔Runtime parity: bakes the Level's Sphere Reflection Captures and routes
+   * the authored statics they cover onto the probe's envMap, so a polished prop
+   * mirrors the sky in the match exactly as it does in the editor viewport after a
+   * Recapture. Static and one-shot at load, like the editor's bake — nothing here
+   * runs per frame, and a Level placing no probes pays nothing.
+   *
+   * Two things are taken off the world for the duration of the capture. Fog of war
+   * starts *fully unknown*, so a cubemap rendered at this moment would store a
+   * black map and every probe-covered surface would reflect a void; the mask is a
+   * uniform (`setEnabled`, no recompile) and the fog surface is one group, so both
+   * come off and go straight back. This is the RTS's version of the editor hiding
+   * its gizmos and helpers before baking.
+   */
+  private buildAuthoredReflectionCaptures(layout: RoomLayout, handle: AuthoredWorldHandle): void {
+    const captures = layout.reflectionCaptures ?? [];
+    this.canvas.dataset.rtsReflectionCaptures = "0";
+    if (captures.length === 0) return;
+    const fogRoot = this.fogView?.root ?? null;
+    const fogRootVisible = fogRoot?.visible ?? false;
+    this.fogMask?.setEnabled(false);
+    if (fogRoot) fogRoot.visible = false;
+    try {
+      for (const actor of captures) {
+        const resolved = resolveSphereReflectionCapture(actor);
+        if (resolved.hidden) continue;
+        this.reflectionCaptureBakes.push(
+          bakeSphereReflectionCapture(this.renderer, this.scene, {
+            ...resolved,
+            position: [...actor.position],
+            rotation: readRotation(actor),
+          }),
+        );
+      }
+    } finally {
+      if (fogRoot) fogRoot.visible = fogRootVisible;
+      this.fogMask?.setEnabled(true);
+    }
+    this.canvas.dataset.rtsReflectionCaptures = String(this.reflectionCaptureBakes.length);
+    if (this.reflectionCaptureBakes.length === 0) return;
+    this.applyReflectionCaptureEnvMaps(handle);
+  }
+
+  /**
+   * Hands each covered authored static mesh the probe's envMap.
+   *
+   * Where {@link RuntimeSceneApp} re-splits its instance groups so every single
+   * placement can take its own nearest probe, this assigns **per batched mesh** and
+   * only when *every* instance in it resolves to the same probe. That is the whole
+   * design: an RTS map draws its art as a few big `InstancedMesh` batches, and
+   * splitting one so that six trees inside a probe get their own material would
+   * trade the batching this route is built on for a reflection nobody looks at. A
+   * mesh whose instances disagree — or that reaches outside every probe — keeps the
+   * global sky environment, which is the correct fallback rather than a compromise.
+   * A distinctly-placed prop (the case probes are actually placed for) is its own
+   * one-instance batch, so it takes the probe.
+   *
+   * The fog mask is *not* re-applied to the clones: `assignProbeEnvMapMaterial`
+   * forwards the base material's own `onBeforeCompile` — the mask patch — ahead of
+   * the capture patch, so the clone is already masked. Patching it a second time
+   * would inject the mask GLSL twice. Shadows are untouched either way, since the
+   * masked depth material hangs off the mesh, not off its material.
+   */
+  private applyReflectionCaptureEnvMaps(handle: AuthoredWorldHandle): void {
+    const probes: ReflectionCaptureProbe[] = this.reflectionCaptureBakes.map((bake) => ({
+      position: bake.position,
+      radius: bake.radius,
+      priority: bake.priority,
+    }));
+    const globalEnv = this.scene.environment;
+    const globalEnvIntensity = this.scene.environmentIntensity;
+    const matrix = new Matrix4();
+    const point = new Vector3();
+    for (const mesh of handle.staticInstanceMeshes) {
+      const bake = this.sharedProbeForInstancedMesh(mesh, probes, matrix, point);
+      if (!bake) continue;
+      applyProbeEnvMapToObject(mesh, bake, globalEnv, globalEnvIntensity);
+      this.reflectionCaptureMeshes.push(mesh);
+    }
+  }
+
+  /**
+   * The one probe covering every instance of `mesh`, or null when they disagree or
+   * any of them falls outside all probes. Instances are tested at their origin
+   * rather than their bounds centre — a probe radius is authored in whole world
+   * units and the difference is a fraction of one.
+   *
+   * The map-wide batches this walks (thousands of trees) bail on the first
+   * uncovered instance, so the common no-probe-nearby case costs one test.
+   */
+  private sharedProbeForInstancedMesh(
+    mesh: InstancedMesh,
+    probes: readonly ReflectionCaptureProbe[],
+    matrix: Matrix4,
+    point: Vector3,
+  ): SphereReflectionCaptureBake | null {
+    mesh.updateWorldMatrix(true, false);
+    let shared: number | null = null;
+    for (let index = 0; index < mesh.count; index += 1) {
+      mesh.getMatrixAt(index, matrix);
+      point.setFromMatrixPosition(matrix).applyMatrix4(mesh.matrixWorld);
+      const probe = selectNearestReflectionCapture([point.x, point.y, point.z], probes);
+      if (probe === null) return null;
+      if (shared === null) shared = probe;
+      else if (shared !== probe) return null;
+    }
+    return shared === null ? null : (this.reflectionCaptureBakes[shared] ?? null);
   }
 
   /**

@@ -1534,18 +1534,7 @@
     },
     {
       "assetId": "towncenter-secondage-level3",
-      "placements": [
-        {
-          "position": [
-            -12.04,
-            0.01,
-            20.38
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "towncenter-secondage-level2",
@@ -1558,12 +1547,23 @@
     {
       "assetId": "towncenter-firstage-level1",
       "placements": []
+    },
+    {
+      "assetId": "shape:sphere",
+      "placements": []
     }
   ],
   "characters": [],
   "worldSettings": {
-    "staticObjectsCastShadow": true,
-    "ambientIntensity": 1
+    "staticObjectsCastShadow": true
+  },
+  "skyAtmosphere": {
+    "rayleigh": 1,
+    "turbidity": 2,
+    "mie": 0.004,
+    "skyLightCapture": {
+      "intensity": 1
+    }
   },
   "lights": [
     {
@@ -1586,6 +1586,7 @@
     }
   ],
   "reflectiveSurfaces": [],
+  "reflectionCaptures": [],
   "blockingVolumes": [
     {
       "id": "blocking-volume-1",

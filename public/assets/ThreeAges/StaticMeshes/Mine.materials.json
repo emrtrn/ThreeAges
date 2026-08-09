@@ -2,8 +2,8 @@
   "schema": 1,
   "slots": [
     "threeages-mat-rock-natural",
-    "",
-    "",
+    "threeages-mat-metal-dark",
+    "threeages-mat-metal-bronze",
     "threeages-mat-wood-dark",
     "threeages-mat-wood-light"
   ]
