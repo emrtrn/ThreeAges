@@ -38,6 +38,8 @@ export type StartingResources = Readonly<Record<string, number>>;
 export interface StartingUnits {
   readonly guard?: number;
   readonly worker?: number;
+  /** Ranged infantry fielded at match start; absent keeps the normal opening at zero. */
+  readonly archer?: number;
   /**
    * Artillery fielded at match start. Unlike guards and workers this defaults to
    * none: siege is a Town-tier unit, so a preset that opens with it is staging a

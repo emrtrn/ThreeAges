@@ -30088,32 +30088,33 @@ check("the shipped preset loads and startingTier stays validated", () => {
   );
 });
 
-check("preset startingUnits carries the siege count through validation", () => {
+check("preset startingUnits carries every playable unit count through validation", () => {
   // `validateStartingUnits` copies an allowlist of keys, so an opening-force
   // role it does not name is dropped without a word — the preset would boot
-  // looking correct and simply field no artillery. Pin the whole roster, not
+  // looking correct and simply field no unit. Pin the whole roster, not
   // any one preset's magnitude, so tuning stays free.
   const base = readPresetJson("gameplay_proof") as object;
   const parsed = validateGamePreset(
-    { ...base, startingUnits: { guard: 1, worker: 1, siege: 1 } },
+    { ...base, startingUnits: { guard: 1, worker: 1, archer: 1, siege: 1 } },
     "gameplay_proof",
   );
   assert.deepEqual(
     parsed.startingUnits,
-    { guard: 1, worker: 1, siege: 1 },
+    { guard: 1, worker: 1, archer: 1, siege: 1 },
     "every opening-force role survives validation",
   );
 
-  // Absent means "none", which is what keeps a preset that never mentions siege
-  // from inheriting artillery.
+  // Absent means "none", which keeps a normal preset from inheriting ranged
+  // units or artillery.
   const none = validateGamePreset({ ...base, startingUnits: { guard: 1 } }, "gameplay_proof");
+  assert.equal(none.startingUnits.archer, undefined);
   assert.equal(none.startingUnits.siege, undefined);
 
   for (const bad of [-1, 1.5, "2"]) {
     assert.throws(
-      () => validateGamePreset({ ...base, startingUnits: { siege: bad } }, "gameplay_proof"),
+      () => validateGamePreset({ ...base, startingUnits: { archer: bad } }, "gameplay_proof"),
       GameDataError,
-      `a siege count of ${JSON.stringify(bad)} must be refused, not rounded`,
+      `an archer count of ${JSON.stringify(bad)} must be refused, not rounded`,
     );
   }
 });
@@ -41903,6 +41904,35 @@ check("Faz 2: Hat and Kol generate forward-facing, distinct move destinations", 
   assert.ok(columnOrders.every((order) => order.path !== null), "each column slot is planned through existing navigation");
 });
 
+check("Faz 3: mixed formations keep Guards ahead of Archers and Siege", () => {
+  const units = new UnitSystem();
+  const guards = Array.from({ length: 10 }, (_, index) => units.spawn(
+    "player", -12 + (index % 5) * 3, 10 + Math.floor(index / 5) * 3, RTS_TEST_UNIT_STATS,
+  ));
+  const archers = Array.from({ length: 10 }, (_, index) => units.spawn(
+    "player", -12 + (index % 5) * 3, 16 + Math.floor(index / 5) * 3, RTS_TEST_ARCHER_STATS,
+  ));
+  const siege = [
+    units.spawn("player", -2, 22, RTS_TEST_SIEGE_STATS),
+    units.spawn("player", 2, 22, RTS_TEST_SIEGE_STATS),
+  ];
+  const navigation = new RtsNavigation();
+  const orders = assignGroupDestinations([...guards, ...archers, ...siege], new Vector3(0, 0, -20), navigation, [], "line");
+  const destinations = new Map(orders.map((order) => [order.unit, order.destination]));
+  const meanZ = (group: readonly Unit[]) => group.reduce((sum, unit) => sum + (destinations.get(unit)?.z ?? 0), 0) / group.length;
+  const meanX = (group: readonly Unit[]) => group.reduce((sum, unit) => sum + (destinations.get(unit)?.x ?? 0), 0) / group.length;
+
+  // Movement heads north (-Z), so a lower Z is the front rank.
+  assert.ok(meanZ(guards) < meanZ(archers), "Guards take the front rank");
+  assert.ok(meanZ(archers) < meanZ(siege), "Siege takes the rear rank");
+  const centroid = [...guards, ...archers, ...siege].reduce((total, unit) => total.add(unit.position), new Vector3())
+    .multiplyScalar(1 / 22);
+  const forward = new Vector3(0, 0, -20).sub(centroid).setY(0).normalize();
+  const siegeLateralOffset = (meanX(siege) * forward.z) - (meanZ(siege) + 20) * forward.x;
+  assert.ok(Math.abs(siegeLateralOffset) < 0.001, "the rear Siege rank remains centred on the formation axis");
+  assert.ok(orders.every((order) => order.path !== null), "each role-aware slot uses existing navigation");
+});
+
 check("Faz 7 a squad clears a narrow corridor instead of jamming in it", () => {
   const units = new UnitSystem();
   const navigation = new RtsNavigation();
@@ -45491,19 +45521,36 @@ function spawnPassiveOpening(
 ): void {
   const worker = units.worker_placeholder ?? assert.fail("worker definition missing");
   const guard = units.guard_placeholder ?? assert.fail("guard definition missing");
+  const archer = units.archer_placeholder ?? assert.fail("archer definition missing");
   const siege = units.siege_placeholder ?? assert.fail("siege definition missing");
   const enemyWorkers = preset.enemyStartingUnits?.worker ?? 5;
+  const enemyGuards = preset.enemyStartingUnits?.guard ?? 3;
+  const enemyArchers = preset.enemyStartingUnits?.archer ?? 0;
+  const enemySiege = preset.enemyStartingUnits?.siege ?? 0;
   const playerGuards = preset.startingUnits?.guard ?? 3;
   const playerWorkers = preset.startingUnits?.worker ?? 5;
+  const playerArchers = preset.startingUnits?.archer ?? 0;
   const playerSiege = preset.startingUnits?.siege ?? 0;
+  for (let index = 0; index < enemyGuards; index += 1) {
+    world.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.enemyStart.z - (7 + Math.floor(index / 5) * 3), guard);
+  }
   for (let index = 0; index < enemyWorkers; index += 1) {
     world.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
+  }
+  for (let index = 0; index < enemyArchers; index += 1) {
+    world.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.enemyStart.z - (5 + Math.floor(index / 5) * 3), archer);
+  }
+  for (let index = 0; index < enemySiege; index += 1) {
+    world.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.enemyStart.z - (4 - Math.floor(index / 5) * 3), siege);
   }
   for (let index = 0; index < playerGuards; index += 1) {
     world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.playerStart.z + 7 + Math.floor(index / 5) * 3, guard);
   }
   for (let index = 0; index < playerWorkers; index += 1) {
     world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 4 + (index % 5) * 2, RTS_BLOCKOUT_MAP.playerStart.z - (8 + Math.floor(index / 5) * 2), worker);
+  }
+  for (let index = 0; index < playerArchers; index += 1) {
+    world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.playerStart.z + (5 + Math.floor(index / 5) * 3), archer);
   }
   for (let index = 0; index < playerSiege; index += 1) {
     world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 6 + (index % 5) * 3, RTS_BLOCKOUT_MAP.playerStart.z + (4 - Math.floor(index / 5) * 3), siege);

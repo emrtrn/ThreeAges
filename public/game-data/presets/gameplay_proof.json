@@ -13,7 +13,8 @@
   "startingUnits": {
     "guard": 10,
     "worker": 8,
-    "siege": 2
+    "siege": 2,
+    "archer": 10
   },
   "enemyStartingResources": {
     "food": 500,
@@ -23,7 +24,9 @@
   },
   "enemyStartingUnits": {
     "guard": 0,
-    "worker": 8
+    "worker": 8,
+    "archer": 0,
+    "siege": 0
   },
   "gameSpeed": 1,
   "mapState": "two_flanks_blockout",

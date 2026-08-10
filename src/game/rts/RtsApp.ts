@@ -374,9 +374,12 @@ const SCENE_BACKGROUND = "#20262b";
 const TOWER_MUZZLE_HEIGHT = 3.2;
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
 const PLACEHOLDER_WORKER_ID = "worker_placeholder";
+const PLACEHOLDER_ARCHER_ID = "archer_placeholder";
 const PLACEHOLDER_SIEGE_ID = "siege_placeholder";
 /** Both camps open with equal standing defence. */
 const STARTING_GUARD_COUNT = 3;
+/** Archers, like artillery, are scenario-only at match start unless a preset asks for them. */
+const STARTING_ARCHER_COUNT = 0;
 /**
  * No artillery in a normal opening: siege unlocks at Town tier and must be paid
  * for at a Barracks. Only a preset that explicitly asks for it starts with any.
@@ -2235,9 +2238,15 @@ export class RtsApp {
     // that drops the siege unit entirely still boots on the default presets.
     const siegeRequested =
       (player.siege ?? STARTING_SIEGE_COUNT) > 0 || (enemy.siege ?? STARTING_SIEGE_COUNT) > 0;
+    const archerRequested =
+      (player.archer ?? STARTING_ARCHER_COUNT) > 0 || (enemy.archer ?? STARTING_ARCHER_COUNT) > 0;
     const siege = this.options.unitBalance[PLACEHOLDER_SIEGE_ID];
     if (siegeRequested && !siege) {
       throw new Error(`Missing unit balance definition "${PLACEHOLDER_SIEGE_ID}"`);
+    }
+    const archer = this.options.unitBalance[PLACEHOLDER_ARCHER_ID];
+    if (archerRequested && !archer) {
+      throw new Error(`Missing unit balance definition "${PLACEHOLDER_ARCHER_ID}"`);
     }
     // Rows of `cols`, so a preset with a wide opening does not string units out
     // in one long line across the map.
@@ -2260,6 +2269,16 @@ export class RtsApp {
         const x = center.x - 4 + (i % cols) * 2;
         const z = center.z - facing * (8 + Math.floor(i / cols) * 2);
         this.units.spawn(owner, x, z, worker);
+      }
+      const archerCount = counts.archer ?? STARTING_ARCHER_COUNT;
+      if (archer) {
+        // Archers open behind the guard screen and in front of siege, matching
+        // the same guard → archer → siege order the formation system uses.
+        for (let i = 0; i < archerCount; i++) {
+          const x = center.x - 6 + (i % cols) * 3;
+          const z = center.z + facing * (5 + Math.floor(i / cols) * 3);
+          this.units.spawn(owner, x, z, archer);
+        }
       }
       const siegeCount = counts.siege ?? STARTING_SIEGE_COUNT;
       if (siege) {

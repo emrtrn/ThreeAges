@@ -66,13 +66,9 @@ export function assignGroupDestinations(
   const centroid = combatUnits.reduce((total, unit) => total.add(unit.position), new Vector3())
     .multiplyScalar(1 / combatUnits.length);
   const spacing = Math.max(...combatUnits.map((unit) => unit.navRadius * 2)) + 0.6;
-  const combatDestinations = assignDestinationsToSlots(
-    combatUnits,
-    rtsFormationWorldSlots(formation, combatUnits.length, spacing, centroid, point),
-    point,
-    navigation,
-    reservations,
-  );
+  const combatDestinations = formation === "line"
+    ? assignRoleAwareLineDestinations(combatUnits, point, centroid, spacing, navigation, reservations)
+    : assignRoleAwareColumnDestinations(combatUnits, point, centroid, spacing, navigation, reservations);
   const workers = units.filter((unit) => unit.role === "worker");
   if (workers.length === 0) return combatDestinations;
   const workerDestinations = assignDestinationsToSlots(
@@ -92,6 +88,106 @@ export function assignGroupDestinations(
 function legacySlots(count: number, point: Vector3): Vector3[] {
   return legacyFormationOffsets(count)
     .map((offset) => new Vector3(point.x + offset.x, 0, point.z + offset.z));
+}
+
+/** Guard, Archer, Siege, then any future combat role: front to back priority. */
+function combatRoleGroups(units: readonly Unit[]): Unit[][] {
+  return [
+    units.filter((unit) => unit.role === "guard"),
+    units.filter((unit) => unit.role === "archer"),
+    units.filter((unit) => unit.role === "siege"),
+    units.filter((unit) => unit.role !== "guard" && unit.role !== "archer" && unit.role !== "siege"),
+  ].filter((group) => group.length > 0);
+}
+
+function assignRoleAwareLineDestinations(
+  units: readonly Unit[],
+  point: Vector3,
+  centroid: Vector3,
+  spacing: number,
+  navigation: RtsNavigation,
+  reservations: readonly DestinationReservation[],
+): GroupDestination[] {
+  const groups = combatRoleGroups(units);
+  if (groups.length <= 1) {
+    return assignDestinationsToSlots(
+      units,
+      rtsFormationWorldSlots("line", units.length, spacing, centroid, point),
+      point,
+      navigation,
+      reservations,
+    );
+  }
+  const forward = point.clone().sub(centroid).setY(0).normalize();
+  if (forward.lengthSq() === 0) forward.set(0, 0, 1);
+  const assigned: GroupDestination[] = [];
+  groups.forEach((group, index) => {
+    // Centre all ranks on the requested target: guards occupy the positive
+    // forward rank, archers the next, and siege the rear-centre rank.
+    const rankOffset = ((groups.length - 1) / 2 - index) * spacing;
+    const rankTarget = point.clone().addScaledVector(forward, rankOffset);
+    const destinations = assignDestinationsToSlots(
+      group,
+      rtsFormationWorldSlots("line", group.length, spacing, centroid, rankTarget),
+      point,
+      navigation,
+      [
+        ...reservations,
+        ...assigned.map((entry) => ({ position: entry.destination, radius: entry.unit.navRadius })),
+      ],
+    );
+    assigned.push(...destinations);
+  });
+  return destinationsInSelectionOrder(units, assigned, point);
+}
+
+function assignRoleAwareColumnDestinations(
+  units: readonly Unit[],
+  point: Vector3,
+  centroid: Vector3,
+  spacing: number,
+  navigation: RtsNavigation,
+  reservations: readonly DestinationReservation[],
+): GroupDestination[] {
+  const groups = combatRoleGroups(units);
+  if (groups.length <= 1) {
+    return assignDestinationsToSlots(
+      units,
+      rtsFormationWorldSlots("column", units.length, spacing, centroid, point),
+      point,
+      navigation,
+      reservations,
+    );
+  }
+  const forward = point.clone().sub(centroid).setY(0).normalize();
+  if (forward.lengthSq() === 0) forward.set(0, 0, 1);
+  const slots = rtsFormationWorldSlots("column", units.length, spacing, centroid, point)
+    .sort((left, right) => (
+      (right.x - point.x) * forward.x + (right.z - point.z) * forward.z
+    ) - (
+      (left.x - point.x) * forward.x + (left.z - point.z) * forward.z
+    ));
+  const assigned: GroupDestination[] = [];
+  let slotIndex = 0;
+  for (const group of groups) {
+    const groupSlots = slots.slice(slotIndex, slotIndex + group.length);
+    slotIndex += group.length;
+    const destinations = assignDestinationsToSlots(group, groupSlots, point, navigation, [
+      ...reservations,
+      ...assigned.map((entry) => ({ position: entry.destination, radius: entry.unit.navRadius })),
+    ]);
+    assigned.push(...destinations);
+  }
+  return destinationsInSelectionOrder(units, assigned, point);
+}
+
+function destinationsInSelectionOrder(
+  units: readonly Unit[],
+  destinations: readonly GroupDestination[],
+  point: Vector3,
+): GroupDestination[] {
+  const byUnit = new Map(destinations.map((entry) => [entry.unit, entry]));
+  return units.map((unit) => byUnit.get(unit) ?? { unit, destination: point.clone(), path: null });
 }
 
 function assignDestinationsToSlots(

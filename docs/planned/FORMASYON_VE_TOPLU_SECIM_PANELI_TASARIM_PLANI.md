@@ -1032,15 +1032,17 @@ Test kompozisyonu:
 2 Topçu
 ```
 
-- [ ] Muhafız ön slotlara
-- [ ] Okçu arka / orta slotlara
-- [ ] Topçu arka merkez slotlara
+- [x] Muhafız ön slotlara
+- [x] Okçu arka / orta slotlara
+- [x] Topçu arka merkez slotlara
 
 atanmalıdır.
 
 ### Kabul kriteri
 
 Hat formasyonunda Topçu ön sıraya geçmemeli ve Okçular Muhafızların büyük bölümünün önüne yerleşmemelidir.
+
+> **Uygulama notu (10 Ağustos 2026):** Hat ve Kol slotları rol önceliğine göre atanıyor: Muhafız → Okçu → Topçu. Hat’ta roller ayrı sıralara, Topçu ise arka merkez eksenine yerleşir. Engine testi doğrulandı; `10 Muhafız + 10 Okçu + 2 Topçu` dünya kabulü bekliyor.
 
 ---
 
