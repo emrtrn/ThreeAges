@@ -30876,6 +30876,98 @@
         "bytes": 8778536
       },
       "license": "Unknown"
+    },
+    {
+      "id": "windmill-firstage-2",
+      "name": "Windmill First Age",
+      "assetType": "staticMesh",
+      "category": "Windmill",
+      "path": "assets/ThreeAges/StaticMeshes/Windmill/Windmill_FirstAge.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Windmill",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 110544
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "windmill-firstage-mill",
+      "name": "Windmill First Age Mill",
+      "assetType": "staticMesh",
+      "category": "Windmill",
+      "path": "assets/ThreeAges/StaticMeshes/Windmill/Windmill_FirstAge-Mill.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Windmill",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 29248
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "windmill-secodage",
+      "name": "Windmill Secod Age",
+      "assetType": "staticMesh",
+      "category": "Windmill",
+      "path": "assets/ThreeAges/StaticMeshes/Windmill/Windmill_SecodAge.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Windmill",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 92356
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "windmill-secodage-mill",
+      "name": "Windmill Secod Age Mill",
+      "assetType": "staticMesh",
+      "category": "Windmill",
+      "path": "assets/ThreeAges/StaticMeshes/Windmill/Windmill_SecodAge-Mill.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Windmill",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 34676
+      },
+      "license": "Unknown"
     }
   ]
 }

@@ -20,7 +20,7 @@ import type { Group } from "three";
 import type { SettlementAge } from "../../data/gameDataTypes";
 import type { RtsActorVisualFactory } from "../content/rtsActorVisualFactory";
 import { createRtsActorPlaceholder } from "../content/rtsActorPlaceholder";
-import { fitPresentationToFootprint } from "../content/rtsActorPresentationTree";
+import { findActorComponentNode, fitPresentationToFootprint } from "../content/rtsActorPresentationTree";
 import type { CommandCenter } from "./commandCenter";
 import type { PlacedStructure } from "./placedStructureSystem";
 
@@ -34,9 +34,25 @@ import type { PlacedStructure } from "./placedStructureSystem";
  * wrong, so the number is shared rather than repeated.
  */
 export const COMMAND_CENTER_VISUAL_FOOTPRINT = 8;
+/** First-Age windmill blades make one calm revolution every four seconds. */
+export const WINDMILL_MILL_DEGREES_PER_SECOND = 90;
+const WINDMILL_MILL_COMPONENT_ID = "windmillMillPivot";
 
 export class RtsBuildingVisuals {
   constructor(private readonly actorVisuals: RtsActorVisualFactory | null = null) {}
+
+  /** Advance only completed First-Age windmill blade pivots. */
+  update(structures: readonly PlacedStructure[], deltaSeconds: number): void {
+    if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return;
+    const radians = WINDMILL_MILL_DEGREES_PER_SECOND * deltaSeconds * Math.PI / 180;
+    for (const structure of structures) {
+      if (!structure.construction.complete || structure.stats.id !== "windmill") continue;
+      const mill = findActorComponentNode(structure.object, WINDMILL_MILL_COMPONENT_ID);
+      // Town's current Actor does not yet author a separate mill. Its missing
+      // pivot is deliberately a no-op until that art arrives.
+      if (mill) mill.rotateZ(radians);
+    }
+  }
 
   applyToCenter(center: CommandCenter, age: SettlementAge = "settlement"): void {
     // The centre goes through the same resolution as every other building; it is

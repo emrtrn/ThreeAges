@@ -3773,6 +3773,7 @@ export class RtsApp {
     this.perfMeasure("hayvanlar", wildlifeMark);
     const constructionMark = this.perfMark();
     this.workerConstruction.update(dt);
+    this.buildingVisuals.update(this.structures.all(), dt);
     // Settle repair jobs whose building was razed or demolished since the last
     // tick; an untouched job is refunded here exactly as a cancelled one is.
     this.structureRepair.update(this.structures.all());

@@ -157,6 +157,7 @@ import {
   findActorComponentNode,
   fitPresentationToFootprint,
   presentationExtent,
+  RTS_ACTOR_COMPONENT_ID,
   tintedCopy,
 } from "../src/game/rts/content/rtsActorPresentationTree";
 import {
@@ -38437,6 +38438,24 @@ check("Actor presentation Faz 3: construction, completed, preview and the centre
   const loading = new RtsBuildingVisuals(stillLoading)
     .createForStructure(structure, "town");
   assert.equal(loading, null, "with no legacy models loaded either, the box placeholder stays");
+});
+
+check("Windmill mill pivot turns only after First-Age construction completes", () => {
+  const visuals = new RtsBuildingVisuals();
+  const root = new Group();
+  const pivot = new Group();
+  pivot.userData[RTS_ACTOR_COMPONENT_ID] = "windmillMillPivot";
+  root.add(pivot);
+  const structure = {
+    stats: { id: "windmill" },
+    construction: { complete: true },
+    object: root,
+  } as unknown as PlacedStructure;
+  visuals.update([structure], 1);
+  assert.ok(Math.abs(pivot.rotation.z - Math.PI / 2) < 1e-9, "the separated mill turns 90 degrees per second");
+  structure.construction.complete = false;
+  visuals.update([structure], 1);
+  assert.ok(Math.abs(pivot.rotation.z - Math.PI / 2) < 1e-9, "a construction site leaves its blades still");
 });
 
 check("Assetization Faz C: UnitSystem resolves catalog presentation pick targets without body-child assumptions", () => {

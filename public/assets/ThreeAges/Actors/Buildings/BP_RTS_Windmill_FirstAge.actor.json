@@ -7,10 +7,22 @@
   "components": [
     { "id": "root", "component": "Transform", "props": {} },
     {
-      "id": "windmillMesh",
+      "id": "windmillBody",
       "component": "StaticMeshComponent",
-      "props": { "assetId": "windmill-firstage" },
+      "props": { "assetId": "windmill-firstage-2" },
       "parent": "root"
+    },
+    {
+      "id": "windmillMillPivot",
+      "component": "Transform",
+      "props": {},
+      "parent": "root"
+    },
+    {
+      "id": "windmillMill",
+      "component": "StaticMeshComponent",
+      "props": { "assetId": "windmill-firstage-mill" },
+      "parent": "windmillMillPivot"
     }
   ],
   "interfaces": [],
