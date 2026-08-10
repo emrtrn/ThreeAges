@@ -124,6 +124,8 @@ export class PastureSystem {
     private readonly wildlife: WildlifeSystem,
     /** A worker the construction or economy loop already owns is not free to herd. */
     private readonly isWorkerBusyElsewhere: (worker: Unit) => boolean = () => false,
+    /** Player-owned automatic staffing can be disabled without changing AI behaviour. */
+    private readonly isAutomaticWorkerAssignmentEnabled: (owner: UnitOwner) => boolean = () => true,
   ) {}
 
   update(deltaSeconds: number): void {
@@ -316,6 +318,7 @@ export class PastureSystem {
    * §9's "endless income" risk would arrive through the back door.
    */
   private hireShepherds(pasture: PastureRecord): void {
+    if (!this.isAutomaticWorkerAssignmentEnabled(pasture.structure.owner)) return;
     const economy = pasture.structure.economy;
     if (!economy) return;
     const capacity = economy.livestockCapacity ?? 0;
@@ -588,4 +591,3 @@ export function penStalls(structure: PlacedStructure): readonly WildlifeStall[] 
   }
   return stalls;
 }
-

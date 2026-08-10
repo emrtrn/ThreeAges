@@ -164,6 +164,8 @@ export class EconomyProductionSystem {
      * changes while an unsafe quarry is never assigned a replacement crew.
      */
     private readonly isWorkerLocationUnsafe: (owner: UnitOwner, x: number, z: number) => boolean = () => false,
+    /** Player-owned automatic staffing can be disabled without changing AI behaviour. */
+    private readonly isAutomaticWorkerAssignmentEnabled: (owner: UnitOwner) => boolean = () => true,
   ) {
     const sources: ResourceSource[] = [];
     if (forests) sources.push(forests);
@@ -691,6 +693,7 @@ export class EconomyProductionSystem {
   }
 
   private assignIdleWorkersToProducer(producer: ProducerRecord): void {
+    if (!this.isAutomaticWorkerAssignmentEnabled(producer.structure.owner)) return;
     const economy = producer.structure.economy;
     if (!economy) return;
     const candidates = this.units.workersOf(producer.structure.owner)

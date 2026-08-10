@@ -44375,6 +44375,37 @@ check("RTS player move orders keep workers out of automatic construction and pro
   units.clear();
 });
 
+check("RTS construction automation can be disabled for manual staffing", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const units = new UnitSystem();
+  const worker = units.spawn("player", 0, 0, RTS_TEST_WORKER_STATS);
+  const structures = new PlacedStructureSystem();
+  structures.place("player", house, 8, 0);
+  let enabled = false;
+  const construction = new WorkerConstructionSystem(
+    units,
+    structures,
+    new RtsNavigation(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => enabled,
+  );
+
+  construction.update(0);
+  assert.equal(construction.stateFor(worker), "idle", "a disabled player automation setting leaves the worker free");
+  enabled = true;
+  construction.update(0);
+  assert.equal(construction.stateFor(worker), "moving", "re-enabling automation fills the open construction job");
+  structures.clear();
+  units.clear();
+});
+
 check("RTS workers rest for three seconds after reaching a player-ordered point", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -49991,6 +50022,35 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
 
   // One trapped unit turns it on, on either panel, and its hint counts exactly
   // the trapped bodies — not the whole selection.
+  // `I` holds a worker group for an explicit staffing choice. These are not
+  // generic actions: each card names a live structure and carries the capacity
+  // the assignment system enforces, so the DOM can make it a one-click order.
+  const heldWorkers = describeSelection({
+    kind: "units",
+    units: [worker(1, "idle"), worker(2, "idle")],
+    workerAssignments: [{
+      structureId: 17,
+      label: "Test Lumber Camp",
+      icon: "/assets/test-lumber-camp.png",
+      assignedWorkers: 1,
+      workerCapacity: 4,
+      actionId: "assign-workers:17",
+    }],
+  }) ?? assert.fail("held worker group has a panel");
+  assert.deepEqual(
+    heldWorkers.workerAssignments?.map((target) => [target.structureId, target.assignedWorkers, target.workerCapacity]),
+    [[17, 1, 4]],
+    "a worker job card preserves the authoritative target capacity",
+  );
+  assert.equal(heldWorkers.workerAssignments?.[0]?.actionId, "assign-workers:17");
+
+  const noWorkYet = describeSelection({
+    kind: "units",
+    units: [worker(1, "idle"), worker(2, "idle")],
+    workerAssignments: [],
+  }) ?? assert.fail("held worker group with no work has a panel");
+  assert.deepEqual(noWorkYet.workerAssignments, [], "an explicit empty work list remains distinguishable from an army group");
+
   const trappedArmy = describeSelection({
     kind: "units",
     units: [guard(1), guard(2, "aggressive", true)],

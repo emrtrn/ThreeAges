@@ -1457,6 +1457,14 @@ body {
   opacity: 0.45;
 }
 
+/* A persistent toggle needs a readable resting state: when automation is off,
+   the player should see at a glance that idle workers await a manual decision. */
+.rts-hud-worker-action[data-enabled="false"] {
+  color: #ffe4a6;
+  background: rgb(113 62 29 / 82%);
+  border-color: var(--ta-gold);
+}
+
 /*
  * The army strip: one chip per unit type the player owns, sitting after the
  * worker cluster as a third status group. It is the population readout's
@@ -2464,6 +2472,114 @@ body {
 .rts-selection-panel[data-rts-panel-mode="roster-formation"] .rts-selection-cards {
   grid-row: 1;
   grid-column: 1
+}
+
+/* `I` holds an idle worker group long enough for the player to make an explicit
+   staffing decision. Its portrait keeps the compact 20% left rail; actual work
+   choices get the remaining panel width as deliberately thin building cards.
+   This mirrors the formation face without pretending building cards are unit
+   portraits: a click here completes a command. */
+.rts-selection-panel[data-rts-panel-mode="roster-worker-assignments"] {
+  grid-template-columns: 88px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.rts-selection-panel[data-rts-panel-mode="roster-worker-assignments"] :is(
+  .rts-selection-portrait,
+  .rts-selection-header,
+  .rts-selection-details,
+  .rts-selection-formation,
+  .rts-selection-hints,
+  .rts-selection-progress
+) {
+  display: none;
+}
+
+.rts-selection-panel[data-rts-panel-mode="roster-worker-assignments"] .rts-selection-cards {
+  grid-row: 1;
+  grid-column: 1;
+  overflow: hidden;
+}
+
+.rts-selection-panel[data-rts-panel-mode="roster-worker-assignments"] .rts-selection-actions {
+  display: none;
+}
+
+.rts-selection-worker-assignments {
+  display: flex;
+  grid-row: 1;
+  grid-column: 2;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.rts-selection-worker-assignments[hidden] {
+  display: none;
+}
+
+.rts-selection-worker-assignment {
+  position: relative;
+  display: grid;
+  flex: 0 0 108px;
+  grid-template-rows: 47px minmax(0, 1fr) max-content;
+  width: 108px;
+  min-width: 0;
+  height: 103px;
+  padding: 0;
+  overflow: hidden;
+  color: var(--ta-ink);
+  font: inherit;
+  text-align: left;
+  background: rgb(23 16 10 / 78%);
+  border: 1px solid rgb(194 157 92 / 45%);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.rts-selection-worker-assignment:is(:hover, :focus-visible) {
+  color: #ffe4a6;
+  border-color: var(--ta-gold);
+  box-shadow: inset 0 0 0 1px rgb(255 209 100 / 28%), 0 0 7px rgb(224 169 59 / 24%);
+}
+
+.rts-selection-worker-assignment-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0.86;
+}
+
+.rts-selection-worker-assignment-label {
+  display: -webkit-box;
+  padding: 4px 5px 2px;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.rts-selection-worker-assignment-capacity {
+  justify-self: end;
+  margin: 0 4px 4px;
+  padding: 1px 4px;
+  color: var(--ta-gold);
+  font-size: 11px;
+  line-height: 1.1;
+  background: rgb(12 8 5 / 78%);
+  border-radius: 2px;
+}
+
+.rts-selection-worker-assignment-empty {
+  align-self: center;
+  margin: 0;
+  color: rgb(229 207 166 / 82%);
+  font-size: 12px;
+  font-style: italic;
 }
 
 .rts-selection-formation {

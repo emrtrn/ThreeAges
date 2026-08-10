@@ -21,6 +21,7 @@ import {
   type SelectionFormationControls,
   type SelectionPanelContent,
   type SelectionUnitCard,
+  type WorkerAssignmentTarget,
 } from "./rtsSelectionView";
 import { isRtsFormationId, type RtsFormationId } from "../units/formations/rtsFormationTypes";
 
@@ -39,6 +40,8 @@ export class RtsSelectionPanel {
   private readonly cards = document.createElement("div");
   private readonly formation = document.createElement("section");
   private readonly formationOptions = document.createElement("div");
+  /** Direct assignment cards shown only next to a held worker group. */
+  private readonly workerAssignments = document.createElement("div");
   private readonly body = document.createElement("div");
   private readonly lines: HTMLParagraphElement[] = [];
   /** The status strip under the body lines; see {@link SelectionChip}. */
@@ -148,7 +151,9 @@ export class RtsSelectionPanel {
     formationTitle.textContent = "Formasyon";
     this.formationOptions.className = "rts-selection-formation-options";
     this.formation.append(this.formationOptions, formationTitle);
-    this.root.append(this.portrait, this.header, details, this.cards, this.formation, this.actionRow, this.progress, this.hints);
+    this.workerAssignments.className = "rts-selection-worker-assignments ui-interactive";
+    this.workerAssignments.hidden = true;
+    this.root.append(this.portrait, this.header, details, this.cards, this.formation, this.workerAssignments, this.actionRow, this.progress, this.hints);
     const overlay = document.getElementById("ui-overlay") ?? document.body;
     overlay.append(this.root, this.actionTray);
     this.setSelection({ kind: "none" });
@@ -216,10 +221,11 @@ export class RtsSelectionPanel {
     // so the mode is an attribute on the root: CSS hides the portrait, header
     // and body wholesale rather than every one of them being toggled here.
     this.root.dataset.rtsPanelMode = content.cards
-      ? content.formation ? "roster-formation" : "roster"
+      ? content.workerAssignments ? "roster-worker-assignments" : content.formation ? "roster-formation" : "roster"
       : "unit";
     this.renderCards(content.cards ?? []);
     this.renderFormation(content.formation);
+    this.renderWorkerAssignments(content.workerAssignments);
     this.title.textContent = content.title;
     this.summary.textContent = content.summary;
     this.hints.textContent = content.hint;
@@ -371,6 +377,56 @@ export class RtsSelectionPanel {
     for (const button of this.formationOptions.querySelectorAll<HTMLButtonElement>(".rts-selection-formation-option")) {
       button.dataset.rtsActive = button.dataset.rtsFormation === formation.active ? "true" : "false";
     }
+  }
+
+  /**
+   * Render target-building cards as buttons because, unlike roster portraits,
+   * they issue a complete order without a second world click.
+   */
+  private renderWorkerAssignments(targets: readonly WorkerAssignmentTarget[] | undefined): void {
+    if (!targets) {
+      this.workerAssignments.hidden = true;
+      delete this.workerAssignments.dataset.rtsWorkerAssignments;
+      return;
+    }
+    const signature = targets.map((target) => (
+      `${target.structureId}|${target.assignedWorkers}|${target.workerCapacity}`
+    )).join(";");
+    if (this.workerAssignments.dataset.rtsWorkerAssignments === signature) return;
+    this.workerAssignments.dataset.rtsWorkerAssignments = signature;
+    this.workerAssignments.hidden = false;
+    if (targets.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "rts-selection-worker-assignment-empty";
+      empty.textContent = "Uygun iş noktası yok · Oto ile otomatik atamayı aç";
+      this.workerAssignments.replaceChildren(empty);
+      return;
+    }
+    this.workerAssignments.replaceChildren(...targets.map((target) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "rts-selection-worker-assignment";
+      card.dataset.rtsAction = target.actionId;
+      const openSlots = target.workerCapacity - target.assignedWorkers;
+      card.title = `${target.label}: ${openSlots} işçi yeri boş. Seçili işçileri ata.`;
+      card.setAttribute("aria-label", card.title);
+      if (target.icon) {
+        const image = document.createElement("img");
+        image.className = "rts-selection-worker-assignment-image";
+        image.src = target.icon;
+        image.alt = "";
+        card.appendChild(image);
+      }
+      const label = document.createElement("span");
+      label.className = "rts-selection-worker-assignment-label";
+      label.textContent = target.label;
+      const capacity = document.createElement("b");
+      capacity.className = "rts-selection-worker-assignment-capacity";
+      capacity.textContent = `${target.assignedWorkers}/${target.workerCapacity}`;
+      card.append(label, capacity);
+      card.addEventListener("click", () => this.onAction(target.actionId));
+      return card;
+    }));
   }
 
   /**

@@ -84,6 +84,8 @@ export class WorkerConstructionSystem {
       deltaSeconds: number,
       workerCount: number,
     ) => RepairAdvanceResult = () => "done",
+    /** Player-owned automatic staffing can be disabled without affecting the AI. */
+    private readonly isAutomaticWorkerAssignmentEnabled: (owner: UnitOwner) => boolean = () => true,
   ) {}
 
   /**
@@ -93,6 +95,9 @@ export class WorkerConstructionSystem {
    * a worker pulled off automatic economy work — gathering keeps the rest.
    */
   assignNearest(structure: PlacedStructure): WorkerAssignmentResult {
+    if (!this.isAutomaticWorkerAssignmentEnabled(structure.owner)) {
+      return { assigned: false, reason: "no-idle-worker" };
+    }
     if (structure.construction.complete || this.assignmentCount(structure) >= MAX_BUILDERS_PER_SITE) {
       return { assigned: false, reason: "no-idle-worker" };
     }
@@ -331,6 +336,7 @@ export class WorkerConstructionSystem {
   private staffConstructionSites(): void {
     for (const structure of this.structures.all()) {
       if (structure.construction.complete) continue;
+      if (!this.isAutomaticWorkerAssignmentEnabled(structure.owner)) continue;
       const staffed = this.assignmentCount(structure);
       // A kingdom without capacity staffing keeps the old rule: top up only a
       // site that lost every builder.
@@ -347,6 +353,13 @@ export class WorkerConstructionSystem {
   /** Builders on one site, for the §51 panel opened by selecting a foundation. */
   assignedWorkers(structure: PlacedStructure): number {
     return this.assignmentCount(structure);
+  }
+
+  /** Remaining distinct approach positions on an unfinished foundation. */
+  availableWorkerSlots(structure: PlacedStructure): number {
+    return structure.construction.complete
+      ? 0
+      : Math.max(0, MAX_BUILDERS_PER_SITE - this.assignmentCount(structure));
   }
 
   /** Workers currently sent to repair this building, walking or already at work. */

@@ -46,8 +46,8 @@ const COMMAND_KEYS = {
   KeyG: "aggressive",
   /** Select every worker that is currently available for automatic work. */
   KeyI: "selectIdleWorkers",
-  /** Send the selected idle workers back into automatic staffing. */
-  KeyR: "assignIdleWorkers",
+  /** Toggle the player's automatic worker staffing preference. */
+  KeyR: "toggleWorkerAutomation",
   /**
    * Snap the camera back to the player's own centre. Home rather than the letter
    * the panel sits under: every free letter near the build controls is one hand

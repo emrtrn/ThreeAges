@@ -42,13 +42,13 @@ export class RtsHudBar {
   private readonly duration = document.createElement("span");
   private readonly warning = document.createElement("p");
   private readonly selectIdleWorkers = document.createElement("button");
-  private readonly assignIdleWorkers = document.createElement("button");
+  private readonly workerAutomation = document.createElement("button");
   private readonly status = document.createElement("div");
   private readonly utilityControls = document.createElement("div");
 
   constructor(
     onSelectIdleWorkers: () => void = () => {},
-    onAssignIdleWorkers: () => void = () => {},
+    onToggleWorkerAutomation: () => void = () => {},
     onOpenPauseMenu: () => void = () => {},
   ) {
     this.root.className = "rts-hud-bar ui-interactive";
@@ -125,13 +125,11 @@ export class RtsHudBar {
     this.selectIdleWorkers.setAttribute("aria-label", "Boştaki işçileri seç (I)");
     this.selectIdleWorkers.title = "Boştaki işçileri seç (I)";
     this.selectIdleWorkers.addEventListener("click", onSelectIdleWorkers);
-    this.assignIdleWorkers.type = "button";
-    this.assignIdleWorkers.className = "rts-hud-worker-action";
-    this.assignIdleWorkers.textContent = "Ata (R)";
-    this.assignIdleWorkers.setAttribute("aria-label", "Seçili işçileri işe ata (R)");
-    this.assignIdleWorkers.title = "Seçili işçileri işe ata (R)";
-    this.assignIdleWorkers.addEventListener("click", onAssignIdleWorkers);
-    workerActions.append(this.selectIdleWorkers, this.assignIdleWorkers);
+    this.workerAutomation.type = "button";
+    this.workerAutomation.className = "rts-hud-worker-action";
+    this.workerAutomation.addEventListener("click", onToggleWorkerAutomation);
+    this.setWorkerAutomationEnabled(true);
+    workerActions.append(this.selectIdleWorkers, this.workerAutomation);
     workerCluster.append(this.idleWorkers, workerActions);
     status.append(matchReadouts, workerCluster);
     this.root.appendChild(status);
@@ -182,7 +180,19 @@ export class RtsHudBar {
     this.idleWorkers.title = `Boşta işçi: ${count}`;
     this.idleWorkers.dataset.idle = String(count > 0);
     this.selectIdleWorkers.disabled = count === 0;
-    this.assignIdleWorkers.disabled = count === 0;
+  }
+
+  /** Render the player-owned automatic staffing preference; the simulation stays in RtsApp. */
+  setWorkerAutomationEnabled(enabled: boolean): void {
+    const state = enabled ? "Açık" : "Kapalı";
+    const label = `Oto: ${state} (R)`;
+    if (this.workerAutomation.textContent !== label) this.workerAutomation.textContent = label;
+    const hint = enabled
+      ? "Otomatik işçi ataması açık. Kapatmak için tıklayın veya R'ye basın."
+      : "Otomatik işçi ataması kapalı. İşçileri elle atayın veya açmak için tıklayın / R'ye basın.";
+    this.workerAutomation.title = hint;
+    this.workerAutomation.setAttribute("aria-label", hint);
+    this.workerAutomation.dataset.enabled = String(enabled);
   }
 
   /**

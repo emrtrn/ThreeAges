@@ -100,6 +100,18 @@ export interface FormationSelectionView {
   readonly active: RtsFormationId;
 }
 
+/** A live, player-commandable workplace offered beside a worker group. */
+export interface WorkerAssignmentTarget {
+  readonly structureId: number;
+  readonly label: string;
+  /** Existing building artwork; null keeps the card's framed fallback. */
+  readonly icon: string | null;
+  readonly assignedWorkers: number;
+  readonly workerCapacity: number;
+  /** Runtime-owned command routed through the panel's ordinary action seam. */
+  readonly actionId: string;
+}
+
 /** Compact live order state for the selection panel; it deliberately names no target. */
 export type UnitOrder = "idle" | "moving" | "attacking" | "attack-moving";
 
@@ -354,6 +366,8 @@ export type RtsSelectionView =
     readonly units: readonly SelectedUnitView[];
     /** Omitted by callers that only need the legacy selection readout. */
     readonly formation?: FormationSelectionView;
+    /** Workplaces with open capacity, present for an explicitly held worker group. */
+    readonly workerAssignments?: readonly WorkerAssignmentTarget[];
   }
   | { readonly kind: "structure"; readonly structure: SelectedStructureView }
   | { readonly kind: "trade-site"; readonly site: SelectedTradeSiteView };
@@ -422,6 +436,8 @@ export interface SelectionPanelContent {
   readonly cards?: readonly SelectionUnitCard[];
   /** Multi-combat selection's V1 formation picker. No movement effect in Faz 1. */
   readonly formation?: SelectionFormationControls;
+  /** Worker-only group selection's direct workplace cards. */
+  readonly workerAssignments?: readonly WorkerAssignmentTarget[];
   /** A running timed job (e.g. a level-up), or null/absent when nothing is timed. */
   readonly progress?: SelectionProgress | null;
 }
@@ -534,6 +550,8 @@ export const CANCEL_TRAIN_ACTION = "cancel-train";
 export const CANCEL_WORKER_ACTION = "cancel-worker";
 export const TRADE_BUY_ACTION_PREFIX = "trade-buy:";
 export const TRADE_SELL_ACTION_PREFIX = "trade-sell:";
+/** A worker-group card command; suffix is the target structure's runtime id. */
+export const WORKER_ASSIGNMENT_ACTION_PREFIX = "assign-workers:";
 
 const ARMOR_CLASS_LABEL: Record<UnitArmorClass, string> = {
   light: "hafif birim",
@@ -649,7 +667,9 @@ export function describeSelection(view: RtsSelectionView): SelectionPanelContent
     health: null,
   };
   if (view.kind === "units") {
-    return view.units.length === 0 ? describeSelection({ kind: "none" }) : describeUnits(view.units, view.formation);
+    return view.units.length === 0
+      ? describeSelection({ kind: "none" })
+      : describeUnits(view.units, view.formation, view.workerAssignments);
   }
   if (view.kind === "trade-site") return describeTradeSite(view.site);
   return describeStructure(view.structure);
@@ -762,6 +782,7 @@ function rescueActions(units: readonly SelectedUnitView[]): SelectionAction[] {
 function describeUnits(
   units: readonly SelectedUnitView[],
   formation: FormationSelectionView | undefined,
+  workerAssignments: readonly WorkerAssignmentTarget[] | undefined,
 ): SelectionPanelContent {
   // Composition is counted per unit *type*, through the same model the HUD army
   // strip is built from. Two reasons it is not the role it used to be: a role
@@ -800,6 +821,9 @@ function describeUnits(
         icon: entry.icon,
         count: entry.count,
       })),
+      ...(workersOnly && workerAssignments !== undefined
+        ? { workerAssignments }
+        : {}),
       ...(combatUnitCount >= 2
         ? { formation: formationControls(formation?.active ?? DEFAULT_RTS_FORMATION, combatUnitCount) }
         : {}),

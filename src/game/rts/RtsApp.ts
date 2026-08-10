@@ -204,12 +204,14 @@ import {
   TRADE_SELL_ACTION_PREFIX,
   TRAIN_ACTION_PREFIX,
   TRAIN_WORKER_ACTION,
+  WORKER_ASSIGNMENT_ACTION_PREFIX,
   CENTER_LEVEL_UP_ACTION,
   type RtsSelectionView,
   type StructureDetailView,
   type CenterProgressionView,
   type StructureRepairView,
   type WorkerJob,
+  type WorkerAssignmentTarget,
 } from "./ui/rtsSelectionView";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
@@ -917,6 +919,8 @@ export class RtsApp {
   private readonly buildPalette: RtsBuildPalette;
   /** Global, match-local preference; individual units do not own formation identity in V1. */
   private activeFormation: RtsFormationId = DEFAULT_RTS_FORMATION;
+  /** Player preference only; AI staffing remains autonomous. */
+  private automaticWorkerAssignmentEnabled = true;
   private readonly selectionPanel = new RtsSelectionPanel(
     (id) => this.runSelectionAction(id),
     (formation) => {
@@ -941,7 +945,7 @@ export class RtsApp {
   private readonly supportAuras = new SupportAuraSystem();
   private readonly hudBar = new RtsHudBar(
     () => this.selectIdleWorkers(),
-    () => this.assignSelectedIdleWorkers(),
+    () => this.toggleWorkerAutomation(),
     () => this.togglePause(),
   );
   /**
@@ -1380,6 +1384,7 @@ export class RtsApp {
       this.wildlife,
       (worker) => this.workerConstruction.stateFor(worker) !== "idle"
         || (this.economyProduction?.isAssigned(worker) ?? false),
+      (owner) => owner !== PLAYER_OWNER || this.automaticWorkerAssignmentEnabled,
     );
     this.workerConstruction = new WorkerConstructionSystem(
       this.units,
@@ -1401,6 +1406,7 @@ export class RtsApp {
       // The AI's build/economy managers stay on the tuned single-builder rule.
       (structure) => structure.owner === PLAYER_OWNER,
       (structure, deltaSeconds, workerCount) => this.structureRepair.advance(structure, deltaSeconds, workerCount),
+      (owner) => owner !== PLAYER_OWNER || this.automaticWorkerAssignmentEnabled,
     );
     this.economyProduction = new EconomyProductionSystem(
       this.units,
@@ -1417,6 +1423,7 @@ export class RtsApp {
       // Player orders remain the player's decision, including the deliberate
       // choice to escort a worker into wolf territory.
       (owner, x, z) => owner === AI_OWNER && this.ai.workerLocationUnsafe(x, z),
+      (owner) => owner !== PLAYER_OWNER || this.automaticWorkerAssignmentEnabled,
     );
     this.logisticsTransfers = new LogisticsTransferSystem(
       this.economyProduction,
@@ -3545,7 +3552,7 @@ export class RtsApp {
     if (this.input.consumeCommand("hold")) this.commands.issueStance("hold");
     if (this.input.consumeCommand("aggressive")) this.commands.issueStance("aggressive");
     if (this.input.consumeCommand("selectIdleWorkers")) this.selectIdleWorkers();
-    if (this.input.consumeCommand("assignIdleWorkers")) this.assignSelectedIdleWorkers();
+    if (this.input.consumeCommand("toggleWorkerAutomation")) this.toggleWorkerAutomation();
     if (!this.input.consumeCommand("attackMove")) return;
     const pointer = this.input.pointerPosition();
     if (pointer) this.commands.issueAttackMoveAt(pointer.x, pointer.y);
@@ -5202,6 +5209,7 @@ export class RtsApp {
    * asserting it twice.
    */
   private selectionView(): RtsSelectionView {
+    this.reconcileManualWorkerSelection();
     // A pending demolish belongs to the building it was aimed at. Selecting
     // anything else disarms it, so the confirm step can never be inherited by a
     // building the player never armed.
@@ -5216,9 +5224,13 @@ export class RtsApp {
     }
     const units = this.selection.selected();
     if (units.length > 0) {
+      const heldWorkerSelection = units.length > 0
+        && units.every((unit) => unit.role === "worker")
+        && units.some((unit) => unit.isHeldForManualAssignment);
       return {
         kind: "units",
         formation: { active: this.activeFormation },
+        ...(heldWorkerSelection ? { workerAssignments: this.workerAssignmentTargets() } : {}),
         units: units.map((unit) => ({
           id: unit.id,
           role: unit.role,
@@ -5498,6 +5510,21 @@ export class RtsApp {
   }
 
   private runSelectionAction(id: string): void {
+    if (id.startsWith(WORKER_ASSIGNMENT_ACTION_PREFIX)) {
+      const structureId = Number(id.slice(WORKER_ASSIGNMENT_ACTION_PREFIX.length));
+      const structure = this.structures.all().find((candidate) => candidate.id === structureId);
+      if (!structure) {
+        this.announce("workers", "Bu iş noktası artık yok.", "refused");
+        return;
+      }
+      const workers = this.selection.selected().filter((worker) => this.isManualAssignmentCandidate(worker));
+      if (workers.length === 0) {
+        this.announce("workers", "Atanacak boşta işçi kalmadı.", "refused");
+        return;
+      }
+      this.assignSelectedWorkersToStructure(workers, structure);
+      return;
+    }
     if (id === TRAIN_WORKER_ACTION) {
       this.queueWorker();
       return;
@@ -5665,14 +5692,17 @@ export class RtsApp {
   /** Select every player worker that is free for automatic staffing (I). */
   private selectIdleWorkers(): void {
     const workers = this.units.workersOf(PLAYER_OWNER).filter((worker) => this.isIdleWorker(worker));
+    // Keep this exact group free while its job cards are on screen. It is released
+    // by a card order, `R`, a normal move/stop command, or when selection moves.
+    for (const worker of workers) worker.holdForManualAssignment();
     this.selection.selectUnits(workers);
     if (workers.length > 0) this.announce("workers", `${workers.length} boşta işçi seçildi.`);
     else this.announce("workers", "Seçilecek boşta işçi yok.", "refused");
   }
 
-  /** Return selected free workers to the normal construction-then-production queue (R). */
-  private assignSelectedIdleWorkers(): void {
-    const workers = this.selection.selected().filter((worker) => this.isIdleWorker(worker));
+  /** Release a held selection into the normal construction-then-production queue. */
+  private releaseSelectedWorkersToAutomation(): void {
+    const workers = this.selection.selected().filter((worker) => this.isManualAssignmentCandidate(worker));
     if (workers.length === 0) {
       this.announce("workers", "İşe gönderilecek boşta işçi seçili değil.", "refused");
       return;
@@ -5685,12 +5715,85 @@ export class RtsApp {
     else this.announce("workers", "Şu anda işçi bekleyen uygun bir iş yok.", "refused");
   }
 
+  /** Toggle player staffing; turning it on releases held workers and immediately fills open jobs. */
+  private toggleWorkerAutomation(): void {
+    this.automaticWorkerAssignmentEnabled = !this.automaticWorkerAssignmentEnabled;
+    this.hudBar.setWorkerAutomationEnabled(this.automaticWorkerAssignmentEnabled);
+    if (!this.automaticWorkerAssignmentEnabled) {
+      this.announce("workers", "Otomatik işçi ataması kapalı: işçileri elle dağıtabilirsiniz.");
+      return;
+    }
+    // Preserve the former one-shot helper for a held selection, then offer all
+    // remaining player workers to the normal automatic queues.
+    if (this.selection.selected().some((worker) => this.isManualAssignmentCandidate(worker))) {
+      this.releaseSelectedWorkersToAutomation();
+    }
+    for (const worker of this.units.workersOf(PLAYER_OWNER)) worker.resumeAutomaticWorkerAssignment();
+    this.workerConstruction.assignIdleWorkers();
+    this.economyProduction?.assignIdleWorkers();
+    this.announce("workers", "Otomatik işçi ataması açık: boş işçiler uygun işlere gönderiliyor.");
+  }
+
   private isIdleWorker(worker: Unit): boolean {
     return worker.role === "worker"
       && !worker.blocksAutomaticWorkerAssignment
       && this.workerConstruction.stateFor(worker) === "idle"
       && !(this.economyProduction?.isAssigned(worker) ?? false)
       && !this.pasture.isShepherd(worker);
+  }
+
+  /** A job-card candidate may be held for this selection, but owns no task yet. */
+  private isManualAssignmentCandidate(worker: Unit): boolean {
+    return worker.role === "worker"
+      && this.workerConstruction.stateFor(worker) === "idle"
+      && !(this.economyProduction?.isAssigned(worker) ?? false)
+      && !this.pasture.isShepherd(worker)
+      && !worker.hasPlayerMoveOrder;
+  }
+
+  /** Release a held worker as soon as the player looks somewhere else. */
+  private reconcileManualWorkerSelection(): void {
+    const selected = new Set(this.selection.selected());
+    for (const worker of this.units.workersOf(PLAYER_OWNER)) {
+      if (worker.isHeldForManualAssignment && !selected.has(worker)) worker.resumeAutomaticWorkerAssignment();
+    }
+  }
+
+  /**
+   * Work cards are a view of the same capacities the assignment systems enforce;
+   * they never invent a destination or expose a source-less/buffer-full producer.
+   */
+  private workerAssignmentTargets(): readonly WorkerAssignmentTarget[] {
+    const producers = new Map((this.economyProduction?.snapshots(PLAYER_OWNER) ?? [])
+      .map((snapshot) => [snapshot.structureId, snapshot]));
+    return this.structures.all()
+      .filter((structure) => structure.owner === PLAYER_OWNER)
+      .flatMap((structure): WorkerAssignmentTarget[] => {
+        if (!structure.construction.complete) {
+          const available = this.workerConstruction.availableWorkerSlots(structure);
+          return available === 0 ? [] : [{
+            structureId: structure.id,
+            label: structure.stats.label,
+            icon: structure.stats.icon ?? null,
+            assignedWorkers: this.workerConstruction.assignedWorkers(structure),
+            workerCapacity: this.workerConstruction.assignedWorkers(structure) + available,
+            actionId: `${WORKER_ASSIGNMENT_ACTION_PREFIX}${structure.id}`,
+          }];
+        }
+        const producer = producers.get(structure.id);
+        if (!producer || structure.economy?.requiresLivestock || !producerHasSource(producer.status)
+          || producer.status === "buffer-full" || producer.assignedWorkers >= producer.workerCapacity) return [];
+        return [{
+          structureId: structure.id,
+          label: structure.stats.label,
+          icon: structure.stats.icon ?? null,
+          assignedWorkers: producer.assignedWorkers,
+          workerCapacity: producer.workerCapacity,
+          actionId: `${WORKER_ASSIGNMENT_ACTION_PREFIX}${structure.id}`,
+        }];
+      })
+      .sort((left, right) => (right.workerCapacity - right.assignedWorkers) - (left.workerCapacity - left.assignedWorkers)
+        || left.label.localeCompare(right.label, "tr"));
   }
 
   private structureDetail(structure: PlacedStructure): StructureDetailView {
@@ -6045,6 +6148,7 @@ export class RtsApp {
   }
 
   private assignWorkerToConstruction(structure: PlacedStructure): void {
+    if (structure.owner === PLAYER_OWNER && !this.automaticWorkerAssignmentEnabled) return;
     const result = this.workerConstruction.assignNearest(structure);
     // Both kingdoms build through this hook, but only the human has a palette:
     // narrating an AI site here would put the AI's problems in the player's HUD.

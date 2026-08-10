@@ -268,6 +268,13 @@ export class Unit {
   private collisionRecoverySeconds = 0;
   private workerReturnDelayAfterMove = 0;
   private workerReturnDelayRemaining = 0;
+  /**
+   * `I` ile seçilen boş işçiler, oyuncu bir iş kartı seçene kadar otomatik
+   * görevlendirme tarafından kapılmamalı. Bu bir hareket emri değildir: işçi
+   * yerinde kalır ve seçim değiştiğinde ya da `R` ile otomatiğe döndüğünde
+   * bırakılır.
+   */
+  private manualAssignmentHeld = false;
   private selectedFlag = false;
   private targeterCount = 0;
   private deathElapsed: number | null = null;
@@ -534,7 +541,17 @@ export class Unit {
 
   /** Whether worker automation must leave this unit at its player-chosen spot. */
   get blocksAutomaticWorkerAssignment(): boolean {
-    return this.hasPlayerMoveOrder || this.workerReturnDelayRemaining > 0;
+    return this.hasPlayerMoveOrder || this.workerReturnDelayRemaining > 0 || this.manualAssignmentHeld;
+  }
+
+  /** Reserve an idle worker for the selection panel's explicit job cards. */
+  holdForManualAssignment(): void {
+    this.manualAssignmentHeld = true;
+  }
+
+  /** True while the worker is waiting for an explicit selection-panel job. */
+  get isHeldForManualAssignment(): boolean {
+    return this.manualAssignmentHeld;
   }
 
   /** Start the post-arrival rest timer for a worker's player-issued route. */
@@ -548,6 +565,7 @@ export class Unit {
   resumeAutomaticWorkerAssignment(): void {
     this.workerReturnDelayAfterMove = 0;
     this.workerReturnDelayRemaining = 0;
+    this.manualAssignmentHeld = false;
   }
 
   /** Advance only the post-arrival worker rest timer. */
