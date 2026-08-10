@@ -41991,6 +41991,36 @@ check("Faz 4: square keeps Siege inside the Guard ring", () => {
   assert.ok(orders.every((order) => order.path !== null), "advanced slots continue through existing navigation");
 });
 
+check("Faz 5: a blocked formation tightens before it abandons its shape", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(corridorBlockers(5));
+  const squad = Array.from({ length: 4 }, (_, index) => units.spawn(
+    "player", -3 + index * 2, 8, RTS_TEST_UNIT_STATS,
+  ));
+  const orders = assignGroupDestinations(squad, new Vector3(0, 0, 0), navigation, [], "line");
+  assert.ok(orders.every((order) => order.path !== null), "the narrowed line still reaches the corridor target");
+  assert.ok(orders.every((order) => order.fallback === undefined), "80% spacing succeeds before individual fallback is needed");
+  assert.ok(
+    Math.max(...orders.map((order) => Math.abs(order.destination.x))) < 2,
+    `the final line fits inside the five-unit gap instead of keeping its full width: ${JSON.stringify(orders.map((order) => order.destination.toArray()))}`,
+  );
+});
+
+check("Faz 5: an unreachable formation slot finds nearby legal ground", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  navigation.setBlockers([{ min: [-2, -1, -2], max: [2, 4, 2] }]);
+  const squad = [
+    units.spawn("player", -1, 8, RTS_TEST_UNIT_STATS),
+    units.spawn("player", 1, 8, RTS_TEST_UNIT_STATS),
+  ];
+  const orders = assignGroupDestinations(squad, new Vector3(0, 0, 0), navigation, [], "line");
+  assert.ok(orders.every((order) => order.path !== null), "a blocked slot does not cancel the group order");
+  assert.ok(orders.every((order) => order.fallback === "nearby"), "each blocked slot searches nearby ground after spacing fallback");
+  assert.ok(orders.every((order) => navigation.isWalkable(order.destination.x, order.destination.z)), "nearby fallback stays on legal ground");
+});
+
 check("Faz 7 a squad clears a narrow corridor instead of jamming in it", () => {
   const units = new UnitSystem();
   const navigation = new RtsNavigation();

@@ -1059,16 +1059,20 @@ Her formasyon yalnız ikonunda değil, dünya üzerinde de ilk bakışta ayırt 
 
 > **Uygulama notu (10 Ağustos 2026):** Kama, Hilal, Kare ve Dağınık için deterministik Move-slot üretimi eklendi. Kare dış halkayı Muhafızlara, iç çekirdeği Topçuya önceliklendirir; Dağınık 1.9× spacing kullanır. Dünya üzerindeki görsel kabul bekliyor.
 
+> **Kabul (10 Ağustos 2026):** Kama, Hilal, Kare ve Dağınık dünya üzerinde görsel olarak doğrulandı.
+
 ---
 
 ## Faz 5 — Engel ve fallback
 
 - [ ] Köprü testi
-- [ ] Dar yol testi
+- [x] Dar yol testi
 - [ ] Bina arası testi
 - [ ] Kayalık engel testi
-- [ ] Ulaşılamaz slot fallback'i
-- [ ] Sıkıştırılmış spacing fallback'i
+- [x] Ulaşılamaz slot fallback'i
+- [x] Sıkıştırılmış spacing fallback'i
+
+> **Uygulama notu (10 Ağustos 2026):** Formasyon Move emri sırasıyla 1.0×, 0.9× ve 0.8× spacing ile denenir. Hâlâ geçersiz slot kalırsa yalnız o slot yakın yürünebilir hücreye projekte edilir; bu da başarısızsa grup Serbest dağıtıma döner. Dar geçit ve yakın-slot fallback’i engine testleriyle doğrulandı. Bina arası ile kayalık dünya kabulü bekliyor.
 
 ---
 

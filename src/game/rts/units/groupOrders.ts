@@ -20,6 +20,8 @@ export interface GroupDestination {
   readonly unit: Unit;
   readonly destination: Vector3;
   readonly path: Vector3[] | null;
+  /** Recovery used only after the exact formation slot could not be reached. */
+  readonly fallback?: "nearby" | "free";
 }
 
 /** A destination already claimed by another active player order. */
@@ -66,19 +68,15 @@ export function assignGroupDestinations(
   const centroid = combatUnits.reduce((total, unit) => total.add(unit.position), new Vector3())
     .multiplyScalar(1 / combatUnits.length);
   const spacing = Math.max(...combatUnits.map((unit) => unit.navRadius * 2)) + 0.6;
-  const combatDestinations = formation === "line"
-    ? assignRoleAwareLineDestinations(combatUnits, point, centroid, spacing, navigation, reservations)
-    : formation === "square"
-      ? assignRoleAwareSquareDestinations(combatUnits, point, centroid, spacing, navigation, reservations)
-      : formation === "loose"
-        ? assignDestinationsToSlots(
-          combatUnits,
-          rtsFormationWorldSlots(formation, combatUnits.length, spacing, centroid, point),
-          point,
-          navigation,
-          reservations,
-        )
-        : assignRoleAwareDepthDestinations(formation, combatUnits, point, centroid, spacing, navigation, reservations);
+  const combatDestinations = assignFormationCombatDestinations(
+    formation,
+    combatUnits,
+    point,
+    centroid,
+    spacing,
+    navigation,
+    reservations,
+  );
   const workers = units.filter((unit) => unit.role === "worker");
   if (workers.length === 0) return combatDestinations;
   const workerDestinations = assignDestinationsToSlots(
@@ -100,6 +98,54 @@ function legacySlots(count: number, point: Vector3): Vector3[] {
     .map((offset) => new Vector3(point.x + offset.x, 0, point.z + offset.z));
 }
 
+/**
+ * A blocked formation first tightens as a group. Only once all three spacings
+ * fail do individual slots search nearby ground; a final free-grid fallback
+ * keeps one bad slot from stopping the squad.
+ */
+function assignFormationCombatDestinations(
+  formation: RtsGeometricFormationId,
+  units: readonly Unit[],
+  point: Vector3,
+  centroid: Vector3,
+  spacing: number,
+  navigation: RtsNavigation,
+  reservations: readonly DestinationReservation[],
+): GroupDestination[] {
+  const assign = (candidateSpacing: number, allowNearbyFallback: boolean): GroupDestination[] => {
+    if (formation === "line") {
+      return assignRoleAwareLineDestinations(
+        units, point, centroid, candidateSpacing, navigation, reservations, allowNearbyFallback,
+      );
+    }
+    if (formation === "square") {
+      return assignRoleAwareSquareDestinations(
+        units, point, centroid, candidateSpacing, navigation, reservations, allowNearbyFallback,
+      );
+    }
+    if (formation === "loose") {
+      return assignDestinationsToSlots(
+        units,
+        rtsFormationWorldSlots(formation, units.length, candidateSpacing, centroid, point),
+        point,
+        navigation,
+        reservations,
+        allowNearbyFallback,
+      );
+    }
+    return assignRoleAwareDepthDestinations(
+      formation, units, point, centroid, candidateSpacing, navigation, reservations, allowNearbyFallback,
+    );
+  };
+  for (const multiplier of [1, 0.9, 0.8]) {
+    const destinations = assign(spacing * multiplier, false);
+    if (destinations.every((entry) => entry.path !== null && entry.fallback === undefined)) return destinations;
+  }
+  const nearby = assign(spacing * 0.8, true);
+  if (nearby.every((entry) => entry.path !== null && entry.fallback !== "free")) return nearby;
+  return assignDestinationsToSlots(units, legacySlots(units.length, point), point, navigation, reservations);
+}
+
 /** Guard, Archer, Siege, then any future combat role: front to back priority. */
 function combatRoleGroups(units: readonly Unit[]): Unit[][] {
   return [
@@ -117,6 +163,7 @@ function assignRoleAwareLineDestinations(
   spacing: number,
   navigation: RtsNavigation,
   reservations: readonly DestinationReservation[],
+  allowNearbyFallback: boolean,
 ): GroupDestination[] {
   const groups = combatRoleGroups(units);
   if (groups.length <= 1) {
@@ -126,6 +173,7 @@ function assignRoleAwareLineDestinations(
       point,
       navigation,
       reservations,
+      allowNearbyFallback,
     );
   }
   const forward = point.clone().sub(centroid).setY(0).normalize();
@@ -145,6 +193,7 @@ function assignRoleAwareLineDestinations(
         ...reservations,
         ...assigned.map((entry) => ({ position: entry.destination, radius: entry.unit.navRadius })),
       ],
+      allowNearbyFallback,
     );
     assigned.push(...destinations);
   });
@@ -159,6 +208,7 @@ function assignRoleAwareDepthDestinations(
   spacing: number,
   navigation: RtsNavigation,
   reservations: readonly DestinationReservation[],
+  allowNearbyFallback: boolean,
 ): GroupDestination[] {
   const groups = combatRoleGroups(units);
   if (groups.length <= 1) {
@@ -168,6 +218,7 @@ function assignRoleAwareDepthDestinations(
       point,
       navigation,
       reservations,
+      allowNearbyFallback,
     );
   }
   const forward = point.clone().sub(centroid).setY(0).normalize();
@@ -186,7 +237,7 @@ function assignRoleAwareDepthDestinations(
     const destinations = assignDestinationsToSlots(group, groupSlots, point, navigation, [
       ...reservations,
       ...assigned.map((entry) => ({ position: entry.destination, radius: entry.unit.navRadius })),
-    ]);
+    ], allowNearbyFallback);
     assigned.push(...destinations);
   }
   return destinationsInSelectionOrder(units, assigned, point);
@@ -199,11 +250,12 @@ function assignRoleAwareSquareDestinations(
   spacing: number,
   navigation: RtsNavigation,
   reservations: readonly DestinationReservation[],
+  allowNearbyFallback: boolean,
 ): GroupDestination[] {
   const groups = combatRoleGroups(units);
   const slots = rtsFormationWorldSlots("square", units.length, spacing, centroid, point);
   if (groups.length <= 1) {
-    return assignDestinationsToSlots(units, slots, point, navigation, reservations);
+    return assignDestinationsToSlots(units, slots, point, navigation, reservations, allowNearbyFallback);
   }
   const forward = point.clone().sub(centroid).setY(0).normalize();
   if (forward.lengthSq() === 0) forward.set(0, 0, 1);
@@ -226,7 +278,7 @@ function assignRoleAwareSquareDestinations(
     const destinations = assignDestinationsToSlots(group, groupSlots, point, navigation, [
       ...reservations,
       ...assigned.map((entry) => ({ position: entry.destination, radius: entry.unit.navRadius })),
-    ]);
+    ], allowNearbyFallback);
     assigned.push(...destinations);
   }
   return destinationsInSelectionOrder(units, assigned, point);
@@ -247,6 +299,7 @@ function assignDestinationsToSlots(
   point: Vector3,
   navigation: RtsNavigation,
   reservations: readonly DestinationReservation[],
+  allowNearbyFallback = true,
 ): GroupDestination[] {
   const pairs: Array<{ unit: number; slot: number; distance: number }> = [];
   units.forEach((unit, u) => {
@@ -277,19 +330,44 @@ function assignDestinationsToSlots(
   if (reservations.length === 0) {
     return units.map((unit, u) => {
       const slot = slots[slotForUnit[u] ?? 0] ?? point;
-      const path = navigation.plan(unit.position, slot) ?? navigation.plan(unit.position, point);
-      return { unit, destination: slot, path };
+      const path = navigation.isWalkable(slot.x, slot.z)
+        ? navigation.plan(unit.position, slot)
+        : null;
+      if (path) return { unit, destination: slot, path };
+      if (allowNearbyFallback) {
+        const nearby = nearestAvailableDestination(unit, slot, navigation, []);
+        if (nearby) return { unit, destination: nearby.destination, path: nearby.path, fallback: "nearby" };
+      }
+      const freePath = navigation.plan(unit.position, point);
+      return {
+        unit,
+        destination: freePath?.[freePath.length - 1]?.clone() ?? point.clone(),
+        path: freePath,
+        fallback: "free",
+      };
     });
   }
 
   const occupied = [...reservations];
   return units.map((unit, u) => {
     const slot = slots[slotForUnit[u] ?? 0] ?? point;
-    const assigned = nearestAvailableDestination(unit, slot, navigation, occupied)
-      ?? nearestAvailableDestination(unit, point, navigation, occupied);
-    if (!assigned) return { unit, destination: slot, path: null };
-    occupied.push({ position: assigned.destination, radius: unit.navRadius });
-    return { unit, destination: assigned.destination, path: assigned.path };
+    const slotAvailable = navigation.isWalkable(slot.x, slot.z) && !occupied.some((reservation) => Math.hypot(
+      slot.x - reservation.position.x,
+      slot.z - reservation.position.z,
+    ) < unit.navRadius + reservation.radius + DESTINATION_CLEARANCE);
+    const directPath = slotAvailable ? navigation.plan(unit.position, slot) : null;
+    if (directPath) {
+      occupied.push({ position: slot.clone(), radius: unit.navRadius });
+      return { unit, destination: slot, path: directPath };
+    }
+    const nearby = allowNearbyFallback
+      ? nearestAvailableDestination(unit, slot, navigation, occupied)
+      : null;
+    if (nearby) {
+      occupied.push({ position: nearby.destination, radius: unit.navRadius });
+      return { unit, destination: nearby.destination, path: nearby.path, fallback: "nearby" };
+    }
+    return { unit, destination: point.clone(), path: null, fallback: "free" };
   });
 }
 
