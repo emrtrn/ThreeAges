@@ -9,6 +9,7 @@ import { Vector3 } from "three";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { PlacedStructure } from "../structures/placedStructureSystem";
+import { productionAdjacencyMultiplier } from "../structures/productionAdjacency";
 import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { ResourceNodeSystem } from "./resourceNodeSystem";
@@ -207,6 +208,7 @@ export class EconomyProductionSystem {
         if (!economy) throw new Error("Economy producer missing economy balance");
         const workingWorkers = [...producer.assignments.values()]
           .filter((assignment) => assignment.state === "producing" || assignment.state === "gathering").length;
+        const adjacencyMultiplier = productionAdjacencyMultiplier(producer.structure, this.structures.all());
         return {
           structureId: producer.structure.id,
           buildingId: producer.structure.stats.id,
@@ -223,10 +225,10 @@ export class EconomyProductionSystem {
             ? 0
             : economy.requiresLivestock
               ? this.livestockYield(producer.structure) * (economy.perAnimalPerMinute ?? 0)
-              : workingWorkers * (economy.perWorkerPerMinute ?? 0),
+              : workingWorkers * (economy.perWorkerPerMinute ?? 0) * adjacencyMultiplier,
           maximumProductionPerMinute: economy.requiresLivestock
             ? (economy.livestockCapacity ?? 0) * (economy.perAnimalPerMinute ?? 0)
-            : economy.workerCapacity * (economy.perWorkerPerMinute ?? 0),
+            : economy.workerCapacity * (economy.perWorkerPerMinute ?? 0) * adjacencyMultiplier,
           localBuffer: producer.localBuffer,
           localBufferCapacity: economy.localBufferCapacity,
           lastProductionTick: producer.lastProductionTick,
@@ -450,7 +452,8 @@ export class EconomyProductionSystem {
     // refused a producer without one, so the fallback is unreachable rather than
     // a quiet way to earn nothing.
     const requested = Math.min(
-      (workingWorkers * (economy.perWorkerPerMinute ?? 0) * deltaSeconds) / 60,
+      (workingWorkers * (economy.perWorkerPerMinute ?? 0)
+        * productionAdjacencyMultiplier(producer.structure, this.structures.all()) * deltaSeconds) / 60,
       economy.localBufferCapacity - producer.localBuffer,
     );
     // Renewable producers only: a farm's crop is grown on the spot, so the

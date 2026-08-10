@@ -819,6 +819,24 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       }
       aura = { radius, healPerSecond, damageResistance };
     }
+    const productionAdjacencyRaw = stats["productionAdjacency"];
+    let productionAdjacency: BuildingBalance["string"]["productionAdjacency"];
+    if (productionAdjacencyRaw !== undefined) {
+      const adjacencyWhere = `${statsWhere}.productionAdjacency`;
+      const adjacencyData = asObject(productionAdjacencyRaw, adjacencyWhere);
+      const targetBuildingId = requireString(adjacencyData, "targetBuildingId", adjacencyWhere);
+      if (!/^[a-z][a-z0-9_]*$/.test(targetBuildingId)) {
+        throw new GameDataError(`${adjacencyWhere}.targetBuildingId: invalid building id "${targetBuildingId}"`);
+      }
+      if (targetBuildingId === id) {
+        throw new GameDataError(`${adjacencyWhere}.targetBuildingId: a building may not support itself`);
+      }
+      const multiplier = requireFiniteNumber(adjacencyData, "multiplier", adjacencyWhere);
+      if (multiplier <= 1) {
+        throw new GameDataError(`${adjacencyWhere}.multiplier: must be > 1`);
+      }
+      productionAdjacency = { targetBuildingId, multiplier };
+    }
     const progressionRaw = stats["progression"];
     const progression = progressionRaw === undefined ? undefined : validateBuildingProgression(
       progressionRaw,
@@ -852,6 +870,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       ...(market ? { market } : {}),
       ...(defense ? { defense } : {}),
       ...(aura ? { aura } : {}),
+      ...(productionAdjacency ? { productionAdjacency } : {}),
       ...(progression ? { progression } : {}),
     };
   }

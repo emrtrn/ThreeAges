@@ -42,6 +42,7 @@ export type StructureBuildFailure =
   | "missing-forest"
   | "missing-game"
   | "missing-livestock"
+  | "missing-adjacent-building"
   | "enemy-occupied";
 
 export type StructureBuildResult =
@@ -83,8 +84,10 @@ export class StructureConstructionService {
      * Omitted, every building is unlocked: the headless placement tests have no
      * progression system, and a default that locked them would refuse builds for
      * a reason those tests never opted into.
-     */
+    */
     private readonly isUnlocked: (owner: UnitOwner, stats: BuildingBalanceStats) => boolean = () => true,
+    /** Optional owner-aware rule for relationships between friendly structures. */
+    private readonly ownerPlacementFailure: (owner: UnitOwner, stats: BuildingBalanceStats, x: number, z: number) => PlacementResult["reason"] = () => null,
   ) {}
 
   /**
@@ -103,7 +106,8 @@ export class StructureConstructionService {
       canPlaceExpansion: this.territory.canPlaceExpansion.bind(this.territory),
     });
     if (!result.valid) return result;
-    const reason = this.additionalPlacementFailure?.(stats, result.x, result.z) ?? null;
+    const reason = this.additionalPlacementFailure?.(stats, result.x, result.z)
+      ?? this.ownerPlacementFailure(owner, stats, result.x, result.z);
     if (reason) return { ...result, valid: false, reason };
     // Own units step aside (see footprintEviction); enemy units do not, or the
     // build order becomes a way to shove a hostile army around for free.

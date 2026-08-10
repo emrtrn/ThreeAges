@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_Windmill_FirstAge",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    { "id": "root", "component": "Transform", "props": {} },
+    {
+      "id": "windmillMesh",
+      "component": "StaticMeshComponent",
+      "props": { "assetId": "windmill-firstage" },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

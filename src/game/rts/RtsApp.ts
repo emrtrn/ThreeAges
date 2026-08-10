@@ -182,6 +182,7 @@ function slotTimerKey(structureId: number, slot: RtsDamageSlotName): string {
   return `${structureId}:${slot}`;
 }
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
+import { hasRequiredAdjacentCompletedBuilding } from "./structures/productionAdjacency";
 import { StructureConstructionService } from "./structures/structureConstructionService";
 import { KingdomRegistry } from "./kingdom/kingdomRegistry";
 import { RoadConstructionService } from "./roads/roadConstructionService";
@@ -1588,6 +1589,9 @@ export class RtsApp {
       // reaches the service without passing either — so this is where "Yerleşim
       // Lv2" is actually true.
       (owner, stats) => buildingUnlocked(stats, this.progression.tierFor(owner)),
+      (owner, stats, x, z) => hasRequiredAdjacentCompletedBuilding(stats, owner, x, z, this.structures.all())
+        ? null
+        : "missing-adjacent-building",
     );
     this.roadConstruction = new RoadConstructionService(
       this.roads,

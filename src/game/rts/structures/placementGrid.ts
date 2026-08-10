@@ -7,7 +7,7 @@ import { RTS_WORLD_BUILD_HALF_EXTENT } from "../world/rtsGround";
 /** Confirmed Phase 2 placement-grid measure, in world units. */
 export const RTS_PLACEMENT_GRID_SIZE = 2;
 
-export type PlacementFailure = "outside-map" | "outside-control" | "blocked" | "insufficient-resources" | "missing-resource-node" | "missing-forest" | "missing-game" | "missing-livestock" | "enemy-occupied";
+export type PlacementFailure = "outside-map" | "outside-control" | "blocked" | "insufficient-resources" | "missing-resource-node" | "missing-forest" | "missing-game" | "missing-livestock" | "missing-adjacent-building" | "enemy-occupied";
 
 export interface PlacementResult {
   readonly x: number;

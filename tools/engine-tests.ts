@@ -320,6 +320,7 @@ import { GpuFrameTimer, type GpuTimerContext } from "@engine/perf/gpuTimer";
 import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
 import { updateStructureDestruction } from "../src/game/rts/structures/structureDestruction";
 import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
+import { hasRequiredAdjacentCompletedBuilding, productionAdjacencyMultiplier } from "../src/game/rts/structures/productionAdjacency";
 import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
 import { centerAccessRoadPlan } from "../src/game/rts/roads/centerAccessRoad";
 import {
@@ -39106,6 +39107,65 @@ check("RTS economy producers report income, survive a ten-minute run, and stop a
   production.reset();
   structures.clear();
   units.clear();
+});
+
+check("Windmill requires a completed adjacent farm and doubles each touching farm without stacking", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const farm = buildings.farm ?? assert.fail("farm definition missing");
+  const windmill = buildings.windmill ?? assert.fail("windmill definition missing");
+  assert.equal(windmill.requiredSettlementLevel, 3);
+  assert.deepEqual(windmill.productionAdjacency, { targetBuildingId: "farm", multiplier: 2 });
+
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const navigation = new RtsNavigation();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 1000, stone: 1000 }, 20);
+  const territory = new TerritoryControlSystem(() => [{ owner: "player", x: 0, z: 0, radius: 1000 }]);
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => structures.navigationBlockers(),
+    territory,
+    () => {},
+    () => {},
+    (stats, x, z) => hasRequiredAdjacentCompletedBuilding(stats, "player", x, z, structures.all())
+      ? null
+      : "missing-adjacent-building",
+  );
+  assert.equal(construction.validate("player", "windmill", 0, 0)?.reason, "missing-adjacent-building");
+  const firstFarm = structures.place("player", farm, 0, 0);
+  assert.equal(construction.validate("player", "windmill", 6, 0)?.reason, "missing-adjacent-building", "a foundation is not enough");
+  structures.advanceConstruction(firstFarm, farm.constructionSeconds);
+  assert.equal(construction.validate("player", "windmill", 6, 0)?.valid, true, "shared edges are valid");
+  assert.equal(construction.validate("player", "windmill", 6, 6)?.reason, "missing-adjacent-building", "diagonal corners are not adjacent");
+
+  const firstMill = structures.place("player", windmill, 6, 0);
+  structures.advanceConstruction(firstMill, windmill.constructionSeconds);
+  for (let index = 0; index < farm.economy!.workerCapacity; index += 1) {
+    units.spawn("player", -8 + index * 1.5, 0, RTS_TEST_WORKER_STATS);
+  }
+  navigation.setBlockers(structures.navigationBlockers());
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+  for (let frame = 0; frame < 600; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    production.update(1 / 60);
+  }
+  const snapshot = production.snapshots("player").find((entry) => entry.structureId === firstFarm.id) ?? assert.fail("farm snapshot missing");
+  assert.equal(snapshot.workingWorkers, farm.economy!.workerCapacity, "the mill leaves its farm crew reachable");
+  assert.equal(
+    snapshot.productionPerMinute,
+    farm.economy!.workerCapacity * farm.economy!.perWorkerPerMinute! * 2,
+    "a touching windmill doubles its farm's production",
+  );
+  const secondMill = structures.place("player", windmill, -6, 0);
+  structures.advanceConstruction(secondMill, windmill.constructionSeconds);
+  assert.equal(productionAdjacencyMultiplier(firstFarm, structures.all()), 2, "two touching windmills still grant one clear x2 multiplier");
+  territory.dispose();
 });
 
 check("Tarladaki isci calisma pozunu takar, birakildiginda birakir", () => {

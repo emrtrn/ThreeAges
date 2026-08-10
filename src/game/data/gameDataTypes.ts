@@ -325,6 +325,8 @@ export interface BuildingBalanceStats {
   readonly defense?: BuildingDefenseBalance;
   /** Present on support structures which sustain nearby friendly units (the Temple). */
   readonly aura?: BuildingAuraBalance;
+  /** Completed local infrastructure that multiplies adjacent target production. */
+  readonly productionAdjacency?: BuildingProductionAdjacencyBalance;
   /**
    * Complete age × level balance matrix — the single source of a building's
    * live stats. Every entry is an absolute value for one of the six playable
@@ -484,6 +486,14 @@ export interface BuildingAuraBalance {
   readonly healPerSecond: number;
   /** Fraction of incoming damage absorbed while inside, 0..{@link MAX_AURA_DAMAGE_RESISTANCE}. */
   readonly damageResistance: number;
+}
+
+/** A strict footprint-edge production bonus, first used by the Windmill. */
+export interface BuildingProductionAdjacencyBalance {
+  /** Stable id of the completed friendly building this structure supports. */
+  readonly targetBuildingId: string;
+  /** Output multiplier while the two completed footprints share an edge. */
+  readonly multiplier: number;
 }
 
 /**

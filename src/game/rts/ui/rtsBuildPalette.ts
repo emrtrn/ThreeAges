@@ -76,7 +76,7 @@ const BUILD_CATEGORIES: readonly BuildCategory[] = [
   {
     title: "Ekonomi",
     groups: [
-      { title: "Gıda", buildingIds: ["farm", "hunting_camp", "pasture"] },
+      { title: "Gıda", buildingIds: ["farm", "windmill", "hunting_camp", "pasture"] },
       { title: "Ham Madde", buildingIds: ["lumber_camp", "quarry", "gold_mine"] },
     ],
   },
@@ -352,7 +352,9 @@ export class RtsBuildPalette {
           ? "Avcı Kulübesi için yakında av hayvanı gerekir."
         : state.result.reason === "missing-livestock"
           ? "Ağıl için yakında evcilleştirilebilir hayvan gerekir."
-        : state.result.reason === "enemy-occupied"
+          : state.result.reason === "missing-adjacent-building"
+            ? "Değirmen, tamamlanmış dost bir Tarlaya bitişik kurulmalı."
+          : state.result.reason === "enemy-occupied"
           ? "Geçersiz konum: alanda düşman birlikleri var."
         : state.result.reason === "missing-resource-node"
           ? "Geçersiz konum: Taş Ocağı veya Altın Madeni uygun kaynak düğümünü örtmeli."

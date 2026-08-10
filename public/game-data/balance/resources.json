@@ -8,12 +8,12 @@
   "stone": {
     "label": "Taş",
     "safeNode": {
-      "capacity": 400,
-      "perWorkerPerMinute": 8
+      "capacity": 1200,
+      "perWorkerPerMinute": 20
     },
     "externalNode": {
-      "capacity": 800,
-      "perWorkerPerMinute": 12
+      "capacity": 2000,
+      "perWorkerPerMinute": 30
     }
   },
   "gold": {

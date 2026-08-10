@@ -130,6 +130,25 @@
         }
       }
     },
+    "windmill": {
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Windmill_FirstAge.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Windmill_FirstAge.actor.json",
+        "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Windmill_FirstAge.actor.json"
+      },
+      "ages": {
+        "settlement": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Windmill_FirstAge.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Windmill_FirstAge.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Windmill_FirstAge.actor.json"
+        },
+        "town": {
+          "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Windmill_SecondAge.actor.json",
+          "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Windmill_SecondAge.actor.json",
+          "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Windmill_SecondAge.actor.json"
+        }
+      }
+    },
     "lumber_camp": {
       "levels": {
         "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_LumberCamp.actor.json",
