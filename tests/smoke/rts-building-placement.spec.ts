@@ -451,7 +451,7 @@ test("RTS Phase 7 a box-selected group takes a move order and every unit finishe
   await expect(formation.locator('[data-rts-formation="free"]')).toHaveAttribute("data-rts-active", "true");
   await formation.locator('[data-rts-formation="line"]').click();
   await expect(formation.locator('[data-rts-formation="line"]')).toHaveAttribute("data-rts-active", "true");
-  await expect(formation.locator(".rts-selection-formation-status")).toHaveText("Aktif Formasyon: Hat");
+  await expect(formation.locator(".rts-selection-formation-status")).toHaveCount(0);
 
   await canvas.click({ button: "right", position: { x: 640, y: 300 } });
   await expect(overlay).toContainText(/yol:\d+/);

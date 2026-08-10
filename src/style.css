@@ -2427,8 +2427,28 @@ body {
    the right half turns the previously unused panel space into one explicit
    choice. Single units and worker-only groups deliberately keep the old faces. */
 .rts-selection-panel[data-rts-panel-mode="roster-formation"] {
-  grid-template-columns: minmax(0, 45%) minmax(0, 55%);
+  /* Matches the ordinary single-unit portrait: 48px + 6px gap + 49px. */
+  --rts-selection-formation-card-height: 103px;
+  --rts-selection-formation-options-height: var(--rts-selection-formation-card-height);
+  grid-template-columns: minmax(0, 35%) minmax(0, 65%);
   grid-template-rows: minmax(0, 1fr);
+}
+
+/* Portrait cards stay full-size. Extra width belongs solely to the left roster:
+   the formation column stays at its two-portrait width and the panel's original
+   left edge remains fixed, so growth goes rightward away from the build panel. */
+.rts-selection-panel[data-rts-panel-mode="roster-formation"][data-rts-roster-count="3"] {
+  left: calc(50% + 43px);
+  width: min(706px, calc(100vw - 48px));
+  grid-template-columns: 276px minmax(0, 372px);
+  transition: left 140ms ease, width 140ms ease;
+}
+
+.rts-selection-panel[data-rts-panel-mode="roster-formation"][data-rts-roster-count="4"] {
+  left: calc(50% + 90px);
+  width: min(800px, calc(100vw - 48px));
+  grid-template-columns: 370px minmax(0, 372px);
+  transition: left 140ms ease, width 140ms ease;
 }
 
 .rts-selection-panel[data-rts-panel-mode="roster-formation"] :is(
@@ -2443,16 +2463,17 @@ body {
 
 .rts-selection-panel[data-rts-panel-mode="roster-formation"] .rts-selection-cards {
   grid-row: 1;
-  grid-column: 1;
+  grid-column: 1
 }
 
 .rts-selection-formation {
   grid-row: 1;
   grid-column: 2;
   display: grid;
-  grid-template-rows: max-content minmax(0, 1fr) max-content;
+  grid-template-rows: var(--rts-selection-formation-options-height) max-content;
+  align-content: start;
   min-width: 0;
-  gap: 3px;
+  gap: 12px;
 }
 
 .rts-selection-formation[hidden] {
@@ -2460,18 +2481,19 @@ body {
 }
 
 .rts-selection-formation-title {
-  color: var(--ta-gold);
+  color: var(--ta-ink);
   font-family: Georgia, serif;
   font-size: 14px;
   line-height: 1;
   text-align: center;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .rts-selection-formation-options {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 3px;
+  gap: 6px;
+  height: var(--rts-selection-formation-options-height);
   min-width: 0;
 }
 
@@ -2524,15 +2546,6 @@ body {
   text-overflow: ellipsis;
 }
 
-.rts-selection-formation-status {
-  margin: 0;
-  color: var(--ta-gold-soft);
-  font-family: Georgia, serif;
-  font-size: 12px;
-  line-height: 1.1;
-  text-align: center;
-}
-
 /* Rescue remains available in the rare trapped-group case without taking the
    formation choice away; its one compact button overlays only empty card space. */
 .rts-selection-panel[data-rts-panel-mode="roster-formation"] .rts-selection-actions {
@@ -2544,7 +2557,18 @@ body {
 
 @media (max-width: 1120px) {
   .rts-selection-panel[data-rts-panel-mode="roster-formation"] {
+    /* Four-plus-three formation cards must share the fixed HUD height. */
+    --rts-selection-formation-card-height: 52px;
+    --rts-selection-formation-options-height: calc(var(--rts-selection-formation-card-height) * 2 + 3px);
     grid-template-columns: minmax(0, 42%) minmax(0, 58%);
+  }
+
+  .rts-selection-panel[data-rts-panel-mode="roster-formation"][data-rts-roster-count="3"] {
+    width: min(706px, calc(100vw - 24px));
+  }
+
+  .rts-selection-panel[data-rts-panel-mode="roster-formation"][data-rts-roster-count="4"] {
+    width: min(800px, calc(100vw - 24px));
   }
 
   .rts-selection-formation-options {
@@ -2565,7 +2589,7 @@ body {
   grid-column: 1;
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   /* Scroll rather than shrink: eight unit types must not become eight
      unreadable slivers, and the panel's height is fixed by its frame. */
@@ -2575,6 +2599,12 @@ body {
 
 .rts-selection-cards[hidden] {
   display: none;
+}
+
+/* These widths exactly fit 3×88px + 2×6px and 4×88px + 3×6px. */
+.rts-selection-panel[data-rts-panel-mode="roster-formation"][data-rts-roster-count="3"] .rts-selection-cards,
+.rts-selection-panel[data-rts-panel-mode="roster-formation"][data-rts-roster-count="4"] .rts-selection-cards {
+  overflow-x: hidden;
 }
 
 /* The rescue button is the only verb a unit selection can carry; give it the
@@ -2589,7 +2619,7 @@ body {
   display: flex;
   flex: 0 0 88px;
   flex-direction: column;
-  gap: 3px;
+  gap: 10px;
   width: 88px;
 }
 
@@ -2623,7 +2653,7 @@ body {
   bottom: 3px;
   padding: 0 4px;
   color: var(--ta-gold);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.25;
   background: rgb(12 8 5 / 78%);
@@ -2633,7 +2663,7 @@ body {
 .rts-selection-card-label {
   overflow: hidden;
   color: var(--ta-ink);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.1;
   text-align: center;
@@ -2677,7 +2707,7 @@ body {
 
 .rts-selection-slots {
   display: flex;
-  gap: 3px;
+  gap: 10px;
   margin-top: 5px;
   overflow: hidden;
 }
@@ -2738,7 +2768,7 @@ body {
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 10px;
   overflow: hidden;
 }
 
@@ -2748,7 +2778,7 @@ body {
 
 .rts-selection-chip {
   display: inline-flex;
-  gap: 3px;
+  gap: 10px;
   align-items: center;
   height: 17px;
   padding: 0 5px;
@@ -3040,6 +3070,26 @@ body {
   padding: 22px 24px;
   color: var(--ta-ink);
   box-shadow: var(--ta-panel-shadow);
+}
+
+/* Category contents have different natural heights. The TypeScript palette
+   measures those endpoints and supplies an inline height only during a switch. */
+.rts-build-palette.is-category-resizing {
+  overflow: hidden;
+  transition: height 140ms ease;
+}
+
+/* The panel is deliberately between two measured heights here. Let its frame
+   reveal the incoming category instead of flashing the grid's emergency scroll
+   box before the height transition reaches its destination. */
+.rts-build-palette.is-category-resizing .rts-build-grid {
+  overflow-y: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rts-build-palette.is-category-resizing {
+    transition-duration: 0ms;
+  }
 }
 
 /*

@@ -39,7 +39,6 @@ export class RtsSelectionPanel {
   private readonly cards = document.createElement("div");
   private readonly formation = document.createElement("section");
   private readonly formationOptions = document.createElement("div");
-  private readonly formationStatus = document.createElement("p");
   private readonly body = document.createElement("div");
   private readonly lines: HTMLParagraphElement[] = [];
   /** The status strip under the body lines; see {@link SelectionChip}. */
@@ -148,8 +147,7 @@ export class RtsSelectionPanel {
     formationTitle.className = "rts-selection-formation-title";
     formationTitle.textContent = "Formasyon";
     this.formationOptions.className = "rts-selection-formation-options";
-    this.formationStatus.className = "rts-selection-formation-status";
-    this.formation.append(formationTitle, this.formationOptions, this.formationStatus);
+    this.formation.append(this.formationOptions, formationTitle);
     this.root.append(this.portrait, this.header, details, this.cards, this.formation, this.actionRow, this.progress, this.hints);
     const overlay = document.getElementById("ui-overlay") ?? document.body;
     overlay.append(this.root, this.actionTray);
@@ -296,14 +294,28 @@ export class RtsSelectionPanel {
    * usually one to four elements long.
    */
   private renderCards(cards: readonly SelectionUnitCard[]): void {
-    const signature = cards.map((card) => `${card.typeId}|${card.count}`).join(";");
+    // Every group keeps the same portrait language. Three and four types widen
+    // the panel through its roster-count attribute instead of becoming a dense
+    // text-only summary.
+    const rosterLayout = "portraits";
+    const signature = `${rosterLayout}|${cards.map((card) => `${card.typeId}|${card.count}`).join(";")}`;
+    this.root.dataset.rtsRosterCount = String(cards.length);
     if (this.cards.dataset.rtsCards === signature) return;
     this.cards.dataset.rtsCards = signature;
+    this.cards.dataset.rtsRosterLayout = rosterLayout;
     this.cards.hidden = cards.length === 0;
     this.cards.replaceChildren(...cards.map((card) => {
       const entry = document.createElement("div");
       entry.className = "rts-selection-card";
       entry.title = `${card.count} ${card.label}`;
+
+      const count = document.createElement("span");
+      count.className = "rts-selection-card-count";
+      count.textContent = `×${card.count}`;
+
+      const label = document.createElement("span");
+      label.className = "rts-selection-card-label";
+      label.textContent = card.label;
 
       const frame = document.createElement("div");
       frame.className = "rts-selection-card-portrait";
@@ -316,15 +328,7 @@ export class RtsSelectionPanel {
         icon.alt = "";
         frame.appendChild(icon);
       }
-      const count = document.createElement("span");
-      count.className = "rts-selection-card-count";
-      count.textContent = `×${card.count}`;
       frame.appendChild(count);
-
-      const label = document.createElement("span");
-      label.className = "rts-selection-card-label";
-      label.textContent = card.label;
-
       entry.append(frame, label);
       return entry;
     }));
@@ -367,8 +371,6 @@ export class RtsSelectionPanel {
     for (const button of this.formationOptions.querySelectorAll<HTMLButtonElement>(".rts-selection-formation-option")) {
       button.dataset.rtsActive = button.dataset.rtsFormation === formation.active ? "true" : "false";
     }
-    const selected = formation.options.find((option) => option.id === formation.active);
-    this.formationStatus.textContent = `Aktif Formasyon: ${selected?.label ?? "Serbest"}`;
   }
 
   /**

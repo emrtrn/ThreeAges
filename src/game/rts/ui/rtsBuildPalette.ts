@@ -146,6 +146,9 @@ export class RtsBuildPalette {
   private readonly tabs = new Map<string, HTMLButtonElement>();
   private readonly categoryPanels = new Map<string, HTMLElement>();
   private activeCategory = "Ekonomi";
+  /** The initial category settles instantly; only player-driven changes resize. */
+  private categoryAnimationReady = false;
+  private categoryAnimationToken = 0;
   /**
    * Placement is *modal*: one pick arms the cursor until a right-click or a
    * different pick disarms it, and the road tool stays armed across a whole
@@ -529,9 +532,36 @@ export class RtsBuildPalette {
   }
 
   private selectCategory(title: string): void {
+    const previousHeight = this.root.getBoundingClientRect().height;
+    // An interrupted transition leaves an explicit height behind. Clear it before
+    // measuring the new category's natural content height.
+    this.root.classList.remove("is-category-resizing");
+    this.root.style.height = "";
     this.activeCategory = title;
     for (const [category, tab] of this.tabs) tab.setAttribute("aria-pressed", String(category === title));
     for (const [category, panel] of this.categoryPanels) panel.hidden = category !== title;
+    const nextHeight = this.root.getBoundingClientRect().height;
+    if (!this.categoryAnimationReady) {
+      this.categoryAnimationReady = true;
+      return;
+    }
+    if (Math.abs(nextHeight - previousHeight) < 1) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const token = ++this.categoryAnimationToken;
+    this.root.style.height = `${previousHeight}px`;
+    this.root.classList.add("is-category-resizing");
+    // Force the browser to commit the old height before it receives the target.
+    void this.root.offsetHeight;
+    this.root.style.height = `${nextHeight}px`;
+    const finish = (event: TransitionEvent): void => {
+      if (event.target !== this.root || event.propertyName !== "height") return;
+      this.root.removeEventListener("transitionend", finish);
+      if (token !== this.categoryAnimationToken) return;
+      this.root.classList.remove("is-category-resizing");
+      this.root.style.height = "";
+    };
+    this.root.addEventListener("transitionend", finish);
   }
 
   dispose(): void {

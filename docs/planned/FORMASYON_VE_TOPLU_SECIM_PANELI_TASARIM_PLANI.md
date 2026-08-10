@@ -991,6 +991,8 @@ Henüz hareket davranışı değişmese bile UI doğru seçim durumunu gösterme
 
 > **Kabul (10 Ağustos 2026):** Görsel browser kontrolü kullanıcı tarafından tamamlandı. State ve minimum asker kuralları ayrıca `tsc` ve engine testleriyle doğrulandı.
 
+> **UI takip notu (10 Ağustos 2026):** Çoklu seçimde her birim türü büyük portre kartıyla gösterilir. Bir veya iki türde temel panel genişliği korunur; üç ve dört türde sol portre sütunu, kartları kaydırmadan sığdıracak kadar genişler. Panelin sol kenarı aynı konumda kalır; ek alan yalnız sağa büyür, formasyon sütunu ise iki-portre seçimindeki piksel genişliğinde korunur. Aktif formasyon kartın kendi vurgusundan anlaşıldığı için tekrarlayan `Aktif Formasyon` satırı gösterilmez. Formasyon kartı masaüstünde tekli seçim portresiyle aynı yüksekliktedir, kartlar yukarı yaslıdır ve `Formasyon` başlığı kartların altında gösterilir.
+
 ---
 
 ## Faz 2 — Temel geometrik formasyonlar
@@ -1065,14 +1067,18 @@ Her formasyon yalnız ikonunda değil, dünya üzerinde de ilk bakışta ayırt 
 
 ## Faz 5 — Engel ve fallback
 
-- [ ] Köprü testi
+- [x] Köprü testi
 - [x] Dar yol testi
-- [ ] Bina arası testi
-- [ ] Kayalık engel testi
+- [x] Bina arası testi
+- [x] Kayalık engel testi
 - [x] Ulaşılamaz slot fallback'i
 - [x] Sıkıştırılmış spacing fallback'i
 
-> **Uygulama notu (10 Ağustos 2026):** Formasyon Move emri sırasıyla 1.0×, 0.9× ve 0.8× spacing ile denenir. Hâlâ geçersiz slot kalırsa yalnız o slot yakın yürünebilir hücreye projekte edilir; bu da başarısızsa grup Serbest dağıtıma döner. Dar geçit ve yakın-slot fallback’i engine testleriyle doğrulandı. Bina arası ile kayalık dünya kabulü bekliyor.
+> **Uygulama notu (10 Ağustos 2026):** Formasyon Move emri sırasıyla 1.0×, 0.9× ve 0.8× spacing ile denenir. Hâlâ geçersiz slot kalırsa yalnız o slot yakın yürünebilir hücreye projekte edilir; bu da başarısızsa grup Serbest dağıtıma döner. Dar geçit ve yakın-slot fallback’i engine testleriyle doğrulandı. Köprü dünya kabulü bekliyor.
+
+> **Kabul (10 Ağustos 2026):** Bina arası ve kayalık yanındaki Hat, Kol ve Kare Move emirleri dünya üzerinde kullanıcı tarafından doğrulandı. Birimler takılmadan hedefe ilerledi; formasyon ve fallback davranışı kabul edildi.
+
+> **Kabul (10 Ağustos 2026):** Köprü geçişi dünya üzerinde kullanıcı tarafından doğrulandı. Grup kalıcı yığılma veya takılma olmadan köprüyü geçti; Faz 5 tamamlandı.
 
 ---
 
