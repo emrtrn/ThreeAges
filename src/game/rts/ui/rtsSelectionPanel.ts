@@ -18,9 +18,11 @@ import {
   type RtsSelectionView,
   type SelectionAction,
   type SelectionChip,
+  type SelectionFormationControls,
   type SelectionPanelContent,
   type SelectionUnitCard,
 } from "./rtsSelectionView";
+import { isRtsFormationId, type RtsFormationId } from "../units/formations/rtsFormationTypes";
 
 export class RtsSelectionPanel {
   private readonly root = document.createElement("section");
@@ -35,6 +37,9 @@ export class RtsSelectionPanel {
   private readonly slots = document.createElement("div");
   /** The group-selection face: one card per unit type, in place of the frame above. */
   private readonly cards = document.createElement("div");
+  private readonly formation = document.createElement("section");
+  private readonly formationOptions = document.createElement("div");
+  private readonly formationStatus = document.createElement("p");
   private readonly body = document.createElement("div");
   private readonly lines: HTMLParagraphElement[] = [];
   /** The status strip under the body lines; see {@link SelectionChip}. */
@@ -57,7 +62,10 @@ export class RtsSelectionPanel {
   /** The action id the story chain is pointing at, if any (Sürüm 2 §12.4). */
   private missionHighlightId: string | null = null;
 
-  constructor(private readonly onAction: (id: string) => void) {
+  constructor(
+    private readonly onAction: (id: string) => void,
+    private readonly onFormationChange: (formation: RtsFormationId) => void = () => undefined,
+  ) {
     // Deliberately *not* `ui-interactive`. The panel is a readout sitting in the
     // bottom-centre of a fullscreen map, and Faz 9 measured what that costs: it
     // swallowed map clicks in a 420x130 box — a Depot placed there failed
@@ -134,7 +142,15 @@ export class RtsSelectionPanel {
     // height is fixed by the frame it lives in.
     this.cards.className = "rts-selection-cards ui-interactive";
     this.cards.hidden = true;
-    this.root.append(this.portrait, this.header, details, this.cards, this.actionRow, this.progress, this.hints);
+    this.formation.className = "rts-selection-formation ui-interactive";
+    this.formation.hidden = true;
+    const formationTitle = document.createElement("strong");
+    formationTitle.className = "rts-selection-formation-title";
+    formationTitle.textContent = "Formasyon";
+    this.formationOptions.className = "rts-selection-formation-options";
+    this.formationStatus.className = "rts-selection-formation-status";
+    this.formation.append(formationTitle, this.formationOptions, this.formationStatus);
+    this.root.append(this.portrait, this.header, details, this.cards, this.formation, this.actionRow, this.progress, this.hints);
     const overlay = document.getElementById("ui-overlay") ?? document.body;
     overlay.append(this.root, this.actionTray);
     this.setSelection({ kind: "none" });
@@ -201,8 +217,11 @@ export class RtsSelectionPanel {
     // A group selection replaces the single-unit frame instead of adding to it,
     // so the mode is an attribute on the root: CSS hides the portrait, header
     // and body wholesale rather than every one of them being toggled here.
-    this.root.dataset.rtsPanelMode = content.cards ? "roster" : "unit";
+    this.root.dataset.rtsPanelMode = content.cards
+      ? content.formation ? "roster-formation" : "roster"
+      : "unit";
     this.renderCards(content.cards ?? []);
+    this.renderFormation(content.formation);
     this.title.textContent = content.title;
     this.summary.textContent = content.summary;
     this.hints.textContent = content.hint;
@@ -309,6 +328,47 @@ export class RtsSelectionPanel {
       entry.append(frame, label);
       return entry;
     }));
+  }
+
+  private renderFormation(formation: SelectionFormationControls | undefined): void {
+    this.formation.hidden = formation === undefined;
+    if (!formation) return;
+    const signature = `${formation.active}|${formation.combatUnitCount}|${formation.options.map((option) => `${option.id}:${option.enabled}`).join(";")}`;
+    if (this.formation.dataset.rtsFormation !== signature) {
+      this.formation.dataset.rtsFormation = signature;
+      this.formationOptions.replaceChildren(...formation.options.map((option) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "rts-selection-formation-option";
+        button.dataset.rtsFormation = option.id;
+        button.disabled = !option.enabled;
+        button.title = option.tooltip;
+        button.setAttribute("aria-label", option.tooltip);
+        const diagram = document.createElement("span");
+        diagram.className = "rts-selection-formation-diagram";
+        diagram.setAttribute("aria-hidden", "true");
+        for (const [x, y] of option.iconDots) {
+          const dot = document.createElement("i");
+          dot.style.left = `${x}%`;
+          dot.style.top = `${y}%`;
+          diagram.appendChild(dot);
+        }
+        const label = document.createElement("span");
+        label.className = "rts-selection-formation-label";
+        label.textContent = option.label;
+        button.append(diagram, label);
+        button.addEventListener("click", () => {
+          const id = button.dataset.rtsFormation;
+          if (id && isRtsFormationId(id)) this.onFormationChange(id);
+        });
+        return button;
+      }));
+    }
+    for (const button of this.formationOptions.querySelectorAll<HTMLButtonElement>(".rts-selection-formation-option")) {
+      button.dataset.rtsActive = button.dataset.rtsFormation === formation.active ? "true" : "false";
+    }
+    const selected = formation.options.find((option) => option.id === formation.active);
+    this.formationStatus.textContent = `Aktif Formasyon: ${selected?.label ?? "Serbest"}`;
   }
 
   /**

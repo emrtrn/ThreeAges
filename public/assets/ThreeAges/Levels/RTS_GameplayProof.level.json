@@ -1551,6 +1551,10 @@
     {
       "assetId": "shape:sphere",
       "placements": []
+    },
+    {
+      "assetId": "base-basic-shaded",
+      "placements": []
     }
   ],
   "characters": [],
@@ -1562,8 +1566,9 @@
     "rayleigh": 1,
     "turbidity": 2,
     "mie": 0.004,
+    "exposure": 1,
     "skyLightCapture": {
-      "intensity": 0.6
+      "intensity": 0.8
     }
   },
   "postProcess": {
@@ -1585,7 +1590,6 @@
       "amount": 0.1
     },
     "grain": {
-      "enabled": true,
       "intensity": 0.2
     },
     "dof": {
@@ -1596,9 +1600,9 @@
     "ao": {
       "enabled": true,
       "radius": 1,
-      "intensity": 0.6
+      "intensity": 1
     },
-    "saturation": 1.1,
+    "saturation": 1,
     "contrast": 1,
     "temperature": 0,
     "tint": 0
@@ -1608,14 +1612,14 @@
       "id": "directional-light-mrzeo4fp-7bl",
       "type": "directional",
       "position": [
-        0,
-        5,
-        0
+        -28.05,
+        3.93,
+        4.77
       ],
       "name": "Directional Light",
       "rotation": [
-        -68,
-        30,
+        40,
+        140,
         0
       ],
       "color": "#ffffff",

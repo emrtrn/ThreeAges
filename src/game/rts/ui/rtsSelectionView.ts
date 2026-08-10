@@ -31,6 +31,11 @@ import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
 import type { MarketSupplyLine, MarketSupplyState } from "../economy/marketSupplySystem";
 import { formatCostShortfall, formatResourceCost, resourceLabel } from "./resourceLabels";
 import { describeArmyRoster } from "./rtsArmyRosterView";
+import {
+  DEFAULT_RTS_FORMATION,
+  RTS_FORMATION_DEFINITIONS,
+  type RtsFormationId,
+} from "../units/formations/rtsFormationTypes";
 
 /**
  * A button the selected thing offers. Declarative on purpose: the panel maps
@@ -88,6 +93,11 @@ export interface SelectedUnitView {
    * exists to undo, so the panel offers that button only when it is set.
    */
   readonly trapped: boolean;
+}
+
+/** The global formation preference presented for a selected combat group. */
+export interface FormationSelectionView {
+  readonly active: RtsFormationId;
 }
 
 /** Compact live order state for the selection panel; it deliberately names no target. */
@@ -339,7 +349,12 @@ export interface SelectedTradeSiteView {
 
 export type RtsSelectionView =
   | { readonly kind: "none" }
-  | { readonly kind: "units"; readonly units: readonly SelectedUnitView[] }
+  | {
+    readonly kind: "units";
+    readonly units: readonly SelectedUnitView[];
+    /** Omitted by callers that only need the legacy selection readout. */
+    readonly formation?: FormationSelectionView;
+  }
   | { readonly kind: "structure"; readonly structure: SelectedStructureView }
   | { readonly kind: "trade-site"; readonly site: SelectedTradeSiteView };
 
@@ -405,6 +420,8 @@ export interface SelectionPanelContent {
    * `[data-rts-panel-mode="roster"]`.
    */
   readonly cards?: readonly SelectionUnitCard[];
+  /** Multi-combat selection's V1 formation picker. No movement effect in Faz 1. */
+  readonly formation?: SelectionFormationControls;
   /** A running timed job (e.g. a level-up), or null/absent when nothing is timed. */
   readonly progress?: SelectionProgress | null;
 }
@@ -458,6 +475,22 @@ export interface SelectionSlot {
 /** One unit type in a group selection: a portrait, its name, and how many. */
 export interface SelectionUnitCard extends SelectionSlot {
   readonly typeId: string;
+}
+
+/** One button in the V1 formation module; the panel only renders this data. */
+export interface SelectionFormationOption {
+  readonly id: RtsFormationId;
+  readonly label: string;
+  readonly enabled: boolean;
+  readonly tooltip: string;
+  readonly iconDots: readonly (readonly [number, number])[];
+}
+
+/** Formation UI is present only for a multi-unit combat selection. */
+export interface SelectionFormationControls {
+  readonly active: RtsFormationId;
+  readonly combatUnitCount: number;
+  readonly options: readonly SelectionFormationOption[];
 }
 
 /**
@@ -616,7 +649,7 @@ export function describeSelection(view: RtsSelectionView): SelectionPanelContent
     health: null,
   };
   if (view.kind === "units") {
-    return view.units.length === 0 ? describeSelection({ kind: "none" }) : describeUnits(view.units);
+    return view.units.length === 0 ? describeSelection({ kind: "none" }) : describeUnits(view.units, view.formation);
   }
   if (view.kind === "trade-site") return describeTradeSite(view.site);
   return describeStructure(view.structure);
@@ -726,7 +759,10 @@ function rescueActions(units: readonly SelectedUnitView[]): SelectionAction[] {
   }];
 }
 
-function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelContent {
+function describeUnits(
+  units: readonly SelectedUnitView[],
+  formation: FormationSelectionView | undefined,
+): SelectionPanelContent {
   // Composition is counted per unit *type*, through the same model the HUD army
   // strip is built from. Two reasons it is not the role it used to be: a role
   // is a fixed four-value enum that a second Guard unit would collapse into the
@@ -750,6 +786,7 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
   // footprint still needs digging out whether it was grabbed alone or in a
   // crowd, and no other surface offers that.
   if (units.length > 1) {
+    const combatUnitCount = units.filter((unit) => unit.role !== "worker").length;
     return {
       title: "",
       summary: "",
@@ -763,6 +800,9 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
         icon: entry.icon,
         count: entry.count,
       })),
+      ...(combatUnitCount >= 2
+        ? { formation: formationControls(formation?.active ?? DEFAULT_RTS_FORMATION, combatUnitCount) }
+        : {}),
     };
   }
 
@@ -839,6 +879,20 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
     selectionCount,
     health: { current: health, max: maxHealth },
     slots,
+  };
+}
+
+function formationControls(active: RtsFormationId, combatUnitCount: number): SelectionFormationControls {
+  return {
+    active,
+    combatUnitCount,
+    options: RTS_FORMATION_DEFINITIONS.map((formation) => ({
+      id: formation.id,
+      label: formation.label,
+      enabled: combatUnitCount >= formation.minUnits,
+      tooltip: `${formation.label}: ${formation.description} En az ${formation.minUnits} asker gerekir.`,
+      iconDots: formation.iconDots,
+    })),
   };
 }
 

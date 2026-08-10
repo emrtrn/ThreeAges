@@ -189,6 +189,7 @@ import { planAutoRoadConnection } from "./roads/autoRoadConnector";
 import { centerAccessRoadPlan } from "./roads/centerAccessRoad";
 import { buildingUnlockRequirement, RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { RtsSelectionPanel } from "./ui/rtsSelectionPanel";
+import { DEFAULT_RTS_FORMATION, type RtsFormationId } from "./units/formations/rtsFormationTypes";
 import { RtsWorldProgressOverlay, type RtsWorldProgressEntry } from "./ui/rtsWorldProgressOverlay";
 import {
   AGE_UP_ACTION,
@@ -911,7 +912,12 @@ export class RtsApp {
   private roadCommitBatchDepth = 0;
   private roadCommitEffectsPending = false;
   private readonly buildPalette: RtsBuildPalette;
-  private readonly selectionPanel = new RtsSelectionPanel((id) => this.runSelectionAction(id));
+  /** Global, match-local preference; individual units do not own formation identity in V1. */
+  private activeFormation: RtsFormationId = DEFAULT_RTS_FORMATION;
+  private readonly selectionPanel = new RtsSelectionPanel(
+    (id) => this.runSelectionAction(id),
+    (formation) => { this.activeFormation = formation; },
+  );
   /** The building whose demolish is armed and awaiting its confirm click. */
   private demolishArmed: PlacedStructure | null = null;
   /** The unfinished site whose cancellation is armed and awaiting its confirm click. */
@@ -5190,6 +5196,7 @@ export class RtsApp {
     if (units.length > 0) {
       return {
         kind: "units",
+        formation: { active: this.activeFormation },
         units: units.map((unit) => ({
           id: unit.id,
           role: unit.role,

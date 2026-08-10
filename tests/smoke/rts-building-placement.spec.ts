@@ -441,6 +441,18 @@ test("RTS Phase 7 a box-selected group takes a move order and every unit finishe
   await canvas.dblclick({ position: guard });
   await expect(panel, "the double-click selects the whole Guard line").toContainText(/[2-9] Muhafız/);
 
+  // Formation Faz 1 is selection state only: the panel exposes all seven
+  // diagrams for a combat group, starts in Serbest, and changing it must not
+  // issue a movement command by itself. The existing move assertion below then
+  // proves the pre-Faz-2 path remains intact after the UI choice.
+  const formation = panel.locator(".rts-selection-formation");
+  await expect(formation).toBeVisible();
+  await expect(formation.locator(".rts-selection-formation-option")).toHaveCount(7);
+  await expect(formation.locator('[data-rts-formation="free"]')).toHaveAttribute("data-rts-active", "true");
+  await formation.locator('[data-rts-formation="line"]').click();
+  await expect(formation.locator('[data-rts-formation="line"]')).toHaveAttribute("data-rts-active", "true");
+  await expect(formation.locator(".rts-selection-formation-status")).toHaveText("Aktif Formasyon: Hat");
+
   await canvas.click({ button: "right", position: { x: 640, y: 300 } });
   await expect(overlay).toContainText(/yol:\d+/);
 

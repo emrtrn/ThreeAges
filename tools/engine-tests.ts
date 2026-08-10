@@ -359,6 +359,7 @@ import {
   type CenterProgressionView,
   type WorkerJob,
 } from "../src/game/rts/ui/rtsSelectionView";
+import { DEFAULT_RTS_FORMATION } from "../src/game/rts/units/formations/rtsFormationTypes";
 import {
   REPAIR_FRACTION_OF_BUILD,
   StructureRepairSystem,
@@ -49721,6 +49722,26 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   // selection that still carried a row of text would be the wall this shape
   // exists to replace. A single selection still teaches the verbs.
   assert.equal(army.hint, "", "a group panel is cards and nothing else");
+  assert.equal(army.formation?.active, "free", "a combat group defaults to Serbest without changing legacy movement");
+
+  const formationArmy = describeSelection({
+    kind: "units",
+    formation: { active: "line" },
+    units: [guard(1), guard(2), worker(3, "idle")],
+  }) ?? assert.fail("panel missing");
+  assert.equal(formationArmy.formation?.active, "line", "the panel carries the app-owned formation preference");
+  assert.equal(formationArmy.formation?.combatUnitCount, 2, "workers do not count toward formation minimums");
+  assert.equal(
+    formationArmy.formation?.options.find((option) => option.id === "wedge")?.enabled,
+    false,
+    "a three-unit minimum stays disabled when the third selected body is a worker",
+  );
+  assert.equal(
+    formationArmy.formation?.options.find((option) => option.id === "line")?.enabled,
+    true,
+    "a legal formation is selectable for two combat units",
+  );
+  assert.equal(DEFAULT_RTS_FORMATION, "free", "Serbest preserves the existing group-movement default");
   assert.match(one.hint, /F: Saldırı-Hareket/, "the verbs are still taught on a single selection");
 
   // Two units that disagree used to force a "Duruş: Karışık" line. There is no

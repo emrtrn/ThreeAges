@@ -30600,10 +30600,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Metal_Dark_BC.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Metal_Dark_BC.png",
-      "tags": ["threeages", "texture", "metal", "iron", "albedo"],
+      "tags": [
+        "threeages",
+        "texture",
+        "metal",
+        "iron",
+        "albedo"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1570285 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1570285
+      },
       "license": "Project-local generated metal candidate"
     },
     {
@@ -30613,10 +30630,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Metal_Dark_N.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Metal_Dark_BC.png",
-      "tags": ["threeages", "texture", "metal", "iron", "normal"],
+      "tags": [
+        "threeages",
+        "texture",
+        "metal",
+        "iron",
+        "normal"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1948994 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1948994
+      },
       "license": "Deterministic derivative"
     },
     {
@@ -30626,10 +30660,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Metal_Dark_ORM.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Metal_Dark_BC.png",
-      "tags": ["threeages", "texture", "metal", "iron", "orm"],
+      "tags": [
+        "threeages",
+        "texture",
+        "metal",
+        "iron",
+        "orm"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 637007 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 637007
+      },
       "license": "Deterministic derivative"
     },
     {
@@ -30639,10 +30690,26 @@
       "category": "ThreeAges/Materials",
       "path": "assets/ThreeAges/Materials/M_TA_Metal_Dark.material.json",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Metal_Dark_BC.png",
-      "tags": ["threeages", "material", "metal", "iron"],
+      "tags": [
+        "threeages",
+        "material",
+        "metal",
+        "iron"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 724 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 724
+      },
       "license": "Project-local ThreeAges metal material"
     },
     {
@@ -30652,10 +30719,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Metal_Bronze_BC.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Metal_Bronze_BC.png",
-      "tags": ["threeages", "texture", "metal", "bronze", "albedo"],
+      "tags": [
+        "threeages",
+        "texture",
+        "metal",
+        "bronze",
+        "albedo"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1637250 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1637250
+      },
       "license": "Project-local generated metal candidate"
     },
     {
@@ -30665,10 +30749,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Metal_Bronze_N.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Metal_Bronze_BC.png",
-      "tags": ["threeages", "texture", "metal", "bronze", "normal"],
+      "tags": [
+        "threeages",
+        "texture",
+        "metal",
+        "bronze",
+        "normal"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 1986946 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1986946
+      },
       "license": "Deterministic derivative"
     },
     {
@@ -30678,10 +30779,27 @@
       "category": "ThreeAges/Textures",
       "path": "assets/ThreeAges/Textures/T_TA_Metal_Bronze_ORM.png",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Metal_Bronze_BC.png",
-      "tags": ["threeages", "texture", "metal", "bronze", "orm"],
+      "tags": [
+        "threeages",
+        "texture",
+        "metal",
+        "bronze",
+        "orm"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 685876 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 685876
+      },
       "license": "Deterministic derivative"
     },
     {
@@ -30691,11 +30809,73 @@
       "category": "ThreeAges/Materials",
       "path": "assets/ThreeAges/Materials/M_TA_Metal_Bronze.material.json",
       "thumbnail": "assets/ThreeAges/Textures/T_TA_Metal_Bronze_BC.png",
-      "tags": ["threeages", "material", "metal", "bronze"],
+      "tags": [
+        "threeages",
+        "material",
+        "metal",
+        "bronze"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": false, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-Textures", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 728 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 728
+      },
       "license": "Project-local ThreeAges metal material"
+    },
+    {
+      "id": "guard-test",
+      "name": "Guard Test",
+      "assetType": "skeletalMesh",
+      "category": "SkeletalMeshes",
+      "path": "assets/starter-content/SkeletalMeshes/guard_test.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "SkeletalMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 8775688
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "guard-test-2",
+      "name": "Guard Test",
+      "assetType": "skeletalMesh",
+      "category": "starter-content",
+      "path": "assets/starter-content/guard_test.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "starter-content",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 8778536
+      },
+      "license": "Unknown"
     }
   ]
 }

@@ -16,9 +16,9 @@
       "placements": [
         {
           "position": [
-            -1.04,
+            -5.49,
             0,
-            0.29
+            -1.22
           ],
           "name": "Player Start",
           "collision": false,
@@ -364,6 +364,14 @@
     },
     {
       "assetId": "highpolyplane",
+      "placements": []
+    },
+    {
+      "assetId": "base-basic-shaded",
+      "placements": []
+    },
+    {
+      "assetId": "archery-secondage-level3",
       "placements": []
     }
   ],
