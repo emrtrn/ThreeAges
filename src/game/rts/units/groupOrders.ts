@@ -12,7 +12,7 @@ import { Vector3 } from "three";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { Unit } from "./unit";
 import { formationOffsets as legacyFormationOffsets } from "./unitMovement";
-import { rtsFormationWorldSlots } from "./formations/rtsFormationGenerator";
+import { rtsFormationWorldSlots, type RtsGeometricFormationId } from "./formations/rtsFormationGenerator";
 import { DEFAULT_RTS_FORMATION, type RtsFormationId } from "./formations/rtsFormationTypes";
 
 /** One unit's share of a group order. A null `path` means "no route exists". */
@@ -52,7 +52,7 @@ export function assignGroupDestinations(
 ): GroupDestination[] {
   if (units.length === 0) return [];
 
-  if (formation === "free" || (formation !== "line" && formation !== "column")) {
+  if (formation === "free") {
     return assignDestinationsToSlots(units, legacySlots(units.length, point), point, navigation, reservations);
   }
 
@@ -68,7 +68,17 @@ export function assignGroupDestinations(
   const spacing = Math.max(...combatUnits.map((unit) => unit.navRadius * 2)) + 0.6;
   const combatDestinations = formation === "line"
     ? assignRoleAwareLineDestinations(combatUnits, point, centroid, spacing, navigation, reservations)
-    : assignRoleAwareColumnDestinations(combatUnits, point, centroid, spacing, navigation, reservations);
+    : formation === "square"
+      ? assignRoleAwareSquareDestinations(combatUnits, point, centroid, spacing, navigation, reservations)
+      : formation === "loose"
+        ? assignDestinationsToSlots(
+          combatUnits,
+          rtsFormationWorldSlots(formation, combatUnits.length, spacing, centroid, point),
+          point,
+          navigation,
+          reservations,
+        )
+        : assignRoleAwareDepthDestinations(formation, combatUnits, point, centroid, spacing, navigation, reservations);
   const workers = units.filter((unit) => unit.role === "worker");
   if (workers.length === 0) return combatDestinations;
   const workerDestinations = assignDestinationsToSlots(
@@ -141,7 +151,8 @@ function assignRoleAwareLineDestinations(
   return destinationsInSelectionOrder(units, assigned, point);
 }
 
-function assignRoleAwareColumnDestinations(
+function assignRoleAwareDepthDestinations(
+  formation: Exclude<RtsGeometricFormationId, "line" | "square" | "loose">,
   units: readonly Unit[],
   point: Vector3,
   centroid: Vector3,
@@ -153,7 +164,7 @@ function assignRoleAwareColumnDestinations(
   if (groups.length <= 1) {
     return assignDestinationsToSlots(
       units,
-      rtsFormationWorldSlots("column", units.length, spacing, centroid, point),
+      rtsFormationWorldSlots(formation, units.length, spacing, centroid, point),
       point,
       navigation,
       reservations,
@@ -161,12 +172,52 @@ function assignRoleAwareColumnDestinations(
   }
   const forward = point.clone().sub(centroid).setY(0).normalize();
   if (forward.lengthSq() === 0) forward.set(0, 0, 1);
-  const slots = rtsFormationWorldSlots("column", units.length, spacing, centroid, point)
+  const slots = rtsFormationWorldSlots(formation, units.length, spacing, centroid, point)
     .sort((left, right) => (
       (right.x - point.x) * forward.x + (right.z - point.z) * forward.z
     ) - (
       (left.x - point.x) * forward.x + (left.z - point.z) * forward.z
     ));
+  const assigned: GroupDestination[] = [];
+  let slotIndex = 0;
+  for (const group of groups) {
+    const groupSlots = slots.slice(slotIndex, slotIndex + group.length);
+    slotIndex += group.length;
+    const destinations = assignDestinationsToSlots(group, groupSlots, point, navigation, [
+      ...reservations,
+      ...assigned.map((entry) => ({ position: entry.destination, radius: entry.unit.navRadius })),
+    ]);
+    assigned.push(...destinations);
+  }
+  return destinationsInSelectionOrder(units, assigned, point);
+}
+
+function assignRoleAwareSquareDestinations(
+  units: readonly Unit[],
+  point: Vector3,
+  centroid: Vector3,
+  spacing: number,
+  navigation: RtsNavigation,
+  reservations: readonly DestinationReservation[],
+): GroupDestination[] {
+  const groups = combatRoleGroups(units);
+  const slots = rtsFormationWorldSlots("square", units.length, spacing, centroid, point);
+  if (groups.length <= 1) {
+    return assignDestinationsToSlots(units, slots, point, navigation, reservations);
+  }
+  const forward = point.clone().sub(centroid).setY(0).normalize();
+  if (forward.lengthSq() === 0) forward.set(0, 0, 1);
+  const right = new Vector3(forward.z, 0, -forward.x);
+  // Higher Chebyshev radius means an outer ring slot. Filling from that ring
+  // inward puts guards around vulnerable archers and siege without assigning a
+  // stat bonus or requiring a rigid combat formation.
+  slots.sort((left, rightSlot) => {
+    const leftOffset = left.clone().sub(point);
+    const rightOffset = rightSlot.clone().sub(point);
+    const leftRing = Math.max(Math.abs(leftOffset.dot(right)), Math.abs(leftOffset.dot(forward)));
+    const rightRing = Math.max(Math.abs(rightOffset.dot(right)), Math.abs(rightOffset.dot(forward)));
+    return rightRing - leftRing;
+  });
   const assigned: GroupDestination[] = [];
   let slotIndex = 0;
   for (const group of groups) {

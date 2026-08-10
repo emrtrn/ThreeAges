@@ -41933,6 +41933,64 @@ check("Faz 3: mixed formations keep Guards ahead of Archers and Siege", () => {
   assert.ok(orders.every((order) => order.path !== null), "each role-aware slot uses existing navigation");
 });
 
+check("Faz 4: advanced formation geometries stay distinct and deterministic", () => {
+  const target = new Vector3(0, 0, -20);
+  const centroid = new Vector3(0, 0, 10);
+  const wedge = rtsFormationWorldSlots("wedge", 10, 1.6, centroid, target);
+  assert.equal(new Set(wedge.map((slot) => slot.z.toFixed(5))).size, 4, "a ten-unit wedge has four readable ranks");
+  assert.equal(
+    wedge.filter((slot) => slot.z === Math.min(...wedge.map((candidate) => candidate.z))).length,
+    1,
+    "the wedge has one forward tip",
+  );
+
+  const crescent = rtsFormationWorldSlots("crescent", 8, 1.6, centroid, target);
+  const wingDepth = Math.min(crescent[0]?.z ?? 0, crescent[crescent.length - 1]?.z ?? 0);
+  const centreDepth = Math.max(...crescent.slice(2, -2).map((slot) => slot.z));
+  assert.ok(wingDepth < centreDepth, "crescent wings lead its recessed centre toward the target");
+
+  const square = rtsFormationWorldSlots("square", 9, 1.6, centroid, target);
+  assert.equal(new Set(square.map((slot) => slot.x.toFixed(5))).size, 3, "a nine-unit square has three files");
+  assert.equal(new Set(square.map((slot) => slot.z.toFixed(5))).size, 3, "a nine-unit square has three ranks");
+
+  const loose = rtsFormationWorldSlots("loose", 9, 1.6, centroid, target);
+  const nearestDistance = (slots: readonly Vector3[]) => Math.min(...slots.flatMap((slot, index) => slots
+    .slice(index + 1)
+    .map((other) => Math.hypot(slot.x - other.x, slot.z - other.z))));
+  assert.ok(nearestDistance(loose) > nearestDistance(square) * 1.45, "loose spacing is materially wider than square spacing");
+  assert.deepEqual(
+    rtsFormationWorldSlots("loose", 9, 1.6, centroid, target).map((slot) => slot.toArray()),
+    loose.map((slot) => slot.toArray()),
+    "loose jitter is deterministic",
+  );
+});
+
+check("Faz 4: square keeps Siege inside the Guard ring", () => {
+  const units = new UnitSystem();
+  const guards = Array.from({ length: 10 }, (_, index) => units.spawn(
+    "player", -12 + (index % 5) * 3, 10 + Math.floor(index / 5) * 3, RTS_TEST_UNIT_STATS,
+  ));
+  const archers = Array.from({ length: 10 }, (_, index) => units.spawn(
+    "player", -12 + (index % 5) * 3, 16 + Math.floor(index / 5) * 3, RTS_TEST_ARCHER_STATS,
+  ));
+  const siege = [
+    units.spawn("player", -2, 22, RTS_TEST_SIEGE_STATS),
+    units.spawn("player", 2, 22, RTS_TEST_SIEGE_STATS),
+  ];
+  const target = new Vector3(0, 0, -20);
+  const orders = assignGroupDestinations([...guards, ...archers, ...siege], target, new RtsNavigation(), [], "square");
+  const destinations = new Map(orders.map((order) => [order.unit, order.destination]));
+  const radius = (unit: Unit) => {
+    const slot = destinations.get(unit) ?? assert.fail("missing formation destination");
+    return Math.hypot(slot.x - target.x, slot.z - target.z);
+  };
+  assert.ok(
+    Math.max(...siege.map(radius)) < Math.min(...guards.map(radius)),
+    "Siege receives inner square slots before any Guard leaves the outer ring",
+  );
+  assert.ok(orders.every((order) => order.path !== null), "advanced slots continue through existing navigation");
+});
+
 check("Faz 7 a squad clears a narrow corridor instead of jamming in it", () => {
   const units = new UnitSystem();
   const navigation = new RtsNavigation();

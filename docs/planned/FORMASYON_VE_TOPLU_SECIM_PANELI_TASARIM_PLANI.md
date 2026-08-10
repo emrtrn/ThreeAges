@@ -1018,7 +1018,7 @@ kanıtlamak için yeterlidir.
 
 10 Muhafız açık arazide Hat ve Kol düzenine güvenilir biçimde hareket edebilmelidir.
 
-> **Uygulama notu (10 Ağustos 2026):** Hedefe göre yönlenen Hat/Kol slotları mevcut Move pathfinding ve hedef rezervasyon sistemine bağlandı. Geometri ve açık arazi rota üretimi engine testiyle doğrulandı; dünya üzerindeki 10 Muhafız görsel kabulü bekliyor.
+> **Kabul (10 Ağustos 2026):** 10 Muhafız ile Hat ve Kol açık arazide görsel olarak doğrulandı.
 
 ---
 
@@ -1042,20 +1042,22 @@ atanmalıdır.
 
 Hat formasyonunda Topçu ön sıraya geçmemeli ve Okçular Muhafızların büyük bölümünün önüne yerleşmemelidir.
 
-> **Uygulama notu (10 Ağustos 2026):** Hat ve Kol slotları rol önceliğine göre atanıyor: Muhafız → Okçu → Topçu. Hat’ta roller ayrı sıralara, Topçu ise arka merkez eksenine yerleşir. Engine testi doğrulandı; `10 Muhafız + 10 Okçu + 2 Topçu` dünya kabulü bekliyor.
+> **Kabul (10 Ağustos 2026):** Hat ve Kol formasyonlarında rol dağılımı görsel olarak doğrulandı.
 
 ---
 
 ## Faz 4 — Gelişmiş geometriler
 
-- [ ] Kama
-- [ ] Hilal
-- [ ] Kare
-- [ ] Dağınık
+- [x] Kama
+- [x] Hilal
+- [x] Kare
+- [x] Dağınık
 
 ### Kabul kriteri
 
 Her formasyon yalnız ikonunda değil, dünya üzerinde de ilk bakışta ayırt edilebilir olmalıdır.
+
+> **Uygulama notu (10 Ağustos 2026):** Kama, Hilal, Kare ve Dağınık için deterministik Move-slot üretimi eklendi. Kare dış halkayı Muhafızlara, iç çekirdeği Topçuya önceliklendirir; Dağınık 1.9× spacing kullanır. Dünya üzerindeki görsel kabul bekliyor.
 
 ---
 
