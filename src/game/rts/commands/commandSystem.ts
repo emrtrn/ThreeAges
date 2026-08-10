@@ -10,6 +10,7 @@ import { Plane, Raycaster, Vector2, Vector3, type Intersection, type Perspective
 import type { SelectionSystem } from "../selection/selectionSystem";
 import type { CommandMarkerSystem } from "./commandMarker";
 import { assignGroupDestinations, type DestinationReservation } from "../units/groupOrders";
+import { DEFAULT_RTS_FORMATION, type RtsFormationId } from "../units/formations/rtsFormationTypes";
 import type { UnitSystem } from "../units/unitSystem";
 import { issueAttackOrder } from "../units/attackPathing";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
@@ -44,6 +45,8 @@ export class CommandSystem {
   private pendingGroundOrders: PendingGroundOrder[] = [];
   private readonly destinationReservations = new Map<Unit, DestinationReservation>();
   private ground: RtsGroundSurface = FLAT_RTS_GROUND;
+  /** Player preference from the selection panel; Attack-Move stays on its legacy path until Faz 6. */
+  private formation: RtsFormationId = DEFAULT_RTS_FORMATION;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -62,6 +65,11 @@ export class CommandSystem {
   /** Sets the authored terrain used for command/rally-point projection. */
   setGroundSurface(ground: RtsGroundSurface): void {
     this.ground = ground;
+  }
+
+  /** Select the geometry applied to subsequent ordinary ground-move orders. */
+  setFormation(formation: RtsFormationId): void {
+    this.formation = formation;
   }
 
   /** Issue the contextual move-or-attack order at a screen position. */
@@ -106,6 +114,7 @@ export class CommandSystem {
       point,
       this.navigation,
       [...this.destinationReservations.values()],
+      this.formation,
     );
     this.clearWorkerTasks(selected);
     // Mirror the player's successful manual recovery: clear every current order

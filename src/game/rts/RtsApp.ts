@@ -916,7 +916,10 @@ export class RtsApp {
   private activeFormation: RtsFormationId = DEFAULT_RTS_FORMATION;
   private readonly selectionPanel = new RtsSelectionPanel(
     (id) => this.runSelectionAction(id),
-    (formation) => { this.activeFormation = formation; },
+    (formation) => {
+      this.activeFormation = formation;
+      this.commands.setFormation(formation);
+    },
   );
   /** The building whose demolish is armed and awaiting its confirm click. */
   private demolishArmed: PlacedStructure | null = null;

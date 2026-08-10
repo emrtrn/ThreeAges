@@ -989,7 +989,7 @@ Bu görsellerin ana amacı tarihsel doğruluk değil, formasyon geometrisinin oy
 
 Henüz hareket davranışı değişmese bile UI doğru seçim durumunu göstermeli ve formasyon state'i güvenilir biçimde değişmelidir.
 
-> **Uygulama notu (10 Ağustos 2026):** State ve minimum asker kuralları `tsc` ile ve hedefli engine testiyle doğrulandı. Tam RTS browser smoke akışı 60 saniyelik araç süresinde sonuçlanmadan kesildi; görsel kabul hâlâ browser/manual kontrol bekliyor.
+> **Kabul (10 Ağustos 2026):** Görsel browser kontrolü kullanıcı tarafından tamamlandı. State ve minimum asker kuralları ayrıca `tsc` ve engine testleriyle doğrulandı.
 
 ---
 
@@ -997,9 +997,9 @@ Henüz hareket davranışı değişmese bile UI doğru seçim durumunu gösterme
 
 İlk olarak yalnız:
 
-- [ ] Hat
-- [ ] Kol
-- [ ] Serbest
+- [x] Hat
+- [x] Kol
+- [x] Serbest
 
 uygulanmalıdır.
 
@@ -1017,6 +1017,8 @@ kanıtlamak için yeterlidir.
 ### Kabul kriteri
 
 10 Muhafız açık arazide Hat ve Kol düzenine güvenilir biçimde hareket edebilmelidir.
+
+> **Uygulama notu (10 Ağustos 2026):** Hedefe göre yönlenen Hat/Kol slotları mevcut Move pathfinding ve hedef rezervasyon sistemine bağlandı. Geometri ve açık arazi rota üretimi engine testiyle doğrulandı; dünya üzerindeki 10 Muhafız görsel kabulü bekliyor.
 
 ---
 

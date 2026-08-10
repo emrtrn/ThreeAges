@@ -418,6 +418,7 @@ import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { congestionSeconds, updateUnitMovement } from "../src/game/rts/units/unitMovement";
 import { settleStoppedUnitOverlaps, updateUnitSeparation } from "../src/game/rts/units/unitSeparation";
 import { assignGroupDestinations } from "../src/game/rts/units/groupOrders";
+import { rtsFormationWorldSlots } from "../src/game/rts/units/formations/rtsFormationGenerator";
 import { issueAttackOrder } from "../src/game/rts/units/attackPathing";
 import { retaliateAgainstAttack, updateUnitEngagement } from "../src/game/rts/combat/engagementSystem";
 import { resolveDamage } from "../src/game/rts/combat/damageResolution";
@@ -41870,6 +41871,36 @@ check("Faz 7 a group order hands each unit its nearest slot, not its selection i
       "assignment does not depend on selection order",
     );
   }
+});
+
+check("Faz 2: Hat and Kol generate forward-facing, distinct move destinations", () => {
+  const target = new Vector3(20, 0, 0);
+  const centroid = new Vector3(0, 0, 0);
+  const line = rtsFormationWorldSlots("line", 10, 1.6, centroid, target);
+  assert.equal(new Set(line.map((slot) => slot.x.toFixed(5))).size, 1, "a line is perpendicular to its movement heading");
+  assert.equal(new Set(line.map((slot) => slot.z.toFixed(5))).size, 10, "each line unit gets its own slot");
+
+  const column = rtsFormationWorldSlots("column", 10, 1.6, centroid, target);
+  assert.equal(new Set(column.map((slot) => slot.x.toFixed(5))).size, 5, "a ten-unit column has five files along its heading");
+  assert.equal(new Set(column.map((slot) => slot.z.toFixed(5))).size, 2, "a ten-unit column stays two units wide");
+
+  const units = new UnitSystem();
+  const guards = Array.from({ length: 10 }, (_, index) => units.spawn(
+    "player",
+    -8 + (index % 5) * 4,
+    12 + Math.floor(index / 5) * 3,
+    RTS_TEST_UNIT_STATS,
+  ));
+  const navigation = new RtsNavigation();
+  const lineOrders = assignGroupDestinations(guards, new Vector3(0, 0, -12), navigation, [], "line");
+  assert.equal(new Set(lineOrders.map((order) => order.destination.z.toFixed(5))).size, 1, "Hat sends the squad to one front");
+  assert.equal(new Set(lineOrders.map((order) => order.destination.x.toFixed(5))).size, 10, "Hat does not stack destinations");
+  assert.ok(lineOrders.every((order) => order.path !== null), "each line slot is planned through existing navigation");
+
+  const columnOrders = assignGroupDestinations(guards, new Vector3(0, 0, -12), navigation, [], "column");
+  assert.equal(new Set(columnOrders.map((order) => order.destination.x.toFixed(5))).size, 2, "Kol keeps two files for ten Guards");
+  assert.equal(new Set(columnOrders.map((order) => order.destination.z.toFixed(5))).size, 5, "Kol adds depth rather than widening");
+  assert.ok(columnOrders.every((order) => order.path !== null), "each column slot is planned through existing navigation");
 });
 
 check("Faz 7 a squad clears a narrow corridor instead of jamming in it", () => {

@@ -11,7 +11,9 @@ import { Vector3 } from "three";
 
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { Unit } from "./unit";
-import { formationOffsets } from "./unitMovement";
+import { formationOffsets as legacyFormationOffsets } from "./unitMovement";
+import { rtsFormationWorldSlots } from "./formations/rtsFormationGenerator";
+import { DEFAULT_RTS_FORMATION, type RtsFormationId } from "./formations/rtsFormationTypes";
 
 /** One unit's share of a group order. A null `path` means "no route exists". */
 export interface GroupDestination {
@@ -46,11 +48,59 @@ export function assignGroupDestinations(
   point: Vector3,
   navigation: RtsNavigation,
   reservations: readonly DestinationReservation[] = [],
+  formation: RtsFormationId = DEFAULT_RTS_FORMATION,
 ): GroupDestination[] {
   if (units.length === 0) return [];
 
-  const slots = formationOffsets(units.length)
+  if (formation === "free" || (formation !== "line" && formation !== "column")) {
+    return assignDestinationsToSlots(units, legacySlots(units.length, point), point, navigation, reservations);
+  }
+
+  // Formations belong only to combat units. Workers still receive their legacy
+  // group-move targets, but combat destinations reserve space so workers do not
+  // immediately stack into the formation.
+  const combatUnits = units.filter((unit) => unit.role !== "worker");
+  if (combatUnits.length < 2) {
+    return assignDestinationsToSlots(units, legacySlots(units.length, point), point, navigation, reservations);
+  }
+  const centroid = combatUnits.reduce((total, unit) => total.add(unit.position), new Vector3())
+    .multiplyScalar(1 / combatUnits.length);
+  const spacing = Math.max(...combatUnits.map((unit) => unit.navRadius * 2)) + 0.6;
+  const combatDestinations = assignDestinationsToSlots(
+    combatUnits,
+    rtsFormationWorldSlots(formation, combatUnits.length, spacing, centroid, point),
+    point,
+    navigation,
+    reservations,
+  );
+  const workers = units.filter((unit) => unit.role === "worker");
+  if (workers.length === 0) return combatDestinations;
+  const workerDestinations = assignDestinationsToSlots(
+    workers,
+    legacySlots(workers.length, point),
+    point,
+    navigation,
+    [
+      ...reservations,
+      ...combatDestinations.map((entry) => ({ position: entry.destination, radius: entry.unit.navRadius })),
+    ],
+  );
+  const byUnit = new Map([...combatDestinations, ...workerDestinations].map((entry) => [entry.unit, entry]));
+  return units.map((unit) => byUnit.get(unit) ?? { unit, destination: point.clone(), path: null });
+}
+
+function legacySlots(count: number, point: Vector3): Vector3[] {
+  return legacyFormationOffsets(count)
     .map((offset) => new Vector3(point.x + offset.x, 0, point.z + offset.z));
+}
+
+function assignDestinationsToSlots(
+  units: readonly Unit[],
+  slots: readonly Vector3[],
+  point: Vector3,
+  navigation: RtsNavigation,
+  reservations: readonly DestinationReservation[],
+): GroupDestination[] {
   const pairs: Array<{ unit: number; slot: number; distance: number }> = [];
   units.forEach((unit, u) => {
     slots.forEach((slot, s) => {
