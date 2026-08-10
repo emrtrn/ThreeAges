@@ -14,7 +14,8 @@
       "id": "pastureMesh",
       "component": "StaticMeshComponent",
       "props": {
-        "assetId": "houses-firstage-2-level1"
+        "assetId": "houses-firstage-2-level1",
+        "position": [-0.0207270384, 0, 0]
       },
       "parent": "root"
     }

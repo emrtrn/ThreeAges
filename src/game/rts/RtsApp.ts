@@ -2415,7 +2415,15 @@ export class RtsApp {
     // on the start screen — a herd fogged from the binder's schedule would graze
     // in plain sight until the first simulation tick.
     const herdViewMark = this.perfMark();
-    this.wildlifeView.sync(this.wildlife.all(), dt, null, this.playerVisibilityTest(), PLAYER_OWNER);
+    this.wildlifeView.sync(
+      this.wildlife.all(),
+      dt,
+      null,
+      this.playerVisibilityTest(),
+      PLAYER_OWNER,
+      (animal) => this.pasture.isLivestockPresentationVisible(animal, (owner) => this.ageOf(owner)),
+      (animal) => this.pasture.livestockPresentationOffset(animal),
+    );
     this.caravanView.sync(this.caravans.all(), dt, this.playerVisibilityTest(), PLAYER_OWNER);
     this.perfMeasure("hayvan/kervan sunumu", herdViewMark);
     // §59: the grid is a simulation fact and `updateFogOfWar` owns it; how far

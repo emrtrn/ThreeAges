@@ -31,6 +31,7 @@
  */
 import { Vector3 } from "three";
 
+import type { SettlementAge } from "../../data/gameDataTypes";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { Unit, UnitOwner } from "../units/unit";
@@ -53,14 +54,32 @@ export type ShepherdState = "moving-to-animal" | "calming" | "driving";
 const PEN_FACE_X = 1;
 const PEN_FACE_Z = 0;
 
-/** How far clear of the footprint edge the first row of animals stands. */
-const PEN_STAND_OFF = 1.4;
+/**
+ * The first feeding line is set just inside the front edge, in the open strip
+ * the pasture art leaves there.  Livestock belongs to the building's claimed
+ * ground; putting it beyond the blocker made a full pen read as four unrelated
+ * cows standing beside a house.
+ */
+const PEN_FRONT_INSET = 0.75;
+
+/** Extra visual lift from the base slab to the raised stone floor in the Lv2 art. */
+const PEN_LEVEL_TWO_LIVESTOCK_FLOOR_HEIGHT = 0.28;
+
+/** Lv2's art needs a small frontward nudge so every hoof rests on the stone floor. */
+const PEN_LEVEL_TWO_LIVESTOCK_FORWARD_OFFSET = 0.25;
+
+const DEFAULT_LIVESTOCK_PRESENTATION_OFFSET = { x: 0, y: 0, z: 0 };
+const LEVEL_TWO_LIVESTOCK_PRESENTATION_OFFSET = {
+  x: PEN_LEVEL_TWO_LIVESTOCK_FORWARD_OFFSET,
+  y: PEN_LEVEL_TWO_LIVESTOCK_FLOOR_HEIGHT,
+  z: 0,
+};
 
 /** Shoulder to shoulder along the face — a cow is about a unit wide at this scale. */
 const PEN_SLOT_SPACING = 1.8;
 
 /** And how far back the next row stands, when a tier's pen outgrows one face. */
-const PEN_ROW_SPACING = 2.4;
+const PEN_ROW_SPACING = 2;
 
 /** Close enough to the shepherd to start calming; the contact distance an animal is caught at. */
 const CONTACT_RANGE = CAUGHT_DISTANCE;
@@ -174,6 +193,28 @@ export class PastureSystem {
   pennedAnimals(structure: PlacedStructure): readonly WildlifeAnimal[] {
     const record = this.pastures.get(structure.id);
     return record ? this.pennedOf(record) : [];
+  }
+
+  /**
+   * A closed late-tier barn does not need to show the animals it contains.
+   * This is presentation-only: livestock remains owned, productive and is
+   * released visibly when the building is razed.
+   */
+  isLivestockPresentationVisible(
+    animal: WildlifeAnimal,
+    ageForOwner: (owner: UnitOwner) => SettlementAge,
+  ): boolean {
+    const pasture = [...this.pastures.values()].find((record) => record.penned.has(animal.id));
+    if (!pasture) return true;
+    return ageForOwner(pasture.structure.owner) === "settlement" && pasture.structure.level < 3;
+  }
+
+  /** Lv2's stone yard alignment is presentation-only; livestock simulation stays on terrain. */
+  livestockPresentationOffset(animal: WildlifeAnimal): { readonly x: number; readonly y: number; readonly z: number } {
+    const pasture = [...this.pastures.values()].find((record) => record.penned.has(animal.id));
+    return pasture?.structure.level === 2
+      ? LEVEL_TWO_LIVESTOCK_PRESENTATION_OFFSET
+      : DEFAULT_LIVESTOCK_PRESENTATION_OFFSET;
   }
 
   snapshots(owner?: UnitOwner): readonly PastureSnapshot[] {
@@ -486,18 +527,19 @@ export class PastureSystem {
   private isHome(assignment: ShepherdAssignment, animal: WildlifeAnimal): boolean {
     const stall = penStalls(assignment.pasture.structure)[assignment.slot];
     if (!stall) return false;
-    return Math.hypot(animal.position.x - stall.x, animal.position.z - stall.z) <= CONTACT_RANGE;
+    const gate = penGate(assignment.pasture.structure, stall);
+    return Math.hypot(animal.position.x - gate.x, animal.position.z - gate.z) <= CONTACT_RANGE;
   }
 
   /**
-   * Where the shepherd walks to end the drive: his animal's own place in the
-   * line, or — if nothing can path there — the nearest reachable footprint edge.
+   * Where the shepherd walks to end the drive: the gate immediately outside his
+   * animal's place in the line, or — if nothing can path there — the nearest
+   * reachable footprint edge.
    *
-   * The fallback is kept from Faz 4 rather than dropped, because the stall is a
-   * point outside the building that the map may still have made unreachable
-   * (another building dropped against that face, a cliff). Arriving at the wrong
-   * side of the barn ends the drive one stride late; failing to arrive at all
-   * strands a calmed animal in the field.
+   * A stall is now deliberately *inside* the footprint, where RTS navigation
+   * rightly refuses to route a worker.  The gate is therefore the hand-off
+   * point: reaching it transfers the animal into its indoor/front-yard slot
+   * without asking a navigation agent to walk through the building.
    */
   private penApproach(assignment: ShepherdAssignment, worker: Unit): Vector3 {
     const { structure } = assignment.pasture;
@@ -505,13 +547,14 @@ export class PastureSystem {
     const halfD = structure.stats.footprint.depth / 2;
     const gap = CONTACT_RANGE * 0.7;
     const stall = penStalls(structure)[assignment.slot];
+    const gate = stall ? penGate(structure, stall) : null;
     const edges = [
       new Vector3(structure.x + halfW + gap, 0, structure.z),
       new Vector3(structure.x - halfW - gap, 0, structure.z),
       new Vector3(structure.x, 0, structure.z + halfD + gap),
       new Vector3(structure.x, 0, structure.z - halfD - gap),
     ].sort((a, b) => worker.position.distanceToSquared(a) - worker.position.distanceToSquared(b));
-    const candidates = stall ? [new Vector3(stall.x, 0, stall.z), ...edges] : edges;
+    const candidates = gate ? [new Vector3(gate.x, 0, gate.z), ...edges] : edges;
     return candidates.find((point) => this.navigation.plan(worker.position, point) !== null)
       ?? candidates[0]!;
   }
@@ -555,9 +598,9 @@ export class PastureSystem {
  * returns more places, and the ones already occupied keep their coordinates, so
  * an upgrade never shuffles the animals already standing there.
  *
- * The row runs along one face, shoulder to shoulder, and wraps to a second row
- * further out once a face is full — which is what keeps a pen of eight from
- * becoming a line stretching off the building into the fields.
+ * The row runs along the open front inside the footprint, shoulder to shoulder,
+ * and wraps toward the building's middle once a face is full. This keeps a pen
+ * of eight from becoming a line stretching off the building into the fields.
  */
 export function penStalls(structure: PlacedStructure): readonly WildlifeStall[] {
   const capacity = structure.economy?.livestockCapacity ?? 0;
@@ -567,9 +610,10 @@ export function penStalls(structure: PlacedStructure): readonly WildlifeStall[] 
   // in one row before the pen has to grow a second.
   const faceWidth = Math.abs(PEN_FACE_X) * structure.stats.footprint.depth
     + Math.abs(PEN_FACE_Z) * structure.stats.footprint.width;
-  // Gaps, not bodies: four animals at 1.8 span 5.4 and stand comfortably along a
-  // six-wide face, which `faceWidth / spacing` alone would have refused.
-  const perRow = Math.max(1, Math.floor(faceWidth / PEN_SLOT_SPACING) + 1);
+  // Pairs read as a settled pen rather than a queue at the building edge. The
+  // second pair steps inward onto the paved floor; larger Town pens keep the
+  // same two-abreast pattern.
+  const perRow = Math.min(2, Math.max(1, Math.floor(faceWidth / PEN_SLOT_SPACING) + 1));
   // Along the face, ninety degrees from its normal.
   const alongX = -PEN_FACE_Z;
   const alongZ = PEN_FACE_X;
@@ -581,7 +625,7 @@ export function penStalls(structure: PlacedStructure): readonly WildlifeStall[] 
     const row = Math.floor(slot / perRow);
     const column = slot % perRow;
     const inThisRow = Math.min(perRow, capacity - row * perRow);
-    const out = half + PEN_STAND_OFF + row * PEN_ROW_SPACING;
+    const out = half - PEN_FRONT_INSET - row * PEN_ROW_SPACING;
     const along = (column - (inThisRow - 1) / 2) * PEN_SLOT_SPACING;
     stalls.push({
       x: structure.x + PEN_FACE_X * out + alongX * along,
@@ -590,4 +634,21 @@ export function penStalls(structure: PlacedStructure): readonly WildlifeStall[] 
     });
   }
   return stalls;
+}
+
+/** The walkable hand-off point immediately outside one interior feeding stall. */
+function penGate(structure: PlacedStructure, stall: WildlifeStall): WildlifeStall {
+  const half = Math.abs(PEN_FACE_X) * structure.stats.footprint.width / 2
+    + Math.abs(PEN_FACE_Z) * structure.stats.footprint.depth / 2;
+  const clearance = CONTACT_RANGE * 0.7;
+  // Preserve the stall's place *along* the feeding line, but put every row's
+  // hand-off on the one navigable front edge. A Town tier's second interior row
+  // must not make its gate drift back into the footprint.
+  const along = (stall.x - structure.x) * -PEN_FACE_Z
+    + (stall.z - structure.z) * PEN_FACE_X;
+  return {
+    x: structure.x + PEN_FACE_X * (half + clearance) - PEN_FACE_Z * along,
+    z: structure.z + PEN_FACE_Z * (half + clearance) + PEN_FACE_X * along,
+    facing: stall.facing,
+  };
 }

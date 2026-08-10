@@ -343,8 +343,8 @@
           "maxHealth": 110,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 20,
-            "localBufferCapacity": 120
+            "perWorkerPerMinute": 12,
+            "localBufferCapacity": 72
           }
         },
         {
@@ -352,8 +352,8 @@
           "maxHealth": 120,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 30,
-            "localBufferCapacity": 180
+            "perWorkerPerMinute": 14,
+            "localBufferCapacity": 84
           }
         }
       ],
@@ -363,8 +363,8 @@
           "maxHealth": 130,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 40,
-            "localBufferCapacity": 320
+            "perWorkerPerMinute": 16,
+            "localBufferCapacity": 128
           }
         },
         {
@@ -372,8 +372,8 @@
           "maxHealth": 140,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 50,
-            "localBufferCapacity": 400
+            "perWorkerPerMinute": 18,
+            "localBufferCapacity": 144
           }
         },
         {
@@ -381,8 +381,8 @@
           "maxHealth": 150,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 60,
-            "localBufferCapacity": 480
+            "perWorkerPerMinute": 20,
+            "localBufferCapacity": 160
           }
         }
       ]
@@ -539,7 +539,7 @@
           "economy": {
             "workerCapacity": 3,
             "localBufferCapacity": 128,
-            "livestockCapacity": 6,
+            "livestockCapacity": 4,
             "perAnimalPerMinute": 16
           }
         },
@@ -549,7 +549,7 @@
           "economy": {
             "workerCapacity": 3,
             "localBufferCapacity": 144,
-            "livestockCapacity": 6,
+            "livestockCapacity": 4,
             "perAnimalPerMinute": 18
           }
         },
@@ -559,7 +559,7 @@
           "economy": {
             "workerCapacity": 3,
             "localBufferCapacity": 160,
-            "livestockCapacity": 6,
+            "livestockCapacity": 4,
             "perAnimalPerMinute": 20
           }
         }

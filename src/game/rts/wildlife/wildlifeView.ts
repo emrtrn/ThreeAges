@@ -53,6 +53,22 @@ export type WildlifePresentationFactory = (
   walkClipSpeed: number,
 ) => RtsPresentationHandle | null;
 
+/** A presentation-only rule for animals that remain fully alive in simulation. */
+export type WildlifePresentationVisibility = (animal: WildlifeAnimal) => boolean;
+/**
+ * A presentation-only local displacement, such as a raised pen floor or a
+ * small art-alignment correction. It never changes the simulated animal.
+ */
+export interface WildlifePresentationOffset {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+export type WildlifePresentationOffsetResolver = (animal: WildlifeAnimal) => WildlifePresentationOffset;
+
+/** The small lift that places livestock hoofs on a pasture's stone foundation. */
+const PENNED_LIVESTOCK_PAD_HEIGHT = 0.18;
+
 export class WildlifeView {
   private readonly handles = new Map<string, RtsPresentationHandle>();
   /** Species that produced no art, so a broken ref is asked for once, not per frame. */
@@ -80,6 +96,10 @@ export class WildlifeView {
    * @param isVisible §59: whether the observing kingdom can see a point right
    *   now. Omitted (the `fogOfWar` flag off) draws every animal.
    * @param viewer which kingdom is looking, so its own livestock is never fogged.
+   * @param shouldDraw optional local-presentation rule, e.g. hiding livestock
+   *   inside a fully enclosed late-tier pasture without altering simulation.
+   * @param presentationOffset optional local art alignment, without changing
+   *   an animal's simulated terrain position.
    */
   sync(
     animals: readonly WildlifeAnimal[],
@@ -87,6 +107,8 @@ export class WildlifeView {
     cameraDistanceSquared: number | null,
     isVisible?: (x: number, z: number) => boolean,
     viewer?: UnitOwner,
+    shouldDraw?: WildlifePresentationVisibility,
+    presentationOffset?: WildlifePresentationOffsetResolver,
   ): void {
     this.drawn.clear();
     for (const animal of animals) {
@@ -95,11 +117,16 @@ export class WildlifeView {
       // is not a body but the memory of one, and it would lie on the map for the
       // rest of the match. Skipped before `handleFor` so a spent animal is never
       // given art again on the next frame.
-      if (animal.spent) continue;
+      if (animal.spent || (shouldDraw !== undefined && !shouldDraw(animal))) continue;
       const handle = this.handleFor(animal);
       if (!handle) continue;
       this.drawn.add(animal.id);
-      handle.root.position.set(animal.position.x, animal.position.y, animal.position.z);
+      const offset = presentationOffset?.(animal);
+      handle.root.position.set(
+        animal.position.x + (offset?.x ?? 0),
+        animal.position.y + (animal.stall ? PENNED_LIVESTOCK_PAD_HEIGHT : 0) + (offset?.y ?? 0),
+        animal.position.z + (offset?.z ?? 0),
+      );
       handle.root.rotation.y = animal.facing;
       handle.root.visible = isWildlifeVisible(
         animal.owner,

@@ -33682,14 +33682,12 @@ check("V2 Faz 4: a shepherd walks out, calms an animal, drives it home, and the 
     assert.notEqual(animal.stall, null, "penning is what replaced its behaviour, not something layered over it");
     assert.equal(animal.lead, null, "a penned animal is no longer being led by anyone");
     assert.equal(animal.stats.id, cow.id, "the tameable species is what was taken");
-    const distance = Math.hypot(animal.position.x - structure.x, animal.position.z - structure.z);
+    const halfWidth = structure.stats.footprint.width / 2;
+    const halfDepth = structure.stats.footprint.depth / 2;
     assert.ok(
-      distance > Math.hypot(structure.stats.footprint.width / 2, structure.stats.footprint.depth / 2) - 1e-6,
-      `a penned animal stands outside the barn, not in it (${distance.toFixed(2)})`,
-    );
-    assert.ok(
-      distance < (structure.economy?.gatherRadius ?? 0),
-      "and never outside the reach of the pasture that owns it",
+      Math.abs(animal.position.x - structure.x) < halfWidth
+        && Math.abs(animal.position.z - structure.z) < halfDepth,
+      "a penned animal occupies the pasture footprint rather than standing beside it",
     );
   }
   // The crew is released once the pen is full: shepherds are workers, and §55's
@@ -33963,7 +33961,7 @@ check("V2 Faz 5: razing a pasture frees its herd instead of deleting it", () => 
 
 // --- Pasture V2 Faz 8: the pen is a feeding line, and the line is not AI ---
 
-check("V2 Faz 8: a pasture's stalls are one evenly spaced row in front of the building", () => {
+check("V2 Faz 8: a pasture's stalls fill its front footprint strip in an evenly spaced row", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
@@ -33974,18 +33972,19 @@ check("V2 Faz 8: a pasture's stalls are one evenly spaced row in front of the bu
   const stalls = penStalls(structure);
 
   assert.equal(stalls.length, capacity, "one place per animal the tier's pen may hold");
-  const halfDiagonal = Math.hypot(
-    structure.stats.footprint.width / 2,
-    structure.stats.footprint.depth / 2,
-  );
+  const halfWidth = structure.stats.footprint.width / 2;
+  const halfDepth = structure.stats.footprint.depth / 2;
+  const rows = new Map<string, number>();
   const spacings = new Set<string>();
   for (const [index, stall] of stalls.entries()) {
-    // Outside the barn and inside the pasture's own reach: the two bounds the
-    // yard used to carry, kept, because they are what stops a stall being drawn
-    // through the wall or out in a neighbour's field.
-    const distance = Math.hypot(stall.x - structure.x, stall.z - structure.z);
-    assert.ok(distance > halfDiagonal, `stall ${index} stands clear of the footprint`);
-    assert.ok(distance < (structure.economy?.gatherRadius ?? 0), `stall ${index} is inside the pasture's reach`);
+    // The pen uses the vacant front strip *within* the ground the pasture owns.
+    // Its mesh is shifted back into the same footprint, so no animal reads as a
+    // disconnected herd parked beside a building.
+    assert.ok(Math.abs(stall.x - structure.x) < halfWidth, `stall ${index} stays inside the footprint width`);
+    assert.ok(Math.abs(stall.z - structure.z) < halfDepth, `stall ${index} stays inside the footprint depth`);
+    assert.ok(stall.x > structure.x, `stall ${index} uses the pasture's front half`);
+    const row = stall.x.toFixed(6);
+    rows.set(row, (rows.get(row) ?? 0) + 1);
     assert.equal(stall.facing, stalls[0]?.facing, "the whole row looks the same way, into the pen");
     if (index > 0) {
       const previous = stalls[index - 1]!;
@@ -33998,6 +33997,11 @@ check("V2 Faz 8: a pasture's stalls are one evenly spaced row in front of the bu
   // rows is the second value — so raising `livestockCapacity` stays a tuning
   // decision rather than a red build.
   assert.ok(spacings.size <= 2, `the row is evenly spaced (gaps: ${[...spacings].join(", ")})`);
+  assert.deepEqual(
+    [...rows.values()].sort((left, right) => left - right),
+    [2, 2],
+    "a four-animal Settlement pen is arranged as two side-by-side pairs",
+  );
   assert.equal(
     new Set(stalls.map((stall) => `${stall.x.toFixed(4)}:${stall.z.toFixed(4)}`)).size,
     capacity,
@@ -34051,6 +34055,34 @@ check("V2 Faz 8: a penned animal stops being simulated — it stands, eats, and 
     pasture.pennedAnimals(structure).length,
     penned.length,
     "and the pen still holds exactly what it held",
+  );
+  assert.equal(
+    pasture.isLivestockPresentationVisible(penned[0]!, () => "settlement"),
+    true,
+    "Settlement Lv1 draws the livestock in its open pen",
+  );
+  assert.deepEqual(
+    pasture.livestockPresentationOffset(penned[0]!),
+    { x: 0, y: 0, z: 0 },
+    "Lv1 keeps its already-correct ground presentation",
+  );
+  structure.level = 2;
+  assert.deepEqual(
+    pasture.livestockPresentationOffset(penned[0]!),
+    { x: 0.25, y: 0.28, z: 0 },
+    "Lv2 alone lifts and moves livestock forward onto its raised stone floor",
+  );
+  structure.level = 3;
+  assert.equal(
+    pasture.isLivestockPresentationVisible(penned[0]!, () => "settlement"),
+    false,
+    "Settlement Lv3 hides livestock inside its closed pasture",
+  );
+  structure.level = 1;
+  assert.equal(
+    pasture.isLivestockPresentationVisible(penned[0]!, () => "town"),
+    false,
+    "the enclosed Town pasture keeps that presentation rule",
   );
   fixture.territory.dispose();
 });
@@ -34309,6 +34341,44 @@ check("V2 Faz 4: your own livestock is never fogged, and the opponent's still is
   assert.equal(isWildlifeVisible("player", 0, 0, () => false, "player"), true);
   assert.equal(isWildlifeVisible("enemy", 0, 0, () => false, "player"), false);
   assert.equal(isWildlifeVisible("wild", 0, 0, () => false, "player"), false);
+  view.dispose();
+});
+
+check("V2 Faz 8: enclosed livestock leaves the renderer but not the simulation", () => {
+  const field = new Group();
+  const view = new WildlifeView(field);
+  const wildlife = new WildlifeSystem(shippedAnimalBalance(), [
+    { id: "pen", species: "cow", x: 0, z: 0, count: 1 },
+  ]);
+  const animal = wildlife.all()[0] ?? assert.fail("the pen fixture needs a cow");
+  assert.ok(wildlife.tame(animal.id, "player", { x: 1, z: 0, facing: 0 }), "the cow is penned");
+  view.setPresentationFactory(() => ({
+    root: new Object3D(),
+    pickTargets: [],
+    selectionRadius: 0.5,
+    dispose: () => {},
+  }));
+
+  view.sync(wildlife.all(), 0, null, undefined, undefined, () => true, () => ({ x: 0.25, y: 0.28, z: 0 }));
+  assert.equal(field.children.length, 1, "an open pasture draws its penned animal");
+  assert.equal(
+    field.children[0]?.position.x,
+    animal.position.x + 0.25,
+    "the Lv2 art correction moves only the rendered animal forward",
+  );
+  assert.equal(
+    field.children[0]?.position.y,
+    animal.position.y + 0.46,
+    "the animal can be lifted onto a raised stone floor visually",
+  );
+
+  view.sync(wildlife.all(), 0, null, undefined, undefined, () => false);
+  assert.equal(field.children.length, 0, "an enclosed pasture releases the animal model");
+  assert.equal(animal.owner, "player", "hiding the model never changes livestock ownership");
+  assert.notEqual(animal.stall, null, "or its penned simulation state");
+
+  view.sync(wildlife.all(), 0, null, undefined, undefined, () => true);
+  assert.equal(field.children.length, 1, "a later open state recreates the presentation");
   view.dispose();
 });
 
