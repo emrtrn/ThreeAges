@@ -1,7 +1,14 @@
 {
   "schema": 1,
   "sockets": [],
-  "animationSet": {},
+  "animationSet": {
+    "idle": "guard_sword_and_shield_idle_1",
+    "walk": "guard_sword_and_shield_walk_1",
+    "run": "guard_sword_and_shield_run_1",
+    "work": "guard_sword_and_shield_idle_1",
+    "attack": "guard_sword_and_sheld_attack_2",
+    "death": "guard_sword_and_shield_death_1"
+  },
   "blendSpaces": [],
   "notifies": [],
   "montages": [],
@@ -9,7 +16,7 @@
     {
       "clip": "guard_sword_and_shield_walk_1",
       "mode": "lockXYZ",
-      "rootNode": "mixamorigHips"
+      "rootNode": "mixamorig:Hips"
     },
     {
       "clip": "guard_sword_and_shield_walk_2",
@@ -48,16 +55,18 @@
     },
     {
       "clip": "guard_sword_and_sheld_attack_1",
-      "mode": "driveMotion",
-      "rootNode": "mixamorigHips"
+      "mode": "lockXYZ",
+      "rootNode": "mixamorig:Hips"
     },
     {
       "clip": "guard_sword_and_sheld_attack_2",
-      "mode": "driveMotion"
+      "mode": "lockXYZ",
+      "rootNode": "mixamorig:Hips"
     },
     {
       "clip": "guard_sword_and_sheld_attack_3",
-      "mode": "driveMotion"
+      "mode": "lockXYZ",
+      "rootNode": "mixamorig:Hips"
     },
     {
       "clip": "guard_sword_and_shield_jump_1",

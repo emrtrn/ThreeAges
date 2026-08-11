@@ -24,7 +24,7 @@
       "id": "guardMesh",
       "component": "SkeletalMeshComponent",
       "props": {
-        "assetId": "ual1-standard-rm",
+        "assetId": "guard",
         "position": [
           0,
           0,
