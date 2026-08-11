@@ -120,6 +120,7 @@ import type { AuthoredWorldHandle } from "@/scene/authoredWorld";
 import { applySceneBackgroundAndAmbient, resolveSceneWorldSettings } from "@/scene/SceneRuntimeCore";
 import type { RoomLayout } from "@engine/scene/layout";
 import { UnitSystem } from "./units/unitSystem";
+import { UnitShadowProxies } from "./units/unitShadowProxies";
 import { Unit } from "./units/unit";
 import { updateUnitMovement } from "./units/unitMovement";
 import { settleStoppedUnitOverlaps } from "./units/unitSeparation";
@@ -700,6 +701,8 @@ export class RtsApp {
   private readonly cameraController = new RtsCameraController();
   private readonly input: RtsInput;
   private readonly units = new UnitSystem();
+  /** Invisible capsule casters that give the non-casting unit meshes a shadow. */
+  private readonly unitShadows = new UnitShadowProxies();
   private readonly wildlife: WildlifeSystem;
   private readonly pasture: PastureSystem;
   private readonly wildlifeRetaliation: WildlifeRetaliationSystem;
@@ -2029,6 +2032,7 @@ export class RtsApp {
     this.projectiles.dispose();
     this.firebrands.dispose();
     this.cannonballs.dispose();
+    this.unitShadows.dispose();
     this.structureDamageVfx.dispose();
     this.hudBar.dispose();
     this.notificationFeed.dispose();
@@ -2217,6 +2221,10 @@ export class RtsApp {
     this.scene.add(this.wildlifeRoot);
     this.scene.add(this.caravanRoot);
     this.scene.add(this.units.root);
+    // A sibling of the units rather than a child of each one: the capsules are a
+    // single instanced mesh, so they cannot hang off the bodies they stand in
+    // for. Their fog handling is therefore explicit — see `UnitShadowProxies`.
+    this.scene.add(this.unitShadows.root);
     this.scene.add(this.projectiles.root);
     this.scene.add(this.firebrands.root);
     this.scene.add(this.cannonballs.root);
@@ -2385,6 +2393,9 @@ export class RtsApp {
     // Cheap when nothing was built: two integer compares (see syncStructurePads).
     this.syncStructurePads();
     this.syncUnitsToGround();
+    // Immediately after grounding, so a capsule never trails a frame behind the
+    // body it shadows, and never sits at last frame's terrain height.
+    this.unitShadows.sync(this.units.all());
     this.perfMeasure("zemin oturtma", groundMark);
     const worldArtMark = this.perfMark();
     this.commandMarkers.update(dt);

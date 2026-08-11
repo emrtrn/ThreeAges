@@ -148,6 +148,36 @@ const ROLE_BODY: Record<UnitRoleId, {
   worker: { radius: UNIT_RADIUS * 0.85, length: 0.8 },
 };
 
+/**
+ * The rough solid a unit occupies, derived from {@link ROLE_BODY}.
+ *
+ * Two things read it: the fallback body and health bar place themselves off
+ * `centerY`, and the fake shadow proxy (`unitShadowProxies.ts`) casts from this
+ * volume rather than from the unit's real mesh. Exported because the second
+ * caller is a different module, and because `centerY` was previously spelled out
+ * at both of the in-file call sites — a silhouette tweak had to be made twice or
+ * the health bar drifted off the head.
+ */
+export interface UnitBodyVolume {
+  /** Half-width of the body at its widest. */
+  readonly radius: number;
+  /** Length of the straight section between the caps. */
+  readonly length: number;
+  /** Height of the body's centre above the unit's feet. */
+  readonly centerY: number;
+}
+
+export function unitBodyVolume(role: UnitRoleId): UnitBodyVolume {
+  const shape = ROLE_BODY[role];
+  return {
+    radius: shape.radius,
+    length: shape.length,
+    // A box body's length already spans it end to end; a capsule's does not —
+    // its two hemispherical caps add a radius at each end.
+    centerY: shape.box ? shape.length / 2 : shape.length / 2 + shape.radius,
+  };
+}
+
 /** Dark iron for a gun barrel; the carriage stays in team colour. */
 const GUN_BARREL_COLOR = "#2f3438";
 const GUN_WHEEL_COLOR = "#6b4a2c";
@@ -308,7 +338,7 @@ export class Unit {
 
     const shape = ROLE_BODY[this.role];
     this.navRadius = shape.radius;
-    const bodyCenterY = shape.box ? shape.length / 2 : shape.length / 2 + shape.radius;
+    const bodyCenterY = unitBodyVolume(this.role).centerY;
     this.installPresentation(presentation, bodyCenterY);
 
     // Always on: this is the answer to "whose is that", which the player needs
@@ -343,9 +373,7 @@ export class Unit {
 
   /** The Actor Script path can replace only the presentation; stats and gameplay stay intact. */
   replacePresentation(presentation: RtsPresentationHandle | null): void {
-    const shape = ROLE_BODY[this.role];
-    const bodyCenterY = shape.box ? shape.length / 2 : shape.length / 2 + shape.radius;
-    this.installPresentation(presentation, bodyCenterY);
+    this.installPresentation(presentation, unitBodyVolume(this.role).centerY);
   }
 
   presentationPickTargets(): readonly Object3D[] {
