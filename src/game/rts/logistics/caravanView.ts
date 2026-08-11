@@ -59,6 +59,10 @@ export class CaravanView {
         working: isLoading(caravan.phase),
         carrying: isCaravanCarrying(caravan.phase),
         attackCount: 0,
+        // A caravan never swings, but it is very much shot at — and the pack
+        // animal reporting its real blow count costs nothing until an asset
+        // authors something to play for one.
+        impactCount: caravan.health.impactCount,
         cameraDistanceSquared: null,
       });
     }

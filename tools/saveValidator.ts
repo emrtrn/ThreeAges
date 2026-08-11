@@ -2608,6 +2608,7 @@ const SKELETON_ANIMATION_SET_ROLES = [
   "fall",
   "work",
   "attack",
+  "hit",
   "death",
 ] as const;
 const SKELETON_ROOT_MOTION_MODES = ["preserve", "lockXZ", "lockXYZ", "driveMotion"] as const;

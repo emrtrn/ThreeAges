@@ -17,7 +17,7 @@
  */
 
 /** What the unit is doing, independent of which clips its asset carries. */
-export type RtsAnimationRole = "idle" | "walk" | "run" | "work" | "attack" | "death";
+export type RtsAnimationRole = "idle" | "walk" | "run" | "work" | "attack" | "hit" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
 export interface RtsAnimationInput {
@@ -43,6 +43,16 @@ export interface RtsAnimationInput {
    * vote in when that damage lands.
    */
   readonly attackCount: number;
+  /**
+   * How many blows this unit has *taken* so far — Guard animation plan Faz 2.
+   *
+   * Read exactly like {@link attackCount}: only its changes matter, one flinch
+   * per increment, and it is written by the health component after the damage is
+   * already resolved. A flinch can therefore never delay a blow, hold a cooldown
+   * or change what a hit was worth; the animation is told what happened, and is
+   * told it late.
+   */
+  readonly impactCount: number;
 }
 
 /**
@@ -209,13 +219,15 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   // clip. An asset that authors none simply stands there, which is what the
   // capsule-era worker did and is never wrong — only less expressive.
   work: ["work", "idle"],
-  // `attack` and `death` deliberately do *not* reach their own clips here. This
-  // chain feeds the continuous, looping channel, and those two clips are
-  // one-shots played per event by {@link advanceRtsAction} — looping a sword
-  // swing between blows would show a unit attacking on a cadence its cooldown
-  // never had. What the continuous channel wants for an engaged or fallen unit
-  // is the standing pose underneath the action.
+  // `attack`, `hit` and `death` deliberately do *not* reach their own clips
+  // here. This chain feeds the continuous, looping channel, and those three
+  // clips are one-shots played per event by {@link advanceRtsAction} — looping a
+  // sword swing between blows would show a unit attacking on a cadence its
+  // cooldown never had, and a looping flinch would show one permanently being
+  // beaten. What the continuous channel wants for an engaged, struck or fallen
+  // unit is the standing pose underneath the action.
   attack: ["idle"],
+  hit: ["idle"],
   death: ["idle"],
 };
 
@@ -307,15 +319,22 @@ export function selectRtsAnimation(
 
 /** The one-shot currently overriding locomotion, if any. */
 export interface RtsActionState {
-  readonly kind: "none" | "attack" | "death";
+  readonly kind: "none" | "attack" | "hit" | "death";
   /** Seconds left of the running clip. Reaches 0 on the frame it finishes. */
   readonly remainingSeconds: number;
   /** The blow count this state was last reconciled against; see {@link advanceRtsAction}. */
   readonly attackCount: number;
+  /** The same, for blows taken rather than landed. */
+  readonly impactCount: number;
 }
 
-/** A unit that has neither swung nor fallen. */
-export const RTS_ACTION_NONE: RtsActionState = { kind: "none", remainingSeconds: 0, attackCount: 0 };
+/** A unit that has neither swung, flinched nor fallen. */
+export const RTS_ACTION_NONE: RtsActionState = {
+  kind: "none",
+  remainingSeconds: 0,
+  attackCount: 0,
+  impactCount: 0,
+};
 
 /**
  * Authored lengths of the one-shot clips, in seconds. Null means the asset
@@ -324,23 +343,31 @@ export const RTS_ACTION_NONE: RtsActionState = { kind: "none", remainingSeconds:
  */
 export interface RtsActionDurations {
   readonly attack: number | null;
+  readonly hit: number | null;
   readonly death: number | null;
 }
 
 /**
  * Advances the one-shot channel by one frame.
  *
- * Three rules, in order:
+ * Four rules, in strict priority order — the plan's
+ * `death > new impact > new attack > locomotion`:
  *  1. **Death latches.** Once it starts it is never interrupted, never
  *     restarted, and never returns to locomotion — a unit only dies once, and
  *     it must still be lying there when the death system despawns it.
- *  2. **A new blow restarts the swing.** Any change in `attackCount` begins the
- *     attack clip from the top, even if the previous swing is still running.
- *  3. **Otherwise the running action runs down**, and locomotion resumes on the
+ *  2. **A blow taken restarts the flinch**, outranking a swing either way
+ *     round: it interrupts one that is running, and one landed while a flinch
+ *     is running does not interrupt it. A unit being beaten reads as being
+ *     beaten, not as trading blows through it.
+ *  3. **A new blow landed restarts the swing.** Any change in `attackCount`
+ *     begins the attack clip from the top, even mid-swing.
+ *  4. **Otherwise the running action runs down**, and locomotion resumes on the
  *     frame it expires.
  *
- * The returned state always carries the input's `attackCount`, so blows landed
- * while an action was uninterruptible do not queue up and fire late.
+ * The returned state always carries the input's counters, so events that
+ * happened while an action owned the body are *dropped* rather than queued —
+ * three blows in half a second are one flinch from the last of them, not three
+ * played back long after the fight moved on.
  */
 export function advanceRtsAction(
   state: RtsActionState,
@@ -349,24 +376,51 @@ export function advanceRtsAction(
   deltaSeconds: number,
 ): RtsActionState {
   const dt = Math.max(0, deltaSeconds);
+  const counters = { attackCount: input.attackCount, impactCount: input.impactCount };
   if (input.dying) {
     if (state.kind === "death") {
-      return { ...state, remainingSeconds: Math.max(0, state.remainingSeconds - dt) };
+      return { ...state, ...counters, remainingSeconds: Math.max(0, state.remainingSeconds - dt) };
     }
     if (durations.death === null) {
       // No authored death clip: the unit's own collapse pose owns its defeat.
-      return { kind: "none", remainingSeconds: 0, attackCount: input.attackCount };
+      return { kind: "none", remainingSeconds: 0, ...counters };
     }
-    return { kind: "death", remainingSeconds: durations.death, attackCount: input.attackCount };
+    return { kind: "death", remainingSeconds: durations.death, ...counters };
+  }
+  if (input.impactCount !== state.impactCount && durations.hit !== null) {
+    return { kind: "hit", remainingSeconds: durations.hit, ...counters };
+  }
+  if (state.kind === "hit") {
+    const remaining = state.remainingSeconds - dt;
+    if (remaining > 0) return { kind: "hit", remainingSeconds: remaining, ...counters };
   }
   if (input.attackCount !== state.attackCount && durations.attack !== null) {
-    return { kind: "attack", remainingSeconds: durations.attack, attackCount: input.attackCount };
+    return { kind: "attack", remainingSeconds: durations.attack, ...counters };
   }
   if (state.kind === "attack") {
     const remaining = state.remainingSeconds - dt;
-    if (remaining > 0) return { kind: "attack", remainingSeconds: remaining, attackCount: input.attackCount };
+    if (remaining > 0) return { kind: "attack", remainingSeconds: remaining, ...counters };
   }
-  return { kind: "none", remainingSeconds: 0, attackCount: input.attackCount };
+  return { kind: "none", remainingSeconds: 0, ...counters };
+}
+
+/**
+ * Which *occurrence* of its kind a one-shot state is: the running counter of the
+ * event that started it, and 0 for the kinds that happen once or not at all.
+ *
+ * Two callers need exactly this number and must agree on it. It picks the
+ * variant clip, so the same unit varies its swings across a fight and its
+ * flinches across a beating while both stay reproducible — blow number seven
+ * looks the same on every replay. And it identifies the occurrence for the
+ * driver's "is this a new one-shot" test, which is why it may not simply be
+ * "either counter changed": a state carries both, so a blow landed *during* a
+ * flinch moves `attackCount` without starting anything, and restarting the clip
+ * on that would freeze a beaten unit on its first flinch frame.
+ */
+export function rtsActionSequence(state: RtsActionState): number {
+  if (state.kind === "attack") return state.attackCount;
+  if (state.kind === "hit") return state.impactCount;
+  return 0;
 }
 
 /**
@@ -387,7 +441,7 @@ export function rtsActionClip(
     variants,
     available,
     variantSeed,
-    state.kind === "attack" ? state.attackCount : 0,
+    rtsActionSequence(state),
   );
 }
 

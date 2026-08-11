@@ -1,7 +1,9 @@
 # ThreeAges — Muhafız Animasyon Tamamlama Planı
 
 Oluşturulma tarihi: 2026-08-11  
-Durum: **Devam ediyor — temel bağlama, materyal paritesi ve hareket/saldırı çeşitliliği tamam; sonraki oturum Faz 1 görsel kabulü veya Faz 2 darbe tepkisinden başlar.**
+Durum: **Devam ediyor — Faz 2 (alınan darbe) kodu ve otomasyonu tamam; Faz 1 ile
+Faz 2'nin dünya içi görsel kabulleri kullanıcıda açık. Sonraki fonksiyonel dilim
+Faz 3 (ikinci death varyantı).**
 
 ## 1. Amaç
 
@@ -43,6 +45,7 @@ combat dengesi ve `Guard.glb` kaynak geometrisi kapsam dışıdır.
 | `run` | `guard_sword_and_shield_run_1` | `run_2` | Tamam, görsel kabul açık |
 | `work` | `guard_sword_and_shield_idle_1` | — | Mevcut davranış korunur |
 | `attack` | `guard_sword_and_sheld_attack_2` | `attack_4`, `slash_5`, `kick` | Tamam |
+| `hit` | `guard_sword_and_shield_impact_1` | `impact_2`, `impact_3` | Tamam, görsel kabul açık |
 | `death` | `guard_sword_and_shield_death_1` | — | Tamam |
 
 `animationVariants` seçimi rastgele sayı üretmez. `unit.id` tabanlı seed;
@@ -128,39 +131,62 @@ veya sıfır hızda koşu yoktur. Başarılıysa plan günlüğüne tarihli kabu
 
 ### Faz 2 — Alınan darbe (`impact`) tepkisi
 
-**Durum:** Planlandı — sonraki fonksiyonel dilim.
+**Durum:** Kod ve otomasyon tamam (2026-08-11), kullanıcı görsel kabulü açık.
 
-**Asset adayları:**
+**Kullanılan klipler:** `guard_sword_and_shield_impact_1` (0.73 s, birincil),
+`impact_2` (1.00 s), `impact_3` (0.73 s).
 
-- `guard_sword_and_shield_impact_1` — 0.70 s
-- `guard_sword_and_shield_impact_2` — 0.97 s
-- `guard_sword_and_shield_impact_3` — 0.70 s
+**Yapılanlar:**
 
-**Yapılacaklar:**
+1. `hit` tek-atımlık semantic rolü üç yüzeye birlikte eklendi (K-01):
+   `ANIMATION_SET_ROLES` (`src/scene/assetSkeletonLoader.ts`),
+   `SKELETON_ANIMATION_SET_ROLES` (`tools/saveValidator.ts`) ve seçici/testler.
+   Skeletal Mesh Editor rol satırını otomatik gösterir; UI değişikliği gerekmedi.
+2. **Sayaç merkezî olarak `HealthComponent.impactCount`'ta tutulur.** Bunun
+   nedeni kapsama: hasar bugün beş ayrı yerden uygulanıyor (`unitCombat`,
+   `PendingImpactQueue`, `structureDefenseSystem`, `predatorSystem`,
+   `wildlifeRetaliation`) ve sayacı bunlardan birine koymak, altıncısının
+   unutulmasına açık kapı bırakırdı. Can puanının gerçekten değiştiği yerde
+   sayılınca hiçbir kaynak atlanamaz. `applied > 0` koşulu heal'i, 0 hasarı ve
+   ölmüş bedene inen fazla vuruşu dışarıda bırakır.
+3. `RtsPresentationUpdate.impactCount` birimlerde `health.impactCount`'tan
+   beslenir; hayvan ve kervan görünümleri de aynı gerçek sayacı taşır (bugün
+   `hit` klibi authorlamadıkları için hiçbir şey oynamaz).
+4. Öncelik `advanceRtsAction` içinde açıkça sıralı:
+   `death > yeni impact > yeni attack > work montajı > locomotion`. Darbe hem
+   koşan saldırıyı keser hem de kendisi koşarken gelen saldırıya kesilmez.
+5. Kuyruk yok: durum her karede girdinin iki sayacını da üstlenir, bu yüzden
+   darbe sırasında olan olaylar **düşer**, sonradan oynanmaz. Yarım saniyede üç
+   vuruş = sonuncusundan başlayan tek darbe klibi.
+6. Varyant seçimi `rtsActionSequence` üzerinden kind'a özel: attack `attackCount`,
+   hit `impactCount` kullanır. Aynı state iki sayacı da taşıdığı için bu ayrım
+   şarttır — yutulan bir saldırı, oynayan darbe klibini ortasında değiştiremez.
 
-1. `hit` adlı tek-atımlık semantic rolü sidecar/validator sözleşmesine ekle.
-2. Birim sunum snapshot'ına oyun verisi olmayan, yalnızca gerçek hasar uygulanınca
-   artan bir `impactCount` aktar.
-3. Tüm hasar kaynaklarını kapsa: anlık melee/ranged hit,
-   `PendingImpactQueue` ile geciken top atışı ve predator vuruşu. Sadece `applied
-   > 0` değişiklikler tepki üretmelidir.
-4. `RtsUnitPresentation` içinde önceliği açıkça tanımla:
-   `death > yeni impact > yeni attack > work > locomotion`.
-5. Aynı kısa aralıktaki vuruşlar için kuyruk yerine son gerçek darbeye restart
-   uygulanıp bitince locomotion'a dönülsün; eski darbeler sonradan oynatılmasın.
-6. Üç impact klibini `hit` varyantı olarak seed + `impactCount` ile deterministik
-   seç; hepsine root-motion doğrulaması uygula.
+**Root-motion doğrulaması (K-03):** Üç impact klibinin `mixamorig:Hips`
+translation kanalı GLB'den ölçüldü. Net yer değiştirme sırasıyla
+(0.08, −0.19, −0.09), (0, 0, 0) ve (0, 0, 0) klip birimi — yani hepsi başladığı
+yere döner. Karşılaştırma: kilitli `attack_2` net 105.7/249.7/6.1, kilitli
+`walk_1` ise 154 birim ilerler. Impact klipleri kilitlenmemiş `idle_1` ile aynı
+büyüklük sınıfında olduğu için `rootMotion` girdisi eklenmedi; `lockXYZ`
+uygulamak gövdenin geri sarsılmasını da düzleştirirdi.
 
-**Otomasyon:**
+**Otomasyon (7 yeni engine kontrolü, `--filter "Muhafiz Faz 2"`):**
 
-- Impact sayacı yalnızca gerçek damage'le artar; heal, miss veya 0 applied artmaz.
-- Her damage kaynağı aynı presentation olayını üretir.
-- Death, impact'i keser; impact ne attack cooldown'una ne de hasar miktarına oy
-  verir.
-- `npx tsc --noEmit` ve `npm run test:engine -- --filter "Skeletal animasyon"`.
+- Sayaç yalnızca uygulanan hasarla artar; heal, 0 hasar, cesede inen vuruş ve
+  `upgradeMax`/`setMax` artırmaz.
+- Dört hasar kaynağının dördü de aynı olayı üretir: anlık vuruş, uçuş süreli top
+  mermisi (havadayken değil, indiğinde), Karakol yaylım ateşi (ok başına bir
+  olay) ve kurt ısırığı.
+- Öncelik, restart ve "geçmişi kuyruğa alma" davranışı; `hit` klibi olmayan
+  asset'in eskisi gibi davranması.
+- Deterministik varyant seçimi ve `rtsActionSequence`'ın kind'a özel olması.
+- `hit` rolünün editör kaydından sağ çıkması + Guard sidecar'ının havuzu
+  authorlaması; havuzda `block`/`crouch`/`casting`/`power_up` bulunmaması (K-04).
+- Darbe animasyonunun hasarı, cooldown'u ve despawn penceresini değiştirmemesi.
+- `npx tsc --noEmit` temiz; `npm run test:engine` (fast) 1395 kontrol yeşil.
 
-**Görsel kabul:** Muhafız yürürken, savaşırken ve ölmeden hemen önce hasar alır;
-pose okunur, spam halinde kilitlenmez, öldüğünde death klibi önceliklidir.
+**Görsel kabul (açık):** Muhafız yürürken, savaşırken ve ölmeden hemen önce hasar
+alır; pose okunur, spam halinde kilitlenmez, öldüğünde death klibi önceliklidir.
 
 ### Faz 3 — İkinci death varyantı
 
@@ -229,13 +255,15 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
 
 ## 5. Sonraki Oturum İçin Başlangıç Noktası
 
-1. Önce Faz 1'in dünya içi görsel kabulünü sor/kaydet. Kabul geldiyse bu planın
-   Uygulama Günlüğü'ne yalnızca kanıtla birlikte işaret ekle.
-2. Ardından Faz 2 ile başla; `RtsPresentationUpdate`, `Unit`,
-   `RtsUnitPresentation`, `rtsUnitAnimation`, `RtsApp.resolveCombatHit`,
-   `PendingImpactQueue` ve predator damage yollarını birlikte incele.
-3. `hit` rolünü eklemeden önce her hasar yolunu listele; eksik kaynak varsa
-   cosmetic event için tek bir merkezi köprü seç.
+1. Önce Faz 1 (walk/run) ve Faz 2 (darbe) görsel kabullerini sor/kaydet. Kabul
+   geldiyse Uygulama Günlüğü'ne yalnızca kanıtla birlikte tarihli satır eklenir.
+2. Ardından Faz 3'e geç: `death_2` klibinin (3.93 s) root-motion'ı ölçülmüş
+   durumda — net 26.1/93.2/65.0, yani `death_1` (3.8/−115.3/67.9) ile aynı
+   sınıfta ve o da kilitlenmemiş. Asıl soru klip değil süre: `deathSeconds`
+   despawn penceresini uzattığı için varyantın uzunluğu hedefleme, seçim ve
+   removal davranışını bozmamalı.
+3. Faz 4/5/6 hâlâ tasarım kapısında; klip ataması yapılmadan önce §4'teki
+   sorular yanıtlanmalı.
 4. Her TypeScript değişikliğinden sonra `npx tsc --noEmit`; her dar dilimden
    sonra ilgili filtreli engine testini çalıştır. Kalabalık/darbe görünümü için
    browser veya kullanıcı görsel kabulü açıkça ayrı yazılır.
@@ -253,6 +281,11 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
 - 2026-08-11 — `walk_2` ve `run_2`, sabit birim seed'iyle hareket varyantlarına
   eklendi. Hedefli skeletal testler ve TypeScript kontrolü geçti; dünya içi
   görsel kabul açık.
+- 2026-08-11 — Faz 2 uygulandı: `hit` rolü, `HealthComponent.impactCount`
+  merkezî sayacı, `advanceRtsAction` içinde death > impact > attack önceliği ve
+  üç impact klibinin deterministik varyant havuzu. Dört hasar yolunun dördü de
+  test altında; 7 yeni engine kontrolü, `tsc --noEmit` ve fast `test:engine`
+  (1395 kontrol) yeşil. Dünya içi görsel kabul açık.
 
 ## 7. Teslim Kapısı
 

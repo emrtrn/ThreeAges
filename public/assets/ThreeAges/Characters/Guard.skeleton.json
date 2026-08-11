@@ -7,7 +7,8 @@
     "run": "guard_sword_and_shield_run_1",
     "work": "guard_sword_and_shield_idle_1",
     "attack": "guard_sword_and_sheld_attack_2",
-    "death": "guard_sword_and_shield_death_1"
+    "death": "guard_sword_and_shield_death_1",
+    "hit": "guard_sword_and_shield_impact_1"
   },
   "animationVariants": {
     "idle": [
@@ -25,6 +26,10 @@
       "guard_sword_and_sheld_attack_4",
       "guard_sword_and_shield_slash_5",
       "guard_sword_and_shield_kick"
+    ],
+    "hit": [
+      "guard_sword_and_shield_impact_2",
+      "guard_sword_and_shield_impact_3"
     ]
   },
   "blendSpaces": [],

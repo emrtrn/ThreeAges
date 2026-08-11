@@ -73,6 +73,14 @@ export interface RtsPresentationUpdate {
   /** Blows landed so far; each increment is one swing to play (Faz D). */
   readonly attackCount: number;
   /**
+   * Blows *taken* so far; each increment is one flinch to play (Guard plan Faz 2).
+   *
+   * Comes straight off the health component, which is where every damage source
+   * in the match already meets, so a delayed shell, a tower, a wolf and a sword
+   * all reach the presentation as the same event.
+   */
+  readonly impactCount: number;
+  /**
    * Whether this presentation is carrying a load right now.
    *
    * Only Actors that author `rtsCargoVisibility` react — for everything else the
@@ -426,6 +434,7 @@ export class Unit {
       dying: this.dying,
       working: this.working,
       attackCount: this.attack.blowCount,
+      impactCount: this.health.impactCount,
       cameraDistanceSquared: cameraPosition ? this.object.position.distanceToSquared(cameraPosition) : null,
     });
   }

@@ -195,6 +195,7 @@ import {
   resolveRtsAnimationRole,
   resolveRtsWorkMontage,
   rtsActionClip,
+  rtsActionSequence,
   rtsLocomotionTuning,
   rtsPlaybackRate,
   rtsWorkMontageSection,
@@ -37934,7 +37935,7 @@ check("Skeletal animasyon Faz C: hiz esikleri, rol onceligi ve dusme zinciri", (
   assert.equal(rtsPlaybackRate("death", 4, tuning), 1);
 
   const selection = selectRtsAnimation(
-    { planarSpeed: 2, attacking: false, dying: false, attackCount: 0 },
+    { planarSpeed: 2, attacking: false, dying: false, attackCount: 0, impactCount: 0 },
     { idle: "Idle_Loop", walk: "Walk_Loop" },
     new Set(["Idle_Loop", "Walk_Loop"]),
     tuning,
@@ -37971,18 +37972,18 @@ check("Skeletal animasyon varyasyonlari: klip secimi birim ve darbe basina karar
     assert.ok(population.size > 1, `${role} varies across Guard instances`);
   }
   assert.equal(
-    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4 }, set, available, variants, 17),
-    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4 }, set, available, variants, 17),
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4, impactCount: 0 }, set, available, variants, 17),
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4, impactCount: 0 }, set, available, variants, 17),
     "the same landed blow resolves to the same attack clip",
   );
   assert.ok(
     ["Attack_1", "Attack_2", "Attack_3"].includes(
-      rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 5 }, set, available, variants, 17) ?? "",
+      rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 5, impactCount: 0 }, set, available, variants, 17) ?? "",
     ),
     "attack variants stay inside the authored/shipped pool",
   );
   const attacks = new Set(Array.from({ length: 12 }, (_, index) =>
-    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: index + 1 }, set, available, variants, 17)));
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: index + 1, impactCount: 0 }, set, available, variants, 17)));
   assert.ok(attacks.size > 1, "one Guard rotates attacks across landed blows");
 
   const normalized = normalizeAssetSkeleton({ animationSet: set, animationVariants: variants });
@@ -38042,7 +38043,7 @@ check("Skeletal animasyon Faz C: lockXZ animatore ulasir ve klip hiza gore olcek
     // 2 units/s against a 6 units/s Guard: walking, at two-thirds of the walk
     // clip's calibrated speed. Two steps so the idle→walk crossfade settles.
     for (let i = 0; i < 2; i += 1) {
-      presentation.update?.({ deltaSeconds: 0.25, planarSpeed: 2, attacking: false, dying: false, attackCount: 0 });
+      presentation.update?.({ deltaSeconds: 0.25, planarSpeed: 2, attacking: false, dying: false, attackCount: 0, impactCount: 0 });
     }
     return model.getObjectByName("hips")!;
   };
@@ -38110,12 +38111,13 @@ check("Skeletal animasyon Faz C: animasyon secimi birimin konumunu ve statlarini
 });
 
 check("Skeletal animasyon Faz D: tek atimlik saldiri her darbede bir kez, olum ise bir kez ve geri donussuz", () => {
-  const durations = { attack: 0.5, death: 1.2 };
+  const durations = { attack: 0.5, hit: null, death: 1.2 };
   const input = (over: Partial<RtsAnimationInput> = {}): RtsAnimationInput => ({
     planarSpeed: 0,
     attacking: false,
     dying: false,
     attackCount: 0,
+    impactCount: 0,
     ...over,
   });
 
@@ -38153,18 +38155,18 @@ check("Skeletal animasyon Faz D: tek atimlik saldiri her darbede bir kez, olum i
 
   // An asset that authors neither clip never enters the one-shot channel, which
   // is what keeps a half-authored unit — and the capsule fallback — playable.
-  const unauthored = { attack: null, death: null };
+  const unauthored = { attack: null, hit: null, death: null };
   assert.equal(advanceRtsAction(RTS_ACTION_NONE, input({ attackCount: 1 }), unauthored, 0.1).kind, "none");
   assert.equal(advanceRtsAction(RTS_ACTION_NONE, input({ dying: true }), unauthored, 0.1).kind, "none");
 
   // Clip resolution is data, not code: the role name indexes the sidecar.
   const set = { idle: "Idle_Loop", attack: "Sword_Attack", death: "Death01" };
   const shipped = new Set(["Idle_Loop", "Sword_Attack", "Death01"]);
-  assert.equal(rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 1 }, set, shipped), "Sword_Attack");
-  assert.equal(rtsActionClip({ kind: "death", remainingSeconds: 1, attackCount: 1 }, set, shipped), "Death01");
+  assert.equal(rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 1, impactCount: 0 }, set, shipped), "Sword_Attack");
+  assert.equal(rtsActionClip({ kind: "death", remainingSeconds: 1, attackCount: 1, impactCount: 0 }, set, shipped), "Death01");
   assert.equal(rtsActionClip(RTS_ACTION_NONE, set, shipped), null, "no action means locomotion owns the pose");
   assert.equal(
-    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 1 }, set, new Set(["Idle_Loop"])),
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 1, impactCount: 0 }, set, new Set(["Idle_Loop"])),
     null,
     "an authored clip the model does not ship resolves to nothing, not to a guess",
   );
@@ -38178,6 +38180,7 @@ check("Isci is montaji: bir kez egilir, insaat boyunca egik kalir, bitince bir k
     dying: false,
     working: false,
     attackCount: 0,
+    impactCount: 0,
     ...over,
   });
   const montages: RtsMontageSource[] = [
@@ -38410,6 +38413,281 @@ check("Skeletal animasyon Faz D: despawn authored olum klibini bekler, kapsul du
   units.clear();
 });
 
+check("Muhafiz Faz 2: darbe sayaci yalnizca gercekten uygulanan hasarla artar", () => {
+  // The counter the flinch triggers off, at the one place it is written. Its
+  // whole contract is "a blow that actually cost hit points, and nothing else":
+  // a heal, a miss, a blow on a corpse and a zero roll all have to leave it
+  // alone, or a Guard flinches at a bandage.
+  const health = new HealthComponent(10);
+  assert.equal(health.impactCount, 0, "an untouched body has taken nothing");
+
+  health.damage(3);
+  assert.equal(health.impactCount, 1, "one applied blow is one flinch to play");
+  health.damage(0);
+  assert.equal(health.impactCount, 1, "a zero-damage roll is not a blow");
+  health.heal(3);
+  assert.equal(health.impactCount, 1, "mending a unit is not hitting it");
+  health.damage(2);
+  assert.equal(health.impactCount, 2);
+
+  // A blow whose damage is entirely clamped away — the overkill shot arriving at
+  // a body that is already down — applies nothing and so plays nothing. The
+  // death clip owns that body, and a corpse that keeps flinching is exactly the
+  // failure the `applied > 0` guard exists for.
+  health.damage(100);
+  assert.equal(health.current, 0);
+  assert.equal(health.impactCount, 3, "the killing blow itself does count");
+  health.damage(100);
+  health.damage(100);
+  assert.equal(health.impactCount, 3, "but nothing that lands on the corpse afterwards does");
+
+  // Raising the ceiling is bookkeeping, not violence, however much health it
+  // moves — an upgrade must never read as the building being shelled.
+  const structure = new HealthComponent(100);
+  structure.damage(20);
+  structure.upgradeMax(400);
+  structure.setMax(150);
+  assert.equal(structure.impactCount, 1, "level and age changes are not hits");
+});
+
+check("Muhafiz Faz 2: her hasar kaynagi ayni darbe olayini uretir", () => {
+  // The plan's requirement that no damage path is missed, checked against the
+  // paths themselves rather than against the counter's implementation. They
+  // agree today because the count is kept where the hit points actually move —
+  // if it is ever pulled up into one of the combat systems instead, whichever
+  // source that system does not own fails here.
+  const units = new UnitSystem();
+  const guard = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const raider = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
+  raider.setAttackTarget(guard);
+
+  // 1. The instant blow: melee and bow both land inside `updateUnitCombat`.
+  updateUnitCombat(units.all(), 0);
+  assert.equal(guard.health.impactCount, 1, "a sword blow is one flinch");
+  assert.ok(guard.health.current < guard.health.max, "and it really cost him health");
+
+  // 2. The delayed blow: a gun's shell is resolved at fire time and lands a
+  //    second later. The flinch has to wait for the ball, not for the muzzle.
+  const impacts = new PendingImpactQueue();
+  impacts.schedule(raider, guard, 5, true, 0.8);
+  impacts.update(0.5);
+  assert.equal(guard.health.impactCount, 1, "a shell still in the air has hit nobody");
+  impacts.update(0.5);
+  assert.equal(guard.health.impactCount, 2, "and lands as one flinch when it arrives");
+
+  // 3. The tower: a Karakol's volley is fired by the structure, not by a unit,
+  //    and never reaches `updateUnitCombat` at all.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const outpostStats = buildings.outpost ?? assert.fail("outpost definition missing");
+  const defense = outpostStats.defense ?? assert.fail("outpost defense missing");
+  const structures = new PlacedStructureSystem();
+  const outpost = structures.place("player", outpostStats, 0, 0);
+  structures.advanceConstruction(outpost, outpostStats.constructionSeconds);
+  const before = raider.health.impactCount;
+  new StructureDefenseSystem().update(structures.all(), [...units.all(), ...structures.all()], 0);
+  assert.equal(
+    raider.health.impactCount - before,
+    defense.arrowsPerVolley,
+    "every arrow in the volley is its own blow taken",
+  );
+
+  units.clear();
+});
+
+check("Muhafiz Faz 2: kurdun isirigi da ayni darbe olayini uretir", () => {
+  // The fourth damage path, and the one most easily forgotten: a wolf bites in
+  // `PredatorSystem`, which reports strikes rather than routing them through
+  // combat. V1 §3.9 was closed once already by mirroring the retaliation call —
+  // this is the same debt for the presentation half.
+  const animals = shippedAnimalBalance();
+  const wildlife = new WildlifeSystem(animals, [{ id: "den", species: "wolf", x: 0, z: 0, count: 1 }]);
+  const wolf = wildlife.all()[0] ?? assert.fail("no wolf spawned");
+  wolf.position.set(0, 0, 0);
+  const units = new UnitSystem();
+  const territory = new TerritoryControlSystem(() => []);
+  territory.refresh();
+  const predators = new PredatorSystem(units, wildlife, (x, z) => territory.ownerAt(x, z));
+  // Standing on the wolf, so the bite is the only thing this check has to wait
+  // for: the chase itself is V3 Faz 4's subject, not this one's.
+  const worker = units.spawn("player", 0.4, 0, RTS_TEST_WORKER_STATS);
+
+  let bites = 0;
+  for (let tick = 0; tick < 400 && bites === 0; tick += 1) {
+    for (const _strike of predators.update(0.25)) bites += 1;
+    wildlife.update(0.25, units.all().map((unit) => unit.position));
+  }
+  assert.ok(bites > 0, "the wolf drew blood");
+  assert.equal(worker.health.impactCount, bites, "and every bite is one flinch, through the same counter");
+
+  units.clear();
+});
+
+check("Muhafiz Faz 2: darbe klibi olumden sonra gelir, saldiridan once, ve gecmisi kuyruga almaz", () => {
+  const durations = { attack: 0.5, hit: 0.3, death: 1.2 };
+  const input = (over: Partial<RtsAnimationInput> = {}): RtsAnimationInput => ({
+    planarSpeed: 0,
+    attacking: false,
+    dying: false,
+    working: false,
+    attackCount: 0,
+    impactCount: 0,
+    ...over,
+  });
+
+  // A blow taken starts the flinch and it runs its own length down.
+  let state = advanceRtsAction(RTS_ACTION_NONE, input({ impactCount: 1 }), durations, 0.1);
+  assert.equal(state.kind, "hit");
+  assert.equal(state.remainingSeconds, 0.3, "the flinch is given the clip's whole length");
+  state = advanceRtsAction(state, input({ impactCount: 1 }), durations, 0.2);
+  assert.equal(state.kind, "hit", "and is not cut short while it is still running");
+  state = advanceRtsAction(state, input({ impactCount: 1 }), durations, 0.2);
+  assert.equal(state.kind, "none", "locomotion resumes the frame it expires");
+
+  // The priority the plan fixes: a blow taken outranks a blow landed, in both
+  // directions. It interrupts a swing…
+  state = advanceRtsAction(state, input({ attackCount: 1, impactCount: 1, attacking: true }), durations, 0.1);
+  assert.equal(state.kind, "attack");
+  state = advanceRtsAction(state, input({ attackCount: 1, impactCount: 2, attacking: true }), durations, 0.1);
+  assert.equal(state.kind, "hit", "being hit interrupts one's own swing");
+  assert.equal(state.remainingSeconds, 0.3);
+  // …and a swing landed mid-flinch does not interrupt back. A unit being beaten
+  // reads as being beaten rather than as trading blows through it.
+  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 2, attacking: true }), durations, 0.1);
+  assert.equal(state.kind, "hit", "a blow landed mid-flinch does not take the body back");
+  assert.ok(Math.abs(state.remainingSeconds - 0.2) < 1e-9, "nor does it restart the flinch");
+  assert.equal(state.attackCount, 2, "but the swing is recorded as spent");
+  // The queue that must not exist: the swallowed swing is gone, not deferred.
+  // Otherwise a Guard replays a fight's worth of blows once the beating stops.
+  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 2, attacking: true }), durations, 0.3);
+  assert.equal(state.kind, "none", "the flinch ends into locomotion, not into the swing it swallowed");
+
+  // Rapid fire: three blows inside one flinch are the *last* one played from the
+  // top, never three flinches queued behind each other.
+  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 3 }), durations, 0.1);
+  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 4 }), durations, 0.1);
+  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 5 }), durations, 0.1);
+  assert.equal(state.remainingSeconds, 0.3, "the newest blow restarts the flinch from the top");
+  assert.equal(state.impactCount, 5);
+  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 5 }), durations, 0.31);
+  assert.equal(state.kind, "none", "and the older ones are never played back afterwards");
+
+  // Death outranks it, and the blows that killed him do not stand him back up.
+  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 6 }), durations, 0.1);
+  assert.equal(state.kind, "hit");
+  state = advanceRtsAction(state, input({ dying: true, attackCount: 2, impactCount: 7 }), durations, 0.1);
+  assert.equal(state.kind, "death", "the fall interrupts the flinch");
+  assert.equal(state.remainingSeconds, 1.2);
+  state = advanceRtsAction(state, input({ dying: true, attackCount: 2, impactCount: 9 }), durations, 0.4);
+  assert.equal(state.kind, "death", "and blows landing on the way down never restart anything");
+  assert.ok(Math.abs(state.remainingSeconds - 0.8) < 1e-9);
+
+  // An asset with no flinch clip simply does not flinch — the half-authored
+  // asset and the capsule fallback keep exactly the behaviour they had.
+  const noFlinch = { attack: 0.5, hit: null, death: 1.2 };
+  const unflinching = advanceRtsAction(RTS_ACTION_NONE, input({ impactCount: 1, attackCount: 1 }), noFlinch, 0.1);
+  assert.equal(unflinching.kind, "attack", "with no hit clip the swing owns the body as before");
+  assert.equal(unflinching.impactCount, 1, "and the unplayable blow is still consumed, not left pending");
+});
+
+check("Muhafiz Faz 2: darbe klibi birim ve darbe sayisi basina kararli secilir", () => {
+  const set = { idle: "Idle_1", attack: "Attack_1", hit: "Impact_1", death: "Death_1" };
+  const variants = { hit: ["Impact_2", "Impact_3", "Missing_Impact"] };
+  const available = new Set(["Idle_1", "Attack_1", "Impact_1", "Impact_2", "Impact_3", "Death_1"]);
+  const struck = (impactCount: number, seed: number) =>
+    rtsActionClip({ kind: "hit", remainingSeconds: 1, attackCount: 0, impactCount }, set, available, variants, seed);
+
+  assert.equal(struck(4, 17), struck(4, 17), "the same blow taken resolves to the same flinch");
+  assert.ok(["Impact_1", "Impact_2", "Impact_3"].includes(struck(5, 17) ?? ""), "and only to a shipped one");
+  const flinches = new Set(Array.from({ length: 12 }, (_, index) => struck(index + 1, 17)));
+  assert.ok(flinches.size > 1, "one Guard rotates flinches across the blows he takes");
+
+  // The sequence is per-kind. A swing counted while a flinch was running moves
+  // `attackCount` without being played, and if that leaked into the flinch's
+  // variant choice the clip would change under the unit mid-blend.
+  assert.equal(
+    rtsActionClip({ kind: "hit", remainingSeconds: 1, attackCount: 0, impactCount: 4 }, set, available, variants, 17),
+    rtsActionClip({ kind: "hit", remainingSeconds: 1, attackCount: 9, impactCount: 4 }, set, available, variants, 17),
+    "a swallowed swing does not change which flinch is playing",
+  );
+  assert.equal(rtsActionSequence({ kind: "hit", remainingSeconds: 1, attackCount: 9, impactCount: 4 }), 4);
+  assert.equal(rtsActionSequence({ kind: "attack", remainingSeconds: 1, attackCount: 9, impactCount: 4 }), 9);
+  assert.equal(rtsActionSequence({ kind: "death", remainingSeconds: 1, attackCount: 9, impactCount: 4 }), 0);
+
+  // The continuous channel never claims the flinch: it is a one-shot, and a
+  // looping one would show a unit permanently being beaten.
+  assert.deepEqual(
+    resolveRtsAnimationRole("hit", set, available),
+    { role: "idle", clip: "Idle_1" },
+    "the looping channel stands a struck unit at idle underneath the one-shot",
+  );
+});
+
+check("Muhafiz Faz 2: hit rolu editor kaydinda hayatta kalir ve Guard onu authorlar", () => {
+  // The sidecar allowlist gotcha (CLAUDE.md), for the role this phase adds: the
+  // loader and the save validator carry the vocabulary twice, so a `hit` only
+  // the loader knows is dropped the first time the Guard is saved from the
+  // Skeletal Mesh Editor — invisibly, until the flinches stop days later.
+  const roundTripped = validateAssetSkeletonDef({
+    schema: 1,
+    animationSet: { idle: "idle-clip", hit: "hit-clip" },
+    animationVariants: { hit: ["hit-clip-2", "hit-clip-3"] },
+  });
+  assert.equal((roundTripped.animationSet as Record<string, string>).hit, "hit-clip", "the validator knows the role");
+  assert.deepEqual(
+    (roundTripped.animationVariants as Record<string, string[]>).hit,
+    ["hit-clip-2", "hit-clip-3"],
+    "and keeps its variant list",
+  );
+  assert.ok(ANIMATION_SET_ROLES.includes("hit"), "the loader knows it too");
+
+  // And the shipped Guard authors it, which is what makes the flinch data rather
+  // than a clip name compiled into the selector.
+  const guard = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+  );
+  const hit = guard.animationSet.hit ?? assert.fail("the Guard authors no hit clip");
+  const flinches = [hit, ...(guard.animationVariants.hit ?? [])];
+  assert.equal(new Set(flinches).size, flinches.length, "the flinch pool has no duplicates to waste a variant slot on");
+  assert.ok(flinches.length > 1, "a beaten Guard has more than one reaction");
+  for (const clip of flinches) {
+    assert.ok(clip.includes("impact"), `the flinch pool holds impact clips, not "${clip}"`);
+    // K-03/K-04: the pool is exactly the three verified in-place impact clips.
+    // A block or a crouch appearing here would be a defensive *mechanic* implied
+    // by an animation, which Faz 4 exists to decide before anything plays it.
+    assert.ok(!/block|crouch|casting|power_up/.test(clip), `"${clip}" implies a mechanic the game does not have`);
+  }
+});
+
+check("Muhafiz Faz 2: darbe animasyonu hasari, cooldown'u ve olum penceresini degistirmez", () => {
+  // K-02, for the flinch. The counter is written by the health component after
+  // the damage has already been applied, so this pins the direction: a beating
+  // looks different and resolves identically.
+  const units = new UnitSystem();
+  const guard = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const raider = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
+  raider.setAttackTarget(guard);
+  updateUnitCombat(units.all(), 0);
+
+  const healthAfterHit = guard.health.current;
+  const impactsAfterHit = guard.health.impactCount;
+  const camera = new Quaternion();
+  for (let frame = 0; frame < 20; frame += 1) guard.updatePresentation(0.1, camera);
+  assert.equal(guard.health.impactCount, impactsAfterHit, "rendering frames do not manufacture blows taken");
+  assert.equal(guard.health.current, healthAfterHit, "nor deal any damage");
+  assert.equal(raider.attack.ready, false, "and a two-second flinch does not tick the attacker's cooldown");
+  assert.equal(guard.attack.blowCount, 0, "a struck unit has not swung because it was struck");
+
+  // The despawn window belongs to the death clip alone. A flinch that could
+  // extend it would leave a body standing there un-targetable and un-removable.
+  const flinched = units.spawn("player", 9, 0, RTS_TEST_UNIT_STATS);
+  for (let blow = 0; blow < 5; blow += 1) flinched.health.damage(1);
+  assert.equal(flinched.deathSeconds, UNIT_DEATH_SECONDS, "blows taken do not lengthen the defeat window");
+
+  units.clear();
+});
+
 check("Skeletal animasyon Faz F: rol tinti klonu boyar, sabloni ve material paylasimini bozmaz", () => {
   // Faz F's answer to "the pack ships one character mesh": Archer, Topçu and
   // Worker are the Guard's rig wearing an authored `materialTint`. The three
@@ -38485,7 +38763,7 @@ check("Skeletal animasyon Faz F: isci sitesinde calisir, yolda degil", () => {
   // Worker speed, so the thresholds are the ones a Worker actually crosses.
   const tuning = rtsLocomotionTuning(4);
   const at = (planarSpeed: number, working: boolean, over: Partial<RtsAnimationInput> = {}) =>
-    classifyRtsAnimation({ planarSpeed, attacking: false, dying: false, working, attackCount: 0, ...over }, tuning);
+    classifyRtsAnimation({ planarSpeed, attacking: false, dying: false, working, attackCount: 0, impactCount: 0, ...over }, tuning);
 
   assert.equal(at(0, true), "work", "a builder standing at its site kneels");
   assert.equal(at(0, false), "idle", "and an unassigned worker just stands");
@@ -38601,6 +38879,7 @@ function driveRtsPresentationFrames(options: {
       dying: false,
       working: false,
       attackCount: 0,
+      impactCount: 0,
       cameraDistanceSquared: options.cameraDistanceSquared,
     });
     if (hips.position.y !== previous) poseUpdates += 1;

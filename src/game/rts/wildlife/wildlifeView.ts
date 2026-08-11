@@ -156,6 +156,11 @@ export class WildlifeView {
         // clip into (§3.4).
         working: !animal.dead && animal.activity === "grazing",
         attackCount: animal.strikeCount,
+        // Off the same health component every unit reports from. No shipped
+        // animal asset authors a `hit` clip, so nothing plays today — but the
+        // counter is the honest value rather than a zero that would have to be
+        // found and fixed the day one does.
+        impactCount: animal.health.impactCount,
         cameraDistanceSquared,
       });
     }

@@ -30,6 +30,7 @@ import {
   resolveRtsWorkMontage,
   resolveRtsAnimationVariant,
   rtsActionClip,
+  rtsActionSequence,
   rtsLocomotionTuning,
   rtsWorkMontageSection,
   selectRtsAnimation,
@@ -156,6 +157,7 @@ class RtsAttachedCrewAnimator {
         dying: false,
         working: false,
         attackCount: 0,
+        impactCount: 0,
       },
       this.animationSet,
       this.animator.clips,
@@ -212,7 +214,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private readonly tuning: RtsLocomotionTuning;
   /** The running one-shot (swing or fall), owned by the pure state machine. */
   private action: RtsActionState = RTS_ACTION_NONE;
-  private actionDurations: RtsActionDurations = { attack: null, death: null };
+  private actionDurations: RtsActionDurations = { attack: null, hit: null, death: null };
   /** Which one-shot the mixer was last told to start, so it retriggers only on change. */
   private startedAction: RtsActionState = RTS_ACTION_NONE;
   /** See {@link RtsPresentationHandle.deathSeconds}: undefined when unauthored. */
@@ -267,6 +269,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // death length is what the unit's despawn timer then waits for.
     this.actionDurations = {
       attack: this.durationOfRole("attack"),
+      hit: this.durationOfRole("hit"),
       death: this.durationOfRole("death"),
     };
     this.deathSeconds = this.actionDurations.death ?? undefined;
@@ -340,8 +343,13 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     }
     this.pendingSeconds = 0;
 
+    // Attack and hit lengths are resolved against *this frame's* counter, since
+    // each variant is a different length and the state machine is about to be
+    // told how long the one it is starting runs for. Death has no variants keyed
+    // to an event, so its cached length stands.
     this.action = advanceRtsAction(this.action, state, {
       attack: this.durationOfRole("attack", state.attackCount),
+      hit: this.durationOfRole("hit", state.impactCount),
       death: this.actionDurations.death,
     }, deltaSeconds);
     this.workState = advanceRtsWorkMontage(this.workState, state, this.workMontage, this.tuning, deltaSeconds);
@@ -356,7 +364,10 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       // Restarted only when the state machine says a *new* one-shot began.
       // Re-issuing it every frame would reset the playhead and freeze the unit
       // on the swing's first frame for as long as it was fighting.
-      if (this.action.kind !== this.startedAction.kind || this.action.attackCount !== this.startedAction.attackCount) {
+      if (
+        this.action.kind !== this.startedAction.kind
+        || rtsActionSequence(this.action) !== rtsActionSequence(this.startedAction)
+      ) {
         animator.playOnce(actionClip, ACTION_FADE_SECONDS);
         this.startedAction = this.action;
       }
@@ -405,14 +416,14 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   }
 
   /** Authored length of the clip a semantic role names, or null when unauthored. */
-  private durationOfRole(role: "attack" | "death", sequence = 0): number | null {
+  private durationOfRole(role: "attack" | "hit" | "death", sequence = 0): number | null {
     const clip = resolveRtsAnimationVariant(
       role,
       this.animationSet,
       this.animationVariants,
       this.animator?.clips ?? new Set<string>(),
       this.animationVariantSeed,
-      role === "attack" ? sequence : 0,
+      role === "death" ? 0 : sequence,
     );
     if (!clip || !this.animator) return null;
     const duration = this.animator.clipDuration(clip);

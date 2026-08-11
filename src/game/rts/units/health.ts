@@ -21,6 +21,7 @@ export interface HealthChange {
 export class HealthComponent {
   private maxValue: number;
   private currentValue: number;
+  private impacts = 0;
 
   constructor(max: number) {
     if (!Number.isFinite(max) || max <= 0) {
@@ -47,12 +48,36 @@ export class HealthComponent {
     return this.currentValue === 0;
   }
 
+  /**
+   * How many blows this body has actually *taken*, counted purely so a
+   * presentation can play one flinch per hit — Guard animation plan Faz 2.
+   *
+   * The mirror image of `AttackComponent.blowCount`, and here rather than on the
+   * unit for one reason: this is the single place every damage source in the
+   * match already passes through. Melee and ranged blows land in `unitCombat`, a
+   * gun's shell lands a second later out of `PendingImpactQueue`, a tower fires
+   * from `structureDefenseSystem`, a wolf bites in `predatorSystem` and a bull
+   * gores in `wildlifeRetaliation` — five call sites today, and a counter kept
+   * anywhere else would have to be threaded through all of them and remembered
+   * by the sixth. Counted where the hit points actually move, no source can be
+   * missed.
+   *
+   * Only real damage counts: `applied` is zero for a blow on an already-dead
+   * body, and healing never reaches here at all. Nothing in combat reads it, so
+   * removing every presentation would leave the fight identical. Monotonic for
+   * the body's lifetime.
+   */
+  get impactCount(): number {
+    return this.impacts;
+  }
+
   /** Apply a non-negative damage amount without allowing health below zero. */
   damage(amount: number): HealthChange {
     this.assertAmount(amount, "Damage");
     const previous = this.currentValue;
     const applied = Math.min(amount, previous);
     this.currentValue -= applied;
+    if (applied > 0) this.impacts += 1;
     return {
       applied,
       previous,
