@@ -309,6 +309,7 @@ export class MaterialEditor {
         ${this.textureColorNumberRow("Emissive Map", "emissiveTexture", "emissive", this.def.emissive, "emissiveIntensity", this.def.emissiveIntensity, 0, 20, 0.1)}
         ${this.textureNumberRow("Ambient Occlusion Map", "aoTexture", "aoIntensity", this.def.aoIntensity, 0, 1, 0.01)}
         ${this.vector2Row("UV Tiling", "uvTilingX", "uvTilingY", this.def.uvTiling.x, this.def.uvTiling.y)}
+        <label class="me-row" title="Flip textures vertically on upload (three.js' default). Leave it on for engine-generated UVs — landscape layers, UVW projection, primitives. Turn it OFF when this material is assigned to a glTF/GLB mesh's material slot: glTF UVs run downward from the image top, so a flipped texture binds upside down and reads as a broken UV layout."><span>Flip Y</span><input data-me-field="flipY" type="checkbox" ${this.def.flipY ? "checked" : ""} /></label>
       </div>
       ${this.normalMotionSection()}
       ${this.layerBlendSection()}
@@ -683,6 +684,7 @@ export class MaterialEditor {
       next.ormTexture = input.value || null;
       next.maskTexture = null;
     }
+    else if (field === "flipY") next.flipY = !(input instanceof HTMLInputElement) || input.checked;
     else if (field === "uvTilingX") next.uvTiling = { ...next.uvTiling, x: numberInput(input.value, 0.001, 100) };
     else if (field === "uvTilingY") next.uvTiling = { ...next.uvTiling, y: numberInput(input.value, 0.001, 100) };
     else if (field === "normalMotionEnabled") {

@@ -1,4 +1,6 @@
 {
   "schema": 1,
-  "slots": []
+  "slots": [
+    "m-guard-material"
+  ]
 }

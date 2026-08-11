@@ -3276,6 +3276,9 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     emissiveTexture: validateTextureRef(input.emissiveTexture, "material.emissiveTexture"),
     ormTexture,
     uvTiling: validateUvTiling(input.uvTiling, "material.uvTiling"),
+    // Mirrors `normalizeForgeMaterialDef`: absent means three.js' flipped default,
+    // so only an explicit `false` opts a glTF-UV material out.
+    flipY: input.flipY !== false,
     roughness: validateOptionalNumber(input.roughness, "material.roughness", 0, 1) ?? 0.8,
     metalness: validateOptionalNumber(input.metalness, "material.metalness", 0, 1) ?? 0,
     aoIntensity: validateOptionalNumber(input.aoIntensity, "material.aoIntensity", 0, 1) ?? 1,

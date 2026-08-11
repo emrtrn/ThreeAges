@@ -103,6 +103,17 @@ export interface ForgeMaterialDef {
   emissiveTexture: string | null;
   ormTexture: string | null;
   uvTiling: ForgeMaterialUvTiling;
+  /**
+   * Whether this material's textures are flipped on upload (three.js' default,
+   * matching engine-generated UVs: landscape splats, UVW projection, primitives).
+   *
+   * Turn it **off** for a material assigned to a glTF/GLB mesh through its
+   * material slots: glTF authors V downward from the image top and `GLTFLoader`
+   * therefore never flips its own textures, so a `TextureLoader`-loaded PNG binds
+   * upside down against those exported UVs — the atlas lands on the wrong
+   * islands, which reads as a broken UV layout rather than a flipped image.
+   */
+  flipY: boolean;
   roughness: number;
   metalness: number;
   aoIntensity: number;
@@ -156,6 +167,7 @@ export function defaultForgeMaterialDef(
     emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
+    flipY: true,
     roughness: 0.8,
     metalness: 0,
     aoIntensity: 1,
@@ -239,6 +251,9 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     emissiveTexture: textureRefOrNull(input.emissiveTexture),
     ormTexture: textureRefOrNull(input.ormTexture) ?? (legacyMaskConsumedByLayerBlend ? null : legacyMaskTexture),
     uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),
+    // Opt-out, not opt-in: every material authored before this field existed was
+    // rendering with three.js' flipped default, so absent must keep meaning `true`.
+    flipY: input.flipY !== false,
     roughness: clamp01(numberOr(input.roughness, 0.8)),
     metalness: clamp01(numberOr(input.metalness, 0)),
     aoIntensity: clamp01(numberOr(input.aoIntensity, 1)),

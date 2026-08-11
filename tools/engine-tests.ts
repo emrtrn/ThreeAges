@@ -1133,7 +1133,7 @@ import {
   readGameModeDefaultPawnClassRef,
 } from "../engine/scene/actorScript";
 import { actorPreviewNodes } from "../engine/scene/actorPreview";
-import { normalizeForgeMaterialDef } from "../engine/assets/material";
+import { defaultForgeMaterialDef, normalizeForgeMaterialDef } from "../engine/assets/material";
 import {
   ANIMATION_SET_ROLES,
   normalizeAssetSkeleton,
@@ -19490,6 +19490,7 @@ check("material save payload requires a material path and canonical fields", () 
     emissiveTexture: "tex-stone-emissive",
     ormTexture: "tex-stone-m",
     uvTiling: { x: 2, y: 3 },
+    flipY: true,
     roughness: 0.72,
     metalness: 0,
     aoIntensity: 0.6,
@@ -19630,6 +19631,96 @@ check("material save payload requires a material path and canonical fields", () 
   assert.equal(savedLegacyLayerMask.maskTexture, null);
   assert.equal(savedLegacyLayerMask.ormTexture, null);
   assert.equal((savedLegacyLayerMask.layerBlend as Record<string, unknown>).maskTexture, "legacy-mask");
+});
+
+check("material flipY survives normalize and save, and reaches every texture map", () => {
+  // Absent means three.js' flipped default in both the loader and the save path,
+  // so no material authored before the field existed changes how it renders.
+  assert.equal(defaultForgeMaterialDef("Default").flipY, true);
+  assert.equal(
+    normalizeForgeMaterialDef({ schema: 1, type: "material", materialType: "standard", name: "Legacy" }).flipY,
+    true,
+  );
+  assert.equal(
+    validateForgeMaterialDef({ schema: 1, type: "material", materialType: "standard", name: "Legacy" }).flipY,
+    true,
+  );
+
+  // The allowlist half: an authored `false` must round-trip through the save
+  // validator, or a glTF-UV material silently reverts to flipped on every save.
+  const glTfUvMaterial = {
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "GlTf Uv",
+    baseColorTexture: "atlas-bc",
+    flipY: false,
+  };
+  assert.equal(normalizeForgeMaterialDef(glTfUvMaterial).flipY, false);
+  assert.equal(validateForgeMaterialDef(glTfUvMaterial).flipY, false);
+  assert.equal(
+    (validateSaveMaterialPayload({
+      path: "assets/ThreeAges/Characters/Atlas.material.json",
+      material: glTfUvMaterial,
+    }).material as Record<string, unknown>).flipY,
+    false,
+  );
+
+  // And the render half: every map the material builds carries the flag, base
+  // layer and blend layer alike, so no single surface stays flipped on its own.
+  const flippedMaps = {
+    baseColorTexture: new Texture(),
+    normalTexture: new Texture(),
+    roughnessTexture: new Texture(),
+    metalnessTexture: new Texture(),
+    aoTexture: new Texture(),
+    opacityTexture: new Texture(),
+    emissiveTexture: new Texture(),
+    layer1BaseColorTexture: new Texture(),
+    layer1NormalTexture: new Texture(),
+    layer1AoTexture: new Texture(),
+    layerBlendMaskTexture: new Texture(),
+  };
+  const unflipped = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "GlTf Uv Layered",
+      baseColorTexture: "atlas-bc",
+      normalTexture: "atlas-n",
+      roughnessTexture: "atlas-r",
+      metalnessTexture: "atlas-m",
+      aoTexture: "atlas-ao",
+      opacityTexture: "atlas-o",
+      emissiveTexture: "atlas-e",
+      flipY: false,
+      layerBlend: {
+        driver: "maskTexture",
+        maskTexture: "blend-mask",
+        layer1: { baseColorTexture: "snow-bc", normalTexture: "snow-n", aoTexture: "snow-ao" },
+      },
+    }),
+    flippedMaps,
+  );
+  for (const [name, texture] of Object.entries(flippedMaps)) {
+    assert.equal(texture.flipY, false, `${name} must inherit the material's flipY`);
+  }
+  unflipped.dispose();
+
+  const defaultFlip = new Texture();
+  const flipped = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Engine Uv",
+      baseColorTexture: "grass-bc",
+    }),
+    { baseColorTexture: defaultFlip },
+  );
+  assert.equal(defaultFlip.flipY, true);
+  flipped.dispose();
 });
 
 check("starter material assets normalize to the canonical material shape", () => {
@@ -20268,6 +20359,7 @@ check("content-new resolves to typed stub files and folders", () => {
     emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
+    flipY: true,
     roughness: 0.8,
     metalness: 0,
     aoIntensity: 1,
@@ -20304,6 +20396,7 @@ check("content-new resolves to typed stub files and folders", () => {
     emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
+    flipY: true,
     roughness: 0.3,
     metalness: 1,
     aoIntensity: 1,
@@ -37852,9 +37945,16 @@ check("Skeletal animasyon Faz C: hiz esikleri, rol onceligi ve dusme zinciri", (
 });
 
 check("Skeletal animasyon varyasyonlari: klip secimi birim ve darbe basina kararlidir", () => {
-  const available = new Set(["Idle_1", "Idle_2", "Idle_3", "Attack_1", "Attack_2", "Attack_3"]);
-  const set = { idle: "Idle_1", attack: "Attack_1" };
-  const variants = { idle: ["Idle_2", "Idle_3", "Missing"], attack: ["Attack_2", "Attack_3"] };
+  const available = new Set([
+    "Idle_1", "Idle_2", "Idle_3", "Walk_1", "Walk_2", "Run_1", "Run_2", "Attack_1", "Attack_2", "Attack_3",
+  ]);
+  const set = { idle: "Idle_1", walk: "Walk_1", run: "Run_1", attack: "Attack_1" };
+  const variants = {
+    idle: ["Idle_2", "Idle_3", "Missing"],
+    walk: ["Walk_2"],
+    run: ["Run_2"],
+    attack: ["Attack_2", "Attack_3"],
+  };
 
   const idle = resolveRtsAnimationVariant("idle", set, variants, available, 17);
   assert.equal(idle, resolveRtsAnimationVariant("idle", set, variants, available, 17), "the same unit keeps its idle choice");
@@ -37862,6 +37962,14 @@ check("Skeletal animasyon varyasyonlari: klip secimi birim ve darbe basina karar
   const idlePopulation = new Set(Array.from({ length: 12 }, (_, index) =>
     resolveRtsAnimationVariant("idle", set, variants, available, index + 1)));
   assert.ok(idlePopulation.size > 1, "different unit identities produce visible idle variety");
+  for (const role of ["walk", "run"] as const) {
+    const first = resolveRtsAnimationVariant(role, set, variants, available, 17);
+    assert.equal(first, resolveRtsAnimationVariant(role, set, variants, available, 17), `${role} remains stable for one unit`);
+    assert.ok([`${role[0]!.toUpperCase()}${role.slice(1)}_1`, `${role[0]!.toUpperCase()}${role.slice(1)}_2`].includes(first ?? ""), `${role} only uses its authored loop clips`);
+    const population = new Set(Array.from({ length: 12 }, (_, index) =>
+      resolveRtsAnimationVariant(role, set, variants, available, index + 1)));
+    assert.ok(population.size > 1, `${role} varies across Guard instances`);
+  }
   assert.equal(
     rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4 }, set, available, variants, 17),
     rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4 }, set, available, variants, 17),
@@ -37878,7 +37986,12 @@ check("Skeletal animasyon varyasyonlari: klip secimi birim ve darbe basina karar
   assert.ok(attacks.size > 1, "one Guard rotates attacks across landed blows");
 
   const normalized = normalizeAssetSkeleton({ animationSet: set, animationVariants: variants });
-  assert.deepEqual(normalized.animationVariants, { idle: ["Idle_2", "Idle_3", "Missing"], attack: ["Attack_2", "Attack_3"] });
+  assert.deepEqual(normalized.animationVariants, {
+    idle: ["Idle_2", "Idle_3", "Missing"],
+    walk: ["Walk_2"],
+    run: ["Run_2"],
+    attack: ["Attack_2", "Attack_3"],
+  });
   const saved = validateAssetSkeletonDef({ schema: 1, sockets: [], animationSet: set, animationVariants: variants });
   assert.deepEqual(saved.animationVariants, variants, "a skeleton editor save retains the variant lists");
 });

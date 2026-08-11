@@ -15,6 +15,12 @@
       "guard_sword_and_shield_idle_3",
       "guard_sword_and_shield_idle_4"
     ],
+    "walk": [
+      "guard_sword_and_shield_walk_2"
+    ],
+    "run": [
+      "guard_sword_and_shield_run_2"
+    ],
     "attack": [
       "guard_sword_and_sheld_attack_4",
       "guard_sword_and_shield_slash_5",

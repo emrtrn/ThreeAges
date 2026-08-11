@@ -132,6 +132,9 @@ export async function loadForgeMaterialLayer(
       texture.colorSpace = colorSpace;
       texture.wrapS = RepeatWrapping;
       texture.wrapT = RepeatWrapping;
+      // Landscape UVs are engine-generated, so this is `true` for every sane paint
+      // layer — honoured anyway so one material reads the same in both consumers.
+      texture.flipY = def.flipY;
       if (options.maxAnisotropy) texture.anisotropy = options.maxAnisotropy;
       texture.needsUpdate = true;
       return texture;
