@@ -146,7 +146,7 @@ export const UNIT_DEATH_SECONDS = 0.35;
  * things — the clip length is a fact about the asset, and this is a readability
  * choice about how long a player gets to see what died where.
  */
-export const UNIT_CORPSE_SECONDS = 5;
+export const UNIT_CORPSE_SECONDS = 30;
 /** A worker rests at a player-chosen point before automatic work may reclaim it. */
 export const WORKER_RETURN_DELAY_SECONDS = 3;
 

@@ -3,7 +3,7 @@
   "type": "material",
   "materialType": "standard",
   "name": "M_Guard",
-  "baseColor": "#ffffff",
+  "baseColor": "#538cfd",
   "baseColorTexture": "guard-bc",
   "normalTexture": "guard-n",
   "maskTexture": null,
@@ -19,7 +19,7 @@
     "y": 1
   },
   "flipY": false,
-  "roughness": 0.5,
+  "roughness": 1,
   "metalness": 0,
   "aoIntensity": 1,
   "opacity": 1,

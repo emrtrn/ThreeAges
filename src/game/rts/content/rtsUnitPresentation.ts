@@ -235,6 +235,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private workState: RtsWorkMontageState = RTS_WORK_MONTAGE_NONE;
   /** Render time a far unit has banked since its last mixer update (Faz F). */
   private pendingSeconds = 0;
+  /** True once the fall has played out and the animator has been stopped for good. */
+  private poseFrozen = false;
   /** Authored wheel pivots, turned by measured travel rather than by a clip. */
   private readonly wheelSpins: readonly RtsWheelSpinBinding[];
   /** Authored cargo meshes, shown and hidden by the carrier's reported load. */
@@ -357,6 +359,15 @@ class RtsUnitPresentation implements RtsPresentationHandle {
 
     const animator = this.animator;
     if (!animator) return;
+    // The one state a presentation never leaves, and the only place it is worth
+    // stopping the animator outright. A body that has finished falling holds one
+    // pose for the rest of its time on the field, so every frame after that is
+    // pure waste — and it is not small waste: `clampWhenFinished` pauses the
+    // action but Three still evaluates and accumulates every one of the clip's
+    // ~200 tracks per channel per frame, and the selector above rebuilds the
+    // same clip choice on top of it. Skipping both is what makes a corpse window
+    // measured in tens of seconds affordable.
+    if (this.poseFrozen) return;
 
     const deltaSeconds = consumeDistanceUpdateDelta({
       deltaSeconds: state.deltaSeconds,
@@ -409,6 +420,13 @@ class RtsUnitPresentation implements RtsPresentationHandle {
           this.startedAction = this.action;
         }
         animator.update(deltaSeconds);
+        // Frozen *after* this frame's tick, never before it. The state machine
+        // does not spend the delta on the frame the fall starts and the mixer
+        // does, so by the time the remaining time reaches zero the mixer has had
+        // a frame more than the clip is long and is sitting on its clamped last
+        // pose. Freezing on the check alone, before the tick, would leave the
+        // body a frame short of where it was animated to land.
+        if (this.action.kind === "death" && this.action.remainingSeconds <= 0) this.poseFrozen = true;
         return;
       }
     } else {
@@ -455,6 +473,18 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       animator.setPlaybackRate(selection.playbackRate);
     }
     animator.update(deltaSeconds);
+  }
+
+  /**
+   * Whether this presentation has stopped animating for good.
+   *
+   * Exposed because the saving is invisible from the outside — the body looks
+   * identical either way — so without a way to observe it, a later edit that
+   * puts every corpse back on the mixer would cost frame time silently. Read by
+   * the engine tests; nothing in the game branches on it.
+   */
+  get animationFrozen(): boolean {
+    return this.poseFrozen;
   }
 
   /** Authored length of the clip a semantic role names, or null when unauthored. */

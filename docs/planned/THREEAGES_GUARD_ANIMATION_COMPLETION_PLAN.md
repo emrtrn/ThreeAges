@@ -277,6 +277,35 @@ ayakları kaymadan adımını sürdürüyor, üst gövdesi sarsılıyor.
    saldırganları serbest bırakıyor. Pencere tamamen sunumsal; uzaması yalnızca
    render ve `units.all()` iterasyonunu etkiliyor.
 
+**Faz 3b — donmuş ceset pozu (2026-08-11).** Ceset süresi 30 sn'ye çıkarılmadan
+önce ölçülen gerçek maliyet: bir ceset kare başına ~200 interpolant × 2 kanal
+(katmanlı animatör), 69 kemik `updateMatrixWorld`, iskelet başına bir
+`Skeleton.update()` + bone texture upload, ve 4 draw call / 15k üçgen. AI tarafı
+zaten sıfır (Faz 3, madde 3).
+
+Kritik bulgu: **`clampWhenFinished` mixer'ı durdurmuyor.** Three action'ı `paused`
+yapıyor (`AnimationAction.js:767`) ama `_update` yine de her interpolantı
+değerlendirip PropertyMixer'a yazıyor. Yani donmuş poz için tam animasyon işi
+sürüyordu.
+
+Düzeltme: `RtsUnitPresentation` düşüş oynayıp bittiğinde `poseFrozen` bayrağını
+kaldırıyor ve o noktadan sonra animatöre hiç girmiyor — seçici de dahil, çünkü
+`rtsActionClip` her karede aynı seçimi yeniden kurup dizi/Set ayırıyordu. Bayrak
+kareyi tikledikten *sonra* kalkıyor: durum makinesi düşüşün başladığı karede
+delta harcamaz, mixer harcar, dolayısıyla kalan süre sıfırlandığında mixer klip
+boyundan bir kare fazlasını almış ve clamp'lenmiş son pozda oturmuş oluyor.
+
+`UNIT_CORPSE_SECONDS` 5 → **30**.
+
+Geriye kalan ceset başına maliyet — sıradaki optimizasyonun hedefi — sahne
+grafiği kemik güncellemesi, `Skeleton.update()` ve draw call'lar. Bunları
+kaldırmanın doğru yolu ceset başına poz pişirmek **değil** (Guard'ın 9.835
+vertex'i ceset başına ~236 KB benzersiz geometri, hem de savaşın ortasında):
+farklı ceset pozu yalnızca **iki** tane — `death_1` ve `death_2`'nin son kareleri.
+Bir kez pişirilip iki `InstancedMesh`'e bağlanırsa sahadaki tüm cesetler 2 draw
+call'a iner, iskelet/mixer/bone texture tamamen kalkar, tint `instanceColor` ile
+taşınır. Bu iş ölçüm sonucuna bağlandı.
+
 **Faz 3a — düşüş ile ceset süresinin ayrılması (kullanıcı bulgusu, 2026-08-11):**
 
 Görsel kabulde ölüm animasyonu bitmeden gövde siliniyordu. İki ayrı neden vardı
@@ -311,7 +340,10 @@ ve ikisi de düzeltildi:
 - Faz 3a: düşüş ile ceset penceresinin ayrı olması, kapsülün kendi hızında
   devrilip sonra yatması, ve **1×/2×/4×/8× hızlarda düşüşün ekran zamanında
   yarıda kesilmemesi** (aynı testte cesetlerin de o hızda temizlendiği).
-- `npx tsc --noEmit` temiz; `npm run test:engine:slow` (tam) 1412 kontrol yeşil.
+- Faz 3b: düşüş bittiğinde donma (bir kare erken değil), donan pozun klibin son
+  pozu olması ve 30 sn boyunca kaymaması, ölüm klibi olmayan asset'in hiç
+  donmaması.
+- `npx tsc --noEmit` temiz; `npm run test:engine:slow` (tam) 1415 kontrol yeşil.
 
 **Görsel kabul (açık):** Bir muhafız bölüğü kırıldığında iki farklı düşüş görünür;
 her iki düşüş de sonuna kadar oynar, gövde 5 sn yerde yattıktan sonra kaybolur;
@@ -434,8 +466,12 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
   Düşüş (`fallSeconds`) ile ceset penceresi (`UNIT_CORPSE_SECONDS = 5`) ayrıldı ve
   `updateDeath` simülasyon hızını alarak düşüş kısmını ölçekler oldu — sunum
   render saatinde, pencere simülasyon saatinde ilerlediği için 2×+ hızlarda klip
-  kırpılıyordu. 5 yeni/güncellenmiş engine kontrolü; `tsc --noEmit` ve tam
-  `test:engine:slow` (1412 kontrol) yeşil. Dünya içi görsel kabul açık.
+  kırpılıyordu. 5 yeni/güncellenmiş engine kontrolü.
+- 2026-08-11 — Faz 3b: düşüş bitince sunum animatörü kalıcı olarak duruyor
+  (`poseFrozen`); `clampWhenFinished`'in mixer'ı durdurmadığı ölçülerek bulundu.
+  `UNIT_CORPSE_SECONDS` 30'a çıkarıldı. Instanced ceset havuzu ölçüme bağlandı.
+  `tsc --noEmit` ve tam `test:engine:slow` (1415 kontrol) yeşil. Dünya içi görsel
+  kabul + kare bütçesi ölçümü açık.
 - 2026-08-11 — Faz 5a uygulandı: `walk_2`/`run_2` ileri varyant havuzundan
   çıkarılıp `walkBack`/`runBack` rollerine taşındı. `T` ardından zemin sağ tık
   yalnız Guard'lara yönü koruyan geri rota verir; TypeScript ve hedefli engine

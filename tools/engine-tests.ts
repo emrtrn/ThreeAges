@@ -39174,6 +39174,98 @@ check("Muhafiz Faz 3: uzun olum klibi yeni bir oyun durumu yaratmaz", () => {
   }
 });
 
+check("Muhafiz Faz 3b: dusen govde son pozunda donar ve animatoru bir daha calismaz", () => {
+  // What makes a long corpse window affordable. `clampWhenFinished` pauses the
+  // action but Three still evaluates and accumulates every track of it on every
+  // frame (AnimationAction._update runs regardless of `paused`), and the
+  // selector rebuilds the same clip choice on top. A body holds one pose for its
+  // whole time on the field, so all of that is waste — but it is invisible
+  // waste, which is why it is pinned here rather than left to be noticed.
+  const guard = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+  );
+  const fall = 2.333;
+  const make = (name: string): Object3D => {
+    const node = new Object3D();
+    node.name = name;
+    return node;
+  };
+  const target = make("Guard_Rig");
+  const hips = make("mixamorigHips");
+  hips.add(make("mixamorigSpine"), make("mixamorigLeftUpLeg"));
+  target.add(hips);
+  // A hips track that actually travels, so "the pose the clip ended on" is a
+  // value this can read rather than a claim. The hips are below the upper-body
+  // bone, so this rides the layered animator's lower channel.
+  const clips = [
+    new AnimationClip("guard_sword_and_shield_idle_1", 1, [
+      new VectorKeyframeTrack("mixamorigHips.position", [0, 1], [0, 0, 0, 0, 0, 0]),
+    ]),
+    new AnimationClip("guard_sword_and_shield_death_1", fall, [
+      new VectorKeyframeTrack("mixamorigHips.position", [0, fall], [0, 0, 0, 0, 0, 7]),
+    ]),
+  ];
+  const build = () => createRtsUnitPresentation({
+    root: target,
+    pickTargets: [],
+    selectionRadius: 0.5,
+    // Seed 0 draws `death_1`, the clip this fixture ships a length for.
+    animation: { target, clips, skeleton: { ...guard, animationVariants: { ...guard.animationVariants, death: [] } } },
+    animationVariantSeed: 0,
+    moveSpeed: 6,
+  }) as RtsPresentationHandle & { readonly animationFrozen: boolean };
+
+  const frame = (over: Partial<RtsPresentationUpdate> = {}): RtsPresentationUpdate => ({
+    deltaSeconds: 0.1,
+    planarSpeed: 0,
+    attacking: false,
+    dying: false,
+    working: false,
+    attackCount: 0,
+    impactCount: 0,
+    cameraDistanceSquared: null,
+    ...over,
+  });
+
+  const corpse = build();
+  assert.ok(corpse.update, "the presentation drives an animator at all");
+  assert.equal(corpse.animationFrozen, false, "a living unit animates");
+  for (let idle = 0; idle < 20; idle += 1) corpse.update?.(frame());
+  assert.equal(corpse.animationFrozen, false, "and keeps animating however long it stands there");
+
+  let frames = 0;
+  while (!corpse.animationFrozen && frames < 200) {
+    corpse.update?.(frame({ dying: true }));
+    frames += 1;
+  }
+  assert.ok(corpse.animationFrozen, "a body that has finished falling stops animating");
+  // Not one frame early: the fall has to have been played through, or the body
+  // freezes short of where the clip was animated to land it.
+  assert.ok(frames * 0.1 >= fall, `froze after ${(frames * 0.1).toFixed(2)}s of a ${fall}s fall`);
+  assert.ok(frames * 0.1 <= fall + 0.2, "and not long after it either");
+  assert.ok(Math.abs(hips.position.z - 7) < 1e-6, "frozen on the pose the clip ended on");
+
+  // And it stays there. A later edit that put corpses back on the mixer would
+  // pass every other check in this file.
+  for (let lying = 0; lying < 300; lying += 1) corpse.update?.(frame({ dying: true }));
+  assert.equal(corpse.animationFrozen, true, "thirty seconds of lying there costs no animation work");
+  assert.ok(Math.abs(hips.position.z - 7) < 1e-6, "and the pose does not drift");
+  corpse.dispose();
+
+  // An asset with no death clip never freezes: it has no fall to finish, and its
+  // body is tipped over by code that must keep running.
+  const capsuleLike = createRtsUnitPresentation({
+    root: target,
+    pickTargets: [],
+    selectionRadius: 0.5,
+    animation: { target, clips: [clips[0]!], skeleton: { ...guard, animationVariants: {} } },
+    moveSpeed: 6,
+  }) as RtsPresentationHandle & { readonly animationFrozen: boolean };
+  for (let dead = 0; dead < 60; dead += 1) capsuleLike.update?.(frame({ dying: true }));
+  assert.equal(capsuleLike.animationFrozen, false, "a unit with no authored fall has nothing to freeze on");
+  capsuleLike.dispose();
+});
+
 check("Muhafiz Faz 3: Guard iki olum klibini de authorlar, ikisi de gercek ve ayni sekilde kok hareketli", () => {
   const guard = normalizeAssetSkeleton(
     JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
