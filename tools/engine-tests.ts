@@ -436,7 +436,8 @@ import { SupportAuraSystem } from "../src/game/rts/structures/supportAuraSystem"
 import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
 import { AI_PROFILES } from "../src/game/data/gameDataTypes";
 import type { AiProfile, BuildingBalanceStats, GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
-import { Unit, UNIT_DEATH_SECONDS, type RtsPresentationHandle } from "../src/game/rts/units/unit";
+import { Unit, UNIT_DEATH_SECONDS, unitBodyVolume, type RtsPresentationHandle } from "../src/game/rts/units/unit";
+import { UnitShadowProxies } from "../src/game/rts/units/unitShadowProxies";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import { WildlifeSystem, wildProfileFor, type RtsHerdDefinition } from "../src/game/rts/wildlife/wildlifeSystem";
 import { PredatorSystem, type PredatorStrike } from "../src/game/rts/wildlife/predatorSystem";
@@ -35713,6 +35714,95 @@ check("RTS shadow coverage spans the field, and follows the camera when it shrin
   // must never drop a tall caster out of the box.
   assert.equal(near.min.y, RTS_SHADOW_BOUNDS.min.y);
   assert.equal(near.max.y, RTS_SHADOW_BOUNDS.max.y);
+});
+
+check("RTS unit shadow proxies cast without drawing, stand on the ground, and respect the fog", () => {
+  const units = new UnitSystem();
+  // Deliberately smaller than the army spawned below, so growth is exercised.
+  const proxies = new UnitShadowProxies(2);
+  const casterOf = (): InstancedMesh => {
+    const mesh = proxies.root.children[0];
+    assert.ok(mesh instanceof InstancedMesh, "the whole layer draws as one instanced batch");
+    return mesh;
+  };
+
+  // Three ways to hide a mesh also stop it casting: `WebGLShadowMap` skips a
+  // caster whose object or material is `visible: false`, and it tests layers
+  // against the *viewing* camera, so no layer renders in one pass and not the
+  // other. `colorWrite` is the only lever left, and every unit shadow in the
+  // game depends on it staying the one that is pulled.
+  const caster = casterOf();
+  assert.equal(caster.castShadow, true, "the capsule is a shadow caster");
+  assert.equal(caster.visible, true, "and stays visible, or it leaves the shadow pass");
+  const material = caster.material as MeshBasicMaterial;
+  assert.equal(material.visible, true, "as does its material");
+  assert.equal(material.colorWrite, false, "while writing no pixel in the colour pass");
+  // Instance matrices are rewritten every frame without recomputing the batch's
+  // bounding sphere, so culling on that sphere would drop the shadows of exactly
+  // the units that moved.
+  assert.equal(caster.frustumCulled, false, "the batch opts out of a cull it cannot keep current");
+
+  const geometry = caster.geometry;
+  geometry.computeBoundingBox();
+  const authoredHeight = geometry.boundingBox!.max.y - geometry.boundingBox!.min.y;
+  const matrix = new Matrix4();
+  const groundY = 3;
+
+  // Placement is derived from the same body volume the fallback mesh and health
+  // bar read, so a silhouette tuning pass moves the shadow with the unit instead
+  // of leaving it behind at the old size.
+  for (const [label, stats] of [["muhafız", RTS_TEST_UNIT_STATS], ["işçi", RTS_TEST_WORKER_STATS]] as const) {
+    const solo = new UnitSystem();
+    const unit = solo.spawn("player", 5, -7, stats);
+    // What `RtsApp.syncUnitsToGround` writes: the authored heightfield, into the
+    // unit's own y. The capsule has to follow it or shadows float on a slope.
+    unit.position.y = groundY;
+    proxies.sync(solo.all());
+    casterOf().getMatrixAt(0, matrix);
+    const placed = new Vector3().setFromMatrixPosition(matrix);
+    const scale = new Vector3().setFromMatrixScale(matrix);
+    const body = unitBodyVolume(unit.role);
+    assert.ok(Math.abs(placed.x - 5) < 1e-6 && Math.abs(placed.z + 7) < 1e-6, `${label}: the capsule stands where the unit does`);
+    const halfHeight = (scale.y * authoredHeight) / 2;
+    // Foot on the ground and crown at the top of the body: a capsule sunk into
+    // the terrain casts a shadow wider than the unit, and one floating above it
+    // casts a shadow detached from the feet — the exact tell this replaces.
+    assert.ok(Math.abs(placed.y - halfHeight - groundY) < 1e-6, `${label}: the capsule's foot rests on the ground`);
+    assert.ok(
+      Math.abs(placed.y + halfHeight - (groundY + body.centerY * 2)) < 1e-6,
+      `${label}: and its crown reaches the top of the body`,
+    );
+    assert.ok(Math.abs(scale.x - scale.z) < 1e-6, `${label}: the footprint is round`);
+    assert.ok(scale.x > 0 && scale.x < body.radius, `${label}: and narrower than the navigation footprint it derives from`);
+  }
+
+  // §59: the fog binder hides an unscouted enemy by clearing `visible` on its
+  // render object. A shadow is a position, so a capsule left behind would trace
+  // the outline of an army the player has never seen.
+  const seen = units.spawn("player", 1, 1, RTS_TEST_UNIT_STATS);
+  const hidden = units.spawn("enemy", 20, 20, RTS_TEST_UNIT_STATS);
+  hidden.object.visible = false;
+  proxies.sync(units.all());
+  assert.equal(casterOf().count, 1, "a fogged unit casts nothing");
+  assert.ok(seen.object.visible, "and the visible one is untouched by the pass");
+  hidden.object.visible = true;
+  proxies.sync(units.all());
+  assert.equal(casterOf().count, 2, "it casts again the moment it is seen");
+
+  // The pool starts small and grows. An army has no fixed size, and a unit that
+  // silently missed a slot would be the one unit on the field with no shadow.
+  for (let i = 0; i < 12; i += 1) units.spawn("player", i, i, RTS_TEST_UNIT_STATS);
+  proxies.sync(units.all());
+  assert.equal(casterOf().count, units.all().length, "every live unit holds a slot however many there are");
+
+  // Off is off: a profile that renders no shadow map must not pay to place
+  // capsules no pass will ever read.
+  proxies.setEnabled(false);
+  proxies.sync(units.all());
+  assert.equal(casterOf().count, 0, "the layer is idle when shadows are off");
+  proxies.setEnabled(true);
+  proxies.sync(units.all());
+  assert.equal(casterOf().count, units.all().length, "and comes back whole when they return");
 });
 
 check("Assetization Faz D: the authored Level keeps both flanks and the enemy base route reachable", () => {

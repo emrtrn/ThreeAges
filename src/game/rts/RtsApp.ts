@@ -18,7 +18,7 @@ import {
   DirectionalLight,
   GridHelper,
   Group,
-  type InstancedMesh,
+  InstancedMesh,
   Matrix4,
   Mesh,
   type Object3D,
@@ -581,6 +581,10 @@ type ShadowCasterCategory = "actors" | "mapArt" | "other";
 function shadowCasterCategory(object: Object3D): ShadowCasterCategory {
   for (let current: Object3D | null = object; current; current = current.parent) {
     if (current.userData.rtsActorPresentation) return "actors";
+    // The unit shadow capsules stand in for actor meshes that no longer cast, so
+    // they belong in the actor budget. Billed to "other" they would read as an
+    // unexplained cost next to the very saving they pay for.
+    if (current.userData.rtsUnitShadowProxy) return "actors";
     if (current.name.startsWith("rts-map-model-")) return "mapArt";
   }
   return "other";
@@ -1094,6 +1098,10 @@ export class RtsApp {
     // protects the match when many structures take damage on the same frame.
     this.structureDamageVfx.setMaxActiveInstances(Math.round(48 * settings.particleDensity));
     this.renderer.shadowMap.enabled = settings.shadowsEnabled;
+    // The unit shadow capsules exist only to be drawn into a shadow map. With no
+    // shadow map they are a per-frame matrix rewrite and a draw call that has
+    // never written a pixel, on exactly the profile that can least afford it.
+    this.unitShadows.setEnabled(settings.shadowsEnabled);
     this.authoredWorld?.setRiverWaterReflectionQuality(
       riverReflectionQuality(rtsGraphicsQuality(this.userSettings.graphics.selectedQualityLevel)),
     );
@@ -2937,9 +2945,13 @@ export class RtsApp {
       if (!(object instanceof Mesh) || !object.castShadow || !object.visible) return;
       const geometry = object.geometry;
       const vertexCount = geometry.index?.count ?? geometry.getAttribute("position")?.count ?? 0;
+      // An instanced caster draws its geometry once per live instance, so the
+      // geometry's own triangle count understates it by that factor — which for
+      // the unit shadow capsules is the whole army.
+      const instances = object instanceof InstancedMesh ? object.count : 1;
       const bucket = out[shadowCasterCategory(object)];
       bucket.meshes += 1;
-      bucket.triangles += Math.floor(vertexCount / 3);
+      bucket.triangles += Math.floor(vertexCount / 3) * instances;
     });
     return out;
   }

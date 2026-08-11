@@ -120,7 +120,11 @@ export class UnitShadowProxies {
       if (!unit.object.visible) continue;
       const body = unitBodyVolume(unit.role);
       const width = body.radius * WIDTH_SCALE;
-      const height = body.length + 2 * body.radius;
+      // The body is centred at `centerY` and stands on the ground, so it is
+      // exactly twice that tall — true of a capsule and of the Topçu's box
+      // alike, which is why this reads `centerY` rather than reassembling the
+      // height from `length` and `radius` and getting the box case wrong.
+      const height = body.centerY * 2;
       this.matrix.makeScale(width, height / UNIT_CAPSULE_HEIGHT, width);
       // `position` is the unit's feet: `RtsApp.syncUnitsToGround` writes the
       // authored heightfield into y, so raising by `centerY` lands the capsule

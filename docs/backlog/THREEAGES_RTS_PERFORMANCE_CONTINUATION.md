@@ -157,6 +157,12 @@ Bu değişiklikler LOD veya gameplay davranışını değiştirmez:
    eder.
 3. Debug snapshot ile gölge maliyeti tahmine değil mesh/üçgen envanterine göre
    görülebilir.
+4. (2)'nin görsel bedeli sonradan geri alındı: birimler gölgesiz kaldıkları için
+   zeminde yüzüyor gibi duruyordu. Gölge artık gerçek meshten değil, birim başına
+   bir kapsülden geliyor — hepsi tek bir `InstancedMesh`, `colorWrite=false` ile
+   yalnız shadow map'e çiziliyor. Kazanç korunuyor (skinning shadow pass'te hâlâ
+   yok), gölge geri geliyor. `shadowsEnabled=false` olan profillerde katman
+   tamamen kapanır.
 
 İlgili dosyalar:
 
@@ -164,7 +170,13 @@ Bu değişiklikler LOD veya gameplay davranışını değiştirmez:
 | --- | --- |
 | `src/game/rts/world/rtsMapArt.ts` | Forest model çağrısında `castShadow=false` |
 | `src/game/rts/content/rtsActorPresentationTree.ts` | `SkinnedMesh` için `castShadow=false` |
+| `src/game/rts/units/unitShadowProxies.ts` | Görünmez kapsül caster havuzu |
 | `src/game/rts/RtsApp.ts` | Hazır sinyalleri ve debug performans/gölge snapshot'ı |
+
+Kapsülü ana geçişten gizlemenin tek yolu `colorWrite=false`: `object.visible`,
+`material.visible` ve layer'lar gölgeyi de eler — `WebGLShadowMap` layer testini
+görüntüleme kamerasına karşı yapar, dolayısıyla "kameranın görmediği ama gölge
+düşüren" bir layer yoktur.
 
 Not: Kamera göreli güneş gölge frustum'u üzerine bir deneme yapıldı; ölçülebilir
 kazanç vermediği için tamamen geri alındı. Bu yaklaşım mevcut çözümün parçası
