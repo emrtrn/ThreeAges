@@ -115,5 +115,5 @@
   "preview": {
     "selectedClip": "guard_sword_and_shield_jump_1"
   },
-  "upperBodyBone": "mixamorig:Spine"
+  "upperBodyBone": "mixamorigSpine"
 }

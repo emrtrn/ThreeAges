@@ -18,7 +18,7 @@
     "x": 1,
     "y": 1
   },
-  "flipY": true,
+  "flipY": false,
   "roughness": 0.5,
   "metalness": 0.5,
   "aoIntensity": 1,
