@@ -38440,7 +38440,7 @@ check("Actor presentation Faz 3: construction, completed, preview and the centre
   assert.equal(loading, null, "with no legacy models loaded either, the box placeholder stays");
 });
 
-check("Windmill mill pivot turns only after First-Age construction completes", () => {
+check("Windmill mill pivot turns only after construction completes", () => {
   const visuals = new RtsBuildingVisuals();
   const root = new Group();
   const pivot = new Group();

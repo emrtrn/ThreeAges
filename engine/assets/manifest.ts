@@ -659,6 +659,13 @@ function isHealthCheckAssetFile(path: string): boolean {
   if (lower.endsWith(".materials.json")) return false;
   if (lower.endsWith(".uvw.json")) return false;
   if (lower.endsWith(".vertexcolors.json")) return false;
+  if (lower.endsWith(".skeleton.json")) return false;
+  // Layout companions, not assets: they are named after the level they belong to
+  // and are loaded with it. `.foliage.json` is the per-layout instance sidecar -
+  // the `.foliagetype.json` asset it references is registered and stays checked.
+  if (lower.endsWith(".landscape.json")) return false;
+  if (lower.endsWith(".foliage.json")) return false;
+  if (lower.endsWith(".meshpaint.json")) return false;
   return ASSET_FILE_EXTENSIONS.has(extensionOf(lower));
 }
 

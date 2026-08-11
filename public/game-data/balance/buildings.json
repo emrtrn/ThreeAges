@@ -309,7 +309,7 @@
   },
   "farm": {
     "label": "Tarla",
-    "icon": "/assets/ui/icons/building-windmill.png",
+    "icon": "/assets/ui/icons/building-farm.png",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -390,7 +390,7 @@
   },
   "windmill": {
     "label": "Değirmen",
-    "icon": "/assets/ui/icons/building-farm.png",
+    "icon": "/assets/ui/icons/building-windmill.png",
     "footprint": {
       "width": 6,
       "depth": 6

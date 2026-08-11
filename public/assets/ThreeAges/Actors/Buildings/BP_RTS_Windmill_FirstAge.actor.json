@@ -5,23 +5,37 @@
   "parentClass": "actor",
   "variables": [],
   "components": [
-    { "id": "root", "component": "Transform", "props": {} },
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
     {
       "id": "windmillBody",
       "component": "StaticMeshComponent",
-      "props": { "assetId": "windmill-firstage-2" },
+      "props": {
+        "assetId": "windmill-firstage-2"
+      },
       "parent": "root"
     },
     {
       "id": "windmillMillPivot",
       "component": "Transform",
-      "props": {},
+      "props": {
+        "position": [
+          0.016,
+          1.2419,
+          0.3312
+        ]
+      },
       "parent": "root"
     },
     {
       "id": "windmillMill",
       "component": "StaticMeshComponent",
-      "props": { "assetId": "windmill-firstage-mill" },
+      "props": {
+        "assetId": "windmill-firstage-mill"
+      },
       "parent": "windmillMillPivot"
     }
   ],

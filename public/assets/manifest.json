@@ -2163,7 +2163,7 @@
       "name": "Save / Load Menu",
       "assetType": "ui",
       "category": "UI",
-      "path": "assets/__playwright-smoke-menu.ui.json",
+      "path": "assets/starter-content/UI/SaveLoadMenu.ui.json",
       "tags": [
         "starter",
         "ui",
@@ -2182,7 +2182,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 3954
+        "bytes": 9419
       },
       "license": "Unknown"
     },
@@ -21868,6 +21868,447 @@
       "license": "Project-local RTS gameplay marker"
     },
     {
+      "id": "threeages-rts-temple-firstage-t1-actor",
+      "name": "BP RTS Temple FirstAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Temple_FirstAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "temple",
+        "settlement",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 533
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-temple-firstage-t2-actor",
+      "name": "BP RTS Temple FirstAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Temple_FirstAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "temple",
+        "settlement",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 533
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-temple-firstage-t3-actor",
+      "name": "BP RTS Temple FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Temple_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "temple",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 533
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-temple-secondage-t1-actor",
+      "name": "BP RTS Temple SecondAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Temple_SecondAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "temple",
+        "town",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 535
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-temple-secondage-t2-actor",
+      "name": "BP RTS Temple SecondAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Temple_SecondAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "temple",
+        "town",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 535
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-temple-secondage-t3-actor",
+      "name": "BP RTS Temple SecondAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Temple_SecondAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "temple",
+        "town",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 535
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-windmill-firstage-actor",
+      "name": "BP RTS Windmill FirstAge.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Windmill_FirstAge.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "windmill",
+        "settlement"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 931
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-windmill-secondage-actor",
+      "name": "BP RTS Windmill SecondAge.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Windmill_SecondAge.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "windmill",
+        "town"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 932
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-herd-marker",
+      "name": "BP RTS Herd.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Markers",
+      "path": "assets/ThreeAges/Actors/Markers/BP_RTS_Herd.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "marker",
+        "wildlife",
+        "herd"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 583
+      },
+      "license": "Project-local RTS gameplay marker"
+    },
+    {
+      "id": "threeages-rts-bull-actor",
+      "name": "BP RTS Bull.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Wildlife",
+      "path": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Bull.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "wildlife",
+        "livestock",
+        "bull"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 829
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-cow-actor",
+      "name": "BP RTS Cow.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Wildlife",
+      "path": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Cow.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "wildlife",
+        "livestock",
+        "cow"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 826
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-deer-actor",
+      "name": "BP RTS Deer.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Wildlife",
+      "path": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Deer.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "wildlife",
+        "game",
+        "deer"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 826
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-fox-actor",
+      "name": "BP RTS Fox.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Wildlife",
+      "path": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Fox.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "wildlife",
+        "predator",
+        "fox"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 827
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-stag-actor",
+      "name": "BP RTS Stag.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Wildlife",
+      "path": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Stag.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "wildlife",
+        "game",
+        "stag"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 829
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-wolf-actor",
+      "name": "BP RTS Wolf.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Wildlife",
+      "path": "assets/ThreeAges/Actors/Wildlife/BP_RTS_Wolf.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "wildlife",
+        "predator",
+        "wolf"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 829
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
       "id": "ual1-standard-rm",
       "name": "UAL1 Standard RM",
       "assetType": "skeletalMesh",
@@ -30919,7 +31360,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 29248
+        "bytes": 29308
       },
       "license": "Unknown"
     },
@@ -30942,7 +31383,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 92356
+        "bytes": 92476
       },
       "license": "Unknown"
     },
@@ -30965,7 +31406,1573 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 34676
+        "bytes": 34480
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-arma",
+      "name": "arma",
+      "assetType": "texture",
+      "category": "UI/Art",
+      "path": "assets/ui/arma.png",
+      "thumbnail": "assets/ui/arma.png",
+      "tags": [
+        "ui",
+        "art"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Art",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 123103
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-cursors-cursor-default",
+      "name": "cursor_default",
+      "assetType": "texture",
+      "category": "UI/Cursors",
+      "path": "assets/ui/cursors/cursor_default.png",
+      "thumbnail": "assets/ui/cursors/cursor_default.png",
+      "tags": [
+        "ui",
+        "cursor"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Cursors",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1130
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-cursors-cursor-default-128",
+      "name": "cursor_default_128",
+      "assetType": "texture",
+      "category": "UI/Cursors",
+      "path": "assets/ui/cursors/cursor_default_128.png",
+      "thumbnail": "assets/ui/cursors/cursor_default_128.png",
+      "tags": [
+        "ui",
+        "cursor"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Cursors",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 10708
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-cursors-cursor-pointer",
+      "name": "cursor_pointer",
+      "assetType": "texture",
+      "category": "UI/Cursors",
+      "path": "assets/ui/cursors/cursor_pointer.png",
+      "thumbnail": "assets/ui/cursors/cursor_pointer.png",
+      "tags": [
+        "ui",
+        "cursor"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Cursors",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1611
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-cursors-cursor-pointer-128",
+      "name": "cursor_pointer_128",
+      "assetType": "texture",
+      "category": "UI/Cursors",
+      "path": "assets/ui/cursors/cursor_pointer_128.png",
+      "thumbnail": "assets/ui/cursors/cursor_pointer_128.png",
+      "tags": [
+        "ui",
+        "cursor"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Cursors",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 17821
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-frame",
+      "name": "frame",
+      "assetType": "texture",
+      "category": "UI/Art",
+      "path": "assets/ui/frame.png",
+      "thumbnail": "assets/ui/frame.png",
+      "tags": [
+        "ui",
+        "art"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Art",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 88984
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-archery-range",
+      "name": "building-archery-range",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-archery-range.png",
+      "thumbnail": "assets/ui/icons/building-archery-range.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 91210
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-barracks",
+      "name": "building-barracks",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-barracks.png",
+      "thumbnail": "assets/ui/icons/building-barracks.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 97392
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-command-center",
+      "name": "building-command-center",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-command-center.png",
+      "thumbnail": "assets/ui/icons/building-command-center.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 103375
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-depot",
+      "name": "building-depot",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-depot.png",
+      "thumbnail": "assets/ui/icons/building-depot.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 94364
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-farm",
+      "name": "building-farm",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-farm.png",
+      "thumbnail": "assets/ui/icons/building-farm.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 108013
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-gold-mine",
+      "name": "building-gold-mine",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-gold-mine.png",
+      "thumbnail": "assets/ui/icons/building-gold-mine.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 91763
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-house",
+      "name": "building-house",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-house.png",
+      "thumbnail": "assets/ui/icons/building-house.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 104015
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-hunting-camp",
+      "name": "building-hunting-camp",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-hunting-camp.png",
+      "thumbnail": "assets/ui/icons/building-hunting-camp.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 108759
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-lumber-camp",
+      "name": "building-lumber-camp",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-lumber-camp.png",
+      "thumbnail": "assets/ui/icons/building-lumber-camp.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 98459
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-market",
+      "name": "building-market",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-market.png",
+      "thumbnail": "assets/ui/icons/building-market.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 93945
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-outpost",
+      "name": "building-outpost",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-outpost.png",
+      "thumbnail": "assets/ui/icons/building-outpost.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 96294
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-pasture",
+      "name": "building-pasture",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-pasture.png",
+      "thumbnail": "assets/ui/icons/building-pasture.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 88608
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-quarry",
+      "name": "building-quarry",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-quarry.png",
+      "thumbnail": "assets/ui/icons/building-quarry.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 89398
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-temple",
+      "name": "building-temple",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-temple.png",
+      "thumbnail": "assets/ui/icons/building-temple.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 106639
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-building-windmill",
+      "name": "building-windmill",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/building-windmill.png",
+      "thumbnail": "assets/ui/icons/building-windmill.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 102375
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-command-attack-move",
+      "name": "command-attack-move",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/command-attack-move.png",
+      "thumbnail": "assets/ui/icons/command-attack-move.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 59243
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-command-hold",
+      "name": "command-hold",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/command-hold.png",
+      "thumbnail": "assets/ui/icons/command-hold.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 55958
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-command-patrol",
+      "name": "command-patrol",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/command-patrol.png",
+      "thumbnail": "assets/ui/icons/command-patrol.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 97304
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-command-stop",
+      "name": "command-stop",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/command-stop.png",
+      "thumbnail": "assets/ui/icons/command-stop.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 93637
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-notification-age-up",
+      "name": "notification_age_up",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/notification_age_up.png",
+      "thumbnail": "assets/ui/icons/notification_age_up.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 617525
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-notification-logistics-cut",
+      "name": "notification_logistics_cut",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/notification_logistics_cut.png",
+      "thumbnail": "assets/ui/icons/notification_logistics_cut.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1090962
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-notification-logistics-restored",
+      "name": "notification_logistics_restored",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/notification_logistics_restored.png",
+      "thumbnail": "assets/ui/icons/notification_logistics_restored.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 835185
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-notification-peace",
+      "name": "notification_peace",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/notification_peace.png",
+      "thumbnail": "assets/ui/icons/notification_peace.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 847414
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-notification-regional-victory",
+      "name": "notification_regional_victory",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/notification_regional_victory.png",
+      "thumbnail": "assets/ui/icons/notification_regional_victory.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 775271
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-resource-food",
+      "name": "resource-food",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/resource-food.png",
+      "thumbnail": "assets/ui/icons/resource-food.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 131804
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-resource-gold",
+      "name": "resource-gold",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/resource-gold.png",
+      "thumbnail": "assets/ui/icons/resource-gold.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 151320
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-resource-stone",
+      "name": "resource-stone",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/resource-stone.png",
+      "thumbnail": "assets/ui/icons/resource-stone.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 124309
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-resource-wood",
+      "name": "resource-wood",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/resource-wood.png",
+      "thumbnail": "assets/ui/icons/resource-wood.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 122174
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-road-delete",
+      "name": "road-delete",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/road-delete.png",
+      "thumbnail": "assets/ui/icons/road-delete.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 126740
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-road",
+      "name": "road",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/road.png",
+      "thumbnail": "assets/ui/icons/road.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 126551
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-trade-site-river-port",
+      "name": "trade-site-river-port",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/trade-site-river-port.png",
+      "thumbnail": "assets/ui/icons/trade-site-river-port.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 120495
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-trade-site-stone-pit",
+      "name": "trade-site-stone-pit",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/trade-site-stone-pit.png",
+      "thumbnail": "assets/ui/icons/trade-site-stone-pit.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 144091
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-trade-site-timber-camp",
+      "name": "trade-site-timber-camp",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/trade-site-timber-camp.png",
+      "thumbnail": "assets/ui/icons/trade-site-timber-camp.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 129024
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-unit-archer",
+      "name": "unit-archer",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/unit-archer.png",
+      "thumbnail": "assets/ui/icons/unit-archer.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 66775
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-unit-guard",
+      "name": "unit-guard",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/unit-guard.png",
+      "thumbnail": "assets/ui/icons/unit-guard.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 94278
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-unit-siege",
+      "name": "unit-siege",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/unit-siege.png",
+      "thumbnail": "assets/ui/icons/unit-siege.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 93342
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-icons-unit-worker",
+      "name": "unit-worker",
+      "assetType": "texture",
+      "category": "UI/Icons",
+      "path": "assets/ui/icons/unit-worker.png",
+      "thumbnail": "assets/ui/icons/unit-worker.png",
+      "tags": [
+        "ui",
+        "icon"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Icons",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 102091
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-loading-background",
+      "name": "loading-background",
+      "assetType": "texture",
+      "category": "UI/Art",
+      "path": "assets/ui/loading-background.jpg",
+      "thumbnail": "assets/ui/loading-background.jpg",
+      "tags": [
+        "ui",
+        "art"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Art",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 370516
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-menu-background",
+      "name": "menu-background",
+      "assetType": "texture",
+      "category": "UI/Art",
+      "path": "assets/ui/menu-background.jpg",
+      "thumbnail": "assets/ui/menu-background.jpg",
+      "tags": [
+        "ui",
+        "art"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Art",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 610912
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-panel",
+      "name": "panel",
+      "assetType": "texture",
+      "category": "UI/Art",
+      "path": "assets/ui/panel.png",
+      "thumbnail": "assets/ui/panel.png",
+      "tags": [
+        "ui",
+        "art"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Art",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2219016
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-panlehud-9slice",
+      "name": "panleHUD-9slice",
+      "assetType": "texture",
+      "category": "UI/Art",
+      "path": "assets/ui/panleHUD-9slice.png",
+      "thumbnail": "assets/ui/panleHUD-9slice.png",
+      "tags": [
+        "ui",
+        "art"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Art",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1079403
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-skin-button-danger-9s",
+      "name": "button_danger_9s",
+      "assetType": "texture",
+      "category": "UI/Skin",
+      "path": "assets/ui/skin/button_danger_9s.png",
+      "thumbnail": "assets/ui/skin/button_danger_9s.png",
+      "tags": [
+        "ui",
+        "skin"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Skin",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2271365
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-skin-button-primary-9s",
+      "name": "button_primary_9s",
+      "assetType": "texture",
+      "category": "UI/Skin",
+      "path": "assets/ui/skin/button_primary_9s.png",
+      "thumbnail": "assets/ui/skin/button_primary_9s.png",
+      "tags": [
+        "ui",
+        "skin"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Skin",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2559720
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-skin-button-secondary-9s",
+      "name": "button_secondary_9s",
+      "assetType": "texture",
+      "category": "UI/Skin",
+      "path": "assets/ui/skin/button_secondary_9s.png",
+      "thumbnail": "assets/ui/skin/button_secondary_9s.png",
+      "tags": [
+        "ui",
+        "skin"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Skin",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1573955
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-skin-button-secondary-source",
+      "name": "button_secondary_source",
+      "assetType": "texture",
+      "category": "UI/Skin",
+      "path": "assets/ui/skin/button_secondary_source.png",
+      "thumbnail": "assets/ui/skin/button_secondary_source.png",
+      "tags": [
+        "ui",
+        "skin"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Skin",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1416152
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-skin-modal-frame-9s",
+      "name": "modal_frame_9s",
+      "assetType": "texture",
+      "category": "UI/Skin",
+      "path": "assets/ui/skin/modal_frame_9s.png",
+      "thumbnail": "assets/ui/skin/modal_frame_9s.png",
+      "tags": [
+        "ui",
+        "skin"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Skin",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2050831
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-skin-notification-alert-9s",
+      "name": "notification_alert_9s",
+      "assetType": "texture",
+      "category": "UI/Skin",
+      "path": "assets/ui/skin/notification_alert_9s.png",
+      "thumbnail": "assets/ui/skin/notification_alert_9s.png",
+      "tags": [
+        "ui",
+        "skin"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Skin",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1330546
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-skin-notification-card-9s",
+      "name": "notification_card_9s",
+      "assetType": "texture",
+      "category": "UI/Skin",
+      "path": "assets/ui/skin/notification_card_9s.png",
+      "thumbnail": "assets/ui/skin/notification_card_9s.png",
+      "tags": [
+        "ui",
+        "skin"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Skin",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 865331
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-skin-progress-track-9s",
+      "name": "progress_track_9s",
+      "assetType": "texture",
+      "category": "UI/Skin",
+      "path": "assets/ui/skin/progress_track_9s.png",
+      "thumbnail": "assets/ui/skin/progress_track_9s.png",
+      "tags": [
+        "ui",
+        "skin"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Skin",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 120083
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-skin-selection-portrait-frame",
+      "name": "selection_portrait_frame",
+      "assetType": "texture",
+      "category": "UI/Skin",
+      "path": "assets/ui/skin/selection_portrait_frame.png",
+      "thumbnail": "assets/ui/skin/selection_portrait_frame.png",
+      "tags": [
+        "ui",
+        "skin"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Skin",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 140281
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-skin-selection-unit-slot-frame",
+      "name": "selection_unit_slot_frame",
+      "assetType": "texture",
+      "category": "UI/Skin",
+      "path": "assets/ui/skin/selection_unit_slot_frame.png",
+      "thumbnail": "assets/ui/skin/selection_unit_slot_frame.png",
+      "tags": [
+        "ui",
+        "skin"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Skin",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 9697
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ui-skin-title-strip-9s",
+      "name": "title_strip_9s",
+      "assetType": "texture",
+      "category": "UI/Skin",
+      "path": "assets/ui/skin/title_strip_9s.png",
+      "thumbnail": "assets/ui/skin/title_strip_9s.png",
+      "tags": [
+        "ui",
+        "skin"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI-Skin",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1162009
       },
       "license": "Unknown"
     }

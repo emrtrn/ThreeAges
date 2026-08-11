@@ -5,12 +5,38 @@
   "parentClass": "actor",
   "variables": [],
   "components": [
-    { "id": "root", "component": "Transform", "props": {} },
     {
-      "id": "windmillMesh",
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "windmillBody",
       "component": "StaticMeshComponent",
-      "props": { "assetId": "windmill-secondage" },
+      "props": {
+        "assetId": "windmill-secodage"
+      },
       "parent": "root"
+    },
+    {
+      "id": "windmillMillPivot",
+      "component": "Transform",
+      "props": {
+        "position": [
+          -0.1044,
+          0.9281,
+          0.3749
+        ]
+      },
+      "parent": "root"
+    },
+    {
+      "id": "windmillMill",
+      "component": "StaticMeshComponent",
+      "props": {
+        "assetId": "windmill-secodage-mill"
+      },
+      "parent": "windmillMillPivot"
     }
   ],
   "interfaces": [],
