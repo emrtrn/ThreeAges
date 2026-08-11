@@ -191,6 +191,7 @@ import {
   advanceRtsAction,
   advanceRtsWorkMontage,
   classifyRtsAnimation,
+  resolveRtsAnimationVariant,
   resolveRtsAnimationRole,
   resolveRtsWorkMontage,
   rtsActionClip,
@@ -37848,6 +37849,38 @@ check("Skeletal animasyon Faz C: hiz esikleri, rol onceligi ve dusme zinciri", (
   assert.equal(selection?.clip, "Walk_Loop");
   assert.equal(selection?.requested, "walk");
   assert.ok(Math.abs((selection?.playbackRate ?? 0) - 2 / 3) < 1e-6);
+});
+
+check("Skeletal animasyon varyasyonlari: klip secimi birim ve darbe basina kararlidir", () => {
+  const available = new Set(["Idle_1", "Idle_2", "Idle_3", "Attack_1", "Attack_2", "Attack_3"]);
+  const set = { idle: "Idle_1", attack: "Attack_1" };
+  const variants = { idle: ["Idle_2", "Idle_3", "Missing"], attack: ["Attack_2", "Attack_3"] };
+
+  const idle = resolveRtsAnimationVariant("idle", set, variants, available, 17);
+  assert.equal(idle, resolveRtsAnimationVariant("idle", set, variants, available, 17), "the same unit keeps its idle choice");
+  assert.ok(["Idle_1", "Idle_2", "Idle_3"].includes(idle ?? ""), "only shipped idle clips are eligible");
+  const idlePopulation = new Set(Array.from({ length: 12 }, (_, index) =>
+    resolveRtsAnimationVariant("idle", set, variants, available, index + 1)));
+  assert.ok(idlePopulation.size > 1, "different unit identities produce visible idle variety");
+  assert.equal(
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4 }, set, available, variants, 17),
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4 }, set, available, variants, 17),
+    "the same landed blow resolves to the same attack clip",
+  );
+  assert.ok(
+    ["Attack_1", "Attack_2", "Attack_3"].includes(
+      rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 5 }, set, available, variants, 17) ?? "",
+    ),
+    "attack variants stay inside the authored/shipped pool",
+  );
+  const attacks = new Set(Array.from({ length: 12 }, (_, index) =>
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: index + 1 }, set, available, variants, 17)));
+  assert.ok(attacks.size > 1, "one Guard rotates attacks across landed blows");
+
+  const normalized = normalizeAssetSkeleton({ animationSet: set, animationVariants: variants });
+  assert.deepEqual(normalized.animationVariants, { idle: ["Idle_2", "Idle_3", "Missing"], attack: ["Attack_2", "Attack_3"] });
+  const saved = validateAssetSkeletonDef({ schema: 1, sockets: [], animationSet: set, animationVariants: variants });
+  assert.deepEqual(saved.animationVariants, variants, "a skeleton editor save retains the variant lists");
 });
 
 /**

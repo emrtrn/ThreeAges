@@ -52,6 +52,46 @@ export interface RtsAnimationInput {
  */
 export type RtsAnimationSet = Readonly<Record<string, string | undefined>>;
 
+/** Optional additional clips for semantic roles, authored beside the primary set. */
+export type RtsAnimationVariants = Readonly<Record<string, readonly string[] | undefined>>;
+
+/**
+ * A reproducible small hash for presentation-only variety.
+ *
+ * It never reaches gameplay state: the same unit instance and blow number pick
+ * the same clip, while replaying a match or restoring its view cannot make a
+ * Guard unexpectedly choose a different swing through `Math.random()`.
+ */
+function stableAnimationVariantIndex(seed: number, role: string, sequence: number, count: number): number {
+  if (count <= 1) return 0;
+  let hash = (Number.isFinite(seed) ? Math.floor(seed) : 0) >>> 0;
+  hash ^= Math.imul(Number.isFinite(sequence) ? Math.floor(sequence) : 0, 0x9e3779b1);
+  for (let index = 0; index < role.length; index += 1) {
+    hash ^= role.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) % count;
+}
+
+/**
+ * Resolves the primary authored clip plus any valid extras, then selects one
+ * deterministically. The primary mapping remains first so an asset with no
+ * variants keeps exactly its pre-variation behaviour.
+ */
+export function resolveRtsAnimationVariant(
+  role: string,
+  animationSet: RtsAnimationSet,
+  variants: RtsAnimationVariants | undefined,
+  available: ReadonlySet<string>,
+  seed = 0,
+  sequence = 0,
+): string | null {
+  const candidates = [animationSet[role], ...(variants?.[role] ?? [])]
+    .filter((clip): clip is string => typeof clip === "string" && available.has(clip));
+  const unique = [...new Set(candidates)];
+  return unique.length > 0 ? unique[stableAnimationVariantIndex(seed, role, sequence, unique.length)] ?? null : null;
+}
+
 /**
  * Speed boundaries and clip calibration for one unit, in world units/s.
  *
@@ -240,14 +280,18 @@ export function selectRtsAnimation(
   animationSet: RtsAnimationSet,
   available: ReadonlySet<string>,
   tuning: RtsLocomotionTuning,
+  variants?: RtsAnimationVariants,
+  variantSeed = 0,
 ): RtsAnimationSelection | null {
   const requested = classifyRtsAnimation(input, tuning);
   const resolved = resolveRtsAnimationRole(requested, animationSet, available);
   if (!resolved) return null;
+  const clip = resolveRtsAnimationVariant(resolved.role, animationSet, variants, available, variantSeed);
+  if (!clip) return null;
   return {
     requested,
     role: resolved.role,
-    clip: resolved.clip,
+    clip,
     playbackRate: rtsPlaybackRate(resolved.role, input.planarSpeed, tuning),
   };
 }
@@ -333,10 +377,18 @@ export function rtsActionClip(
   state: RtsActionState,
   animationSet: RtsAnimationSet,
   available: ReadonlySet<string>,
+  variants?: RtsAnimationVariants,
+  variantSeed = 0,
 ): string | null {
   if (state.kind === "none") return null;
-  const clip = animationSet[state.kind];
-  return clip && available.has(clip) ? clip : null;
+  return resolveRtsAnimationVariant(
+    state.kind,
+    animationSet,
+    variants,
+    available,
+    variantSeed,
+    state.kind === "attack" ? state.attackCount : 0,
+  );
 }
 
 /* ------------------------------------------------------------------------- *

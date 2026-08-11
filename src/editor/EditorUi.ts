@@ -3007,6 +3007,12 @@ export class EditorUi {
           path: assetPath(asset),
         })),
         onStatus: (message, tone) => this.setStatus(message, tone),
+        onMaterialSlotsSaved: (assetId) => {
+          this.modelMaterialPreviewCache.delete(assetId);
+          this.thumbnailRenderer.clearCache();
+          this.renderContentAssets();
+          void this.app.refreshAssetMaterialSlots(assetId);
+        },
       });
     } catch (error) {
       this.setStatus(

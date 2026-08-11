@@ -225,6 +225,12 @@ export interface AssetSkeletonDef {
   schema: 1;
   sockets: AssetSkeletonSocketDef[];
   animationSet: Partial<Record<AnimationSetRole, string>>;
+  /**
+   * Optional extra clips for a semantic role. The primary `animationSet` clip
+   * remains the compatibility fallback; consumers can make a stable per-instance
+   * choice from this list without embedding game-specific animation names here.
+   */
+  animationVariants: Partial<Record<AnimationSetRole, string[]>>;
   blendSpaces: AssetSkeletonBlendSpaceDef[];
   notifies: AssetSkeletonNotifyDef[];
   montages: AssetSkeletonMontageDef[];
@@ -257,6 +263,9 @@ export function defaultBlendSpaceAxis(name: string): BlendSpaceAxisDef {
 export function skeletonClipNames(def: AssetSkeletonDef): string[] {
   const names = new Set<string>();
   for (const clip of Object.values(def.animationSet)) if (clip) names.add(clip);
+  for (const clips of Object.values(def.animationVariants)) {
+    for (const clip of clips ?? []) names.add(clip);
+  }
   for (const montage of def.montages) names.add(montage.clip);
   for (const blendSpace of def.blendSpaces) {
     for (const sample of blendSpace.samples) names.add(sample.clip);
@@ -278,6 +287,7 @@ export function defaultAssetSkeleton(): AssetSkeletonDef {
     schema: 1,
     sockets: [],
     animationSet: {},
+    animationVariants: {},
     blendSpaces: [],
     notifies: [],
     montages: [],
@@ -306,6 +316,7 @@ export function normalizeAssetSkeleton(value: unknown): AssetSkeletonDef {
     schema: 1,
     sockets: normalizeSockets(input.sockets),
     animationSet: normalizeAnimationSet(input.animationSet),
+    animationVariants: normalizeAnimationVariants(input.animationVariants),
     blendSpaces: normalizeBlendSpaces(input.blendSpaces),
     notifies: normalizeNotifies(input.notifies),
     montages: normalizeMontages(input.montages),
@@ -483,6 +494,20 @@ function normalizeAnimationSet(value: unknown): Partial<Record<AnimationSetRole,
   for (const role of ANIMATION_SET_ROLES) {
     const clip = input[role];
     if (typeof clip === "string" && clip.length > 0) result[role] = clip;
+  }
+  return result;
+}
+
+/** Extra role clips are de-duplicated so a repeated editor selection cannot bias a roll. */
+function normalizeAnimationVariants(value: unknown): Partial<Record<AnimationSetRole, string[]>> {
+  const result: Partial<Record<AnimationSetRole, string[]>> = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return result;
+  const input = value as Record<string, unknown>;
+  for (const role of ANIMATION_SET_ROLES) {
+    const raw = input[role];
+    if (!Array.isArray(raw)) continue;
+    const clips = [...new Set(raw.filter((clip): clip is string => typeof clip === "string" && clip.length > 0))];
+    if (clips.length > 0) result[role] = clips;
   }
   return result;
 }

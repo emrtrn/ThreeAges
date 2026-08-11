@@ -20,7 +20,8 @@ export class UnitSystem {
   private readonly units: Unit[] = [];
   /** Presentation pick mesh id → unit, for resolving raycast hits. */
   private readonly byPickObjectId = new Map<number, Unit>();
-  private presentationFactory: ((owner: UnitOwner, stats: UnitBalanceStats) => RtsPresentationHandle | null) | null = null;
+  /** Receives the constructed unit so visual choices can use its stable id. */
+  private presentationFactory: ((unit: Unit) => RtsPresentationHandle | null) | null = null;
 
   constructor() {
     this.root.name = "rts-units";
@@ -28,7 +29,8 @@ export class UnitSystem {
 
   /** Role, speed and counters all ride on `stats` now — there is no role argument. */
   spawn(owner: UnitOwner, x: number, z: number, stats: UnitBalanceStats): Unit {
-    const unit = new Unit(owner, x, z, stats, this.presentationFactory?.(owner, stats) ?? null);
+    const unit = new Unit(owner, x, z, stats);
+    unit.replacePresentation(this.presentationFactory?.(unit) ?? null);
     this.units.push(unit);
     this.registerPickTargets(unit);
     this.root.add(unit.object);
@@ -65,7 +67,7 @@ export class UnitSystem {
     for (const unit of this.units) unit.updatePresentation(deltaSeconds, cameraQuaternion, cameraPosition);
   }
 
-  setPresentationFactory(factory: ((owner: UnitOwner, stats: UnitBalanceStats) => RtsPresentationHandle | null) | null): void {
+  setPresentationFactory(factory: ((unit: Unit) => RtsPresentationHandle | null) | null): void {
     this.presentationFactory = factory;
   }
 
@@ -73,7 +75,7 @@ export class UnitSystem {
   refreshPresentations(): void {
     if (!this.presentationFactory) return;
     for (const unit of this.units) {
-      const presentation = this.presentationFactory(unit.owner, unit.stats);
+      const presentation = this.presentationFactory(unit);
       if (!presentation) continue;
       this.unregisterPickTargets(unit);
       unit.replacePresentation(presentation);

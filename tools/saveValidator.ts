@@ -2631,6 +2631,26 @@ function validateAnimationSet(value: unknown): Record<string, string> {
   return animationSet;
 }
 
+/** Mirrors `AssetSkeletonDef.animationVariants`; editor saves must retain extras. */
+function validateAnimationVariants(value: unknown): Record<string, string[]> {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("skeleton.animationVariants must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const variants: Record<string, string[]> = {};
+  for (const role of SKELETON_ANIMATION_SET_ROLES) {
+    const clips = input[role];
+    if (clips === undefined || clips === null) continue;
+    if (!Array.isArray(clips) || clips.some((clip) => typeof clip !== "string" || clip.length === 0)) {
+      throw new Error(`skeleton.animationVariants.${role} must be an array of clip name strings`);
+    }
+    const unique = [...new Set(clips)];
+    if (unique.length > 0) variants[role] = unique;
+  }
+  return variants;
+}
+
 function validateSkeletonSocket(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} must be an object`);
@@ -3045,6 +3065,7 @@ export function validateAssetSkeletonDef(value: unknown): Record<string, unknown
     schema: 1,
     sockets,
     animationSet: validateAnimationSet(input.animationSet),
+    animationVariants: validateAnimationVariants(input.animationVariants),
     blendSpaces: validateBlendSpaces(input.blendSpaces),
     notifies: validateNotifies(input.notifies),
     montages: validateMontages(input.montages),

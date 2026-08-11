@@ -281,7 +281,12 @@ export class RtsActorVisualFactory {
    * handle needs to calibrate its walk/run boundary and playback rate — it is
    * balance data read straight off the unit's stats, never off the Actor Script.
    */
-  createUnitPresentation(unitId: string, owner: UnitOwner, moveSpeed?: number): RtsPresentationHandle | null {
+  createUnitPresentation(
+    unitId: string,
+    owner: UnitOwner,
+    moveSpeed?: number,
+    animationVariantSeed?: number,
+  ): RtsPresentationHandle | null {
     const actorRef = rtsUnitActorRef(this.catalog, unitId, owner);
     if (!actorRef || !this.ready) return null;
     const root = this.createActorVisual(actorRef);
@@ -302,6 +307,7 @@ export class RtsActorVisualFactory {
       pickTargets,
       selectionRadius: readRtsSelectionRadius(def),
       animation: def ? this.animationSourceFor(root) : null,
+      animationVariantSeed,
       moveSpeed,
       wheelSpins: def ? bindRtsWheelSpins(def, root) : [],
       // The siege engine is what these two exist for: a barrel that kicks when

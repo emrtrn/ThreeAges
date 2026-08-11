@@ -28,6 +28,7 @@ import {
   advanceRtsAction,
   advanceRtsWorkMontage,
   resolveRtsWorkMontage,
+  resolveRtsAnimationVariant,
   rtsActionClip,
   rtsLocomotionTuning,
   rtsWorkMontageSection,
@@ -37,6 +38,7 @@ import {
   type RtsActionDurations,
   type RtsActionState,
   type RtsAnimationSet,
+  type RtsAnimationVariants,
   type RtsLocomotionTuning,
   type RtsWorkMontage,
   type RtsWorkMontageState,
@@ -71,6 +73,8 @@ export interface RtsUnitPresentationOptions {
   readonly selectionRadius: number;
   /** Null for a model that ships no clips; the unit then stands in its bind pose. */
   readonly animation: RtsUnitAnimationSource | null;
+  /** Stable per-instance seed for purely visual animation variety. */
+  readonly animationVariantSeed?: number | undefined;
   /**
    * The unit's authored `moveSpeed`, which calibrates the walk/run boundary and
    * the playback rate. Omitted for a caller that does not know it; the defaults
@@ -202,6 +206,9 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private animationTarget: Object3D | null = null;
   /** Sidecar role→clip map, consulted every frame by the pure selector. */
   private animationSet: RtsAnimationSet = {};
+  /** Extra authored clips per semantic role; absent keeps the single-clip path. */
+  private animationVariants: RtsAnimationVariants = {};
+  private readonly animationVariantSeed: number;
   private readonly tuning: RtsLocomotionTuning;
   /** The running one-shot (swing or fall), owned by the pure state machine. */
   private action: RtsActionState = RTS_ACTION_NONE;
@@ -235,6 +242,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     this.root = options.root;
     this.pickTargets = options.pickTargets;
     this.selectionRadius = options.selectionRadius;
+    this.animationVariantSeed = options.animationVariantSeed ?? 0;
     this.tuning = rtsLocomotionTuning(options.moveSpeed ?? 1, { walkClipSpeed: options.walkClipSpeed });
     this.wheelSpins = options.wheelSpins ?? [];
     this.cargoVisuals = options.cargoVisuals ?? [];
@@ -253,6 +261,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       rootMotion: animation.skeleton.rootMotion,
     });
     this.animationSet = animation.skeleton.animationSet;
+    this.animationVariants = animation.skeleton.animationVariants;
     // One-shot lengths come from the clips themselves, which is the only place
     // that knows them: a swing or a fall must be allowed to finish, and the
     // death length is what the unit's despawn timer then waits for.
@@ -266,7 +275,13 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // spawns instead of blending out of its bind pose. An asset with no authored
     // idle is left in its bind pose on purpose — falling back to "some clip"
     // could just as easily start it on its death.
-    const idle = animation.skeleton.animationSet.idle;
+    const idle = resolveRtsAnimationVariant(
+      "idle",
+      this.animationSet,
+      this.animationVariants,
+      this.animator.clips,
+      this.animationVariantSeed,
+    );
     if (idle) this.animator.play(idle, 0);
   }
 
@@ -325,9 +340,18 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     }
     this.pendingSeconds = 0;
 
-    this.action = advanceRtsAction(this.action, state, this.actionDurations, deltaSeconds);
+    this.action = advanceRtsAction(this.action, state, {
+      attack: this.durationOfRole("attack", state.attackCount),
+      death: this.actionDurations.death,
+    }, deltaSeconds);
     this.workState = advanceRtsWorkMontage(this.workState, state, this.workMontage, this.tuning, deltaSeconds);
-    const actionClip = rtsActionClip(this.action, this.animationSet, animator.clips);
+    const actionClip = rtsActionClip(
+      this.action,
+      this.animationSet,
+      animator.clips,
+      this.animationVariants,
+      this.animationVariantSeed,
+    );
     if (actionClip) {
       // Restarted only when the state machine says a *new* one-shot began.
       // Re-issuing it every frame would reset the playhead and freeze the unit
@@ -363,7 +387,14 @@ class RtsUnitPresentation implements RtsPresentationHandle {
 
     // A null selection means the asset has no clip for this state; the current
     // pose is held rather than replaced with an arbitrary one.
-    const selection = selectRtsAnimation(state, this.animationSet, animator.clips, this.tuning);
+    const selection = selectRtsAnimation(
+      state,
+      this.animationSet,
+      animator.clips,
+      this.tuning,
+      this.animationVariants,
+      this.animationVariantSeed,
+    );
     if (selection) {
       animator.play(selection.clip, LOCOMOTION_FADE_SECONDS);
       // After `play`, which resets the rate: this is what keeps a Guard slowed by
@@ -374,8 +405,15 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   }
 
   /** Authored length of the clip a semantic role names, or null when unauthored. */
-  private durationOfRole(role: "attack" | "death"): number | null {
-    const clip = this.animationSet[role];
+  private durationOfRole(role: "attack" | "death", sequence = 0): number | null {
+    const clip = resolveRtsAnimationVariant(
+      role,
+      this.animationSet,
+      this.animationVariants,
+      this.animator?.clips ?? new Set<string>(),
+      this.animationVariantSeed,
+      role === "attack" ? sequence : 0,
+    );
     if (!clip || !this.animator) return null;
     const duration = this.animator.clipDuration(clip);
     return duration !== null && duration > 0 ? duration : null;

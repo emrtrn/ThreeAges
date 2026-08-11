@@ -19,6 +19,7 @@ import {
   MathUtils,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   Object3D,
   PerspectiveCamera,
   Quaternion,
@@ -28,6 +29,7 @@ import {
   SphereGeometry,
   SRGBColorSpace,
   Spherical,
+  TextureLoader,
   Vector3,
   WebGLRenderer,
   type AnimationMixer,
@@ -57,6 +59,18 @@ import {
 } from "@/editor/gameEditorRegistry";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { OrbitViewportCamera, createAssetViewportRig } from "@/editor/assetViewportCamera";
+import {
+  applyMaterialSlotOverrides,
+  assignedMaterialSlotIds,
+  collectAssetMaterialElements,
+  defaultAssetMaterialSlots,
+  loadAssetMaterialSlots,
+  saveAssetMaterialSlots,
+  type AssetMaterialElement,
+  type AssetMaterialSlotsDef,
+} from "@/editor/assetMaterialSlotsStore";
+import type { AssetManifest, AssetRecord } from "@engine/assets/manifest";
+import { loadForgeMaterial } from "@/scene/materialAssets";
 import {
   ANIMATION_SET_ROLES,
   BLEND_SPACE_TYPES,
@@ -96,6 +110,8 @@ export interface SkeletalMeshEditorOptions {
   assets?: AssetPickerItem[];
   /** Optional status sink (surfaces to the host editor's status bar). */
   onStatus?: (message: string, tone?: "info" | "warning" | "error") => void;
+  /** Lets the host refresh model previews and live scene instances after saving slots. */
+  onMaterialSlotsSaved?: (assetId: string) => void;
 }
 
 type PersonaMode = "skeleton" | "animation" | "physics";
@@ -187,6 +203,7 @@ export class SkeletalMeshEditor {
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(45, 1, 0.01, 1000);
   private readonly loader: GLTFLoader;
+  private readonly textureLoader = new TextureLoader();
   private readonly modelGroup = new Group();
   private readonly helperGroup = new Group();
   private readonly resizeObserver: ResizeObserver;
@@ -233,6 +250,10 @@ export class SkeletalMeshEditor {
   private stats: MeshStats = emptyStats();
   private readonly skinnedMeshes: SkinnedMesh[] = [];
   private readonly materials = new Set<Material>();
+  private materialSlots: AssetMaterialSlotsDef = defaultAssetMaterialSlots();
+  private materialElements: AssetMaterialElement[] = [];
+  private previewMaterials = new Map<string, MeshBasicMaterial | MeshStandardMaterial>();
+  private readonly originalMeshMaterials = new Map<Mesh, Mesh["material"]>();
   private readonly meshSections: MeshSectionInfo[] = [];
   private readonly morphTargets: MorphTargetControl[] = [];
   private boneRoots: BoneNode[] = [];
@@ -321,6 +342,7 @@ export class SkeletalMeshEditor {
     this.startRenderLoop();
 
     void this.loadModel();
+    void this.loadMaterialSlots();
   }
 
   private buildScene(): void {
@@ -357,6 +379,9 @@ export class SkeletalMeshEditor {
       this.buildSkeletonHelper(gltf.scene);
       this.buildNormalHelpers(gltf.scene);
       await this.loadSkeleton();
+      if (assignedMaterialSlotIds(this.materialSlots).length > 0) {
+        await this.applyPreviewMaterials({ dirty: false, status: false });
+      }
       this.rebuildPlaybackAnimator();
       this.selectedClipName = this.resolveInitialClip();
       if (this.selectedClipName) this.selectClip(this.selectedClipName, { autoplay: false, crossfade: false });
@@ -379,6 +404,15 @@ export class SkeletalMeshEditor {
     this.sanitizeRootMotion();
     this.sanitizeSockets();
     this.rebuildSocketOverlays();
+  }
+
+  private async loadMaterialSlots(): Promise<void> {
+    this.materialSlots = await loadAssetMaterialSlots(this.options.modelPath);
+    if (this.disposed) return;
+    this.renderDetails();
+    if (this.modelRoot && assignedMaterialSlotIds(this.materialSlots).length > 0) {
+      await this.applyPreviewMaterials({ dirty: false, status: false });
+    }
   }
 
   private sanitizeRootMotion(): void {
@@ -456,6 +490,9 @@ export class SkeletalMeshEditor {
       }
       if (object instanceof Bone) boneSet.add(object);
       if (!(object instanceof Mesh)) return;
+      if (!this.originalMeshMaterials.has(object)) {
+        this.originalMeshMaterials.set(object, object.material);
+      }
       stats.meshCount += 1;
       const geometry = object.geometry;
       const position = geometry.getAttribute("position");
@@ -493,6 +530,7 @@ export class SkeletalMeshEditor {
     this.bones = [...boneSet];
     this.boneRoots = buildBoneTree(this.bones);
     this.nodeNames = nodeNames;
+    this.materialElements = collectAssetMaterialElements(root);
   }
 
   private collectMorphTargets(mesh: Mesh, targets: Map<string, MorphTargetControl>): void {
@@ -1209,19 +1247,22 @@ export class SkeletalMeshEditor {
       <div class="sm-section">
         <div class="sm-section-title">Materials</div>
         ${
-          this.materials.size
-            ? [...this.materials]
+          this.materialElements.length
+            ? this.materialElements
                 .map(
-                  (material, index) => `
-                    <div class="sm-row">
-                      <span>Element ${index}</span>
-                      <strong>${escapeHtml(material.name || material.type || "Material")}</strong>
-                    </div>
+                  (element) => `
+                    <label class="sm-row">
+                      <span>Element ${element.slotIndex} <small>${escapeHtml(element.sourceMaterialName)}</small></span>
+                      <select data-skel-material-slot="${element.slotIndex}">
+                        ${this.materialSlotOptions(element.slotIndex)}
+                      </select>
+                    </label>
                   `,
                 )
                 .join("")
-            : `<div class="sm-empty">No materials found.</div>`
+            : `<div class="sm-empty">No material elements found.</div>`
         }
+        <div class="sm-hint">Assign a Material asset here to override the embedded GLB material. Save writes a .materials.json sidecar.</div>
       </div>
       <div class="sm-section">
         <div class="sm-section-title">Sections <span class="sm-count">${this.meshSections.length}</span></div>
@@ -1274,6 +1315,95 @@ export class SkeletalMeshEditor {
         }
       </div>
     `;
+  }
+
+  private materialSlotOptions(slotIndex: number): string {
+    const materials = this.options.assets?.filter((asset) => asset.assetType === "material") ?? [];
+    const selectedMaterialId = this.materialSlots.slots[slotIndex] ?? "";
+    return [`<option value="" ${selectedMaterialId ? "" : "selected"}>Embedded</option>`]
+      .concat(
+        materials.map(
+          (asset) =>
+            `<option value="${escapeHtml(asset.id)}" ${
+              selectedMaterialId === asset.id ? "selected" : ""
+            }>${escapeHtml(asset.name)}</option>`,
+        ),
+      )
+      .join("");
+  }
+
+  private async applyPreviewMaterial(
+    slotIndex: number,
+    materialId: string,
+    options: { dirty?: boolean; status?: boolean } = {},
+  ): Promise<void> {
+    const slots = [...this.materialSlots.slots];
+    slots[slotIndex] = materialId;
+    while (slots.length > 0 && !slots[slots.length - 1]) slots.pop();
+    this.materialSlots = { schema: 1, slots };
+    await this.applyPreviewMaterials(options);
+  }
+
+  private async applyPreviewMaterials(options: { dirty?: boolean; status?: boolean } = {}): Promise<void> {
+    this.disposePreviewMaterials();
+    this.restoreOriginalMaterials();
+    const materialIds = [...new Set(assignedMaterialSlotIds(this.materialSlots))];
+    if (materialIds.length === 0) {
+      this.applyWireframe();
+      if (options.dirty) this.markDirty();
+      if (options.status !== false) this.setStatus("Material slots cleared; using embedded materials.");
+      return;
+    }
+    try {
+      const manifest = this.previewAssetManifest();
+      for (const id of materialIds) {
+        const record = this.options.assets?.find((asset) => asset.id === id);
+        if (!record) throw new Error(`Material not found: ${id}`);
+        const material = await loadForgeMaterial(manifest, id, this.textureLoader, {
+          maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy(),
+        });
+        this.previewMaterials.set(id, material);
+      }
+      applyMaterialSlotOverrides(this.modelGroup, this.materialSlots, (id) => this.previewMaterials.get(id));
+      this.applyWireframe();
+      if (options.dirty) this.markDirty();
+      if (options.status !== false) this.setStatus("Preview material slots updated.");
+    } catch (error) {
+      this.setStatus(`Material preview failed: ${describeError(error)}`, "error");
+    }
+  }
+
+  private previewAssetManifest(): AssetManifest {
+    const assets: AssetRecord[] = [];
+    for (const asset of this.options.assets ?? []) {
+      if (asset.assetType !== "material" && asset.assetType !== "texture") continue;
+      assets.push({
+        id: asset.id,
+        name: asset.name,
+        assetType: asset.assetType,
+        category: "",
+        path: asset.path,
+        tags: [],
+        placeable: false,
+        placement: { surface: "floor", snapToWall: false, allowRotation: true, allowScale: true },
+        runtime: { loadGroup: "editor", castShadow: false, receiveShadow: false, collision: false, bytes: 0 },
+        license: "unknown",
+      });
+    }
+    return { version: 1, generated: "skeletal-mesh-editor-preview", ktx2: false, assets };
+  }
+
+  private disposePreviewMaterials(): void {
+    for (const material of this.previewMaterials.values()) {
+      material.map?.dispose();
+      if (material instanceof MeshStandardMaterial) material.normalMap?.dispose();
+      material.dispose();
+    }
+    this.previewMaterials.clear();
+  }
+
+  private restoreOriginalMaterials(): void {
+    for (const [mesh, material] of this.originalMeshMaterials) mesh.material = material;
   }
 
   private bindDetails(): void {
@@ -1341,6 +1471,11 @@ export class SkeletalMeshEditor {
     this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-skel-role]").forEach((select) => {
       select.addEventListener("change", () => {
         this.setAnimationRole(select.dataset.skelRole as AnimationSetRole, select.value);
+      });
+    });
+    this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-skel-material-slot]").forEach((select) => {
+      select.addEventListener("change", () => {
+        void this.applyPreviewMaterial(Number(select.dataset.skelMaterialSlot), select.value, { dirty: true });
       });
     });
     this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-morph]").forEach((input) => {
@@ -3127,7 +3262,7 @@ export class SkeletalMeshEditor {
   }
 
   private applyWireframe(): void {
-    for (const material of this.materials) {
+    for (const material of [...this.materials, ...this.previewMaterials.values()]) {
       if ("wireframe" in material) {
         (material as Material & { wireframe: boolean }).wireframe = this.wireframe;
         material.needsUpdate = true;
@@ -3150,9 +3285,18 @@ export class SkeletalMeshEditor {
 
   private async save(): Promise<void> {
     try {
-      const result = await saveAssetSkeleton(this.options.modelPath, this.skeleton);
+      const [skeletonResult, materialResult] = await Promise.all([
+        saveAssetSkeleton(this.options.modelPath, this.skeleton),
+        saveAssetMaterialSlots(this.options.modelPath, this.materialSlots),
+      ]);
       this.overlay.querySelector<HTMLButtonElement>("[data-sm-save]")?.classList.remove("is-dirty");
-      this.setStatus(result.changed ? `Saved ${result.path}` : "No skeleton metadata changes to save.");
+      const changed = skeletonResult.changed || materialResult.changed;
+      this.setStatus(
+        changed
+          ? `Saved ${skeletonResult.path} and ${materialResult.path}`
+          : "No skeleton or material-slot changes to save.",
+      );
+      if (this.options.assetId) this.options.onMaterialSlotsSaved?.(this.options.assetId);
     } catch (error) {
       this.setStatus(`Save failed: ${describeError(error)}`, "error");
     }
@@ -3172,6 +3316,8 @@ export class SkeletalMeshEditor {
     this.disposeNormalHelpers();
     this.disposeSocketOverlays();
     this.disposePhysicsOverlays();
+    this.restoreOriginalMaterials();
+    this.disposePreviewMaterials();
     this.boneMarker.geometry.dispose();
     if (Array.isArray(this.boneMarker.material)) {
       for (const material of this.boneMarker.material) material.dispose();

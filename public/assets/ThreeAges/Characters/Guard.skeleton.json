@@ -9,6 +9,18 @@
     "attack": "guard_sword_and_sheld_attack_2",
     "death": "guard_sword_and_shield_death_1"
   },
+  "animationVariants": {
+    "idle": [
+      "guard_sword_and_shield_idle_2",
+      "guard_sword_and_shield_idle_3",
+      "guard_sword_and_shield_idle_4"
+    ],
+    "attack": [
+      "guard_sword_and_sheld_attack_4",
+      "guard_sword_and_shield_slash_5",
+      "guard_sword_and_shield_kick"
+    ]
+  },
   "blendSpaces": [],
   "notifies": [],
   "montages": [],
@@ -65,6 +77,21 @@
     },
     {
       "clip": "guard_sword_and_sheld_attack_3",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorig:Hips"
+    },
+    {
+      "clip": "guard_sword_and_sheld_attack_4",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorig:Hips"
+    },
+    {
+      "clip": "guard_sword_and_shield_slash_5",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorig:Hips"
+    },
+    {
+      "clip": "guard_sword_and_shield_kick",
       "mode": "lockXYZ",
       "rootNode": "mixamorig:Hips"
     },

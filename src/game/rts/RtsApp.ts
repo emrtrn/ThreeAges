@@ -5225,11 +5225,12 @@ export class RtsApp {
       if (this.disposed) return;
       if (cannonball) this.cannonballs.setBallModel(cannonball);
       this.warmStructureDamageEffects();
-      this.units.setPresentationFactory((owner, stats) =>
+      this.units.setPresentationFactory((unit) =>
         this.actorVisuals?.createUnitPresentation(
-          Object.entries(this.options.unitBalance).find(([, value]) => value === stats)?.[0] ?? "",
-          owner,
-          stats.moveSpeed,
+          unit.typeId,
+          unit.owner,
+          unit.stats.moveSpeed,
+          unit.id,
         ) ?? null);
       this.units.refreshPresentations();
       this.wildlifeView.setPresentationFactory((species, moveSpeed, walkClipSpeed) =>

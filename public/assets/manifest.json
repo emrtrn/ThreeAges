@@ -32446,6 +32446,121 @@
         "bytes": 12014724
       },
       "license": "Unknown"
+    },
+    {
+      "id": "guard-bc",
+      "name": "Guard BC",
+      "assetType": "texture",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Guard_BC.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 317240
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "guard-n",
+      "name": "Guard N",
+      "assetType": "texture",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Guard_N.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 436382
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "guard-r",
+      "name": "Guard R",
+      "assetType": "texture",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Guard_R.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 177409
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-guard-material",
+      "name": "M Guard.Material",
+      "assetType": "material",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/M_Guard.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 664
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "guard-r2",
+      "name": "Guard R2",
+      "assetType": "texture",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Guard_R2.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 157172
+      },
+      "license": "Unknown"
     }
   ]
 }
