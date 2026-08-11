@@ -32471,6 +32471,62 @@
       "license": "Unknown"
     },
     {
+      "id": "guard-blue-bc",
+      "name": "Guard Blue BC",
+      "assetType": "texture",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Guard_Blue_BC.png",
+      "tags": [
+        "guard",
+        "base-color",
+        "player",
+        "blue"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2555571
+      },
+      "license": "Generated"
+    },
+    {
+      "id": "guard-red-bc",
+      "name": "Guard Red BC",
+      "assetType": "texture",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Guard_Red_BC.png",
+      "tags": [
+        "guard",
+        "base-color",
+        "ai",
+        "red"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2570695
+      },
+      "license": "Generated"
+    },
+    {
       "id": "guard-n",
       "name": "Guard N",
       "assetType": "texture",
@@ -32559,6 +32615,58 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 157172
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "guard-orm",
+      "name": "Guard ORM",
+      "assetType": "texture",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Guard_ORM.png",
+      "tags": [
+        "guard",
+        "orm",
+        "ao",
+        "roughness",
+        "metallic"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 229828
+      },
+      "license": "Generated"
+    },
+    {
+      "id": "m-guard-ai-material",
+      "name": "M Guard AI.Material",
+      "assetType": "material",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/M_Guard_AI.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 684
       },
       "license": "Unknown"
     }

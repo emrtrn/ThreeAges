@@ -9,8 +9,8 @@
     "runBack": "guard_sword_and_shield_run_2",
     "work": "guard_sword_and_shield_idle_1",
     "attack": "guard_sword_and_sheld_attack_2",
-    "death": "guard_sword_and_shield_death_1",
-    "hit": "guard_sword_and_shield_impact_1"
+    "hit": "guard_sword_and_shield_impact_1",
+    "death": "guard_sword_and_shield_death_1"
   },
   "animationVariants": {
     "idle": [
@@ -112,8 +112,8 @@
   ],
   "physicsBodies": [],
   "physicsConstraints": [],
-  "upperBodyBone": "mixamorig:Spine",
   "preview": {
     "selectedClip": "guard_sword_and_shield_jump_1"
-  }
+  },
+  "upperBodyBone": "mixamorig:Spine"
 }
