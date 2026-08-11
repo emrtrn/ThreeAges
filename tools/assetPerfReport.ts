@@ -48,6 +48,13 @@ export interface GltfJson {
   meshes?: GltfMesh[];
   images?: GltfImage[];
   bufferViews?: GltfBufferView[];
+  /** Node graph, for callers checking a rig's bone names rather than its cost. */
+  nodes?: GltfNode[];
+}
+
+export interface GltfNode {
+  name?: string;
+  children?: number[];
 }
 
 export interface GltfGeometryStats {

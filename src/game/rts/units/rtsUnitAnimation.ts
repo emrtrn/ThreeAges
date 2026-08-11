@@ -326,6 +326,17 @@ export interface RtsActionState {
   readonly attackCount: number;
   /** The same, for blows taken rather than landed. */
   readonly impactCount: number;
+  /**
+   * True when this one-shot owns only the upper body, leaving the legs on
+   * locomotion — the flinch a walking unit plays without stopping walking.
+   *
+   * Decided once, on the frame the action starts, and then carried unchanged for
+   * its whole length. It has to be latched rather than recomputed per frame: a
+   * unit that is shoved to a halt half a second into a 0.73 s flinch would
+   * otherwise swap from a torso-only reaction to a full-body one mid-clip, which
+   * pops far harder than either choice does on its own.
+   */
+  readonly layered: boolean;
 }
 
 /** A unit that has neither swung, flinched nor fallen. */
@@ -334,6 +345,7 @@ export const RTS_ACTION_NONE: RtsActionState = {
   remainingSeconds: 0,
   attackCount: 0,
   impactCount: 0,
+  layered: false,
 };
 
 /**
@@ -346,6 +358,27 @@ export interface RtsActionDurations {
   readonly hit: number | null;
   readonly death: number | null;
 }
+
+/**
+ * Whether — and when — a flinch may be demoted to an upper-body-only clip.
+ *
+ * Two conditions, and both are needed. The asset must be able to split its
+ * skeleton at all (an authored `upperBodyBone` that matched real bones), and the
+ * legs must have something worth protecting: a unit standing still has no stride
+ * to interrupt, and taking the blow through the whole body there keeps the hip
+ * recoil the impact clips were animated with. Above walking speed the trade
+ * reverses — the full-body clip pins the legs mid-stride while the simulation
+ * keeps sliding the unit forward, which is foot-skate with no upside.
+ */
+export interface RtsActionLayering {
+  /** True when the asset can play a clip on the upper body alone. */
+  readonly canLayerHit: boolean;
+  /** The unit's own walking boundary, from {@link RtsLocomotionTuning}. */
+  readonly walkSpeed: number;
+}
+
+/** Never layer: the behaviour of every caller that predates upper-body flinches. */
+const NO_LAYERING: RtsActionLayering = { canLayerHit: false, walkSpeed: Infinity };
 
 /**
  * Advances the one-shot channel by one frame.
@@ -368,15 +401,20 @@ export interface RtsActionDurations {
  * happened while an action owned the body are *dropped* rather than queued —
  * three blows in half a second are one flinch from the last of them, not three
  * played back long after the fight moved on.
+ *
+ * Only the flinch is ever demoted to the upper body ({@link RtsActionLayering}).
+ * A swing is thrown from a standstill and a fall is the whole body by
+ * definition, so neither has legs to keep.
  */
 export function advanceRtsAction(
   state: RtsActionState,
   input: RtsAnimationInput,
   durations: RtsActionDurations,
   deltaSeconds: number,
+  layering: RtsActionLayering = NO_LAYERING,
 ): RtsActionState {
   const dt = Math.max(0, deltaSeconds);
-  const counters = { attackCount: input.attackCount, impactCount: input.impactCount };
+  const counters = { attackCount: input.attackCount, impactCount: input.impactCount, layered: false };
   if (input.dying) {
     if (state.kind === "death") {
       return { ...state, ...counters, remainingSeconds: Math.max(0, state.remainingSeconds - dt) };
@@ -388,11 +426,14 @@ export function advanceRtsAction(
     return { kind: "death", remainingSeconds: durations.death, ...counters };
   }
   if (input.impactCount !== state.impactCount && durations.hit !== null) {
-    return { kind: "hit", remainingSeconds: durations.hit, ...counters };
+    const layered = layering.canLayerHit && input.planarSpeed > layering.walkSpeed;
+    return { kind: "hit", remainingSeconds: durations.hit, ...counters, layered };
   }
   if (state.kind === "hit") {
     const remaining = state.remainingSeconds - dt;
-    if (remaining > 0) return { kind: "hit", remainingSeconds: remaining, ...counters };
+    // `state.layered` last, overriding the default: the choice belongs to the
+    // frame the flinch started, not to the speed the unit happens to have now.
+    if (remaining > 0) return { kind: "hit", remainingSeconds: remaining, ...counters, layered: state.layered };
   }
   if (input.attackCount !== state.attackCount && durations.attack !== null) {
     return { kind: "attack", remainingSeconds: durations.attack, ...counters };

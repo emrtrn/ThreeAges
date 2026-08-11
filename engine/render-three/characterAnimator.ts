@@ -197,6 +197,19 @@ export class CrossfadeAnimator {
   }
 
   /**
+   * Stops every action and drops the mixer's binding cache for `root`.
+   *
+   * Both halves matter and the second is the one that is easy to forget: the
+   * cache is keyed by root, so an owner that only stops its actions keeps every
+   * node it ever animated reachable for the mixer's lifetime — in an RTS, that is
+   * every unit that has ever died.
+   */
+  release(root: Object3D): void {
+    this.mixer.stopAllAction();
+    this.mixer.uncacheRoot(root);
+  }
+
+  /**
    * Plays `name` through exactly once and holds its final pose
    * (`clampWhenFinished`), for event clips like a swing or a death.
    *

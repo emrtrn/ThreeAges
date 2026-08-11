@@ -891,6 +891,7 @@ import {
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
 import { LayeredCharacterAnimator } from "../engine/render-three/layeredCharacterAnimator";
+import { LayeredClipAnimator } from "../engine/render-three/layeredClipAnimator";
 import {
   applyRootMotionToClip,
   resolveRootMotionUpAxis,
@@ -37972,18 +37973,18 @@ check("Skeletal animasyon varyasyonlari: klip secimi birim ve darbe basina karar
     assert.ok(population.size > 1, `${role} varies across Guard instances`);
   }
   assert.equal(
-    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4, impactCount: 0 }, set, available, variants, 17),
-    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4, impactCount: 0 }, set, available, variants, 17),
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4, impactCount: 0, layered: false }, set, available, variants, 17),
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4, impactCount: 0, layered: false }, set, available, variants, 17),
     "the same landed blow resolves to the same attack clip",
   );
   assert.ok(
     ["Attack_1", "Attack_2", "Attack_3"].includes(
-      rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 5, impactCount: 0 }, set, available, variants, 17) ?? "",
+      rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 5, impactCount: 0, layered: false }, set, available, variants, 17) ?? "",
     ),
     "attack variants stay inside the authored/shipped pool",
   );
   const attacks = new Set(Array.from({ length: 12 }, (_, index) =>
-    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: index + 1, impactCount: 0 }, set, available, variants, 17)));
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: index + 1, impactCount: 0, layered: false }, set, available, variants, 17)));
   assert.ok(attacks.size > 1, "one Guard rotates attacks across landed blows");
 
   const normalized = normalizeAssetSkeleton({ animationSet: set, animationVariants: variants });
@@ -38162,11 +38163,11 @@ check("Skeletal animasyon Faz D: tek atimlik saldiri her darbede bir kez, olum i
   // Clip resolution is data, not code: the role name indexes the sidecar.
   const set = { idle: "Idle_Loop", attack: "Sword_Attack", death: "Death01" };
   const shipped = new Set(["Idle_Loop", "Sword_Attack", "Death01"]);
-  assert.equal(rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 1, impactCount: 0 }, set, shipped), "Sword_Attack");
-  assert.equal(rtsActionClip({ kind: "death", remainingSeconds: 1, attackCount: 1, impactCount: 0 }, set, shipped), "Death01");
+  assert.equal(rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 1, impactCount: 0, layered: false }, set, shipped), "Sword_Attack");
+  assert.equal(rtsActionClip({ kind: "death", remainingSeconds: 1, attackCount: 1, impactCount: 0, layered: false }, set, shipped), "Death01");
   assert.equal(rtsActionClip(RTS_ACTION_NONE, set, shipped), null, "no action means locomotion owns the pose");
   assert.equal(
-    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 1, impactCount: 0 }, set, new Set(["Idle_Loop"])),
+    rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 1, impactCount: 0, layered: false }, set, new Set(["Idle_Loop"])),
     null,
     "an authored clip the model does not ship resolves to nothing, not to a guess",
   );
@@ -38607,13 +38608,13 @@ check("Muhafiz Faz 2: darbe klibi birim ve darbe sayisi basina kararli secilir",
   // `attackCount` without being played, and if that leaked into the flinch's
   // variant choice the clip would change under the unit mid-blend.
   assert.equal(
-    rtsActionClip({ kind: "hit", remainingSeconds: 1, attackCount: 0, impactCount: 4 }, set, available, variants, 17),
-    rtsActionClip({ kind: "hit", remainingSeconds: 1, attackCount: 9, impactCount: 4 }, set, available, variants, 17),
+    rtsActionClip({ kind: "hit", remainingSeconds: 1, attackCount: 0, impactCount: 4, layered: false }, set, available, variants, 17),
+    rtsActionClip({ kind: "hit", remainingSeconds: 1, attackCount: 9, impactCount: 4, layered: false }, set, available, variants, 17),
     "a swallowed swing does not change which flinch is playing",
   );
-  assert.equal(rtsActionSequence({ kind: "hit", remainingSeconds: 1, attackCount: 9, impactCount: 4 }), 4);
-  assert.equal(rtsActionSequence({ kind: "attack", remainingSeconds: 1, attackCount: 9, impactCount: 4 }), 9);
-  assert.equal(rtsActionSequence({ kind: "death", remainingSeconds: 1, attackCount: 9, impactCount: 4 }), 0);
+  assert.equal(rtsActionSequence({ kind: "hit", remainingSeconds: 1, attackCount: 9, impactCount: 4, layered: false }), 4);
+  assert.equal(rtsActionSequence({ kind: "attack", remainingSeconds: 1, attackCount: 9, impactCount: 4, layered: false }), 9);
+  assert.equal(rtsActionSequence({ kind: "death", remainingSeconds: 1, attackCount: 9, impactCount: 4, layered: false }), 0);
 
   // The continuous channel never claims the flinch: it is a one-shot, and a
   // looping one would show a unit permanently being beaten.
@@ -38686,6 +38687,218 @@ check("Muhafiz Faz 2: darbe animasyonu hasari, cooldown'u ve olum penceresini de
   assert.equal(flinched.deathSeconds, UNIT_DEATH_SECONDS, "blows taken do not lengthen the defeat window");
 
   units.clear();
+});
+
+check("Muhafiz Faz 2b: yuruyen birim darbeyi belden yukarisi oynatir, duran birim tum govdesiyle", () => {
+  const durations = { attack: 0.5, hit: 0.3, death: 1.2 };
+  const input = (over: Partial<RtsAnimationInput> = {}): RtsAnimationInput => ({
+    planarSpeed: 0,
+    attacking: false,
+    dying: false,
+    working: false,
+    attackCount: 0,
+    impactCount: 0,
+    ...over,
+  });
+  // The unit's own walking boundary, exactly as the presentation passes it.
+  const layering = { canLayerHit: true, walkSpeed: 0.6 };
+
+  // Standing still, the whole body takes the blow: there is no stride to protect
+  // and the impact clips were animated with a hip recoil worth keeping.
+  const standing = advanceRtsAction(RTS_ACTION_NONE, input({ impactCount: 1 }), durations, 0.1, layering);
+  assert.equal(standing.kind, "hit");
+  assert.equal(standing.layered, false, "a standing unit flinches with its whole body");
+
+  // Walking, the legs keep the gait and only the torso reacts — the foot-skate
+  // this phase exists to remove.
+  let moving = advanceRtsAction(RTS_ACTION_NONE, input({ planarSpeed: 4, impactCount: 1 }), durations, 0.1, layering);
+  assert.equal(moving.layered, true, "a moving unit flinches from the waist up");
+
+  // Latched, not recomputed. A unit shoved to a halt mid-flinch must not swap
+  // from a torso-only reaction to a full-body one with the clip half played.
+  moving = advanceRtsAction(moving, input({ planarSpeed: 0, impactCount: 1 }), durations, 0.1, layering);
+  assert.equal(moving.kind, "hit");
+  assert.equal(moving.layered, true, "stopping mid-flinch does not change which body it owns");
+  moving = advanceRtsAction(moving, input({ planarSpeed: 0, impactCount: 1 }), durations, 0.25, layering);
+  assert.equal(moving.kind, "none", "and it still ends on its own length");
+  assert.equal(moving.layered, false, "which hands the torso back");
+
+  // The other two one-shots are never demoted. A swing is thrown from a
+  // standstill and a fall is the whole body by definition, so neither has legs
+  // worth keeping — and half a corpse walking is the failure this rules out.
+  const swinging = advanceRtsAction(
+    RTS_ACTION_NONE, input({ planarSpeed: 6, attackCount: 1 }), durations, 0.1, layering,
+  );
+  assert.equal(swinging.kind, "attack");
+  assert.equal(swinging.layered, false, "a swing owns the whole body");
+  const falling = advanceRtsAction(RTS_ACTION_NONE, input({ planarSpeed: 6, dying: true }), durations, 0.1, layering);
+  assert.equal(falling.kind, "death");
+  assert.equal(falling.layered, false, "and so does a fall, at any speed");
+
+  // An asset that cannot split its skeleton behaves exactly as it did before
+  // this phase — which is also what the default argument gives every caller that
+  // never passes one.
+  const unsplittable = advanceRtsAction(
+    RTS_ACTION_NONE, input({ planarSpeed: 4, impactCount: 1 }), durations, 0.1, { canLayerHit: false, walkSpeed: 0.6 },
+  );
+  assert.equal(unsplittable.layered, false, "no upper-body bone means no layering");
+  assert.equal(
+    advanceRtsAction(RTS_ACTION_NONE, input({ planarSpeed: 4, impactCount: 1 }), durations, 0.1).layered,
+    false,
+    "and layering is opt-in, so an unaware caller keeps full-body flinches",
+  );
+});
+
+check("Muhafiz Faz 2b: ust govde maskesi Mixamo adini bulur ve kalcayi bacaklarda birakir", () => {
+  // The rename that makes this non-obvious: `GLTFLoader` runs every node name
+  // through `PropertyBinding.sanitizeNodeName`, so the `mixamorig:Spine` an
+  // artist authors is `mixamorigSpine` by the time it is an Object3D. Matching
+  // only the literal string leaves the mask empty, which looks exactly like
+  // "layering was never implemented".
+  const make = (name: string): Object3D => {
+    const node = new Object3D();
+    node.name = name;
+    return node;
+  };
+  const root = make("Guard_Rig");
+  const hips = make("mixamorigHips");
+  const spine = make("mixamorigSpine");
+  spine.add(make("mixamorigSpine1"), make("mixamorigNeck"), make("mixamorigRightArm"));
+  hips.add(spine, make("mixamorigLeftUpLeg"), make("mixamorigRightUpLeg"));
+  root.add(hips);
+
+  const mask = collectSubtreeNodeNames(root, "mixamorig:Spine");
+  assert.ok(mask.size > 0, "the authored name resolves against the sanitized scene");
+  assert.ok(mask.has("mixamorigRightArm"), "the arm is upper body");
+  assert.equal(mask.has("mixamorigHips"), false, "the hips are not");
+  assert.equal(mask.has("mixamorigLeftUpLeg"), false, "and neither are the legs");
+  assert.deepEqual(
+    collectSubtreeNodeNames(root, "mixamorigSpine"),
+    mask,
+    "both spellings of the same bone name select the same body",
+  );
+  assert.equal(collectSubtreeNodeNames(root, "mixamorigTail").size, 0, "a bone the rig lacks masks nothing");
+
+  // The split is what actually keeps a flinch from dragging a walking unit: the
+  // impact clip's hip track lands on the lower channel, where the walk clip is
+  // playing instead, so nothing the flinch does can move the body.
+  const track = (node: string) => new VectorKeyframeTrack(`${node}.position`, [0, 0.5], [0, 0, 0, 0, 0, 0]);
+  const impact = new AnimationClip("impact_1", 0.73, [
+    track("mixamorigHips"), track("mixamorigSpine"), track("mixamorigRightArm"),
+  ]);
+  const split = splitClipsByUpperBody([impact], mask);
+  const names = (clip: AnimationClip | undefined) =>
+    (clip?.tracks ?? []).map((entry) => entry.name.split(".")[0]);
+  assert.deepEqual(names(split.lower[0]), ["mixamorigHips"], "the flinch's hip motion stays on the legs' channel");
+  assert.deepEqual(
+    names(split.upper[0]),
+    ["mixamorigSpine", "mixamorigRightArm"],
+    "and only the torso rides the upper channel",
+  );
+  assert.equal(split.upper[0]?.duration, 0.73, "both halves keep the authored length the state machine times");
+});
+
+check("Muhafiz Faz 2b: katmanli darbe oynarken bacaklar yurumeye devam eder", () => {
+  const make = (name: string): Object3D => {
+    const node = new Object3D();
+    node.name = name;
+    return node;
+  };
+  const root = make("Guard_Rig");
+  const hips = make("mixamorigHips");
+  const spine = make("mixamorigSpine");
+  hips.add(spine, make("mixamorigLeftUpLeg"));
+  root.add(hips);
+  const track = (node: string) => new VectorKeyframeTrack(`${node}.position`, [0, 0.5], [0, 0, 0, 0, 0, 0]);
+  const bodyClip = (name: string, duration: number) =>
+    new AnimationClip(name, duration, [track("mixamorigHips"), track("mixamorigSpine")]);
+  const animator = new LayeredClipAnimator(
+    root,
+    [bodyClip("walk", 1), bodyClip("run", 0.8), bodyClip("impact", 0.73), bodyClip("death", 3.8)],
+    "mixamorig:Spine",
+  );
+
+  assert.equal(animator.hasUpperBody, true, "the mask matched, so layering is real rather than a silent no-op");
+  animator.play("walk", 0);
+  assert.equal(animator.lowerClip, "walk");
+  assert.equal(animator.upperClip, "walk", "with no action running the torso mirrors the gait");
+
+  // The whole point: the flinch claims the torso and the legs are untouched.
+  animator.playUpperOnce("impact", 0.06);
+  assert.equal(animator.lowerClip, "walk", "the legs keep walking through the blow");
+  assert.equal(animator.upperClip, "impact");
+  assert.equal(animator.isUpperBusy, true);
+
+  // Locomotion keeps driving underneath — a struck unit may break into a run —
+  // and must not steal the torso back while the flinch is still playing.
+  animator.play("run", 0.18);
+  assert.equal(animator.lowerClip, "run", "the gait can change mid-flinch");
+  assert.equal(animator.upperClip, "impact", "without cutting the flinch short");
+
+  // And it is released into the gait the legs are on *now*, not the one that was
+  // playing when the blow landed.
+  animator.releaseUpperBody(0);
+  assert.equal(animator.upperClip, "run", "the torso rejoins the current gait");
+  assert.equal(animator.isUpperBusy, false);
+
+  // A full-body one-shot reclaims the torso outright: a unit killed mid-flinch
+  // must fall with all of itself, not flinch from the waist up while it dies.
+  animator.playUpperOnce("impact", 0.06);
+  animator.playOnce("death", 0.06);
+  assert.equal(animator.lowerClip, "death");
+  assert.equal(animator.upperClip, "death", "death owns both channels");
+  assert.equal(animator.isUpperBusy, false);
+  assert.equal(animator.clipDuration("impact"), 0.73, "clip lengths come from the unsplit originals");
+  assert.equal(animator.clipDuration("nope"), null);
+
+  // Ticking is this class's own job (the RTS loop owns it and throttles it by
+  // distance), so both channels have to advance — a lower channel that never
+  // ticked would leave a layered unit's legs frozen.
+  animator.play("walk", 0);
+  animator.update(0.1);
+  assert.equal(animator.lowerClip, "walk");
+});
+
+check("Muhafiz Faz 2b: Guard ust govde kemigini authorlar, kemik gercek ve kayitta hayatta kalir", () => {
+  // The sidecar allowlist gotcha (CLAUDE.md) for this phase's one new field.
+  const roundTripped = validateAssetSkeletonDef({ schema: 1, upperBodyBone: "mixamorig:Spine" });
+  assert.equal(roundTripped.upperBodyBone, "mixamorig:Spine", "the validator keeps it through an editor save");
+  assert.equal(
+    normalizeAssetSkeleton({ schema: 1, upperBodyBone: "mixamorig:Spine" }).upperBodyBone,
+    "mixamorig:Spine",
+    "and the loader reads the same field back",
+  );
+
+  const guard = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+  );
+  const bone = guard.upperBodyBone ?? assert.fail("the Guard authors no upper-body bone, so flinches stay full-body");
+
+  // A bone name is a string until something checks it against the rig. A typo
+  // here costs nothing at load and silently turns every layered flinch back into
+  // a full-body one, which is the bug this phase started from.
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard.glb")))
+    ?? assert.fail("the Guard model is not a readable GLB");
+  const nodes = parsed.json.nodes ?? [];
+  const index = nodes.findIndex((node) => node.name === bone);
+  assert.ok(index >= 0, `"${bone}" is not a node on the Guard rig`);
+
+  // And it must split the body where the plan says: the hips belong to the legs,
+  // or the flinch drags the unit off the path the simulation is walking it down.
+  const descendants = new Set<number>();
+  const walk = (at: number): void => {
+    for (const child of nodes[at]?.children ?? []) {
+      if (descendants.has(child)) continue;
+      descendants.add(child);
+      walk(child);
+    }
+  };
+  walk(index);
+  const named = (name: string) => nodes.findIndex((node) => node.name === name);
+  assert.equal(descendants.has(named("mixamorig:Hips")), false, "the hips stay on the locomotion channel");
+  assert.equal(descendants.has(named("mixamorig:LeftUpLeg")), false, "and so do the legs");
+  assert.ok(descendants.has(named("mixamorig:Head")), "while the head rides the flinch");
+  assert.ok(descendants.has(named("mixamorig:RightShoulder")), "along with the sword arm");
 });
 
 check("Skeletal animasyon Faz F: rol tinti klonu boyar, sabloni ve material paylasimini bozmaz", () => {

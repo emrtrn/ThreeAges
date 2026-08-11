@@ -113,6 +113,7 @@
   ],
   "physicsBodies": [],
   "physicsConstraints": [],
+  "upperBodyBone": "mixamorig:Spine",
   "preview": {
     "selectedClip": "guard_sword_and_shield_jump_1"
   }

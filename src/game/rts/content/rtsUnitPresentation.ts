@@ -18,6 +18,8 @@ import { Mesh, type AnimationClip, type Object3D } from "three";
 import type { ActorScriptDef } from "@engine/scene/actorScript";
 
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
+import { collectSubtreeNodeNames } from "@engine/render-three/bodyMask";
+import { LayeredClipAnimator, type UnitClipAnimator } from "@engine/render-three/layeredClipAnimator";
 import {
   consumeDistanceUpdateDelta,
   isFarFromFocus,
@@ -172,8 +174,7 @@ class RtsAttachedCrewAnimator {
 
   dispose(): void {
     if (!this.animator) return;
-    this.animator.mixer.stopAllAction();
-    if (this.target) this.animator.mixer.uncacheRoot(this.target);
+    if (this.target) this.animator.release(this.target);
     this.animator = null;
     this.target = null;
   }
@@ -203,7 +204,16 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   readonly root: Object3D;
   readonly pickTargets: readonly Object3D[];
   readonly selectionRadius: number;
-  private animator: CrossfadeAnimator | null = null;
+  private animator: UnitClipAnimator | null = null;
+  /**
+   * The same animator when it can split the body, else null.
+   *
+   * Held separately rather than behind a capability flag on the interface so the
+   * unlayered path is provably untouched: an asset that authors no upper-body
+   * bone gets the plain single-mixer animator it always had, and every call that
+   * only a layered asset can serve is unreachable without this reference.
+   */
+  private layered: LayeredClipAnimator | null = null;
   /** The node the mixer was bound to, so disposal uncaches the same root. */
   private animationTarget: Object3D | null = null;
   /** Sidecar role→clip map, consulted every frame by the pure selector. */
@@ -259,9 +269,26 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // authoritative over position, so a walk clip that carries its own
     // translation would drag the body away from where the simulation put it.
     this.animationTarget = animation.target;
-    this.animator = new CrossfadeAnimator(animation.target, animation.clips, {
-      rootMotion: animation.skeleton.rootMotion,
-    });
+    // Layering costs a second mixer and a second set of clip actions per unit,
+    // so it is bought only where it is used: the asset has to author an
+    // upper-body bone *and* that bone has to match real nodes on this model. A
+    // bone that matches nothing would split every track onto the lower channel
+    // and pay the whole cost for an animator that behaves identically.
+    const upperBodyBone = animation.skeleton.upperBodyBone;
+    const canSplit =
+      typeof upperBodyBone === "string" &&
+      upperBodyBone.length > 0 &&
+      collectSubtreeNodeNames(animation.target, upperBodyBone).size > 0;
+    if (canSplit) {
+      this.layered = new LayeredClipAnimator(animation.target, animation.clips, upperBodyBone, {
+        rootMotion: animation.skeleton.rootMotion,
+      });
+      this.animator = this.layered;
+    } else {
+      this.animator = new CrossfadeAnimator(animation.target, animation.clips, {
+        rootMotion: animation.skeleton.rootMotion,
+      });
+    }
     this.animationSet = animation.skeleton.animationSet;
     this.animationVariants = animation.skeleton.animationVariants;
     // One-shot lengths come from the clips themselves, which is the only place
@@ -351,7 +378,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       attack: this.durationOfRole("attack", state.attackCount),
       hit: this.durationOfRole("hit", state.impactCount),
       death: this.actionDurations.death,
-    }, deltaSeconds);
+    }, deltaSeconds, { canLayerHit: this.layered !== null, walkSpeed: this.tuning.walkSpeed });
     this.workState = advanceRtsWorkMontage(this.workState, state, this.workMontage, this.tuning, deltaSeconds);
     const actionClip = rtsActionClip(
       this.action,
@@ -364,17 +391,32 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       // Restarted only when the state machine says a *new* one-shot began.
       // Re-issuing it every frame would reset the playhead and freeze the unit
       // on the swing's first frame for as long as it was fighting.
-      if (
+      const started =
         this.action.kind !== this.startedAction.kind
-        || rtsActionSequence(this.action) !== rtsActionSequence(this.startedAction)
-      ) {
-        animator.playOnce(actionClip, ACTION_FADE_SECONDS);
-        this.startedAction = this.action;
+        || rtsActionSequence(this.action) !== rtsActionSequence(this.startedAction);
+      if (this.action.layered && this.layered) {
+        // The one one-shot that shares the body. It claims the torso and then
+        // falls through on purpose — the locomotion code below still runs, and
+        // it is what keeps the legs striding under a flinch instead of pinning
+        // the whole unit mid-step while the simulation slides it forward.
+        if (started) {
+          this.layered.playUpperOnce(actionClip, ACTION_FADE_SECONDS);
+          this.startedAction = this.action;
+        }
+      } else {
+        if (started) {
+          animator.playOnce(actionClip, ACTION_FADE_SECONDS);
+          this.startedAction = this.action;
+        }
+        animator.update(deltaSeconds);
+        return;
       }
-      animator.update(deltaSeconds);
-      return;
+    } else {
+      this.startedAction = RTS_ACTION_NONE;
+      // Where a layered flinch ends: the torso fades back into the gait the legs
+      // are on *now*, which is not necessarily the one it left.
+      this.layered?.releaseUpperBody(LOCOMOTION_FADE_SECONDS);
     }
-    this.startedAction = RTS_ACTION_NONE;
 
     // The work montage sits between the one-shots and locomotion: it owns the
     // body only while the unit is standing at its job (or winding down out of
@@ -433,12 +475,12 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   dispose(): void {
     for (const crew of this.crew) crew.dispose();
     if (this.animator) {
-      // Both halves matter: stopping ends the actions, uncaching releases the
-      // mixer's per-root binding cache. Without the second, every unit that ever
-      // died stays referenced for the lifetime of the match.
-      this.animator.mixer.stopAllAction();
-      if (this.animationTarget) this.animator.mixer.uncacheRoot(this.animationTarget);
+      // Every channel the animator owns, not just the first: a layered unit
+      // holds two mixers, and leaving the second bound keeps every unit that
+      // ever died referenced for the lifetime of the match.
+      if (this.animationTarget) this.animator.release(this.animationTarget);
       this.animator = null;
+      this.layered = null;
       this.animationTarget = null;
     }
     // Detaching before the owning unit disposes its subtree is what keeps the

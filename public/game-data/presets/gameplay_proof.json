@@ -11,10 +11,10 @@
     "gold": 200
   },
   "startingUnits": {
-    "guard": 8,
+    "guard": 12,
     "worker": 8,
     "siege": 2,
-    "archer": 2
+    "archer": 12
   },
   "enemyStartingResources": {
     "food": 500,

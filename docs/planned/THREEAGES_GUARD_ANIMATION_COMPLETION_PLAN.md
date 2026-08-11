@@ -1,9 +1,10 @@
 # ThreeAges — Muhafız Animasyon Tamamlama Planı
 
 Oluşturulma tarihi: 2026-08-11  
-Durum: **Devam ediyor — Faz 2 (alınan darbe) kodu ve otomasyonu tamam; Faz 1 ile
-Faz 2'nin dünya içi görsel kabulleri kullanıcıda açık. Sonraki fonksiyonel dilim
-Faz 3 (ikinci death varyantı).**
+Durum: **Devam ediyor — Faz 2 görsel kabulünde ayak kayması bulundu ve Faz 2b
+(üst gövde katmanı) ile giderildi; kodu ve otomasyonu tamam. Faz 1 ile Faz 2b'nin
+dünya içi görsel kabulleri kullanıcıda açık. Sonraki fonksiyonel dilim Faz 3
+(ikinci death varyantı).**
 
 ## 1. Amaç
 
@@ -45,7 +46,7 @@ combat dengesi ve `Guard.glb` kaynak geometrisi kapsam dışıdır.
 | `run` | `guard_sword_and_shield_run_1` | `run_2` | Tamam, görsel kabul açık |
 | `work` | `guard_sword_and_shield_idle_1` | — | Mevcut davranış korunur |
 | `attack` | `guard_sword_and_sheld_attack_2` | `attack_4`, `slash_5`, `kick` | Tamam |
-| `hit` | `guard_sword_and_shield_impact_1` | `impact_2`, `impact_3` | Tamam, görsel kabul açık |
+| `hit` | `guard_sword_and_shield_impact_1` | `impact_2`, `impact_3` | Tamam (hareket hâlinde üst gövde), görsel kabul açık |
 | `death` | `guard_sword_and_shield_death_1` | — | Tamam |
 
 `animationVariants` seçimi rastgele sayı üretmez. `unit.id` tabanlı seed;
@@ -185,8 +186,69 @@ uygulamak gövdenin geri sarsılmasını da düzleştirirdi.
 - Darbe animasyonunun hasarı, cooldown'u ve despawn penceresini değiştirmemesi.
 - `npx tsc --noEmit` temiz; `npm run test:engine` (fast) 1395 kontrol yeşil.
 
-**Görsel kabul (açık):** Muhafız yürürken, savaşırken ve ölmeden hemen önce hasar
-alır; pose okunur, spam halinde kilitlenmez, öldüğünde death klibi önceliklidir.
+**Görsel kabul sonucu (2026-08-11): reddedildi.** Duran birimde pose doğru, fakat
+yürüyen/koşan birim darbeyi *tüm gövdeyle* oynadığı için bacaklar adım ortasında
+donuyor ve simülasyon birimi kaydırmaya devam ederken ayaklar sürünüyor. Düzeltme
+Faz 2b.
+
+### Faz 2b — Darbenin üst gövdeye indirilmesi
+
+**Durum:** Kod ve otomasyon tamam (2026-08-11), kullanıcı görsel kabulü açık.
+
+**Bulgu:** Tek `CrossfadeAnimator` tüm gövdeyi sürüyordu; RTS sunumu, TPS
+tarafında zaten var olan gövde maskesi altyapısını (`bodyMask`,
+`AssetSkeletonDef.upperBodyBone`) hiç kullanmıyordu.
+
+**Yapılanlar:**
+
+1. `engine/render-three/layeredClipAnimator.ts` — `LayeredClipAnimator`: aynı
+   kök üzerinde iki maskeli `CrossfadeAnimator`. `LayeredCharacterAnimator`'dan
+   ayrı durmasının nedeni sahiplik modeli: TPS animatörü montajın süresini kendi
+   tutar ve mixer'ları `AnimationSubsystem`'e verir; RTS'te süreyi zaten saf
+   durum makinesi bilir ve tick'i mesafeye göre kısan RTS döngüsü sahiplenir. Bu
+   sınıf hiç zaman tutmaz. Ortak `UnitClipAnimator` arayüzü sayesinde sürücü tek
+   bir kez yazılır.
+2. Root motion **bölmeden önce** uygulanır. Maskelenmiş yarıda kalça position
+   track'i yoktur ve `resolveRootMotionNode` bulduğu ilk position track'e düşer —
+   üst yarıya kilit uygulamak rastgele bir kol kemiğini yerine çivilerdi.
+3. `RtsActionState.layered`: klip **başladığı karede** belirlenir ve süresince
+   değişmez. Kural `canLayerHit && planarSpeed > tuning.walkSpeed`. Duran birim
+   tüm gövdeyle sarsılır — korunacak adım yoktur ve impact klipleri kalça geri
+   tepmesiyle animate edilmiştir. Yarı yolda durdurulan birim klip ortasında
+   torso-only ↔ full-body geçirmez; bu geçiş her iki seçenekten de kötü patlar.
+4. `attack` ve `death` asla katmanlanmaz: saldırı zaten yerinde savrulur, ölüm
+   tanımı gereği tüm gövdedir (yarısı yürüyen ceset yok).
+5. Sürücüde katmanlı darbe dalı **erken dönmez** — locomotion kodu altında
+   çalışmaya devam eder. Darbe bittiğinde torso, bıraktığı yürüyüşe değil
+   birimin *o anki* yürüyüşüne döner (yürürken vurulup koşmaya başlayan birim).
+6. Maliyet yalnızca kullanan asset'te: `upperBodyBone` authorlanmış **ve** gerçek
+   kemiklerle eşleşmişse ikinci mixer alınır; eşleşmeyen kemik adı tüm track'leri
+   alt kanala düşürüp bedeli boşuna ödetirdi.
+7. `collectSubtreeNodeNames` artık sanitize toleranslı. `GLTFLoader` her düğüm
+   adını `PropertyBinding.sanitizeNodeName`'den geçirir, yani sidecar'daki
+   `mixamorig:Spine` sahnede `mixamorigSpine`'dır. Eşleşmeyen maske "katmanlama
+   hiç yazılmamış" gibi görünen tek sessiz hatadır.
+8. `Guard.skeleton.json` → `"upperBodyBone": "mixamorig:Spine"`. Kalça ve
+   bacaklar locomotion kanalında kalır.
+9. `CrossfadeAnimator.release(root)` eklendi; sunumdaki iki `dispose` de artık
+   onu çağırır, katmanlı birimde **iki** mixer'ın binding cache'i bırakılır.
+
+**Otomasyon (4 yeni engine kontrolü, `--filter "Muhafiz Faz 2"`):**
+
+- Katmanlama kuralı: hareketli üst gövde / duran tüm gövde, kilitlenen karar,
+  attack ve death'in hiç katmanlanmaması, `canLayerHit` yokken eski davranış.
+- Maske: iki yazımın da aynı gövdeyi seçmesi, kalça/bacakların dışarıda kalması,
+  impact klibinin kalça track'inin alt kanala düşmesi.
+- Katmanlı oynatma: bacakların yürümeye devam etmesi, darbe ortasında gaitin
+  değişebilmesi, torso'nun güncel gaite dönmesi, death'in iki kanalı da alması.
+- Guard'ın kemiği authorlaması + kemiğin GLB'de gerçekten var olması ve kalçayı
+  dışarıda bırakması (yazım hatası aksi hâlde sessizce full-body'ye döner).
+- `npx tsc --noEmit` temiz; `npm run verify:imports` geçti; `npm run test:engine`
+  (fast) 1399 kontrol yeşil.
+
+**Görsel kabul (açık):** Yürüyen/koşan muhafız vurulduğunda ayakları kaymadan
+adımını sürdürür, üst gövdesi sarsılır; duran muhafız tüm gövdesiyle sarsılır;
+ölürken tüm gövde düşer.
 
 ### Faz 3 — İkinci death varyantı
 
@@ -255,8 +317,9 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
 
 ## 5. Sonraki Oturum İçin Başlangıç Noktası
 
-1. Önce Faz 1 (walk/run) ve Faz 2 (darbe) görsel kabullerini sor/kaydet. Kabul
-   geldiyse Uygulama Günlüğü'ne yalnızca kanıtla birlikte tarihli satır eklenir.
+1. Önce Faz 1 (walk/run) ve Faz 2b (katmanlı darbe) görsel kabullerini
+   sor/kaydet. Kabul geldiyse Uygulama Günlüğü'ne yalnızca kanıtla birlikte
+   tarihli satır eklenir.
 2. Ardından Faz 3'e geç: `death_2` klibinin (3.93 s) root-motion'ı ölçülmüş
    durumda — net 26.1/93.2/65.0, yani `death_1` (3.8/−115.3/67.9) ile aynı
    sınıfta ve o da kilitlenmemiş. Asıl soru klip değil süre: `deathSeconds`
@@ -286,6 +349,13 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
   üç impact klibinin deterministik varyant havuzu. Dört hasar yolunun dördü de
   test altında; 7 yeni engine kontrolü, `tsc --noEmit` ve fast `test:engine`
   (1395 kontrol) yeşil. Dünya içi görsel kabul açık.
+- 2026-08-11 — Faz 2 görsel kabulü **reddedildi**: yürüyen/koşan muhafız darbeyi
+  tüm gövdeyle oynayınca ayak kayması oluşuyor.
+- 2026-08-11 — Faz 2b uygulandı: `LayeredClipAnimator` ile üst gövde slotu, klip
+  başlangıcında kilitlenen `RtsActionState.layered` kararı, Guard'a
+  `upperBodyBone: "mixamorig:Spine"` ve sanitize toleranslı maske araması. 4 yeni
+  engine kontrolü; `tsc --noEmit`, `verify:imports` ve fast `test:engine`
+  (1399 kontrol) yeşil. Dünya içi görsel kabul açık.
 
 ## 7. Teslim Kapısı
 
