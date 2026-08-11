@@ -989,6 +989,7 @@ import {
   DEFAULT_SCENE_SUN_ID,
   ensureDefaultSceneLights,
   fitDirectionalShadowToBounds,
+  invalidateMaterialsForShadowToggle,
   resolveSceneWorldSettings,
   buildSceneEntities,
   computeModelLocalBounds,
@@ -1893,6 +1894,44 @@ check("scene runtime room bounds unions placements and honors asset filters", ()
 
   assert.deepEqual(roomBounds?.min.toArray(), [0, 0, 0]);
   assert.deepEqual(roomBounds?.max.toArray(), [2, 1, 3]);
+});
+
+check("crossing the master shadow toggle relinks every lit material in the scene", () => {
+  // three's `needsProgramChange` watches the lights-state version, and flipping
+  // `renderer.shadowMap.enabled` changes neither the light count nor the caster
+  // count — so nothing there ever notices. A material left on its old program
+  // keeps a `sampler2DShadow` the renderer no longer fills, and every draw using
+  // it fails with a texture/sampler mismatch: the whole lit scene disappears
+  // while the sky keeps drawing. Bumping `Material.version` is what forces the
+  // relink, so that is what this asserts — `needsUpdate` is a write-only setter
+  // whose entire observable effect is the version.
+  const root = new Group();
+  const single = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
+  const multi = new Mesh(new BoxGeometry(1, 1, 1), [new MeshStandardMaterial(), new MeshBasicMaterial()]);
+  const nested = new Group();
+  // Nested, because the scene is a tree and the terrain sits several levels down
+  // — a one-level walk would have looked green and fixed nothing on screen.
+  const deep = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
+  nested.add(deep);
+  root.add(single, multi, nested);
+  // A light carries no material and must not throw the walk off.
+  root.add(new DirectionalLight(0xffffff, 1));
+
+  const versionsBefore = [
+    (single.material as MeshStandardMaterial).version,
+    ...(multi.material as MeshStandardMaterial[]).map((entry) => entry.version),
+    (deep.material as MeshStandardMaterial).version,
+  ];
+  invalidateMaterialsForShadowToggle(root);
+  const versionsAfter = [
+    (single.material as MeshStandardMaterial).version,
+    ...(multi.material as MeshStandardMaterial[]).map((entry) => entry.version),
+    (deep.material as MeshStandardMaterial).version,
+  ];
+  assert.equal(versionsAfter.length, 4, "single, both slots of a multi-material, and a nested mesh");
+  versionsAfter.forEach((after, index) => {
+    assert.ok(after > versionsBefore[index]!, `material ${index} was flagged for a relink`);
+  });
 });
 
 check("scene runtime fits directional shadows around the whole room", () => {

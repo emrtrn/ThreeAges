@@ -308,6 +308,37 @@ export function fitDirectionalShadowToBounds(
   cam.updateProjectionMatrix();
 }
 
+/**
+ * Force every material under `root` to relink its program, after the master
+ * shadow toggle (`renderer.shadowMap.enabled`) has moved.
+ *
+ * three does not do this itself, and the failure is spectacular rather than
+ * subtle. `WebGLRenderer`'s `needsProgramChange` watches the *lights state*
+ * version, and flipping the master toggle changes neither the light count nor
+ * the number of casters — so a material keeps a program compiled with
+ * `USE_SHADOWMAP` while the renderer has stopped producing a shadow map. Its
+ * `sampler2DShadow` then points at nothing, and every draw call using that
+ * program fails with `GL_INVALID_OPERATION: Mismatch between texture format and
+ * sampler type`. What the player sees is the whole lit scene disappearing —
+ * terrain, buildings, characters — while unlit meshes and the sky keep drawing,
+ * which reads as a rendering collapse rather than as a shader mismatch and sends
+ * the search in entirely the wrong direction.
+ *
+ * Bumping `Material.version` is the documented remedy: it takes the renderer's
+ * `material.version !== __version` branch, which relinks unconditionally. The
+ * recompile is inherent — turning shadows off genuinely changes every lit shader
+ * — and callers pay it only on the frame a profile actually crosses the toggle,
+ * which is why they must track the previous value rather than call this on every
+ * profile change.
+ */
+export function invalidateMaterialsForShadowToggle(root: Object3D): void {
+  root.traverse((object) => {
+    const material = (object as { material?: { needsUpdate: boolean } | { needsUpdate: boolean }[] }).material;
+    if (!material) return;
+    for (const entry of Array.isArray(material) ? material : [material]) entry.needsUpdate = true;
+  });
+}
+
 export function applySceneBackgroundAndAmbient(options: {
   scene: Scene;
   ambientLight: AmbientLight | null;

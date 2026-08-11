@@ -145,6 +145,7 @@ import {
   DEFAULT_SCENE_SUN_ID,
   ensureDefaultSceneLights,
   fitDirectionalShadowToBounds,
+  invalidateMaterialsForShadowToggle,
   isSceneSunLight,
   readSceneRuntimeStats,
   readSceneRuntimeMemory,
@@ -774,6 +775,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * to the pre-quality-layer runtime until a profile is applied (Principle #2:
    * this only ever gates authored effects down, never writes layout data). */
   private qualitySettings: QualitySettings = resolveQualitySettings("ultra");
+  /**
+   * The shadow toggle the scene's materials were last compiled against. Null
+   * until the first profile applies. See {@link invalidateMaterialsForShadowToggle}
+   * for why crossing it has to be detected rather than read off the renderer.
+   */
+  private shadowsCompiledEnabled: boolean | null = null;
   /** Fork-provided Phase 7 content scaling; template profiles deliberately omit it. */
   private qualityExtensions: QualityExtensions = {};
   /** Adaptive quality controller (Faz 6). Owns the player's profile as its base
@@ -5204,6 +5211,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private applyRuntimeShadowQuality(): void {
     const quality = this.qualitySettings;
     this.renderer.shadowMap.enabled = quality.shadowsEnabled;
+    // Only when the toggle actually moves: three leaves every lit material on a
+    // stale program otherwise, and the whole lit scene stops drawing. See
+    // `invalidateMaterialsForShadowToggle`.
+    if (this.shadowsCompiledEnabled !== quality.shadowsEnabled) {
+      this.shadowsCompiledEnabled = quality.shadowsEnabled;
+      invalidateMaterialsForShadowToggle(this.scene);
+    }
     for (const record of this.lightObjects) {
       const light = record.light;
       if (!light.castShadow) continue;

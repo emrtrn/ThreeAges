@@ -121,6 +121,7 @@ import type { AuthoredWorldHandle } from "@/scene/authoredWorld";
 import {
   applySceneBackgroundAndAmbient,
   fitDirectionalShadowToBounds,
+  invalidateMaterialsForShadowToggle,
   resolveSceneWorldSettings,
 } from "@/scene/SceneRuntimeCore";
 import type { RoomLayout } from "@engine/scene/layout";
@@ -712,6 +713,12 @@ export class RtsApp {
   private readonly units = new UnitSystem();
   /** Invisible capsule casters that give the non-casting unit meshes a shadow. */
   private readonly unitShadows = new UnitShadowProxies();
+  /**
+   * The shadow toggle the scene's materials were last compiled against. Null
+   * until the first profile applies. See {@link recompileForShadowToggle} for
+   * why this has to be tracked rather than read off the renderer.
+   */
+  private shadowsCompiledEnabled: boolean | null = null;
   private readonly wildlife: WildlifeSystem;
   private readonly pasture: PastureSystem;
   private readonly wildlifeRetaliation: WildlifeRetaliationSystem;
@@ -1098,6 +1105,13 @@ export class RtsApp {
     // protects the match when many structures take damage on the same frame.
     this.structureDamageVfx.setMaxActiveInstances(Math.round(48 * settings.particleDensity));
     this.renderer.shadowMap.enabled = settings.shadowsEnabled;
+    // Only when the toggle actually moves: three leaves every lit material on a
+    // stale program otherwise, and the whole lit scene stops drawing. See
+    // `invalidateMaterialsForShadowToggle`.
+    if (this.shadowsCompiledEnabled !== settings.shadowsEnabled) {
+      this.shadowsCompiledEnabled = settings.shadowsEnabled;
+      invalidateMaterialsForShadowToggle(this.scene);
+    }
     // The unit shadow capsules exist only to be drawn into a shadow map. With no
     // shadow map they are a per-frame matrix rewrite and a draw call that has
     // never written a pixel, on exactly the profile that can least afford it.

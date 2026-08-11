@@ -32423,6 +32423,29 @@
         "bytes": 1162009
       },
       "license": "Unknown"
+    },
+    {
+      "id": "guard",
+      "name": "Guard",
+      "assetType": "skeletalMesh",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Guard.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 12014724
+      },
+      "license": "Unknown"
     }
   ]
 }
