@@ -95,6 +95,7 @@ import {
   levelHasAuthoredSun,
   levelHasAuthoredWorld,
   loadRtsAuthoredWorld,
+  rtsShadowBounds,
 } from "./world/rtsAuthoredWorld";
 import { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
 import {
@@ -117,7 +118,11 @@ import {
   resolvePostProcess,
 } from "@engine/render-three/postProcess";
 import type { AuthoredWorldHandle } from "@/scene/authoredWorld";
-import { applySceneBackgroundAndAmbient, resolveSceneWorldSettings } from "@/scene/SceneRuntimeCore";
+import {
+  applySceneBackgroundAndAmbient,
+  fitDirectionalShadowToBounds,
+  resolveSceneWorldSettings,
+} from "@/scene/SceneRuntimeCore";
 import type { RoomLayout } from "@engine/scene/layout";
 import { UnitSystem } from "./units/unitSystem";
 import { UnitShadowProxies } from "./units/unitShadowProxies";
@@ -639,13 +644,13 @@ export class RtsApp {
   private gpuSweepRestore: (() => void) | null = null;
   /** The configurations of the running sweep; empty when none is running. */
   private gpuSweepPlan: readonly { readonly id: string; readonly apply: () => () => void }[] = [];
-  /** Authored shadow frusta before the active profile scales their coverage. */
-  private readonly shadowCameraExtents = new WeakMap<DirectionalLight, {
-    readonly left: number;
-    readonly right: number;
-    readonly top: number;
-    readonly bottom: number;
-  }>();
+  /**
+   * The field's shadow-casting suns, cached so {@link refitShadowCameras} can run
+   * every frame. Traversing the scene for them at that rate is not affordable —
+   * the authored world is thousands of objects — and the fit itself is eight
+   * corner transforms per light.
+   */
+  private shadowLights: DirectionalLight[] = [];
   private readonly actorVisuals: RtsActorVisualFactory | null;
   private readonly buildingVisuals: RtsBuildingVisuals;
   private readonly mapArt: RtsMapArt;
@@ -1094,25 +1099,50 @@ export class RtsApp {
     );
     this.scene.traverse((object) => {
       if (!(object instanceof DirectionalLight) || !object.castShadow) return;
-      const camera = object.shadow.camera;
-      let base = this.shadowCameraExtents.get(object);
-      if (!base) {
-        base = { left: camera.left, right: camera.right, top: camera.top, bottom: camera.bottom };
-        this.shadowCameraExtents.set(object, base);
-      }
-      camera.left = base.left * settings.shadowDistanceScale;
-      camera.right = base.right * settings.shadowDistanceScale;
-      camera.top = base.top * settings.shadowDistanceScale;
-      camera.bottom = base.bottom * settings.shadowDistanceScale;
-      camera.updateProjectionMatrix();
       if (object.shadow.mapSize.width === settings.shadowMapSize) return;
       object.shadow.mapSize.set(settings.shadowMapSize, settings.shadowMapSize);
       object.shadow.map?.dispose();
       object.shadow.map = null;
     });
+    // After the resolution change, never before: the fit snaps the frustum to
+    // whole shadow-map texels, so it has to read the size this profile just set.
+    this.refitShadowCameras();
     this.resize();
     if (this.options.levelLayout) this.applyAuthoredPostProcess(this.options.levelLayout);
     this.syncQualityDebug();
+  }
+
+  /**
+   * Rebuilds the cached sun list after the lit scene changes — the fallback sun
+   * being added, an authored Level's lights mounting, the fallback retiring.
+   */
+  private refreshShadowLights(): void {
+    const lights: DirectionalLight[] = [];
+    if (this.codeSun) lights.push(this.codeSun);
+    for (const light of this.authoredWorld?.directionalLights ?? []) lights.push(light);
+    this.shadowLights = lights.filter((light) => light.castShadow);
+    this.refitShadowCameras();
+  }
+
+  /**
+   * Re-fits every sun's shadow frustum to the field box the active quality
+   * profile and camera focus imply.
+   *
+   * Runs per frame because below full coverage the box follows the camera. That
+   * is the whole point: three anchors a directional shadow frustum at the *light
+   * actor*, so a fixed world-space frustum shadows wherever the sun happens to
+   * stand and leaves the rest of the map — the port, the AI's half — permanently
+   * unshadowed, no matter where the player is looking.
+   */
+  private refitShadowCameras(): void {
+    if (this.shadowLights.length === 0) return;
+    const bounds = rtsShadowBounds(
+      this.cameraController.focusX,
+      this.cameraController.focusZ,
+      this.qualitySettings.shadowDistanceScale,
+    );
+    // Coverage is already carried by the box, so the fit itself never scales.
+    for (const light of this.shadowLights) fitDirectionalShadowToBounds(light, bounds);
   }
 
   /** Browser-testable witness of player intent and transient adaptive state. */
@@ -2161,17 +2191,15 @@ export class RtsApp {
     sun.position.set(40, 80, 30);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -80;
-    sun.shadow.camera.right = 80;
-    sun.shadow.camera.top = 80;
-    sun.shadow.camera.bottom = -80;
-    sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 260;
     this.scene.add(sun);
     // Kept referenced so an authored directional light (Faz E) can retire it once
     // the Level's world has actually loaded — never before, so a load failure
     // leaves the field lit by this fallback rather than dark.
     this.codeSun = sun;
+    // The frustum is not hand-written here any more: `refitShadowCameras` derives
+    // it from the field box and this light's own pose, so the fallback sun and an
+    // authored one are covered by the same rule.
+    this.refreshShadowLights();
 
     this.groundGroup = createRtsGround();
     this.scene.add(this.groundGroup);
@@ -2338,6 +2366,9 @@ export class RtsApp {
     // the map is not playing the match, and freezing it would trap the player
     // staring at whatever the last frame happened to show.
     this.cameraController.update(dt, this.input);
+    // Straight after the camera, because below full coverage the shadow box
+    // follows its ground focus — a frame late and the shadows lag the pan.
+    this.refitShadowCameras();
     this.perfCaptureSteps = 0;
     if (this.match.active && this.flow.running) {
       const simulationMark = this.perfMark();
@@ -4366,6 +4397,10 @@ export class RtsApp {
         this.codeSun.dispose();
         this.codeSun = null;
       }
+      // The suns the field is now lit by — the authored ones, and the fallback
+      // only if the Level authored none. Must precede the profile pass below,
+      // which re-fits whatever this list holds.
+      this.refreshShadowLights();
       // Authored lights arrive asynchronously, after the initial profile was
       // applied to the fallback sun. Bring their shadow maps under the same
       // live profile before the first authored-world frame is shown.

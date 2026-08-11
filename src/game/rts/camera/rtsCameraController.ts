@@ -69,6 +69,16 @@ export class RtsCameraController {
     this.camera.updateProjectionMatrix();
   }
 
+  /** World X of the ground point the camera is looking at. */
+  get focusX(): number {
+    return this.focus.x;
+  }
+
+  /** World Z of the ground point the camera is looking at. */
+  get focusZ(): number {
+    return this.focus.z;
+  }
+
   /** Recenter the camera focus (world XZ), clamped to bounds. */
   setFocus(x: number, z: number): void {
     this.focus.set(x, 0, z);

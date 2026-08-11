@@ -17,16 +17,49 @@ import { RTS_WORLD_HALF_EXTENT } from "./rtsGround";
 import type { PlanarReflectionQuality } from "@engine/render-three/planarReflectionSource";
 
 /**
- * Shadow frustum coverage for the field's sun. The X/Z extent spans the whole
- * playable field; the tall Y extent exists only to size the ortho `far` plane,
- * which {@link fitDirectionalShadowToBounds} derives from the box height — the
- * authored sun sits high above the field (y ≈ 80), so a short far would clip its
- * shadows away. This reproduces the legacy code sun's ~260-unit depth range.
+ * Vertical span the field's shadow casters live in: from below the deepest
+ * authored terrain to above the tallest structure or tree. Real geometry, not a
+ * safety number — {@link fitDirectionalShadowToBounds} fits the frustum to the
+ * box's *corners*, so an inflated height tilts into the ortho extent for a low
+ * sun and spends shadow-map texels on empty sky. The depth range (`near`/`far`)
+ * is derived from the light's own pose, so nothing here has to reserve for it.
  */
-const RTS_SHADOW_BOUNDS = new Box3(
-  new Vector3(-RTS_WORLD_HALF_EXTENT, -2, -RTS_WORLD_HALF_EXTENT),
-  new Vector3(RTS_WORLD_HALF_EXTENT, 220, RTS_WORLD_HALF_EXTENT),
+const RTS_SHADOW_MIN_Y = -12;
+const RTS_SHADOW_MAX_Y = 45;
+
+/**
+ * Shadow frustum coverage for the field's sun: the whole playable field. The
+ * backdrop art outside the world extent is deliberately excluded — it would
+ * enlarge the frustum for shadows that fall behind the map edge anyway.
+ */
+export const RTS_SHADOW_BOUNDS = new Box3(
+  new Vector3(-RTS_WORLD_HALF_EXTENT, RTS_SHADOW_MIN_Y, -RTS_WORLD_HALF_EXTENT),
+  new Vector3(RTS_WORLD_HALF_EXTENT, RTS_SHADOW_MAX_Y, RTS_WORLD_HALF_EXTENT),
 );
+
+/**
+ * The box a match's shadows are fitted to at a given quality coverage scale.
+ *
+ * At full coverage this is the whole field, so every structure on the map casts
+ * regardless of where the player is looking. Below it the box shrinks *around the
+ * camera's ground focus* rather than around a fixed world point: a shadow budget
+ * spent on the half of the map nobody is looking at is what produced "the port
+ * has no shadows". The box keeps its full size at the map edge (it slides rather
+ * than clips) so the fitted frustum stays a constant size as the camera pans,
+ * which is what lets the texel snap hold the shadow edges still.
+ */
+export function rtsShadowBounds(focusX: number, focusZ: number, coverageScale: number): Box3 {
+  const scale = Math.min(1, Math.max(0.05, coverageScale > 0 ? coverageScale : 1));
+  if (scale >= 1) return RTS_SHADOW_BOUNDS;
+  const half = RTS_WORLD_HALF_EXTENT * scale;
+  const limit = RTS_WORLD_HALF_EXTENT - half;
+  const centerX = Math.min(limit, Math.max(-limit, focusX));
+  const centerZ = Math.min(limit, Math.max(-limit, focusZ));
+  return new Box3(
+    new Vector3(centerX - half, RTS_SHADOW_MIN_Y, centerZ - half),
+    new Vector3(centerX + half, RTS_SHADOW_MAX_Y, centerZ + half),
+  );
+}
 
 /** Whether a Level authors any static world worth mounting (instances, lights or terrain). */
 export function levelHasAuthoredWorld(layout: RoomLayout): boolean {

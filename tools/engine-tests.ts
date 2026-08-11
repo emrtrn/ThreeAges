@@ -239,7 +239,11 @@ import {
   requireRtsLevelRef,
   resolveRtsLevelRef,
 } from "../src/game/rts/world/rtsLevelRef";
-import { levelHasAuthoredWorld } from "../src/game/rts/world/rtsAuthoredWorld";
+import {
+  levelHasAuthoredWorld,
+  RTS_SHADOW_BOUNDS,
+  rtsShadowBounds,
+} from "../src/game/rts/world/rtsAuthoredWorld";
 import {
   RTS_PLACEMENT_GRID_SIZE,
   buildingFootprintBlocker,
@@ -1334,6 +1338,7 @@ import {
   Fog,
   FogExp2,
   Float32BufferAttribute,
+  Frustum,
   Group,
   Matrix4,
   Mesh,
@@ -1889,36 +1894,77 @@ check("scene runtime room bounds unions placements and honors asset filters", ()
   assert.deepEqual(roomBounds?.max.toArray(), [2, 1, 3]);
 });
 
-check("scene runtime fits directional shadows from room bounds", () => {
+check("scene runtime fits directional shadows around the whole room", () => {
+  // The frustum three.js actually renders the shadow map with, built the way
+  // `WebGLShadowMap` does: pose the camera at the light, then intersect.
+  const shadowFrustum = (light: DirectionalLight): Frustum => {
+    light.shadow.updateMatrices(light);
+    const camera = light.shadow.camera;
+    return new Frustum().setFromProjectionMatrix(
+      new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+    );
+  };
+  const corners = (box: Box3): Vector3[] => {
+    const out: Vector3[] = [];
+    for (let index = 0; index < 8; index += 1) {
+      out.push(new Vector3(
+        index & 1 ? box.max.x : box.min.x,
+        index & 2 ? box.max.y : box.min.y,
+        index & 4 ? box.max.z : box.min.z,
+      ));
+    }
+    return out;
+  };
+
+  // The regression this pins: three anchors a directional shadow camera at the
+  // *light*, so a sun authored low and off to one side — the RTS field's sits at
+  // y≈4, x≈-28 — covered only the slab in front of itself. Half the map (the
+  // port, the AI's base) rendered with no shadows at all, and the far side of the
+  // box sat behind a positive `near` plane. Every corner must be inside.
+  const room = new Box3(new Vector3(-70, -12, -70), new Vector3(70, 45, 70));
   const sun = new DirectionalLight();
-  fitDirectionalShadowToBounds(
-    sun,
-    new Box3(new Vector3(-5, 0, -2), new Vector3(5, 4, 2)),
-  );
+  sun.position.set(-28, 4, 5);
+  sun.target.position.set(-28.64, 3.51, 5.59);
+  fitDirectionalShadowToBounds(sun, room);
+  for (const corner of corners(room)) {
+    assert.ok(
+      shadowFrustum(sun).containsPoint(corner),
+      `room corner ${corner.toArray().join(",")} fell outside the shadow frustum`,
+    );
+  }
+  // A sun standing inside the world puts part of the room behind itself; an
+  // orthographic frustum may reach backwards, and refusing to was the bug.
+  assert.ok(sun.shadow.camera.near < 0);
 
-  assert.equal(sun.shadow.camera.left, -7);
-  assert.equal(sun.shadow.camera.right, 7);
-  assert.equal(sun.shadow.camera.top, 7);
-  assert.equal(sun.shadow.camera.bottom, -7);
-  assert.equal(sun.shadow.camera.far, 34);
+  // A high, centred sun is fitted just as tightly — the coverage tracks the room,
+  // never a fixed multiple of it.
+  const overhead = new DirectionalLight();
+  overhead.position.set(0, 200, 0.001);
+  fitDirectionalShadowToBounds(overhead, room);
+  for (const corner of corners(room)) {
+    assert.ok(
+      shadowFrustum(overhead).containsPoint(corner),
+      `room corner ${corner.toArray().join(",")} fell outside the overhead frustum`,
+    );
+  }
+  assert.ok(overhead.shadow.camera.right - overhead.shadow.camera.left < 200);
 
-  // Quality shadowDistanceScale shrinks the coverage extent only; far is intact
-  // (never clip shadow depth). scale 0.5 → half 3.5, far still 34.
-  fitDirectionalShadowToBounds(
-    sun,
-    new Box3(new Vector3(-5, 0, -2), new Vector3(5, 4, 2)),
-    0.5,
-  );
-  assert.equal(sun.shadow.camera.right, 3.5);
-  assert.equal(sun.shadow.camera.top, 3.5);
-  assert.equal(sun.shadow.camera.far, 34);
+  // Quality shadowDistanceScale shrinks the coverage extent only; the depth range
+  // is intact (shrinking coverage must never clip a caster out of the map).
+  fitDirectionalShadowToBounds(sun, room);
+  const fullWidth = sun.shadow.camera.right - sun.shadow.camera.left;
+  const fullHeight = sun.shadow.camera.top - sun.shadow.camera.bottom;
+  const fullNear = sun.shadow.camera.near;
+  const fullFar = sun.shadow.camera.far;
+  fitDirectionalShadowToBounds(sun, room, 0.5);
+  const halved = sun.shadow.camera;
+  assert.ok(Math.abs((halved.right - halved.left) / fullWidth - 0.5) < 0.02);
+  assert.ok(Math.abs((halved.top - halved.bottom) / fullHeight - 0.5) < 0.02);
+  assert.equal(halved.near, fullNear);
+  assert.equal(halved.far, fullFar);
   // A non-positive scale falls back to 1 (no shrink).
-  fitDirectionalShadowToBounds(
-    sun,
-    new Box3(new Vector3(-5, 0, -2), new Vector3(5, 4, 2)),
-    0,
-  );
-  assert.equal(sun.shadow.camera.right, 7);
+  fitDirectionalShadowToBounds(sun, room, 0);
+  assert.ok(Math.abs(sun.shadow.camera.right - sun.shadow.camera.left - fullWidth) < 1e-6);
 });
 
 check("scene runtime applies background and ambient light lifecycle", () => {
@@ -35633,6 +35679,40 @@ check("Landscape Faz 4: the gameplay proof Level authors a mountable Landscape t
   // The synchronous gate RtsApp reads to decide it will mount an authored world
   // (and, once mounted, retire the flat ground) must see the terrain.
   assert.equal(levelHasAuthoredWorld(layout as never), true, "an authored Landscape counts as a mountable world");
+});
+
+check("RTS shadow coverage spans the field, and follows the camera when it shrinks", () => {
+  // Full coverage is the whole playable field regardless of where the player is
+  // looking: at the top profile every structure on the map casts a shadow, which
+  // is the property that "the port has no shadows" violated.
+  for (const focus of [[0, 0], [60, -60], [-65, 65]] as const) {
+    const box = rtsShadowBounds(focus[0], focus[1], 1);
+    assert.equal(box.min.x, -RTS_WORLD_HALF_EXTENT);
+    assert.equal(box.max.z, RTS_WORLD_HALF_EXTENT);
+  }
+  // The field box must reach the map edge, or the rim is never shadowed.
+  assert.equal(RTS_SHADOW_BOUNDS.max.x, RTS_WORLD_HALF_EXTENT);
+  assert.ok(RTS_SHADOW_BOUNDS.max.y > RTS_SHADOW_BOUNDS.min.y, "the box has a real vertical span");
+
+  // Below full coverage the box follows the camera's ground focus rather than a
+  // fixed world point — a shadow budget spent on the half of the map nobody is
+  // looking at is exactly the reported bug in a cheaper disguise.
+  const near = rtsShadowBounds(50, -40, 0.5);
+  assert.ok(near.containsPoint(new Vector3(50, 0, -40)), "the reduced box covers what the camera looks at");
+  assert.ok(!near.containsPoint(new Vector3(-50, 0, 40)), "and gives up the far side of the map");
+
+  // Constant size as it pans (it slides at the edge instead of clipping): the
+  // fitted frustum stays one size, which is what lets its texel snap hold the
+  // shadow edges still instead of letting them crawl.
+  const middle = rtsShadowBounds(0, 0, 0.5);
+  const edge = rtsShadowBounds(400, -400, 0.5);
+  assert.ok(Math.abs((edge.max.x - edge.min.x) - (middle.max.x - middle.min.x)) < 1e-9);
+  assert.ok(edge.max.x <= RTS_WORLD_HALF_EXTENT + 1e-9, "and never slides off the field");
+  assert.ok(edge.min.z >= -RTS_WORLD_HALF_EXTENT - 1e-9);
+  // Every coverage level keeps the same vertical span: shrinking ground coverage
+  // must never drop a tall caster out of the box.
+  assert.equal(near.min.y, RTS_SHADOW_BOUNDS.min.y);
+  assert.equal(near.max.y, RTS_SHADOW_BOUNDS.max.y);
 });
 
 check("Assetization Faz D: the authored Level keeps both flanks and the enemy base route reachable", () => {
