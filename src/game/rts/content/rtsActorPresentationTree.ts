@@ -35,6 +35,9 @@ function readVec3(value: unknown): [number, number, number] | null {
  */
 export type TintedMaterialResolver = (material: Material, tint: string) => Material;
 
+/** Resolves an Actor component's authored material-slot override. */
+export type ComponentMaterialResolver = (materialId: string) => Material | undefined;
+
 const defaultTintedMaterial: TintedMaterialResolver = (material, tint) => tintedCopy(material, tint);
 
 /** Clone a material and recolour it, leaving every other authored property alone. */
@@ -62,6 +65,13 @@ function applyMaterialTint(model: Object3D, tint: string, resolve: TintedMateria
     child.material = Array.isArray(child.material)
       ? child.material.map((entry) => resolve(entry, tint))
       : resolve(child.material, tint);
+  });
+}
+
+/** Apply one authored material to every primitive rendered by a mesh component. */
+function applyComponentMaterial(model: Object3D, material: Material): void {
+  model.traverse((child) => {
+    if (child instanceof Mesh) child.material = material;
   });
 }
 
@@ -96,6 +106,7 @@ export function buildActorPresentationTree(
   name: string,
   resolveTemplate: (assetId: string) => Object3D | undefined,
   resolveTintedMaterial: TintedMaterialResolver = defaultTintedMaterial,
+  resolveComponentMaterial?: ComponentMaterialResolver,
 ): Group {
   const root = new Group();
   root.name = `rts-actor-presentation:${name}`;
@@ -155,6 +166,11 @@ export function buildActorPresentationTree(
         child.receiveShadow = true;
       }
     });
+    const materialSlot = component.props.materialSlot;
+    if (typeof materialSlot === "string" && materialSlot.length > 0) {
+      const material = resolveComponentMaterial?.(materialSlot);
+      if (material) applyComponentMaterial(model, material);
+    }
     // Role and faction readability on a one-character pack: every unit is the
     // same rig, told apart by an authored tint — and the Guard authors one per
     // owner, so the two armies read apart at a glance. Untinted components (the

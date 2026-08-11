@@ -29,7 +29,8 @@
           0,
           0,
           0
-        ]
+        ],
+        "materialSlot": "m-guard-material"
       },
       "parent": "root"
     }

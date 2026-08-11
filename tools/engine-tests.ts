@@ -39365,6 +39365,35 @@ check("Skeletal animasyon Faz F: rol tinti klonu boyar, sabloni ve material payl
   assert.equal(built, 2, "keyed by tint as well as by source material");
 });
 
+check("RTS AI guard material slot is applied per Actor without changing the shared Guard template", () => {
+  const def = normalizeActorScriptDef({
+    schema: 1,
+    type: "actor",
+    name: "BP_RTS_Enemy_Guard",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "guardMesh", component: "SkeletalMeshComponent", parent: "root", props: { assetId: "guard", materialSlot: "m-guard-ai-material" } },
+    ],
+  }, "BP_RTS_Enemy_Guard");
+  const original = new MeshStandardMaterial({ color: "#ffffff" });
+  const ai = new MeshStandardMaterial({ color: "#ffffff" });
+  const template = new Group();
+  const source = new Mesh(new BoxGeometry(1, 1, 1), original);
+  source.name = "guard-body";
+  template.add(source);
+
+  const tree = buildActorPresentationTree(
+    def,
+    "BP_RTS_Enemy_Guard",
+    () => template,
+    undefined,
+    (id) => id === "m-guard-ai-material" ? ai : undefined,
+  );
+  const body = tree.getObjectByName("guard-body") as Mesh;
+  assert.equal(body.material, ai, "the AI Actor uses its authored material slot");
+  assert.equal(source.material, original, "the shared Guard template remains on its default material");
+});
+
 check("Skeletal animasyon Faz F: isci sitesinde calisir, yolda degil", () => {
   // Worker speed, so the thresholds are the ones a Worker actually crosses.
   const tuning = rtsLocomotionTuning(4);

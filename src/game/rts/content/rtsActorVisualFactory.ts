@@ -499,6 +499,16 @@ export class RtsActorVisualFactory {
       .map(async (node) => {
         const assetId = node.props.assetId as string;
         const asset = this.manifestMeshes.get(assetId)!;
+        const materialSlot = node.props.materialSlot;
+        if (typeof materialSlot === "string" && materialSlot.length > 0) {
+          const material = await this.slotMaterial(materialSlot);
+          if (!material) {
+            throw new RtsActorPresentationError(
+              ref,
+              `mesh component "${node.id}" could not load material slot "${materialSlot}"`,
+            );
+          }
+        }
         try {
           this.templates.set(assetId, await this.templateFor(assetId, asset.path));
         } catch (cause) {
@@ -641,6 +651,7 @@ export class RtsActorVisualFactory {
       ref,
       (assetId) => this.templates.get(assetId)?.scene,
       (material, tint) => this.tintedMaterial(material, tint),
+      (materialId) => this.slotMaterials.get(materialId) ?? undefined,
     );
   }
 
