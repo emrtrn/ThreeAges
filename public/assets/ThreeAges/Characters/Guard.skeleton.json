@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "sockets": [],
+  "animationSet": {},
+  "blendSpaces": [],
+  "notifies": [],
+  "montages": [],
+  "rootMotion": [
+    {
+      "clip": "guard_sword_and_shield_walk_1",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_shield_walk_2",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_shield_run_1",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_shield_run_2",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_shield_strafe_1",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_shield_strafe_2",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_shield_strafe_3",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_shield_strafe_4",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_sheld_attack_1",
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_sheld_attack_2",
+      "mode": "driveMotion"
+    },
+    {
+      "clip": "guard_sword_and_sheld_attack_3",
+      "mode": "driveMotion"
+    },
+    {
+      "clip": "guard_sword_and_shield_jump_1",
+      "mode": "lockXZ"
+    }
+  ],
+  "physicsBodies": [],
+  "physicsConstraints": [],
+  "preview": {
+    "selectedClip": "guard_sword_and_shield_jump_1"
+  }
+}

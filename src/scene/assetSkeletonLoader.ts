@@ -5,7 +5,12 @@
  * in `src/editor/assetSkeletonStore.ts`.
  */
 import type { Vec3 } from "@engine/scene/layout";
+import { ROOT_MOTION_MODES, ROOT_MOTION_UP_AXES } from "@engine/render-three/rootMotion";
+import type { RootMotionMode, RootMotionUpAxis } from "@engine/render-three/rootMotion";
 import { projectFileUrl } from "@/project/ProjectSystem";
+
+export { ROOT_MOTION_MODES, ROOT_MOTION_UP_AXES };
+export type { RootMotionMode, RootMotionUpAxis };
 
 /**
  * Semantic clip roles an asset may author. `idle`/`walk`/`run`/`jump`/`fall`/
@@ -194,13 +199,13 @@ export interface AssetSkeletonMontageSectionDef {
   loop: boolean;
 }
 
-export const ROOT_MOTION_MODES = ["preserve", "lockXZ", "lockXYZ"] as const;
-export type RootMotionMode = (typeof ROOT_MOTION_MODES)[number];
-
 /**
- * Per-clip root-motion playback policy. `lockXZ` keeps vertical root bob/jumps
- * but removes horizontal drift; `lockXYZ` fully pins the root translation to
- * the clip's first frame. The source GLTF is not rewritten.
+ * Per-clip root-motion playback policy; the modes themselves are defined by the
+ * runtime that applies them, so the sidecar and the player cannot drift apart.
+ * `lockXZ` keeps vertical root bob/jumps but removes horizontal travel;
+ * `lockXYZ` fully pins the root translation to the clip's first frame;
+ * `driveMotion` declares that gameplay moves the actor for this clip. The
+ * source GLTF is never rewritten.
  */
 export interface AssetSkeletonRootMotionDef {
   /** Clip name carried by the asset. */
@@ -208,6 +213,8 @@ export interface AssetSkeletonRootMotionDef {
   mode: RootMotionMode;
   /** Optional animated node to pin; absent means auto-detect a root-like node. */
   rootNode?: string;
+  /** Overrides the auto-detected vertical axis of the root's position track. */
+  upAxis?: RootMotionUpAxis;
 }
 
 export interface AssetSkeletonPreviewPrefs {
@@ -380,6 +387,9 @@ function normalizeRootMotion(value: unknown): AssetSkeletonRootMotionDef[] {
     };
     if (typeof input.rootNode === "string" && input.rootNode.length > 0) {
       entry.rootNode = input.rootNode;
+    }
+    if (ROOT_MOTION_UP_AXES.includes(input.upAxis as RootMotionUpAxis)) {
+      entry.upAxis = input.upAxis as RootMotionUpAxis;
     }
     result.push(entry);
   }

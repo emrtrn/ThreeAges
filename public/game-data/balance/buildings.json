@@ -396,8 +396,8 @@
       "depth": 6
     },
     "cost": {
-      "wood": 200,
-      "stone": 100
+      "wood": 100,
+      "stone": 50
     },
     "constructionSeconds": 18,
     "requiredSettlementLevel": 3,

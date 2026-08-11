@@ -51,7 +51,8 @@ export class CrossfadeAnimator {
     options: { readonly rootMotion?: readonly RootMotionClipSetting[] } = {},
   ) {
     this.mixer = new AnimationMixer(root);
-    for (const clip of applyRootMotionToClips(clips, options.rootMotion)) {
+    // `root` also resolves which track axis is vertical, which is rig-dependent.
+    for (const clip of applyRootMotionToClips(clips, options.rootMotion, root)) {
       this.actions.set(clip.name, this.mixer.clipAction(clip));
     }
     this.clips = new Set(this.actions.keys());

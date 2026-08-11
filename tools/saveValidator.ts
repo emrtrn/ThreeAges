@@ -2610,7 +2610,8 @@ const SKELETON_ANIMATION_SET_ROLES = [
   "attack",
   "death",
 ] as const;
-const SKELETON_ROOT_MOTION_MODES = ["preserve", "lockXZ", "lockXYZ"] as const;
+const SKELETON_ROOT_MOTION_MODES = ["preserve", "lockXZ", "lockXYZ", "driveMotion"] as const;
+const SKELETON_ROOT_MOTION_UP_AXES = ["x", "y", "z"] as const;
 
 function validateAnimationSet(value: unknown): Record<string, string> {
   if (value === undefined || value === null) return {};
@@ -2875,6 +2876,16 @@ function validateRootMotion(value: unknown): Record<string, unknown>[] {
         throw new Error(`${label}.rootNode must be a node name string`);
       }
       output.rootNode = input.rootNode;
+    }
+    if (input.upAxis !== undefined && input.upAxis !== null && input.upAxis !== "") {
+      if (
+        !SKELETON_ROOT_MOTION_UP_AXES.includes(
+          input.upAxis as (typeof SKELETON_ROOT_MOTION_UP_AXES)[number],
+        )
+      ) {
+        throw new Error(`${label}.upAxis must be one of ${SKELETON_ROOT_MOTION_UP_AXES.join(", ")}`);
+      }
+      output.upAxis = input.upAxis;
     }
     return output;
   });

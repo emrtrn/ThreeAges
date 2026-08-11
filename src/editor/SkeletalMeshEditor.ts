@@ -38,7 +38,15 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 import { VertexNormalsHelper } from "three/examples/jsm/helpers/VertexNormalsHelper.js";
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
-import { applyRootMotionToClips, rootMotionPositionNodes } from "@engine/render-three/rootMotion";
+import {
+  ROOT_MOTION_UP_AXES,
+  applyRootMotionToClips,
+  resolveRootMotionNode,
+  resolveRootMotionUpAxis,
+  rootMotionClipDisplacement,
+  rootMotionPositionNodes,
+} from "@engine/render-three/rootMotion";
+import type { RootMotionUpAxis } from "@engine/render-three/rootMotion";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import type { Entity } from "@engine/scene/entity";
 import type { Vec3 } from "@engine/scene/layout";
@@ -151,6 +159,14 @@ interface PhysicsOverlay {
 interface ConstraintOverlay {
   line: Line;
   constraint: AssetSkeletonPhysicsConstraintDef;
+}
+
+/** Inner scroll boxes of the details panel whose position survives a re-render. */
+const DETAILS_SCROLL_PANES = [".sm-clip-list", ".sm-bone-tree"] as const;
+
+interface DetailsScroll {
+  host: number;
+  panes: Map<string, number>;
 }
 
 export class SkeletalMeshEditor {
@@ -375,7 +391,7 @@ export class SkeletalMeshEditor {
     const root = this.modelRoot;
     if (!root) return;
     this.mixer?.stopAllAction();
-    this.playbackClips = applyRootMotionToClips(this.clips, this.skeleton.rootMotion);
+    this.playbackClips = applyRootMotionToClips(this.clips, this.skeleton.rootMotion, root);
     this.playbackClipByName.clear();
     for (const clip of this.playbackClips) this.playbackClipByName.set(clip.name, clip);
     this.animator = new CrossfadeAnimator(root, this.playbackClips);
@@ -693,6 +709,7 @@ export class SkeletalMeshEditor {
   }
 
   private renderDetails(): void {
+    const scroll = this.captureDetailsScroll();
     const modeBody =
       this.mode === "animation"
         ? this.renderAnimationDetails()
@@ -706,6 +723,32 @@ export class SkeletalMeshEditor {
       ${this.renderMeshDetails()}
     `;
     this.bindDetails();
+    this.restoreDetailsScroll(scroll);
+  }
+
+  /**
+   * The details panel is rebuilt with innerHTML on every state change, which
+   * would otherwise snap the panel and its inner lists (clips, bones) back to
+   * the top - stepping through clips one by one loses the reading position.
+   */
+  private captureDetailsScroll(): DetailsScroll {
+    const panes = new Map<string, number>();
+    for (const selector of DETAILS_SCROLL_PANES) {
+      const pane = this.detailsHost.querySelector<HTMLElement>(selector);
+      if (pane) panes.set(selector, pane.scrollTop);
+    }
+    return { host: this.detailsHost.scrollTop, panes };
+  }
+
+  private restoreDetailsScroll(scroll: DetailsScroll): void {
+    this.detailsHost.scrollTop = scroll.host;
+    for (const [selector, top] of scroll.panes) {
+      const pane = this.detailsHost.querySelector<HTMLElement>(selector);
+      if (pane) pane.scrollTop = top;
+    }
+    this.detailsHost
+      .querySelector<HTMLElement>(".sm-clip-row.is-selected")
+      ?.scrollIntoView({ block: "nearest" });
   }
 
   private renderSkeletonDetails(): string {
@@ -896,6 +939,13 @@ export class SkeletalMeshEditor {
   private renderRootMotionDetails(clip: AnimationClip): string {
     const setting = this.rootMotionSetting(clip.name);
     const mode = setting?.mode ?? "preserve";
+    const rootNode = resolveRootMotionNode(clip, setting?.rootNode);
+    // The position track lives in the root's parent space, which is Y-up only by
+    // convention - show which axis was actually detected so a wrong auto-guess
+    // is visible instead of quietly locking the wrong pair.
+    const detectedAxis = rootNode
+      ? resolveRootMotionUpAxis(rootNode, undefined, this.modelRoot ?? undefined)
+      : "y";
     return `
       <div class="sm-section">
         <div class="sm-section-title">Root Motion</div>
@@ -913,8 +963,38 @@ export class SkeletalMeshEditor {
             ${this.rootMotionNodeOptions(clip, setting?.rootNode ?? "")}
           </select>
         </label>
-        <div class="sm-hint">In-place modes pin the chosen node's position track during playback; the source GLTF stays unchanged.</div>
+        <label class="sm-row">
+          <span>Up Axis</span>
+          <select data-skel-root-motion-up="${escapeHtml(clip.name)}" ${mode === "lockXZ" ? "" : "disabled"}>
+            <option value="" ${setting?.upAxis ? "" : "selected"}>Auto (${detectedAxis.toUpperCase()})</option>
+            ${ROOT_MOTION_UP_AXES.map(
+              (axis) =>
+                `<option value="${axis}" ${axis === setting?.upAxis ? "selected" : ""}>${axis.toUpperCase()}</option>`,
+            ).join("")}
+          </select>
+        </label>
+        ${this.renderRootMotionTravel(clip, setting)}
+        <div class="sm-hint">${rootMotionModeHint(mode, setting?.upAxis ?? detectedAxis)}</div>
       </div>
+    `;
+  }
+
+  /**
+   * What the clip actually travels, measured from its own keys. For a
+   * `driveMotion` clip this is the figure gameplay code must apply to the actor,
+   * so it beats hard-coding a guessed lunge distance.
+   */
+  private renderRootMotionTravel(
+    clip: AnimationClip,
+    setting: AssetSkeletonRootMotionDef | null,
+  ): string {
+    const travel = rootMotionClipDisplacement(clip, setting ?? undefined, this.modelRoot ?? undefined);
+    if (!travel) return "";
+    const horizontal = Math.hypot(travel.x, travel.z);
+    const speed = clip.duration > 0 ? horizontal / clip.duration : 0;
+    return `
+      <div class="sm-row"><span>Measured Travel</span><strong>${horizontal.toFixed(2)} fwd / ${travel.y.toFixed(2)} up</strong></div>
+      <div class="sm-row"><span>Travel Speed</span><strong>${speed.toFixed(2)} /s over ${clip.duration.toFixed(2)}s</strong></div>
     `;
   }
 
@@ -1251,6 +1331,11 @@ export class SkeletalMeshEditor {
     this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-skel-root-motion-node]").forEach((select) => {
       select.addEventListener("change", () => {
         this.setRootMotionNode(select.dataset.skelRootMotionNode ?? "", select.value);
+      });
+    });
+    this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-skel-root-motion-up]").forEach((select) => {
+      select.addEventListener("change", () => {
+        this.setRootMotionUpAxis(select.dataset.skelRootMotionUp ?? "", select.value);
       });
     });
     this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-skel-role]").forEach((select) => {
@@ -2511,6 +2596,7 @@ export class SkeletalMeshEditor {
         clip: clipName,
         mode,
         ...(current?.rootNode ? { rootNode: current.rootNode } : {}),
+        ...(current?.upAxis ? { upAxis: current.upAxis } : {}),
       };
       this.skeleton = {
         ...this.skeleton,
@@ -2527,6 +2613,23 @@ export class SkeletalMeshEditor {
     if (!current || current.mode === "preserve") return;
     const next: AssetSkeletonRootMotionDef = { clip: clipName, mode: current.mode };
     if (rootNode) next.rootNode = rootNode;
+    if (current.upAxis) next.upAxis = current.upAxis;
+    this.skeleton = {
+      ...this.skeleton,
+      rootMotion: upsertRootMotion(this.skeleton.rootMotion, next),
+    };
+    this.markDirty();
+    this.restartSelectedClipPreview();
+  }
+
+  private setRootMotionUpAxis(clipName: string, upAxis: string): void {
+    const current = this.rootMotionSetting(clipName);
+    if (!current || current.mode === "preserve") return;
+    const next: AssetSkeletonRootMotionDef = { clip: clipName, mode: current.mode };
+    if (current.rootNode) next.rootNode = current.rootNode;
+    if (ROOT_MOTION_UP_AXES.includes(upAxis as RootMotionUpAxis)) {
+      next.upAxis = upAxis as RootMotionUpAxis;
+    }
     this.skeleton = {
       ...this.skeleton,
       rootMotion: upsertRootMotion(this.skeleton.rootMotion, next),
@@ -3141,9 +3244,26 @@ function upsertRootMotion(
 }
 
 function rootMotionModeLabel(mode: RootMotionMode): string {
-  if (mode === "lockXZ") return "In Place: Lock XZ";
-  if (mode === "lockXYZ") return "In Place: Lock XYZ";
+  // "Horizontal"/"All", not "XZ"/"XYZ": which track components are horizontal
+  // depends on the rig's up axis, so naming them by axis letter misleads.
+  if (mode === "lockXZ") return "In Place: Lock Horizontal";
+  if (mode === "lockXYZ") return "In Place: Lock All";
+  if (mode === "driveMotion") return "Root Motion -> Gameplay";
   return "Preserve Root Motion";
+}
+
+function rootMotionModeHint(mode: RootMotionMode, upAxis: RootMotionUpAxis): string {
+  const axis = upAxis.toUpperCase();
+  if (mode === "lockXZ") {
+    return `Horizontal travel is removed and the vertical axis (${axis}) is kept, so jump arcs and walk bob survive. The source GLTF stays unchanged.`;
+  }
+  if (mode === "lockXYZ") {
+    return "The root is pinned to the clip's first frame on all three axes. The source GLTF stays unchanged.";
+  }
+  if (mode === "driveMotion") {
+    return "Declares that gameplay owns this clip's travel: playback is left as authored, and the measured travel above is what your code must apply to the actor. No runtime driver moves the capsule yet.";
+  }
+  return "The clip plays exactly as authored and nothing moves the actor.";
 }
 
 function emptyStats(): MeshStats {

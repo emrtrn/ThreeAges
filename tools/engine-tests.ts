@@ -889,7 +889,12 @@ import {
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
 import { LayeredCharacterAnimator } from "../engine/render-three/layeredCharacterAnimator";
-import { applyRootMotionToClip, rootMotionPositionNodes } from "../engine/render-three/rootMotion";
+import {
+  applyRootMotionToClip,
+  resolveRootMotionUpAxis,
+  rootMotionClipDisplacement,
+  rootMotionPositionNodes,
+} from "../engine/render-three/rootMotion";
 import { createCharacterSceneObject, entityCharacterItem } from "../engine/render-three/models";
 import {
   DEFAULT_GAME_MODE_ID,
@@ -10039,6 +10044,105 @@ check("root motion clip filtering can pin XYZ on an authored root node", () => {
   assert.deepEqual(Array.from(filtered.tracks[0]!.values), [0, 4, 0, 0, 4, 0]);
   assert.deepEqual(Array.from(filtered.tracks[1]!.values), [10, 1, 10, 12, 2, 12]);
   assert.deepEqual(rootMotionPositionNodes(clip), ["Armature", "Hips"]);
+});
+
+// A rig exported from a Z-up tool carries the conversion on an intermediate
+// node, so the root's position track has its vertical on Z and its travel on Y.
+// Assuming index 1 is vertical strips the jump height and leaves the forward
+// drift running, which is the whole point of these four checks.
+const buildZUpConvertedRig = (): Object3D => {
+  const root = new Object3D();
+  root.name = "Guard_Root";
+  root.scale.setScalar(0.01);
+  const rig = new Object3D();
+  rig.name = "Guard_Rig";
+  rig.quaternion.setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2);
+  root.add(rig);
+  const hips = new Object3D();
+  hips.name = "mixamorigHips";
+  rig.add(hips);
+  return root;
+};
+
+const buildYUpRig = (): Object3D => {
+  const root = new Object3D();
+  root.name = "Hero_Root";
+  const hips = new Object3D();
+  hips.name = "mixamorigHips";
+  root.add(hips);
+  return root;
+};
+
+/** Guard's jump_1 in miniature: travel on local Y, the jump arc on local Z. */
+const buildZUpJumpClip = (): AnimationClip =>
+  new AnimationClip("jump", 1, [
+    new VectorKeyframeTrack("mixamorigHips.position", [0, 0.5, 1], [0, 0, -85, 0, 120, -152, 0, 245, -85]),
+  ]);
+
+check("root motion up axis is derived from the rig, not assumed to be Y", () => {
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", undefined, buildZUpConvertedRig()), "z");
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", undefined, buildYUpRig()), "y");
+  // An authored override wins, and an unknown rig falls back to Y.
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", "x", buildZUpConvertedRig()), "x");
+  assert.equal(resolveRootMotionUpAxis("mixamorigHips", undefined, undefined), "y");
+});
+
+check("lockXZ keeps the rig's own vertical axis and removes its travel axis", () => {
+  const setting = { clip: "jump", mode: "lockXZ" } as const;
+
+  const zUp = applyRootMotionToClip(buildZUpJumpClip(), setting, buildZUpConvertedRig());
+  // Travel (local Y) is pinned to the first key; the arc (local Z) survives.
+  assert.deepEqual(Array.from(zUp.tracks[0]!.values), [0, 0, -85, 0, 0, -152, 0, 0, -85]);
+
+  const yUp = applyRootMotionToClip(buildZUpJumpClip(), setting, buildYUpRig());
+  // Same clip, Y-up rig: now Y is the axis worth keeping and Z gets pinned.
+  assert.deepEqual(Array.from(yUp.tracks[0]!.values), [0, 0, -85, 0, 120, -85, 0, 245, -85]);
+
+  const override = applyRootMotionToClip(
+    buildZUpJumpClip(),
+    { clip: "jump", mode: "lockXZ", upAxis: "y" },
+    buildZUpConvertedRig(),
+  );
+  assert.deepEqual(Array.from(override.tracks[0]!.values), Array.from(yUp.tracks[0]!.values));
+});
+
+check("driveMotion leaves playback untouched and reports the clip's real travel", () => {
+  const clip = buildZUpJumpClip();
+  const setting = { clip: "jump", mode: "driveMotion" } as const;
+
+  // Gameplay owns the movement, so the clip must reach the mixer as authored.
+  assert.equal(applyRootMotionToClip(clip, setting, buildZUpConvertedRig()), clip);
+
+  // Local delta (0, 245, 0) maps through the +90 X conversion and the 0.01 root
+  // scale to 2.45 forward and 0 up - the number gameplay must apply itself.
+  const travel = rootMotionClipDisplacement(clip, setting, buildZUpConvertedRig());
+  assert.ok(travel, "expected a measured displacement");
+  assert.ok(Math.abs(Math.hypot(travel.x, travel.z) - 2.45) < 1e-4, `forward travel was ${travel.x},${travel.z}`);
+  assert.ok(Math.abs(travel.y) < 1e-4, `vertical travel was ${travel.y}`);
+});
+
+check("root motion locking survives glTF CUBICSPLINE tracks", () => {
+  // CUBICSPLINE keys are [inTangent, value, outTangent]; a naive stride of 3
+  // would treat tangents as poses and lock the wrong floats.
+  const track = new VectorKeyframeTrack(
+    "mixamorigHips.position",
+    [0, 1],
+    [0, 0, 0, 0, 0, -85, 0, 0, 0, 0, 0, 0, 0, 245, -85, 0, 0, 0],
+  );
+  const clip = new AnimationClip("jump", 1, [track]);
+
+  const locked = applyRootMotionToClip(
+    clip,
+    { clip: "jump", mode: "lockXZ" },
+    buildZUpConvertedRig(),
+  );
+  const values = Array.from(locked.tracks[0]!.values);
+
+  assert.deepEqual(values.slice(3, 6), [0, 0, -85]);
+  assert.deepEqual(values.slice(12, 15), [0, 0, -85]);
+  // Tangents on the locked axes are cleared so the spline cannot reintroduce them.
+  assert.deepEqual(values.slice(0, 3), [0, 0, 0]);
+  assert.deepEqual(values.slice(15, 18), [0, 0, 0]);
 });
 
 check("splitClipsByUpperBody: routes each track to the half its node belongs to", () => {

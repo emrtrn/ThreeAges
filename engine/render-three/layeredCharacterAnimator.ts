@@ -43,7 +43,7 @@ export class LayeredCharacterAnimator {
   ) {
     const upperNames = collectSubtreeNodeNames(root, upperBodyBone);
     this.upperBodyMatched = upperNames.size > 0;
-    const playbackClips = applyRootMotionToClips(clips, options.rootMotion);
+    const playbackClips = applyRootMotionToClips(clips, options.rootMotion, root);
     const split = splitClipsByUpperBody(playbackClips, upperNames);
     this.lower = new CrossfadeAnimator(root, split.lower);
     this.upper = new CrossfadeAnimator(root, split.upper);
