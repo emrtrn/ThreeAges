@@ -646,7 +646,7 @@ const LOGISTICS_REASON: Record<ProducerLogisticsStatus, string> = {
 };
 
 const WORKER_HINT = "Sağ tık: inşaata veya üretim yapısına ata · X: Görevi bırak";
-const ARMY_HINT = "F: Saldırı-Hareket · H: Koru · G: Serbest · X: Dur";
+const ARMY_HINT = "F: Saldırı-Hareket · T ardından sağ tık: Geri Çekil · H: Koru · G: Serbest · X: Dur";
 const OUTPOST_HINT = "Sağ tık: menzildeki düşmana saldırı emri ver";
 
 /** Above this an attacker is meaningfully strong; below its mirror, weak. */

@@ -145,7 +145,10 @@ export function updateUnitMovement(
     // wheeled gun sent back the way it came stops where it stands, comes about,
     // and only then rolls — a carriage that drifted onto the new heading while
     // moving would carve a long arc across the field instead of turning.
-    if (!unit.steerToHeading(Math.atan2(scratchDir.x, scratchDir.z), dt)) {
+    // A retreat keeps the Guard's shield/front pointed where it was when the
+    // player gave the order. It is still a normal nav route; only turning is
+    // skipped so the authored reverse gait can read truthfully.
+    if (!unit.isRetreating && !unit.steerToHeading(Math.atan2(scratchDir.x, scratchDir.z), dt)) {
       // Deliberately standing still is not a stall, so the congestion clock is
       // not advanced: counting a pivot as blocked ground would re-plan the route
       // out from under a gun that is doing exactly what it was told.

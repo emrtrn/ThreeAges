@@ -50,11 +50,17 @@ export interface GltfJson {
   bufferViews?: GltfBufferView[];
   /** Node graph, for callers checking a rig's bone names rather than its cost. */
   nodes?: GltfNode[];
+  /** Clip list, for callers checking that a sidecar names clips the model ships. */
+  animations?: GltfAnimation[];
 }
 
 export interface GltfNode {
   name?: string;
   children?: number[];
+}
+
+export interface GltfAnimation {
+  name?: string;
 }
 
 export interface GltfGeometryStats {

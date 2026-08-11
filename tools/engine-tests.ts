@@ -438,7 +438,13 @@ import { SupportAuraSystem } from "../src/game/rts/structures/supportAuraSystem"
 import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
 import { AI_PROFILES } from "../src/game/data/gameDataTypes";
 import type { AiProfile, BuildingBalanceStats, GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
-import { Unit, UNIT_DEATH_SECONDS, unitBodyVolume, type RtsPresentationHandle } from "../src/game/rts/units/unit";
+import {
+  Unit,
+  UNIT_CORPSE_SECONDS,
+  UNIT_DEATH_SECONDS,
+  unitBodyVolume,
+  type RtsPresentationHandle,
+} from "../src/game/rts/units/unit";
 import { UnitShadowProxies } from "../src/game/rts/units/unitShadowProxies";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import { WildlifeSystem, wildProfileFor, type RtsHerdDefinition } from "../src/game/rts/wildlife/wildlifeSystem";
@@ -30536,6 +30542,39 @@ check("RTS player ground orders release combat units from hold position", () => 
   assert.equal(guard.hasPlayerMoveOrder, true);
 });
 
+check("RTS Guard retreat keeps facing, keeps player-order priority and excludes other roles", () => {
+  const units = new UnitSystem();
+  const guard = units.spawn("player", 0, 3, RTS_TEST_UNIT_STATS);
+  const worker = units.spawn("player", 1, 3, RTS_TEST_WORKER_STATS);
+  // +Z is the Guard's front; the map point under the camera centre is behind it.
+  guard.faceHeading(0);
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 10, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const commands = new CommandSystem(
+    { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement,
+    camera,
+    { selected: () => [guard, worker] } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem,
+    units,
+    new CommandCenterSystem(),
+    new RtsNavigation(),
+    new CommandMarkerSystem(),
+  );
+
+  assert.equal(commands.armRetreat(), true, "a selected live Guard can arm a retreat");
+  commands.issueAt(50, 50);
+  assert.equal(guard.isRetreating, true, "the Guard receives a backwards player route");
+  assert.equal(guard.hasPlayerMoveOrder, true, "retreat remains a player-priority transit order");
+  assert.equal(worker.hasMovementOrder, false, "workers are not pulled into a Guard retreat");
+  const facing = guard.object.rotation.y;
+  for (let step = 0; step < 30; step += 1) updateUnitMovement([guard], 1 / 60);
+  assert.ok(guard.position.z < 3, "the Guard moved toward the target behind it");
+  assert.equal(guard.object.rotation.y, facing, "the Guard does not turn around while retreating");
+  assert.equal(retaliateAgainstAttack(guard, units.spawn("enemy", 0, 2.5, RTS_TEST_UNIT_STATS), new RtsNavigation()), false,
+    "an actual hit cannot replace the explicit retreat with a chase");
+});
+
 check("RTS group ground orders stop first and stagger each unit launch", () => {
   const units = new UnitSystem();
   const first = units.spawn("player", 8, 8, RTS_TEST_UNIT_STATS);
@@ -37889,6 +37928,16 @@ check("Skeletal animasyon Faz C: hiz esikleri, rol onceligi ve dusme zinciri", (
   assert.equal(at(0.4), "idle", "jitter below the walk threshold still reads as standing");
   assert.equal(at(1.5), "walk");
   assert.equal(at(6), "run", "a unit at its full move speed is running, not walking");
+  assert.equal(
+    classifyRtsAnimation({ planarSpeed: 1.5, attacking: false, dying: false, backward: true }, tuning),
+    "walkBack",
+    "a reverse route selects the authored reverse walk role",
+  );
+  assert.equal(
+    classifyRtsAnimation({ planarSpeed: 6, attacking: false, dying: false, backward: true }, tuning),
+    "runBack",
+    "a reverse route selects the authored reverse run role",
+  );
   // Priority: a unit in weapon range is fighting even if the crowd is still
   // pushing it around, and a dying unit falls rather than finishing its swing.
   assert.equal(at(6, true), "attack", "being in range outranks any residual speed");
@@ -37950,11 +37999,11 @@ check("Skeletal animasyon varyasyonlari: klip secimi birim ve darbe basina karar
   const available = new Set([
     "Idle_1", "Idle_2", "Idle_3", "Walk_1", "Walk_2", "Run_1", "Run_2", "Attack_1", "Attack_2", "Attack_3",
   ]);
-  const set = { idle: "Idle_1", walk: "Walk_1", run: "Run_1", attack: "Attack_1" };
+  const set = {
+    idle: "Idle_1", walk: "Walk_1", run: "Run_1", walkBack: "Walk_2", runBack: "Run_2", attack: "Attack_1",
+  };
   const variants = {
     idle: ["Idle_2", "Idle_3", "Missing"],
-    walk: ["Walk_2"],
-    run: ["Run_2"],
     attack: ["Attack_2", "Attack_3"],
   };
 
@@ -37967,11 +38016,10 @@ check("Skeletal animasyon varyasyonlari: klip secimi birim ve darbe basina karar
   for (const role of ["walk", "run"] as const) {
     const first = resolveRtsAnimationVariant(role, set, variants, available, 17);
     assert.equal(first, resolveRtsAnimationVariant(role, set, variants, available, 17), `${role} remains stable for one unit`);
-    assert.ok([`${role[0]!.toUpperCase()}${role.slice(1)}_1`, `${role[0]!.toUpperCase()}${role.slice(1)}_2`].includes(first ?? ""), `${role} only uses its authored loop clips`);
-    const population = new Set(Array.from({ length: 12 }, (_, index) =>
-      resolveRtsAnimationVariant(role, set, variants, available, index + 1)));
-    assert.ok(population.size > 1, `${role} varies across Guard instances`);
+    assert.equal(first, `${role[0]!.toUpperCase()}${role.slice(1)}_1`, `${role} never borrows a reverse loop`);
   }
+  assert.equal(resolveRtsAnimationVariant("walkBack", set, variants, available, 17), "Walk_2");
+  assert.equal(resolveRtsAnimationVariant("runBack", set, variants, available, 17), "Run_2");
   assert.equal(
     rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4, impactCount: 0, layered: false }, set, available, variants, 17),
     rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 4, impactCount: 0, layered: false }, set, available, variants, 17),
@@ -37990,8 +38038,6 @@ check("Skeletal animasyon varyasyonlari: klip secimi birim ve darbe basina karar
   const normalized = normalizeAssetSkeleton({ animationSet: set, animationVariants: variants });
   assert.deepEqual(normalized.animationVariants, {
     idle: ["Idle_2", "Idle_3", "Missing"],
-    walk: ["Walk_2"],
-    run: ["Run_2"],
     attack: ["Attack_2", "Attack_3"],
   });
   const saved = validateAssetSkeletonDef({ schema: 1, sockets: [], animationSet: set, animationVariants: variants });
@@ -38369,7 +38415,11 @@ check("Skeletal animasyon Faz D: saldiri animasyonu hasari ve cooldown'u degisti
   units.clear();
 });
 
-check("Skeletal animasyon Faz D: despawn authored olum klibini bekler, kapsul dususu ise sabit sureyi", () => {
+check("Skeletal animasyon Faz D: dusus once biter, ceset sonra kalkar", () => {
+  // Two durations, deliberately separate. The *fall* is a fact about the asset —
+  // its clip, or the code tip-over for a unit with none — and the *window* is
+  // how long the body is left on the field, which is a readability choice. The
+  // window is the longer of the two, so neither can cut the other short.
   const deathClipSeconds = 1.4;
   const withDeathClip = (): RtsPresentationHandle => ({
     root: new Group(),
@@ -38385,11 +38435,13 @@ check("Skeletal animasyon Faz D: despawn authored olum klibini bekler, kapsul du
   units.setPresentationFactory(null);
   const capsule = units.spawn("player", 6, 0, RTS_TEST_UNIT_STATS);
 
-  assert.equal(animated.deathSeconds, deathClipSeconds, "the authored clip length replaces the constant");
-  assert.equal(capsule.deathSeconds, UNIT_DEATH_SECONDS, "an unanimated unit keeps the code collapse window");
-  // The Faz D bug this exists to prevent: UNIT_DEATH_SECONDS is 0.35s and every
-  // authored death is longer, so a unit would blink out of existence part-way
-  // through its own fall.
+  assert.equal(animated.fallSeconds, deathClipSeconds, "the authored clip length is the fall");
+  assert.equal(capsule.fallSeconds, UNIT_DEATH_SECONDS, "an unanimated unit falls by the code tip-over");
+  assert.equal(animated.deathSeconds, UNIT_CORPSE_SECONDS, "and then lies there for the corpse window");
+  assert.equal(capsule.deathSeconds, UNIT_CORPSE_SECONDS, "which is the same for a unit with no clip");
+  // The Faz D bug this exists to prevent: a unit blinking out of existence
+  // part-way through its own fall. It is now impossible by construction, and
+  // this is the fixture that would have caught it.
   assert.ok(deathClipSeconds > UNIT_DEATH_SECONDS, "the fixture is the case that actually breaks");
 
   const removed: Unit[] = [];
@@ -38397,19 +38449,67 @@ check("Skeletal animasyon Faz D: despawn authored olum klibini bekler, kapsul du
   animated.health.damage(RTS_TEST_UNIT_STATS.maxHealth);
   capsule.health.damage(RTS_TEST_UNIT_STATS.maxHealth);
 
-  updateUnitDeaths(units, selection, UNIT_DEATH_SECONDS);
-  assert.ok(!units.all().includes(capsule), "the capsule's fixed collapse ends on schedule");
-  assert.ok(units.all().includes(animated), "the animated unit is still falling");
+  updateUnitDeaths(units, selection, deathClipSeconds);
+  assert.ok(units.all().includes(animated), "a finished fall does not remove the body");
+  assert.ok(units.all().includes(capsule), "nor does the capsule's, long since over");
+  // The tip-over is paced by the fall, not by the window: the body goes down at
+  // its own speed and then lies there, rather than sinking over five seconds.
+  assert.ok(Math.abs(capsule.object.rotation.z + Math.PI * 0.5) < 1e-9, "the capsule is all the way down");
 
-  updateUnitDeaths(units, selection, deathClipSeconds - UNIT_DEATH_SECONDS - 0.01);
+  updateUnitDeaths(units, selection, UNIT_CORPSE_SECONDS - deathClipSeconds - 0.01);
   assert.ok(units.all().includes(animated), "and is not removed a frame early");
   updateUnitDeaths(units, selection, 0.02);
-  assert.ok(!units.all().includes(animated), "it leaves once its own clip has finished");
+  assert.ok(!units.all().includes(animated), "it leaves once the corpse window is spent");
+  assert.ok(!units.all().includes(capsule), "and so does the capsule, on the same window");
 
   // The clip animates the fall itself, so the code tip-over must stay off it —
   // applying both lands the body twice and buries it in the ground.
   assert.equal(animated.object.rotation.z, 0, "an authored death is not also rotated by code");
   assert.ok(capsule.object.rotation.z < 0, "the fallback still tips over, as it always did");
+
+  units.clear();
+});
+
+check("Skeletal animasyon Faz D: hizlandirilmis simulasyonda dusus yarida kesilmez", () => {
+  // The bug this pins, found in play: the death clip is advanced by the
+  // presentation on the *rendered* delta — on purpose, so a health bar and a
+  // tracer look the same at any game speed — while this window is spent on the
+  // *simulation* delta, which is the rendered one times the speed. Unscaled, 4x
+  // burns the window four times faster than the clip it exists to wait for.
+  const fall = 3.933;
+  const units = new UnitSystem();
+  units.setPresentationFactory(() => ({
+    root: new Group(),
+    pickTargets: [],
+    selectionRadius: 0.5,
+    deathSeconds: fall,
+    dispose: () => undefined,
+  }));
+  const selection = { remove: () => undefined };
+
+  for (const speed of [1, 2, 4, 8]) {
+    const guard = units.spawn("player", speed, 0, RTS_TEST_UNIT_STATS);
+    guard.health.damage(RTS_TEST_UNIT_STATS.maxHealth);
+    // One second of *rendered* time is `speed` seconds of simulation time, which
+    // is exactly what the frame loop hands this function.
+    const renderedSecondsAlive = (): number => {
+      let rendered = 0;
+      while (units.all().includes(guard) && rendered < 60) {
+        updateUnitDeaths(units, selection, 0.05 * speed, speed);
+        rendered += 0.05;
+      }
+      return rendered;
+    };
+    const rendered = renderedSecondsAlive();
+    assert.ok(
+      rendered >= fall,
+      `at ${speed}x the body left after ${rendered.toFixed(2)}s of screen time, mid-fall (clip is ${fall}s)`,
+    );
+    // And the corpse linger is *not* scaled: fast-forwarding a battle should
+    // clear the field at that speed too, so past the point where the fall fits,
+    // the window shortens in real time rather than holding bodies for 5s each.
+    assert.ok(rendered <= UNIT_CORPSE_SECONDS + 0.1, `at ${speed}x the body is not held longer than the window`);
+  }
 
   units.clear();
 });
@@ -38661,6 +38761,20 @@ check("Muhafiz Faz 2: hit rolu editor kaydinda hayatta kalir ve Guard onu author
   }
 });
 
+check("Muhafiz geri locomotion: ters donguler yalnizca geri cekilme rollerindedir", () => {
+  const guard = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+  );
+  assert.equal(guard.animationSet.walk, "guard_sword_and_shield_walk_1");
+  assert.equal(guard.animationSet.run, "guard_sword_and_shield_run_1");
+  assert.equal(guard.animationSet.walkBack, "guard_sword_and_shield_walk_2");
+  assert.equal(guard.animationSet.runBack, "guard_sword_and_shield_run_2");
+  assert.equal(guard.animationVariants.walk, undefined, "normal walking never samples the reverse clip");
+  assert.equal(guard.animationVariants.run, undefined, "normal running never samples the reverse clip");
+  assert.ok(ANIMATION_SET_ROLES.includes("walkBack"), "the generic skeleton schema preserves reverse walking");
+  assert.ok(ANIMATION_SET_ROLES.includes("runBack"), "the generic skeleton schema preserves reverse running");
+});
+
 check("Muhafiz Faz 2: darbe animasyonu hasari, cooldown'u ve olum penceresini degistirmez", () => {
   // K-02, for the flinch. The counter is written by the health component after
   // the damage has already been applied, so this pins the direction: a beating
@@ -38684,7 +38798,8 @@ check("Muhafiz Faz 2: darbe animasyonu hasari, cooldown'u ve olum penceresini de
   // extend it would leave a body standing there un-targetable and un-removable.
   const flinched = units.spawn("player", 9, 0, RTS_TEST_UNIT_STATS);
   for (let blow = 0; blow < 5; blow += 1) flinched.health.damage(1);
-  assert.equal(flinched.deathSeconds, UNIT_DEATH_SECONDS, "blows taken do not lengthen the defeat window");
+  assert.equal(flinched.fallSeconds, UNIT_DEATH_SECONDS, "blows taken do not lengthen the fall");
+  assert.equal(flinched.deathSeconds, UNIT_CORPSE_SECONDS, "nor the window the body is left on the field for");
 
   units.clear();
 });
@@ -38899,6 +39014,192 @@ check("Muhafiz Faz 2b: Guard ust govde kemigini authorlar, kemik gercek ve kayit
   assert.equal(descendants.has(named("mixamorig:LeftUpLeg")), false, "and so do the legs");
   assert.ok(descendants.has(named("mixamorig:Head")), "while the head rides the flinch");
   assert.ok(descendants.has(named("mixamorig:RightShoulder")), "along with the sword arm");
+});
+
+check("Muhafiz Faz 3: her muhafiz olum klibini sabit secer ve despawn penceresi tam o klibin uzunlugudur", () => {
+  // The trap a death variant pool introduces, and the only reason this phase is
+  // more than a data edit: the clip that *plays* and the length the unit is held
+  // on the field for are resolved separately. If they ever disagree, the body
+  // either vanishes mid-fall or lies there after the clip has finished — and
+  // both look like an animation bug rather than a wiring one.
+  const guard = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+  );
+  const lengths: Record<string, number> = {
+    guard_sword_and_shield_idle_1: 1,
+    guard_sword_and_shield_death_1: 2.333,
+    guard_sword_and_shield_death_2: 3.933,
+  };
+  const make = (name: string): Object3D => {
+    const node = new Object3D();
+    node.name = name;
+    return node;
+  };
+  const buildRig = (): Object3D => {
+    const root = make("Guard_Rig");
+    const hips = make("mixamorigHips");
+    hips.add(make("mixamorigSpine"), make("mixamorigLeftUpLeg"));
+    root.add(hips);
+    return root;
+  };
+  const clips = Object.entries(lengths).map(([name, duration]) =>
+    new AnimationClip(name, duration, [
+      new VectorKeyframeTrack("mixamorigHips.position", [0, duration], [0, 0, 0, 0, 0, 0]),
+      new VectorKeyframeTrack("mixamorigSpine.position", [0, duration], [0, 0, 0, 0, 0, 0]),
+    ]));
+  const available = new Set(Object.keys(lengths));
+  const windowFor = (seed: number): { readonly clip: string; readonly seconds: number | undefined } => {
+    const target = buildRig();
+    const presentation = createRtsUnitPresentation({
+      root: target,
+      pickTargets: [],
+      selectionRadius: 0.5,
+      animation: { target, clips, skeleton: guard },
+      animationVariantSeed: seed,
+      moveSpeed: 6,
+    });
+    const clip = rtsActionClip(
+      { kind: "death", remainingSeconds: 1, attackCount: 0, impactCount: 0, layered: false },
+      guard.animationSet,
+      available,
+      guard.animationVariants,
+      seed,
+    ) ?? assert.fail("the Guard resolves no death clip");
+    // `deathSeconds` on the *presentation* is the fall — the clip's own length.
+    // The unit widens it to the corpse window; what has to match the clip here
+    // is the fall, since that is what the body is animating.
+    const seconds = presentation.deathSeconds;
+    presentation.dispose();
+    return { clip, seconds };
+  };
+
+  const drawn = new Set<string>();
+  for (let seed = 0; seed < 40; seed += 1) {
+    const { clip, seconds } = windowFor(seed);
+    drawn.add(clip);
+    assert.equal(
+      seconds,
+      lengths[clip],
+      `seed ${seed} plays ${clip} but is held on the field for ${String(seconds)}s`,
+    );
+  }
+  assert.ok(drawn.has("guard_sword_and_shield_death_1"), "some Guards fall the first way");
+  assert.ok(drawn.has("guard_sword_and_shield_death_2"), "and some the second — the pool is actually used");
+
+  // Stable per unit, across a reload and across the fight it just lost. The
+  // sequence for a death is fixed at 0, so neither the blows it landed nor the
+  // ones that killed it may reach the choice: a clip that changed under the unit
+  // would change the window `updateDeath` is already counting down.
+  assert.deepEqual(windowFor(17), windowFor(17), "the same Guard falls the same way on every replay");
+  const afterAFight = rtsActionClip(
+    { kind: "death", remainingSeconds: 1, attackCount: 9, impactCount: 4, layered: false },
+    guard.animationSet,
+    available,
+    guard.animationVariants,
+    17,
+  );
+  assert.equal(afterAFight, windowFor(17).clip, "the blows it traded do not pick its death");
+
+  // The half-authored asset keeps working: one death clip means one window, and
+  // an asset with none reports no window at all rather than a wrong one.
+  const target = buildRig();
+  const single = createRtsUnitPresentation({
+    root: target,
+    pickTargets: [],
+    selectionRadius: 0.5,
+    animation: {
+      target,
+      clips,
+      skeleton: { ...guard, animationVariants: { ...guard.animationVariants, death: [] } },
+    },
+    animationVariantSeed: 3,
+    moveSpeed: 6,
+  });
+  assert.equal(single.deathSeconds, lengths.guard_sword_and_shield_death_1, "an unvaried asset keeps its one length");
+  single.dispose();
+});
+
+check("Muhafiz Faz 3: uzun olum klibi yeni bir oyun durumu yaratmaz", () => {
+  // The acceptance question this phase turns on. A 3.93 s fall is 68% longer
+  // than the 2.33 s one, so if anything gameplay-facing were gated on the defeat
+  // *window* rather than on depleted health, half the Guards would spend an
+  // extra 1.6 s as an un-killable, un-targetable obstacle. Every query below is
+  // asserted at the moment of death, not at the end of the window.
+  const windows = [2.333, 3.933];
+  for (const deathClipSeconds of windows) {
+    const units = new UnitSystem();
+    units.setPresentationFactory(() => ({
+      root: new Group(),
+      pickTargets: [],
+      selectionRadius: 0.5,
+      deathSeconds: deathClipSeconds,
+      dispose: () => undefined,
+    }));
+    const guard = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+    const raider = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
+    raider.setAttackTarget(guard);
+    assert.equal(guard.fallSeconds, deathClipSeconds, "the unit falls for exactly its own clip");
+    assert.equal(guard.deathSeconds, UNIT_CORPSE_SECONDS, "then lies there on the shared corpse window");
+
+    const removed: Unit[] = [];
+    const selection = { remove: (unit: Unit) => removed.push(unit) };
+    guard.health.damage(RTS_TEST_UNIT_STATS.maxHealth);
+
+    // Depleted health, not an elapsed window, is what takes a unit out of play —
+    // and it is already true before the first defeat frame runs.
+    assert.equal(units.unitsOf("player").includes(guard), false, "a depleted Guard is out of play at once");
+    assert.equal(units.armyOf("player").includes(guard), false, "and out of every army query");
+
+    updateUnitDeaths(units, selection, 0.016);
+    assert.deepEqual(removed, [guard], "the fall deselects it on its first frame, not on its last");
+    assert.equal(raider.attackTarget, null, "and frees its attacker the same frame");
+    assert.equal(guard.dying, true);
+    assert.equal(
+      units.bodyMeshes().some((mesh) => guard.presentationPickTargets().includes(mesh)),
+      false,
+      "a body cannot be clicked back into a selection while it lies there",
+    );
+    assert.ok(units.all().includes(guard), "but it is still on the field, falling");
+
+    // The window is spent only by time, and it outlasts both variants' clips —
+    // which is what stopped the long one being cut off mid-fall.
+    assert.ok(UNIT_CORPSE_SECONDS > deathClipSeconds, `${deathClipSeconds}s of falling fits inside the window`);
+    updateUnitDeaths(units, selection, UNIT_CORPSE_SECONDS - 0.016 - 0.01);
+    assert.ok(units.all().includes(guard), "it is not removed a frame early");
+    updateUnitDeaths(units, selection, 0.02);
+    assert.equal(units.all().includes(guard), false, "and leaves once the corpse window is spent");
+    assert.deepEqual(removed, [guard], "a longer fall never deselects twice");
+
+    units.clear();
+  }
+});
+
+check("Muhafiz Faz 3: Guard iki olum klibini de authorlar, ikisi de gercek ve ayni sekilde kok hareketli", () => {
+  const guard = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+  );
+  const primary = guard.animationSet.death ?? assert.fail("the Guard authors no death clip");
+  const pool = [primary, ...(guard.animationVariants.death ?? [])];
+  assert.ok(pool.length > 1, "a company of Guards does not all fall the same way");
+  assert.equal(new Set(pool).size, pool.length, "the death pool has no duplicates to waste a variant slot on");
+
+  // A variant name is a string until something checks it against the model. A
+  // typo costs nothing at load — `resolveRtsAnimationVariant` simply drops the
+  // unknown name — so half the Guards quietly go back to the primary clip.
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard.glb")))
+    ?? assert.fail("the Guard model is not a readable GLB");
+  const shipped = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
+  for (const clip of pool) {
+    assert.ok(shipped.has(clip), `"${clip}" is not a clip the Guard ships`);
+    assert.ok(/death/.test(clip), `the death pool holds death clips, not "${clip}"`);
+  }
+
+  // K-03, as a *relationship* rather than a magnitude: both variants have to be
+  // treated the same way, or one Guard slides as he falls and the next drops on
+  // the spot. Neither is locked today — the fall's own travel is what was
+  // accepted for `death_1` — and this fails the moment only one of them changes.
+  const locks = pool.map((clip) => guard.rootMotion.find((entry) => entry.clip === clip)?.mode ?? "preserve");
+  assert.equal(new Set(locks).size, 1, `the death variants disagree on root motion: ${locks.join(", ")}`);
 });
 
 check("Skeletal animasyon Faz F: rol tinti klonu boyar, sabloni ve material paylasimini bozmaz", () => {
@@ -42519,9 +42820,9 @@ check("RTS death deselects, clears attackers, then removes the defeated unit", (
   assert.deepEqual(removed, [player], "a dead selected unit leaves the selection immediately");
   assert.equal(player.selected, false);
   assert.equal(enemy.attackTarget, null, "attackers drop a defeated target immediately");
-  assert.ok(units.all().includes(player), "brief defeat pose happens before removal");
+  assert.ok(units.all().includes(player), "the defeat pose happens before removal");
 
-  updateUnitDeaths(units, selection, 0.25);
+  updateUnitDeaths(units, selection, UNIT_CORPSE_SECONDS);
   assert.ok(!units.all().includes(player), "defeated unit leaves the live registry");
   assert.equal(units.unitForObject(body), null, "defeated body no longer resolves from raycasts");
 });

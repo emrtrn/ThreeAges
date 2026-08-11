@@ -20,7 +20,7 @@
   },
   "flipY": false,
   "roughness": 0.5,
-  "metalness": 0.5,
+  "metalness": 0,
   "aoIntensity": 1,
   "opacity": 1,
   "alphaMode": "opaque",

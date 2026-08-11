@@ -36,6 +36,8 @@ interface PendingGroundOrder {
   readonly unit: Unit;
   readonly path: readonly Vector3[];
   readonly delay: number;
+  /** The route travels normally, but its Guard keeps the facing it had at issue time. */
+  readonly retreating: boolean;
 }
 
 export class CommandSystem {
@@ -45,6 +47,8 @@ export class CommandSystem {
   private pendingGroundOrders: PendingGroundOrder[] = [];
   private readonly destinationReservations = new Map<Unit, DestinationReservation>();
   private ground: RtsGroundSurface = FLAT_RTS_GROUND;
+  /** `T` arms exactly one following right-click as a Guard retreat destination. */
+  private retreatArmed = false;
   /** Player preference from the selection panel; Attack-Move stays on its legacy path until Faz 6. */
   private formation: RtsFormationId = DEFAULT_RTS_FORMATION;
 
@@ -74,6 +78,11 @@ export class CommandSystem {
 
   /** Issue the contextual move-or-attack order at a screen position. */
   issueAt(x: number, y: number): void {
+    if (this.retreatArmed) {
+      this.retreatArmed = false;
+      this.issueRetreatAt(x, y);
+      return;
+    }
     const selected = this.selection.selected();
     const target = this.raycastTarget(x, y);
     if (selected.length === 0) {
@@ -133,6 +142,7 @@ export class CommandSystem {
         unit,
         path,
         delay: launchIndex * GROUP_MOVE_STAGGER_SECONDS,
+        retreating: false,
       });
       this.destinationReservations.set(unit, { position: destination.clone(), radius: unit.navRadius });
       launchIndex += 1;
@@ -155,7 +165,8 @@ export class CommandSystem {
       // A direct ground order is an explicit request to leave the current spot.
       // "Hold position" cannot leave the released route silently inert.
       if (pending.unit.role !== "worker") pending.unit.setStance("aggressive");
-      pending.unit.setPlayerMovePath(pending.path);
+      if (pending.retreating) pending.unit.setPlayerRetreatPath(pending.path);
+      else pending.unit.setPlayerMovePath(pending.path);
       if (pending.unit.role === "worker") pending.unit.waitBeforeReturningToWork();
     }
     this.pendingGroundOrders = waiting;
@@ -168,6 +179,7 @@ export class CommandSystem {
    * an attack-move that drags the economy along is not what the player meant.
    */
   issueAttackMoveAt(x: number, y: number): void {
+    this.retreatArmed = false;
     const selected = this.selection.selected().filter((unit) => unit.role !== "worker");
     if (selected.length === 0) return;
     const point = this.groundPoint(x, y);
@@ -184,6 +196,7 @@ export class CommandSystem {
 
   /** Immediately stop every currently selected unit and clear attack pursuit. */
   issueStop(): void {
+    this.retreatArmed = false;
     const selected = this.selection.selected();
     this.cancelPendingGroundOrders(selected);
     this.releaseDestinationReservations(selected);
@@ -193,6 +206,7 @@ export class CommandSystem {
 
   /** Set the stance of every selected combat unit (GDD 06 §26). */
   issueStance(stance: UnitStance): void {
+    this.retreatArmed = false;
     const selected = this.selection.selected();
     this.cancelPendingGroundOrders(selected);
     this.releaseDestinationReservations(selected);
@@ -204,6 +218,58 @@ export class CommandSystem {
   /** Ground position under a screen pixel, for tools that pick a map point. */
   groundPointAt(x: number, y: number): Vector3 | null {
     return this.groundPoint(x, y);
+  }
+
+  /**
+   * Arm one Guard-only reverse move. The next right-click supplies its normal
+   * navigated destination, while movement deliberately preserves each Guard's
+   * current facing so the reverse locomotion clips are semantically correct.
+   */
+  armRetreat(): boolean {
+    this.retreatArmed = this.selection.selected().some((unit) => unit.role === "guard" && !unit.dying);
+    return this.retreatArmed;
+  }
+
+  /** Issue the armed reverse move; workers, archers and siege keep their orders. */
+  private issueRetreatAt(x: number, y: number): void {
+    const selected = this.selection.selected().filter((unit) => unit.role === "guard" && !unit.dying);
+    if (selected.length === 0) return;
+    const point = this.groundPoint(x, y);
+    if (!point) return;
+
+    this.cancelPendingGroundOrders(selected);
+    this.releaseDestinationReservations(selected);
+    const destinations = assignGroupDestinations(
+      selected,
+      point,
+      this.navigation,
+      [...this.destinationReservations.values()],
+      this.formation,
+    );
+    for (const unit of selected) unit.stop();
+    const launchOrder = destinations
+      .filter((entry): entry is typeof entry & { path: Vector3[] } => entry.path !== null)
+      .sort((left, right) => {
+        const leftDistance = Math.hypot(left.unit.position.x - point.x, left.unit.position.z - point.z);
+        const rightDistance = Math.hypot(right.unit.position.x - point.x, right.unit.position.z - point.z);
+        return leftDistance - rightDistance || left.unit.id - right.unit.id;
+      });
+    let launchIndex = 0;
+    for (const { unit, destination, path } of launchOrder) {
+      // A ground command remains an explicit escape from Hold Position. The
+      // transit-order rule still stops auto-acquisition from replacing retreat.
+      unit.setStance("aggressive");
+      this.pendingGroundOrders.push({
+        unit,
+        path,
+        delay: launchIndex * GROUP_MOVE_STAGGER_SECONDS,
+        retreating: true,
+      });
+      this.destinationReservations.set(unit, { position: destination.clone(), radius: unit.navRadius });
+      launchIndex += 1;
+    }
+    this.update(0);
+    this.markers.spawn(point, "#79c8ff");
   }
 
   /** Raycast a screen point against units or command centres before ground. */

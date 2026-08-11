@@ -5,6 +5,8 @@
     "idle": "guard_sword_and_shield_idle_1",
     "walk": "guard_sword_and_shield_walk_1",
     "run": "guard_sword_and_shield_run_1",
+    "walkBack": "guard_sword_and_shield_walk_2",
+    "runBack": "guard_sword_and_shield_run_2",
     "work": "guard_sword_and_shield_idle_1",
     "attack": "guard_sword_and_sheld_attack_2",
     "death": "guard_sword_and_shield_death_1",
@@ -16,12 +18,6 @@
       "guard_sword_and_shield_idle_3",
       "guard_sword_and_shield_idle_4"
     ],
-    "walk": [
-      "guard_sword_and_shield_walk_2"
-    ],
-    "run": [
-      "guard_sword_and_shield_run_2"
-    ],
     "attack": [
       "guard_sword_and_sheld_attack_4",
       "guard_sword_and_shield_slash_5",
@@ -30,6 +26,9 @@
     "hit": [
       "guard_sword_and_shield_impact_2",
       "guard_sword_and_shield_impact_3"
+    ],
+    "death": [
+      "guard_sword_and_shield_death_2"
     ]
   },
   "blendSpaces": [],

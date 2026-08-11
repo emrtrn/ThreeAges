@@ -3631,6 +3631,7 @@ export class RtsApp {
     if (this.input.consumeStopRequest()) this.commands.issueStop();
     if (this.input.consumeCommand("hold")) this.commands.issueStance("hold");
     if (this.input.consumeCommand("aggressive")) this.commands.issueStance("aggressive");
+    if (this.input.consumeCommand("retreat")) this.commands.armRetreat();
     if (this.input.consumeCommand("selectIdleWorkers")) this.selectIdleWorkers();
     if (this.input.consumeCommand("toggleWorkerAutomation")) this.toggleWorkerAutomation();
     if (!this.input.consumeCommand("attackMove")) return;
@@ -3949,7 +3950,10 @@ export class RtsApp {
       );
       return 0;
     });
-    updateUnitDeaths(this.units, this.selection, dt);
+    // The speed matters here and nowhere else in this method: the defeat window
+    // waits for a clip the presentation plays on the rendered clock, so it is
+    // the one duration that has to be told how fast this one is running.
+    updateUnitDeaths(this.units, this.selection, dt, this.simulationSpeed);
     this.destroyRuinedStructures();
     this.perfMeasure("savaş", combatMark);
     // §59, before the objectives below and before anything reads the AI: fog is

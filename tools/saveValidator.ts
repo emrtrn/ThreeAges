@@ -2604,6 +2604,8 @@ const SKELETON_ANIMATION_SET_ROLES = [
   "idle",
   "walk",
   "run",
+  "walkBack",
+  "runBack",
   "jump",
   "fall",
   "work",

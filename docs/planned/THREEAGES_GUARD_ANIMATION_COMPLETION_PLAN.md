@@ -1,10 +1,9 @@
 # ThreeAges — Muhafız Animasyon Tamamlama Planı
 
 Oluşturulma tarihi: 2026-08-11  
-Durum: **Devam ediyor — Faz 2 görsel kabulünde ayak kayması bulundu ve Faz 2b
-(üst gövde katmanı) ile giderildi; kodu ve otomasyonu tamam. Faz 1 ile Faz 2b'nin
-dünya içi görsel kabulleri kullanıcıda açık. Sonraki fonksiyonel dilim Faz 3
-(ikinci death varyantı).**
+Durum: **Devam ediyor — Faz 1, 2, 2b kabul edildi; Faz 3 (ikinci death varyantı)
+kodu/verisi/otomasyonu tamam, görsel kabulü açık. Faz 5a Guard geri çekilmesi
+uygulandı, görsel kabulü açık; kalan Faz 4/5b/6 hâlâ tasarım kapısında.**
 
 ## 1. Amaç
 
@@ -42,17 +41,19 @@ combat dengesi ve `Guard.glb` kaynak geometrisi kapsam dışıdır.
 | RTS rolü | Birincil klip | Ek klipler | Durum |
 | --- | --- | --- | --- |
 | `idle` | `guard_sword_and_shield_idle_1` | `idle_2`, `idle_3`, `idle_4` | Tamam |
-| `walk` | `guard_sword_and_shield_walk_1` | `walk_2` | Tamam, görsel kabul açık |
-| `run` | `guard_sword_and_shield_run_1` | `run_2` | Tamam, görsel kabul açık |
+| `walk` | `guard_sword_and_shield_walk_1` | — | Tamam, ileri hareket |
+| `run` | `guard_sword_and_shield_run_1` | — | Tamam, ileri hareket |
+| `walkBack` | `guard_sword_and_shield_walk_2` | — | Faz 5a, geri çekilme |
+| `runBack` | `guard_sword_and_shield_run_2` | — | Faz 5a, geri çekilme |
 | `work` | `guard_sword_and_shield_idle_1` | — | Mevcut davranış korunur |
 | `attack` | `guard_sword_and_sheld_attack_2` | `attack_4`, `slash_5`, `kick` | Tamam |
 | `hit` | `guard_sword_and_shield_impact_1` | `impact_2`, `impact_3` | Tamam (hareket hâlinde üst gövde), görsel kabul açık |
 | `death` | `guard_sword_and_shield_death_1` | — | Tamam |
 
-`animationVariants` seçimi rastgele sayı üretmez. `unit.id` tabanlı seed;
-idle/walk/run için birim başına, attack için de `attackCount` başına kararlı klip
-seçer. Bu nedenle bir kalabalıkta çeşitlilik görünür, fakat aynı muhafız her
-karede farklı pozdan başlamaz.
+`animationVariants` seçimi rastgele sayı üretmez. `unit.id` tabanlı seed; idle
+için birim başına, attack için de `attackCount` başına kararlı klip seçer. Geri
+locomotion bir varyant değildir: `walk_2` ve `run_2` yalnızca gerçek geri
+çekilme emrinin semantic rolleridir.
 
 Walk/run ve saldırı varyantlarının root-motion yolları `lockXYZ` ile RTS
 simülasyonundan ayrılmıştır. Mevcut testler saldırı/death süresinin hasar veya
@@ -114,9 +115,9 @@ kullanıcı gözlemi olmadan kapatılmaz:
 
 ### Faz 1 — Walk/Run görsel kabulü
 
-**Durum:** Kod tamam, kullanıcı görsel kabulü açık.
+**Durum:** ✅ Tamam — görsel kabul 2026-08-11'de alındı.
 
-**Amaç:** Yeni `walk_2` ve `run_2` döngülerinin birlik hareketinde doğal
+**Amaç:** İleri `walk_1` ve `run_1` döngülerinin birlik hareketinde doğal
 göründüğünü doğrulamak.
 
 **Manuel kabul senaryosu:**
@@ -246,26 +247,75 @@ tarafında zaten var olan gövde maskesi altyapısını (`bodyMask`,
 - `npx tsc --noEmit` temiz; `npm run verify:imports` geçti; `npm run test:engine`
   (fast) 1399 kontrol yeşil.
 
-**Görsel kabul (açık):** Yürüyen/koşan muhafız vurulduğunda ayakları kaymadan
-adımını sürdürür, üst gövdesi sarsılır; duran muhafız tüm gövdesiyle sarsılır;
-ölürken tüm gövde düşer.
+**Görsel kabul (2026-08-11): ✅ kabul edildi.** Yürüyen/koşan muhafız vurulduğunda
+ayakları kaymadan adımını sürdürüyor, üst gövdesi sarsılıyor.
 
 ### Faz 3 — İkinci death varyantı
 
-**Durum:** Faz 2 kabulünden sonra dar, güvenli asset dilimi.
+**Durum:** Kod, veri ve otomasyon tamam (2026-08-11), kullanıcı görsel kabulü açık.
 
-**Asset adayı:** `guard_sword_and_shield_death_2` — 3.90 s.
+**Klipler:** `guard_sword_and_shield_death_1` (2.333 s, birincil),
+`death_2` (3.933 s). Ölçüm GLB'den: `death_1` 2.333 s, `death_2` 3.933 s — plandaki
+"3.90 s" tahmini yerine gerçek değer.
 
-**Yapılacaklar:**
+**Yapılanlar:**
 
-1. `death_2` root-motion/pivotunu Skeleton Editor'da incele ve gerekli in-place
-   ayarı ekle.
-2. `animationVariants.death` içine yalnızca klip ve despawn süresi uyumluysa ekle.
-3. Her birimin seed'inin ölüm klibini sabit seçtiğini ve presentation'ın seçtiği
-   klip süresince `unitDeath` tarafından sahnede kaldığını test et.
+1. `animationVariants.death` → `["guard_sword_and_shield_death_2"]`. **Kod
+   değişikliği gerekmedi:** `rtsActionClip` death için `rtsActionSequence` = 0
+   kullanıyor, `durationOfRole("death")` de aynı sequence'ı geçiyor, yani klip ve
+   pencere aynı seed'den aynı varyanta çözülüyor.
+2. Root motion: `mixamorig:Hips` net yer değiştirme `death_1` (3.8, −115.3, 67.9),
+   `death_2` (−24.1, 93.2, 65.0) klip birimi — aynı büyüklük sınıfı. `death_1`
+   kilitsiz hâliyle zaten kabul edilmişti; `death_2` de kilitlenmedi. Kilitlemek
+   düşüşün kendi savrulmasını düzleştirirdi. Önemli olan **ikisinin aynı
+   davranması**, bu yüzden test büyüklüğü değil ilişkiyi pinliyor.
+3. Despawn penceresi sorusu incelendi ve **kapandı**: her oyun sorgusu
+   `health.depleted`'a bağlı (`unitsOf`/`armyOf`, `bodyMeshes` tıklama hedefleri,
+   `engagementSystem` — dolayısıyla `combatTargets` listesindeki cesetler —
+   `unitSeparation`, `unitMovement`, görüş kaynakları, AI `armyManager`), death
+   penceresinin uzunluğuna değil. `beginDeath()` daha ilk karede seçimden çıkarıp
+   saldırganları serbest bırakıyor. Pencere tamamen sunumsal; uzaması yalnızca
+   render ve `units.all()` iterasyonunu etkiliyor.
 
-**Kabul:** Uzun death klibi zarar verilemeyen yeni bir oyun durumu yaratmaz;
-ölümden sonra hedefleme, selection ve removal mevcut davranışını korur.
+**Faz 3a — düşüş ile ceset süresinin ayrılması (kullanıcı bulgusu, 2026-08-11):**
+
+Görsel kabulde ölüm animasyonu bitmeden gövde siliniyordu. İki ayrı neden vardı
+ve ikisi de düzeltildi:
+
+1. **Pencere = klip süresiydi.** Klibin *tam* uzunluğu pencere olduğu için en
+   ufak gecikme (mixer'ın ilk kare farkı, mesafe throttle'ının banked zamanı)
+   sonu kırpıyordu. Artık iki süre ayrı: `Unit.fallSeconds` düşüşün kendisi
+   (authored klip ya da kapsül devrilmesi), `UNIT_CORPSE_SECONDS = 5` ise gövdenin
+   alanda kalma tabanı. Pencere ikisinin büyüğü, yani düşüş her zaman sığıyor.
+   Kapsül devrilmesi hâlâ kendi hızında iniyor — 5 saniyeye yayılmıyor.
+2. **İki saat uyuşmuyordu.** Sunum *render* deltasıyla ilerliyor (bilinçli: can
+   barı ve mermi izi her oyun hızında aynı görünmeli), pencere ise *simülasyon*
+   deltasıyla harcanıyordu; simülasyon deltası render'ın hız çarpanı katı. 4×
+   hızda pencere, beklediği klipten dört kat hızlı tükeniyordu. `updateDeath`
+   artık simülasyon hızını alıyor ve **yalnızca düşüş kısmını** ölçekliyor: ceset
+   bekleme süresi simülasyon saniyesi olarak kalıyor, çünkü hızlandırılmış bir
+   savaşta oyuncu alanın da o hızda temizlenmesini bekler.
+
+**Otomasyon (3 yeni engine kontrolü, `--filter "Muhafiz Faz 3"`):**
+
+- 40 seed üzerinde: oynatılan klip ile bildirilen `deathSeconds` **daima aynı
+  klibin uzunluğu**; havuzun iki klibi de gerçekten çekiliyor; aynı seed her
+  tekrarda aynı düşüşü veriyor; birimin sonunda yaptığı/aldığı vuruşlar ölüm
+  klibini seçmiyor; varyantsız asset tek uzunluğunu koruyor.
+- Uzun pencere iki uzunluk için de: depleted anında oyun dışı, ilk karede
+  deselect + saldırgan serbest, ceset tıklanamaz, klip bitene kadar alanda,
+  bir kare erken gitmiyor, iki kez deselect etmiyor.
+- Guard'ın iki death klibini de authorlaması, ikisinin de GLB'de gerçekten var
+  olması (yazım hatası sessizce birincile döner) ve root-motion muamelesinin
+  ikisinde aynı olması.
+- Faz 3a: düşüş ile ceset penceresinin ayrı olması, kapsülün kendi hızında
+  devrilip sonra yatması, ve **1×/2×/4×/8× hızlarda düşüşün ekran zamanında
+  yarıda kesilmemesi** (aynı testte cesetlerin de o hızda temizlendiği).
+- `npx tsc --noEmit` temiz; `npm run test:engine:slow` (tam) 1412 kontrol yeşil.
+
+**Görsel kabul (açık):** Bir muhafız bölüğü kırıldığında iki farklı düşüş görünür;
+her iki düşüş de sonuna kadar oynar, gövde 5 sn yerde yattıktan sonra kaybolur;
+ceset ne tıklanabilir ne de hedeflenebilir.
 
 ### Faz 4 — Defans/blok dili için oyun-state tasarımı
 
@@ -290,7 +340,24 @@ Bu karar verilmeden bu faz açılmaz.
 
 ### Faz 5 — Hareket başlangıcı, duruş ve yön değiştirme
 
-**Durum:** Keşif + görsel prototip gerektirir.
+**Durum:** Faz 5a tamam, görsel kabul açık; Faz 5b keşif + görsel prototip gerektirir.
+
+#### Faz 5a — Guard geri çekilmesi
+
+Seçili canlı Guard'larda `T` ile tek bir geri çekilme emri kurulur; sonraki
+zemin sağ tık hedefi normal navigasyon/formasyon hedefine dönüşür. Guard rota
+boyunca mevcut yönünü korur, otomatik hedef edinimi veya alınan hasar bu
+oyuncu emrini kovalamaya çeviremez. Bu sırada `walkBack`/`runBack` sırasıyla
+`walk_2`/`run_2` kliplerini oynatır. İşçi, okçu ve topçu bu emre dahil olmaz.
+
+**Otomatik kanıt:** `tsc --noEmit`; hedefli engine kontrolleri yönü koruma,
+oyuncu-emri önceliği, rol filtresi ve sidecar rol ayrımını kapsar.
+
+**Görsel kabul:** Guard öne bakarken arkasındaki zemine `T` ardından sağ tık;
+geri adımın kalkan/yüz yönünü koruduğu, ayak kayması olmadığı ve normal sağ
+tık hareketinin hâlâ yalnız `_1` döngülerini kullandığı doğrulanmalı.
+
+#### Faz 5b — Dönüş ve strafe
 
 **Asset adayları:** `180_turn_1`, `strafe_1..4`, `sheath_sword_1/2`.
 
@@ -317,16 +384,17 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
 
 ## 5. Sonraki Oturum İçin Başlangıç Noktası
 
-1. Önce Faz 1 (walk/run) ve Faz 2b (katmanlı darbe) görsel kabullerini
-   sor/kaydet. Kabul geldiyse Uygulama Günlüğü'ne yalnızca kanıtla birlikte
-   tarihli satır eklenir.
-2. Ardından Faz 3'e geç: `death_2` klibinin (3.93 s) root-motion'ı ölçülmüş
-   durumda — net 26.1/93.2/65.0, yani `death_1` (3.8/−115.3/67.9) ile aynı
-   sınıfta ve o da kilitlenmemiş. Asıl soru klip değil süre: `deathSeconds`
-   despawn penceresini uzattığı için varyantın uzunluğu hedefleme, seçim ve
-   removal davranışını bozmamalı.
-3. Faz 4/5/6 hâlâ tasarım kapısında; klip ataması yapılmadan önce §4'teki
-   sorular yanıtlanmalı.
+1. Önce Faz 3'ün görsel kabulünü sor/kaydet: bir muhafız bölüğü kırıldığında iki
+   farklı düşüş görünmeli, uzun düşüş sahnede takılı kalmamalı. Kabul geldiyse
+   Uygulama Günlüğü'ne kanıtla birlikte tarihli satır eklenir.
+2. Fonksiyonel iş kalmadı — Faz 4/5/6 tasarım kapısında. Kapıyı açmak §4'teki
+   soruların yanıtlanmasına bağlı; en ucuz sıra Faz 6 (generic notify
+   dispatcher) çünkü tek gereksinimi runtime altyapısı, yeni oyun mekaniği değil.
+   Faz 4 (block) gerçek bir savunma mekaniği kararı, Faz 5 (turn/strafe) ise
+   sunumun bugün taşımadığı yönsel hız verisini istiyor.
+3. Teslim kapısı (§7) için kalan: Faz 4/5/6'nın ya uygulanması ya da açık tasarım
+   kararlarıyla ayrı bir backlog belgesine taşınması, ve `npm run build:verify`
+   ile tam doğrulama.
 4. Her TypeScript değişikliğinden sonra `npx tsc --noEmit`; her dar dilimden
    sonra ilgili filtreli engine testini çalıştır. Kalabalık/darbe görünümü için
    browser veya kullanıcı görsel kabulü açıkça ayrı yazılır.
@@ -341,9 +409,9 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
 - 2026-08-11 — Görsel kabul: idle/attack geçişleri çalışıyor.
 - 2026-08-11 — 512² `M_Guard` materyali, Skeletal Mesh Editor slot yüzeyi ve
   `Guard.materials.json` üzerinden Guard'a atandı.
-- 2026-08-11 — `walk_2` ve `run_2`, sabit birim seed'iyle hareket varyantlarına
-  eklendi. Hedefli skeletal testler ve TypeScript kontrolü geçti; dünya içi
-  görsel kabul açık.
+- 2026-08-11 — `walk_2` ve `run_2` önce sabit birim seed'iyle ileri hareket
+  varyantlarına eklendi; sonraki incelemede kaynak kliplerin geri hareket ettiği
+  görüldü. Bu ilk atama geçersizdir ve Faz 5a ile kaldırılmıştır.
 - 2026-08-11 — Faz 2 uygulandı: `hit` rolü, `HealthComponent.impactCount`
   merkezî sayacı, `advanceRtsAction` içinde death > impact > attack önceliği ve
   üç impact klibinin deterministik varyant havuzu. Dört hasar yolunun dördü de
@@ -355,7 +423,23 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
   başlangıcında kilitlenen `RtsActionState.layered` kararı, Guard'a
   `upperBodyBone: "mixamorig:Spine"` ve sanitize toleranslı maske araması. 4 yeni
   engine kontrolü; `tsc --noEmit`, `verify:imports` ve fast `test:engine`
-  (1399 kontrol) yeşil. Dünya içi görsel kabul açık.
+  (1399 kontrol) yeşil.
+- 2026-08-11 — **Görsel kabul: Faz 1 (walk/run varyantları) ve Faz 2b (katmanlı
+  darbe) dünya içinde kabul edildi.** Yürüyen muhafız vurulduğunda adımını
+  sürdürüyor, ayak kayması giderildi.
+- 2026-08-11 — Faz 3 uygulandı: `death_2` (3.933 s) varyant havuzuna eklendi, kod
+  değişikliği gerekmedi. Despawn penceresinin tamamen sunumsal olduğu — her oyun
+  sorgusunun `health.depleted`'a bağlı olduğu — incelenip teste bağlandı.
+- 2026-08-11 — Faz 3a: kullanıcı ölüm animasyonunun bitmeden kesildiğini bildirdi.
+  Düşüş (`fallSeconds`) ile ceset penceresi (`UNIT_CORPSE_SECONDS = 5`) ayrıldı ve
+  `updateDeath` simülasyon hızını alarak düşüş kısmını ölçekler oldu — sunum
+  render saatinde, pencere simülasyon saatinde ilerlediği için 2×+ hızlarda klip
+  kırpılıyordu. 5 yeni/güncellenmiş engine kontrolü; `tsc --noEmit` ve tam
+  `test:engine:slow` (1412 kontrol) yeşil. Dünya içi görsel kabul açık.
+- 2026-08-11 — Faz 5a uygulandı: `walk_2`/`run_2` ileri varyant havuzundan
+  çıkarılıp `walkBack`/`runBack` rollerine taşındı. `T` ardından zemin sağ tık
+  yalnız Guard'lara yönü koruyan geri rota verir; TypeScript ve hedefli engine
+  kontrolleri geçti. Dünya içi görsel kabul açık.
 
 ## 7. Teslim Kapısı
 

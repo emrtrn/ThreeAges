@@ -12,6 +12,8 @@ export function updateUnitDeaths(
   units: UnitSystem,
   selection: Pick<SelectionSystem, "remove">,
   dt: number,
+  /** The rate `dt` is already scaled by; see {@link Unit.updateDeath}. */
+  simulationSpeed = 1,
 ): void {
   for (const unit of [...units.all()]) {
     if (!unit.health.depleted) continue;
@@ -19,6 +21,6 @@ export function updateUnitDeaths(
       selection.remove(unit);
       units.clearAttackTargets(unit);
     }
-    if (unit.updateDeath(dt)) units.despawn(unit);
+    if (unit.updateDeath(dt, simulationSpeed)) units.despawn(unit);
   }
 }

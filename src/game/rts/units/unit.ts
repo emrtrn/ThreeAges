@@ -64,6 +64,8 @@ export interface RtsPresentationUpdate {
   readonly planarSpeed: number;
   /** Keep a deliberately unhurried mover on its walk clip at any travel speed. */
   readonly forceWalk?: boolean;
+  /** True while the unit is travelling without turning its body toward the route. */
+  readonly backward?: boolean;
   /** True while a live target is inside weapon range — i.e. blows are landing. */
   readonly attacking: boolean;
   /** True once the defeat pose has begun. */
@@ -133,8 +135,18 @@ export interface RtsPresentationHandle {
 
 /** Gameplay footprint used by selection, commands and formation spacing. */
 export const UNIT_RADIUS = 0.5;
-/** Brief defeat presentation before the unit leaves the field. */
+/** How long the code tip-over takes to lay an unanimated unit down. */
 export const UNIT_DEATH_SECONDS = 0.35;
+/**
+ * How long a fallen body stays on the field before it is removed.
+ *
+ * A floor under the defeat window rather than the window itself: the fall has to
+ * finish first, so a unit is held for its own clip *or* this, whichever is
+ * longer. Splitting it this way is what lets the two be tuned against different
+ * things — the clip length is a fact about the asset, and this is a readability
+ * choice about how long a player gets to see what died where.
+ */
+export const UNIT_CORPSE_SECONDS = 5;
 /** A worker rests at a player-chosen point before automatic work may reclaim it. */
 export const WORKER_RETURN_DELAY_SECONDS = 3;
 
@@ -289,6 +301,8 @@ export class Unit {
    * with its old job or a Guard may abandon after taking one hit.
    */
   private playerMoveOrder = false;
+  /** A player-issued reverse move; gameplay stays a normal route, presentation keeps its facing. */
+  private retreating = false;
   /**
    * True while a rescue escort is walking this unit out of a footprint it was
    * caught inside. It marks the one stretch of movement that must ignore crowd
@@ -430,6 +444,7 @@ export class Unit {
     this.presentation?.update?.({
       deltaSeconds,
       planarSpeed: this.measurePlanarSpeed(deltaSeconds),
+      backward: this.retreating,
       attacking: this.isTradingBlows() || this.hunting,
       dying: this.dying,
       working: this.working,
@@ -511,6 +526,7 @@ export class Unit {
     this.attackMoveTarget = null;
     this.movePath = [];
     this.playerMoveOrder = false;
+    this.retreating = false;
     this.rescuing = false;
     this.collisionRecoverySeconds = 0;
     this.resumeAutomaticWorkerAssignment();
@@ -531,6 +547,7 @@ export class Unit {
     this.resumeAutomaticWorkerAssignment();
     this.moveTarget = new Vector3(x, 0, z);
     this.playerMoveOrder = true;
+    this.retreating = false;
     this.rescuing = true;
   }
 
@@ -569,6 +586,20 @@ export class Unit {
   /** Set a player-issued ground route that automation must not preempt. */
   setPlayerMovePath(points: readonly Vector3[]): void {
     this.replaceMovePath(points, true);
+  }
+
+  /**
+   * Set a player-issued route that keeps a Guard's current facing while it
+   * moves. The route still uses ordinary navigation, collision and arrival
+   * rules; only its body heading and locomotion role differ.
+   */
+  setPlayerRetreatPath(points: readonly Vector3[]): void {
+    this.replaceMovePath(points, true, true);
+  }
+
+  /** Whether the current player route is a backwards retreat. */
+  get isRetreating(): boolean {
+    return this.retreating && this.hasPlayerMoveOrder;
   }
 
   /** Whether an active player-issued ground route still owns this unit. */
@@ -611,12 +642,13 @@ export class Unit {
     this.workerReturnDelayRemaining = Math.max(0, this.workerReturnDelayRemaining - Math.max(0, dt));
   }
 
-  private replaceMovePath(points: readonly Vector3[], playerMoveOrder: boolean): void {
+  private replaceMovePath(points: readonly Vector3[], playerMoveOrder: boolean, retreating = false): void {
     this.setAttackTarget(null);
     this.attackMoveTarget = null;
     this.moveTarget = null;
     this.movePath = points.map((point) => point.clone());
     this.playerMoveOrder = playerMoveOrder;
+    this.retreating = retreating;
     this.rescuing = false;
     this.collisionRecoverySeconds = 0;
     if (!playerMoveOrder) this.resumeAutomaticWorkerAssignment();
@@ -633,6 +665,7 @@ export class Unit {
     this.movePath = points.map((point) => point.clone());
     this.attackMoveTarget = destination.clone();
     this.playerMoveOrder = false;
+    this.retreating = false;
     this.collisionRecoverySeconds = 0;
   }
 
@@ -666,6 +699,7 @@ export class Unit {
     this.movePath.shift();
     if (this.movePath.length === 0) {
       this.playerMoveOrder = false;
+      this.retreating = false;
       this.workerReturnDelayRemaining = this.workerReturnDelayAfterMove;
       this.workerReturnDelayAfterMove = 0;
     }
@@ -678,6 +712,7 @@ export class Unit {
     this.moveTarget = null;
     this.movePath = [];
     this.playerMoveOrder = false;
+    this.retreating = false;
     this.rescuing = false;
     this.collisionRecoverySeconds = 0;
     this.resumeAutomaticWorkerAssignment();
@@ -699,6 +734,7 @@ export class Unit {
     this.attackMoveTarget = null;
     this.moveTarget = null;
     this.movePath = [];
+    this.retreating = false;
     this.collisionRecoverySeconds = 0;
   }
 
@@ -719,6 +755,7 @@ export class Unit {
     this.chaseOrigin = target !== null && auto ? this.position.clone() : null;
     this.moveTarget = null;
     this.movePath = [];
+    this.retreating = false;
     if (target) {
       this.playerMoveOrder = false;
       this.resumeAutomaticWorkerAssignment();
@@ -814,24 +851,50 @@ export class Unit {
   }
 
   /**
-   * The defeat window this unit actually plays: its presentation's authored
-   * death animation when it has one, otherwise the code collapse's fixed
-   * {@link UNIT_DEATH_SECONDS}.
+   * How long the fall itself takes: the presentation's authored death animation
+   * when it has one, otherwise the code tip-over's {@link UNIT_DEATH_SECONDS}.
    */
-  get deathSeconds(): number {
+  get fallSeconds(): number {
     return this.presentation?.deathSeconds ?? UNIT_DEATH_SECONDS;
   }
 
-  /** Advance the defeat pose; true means the registry may now remove the unit. */
-  updateDeath(dt: number): boolean {
+  /**
+   * The defeat window at normal speed: the fall, then the body lying there for
+   * the rest of {@link UNIT_CORPSE_SECONDS}.
+   */
+  get deathSeconds(): number {
+    return Math.max(this.fallSeconds, UNIT_CORPSE_SECONDS);
+  }
+
+  /**
+   * Advance the defeat pose; true means the registry may now remove the unit.
+   *
+   * `simulationSpeed` is what keeps a death readable at 2x–8x, and it is needed
+   * because the two clocks involved are genuinely different: an authored death
+   * clip is played by the presentation on the *rendered* delta (deliberately —
+   * a health bar and a tracer should look the same at any game speed), while
+   * this window is spent on the *simulation* delta, which is the rendered one
+   * multiplied by the speed. Left unscaled, 4x speed burns the window four times
+   * faster than the clip it exists to wait for and the body vanishes a quarter
+   * of the way into its own fall.
+   *
+   * Only the fall is scaled. The corpse linger stays in simulation seconds
+   * because it is not waiting for anything on screen: at 8x the player is
+   * fast-forwarding a battle and wants the field cleared at that speed too.
+   */
+  updateDeath(dt: number, simulationSpeed = 1): boolean {
     if (this.deathElapsed === null) return false;
-    const duration = this.deathSeconds;
+    const speed = Number.isFinite(simulationSpeed) && simulationSpeed > 0 ? simulationSpeed : 1;
+    const fall = this.fallSeconds * speed;
+    const duration = Math.max(fall, UNIT_CORPSE_SECONDS);
     this.deathElapsed = Math.min(duration, this.deathElapsed + Math.max(0, dt));
     // The tip-over is the *fallback* death. An asset that animates its own fall
     // must not also be rotated by code, or the body lands twice — once from the
     // clip's own collapse and once from this, ending face-down in the ground.
+    // It is paced by the fall, not by the whole window: the body goes down at
+    // its own speed and then lies there, rather than sinking over five seconds.
     if (this.presentation?.deathSeconds === undefined) {
-      const progress = this.deathElapsed / duration;
+      const progress = fall > 0 ? Math.min(1, this.deathElapsed / fall) : 1;
       this.object.rotation.z = -Math.PI * 0.5 * progress;
       this.object.position.y = -UNIT_RADIUS * 0.2 * progress;
     }

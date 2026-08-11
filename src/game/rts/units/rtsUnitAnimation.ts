@@ -17,7 +17,7 @@
  */
 
 /** What the unit is doing, independent of which clips its asset carries. */
-export type RtsAnimationRole = "idle" | "walk" | "run" | "work" | "attack" | "hit" | "death";
+export type RtsAnimationRole = "idle" | "walk" | "run" | "walkBack" | "runBack" | "work" | "attack" | "hit" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
 export interface RtsAnimationInput {
@@ -25,6 +25,8 @@ export interface RtsAnimationInput {
   readonly planarSpeed: number;
   /** Some non-combat movers (the pack donkey) never visually run. */
   readonly forceWalk?: boolean;
+  /** True while an order deliberately keeps the unit facing forward as it retreats. */
+  readonly backward?: boolean;
   /** True while a live target is inside weapon range. */
   readonly attacking: boolean;
   /** True once the defeat pose has begun. */
@@ -199,6 +201,8 @@ export function classifyRtsAnimation(
 ): RtsAnimationRole {
   if (input.dying) return "death";
   if (input.attacking) return "attack";
+  if (input.backward && !input.forceWalk && input.planarSpeed >= tuning.runSpeed) return "runBack";
+  if (input.backward && input.planarSpeed > tuning.walkSpeed) return "walkBack";
   if (!input.forceWalk && input.planarSpeed >= tuning.runSpeed) return "run";
   if (input.planarSpeed > tuning.walkSpeed) return "walk";
   if (input.working) return "work";
@@ -215,6 +219,11 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   idle: ["idle"],
   walk: ["walk", "run", "idle"],
   run: ["run", "walk", "idle"],
+  // A project that has not authored dedicated reverse clips remains fully
+  // playable: its retreat order uses the ordinary gait instead of holding a
+  // pose. Guard maps these to its verified reverse loops in the sidecar.
+  walkBack: ["walkBack", "walk", "run", "idle"],
+  runBack: ["runBack", "walkBack", "run", "walk", "idle"],
   // Work is continuous and looped like locomotion, so it *does* reach its own
   // clip. An asset that authors none simply stands there, which is what the
   // capsule-era worker did and is never wrong — only less expressive.
@@ -266,7 +275,11 @@ export function rtsPlaybackRate(
   planarSpeed: number,
   tuning: RtsLocomotionTuning,
 ): number {
-  const reference = role === "run" ? tuning.runClipSpeed : role === "walk" ? tuning.walkClipSpeed : 0;
+  const reference = role === "run" || role === "runBack"
+    ? tuning.runClipSpeed
+    : role === "walk" || role === "walkBack"
+      ? tuning.walkClipSpeed
+      : 0;
   if (reference <= 0) return 1;
   const rate = planarSpeed / reference;
   return Math.min(tuning.maxPlaybackRate, Math.max(tuning.minPlaybackRate, rate));
