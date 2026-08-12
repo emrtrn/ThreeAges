@@ -32485,7 +32485,7 @@
       "name": "Guard",
       "assetType": "skeletalMesh",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Guard.glb",
+      "path": "assets/ThreeAges/Characters/Guard/Guard.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -32505,10 +32505,10 @@
     },
     {
       "id": "guard-bc",
-      "name": "Guard BC",
+      "name": "Guard_BC",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Guard_BC.png",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_BC.png",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -32528,10 +32528,10 @@
     },
     {
       "id": "guard-blue-bc",
-      "name": "Guard Blue BC",
+      "name": "Guard_Blue_BC",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Guard_Blue_BC.png",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_Blue_BC.png",
       "tags": [
         "guard",
         "base-color",
@@ -32556,10 +32556,10 @@
     },
     {
       "id": "guard-red-bc",
-      "name": "Guard Red BC",
+      "name": "Guard_Red_BC",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Guard_Red_BC.png",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_Red_BC.png",
       "tags": [
         "guard",
         "base-color",
@@ -32584,10 +32584,10 @@
     },
     {
       "id": "guard-n",
-      "name": "Guard N",
+      "name": "Guard_N",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Guard_N.png",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_N.png",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -32607,10 +32607,10 @@
     },
     {
       "id": "m-guard-material",
-      "name": "M Guard.Material",
+      "name": "M_Guard",
       "assetType": "material",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/M_Guard.material.json",
+      "path": "assets/ThreeAges/Characters/Guard/M_Guard.material.json",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -32630,10 +32630,10 @@
     },
     {
       "id": "guard-orm",
-      "name": "Guard ORM",
+      "name": "Guard_ORM",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Guard_ORM.png",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_ORM.png",
       "tags": [
         "guard",
         "orm",
@@ -32659,10 +32659,10 @@
     },
     {
       "id": "m-guard-ai-material",
-      "name": "M Guard AI.Material",
+      "name": "M_Guard_AI",
       "assetType": "material",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/M_Guard_AI.material.json",
+      "path": "assets/ThreeAges/Characters/Guard/M_Guard_AI.material.json",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -32685,7 +32685,7 @@
       "name": "Archer",
       "assetType": "skeletalMesh",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Archer.glb",
+      "path": "assets/ThreeAges/Characters/Archer/Archer.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -32700,6 +32700,144 @@
         "receiveShadow": true,
         "collision": true,
         "bytes": 28567072
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "worker-bc",
+      "name": "Worker_BC",
+      "assetType": "texture",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Worker/Worker_BC.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 3631761
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-worker-material",
+      "name": "M_Worker",
+      "assetType": "material",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Worker/M_Worker.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 682
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "worker",
+      "name": "Worker",
+      "assetType": "skeletalMesh",
+      "category": "Worker",
+      "path": "assets/ThreeAges/Characters/Worker/Worker.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Worker",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5617076
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "erika-archer-clothes-diffuse",
+      "name": "Erika Archer Clothes Diffuse",
+      "assetType": "texture",
+      "category": "Archer",
+      "path": "assets/ThreeAges/Characters/Archer/Erika_Archer_Clothes_diffuse.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Archer",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 3479930
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "erika-archer-clothes-normal",
+      "name": "Erika Archer Clothes Normal",
+      "assetType": "texture",
+      "category": "Archer",
+      "path": "assets/ThreeAges/Characters/Archer/Erika_Archer_Clothes_normal.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Archer",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 3065830
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-archer-material",
+      "name": "M Archer.Material",
+      "assetType": "material",
+      "category": "Archer",
+      "path": "assets/ThreeAges/Characters/Archer/M_Archer.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Archer",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 682
       },
       "license": "Unknown"
     }

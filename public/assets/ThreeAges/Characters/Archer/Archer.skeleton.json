@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "sockets": [],
+  "animationSet": {},
+  "animationVariants": {},
+  "blendSpaces": [],
+  "notifies": [],
+  "montages": [],
+  "rootMotion": [],
+  "physicsBodies": [],
+  "physicsConstraints": [],
+  "preview": {
+    "selectedClip": "Archer_fall_a_land_to_run_forward"
+  }
+}

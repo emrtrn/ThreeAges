@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "sockets": [],
+  "animationSet": {},
+  "animationVariants": {},
+  "blendSpaces": [],
+  "notifies": [],
+  "montages": [],
+  "rootMotion": [
+    {
+      "clip": "Worker_left_strafe",
+      "mode": "lockXYZ"
+    },
+    {
+      "clip": "Worker_left_strafe_walking",
+      "mode": "lockXYZ"
+    },
+    {
+      "clip": "Worker_running",
+      "mode": "lockXYZ"
+    },
+    {
+      "clip": "Worker_walking",
+      "mode": "lockXYZ"
+    }
+  ],
+  "physicsBodies": [],
+  "physicsConstraints": [],
+  "preview": {
+    "selectedClip": "Worker_walking"
+  }
+}
