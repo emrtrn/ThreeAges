@@ -34,7 +34,78 @@
     ]
   },
   "blendSpaces": [],
-  "notifies": [],
+  "notifies": [
+    {
+      "name": "footstep",
+      "clip": "guard_sword_and_shield_walk_1",
+      "time": 0.36
+    },
+    {
+      "name": "footstep",
+      "clip": "guard_sword_and_shield_walk_1",
+      "time": 0.92
+    },
+    {
+      "name": "footstep",
+      "clip": "guard_sword_and_shield_run_1",
+      "time": 0.2
+    },
+    {
+      "name": "footstep",
+      "clip": "guard_sword_and_shield_run_1",
+      "time": 0.55
+    },
+    {
+      "name": "footstep",
+      "clip": "guard_sword_and_shield_walk_2",
+      "time": 0.33
+    },
+    {
+      "name": "footstep",
+      "clip": "guard_sword_and_shield_walk_2",
+      "time": 0.95
+    },
+    {
+      "name": "footstep",
+      "clip": "guard_sword_and_shield_run_2",
+      "time": 0.25
+    },
+    {
+      "name": "footstep",
+      "clip": "guard_sword_and_shield_run_2",
+      "time": 0.47
+    },
+    {
+      "name": "sword-swing",
+      "clip": "guard_sword_and_sheld_attack_2",
+      "time": 0.65
+    },
+    {
+      "name": "sword-swing",
+      "clip": "guard_sword_and_sheld_attack_4",
+      "time": 0.46
+    },
+    {
+      "name": "sword-swing",
+      "clip": "guard_sword_and_shield_slash_5",
+      "time": 0.63
+    },
+    {
+      "name": "body-impact",
+      "clip": "guard_sword_and_shield_impact_1",
+      "time": 0.15
+    },
+    {
+      "name": "body-impact",
+      "clip": "guard_sword_and_shield_impact_2",
+      "time": 0.1
+    },
+    {
+      "name": "body-impact",
+      "clip": "guard_sword_and_shield_impact_3",
+      "time": 0.11
+    }
+  ],
   "montages": [],
   "rootMotion": [
     {

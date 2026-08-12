@@ -1,11 +1,11 @@
 # ThreeAges — Muhafız Animasyon Tamamlama Planı
 
 Oluşturulma tarihi: 2026-08-11  
-Durum: **Devam ediyor — Faz 1, 2, 2b, 3 (3a/3b dahil), 4 ve 5a kabul edildi.
+Durum: **Devam ediyor — Faz 1, 2, 2b, 3 (3a/3b dahil), 4, 5a ve Ek A kabul edildi.
 Faz 4 tasarım kapısı kapandı: blok yolu denendi ve elendi, yerine Tapınak
-alanında iyileşme duruşu uygulanıp kabul edildi. Ek A (`hold` duruşunda hazır
-poz) uygulandı, görsel kabulü açık. Fonksiyonel iş olarak geriye yalnız Faz 5b ve
-Faz 6 kaldı; ikisi de hâlâ tasarım kapısında.**
+alanında iyileşme duruşu uygulanıp kabul edildi. Faz 6 tasarım kapısı da kapandı
+(notify hattının tüketicisi VFX seçildi) ve uygulandı; dünya içi görsel kabulü
+açık. Fonksiyonel iş olarak geriye yalnız Faz 5b kaldı.**
 
 ## 1. Amaç
 
@@ -661,29 +661,133 @@ recovery boyunca idle'a düşmemesi temel kabul şartıdır.
 
 ### Faz 6 — Footstep, shield ve hit VFX/SFX notify hattı
 
-**Durum:** Generic runtime notify tüketicisi eksik.
+**Durum:** ✅ Kod, veri ve otomasyon 2026-08-12'de bitti; dünya içi görsel kabul
+açık.
 
-Skeletal Mesh Editor notifies'i sidecar'a yazabiliyor; fakat RTS
-`RtsUnitPresentation` bunları runtime'da yayınlamıyor. Bu faz önce generic,
-tekrar tetiklemeyen clip-playhead notify dispatcher tasarlar; ardından Guard
-kliplerine `footstep`, `sword-swing`, `shield-hit` ve `body-impact` işaretleri
-ekler.
+Skeletal Mesh Editor notifies'i sidecar'a zaten yazabiliyordu ve saf tetikleme
+mantığı (`src/game/animationNotifies.ts`) TPS tarafında çalışıyordu; eksik olan
+tek şey RTS sunumunun playhead'i hiç örneklememesiydi.
+
+#### 6.1 Tasarım kapısı: hattın ucundaki tüketici (kullanıcı kararı, 2026-08-12)
+
+Faz'ın adı "VFX/SFX" diyor, fakat RTS'te **ses altyapısı yok** — `rtsMatchOverlay`
+bunu açıkça yazıyor ("Ana ses seviyesi" ayarı bilerek yok) ve ses,
+`THREEAGES_AUDIO_DESIGN_AND_PRODUCTION_PLAN.md` ile ayrı bir üretim planı; henüz
+tek bir SFX varlığı üretilmedi. Üç seçenek sunuldu (yalnız dispatcher, dispatcher
+artı VFX tüketicisi, backlog'a taşı) ve **VFX tüketicisi** seçildi: tüketicisi
+olmayan bir hat ne dünya içinde kabul edilebilir ne de §13'ün "yarım sistem"
+kuralına uyar, `VfxSubsystem` ise RTS'te zaten canlı.
+
+#### 6.2 Ölçüm (GLB'den, 2026-08-12)
+
+İşaret zamanları tahmin değil, ölçüm. Ayak temasları için ayak/parmak kemikleri
+üzerinde forward kinematics; kılıç teması için kalçaya **göreli** sağ el hızı
+(klipler runtime'da `lockXYZ` olduğu için mutlak ölçüm oynanmayan bir klibi
+tarif ederdi); darbe için gövdenin geri tepme tepesi.
+
+| Klip | Süre | İşaret | Ölçülen an |
+| --- | --- | --- | --- |
+| `walk_1` | 1.133 s | `footstep` ×2 | 0.36 / 0.92 |
+| `run_1` | 0.733 s | `footstep` ×2 | 0.20 / 0.55 |
+| `walk_2` | 1.300 s | `footstep` ×2 | 0.33 / 0.95 |
+| `run_2` | 0.567 s | `footstep` ×2 | 0.25 / 0.47 |
+| `attack_2` | 1.333 s | `sword-swing` | 0.65 |
+| `attack_4` | 1.033 s | `sword-swing` | 0.46 |
+| `slash_5` | 1.400 s | `sword-swing` | 0.63 |
+| `impact_1/2/3` | 0.733 / 1.000 / 0.733 s | `body-impact` | 0.15 / 0.10 / 0.11 |
+
+**`shield-hit` authorlanmadı.** Planın ilk taslağında vardı; Faz 4 o taslaktan
+sonra blok mekaniğini eledi ve bugün sidecar'da blok klibi yok. Bir işaret klip
+yaratamaz — oynamayan bir klibin üzerine konurdu. K-04'ün notify tarafındaki
+karşılığı bu ve bir kontrol bunu böyle tutuyor. Aynı gerekçeyle `kick` klibi de
+işaretsiz: teması gerçek ama sesi kılıçtan başka bir olay, ve adını ses planı
+isteyince koymak tek satır veri.
+
+#### 6.3 Yapılanlar
+
+1. **Playhead yüzeyi:** `UnitClipAnimator.getActiveClip()` arayüze eklendi
+   (`CrossfadeAnimator` zaten taşıyordu), `LayeredClipAnimator` bunu **alt
+   kanaldan** karşılıyor ve torso için ayrı bir `getUpperActiveClip()` veriyor.
+   Ayrım şart: tam gövde klibi iki kanalda da aynı klip, ikisini birden okumak
+   her saldırıyı **iki kez** atardı. Üst kanal yalnız `playUpperOnce` onu
+   sahiplendiği sürece klip bildiriyor, gerisinde `null`.
+2. **İki detektör, tek sunum:** `RtsUnitPresentation` gövde ve torso için ayrı
+   `AnimationNotifyTracker` tutuyor. Yürürken vurulan birim gerçekten iki
+   işaretli klip oynatıyor — ayakları basmaya devam ederken göğsü darbeyi alıyor —
+   ve bu tek bir playhead'e sığmıyor.
+3. **Yeniden başlatma sinyali:** `AnimationNotifyTracker.arm(clip, time)`.
+   Kendi üzerine yeniden başlayan bir klip (aynı ad, geri saran zaman) playhead
+   karşılaştırmasına **loop wrap** gibi görünür ve öyle okunursa yarıda kesilen
+   çekimin hiç ulaşmadığı bütün kuyruk işaretlerini atar. Sunum bir one-shot'ın
+   *başladığı* kareyi zaten biliyor (`started`), montaj bölümü kimliği de
+   `startedContinuous` ile izleniyor.
+4. **Tek tick noktası:** `update` içindeki dört ayrı `animator.update` çağrısı
+   `tick()` altında toplandı; örnekleme her zaman tick'ten **sonra**. Uzak
+   birimin biriktirilmiş deltası tek bir aralık olarak geçiyor, yani işaret
+   atlanmıyor da tekrarlanmıyor da. Donmuş ceset (Faz 3b) ve duraklatılmış kare
+   animatöre hiç girmediği için hiç atmıyor.
+5. **Tüketici tabloda, kodda değil:** `src/game/rts/content/rtsNotifyEffects.ts`
+   saf modül — hangi ad çiziliyor, gövdenin neresinde, hangi mesafeye kadar ve
+   saniyede kaç kez. Tabloda karşılığı olmayan ad hata değil: `sword-swing`
+   ölçüldü ve authorlandı, çünkü ses planının beklediği olay o; sadece hiçbir
+   şey çizmiyor.
+6. **Ayrı VFX bütçesi:** `unitNotifyVfx` ikinci bir `VfxSubsystem`.
+   `structureDamageVfx`'in bütçesi **olaylar** için ölçülmüş (bir yapı hasar
+   alır, bir gülle iner); ayak sesi olay değil, ekrandaki asker sayısıyla ölçeklenen
+   sürekli bir emisyon. Aynı havuzda yürüyen bir bölük bütün payı toza harcar ve
+   yıkılan Karakol sessizce çöker. Ayrıldığında bir kalabalığın yapabileceği en
+   kötü şey kendi ayak seslerini düşürmek. Yoğunluk aynı kalite ayarını takip
+   ediyor.
+7. **Global hız tavanı, per-unit değil:** `footstep` saniyede 20; kırk askerin
+   her biri kendi limitinin altında kalır ve toplam hiçbir şeyi bağlamazdı.
+   `body-impact` hiç kısılmıyor — kalabalıkta eksik bir ayak sesi görünmez, eksik
+   bir darbe dövüşün okunur yarısıdır. Mesafe kırpması `footstep` için 42 birim,
+   yani animasyon throttle'ının başladığı 45'ten **önce**: hiç çizilmeyen bir
+   birimin mixer'ı ayrıca kısılıyor.
+8. **Yeni varlıklar:** `FX_RTS_Footstep_Dust` (0.2 s, 4 parçacık) ve
+   `FX_RTS_Body_Impact` (0.15 s, 7 parçacık), manifestte `rts-fx-footstep-dust`
+   ve `rts-fx-body-impact` olarak. İkisi de sprite, dokusuz.
+
+**Otomasyon (6 yeni engine kontrolü, `--filter "Muhafiz Faz 6"`):**
+
+- Her işaret bir kez atılıyor ve kare boyu bunu değiştirmiyor: 60 Hz ile 15 Hz
+  aynı sayıyı veriyor, duraklatılmış kare hiç atmıyor, işaretsiz asset yolu hiç
+  girmiyor.
+- Katmanlı darbe iki kanaldan atıyor (ayaklar basmaya devam ederken bir kez
+  `body-impact`), tam gövde saldırısı **bir** kez atıyor.
+- Yarıda kesilip yeniden başlayan saldırı önceki çekimin kuyruğunu atmıyor;
+  donmuş ceset 10 saniye boyunca hiç atmıyor.
+- Guard işaretleri GLB'de gerçekten var olan kliplerin **içinde** duruyor
+  (yazım hatası ve süre taşması sessizce hiçbir şeye çözülür), ad↔klip ilişkisi
+  pinli (ayak izi yalnız locomotion, temas yalnız saldırı, sarsıntı yalnız darbe
+  klibinde; her locomotion klibi iki ayağı da işaretliyor), `shield-hit` yok ve
+  blok rolü hâlâ authorlanmamış (K-04), notifies editör kaydından sağ çıkıyor.
+- Efekt tablosunun her id'si manifestte `effect` olarak var, runtime
+  normalizer'ıyla ayrışıyor ve döngüsüz kısa bir burst; hız tavanı `footstep`'i
+  kısıyor `body-impact`'i kısmıyor; mesafe kırpması ve "kamerası olmayan çağıran
+  yakın sayılır" sözleşmesi.
+- K-02: sunum tüketicisi birimi kımıldatmıyor, canını, cooldown'unu ve emrini
+  değiştirmiyor.
 
 **Kabul:** Crossfade, uzaktaki düşük cadence, klip restart ve pause/resume
 durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirmez.
 
+**Dünya içi görsel kabul (açık):** yürüyen bir muhafız bölüğünün ayaklarının
+altında küçük toz bulutları çıkmalı (yakın kamerada; ~42 birimden sonra kesilir),
+ve vurulan bir muhafızın göğüs hizasında kısa bir toz patlaması görünmeli.
+Kılıç sallamak hiçbir şey çizmez — bu beklenen davranış.
+
 ## 5. Sonraki Oturum İçin Başlangıç Noktası
 
-**Açık görsel kabul kalmadı.** Faz 1, 2b, 3, 4, 5a ve Ek A dünya içinde kabul
-edildi. Ek A.1'in (hold hasar azaltma) dünya içi doğrulaması isteğe bağlı: kule
-ateşi altındaki bir Guard bölüğünü `H` ile tutup canlarının daha yavaş düştüğünü
-izlemek yeterli — sayısal kanıt zaten testte.
+**Açık tek görsel kabul Faz 6'nın.** Faz 1, 2b, 3, 4, 5a ve Ek A dünya içinde
+kabul edildi. Ek A.1'in (hold hasar azaltma) dünya içi doğrulaması isteğe bağlı:
+kule ateşi altındaki bir Guard bölüğünü `H` ile tutup canlarının daha yavaş
+düştüğünü izlemek yeterli — sayısal kanıt zaten testte.
 
-1. Fonksiyonel iş olarak yalnız Faz 5b ve Faz 6 kaldı, ikisi de hâlâ tasarım
-   kapısında. En ucuz sıra Faz 6 (generic notify dispatcher) çünkü tek gereksinimi
-   runtime altyapısı, yeni oyun mekaniği değil. Faz 5b (turn/strafe) sunumun bugün
-   taşımadığı yönsel hız verisini istiyor ve önce o verinin nereden geleceğine
-   karar verilmeli.
+1. Fonksiyonel iş olarak yalnız **Faz 5b** kaldı ve hâlâ tasarım kapısında:
+   turn/strafe, sunumun bugün taşımadığı yönsel hız verisini istiyor ve önce o
+   verinin nereden geleceğine karar verilmeli. Faz 6 uygulandı; ondan geriye
+   yalnız dünya içi görsel kabul duruyor (§4, Faz 6'nın sonu).
 2. İsteğe bağlı ve bağımsız eklerden biri (`hold` duruşunda `block_idle`) **Ek A
    olarak uygulandı**; §4.5'in "Uygulanmayan" listesinde iki tanesi kaldı:
    `crouch`/`crouching` geçiş klipleriyle gerçek diz çökme ve kalkma hareketi
@@ -783,6 +887,20 @@ izlemek yeterli — sayısal kanıt zaten testte.
   `CombatTarget.stanceResistanceAt(distance)` üzerinden tek sahipte,
   `resolveDamage` artık **zorunlu** `fromDistance` alıyor ve aura ile çarpımsal
   birleşip tavana takılıyor. 4 yeni engine kontrolü.
+- 2026-08-12 — **Faz 6 uygulandı.** Tasarım kapısı kullanıcı kararıyla kapandı:
+  RTS'te ses altyapısı olmadığı ve ses ayrı bir üretim planı olduğu için hattın
+  tüketicisi VFX seçildi. `UnitClipAnimator.getActiveClip()` arayüze eklendi ve
+  `LayeredClipAnimator` gövde/torso için iki ayrı playhead veriyor (tam gövde
+  klibi iki kanalda da aynı klip olduğu için torso yalnız sahiplendiğinde
+  bildiriyor); sunum iki `AnimationNotifyTracker` sürüyor; yeni
+  `AnimationNotifyTracker.arm()` kendi üzerine yeniden başlayan klibi loop
+  wrap'tan ayırıyor; dört `animator.update` çağrısı tek `tick()`e toplandı ve
+  örnekleme hep tick'ten sonra. Guard'a 14 işaret authorlandı — hepsi GLB'den
+  ölçüldü (ayak temasları FK ile, kılıç teması kalçaya göreli el hızıyla).
+  `shield-hit` bilinçli olarak yok: Faz 4 blok mekaniğini eledi, klip yok
+  (K-04). Tüketici tarafı saf `rtsNotifyEffects` tablosu, ayrı bir
+  `VfxSubsystem` bütçesi ve iki yeni efekt varlığı. 6 yeni engine kontrolü;
+  `npm run build:verify` tam yeşil (1433 kontrol). Dünya içi görsel kabul açık.
 - 2026-08-11 — Faz 5a uygulandı: `walk_2`/`run_2` ileri varyant havuzundan
   çıkarılıp `walkBack`/`runBack` rollerine taşındı. `T` ardından zemin sağ tık
   yalnız Guard'lara yönü koruyan geri rota verir; TypeScript ve hedefli engine
@@ -795,8 +913,9 @@ Plan ancak şu şartlar birlikte sağlandığında tamam kabul edilir:
 - ✅ Faz 1 ile Faz 3'ün görsel kabulleri kaydedilmiş (2026-08-11 / 2026-08-12),
 - ✅ Faz 2 gerçek hasar kaynaklarının tamamını kapsayan testlerle kanıtlanmış,
 - ✅ Faz 4 ile Faz 5a uygulanıp kabul edilmiş (2026-08-12),
-- Faz 5b/6 ya uygulanıp kabul edilmiş ya da açık tasarım kararlarıyla ayrı
+- ✅ Faz 6 uygulanmış (2026-08-12) — dünya içi görsel kabulü açık,
+- Faz 5b ya uygulanıp kabul edilmiş ya da açık tasarım kararlarıyla ayrı
   backlog belgesine taşınmış — **tek açık madde bu,**
-- ✅ tam doğrulama (`npm run build:verify`) temiz geçmiş (2026-08-12, 1420 kontrol),
+- ✅ tam doğrulama (`npm run build:verify`) temiz geçmiş (2026-08-12, 1433 kontrol),
 - Guard materyal, root-motion ve animasyon sidecar'ları manifest/runtime/editor
   yollarında tutarlı kalmış olmalı.

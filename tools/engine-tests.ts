@@ -188,6 +188,11 @@ import {
   RTS_ANIMATION_DISTANCE_SETTINGS,
 } from "../src/game/rts/content/rtsUnitPresentation";
 import {
+  RtsNotifyEffectBudget,
+  RTS_NOTIFY_EFFECTS,
+  rtsNotifyEffectIds,
+} from "../src/game/rts/content/rtsNotifyEffects";
+import {
   advanceRtsAction,
   advanceRtsWorkMontage,
   classifyRtsAnimation,
@@ -39168,6 +39173,382 @@ check("Muhafiz Ek A (hold durusu): rol editor kaydinda hayatta kalir ve Guard bl
   for (const clip of idles) {
     assert.notEqual(clip, hold, "and an aggressive unit never falls into it by accident");
   }
+});
+
+/**
+ * Guard plan Faz 6 — the animation-notify line.
+ *
+ * A rig with a hip and a spine, so the same fixture serves both the plain
+ * animator and the layered one (`upperBodyBone` splits at the spine).
+ */
+function buildRtsNotifyRig(): { readonly root: Group; readonly model: Object3D; readonly clips: AnimationClip[] } {
+  const node = (name: string): Object3D => {
+    const object = new Object3D();
+    object.name = name;
+    return object;
+  };
+  const model = node("rig");
+  const hips = node("hips");
+  hips.add(node("spine"));
+  model.add(hips);
+  const root = new Group();
+  root.add(model);
+  const track = (bone: string, duration: number) =>
+    new VectorKeyframeTrack(`${bone}.position`, [0, duration], [0, 0, 0, 0, 0, 0]);
+  const clips = [
+    new AnimationClip("Idle_Loop", 1, [track("hips", 1), track("spine", 1)]),
+    new AnimationClip("Walk_Loop", 1, [track("hips", 1), track("spine", 1)]),
+    new AnimationClip("Attack_Once", 1, [track("hips", 1), track("spine", 1)]),
+    new AnimationClip("Impact_Once", 1, [track("hips", 1), track("spine", 1)]),
+  ];
+  return { root, model, clips };
+}
+
+/** The Faz 6 fixture's authored markers: one per clip, halfway through it. */
+const RTS_NOTIFY_FIXTURE = [
+  { name: "footstep", clip: "Walk_Loop", time: 0.5 },
+  { name: "sword-swing", clip: "Attack_Once", time: 0.5 },
+  { name: "body-impact", clip: "Impact_Once", time: 0.5 },
+];
+
+function driveRtsNotifies(options: {
+  readonly upperBodyBone?: string;
+  readonly notifies?: readonly { name: string; clip: string; time: number }[];
+}): { readonly presentation: RtsPresentationHandle; readonly fired: string[] } {
+  const { root, model, clips } = buildRtsNotifyRig();
+  const fired: string[] = [];
+  const presentation = createRtsUnitPresentation({
+    root,
+    pickTargets: [],
+    selectionRadius: 0.5,
+    moveSpeed: 6,
+    animation: {
+      target: model,
+      clips,
+      skeleton: normalizeAssetSkeleton({
+        animationSet: {
+          idle: "Idle_Loop",
+          walk: "Walk_Loop",
+          attack: "Attack_Once",
+          hit: "Impact_Once",
+        },
+        ...(options.upperBodyBone === undefined ? {} : { upperBodyBone: options.upperBodyBone }),
+        notifies: options.notifies ?? RTS_NOTIFY_FIXTURE,
+      }),
+    },
+    onNotify: (name) => fired.push(name),
+  });
+  return { presentation, fired };
+}
+
+/** Walking at the clip's calibrated speed: one clip second is one real second. */
+const RTS_NOTIFY_WALK = {
+  planarSpeed: 3,
+  attacking: false,
+  dying: false,
+  attackCount: 0,
+  impactCount: 0,
+  cameraDistanceSquared: null,
+} as const;
+
+check("Muhafiz Faz 6: her isaret bir kez atilir ve kare boyu bunu degistirmez", () => {
+  // The one thing a notify may never do: fire twice for one moment of the
+  // animation. Everything else about it — which sound, which puff of dust — is
+  // replaceable; a doubled footstep is a bug the player hears before anyone
+  // measures it. And a marker that is *skipped* is the same bug seen from the
+  // other side, which is why both bounds are asserted.
+  const fine = driveRtsNotifies({});
+  for (let step = 0; step < 120; step += 1) {
+    fine.presentation.update?.({ ...RTS_NOTIFY_WALK, deltaSeconds: 1 / 60 });
+  }
+  // One marker per one-second loop over two seconds; the first tick is spent
+  // arming rather than firing, so one short of two is allowed and three is not.
+  assert.ok(fine.fired.length >= 1 && fine.fired.length <= 2, `two seconds of walking (got ${fine.fired.length})`);
+  assert.deepEqual([...new Set(fine.fired)], ["footstep"], "and only the walk clip's marker fires");
+  fine.presentation.dispose();
+
+  // The same two seconds at the far-unit cadence, where banked time arrives as
+  // one large step. This is exactly where a naive playhead comparison either
+  // loses markers between samples or replays them across the loop seam.
+  const coarse = driveRtsNotifies({});
+  for (let step = 0; step < 30; step += 1) {
+    coarse.presentation.update?.({ ...RTS_NOTIFY_WALK, deltaSeconds: 1 / 15 });
+  }
+  assert.equal(
+    coarse.fired.length,
+    fine.fired.length,
+    `a distant unit's footfalls match a near one's (${coarse.fired.length} vs ${fine.fired.length})`,
+  );
+  coarse.presentation.dispose();
+
+  // A paused frame is not a small frame. The playhead has not moved, so a
+  // sample taken anyway would fire whatever marker it is sitting on, every frame.
+  const paused = driveRtsNotifies({});
+  for (let step = 0; step < 10; step += 1) {
+    paused.presentation.update?.({ ...RTS_NOTIFY_WALK, deltaSeconds: 0 });
+  }
+  assert.equal(paused.fired.length, 0, "a paused unit fires nothing");
+  paused.presentation.dispose();
+
+  // An asset that authors no markers never enters the path at all: this feature
+  // has to cost the archer, the worker and every animal exactly nothing.
+  const unmarked = driveRtsNotifies({ notifies: [] });
+  for (let step = 0; step < 120; step += 1) {
+    unmarked.presentation.update?.({ ...RTS_NOTIFY_WALK, deltaSeconds: 1 / 60 });
+  }
+  assert.equal(unmarked.fired.length, 0, "an unmarked asset emits nothing");
+  unmarked.presentation.dispose();
+});
+
+check("Muhafiz Faz 6: katmanli darbe iki kanaldan atar, tam gövde klibi bir kez atar", () => {
+  // Faz 2b split the body in two, which splits the playhead in two with it: a
+  // struck walker is genuinely playing two marked clips at once, and its feet
+  // have to keep landing while its chest takes the blow. The trap on the other
+  // side is that a *full-body* one-shot lives on both channels — read naively,
+  // every swing would fire twice.
+  const layered = driveRtsNotifies({ upperBodyBone: "spine" });
+  for (let step = 0; step < 45; step += 1) {
+    layered.presentation.update?.({ ...RTS_NOTIFY_WALK, deltaSeconds: 1 / 60 });
+  }
+  const beforeBlow = layered.fired.length;
+  assert.ok(beforeBlow >= 1, "the walk was already firing footsteps");
+  // Struck while walking: the flinch takes the torso, the legs keep striding.
+  for (let step = 0; step < 45; step += 1) {
+    layered.presentation.update?.({ ...RTS_NOTIFY_WALK, deltaSeconds: 1 / 60, impactCount: 1 });
+  }
+  const duringBlow = layered.fired.slice(beforeBlow);
+  assert.equal(
+    duringBlow.filter((name) => name === "body-impact").length,
+    1,
+    "the flinch's marker fires exactly once",
+  );
+  assert.ok(
+    duringBlow.includes("footstep"),
+    "and the legs keep marking their footfalls underneath it",
+  );
+  layered.presentation.dispose();
+
+  // The full-body case on the same layered animator, where both channels carry
+  // the identical clip. One swing, one marker.
+  const swinging = driveRtsNotifies({ upperBodyBone: "spine" });
+  for (let step = 0; step < 60; step += 1) {
+    swinging.presentation.update?.({
+      ...RTS_NOTIFY_WALK,
+      planarSpeed: 0,
+      attacking: true,
+      attackCount: 1,
+      deltaSeconds: 1 / 60,
+    });
+  }
+  assert.equal(
+    swinging.fired.filter((name) => name === "sword-swing").length,
+    1,
+    `one swing fires one marker (got ${swinging.fired.join(",")})`,
+  );
+  swinging.presentation.dispose();
+});
+
+check("Muhafiz Faz 6: yarida kesilip yeniden baslayan klip gecmis isaretlerini atmaz", () => {
+  // The failure a playhead comparison cannot see on its own. A one-shot
+  // restarted onto *itself* keeps its clip name and rewinds its time, which is
+  // indistinguishable from a loop wrap — and read as a wrap it fires every
+  // marker in the tail the interrupted take never reached. Two swings in a row,
+  // the first cut short well before its marker.
+  const restarted = driveRtsNotifies({});
+  const swing = { ...RTS_NOTIFY_WALK, planarSpeed: 0, attacking: true, deltaSeconds: 1 / 60 };
+  for (let step = 0; step < 12; step += 1) {
+    restarted.presentation.update?.({ ...swing, attackCount: 1 });
+  }
+  assert.equal(restarted.fired.length, 0, "the first swing was cut off before its contact");
+  for (let step = 0; step < 60; step += 1) {
+    restarted.presentation.update?.({ ...swing, attackCount: 2 });
+  }
+  assert.deepEqual(restarted.fired, ["sword-swing"], "the second swing fires its own marker, once, and not the first's");
+  restarted.presentation.dispose();
+
+  // A body that has finished falling is frozen for good (Faz 3b) and never
+  // animates again — so it can never emit again either, however long the corpse
+  // lies there.
+  const dying = driveRtsNotifies({ notifies: [{ name: "footstep", clip: "Walk_Loop", time: 0.5 }] });
+  for (let step = 0; step < 20; step += 1) {
+    dying.presentation.update?.({ ...RTS_NOTIFY_WALK, deltaSeconds: 1 / 60 });
+  }
+  const beforeDeath = dying.fired.length;
+  for (let step = 0; step < 600; step += 1) {
+    dying.presentation.update?.({ ...RTS_NOTIFY_WALK, dying: true, deltaSeconds: 1 / 60 });
+  }
+  assert.equal(dying.fired.length, beforeDeath, "a corpse emits nothing for the rest of its time on the field");
+  dying.presentation.dispose();
+});
+
+check("Muhafiz Faz 6: Guard isaretleri gercek kliplerin icinde durur ve K-04'u bozmaz", () => {
+  const guard = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+  );
+  assert.ok(guard.notifies.length > 0, "the Guard authors animation notifies");
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard.glb")))
+    ?? assert.fail("the Guard model is not a readable GLB");
+  const durations = new Map<string, number>();
+  for (const animation of parsed.json.animations ?? []) {
+    // A clip's length is the last key on any of its samplers' inputs.
+    let end = 0;
+    for (const sampler of animation.samplers ?? []) {
+      const accessor = parsed.json.accessors?.[sampler.input];
+      const max = accessor?.max?.[0];
+      if (typeof max === "number") end = Math.max(end, max);
+    }
+    durations.set(animation.name ?? "", end);
+  }
+
+  for (const notify of guard.notifies) {
+    const duration = durations.get(notify.clip);
+    // A misspelled clip is the silent failure this pins: the marker is authored,
+    // the file validates, and nothing ever fires because no playhead visits it.
+    assert.ok(duration !== undefined, `"${notify.clip}" is not a clip on the Guard rig`);
+    assert.ok(notify.time > 0, `${notify.name} on ${notify.clip} sits at the very first frame`);
+    assert.ok(
+      notify.time < (duration ?? 0),
+      `${notify.name} at ${notify.time}s is past the end of ${notify.clip} (${String(duration)}s)`,
+    );
+  }
+
+  // Which markers live on which clips is the authoring contract, and it is a
+  // relationship rather than a set of times: a footfall belongs to a clip the
+  // unit walks with, a contact to one it strikes with, a flinch to one it is
+  // struck with. Tuning the exact instants must stay free.
+  const byName = (name: string): string[] =>
+    guard.notifies.filter((notify) => notify.name === name).map((notify) => notify.clip);
+  const locomotion = new Set([
+    guard.animationSet.walk,
+    guard.animationSet.run,
+    guard.animationSet.walkBack,
+    guard.animationSet.runBack,
+  ]);
+  const footsteps = byName("footstep");
+  assert.ok(footsteps.length > 0, "the Guard marks its footfalls");
+  for (const clip of footsteps) assert.ok(locomotion.has(clip), `footstep marked on non-locomotion clip ${clip}`);
+  for (const clip of locomotion) {
+    assert.equal(footsteps.filter((marked) => marked === clip).length, 2, `${String(clip)} marks both feet`);
+  }
+
+  const attacks = new Set([guard.animationSet.attack, ...(guard.animationVariants.attack ?? [])]);
+  for (const clip of byName("sword-swing")) assert.ok(attacks.has(clip), `sword-swing marked on non-attack clip ${clip}`);
+  const flinches = new Set([guard.animationSet.hit, ...(guard.animationVariants.hit ?? [])]);
+  const impacts = byName("body-impact");
+  assert.equal(impacts.length, flinches.size, "every flinch variant marks its contact");
+  for (const clip of impacts) assert.ok(flinches.has(clip), `body-impact marked on non-flinch clip ${clip}`);
+
+  // K-04, from the notify side. The plan's original sketch named a `shield-hit`
+  // marker, and Faz 4 then established that this game has no blocking mechanic
+  // and no authored block clip. A marker cannot bring one into existence: it
+  // would have to sit on a clip nothing plays.
+  assert.equal(guard.animationSet.block, undefined, "still no block role");
+  for (const notify of guard.notifies) {
+    assert.notEqual(notify.name, "shield-hit", "a shield marker needs a block clip the game does not have");
+  }
+
+  // The sidecar allowlist gotcha (CLAUDE.md), for notifies: a field the editor's
+  // save path drops is a field that vanishes the next time anyone touches the
+  // asset in the Skeletal Mesh Editor.
+  const roundTripped = validateAssetSkeletonDef({
+    schema: 1,
+    animationSet: { idle: "idle-clip" },
+    notifies: [{ name: "footstep", clip: "idle-clip", time: 0.25 }],
+  });
+  const saved = roundTripped.notifies as { name: string; clip: string; time: number }[];
+  assert.deepEqual(saved, [{ name: "footstep", clip: "idle-clip", time: 0.25 }], "notifies survive an editor save");
+});
+
+check("Muhafiz Faz 6: notify efekt tablosu manifestte karsiligi olan varliklari sürer ve butcesi baglayicidir", () => {
+  const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
+    assets: { id: string; assetType?: string; path: string }[];
+  };
+  for (const effectId of rtsNotifyEffectIds()) {
+    const asset = manifest.assets.find((entry) => entry.id === effectId)
+      ?? assert.fail(`notify effect "${effectId}" is not in the asset manifest`);
+    assert.equal(asset.assetType, "effect", `${effectId} must be manifested as an effect`);
+    // Parsed through the runtime's own normalizer, so a file the match cannot
+    // read fails here rather than as an invisible burst in the game.
+    const definition = normalizeEffectDefinition(
+      JSON.parse(readFileSync(`public/${asset.path}`, "utf8")) as unknown,
+    );
+    assert.equal(definition.system.loop, false, `${effectId} is a burst, not a looping emitter`);
+    assert.ok(definition.system.duration <= 0.5, `${effectId} must be over before the next footfall`);
+  }
+
+  // The rate cap is what keeps an ambient emitter from spending an event
+  // budget: a company of forty is forty units each politely under a per-unit
+  // limit, so the cap has to be global, and this is that.
+  const budget = new RtsNotifyEffectBudget();
+  const footstep = RTS_NOTIFY_EFFECTS.footstep ?? assert.fail("footsteps are drawn");
+  assert.ok(footstep.minIntervalSeconds > 0, "footfalls are throttled");
+  assert.ok(budget.request("footstep", 0, 1) !== null, "the first footfall is drawn");
+  assert.equal(budget.request("footstep", footstep.minIntervalSeconds / 2, 1), null, "a second one too soon is dropped");
+  assert.ok(
+    budget.request("footstep", footstep.minIntervalSeconds * 1.01, 1) !== null,
+    "and the one after the interval is drawn again",
+  );
+
+  // An event burst is never throttled, for the reason the ambient one is: a
+  // footstep missing from a crowd is invisible, a missing flinch is the
+  // readable half of a fight.
+  const flinch = RTS_NOTIFY_EFFECTS["body-impact"] ?? assert.fail("flinches are drawn");
+  assert.equal(flinch.minIntervalSeconds, 0, "a blow landing is never rate-capped");
+  for (let step = 0; step < 5; step += 1) {
+    assert.ok(budget.request("body-impact", 0, 1) !== null, "five simultaneous blows draw five bursts");
+  }
+
+  // Distance culling, and the headless caller's exemption — the same "null means
+  // the caller has no camera" contract the animation throttle already keeps.
+  assert.equal(budget.request("body-impact", 0, flinch.maxDistance + 1), null, "a burst past the cull is dropped");
+  assert.ok(budget.request("body-impact", 0, null) !== null, "a caller with no camera is treated as near");
+
+  // An authored marker with no entry here is not a gap: `sword-swing` is real,
+  // measured and waiting for the audio plan. It simply draws nothing.
+  assert.equal(RTS_NOTIFY_EFFECTS["sword-swing"], undefined, "a swing has no particle to it");
+  assert.equal(budget.request("sword-swing", 0, 1), null, "and an undrawn name never reaches the renderer");
+});
+
+check("Muhafiz Faz 6: notify tuketicisi simulasyonu okuyabilir, degistiremez (K-02)", () => {
+  // K-02 for this slice. The sink runs inside the presentation's update, one
+  // call away from the unit, and a consumer that wrote back to it — cancelling a
+  // swing, nudging a body, spending a hit point — would be a rendering decision
+  // deciding a fight. So the unit is walked the way the movement system walks
+  // it, with a sink attached, and nothing it is judged by may move.
+  const { root, model, clips } = buildRtsNotifyRig();
+  const fired: string[] = [];
+  const unit = new Unit("player", 3, -4, RTS_TEST_UNIT_STATS, createRtsUnitPresentation({
+    root,
+    pickTargets: [],
+    selectionRadius: 0.5,
+    moveSpeed: RTS_TEST_UNIT_STATS.moveSpeed,
+    animation: {
+      target: model,
+      clips,
+      skeleton: normalizeAssetSkeleton({
+        animationSet: { idle: "Idle_Loop", walk: "Walk_Loop" },
+        notifies: [{ name: "footstep", clip: "Walk_Loop", time: 0.5 }],
+      }),
+    },
+    onNotify: (name) => fired.push(name),
+  }));
+
+  const camera = new Quaternion();
+  let x = 3;
+  for (let step = 0; step < 40; step += 1) {
+    x += 0.06;
+    unit.object.position.x = x;
+    unit.updatePresentation(1 / 60, camera);
+  }
+
+  assert.ok(fired.length > 0, "the walk did reach its marker — this is not a silent fixture");
+  assert.deepEqual([...new Set(fired)], ["footstep"], "and only that marker");
+  assert.ok(Math.abs(unit.position.x - x) < 1e-9, "the unit is exactly where the simulation put it");
+  assert.equal(unit.position.z, -4, "a notify never nudges the body");
+  assert.equal(unit.health.current, RTS_TEST_UNIT_STATS.maxHealth, "no marker deals or heals damage");
+  assert.equal(unit.attack.ready, true, "no marker spends or refunds a cooldown");
+  assert.equal(unit.moveTarget, null, "no marker issues an order");
+  assert.equal(unit.dying, false);
 });
 
 check("RTS hold durusu: menzilindeki saldirgana karsilik verir, disindakine veremez", () => {

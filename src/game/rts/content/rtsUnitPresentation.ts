@@ -27,6 +27,11 @@ import {
 } from "@engine/perf/distanceUpdateRate";
 import type { AssetSkeletonDef } from "@/scene/assetSkeletonLoader";
 import {
+  AnimationNotifyTracker,
+  groupNotifiesByClip,
+  type NotifyMarker,
+} from "@/game/animationNotifies";
+import {
   advanceRtsAction,
   advanceRtsWorkMontage,
   resolveRtsWorkMontage,
@@ -122,6 +127,16 @@ export interface RtsUnitPresentationOptions {
   readonly muzzle?: Object3D | null | undefined;
   /** Visual-only riders/crew parented to this unit's root. */
   readonly crew?: readonly RtsAttachedCrewPresentation[] | undefined;
+  /**
+   * Called with an authored animation notify's name as this unit's playhead
+   * crosses it (Guard plan Faz 6) — a footfall, a sword's contact, a flinch.
+   *
+   * A report, never a request: the simulation has already decided what happened
+   * and how much it hurt, and this says only when the *art* reaches the moment.
+   * Nothing downstream of it may write simulation state. Omitted by callers with
+   * no consumer, which skips the sampling entirely.
+   */
+  readonly onNotify?: ((name: string) => void) | undefined;
 }
 
 /** An independently animated visual attached to a unit, never a simulation unit. */
@@ -269,6 +284,36 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   readonly muzzle: Object3D | null;
   /** Last load state applied, so an unchanged frame touches no node at all. */
   private carrying: boolean | null = null;
+  /** Where an authored notify goes, or null when this caller consumes none. */
+  private readonly onNotify: ((name: string) => void) | null;
+  /** Authored markers keyed by clip; empty keeps the whole notify path unentered. */
+  private notifiesByClip: ReadonlyMap<string, readonly NotifyMarker[]> = new Map();
+  /**
+   * Notify detector for the clip driving the body — the legs' channel on a
+   * layered unit, the only channel on every other one.
+   */
+  private readonly bodyNotifies = new AnimationNotifyTracker();
+  /**
+   * A second detector for the torso, used only while a one-shot owns it alone.
+   *
+   * Two detectors rather than one because a struck walker is genuinely playing
+   * two clips at once and both carry markers: its feet keep landing while its
+   * chest takes the blow. They cannot be merged into one playhead, and reading
+   * both channels unconditionally would double every full-body clip's notifies —
+   * which is why {@link LayeredClipAnimator.getUpperActiveClip} reports null the
+   * moment the torso goes back to mirroring the legs.
+   */
+  private readonly torsoNotifies = new AnimationNotifyTracker();
+  /**
+   * What the continuous channel was last told to play, as an identity string.
+   *
+   * A restart onto the same clip name is invisible to a playhead comparison — the
+   * name is unchanged and the time jumps backwards, which reads as a loop wrap
+   * and would fire every marker the interrupted take never reached. The montage
+   * section is part of the identity for the same reason: re-entering a section
+   * rewinds inside one clip.
+   */
+  private startedContinuous: string | null = null;
   /** Crew mixers are visual children of this one unit, never independent units. */
   private readonly crew: readonly RtsAttachedCrewAnimator[];
 
@@ -283,10 +328,14 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     this.cargoSways = options.cargoSways ?? [];
     this.gunRecoils = options.gunRecoils ?? [];
     this.muzzle = options.muzzle ?? null;
+    this.onNotify = options.onNotify ?? null;
     this.crew = (options.crew ?? []).map((member) => new RtsAttachedCrewAnimator(member, options.moveSpeed ?? 1));
 
     const animation = options.animation;
     if (!animation || animation.clips.length === 0) return;
+    // Grouped only where someone listens: every unit in the match builds one of
+    // these, and an asset with no consumer should carry no per-instance map.
+    if (this.onNotify) this.notifiesByClip = groupNotifiesByClip(animation.skeleton.notifies);
     // Root motion is locked from the sidecar, not from code: RTS movement is
     // authoritative over position, so a walk clip that carries its own
     // translation would drag the body away from where the simulation put it.
@@ -433,13 +482,18 @@ class RtsUnitPresentation implements RtsPresentationHandle {
         if (started) {
           this.layered.playUpperOnce(actionClip, ACTION_FADE_SECONDS);
           this.startedAction = this.action;
+          this.torsoNotifies.arm(actionClip);
         }
       } else {
         if (started) {
           animator.playOnce(actionClip, ACTION_FADE_SECONDS);
           this.startedAction = this.action;
+          // A one-shot takes the continuous channel with it, so what plays after
+          // it is a fresh start however familiar its name.
+          this.startedContinuous = null;
+          this.bodyNotifies.arm(actionClip);
         }
-        animator.update(deltaSeconds);
+        this.tick(deltaSeconds);
         // Frozen *after* this frame's tick, never before it. The state machine
         // does not spend the delta on the frame the fall starts and the mixer
         // does, so by the time the remaining time reaches zero the mixer has had
@@ -472,7 +526,12 @@ class RtsUnitPresentation implements RtsPresentationHandle {
         },
         LOCOMOTION_FADE_SECONDS,
       );
-      animator.update(deltaSeconds);
+      this.markContinuous(
+        this.workMontage.clip,
+        `${this.workMontage.clip}@${workSection.section.startSeconds}:${workSection.section.endSeconds}:${workSection.loop}`,
+        workSection.section.startSeconds,
+      );
+      this.tick(deltaSeconds);
       return;
     }
 
@@ -491,8 +550,48 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       // After `play`, which resets the rate: this is what keeps a Guard slowed by
       // a crowd from skating, since its feet then cycle at the speed it moves.
       animator.setPlaybackRate(selection.playbackRate);
+      this.markContinuous(selection.clip, selection.clip, 0);
     }
-    animator.update(deltaSeconds);
+    this.tick(deltaSeconds);
+  }
+
+  /**
+   * Advances the mixer and reads whatever notify markers that step crossed.
+   *
+   * One place rather than four so the two can never come apart: a path that
+   * ticked without sampling would bank markers and fire them all at once on the
+   * next path that did, and a path that sampled without ticking would report a
+   * playhead that has not moved. Sampling *after* the tick is what makes the
+   * far-unit cadence honest — the whole banked delta is one interval, and a
+   * marker inside it fires once, on the frame the animation actually reached it.
+   */
+  private tick(deltaSeconds: number): void {
+    this.animator?.update(deltaSeconds);
+    if (this.notifiesByClip.size === 0 || !this.onNotify) return;
+    const animator = this.animator;
+    if (!animator) return;
+    for (const notify of this.bodyNotifies.sample(animator.getActiveClip(), this.notifiesByClip)) {
+      this.onNotify(notify.name);
+    }
+    // Null whenever no one-shot owns the torso, which is what stops a full-body
+    // clip — present on both channels — from firing each of its markers twice.
+    const torso = this.layered?.getUpperActiveClip() ?? null;
+    for (const notify of this.torsoNotifies.sample(torso, this.notifiesByClip)) {
+      this.onNotify(notify.name);
+    }
+  }
+
+  /**
+   * Records what the continuous channel is playing, re-arming on a real restart.
+   *
+   * `identity` is what changes when playback begins again rather than continues:
+   * the clip name for locomotion, and the clip *plus its window* for a montage
+   * section, since re-entering a section rewinds inside a single clip.
+   */
+  private markContinuous(clip: string, identity: string, startSeconds: number): void {
+    if (identity === this.startedContinuous) return;
+    this.startedContinuous = identity;
+    this.bodyNotifies.arm(clip, startSeconds);
   }
 
   /**

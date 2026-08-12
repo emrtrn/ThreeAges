@@ -1,0 +1,105 @@
+{
+  "schema": 2,
+  "type": "particleEffect",
+  "name": "RTS Footstep Dust",
+  "category": "RTS Units",
+  "tags": [
+    "rts",
+    "unit",
+    "dust",
+    "footstep"
+  ],
+  "system": {
+    "enabled": true,
+    "loop": false,
+    "duration": 0.2,
+    "seed": null,
+    "maxParticles": 4,
+    "bounds": {
+      "mode": "fixed",
+      "min": [
+        -0.6,
+        0,
+        -0.6
+      ],
+      "max": [
+        0.6,
+        0.8,
+        0.6
+      ],
+      "showInPreview": true
+    }
+  },
+  "spawn": {
+    "mode": "burst",
+    "rate": 0,
+    "count": 4,
+    "delay": 0,
+    "interval": 0,
+    "shape": "sphere",
+    "radius": 0.12,
+    "boxSize": [
+      1,
+      1,
+      1
+    ]
+  },
+  "initialize": {
+    "lifetime": [
+      0.35,
+      0.55
+    ],
+    "startSize": [
+      1,
+      1.5
+    ],
+    "startColor": "#b0a48f",
+    "startOpacity": 0.35,
+    "direction": [
+      0,
+      1,
+      0
+    ],
+    "speed": [
+      0.3,
+      0.6
+    ],
+    "spreadAngleDeg": 110,
+    "rotation": [
+      0,
+      0
+    ],
+    "angularVelocity": [
+      0,
+      0
+    ]
+  },
+  "update": {
+    "gravityScale": 0,
+    "drag": 4,
+    "acceleration": [
+      0,
+      0,
+      0
+    ],
+    "endSize": [
+      2,
+      2.8
+    ],
+    "endColor": "#8f8272",
+    "endOpacity": 0,
+    "fadeInTime": 0.05,
+    "fadeOutTime": 0.3
+  },
+  "renderer": {
+    "type": "sprite",
+    "blendMode": "alpha",
+    "softness": 0.8,
+    "sortMode": "none",
+    "texture": null,
+    "subUV": {
+      "cols": 1,
+      "rows": 1
+    }
+  }
+}

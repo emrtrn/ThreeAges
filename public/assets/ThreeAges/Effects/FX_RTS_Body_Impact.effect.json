@@ -1,0 +1,105 @@
+{
+  "schema": 2,
+  "type": "particleEffect",
+  "name": "RTS Body Impact",
+  "category": "RTS Units",
+  "tags": [
+    "rts",
+    "unit",
+    "impact",
+    "combat"
+  ],
+  "system": {
+    "enabled": true,
+    "loop": false,
+    "duration": 0.15,
+    "seed": null,
+    "maxParticles": 8,
+    "bounds": {
+      "mode": "fixed",
+      "min": [
+        -0.8,
+        -0.4,
+        -0.8
+      ],
+      "max": [
+        0.8,
+        0.8,
+        0.8
+      ],
+      "showInPreview": true
+    }
+  },
+  "spawn": {
+    "mode": "burst",
+    "rate": 0,
+    "count": 7,
+    "delay": 0,
+    "interval": 0,
+    "shape": "sphere",
+    "radius": 0.18,
+    "boxSize": [
+      1,
+      1,
+      1
+    ]
+  },
+  "initialize": {
+    "lifetime": [
+      0.25,
+      0.4
+    ],
+    "startSize": [
+      1.2,
+      1.8
+    ],
+    "startColor": "#d8cdb8",
+    "startOpacity": 0.55,
+    "direction": [
+      0,
+      0.4,
+      0
+    ],
+    "speed": [
+      1.2,
+      2.2
+    ],
+    "spreadAngleDeg": 180,
+    "rotation": [
+      0,
+      0
+    ],
+    "angularVelocity": [
+      0,
+      0
+    ]
+  },
+  "update": {
+    "gravityScale": 0.4,
+    "drag": 6,
+    "acceleration": [
+      0,
+      0,
+      0
+    ],
+    "endSize": [
+      2.4,
+      3.4
+    ],
+    "endColor": "#9d9384",
+    "endOpacity": 0,
+    "fadeInTime": 0.02,
+    "fadeOutTime": 0.2
+  },
+  "renderer": {
+    "type": "sprite",
+    "blendMode": "alpha",
+    "softness": 0.7,
+    "sortMode": "none",
+    "texture": null,
+    "subUV": {
+      "cols": 1,
+      "rows": 1
+    }
+  }
+}

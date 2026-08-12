@@ -40,6 +40,11 @@ export interface UnitClipAnimator {
   playRange(name: string, range: AnimatorClipRange, fadeSeconds?: number): void;
   setPlaybackRate(rate: number): void;
   clipDuration(name: string): number | null;
+  /**
+   * The clip driving the body right now, with its playhead — what an animation
+   * notify detector measures against. Null when nothing is playing.
+   */
+  getActiveClip(): { clip: string; time: number; duration: number } | null;
   update(deltaSeconds: number): void;
   release(root: Object3D): void;
 }
@@ -99,6 +104,29 @@ export class LayeredClipAnimator implements UnitClipAnimator {
   /** True while a one-shot owns the torso alone. */
   get isUpperBusy(): boolean {
     return this.upperOwned;
+  }
+
+  /**
+   * The body's clip and playhead — always the lower channel's.
+   *
+   * The lower channel is the one that is never a duplicate: a full-body play
+   * puts the same clip on both channels, so reading both would fire every one of
+   * that clip's notifies twice. What the torso can hold *alone* is exposed
+   * separately by {@link getUpperActiveClip}, and only while it holds it.
+   */
+  getActiveClip(): { clip: string; time: number; duration: number } | null {
+    return this.lower.getActiveClip();
+  }
+
+  /**
+   * The clip on the torso while a {@link playUpperOnce} owns it, else null.
+   *
+   * Null the rest of the time by construction, not by preference: whenever no
+   * one-shot owns the torso it is mirroring the legs, and the pair would be the
+   * same clip counted twice.
+   */
+  getUpperActiveClip(): { clip: string; time: number; duration: number } | null {
+    return this.upperOwned ? this.upper.getActiveClip() : null;
   }
 
   /**

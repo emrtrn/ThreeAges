@@ -19,6 +19,8 @@ export interface ImageDimensions {
 
 interface GltfAccessor {
   count?: number;
+  /** Per-component maximum, which on a sampler input is the clip's last key. */
+  max?: number[];
 }
 
 interface GltfPrimitive {
@@ -61,6 +63,8 @@ export interface GltfNode {
 
 export interface GltfAnimation {
   name?: string;
+  /** Keyframe samplers, for callers measuring how long a clip actually runs. */
+  samplers?: { input?: number }[];
 }
 
 export interface GltfGeometryStats {

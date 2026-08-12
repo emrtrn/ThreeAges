@@ -25414,6 +25414,62 @@
       "license": "Project-local RTS effect"
     },
     {
+      "id": "rts-fx-footstep-dust",
+      "name": "RTS Footstep Dust",
+      "assetType": "effect",
+      "category": "RTS Units",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Footstep_Dust.effect.json",
+      "tags": [
+        "rts",
+        "unit",
+        "dust",
+        "footstep"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "RTS Units",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1508
+      },
+      "license": "Project-local RTS effect"
+    },
+    {
+      "id": "rts-fx-body-impact",
+      "name": "RTS Body Impact",
+      "assetType": "effect",
+      "category": "RTS Units",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Body_Impact.effect.json",
+      "tags": [
+        "rts",
+        "unit",
+        "impact",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "RTS Units",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1517
+      },
+      "license": "Project-local RTS effect"
+    },
+    {
       "id": "m-cobblestonerough-material",
       "name": "M Cobble Stone Rough.Material",
       "assetType": "material",
@@ -32621,6 +32677,29 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 684
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archer",
+      "name": "Archer",
+      "assetType": "skeletalMesh",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Archer.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 28567072
       },
       "license": "Unknown"
     }

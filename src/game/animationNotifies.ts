@@ -84,6 +84,24 @@ export class AnimationNotifyTracker {
   private clip: string | null = null;
   private time = 0;
 
+  /**
+   * Re-arms on `clip` at `time`, so the next {@link sample} measures from there.
+   *
+   * For the one case a playhead comparison cannot see: a clip restarted onto
+   * *itself* (the same swing thrown twice, a montage section re-entered). The
+   * name is unchanged and the time jumps backwards, which is indistinguishable
+   * from a loop wrap — and read as a wrap it would fire every marker in the tail
+   * the interrupted take never reached. Callers that know a playback *began*
+   * say so here; everything else is left to {@link sample}.
+   *
+   * Arming at 0 rather than resetting to "no clip" is deliberate: the markers in
+   * the first tick of the new take are then still crossed and still fire once.
+   */
+  arm(clip: string, time = 0): void {
+    this.clip = clip;
+    this.time = time;
+  }
+
   sample(
     active: ActiveClipSample | null,
     notifiesByClip: ReadonlyMap<string, readonly NotifyMarker[]>,

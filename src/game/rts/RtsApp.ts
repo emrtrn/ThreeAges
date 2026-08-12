@@ -75,6 +75,7 @@ import {
   rtsContentAssetsState,
   type RtsActorLoadReport,
 } from "./content/rtsActorVisualFactory";
+import { RtsNotifyEffectBudget, rtsNotifyEffectIds } from "./content/rtsNotifyEffects";
 import { AiController } from "./ai/aiController";
 import { SettlementAiSiteProvider } from "./ai/aiSiteProvider";
 import { proceduralDepotRoadRank, proceduralRoadSiteFailure } from "./ai/aiRoadSiteFilter";
@@ -753,6 +754,31 @@ export class RtsApp {
     loadMeshModels: (modelIds) => this.loadStructureDamageModels(modelIds),
   });
   /**
+   * The bursts an animation notify asks for — Guard plan Faz 6.
+   *
+   * A second subsystem rather than a share of {@link structureDamageVfx}, for
+   * the one thing a subsystem owns that matters here: the instance budget. That
+   * budget was sized for *events* — a building taking a hit, a shell landing —
+   * and footsteps are not events but a continuous emission that scales with how
+   * many soldiers are on screen. Pooled together, a marching company would spend
+   * the whole allowance on dust and a collapsing Karakol would fall in silence.
+   * Separated, the worst a crowd of feet can do is drop its own footsteps.
+   */
+  private readonly unitNotifyVfx = new VfxSubsystem({
+    resolveEffectUrl: (effectId) => {
+      const path = this.actorVisuals?.effectAssetPath(effectId);
+      return path ? projectFileUrl(path) : null;
+    },
+    resolveTextureUrl: (textureId) => {
+      const path = this.actorVisuals?.textureAssetPath(textureId);
+      return path ? projectFileUrl(path) : null;
+    },
+  });
+  /** Owns which notify names are drawn and how often; see `rtsNotifyEffects`. */
+  private readonly unitNotifyBudget = new RtsNotifyEffectBudget();
+  /** Monotonic real-seconds reading the notify rate cap measures against. */
+  private unitNotifyClock = 0;
+  /**
    * Real-time accumulators for the repeating damage slots, keyed `<id>:<slot>`.
    * Reconciled against the live set every frame, so a building that heals, dies
    * or finishes construction drops its timers without a bespoke unsubscribe.
@@ -1104,6 +1130,11 @@ export class RtsApp {
     // Effect density controls particles within each emitter; this companion cap
     // protects the match when many structures take damage on the same frame.
     this.structureDamageVfx.setMaxActiveInstances(Math.round(48 * settings.particleDensity));
+    // Its own, smaller allowance: see {@link unitNotifyVfx} for why the two are
+    // not one pool. Density rides the same quality knob, so "fewer particles"
+    // means fewer everywhere rather than everywhere-but-the-feet.
+    this.unitNotifyVfx.setGlobalDensity(settings.particleDensity);
+    this.unitNotifyVfx.setMaxActiveInstances(Math.round(32 * settings.particleDensity));
     this.renderer.shadowMap.enabled = settings.shadowsEnabled;
     // Only when the toggle actually moves: three leaves every lit material on a
     // stale program otherwise, and the whole lit scene stops drawing. See
@@ -2086,6 +2117,7 @@ export class RtsApp {
     this.cannonballs.dispose();
     this.unitShadows.dispose();
     this.structureDamageVfx.dispose();
+    this.unitNotifyVfx.dispose();
     this.hudBar.dispose();
     this.notificationFeed.dispose();
     this.gameSpeedControls.dispose();
@@ -2253,6 +2285,7 @@ export class RtsApp {
     this.scene.add(this.centers.root);
     this.scene.add(this.structures.root);
     this.scene.add(this.structureDamageVfx.root);
+    this.scene.add(this.unitNotifyVfx.root);
     this.scene.add(this.placement.root);
     this.scene.add(this.roadPlacement.root);
     this.scene.add(this.roadDebugView.root);
@@ -2469,6 +2502,11 @@ export class RtsApp {
     // are advanced with the simulation in `updateSimulation`, not on this
     // rendered delta.
     const unitViewMark = this.perfMark();
+    // Before the presentations, not after: a notify fired this frame reads this
+    // clock, and a burst timed against last frame's reading would let the rate
+    // cap pass two of them through on the same frame.
+    this.unitNotifyClock += Math.max(0, dt);
+    this.unitNotifyVfx.advance(dt);
     this.units.updatePresentation(
       dt,
       this.cameraController.camera.quaternion,
@@ -2665,7 +2703,7 @@ export class RtsApp {
       },
       {
         id: "birimler",
-        apply: hide([this.units.root, this.wildlifeRoot, this.caravanRoot]),
+        apply: hide([this.units.root, this.wildlifeRoot, this.caravanRoot, this.unitNotifyVfx.root]),
       },
       {
         id: "yapılar",
@@ -3278,6 +3316,35 @@ export class RtsApp {
       }
     }
     void Promise.all([...effectIds].map((effectId) => this.structureDamageVfx.warm(effectId)));
+    // The notify bursts warm on the same pass and for the same reason: the first
+    // company to march would otherwise walk through its own load.
+    void Promise.all(rtsNotifyEffectIds().map((effectId) => this.unitNotifyVfx.warm(effectId)));
+  }
+
+  /**
+   * Draws an animation notify, or drops it — Guard plan Faz 6.
+   *
+   * Reads the unit and writes nothing back to it: which blow landed and what it
+   * cost were settled by the simulation long before the art reached this frame,
+   * and this only decides whether a puff of dust is worth drawing where the body
+   * is. A dropped burst (too far, inside the rate cap, past the instance budget)
+   * is invisible to everything else by construction.
+   *
+   * No warm-and-retry like {@link playWorldEffect}: a missed footstep is a
+   * missed footstep, and a retry closure per footfall would cost more than the
+   * burst it is chasing.
+   */
+  private playUnitNotify(unit: Unit, name: string): void {
+    const position = unit.position;
+    const binding = this.unitNotifyBudget.request(
+      name,
+      this.unitNotifyClock,
+      this.cameraController.camera.position.distanceTo(position),
+    );
+    if (!binding) return;
+    this.unitNotifyVfx.play(binding.effectId, {
+      position: [position.x, position.y + binding.heightOffset, position.z],
+    });
   }
 
   /** The authored damage presentation for this building, or null with no catalog. */
@@ -5235,6 +5302,7 @@ export class RtsApp {
           unit.owner,
           unit.stats.moveSpeed,
           unit.id,
+          (notify) => this.playUnitNotify(unit, notify),
         ) ?? null);
       this.units.refreshPresentations();
       this.wildlifeView.setPresentationFactory((species, moveSpeed, walkClipSpeed) =>

@@ -286,6 +286,7 @@ export class RtsActorVisualFactory {
     owner: UnitOwner,
     moveSpeed?: number,
     animationVariantSeed?: number,
+    onNotify?: (name: string) => void,
   ): RtsPresentationHandle | null {
     const actorRef = rtsUnitActorRef(this.catalog, unitId, owner);
     if (!actorRef || !this.ready) return null;
@@ -315,6 +316,10 @@ export class RtsActorVisualFactory {
       gunRecoils: def ? bindRtsGunRecoils(def, root) : [],
       muzzle: def ? bindRtsMuzzle(def, root) : null,
       crew,
+      // Only units carry a notify consumer today: an animal's or a caravan's
+      // sidecar authors no markers, and handing them a sink would buy a
+      // per-instance map for an empty list.
+      onNotify,
     });
   }
 
