@@ -2605,9 +2605,13 @@ body {
   text-transform: none;
 }
 
+/* Six cards, not seven, since Serbest was retired. The 6px gap is deliberately
+   unchanged: the freed column goes entirely into card width (48px -> 57px in the
+   372px formation column), so the diagrams and their labels read larger without
+   the row looking looser. */
 .rts-selection-formation-options {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 6px;
   height: var(--rts-selection-formation-options-height);
   min-width: 0;
@@ -2673,7 +2677,7 @@ body {
 
 @media (max-width: 1120px) {
   .rts-selection-panel[data-rts-panel-mode="roster-formation"] {
-    /* Four-plus-three formation cards must share the fixed HUD height. */
+    /* Two rows of three formation cards must share the fixed HUD height. */
     --rts-selection-formation-card-height: 52px;
     --rts-selection-formation-options-height: calc(var(--rts-selection-formation-card-height) * 2 + 3px);
     grid-template-columns: minmax(0, 42%) minmax(0, 58%);
@@ -2687,8 +2691,10 @@ body {
     width: min(800px, calc(100vw - 24px));
   }
 
+  /* Six cards divide evenly into two rows of three — no ragged 4+2 row, and
+     each card is wider than the old four-column split at the same gap. */
   .rts-selection-formation-options {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .rts-selection-formation-diagram {

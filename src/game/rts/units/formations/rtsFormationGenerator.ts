@@ -2,8 +2,6 @@ import { Vector3 } from "three";
 
 import type { RtsFormationId } from "./rtsFormationTypes";
 
-export type RtsGeometricFormationId = Exclude<RtsFormationId, "free">;
-
 export interface RtsFormationOffset {
   /** Sideways displacement: negative is left, positive is right. */
   readonly x: number;
@@ -13,7 +11,7 @@ export interface RtsFormationOffset {
 
 /** V1 formation geometry, local to the movement direction. */
 export function rtsFormationOffsets(
-  formation: RtsGeometricFormationId,
+  formation: RtsFormationId,
   count: number,
   spacing: number,
 ): RtsFormationOffset[] {
@@ -119,7 +117,7 @@ function centreDepth(offsets: readonly RtsFormationOffset[]): RtsFormationOffset
 
 /** Rotate local formation geometry to face from the group centroid to its target. */
 export function rtsFormationWorldSlots(
-  formation: RtsGeometricFormationId,
+  formation: RtsFormationId,
   count: number,
   spacing: number,
   centroid: Vector3,

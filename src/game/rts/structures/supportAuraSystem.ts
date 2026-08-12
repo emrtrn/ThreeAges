@@ -44,6 +44,17 @@ export interface AuraTargetUnit {
   /** A unit already playing its defeat pose is past saving; the field skips it. */
   readonly dying: boolean;
   damageResistance: number;
+  /**
+   * Whether this tick's pass actually restored hit points to this body.
+   *
+   * Presentation-only, and written here rather than derived from "inside the
+   * radius and below full health" because those two are not the same fact: a
+   * unit at full health standing in the field is receiving nothing, and this is
+   * the one place that already knows it. It follows the same
+   * rewritten-from-zero rule as {@link damageResistance}, so a healed, razed or
+   * departed unit stops claiming it on the very next tick with nothing to unwind.
+   */
+  mending: boolean;
 }
 
 /** One unit's live support state, for the debug overlay and the selection panel. */
@@ -62,7 +73,10 @@ export class SupportAuraSystem {
     dt: number,
   ): void {
     this.effects.clear();
-    for (const unit of units) unit.damageResistance = 0;
+    for (const unit of units) {
+      unit.damageResistance = 0;
+      unit.mending = false;
+    }
     const delta = Math.max(0, dt);
     const sources = structures.filter(isActiveAuraSource);
     if (sources.length === 0) return;
@@ -79,6 +93,10 @@ export class SupportAuraSystem {
       }
       if (resistance === 0 && healed === 0) continue;
       unit.damageResistance = resistance;
+      // Strictly "hit points moved", not "stood in the radius": a unit already at
+      // full health takes nothing from the field, and kneeling to be tended for a
+      // wound it does not have is the one reading this pose must not have.
+      unit.mending = healed > 0;
       this.effects.set(unit, { healed, damageResistance: resistance });
     }
   }

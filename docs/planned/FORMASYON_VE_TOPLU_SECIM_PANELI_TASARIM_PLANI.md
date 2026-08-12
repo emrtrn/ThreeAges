@@ -427,18 +427,28 @@ bir jitter sistemiyle oluşturulmalıdır.
 
 ---
 
-## 5.7 Serbest — `free`
+## 5.7 Serbest — `free` (KALDIRILDI — 12 Ağustos 2026)
 
-**Minimum asker:** 2  
-**UI etiketi:** Serbest
+Bu seçenek yeni formasyon sisteminin **geri uyumluluk modu** olarak tasarlanmıştı:
+hiçbir formasyon slotu uygulanmaz, mevcut grup hareket sistemi aynen kullanılırdı.
 
-### Amaç
+Faz 2–5 ile altı geometrik formasyonun tamamı sahaya çıktığı için geri uyumluluk
+modunun gerekçesi ortadan kalktı ve `free` hem `RtsFormationId`'den hem de panelden
+kaldırıldı. Yerine geçen kararlar:
 
-Mevcut grup hareket sistemini kullanmak.
+- **Varsayılan artık `line` (Hat)** — `DEFAULT_RTS_FORMATION`. En geniş ve en az
+  sürprizli düzen olduğu için Serbest'in yerini o aldı.
+- **Panel altı kart gösterir** (Hat, Kol, Kama, Hilal, Kare, Dağınık). Kartlar
+  aradaki 6px boşluk korunarak genişletildi; dar ekranda 4+3 yerine 3+3 iki sıra.
+- **Eski dağınık dağıtım kaybolmadı**, yalnızca oyuncunun seçebildiği bir mod
+  olmaktan çıktı: işçiler, ikiden az savaşçı içeren seçimler ve hiçbir formasyon
+  slotunun ulaşılabilir olmadığı fallback yolu hâlâ `legacyFormationOffsets`
+  kullanır (`groupOrders.ts`).
+- **Saldırı-Hareket (F) de aktif formasyonu kullanır** — "formasyonsuz" bir cevap
+  kalmadığı için sabit bir varsayılana düşmek oyuncunun seçimini sessizce bozardı.
 
-Bu seçenek yeni formasyon sisteminin **geri uyumluluk modu** olacaktır.
-
-Hiçbir formasyon slotu uygulanmaz.
+`Serbest` adı oyunda yalnızca **duruş** (G) etiketi olarak yaşamaya devam eder;
+§ 7'deki isim çakışması sorunu böylece kendiliğinden çözülmüştür.
 
 ---
 
@@ -512,11 +522,12 @@ Karışık askerî seçimde portreler mümkün olduğunca mevcut boyutlarını k
 Dar çalışma alanında formasyon butonları:
 
 ```text
-Hat   Kol   Kama   Hilal
-Kare  Dağ.  Serbest
+Hat   Kol   Kama
+Hilal Kare  Dağ.
 ```
 
-şeklinde `4 + 3` iki satırlı düzene geçebilir.
+şeklinde iki satırlı düzene geçer. (Serbest kaldırıldıktan sonra altı kart `3 + 3`
+olarak eşit bölünüyor; özgün plandaki `4 + 3` düzeni artık geçerli değil — bkz. § 5.7.)
 
 ---
 
@@ -524,13 +535,10 @@ Kare  Dağ.  Serbest
 
 ## 8.1 Varsayılan değer
 
-Yeni sistem ilk eklendiğinde varsayılan:
+Yeni sistem ilk eklendiğinde varsayılan `Serbest` idi; böylece mevcut oyun
+davranışı değişmiyordu.
 
-`Serbest`
-
-olmalıdır.
-
-Bu sayede mevcut oyun davranışı değişmez.
+Serbest kaldırıldıktan sonra (§ 5.7) varsayılan **`Hat`**tır.
 
 ## 8.2 Formasyon seçildiğinde
 
@@ -762,6 +770,10 @@ UI'da gerekirse formasyon `Serbest` ile birim davranış komutu `Serbest` görse
 
 # 16. Önemli isim çakışması
 
+> **Çözüldü (12 Ağustos 2026):** `free` formasyonu kaldırıldığı için (§ 5.7)
+> `Serbest` artık yalnızca duruş etiketidir. Aşağıdaki bölüm, çakışmanın nasıl
+> düşünüldüğünü kayıt altında tutmak için duruyor.
+
 Mevcut oyunda `G: Serbest` şeklinde bir asker davranış komutu bulunmaktadır.
 
 Yeni formasyonlardan biri de `Serbest` olarak adlandırılmaktadır.
@@ -980,10 +992,10 @@ Bu görsellerin ana amacı tarihsel doğruluk değil, formasyon geometrisinin oy
 - [x] `RtsFormationId` tanımla
 - [x] Aktif formasyon state'i ekle
 - [x] Çoklu asker seçiminde Formasyon UI'ını göster
-- [x] Yedi formasyon ikonunu oluştur
+- [x] Yedi formasyon ikonunu oluştur (12 Ağustos 2026'da altıya indi — § 5.7)
 - [x] Selected / hover / disabled durumlarını ekle
 - [x] Minimum asker sayılarını uygula
-- [x] `Serbest` varsayılanını koru
+- [x] ~~`Serbest` varsayılanını koru~~ → varsayılan `Hat` (§ 5.7)
 
 ### Kabul kriteri
 
@@ -1001,7 +1013,7 @@ Henüz hareket davranışı değişmese bile UI doğru seçim durumunu gösterme
 
 - [x] Hat
 - [x] Kol
-- [x] Serbest
+- [x] ~~Serbest~~ (kaldırıldı — § 5.7)
 
 uygulanmalıdır.
 
@@ -1133,7 +1145,9 @@ Her formasyon yalnız ikonunda değil, dünya üzerinde de ilk bakışta ayırt 
 
 # 24. Teknik kabul kriterleri
 
-- [ ] Formasyon sistemi mevcut `Serbest` grup hareketini bozmuyor.
+- [ ] ~~Formasyon sistemi mevcut `Serbest` grup hareketini bozmuyor.~~ Serbest
+      kaldırıldı (§ 5.7); yerine geçen kriter: eski dağınık dağıtım işçilerde,
+      ikiden az savaşçılı seçimlerde ve fallback yolunda hâlâ aynı çalışıyor.
 - [ ] Formasyon seçmek kendi başına hareket komutu üretmiyor.
 - [ ] 25–40 birimlik gruplarda belirgin frame hitch oluşmuyor.
 - [ ] Ulaşılamaz tek slot bütün grubu kilitlemiyor.

@@ -72,6 +72,14 @@ export interface RtsPresentationUpdate {
   readonly dying: boolean;
   /** True while the unit is standing at an in-place job — a builder on its site (Faz F). */
   readonly working: boolean;
+  /**
+   * True while a support field is restoring this body's hit points (Guard plan
+   * Faz 4). An asset that authors a `rest` clip waits in that pose instead of
+   * its idle for as long as it is being mended.
+   *
+   * Omitted by callers that model no such field, which keeps their ordinary idle.
+   */
+  readonly resting?: boolean;
   /** Blows landed so far; each increment is one swing to play (Faz D). */
   readonly attackCount: number;
   /**
@@ -267,6 +275,14 @@ export class Unit {
    * about buildings; this is the target-side answer that contract can read.
    */
   damageResistance = 0;
+  /**
+   * Whether a support field restored hit points to this body on the last tick.
+   *
+   * Written by the same pass and under the same rewritten-from-zero rule as
+   * {@link damageResistance}. Presentation-only: nothing in combat, movement or
+   * AI reads it, so removing every animation would leave the match identical.
+   */
+  mending = false;
   /** Active move destination (y = 0), or null when idle/arrived. */
   moveTarget: Vector3 | null = null;
   /** Enemy this unit is currently fighting, or null. */
@@ -448,6 +464,10 @@ export class Unit {
       attacking: this.isTradingBlows() || this.hunting,
       dying: this.dying,
       working: this.working,
+      // The bridge from the support field to the pose: a body being mended waits
+      // kneeling instead of standing, and rises the tick the mending stops —
+      // which is the tick it reaches full health, or leaves the field.
+      resting: this.mending,
       attackCount: this.attack.blowCount,
       impactCount: this.health.impactCount,
       cameraDistanceSquared: cameraPosition ? this.object.position.distanceToSquared(cameraPosition) : null,

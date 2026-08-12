@@ -187,7 +187,11 @@ export class CommandSystem {
 
     this.cancelPendingGroundOrders(selected);
     this.releaseDestinationReservations(selected);
-    for (const { unit, destination, path } of assignGroupDestinations(selected, point, this.navigation)) {
+    // Attack-move takes the same shape the player picked for an ordinary move:
+    // with Serbest gone there is no "no formation" answer, and defaulting to Hat
+    // here would silently break the wedge the player just chose.
+    const attackMove = assignGroupDestinations(selected, point, this.navigation, [], this.formation);
+    for (const { unit, destination, path } of attackMove) {
       if (path) unit.setAttackMovePath(path, destination);
       else unit.stop();
     }

@@ -38761,6 +38761,234 @@ check("Muhafiz Faz 2: hit rolu editor kaydinda hayatta kalir ve Guard onu author
   }
 });
 
+check("Muhafiz Faz 4: iyilesen birim diz cokme pozunda bekler, mesguliyet ve hareket onu ayaga kaldirir", () => {
+  const tuning = rtsLocomotionTuning(6);
+  const input = (over: Partial<RtsAnimationInput> = {}): RtsAnimationInput => ({
+    planarSpeed: 0,
+    attacking: false,
+    dying: false,
+    working: false,
+    attackCount: 0,
+    impactCount: 0,
+    ...over,
+  });
+
+  // The whole phase: a body being mended waits kneeling instead of standing.
+  assert.equal(classifyRtsAnimation(input({ resting: true }), tuning), "rest");
+  assert.equal(classifyRtsAnimation(input({ resting: false }), tuning), "idle");
+  // A caller that models no restoring field at all — wildlife, caravans — keeps
+  // exactly the idle it had before this role existed.
+  assert.equal(classifyRtsAnimation(input(), tuning), "idle");
+
+  // Where it sits in the ladder. Everything that means the unit has something
+  // else to do outranks it, because a kneeling pose that survived an order would
+  // slide a praying soldier across the map.
+  assert.equal(classifyRtsAnimation(input({ resting: true, planarSpeed: 6 }), tuning), "run");
+  assert.equal(classifyRtsAnimation(input({ resting: true, planarSpeed: 1 }), tuning), "walk");
+  assert.equal(classifyRtsAnimation(input({ resting: true, attacking: true }), tuning), "attack");
+  assert.equal(classifyRtsAnimation(input({ resting: true, dying: true }), tuning), "death");
+  // And work outranks it specifically: a wounded builder inside the field is
+  // still a builder, and the job it was sent to do wins over the mending.
+  assert.equal(classifyRtsAnimation(input({ resting: true, working: true }), tuning), "work");
+
+  // Unlike the one-shots, `rest` is continuous and reaches its own clip — it is
+  // held for as long as the mending takes rather than played once per event.
+  const set = { idle: "Idle_1", rest: "Crouch_Idle", walk: "Walk_1" };
+  const available = new Set(["Idle_1", "Crouch_Idle", "Walk_1"]);
+  assert.deepEqual(resolveRtsAnimationRole("rest", set, available), { role: "rest", clip: "Crouch_Idle" });
+  // An asset that authors none simply waits standing up, which is what every
+  // unit did before this role and is never wrong — only less expressive.
+  assert.deepEqual(
+    resolveRtsAnimationRole("rest", { idle: "Idle_1" }, new Set(["Idle_1"])),
+    { role: "idle", clip: "Idle_1" },
+  );
+
+  // The pose is not locomotion, so it is never speed-scaled: a kneeling body has
+  // no stride to keep in step with the ground.
+  assert.equal(rtsPlaybackRate("rest", 0, tuning), 1);
+  assert.equal(rtsPlaybackRate("rest", 5, tuning), 1);
+  const selected = selectRtsAnimation(input({ resting: true }), set, available, tuning);
+  assert.equal(selected?.role, "rest");
+  assert.equal(selected?.clip, "Crouch_Idle");
+  assert.equal(selected?.playbackRate, 1);
+});
+
+check("Muhafiz Faz 4: diz cokme yalnizca can gercekten geri geldigi surece bildirilir", () => {
+  // The honesty condition. The pose claims "this body is being tended", so it
+  // must be written where hit points actually move — not from standing in the
+  // radius, which is also true of a soldier at full health who is receiving
+  // nothing. This is what makes a unit rise on reaching full health without
+  // anything watching for that separately.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const templeStats = buildings.temple ?? assert.fail("temple definition missing");
+  const aura = templeStats.aura ?? assert.fail("temple aura missing");
+
+  const structures = new PlacedStructureSystem();
+  const temple = structures.place("player", templeStats, 0, 0);
+  const units = new UnitSystem();
+  const wounded = units.spawn("player", aura.radius - 1, 0, RTS_TEST_UNIT_STATS);
+  const unhurt = units.spawn("player", aura.radius - 2, 0, RTS_TEST_UNIT_STATS);
+  const outside = units.spawn("player", aura.radius + 5, 0, RTS_TEST_UNIT_STATS);
+  const enemy = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
+  for (const unit of [wounded, outside, enemy]) unit.health.damage(20);
+  const auras = new SupportAuraSystem();
+
+  // An unfinished site tends nobody: the build time is the price of the field.
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(wounded.mending, false, "a construction site tends nobody");
+
+  structures.advanceConstruction(temple, templeStats.constructionSeconds);
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(wounded.mending, true, "a wounded unit inside the field kneels");
+  assert.ok(wounded.health.current > wounded.health.max - 20, "because its hit points really are coming back");
+  assert.equal(unhurt.mending, false, "a unit at full health takes nothing from the field and stays standing");
+  assert.equal(unhurt.health.current, unhurt.health.max);
+  assert.equal(outside.mending, false, "a wounded unit outside the radius is not being tended");
+  assert.equal(enemy.mending, false, "and the field never tends the other kingdom");
+
+  // Rising when healed, which is the behaviour the pose exists to show. Run the
+  // field until the wound is gone and the claim must drop on the same tick the
+  // healing stops — not a tick late, or the Guard prays over a full health bar.
+  for (let tick = 0; tick < 200 && wounded.health.current < wounded.health.max; tick += 1) {
+    auras.update(structures.all(), units.all(), 1);
+  }
+  assert.equal(wounded.health.current, wounded.health.max, "the field closes the wound");
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(wounded.mending, false, "and the healed unit stands back up");
+
+  // Walking out ends it on the very next tick, with no bookkeeping to unwind —
+  // the same rewritten-from-zero rule the resistance follows.
+  wounded.health.damage(20);
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(wounded.mending, true, "a fresh wound puts it back on its knees");
+  wounded.position.set(aura.radius + 9, 0, 0);
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(wounded.mending, false, "leaving the radius drops the pose immediately");
+
+  // A body already going down is past tending, and must not kneel on the way.
+  const falling = units.spawn("player", aura.radius - 1, 0, RTS_TEST_UNIT_STATS);
+  falling.health.damage(20);
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(falling.mending, true, "it kneels while it is still savable");
+  falling.health.damage(falling.health.max);
+  assert.equal(falling.beginDeath(), true, "the fixture actually starts the fall");
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(falling.mending, false, "a dying body is past tending");
+  assert.equal(falling.health.current, 0, "and the field does not raise it off the floor");
+
+  structures.clear();
+  units.clear();
+});
+
+check("Muhafiz Faz 4: rest rolu editor kaydinda hayatta kalir ve Guard cömelme klibini authorlar", () => {
+  // The sidecar allowlist gotcha (CLAUDE.md), for this phase's new role.
+  const roundTripped = validateAssetSkeletonDef({
+    schema: 1,
+    animationSet: { idle: "idle-clip", rest: "rest-clip" },
+  });
+  assert.equal((roundTripped.animationSet as Record<string, string>).rest, "rest-clip", "the validator knows the role");
+  assert.equal(
+    normalizeAssetSkeleton({ schema: 1, animationSet: { rest: "rest-clip" } }).animationSet.rest,
+    "rest-clip",
+    "and the loader reads the same field back",
+  );
+  assert.ok(ANIMATION_SET_ROLES.includes("rest"), "the loader knows it too");
+
+  const guard = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+  );
+  const rest = guard.animationSet.rest ?? assert.fail("the Guard authors no rest clip");
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard.glb")))
+    ?? assert.fail("the Guard model is not a readable GLB");
+  const clips = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
+  // A typo here is silent: the role resolves to nothing and the Guard simply
+  // keeps standing, which looks exactly like the feature never shipped.
+  assert.ok(clips.has(rest), `"${rest}" is not a clip on the Guard rig`);
+  assert.ok(/crouch/.test(rest), `the resting pose is a crouch, not "${rest}"`);
+
+  // K-03, as a relationship rather than a magnitude: the crouch idle is an
+  // in-place loop exactly like the standing idles, so it gets the same
+  // root-motion treatment they do — none. The clips that *do* travel (the walks,
+  // the runs, the swings) are the ones carrying a lock.
+  const locked = new Set(guard.rootMotion.map((entry) => entry.clip));
+  const idles = [guard.animationSet.idle, ...(guard.animationVariants.idle ?? [])];
+  for (const clip of idles) assert.equal(locked.has(clip ?? ""), false, "the standing idles need no lock");
+  assert.equal(locked.has(rest), false, "and neither does the crouch idle it is held in place beside");
+  assert.ok(locked.has(guard.animationSet.walk ?? ""), "while a clip that travels does carry one");
+
+  // The user's Faz 4 decision, pinned: the crouch is a *healing* pose, not a
+  // stance and not a block. Nothing may quietly promote it into a defensive
+  // mechanic the game does not have (K-04).
+  assert.equal(guard.animationSet.block, undefined, "no block role: the game has no blocking mechanic");
+  for (const clip of [guard.animationSet.hit, ...(guard.animationVariants.hit ?? [])]) {
+    assert.ok(clip !== undefined && !/crouch|block/.test(clip), `"${clip}" implies a defence that does not exist`);
+  }
+});
+
+check("Muhafiz Faz 4: diz cokme pozu hasari, iyilesme hizini ve cooldown'u degistirmez", () => {
+  // K-02, for this phase. The pose is told what the simulation already did, and
+  // is told it late; none of its length may reach back into the fight.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const templeStats = buildings.temple ?? assert.fail("temple definition missing");
+  const aura = templeStats.aura ?? assert.fail("temple aura missing");
+
+  const structures = new PlacedStructureSystem();
+  const temple = structures.place("player", templeStats, 0, 0);
+  structures.advanceConstruction(temple, templeStats.constructionSeconds);
+  const units = new UnitSystem();
+
+  // A presentation that records what the simulation tells it, which is the only
+  // way to see the field this phase adds without a renderer.
+  const seen: (boolean | undefined)[] = [];
+  units.setPresentationFactory(() => ({
+    root: new Group(),
+    pickTargets: [],
+    selectionRadius: 0.5,
+    dispose: () => undefined,
+    update: (state: { readonly resting?: boolean }) => { seen.push(state.resting); },
+  }) as unknown as RtsPresentationHandle);
+  const guard = units.spawn("player", aura.radius - 1, 0, RTS_TEST_UNIT_STATS);
+  units.setPresentationFactory(null);
+  guard.health.damage(20);
+
+  const auras = new SupportAuraSystem();
+  auras.update(structures.all(), units.all(), 1);
+  const camera = new Quaternion();
+  seen.length = 0;
+  guard.updatePresentation(0.1, camera);
+  assert.equal(seen.at(-1), true, "the wounded Guard in the field reports the kneeling pose");
+
+  // Rendering the pose changes nothing about the mending it illustrates: the
+  // health it shows is the health the aura pass produced, at the aura's rate.
+  const healthBefore = guard.health.current;
+  for (let frame = 0; frame < 30; frame += 1) guard.updatePresentation(0.1, camera);
+  assert.equal(guard.health.current, healthBefore, "rendering frames heal nothing on their own");
+  auras.update(structures.all(), units.all(), 1);
+  assert.equal(
+    guard.health.current,
+    Math.min(guard.health.max, healthBefore + aura.healPerSecond),
+    "and the aura still mends at exactly its data rate",
+  );
+
+  // And a unit that is fighting reports no pose at all, so a Guard defending the
+  // Tapinak never kneels mid-swing.
+  const raider = units.spawn("enemy", aura.radius - 1.5, 0, RTS_TEST_UNIT_STATS);
+  raider.setAttackTarget(guard);
+  updateUnitCombat(units.all(), 0);
+  const impacts = guard.health.impactCount;
+  seen.length = 0;
+  guard.updatePresentation(0.1, camera);
+  assert.equal(guard.health.impactCount, impacts, "rendering does not manufacture blows taken");
+  assert.equal(raider.attack.ready, false, "nor tick the attacker's cooldown");
+
+  structures.clear();
+  units.clear();
+});
+
 check("Muhafiz geri locomotion: ters donguler yalnizca geri cekilme rollerindedir", () => {
   const guard = normalizeAssetSkeleton(
     JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
@@ -38995,7 +39223,16 @@ check("Muhafiz Faz 2b: Guard ust govde kemigini authorlar, kemik gercek ve kayit
   const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard.glb")))
     ?? assert.fail("the Guard model is not a readable GLB");
   const nodes = parsed.json.nodes ?? [];
-  const index = nodes.findIndex((node) => node.name === bone);
+  // Matched the way the runtime matches it (`collectSubtreeNodeNames`), through
+  // `sanitizeNodeName` on both sides, rather than against the raw glTF spelling.
+  // The rig calls the bone `mixamorig:Spine` and the Skeletal Mesh Editor writes
+  // back the sanitized `mixamorigSpine` it sees in the loaded scene, so both are
+  // valid authorings of the same bone and pinning one spelling turns an ordinary
+  // editor save red. What must still fail is a name that resolves to no bone at
+  // all — that is the silent full-body regression this check exists for.
+  const sanitized = PropertyBinding.sanitizeNodeName(bone);
+  const index = nodes.findIndex((node) => node.name !== undefined
+    && PropertyBinding.sanitizeNodeName(node.name) === sanitized);
   assert.ok(index >= 0, `"${bone}" is not a node on the Guard rig`);
 
   // And it must split the body where the plan says: the hips belong to the legs,
@@ -43355,17 +43592,19 @@ check("RTS farms and lumber camps reserve building space but not unit navigation
 check("Faz 7 a group order hands each unit its nearest slot, not its selection index", () => {
   const units = new UnitSystem();
   const navigation = new RtsNavigation();
-  // Four units around the command point, one per quadrant. The 2x2 formation has
-  // a slot in each quadrant too, so the correct assignment is the one where
-  // nobody crosses the middle — which is exactly what index order would break,
-  // since these are spawned in the opposite order to the slots.
+  // Four units around the command point, one per quadrant. Kare's 2x2 grid has a
+  // slot in each quadrant too, so the correct assignment is the one where nobody
+  // crosses the middle — which is exactly what index order would break, since
+  // these are spawned in the opposite order to the slots. The formation is named
+  // rather than left to the default: the point under test is slot *matching*, and
+  // it must keep being asserted against a known geometry.
   const northEast = units.spawn("player", 20, 20, RTS_TEST_UNIT_STATS);
   const northWest = units.spawn("player", -20, 20, RTS_TEST_UNIT_STATS);
   const southEast = units.spawn("player", 20, -20, RTS_TEST_UNIT_STATS);
   const southWest = units.spawn("player", -20, -20, RTS_TEST_UNIT_STATS);
   const squad = [northEast, northWest, southEast, southWest];
 
-  const assignments = assignGroupDestinations(squad, new Vector3(0, 0, 0), navigation);
+  const assignments = assignGroupDestinations(squad, new Vector3(0, 0, 0), navigation, [], "square");
   const slot = new Map(assignments.map((a) => [a.unit, a.destination]));
   for (const unit of squad) {
     const destination = slot.get(unit) ?? assert.fail("unit missing a slot");
@@ -43386,7 +43625,9 @@ check("Faz 7 a group order hands each unit its nearest slot, not its selection i
   );
 
   // Determinism: the same selection, reordered, is the same set of orders.
-  const shuffled = assignGroupDestinations([southWest, northEast, southEast, northWest], new Vector3(0, 0, 0), navigation);
+  const shuffled = assignGroupDestinations(
+    [southWest, northEast, southEast, northWest], new Vector3(0, 0, 0), navigation, [], "square",
+  );
   for (const a of shuffled) {
     assert.deepEqual(
       [a.destination.x, a.destination.z],
@@ -51441,7 +51682,12 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   // selection that still carried a row of text would be the wall this shape
   // exists to replace. A single selection still teaches the verbs.
   assert.equal(army.hint, "", "a group panel is cards and nothing else");
-  assert.equal(army.formation?.active, "free", "a combat group defaults to Serbest without changing legacy movement");
+  assert.equal(army.formation?.active, "line", "a combat group opens on Hat now that Serbest is gone");
+  assert.deepEqual(
+    army.formation?.options.map((option) => option.id),
+    ["line", "column", "wedge", "crescent", "square", "loose"],
+    "Serbest is no longer offered: every formation the panel lists is a real geometry",
+  );
 
   const formationArmy = describeSelection({
     kind: "units",
@@ -51460,7 +51706,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
     true,
     "a legal formation is selectable for two combat units",
   );
-  assert.equal(DEFAULT_RTS_FORMATION, "free", "Serbest preserves the existing group-movement default");
+  assert.equal(DEFAULT_RTS_FORMATION, "line", "Hat inherited the default seat when Serbest was removed");
   assert.match(one.hint, /F: Saldırı-Hareket/, "the verbs are still taught on a single selection");
 
   // Two units that disagree used to force a "Duruş: Karışık" line. There is no

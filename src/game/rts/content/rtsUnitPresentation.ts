@@ -40,6 +40,7 @@ import {
   RTS_WORK_MONTAGE_NONE,
   type RtsActionDurations,
   type RtsActionState,
+  type RtsAnimationRole,
   type RtsAnimationSet,
   type RtsAnimationVariants,
   type RtsLocomotionTuning,
@@ -184,6 +185,17 @@ class RtsAttachedCrewAnimator {
 const LOCOMOTION_FADE_SECONDS = 0.18;
 /** A swing and a fall are meant to read as sudden, so they cut in far faster. */
 const ACTION_FADE_SECONDS = 0.06;
+/**
+ * Kneeling down to be tended, and rising once it is done.
+ *
+ * Slower than an ordinary locomotion blend because it is a whole change of
+ * posture rather than a change of gait: at 0.18 s a wounded soldier drops to the
+ * ground and springs back up like a dropped puppet. Deliberately *not* applied
+ * to every transition out of the pose — a unit ordered to move mid-mending is
+ * getting up because something urgent happened, and should do it at the speed
+ * everything else moves at.
+ */
+const REST_FADE_SECONDS = 0.45;
 
 /**
  * When a unit's animation may run on a reduced cadence, and how reduced.
@@ -225,6 +237,14 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   /** The running one-shot (swing or fall), owned by the pure state machine. */
   private action: RtsActionState = RTS_ACTION_NONE;
   private actionDurations: RtsActionDurations = { attack: null, hit: null, death: null };
+  /**
+   * The continuous role the mixer was last told to play, for {@link locomotionFade}.
+   *
+   * Only written on frames the continuous channel actually reaches, so a one-shot
+   * or a work montage passing overhead leaves it alone: what the kneel blends out
+   * of is the last pose this channel held, not whatever interrupted it.
+   */
+  private lastContinuousRole: RtsAnimationRole = "idle";
   /** Which one-shot the mixer was last told to start, so it retriggers only on change. */
   private startedAction: RtsActionState = RTS_ACTION_NONE;
   /** See {@link RtsPresentationHandle.deathSeconds}: undefined when unauthored. */
@@ -467,7 +487,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       this.animationVariantSeed,
     );
     if (selection) {
-      animator.play(selection.clip, LOCOMOTION_FADE_SECONDS);
+      animator.play(selection.clip, this.locomotionFade(selection.role));
       // After `play`, which resets the rate: this is what keeps a Guard slowed by
       // a crowd from skating, since its feet then cycle at the speed it moves.
       animator.setPlaybackRate(selection.playbackRate);
@@ -485,6 +505,22 @@ class RtsUnitPresentation implements RtsPresentationHandle {
    */
   get animationFrozen(): boolean {
     return this.poseFrozen;
+  }
+
+  /**
+   * Blend length for a continuous clip, slowed only for the kneel and the rise.
+   *
+   * Both directions of the `idle`↔`rest` pair, and only that pair: those are the
+   * two the fiction wants unhurried. Anything else leaving the pose — a march
+   * order, a fight, a fall — keeps the ordinary blend, because those transitions
+   * are urgent and a lazy one would leave the body kneeling half a second into
+   * a charge.
+   */
+  private locomotionFade(role: RtsAnimationRole): number {
+    const restful = (role === "rest" && this.lastContinuousRole === "idle")
+      || (role === "idle" && this.lastContinuousRole === "rest");
+    this.lastContinuousRole = role;
+    return restful ? REST_FADE_SECONDS : LOCOMOTION_FADE_SECONDS;
   }
 
   /** Authored length of the clip a semantic role names, or null when unauthored. */

@@ -12,7 +12,7 @@ import { Vector3 } from "three";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { Unit } from "./unit";
 import { formationOffsets as legacyFormationOffsets } from "./unitMovement";
-import { rtsFormationWorldSlots, type RtsGeometricFormationId } from "./formations/rtsFormationGenerator";
+import { rtsFormationWorldSlots } from "./formations/rtsFormationGenerator";
 import { DEFAULT_RTS_FORMATION, type RtsFormationId } from "./formations/rtsFormationTypes";
 
 /** One unit's share of a group order. A null `path` means "no route exists". */
@@ -53,10 +53,6 @@ export function assignGroupDestinations(
   formation: RtsFormationId = DEFAULT_RTS_FORMATION,
 ): GroupDestination[] {
   if (units.length === 0) return [];
-
-  if (formation === "free") {
-    return assignDestinationsToSlots(units, legacySlots(units.length, point), point, navigation, reservations);
-  }
 
   // Formations belong only to combat units. Workers still receive their legacy
   // group-move targets, but combat destinations reserve space so workers do not
@@ -104,7 +100,7 @@ function legacySlots(count: number, point: Vector3): Vector3[] {
  * keeps one bad slot from stopping the squad.
  */
 function assignFormationCombatDestinations(
-  formation: RtsGeometricFormationId,
+  formation: RtsFormationId,
   units: readonly Unit[],
   point: Vector3,
   centroid: Vector3,
@@ -201,7 +197,7 @@ function assignRoleAwareLineDestinations(
 }
 
 function assignRoleAwareDepthDestinations(
-  formation: Exclude<RtsGeometricFormationId, "line" | "square" | "loose">,
+  formation: Exclude<RtsFormationId, "line" | "square" | "loose">,
   units: readonly Unit[],
   point: Vector3,
   centroid: Vector3,

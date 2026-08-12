@@ -1,9 +1,12 @@
 /**
- * Formation ids are deliberately separate from {@link UnitStance}. "Serbest"
- * is already a player-facing stance label; here it means legacy group movement.
+ * Formation ids are deliberately separate from {@link UnitStance}: "Serbest" is
+ * a stance label (G), never a formation. The old `free` formation — "keep the
+ * legacy group-move scatter" — was removed once every geometric formation was
+ * shipped; a combat group now always marches in a readable shape, and legacy
+ * scatter survives only where it still belongs (workers, and the fallback path
+ * in `groupOrders` when no formation slot can be reached).
  */
 export type RtsFormationId =
-  | "free"
   | "line"
   | "column"
   | "wedge"
@@ -20,7 +23,8 @@ export interface RtsFormationDefinition {
   readonly iconDots: readonly (readonly [number, number])[];
 }
 
-export const DEFAULT_RTS_FORMATION: RtsFormationId = "free";
+/** Hat is the widest, least surprising shape, so it inherits Serbest's seat. */
+export const DEFAULT_RTS_FORMATION: RtsFormationId = "line";
 
 /**
  * UI-facing V1 formation catalogue. Geometry and movement rules deliberately
@@ -34,7 +38,6 @@ export const RTS_FORMATION_DEFINITIONS: readonly RtsFormationDefinition[] = [
   { id: "crescent", label: "Hilal", minUnits: 6, description: "Kanatları öne çıkaran geniş düzen.", iconDots: [[16, 16], [84, 16], [26, 40], [74, 40], [38, 64], [62, 64], [50, 82]] },
   { id: "square", label: "Kare", minUnits: 8, description: "Kırılgan birlikleri merkezde korur.", iconDots: [[18, 18], [50, 18], [82, 18], [18, 50], [82, 50], [18, 82], [50, 82], [82, 82]] },
   { id: "loose", label: "Dağınık", minUnits: 2, description: "Birimler arasındaki mesafeyi artırır.", iconDots: [[18, 20], [73, 12], [48, 43], [88, 58], [14, 76], [62, 88]] },
-  { id: "free", label: "Serbest", minUnits: 2, description: "Mevcut grup hareket düzenini kullanır.", iconDots: [[18, 20], [52, 15], [82, 26], [31, 51], [67, 54], [14, 82], [49, 78], [86, 84]] },
 ];
 
 export function isRtsFormationId(value: string): value is RtsFormationId {

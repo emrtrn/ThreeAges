@@ -1,9 +1,10 @@
 # ThreeAges — Muhafız Animasyon Tamamlama Planı
 
 Oluşturulma tarihi: 2026-08-11  
-Durum: **Devam ediyor — Faz 1, 2, 2b kabul edildi; Faz 3 (ikinci death varyantı)
-kodu/verisi/otomasyonu tamam, görsel kabulü açık. Faz 5a Guard geri çekilmesi
-uygulandı, görsel kabulü açık; kalan Faz 4/5b/6 hâlâ tasarım kapısında.**
+Durum: **Devam ediyor — Faz 1, 2, 2b, 3 (3a/3b dahil), 4 ve 5a kabul edildi.
+Faz 4 tasarım kapısı kapandı: blok yolu denendi ve elendi, yerine Tapınak
+alanında iyileşme duruşu uygulanıp kabul edildi. Geriye yalnız Faz 5b ve Faz 6
+kaldı; ikisi de hâlâ tasarım kapısında.**
 
 ## 1. Amaç
 
@@ -46,9 +47,10 @@ combat dengesi ve `Guard.glb` kaynak geometrisi kapsam dışıdır.
 | `walkBack` | `guard_sword_and_shield_walk_2` | — | Faz 5a, geri çekilme |
 | `runBack` | `guard_sword_and_shield_run_2` | — | Faz 5a, geri çekilme |
 | `work` | `guard_sword_and_shield_idle_1` | — | Mevcut davranış korunur |
+| `rest` | `guard_sword_and_shield_crouch_idle` | — | Faz 4, Tapınak alanında iyileşme |
 | `attack` | `guard_sword_and_sheld_attack_2` | `attack_4`, `slash_5`, `kick` | Tamam |
-| `hit` | `guard_sword_and_shield_impact_1` | `impact_2`, `impact_3` | Tamam (hareket hâlinde üst gövde), görsel kabul açık |
-| `death` | `guard_sword_and_shield_death_1` | — | Tamam |
+| `hit` | `guard_sword_and_shield_impact_1` | `impact_2`, `impact_3` | Tamam (hareket hâlinde üst gövde) |
+| `death` | `guard_sword_and_shield_death_1` | `death_2` | Tamam |
 
 `animationVariants` seçimi rastgele sayı üretmez. `unit.id` tabanlı seed; idle
 için birim başına, attack için de `attackCount` başına kararlı klip seçer. Geri
@@ -102,13 +104,18 @@ root node ile `lockXYZ` olur. Kaynak GLB değiştirilmez.
 attack havuzuna girmez. `casting`, `crouch`, `sheath` ve `power_up` klipleri
 oyunda gerçek bir state/event olmadan sadece isim benzerliğiyle atanmaz.
 
+Faz 4 bu kuralı ihlal etmez, uygular: `crouch_idle` ancak simülasyonda gerçekten
+var olan bir duruma (`SupportAuraSystem`'in o tick iyileştirdiği birim)
+bağlandıktan sonra atandı. `block` klipleri ise gerçek bir blok mekaniği
+olmadığı için authorlanmamış durumda ve bir engine kontrolü bunu koruyor.
+
 ### K-05 — Görsel kabul otomatik testten ayrıdır
 
 Engine testleri sözleşme ve regresyon kanıtıdır. Aşağıdaki dünya içi kabuller
 kullanıcı gözlemi olmadan kapatılmaz:
 
 - Aynı anda 10 muhafızın yürüme/koşma ritmi ve ayak kayması.
-- Darbe, blok, ölüm ve yeniden locomotion geçişlerinin okunurluğu.
+- Darbe, iyileşme duruşu, ölüm ve yeniden locomotion geçişlerinin okunurluğu.
 - Farklı uzaklıklarda mixer seyrek güncellemesinin görünür sıçrama üretmemesi.
 
 ## 4. Kalan Fazlar
@@ -133,7 +140,8 @@ veya sıfır hızda koşu yoktur. Başarılıysa plan günlüğüne tarihli kabu
 
 ### Faz 2 — Alınan darbe (`impact`) tepkisi
 
-**Durum:** Kod ve otomasyon tamam (2026-08-11), kullanıcı görsel kabulü açık.
+**Durum:** ✅ Kapandı — kod ve otomasyon 2026-08-11'de bitti, ilk görsel kabul
+**reddedildi** (ayak kayması) ve düzeltmesi Faz 2b ile kabul edildi.
 
 **Kullanılan klipler:** `guard_sword_and_shield_impact_1` (0.73 s, birincil),
 `impact_2` (1.00 s), `impact_3` (0.73 s).
@@ -194,7 +202,8 @@ Faz 2b.
 
 ### Faz 2b — Darbenin üst gövdeye indirilmesi
 
-**Durum:** Kod ve otomasyon tamam (2026-08-11), kullanıcı görsel kabulü açık.
+**Durum:** ✅ Tamam — kod ve otomasyon 2026-08-11'de bitti, görsel kabul aynı gün
+alındı.
 
 **Bulgu:** Tek `CrossfadeAnimator` tüm gövdeyi sürüyordu; RTS sunumu, TPS
 tarafında zaten var olan gövde maskesi altyapısını (`bodyMask`,
@@ -252,7 +261,8 @@ ayakları kaymadan adımını sürdürüyor, üst gövdesi sarsılıyor.
 
 ### Faz 3 — İkinci death varyantı
 
-**Durum:** Kod, veri ve otomasyon tamam (2026-08-11), kullanıcı görsel kabulü açık.
+**Durum:** ✅ Tamam — kod, veri ve otomasyon 2026-08-11'de bitti, görsel kabul
+2026-08-12'de alındı (3a düşüş/ceset ayrımı ve 3b donmuş poz dahil).
 
 **Klipler:** `guard_sword_and_shield_death_1` (2.333 s, birincil),
 `death_2` (3.933 s). Ölçüm GLB'den: `death_1` 2.333 s, `death_2` 3.933 s — plandaki
@@ -345,34 +355,155 @@ ve ikisi de düzeltildi:
   donmaması.
 - `npx tsc --noEmit` temiz; `npm run test:engine:slow` (tam) 1415 kontrol yeşil.
 
-**Görsel kabul (açık):** Bir muhafız bölüğü kırıldığında iki farklı düşüş görünür;
-her iki düşüş de sonuna kadar oynar, gövde 5 sn yerde yattıktan sonra kaybolur;
-ceset ne tıklanabilir ne de hedeflenebilir.
+**Görsel kabul (2026-08-12): ✅ kabul edildi.** Bir muhafız bölüğü kırıldığında
+iki farklı düşüş görünüyor; her iki düşüş de sonuna kadar oynuyor, gövde yerde
+yattıktan sonra kayboluyor; ceset ne tıklanabilir ne de hedeflenebilir.
 
-### Faz 4 — Defans/blok dili için oyun-state tasarımı
+### Faz 4 — Tapınak alanında iyileşme duruşu
 
-**Durum:** Tasarım kapısı — doğrudan klip ataması yapılmayacak.
+**Durum:** ✅ Tamam — kod, veri ve otomasyon 2026-08-12'de bitti, görsel kabul
+aynı gün alındı.
 
-**Asset adayları:** `block_1`, `block_2`, `crouch_block_1`, `crouch_block_2`,
-`block_idle`.
+Bu faz "defans/blok dili" olarak açıldı; tasarım kapısında iki tur döndü ve
+**savunma değil, iyileşme** olarak kapandı. Aşağıda hem elenen yol hem seçilen yol
+duruyor, çünkü elenme gerekçesi kalan blok asset'leri için de geçerli.
 
-Bugünkü `hold` stance yalnızca hareket/engagement politikasıdır; gerçek bir block
-olayı, stamina veya hasar azaltma zamanı değildir. Bu yüzden her alınan darbede
-`block` oynatmak savunma mekanizması varmış gibi yanıltıcı olur.
+#### 4.1 Ölçülen asset gerçeği (2026-08-12, GLB'den)
 
-**Önce karar verilmesi gerekenler:**
+| Klip | Süre | `mixamorig:Hips` net yer değiştirme | Şekil |
+| --- | --- | --- | --- |
+| `guard_sword_and_shield_crouch_idle` | 2.467 s | (0.00, 0.00, 0.00) | **döngü**, tam yerinde |
+| `guard_sword_and_shield_crouch` | 0.600 s | (−2.8, −24.5, **+39.5**) | diz çökme geçişi |
+| `guard_sword_and_shield_crouching` | 0.533 s | (3.2, 24.9, **−39.5**) | kalkma geçişi |
+| `guard_sword_and_shield_crouching_2` | 0.667 s | (0.00, 0.00, 0.00) | döngü, yerinde |
+| `guard_sword_and_shield_block_1` | 0.500 s | (−2.9, 23.0, 10.0) | tek atım, öne yaslanma |
+| `guard_sword_and_shield_block_2` | 0.533 s | (−1.3, −26.3, −12.0) | tek atım, geri savrulma |
+| `sguard_word_and_shield_block_idle` | 1.400 s | (0.0, 0.0, 0.0) | döngü, ayakta guard stance |
 
-- Block yalnızca gelecekteki savunma yeteneğinin başarılı sonucu mu, yoksa
-  cosmetic bir guard stance mı?
-- Başarılı block varsa damage/resistance nerede hesaplanacak ve hangi event
-  `blockCount` aktaracak?
-- Crouch blok seçilebilir bir stance mi, yoksa yalnızca sinematik/AI asseti mi?
+Karşılaştırma tabanı: `walk_1` net 154, `idle_3`/`idle_4` net ~0.03 klip birimi.
 
-Bu karar verilmeden bu faz açılmaz.
+Üç sonuç:
+
+1. `crouch_idle` **tam yerinde** (net sıfır) — `idle_3`/`idle_4` ile aynı sınıfta,
+   yani kilit gerektirmeyen temiz bir döngü. Kullanılan klip bu.
+2. `crouch` ile `crouching` birbirinin **tam tersi** (Z ekseninde ±39.5), yani
+   authorlanmış bir diz çökme/kalkma çifti. İkisi de bir yürüyüş adımının ~%26'sı
+   kadar yer değiştiriyor; kullanılacaklarsa `lockXYZ` şart. Bu fazda
+   kullanılmadılar (bkz. "Uygulanmayan").
+3. `block_idle` isimlendirmesi bozuk: dosyadaki gerçek ad
+   **`sguard_word_and_shield_block_idle`** (`sguard_word`, `guard_sword` değil).
+   Sidecar'a doğru yazılmazsa rol sessizce fallback'e düşer.
+
+#### 4.2 Bugün gerçekten var olan oyun kancaları
+
+Tarama sonucu, bir duruşa bağlanabilecek dört aday state var ve hepsi farklı şey
+vaat ediyor:
+
+- **`UnitStance = "aggressive" | "hold"`** (`unit.ts`, `H` tuşu). Yalnızca hareket
+  ve hedef edinme politikası; hasarla hiç ilgisi yok.
+- **`Unit.damageResistance`** (`damageResolution.ts`, `supportAuraSystem`). Gerçek
+  ve tek hasar azaltma yolu; her tick sıfırdan yeniden yazılıyor.
+- **`BuildingBalanceStats.aura.healPerSecond`** (aynı sistem). Gerçek ve tek can
+  geri kazandırma yolu — **bu fazın bağlandığı kanca.**
+- **`HealthComponent.impactCount`** (Faz 2). Uygulanmış hasarı sayar; emilmiş bir
+  vuruşu ayırt edemez.
+
+#### 4.3 Elenen yol: blok (2026-08-12, uygulandı ve geri alındı)
+
+İlk kapı kararı `block_1`/`block_2`'yi aura **emilimine** bağlamaktı: Tapınak
+alanındaki birim vurulduğunda `hit` yerine kalkan cevabı oynasın. Kodu, verisi ve
+4 engine kontrolü yazıldı, `build:verify` yeşil geçti; sonra **kullanıcı
+gözleminde elendi**: emilim koşulu (alanın içinde olmak *ve* tam o anda vurulmak)
+sahada yeterince sık kurulmadığı için davranış pratikte gözlemlenemedi.
+
+`block` rolü, `impactAbsorbed` sinyali ve dört kontrol bu yüzden tamamen geri
+alındı. Bugün sidecar'da blok klibi authorlanmış **değil** ve bir engine kontrolü
+bunu böyle tutuyor: K-04 gereği oyunda gerçek bir blok mekaniği olmadan hiçbir
+klip blok rolüne giremez.
+
+Kaydedilmeye değer teknik bulgu: kalkanı **mermiye değil gövdeye** bağlamak
+gerekiyordu. Top hasarını *ateş anında* pişirir (`AttackComponent.tryFire`), yani
+korumalı bir birime atılıp o birim alandan çıktıktan sonra inen mermi, artık
+sahip olmadığı bir korumayla indirilmiştir. Aynı "durumu izle, olayı değil"
+ayrımı iyileşme duruşunda da karşılığını buldu (aşağıda madde 2).
+
+#### 4.4 Seçilen yol: iyileşme duruşu (kullanıcı kararı, 2026-08-12)
+
+> "Guard Tapınak alanında iken çömelme hareketi yapsın (dua gibi görünsün, diz
+> çökme) ve bu şekilde iyileşsin. İyileşince ayağa kalkar. Yani tapınak
+> yarıçapında yaralı askerlerin bekleme animasyonu idle değil çömelme olacak."
+
+Blok yerine bu seçildi çünkü koşulu **sürekli ve gözlemlenebilir**: birim alanda
+durduğu ve yarası olduğu sürece poz görünür, tek bir vuruş anına bağlı değil. Ve
+gösterdiği şey zaten oynuyor — Tapınak gerçekten can veriyor.
+
+#### 4.5 Yapılanlar
+
+1. **Yeni sürekli rol `rest`**, K-01'in üç yüzeyinde birlikte:
+   `ANIMATION_SET_ROLES` (`src/scene/assetSkeletonLoader.ts`),
+   `SKELETON_ANIMATION_SET_ROLES` (`tools/saveValidator.ts`) ve seçici/testler.
+   Skeletal Mesh Editor rol satırını otomatik gösterir; UI değişikliği gerekmedi.
+   Tek atımlık değil sürekli: `work` gibi kendi klibine ulaşır, asset authorlamazsa
+   `idle`'a düşer — yani rolü olmayan her birim eskisi gibi ayakta bekler.
+2. **Sinyal "yarası var ve alanın içinde" değil, "canı gerçekten geri geldi".**
+   `SupportAuraSystem` iyileştirdiği birime `Unit.mending = healed > 0` yazıyor;
+   `damageResistance` ile aynı her-tick-sıfırdan kuralında, yani iyileşen, alandan
+   çıkan veya Tapınağı yıkılan birim bir sonraki tick'te iddiayı düşürüyor ve geri
+   alınacak defter kalmıyor. İki koşulu birleştirip türetmek yanlış olurdu: tam
+   candaki bir birim alanın içinde de olsa hiçbir şey almıyor. Bunun doğrudan
+   sonucu olarak **birim tam cana ulaştığı tick'te `healed` sıfırlandığı için ayağa
+   kalkması ayrıca kodlanmadı** — kullanıcının istediği "iyileşince ayağa kalkar"
+   davranışı bu tanımdan bedavaya geliyor.
+3. **Öncelik sırası:** `death > attack > locomotion > work > rest > idle`.
+   Emir alan, dövüşen, düşen veya inşa eden birim diz çökmez; yalnızca yapacak
+   başka işi olmayan yaralı asker çöker. Alandaki yaralı bir işçi hâlâ işçidir —
+   `work` bilinçli olarak `rest`'in üstünde.
+4. **Klip:** `rest` → `guard_sword_and_shield_crouch_idle` (2.467 s, net sıfır).
+   Yerinde olduğu için `rootMotion` girdisi **eklenmedi**; test bunu büyüklük
+   olarak değil ilişki olarak pinliyor: crouch idle, ayakta idle'larla aynı
+   muameleyi görür (kilitsiz), yürüyüş ise kilitli kalır.
+5. **Diz çökme/kalkma hızı:** sürekli kanalın 0.18 s'lik blend'i bu poz için sert
+   kalıyordu (asker yere düşüp zıplayarak kalkıyor gibi görünüyordu).
+   `idle`↔`rest` çiftinin **iki yönü de** 0.45 s'ye çıkarıldı. Yalnızca o çift:
+   emir alıp kalkan birim normal hızda kalkmalı, yoksa hücuma yarım saniye diz
+   üstünde başlar.
+
+**Uygulanmayan:**
+
+- `crouch` (diz çökme) ve `crouching` (kalkma) geçiş klipleri. Ölçüldüler ve
+  authorlanmış bir çift oldukları doğrulandı; kullanılmaları montaj makinesinin
+  üç ayrı klibe genelleştirilmesini ister (bugünkü `RtsWorkMontage` tek klibi
+  bölümlere ayırıyor). 0.45 s'lik blend aynı okumayı verdiği için ayrı bir dilime
+  bırakıldı — istenirse açılacak ilk ek bu.
+- Seçenek A: `hold` duruşunda `block_idle` döngüsü. Değerlendirildi, alınmadı;
+  hâlâ ucuz ve bağımsız bir ek.
+- Crouch **blok** klipleri (`crouch_block_*`) ve seçilebilir bir çömelme stance'i.
+  Kullanıcı kararıyla kapsam dışı: yeni bir emir ve menzil/görüş sonuçları demek.
+
+**Otomasyon (4 yeni engine kontrolü, `--filter "Muhafiz Faz 4"`):**
+
+- Rol sınıflandırması: `resting` diz çöktürür, `resting` yokken idle kalır, bayrağı
+  hiç göndermeyen çağıran Faz 4 öncesi davranışı korur; hareket, saldırı, ölüm
+  **ve iş** birimi ayağa kaldırır; rol kendi klibine ulaşır, authorlanmamışsa
+  `idle`'a düşer; poz hıza göre ölçeklenmez.
+- Dürüstlük: alan yaralıyı diz çöktürür **ve** canı gerçekten geri gelir; tam
+  candaki birim ayakta kalır; yarıçap dışındaki yaralı ve düşman birim çökmez;
+  inşa hâlindeki Tapınak kimseyi iyileştirmez; **yara kapandığı tick'te birim
+  ayağa kalkar**; yarıçaptan çıkmak pozu aynı tick'te düşürür; düşmekte olan gövde
+  diz çökmez.
+- Sidecar: rol editör kaydından sağ çıkar, Guard klibi authorlar, klip GLB'de
+  gerçekten vardır, bir crouch klibidir, ayakta idle'lar gibi kilitsizdir (yürüyüş
+  ise kilitlidir), ve **blok rolü authorlanmamıştır** + `hit` havuzuna crouch/block
+  sızmamıştır (K-04).
+- K-02: poz hasarı, iyileşme hızını (aura'nın veri oranı) ve saldırganın
+  cooldown'unu değiştirmez; dövüşen Guard diz çökmez.
+
+**Görsel kabul (2026-08-12): ✅ kabul edildi.** Yaralı Guard Tapınak yarıçapında
+diz çöküp bekliyor, canı dolarken pozda kalıyor, dolunca ayağa kalkıyor.
 
 ### Faz 5 — Hareket başlangıcı, duruş ve yön değiştirme
 
-**Durum:** Faz 5a tamam, görsel kabul açık; Faz 5b keşif + görsel prototip gerektirir.
+**Durum:** Faz 5a tamam ve kabul edildi; Faz 5b keşif + görsel prototip gerektirir.
 
 #### Faz 5a — Guard geri çekilmesi
 
@@ -385,9 +516,9 @@ oyuncu emrini kovalamaya çeviremez. Bu sırada `walkBack`/`runBack` sırasıyla
 **Otomatik kanıt:** `tsc --noEmit`; hedefli engine kontrolleri yönü koruma,
 oyuncu-emri önceliği, rol filtresi ve sidecar rol ayrımını kapsar.
 
-**Görsel kabul:** Guard öne bakarken arkasındaki zemine `T` ardından sağ tık;
-geri adımın kalkan/yüz yönünü koruduğu, ayak kayması olmadığı ve normal sağ
-tık hareketinin hâlâ yalnız `_1` döngülerini kullandığı doğrulanmalı.
+**Görsel kabul (2026-08-12): ✅ kabul edildi.** Guard geri adımda kalkan/yüz
+yönünü koruyor, ayak kayması yok, normal sağ tık hareketi hâlâ yalnız `_1`
+döngülerini kullanıyor.
 
 #### Faz 5b — Dönüş ve strafe
 
@@ -416,17 +547,20 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
 
 ## 5. Sonraki Oturum İçin Başlangıç Noktası
 
-1. Önce Faz 3'ün görsel kabulünü sor/kaydet: bir muhafız bölüğü kırıldığında iki
-   farklı düşüş görünmeli, uzun düşüş sahnede takılı kalmamalı. Kabul geldiyse
-   Uygulama Günlüğü'ne kanıtla birlikte tarihli satır eklenir.
-2. Fonksiyonel iş kalmadı — Faz 4/5/6 tasarım kapısında. Kapıyı açmak §4'teki
-   soruların yanıtlanmasına bağlı; en ucuz sıra Faz 6 (generic notify
-   dispatcher) çünkü tek gereksinimi runtime altyapısı, yeni oyun mekaniği değil.
-   Faz 4 (block) gerçek bir savunma mekaniği kararı, Faz 5 (turn/strafe) ise
-   sunumun bugün taşımadığı yönsel hız verisini istiyor.
-3. Teslim kapısı (§7) için kalan: Faz 4/5/6'nın ya uygulanması ya da açık tasarım
-   kararlarıyla ayrı bir backlog belgesine taşınması, ve `npm run build:verify`
-   ile tam doğrulama.
+**Açık görsel kabul kalmadı.** Faz 1, 2b, 3, 4 ve 5a dünya içinde kabul edildi.
+
+1. Fonksiyonel iş olarak yalnız Faz 5b ve Faz 6 kaldı, ikisi de hâlâ tasarım
+   kapısında. En ucuz sıra Faz 6 (generic notify dispatcher) çünkü tek gereksinimi
+   runtime altyapısı, yeni oyun mekaniği değil. Faz 5b (turn/strafe) sunumun bugün
+   taşımadığı yönsel hız verisini istiyor ve önce o verinin nereden geleceğine
+   karar verilmeli.
+2. İsteğe bağlı, bağımsız ve sırayla en ucuz üç ek §4.5'in "Uygulanmayan"
+   listesinde duruyor: `crouch`/`crouching` geçiş klipleriyle gerçek diz çökme ve
+   kalkma hareketi (montaj makinesini üç klibe genelleştirmek), `hold` duruşunda
+   `block_idle` döngüsü, ve crouch blok. Üçü de bu planın kapsamı içinde ama
+   hiçbiri teslim kapısının şartı değil.
+3. Teslim kapısı (§7) için kalan tek madde: Faz 5b/6'nın ya uygulanması ya da açık
+   tasarım kararlarıyla ayrı bir backlog belgesine taşınması.
 4. Her TypeScript değişikliğinden sonra `npx tsc --noEmit`; her dar dilimden
    sonra ilgili filtreli engine testini çalıştır. Kalabalık/darbe görünümü için
    browser veya kullanıcı görsel kabulü açıkça ayrı yazılır.
@@ -472,6 +606,38 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
   `UNIT_CORPSE_SECONDS` 30'a çıkarıldı. Instanced ceset havuzu ölçüme bağlandı.
   `tsc --noEmit` ve tam `test:engine:slow` (1415 kontrol) yeşil. Dünya içi görsel
   kabul + kare bütçesi ölçümü açık.
+- 2026-08-12 — **Görsel kabul: Faz 3 (3a/3b dahil) dünya içinde kabul edildi.**
+  İki farklı düşüş görünüyor, düşüşler sonuna kadar oynuyor, ceset donmuş pozda
+  bekleyip kayboluyor.
+- 2026-08-12 — Faz 4 tasarım kapısı ölçümle açıldı: altı blok klibinin süresi ve
+  `mixamorig:Hips` net yer değiştirmesi GLB'den okundu (`block_1/2` ve
+  `crouch_block_1` kilitsiz kullanılamaz), `block_idle`'ın gerçek adının
+  `sguard_word_and_shield_block_idle` olduğu bulundu, ve bugün var olan üç oyun
+  kancası (`hold` stance, `damageResistance`, `impactCount`) ile üç seçenek
+  (A/B/C) belgelendi.
+- 2026-08-12 — Faz 4, birinci deneme (**Seçenek B, geri alındı**): tek-atımlık
+  `block` rolü `hit`'in yuvasında aura emilimine bağlandı, `build:verify` yeşil
+  geçti. Kullanıcı gözleminde elendi — emilim koşulu (alanın içinde olmak *ve* tam
+  o anda vurulmak) sahada yeterince sık kurulmadığı için davranış görülemedi. Rol,
+  sinyal ve dört kontrol tamamen geri alındı.
+- 2026-08-12 — **Kullanıcı kararı: iyileşme duruşu.** Faz 4 uygulandı: sürekli
+  `rest` rolü üç yüzeye eklendi (`crouch_idle`, 2.467 s, net sıfır — kilit
+  gerekmedi), sinyal `SupportAuraSystem` → `Unit.mending = healed > 0`, öncelik
+  `work > rest > idle`, ve `idle`↔`rest` çiftinin iki yönü de 0.45 s'ye
+  yavaşlatıldı. "İyileşince ayağa kalkar" ayrıca kodlanmadı: tam canda `healed`
+  sıfır olduğu için tanımdan geliyor. 4 yeni engine kontrolü.
+  `npm run build:verify` tam yeşil: `verify:imports`, `vite build`,
+  `test:engine:slow` 1420 kontrol, `verify:dist --strict`. Dünya içi görsel kabul
+  açık.
+- 2026-08-12 — **Görsel kabul: Faz 4 (Tapınak alanında iyileşme duruşu) ve
+  Faz 5a (Guard geri çekilmesi) dünya içinde kabul edildi.** Yaralı Guard alanda
+  diz çöküp bekliyor ve canı dolunca ayağa kalkıyor. Bu kabulle planda açık görsel
+  kabul kalmadı; geriye yalnız Faz 5b ve Faz 6 tasarım kapıları duruyor.
+- 2026-08-12 — Faz 2b kontrolü `Guard ust govde kemigini authorlar` `main`'de
+  kırmızı bulundu: `upperBodyBone`'u GLB'nin ham `mixamorig:Spine` yazımına
+  pinliyordu, sidecar ise bir editör kaydından sonra sanitize edilmiş
+  `mixamorigSpine` taşıyor. Runtime ikisini de kabul ettiği için oyun etkilenmemiş.
+  Kontrol runtime ile aynı biçimde iki tarafı da sanitize ediyor artık.
 - 2026-08-11 — Faz 5a uygulandı: `walk_2`/`run_2` ileri varyant havuzundan
   çıkarılıp `walkBack`/`runBack` rollerine taşındı. `T` ardından zemin sağ tık
   yalnız Guard'lara yönü koruyan geri rota verir; TypeScript ve hedefli engine
@@ -481,10 +647,11 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
 
 Plan ancak şu şartlar birlikte sağlandığında tamam kabul edilir:
 
-- Faz 1 ile Faz 3'ün görsel kabulleri kaydedilmiş,
-- Faz 2 gerçek hasar kaynaklarının tamamını kapsayan testlerle kanıtlanmış,
-- Faz 4/5/6 ya uygulanıp kabul edilmiş ya da açık tasarım kararlarıyla ayrı
-  backlog belgesine taşınmış,
-- tam doğrulama (`npm run build:verify`) temiz geçmiş,
+- ✅ Faz 1 ile Faz 3'ün görsel kabulleri kaydedilmiş (2026-08-11 / 2026-08-12),
+- ✅ Faz 2 gerçek hasar kaynaklarının tamamını kapsayan testlerle kanıtlanmış,
+- ✅ Faz 4 ile Faz 5a uygulanıp kabul edilmiş (2026-08-12),
+- Faz 5b/6 ya uygulanıp kabul edilmiş ya da açık tasarım kararlarıyla ayrı
+  backlog belgesine taşınmış — **tek açık madde bu,**
+- ✅ tam doğrulama (`npm run build:verify`) temiz geçmiş (2026-08-12, 1420 kontrol),
 - Guard materyal, root-motion ve animasyon sidecar'ları manifest/runtime/editor
   yollarında tutarlı kalmış olmalı.

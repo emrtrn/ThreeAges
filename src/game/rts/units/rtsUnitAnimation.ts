@@ -17,7 +17,8 @@
  */
 
 /** What the unit is doing, independent of which clips its asset carries. */
-export type RtsAnimationRole = "idle" | "walk" | "run" | "walkBack" | "runBack" | "work" | "attack" | "hit" | "death";
+export type RtsAnimationRole =
+  | "idle" | "walk" | "run" | "walkBack" | "runBack" | "work" | "rest" | "attack" | "hit" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
 export interface RtsAnimationInput {
@@ -38,6 +39,21 @@ export interface RtsAnimationInput {
    * has is performed from a standstill at an approach point.
    */
   readonly working: boolean;
+  /**
+   * True while the unit is standing still being restored in place — today, a
+   * wounded soldier inside a Temple's support field (Guard plan Faz 4).
+   *
+   * A single flag for the same reason {@link working} is one: the pose only
+   * needs "being tended here", and it is written where the restoring actually
+   * happens rather than inferred from position and health. It reports a fact the
+   * simulation already produced — the aura healed this body this tick — so the
+   * pose ends the moment the healing does, which is what makes a unit rise on
+   * reaching full health without anything watching for that separately.
+   *
+   * Optional: a caller that models no restoring field omits it and keeps its
+   * ordinary idle.
+   */
+  readonly resting?: boolean;
   /**
    * How many blows this unit has landed so far. Only its *changes* are read —
    * one swing animation per increment — so the presentation stays event-driven
@@ -206,6 +222,10 @@ export function classifyRtsAnimation(
   if (!input.forceWalk && input.planarSpeed >= tuning.runSpeed) return "run";
   if (input.planarSpeed > tuning.walkSpeed) return "walk";
   if (input.working) return "work";
+  // Below work, above idle. A wounded builder inside the field is still a
+  // builder — the job it was sent to do outranks the mending it happens to be
+  // receiving — but a soldier with nothing else to do kneels rather than stands.
+  if (input.resting) return "rest";
   return "idle";
 }
 
@@ -228,6 +248,11 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   // clip. An asset that authors none simply stands there, which is what the
   // capsule-era worker did and is never wrong — only less expressive.
   work: ["work", "idle"],
+  // Continuous and looped like work, and it reaches its own clip for the same
+  // reason: the unit holds this pose for as long as the mending takes. An asset
+  // that authors none simply waits standing up, which is exactly what every unit
+  // did before this role existed.
+  rest: ["rest", "idle"],
   // `attack`, `hit` and `death` deliberately do *not* reach their own clips
   // here. This chain feeds the continuous, looping channel, and those three
   // clips are one-shots played per event by {@link advanceRtsAction} — looping a
