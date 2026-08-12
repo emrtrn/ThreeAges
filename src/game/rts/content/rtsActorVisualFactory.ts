@@ -266,6 +266,33 @@ export class RtsActorVisualFactory {
     return this.ready;
   }
 
+  /**
+   * The Forge material this unit's own mesh is drawn with, or null.
+   *
+   * Exists for art *derived* from a unit rather than attached to it — the gear a
+   * dead Guard leaves behind, which has to be the same colour the body was.
+   * Reading it here rather than off the corpse is what keeps the debris system
+   * from having to reach into a unit's presentation tree, and what makes the
+   * answer available after the body is gone.
+   *
+   * Null when the ref is unknown, the Actor failed to load, its mesh component
+   * assigns no slot, or the slot has not been resolved — all of which the caller
+   * degrades to "use the prop's own material", never to a missing draw.
+   */
+  unitMeshMaterial(unitId: string, owner: UnitOwner): Material | null {
+    const actorRef = rtsUnitActorRef(this.catalog, unitId, owner);
+    if (!actorRef) return null;
+    const def = this.definitions.get(actorRef);
+    if (!def) return null;
+    for (const component of def.components) {
+      const slot = component.props["materialSlot"];
+      if (typeof slot !== "string" || slot.length === 0) continue;
+      const material = this.slotMaterials.get(slot);
+      if (material) return material;
+    }
+    return null;
+  }
+
   /** Counts and reasons for whatever the pack could not build. */
   report(): RtsActorLoadReport {
     return {

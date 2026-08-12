@@ -125,7 +125,7 @@ geri locomotion'ı simülasyon hareketiyle uyumlu çalıştırmak.
 - [x] Faz 2 tamamlanana kadar mevcut yeşil/turuncu `materialTint` ayrımını geçici
   olarak koru.
 - [x] `selectionRadius: 0.39` gameplay sözleşmesini değiştirme.
-- [ ] Actor yönü, zemin oturuşu ve ölçeğini Guard ile aynı sahnede karşılaştır.
+- [x] Actor yönü, zemin oturuşu ve ölçeğini Guard ile aynı sahnede karşılaştır.
 
 ### 4.2 Birincil semantic roller
 
@@ -142,7 +142,7 @@ geri locomotion'ı simülasyon hareketiyle uyumlu çalıştırmak.
   deterministik `idle` varyantları olarak ekle.
 - [x] `Archer_unurmed_idle` yazımındaki ve görünümündeki silahsız duruşu temel
   idle havuzuna ekleme.
-- [ ] Locomotion oynatma hızının Okçu `moveSpeed: 6.2` ile ayak kayması
+- [x] Locomotion oynatma hızının Okçu `moveSpeed: 6.2` ile ayak kayması
   üretmediğini doğrula.
 - [x] Geri locomotion kliplerini yalnızca gerçek geri çekilme semantic rollerinde
   kullan; ileri varyant havuzuna koyma.
@@ -168,12 +168,12 @@ Otomatik hazırlık:
 - [x] Chromium smoke ile rotanın gerçek Actor paketi, sıfır placeholder ve
   page/console error olmadan 10+10 Okçu açtığını doğrula.
 
-- [ ] Aynı anda en az 10 oyuncu ve 10 düşman Okçu oluştur.
-- [ ] Kısa hedef, uzak hedef, açık alan ve dar geçitte walk/run gözle.
+- [x] Aynı anda en az 10 oyuncu ve 10 düşman Okçu oluştur.
+- [x] Kısa hedef, uzak hedef, açık alan ve dar geçitte walk/run gözle.
 - [ ] `T` geri çekilme emrinde walkBack/runBack yönünü gözle.
-- [ ] Dururken idle varyantlarının birimler arasında çeşitlilik gösterdiğini,
+- [x] Dururken idle varyantlarının birimler arasında çeşitlilik gösterdiğini,
   aynı birimde restart sonrası değişmediğini doğrula.
-- [ ] Modelin gameplay kökünden ayrılmadığını ve başlangıç noktasına sıçramadığını
+- [x] Modelin gameplay kökünden ayrılmadığını ve başlangıç noktasına sıçramadığını
   doğrula.
 - [ ] Ayak kayması, T-pose, ters yön, zemin altına girme veya her karede klip
   restart gözlenmediğinde kullanıcı kabulünü tarihli olarak kaydet.
@@ -444,3 +444,12 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
   (`PARTIAL`); Chromium smoke 1/1 geçti ve gerçek Actor paketi, sıfır placeholder,
   10+10 Okçu ile page/console error olmadığını doğruladı. Nihai locomotion görünümü
   kullanıcı kabulünü bekliyor.
+- 2026-08-12 — Kullanıcı 10+10 sahnede yön/ölçek/zemin, ileri walk/run, idle
+  çeşitliliği ve root-position davranışının çalıştığını; ancak `T` geri çekilmede
+  Okçunun geri yürümek yerine dönüp ileri gittiğini bildirdi. Kök neden
+  `CommandSystem.armRetreat()` ve `issueRetreatAt()` içindeki Guard-only rol
+  filtresiydi; Archer geri çekilme kapsamına alındı. Regresyon testi Guard ve
+  Archer'ın geri hedefe hareket ederken mevcut yönünü koruduğunu, worker/siege'in
+  kapsama girmediğini pinliyor. `npx.cmd tsc --noEmit` geçti; retreat/Archer/
+  Skeletal animasyon filtresinde 25 kontrol geçti (`PARTIAL`) ve Chromium kabul
+  smoke'u 1/1 geçti. `T` davranışının görsel yeniden kabulü açık.

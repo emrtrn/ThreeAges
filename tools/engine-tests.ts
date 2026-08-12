@@ -428,6 +428,14 @@ import { planAutoRoadConnection } from "../src/game/rts/roads/autoRoadConnector"
 import { roadGraphToLandscapeSpline, RoadPaintSurface, StructurePadTerrainSurface, structurePadsToRectDeforms, structurePadsToRectPaints } from "../src/game/rts/roads/roadTerrainPainter";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
+import {
+  GEAR_DEBRIS_SECONDS,
+  RTS_GEAR_KINDS,
+  RTS_GEAR_PROP_SLOTS,
+  RTS_UNIT_GEAR,
+  UnitGearDebris,
+  type RtsGearKind,
+} from "../src/game/rts/units/unitGearDebris";
 import { congestionSeconds, updateUnitMovement } from "../src/game/rts/units/unitMovement";
 import { settleStoppedUnitOverlaps, updateUnitSeparation } from "../src/game/rts/units/unitSeparation";
 import { assignGroupDestinations } from "../src/game/rts/units/groupOrders";
@@ -30547,12 +30555,14 @@ check("RTS player ground orders release combat units from hold position", () => 
   assert.equal(guard.hasPlayerMoveOrder, true);
 });
 
-check("RTS Guard retreat keeps facing, keeps player-order priority and excludes other roles", () => {
+check("RTS Guard and Archer retreat keep facing, keep player-order priority and exclude other roles", () => {
   const units = new UnitSystem();
   const guard = units.spawn("player", 0, 3, RTS_TEST_UNIT_STATS);
-  const worker = units.spawn("player", 1, 3, RTS_TEST_WORKER_STATS);
-  // +Z is the Guard's front; the map point under the camera centre is behind it.
+  const archer = units.spawn("player", 1, 3, RTS_TEST_ARCHER_STATS);
+  const worker = units.spawn("player", 2, 3, RTS_TEST_WORKER_STATS);
+  // +Z is the soldiers' front; the map point under the camera centre is behind them.
   guard.faceHeading(0);
+  archer.faceHeading(0);
   const camera = new PerspectiveCamera(60, 1, 0.1, 100);
   camera.position.set(0, 10, 10);
   camera.lookAt(0, 0, 0);
@@ -30560,24 +30570,32 @@ check("RTS Guard retreat keeps facing, keeps player-order priority and excludes 
   const commands = new CommandSystem(
     { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement,
     camera,
-    { selected: () => [guard, worker] } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem,
+    { selected: () => [guard, archer, worker] } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem,
     units,
     new CommandCenterSystem(),
     new RtsNavigation(),
     new CommandMarkerSystem(),
   );
 
-  assert.equal(commands.armRetreat(), true, "a selected live Guard can arm a retreat");
+  assert.equal(commands.armRetreat(), true, "a selected live Guard or Archer can arm a retreat");
   commands.issueAt(50, 50);
+  commands.update(0.18);
   assert.equal(guard.isRetreating, true, "the Guard receives a backwards player route");
+  assert.equal(archer.isRetreating, true, "the Archer receives the same backwards player route");
   assert.equal(guard.hasPlayerMoveOrder, true, "retreat remains a player-priority transit order");
-  assert.equal(worker.hasMovementOrder, false, "workers are not pulled into a Guard retreat");
-  const facing = guard.object.rotation.y;
-  for (let step = 0; step < 30; step += 1) updateUnitMovement([guard], 1 / 60);
+  assert.equal(archer.hasPlayerMoveOrder, true, "the Archer retreat has the same player-order priority");
+  assert.equal(worker.hasMovementOrder, false, "workers are not pulled into a combat-unit retreat");
+  const guardFacing = guard.object.rotation.y;
+  const archerFacing = archer.object.rotation.y;
+  for (let step = 0; step < 10; step += 1) updateUnitMovement([guard, archer], 1 / 60);
   assert.ok(guard.position.z < 3, "the Guard moved toward the target behind it");
-  assert.equal(guard.object.rotation.y, facing, "the Guard does not turn around while retreating");
+  assert.ok(archer.position.z < 3, "the Archer moved toward the target behind it");
+  assert.equal(guard.object.rotation.y, guardFacing, "the Guard does not turn around while retreating");
+  assert.equal(archer.object.rotation.y, archerFacing, "the Archer does not turn around while retreating");
   assert.equal(retaliateAgainstAttack(guard, units.spawn("enemy", 0, 2.5, RTS_TEST_UNIT_STATS), new RtsNavigation()), false,
     "an actual hit cannot replace the explicit retreat with a chase");
+  assert.equal(retaliateAgainstAttack(archer, units.spawn("enemy", 1, 2.5, RTS_TEST_UNIT_STATS), new RtsNavigation()), false,
+    "an actual hit cannot replace the Archer's explicit retreat with a chase");
 });
 
 check("RTS group ground orders stop first and stagger each unit launch", () => {
@@ -38597,6 +38615,202 @@ check("Skeletal animasyon Faz D: hizlandirilmis simulasyonda dusus yarida kesilm
   }
 
   units.clear();
+});
+
+check("Muhafiz techizat dokuntusu: her parca katalogda ve manifestte gercek bir staticMesh'e baglanir", () => {
+  // The Guard's helmet, shield and sword are welded into one merged mesh so a
+  // live soldier costs one draw call. The debris models are what pays that back,
+  // and they reach the runtime through the catalog's prop table — which means a
+  // rename on either side breaks the drop *silently*: no type error, no failed
+  // load, just gear that never appears. This is that seam.
+  const catalog = JSON.parse(readFileSync("public/game-data/content/rts-content.json", "utf8")) as {
+    props: Record<string, string>;
+    units: Record<string, unknown>;
+  };
+  const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
+    assets: Array<{ id: string; assetType: string; path: string }>;
+  };
+  const assetsById = new Map(manifest.assets.map((asset) => [asset.id, asset]));
+
+  for (const kind of RTS_GEAR_KINDS) {
+    const slot = RTS_GEAR_PROP_SLOTS[kind];
+    const assetId = catalog.props[slot] ?? assert.fail(`rts-content.json maps no prop slot "${slot}"`);
+    const asset = assetsById.get(assetId) ?? assert.fail(`prop slot "${slot}" names unmanifested asset "${assetId}"`);
+    // A skeletal mesh here would load and then draw nothing useful: the debris
+    // pool instances one static geometry, and a rigged body has no such thing.
+    assert.equal(asset.assetType, "staticMesh", `${assetId} is a static mesh`);
+    assert.ok(existsSync(`public/${asset.path}`), `${assetId} points at a file that exists`);
+  }
+
+  // The other half of the same seam: a unit type that sheds gear has to be a
+  // type the catalog actually spawns, or the table is describing a unit that
+  // left the game.
+  for (const [typeId, kinds] of Object.entries(RTS_UNIT_GEAR)) {
+    assert.ok(typeId in catalog.units, `${typeId} sheds gear and is a catalog unit`);
+    assert.ok(kinds.length > 0, `${typeId} names at least one piece`);
+    for (const kind of kinds) {
+      assert.ok(RTS_GEAR_PROP_SLOTS[kind], `${typeId} sheds "${kind}", which has a prop slot`);
+    }
+  }
+});
+
+check("Muhafiz techizat dokuntusu: kit ceset kaldirilirken dusulur, dusus biterken degil", () => {
+  // The timing this pins is the whole reason the drop hangs off removal rather
+  // than off a notify on the death clip. A body lies on the field for the corpse
+  // window *wearing its kit* — it is one merged mesh, it cannot take the helmet
+  // off — so gear dropped when the clip ended would sit on the ground next to a
+  // corpse still visibly wearing it, for the rest of the window.
+  const fall = 1.5;
+  assert.ok(fall < UNIT_CORPSE_SECONDS, "the fixture is the case that separates the two moments");
+  const units = new UnitSystem();
+  units.setPresentationFactory(() => ({
+    root: new Group(),
+    pickTargets: [],
+    selectionRadius: 0.5,
+    deathSeconds: fall,
+    dispose: () => undefined,
+  }));
+  const guard = units.spawn("player", 3, 4, RTS_TEST_UNIT_STATS);
+  const selection = { remove: () => undefined };
+  const dropped: Unit[] = [];
+  const drop = (unit: Unit): void => void dropped.push(unit);
+
+  guard.health.damage(RTS_TEST_UNIT_STATS.maxHealth);
+  updateUnitDeaths(units, selection, fall, 1, drop);
+  assert.equal(dropped.length, 0, "the fall ending drops nothing");
+  updateUnitDeaths(units, selection, UNIT_CORPSE_SECONDS - fall - 0.01, 1, drop);
+  assert.equal(dropped.length, 0, "nor does any point inside the corpse window");
+
+  updateUnitDeaths(units, selection, 0.02, 1, drop);
+  assert.equal(dropped.length, 1, "the body leaving the field is what drops the kit");
+  assert.equal(dropped[0], guard, "and it is handed the body it fell from");
+  assert.ok(!units.all().includes(guard), "which is gone immediately after");
+  // Read *before* despawn, so the drop point is where the body actually lies
+  // rather than wherever a cleared unit's vector ends up.
+  assert.equal(dropped[0]?.position.x, 3, "still carrying where it fell");
+  assert.equal(dropped[0]?.position.z, 4);
+
+  updateUnitDeaths(units, selection, 5, 1, drop);
+  assert.equal(dropped.length, 1, "and it drops once, not once per later frame");
+  units.clear();
+});
+
+check("Muhafiz techizat dokuntusu: parcalar araziye oturur, sis altinda cizilmez, havuz en eskiyi geri doner", () => {
+  // Fixture geometry rather than the shipped GLBs: this is the pool and the
+  // tumble under test, and the models are 8 MB apiece. The box's extents are
+  // what the resting-height assertion is derived from, so the check stays true
+  // if the real gear is re-exported at any size.
+  const BOX = { x: 0.3, y: 0.2, z: 0.1 } as const;
+  const maxHalfExtent = Math.max(BOX.x, BOX.y, BOX.z) / 2;
+  const geometry = new BoxGeometry(BOX.x, BOX.y, BOX.z);
+  // Deliberately *not* centred on its own origin, which is the shape the real
+  // gear arrives in: each piece is authored around the hand or head that wore
+  // it, offset from the rig's root. A fixture centred at the origin passes
+  // whether or not the loader recentres the model, and so cannot tell that a
+  // sword lands buried by however far its author placed it from the hip.
+  geometry.translate(1.5, -0.6, 2.25);
+  const material = new MeshBasicMaterial();
+  const debris = new UnitGearDebris();
+  for (const kind of RTS_GEAR_KINDS) debris.setModel(kind, new Mesh(geometry, material));
+  for (const kind of RTS_GEAR_KINDS) assert.ok(debris.hasModel(kind), `${kind} took its model`);
+
+  const ground = 4.25;
+  debris.setGroundSampler(() => ground);
+  const drawnPositions = (): Vector3[] => {
+    const positions: Vector3[] = [];
+    const matrix = new Matrix4();
+    for (const child of debris.root.children) {
+      if (!(child instanceof InstancedMesh)) continue;
+      for (let index = 0; index < child.count; index += 1) {
+        child.getMatrixAt(index, matrix);
+        positions.push(new Vector3().setFromMatrixPosition(matrix));
+      }
+    }
+    return positions;
+  };
+  const settle = (seconds: number): void => {
+    for (let elapsed = 0; elapsed < seconds; elapsed += 1 / 60) debris.advance(1 / 60);
+  };
+
+  const kinds = RTS_UNIT_GEAR["guard_placeholder"] ?? assert.fail("the Guard sheds gear");
+  debris.drop(new Vector3(2, ground, -3), 1, kinds, null);
+  assert.equal(debris.activeCount(), kinds.length, "one piece per item of kit");
+  settle(4);
+
+  const landed = drawnPositions();
+  assert.equal(landed.length, kinds.length, "every piece is drawn once it has landed");
+  for (const position of landed) {
+    // Resting *on* the authored surface: above it, and by no more than the
+    // model's own half-extent. A piece sunk into the terrain or hovering over it
+    // is the failure this catches, at any ground height.
+    assert.ok(position.y > ground, `a piece rests above the terrain (${position.y} vs ${ground})`);
+    assert.ok(
+      position.y <= ground + maxHalfExtent + 1e-6,
+      `and not floating over it (${position.y} vs ${ground})`,
+    );
+    // Scattered around the body, not thrown across the formation.
+    assert.ok(Math.hypot(position.x - 2, position.z + 3) < 3, "the kit lands near the body it fell from");
+  }
+
+  const before = drawnPositions().map((position) => position.clone());
+  settle(1);
+  const after = drawnPositions();
+  for (let index = 0; index < before.length; index += 1) {
+    assert.ok(
+      (before[index] as Vector3).distanceTo(after[index] as Vector3) < 1e-6,
+      "a settled piece has stopped moving",
+    );
+  }
+
+  // Fog: still lying there, simply not drawn. Gear visible through unscouted
+  // ground would report a battle the player never saw — the same leak the unit
+  // shadow capsules are hidden for.
+  debris.setVisibilityTest(() => false);
+  debris.advance(1 / 60);
+  assert.equal(debris.drawnCount(), 0, "fogged kit is not drawn");
+  assert.equal(debris.activeCount(), kinds.length, "but it has not been thrown away");
+  debris.setVisibilityTest(() => true);
+  debris.advance(1 / 60);
+  assert.equal(debris.drawnCount(), kinds.length, "and it comes back when the ground is scouted");
+
+  // Two kingdoms' kit must not share a draw: the material is what carries the
+  // colour a body fought in, so a second material is a second instanced mesh.
+  const drawsBefore = debris.root.children.length;
+  debris.drop(new Vector3(2, ground, -3), 2, kinds, new MeshBasicMaterial());
+  assert.equal(
+    debris.root.children.length,
+    drawsBefore + kinds.length,
+    "a second material opens its own pools rather than repainting the first",
+  );
+
+  // The pool is bounded: a rout drops far more kit than it can hold, and the
+  // hundred-and-first body recycles the oldest piece instead of allocating.
+  debris.clear();
+  for (let body = 0; body < 40; body += 1) debris.drop(new Vector3(body, ground, 0), body, kinds, null);
+  const afterForty = debris.activeCount();
+  for (let body = 40; body < 400; body += 1) debris.drop(new Vector3(body, ground, 0), body, kinds, null);
+  const afterFourHundred = debris.activeCount();
+  assert.ok(afterForty > 0, "the field does hold debris");
+  assert.ok(afterFourHundred < 400 * kinds.length, "the pool is bounded well under what was dropped");
+  assert.equal(afterFourHundred, debris.activeCount(), "and stays there");
+  for (let body = 0; body < 400; body += 1) debris.drop(new Vector3(body, ground, 0), body, kinds, null);
+  assert.equal(debris.activeCount(), afterFourHundred, "another rout does not grow it further");
+
+  // The lie-there window is spent in simulation seconds, so a fast-forwarded
+  // battle clears its field at the speed the player asked for. Derived from the
+  // exported constant, so retuning the window leaves this check true.
+  debris.clear();
+  debris.drop(new Vector3(0, ground, 0), 7, kinds, null);
+  for (let elapsed = 0; elapsed < GEAR_DEBRIS_SECONDS / 4; elapsed += 1 / 30) debris.advance(1 / 30, 4);
+  assert.equal(debris.activeCount(), 0, "at 4x the kit is cleared in a quarter of the window");
+
+  debris.clear();
+  debris.drop(new Vector3(0, ground, 0), 8, kinds, null);
+  settle(GEAR_DEBRIS_SECONDS - 1);
+  assert.ok(debris.activeCount() > 0, "at 1x it is still there a second before the window closes");
+
+  debris.dispose();
+  geometry.dispose();
 });
 
 check("Muhafiz Faz 2: darbe sayaci yalnizca gercekten uygulanan hasarla artar", () => {

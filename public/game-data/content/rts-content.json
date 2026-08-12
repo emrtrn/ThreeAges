@@ -312,7 +312,10 @@
   },
   "ui": {},
   "props": {
-    "cannonball": "cannon-ball"
+    "cannonball": "cannon-ball",
+    "guardHelmet": "guard-helmet",
+    "guardShield": "guard-shield",
+    "guardSword": "guard-sword"
   },
   "damage": {
     "defaults": {

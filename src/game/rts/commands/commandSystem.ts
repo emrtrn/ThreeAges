@@ -36,8 +36,13 @@ interface PendingGroundOrder {
   readonly unit: Unit;
   readonly path: readonly Vector3[];
   readonly delay: number;
-  /** The route travels normally, but its Guard keeps the facing it had at issue time. */
+  /** The route travels normally, but the retreating unit keeps its facing at issue time. */
   readonly retreating: boolean;
+}
+
+/** Roles with authored reverse locomotion and a readable player retreat. */
+function canPlayerRetreat(unit: Unit): boolean {
+  return (unit.role === "guard" || unit.role === "archer") && !unit.dying;
 }
 
 export class CommandSystem {
@@ -47,7 +52,7 @@ export class CommandSystem {
   private pendingGroundOrders: PendingGroundOrder[] = [];
   private readonly destinationReservations = new Map<Unit, DestinationReservation>();
   private ground: RtsGroundSurface = FLAT_RTS_GROUND;
-  /** `T` arms exactly one following right-click as a Guard retreat destination. */
+  /** `T` arms exactly one following right-click as a reverse-move destination. */
   private retreatArmed = false;
   /** Player preference from the selection panel; Attack-Move stays on its legacy path until Faz 6. */
   private formation: RtsFormationId = DEFAULT_RTS_FORMATION;
@@ -225,18 +230,19 @@ export class CommandSystem {
   }
 
   /**
-   * Arm one Guard-only reverse move. The next right-click supplies its normal
-   * navigated destination, while movement deliberately preserves each Guard's
-   * current facing so the reverse locomotion clips are semantically correct.
+   * Arm one reverse move for the selected Guards and Archers. The next
+   * right-click supplies its normal navigated destination, while movement
+   * deliberately preserves each unit's current facing so its authored reverse
+   * locomotion clips are semantically correct.
    */
   armRetreat(): boolean {
-    this.retreatArmed = this.selection.selected().some((unit) => unit.role === "guard" && !unit.dying);
+    this.retreatArmed = this.selection.selected().some(canPlayerRetreat);
     return this.retreatArmed;
   }
 
-  /** Issue the armed reverse move; workers, archers and siege keep their orders. */
+  /** Issue the armed reverse move; workers and siege keep their orders. */
   private issueRetreatAt(x: number, y: number): void {
-    const selected = this.selection.selected().filter((unit) => unit.role === "guard" && !unit.dying);
+    const selected = this.selection.selected().filter(canPlayerRetreat);
     if (selected.length === 0) return;
     const point = this.groundPoint(x, y);
     if (!point) return;

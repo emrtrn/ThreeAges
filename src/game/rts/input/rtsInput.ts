@@ -44,7 +44,7 @@ const COMMAND_KEYS = {
   KeyH: "hold",
   /** Return held units to normal orders. */
   KeyG: "aggressive",
-  /** Arm one Guard-only reverse move; the next ground right-click is its destination. */
+  /** Arm one Guard/Archer reverse move; the next ground right-click is its destination. */
   KeyT: "retreat",
   /** Select every worker that is currently available for automatic work. */
   KeyI: "selectIdleWorkers",

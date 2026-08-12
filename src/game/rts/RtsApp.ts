@@ -128,6 +128,12 @@ import {
 import type { RoomLayout } from "@engine/scene/layout";
 import { UnitSystem } from "./units/unitSystem";
 import { UnitShadowProxies } from "./units/unitShadowProxies";
+import {
+  RTS_GEAR_KINDS,
+  RTS_GEAR_PROP_SLOTS,
+  RTS_UNIT_GEAR,
+  UnitGearDebris,
+} from "./units/unitGearDebris";
 import { Unit } from "./units/unit";
 import { updateUnitMovement } from "./units/unitMovement";
 import { settleStoppedUnitOverlaps } from "./units/unitSeparation";
@@ -714,6 +720,11 @@ export class RtsApp {
   private readonly units = new UnitSystem();
   /** Invisible capsule casters that give the non-casting unit meshes a shadow. */
   private readonly unitShadows = new UnitShadowProxies();
+  /**
+   * The kit a fallen body leaves behind — the other half of the Guard's merged
+   * mesh, which cannot shed anything it is welded to.
+   */
+  private readonly gearDebris = new UnitGearDebris();
   /**
    * The shadow toggle the scene's materials were last compiled against. Null
    * until the first profile applies. See {@link recompileForShadowToggle} for
@@ -2116,6 +2127,7 @@ export class RtsApp {
     this.firebrands.dispose();
     this.cannonballs.dispose();
     this.unitShadows.dispose();
+    this.gearDebris.dispose();
     this.structureDamageVfx.dispose();
     this.unitNotifyVfx.dispose();
     this.hudBar.dispose();
@@ -2308,6 +2320,12 @@ export class RtsApp {
     // single instanced mesh, so they cannot hang off the bodies they stand in
     // for. Their fog handling is therefore explicit — see `UnitShadowProxies`.
     this.scene.add(this.unitShadows.root);
+    // Debris outlives the bodies it fell from, so it hangs off the scene rather
+    // than off the units, and answers to the fog on its own — same contract, and
+    // for the same reason, as the shadow capsules above.
+    this.scene.add(this.gearDebris.root);
+    this.gearDebris.setGroundSampler((x, z) => this.groundSurface.heightAt(x, z));
+    this.gearDebris.setVisibilityTest(this.playerVisibilityTest() ?? null);
     this.scene.add(this.projectiles.root);
     this.scene.add(this.firebrands.root);
     this.scene.add(this.cannonballs.root);
@@ -2489,6 +2507,11 @@ export class RtsApp {
     // delta: the rings must breathe together and at the same rate at any game speed.
     updateSelectionRingPulse(dt);
     this.structures.updateVisualAnimations(dt);
+    // On the rendered delta with the speed handed in, not on the simulation
+    // delta: a tumbling helmet is a fall and should look the same at 8x, while
+    // how long it then lies there is measured in simulation seconds. The system
+    // splits the two; see `UnitGearDebris.advance`.
+    this.gearDebris.advance(dt, this.simulationSpeed);
     this.updateStructureDamageVfx(dt);
     this.updateWorldProgressOverlay();
     this.perfMeasure("yapı görselleri", worldArtMark);
@@ -2703,7 +2726,15 @@ export class RtsApp {
       },
       {
         id: "birimler",
-        apply: hide([this.units.root, this.wildlifeRoot, this.caravanRoot, this.unitNotifyVfx.root]),
+        apply: hide([
+          this.units.root,
+          this.wildlifeRoot,
+          this.caravanRoot,
+          this.unitNotifyVfx.root,
+          // Billed to the units it fell off, so a field littered after a battle
+          // shows up in the bucket a reader would look for it in.
+          this.gearDebris.root,
+        ]),
       },
       {
         id: "yapılar",
@@ -3345,6 +3376,24 @@ export class RtsApp {
     this.unitNotifyVfx.play(binding.effectId, {
       position: [position.x, position.y + binding.heightOffset, position.z],
     });
+  }
+
+  /**
+   * Leave a removed body's kit on the field, if its type wears any.
+   *
+   * Called as the corpse is despawned, which is the last frame its position and
+   * type are still readable. The material comes from the Actor pack rather than
+   * from the body — asked for by type and owner, so the kit that lands is the
+   * same colour the kingdom fought in, and so the answer survives the unit it
+   * describes. No pack, no gear: the fallback code bodies wear none.
+   */
+  private dropUnitGear(unit: Unit): void {
+    const kinds = RTS_UNIT_GEAR[unit.typeId];
+    if (!kinds || kinds.length === 0) return;
+    const material = this.actorVisuals?.unitMeshMaterial(unit.typeId, unit.owner) ?? null;
+    // Seeded on the unit id so one body's scatter is the same on every run —
+    // decoration, but decoration a headless check can still assert about.
+    this.gearDebris.drop(unit.position, unit.id, kinds, material);
   }
 
   /** The authored damage presentation for this building, or null with no catalog. */
@@ -4020,7 +4069,7 @@ export class RtsApp {
     // The speed matters here and nowhere else in this method: the defeat window
     // waits for a clip the presentation plays on the rendered clock, so it is
     // the one duration that has to be told how fast this one is running.
-    updateUnitDeaths(this.units, this.selection, dt, this.simulationSpeed);
+    updateUnitDeaths(this.units, this.selection, dt, this.simulationSpeed, (unit) => this.dropUnitGear(unit));
     this.destroyRuinedStructures();
     this.perfMeasure("savaş", combatMark);
     // §59, before the objectives below and before anything reads the AI: fog is
@@ -5067,6 +5116,9 @@ export class RtsApp {
     this.projectiles.clear();
     this.firebrands.clear();
     this.cannonballs.clear();
+    // The last match's dead left their kit on ground the new match is about to
+    // reuse. It outlives bodies on purpose, but not the game they died in.
+    this.gearDebris.clear();
     // The shells those guns had in the air belong to the match that just ended;
     // landing them on a fresh field would damage whatever now stands there. The
     // towers' guns keep their own queue, so it is emptied alongside.
@@ -5322,6 +5374,18 @@ export class RtsApp {
         if (structure.construction.complete) this.applyStructureVisual(structure);
         else this.applyConstructionVisual(structure);
       }
+      // The gear a body sheds, through the same prop path and for the same
+      // reason: three models no Actor references. Last, and in parallel, because
+      // nothing on the field needs them until something dies — loading them
+      // ahead of the presentations would hold every unit on its stand-in art for
+      // the length of three downloads, to be ready for an event minutes away. A
+      // catalog that maps none of them leaves the layer empty, which is a fork
+      // with different art, not a failure.
+      const gear = await Promise.all(
+        RTS_GEAR_KINDS.map((kind) => this.actorVisuals!.loadPropModel(RTS_GEAR_PROP_SLOTS[kind])),
+      );
+      if (this.disposed) return;
+      RTS_GEAR_KINDS.forEach((kind, index) => this.gearDebris.setModel(kind, gear[index] ?? null));
     } catch (error) {
       // Only a pack-wide failure reaches here now — an unreachable manifest, with
       // which no reference resolves at all. A single broken Actor is handled
