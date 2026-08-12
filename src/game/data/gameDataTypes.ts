@@ -208,6 +208,24 @@ export interface UnitBalanceStats {
    */
   readonly chaseRange: number;
   /**
+   * Fraction of a blow this unit absorbs while holding position *and* unable to
+   * answer it — i.e. struck from beyond its own {@link attackRange}, by an archer,
+   * a siege gun or a tower it will never step out to reach (GDD 06 §26).
+   *
+   * Scoped to blows it cannot return on purpose. Hold is meant to be a trade:
+   * the unit gives up its feet and keeps its weapon, so an attacker that closes
+   * into reach already gets an even exchange and needs no correction. What the
+   * stance has no answer to is the enemy standing outside that reach, and this
+   * is the shield raised against exactly that.
+   *
+   * Optional, and absent means none: bracing is a fact about carrying a shield,
+   * not about receiving an order, so a unit that authors no number holds its
+   * position exactly as it did before. Capped by the validator at
+   * {@link MAX_AURA_DAMAGE_RESISTANCE} — the same ceiling a support field obeys,
+   * and the two compose rather than replace each other.
+   */
+  readonly holdDamageResistance?: number;
+  /**
    * How far this unit reveals fog for its kingdom (GDD 08 §41/§42, plan §59).
    * Required rather than optional: a unit with no vision would be a scout that
    * reveals nothing, and the validator can only enforce "sees at least as far as

@@ -3,8 +3,9 @@
 Oluşturulma tarihi: 2026-08-11  
 Durum: **Devam ediyor — Faz 1, 2, 2b, 3 (3a/3b dahil), 4 ve 5a kabul edildi.
 Faz 4 tasarım kapısı kapandı: blok yolu denendi ve elendi, yerine Tapınak
-alanında iyileşme duruşu uygulanıp kabul edildi. Geriye yalnız Faz 5b ve Faz 6
-kaldı; ikisi de hâlâ tasarım kapısında.**
+alanında iyileşme duruşu uygulanıp kabul edildi. Ek A (`hold` duruşunda hazır
+poz) uygulandı, görsel kabulü açık. Fonksiyonel iş olarak geriye yalnız Faz 5b ve
+Faz 6 kaldı; ikisi de hâlâ tasarım kapısında.**
 
 ## 1. Amaç
 
@@ -48,6 +49,7 @@ combat dengesi ve `Guard.glb` kaynak geometrisi kapsam dışıdır.
 | `runBack` | `guard_sword_and_shield_run_2` | — | Faz 5a, geri çekilme |
 | `work` | `guard_sword_and_shield_idle_1` | — | Mevcut davranış korunur |
 | `rest` | `guard_sword_and_shield_crouch_idle` | — | Faz 4, Tapınak alanında iyileşme |
+| `hold` | `sguard_word_and_shield_block_idle` | — | Ek A, `hold` duruşu (H tuşu) |
 | `attack` | `guard_sword_and_sheld_attack_2` | `attack_4`, `slash_5`, `kick` | Tamam |
 | `hit` | `guard_sword_and_shield_impact_1` | `impact_2`, `impact_3` | Tamam (hareket hâlinde üst gövde) |
 | `death` | `guard_sword_and_shield_death_1` | `death_2` | Tamam |
@@ -475,8 +477,8 @@ gösterdiği şey zaten oynuyor — Tapınak gerçekten can veriyor.
   üç ayrı klibe genelleştirilmesini ister (bugünkü `RtsWorkMontage` tek klibi
   bölümlere ayırıyor). 0.45 s'lik blend aynı okumayı verdiği için ayrı bir dilime
   bırakıldı — istenirse açılacak ilk ek bu.
-- Seçenek A: `hold` duruşunda `block_idle` döngüsü. Değerlendirildi, alınmadı;
-  hâlâ ucuz ve bağımsız bir ek.
+- ~~Seçenek A: `hold` duruşunda `block_idle` döngüsü.~~ **Ek A ile uygulandı
+  (2026-08-12), bkz. aşağısı.**
 - Crouch **blok** klipleri (`crouch_block_*`) ve seçilebilir bir çömelme stance'i.
   Kullanıcı kararıyla kapsam dışı: yeni bir emir ve menzil/görüş sonuçları demek.
 
@@ -500,6 +502,131 @@ gösterdiği şey zaten oynuyor — Tapınak gerçekten can veriyor.
 
 **Görsel kabul (2026-08-12): ✅ kabul edildi.** Yaralı Guard Tapınak yarıçapında
 diz çöküp bekliyor, canı dolarken pozda kalıyor, dolunca ayağa kalkıyor.
+
+### Ek A — `hold` duruşunda hazır poz (`block_idle`)
+
+**Durum:** Kod, veri ve otomasyon 2026-08-12'de bitti; dünya içi görsel kabul açık.
+
+§4.5'in "Uygulanmayan" listesindeki Seçenek A. Bir faz değil, bağımsız bir ek:
+teslim kapısının şartı değil, fakat H tuşunun bugün yalnız *menzil davranışında*
+görünen etkisini — birimin ulaşabileceği bir hedefi kovalamayı reddetmesi —
+gövdede okunur yapar.
+
+**Ölçüm (GLB'den, 2026-08-12):** `sguard_word_and_shield_block_idle` 1.400 s, net
+`mixamorig:Hips` yer değiştirmesi (0.02, −0.04, 0.04) klip birimi. Karşılaştırma:
+ayakta `guard_sword_and_shield_idle_1` kendi başına (−0.64, −0.97, −0.31) sürükleniyor,
+yani hazır poz kilitsiz idle'lardan **daha** yerinde. `rootMotion` girdisi eklenmedi.
+
+**Yapılanlar:**
+
+1. **Yeni sürekli rol `hold`**, K-01'in üç yüzeyinde birlikte:
+   `ANIMATION_SET_ROLES` (`src/scene/assetSkeletonLoader.ts`),
+   `SKELETON_ANIMATION_SET_ROLES` (`tools/saveValidator.ts`) ve seçici/testler.
+   Skeletal Mesh Editor rol satırını otomatik gösterir; UI değişikliği gerekmedi.
+   `work`/`rest` gibi sürekli: kendi klibine ulaşır, asset authorlamazsa `idle`'a
+   düşer — yani rolü olmayan her birim eskisi gibi ayakta bekler, emir yine çalışır.
+2. **Sinyal bir *emir*, bir durum değil.** `RtsPresentationUpdate.holding` doğrudan
+   `unit.stance === "hold"` okur; `mending` gibi her tick yeniden yazılan bir alan
+   değil, çünkü duruşun kendisi zaten kalıcı ve tek sahibi `setStance`. Anı değil
+   hâli okumak, yeniden seçilen/yüklenen birimin de pozda kalmasını sağlar.
+3. **Öncelik sırası:** `death > attack > locomotion > work > rest > hold > idle`.
+   Gövde üzerindeki en zayıf iddia, çünkü üstündeki her rol birimin *yaptığı* bir
+   şey; bu yalnızca aralarda beklediği duruş. Tapınak alanındaki yaralı bir
+   `hold` birimi bu yüzden diz çöker (iyileşme haberdir, duran emir değil) ve
+   yara kapanınca doğrudan hazır poza kalkar.
+4. **Rol filtresi komutun, animasyonun değil.** `issueStance` zaten işçiyi dışarıda
+   bırakıyor; işçi hiç `hold` olamadığı için hiç hazır poza da giremez. Ayrıca
+   `hold` klibini yalnızca Guard authorluyor, yani okçu/topçu emri alır ve eskisi
+   gibi ayakta bekler.
+5. **Blend:** `idle`↔`hold` normal 0.18 s'de kalıyor. 0.45 s'lik yavaş geçiş
+   yalnızca `rest` çiftinin hakkı; emre 0.45 s'de cevap veren birim itaatsiz
+   görünür. Buna karşılık `locomotionFade` artık `rest`'in karşı tarafını "ayakta
+   olan her poz" sayıyor: diz çökmüş bir `hold` birimi de yavaşça kalkıyor,
+   0.18 s'de zıplamıyor.
+
+**Otomasyon (3 yeni engine kontrolü, `--filter "Muhafiz Ek A"`):**
+
+- Rol sınıflandırması: `holding` hazır poza sokar, bayrağı hiç göndermeyen çağıran
+  Faz öncesi davranışı korur; hareket, saldırı, ölüm, iş **ve iyileşme** birimi
+  duruştan çıkarır; rol kendi klibine ulaşır, authorlanmamışsa `idle`'a düşer;
+  poz hıza göre ölçeklenmez.
+- Emir yolu: `CommandSystem.issueStance("hold")` — H tuşunun gerçekten çalıştırdığı
+  komut — pozu aynı karede yakar, `aggressive`'e dönmek aynı karede söndürür,
+  işçi hiçbir zaman girmez. K-02: kare render etmek duruşu iptal etmiyor, canı
+  değiştirmiyor ve durması söylenen birimi kımıldatmıyor.
+- Sidecar: rol editör kaydından sağ çıkar, Guard klibi authorlar, klip GLB'de
+  gerçekten vardır (**bozuk `sguard_word_` yazımı dahil** — "düzeltilmiş" bir ad
+  sessizce hiçbir şeye çözülür), bir `block_idle`'dır, ayakta idle gibi kilitsizdir,
+  ve K-04: `block` rolü hâlâ authorlanmamış + hazır poz `hit`/`attack`/`idle`
+  havuzlarının hiçbirine sızmamış.
+- `npx tsc --noEmit` temiz; `npm run test:engine` (fast) 1414 kontrol yeşil.
+
+**Görsel kabul (2026-08-12): ✅ kabul edildi.** Seçili Guard'lara `H` basıldığında
+gövde gevşek idle'dan kalkanı önde hazır duruşa geçiyor ve emir kaldırılana kadar
+orada kalıyor.
+
+#### Ek A.1 — Duruşun oyun karşılığı (kullanıcı kararı, 2026-08-12)
+
+Görsel kabulden sonra kullanıcı sordu: hold'daki asker vurulurken canı daha yavaş
+düşmeli mi, ve hold'da rakip hiç zarar görmüyor mu?
+
+**Önce ölçüm — "hold'da vuramıyorlar" kısmen yanlıştı.** Simüle edildi:
+
+| Senaryo | Sonuç |
+| --- | --- |
+| Hold Guard (menzil 1.2) ↔ 1.1'e sokulan düşman Guard | İkisi de 100 → 56.8. Takas **tam simetrik**; hold birim karşılık veriyor. |
+| Hold Guard ↔ 6.5'te duran düşman okçu (menzil 7) | Okçu 100'de kalıyor, Guard 56.8'e iniyor. Hedefi **hiç edinmiyor**. |
+
+Sebep `engagementSystem.ts`'in `acquireTarget`'ı: hold'da edinme yarıçapı birimin
+kendi silah menziliyle sınırlanıyor, yoksa birim yürümeyi reddedeceği bir hedefi
+tutardı. Yani hata değil — duruşun bedeli. Bu iki satır kalıcı bir kontrole
+bağlandı (`--filter "hold durusu"`).
+
+**Karar:** misilleme/diken mekaniği **yok** (erişebildiği düşman zaten vuruluyor);
+bunun yerine **%25 hasar azaltma, yalnız cevap veremediği vuruşlara** — yani
+birimin kendi `attackRange`'i dışından gelen ok/top/kule ateşine. Kullanıcının
+ilk önerisi %50'ydi; iki gerekçeyle düşürüldü: (a) %50 Guard'ın efektif canını iki
+katına çıkarıp bugün berabere biten melee takasını hold lehine çevirir ve hold her
+savunmanın varsayılanı olur, (b) Tapınak alanıyla birleşince 0.75 tavanına dayanır.
+Menzil koşulu ise zaten adil olan melee takasına hiç dokunmadan gözlenen
+dengesizliği tam olarak hedefliyor.
+
+**Yapılanlar:**
+
+1. **Veri, kod değil:** `UnitBalanceStats.holdDamageResistance` (opsiyonel),
+   `units.json`'da yalnız Guard'da `0.25`. Yokluğu "kalkanı yok" demek — okçu/topçu
+   emri alır, pozu ve azaltmayı almaz. Kalkanı gösteren birim ile azaltmayı alan
+   birim aynı; başkasına vermek tek satır veri.
+2. **Kural tek sahipte:** `CombatTarget.stanceResistanceAt(distance)` — alan değil
+   **metot**, çünkü `damageResistance`'ın aksine cevap vuruşun nereden geldiğine
+   bağlı. `Unit` uyguluyor: `stance === "hold"`, ölmüyor, ve `distance >
+   attack.range`. Yapılar uygulamıyor (duruşları yok).
+3. **Tek kapı:** `resolveDamage(attacker, target, fromDistance)`. Mesafe
+   **zorunlu** parametre — opsiyonel olsaydı yeni bir hasar yolu onu unutup her
+   birimin kalkanını sessizce düşürürdü ve hiçbir test bunu görmezdi.
+   Faz 2'nin "altıncı çağıran" dersi.
+4. **Toplama değil çarpma:** aura ve duruş birbirinin bıraktığından pay alıyor
+   (`1-(1-a)(1-b)`), toplam yine `MAX_AURA_DAMAGE_RESISTANCE` ile sınırlı. İki
+   0.5'lik kaynak toplanırsa hiçbir şeyin zarar veremediği birim çıkardı.
+5. **Mermi hasarı ateş anında pişiyor** (`tryFire`), yani kalkan **atışın
+   yapıldığı mesafeye** göre uygulanıyor: braced bir birime nişan alınmışsa
+   nişan braced bir birime alınmıştır. Faz 4'ün "kalkanı mermiye değil gövdeye
+   bağla" bulgusuyla tutarlı.
+6. Kurt ısırığı ve yaban hayatı misillemesi `resolveDamage`'dan geçmiyor ve
+   melee; dolayısıyla etkilenmiyor — doğru sonuç, çünkü ikisi de erişilebilir.
+
+**Otomasyon (4 yeni engine kontrolü, `--filter "hold durusu"`):**
+
+- Bugünkü davranışın kendisi: menzilindeki saldırgana karşılık verir, dışındakine
+  veremez (ölçümün kalıcı hâli).
+- Kalkan yalnız cevaplanamayan vuruşu emer: menzil dışı azalır, menzil içi tam
+  iner, `aggressive` birim hiç emmez, duruşu bırakmak kalkanı aynı anda indirir,
+  düşmekte olan gövde emmez. Beklenen değer **aynı tablodan türetiliyor**, sabit
+  yazılmıyor.
+- Aura ile çarpımsal birleşme ve tavanın aşılamaması.
+- Kule yaylımının da kapsanması (kule her hold birimini outrange ettiği için asıl
+  yol), ve veri sınırlarının validator'da dosya/alan adıyla reddi + alanı hiç
+  authorlamayan birimin eskisi gibi çözülmesi.
 
 ### Faz 5 — Hareket başlangıcı, duruş ve yön değiştirme
 
@@ -547,18 +674,21 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
 
 ## 5. Sonraki Oturum İçin Başlangıç Noktası
 
-**Açık görsel kabul kalmadı.** Faz 1, 2b, 3, 4 ve 5a dünya içinde kabul edildi.
+**Açık görsel kabul kalmadı.** Faz 1, 2b, 3, 4, 5a ve Ek A dünya içinde kabul
+edildi. Ek A.1'in (hold hasar azaltma) dünya içi doğrulaması isteğe bağlı: kule
+ateşi altındaki bir Guard bölüğünü `H` ile tutup canlarının daha yavaş düştüğünü
+izlemek yeterli — sayısal kanıt zaten testte.
 
 1. Fonksiyonel iş olarak yalnız Faz 5b ve Faz 6 kaldı, ikisi de hâlâ tasarım
    kapısında. En ucuz sıra Faz 6 (generic notify dispatcher) çünkü tek gereksinimi
    runtime altyapısı, yeni oyun mekaniği değil. Faz 5b (turn/strafe) sunumun bugün
    taşımadığı yönsel hız verisini istiyor ve önce o verinin nereden geleceğine
    karar verilmeli.
-2. İsteğe bağlı, bağımsız ve sırayla en ucuz üç ek §4.5'in "Uygulanmayan"
-   listesinde duruyor: `crouch`/`crouching` geçiş klipleriyle gerçek diz çökme ve
-   kalkma hareketi (montaj makinesini üç klibe genelleştirmek), `hold` duruşunda
-   `block_idle` döngüsü, ve crouch blok. Üçü de bu planın kapsamı içinde ama
-   hiçbiri teslim kapısının şartı değil.
+2. İsteğe bağlı ve bağımsız eklerden biri (`hold` duruşunda `block_idle`) **Ek A
+   olarak uygulandı**; §4.5'in "Uygulanmayan" listesinde iki tanesi kaldı:
+   `crouch`/`crouching` geçiş klipleriyle gerçek diz çökme ve kalkma hareketi
+   (montaj makinesini üç klibe genelleştirmek) ve crouch blok. İkisi de bu planın
+   kapsamı içinde ama hiçbiri teslim kapısının şartı değil.
 3. Teslim kapısı (§7) için kalan tek madde: Faz 5b/6'nın ya uygulanması ya da açık
    tasarım kararlarıyla ayrı bir backlog belgesine taşınması.
 4. Her TypeScript değişikliğinden sonra `npx tsc --noEmit`; her dar dilimden
@@ -638,6 +768,21 @@ durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirme
   pinliyordu, sidecar ise bir editör kaydından sonra sanitize edilmiş
   `mixamorigSpine` taşıyor. Runtime ikisini de kabul ettiği için oyun etkilenmemiş.
   Kontrol runtime ile aynı biçimde iki tarafı da sanitize ediyor artık.
+- 2026-08-12 — **Ek A uygulandı** (§4.5'in Seçenek A'sı): sürekli `hold` rolü üç
+  yüzeye eklendi, Guard `sguard_word_and_shield_block_idle` (1.400 s, net ~0 —
+  kilit gerekmedi) authorladı, sinyal `unit.stance === "hold"` doğrudan okunuyor
+  ve öncelik `rest > hold > idle`. `locomotionFade`'in yavaş `rest` çifti artık
+  "ayakta olan her poz"u kapsıyor, yani diz çökmüş `hold` birimi de yavaş
+  kalkıyor. 3 yeni engine kontrolü; `tsc --noEmit` ve fast `test:engine`
+  (1414 kontrol) yeşil.
+- 2026-08-12 — **Görsel kabul: Ek A kabul edildi.** Aynı oturumda kullanıcı hold'un
+  oyun karşılığını sordu; ölçüm gösterdi ki hold birim melee saldırgana zaten
+  simetrik karşılık veriyor, açık olan tek yer menzilli saldırgan. **Ek A.1
+  uygulandı** (kullanıcı kararı: %25, yalnız cevaplanamayan vuruşlara):
+  `holdDamageResistance` veri alanı Guard'da 0.25, kural
+  `CombatTarget.stanceResistanceAt(distance)` üzerinden tek sahipte,
+  `resolveDamage` artık **zorunlu** `fromDistance` alıyor ve aura ile çarpımsal
+  birleşip tavana takılıyor. 4 yeni engine kontrolü.
 - 2026-08-11 — Faz 5a uygulandı: `walk_2`/`run_2` ileri varyant havuzundan
   çıkarılıp `walkBack`/`runBack` rollerine taşındı. `T` ardından zemin sağ tık
   yalnız Guard'lara yönü koruyan geri rota verir; TypeScript ve hedefli engine

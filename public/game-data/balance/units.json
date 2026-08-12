@@ -12,6 +12,7 @@
     "attackRange": 1.2,
     "acquisitionRange": 9,
     "chaseRange": 14,
+    "holdDamageResistance": 0.25,
     "visionRadius": 11,
     "damageMultipliers": {
       "light": 1,

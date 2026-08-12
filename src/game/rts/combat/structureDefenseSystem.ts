@@ -110,7 +110,10 @@ export class StructureDefenseSystem {
       }
       for (let shotIndex = 0; shotIndex < defense.arrowsPerVolley; shotIndex += 1) {
         if (target.health.depleted) break;
-        const damage = resolveDamage(defense, target);
+        // The tower's own distance to what it is shooting at: a Karakol
+        // outranges every held unit on the field, so this is precisely the blow
+        // a raised shield is for.
+        const damage = resolveDamage(defense, target, combatDistance(structure.position, target));
         const travel = onShot?.({ attacker: structure, target, shotIndex, defense, damage }) ?? 0;
         if (travel > 0) {
           // In the air: the target keeps its health until the shell arrives, so

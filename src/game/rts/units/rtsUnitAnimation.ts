@@ -18,7 +18,7 @@
 
 /** What the unit is doing, independent of which clips its asset carries. */
 export type RtsAnimationRole =
-  | "idle" | "walk" | "run" | "walkBack" | "runBack" | "work" | "rest" | "attack" | "hit" | "death";
+  | "idle" | "walk" | "run" | "walkBack" | "runBack" | "work" | "rest" | "hold" | "attack" | "hit" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
 export interface RtsAnimationInput {
@@ -54,6 +54,19 @@ export interface RtsAnimationInput {
    * ordinary idle.
    */
   readonly resting?: boolean;
+  /**
+   * True while this unit has been ordered to hold its ground rather than to
+   * pursue what it sees (`UnitStance = "hold"`, the `H` key).
+   *
+   * The one flag here that reports an *order* rather than a condition, and that
+   * is the whole point of it: holding is a decision the player made that today
+   * only shows up indirectly, in a unit declining to chase something it could
+   * reach. Read as a plain state rather than as the moment the stance changed,
+   * so a unit re-selected, saved or reloaded mid-hold is still in the pose.
+   *
+   * Optional: a caller with no notion of stance omits it and keeps its idle.
+   */
+  readonly holding?: boolean;
   /**
    * How many blows this unit has landed so far. Only its *changes* are read —
    * one swing animation per increment — so the presentation stays event-driven
@@ -226,6 +239,12 @@ export function classifyRtsAnimation(
   // builder — the job it was sent to do outranks the mending it happens to be
   // receiving — but a soldier with nothing else to do kneels rather than stands.
   if (input.resting) return "rest";
+  // Last before idle, because it is the weakest claim on the body: every role
+  // above is something the unit is *doing*, and this is only the posture it
+  // waits in between those. A held unit that is wounded inside a support field
+  // therefore kneels — the mending is news, the standing order is not — and
+  // stands back into its ready pose the moment the wound closes.
+  if (input.holding) return "hold";
   return "idle";
 }
 
@@ -253,6 +272,11 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   // that authors none simply waits standing up, which is exactly what every unit
   // did before this role existed.
   rest: ["rest", "idle"],
+  // Continuous for the same reason again: the order stands until the player
+  // revokes it, so the pose is held rather than played. An asset that authors no
+  // ready stance waits in its ordinary idle, which is exactly what every unit
+  // did before this role existed — the order still works, it just does not show.
+  hold: ["hold", "idle"],
   // `attack`, `hit` and `death` deliberately do *not* reach their own clips
   // here. This chain feeds the continuous, looping channel, and those three
   // clips are one-shots played per event by {@link advanceRtsAction} — looping a

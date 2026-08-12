@@ -510,15 +510,20 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   /**
    * Blend length for a continuous clip, slowed only for the kneel and the rise.
    *
-   * Both directions of the `idle`↔`rest` pair, and only that pair: those are the
-   * two the fiction wants unhurried. Anything else leaving the pose — a march
-   * order, a fight, a fall — keeps the ordinary blend, because those transitions
-   * are urgent and a lazy one would leave the body kneeling half a second into
-   * a charge.
+   * Both directions between `rest` and a standing pose, and only those: going
+   * down to be tended and getting back up are what the fiction wants unhurried.
+   * Which standing pose it is does not change that — a held Guard rises out of
+   * the kneel just as slowly as an ordinary one — so `hold` counts as standing
+   * here alongside `idle`. Anything else leaving the pose (a march order, a
+   * fight, a fall) keeps the ordinary blend, because those transitions are
+   * urgent and a lazy one would leave the body kneeling half a second into a
+   * charge. Adopting the ready stance is one of the ordinary ones: an order
+   * answered at 0.18 s reads as obeyed, at 0.45 s as reluctant.
    */
   private locomotionFade(role: RtsAnimationRole): number {
-    const restful = (role === "rest" && this.lastContinuousRole === "idle")
-      || (role === "idle" && this.lastContinuousRole === "rest");
+    const standing = (candidate: RtsAnimationRole): boolean => candidate === "idle" || candidate === "hold";
+    const restful = (role === "rest" && standing(this.lastContinuousRole))
+      || (standing(role) && this.lastContinuousRole === "rest");
     this.lastContinuousRole = role;
     return restful ? REST_FADE_SECONDS : LOCOMOTION_FADE_SECONDS;
   }

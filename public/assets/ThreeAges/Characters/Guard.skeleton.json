@@ -9,6 +9,7 @@
     "runBack": "guard_sword_and_shield_run_2",
     "work": "guard_sword_and_shield_idle_1",
     "rest": "guard_sword_and_shield_crouch_idle",
+    "hold": "sguard_word_and_shield_block_idle",
     "attack": "guard_sword_and_sheld_attack_2",
     "hit": "guard_sword_and_shield_impact_1",
     "death": "guard_sword_and_shield_death_1"

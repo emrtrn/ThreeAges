@@ -436,7 +436,7 @@ import { PendingImpactQueue } from "../src/game/rts/combat/pendingImpacts";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
 import { SupportAuraSystem } from "../src/game/rts/structures/supportAuraSystem";
 import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
-import { AI_PROFILES } from "../src/game/data/gameDataTypes";
+import { AI_PROFILES, MAX_AURA_DAMAGE_RESISTANCE } from "../src/game/data/gameDataTypes";
 import type { AiProfile, BuildingBalanceStats, GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import {
   Unit,
@@ -38386,7 +38386,7 @@ check("Skeletal animasyon Faz D: saldiri animasyonu hasari ve cooldown'u degisti
   const target = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
   assert.equal(attacker.attack.blowCount, 0, "a unit that has not swung has landed no blows");
 
-  const first = attacker.attack.tryHit(target);
+  const first = attacker.attack.tryHit(target, 1);
   assert.ok(first, "the first swing lands");
   assert.equal(attacker.attack.blowCount, 1, "exactly one swing to play per landed blow");
   const healthAfterHit = target.health.current;
@@ -38403,12 +38403,12 @@ check("Skeletal animasyon Faz D: saldiri animasyonu hasari ve cooldown'u degisti
   // same as the first — the animation has no say in either.
   attacker.attack.update(RTS_TEST_UNIT_STATS.attackCooldown);
   assert.equal(attacker.attack.ready, true);
-  const second = attacker.attack.tryHit(target);
+  const second = attacker.attack.tryHit(target, 1);
   assert.equal(second?.amount, first.amount, "identical swings deal identical damage");
   assert.equal(attacker.attack.blowCount, 2);
 
   // A blocked swing is not a swing: no counter movement means no animation.
-  const blocked = attacker.attack.tryHit(target);
+  const blocked = attacker.attack.tryHit(target, 1);
   assert.equal(blocked, null, "the cooldown refuses the third swing");
   assert.equal(attacker.attack.blowCount, 2, "a refused swing plays no animation");
 
@@ -38987,6 +38987,391 @@ check("Muhafiz Faz 4: diz cokme pozu hasari, iyilesme hizini ve cooldown'u degis
 
   structures.clear();
   units.clear();
+});
+
+check("Muhafiz Ek A (hold durusu): bekleyen birim hazir pozunu tutar, is ve hareket onu bozar", () => {
+  const tuning = rtsLocomotionTuning(6);
+  const input = (over: Partial<RtsAnimationInput> = {}): RtsAnimationInput => ({
+    planarSpeed: 0,
+    attacking: false,
+    dying: false,
+    working: false,
+    attackCount: 0,
+    impactCount: 0,
+    ...over,
+  });
+
+  // The whole slice: a unit standing on a hold order waits in a ready stance
+  // instead of its ordinary idle, which is what puts the `H` key on the body.
+  assert.equal(classifyRtsAnimation(input({ holding: true }), tuning), "hold");
+  assert.equal(classifyRtsAnimation(input({ holding: false }), tuning), "idle");
+  // A caller with no notion of stance — wildlife, caravans — keeps its idle, so
+  // the flag arriving is what changes behaviour and not the role existing.
+  assert.equal(classifyRtsAnimation(input(), tuning), "idle");
+
+  // It is the weakest claim on the body: anything the unit is actually *doing*
+  // outranks the posture it waits in between doing things.
+  assert.equal(classifyRtsAnimation(input({ holding: true, planarSpeed: 1 }), tuning), "walk");
+  assert.equal(classifyRtsAnimation(input({ holding: true, planarSpeed: 6 }), tuning), "run");
+  assert.equal(classifyRtsAnimation(input({ holding: true, attacking: true }), tuning), "attack");
+  assert.equal(classifyRtsAnimation(input({ holding: true, dying: true }), tuning), "death");
+  assert.equal(classifyRtsAnimation(input({ holding: true, working: true }), tuning), "work");
+  // And the mending outranks it specifically: a wounded held unit inside a
+  // support field kneels — being healed is news, a standing order is not — then
+  // rises straight back into the ready stance when the wound closes.
+  assert.equal(classifyRtsAnimation(input({ holding: true, resting: true }), tuning), "rest");
+
+  // Continuous like `work` and `rest`, so it reaches its own clip and is held
+  // for as long as the order stands rather than played once per event.
+  const set = { idle: "Idle_1", hold: "Block_Idle", walk: "Walk_1" };
+  const available = new Set(["Idle_1", "Block_Idle", "Walk_1"]);
+  assert.deepEqual(resolveRtsAnimationRole("hold", set, available), { role: "hold", clip: "Block_Idle" });
+  // An asset that authors no ready stance simply waits standing: the order still
+  // works exactly as it did, it just does not show on that unit.
+  assert.deepEqual(
+    resolveRtsAnimationRole("hold", { idle: "Idle_1" }, new Set(["Idle_1"])),
+    { role: "idle", clip: "Idle_1" },
+  );
+
+  // Not locomotion, so never speed-scaled: a unit shoved by its neighbours holds
+  // its stance at the speed it was animated at.
+  assert.equal(rtsPlaybackRate("hold", 0, tuning), 1);
+  assert.equal(rtsPlaybackRate("hold", 5, tuning), 1);
+  const selected = selectRtsAnimation(input({ holding: true }), set, available, tuning);
+  assert.equal(selected?.role, "hold");
+  assert.equal(selected?.clip, "Block_Idle");
+  assert.equal(selected?.playbackRate, 1);
+});
+
+check("Muhafiz Ek A (hold durusu): poz H emrinin kendisini okur, isciyi ve simulasyonu degistirmez", () => {
+  const units = new UnitSystem();
+  // A presentation that records what the simulation tells it, which is the only
+  // way to see the field from the order through to the pose without a renderer.
+  const seen = new Map<string, boolean | undefined>();
+  const record = (key: string) => (state: { readonly holding?: boolean }) => { seen.set(key, state.holding); };
+  units.setPresentationFactory(() => ({
+    root: new Group(),
+    pickTargets: [],
+    selectionRadius: 0.5,
+    dispose: () => undefined,
+    update: record("guard"),
+  }) as unknown as RtsPresentationHandle);
+  const guard = units.spawn("player", 4, 4, RTS_TEST_UNIT_STATS);
+  units.setPresentationFactory(() => ({
+    root: new Group(),
+    pickTargets: [],
+    selectionRadius: 0.5,
+    dispose: () => undefined,
+    update: record("worker"),
+  }) as unknown as RtsPresentationHandle);
+  const worker = units.spawn("player", 5, 4, RTS_TEST_WORKER_STATS);
+  units.setPresentationFactory(null);
+
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 10, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const commands = new CommandSystem(
+    { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement,
+    camera,
+    { selected: () => [guard, worker] } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem,
+    units,
+    new CommandCenterSystem(),
+    new RtsNavigation(),
+    new CommandMarkerSystem(),
+  );
+
+  const billboard = new Quaternion();
+  guard.updatePresentation(0.1, billboard);
+  worker.updatePresentation(0.1, billboard);
+  assert.equal(seen.get("guard"), false, "an aggressive unit reports no ready stance");
+
+  // The `H` key, through the command it actually runs (`RtsApp` → `issueStance`).
+  commands.issueStance("hold");
+  guard.updatePresentation(0.1, billboard);
+  worker.updatePresentation(0.1, billboard);
+  assert.equal(guard.stance, "hold", "the order reaches the unit");
+  assert.equal(seen.get("guard"), true, "and the same order reaches the pose");
+  // The role filter is the command's, not the animation's: a worker is never put
+  // into a stance, so it can never be put into a stance's pose either.
+  assert.equal(worker.stance, "aggressive", "workers take no stance order");
+  assert.equal(seen.get("worker"), false, "so no worker ever adopts the ready pose");
+
+  // Revoking it drops the pose on the same frame, with no bookkeeping to unwind:
+  // the flag is a plain read of the stance rather than a latch of its own.
+  commands.issueStance("aggressive");
+  guard.updatePresentation(0.1, billboard);
+  assert.equal(seen.get("guard"), false, "and standing down puts it back on its idle");
+
+  // K-02: the pose is a read of an order the movement and targeting rules
+  // already had. Rendering it neither moves the unit nor edits the order.
+  commands.issueStance("hold");
+  const health = guard.health.current;
+  const position = guard.position.clone();
+  for (let frame = 0; frame < 30; frame += 1) guard.updatePresentation(0.1, billboard);
+  assert.equal(guard.stance, "hold", "rendering the stance does not revoke it");
+  assert.equal(guard.health.current, health, "nor heal or hurt the body wearing it");
+  assert.equal(guard.position.distanceTo(position), 0, "nor move a unit that was told to stand still");
+
+  units.clear();
+});
+
+check("Muhafiz Ek A (hold durusu): rol editor kaydinda hayatta kalir ve Guard block idle'i authorlar", () => {
+  // The sidecar allowlist gotcha (CLAUDE.md), for this slice's new role.
+  const roundTripped = validateAssetSkeletonDef({
+    schema: 1,
+    animationSet: { idle: "idle-clip", hold: "hold-clip" },
+  });
+  assert.equal((roundTripped.animationSet as Record<string, string>).hold, "hold-clip", "the validator knows the role");
+  assert.equal(
+    normalizeAssetSkeleton({ schema: 1, animationSet: { hold: "hold-clip" } }).animationSet.hold,
+    "hold-clip",
+    "and the loader reads the same field back",
+  );
+  assert.ok(ANIMATION_SET_ROLES.includes("hold"), "the loader knows it too");
+
+  const guard = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+  );
+  const hold = guard.animationSet.hold ?? assert.fail("the Guard authors no hold clip");
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard.glb")))
+    ?? assert.fail("the Guard model is not a readable GLB");
+  const clips = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
+  // This clip is the one place the rig's naming is genuinely broken — it ships as
+  // `sguard_word_and_shield_block_idle`, not the `guard_sword_` prefix every
+  // other clip carries — and a sidecar that "corrects" it resolves to nothing,
+  // which on screen is indistinguishable from the feature never shipping.
+  assert.ok(clips.has(hold), `"${hold}" is not a clip on the Guard rig`);
+  assert.ok(/block_idle/.test(hold), `the ready stance is a block idle, not "${hold}"`);
+
+  // K-03, as a relationship rather than a magnitude: the block idle is an
+  // in-place loop exactly like the standing idles, so it gets the same
+  // root-motion treatment they do — none — while the clips that travel keep theirs.
+  const locked = new Set(guard.rootMotion.map((entry) => entry.clip));
+  assert.equal(locked.has(hold), false, "an in-place stance needs no lock");
+  assert.equal(locked.has(guard.animationSet.idle ?? ""), false, "just as the standing idle does not");
+  assert.ok(locked.has(guard.animationSet.walk ?? ""), "while a clip that travels does carry one");
+
+  // K-04, still: a *stance* is a real order the game has, and a block *mechanic*
+  // is not. This clip may show a raised shield and may never become one.
+  assert.equal(guard.animationSet.block, undefined, "no block role: the game has no blocking mechanic");
+  const oneShots = [
+    guard.animationSet.hit,
+    ...(guard.animationVariants.hit ?? []),
+    guard.animationSet.attack,
+    ...(guard.animationVariants.attack ?? []),
+  ];
+  for (const clip of oneShots) {
+    assert.notEqual(clip, hold, "the ready stance is never played as a blow landed or taken");
+  }
+  const idles = [guard.animationSet.idle, ...(guard.animationVariants.idle ?? [])];
+  for (const clip of idles) {
+    assert.notEqual(clip, hold, "and an aggressive unit never falls into it by accident");
+  }
+});
+
+check("RTS hold durusu: menzilindeki saldirgana karsilik verir, disindakine veremez", () => {
+  // GDD 06 §26's half of Hold that is easy to lose: it surrenders *movement*,
+  // never the weapon. A held unit that stopped shooting back would be a unit the
+  // player has disarmed by accident, and nothing on screen would say so.
+  const navigation = new RtsNavigation();
+  const units = new UnitSystem();
+  const held = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  held.setStance("hold");
+  // A melee attacker that has closed to its own weapon range (1.2) is inside the
+  // held unit's identical range, so the exchange is mutual.
+  const melee = units.spawn("enemy", 1.1, 0, RTS_TEST_UNIT_STATS);
+  for (let tick = 0; tick < 3; tick += 1) {
+    updateUnitEngagement(units.all(), { navigation, targets: [...units.all()] });
+    updateUnitCombat(units.all(), 1.5);
+  }
+  assert.ok(held.attackTarget !== null, "a held unit answers the enemy that walked into its reach");
+  assert.ok(melee.health.current < melee.health.max, "and the attacker is hurt for coming that close");
+  assert.ok(held.health.current < held.health.max, "while taking the blows it stood still for");
+  units.clear();
+
+  // The other half, and the reason Hold is a real trade rather than a free
+  // upgrade: an attacker that outranges the held unit is one it will never
+  // reach, because reaching it would mean stepping off the position.
+  const ranged = new UnitSystem();
+  const pinned = ranged.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  pinned.setStance("hold");
+  const archer = ranged.spawn("enemy", 6.5, 0, {
+    ...RTS_TEST_UNIT_STATS,
+    id: "archer_placeholder",
+    role: "archer",
+    attackType: "ranged",
+    attackRange: 7,
+  } as unknown as typeof RTS_TEST_UNIT_STATS);
+  for (let tick = 0; tick < 3; tick += 1) {
+    updateUnitEngagement(ranged.all(), { navigation, targets: [...ranged.all()] });
+    updateUnitCombat(ranged.all(), 1.7);
+  }
+  assert.equal(pinned.attackTarget, null, "a held unit never acquires past its own weapon range");
+  assert.equal(archer.health.current, archer.health.max, "so an outranging attacker is shot at by nobody");
+  assert.ok(pinned.health.current < pinned.health.max, "and the held unit pays for holding");
+  ranged.clear();
+});
+
+check("RTS hold durusu: kalkan yalnizca cevaplayamadigi vurusu emer", () => {
+  // The user's Ek A decision, and the whole shape of it: Hold gives up the feet
+  // and keeps the weapon, so the exchange it *can* answer stays untouched and
+  // only the blow it cannot answer is absorbed.
+  const balance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const guardStats = balance.guard_placeholder ?? assert.fail("guard definition missing");
+  const braced = guardStats.holdDamageResistance ?? assert.fail("the Guard authors no bracing");
+
+  const units = new UnitSystem();
+  const held = units.spawn("player", 0, 0, guardStats);
+  held.setStance("hold");
+  const standing = units.spawn("player", 0, 0, guardStats);
+
+  // Derived from the same table the game reads, so this stays true at any
+  // tuning of either the damage or the bracing.
+  const raw = guardStats.attackDamage * guardStats.damageMultipliers[guardStats.armorClass];
+  const beyond = guardStats.attackRange + 1;
+  const within = guardStats.attackRange;
+
+  assert.ok(
+    Math.abs(resolveDamage(guardStats, held, beyond) - raw * (1 - braced)) < 1e-9,
+    "a blow struck from outside the held unit's reach lands reduced",
+  );
+  assert.equal(
+    resolveDamage(guardStats, held, within),
+    raw,
+    "while one struck from inside it lands in full — that attacker is already being hit back",
+  );
+  assert.equal(
+    resolveDamage(guardStats, standing, beyond),
+    raw,
+    "and an aggressive unit shot from the same distance braces against nothing",
+  );
+
+  // The stance is the condition, so revoking it drops the shield with nothing to
+  // unwind — the same rule the pose follows.
+  held.setStance("aggressive");
+  assert.equal(resolveDamage(guardStats, held, beyond), raw, "standing down lowers the shield at once");
+  held.setStance("hold");
+  assert.ok(resolveDamage(guardStats, held, beyond) < raw, "and taking the stance raises it again");
+
+  // A body already going down is past defending. Left braced it would drag out a
+  // fall the player is watching end.
+  held.health.damage(held.health.max);
+  assert.equal(held.beginDeath(), true, "the fixture actually starts the fall");
+  assert.equal(resolveDamage(guardStats, held, beyond), raw, "a falling body braces against nothing");
+  units.clear();
+});
+
+check("RTS hold durusu: kalkan Tapinak alaniyla toplanmaz, carpilir ve tavani asmaz", () => {
+  // Two independent absorptions, each taking its share of what the other let
+  // through. Added instead, a 0.5 field and a 0.5 stance would produce a unit
+  // nothing in the match could hurt.
+  const balance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const guardStats = balance.guard_placeholder ?? assert.fail("guard definition missing");
+  const braced = guardStats.holdDamageResistance ?? assert.fail("the Guard authors no bracing");
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const aura = buildings.temple?.aura ?? assert.fail("temple aura missing");
+
+  const units = new UnitSystem();
+  const sheltered = units.spawn("player", 0, 0, guardStats);
+  sheltered.setStance("hold");
+  sheltered.damageResistance = aura.damageResistance;
+  const raw = guardStats.attackDamage * guardStats.damageMultipliers[guardStats.armorClass];
+  const beyond = guardStats.attackRange + 1;
+
+  const expected = raw * (1 - aura.damageResistance) * (1 - braced);
+  assert.ok(
+    Math.abs(resolveDamage(guardStats, sheltered, beyond) - expected) < 1e-9,
+    "a held Guard inside the Temple field takes each protection off what the other left",
+  );
+  assert.ok(expected > raw * (1 - aura.damageResistance - braced), "which is strictly more than the sum would leave");
+
+  // And the shared ceiling still holds, whatever either source claims: a stray
+  // field value plus a stance may not make a unit unkillable.
+  sheltered.damageResistance = 5;
+  const capped = resolveDamage(guardStats, sheltered, beyond);
+  assert.ok(capped >= raw * (1 - MAX_AURA_DAMAGE_RESISTANCE) - 1e-9, "the cap is the floor on what a hit is worth");
+  assert.ok(capped > 0, "and no combination of protections reduces a blow to nothing");
+  units.clear();
+});
+
+check("RTS hold durusu: kalkan kule yaylimina da uygulanir, veri sinirlari zorunludur", () => {
+  // Coverage over the path that matters most: a Karakol outranges every held
+  // unit on the field, so a shield that only worked against units would be a
+  // shield the player never sees work.
+  const balance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const guardStats = balance.guard_placeholder ?? assert.fail("guard definition missing");
+  const braced = guardStats.holdDamageResistance ?? assert.fail("the Guard authors no bracing");
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const outpostStats = buildings.outpost ?? assert.fail("outpost definition missing");
+  const defense = outpostStats.defense ?? assert.fail("outpost defense missing");
+  assert.ok(defense.attackRange > guardStats.attackRange, "the tower outranges a Guard, which is why this matters");
+
+  // One lone target per run: a volley picks a single enemy, so the two stances
+  // have to be measured against their own identical tower rather than side by
+  // side in front of one.
+  const volleyLoss = (stance: "hold" | "aggressive"): number => {
+    const structures = new PlacedStructureSystem();
+    const tower = structures.place("enemy", outpostStats, 0, 0);
+    structures.advanceConstruction(tower, outpostStats.constructionSeconds);
+    const units = new UnitSystem();
+    const victim = units.spawn("player", defense.attackRange * 0.5, 0, guardStats);
+    victim.setStance(stance);
+    new StructureDefenseSystem().update(structures.all(), [...units.all(), ...structures.all()], 0);
+    const loss = victim.health.max - victim.health.current;
+    structures.clear();
+    units.clear();
+    return loss;
+  };
+
+  const standingLoss = volleyLoss("aggressive");
+  const heldLoss = volleyLoss("hold");
+  assert.ok(standingLoss > 0, "the tower really did fire");
+  assert.ok(
+    Math.abs(heldLoss - standingLoss * (1 - braced)) < 1e-6,
+    "and the held Guard takes exactly the braced share of the same volley",
+  );
+
+  // The data band, refused where the file is named. A negative value would
+  // *amplify* arrows and a value at or past the shared ceiling would let a
+  // stance alone approach invulnerability before any field was added.
+  assert.ok(braced > 0 && braced <= MAX_AURA_DAMAGE_RESISTANCE, "the shipped value sits inside the legal band");
+  assert.throws(
+    () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, holdDamageResistance: -0.1 } }),
+    /holdDamageResistance/,
+    "a negative brace is refused",
+  );
+  assert.throws(
+    () => validateUnitBalance({
+      guard_placeholder: { ...RTS_TEST_UNIT_STATS, holdDamageResistance: MAX_AURA_DAMAGE_RESISTANCE + 0.01 },
+    }),
+    /holdDamageResistance/,
+    "and so is one past the ceiling the aura obeys",
+  );
+  // Absent stays legal: bracing is a fact about carrying a shield, so a unit
+  // that authors none must keep resolving exactly as it did before.
+  const unbraced = validateUnitBalance({ guard_placeholder: RTS_TEST_UNIT_STATS }).guard_placeholder
+    ?? assert.fail("the fixture failed to validate");
+  assert.equal(unbraced.holdDamageResistance, undefined);
+  const plain = new UnitSystem();
+  const plainHeld = plain.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  plainHeld.setStance("hold");
+  assert.equal(
+    resolveDamage(RTS_TEST_UNIT_STATS, plainHeld, RTS_TEST_UNIT_STATS.attackRange + 1),
+    RTS_TEST_UNIT_STATS.attackDamage * RTS_TEST_UNIT_STATS.damageMultipliers[RTS_TEST_UNIT_STATS.armorClass],
+    "a unit with no shield holds position exactly as it did before this existed",
+  );
+  plain.clear();
 });
 
 check("Muhafiz geri locomotion: ters donguler yalnizca geri cekilme rollerindedir", () => {
@@ -41222,10 +41607,10 @@ check("a completed Tapınak mends its own units in range and softens the blows t
   const attacker = units.spawn("enemy", aura.radius - 1.5, 0, RTS_TEST_UNIT_STATS);
   const fullDamage = RTS_TEST_UNIT_STATS.attackDamage * RTS_TEST_UNIT_STATS.damageMultipliers.heavy;
   assert.ok(
-    Math.abs(resolveDamage(RTS_TEST_UNIT_STATS, inside) - fullDamage * (1 - aura.damageResistance)) < 1e-9,
+    Math.abs(resolveDamage(RTS_TEST_UNIT_STATS, inside, 0) - fullDamage * (1 - aura.damageResistance)) < 1e-9,
     "a blow on a sheltered unit lands reduced",
   );
-  assert.equal(resolveDamage(RTS_TEST_UNIT_STATS, outside), fullDamage, "and unreduced outside the field");
+  assert.equal(resolveDamage(RTS_TEST_UNIT_STATS, outside, 0), fullDamage, "and unreduced outside the field");
   attacker.stop();
 
   // Walking out of the field ends the protection on the very next tick, with no
@@ -43201,17 +43586,21 @@ check("Faz 7 soft counters make each role the answer to a different target", () 
 
   // Plan §46: "Tek birim türü her durumda en iyi seçim değil." Each attacker
   // must lose to another attacker on at least one target class.
+  //
+  // Every blow here is measured at point blank (`0`), because this is a question
+  // about the counter *table*: nobody is holding a position, and folding a
+  // stance into it would compare weapons against different defenders.
   assert.ok(
-    resolveDamage(guard.stats, heavyEnemy) > resolveDamage(archer.stats, heavyEnemy),
+    resolveDamage(guard.stats, heavyEnemy, 0) > resolveDamage(archer.stats, heavyEnemy, 0),
     "the Guard, not the Archer, is what answers a heavy front line",
   );
   assert.ok(
-    resolveDamage(gun.stats, wall) > resolveDamage(guard.stats, wall) * 4,
+    resolveDamage(gun.stats, wall, 0) > resolveDamage(guard.stats, wall, 0) * 4,
     "plan §46: siege is necessary against buildings",
   );
   assert.ok(
-    resolveDamage(gun.stats, lightEnemy) < resolveDamage(archer.stats, lightEnemy)
-      && resolveDamage(gun.stats, heavyEnemy) < resolveDamage(guard.stats, heavyEnemy),
+    resolveDamage(gun.stats, lightEnemy, 0) < resolveDamage(archer.stats, lightEnemy, 0)
+      && resolveDamage(gun.stats, heavyEnemy, 0) < resolveDamage(guard.stats, heavyEnemy, 0),
     "plan §46: siege is weak against units and must be escorted",
   );
 
@@ -43219,7 +43608,7 @@ check("Faz 7 soft counters make each role the answer to a different target", () 
   // damage race with the Guard: §7.1 gives it range as the actual advantage,
   // and it stays fragile up close.
   assert.ok(
-    resolveDamage(archer.stats, lightEnemy) > resolveDamage(archer.stats, heavyEnemy),
+    resolveDamage(archer.stats, lightEnemy, 0) > resolveDamage(archer.stats, heavyEnemy, 0),
     "the Archer would rather be shooting a light target",
   );
   assert.ok(
@@ -43228,13 +43617,13 @@ check("Faz 7 soft counters make each role the answer to a different target", () 
   );
   assert.ok(
     archer.health.max < guard.health.max
-      && resolveDamage(guard.stats, archer) > resolveDamage(archer.stats, guard),
+      && resolveDamage(guard.stats, archer, 0) > resolveDamage(archer.stats, guard, 0),
     "plan §46: and weak the moment a Guard reaches it",
   );
 
   // Time-to-kill sanity (GDD 12 §30): a mirror fight leaves room to react.
   const mirrorTtk = (stats: UnitBalanceStats, target: Unit) =>
-    (target.health.max / resolveDamage(stats, target)) * stats.attackCooldown;
+    (target.health.max / resolveDamage(stats, target, 0)) * stats.attackCooldown;
   assert.ok(mirrorTtk(RTS_TEST_UNIT_STATS, heavyEnemy) > 4, "a Guard mirror is not a coin flip");
 });
 

@@ -58,17 +58,25 @@ export class AttackComponent {
     return this.blows;
   }
 
-  /** Damage this attack would deal to a target, for UI counter hints. */
-  damageAgainst(target: CombatTarget): number {
-    return resolveDamage(this.stats, target);
+  /**
+   * Damage this attack would deal to a target, for UI counter hints.
+   *
+   * `fromDistance` defaults to point blank because a counter hint is a question
+   * about the *table* — what this weapon is worth against that armour class —
+   * asked with no two units standing anywhere. A hint that quietly folded in the
+   * target's current stance would answer a different question than the one the
+   * panel is asking.
+   */
+  damageAgainst(target: CombatTarget, fromDistance = 0): number {
+    return resolveDamage(this.stats, target, fromDistance);
   }
 
   /**
    * Damage a living target when the cooldown has elapsed. The caller has already
    * confirmed range and hostility; this only owns the timing and the amount.
    */
-  tryHit(target: CombatTarget): HealthChange | null {
-    const damage = this.tryFire(target);
+  tryHit(target: CombatTarget, fromDistance: number): HealthChange | null {
+    const damage = this.tryFire(target, fromDistance);
     return damage === null ? null : target.health.damage(damage);
   }
 
@@ -79,10 +87,14 @@ export class AttackComponent {
    * {@link ../combat/pendingImpacts.PendingImpactQueue}; the amount is fixed at
    * the moment of firing so a shell already in the air keeps the value it was
    * fired with.
+   *
+   * `fromDistance` is therefore the distance *the shot was fired from*, which is
+   * also the honest one for the target's stance: a shell aimed at a braced unit
+   * was aimed at a braced unit, whatever that unit does while it is in the air.
    */
-  tryFire(target: CombatTarget): number | null {
+  tryFire(target: CombatTarget, fromDistance: number): number | null {
     if (!this.ready || target.health.depleted) return null;
-    const damage = resolveDamage(this.stats, target);
+    const damage = resolveDamage(this.stats, target, fromDistance);
     this.cooldownRemaining = this.stats.attackCooldown;
     this.blows += 1;
     return damage;

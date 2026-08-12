@@ -55,6 +55,22 @@ export interface CombatTarget {
    * nothing protects — structures included — resolving exactly as before.
    */
   readonly damageResistance?: number;
+  /**
+   * Fraction of a blow struck from `distance` away that this target's own
+   * *stance* absorbs, 0..1 — the shield a unit holding its position raises
+   * against what it cannot reach (GDD 06 §26).
+   *
+   * A method rather than a field because, unlike {@link damageResistance}, the
+   * answer depends on where the blow came from: the same held Guard absorbs an
+   * arrow shot from across the field and takes a sword in front of it in full.
+   * Asking the target rather than deriving it at the damage site is what keeps
+   * the rule in one place — the target is the only thing that knows both its
+   * stance and how far its own weapon reaches.
+   *
+   * Optional, and absent means none: a structure has no stance to take, and a
+   * unit that authors no bracing keeps resolving exactly as it did before.
+   */
+  stanceResistanceAt?(distance: number): number;
   /** Units show a target ring; structures may omit that presentation hook. */
   setTargetedBy?(delta: number): void;
 }

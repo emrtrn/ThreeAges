@@ -80,6 +80,15 @@ export interface RtsPresentationUpdate {
    * Omitted by callers that model no such field, which keeps their ordinary idle.
    */
   readonly resting?: boolean;
+  /**
+   * True while this unit is standing on a hold order (`H`). An asset that
+   * authors a `hold` clip waits in that ready stance instead of its idle, which
+   * is what makes the order visible on the body rather than only in what the
+   * unit declines to chase.
+   *
+   * Omitted by callers with no notion of stance, which keeps their ordinary idle.
+   */
+  readonly holding?: boolean;
   /** Blows landed so far; each increment is one swing to play (Faz D). */
   readonly attackCount: number;
   /**
@@ -427,6 +436,29 @@ export class Unit {
     return this.selectedFlag;
   }
 
+  /**
+   * {@link CombatTarget.stanceResistanceAt}: the shield a held unit raises
+   * against a blow it has no answer to.
+   *
+   * Two conditions, and the second is what keeps Hold a trade rather than an
+   * upgrade. The unit must be holding position, and the blow must come from
+   * beyond its own weapon range — an attacker that closed into reach is already
+   * being hit back (`engagementSystem` hands a held unit anything inside that
+   * range), so that exchange needs no thumb on it. What Hold has no answer to is
+   * the archer, the gun or the tower standing outside it, and that is what this
+   * absorbs.
+   *
+   * A body already going down is excluded for the same reason a support field
+   * skips it: it is past defending, and a corpse that shrugged off arrows on the
+   * way down would stretch out a fall the player is watching end.
+   */
+  stanceResistanceAt(distance: number): number {
+    if (this.stance !== "hold" || this.dying) return 0;
+    const braced = this.stats.holdDamageResistance ?? 0;
+    if (braced <= 0) return 0;
+    return distance > this.attack.range ? braced : 0;
+  }
+
   /** Whether another unit currently has an explicit attack order on this one. */
   get targeted(): boolean {
     return this.targeterCount > 0;
@@ -468,6 +500,10 @@ export class Unit {
       // kneeling instead of standing, and rises the tick the mending stops —
       // which is the tick it reaches full health, or leaves the field.
       resting: this.mending,
+      // The bridge from the stance to the pose. A plain read of the order that
+      // is already there: `setStance` owns what holding *means* to movement and
+      // targeting, and this only reports that it is in force.
+      holding: this.stance === "hold",
       attackCount: this.attack.blowCount,
       impactCount: this.health.impactCount,
       cameraDistanceSquared: cameraPosition ? this.object.position.distanceToSquared(cameraPosition) : null,

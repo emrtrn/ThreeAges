@@ -46,6 +46,10 @@ Oyuncu her askerin yerini tek tek ayarlamak zorunda kalmamalıdır. Bir formasyo
 
 `Serbest` formasyonu mevcut grup hedef dağılımının aynısı olmalıdır. Böylece yeni özellik kapatılabilir bir ek davranış olur ve mevcut oynanış geriye dönük olarak bozulmaz.
 
+> **Güncelleme (12 Ağustos 2026):** Bu geri uyumluluk modu, altı formasyonun tamamı
+> sahaya çıktıktan sonra kaldırıldı (§ 5.7). Mevcut dağılım kodu silinmedi;
+> işçilerde, ikiden az savaşçılı seçimlerde ve fallback yolunda hâlâ çalışıyor.
+
 ### 2.4 Formasyon savaş sırasında katı bir kilit olmamalıdır
 
 Birimler saldırı sırasında formasyon slotuna bağlı kalmamalıdır. Yakın dövüş birimleri hedefe yaklaşabilmeli, Okçular ateş pozisyonu bulabilmeli ve Topçu uygun menzili koruyabilmelidir.
@@ -70,7 +74,7 @@ belirlemelidir.
 - Hilal
 - Kare
 - Dağınık
-- Serbest
+- ~~Serbest~~ (kaldırıldı — § 5.7)
 - Rol bazlı birim slot dağılımı
 - Çoklu asker seçiminde Formasyon UI'ı
 - Move ve Attack-Move komutlarında formasyon hedef noktaları
@@ -1249,7 +1253,6 @@ Kama
 Hilal
 Kare
 Dağınık
-Serbest
 ```
 
 Formasyonlar ilk aşamada stat bonusu vermemeli; avantaj ve dezavantajları sahadaki gerçek yerleşimden doğmalıdır.

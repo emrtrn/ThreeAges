@@ -2610,6 +2610,7 @@ const SKELETON_ANIMATION_SET_ROLES = [
   "fall",
   "work",
   "rest",
+  "hold",
   "attack",
   "hit",
   "death",

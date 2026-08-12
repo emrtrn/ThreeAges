@@ -14,11 +14,13 @@ export type { RootMotionMode, RootMotionUpAxis };
 
 /**
  * Semantic clip roles an asset may author. `idle`/`walk`/`run`/`jump`/`fall`/
- * `work`/`rest` are continuous states; `attack`/`hit`/`death` are one-shot actions,
- * played once per event rather than looped (RTS skeletal animation plan Faz D,
- * Guard animation plan Faz 2). `hit` is the flinch a body plays when damage is
- * applied to it, the mirror of `attack`. `rest` is the held pose a body waits in
- * while something is restoring it in place, instead of its ordinary idle.
+ * `work`/`rest`/`hold` are continuous states; `attack`/`hit`/`death` are one-shot
+ * actions, played once per event rather than looped (RTS skeletal animation plan
+ * Faz D, Guard animation plan Faz 2). `hit` is the flinch a body plays when damage
+ * is applied to it, the mirror of `attack`. `rest` is the held pose a body waits in
+ * while something is restoring it in place, instead of its ordinary idle. `hold` is
+ * the ready pose it waits in while it has been ordered to hold its ground — a
+ * second idle chosen by an order rather than by the body's condition.
  *
  * Adding a role here also requires adding it to `SKELETON_ANIMATION_SET_ROLES`
  * in `tools/saveValidator.ts`, or an editor save silently drops it.
@@ -33,6 +35,7 @@ export const ANIMATION_SET_ROLES = [
   "fall",
   "work",
   "rest",
+  "hold",
   "attack",
   "hit",
   "death",

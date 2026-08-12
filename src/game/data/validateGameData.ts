@@ -479,6 +479,21 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (acquisitionRange > 0 && acquisitionRange < attackRange) {
       throw new GameDataError(`${statsWhere}.acquisitionRange: must be >= attackRange`);
     }
+    // Optional: absent means a unit that does not brace at all, which is every
+    // unit that carries no shield. Present and nonsensical is refused loudly —
+    // a negative value would *amplify* arrows, and anything at or above the
+    // shared ceiling would let a stance alone make a unit effectively unkillable
+    // before a support field had added anything to it.
+    const holdDamageResistanceRaw = stats["holdDamageResistance"];
+    let holdDamageResistance: number | undefined;
+    if (holdDamageResistanceRaw !== undefined) {
+      holdDamageResistance = requireFiniteNumber(stats, "holdDamageResistance", statsWhere);
+      if (holdDamageResistance <= 0 || holdDamageResistance > MAX_AURA_DAMAGE_RESISTANCE) {
+        throw new GameDataError(
+          `${statsWhere}.holdDamageResistance: must be > 0 and <= ${MAX_AURA_DAMAGE_RESISTANCE}`,
+        );
+      }
+    }
     const visionRadius = requireFiniteNumber(stats, "visionRadius", statsWhere);
     if (visionRadius <= 0) {
       throw new GameDataError(`${statsWhere}.visionRadius: must be > 0`);
@@ -550,6 +565,7 @@ export function validateUnitBalance(value: unknown): UnitBalance {
       attackRange,
       acquisitionRange,
       chaseRange,
+      ...(holdDamageResistance === undefined ? {} : { holdDamageResistance }),
       visionRadius,
       damageMultipliers: validateDamageMultipliers(
         stats["damageMultipliers"],
