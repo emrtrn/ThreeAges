@@ -32699,7 +32699,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 28567072
+        "bytes": 5434536
       },
       "license": "Unknown"
     },
@@ -32773,52 +32773,6 @@
       "license": "Unknown"
     },
     {
-      "id": "erika-archer-clothes-diffuse",
-      "name": "Erika Archer Clothes Diffuse",
-      "assetType": "texture",
-      "category": "Archer",
-      "path": "assets/ThreeAges/Characters/Archer/Erika_Archer_Clothes_diffuse.png",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Archer",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 3479930
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "erika-archer-clothes-normal",
-      "name": "Erika Archer Clothes Normal",
-      "assetType": "texture",
-      "category": "Archer",
-      "path": "assets/ThreeAges/Characters/Archer/Erika_Archer_Clothes_normal.png",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Archer",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 3065830
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "m-archer-material",
       "name": "M Archer.Material",
       "assetType": "material",
@@ -32838,6 +32792,52 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 682
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archer-bc",
+      "name": "Archer BC",
+      "assetType": "texture",
+      "category": "Archer",
+      "path": "assets/ThreeAges/Characters/Archer/Archer_BC.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Archer",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1594712
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archer-n",
+      "name": "Archer N",
+      "assetType": "texture",
+      "category": "Archer",
+      "path": "assets/ThreeAges/Characters/Archer/Archer_N.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Archer",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1474909
       },
       "license": "Unknown"
     }
