@@ -52,9 +52,24 @@ export interface RtsNotifyEffectBinding {
 export const RTS_NOTIFY_EFFECTS: Readonly<Record<string, RtsNotifyEffectBinding>> = {
   footstep: {
     effectId: "rts-fx-footstep-dust",
-    // At the ground, where a foot meets it. The unit's own origin is its feet.
-    heightOffset: 0.05,
-    maxDistance: 42,
+    /*
+     * Just above the ground the foot met — the unit's own origin is its feet,
+     * and `syncUnitsToGround` has already written the heightfield into it.
+     *
+     * Not *at* it (0.05 was the first attempt): a puff that hugs the terrain
+     * reads as part of the ground texture, especially in dust colours on dirt,
+     * and the soldier's own legs cover what is left. A hand's height clears the
+     * body and silhouettes the cloud against the ground instead of into it.
+     */
+    heightOffset: 0.2,
+    /*
+     * The cull is "don't draw what the player cannot make out", and it has to be
+     * measured the way it is applied: camera-to-*unit*, not camera-to-focus. The
+     * camera sits at most 40 units from its focus point, so a unit at the edge of
+     * the view is already past that — a 42 here culled most of a visible army
+     * while looking, from the tuning table, like it culled nothing.
+     */
+    maxDistance: 60,
     // 20 a second across the field. Enough that a marching company kicks up a
     // near-continuous trail, capped well under the shared instance budget.
     minIntervalSeconds: 0.05,

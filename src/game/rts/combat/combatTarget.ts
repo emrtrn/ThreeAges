@@ -71,7 +71,13 @@ export interface CombatTarget {
    * unit that authors no bracing keeps resolving exactly as it did before.
    */
   stanceResistanceAt?(distance: number): number;
-  /** Units show a target ring; structures may omit that presentation hook. */
+  /**
+   * Bookkeeping for how many attackers currently hold an explicit order on this
+   * target. Units count it (`Unit.targeted` reads it back); structures may omit
+   * the hook. It drives no visuals: the red ring it used to light under a
+   * targeted body was removed — an enemy under fire is already legible from the
+   * fight itself, and the ring only added a marker the player never asked for.
+   */
   setTargetedBy?(delta: number): void;
 }
 

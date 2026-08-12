@@ -18,7 +18,6 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
-  RingGeometry,
   Vector3,
   type BufferGeometry,
   type Quaternion,
@@ -311,7 +310,6 @@ export class Unit {
   /** Where an auto-acquired chase began; the leash is measured from here. */
   private chaseOrigin: Vector3 | null = null;
   private readonly ring: Mesh;
-  private readonly targetRing: Mesh;
   private readonly healthBar: HealthBar;
   private presentation: RtsPresentationHandle | null = null;
   /** Where the body stood at the last presentation frame; see `measurePlanarSpeed`. */
@@ -398,21 +396,6 @@ export class Unit {
       name: "rts-unit-selection-ring",
     });
     this.object.add(this.ring);
-
-    // Separate from the local selection ring: this is visible on an enemy while
-    // one or more selected player units have an explicit attack order on it.
-    this.targetRing = new Mesh(
-      new RingGeometry(UNIT_RADIUS * 1.65, UNIT_RADIUS * 1.95, 24),
-      new MeshStandardMaterial({
-        color: new Color("#ff7468"),
-        emissive: new Color("#9a241b"),
-        roughness: 0.5,
-      }),
-    );
-    this.targetRing.rotation.x = -Math.PI / 2;
-    this.targetRing.position.y = 0.04;
-    this.targetRing.visible = false;
-    this.object.add(this.targetRing);
 
     this.healthBar = new HealthBar(shape.radius * 2.4, bodyCenterY + shape.length / 2 + 0.55);
     this.object.add(this.healthBar.object);
@@ -1056,6 +1039,5 @@ export class Unit {
 
   setTargetedBy(delta: number): void {
     this.targeterCount = Math.max(0, this.targeterCount + delta);
-    this.targetRing.visible = this.targeterCount > 0;
   }
 }

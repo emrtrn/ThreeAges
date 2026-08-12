@@ -1,11 +1,12 @@
 # ThreeAges — Muhafız Animasyon Tamamlama Planı
 
 Oluşturulma tarihi: 2026-08-11  
-Durum: **Devam ediyor — Faz 1, 2, 2b, 3 (3a/3b dahil), 4, 5a ve Ek A kabul edildi.
-Faz 4 tasarım kapısı kapandı: blok yolu denendi ve elendi, yerine Tapınak
-alanında iyileşme duruşu uygulanıp kabul edildi. Faz 6 tasarım kapısı da kapandı
-(notify hattının tüketicisi VFX seçildi) ve uygulandı; dünya içi görsel kabulü
-açık. Fonksiyonel iş olarak geriye yalnız Faz 5b kaldı.**
+Durum: **Devam ediyor — Faz 1, 2, 2b, 3 (3a/3b dahil), 4, 5a, Ek A ve Faz 6
+kabul edildi. Faz 4 tasarım kapısı kapandı: blok yolu denendi ve elendi, yerine
+Tapınak alanında iyileşme duruşu uygulanıp kabul edildi. Faz 6 tasarım kapısı da
+kapandı (notify hattının tüketicisi VFX seçildi), uygulandı ve dünya içinde kabul
+edildi. Açık görsel kabul kalmadı; fonksiyonel iş olarak geriye yalnız Faz 5b
+kaldı.**
 
 ## 1. Amaç
 
@@ -661,8 +662,9 @@ recovery boyunca idle'a düşmemesi temel kabul şartıdır.
 
 ### Faz 6 — Footstep, shield ve hit VFX/SFX notify hattı
 
-**Durum:** ✅ Kod, veri ve otomasyon 2026-08-12'de bitti; dünya içi görsel kabul
-açık.
+**Durum:** ✅ Tamam — kod, veri ve otomasyon 2026-08-12'de bitti, ilk görsel
+kabul **reddedildi** (ayak tozu görünmedi), düzeltmesi §6.4 ile aynı gün kabul
+edildi.
 
 Skeletal Mesh Editor notifies'i sidecar'a zaten yazabiliyordu ve saf tetikleme
 mantığı (`src/game/animationNotifies.ts`) TPS tarafında çalışıyordu; eksik olan
@@ -741,14 +743,48 @@ isteyince koymak tek satır veri.
 7. **Global hız tavanı, per-unit değil:** `footstep` saniyede 20; kırk askerin
    her biri kendi limitinin altında kalır ve toplam hiçbir şeyi bağlamazdı.
    `body-impact` hiç kısılmıyor — kalabalıkta eksik bir ayak sesi görünmez, eksik
-   bir darbe dövüşün okunur yarısıdır. Mesafe kırpması `footstep` için 42 birim,
-   yani animasyon throttle'ının başladığı 45'ten **önce**: hiç çizilmeyen bir
-   birimin mixer'ı ayrıca kısılıyor.
-8. **Yeni varlıklar:** `FX_RTS_Footstep_Dust` (0.2 s, 4 parçacık) ve
-   `FX_RTS_Body_Impact` (0.15 s, 7 parçacık), manifestte `rts-fx-footstep-dust`
-   ve `rts-fx-body-impact` olarak. İkisi de sprite, dokusuz.
+   bir darbe dövüşün okunur yarısıdır. Maliyeti bağlayan şey bu tavan ve instance
+   bütçesi; mesafe kırpması yalnızca "görünmeyeni çizme" nezaketi.
+8. **Yeni varlıklar:** `FX_RTS_Footstep_Dust` ve `FX_RTS_Body_Impact`, manifestte
+   `rts-fx-footstep-dust` ve `rts-fx-body-impact` olarak. İkisi de sprite, dokusuz.
 
-**Otomasyon (6 yeni engine kontrolü, `--filter "Muhafiz Faz 6"`):**
+#### 6.4 İlk görsel kabul reddedildi: ayak tozu görünmedi (2026-08-12)
+
+Kullanıcı gözleminde **darbe tozu çalıştı, ayak tozu hiç görünmedi.** İkisi aynı
+subsystem'den, aynı warm'dan ve aynı `playUnitNotify` kapısından geçtiği için
+fark daraltılabildi; sırayla elendi:
+
+- Dispatcher: **çalışıyor.** Gerçek `Guard.skeleton.json` ile — gerçek klip
+  adları, gerçek `lockXYZ` kilitleri, gerçek `upperBodyBone` maskesi — dört
+  saniyelik yürüyüş altı `footstep` atıyor. Bu ölçüm kalıcı bir kontrole
+  dönüştürüldü, çünkü bir sonraki sessiz ayak sesinde "hata sidecar'da değil"
+  demenin en ucuz yolu o.
+- Efekt varlığı: **parçacık üretiyor.** Runtime tanımına çevrilip başsız
+  simüle edildi; burst tam sayıda doğuyor.
+- Saat, mesafe, warm, manifest çözümü: hepsi geçiyor.
+
+Geriye tek açıklama kaldı ve iki gerçek kusur çıktı:
+
+1. **Toz okunmuyordu.** 4 parçacık, %35 opaklık, toprak renginde (`#b0a48f`),
+   toprak zeminde, askerin bacaklarının dibinde, 5 cm yükseklikte. Görünmez değil
+   ama fark edilmez. Sayılar okunur seviyeye çekildi (8 parçacık, %60 opaklık,
+   son boyut 5–7, biten renk zeminden **açık**) ve doğuş yüksekliği 0.05 → 0.20:
+   bir el boyu, gövdeyi geçmeye ve bulutu zemine karışmak yerine zemine karşı
+   siluet vermeye yetiyor.
+2. **Kırpma yarıçapı yanlış eksende ölçülmüştü.** 42, animasyon throttle'ının
+   45'inden küçük olsun diye seçilmişti; fakat throttle gibi bu da kameradan
+   **birime** olan mesafe, kameranın odak noktasına olan mesafesi değil. Kamera
+   odağına en fazla 40 birim uzakta olduğu için ekranın kenarındaki birim zaten
+   42'yi aşıyordu — tabloda hiçbir şeyi kırpmıyormuş gibi görünen bir ayar,
+   görünen ordunun çoğunu kırpıyordu. 60'a çıkarıldı (`body-impact` ile aynı).
+
+İkisi düzeltildikten sonra **aynı gün kabul edildi.** Kaydedilmeye değer olan,
+elemenin kendisi: aynı subsystem'den geçen iki efektten biri görünüp diğeri
+görünmediğinde şüpheli listesi kısadır — hat, varlık, saat, mesafe, bütçe — ve
+üçü ölçümle elenince geriye yalnız *sanat* ile *ayar* kalıyor. Hattı ölçen adım
+kalıcı bir kontrole dönüştürüldü.
+
+**Otomasyon (7 yeni engine kontrolü, `--filter "Muhafiz Faz 6"`):**
 
 - Her işaret bir kez atılıyor ve kare boyu bunu değiştirmiyor: 60 Hz ile 15 Hz
   aynı sayıyı veriyor, duraklatılmış kare hiç atmıyor, işaretsiz asset yolu hiç
@@ -766,34 +802,34 @@ isteyince koymak tek satır veri.
   normalizer'ıyla ayrışıyor ve döngüsüz kısa bir burst; hız tavanı `footstep`'i
   kısıyor `body-impact`'i kısmıyor; mesafe kırpması ve "kamerası olmayan çağıran
   yakın sayılır" sözleşmesi.
+- Gerçek `Guard.skeleton.json` yürürken ayak işaretini gerçekten atıyor (§6.4'ün
+  elemesinin kalıcı hâli).
 - K-02: sunum tüketicisi birimi kımıldatmıyor, canını, cooldown'unu ve emrini
   değiştirmiyor.
 
 **Kabul:** Crossfade, uzaktaki düşük cadence, klip restart ve pause/resume
 durumlarında notify iki kere atılmaz; ses/VFX gameplay hasarını değiştirmez.
 
-**Dünya içi görsel kabul (açık):** yürüyen bir muhafız bölüğünün ayaklarının
-altında küçük toz bulutları çıkmalı (yakın kamerada; ~42 birimden sonra kesilir),
-ve vurulan bir muhafızın göğüs hizasında kısa bir toz patlaması görünmeli.
-Kılıç sallamak hiçbir şey çizmez — bu beklenen davranış.
+**Görsel kabul (2026-08-12): ✅ kabul edildi.** Yürüyen muhafızların ayaklarının
+dibinde her adımda toz kalkıyor, vurulan muhafızın gövdesinde kısa bir patlama
+görünüyor. Kılıç sallamak hiçbir şey çizmiyor — beklenen davranış.
 
 ## 5. Sonraki Oturum İçin Başlangıç Noktası
 
-**Açık tek görsel kabul Faz 6'nın.** Faz 1, 2b, 3, 4, 5a ve Ek A dünya içinde
+**Açık görsel kabul kalmadı.** Faz 1, 2b, 3, 4, 5a, Ek A ve Faz 6 dünya içinde
 kabul edildi. Ek A.1'in (hold hasar azaltma) dünya içi doğrulaması isteğe bağlı:
 kule ateşi altındaki bir Guard bölüğünü `H` ile tutup canlarının daha yavaş
 düştüğünü izlemek yeterli — sayısal kanıt zaten testte.
 
 1. Fonksiyonel iş olarak yalnız **Faz 5b** kaldı ve hâlâ tasarım kapısında:
    turn/strafe, sunumun bugün taşımadığı yönsel hız verisini istiyor ve önce o
-   verinin nereden geleceğine karar verilmeli. Faz 6 uygulandı; ondan geriye
-   yalnız dünya içi görsel kabul duruyor (§4, Faz 6'nın sonu).
+   verinin nereden geleceğine karar verilmeli. Faz 6 uygulandı ve kabul edildi.
 2. İsteğe bağlı ve bağımsız eklerden biri (`hold` duruşunda `block_idle`) **Ek A
    olarak uygulandı**; §4.5'in "Uygulanmayan" listesinde iki tanesi kaldı:
    `crouch`/`crouching` geçiş klipleriyle gerçek diz çökme ve kalkma hareketi
    (montaj makinesini üç klibe genelleştirmek) ve crouch blok. İkisi de bu planın
    kapsamı içinde ama hiçbiri teslim kapısının şartı değil.
-3. Teslim kapısı (§7) için kalan tek madde: Faz 5b/6'nın ya uygulanması ya da açık
+3. Teslim kapısı (§7) için kalan tek madde: Faz 5b'nin ya uygulanması ya da açık
    tasarım kararlarıyla ayrı bir backlog belgesine taşınması.
 4. Her TypeScript değişikliğinden sonra `npx tsc --noEmit`; her dar dilimden
    sonra ilgili filtreli engine testini çalıştır. Kalabalık/darbe görünümü için
@@ -901,6 +937,18 @@ düştüğünü izlemek yeterli — sayısal kanıt zaten testte.
   (K-04). Tüketici tarafı saf `rtsNotifyEffects` tablosu, ayrı bir
   `VfxSubsystem` bütçesi ve iki yeni efekt varlığı. 6 yeni engine kontrolü;
   `npm run build:verify` tam yeşil (1433 kontrol). Dünya içi görsel kabul açık.
+- 2026-08-12 — Faz 6 ilk görsel kabulü **reddedildi**: darbe tozu çıkıyor, ayak
+  tozu hiç görünmüyor. Aynı subsystem'den geçen iki efekt olduğu için hat, varlık,
+  saat ve mesafe ölçümle elendi (gerçek sidecar'la dispatcher atıyor, efekt
+  parçacık üretiyor); iki gerçek kusur kaldı ve düzeltildi: toz okunmuyordu
+  (4 parçacık / %35 opaklık / toprak renginde toprak üstünde / 5 cm yükseklikte →
+  8 parçacık, %60, zeminden açık biten renk, 0.20 yükseklik) ve mesafe kırpması
+  kamera-odak yerine kamera-birim ekseninde ölçülmesi gerektiği için 42 → 60.
+  Eleme adımı 7. engine kontrolü olarak kalıcılaştırıldı;
+  `npm run build:verify` tam yeşil (1434 kontrol).
+- 2026-08-12 — **Görsel kabul: Faz 6 kabul edildi.** Yürüyen muhafızların
+  ayaklarının dibinde toz kalkıyor, vurulan muhafızın gövdesinde patlama
+  görünüyor. Bu kabulle planda açık görsel kabul kalmadı.
 - 2026-08-11 — Faz 5a uygulandı: `walk_2`/`run_2` ileri varyant havuzundan
   çıkarılıp `walkBack`/`runBack` rollerine taşındı. `T` ardından zemin sağ tık
   yalnız Guard'lara yönü koruyan geri rota verir; TypeScript ve hedefli engine
@@ -913,9 +961,9 @@ Plan ancak şu şartlar birlikte sağlandığında tamam kabul edilir:
 - ✅ Faz 1 ile Faz 3'ün görsel kabulleri kaydedilmiş (2026-08-11 / 2026-08-12),
 - ✅ Faz 2 gerçek hasar kaynaklarının tamamını kapsayan testlerle kanıtlanmış,
 - ✅ Faz 4 ile Faz 5a uygulanıp kabul edilmiş (2026-08-12),
-- ✅ Faz 6 uygulanmış (2026-08-12) — dünya içi görsel kabulü açık,
+- ✅ Faz 6 uygulanıp kabul edilmiş (2026-08-12),
 - Faz 5b ya uygulanıp kabul edilmiş ya da açık tasarım kararlarıyla ayrı
   backlog belgesine taşınmış — **tek açık madde bu,**
-- ✅ tam doğrulama (`npm run build:verify`) temiz geçmiş (2026-08-12, 1433 kontrol),
+- ✅ tam doğrulama (`npm run build:verify`) temiz geçmiş (2026-08-12, 1434 kontrol),
 - Guard materyal, root-motion ve animasyon sidecar'ları manifest/runtime/editor
   yollarında tutarlı kalmış olmalı.

@@ -16,7 +16,7 @@
     "seed": null,
     "maxParticles": 8,
     "bounds": {
-      "mode": "fixed",
+      "mode": "autoPreview",
       "min": [
         -0.8,
         -0.4,
@@ -33,7 +33,7 @@
   "spawn": {
     "mode": "burst",
     "rate": 0,
-    "count": 7,
+    "count": 12,
     "delay": 0,
     "interval": 0,
     "shape": "sphere",
@@ -46,25 +46,25 @@
   },
   "initialize": {
     "lifetime": [
-      0.25,
-      0.4
+      0.5,
+      1
     ],
     "startSize": [
-      1.2,
-      1.8
+      2,
+      3
     ],
-    "startColor": "#d8cdb8",
-    "startOpacity": 0.55,
+    "startColor": "#ff0000",
+    "startOpacity": 1,
     "direction": [
       0,
-      0.4,
+      -1,
       0
     ],
     "speed": [
       1.2,
       2.2
     ],
-    "spreadAngleDeg": 180,
+    "spreadAngleDeg": 90,
     "rotation": [
       0,
       0
@@ -75,18 +75,18 @@
     ]
   },
   "update": {
-    "gravityScale": 0.4,
+    "gravityScale": 1,
     "drag": 6,
     "acceleration": [
       0,
-      0,
+      -1,
       0
     ],
     "endSize": [
-      2.4,
-      3.4
+      1,
+      2
     ],
-    "endColor": "#9d9384",
+    "endColor": "#ff0000",
     "endOpacity": 0,
     "fadeInTime": 0.02,
     "fadeOutTime": 0.2
@@ -96,10 +96,10 @@
     "blendMode": "alpha",
     "softness": 0.7,
     "sortMode": "none",
-    "texture": null,
+    "texture": "t-dust-particle-d",
     "subUV": {
-      "cols": 1,
-      "rows": 1
+      "cols": 2,
+      "rows": 2
     }
   }
 }

@@ -39551,6 +39551,63 @@ check("Muhafiz Faz 6: notify tuketicisi simulasyonu okuyabilir, degistiremez (K-
   assert.equal(unit.dying, false);
 });
 
+
+check("Muhafiz Faz 6: gercek Guard sidecar'i yururken ayak isaretini gercekten atar", () => {
+  // The fixture checks above prove the machinery; this proves the *asset*. It is
+  // the check that says where a fault is not: authored clip names, root-motion
+  // locks and the upper-body split are all the Guard's real ones, so a silent
+  // footstep in the game cannot be blamed on the sidecar without this going red
+  // first. (It earned its place: the first world-in acceptance reported no dust
+  // at all, and this is what showed the line was firing and the art was not
+  // readable.)
+  const guard = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+  );
+  const node = (name: string): Object3D => { const object = new Object3D(); object.name = name; return object; };
+  const model = node("Guard_Rig");
+  const hips = node("mixamorigHips");
+  // Sanitized spellings, as `GLTFLoader` leaves them — the mask has to match the
+  // sidecar's `mixamorig:Spine` through that sanitisation (Faz 2b).
+  hips.add(node("mixamorigSpine"), node("mixamorigLeftUpLeg"), node("mixamorigRightUpLeg"));
+  model.add(hips);
+  const root = new Group();
+  root.add(model);
+  const names = new Set<string>();
+  for (const clip of Object.values(guard.animationSet)) if (clip) names.add(clip);
+  for (const list of Object.values(guard.animationVariants)) for (const clip of list ?? []) names.add(clip);
+  // Every clip a full second and change, with a hip track the root-motion lock
+  // can actually bite on: the walk clip is locked, so a fixture without one
+  // would exercise a different code path than the game does.
+  const clips = [...names].map((name) => new AnimationClip(name, 1.133, [
+    new VectorKeyframeTrack("mixamorigHips.position", [0, 1.133], [0, 0, 0, 0, 0, 2]),
+    new VectorKeyframeTrack("mixamorigSpine.position", [0, 1.133], [0, 0, 0, 0, 0, 0]),
+    new VectorKeyframeTrack("mixamorigLeftUpLeg.position", [0, 1.133], [0, 0, 0, 0, 0, 0]),
+  ]));
+  const fired: string[] = [];
+  const presentation = createRtsUnitPresentation({
+    root,
+    pickTargets: [],
+    selectionRadius: 0.5,
+    moveSpeed: 3.5,
+    animation: { target: model, clips, skeleton: guard },
+    onNotify: (name) => fired.push(name),
+  });
+  for (let step = 0; step < 240; step += 1) {
+    presentation.update?.({
+      deltaSeconds: 1 / 60,
+      planarSpeed: 1.6,
+      attacking: false,
+      dying: false,
+      attackCount: 0,
+      impactCount: 0,
+      cameraDistanceSquared: 400,
+    });
+  }
+  presentation.dispose();
+  assert.ok(fired.length > 0, "four seconds of walking marked no footfall at all");
+  assert.deepEqual([...new Set(fired)], ["footstep"], "and marked nothing else");
+});
+
 check("RTS hold durusu: menzilindeki saldirgana karsilik verir, disindakine veremez", () => {
   // GDD 06 §26's half of Hold that is easy to lose: it surrenders *movement*,
   // never the weapon. A held unit that stopped shooting back would be a unit the
@@ -41766,7 +41823,7 @@ check("RTS melee attacks apply JSON damage on cooldown and clear a depleted targ
   defender.health.damage(100);
   updateUnitCombat([attacker], 0);
   assert.equal(attacker.attackTarget, null, "stale depleted target is cleared");
-  assert.equal(defender.targeted, false, "target marker clears with the attack order");
+  assert.equal(defender.targeted, false, "targeting count clears with the attack order");
 });
 
 check("RTS melee attacks can damage an enemy command center", () => {

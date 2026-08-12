@@ -25437,7 +25437,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1508
+        "bytes": 1504
       },
       "license": "Project-local RTS effect"
     },
