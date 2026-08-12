@@ -1,0 +1,34 @@
+{
+  "id": "archer_locomotion_acceptance",
+  "label": "Archer Locomotion Acceptance",
+  "flags": {
+    "fogOfWar": false
+  },
+  "startingResources": {
+    "food": 0,
+    "wood": 0,
+    "stone": 0,
+    "gold": 0
+  },
+  "startingUnits": {
+    "guard": 0,
+    "worker": 0,
+    "archer": 10,
+    "siege": 0
+  },
+  "enemyStartingResources": {
+    "food": 0,
+    "wood": 0,
+    "stone": 0,
+    "gold": 0
+  },
+  "enemyStartingUnits": {
+    "guard": 0,
+    "worker": 0,
+    "archer": 10,
+    "siege": 0
+  },
+  "gameSpeed": 1,
+  "mapState": "two_flanks_blockout",
+  "aiProfile": "hard"
+}

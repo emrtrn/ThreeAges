@@ -38118,6 +38118,17 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
   assert.ok(idlePopulation.size > 1, "a group of Archers uses more than one deterministic idle");
 });
 
+check("Archer Faz 1: kabul preseti iki tarafa da yalniz onar Okcu verir", () => {
+  const preset = validateGamePreset(
+    JSON.parse(readFileSync("public/game-data/presets/archer_locomotion_acceptance.json", "utf8")) as unknown,
+    "archer_locomotion_acceptance",
+  );
+  assert.deepEqual(preset.startingUnits, { guard: 0, worker: 0, archer: 10, siege: 0 });
+  assert.deepEqual(preset.enemyStartingUnits, { guard: 0, worker: 0, archer: 10, siege: 0 });
+  assert.equal(preset.flags.fogOfWar, false, "both armies stay visible during visual acceptance");
+  assert.equal(preset.gameSpeed, 1, "animation cadence is observed at ordinary match speed");
+});
+
 /**
  * A one-bone model whose walk clip both translates (root motion, on Z) and lifts
  * (a plain pose channel, on Y). The two axes are what the Faz C assertions read:
@@ -38820,7 +38831,7 @@ check("Muhafiz Faz 2: hit rolu editor kaydinda hayatta kalir ve Guard onu author
   // And the shipped Guard authors it, which is what makes the flinch data rather
   // than a clip name compiled into the selector.
   const guard = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
   );
   const hit = guard.animationSet.hit ?? assert.fail("the Guard authors no hit clip");
   const flinches = [hit, ...(guard.animationVariants.hit ?? [])];
@@ -38971,10 +38982,10 @@ check("Muhafiz Faz 4: rest rolu editor kaydinda hayatta kalir ve Guard cömelme 
   assert.ok(ANIMATION_SET_ROLES.includes("rest"), "the loader knows it too");
 
   const guard = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
   );
   const rest = guard.animationSet.rest ?? assert.fail("the Guard authors no rest clip");
-  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard.glb")))
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.glb")))
     ?? assert.fail("the Guard model is not a readable GLB");
   const clips = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
   // A typo here is silent: the role resolves to nothing and the Guard simply
@@ -39205,10 +39216,10 @@ check("Muhafiz Ek A (hold durusu): rol editor kaydinda hayatta kalir ve Guard bl
   assert.ok(ANIMATION_SET_ROLES.includes("hold"), "the loader knows it too");
 
   const guard = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
   );
   const hold = guard.animationSet.hold ?? assert.fail("the Guard authors no hold clip");
-  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard.glb")))
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.glb")))
     ?? assert.fail("the Guard model is not a readable GLB");
   const clips = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
   // This clip is the one place the rig's naming is genuinely broken — it ships as
@@ -39452,10 +39463,10 @@ check("Muhafiz Faz 6: yarida kesilip yeniden baslayan klip gecmis isaretlerini a
 
 check("Muhafiz Faz 6: Guard isaretleri gercek kliplerin icinde durur ve K-04'u bozmaz", () => {
   const guard = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
   );
   assert.ok(guard.notifies.length > 0, "the Guard authors animation notifies");
-  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard.glb")))
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.glb")))
     ?? assert.fail("the Guard model is not a readable GLB");
   const durations = new Map<string, number>();
   for (const animation of parsed.json.animations ?? []) {
@@ -39630,7 +39641,7 @@ check("Muhafiz Faz 6: gercek Guard sidecar'i yururken ayak isaretini gercekten a
   // at all, and this is what showed the line was firing and the art was not
   // readable.)
   const guard = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
   );
   const node = (name: string): Object3D => { const object = new Object3D(); object.name = name; return object; };
   const model = node("Guard_Rig");
@@ -39883,7 +39894,7 @@ check("RTS hold durusu: kalkan kule yaylimina da uygulanir, veri sinirlari zorun
 
 check("Muhafiz geri locomotion: ters donguler yalnizca geri cekilme rollerindedir", () => {
   const guard = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
   );
   assert.equal(guard.animationSet.walk, "guard_sword_and_shield_walk_1");
   assert.equal(guard.animationSet.run, "guard_sword_and_shield_run_1");
@@ -40105,14 +40116,14 @@ check("Muhafiz Faz 2b: Guard ust govde kemigini authorlar, kemik gercek ve kayit
   );
 
   const guard = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
   );
   const bone = guard.upperBodyBone ?? assert.fail("the Guard authors no upper-body bone, so flinches stay full-body");
 
   // A bone name is a string until something checks it against the rig. A typo
   // here costs nothing at load and silently turns every layered flinch back into
   // a full-body one, which is the bug this phase started from.
-  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard.glb")))
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.glb")))
     ?? assert.fail("the Guard model is not a readable GLB");
   const nodes = parsed.json.nodes ?? [];
   // Matched the way the runtime matches it (`collectSubtreeNodeNames`), through
@@ -40152,7 +40163,7 @@ check("Muhafiz Faz 3: her muhafiz olum klibini sabit secer ve despawn penceresi 
   // either vanishes mid-fall or lies there after the clip has finished — and
   // both look like an animation bug rather than a wiring one.
   const guard = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
   );
   const lengths: Record<string, number> = {
     guard_sword_and_shield_idle_1: 1,
@@ -40311,7 +40322,7 @@ check("Muhafiz Faz 3b: dusen govde son pozunda donar ve animatoru bir daha calis
   // whole time on the field, so all of that is waste — but it is invisible
   // waste, which is why it is pinned here rather than left to be noticed.
   const guard = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
   );
   const fall = 2.333;
   const make = (name: string): Object3D => {
@@ -40397,7 +40408,7 @@ check("Muhafiz Faz 3b: dusen govde son pozunda donar ve animatoru bir daha calis
 
 check("Muhafiz Faz 3: Guard iki olum klibini de authorlar, ikisi de gercek ve ayni sekilde kok hareketli", () => {
   const guard = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
   );
   const primary = guard.animationSet.death ?? assert.fail("the Guard authors no death clip");
   const pool = [primary, ...(guard.animationVariants.death ?? [])];
@@ -40407,7 +40418,7 @@ check("Muhafiz Faz 3: Guard iki olum klibini de authorlar, ikisi de gercek ve ay
   // A variant name is a string until something checks it against the model. A
   // typo costs nothing at load — `resolveRtsAnimationVariant` simply drops the
   // unknown name — so half the Guards quietly go back to the primary clip.
-  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard.glb")))
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.glb")))
     ?? assert.fail("the Guard model is not a readable GLB");
   const shipped = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
   for (const clip of pool) {

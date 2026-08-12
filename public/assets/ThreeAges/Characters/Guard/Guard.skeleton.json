@@ -111,7 +111,7 @@
     {
       "clip": "guard_sword_and_shield_walk_1",
       "mode": "lockXYZ",
-      "rootNode": "mixamorig:Hips"
+      "rootNode": "mixamorigHips"
     },
     {
       "clip": "guard_sword_and_shield_walk_2",
@@ -150,23 +150,18 @@
     },
     {
       "clip": "guard_sword_and_sheld_attack_1",
-      "mode": "lockXYZ",
-      "rootNode": "mixamorig:Hips"
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
     },
     {
       "clip": "guard_sword_and_sheld_attack_2",
-      "mode": "lockXYZ",
-      "rootNode": "mixamorig:Hips"
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
     },
     {
       "clip": "guard_sword_and_sheld_attack_3",
-      "mode": "lockXYZ",
-      "rootNode": "mixamorig:Hips"
-    },
-    {
-      "clip": "guard_sword_and_sheld_attack_4",
-      "mode": "lockXYZ",
-      "rootNode": "mixamorig:Hips"
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
     },
     {
       "clip": "guard_sword_and_shield_slash_5",
@@ -180,13 +175,24 @@
     },
     {
       "clip": "guard_sword_and_shield_jump_1",
-      "mode": "lockXZ"
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_shield_slash_2",
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_shield_slash_4",
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
     }
   ],
   "physicsBodies": [],
   "physicsConstraints": [],
   "preview": {
-    "selectedClip": "guard_sword_and_shield_jump_1"
+    "selectedClip": "sguard_word_and_shield_block_idle"
   },
   "upperBodyBone": "mixamorigSpine"
 }

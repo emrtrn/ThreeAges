@@ -161,6 +161,13 @@ geri locomotion'ı simülasyon hareketiyle uyumlu çalıştırmak.
 
 ### 4.4 Dünya içi görsel kabul
 
+Otomatik hazırlık:
+
+- [x] `archer_locomotion_acceptance` presetiyle yalnız 10 oyuncu ve 10 düşman
+  Okçu içeren, sis kapalı ve normal hızlı tekrar kullanılabilir kabul rotası oluştur.
+- [x] Chromium smoke ile rotanın gerçek Actor paketi, sıfır placeholder ve
+  page/console error olmadan 10+10 Okçu açtığını doğrula.
+
 - [ ] Aynı anda en az 10 oyuncu ve 10 düşman Okçu oluştur.
 - [ ] Kısa hedef, uzak hedef, açık alan ve dar geçitte walk/run gözle.
 - [ ] `T` geri çekilme emrinde walkBack/runBack yönünü gözle.
@@ -431,3 +438,9 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
   korundu. `npx.cmd tsc --noEmit` geçti; dar engine filtresinde 22 kontrol geçti,
   1414 kontrol filtre nedeniyle atlandı (`PARTIAL`). Dünya içi görsel kabul ve
   buna bağlı Faz 2 kapısı açık bırakıldı.
+- 2026-08-12 — Faz 1 görsel kabul hazırlığı eklendi: ana `gameplay_proof`
+  açılışına dokunmadan `archer_locomotion_acceptance` preseti iki tarafa yalnız
+  10'ar Okçu verecek şekilde oluşturuldu. Dar engine filtresi 23 kontrolle geçti
+  (`PARTIAL`); Chromium smoke 1/1 geçti ve gerçek Actor paketi, sıfır placeholder,
+  10+10 Okçu ile page/console error olmadığını doğruladı. Nihai locomotion görünümü
+  kullanıcı kabulünü bekliyor.

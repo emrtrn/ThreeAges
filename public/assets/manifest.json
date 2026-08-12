@@ -32499,7 +32499,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 12014724
+        "bytes": 12011052
       },
       "license": "Unknown"
     },
@@ -32838,6 +32838,75 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 1474909
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "guard-helmet",
+      "name": "Guard Helmet",
+      "assetType": "staticMesh",
+      "category": "Guard",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_Helmet.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Guard",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 7983996
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "guard-shield",
+      "name": "Guard Shield",
+      "assetType": "staticMesh",
+      "category": "Guard",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_Shield.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Guard",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 7948804
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "guard-sword",
+      "name": "Guard Sword",
+      "assetType": "staticMesh",
+      "category": "Guard",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_Sword.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Guard",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 7954136
       },
       "license": "Unknown"
     }
