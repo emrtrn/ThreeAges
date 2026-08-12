@@ -1,15 +1,122 @@
 {
   "schema": 1,
   "sockets": [],
-  "animationSet": {},
-  "animationVariants": {},
+  "animationSet": {
+    "idle": "Archer_standing_idle",
+    "walk": "Archer_standing_walk_forward",
+    "run": "Archer_standing_run_forward",
+    "walkBack": "Archer_standing_walk_back",
+    "runBack": "Archer_standing_run_back"
+  },
+  "animationVariants": {
+    "idle": [
+      "Archer_standing_idle_examine",
+      "Archer_standing_idle_looking"
+    ]
+  },
   "blendSpaces": [],
   "notifies": [],
   "montages": [],
-  "rootMotion": [],
+  "rootMotion": [
+    {
+      "clip": "Archer_fall_a_land_to_run_forward",
+      "mode": "lockXZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_aim_walk_back",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_aim_walk_forward",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_aim_walk_left",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_aim_walk_right",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_dive_forward",
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_dodge_backward",
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_dodge_forward",
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_dodge_left",
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_dodge_right",
+      "mode": "driveMotion",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_run_back",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_run_forward",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_run_left",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_run_right",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_turn_90_right",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_walk_back",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_walk_forward",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_walk_left",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_walk_right",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    }
+  ],
   "physicsBodies": [],
   "physicsConstraints": [],
   "preview": {
-    "selectedClip": "Archer_fall_a_land_to_run_forward"
+    "selectedClip": "T-Pose"
   }
 }

@@ -38049,6 +38049,75 @@ check("Skeletal animasyon varyasyonlari: klip secimi birim ve darbe basina karar
   assert.deepEqual(saved.animationVariants, variants, "a skeleton editor save retains the variant lists");
 });
 
+check("Archer Faz 1: iki ordu gercek Archer assetini ve mevcut secim sozlesmesini kullanir", () => {
+  const manifest = parseRtsMeshManifest(
+    JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
+  );
+  for (const [file, tint] of [
+    ["BP_RTS_Archer", "#4f8f4a"],
+    ["BP_RTS_Enemy_Archer", "#a8552f"],
+  ] as const) {
+    const ref = `public/assets/ThreeAges/Actors/Units/${file}.actor.json`;
+    const actor = normalizeActorScriptDef(JSON.parse(readFileSync(ref, "utf8")) as unknown, ref);
+    validateRtsPresentationActor(actor, ref, manifest);
+    const mesh = actor.components.find((component) => component.component === "SkeletalMeshComponent")
+      ?? assert.fail(`${ref} has no skeletal mesh`);
+
+    assert.equal(mesh.props.assetId, "archer", `${ref} renders the Archer rig`);
+    assert.equal(mesh.props.materialTint, tint, `${ref} keeps its temporary team tint until Faz 2`);
+    assert.equal(readRtsSelectionRadius(actor), 0.39, `${ref} keeps the Archer gameplay selection radius`);
+  }
+});
+
+check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtime havuzuna girmez", () => {
+  const archer = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Archer/Archer.skeleton.json", "utf8")) as unknown,
+  );
+  assert.deepEqual(archer.animationSet, {
+    idle: "Archer_standing_idle",
+    walk: "Archer_standing_walk_forward",
+    run: "Archer_standing_run_forward",
+    walkBack: "Archer_standing_walk_back",
+    runBack: "Archer_standing_run_back",
+  });
+  assert.deepEqual(archer.animationVariants.idle, [
+    "Archer_standing_idle_examine",
+    "Archer_standing_idle_looking",
+  ]);
+  assert.equal(archer.animationVariants.walk, undefined, "forward walking never samples a reverse clip");
+  assert.equal(archer.animationVariants.run, undefined, "forward running never samples a reverse clip");
+
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Archer/Archer.glb")))
+    ?? assert.fail("the Archer model is not a readable GLB");
+  const shipped = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
+  const runtimePool = [
+    ...Object.values(archer.animationSet),
+    ...Object.values(archer.animationVariants).flatMap((clips) => clips ?? []),
+  ].filter((clip): clip is string => clip !== undefined);
+
+  for (const clip of runtimePool) assert.ok(shipped.has(clip), `"${clip}" is not a clip the Archer ships`);
+  assert.equal(new Set(runtimePool).size, runtimePool.length, "the Archer locomotion pools contain no duplicate clip");
+  assert.ok(!runtimePool.includes("Archer_unurmed_idle"), "the unarmed idle never enters the armed Archer pool");
+  assert.ok(
+    !runtimePool.includes("Archer_standing_turn_90_right"),
+    "the known duplicate turn_90_right clip never enters a semantic role or variant pool",
+  );
+  assert.ok(
+    archer.notifies.every((notify) => notify.clip !== "Archer_standing_turn_90_right"),
+    "the duplicate clip carries no runtime notify",
+  );
+
+  const stableIdle = resolveRtsAnimationVariant("idle", archer.animationSet, archer.animationVariants, shipped, 17);
+  assert.equal(
+    stableIdle,
+    resolveRtsAnimationVariant("idle", archer.animationSet, archer.animationVariants, shipped, 17),
+    "one Archer keeps the same idle across replay",
+  );
+  const idlePopulation = new Set(Array.from({ length: 20 }, (_, index) =>
+    resolveRtsAnimationVariant("idle", archer.animationSet, archer.animationVariants, shipped, index + 1)));
+  assert.ok(idlePopulation.size > 1, "a group of Archers uses more than one deterministic idle");
+});
+
 /**
  * A one-bone model whose walk clip both translates (root motion, on Z) and lifts
  * (a plain pose channel, on Y). The two axes are what the Faz C assertions read:

@@ -24,7 +24,7 @@
       "id": "archerMesh",
       "component": "SkeletalMeshComponent",
       "props": {
-        "assetId": "ual1-standard-rm",
+        "assetId": "archer",
         "position": [
           0,
           0,
