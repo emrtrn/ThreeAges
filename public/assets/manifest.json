@@ -32796,29 +32796,6 @@
       "license": "Unknown"
     },
     {
-      "id": "archer-bc",
-      "name": "Archer BC",
-      "assetType": "texture",
-      "category": "Archer",
-      "path": "assets/ThreeAges/Characters/Archer/Archer_BC.png",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Archer",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 1594712
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "archer-n",
       "name": "Archer N",
       "assetType": "texture",
@@ -32907,6 +32884,75 @@
         "receiveShadow": true,
         "collision": true,
         "bytes": 7954136
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archerblue-bc",
+      "name": "Archer Blue BC",
+      "assetType": "texture",
+      "category": "Archer",
+      "path": "assets/ThreeAges/Characters/Archer/ArcherBlue_BC.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Archer",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1682340
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archerred-bc",
+      "name": "Archer Red BC",
+      "assetType": "texture",
+      "category": "Archer",
+      "path": "assets/ThreeAges/Characters/Archer/ArcherRed_BC.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Archer",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1685808
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-archer-material-copy",
+      "name": "M_ArcherAI",
+      "assetType": "material",
+      "category": "Archer",
+      "path": "assets/ThreeAges/Characters/Archer/M_ArcherAI.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Archer",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 682
       },
       "license": "Unknown"
     }

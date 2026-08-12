@@ -1,8 +1,9 @@
 # ThreeAges — Okçu Animasyon ve Materyal Entegrasyon Planı
 
 Oluşturulma tarihi: 2026-08-12  
-Durum: **Uygulanıyor — Faz 1 Actor bağlantısı, locomotion verisi ve dar otomasyon
-tamamlandı. Dünya içi locomotion görsel kabulü bekleniyor.**
+Durum: **Uygulanıyor — Faz 1 geri çekilme görsel yeniden kabulü açık. Kullanıcı
+yönlendirmesiyle Faz 2 doku/materyal authoring'i yapıldı ve AI materyal bağlantısı
+tamamlandı; materyal görsel kabulü bekleniyor.**
 
 ## 1. Amaç
 
@@ -183,7 +184,7 @@ texture üretimi başlamaz.
 
 ## 5. Faz 2 — Imagegen Takım Dokuları ve Materyaller
 
-**Durum:** ⬜ Faz 1 kabulünü bekliyor  
+**Durum:** 🟨 Doku/materyal authoring'i ve AI bağlantısı tamamlandı — görsel kabul bekleniyor
 **Amaç:** Guard ile aynı yöntemle oyuncu için mavi, AI için kırmızı base-color
 texture üretmek ve tam-model tint ihtiyacını kaldırmak.
 
@@ -202,18 +203,19 @@ texture üretmek ve tam-model tint ihtiyacını kaldırmak.
 
 ### 5.2 Manifest ve materyal bağlantısı
 
-- [ ] Mavi texture'ı manifestte `archer-blue-bc` olarak kaydet.
-- [ ] Kırmızı texture'ı manifestte `archer-red-bc` olarak kaydet.
-- [ ] `M_Archer.material.json` base-color kaynağını `archer-blue-bc` yap.
-- [ ] `M_Archer_AI.material.json` oluştur ve base-color kaynağını
-  `archer-red-bc` yap.
-- [ ] Her iki materyalde aynı `archer-n`, roughness ve diğer yüzey ayarlarını
+- [x] Mavi texture'ı manifestte `archerblue-bc` olarak kaydet.
+- [x] Kırmızı texture'ı manifestte `archerred-bc` olarak kaydet.
+- [x] `M_Archer.material.json` base-color kaynağını `archerblue-bc` yap.
+- [x] `M_ArcherAI.material.json` oluştur ve base-color kaynağını
+  `archerred-bc` yap.
+- [x] Her iki materyalde aynı `archer-n`, roughness ve diğer yüzey ayarlarını
   kullan.
 - [ ] Oyuncu Actor'ına `materialSlot: "m-archer-material"` ata.
-- [ ] Düşman Actor'ına `materialSlot: "m-archer-ai-material"` ata.
-- [ ] Texture tabanlı takım ayrımı kabul edilince iki Actor'dan da
-  `materialTint` kaldır.
-- [ ] `Archer.materials.json` slot 0 varsayılanının oyuncu materyali olarak
+- [x] Düşman Actor'ına `materialSlot: "m-archer-material-copy"` ata.
+- [ ] Texture tabanlı takım ayrımı kabul edilince oyuncu Actor'dan kalan
+  `materialTint` değerini kaldır.
+- [x] Düşman Actor'dan geçici `materialTint` değerini kaldır.
+- [x] `Archer.materials.json` slot 0 varsayılanının oyuncu materyali olarak
   kaldığını doğrula.
 
 ### 5.3 Görsel kabul
@@ -453,3 +455,11 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
   kapsama girmediğini pinliyor. `npx.cmd tsc --noEmit` geçti; retreat/Archer/
   Skeletal animasyon filtresinde 25 kontrol geçti (`PARTIAL`) ve Chromium kabul
   smoke'u 1/1 geçti. `T` davranışının görsel yeniden kabulü açık.
+- 2026-08-13 — Kullanıcının authorladığı `ArcherBlue_BC.png`,
+  `ArcherRed_BC.png`, `M_Archer.material.json` ve `M_ArcherAI.material.json`
+  varlıkları incelendi. AI materyali manifestte `m-archer-material-copy` kimliğiyle
+  `archerred-bc` dokusuna çözülüyor. Yalnız `BP_RTS_Enemy_Archer.actor.json`
+  bu slota bağlandı ve eski turuncu full-model tint kaldırıldı; oyuncu Actor'ı ve
+  oyuncu materyali değiştirilmedi. `npx.cmd tsc --noEmit` geçti; Archer/material
+  slot filtresinde 12 kontrol geçti (`PARTIAL`). Browser doğrulaması aktif diğer
+  oturum nedeniyle çalıştırılmadı; materyal görsel kabulü açık.

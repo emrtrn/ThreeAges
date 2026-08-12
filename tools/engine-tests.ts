@@ -38067,13 +38067,14 @@ check("Skeletal animasyon varyasyonlari: klip secimi birim ve darbe basina karar
   assert.deepEqual(saved.animationVariants, variants, "a skeleton editor save retains the variant lists");
 });
 
-check("Archer Faz 1: iki ordu gercek Archer assetini ve mevcut secim sozlesmesini kullanir", () => {
-  const manifest = parseRtsMeshManifest(
-    JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
-  );
-  for (const [file, tint] of [
-    ["BP_RTS_Archer", "#4f8f4a"],
-    ["BP_RTS_Enemy_Archer", "#a8552f"],
+check("Archer entegrasyonu: iki ordu gercek asseti, dogru takim yuzeyini ve secim sozlesmesini kullanir", () => {
+  const rawManifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
+    assets: { id: string; assetType: string; path: string }[];
+  };
+  const manifest = parseRtsMeshManifest(rawManifest);
+  for (const [file, expected] of [
+    ["BP_RTS_Archer", { tint: "#4f8f4a", materialSlot: undefined }],
+    ["BP_RTS_Enemy_Archer", { tint: undefined, materialSlot: "m-archer-material-copy" }],
   ] as const) {
     const ref = `public/assets/ThreeAges/Actors/Units/${file}.actor.json`;
     const actor = normalizeActorScriptDef(JSON.parse(readFileSync(ref, "utf8")) as unknown, ref);
@@ -38082,9 +38083,17 @@ check("Archer Faz 1: iki ordu gercek Archer assetini ve mevcut secim sozlesmesin
       ?? assert.fail(`${ref} has no skeletal mesh`);
 
     assert.equal(mesh.props.assetId, "archer", `${ref} renders the Archer rig`);
-    assert.equal(mesh.props.materialTint, tint, `${ref} keeps its temporary team tint until Faz 2`);
+    assert.equal(mesh.props.materialTint, expected.tint, `${ref} uses the expected temporary tint state`);
+    assert.equal(mesh.props.materialSlot, expected.materialSlot, `${ref} uses the expected authored team material`);
     assert.equal(readRtsSelectionRadius(actor), 0.39, `${ref} keeps the Archer gameplay selection radius`);
   }
+
+  const material = rawManifest.assets.find((asset) => asset.id === "m-archer-material-copy")
+    ?? assert.fail("the enemy Archer material is not present in the manifest");
+  assert.equal(material.assetType, "material");
+  assert.equal(material.path, "assets/ThreeAges/Characters/Archer/M_ArcherAI.material.json");
+  const definition = JSON.parse(readFileSync(`public/${material.path}`, "utf8")) as { baseColorTexture?: unknown };
+  assert.equal(definition.baseColorTexture, "archerred-bc", "the enemy Archer material uses the red texture");
 });
 
 check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtime havuzuna girmez", () => {

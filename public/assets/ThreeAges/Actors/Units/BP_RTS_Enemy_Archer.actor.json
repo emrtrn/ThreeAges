@@ -30,7 +30,7 @@
           0,
           0
         ],
-        "materialTint": "#a8552f"
+        "materialSlot": "m-archer-material-copy"
       },
       "parent": "root"
     }
