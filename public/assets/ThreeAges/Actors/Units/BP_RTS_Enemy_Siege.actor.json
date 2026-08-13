@@ -35,7 +35,7 @@
           -90,
           0
         ],
-        "materialTint": "#7a3a33"
+        "materialSlot": "m-guard-ai-material"
       },
       "parent": "root"
     },

@@ -30,7 +30,7 @@
           0,
           0
         ],
-        "materialTint": "#4f8f4a"
+        "materialSlot": "m-archer-material"
       },
       "parent": "root"
     }
