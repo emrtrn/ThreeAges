@@ -18,12 +18,18 @@
 
 /** What the unit is doing, independent of which clips its asset carries. */
 export type RtsAnimationRole =
-  | "idle" | "walk" | "run" | "walkBack" | "runBack" | "work" | "rest" | "hold" | "attack" | "hit" | "death";
+  | "idle" | "walk" | "run" | "walkBack" | "runBack"
+  | "aimWalkForward" | "aimWalkBack" | "aimWalkLeft" | "aimWalkRight"
+  | "work" | "rest" | "hold" | "attack" | "hit" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
 export interface RtsAnimationInput {
   /** Observed ground speed in world units/s, measured from real displacement. */
   readonly planarSpeed: number;
+  /** Measured local right/left velocity (+right), relative to the body's facing. */
+  readonly localVelocityX?: number;
+  /** Measured local forward/back velocity (+forward), relative to the body's facing. */
+  readonly localVelocityZ?: number;
   /** Some non-combat movers (the pack donkey) never visually run. */
   readonly forceWalk?: boolean;
   /** True while an order deliberately keeps the unit facing forward as it retreats. */
@@ -227,8 +233,17 @@ export function rtsLocomotionTuning(
 export function classifyRtsAnimation(
   input: RtsAnimationInput,
   tuning: RtsLocomotionTuning,
+  directionalAimActive = false,
 ): RtsAnimationRole {
   if (input.dying) return "death";
+  if (directionalAimActive && input.planarSpeed > tuning.walkSpeed) {
+    const localX = Number.isFinite(input.localVelocityX) ? input.localVelocityX! : 0;
+    const localZ = Number.isFinite(input.localVelocityZ)
+      ? input.localVelocityZ!
+      : input.backward ? -input.planarSpeed : input.planarSpeed;
+    if (Math.abs(localX) > Math.abs(localZ)) return localX > 0 ? "aimWalkRight" : "aimWalkLeft";
+    return localZ < 0 ? "aimWalkBack" : "aimWalkForward";
+  }
   if (input.attacking) return "attack";
   if (input.backward && !input.forceWalk && input.planarSpeed >= tuning.runSpeed) return "runBack";
   if (input.backward && input.planarSpeed > tuning.walkSpeed) return "walkBack";
@@ -263,6 +278,13 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   // pose. Guard maps these to its verified reverse loops in the sidecar.
   walkBack: ["walkBack", "walk", "run", "idle"],
   runBack: ["runBack", "walkBack", "run", "walk", "idle"],
+  // Directional aim is an opt-in continuous base under the layered ranged
+  // one-shots. A partially authored asset remains readable on its ordinary
+  // gait rather than holding a pose or borrowing another aim direction.
+  aimWalkForward: ["aimWalkForward", "walk", "run", "idle"],
+  aimWalkBack: ["aimWalkBack", "walkBack", "walk", "run", "idle"],
+  aimWalkLeft: ["aimWalkLeft", "walk", "run", "idle"],
+  aimWalkRight: ["aimWalkRight", "walk", "run", "idle"],
   // Work is continuous and looped like locomotion, so it *does* reach its own
   // clip. An asset that authors none simply stands there, which is what the
   // capsule-era worker did and is never wrong — only less expressive.
@@ -327,6 +349,8 @@ export function rtsPlaybackRate(
   const reference = role === "run" || role === "runBack"
     ? tuning.runClipSpeed
     : role === "walk" || role === "walkBack"
+        || role === "aimWalkForward" || role === "aimWalkBack"
+        || role === "aimWalkLeft" || role === "aimWalkRight"
       ? tuning.walkClipSpeed
       : 0;
   if (reference <= 0) return 1;
@@ -356,8 +380,9 @@ export function selectRtsAnimation(
   tuning: RtsLocomotionTuning,
   variants?: RtsAnimationVariants,
   variantSeed = 0,
+  directionalAimActive = false,
 ): RtsAnimationSelection | null {
-  const requested = classifyRtsAnimation(input, tuning);
+  const requested = classifyRtsAnimation(input, tuning, directionalAimActive);
   const resolved = resolveRtsAnimationRole(requested, animationSet, available);
   if (!resolved) return null;
   const clip = resolveRtsAnimationVariant(resolved.role, animationSet, variants, available, variantSeed);

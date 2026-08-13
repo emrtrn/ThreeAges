@@ -280,6 +280,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private layered: LayeredClipAnimator | null = null;
   /** Asset opt-in: only moving ranged attacks with this flag may split the body. */
   private canLayerAttack = false;
+  /** Presence of an authored aim gait opts this asset into local-direction selection. */
+  private canDirectionalAim = false;
   /** The node the mixer was bound to, so disposal uncaches the same root. */
   private animationTarget: Object3D | null = null;
   /** Sidecar role→clip map, consulted every frame by the pure selector. */
@@ -402,6 +404,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     this.animationSet = animation.skeleton.animationSet;
     this.animationVariants = animation.skeleton.animationVariants;
     this.canLayerAttack = animation.skeleton.layerAttackWhenMoving === true;
+    this.canDirectionalAim = ["aimWalkForward", "aimWalkBack", "aimWalkLeft", "aimWalkRight"]
+      .some((role) => typeof this.animationSet[role] === "string");
     // One-shot lengths come from the clips themselves, which is the only place
     // that knows them: a swing or a fall must be allowed to finish, and the
     // death length is what the unit's despawn timer then waits for.
@@ -600,6 +604,9 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       this.tuning,
       this.animationVariants,
       this.animationVariantSeed,
+      this.canDirectionalAim && (
+        state.attacking || this.action.kind === "attack" || this.action.kind === "attackRecovery"
+      ),
     );
     if (selection) {
       animator.play(selection.clip, this.locomotionFade(selection.role));

@@ -61,6 +61,10 @@ export interface RtsPresentationUpdate {
   readonly deltaSeconds: number;
   /** Observed ground speed (units/s), measured from actual displacement. */
   readonly planarSpeed: number;
+  /** Measured velocity along the body's local right axis (+right, -left). */
+  readonly localVelocityX?: number;
+  /** Measured velocity along the body's local forward axis (+forward, -back). */
+  readonly localVelocityZ?: number;
   /** Keep a deliberately unhurried mover on its walk clip at any travel speed. */
   readonly forceWalk?: boolean;
   /** True while the unit is travelling without turning its body toward the route. */
@@ -312,8 +316,10 @@ export class Unit {
   private readonly ring: Mesh;
   private readonly healthBar: HealthBar;
   private presentation: RtsPresentationHandle | null = null;
-  /** Where the body stood at the last presentation frame; see `measurePlanarSpeed`. */
+  /** Where the body stood at the last presentation frame; see `measureLocalPlanarVelocity`. */
   private readonly lastPresentationPosition = new Vector3();
+  /** Reused local motion sample; presentation measurement allocates nothing per frame. */
+  private readonly presentationLocalVelocity = new Vector3();
   private fallbackBody: Mesh | null = null;
   private pickTargets: readonly Object3D[] = [];
   private movePath: Vector3[] = [];
@@ -472,9 +478,12 @@ export class Unit {
       this.healthBar.set(this.health.ratio);
       this.healthBar.faceCamera(cameraQuaternion);
     }
+    const localVelocity = this.measureLocalPlanarVelocity(deltaSeconds);
     this.presentation?.update?.({
       deltaSeconds,
-      planarSpeed: this.measurePlanarSpeed(deltaSeconds),
+      planarSpeed: Math.hypot(localVelocity.x, localVelocity.z),
+      localVelocityX: localVelocity.x,
+      localVelocityZ: localVelocity.z,
       backward: this.retreating,
       attacking: this.isTradingBlows() || this.hunting,
       dying: this.dying,
@@ -531,21 +540,30 @@ export class Unit {
   }
 
   /**
-   * Ground speed observed since the last presentation frame.
+   * Local planar velocity observed since the last presentation frame.
    *
    * Measured from displacement rather than read off `speed` or the move target,
    * so it tells the truth in every case the animation has to survive: a unit
    * blocked by a crowd, shoved by separation, or stopped mid-order is reported
-   * as slow because it *is* slow. It also costs the unit no extra simulation
-   * state — the previous position is a presentation-local memory.
+   * as slow because it *is* slow. The world displacement is projected onto the
+   * body's current right/forward axes for directional animation selection. It
+   * also costs the unit no extra simulation state — the previous position and
+   * reusable output vector are presentation-local memory.
    */
-  private measurePlanarSpeed(deltaSeconds: number): number {
+  private measureLocalPlanarVelocity(deltaSeconds: number): Vector3 {
     const previous = this.lastPresentationPosition;
     const dx = this.object.position.x - previous.x;
     const dz = this.object.position.z - previous.z;
     previous.set(this.object.position.x, 0, this.object.position.z);
-    if (deltaSeconds <= 0) return 0;
-    return Math.hypot(dx, dz) / deltaSeconds;
+    if (deltaSeconds <= 0) return this.presentationLocalVelocity.set(0, 0, 0);
+    const inverseDelta = 1 / deltaSeconds;
+    const sine = Math.sin(this.object.rotation.y);
+    const cosine = Math.cos(this.object.rotation.y);
+    return this.presentationLocalVelocity.set(
+      (dx * cosine - dz * sine) * inverseDelta,
+      0,
+      (dx * sine + dz * cosine) * inverseDelta,
+    );
   }
 
   /**

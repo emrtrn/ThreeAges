@@ -1,9 +1,9 @@
 # ThreeAges — Okçu Animasyon ve Materyal Entegrasyon Planı
 
 Oluşturulma tarihi: 2026-08-12  
-Durum: **Uygulanıyor — Faz 1–4 dünya içi görsel kabulleri tamamlandı. Faz 5'in
-önceki kabulüne eklenen hareket hâlinde atış layer blend'i için yeniden dünya içi
-görsel kabul açık; diğer açık maddeler ileri backlog'tur.**
+Durum: **Uygulanıyor — Faz 1–5 teslim ve dünya içi görsel kabul kapıları tamamlandı.
+Faz 6A kod/otomasyon dilimi tamamlandı; directional aim dünya içi görsel kabulü
+açık. Faz 6'nın diğer maddeleri kapsam dışı backlog'tur.**
 
 ## 1. Amaç
 
@@ -48,7 +48,7 @@ Bu çalışmada aşağıdaki kurallar değişmez:
 - [x] Aim-walk klipleri in-place kullanım için kilitlendi.
 - [x] Dodge ve dive kliplerinin gelecekteki gameplay-driven hareket kullanımı
   için `driveMotion` seçimi kaydedildi.
-- [ ] Faz 1 browser kabulünde authorlanan kilitlerin world-position sürüklenmesi
+- [x] Faz 1 browser kabulünde authorlanan kilitlerin world-position sürüklenmesi
   üretmediği doğrulanacak; gerekirse düzeltme yalnızca Skeletal Mesh Editor'den
   yapılacak.
 
@@ -190,15 +190,15 @@ texture üretmek ve tam-model tint ihtiyacını kaldırmak.
 
 ### 5.1 Imagegen üretim sözleşmesi
 
-- [ ] Kaynak referans olarak mevcut `Archer_BC.png` dosyasını kullan.
+- [x] Kaynak referans olarak mevcut `Archer_BC.png` dosyasını kullan.
 - [x] `ArcherBlue_BC.png` üretildi; takım kumaşları mavi olacak şekilde authorlandı.
 - [x] `ArcherRed_BC.png` üretildi; aynı takım bölgeleri kırmızı olacak şekilde authorlandı.
 - [x] Çıktılar tam `1024×1024` PNG olarak kaydedildi.
-- [ ] Ten, yüz, saç, deri, metal, yay, ok, dikiş, gölge ve alpha sınırlarının
+- [x] Ten, yüz, saç, deri, metal, yay, ok, dikiş, gölge ve alpha sınırlarının
   konumunu değiştirme.
-- [ ] Mavi/kırmızı görsellerin birbirinden yalnızca takım rengi bakımından
+- [x] Mavi/kırmızı görsellerin birbirinden yalnızca takım rengi bakımından
   ayrıldığını karşılaştır.
-- [ ] UV adaları arasında generative taşma, seam, yeni çizgi, yüz bozulması veya
+- [x] UV adaları arasında generative taşma, seam, yeni çizgi, yüz bozulması veya
   eksik parça varsa çıktıyı reddet ve yeniden üret.
 
 ### 5.2 Manifest ve materyal bağlantısı
@@ -244,7 +244,7 @@ biçimde göstermek; hasar/cooldown davranışını değiştirmemek.
   otomasyonla doğrula.
 - [x] Yeni atış önceki action bitmeden gelirse yeni olayın klibi baştan
   başlattığını otomasyonla doğrula.
-- [ ] Klip sırasında world-position drift varsa root-motion düzeltmesini yalnızca
+- [x] Klip sırasında world-position drift varsa root-motion düzeltmesini yalnızca
   Skeletal Mesh Editor üzerinden yap.
 - [x] Animasyon süresinin `attackCooldown: 1.6`, hasar, hedef veya projectile
   üretimini değiştirmediğini otomasyonla test et.
@@ -284,7 +284,7 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 - [x] `hit` birincili olarak
   `Archer_standing_react_small_from_front` kullan. GLB denetimindeki gerçek
   süresi `1.789 s`.
-- [ ] `Archer_standing_react_small_from_headshot` klibini ilk dilimde genel
+- [x] `Archer_standing_react_small_from_headshot` klibini ilk dilimde genel
   varyant olarak bağlama; oyunda headshot olayı yokken yanlış anlam üretip
   üretmediğini görsel tasarım kapısında değerlendir.
 - [x] Hareket hâlinde tam-gövde flinch ayak kaydırdığı için Guard'daki gibi
@@ -316,7 +316,7 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 
 ## 8. Faz 5 — Zengin Atış Döngüsü, Socket ve Notify
 
-**Durum:** 🟨 Hareket hâlinde atış layer blend'i görsel kabulü açık
+**Durum:** ✅ Dünya içi görsel kabul tamamlandı — açık kalan maddeler ileri backlog
 
 ### 8.1 Atış döngüsü
 
@@ -334,7 +334,7 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 - [x] Duran başlayan saldırı/recovery sırasında hareket emri verilirse kalan
   klibi mevcut playhead'den üst gövdeye geçir; klibi ve `arrow-release` notify
   penceresini baştan başlatma.
-- [ ] Hareket hâlinde atış ve recovery sırasında ayak sürüklemesi olmadığını
+- [x] Hareket hâlinde atış ve recovery sırasında ayak sürüklemesi olmadığını
   kullanıcı dünya içinde kabul etsin.
 - [ ] `equip_bow` ve `disarm_bow` yalnızca gerçek silah hazırlama state'i
   tasarlanırsa bu döngüye girsin.
@@ -385,12 +385,16 @@ Bu maddeler temel Archer teslim kapısının zorunlu parçası değildir.
 
 ### 9.1 Directional aim locomotion
 
-- [ ] Dört `aim_walk_*` klibini ancak sunum gerçek local hareket yönünü taşıyınca
+- [x] Dört `aim_walk_*` klibini ancak sunum gerçek local hareket yönünü taşıyınca
   kullan.
-- [ ] İleri/geri/sol/sağ seçimini world yönünden değil, birimin local velocity
+- [x] İleri/geri/sol/sağ seçimini world yönünden değil, birimin local velocity
   bileşenlerinden üret.
-- [ ] Aim-walk üst gövde ve alt gövde ayrımını, tam klip ile layered yaklaşım
-  arasında görsel olarak karşılaştır.
+- [x] `aim_walk_*` klibini continuous tam-gövde tabanı yap; hareketli
+  `aim_recoil`/`draw_arrow` action'ları mevcut `mixamorigSpine` katmanında bu
+  tabanın üstüne binsin. Gameplay hareketi ve atış zamanlaması otorite olarak
+  kalmaya devam etsin.
+- [ ] İleri/geri/sol/sağ hareketleri, yön geçişlerini ve hareketli atış sırasında
+  ayak kayması üretmediğini dünya içinde kullanıcı görsel kabulünden geçir.
 
 ### 9.2 Turn
 
@@ -429,12 +433,12 @@ Filtreli test `PARTIAL` sonuçtur; tam yeşil build sayılmaz.
 
 Browser-facing her fazda:
 
-- [ ] `?editor` Skeletal Mesh Editor önizlemesinde console/page error yok.
-- [ ] RTS runtime'da oyuncu ve düşman Actor'ları doğru asset/materyali kullanıyor.
-- [ ] Normal oyun kamerasında ölçek, yön, team readability ve geçişler kabul
+- [x] `?editor` Skeletal Mesh Editor önizlemesinde console/page error yok.
+- [x] RTS runtime'da oyuncu ve düşman Actor'ları doğru asset/materyali kullanıyor.
+- [x] Normal oyun kamerasında ölçek, yön, team readability ve geçişler kabul
   edildi.
-- [ ] 20 ve 40 gerçek Archer instance ile animasyon/frame bütçesi ölçüldü.
-- [ ] Kullanıcı kabulü plan günlüğüne tarihli kaydedildi.
+- [x] 20 ve 40 gerçek Archer instance ile animasyon/frame bütçesi ölçüldü.
+- [x] Kullanıcı kabulü plan günlüğüne tarihli kaydedildi.
 
 Geniş runtime/schema değişikliği veya commit öncesinde:
 
@@ -451,13 +455,13 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
 - [x] Faz 3 ranged attack, gerçek `attackCount` ile senkron ve görsel olarak kabul
   edildi.
 - [x] Faz 4 hit/death akışı gerçek olaylara bağlı ve görsel olarak kabul edildi.
-- [ ] Faz 5 için ya zengin atış döngüsü/socket/notify tamamlandı ya da açık
+- [x] Faz 5 için ya zengin atış döngüsü/socket/notify tamamlandı ya da açık
   maddeler ayrı backlog'a taşındı.
-- [ ] Duplike `turn_90_right` hiçbir runtime sözleşmesine girmedi.
-- [ ] Root-motion authoring ile simülasyon konumu arasında drift yok.
-- [ ] Oyuncu/düşman takım ayrımı texture üzerinden okunuyor; geçici full-model
+- [x] Duplike `turn_90_right` hiçbir runtime sözleşmesine girmedi.
+- [x] Root-motion authoring ile simülasyon konumu arasında drift yok.
+- [x] Oyuncu/düşman takım ayrımı texture üzerinden okunuyor; geçici full-model
   tint kaldırıldı.
-- [ ] `npm.cmd run build:verify` temiz geçti.
+- [x] `npm.cmd run build:verify` temiz geçti.
 
 ## 12. Uygulama Günlüğü
 
@@ -615,3 +619,29 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
   eder; mevcut playhead ve notify aralığı korunur, recovery boyunca yeniden
   full-body'ye dönmez. `tsc`, 24 hedefli animasyon testi ve Archer Chromium boot
   smoke geçti. Dünya içi görsel kabul açık.
+- 2026-08-13 — Kullanıcı, saldırı/recoil/recovery sırasında verilen hareket
+  emrinde üst-gövde layer blend'inin çalıştığını ve ayak sürüklemesinin
+  giderildiğini doğruladı. Hareketli atış görsel kabulü kapatıldı; Faz 5 yeniden
+  kabul edilmiş durumda, kalan açık maddeler ileri backlog'ta tutuluyor.
+- 2026-08-13 — Tam doğrulamadaki görev bütçesi testi, ekonomi taşımayan
+  `archer_locomotion_acceptance` kabul presetini normal öğretici başlangıcı saydığı
+  için başarısız oldu. Test yalnız Settlement'ta ve en az bir işçiyle açılan,
+  öğreticiyi gerçekten ilerletebilen presetleri değerlendirecek şekilde daraltıldı;
+  kabul presetinin `0 worker / 0 kaynak` sözleşmesi korundu. Hedefli görev testi
+  1/1 geçti (`PARTIAL`). Ardından `npm.cmd run build:verify`; import sınırları,
+  TypeScript/Vite build, 1440 engine kontrolü ve strict dist denetimiyle temiz
+  geçti. Faz 1–5 teslim kapısı kapatıldı; Faz 6 ve diğer açık maddeler ileri
+  backlog olarak bırakıldı.
+- 2026-08-13 — Yalnız Faz 6A uygulandı. Archer sidecar'ına
+  `aimWalkForward/Back/Left/Right` semantic rolleri eklendi; loader ve save
+  validator bu rolleri kayıpsız taşıyor. Birim sunumu gerçek frame displacement'ını
+  gövdenin facing eksenlerine çevirerek local sağ/ileri hız bileşenlerini raporluyor.
+  Hedef menzilinde veya halen süren attack/recovery penceresinde hareket varken
+  dominant local eksen dört aim-walk klibinden birini seçiyor; opt-in rol taşımayan
+  assetler eski `attack` davranışını koruyor.
+  Aim-walk continuous tam-gövde tabanı, mevcut hareketli recoil/recovery torso
+  katmanının altında çalışıyor; cooldown, hasar, hedefleme ve konum yazılmıyor.
+  `npx.cmd tsc --noEmit` ve Archer/Skeletal hedefli 25 engine kontrolü geçti
+  (`PARTIAL`). Chromium 10v10 boot smoke'u gerçek Actor paketi, sıfır placeholder
+  ve page/console error olmadan 1/1 geçti. Bu teknik smoke yön/geçiş/ayak kayması
+  dünya içi kullanıcı görsel kabulünün yerine geçmez; ilgili kabul açık.

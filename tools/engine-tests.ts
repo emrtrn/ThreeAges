@@ -38151,6 +38151,10 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
     run: "Archer_standing_run_forward",
     walkBack: "Archer_standing_walk_back",
     runBack: "Archer_standing_run_back",
+    aimWalkForward: "Archer_standing_aim_walk_forward",
+    aimWalkBack: "Archer_standing_aim_walk_back",
+    aimWalkLeft: "Archer_standing_aim_walk_left",
+    aimWalkRight: "Archer_standing_aim_walk_right",
     attack: "Archer_standing_aim_recoil",
     attackRecovery: "Archer_standing_draw_arrow",
     hit: "Archer_standing_react_small_from_front",
@@ -38222,6 +38226,10 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
     "Archer_standing_react_small_from_front",
     "Archer_standing_death_backward",
     "Archer_standing_death_forward",
+    "Archer_standing_aim_walk_forward",
+    "Archer_standing_aim_walk_back",
+    "Archer_standing_aim_walk_left",
+    "Archer_standing_aim_walk_right",
   ]) {
     assert.deepEqual(
       archer.rootMotion.find((entry) => entry.clip === clip),
@@ -38308,6 +38316,146 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
   const idlePopulation = new Set(Array.from({ length: 20 }, (_, index) =>
     resolveRtsAnimationVariant("idle", archer.animationSet, archer.animationVariants, shipped, index + 1)));
   assert.ok(idlePopulation.size > 1, "a group of Archers uses more than one deterministic idle");
+});
+
+check("Archer Faz 6A: hedefe bakarken local hareket yonu dogru aim-walk klibini secer", () => {
+  const raw = JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Archer/Archer.skeleton.json", "utf8"),
+  ) as Record<string, unknown>;
+  const archer = normalizeAssetSkeleton(raw);
+  const saved = validateAssetSkeletonDef(raw);
+  const roles = {
+    aimWalkForward: "Archer_standing_aim_walk_forward",
+    aimWalkBack: "Archer_standing_aim_walk_back",
+    aimWalkLeft: "Archer_standing_aim_walk_left",
+    aimWalkRight: "Archer_standing_aim_walk_right",
+  } as const;
+  for (const [role, clip] of Object.entries(roles)) {
+    assert.equal(archer.animationSet[role], clip, `${role} resolves through the runtime loader`);
+    assert.equal(saved.animationSet?.[role], clip, `${role} survives an editor save`);
+  }
+
+  const tuning = rtsLocomotionTuning(6.2);
+  const movingShot = (localVelocityX: number, localVelocityZ: number): RtsAnimationInput => ({
+    planarSpeed: Math.hypot(localVelocityX, localVelocityZ),
+    localVelocityX,
+    localVelocityZ,
+    attacking: true,
+    dying: false,
+    working: false,
+    attackCount: 1,
+    impactCount: 0,
+  });
+  for (const [input, expected] of [
+    [movingShot(0, 3), "aimWalkForward"],
+    [movingShot(0, -3), "aimWalkBack"],
+    [movingShot(-3, 0), "aimWalkLeft"],
+    [movingShot(3, 0), "aimWalkRight"],
+  ] as const) {
+    assert.equal(classifyRtsAnimation(input, tuning, true), expected, `${expected} follows local velocity`);
+    assert.equal(
+      selectRtsAnimation(input, archer.animationSet, new Set(Object.values(roles)), tuning, undefined, 0, true)?.clip,
+      roles[expected],
+      `${expected} selects its authored Archer clip`,
+    );
+  }
+  assert.equal(
+    classifyRtsAnimation(movingShot(3, 0), tuning),
+    "attack",
+    "an asset without directional aim keeps the legacy attack classification",
+  );
+  assert.equal(
+    classifyRtsAnimation({ ...movingShot(-3, 0), attacking: false }, tuning, true),
+    "aimWalkLeft",
+    "an active recovery keeps the directional base after a move order clears the target",
+  );
+  assert.equal(
+    classifyRtsAnimation({ ...movingShot(0, 0), planarSpeed: 0 }, tuning, true),
+    "attack",
+    "a standing Archer keeps the ordinary attack base instead of freezing on an aim gait",
+  );
+  assert.deepEqual(
+    selectRtsAnimation(
+      movingShot(3, 0),
+      { idle: "Idle", walk: "Walk" },
+      new Set(["Idle", "Walk"]),
+      tuning,
+      undefined,
+      0,
+      true,
+    ),
+    {
+      requested: "aimWalkRight",
+      role: "walk",
+      clip: "Walk",
+      playbackRate: rtsPlaybackRate("walk", 3, tuning),
+    },
+    "a partially authored directional asset falls back to its ordinary gait",
+  );
+  assert.equal(
+    rtsPlaybackRate("aimWalkRight", 2, tuning),
+    rtsPlaybackRate("walk", 2, tuning),
+    "aim-walk cadence uses the ordinary walk calibration",
+  );
+
+  let reported: { localVelocityX?: number; localVelocityZ?: number; planarSpeed: number } | null = null;
+  const unit = new Unit("player", 0, 0, RTS_TEST_UNIT_STATS, {
+    root: new Group(),
+    pickTargets: [],
+    selectionRadius: 0.39,
+    update: (state) => { reported = state; },
+    dispose: () => {},
+  });
+  unit.faceHeading(Math.PI / 2);
+  unit.position.x = 2;
+  unit.updatePresentation(1, new Quaternion());
+  assert.ok(reported, "the unit reports its measured movement to presentation");
+  assert.ok(Math.abs(reported!.localVelocityX ?? 1) < 1e-9, "world +X is not sideways while facing +X");
+  assert.ok(Math.abs((reported!.localVelocityZ ?? 0) - 2) < 1e-9, "world +X becomes local forward while facing +X");
+  assert.equal(reported!.planarSpeed, 2, "local decomposition preserves measured planar speed");
+
+  unit.position.z = 2;
+  unit.updatePresentation(1, new Quaternion());
+  assert.ok((reported!.localVelocityX ?? 0) < -1.9, "world +Z becomes local left while facing +X");
+  assert.ok(Math.abs(reported!.localVelocityZ ?? 1) < 1e-9, "the sideways sample has no local forward component");
+  unit.dispose();
+
+  const hips = new Bone();
+  hips.name = "hips";
+  const model = new Group();
+  model.add(hips);
+  const clipAt = (name: string, x: number) => new AnimationClip(name, 1, [
+    new VectorKeyframeTrack("hips.position", [0, 1], [x, 0, 0, x, 0, 0]),
+  ]);
+  const presentation = createRtsUnitPresentation({
+    root: model,
+    pickTargets: [],
+    selectionRadius: 0.39,
+    moveSpeed: 6.2,
+    animation: {
+      target: model,
+      clips: [clipAt("Idle", 0), clipAt("AimRight", 4)],
+      skeleton: normalizeAssetSkeleton({
+        animationSet: { idle: "Idle", aimWalkRight: "AimRight" },
+      }),
+    },
+  });
+  const rightward = {
+    deltaSeconds: 0.25,
+    planarSpeed: 3,
+    localVelocityX: 3,
+    localVelocityZ: 0,
+    attacking: true,
+    dying: false,
+    working: false,
+    attackCount: 0,
+    impactCount: 0,
+    cameraDistanceSquared: null,
+  };
+  presentation.update?.(rightward);
+  presentation.update?.(rightward);
+  assert.ok(hips.position.x > 3.9, "the presentation bridge opts an authored aim gait into directional selection");
+  presentation.dispose();
 });
 
 check("Archer Faz 1: kabul preseti iki tarafa da yalniz onar Okcu verir", () => {
@@ -43655,16 +43803,17 @@ check("the shipped mission script validates, and a broken one fails at load", ()
     }, 0);
   // Read from the shipped presets rather than hard-coded: the stockpile is
   // balance data that moves, and an invariant quoting a number the presets have
-  // left behind protects nothing. Every preset that opens on Settlement counts —
-  // the tur can be launched on any of them, and the leanest is the one that
-  // decides whether its opening is affordable. A preset carrying a `startingTier`
-  // is excluded because it starts the match past everything this budget is about.
-  const leanestStartingWood = Math.min(...readdirSync("public/game-data/presets")
+  // left behind protects nothing. Only playable Settlement openings count here.
+  // Acceptance fixtures such as the Archer 10v10 route intentionally have no
+  // workers or economy and cannot advance this construction-driven mission.
+  const missionStartingWoods = readdirSync("public/game-data/presets")
     .filter((file) => file.endsWith(".json"))
     .map((file) => file.slice(0, -".json".length))
     .map((id) => validateGamePreset(readPresetJson(id), id))
-    .filter((preset) => preset.startingTier === undefined)
-    .map((preset) => preset.startingResources?.wood ?? 0));
+    .filter((preset) => preset.startingTier === undefined && (preset.startingUnits.worker ?? 0) > 0)
+    .map((preset) => preset.startingResources?.wood ?? 0);
+  assert.ok(missionStartingWoods.length > 0, "a shipped preset must support the mission opening");
+  const leanestStartingWood = Math.min(...missionStartingWoods);
   assert.ok(leanestStartingWood > 0, "a shipped preset must open with wood to spend");
   assert.ok(
     openingWoodCost <= leanestStartingWood / 2,

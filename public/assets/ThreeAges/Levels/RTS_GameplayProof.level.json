@@ -2926,9 +2926,9 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json",
       "position": [
-        -40,
+        -38.44,
         0,
-        40
+        26.82
       ],
       "name": "Player Start",
       "scale": 1,
