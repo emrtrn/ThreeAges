@@ -70,17 +70,17 @@ export const SIEGE_WRECK_TIMING: SiegeWreckTiming = {
   wheelBreakSeconds: 0.15,
   wheelRollSeconds: 1.4,
   wheelRollDistance: 2.2,
-  barrelFallSeconds: 0.9,
+  barrelFallSeconds: 2,
   // The barrel pivot sits about a metre up on the shipped carriage, and the
   // carriage is collapsing under it, so the drop is a little more than that.
   // The pivot rests at y=0.95. A 1.05 drop drove it below the terrain before
   // the pitch even began; leave the fallen barrel visibly on the carriage.
-  barrelDropDistance: 0.62,
+  barrelDropDistance: 0.6,
   // The blast already has an authored effect. This small hop makes its force
   // read on the barrel too, before gravity pulls it down.
-  barrelHopHeight: 0.28,
-  barrelHopSeconds: 0.2,
-  barrelPitchRadians: 1.05,
+  barrelHopHeight: 1,
+  barrelHopSeconds: 0.5,
+  barrelPitchRadians: -0.1,
   collapseSeconds: 1.8,
   fireStartSeconds: 0.3,
   fireIntervalSeconds: 0.55,
