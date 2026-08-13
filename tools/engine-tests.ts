@@ -38182,11 +38182,14 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
   ) as unknown;
   const worker = normalizeAssetSkeleton(rawSkeleton);
   const saved = validateAssetSkeletonDef(rawSkeleton);
-  assert.deepEqual(worker.animationSet, {
+  const baseRoles = {
     idle: "Worker_idle_natural",
     walk: "Worker_walking",
     run: "Worker_running",
-  });
+  } as const;
+  for (const [role, clip] of Object.entries(baseRoles)) {
+    assert.equal(worker.animationSet[role], clip, `${role} remains mapped to its authored Worker locomotion clip`);
+  }
   assert.deepEqual(worker.animationVariants, {}, "Faz 1 keeps activity and carrying clips out of the locomotion pool");
   assert.deepEqual(saved.animationSet, worker.animationSet, "the Worker locomotion roles survive a skeleton editor save");
 
@@ -38194,12 +38197,7 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
     ?? assert.fail("the Worker model is a readable GLB");
   const shipped = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
   const runtimePool = Object.values(worker.animationSet).filter((clip): clip is string => clip !== undefined);
-  assert.deepEqual(new Set(runtimePool), new Set([
-    "Worker_idle_natural",
-    "Worker_walking",
-    "Worker_running",
-  ]));
-  for (const clip of runtimePool) assert.ok(shipped.has(clip), `"${clip}" is a clip the Worker ships`);
+  for (const clip of Object.values(baseRoles)) assert.ok(shipped.has(clip), `"${clip}" is a clip the Worker ships`);
   assert.ok(!runtimePool.includes("T-Pose"), "T-Pose never enters a runtime Worker role");
   for (const clip of ["Worker_walking", "Worker_running"]) {
     assert.deepEqual(
@@ -38218,6 +38216,46 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
     assert.equal(selectRtsAnimation(input, worker.animationSet, shipped, tuning)?.clip, expected);
   }
   assert.equal(rtsPlaybackRate("run", 6, tuning), 1, "the run clip is calibrated for the Worker's moveSpeed 6");
+});
+
+check("Worker Faz 2: nötr iş pozu yalnız iş noktasında locomotionun yerini alır", () => {
+  const worker = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.skeleton.json", "utf8")) as unknown,
+  );
+  const saved = validateAssetSkeletonDef(worker);
+  assert.equal(worker.animationSet.work, "Worker_kneeling_idle");
+  assert.equal(saved.animationSet?.work, "Worker_kneeling_idle", "the neutral work role survives an editor save");
+  assert.deepEqual(worker.animationVariants.work, undefined, "Faz 2 keeps one stable, neutral work fallback");
+
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.glb")))
+    ?? assert.fail("the Worker model is a readable GLB");
+  const shipped = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
+  assert.ok(shipped.has(worker.animationSet.work), "the neutral work role names a shipped Worker clip");
+
+  const tuning = rtsLocomotionTuning(6);
+  const input = (planarSpeed: number, working: boolean): RtsAnimationInput => ({
+    planarSpeed,
+    working,
+    attacking: false,
+    dying: false,
+    attackCount: 0,
+    impactCount: 0,
+  });
+  assert.equal(
+    selectRtsAnimation(input(0, true), worker.animationSet, shipped, tuning)?.clip,
+    "Worker_kneeling_idle",
+    "a settled Worker presents the neutral kneeling work pose",
+  );
+  assert.equal(
+    selectRtsAnimation(input(3, true), worker.animationSet, shipped, tuning)?.clip,
+    "Worker_walking",
+    "a Worker still travelling to work keeps locomotion instead of kneeling on the route",
+  );
+  assert.equal(
+    selectRtsAnimation(input(0, false), worker.animationSet, shipped, tuning)?.clip,
+    "Worker_idle_natural",
+    "ending the job clears the neutral pose back to idle",
+  );
 });
 
 check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtime havuzuna girmez", () => {

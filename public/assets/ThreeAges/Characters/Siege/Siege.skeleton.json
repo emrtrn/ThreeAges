@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "sockets": [],
+  "animationSet": {},
+  "animationVariants": {},
+  "blendSpaces": [],
+  "notifies": [],
+  "montages": [],
+  "rootMotion": [
+    {
+      "clip": "siege_push_start",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "siege_push_stop",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "siege_pushing",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "siege_walk_backward",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "siege_walk_forward",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    }
+  ],
+  "physicsBodies": [],
+  "physicsConstraints": [],
+  "preview": {
+    "selectedClip": "siege_walk_forward"
+  }
+}

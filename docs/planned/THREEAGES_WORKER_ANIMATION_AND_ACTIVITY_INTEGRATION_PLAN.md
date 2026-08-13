@@ -1,7 +1,7 @@
 # ThreeAges — Worker Animasyon ve Aktivite Entegrasyon Planı
 
 Oluşturulma tarihi: 2026-08-13  
-Durum: **Devam ediyor — Faz 1 uygulama ve otomasyonu tamamlandı; Faz 1A dünya içi görsel kabulünü bekliyor.**
+Durum: **Devam ediyor — Faz 1/1A tamamlandı; Faz 2'nin otomasyonu tamam, dünya içi diz çökme geçiş kabulü bekliyor.**
 
 ## 1. Amaç
 
@@ -138,7 +138,7 @@ uzak animasyon throttle'ı prop görünürlüğünü geciktirmez.
 
 ## 6. Faz 1 — Actor Bağlantısı ve Temel Locomotion
 
-**Durum:** ✅ Uygulama ve otomasyon tamamlandı — Faz 1A görsel kabulünü bekliyor.  
+**Durum:** ✅ Tamamlandı — kullanıcı dünya içi locomotion kabulü: 2026-08-13.
 **Amaç:** Yeni Worker modelini iki takımın Actor'ına bağlamak ve yalnız kanıtlı
 idle/walk/run kliplerini çalıştırmak.
 
@@ -151,7 +151,7 @@ idle/walk/run kliplerini çalıştırmak.
 - [x] Asset sidecar varsayılanı `m-worker-material` olarak doğrulandı; iki Actor için
   ayrı `materialSlot` override'ı gerekmedi.
 - [x] `selectionRadius: 0.43` gameplay sözleşmesi korundu.
-- [ ] Model yönü, ölçeği ve zemin oturuşunu Guard/Archer yanında dünya içinde doğrula.
+- [x] Model yönü, ölçeği ve zemin oturuşu dünya içi locomotion kabulünde doğrulandı.
 
 ### 6.2 Birincil semantic roller
 
@@ -180,7 +180,7 @@ idle/walk/run kliplerini çalıştırmak.
 
 ## 7. Faz 1A — Locomotion Dünya İçi Görsel Kabulü
 
-**Durum:** ⬜ Faz 1 uygulaması tamamlandı; dünya içi görsel kabul bekleniyor.  
+**Durum:** ✅ Kullanıcı kabulü tamamlandı — 2026-08-13.
 **Amaç:** Temel model bağlantısını iş animasyonlarıyla karıştırmadan kabul etmek.
 
 ### 7.1 Kabul ortamı
@@ -200,13 +200,13 @@ idle/walk/run kliplerini çalıştırmak.
   ayrılmasını kontrol et.
 - [ ] Idle klibinin tekrarında sıçrama veya her karede restart olmadığını doğrula.
 - [ ] Modelin zemin altına girmediğini ve seçim halkasına doğru oturduğunu doğrula.
-- [ ] Kullanıcı kabulünü tarihli olarak bu belgeye kaydet.
+- [x] Kullanıcı locomotion kabulü kaydedildi: 2026-08-13 (`çalışıyor, devam et`).
 
 **Çıkış kapısı:** Locomotion kullanıcı tarafından kabul edilmeden Faz 2 başlamaz.
 
 ## 8. Faz 2 — Güvenli Nötr Çalışma Sunumu
 
-**Durum:** ⬜ Faz 1A'yı bekliyor  
+**Durum:** ⬜ Uygulama ve otomasyon tamamlandı; dünya içi diz çökme geçiş kabulü bekliyor.
 **Amaç:** İşe özel state sözleşmesi kurulana kadar Worker'ın bütün iş noktalarında
 statik durması yerine güvenli ve yanıltıcı olmayan bir çalışma pozu göstermek.
 
@@ -214,13 +214,15 @@ statik durması yerine güvenli ve yanıltıcı olmayan bir çalışma pozu gös
   davranışı açısından incele.
 - [ ] Ani ayakta→diz çökmüş snap kabul edilemezse basit loop rolü yerine montage
   veya ek geçiş animasyonu gereksinimini kaydet.
-- [ ] Görsel olarak kabul edilirse `work` için nötr fallback olarak bağla.
+- [x] `Worker_kneeling_idle`, tek ve stabil nötr `work` fallback'i olarak bağlandı;
+  dünya içi görsel kabul hâlâ açık.
 - [ ] İnşaat, onarım, çiftlik, maden, odun ve hayvan işlerinde aynı fallback'in
   anlam bozmadığını ayrı ayrı gözle.
-- [ ] `working` false olduğunda idle'a güvenli biçimde döndüğünü doğrula.
-- [ ] İşe yürürken `work` klibinin locomotion'dan önce başlamadığını test et.
-- [ ] İş bittiği veya Worker serbest bırakıldığı karede pozun temizlendiğini test et.
-- [ ] Hedefli engine testlerini ve TypeScript kontrolünü çalıştır.
+- [x] `working` false olduğunda idle'a güvenli biçimde döndüğünü otomasyonla doğrula.
+- [x] İşe yürürken `work` klibinin locomotion'dan önce başlamadığını otomasyonla test et.
+- [x] İş bittiği veya Worker serbest bırakıldığı karede pozun temizlendiğini inşaat,
+  maden ve ekonomi çıkış testleriyle doğrula.
+- [x] Hedefli engine testlerini ve TypeScript kontrolünü çalıştır.
 - [ ] Dünya içi görsel kabulü tarihli kaydet.
 
 ## 9. Faz 3 — İşe Göre Aktivite Sözleşmesi ve Animasyonlar

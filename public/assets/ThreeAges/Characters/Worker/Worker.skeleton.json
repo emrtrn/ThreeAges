@@ -4,7 +4,8 @@
   "animationSet": {
     "idle": "Worker_idle_natural",
     "walk": "Worker_walking",
-    "run": "Worker_running"
+    "run": "Worker_running",
+    "work": "Worker_kneeling_idle"
   },
   "animationVariants": {},
   "blendSpaces": [],

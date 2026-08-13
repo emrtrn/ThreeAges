@@ -33024,6 +33024,29 @@
         "bytes": 11256
       },
       "license": "Unknown"
+    },
+    {
+      "id": "siege",
+      "name": "Siege",
+      "assetType": "skeletalMesh",
+      "category": "Siege",
+      "path": "assets/ThreeAges/Characters/Siege/Siege.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Siege",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2138820
+      },
+      "license": "Unknown"
     }
   ]
 }
