@@ -217,5 +217,6 @@
   "preview": {
     "selectedClip": "Archer_standing_aim_walk_right"
   },
-  "upperBodyBone": "mixamorigSpine"
+  "upperBodyBone": "mixamorigSpine",
+  "layerAttackWhenMoving": true
 }

@@ -1,9 +1,9 @@
 # ThreeAges — Okçu Animasyon ve Materyal Entegrasyon Planı
 
 Oluşturulma tarihi: 2026-08-12  
-Durum: **Uygulanıyor — Faz 1–5 dünya içi görsel kabulleri kullanıcı tarafından
-tamamlandı. Faz 5'te kalan `body-impact`, efekt bütçesi ve silah-hazırlama
-kararları görsel kabulün dışında, ileri backlog olarak açıktır.**
+Durum: **Uygulanıyor — Faz 1–4 dünya içi görsel kabulleri tamamlandı. Faz 5'in
+önceki kabulüne eklenen hareket hâlinde atış layer blend'i için yeniden dünya içi
+görsel kabul açık; diğer açık maddeler ileri backlog'tur.**
 
 ## 1. Amaç
 
@@ -316,7 +316,7 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 
 ## 8. Faz 5 — Zengin Atış Döngüsü, Socket ve Notify
 
-**Durum:** ✅ Dünya içi görsel kabul tamamlandı — açık kalan maddeler ileri backlog
+**Durum:** 🟨 Hareket hâlinde atış layer blend'i görsel kabulü açık
 
 ### 8.1 Atış döngüsü
 
@@ -328,6 +328,14 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 - [x] Reload animasyonu hiçbir durumda bir sonraki gerçek atışı geciktirmesin.
 - [x] Kullanıcı `aim_recoil → draw_arrow` recovery/reload geçişini dünya içinde
   kabul etti.
+- [x] `layerAttackWhenMoving` sidecar opt-in'iyle hareket eden Archer'ın
+  `aim_recoil` ve `draw_arrow` kliplerini `mixamorigSpine` üstünde oynat; alt
+  gövde walk/run locomotion'da kalsın. Duran atış tam gövde kalır.
+- [x] Duran başlayan saldırı/recovery sırasında hareket emri verilirse kalan
+  klibi mevcut playhead'den üst gövdeye geçir; klibi ve `arrow-release` notify
+  penceresini baştan başlatma.
+- [ ] Hareket hâlinde atış ve recovery sırasında ayak sürüklemesi olmadığını
+  kullanıcı dünya içinde kabul etsin.
 - [ ] `equip_bow` ve `disarm_bow` yalnızca gerçek silah hazırlama state'i
   tasarlanırsa bu döngüye girsin.
 
@@ -593,3 +601,17 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
 - 2026-08-13 — Kullanıcı Faz 1–5 dünya içi görsel kabullerinin tamamlandığını
   bildirdi. Açık Faz 5 maddeleri (`body-impact`, efekt bütçesi ve gerçek
   equip/disarm state'i) bu kabulün dışındaki ileri backlog olarak bırakıldı.
+- 2026-08-13 — Kullanıcı hareket hâlinde atışta ayak sürüklemesi bildirdi.
+  Archer sidecar'ına `layerAttackWhenMoving: true` eklendi; yalnızca bu opt-in,
+  `upperBodyBone: mixamorigSpine` ve yürüyüş hızı üstünde `aim_recoil` ile
+  `draw_arrow`u torso channel'a taşır. Layer seçimi atış başlangıcında kilitlenir,
+  recovery boyunca korunur; melee/legacy assetler ve duran atış tam gövde kalır.
+  `tsc`, 24 hedefli animasyon testi ve Archer Chromium boot smoke geçti. Dünya
+  içi ayak sürüklemesi görsel kabulü yeniden açık.
+- 2026-08-13 — Kullanıcı, saldırı dururken başladıktan sonra recoil/recovery
+  sırasında verilen hareket emrinde ayak sürüklemesinin sürdüğünü bildirdi. Kök
+  neden ilk layer kararının tüm saldırı boyunca değişmez tutulmasıydı. Ranged
+  saldırı artık hareket başlayınca yalnızca bir kez full-body'den torso'ya terfi
+  eder; mevcut playhead ve notify aralığı korunur, recovery boyunca yeniden
+  full-body'ye dönmez. `tsc`, 24 hedefli animasyon testi ve Archer Chromium boot
+  smoke geçti. Dünya içi görsel kabul açık.

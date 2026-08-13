@@ -390,13 +390,13 @@ export interface RtsActionState {
   readonly impactCount: number;
   /**
    * True when this one-shot owns only the upper body, leaving the legs on
-   * locomotion — the flinch a walking unit plays without stopping walking.
+   * locomotion — a walking unit can react or fire without stopping its stride.
    *
-   * Decided once, on the frame the action starts, and then carried unchanged for
-   * its whole length. It has to be latched rather than recomputed per frame: a
-   * unit that is shoved to a halt half a second into a 0.73 s flinch would
-   * otherwise swap from a torso-only reaction to a full-body one mid-clip, which
-   * pops far harder than either choice does on its own.
+   * A layered action never demotes while it is running. Moving ranged attacks
+   * may promote from full-body to upper-body when a move order takes effect
+   * mid-shot; after that promotion the choice stays latched through recovery.
+   * This one-way rule prevents both foot skating and a torso/full-body pop when
+   * the unit later slows down again.
    */
   readonly layered: boolean;
 }
@@ -424,7 +424,7 @@ export interface RtsActionDurations {
 }
 
 /**
- * Whether — and when — a flinch may be demoted to an upper-body-only clip.
+ * Whether — and when — a one-shot may be demoted to an upper-body-only clip.
  *
  * Two conditions, and both are needed. The asset must be able to split its
  * skeleton at all (an authored `upperBodyBone` that matched real bones), and the
@@ -437,12 +437,14 @@ export interface RtsActionDurations {
 export interface RtsActionLayering {
   /** True when the asset can play a clip on the upper body alone. */
   readonly canLayerHit: boolean;
+  /** True when a moving unit may keep its gait below a ranged attack/recovery. */
+  readonly canLayerAttack?: boolean;
   /** The unit's own walking boundary, from {@link RtsLocomotionTuning}. */
   readonly walkSpeed: number;
 }
 
 /** Never layer: the behaviour of every caller that predates upper-body flinches. */
-const NO_LAYERING: RtsActionLayering = { canLayerHit: false, walkSpeed: Infinity };
+const NO_LAYERING: RtsActionLayering = { canLayerHit: false, canLayerAttack: false, walkSpeed: Infinity };
 
 /**
  * Advances the one-shot channel by one frame.
@@ -468,9 +470,9 @@ const NO_LAYERING: RtsActionLayering = { canLayerHit: false, walkSpeed: Infinity
  * three blows in half a second are one flinch from the last of them, not three
  * played back long after the fight moved on.
  *
- * Only the flinch is ever demoted to the upper body ({@link RtsActionLayering}).
- * A swing is thrown from a standstill and a fall is the whole body by
- * definition, so neither has legs to keep.
+ * A moving ranged attack and a flinch may be demoted to the upper body
+ * ({@link RtsActionLayering}). Melee swings remain full-body, while a fall is
+ * full-body by definition.
  */
 export function advanceRtsAction(
   state: RtsActionState,
@@ -502,18 +504,23 @@ export function advanceRtsAction(
     if (remaining > 0) return { kind: "hit", remainingSeconds: remaining, ...counters, layered: state.layered };
   }
   if (input.attackCount !== state.attackCount && durations.attack !== null) {
-    return { kind: "attack", remainingSeconds: durations.attack, ...counters };
+    const layered = layering.canLayerAttack === true && input.planarSpeed > layering.walkSpeed;
+    return { kind: "attack", remainingSeconds: durations.attack, ...counters, layered };
   }
   if (state.kind === "attack") {
     const remaining = state.remainingSeconds - dt;
-    if (remaining > 0) return { kind: "attack", remainingSeconds: remaining, ...counters };
+    const layered = state.layered
+      || (layering.canLayerAttack === true && input.planarSpeed > layering.walkSpeed);
+    if (remaining > 0) return { kind: "attack", remainingSeconds: remaining, ...counters, layered };
     if (durations.attackRecovery !== null && durations.attackRecovery !== undefined) {
-      return { kind: "attackRecovery", remainingSeconds: durations.attackRecovery, ...counters };
+      return { kind: "attackRecovery", remainingSeconds: durations.attackRecovery, ...counters, layered };
     }
   }
   if (state.kind === "attackRecovery") {
     const remaining = state.remainingSeconds - dt;
-    if (remaining > 0) return { kind: "attackRecovery", remainingSeconds: remaining, ...counters };
+    const layered = state.layered
+      || (layering.canLayerAttack === true && input.planarSpeed > layering.walkSpeed);
+    if (remaining > 0) return { kind: "attackRecovery", remainingSeconds: remaining, ...counters, layered };
   }
   return { kind: "none", remainingSeconds: 0, ...counters };
 }

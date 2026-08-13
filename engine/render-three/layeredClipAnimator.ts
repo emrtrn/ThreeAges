@@ -159,11 +159,13 @@ export class LayeredClipAnimator implements UnitClipAnimator {
    * A one-shot on the torso alone, leaving the legs on whatever they are doing.
    * Always restarts, like {@link CrossfadeAnimator.playOnce}: re-triggering is
    * the normal case, and the caller decides when a blow is a *new* one.
+   * `startSeconds` preserves progress when a running full-body action is
+   * promoted to this channel after locomotion begins.
    */
-  playUpperOnce(name: string, fadeSeconds = 0.08): void {
+  playUpperOnce(name: string, fadeSeconds = 0.08, startSeconds = 0): void {
     if (!this.clips.has(name)) return;
     this.upperOwned = true;
-    this.upper.playOnce(name, fadeSeconds);
+    this.upper.playOnce(name, fadeSeconds, startSeconds);
   }
 
   /**

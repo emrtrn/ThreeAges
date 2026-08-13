@@ -23,9 +23,9 @@
     "gold": 200
   },
   "enemyStartingUnits": {
-    "guard": 6,
+    "guard": 2,
     "worker": 8,
-    "archer": 6,
+    "archer": 2,
     "siege": 0
   },
   "gameSpeed": 1,

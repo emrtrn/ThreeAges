@@ -218,9 +218,11 @@ export class CrossfadeAnimator {
    * blow), and a no-op there would silently drop every swing after the first.
    * The looping state a later {@link play} crossfades to is unaffected, but the
    * one-shot's own action keeps its `LoopOnce` mode — so a clip must not be
-   * driven through both entry points.
+   * driven through both entry points. `startSeconds` is used when an already
+   * running full-body action is transferred to a masked channel without
+   * restarting its visual or notify timeline.
    */
-  playOnce(name: string, fadeSeconds = 0.08): void {
+  playOnce(name: string, fadeSeconds = 0.08, startSeconds = 0): void {
     if (this.blendActions.size > 0) this.stopBlend();
     const next = this.actions.get(name);
     if (!next) return;
@@ -232,6 +234,7 @@ export class CrossfadeAnimator {
     next.clampWhenFinished = true;
     next.setEffectiveTimeScale(1);
     next.setEffectiveWeight(1);
+    next.time = Math.max(0, Math.min(startSeconds, next.getClip().duration));
     next.play();
     const prev = this.current && this.current !== name ? this.actions.get(this.current) : undefined;
     if (prev && fadeSeconds > 0) prev.crossFadeTo(next, fadeSeconds, false);

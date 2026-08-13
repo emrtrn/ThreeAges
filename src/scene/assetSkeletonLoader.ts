@@ -257,6 +257,12 @@ export interface AssetSkeletonDef {
    * Absent disables upper-body layering (montages fall back to full-body).
    */
   upperBodyBone?: string;
+  /**
+   * Lets the RTS presentation keep lower-body locomotion active while a moving
+   * unit plays its authored attack and recovery clips on the upper body.
+   * Absent preserves full-body attacks for melee and legacy assets.
+   */
+  layerAttackWhenMoving?: boolean;
   preview: AssetSkeletonPreviewPrefs;
 }
 
@@ -339,6 +345,7 @@ export function normalizeAssetSkeleton(value: unknown): AssetSkeletonDef {
   if (typeof input.upperBodyBone === "string" && input.upperBodyBone.length > 0) {
     result.upperBodyBone = input.upperBodyBone;
   }
+  if (input.layerAttackWhenMoving === true) result.layerAttackWhenMoving = true;
   return result;
 }
 

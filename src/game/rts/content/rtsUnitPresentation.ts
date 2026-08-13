@@ -278,6 +278,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
    * only a layered asset can serve is unreachable without this reference.
    */
   private layered: LayeredClipAnimator | null = null;
+  /** Asset opt-in: only moving ranged attacks with this flag may split the body. */
+  private canLayerAttack = false;
   /** The node the mixer was bound to, so disposal uncaches the same root. */
   private animationTarget: Object3D | null = null;
   /** Sidecar role→clip map, consulted every frame by the pure selector. */
@@ -399,6 +401,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     }
     this.animationSet = animation.skeleton.animationSet;
     this.animationVariants = animation.skeleton.animationVariants;
+    this.canLayerAttack = animation.skeleton.layerAttackWhenMoving === true;
     // One-shot lengths come from the clips themselves, which is the only place
     // that knows them: a swing or a fall must be allowed to finish, and the
     // death length is what the unit's despawn timer then waits for.
@@ -497,7 +500,11 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       attackRecovery: this.actionDurations.attackRecovery ?? null,
       hit: this.durationOfRole("hit", state.impactCount),
       death: this.actionDurations.death,
-    }, deltaSeconds, { canLayerHit: this.layered !== null, walkSpeed: this.tuning.walkSpeed });
+    }, deltaSeconds, {
+      canLayerHit: this.layered !== null,
+      canLayerAttack: this.layered !== null && this.canLayerAttack,
+      walkSpeed: this.tuning.walkSpeed,
+    });
     this.workState = advanceRtsWorkMontage(this.workState, state, this.workMontage, this.tuning, deltaSeconds);
     const actionClip = rtsActionClip(
       this.action,
@@ -513,15 +520,25 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       const started =
         this.action.kind !== this.startedAction.kind
         || rtsActionSequence(this.action) !== rtsActionSequence(this.startedAction);
+      const promotedToUpperBody =
+        !started
+        && this.action.layered
+        && !this.startedAction.layered;
       if (this.action.layered && this.layered) {
         // The one one-shot that shares the body. It claims the torso and then
         // falls through on purpose — the locomotion code below still runs, and
         // it is what keeps the legs striding under a flinch instead of pinning
         // the whole unit mid-step while the simulation slides it forward.
-        if (started) {
-          this.layered.playUpperOnce(actionClip, ACTION_FADE_SECONDS);
+        if (started || promotedToUpperBody) {
+          // A move order may arrive after a standing shot has already begun.
+          // Continue the torso from the lower channel's current playhead rather
+          // than restarting recoil (and its arrow-release notify) from zero.
+          const startSeconds = promotedToUpperBody
+            ? (this.layered.getActiveClip()?.time ?? 0)
+            : 0;
+          this.layered.playUpperOnce(actionClip, ACTION_FADE_SECONDS, startSeconds);
           this.startedAction = this.action;
-          this.torsoNotifies.arm(actionClip);
+          this.torsoNotifies.arm(actionClip, startSeconds);
         }
       } else {
         if (started) {

@@ -38166,6 +38166,11 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
     "mixamorigSpine",
     "the Archer splits a moving hit above the hips while death remains a full-body action",
   );
+  assert.equal(
+    archer.layerAttackWhenMoving,
+    true,
+    "the Archer also layers its moving attack and recovery above the same spine",
+  );
   assert.deepEqual(archer.sockets, [{
     name: "arrow-release",
     bone: "mixamorigRightHand",
@@ -40377,6 +40382,44 @@ check("Muhafiz Faz 2b: yuruyen birim darbeyi belden yukarisi oynatir, duran biri
   );
   assert.equal(swinging.kind, "attack");
   assert.equal(swinging.layered, false, "a swing owns the whole body");
+  const rangedLayering = { ...layering, canLayerAttack: true };
+  const bowDurations = { ...durations, attackRecovery: 0.4 };
+  let movingBow = advanceRtsAction(
+    RTS_ACTION_NONE, input({ planarSpeed: 6, attackCount: 1 }), bowDurations, 0, rangedLayering,
+  );
+  assert.equal(movingBow.layered, true, "an opted-in moving Archer fires from the waist up");
+  movingBow = advanceRtsAction(
+    movingBow, input({ planarSpeed: 0, attackCount: 1 }), bowDurations, 0.5, rangedLayering,
+  );
+  assert.equal(movingBow.kind, "attackRecovery", "the release hands into its authored recovery");
+  assert.equal(movingBow.layered, true, "recovery keeps the same lower-body gait ownership");
+  movingBow = advanceRtsAction(
+    movingBow, input({ planarSpeed: 0, attackCount: 1 }), bowDurations, 0.1, rangedLayering,
+  );
+  assert.equal(movingBow.layered, true, "stopping mid-recovery cannot pop it back to full body");
+  const standingBow = advanceRtsAction(
+    RTS_ACTION_NONE, input({ planarSpeed: 0, attackCount: 1 }), bowDurations, 0, rangedLayering,
+  );
+  assert.equal(standingBow.layered, false, "a standing Archer keeps its authored full-body shot");
+  let commandedMidShot = advanceRtsAction(
+    standingBow, input({ planarSpeed: 6, attackCount: 1 }), bowDurations, 0.2, rangedLayering,
+  );
+  assert.equal(commandedMidShot.kind, "attack");
+  assert.equal(commandedMidShot.layered, true, "a move order during recoil promotes the remaining shot above the waist");
+  commandedMidShot = advanceRtsAction(
+    commandedMidShot, input({ planarSpeed: 0, attackCount: 1 }), bowDurations, 0.4, rangedLayering,
+  );
+  assert.equal(commandedMidShot.kind, "attackRecovery");
+  assert.equal(commandedMidShot.layered, true, "the mid-shot promotion stays latched through recovery");
+  let commandedDuringRecovery = advanceRtsAction(
+    standingBow, input({ planarSpeed: 0, attackCount: 1 }), bowDurations, 0.8, rangedLayering,
+  );
+  assert.equal(commandedDuringRecovery.kind, "attackRecovery");
+  assert.equal(commandedDuringRecovery.layered, false);
+  commandedDuringRecovery = advanceRtsAction(
+    commandedDuringRecovery, input({ planarSpeed: 6, attackCount: 1 }), bowDurations, 0.1, rangedLayering,
+  );
+  assert.equal(commandedDuringRecovery.layered, true, "a move order during draw-arrow also promotes the torso only");
   const falling = advanceRtsAction(RTS_ACTION_NONE, input({ planarSpeed: 6, dying: true }), durations, 0.1, layering);
   assert.equal(falling.kind, "death");
   assert.equal(falling.layered, false, "and so does a fall, at any speed");
@@ -40475,6 +40518,16 @@ check("Muhafiz Faz 2b: katmanli darbe oynarken bacaklar yurumeye devam eder", ()
   assert.equal(animator.upperClip, "impact");
   assert.equal(animator.isUpperBusy, true);
 
+  animator.releaseUpperBody(0);
+  animator.playOnce("impact", 0);
+  animator.update(0.31);
+  const promotedAt = animator.getActiveClip()?.time ?? 0;
+  animator.playUpperOnce("impact", 0, promotedAt);
+  assert.ok(
+    Math.abs((animator.getUpperActiveClip()?.time ?? 0) - promotedAt) < 1e-6,
+    "promoting a running full-body action keeps its playhead instead of restarting its notify window",
+  );
+
   // Locomotion keeps driving underneath — a struck unit may break into a run —
   // and must not steal the torso back while the flinch is still playing.
   animator.play("run", 0.18);
@@ -40507,10 +40560,11 @@ check("Muhafiz Faz 2b: katmanli darbe oynarken bacaklar yurumeye devam eder", ()
 
 check("Muhafiz Faz 2b: Guard ust govde kemigini authorlar, kemik gercek ve kayitta hayatta kalir", () => {
   // The sidecar allowlist gotcha (CLAUDE.md) for this phase's one new field.
-  const roundTripped = validateAssetSkeletonDef({ schema: 1, upperBodyBone: "mixamorig:Spine" });
+  const roundTripped = validateAssetSkeletonDef({ schema: 1, upperBodyBone: "mixamorig:Spine", layerAttackWhenMoving: true });
   assert.equal(roundTripped.upperBodyBone, "mixamorig:Spine", "the validator keeps it through an editor save");
+  assert.equal(roundTripped.layerAttackWhenMoving, true, "the validator preserves the explicit moving-attack layer opt-in");
   assert.equal(
-    normalizeAssetSkeleton({ schema: 1, upperBodyBone: "mixamorig:Spine" }).upperBodyBone,
+    normalizeAssetSkeleton({ schema: 1, upperBodyBone: "mixamorig:Spine", layerAttackWhenMoving: true }).upperBodyBone,
     "mixamorig:Spine",
     "and the loader reads the same field back",
   );

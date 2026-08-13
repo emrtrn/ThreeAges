@@ -3067,6 +3067,9 @@ export function validateAssetSkeletonDef(value: unknown): Record<string, unknown
   ) {
     throw new Error("skeleton.upperBodyBone must be a bone name string");
   }
+  if (input.layerAttackWhenMoving !== undefined && typeof input.layerAttackWhenMoving !== "boolean") {
+    throw new Error("skeleton.layerAttackWhenMoving must be a boolean");
+  }
   const output: Record<string, unknown> = {
     schema: 1,
     sockets,
@@ -3085,6 +3088,7 @@ export function validateAssetSkeletonDef(value: unknown): Record<string, unknown
   if (typeof input.upperBodyBone === "string" && input.upperBodyBone.length > 0) {
     output.upperBodyBone = input.upperBodyBone;
   }
+  if (input.layerAttackWhenMoving === true) output.layerAttackWhenMoving = true;
   return output;
 }
 
