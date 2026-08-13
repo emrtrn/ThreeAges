@@ -108,6 +108,11 @@ export class CommandCenter implements UpgradableStructure {
   readonly combatRadius = COMMAND_CENTER_FOOTPRINT / 2;
   /** {@link CombatTarget}: the centre is a building, so siege is the answer to it. */
   readonly armorClass = "structure" as const;
+  /** {@link CombatTarget}: the same row as {@link stats}, under the contract's name. */
+  get buildingStats(): BuildingBalanceStats {
+    return this.stats;
+  }
+
 
   constructor(
     readonly owner: UnitOwner,

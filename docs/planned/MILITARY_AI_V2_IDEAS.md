@@ -531,44 +531,116 @@ ve hedefleme kodu "sahada yalnızca `player` ve `enemy` var" varsayamaz.
 
 Sıra, bağımlılık ve erken görünür kazanca göre belirlendi.
 
-### Faz 0 — Formasyon temizliği *(AI'a dokunmaz)*
+> **Durum: Faz 0–4 uygulandı.** Aşağıdaki her madde kodda karşılığını buldu;
+> sapmalar madde altında not edildi. Dosya haritası ve doğrulama §21'de.
 
-- §5 topçu kaynaklı aralık sorunu (slot başına çarpışma aralığı)
-- §6 `loose` rol bantları
+### Faz 0 — Formasyon temizliği *(AI'a dokunmaz)* — ✅
+
+- ✅ §5 topçu kaynaklı aralık sorunu (slot başına çarpışma aralığı)
+- ✅ §6 `loose` rol bantları
 
 Her ikisi de doğrulanmış hatadır ve formasyonlar bugün yalnızca oyuncu tarafında
 kullanıldığı için **anında oynanış kazancı** verir. AI çalışmasının önkoşulu
 değildir; bu yüzden en başta.
 
-### Faz 1 — AI grup-emri dikişi
+*Uygulama notu (§5):* çözüm iki parçalı. Izgara artık *tipik* birime göre
+kuruluyor (`formationBaseSpacing`, üst medyan yarıçap — tek rollü bir grupta
+eski davranışla bit düzeyinde aynı), komşu slot çiftleri ise gerçekten
+gerektiğinde `relaxSlotSpacing` ile açılıyor. Rol bandı başına ayrı aralık
+(`line` rütbeleri, `wedge` kuyruğu) doğrudan `radiusA + radiusB + padding`
+kullanıyor.
 
-- §2 `ArmyManager` → `assignGroupDestinations`
-- §9 taktik fazın iskeleti (`MARCH` / `DEPLOY` / `ENGAGE` ayrımı)
-- §4 `wedge` kama + destek kuyruğu
+*Uygulama notu (§6):* üç sabit yüzdelik bant yerine, `loose` slotları ileri
+projeksiyona göre sıralanıp Muhafız → Okçu → Topçu sırasıyla dolduruluyor.
+Sevkedilen kompozisyon oranında sonuç plandaki %40/%35/%25 bandına denk düşüyor,
+fakat bant sınırı orduya göre kayıyor — 12 muhafız 2 topçuyla yürüdüğünde
+"ön %40" kuralı topçuyu orta banda çekerdi. Jitter ve slot konumları
+değişmedi (§17.3).
+
+### Faz 1 — AI grup-emri dikişi — ✅
+
+- ✅ §2 `ArmyManager` → `assignGroupDestinations`
+- ✅ §9 taktik fazın iskeleti (`march` / `approach` / `deploy` / `engage` /
+  `reposition`)
+- ✅ §4 `wedge` kama + destek kuyruğu
 
 Planın geri kalanının önkoşulu.
 
-### Faz 2 — Formasyon kararı
+*Uygulama notu (§9):* `engage`, plandaki "düşman eşiğe girdi" koşuluna ek olarak
+**hedefin kendisine varmakla** da tetikleniyor. Aksi hâlde savunmasız bir
+tarlaya yürüyen ordu düzgün bir hat kurup ona hiç vurmuyordu.
 
-- §7 `formationScorer.ts` + `ai.json` ağırlıkları + mevcut hysteresis'e bağlama
-- §8 düşman kompozisyon sınıfları
-- §16 panel satırları
+*Uygulama notu (§2 performans):* slotlar formasyon / faz / ordu büyüklüğü /
+hedef değiştiğinde yeniden kesiliyor; hedef `SLOT_TARGET_STEP` ile
+kuantalanıyor. Kohezyon eşiği ayrıca bir tetikleyici ama en fazla
+`COHESION_REASSIGN_SECONDS`'ta bir — ve kohezyon *durmuş* birimler üzerinden
+ölçülüyor, yoksa her normal yürüyüş "dağıldı" okunup her değerlendirmede
+yeniden plan yapardı.
 
-### Faz 3 — Lojistik zekâsı
+### Faz 2 — Formasyon kararı — ✅
 
-- §11.2/11.3 `logisticsDamage` alanı ve veri kaynakları
-- §11.4 savunma önceliği ve geri çekilme hedefi
+- ✅ §7 `formationScorer.ts` + `ai.json` ağırlıkları + mevcut hysteresis'e bağlama
+- ✅ §8 düşman kompozisyon sınıfları
+- ✅ §16 panel satırları
+
+*Uygulama notu (§7):* `minimumCommitmentSeconds` bağlılığı **faza kapsamlı**.
+Kol düzeninde yürüyen ordu konuşlanma halkasına girdiğinde hatta geçmesi
+stratejiye ait bir sayaç yüzünden gecikmemeli — planın "en görünür davranış"
+dediği geçiş tam olarak budur. Histerezis marjı çarpımsal değil toplamsal
+uygulandı: negatif puanda `× (1 + marj)` *daha kötü* olanı kazandırır.
+
+*Uygulama notu (§7 ağırlıkları):* `missionFit` 1.6'ya çekildi. 1.0'da §3'ün
+"Kol bir seyahat formasyonudur" temel kuralı tutmuyordu — `enemyFit` yürüyüş
+sırasında hattı öne geçiriyordu.
+
+### Faz 3 — Lojistik zekâsı — ✅
+
+- ✅ §11.2/11.3 `logisticsDamage` alanı ve veri kaynakları
+- ✅ §11.4 savunma önceliği ve geri çekilme hedefi
 
 Planın en yüksek uzun vadeli değeri burada.
 
-### Faz 4 — Doktrin ince ayarı
+*Uygulama notu (§11.3):* yeni sistem yazılmadı ve yeni bir dünya kaynağı
+açılmadı — blackboard zaten `ProductionLogisticsSystem` okuyor, ordu da aynı
+kaynaktan tek bir soruya daraltılmış bir görünüm alıyor
+(`AiLogisticsWatch.producersServedBy`). Bölge değeri hedefin kendi balance
+satırından (`territory.controlRadius`) geliyor: Karakol'u görmek zaten onun yer
+tuttuğunu görmektir, dolayısıyla fazladan bilgi sızmıyor.
 
-- §10.1 Muhafız perdeleme
-- §10.2 Okçu standoff
-- §10.3 Topçu yapı hedef önceliği
-- §10.4 ordu ölçeğinde leash
-- §12 kohezyon / regroup
-- §13 `matchupModifier`
+*Uygulama notu (§17.2):* üretici listesi `enemyMemorySystem`'in hatırladığı
+küme ile kesiştiriliyor; görülmemiş bir üretici, hatırlanan deponun puanını
+yükseltmiyor.
+
+### Faz 4 — Doktrin ince ayarı — ✅
+
+- ✅ §10.1 Muhafız perdeleme
+- ✅ §10.2 Okçu standoff
+- ✅ §10.3 Topçu yapı hedef önceliği
+- ✅ §10.4 ordu ölçeğinde leash
+- ✅ §12 kohezyon / regroup
+- ✅ §13 `matchupModifier`
+
+*Uygulama notu (§10.3):* yapı sınıflandırması artık tek bir yerde
+(`structureRoleFor`) — stratejik hedef puanı ile sahadaki topçunun hedef seçimi
+aynı tabloyu okuyor. `CombatTarget`'a isteğe bağlı `buildingStats` eklendi
+(`stats` adı `Unit`'te zaten farklı bir tiple dolu). Yan etki: `archery_range`
+artık `support` değil `military` sınıfında — §60 #4'ün "askerî üretim"
+tanımıyla tutarlı.
+
+*Uygulama notu (§12):* kohezyon **slot yeniden atama** tetikleyicisi olarak
+uygulandı, `regroup` *görevini* tetiklemiyor. Uzun bir yürüyüşte gerilmiş ordu
+görev seviyesinde geri çekilseydi, saldırıyı hiç tamamlayamazdı; plandaki
+"REGROUP → grup emri (`loose`)" satırı ise aynen uygulandı.
+
+*Uygulama notu (§13):* `matchupModifier`, blackboard'un §52 gücünü *değiştirmek*
+yerine ona bir çarpan olarak uygulanıyor. Blackboard'un "ordum ne kadar büyük"
+cevabı ekonomi ve nüfus tavanı tarafından da okunuyor; aynı ordu hakkında iki
+farklı sayı üretmek, iki cevaptan herhangi birinden kötüdür. Görülen düşman
+yoksa çarpan tam olarak 1.
+
+*Ertelendi (§10.2):* okçu overkill limiter uygulanmadı — `PendingImpactQueue`
+yalnızca havadaki mermileri tutuyor, anlık vuruşlar rezerve edilmiyor. §19'daki
+gerekçe hâlâ geçerli.
 
 ---
 
@@ -595,3 +667,59 @@ rakip yapan şey şu cümleyi kurabilmesidir:
 
 Faz 0 bugünkü oyunu düzeltir, Faz 1-2 AI'ı bir orduya çevirir, Faz 3 onu bu
 oyunun rakibi yapar.
+
+---
+
+## 21. Uygulama haritası
+
+### Yeni dosyalar
+
+| Dosya | Madde |
+| --- | --- |
+| `src/game/rts/units/formations/slotSpacing.ts` | §5 slot başına çarpışma aralığı |
+| `src/game/rts/ai/formationScorer.ts` | §7 formasyon puanı, §8 kompozisyon sınıfları |
+| `src/game/rts/structures/structureRole.ts` | §10.3 + §60 için tek yapı sınıflandırması |
+
+### Değişen dosyalar
+
+| Dosya | Madde |
+| --- | --- |
+| `src/game/rts/units/groupOrders.ts` | §5, §6, §4 — geometri/rol/eşleme/aralık ayrımı |
+| `src/game/rts/ai/armyManager.ts` | §2, §9, §10.1, §10.2, §10.4, §11.4, §12, §13 |
+| `src/game/rts/ai/armyTargeting.ts` | §11.2 `logisticsDamage` |
+| `src/game/rts/ai/aiBlackboard.ts` | §13 `matchupModifier`, `roleCounts` |
+| `src/game/rts/ai/aiController.ts` | §11.3 lojistik görünümü, snapshot alanları |
+| `src/game/rts/ai/aiDebugView.ts` | §16 panel satırları |
+| `src/game/rts/ai/aiTypes.ts` | §9 `AiTacticalPhase` |
+| `src/game/rts/ai/aiDecisionLog.ts` | §7 `army-formation` karar türü |
+| `src/game/rts/combat/engagementSystem.ts`, `combatTarget.ts` | §10.3 |
+| `src/game/data/gameDataTypes.ts`, `validateGameData.ts` | §17.1 |
+| `public/game-data/balance/ai.json` | `army.formationWeights`, `army.tactics`, `targetWeights.logisticsValue` |
+
+### Yeni `ai.json` alanları
+
+Hepsi `validateAiBalance` üzerinden doğrulanıyor (§17.1) — eksik terim, bilinmeyen
+terim, negatif ağırlık ve sırasız mesafe halkaları dosya + alan adı verilerek
+reddediliyor.
+
+```text
+army.formationWeights   missionFit · terrainFit · enemyFit
+                        compositionFit · cohesionFit · transitionCost
+army.tactics            approachDistance · deployDistance · engageDistance
+                        cohesionRadius · cohesionThreshold · pursuitLeash
+                        archerStandoff
+army.targetWeights      + logisticsValue
+```
+
+### Testler
+
+`tools/engine-tests.ts` içinde 11 yeni kontrol, hepsi `Askerî AI v2` önekiyle
+filtrelenebiliyor. CLAUDE.md kuralı gereği hiçbiri bir büyüklüğü sabitlemiyor:
+ilişkiler (kama ucu Muhafızdır, akış taşıyan depo taşımayanı geçer), türetmeler
+(slot aralığı birimlerin kendi `navRadius`'undan hesaplanıyor) ve sözleşmeler
+(her formasyon puanlanabiliyor, her puan bir gerekçe taşıyor, her yeni alan
+doğrulanıyor) test ediliyor.
+
+Sözleşmesi değiştiği için güncellenen mevcut kontroller: §54 ve §60 artık
+"birime saldırı emri verildi" yerine "grup emriyle hedefe yürüdü" ölçüyor —
+§2'nin doğrudan sonucu.

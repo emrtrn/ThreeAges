@@ -317,11 +317,79 @@ export class AiBlackboardReader {
  * `army.rolePower`) — a Topçu counted as one Guard would have the AI read a siege
  * push as a even fight and a Guard wall as unbeatable.
  */
-export function armyPower(units: readonly Unit[], balance: AiBalance): number {
+export function armyPower(
+  units: readonly Unit[],
+  balance: AiBalance,
+  /**
+   * Askerî AI v2 planı §13: the enemy mix this army is being measured *against*.
+   *
+   * Optional, and omitting it keeps the plain §52 sum — which is what every
+   * caller that is asking "how big is this army" (the blackboard, the defence
+   * minimum, a target's DefenseStrength) actually wants. Only the attack/retreat
+   * decision asks the harder question, "how big is this army against *that*
+   * one", and that is the only caller that passes this.
+   */
+  opposing?: AiRoleCounts,
+): number {
+  const modifier = opposing ? matchupModifierFor(opposing) : null;
   return units.reduce(
-    (total, unit) => total + (balance.army.rolePower[unit.role] ?? 0) * unit.health.ratio,
+    (total, unit) => total
+      + (balance.army.rolePower[unit.role] ?? 0)
+      * (modifier?.[unit.role] ?? 1)
+      * unit.health.ratio,
     0,
   );
+}
+
+/** Counts of the three combat roles on one side. */
+export interface AiRoleCounts {
+  readonly guard: number;
+  readonly archer: number;
+  readonly siege: number;
+}
+
+/** Every combat unit in `units`, counted by role. */
+export function roleCounts(units: readonly Unit[]): AiRoleCounts {
+  return {
+    guard: units.filter((unit) => unit.role === "guard").length,
+    archer: units.filter((unit) => unit.role === "archer").length,
+    siege: units.filter((unit) => unit.role === "siege").length,
+  };
+}
+
+/**
+ * §13: what one of our roles is worth *against* one of theirs.
+ *
+ * The design's soft-counter shape, one level up from `units.json`'s
+ * `damageMultipliers`: those decide a single hit, this decides whether the army
+ * should be in the fight at all. It lives in code beside the formula for the
+ * same reason {@link KIND_VALUE} does — it is the design's priority order, not a
+ * tuning dial, and the dials it feeds (`attackPowerRatio` and friends) are
+ * already data.
+ *
+ * Deliberately *not* extended into formation or positional modifiers: those turn
+ * a power ratio into a combat simulation, which the plan rules out (§19).
+ */
+const MATCHUP: Readonly<Record<"guard" | "archer" | "siege", AiRoleCounts>> = {
+  // Guards close the distance; that is worth most against troops who need it open.
+  guard: { guard: 1, archer: 1.25, siege: 1.35 },
+  // Archers trade well with each other and punish slow guns, badly with a wall of shields.
+  archer: { guard: 0.85, archer: 1, siege: 1.2 },
+  // A gun is built for masonry (GDD 12 §33); against people it is mostly a liability.
+  siege: { guard: 0.7, archer: 0.7, siege: 1 },
+};
+
+/** Per-role power multiplier against a given enemy mix, or 1 where it is unknown. */
+function matchupModifierFor(opposing: AiRoleCounts): Readonly<Record<string, number>> {
+  const total = opposing.guard + opposing.archer + opposing.siege;
+  if (total <= 0) return {};
+  const blend = (row: AiRoleCounts): number =>
+    (row.guard * opposing.guard + row.archer * opposing.archer + row.siege * opposing.siege) / total;
+  return {
+    guard: blend(MATCHUP.guard),
+    archer: blend(MATCHUP.archer),
+    siege: blend(MATCHUP.siege),
+  };
 }
 
 /**

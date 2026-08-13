@@ -109,6 +109,7 @@ import {
 } from "../src/scene/runtimeDebugSnapshot";
 import { RuntimeActorSpawnCoordinator } from "../src/scene/runtimeActorSpawnCoordinator";
 import { normalizeActorScriptDef, type ActorScriptDef } from "../engine/scene/actorScript";
+import { AI_FORMATION_WEIGHTS } from "../src/game/data/gameDataTypes";
 import {
   GameDataError,
   validateAgeBalance,
@@ -321,6 +322,15 @@ import {
   AI_HIGH_VALUE_TARGET_SCORE,
   type AiTargetCandidate,
 } from "../src/game/rts/ai/armyTargeting";
+import {
+  betterFormation,
+  enemyCompositionClass,
+  scoreFormations,
+  AI_ENEMY_COMPOSITION_CLASSES,
+  type AiFormationContext,
+} from "../src/game/rts/ai/formationScorer";
+import { armyPower } from "../src/game/rts/ai/aiBlackboard";
+import type { AiLogisticsWatch } from "../src/game/rts/ai/armyManager";
 import { formatRtsAiDebug } from "../src/game/rts/ai/aiDebugView";
 import { formatRtsPerfDebug } from "../src/game/rts/debug/formatRtsPerfDebug";
 import {
@@ -373,7 +383,7 @@ import {
   type CenterProgressionView,
   type WorkerJob,
 } from "../src/game/rts/ui/rtsSelectionView";
-import { DEFAULT_RTS_FORMATION } from "../src/game/rts/units/formations/rtsFormationTypes";
+import { DEFAULT_RTS_FORMATION, RTS_FORMATION_DEFINITIONS } from "../src/game/rts/units/formations/rtsFormationTypes";
 import {
   REPAIR_FRACTION_OF_BUILD,
   StructureRepairSystem,
@@ -38141,6 +38151,75 @@ check("Archer entegrasyonu: iki ordu gercek asseti, dogru takim yuzeyini ve seci
   );
 });
 
+check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kullanir", () => {
+  const rawManifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
+    assets: { id: string; assetType: string; path: string }[];
+  };
+  const manifest = parseRtsMeshManifest(rawManifest);
+  const workerAsset = rawManifest.assets.find((asset) => asset.id === "worker")
+    ?? assert.fail("the Worker skeletal mesh is present in the manifest");
+  assert.equal(workerAsset.assetType, "skeletalMesh");
+  assert.equal(workerAsset.path, "assets/ThreeAges/Characters/Worker/Worker.glb");
+
+  for (const file of ["BP_RTS_Worker", "BP_RTS_Enemy_Worker"]) {
+    const ref = `public/assets/ThreeAges/Actors/Units/${file}.actor.json`;
+    const actor = normalizeActorScriptDef(JSON.parse(readFileSync(ref, "utf8")) as unknown, ref);
+    validateRtsPresentationActor(actor, ref, manifest);
+    const mesh = actor.components.find((component) => component.component === "SkeletalMeshComponent")
+      ?? assert.fail(`${ref} has no skeletal mesh`);
+    assert.equal(mesh.props.assetId, "worker", `${ref} renders the authored Worker rig`);
+    assert.equal(mesh.props.materialSlot, undefined, `${ref} keeps the Worker asset material as its shared default`);
+    assert.equal(readRtsSelectionRadius(actor), 0.43, `${ref} keeps the Worker gameplay selection radius`);
+  }
+
+  const materials = normalizeAssetMaterialSlots(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.materials.json", "utf8")) as unknown,
+  );
+  assert.deepEqual(materials.slots, ["m-worker-material"], "the Worker asset supplies its own material slot");
+
+  const rawSkeleton = JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.skeleton.json", "utf8"),
+  ) as unknown;
+  const worker = normalizeAssetSkeleton(rawSkeleton);
+  const saved = validateAssetSkeletonDef(rawSkeleton);
+  assert.deepEqual(worker.animationSet, {
+    idle: "Worker_idle_natural",
+    walk: "Worker_walking",
+    run: "Worker_running",
+  });
+  assert.deepEqual(worker.animationVariants, {}, "Faz 1 keeps activity and carrying clips out of the locomotion pool");
+  assert.deepEqual(saved.animationSet, worker.animationSet, "the Worker locomotion roles survive a skeleton editor save");
+
+  const parsed = parseGlb(new Uint8Array(readFileSync(`public/${workerAsset.path}`)))
+    ?? assert.fail("the Worker model is a readable GLB");
+  const shipped = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
+  const runtimePool = Object.values(worker.animationSet).filter((clip): clip is string => clip !== undefined);
+  assert.deepEqual(new Set(runtimePool), new Set([
+    "Worker_idle_natural",
+    "Worker_walking",
+    "Worker_running",
+  ]));
+  for (const clip of runtimePool) assert.ok(shipped.has(clip), `"${clip}" is a clip the Worker ships`);
+  assert.ok(!runtimePool.includes("T-Pose"), "T-Pose never enters a runtime Worker role");
+  for (const clip of ["Worker_walking", "Worker_running"]) {
+    assert.deepEqual(
+      worker.rootMotion.find((entry) => entry.clip === clip),
+      { clip, mode: "lockXYZ", rootNode: "mixamorigHips" },
+      `${clip}'s authored root translation remains locked for gameplay-driven movement`,
+    );
+  }
+
+  const tuning = rtsLocomotionTuning(6);
+  for (const [input, expected] of [
+    [{ planarSpeed: 0, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Worker_idle_natural"],
+    [{ planarSpeed: 3, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Worker_walking"],
+    [{ planarSpeed: 6, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Worker_running"],
+  ] as const) {
+    assert.equal(selectRtsAnimation(input, worker.animationSet, shipped, tuning)?.clip, expected);
+  }
+  assert.equal(rtsPlaybackRate("run", 6, tuning), 1, "the run clip is calibrated for the Worker's moveSpeed 6");
+});
+
 check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtime havuzuna girmez", () => {
   const archer = normalizeAssetSkeleton(
     JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Archer/Archer.skeleton.json", "utf8")) as unknown,
@@ -45264,6 +45343,127 @@ check("Faz 4: square keeps Siege inside the Guard ring", () => {
   assert.ok(orders.every((order) => order.path !== null), "advanced slots continue through existing navigation");
 });
 
+check("Askerî AI v2 §5: one Topçu no longer opens the whole formation's spacing", () => {
+  // The bug this pins: spacing used to be `max(navRadius) * 2 + padding` over
+  // the *whole* group, so a single wide gun stretched twenty Guards apart. The
+  // contract is per-pair — a Guard's neighbours are spaced for Guards, and the
+  // gun takes its own room where it actually stands.
+  const target = new Vector3(0, 0, -20);
+  const navigation = new RtsNavigation();
+  const rankGap = (destinations: readonly Vector3[]): number => Math.min(...destinations
+    .flatMap((slot, index) => destinations.slice(index + 1)
+      .map((other) => Math.hypot(slot.x - other.x, slot.z - other.z))));
+
+  const plainSystem = new UnitSystem();
+  const plainGuards = Array.from({ length: 6 }, (_, index) => plainSystem.spawn(
+    "player", -6 + index * 2.4, 10, RTS_TEST_UNIT_STATS,
+  ));
+  const plain = assignGroupDestinations(plainGuards, target, navigation, [], "line");
+
+  const mixedSystem = new UnitSystem();
+  const mixedGuards = Array.from({ length: 6 }, (_, index) => mixedSystem.spawn(
+    "player", -6 + index * 2.4, 10, RTS_TEST_UNIT_STATS,
+  ));
+  const gun = mixedSystem.spawn("player", 0, 14, RTS_TEST_SIEGE_STATS);
+  const mixed = assignGroupDestinations([...mixedGuards, gun], target, navigation, [], "line");
+  const mixedGuardSlots = mixed
+    .filter((order) => order.unit.role === "guard")
+    .map((order) => order.destination);
+
+  assert.ok(
+    Math.abs(rankGap(mixedGuardSlots) - rankGap(plain.map((order) => order.destination))) < 1e-6,
+    "the Guard rank keeps the spacing it had before a gun joined the group",
+  );
+
+  // And the gun is not simply crammed in: every slot around it clears both
+  // bodies. Derived from the units' own radii, so retuning a silhouette moves
+  // this bar with it instead of stranding the check.
+  const gunSlot = mixed.find((order) => order.unit === gun)?.destination
+    ?? assert.fail("the gun received no slot");
+  for (const order of mixed) {
+    if (order.unit === gun) continue;
+    assert.ok(
+      Math.hypot(gunSlot.x - order.destination.x, gunSlot.z - order.destination.z)
+        >= gun.navRadius + order.unit.navRadius - 1e-6,
+      "no slot next to the gun overlaps it",
+    );
+  }
+});
+
+check("Askerî AI v2 §6: Dağınık keeps Topçu behind, and stays scattered", () => {
+  const units = new UnitSystem();
+  const guards = Array.from({ length: 6 }, (_, index) => units.spawn(
+    "player", -6 + index * 2.4, 10, RTS_TEST_UNIT_STATS,
+  ));
+  const archers = Array.from({ length: 4 }, (_, index) => units.spawn(
+    "player", -4 + index * 2.4, 14, RTS_TEST_ARCHER_STATS,
+  ));
+  const siege = [
+    units.spawn("player", -2, 18, RTS_TEST_SIEGE_STATS),
+    units.spawn("player", 2, 18, RTS_TEST_SIEGE_STATS),
+  ];
+  const target = new Vector3(0, 0, -20);
+  const squad = [...guards, ...archers, ...siege];
+  const loose = assignGroupDestinations(squad, target, new RtsNavigation(), [], "loose");
+  const destinations = new Map(loose.map((order) => [order.unit, order.destination]));
+  // Movement heads north (-Z), so a lower Z is further forward.
+  const meanZ = (group: readonly Unit[]) => group
+    .reduce((sum, unit) => sum + (destinations.get(unit)?.z ?? 0), 0) / group.length;
+  assert.ok(meanZ(guards) < meanZ(archers), "Dağınık still puts Guards ahead of Archers");
+  assert.ok(meanZ(archers) < meanZ(siege), "and it never drops the guns into the front band");
+
+  // The scatter is the whole point of the formation and must survive the bands:
+  // Dağınık slots stay further apart than the same squad in Kare.
+  const spread = (orders: readonly { destination: Vector3 }[]): number => Math.min(...orders
+    .flatMap((order, index) => orders.slice(index + 1)
+      .map((other) => Math.hypot(order.destination.x - other.destination.x,
+        order.destination.z - other.destination.z))));
+  const square = assignGroupDestinations(squad, target, new RtsNavigation(), [], "square");
+  assert.ok(spread(loose) > spread(square), "Dağınık is still the loose one");
+  assert.deepEqual(
+    assignGroupDestinations(squad, target, new RtsNavigation(), [], "loose")
+      .map((order) => order.destination.toArray()),
+    loose.map((order) => order.destination.toArray()),
+    "§17.3: and its jitter is still deterministic",
+  );
+});
+
+check("Askerî AI v2 §4: Kama is an assault wedge with a support tail", () => {
+  const units = new UnitSystem();
+  const guards = Array.from({ length: 6 }, (_, index) => units.spawn(
+    "player", -6 + index * 2.4, 10, RTS_TEST_UNIT_STATS,
+  ));
+  const archers = Array.from({ length: 4 }, (_, index) => units.spawn(
+    "player", -4 + index * 2.4, 14, RTS_TEST_ARCHER_STATS,
+  ));
+  const siege = [units.spawn("player", 0, 18, RTS_TEST_SIEGE_STATS)];
+  const target = new Vector3(0, 0, -20);
+  const orders = assignGroupDestinations(
+    [...guards, ...archers, ...siege], target, new RtsNavigation(), [], "wedge",
+  );
+  const destinations = new Map(orders.map((order) => [order.unit, order.destination]));
+  const depth = (unit: Unit): number => destinations.get(unit)?.z ?? 0;
+
+  // The tip charges; the tail shoots over it. Not one twenty-unit triangle whose
+  // widest row happens to be made of guns.
+  const tip = orders.reduce((best, order) => order.destination.z < best.destination.z ? order : best);
+  assert.equal(tip.unit.role, "guard", "the point of the wedge is a Guard");
+  assert.ok(
+    Math.max(...guards.map(depth)) < Math.min(...archers.map(depth)),
+    "every Archer stands behind every Guard",
+  );
+  assert.ok(
+    Math.max(...archers.map(depth)) < Math.min(...siege.map(depth)),
+    "and the gun is the tail of the tail",
+  );
+  // The vanguard is genuinely a wedge, not a line: its guards occupy several ranks.
+  assert.ok(
+    new Set(guards.map((guard) => depth(guard).toFixed(3))).size > 1,
+    "the Guard vanguard keeps the wedge's depth",
+  );
+  assert.ok(orders.every((order) => order.path !== null), "and the whole shape still routes");
+});
+
 check("Faz 5: a blocked formation tightens before it abandons its shape", () => {
   const units = new UnitSystem();
   const navigation = new RtsNavigation();
@@ -48989,6 +49189,12 @@ function aiTestSnapshot(overrides: Partial<AiControllerSnapshot> = {}): AiContro
     garrisonCount: 0,
     target: null,
     retreatReason: null,
+    phase: null,
+    formation: null,
+    formationScores: [],
+    formationReason: null,
+    enemyClass: "balanced",
+    cohesion: 1,
     concluded: false,
     bottleneck: null,
     expansionStep: "outpost",
@@ -52291,7 +52497,10 @@ check("ai balance orders the §69 dominance bar above the §62 attack bar", () =
 });
 
 /** An ArmyManager over a headless world, so missions can be driven directly. */
-function armyTestWorld(objectives: (() => AiObjectiveWatch | null) | null = null) {
+function armyTestWorld(
+  objectives: (() => AiObjectiveWatch | null) | null = null,
+  logistics: AiLogisticsWatch | null = null,
+) {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
@@ -52307,7 +52516,9 @@ function armyTestWorld(objectives: (() => AiObjectiveWatch | null) | null = null
   const navigation = new RtsNavigation();
   navigation.setBlockers(centers.navigationBlockers());
   const log = new AiDecisionLog();
-  const army = new ArmyManager("enemy", units, centers, structures, navigation, AI_TEST_BALANCE, log, objectives);
+  const army = new ArmyManager(
+    "enemy", units, centers, structures, navigation, AI_TEST_BALANCE, log, objectives, null, logistics,
+  );
   /** A completed player building the AI can see and score. */
   const playerBuilding = (id: string, x: number, z: number) => {
     const stats = buildings[id] ?? assert.fail(`${id} balance missing`);
@@ -52331,7 +52542,17 @@ function armyTestWorld(objectives: (() => AiObjectiveWatch | null) | null = null
     }
     return spawned;
   };
-  return { army, units, structures, centers, log, playerBuilding, enemyGuards, playerGuards };
+  /** A completed building the AI itself owns — what §11.4 falls back to. */
+  const aiBuilding = (id: string, x: number, z: number) => {
+    const stats = buildings[id] ?? assert.fail(`${id} balance missing`);
+    const structure = structures.place("enemy", stats, x, z);
+    structures.advanceConstruction(structure, stats.constructionSeconds);
+    return structure;
+  };
+  return {
+    army, units, structures, centers, navigation, buildings, log,
+    playerBuilding, aiBuilding, enemyGuards, playerGuards,
+  };
 }
 
 check("§54: the AI holds a garrison at its base instead of sending every guard", () => {
@@ -52349,8 +52570,31 @@ check("§54: the AI holds a garrison at its base instead of sending every guard"
   // literal here would silently become a different claim the day it is retuned.
   const settlementDefense = AI_TEST_BALANCE.army.minimumDefensePower.settlement;
   assert.equal(state.garrisonCount, settlementDefense, "the minimum defence is held back");
-  const striking = guards.filter((unit) => unit.attackTarget !== null);
-  assert.equal(striking.length, 6 - settlementDefense, "everything above the minimum takes the field");
+  // Askerî AI v2 §2: away from contact the field army marches as a formation, so
+  // "took the field" is a movement order toward the target rather than an attack
+  // target on a farm thirty-six units away. The garrison walks the other way.
+  const aim = state.target ?? assert.fail("an attacking army holds a target");
+  const base = world.centers.get("enemy") ?? assert.fail("the AI has a centre to garrison");
+  // The field marches on the target; the garrison stays with the centre. Which
+  // side of that a unit is on is read off where its order actually sends it,
+  // with no distance literal to go stale when the tactics are retuned.
+  const marchingOnTheTarget = (unit: Unit): boolean => {
+    const destination = unit.pathDestination;
+    if (!destination) return false;
+    return Math.hypot(destination.x - aim.candidate.x, destination.z - aim.candidate.z)
+      < Math.hypot(destination.x - base.position.x, destination.z - base.position.z);
+  };
+  assert.equal(
+    guards.filter(marchingOnTheTarget).length,
+    6 - settlementDefense,
+    "everything above the minimum takes the field",
+  );
+  assert.equal(
+    guards.filter((unit) => unit.pathDestination !== null && !marchingOnTheTarget(unit)).length,
+    settlementDefense,
+    "§54: and the garrison is sent to its own centre, not after them",
+  );
+  assert.equal(state.phase, "approach", "§9: and it is marching, not already fighting");
 
   // §54: a Town holds back more, because it has more to lose. Same army, same
   // ratio, only the age differs — so the garrison is the only thing that can.
@@ -52391,11 +52635,18 @@ check("§60: the AI picks the outer economy while even and the centre once domin
   const farm = even.playerBuilding("farm", 0, 16);
   even.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5 }), "attack");
   assert.equal(even.army.currentMission, "harassEconomy", "§60 #2: undefended outer economy first");
+  assert.equal(even.army.state().target?.candidate.id, `structure:${farm.id}`, "and that farm is the target");
   assert.ok(
-    even.units.unitsOf("enemy").some((unit) => unit.attackTarget === farm),
+    even.units.unitsOf("enemy").some((unit) => unit.pathWaypointCount > 0),
     "and the guards are actually ordered onto it",
   );
-  assert.match(even.log.latest?.reason ?? "", /dış ekonomi/, "§5: the panel can explain the choice");
+  // The newest entry is now the §7 formation choice, so the mission entry is
+  // asked for by kind rather than by "whatever was logged last".
+  assert.match(
+    even.log.recent().find((entry) => entry.kind === "army-mission")?.reason ?? "",
+    /dış ekonomi/,
+    "§5: the panel can explain the choice",
+  );
 
   // §69: the same army against a collapsed defence goes for the win instead.
   const dominant = armyTestWorld();
@@ -52403,8 +52654,8 @@ check("§60: the AI picks the outer economy while even and the centre once domin
   dominant.playerBuilding("farm", 0, 16);
   dominant.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 0 }), "attack");
   assert.equal(dominant.army.currentMission, "assaultTarget", "§67: a won match gets finished");
-  const center = dominant.centers.get("player");
-  assert.ok(dominant.units.unitsOf("enemy").some((unit) => unit.attackTarget === center));
+  assert.equal(dominant.army.state().target?.candidate.kind, "center");
+  assert.ok(dominant.units.unitsOf("enemy").some((unit) => unit.pathWaypointCount > 0));
 
   // §57: whatever the target, a raid at home outranks it.
   const raided = armyTestWorld();
@@ -52532,6 +52783,313 @@ check("§62/§65: the AI retreats on a lost exchange and on a ground-down army",
     null,
     "§82: an army that never left has no retreat to explain",
   );
+});
+
+check("Askerî AI v2 §7/§8: the formation score is data-tuned, reasoned and held", () => {
+  const weights = AI_TEST_BALANCE.army.formationWeights;
+  const base: AiFormationContext = {
+    phase: "deploy",
+    mission: "assaultTarget",
+    enemyClass: "balanced",
+    friendly: { guard: 6, archer: 3, siege: 1 },
+    terrainWidth: 0.8,
+    cohesion: 1,
+    current: null,
+    unitCount: 10,
+  };
+
+  // Every formation the army is large enough to form is offered, and none is
+  // offered that it is not — the catalogue's own `minUnits`, not a second list.
+  assert.deepEqual(
+    scoreFormations(base, weights).map((entry) => entry.formation).sort(),
+    RTS_FORMATION_DEFINITIONS.filter((entry) => entry.minUnits <= 10).map((entry) => entry.id).sort(),
+  );
+  assert.deepEqual(
+    scoreFormations({ ...base, unitCount: 4 }, weights).map((entry) => entry.formation).sort(),
+    RTS_FORMATION_DEFINITIONS.filter((entry) => entry.minUnits <= 4).map((entry) => entry.id).sort(),
+    "a four-unit army is never asked to form a Kare",
+  );
+  // §5 of the AI design: no unexplained decisions, ever.
+  assert.ok(scoreFormations(base, weights).every((entry) => entry.reason.length > 0));
+  // §17.3: identical input, identical order.
+  assert.deepEqual(scoreFormations(base, weights), scoreFormations(base, weights));
+
+  // §3's headline rule: Kol is a travel formation, and contact ends it.
+  assert.equal(betterFormation({ ...base, phase: "march" }, weights, 0)?.formation, "column");
+  assert.notEqual(betterFormation({ ...base, phase: "deploy" }, weights, 0)?.formation, "column");
+
+  // §7: hysteresis is the director's rule reused, not a new one. With no margin
+  // the winner takes over; with a margin wider than the actual gap it does not.
+  const held: AiFormationContext = { ...base, current: "square" };
+  const scores = scoreFormations(held, weights);
+  const challenger = scores[0] ?? assert.fail("something must score");
+  const incumbent = scores.find((entry) => entry.formation === "square")
+    ?? assert.fail("the held formation must still be scored");
+  assert.equal(betterFormation(held, weights, 0)?.formation, challenger.formation);
+  if (challenger.formation !== incumbent.formation) {
+    const needed = (challenger.score - incumbent.score) / Math.abs(incumbent.score);
+    assert.equal(
+      betterFormation(held, weights, needed + 0.1)?.formation,
+      "square",
+      "a margin wider than the gap keeps the army in the shape it already holds",
+    );
+  }
+
+  // §8: the enemy army reduces to one class, and every class is answerable.
+  assert.equal(enemyCompositionClass({ guard: 8, archer: 1, siege: 0 }), "melee_heavy");
+  assert.equal(enemyCompositionClass({ guard: 1, archer: 8, siege: 0 }), "ranged_heavy");
+  assert.equal(enemyCompositionClass({ guard: 1, archer: 1, siege: 6 }), "siege_heavy");
+  assert.equal(enemyCompositionClass({ guard: 3, archer: 3, siege: 2 }), "balanced");
+  assert.equal(enemyCompositionClass({ guard: 1, archer: 0, siege: 0 }), "weak");
+  assert.equal(
+    enemyCompositionClass({ guard: 8, archer: 1, siege: 0 }, { fortifiedTarget: true }),
+    "fortified",
+    "a Karakol is a different problem from the same troops in the open",
+  );
+  for (const enemyClass of AI_ENEMY_COMPOSITION_CLASSES) {
+    assert.ok(
+      scoreFormations({ ...base, enemyClass }, weights).length > 0,
+      `${enemyClass} has an answer`,
+    );
+  }
+});
+
+check("Askerî AI v2 §2/§9: the army marches as a formation and only fights on contact", () => {
+  const world = armyTestWorld();
+  const guards = world.enemyGuards(6);
+  world.playerBuilding("farm", 0, 16);
+  const blackboard = () => aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5 });
+
+  world.army.update(blackboard(), "attack");
+  const marching = world.army.state();
+  assert.equal(marching.phase, "approach", "§9: the tactical phase is a sub-state of the attack");
+  assert.ok(marching.formation !== null, "§7: and it is holding a chosen formation");
+  assert.ok(
+    guards.every((guard) => guard.attackTarget === null),
+    "§15: nothing is ordered to attack before contact",
+  );
+  assert.ok(
+    guards.some((guard) => guard.pathDestination !== null),
+    "§2: the army is walked out by a group order instead of unit by unit",
+  );
+
+  // §2's performance rule: nothing changed, so the slots are not re-cut. The
+  // planned routes are the observable — a re-assignment replaces them.
+  const routes = guards.map((guard) => guard.pathDestination?.toArray() ?? null);
+  world.army.update(blackboard(), "attack");
+  assert.deepEqual(
+    guards.map((guard) => guard.pathDestination?.toArray() ?? null),
+    routes,
+    "an unchanged phase, formation and target does not re-plan the whole army",
+  );
+
+  // Contact: the army arrives, and the per-unit combat system takes it back.
+  for (const guard of guards) guard.position.set(guard.position.x, 0, 14);
+  world.army.update(blackboard(), "attack");
+  assert.equal(world.army.state().phase, "engage");
+  assert.ok(
+    guards.some((guard) => guard.attackTarget !== null),
+    "§15: contact hands the army straight back to per-unit targeting",
+  );
+});
+
+check("Askerî AI v2 §11: the depot that carries the flow outranks its idle twin", () => {
+  const served = new Map<number, readonly number[]>();
+  const world = armyTestWorld(null, { producersServedBy: (id) => served.get(id) ?? [] });
+  const guards = world.enemyGuards(6);
+  // Equidistant from the army centroid, so the only thing separating the two is
+  // what they carry: same class, same health, same defence.
+  const origin = guards.reduce((sum, guard) => sum + guard.position.x, 0) / guards.length;
+  const idle = world.playerBuilding("depot", origin - 15, 16);
+  const busy = world.playerBuilding("depot", origin + 15, 16);
+  served.set(busy.id, [901, 902, 903]);
+
+  world.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5 }), "attack");
+  const target = world.army.state().target ?? assert.fail("the army must hold a target");
+  assert.equal(target.candidate.id, `structure:${busy.id}`, "§11.2: it goes for the throat");
+  assert.notEqual(target.candidate.id, `structure:${idle.id}`);
+  assert.match(target.reason, /üretici/, "§5: and the panel says the flow is why");
+
+  // With nothing known to be served, the two are indistinguishable again — which
+  // is what §17.2 asks for: a producer nobody scouted must not raise a score.
+  const unseen = armyTestWorld(null, { producersServedBy: () => [] });
+  unseen.enemyGuards(6);
+  const unseenIdle = unseen.playerBuilding("depot", origin - 15, 16);
+  const unseenBusy = unseen.playerBuilding("depot", origin + 15, 16);
+  unseen.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5 }), "attack");
+  const unseenTarget = unseen.army.state().target?.candidate.id;
+  assert.ok(
+    unseenTarget === `structure:${unseenIdle.id}` || unseenTarget === `structure:${unseenBusy.id}`,
+    "an unscouted supply network leaves the two depots scoring alike",
+  );
+  assert.ok(
+    !(unseen.army.state().target?.reason ?? "").includes("üretici"),
+    "and nothing claims a flow it never saw",
+  );
+});
+
+check("Askerî AI v2 §11.4: a beaten army falls back on a safe Karakol, not the front door", () => {
+  const world = armyTestWorld();
+  const guards = world.enemyGuards(6);
+  world.playerBuilding("farm", 0, 16);
+  const outpost = world.aiBuilding("outpost", -22, -34);
+  const base = world.centers.get("enemy") ?? assert.fail("the AI has a centre");
+
+  world.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5 }), "attack");
+  assert.ok(world.army.currentMission === "harassEconomy" || world.army.currentMission === "assaultTarget");
+  world.army.update(aiTestBlackboard({ ownArmyPower: 1, knownEnemyArmyPower: 9 }), "attack");
+  assert.equal(world.army.currentMission, "regroup");
+  assert.equal(world.army.state().retreatReason, "outmatched", "§65: the trigger still names itself");
+
+  const destinations = guards.map((guard) => guard.pathDestination).filter((point) => point !== null);
+  assert.ok(destinations.length > 0, "the retreat is actually ordered");
+  assert.ok(
+    destinations.every((point) =>
+      Math.hypot(point.x - outpost.x, point.z - outpost.z)
+      < Math.hypot(point.x - base.position.x, point.z - base.position.z)),
+    "§11.4: it withdraws onto the outpost instead of the open ground beside the centre",
+  );
+
+  // "Safe" has to mean safe: an outpost being stormed is not a fallback position.
+  const stormed = armyTestWorld();
+  const stormedGuards = stormed.enemyGuards(6);
+  stormed.playerBuilding("farm", 0, 16);
+  const contested = stormed.aiBuilding("outpost", -22, -34);
+  stormed.units.spawn("player", contested.x + 1, contested.z + 1, RTS_TEST_UNIT_STATS);
+  stormed.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5 }), "attack");
+  stormed.army.update(aiTestBlackboard({ ownArmyPower: 1, knownEnemyArmyPower: 9 }), "attack");
+  const stormedDestinations = stormedGuards
+    .map((guard) => guard.pathDestination)
+    .filter((point) => point !== null);
+  assert.ok(
+    stormedDestinations.every((point) =>
+      Math.hypot(point.x - contested.x, point.z - contested.z) > 1),
+    "an outpost with the enemy standing on it is not a place to fall back to",
+  );
+});
+
+check("Askerî AI v2 §13: the power ratio knows who it is fighting", () => {
+  const units = new UnitSystem();
+  const guards = Array.from({ length: 4 }, (_, index) => units.spawn(
+    "enemy", index * 2, 0, RTS_TEST_UNIT_STATS,
+  ));
+  const guns = Array.from({ length: 2 }, (_, index) => units.spawn(
+    "enemy", index * 2, 6, RTS_TEST_SIEGE_STATS,
+  ));
+  const plainGuards = armyPower(guards, AI_TEST_BALANCE);
+
+  // The §52 sum is untouched when nothing is known about the other side, which
+  // keeps the blackboard's answer to "how big is my army" a single answer.
+  assert.equal(armyPower(guards, AI_TEST_BALANCE, { guard: 0, archer: 0, siege: 0 }), plainGuards);
+  // A mirror match is the baseline the table is written around.
+  assert.equal(armyPower(guards, AI_TEST_BALANCE, { guard: 4, archer: 0, siege: 0 }), plainGuards);
+  // GDD 12 §33's soft counters, one level up: a Guard is worth more against
+  // troops who need the distance open, and a gun is worth less against people.
+  assert.ok(
+    armyPower(guards, AI_TEST_BALANCE, { guard: 0, archer: 4, siege: 0 }) > plainGuards,
+    "Muhafız is worth more against an Okçu line",
+  );
+  assert.ok(
+    armyPower(guns, AI_TEST_BALANCE, { guard: 4, archer: 0, siege: 0 })
+      < armyPower(guns, AI_TEST_BALANCE),
+    "a Topçu counted against infantry is worth less than its raw power",
+  );
+});
+
+check("Askerî AI v2 §10.3: a gun shells the Karakol, not the house beside it", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const navigation = new RtsNavigation();
+  const gun = units.spawn("enemy", 0, 0, RTS_TEST_SIEGE_STATS);
+  const complete = (id: string, x: number, z: number) => {
+    const stats = buildings[id] ?? assert.fail(`${id} balance missing`);
+    const structure = structures.place("player", stats, x, z);
+    structures.advanceConstruction(structure, stats.constructionSeconds);
+    return structure;
+  };
+  // The house is nearer; the outpost is what the design says to break first.
+  const house = complete("house", 3, 0);
+  const outpost = complete("outpost", 10, 0);
+  updateUnitEngagement([gun], { navigation, targets: [house, outpost] });
+  assert.equal(gun.attackTarget, outpost, "§10.3: rank first, distance second");
+
+  // The rule is a *siege* rule: an escort still answers whatever is nearest,
+  // because a Guard that walks past the enemy to punch a wall reads as broken.
+  const escortUnits = new UnitSystem();
+  const escort = escortUnits.spawn("enemy", 0, 0, RTS_TEST_UNIT_STATS);
+  const defender = escortUnits.spawn("player", 4, 0, RTS_TEST_UNIT_STATS);
+  updateUnitEngagement([escort], { navigation, targets: [defender, house, outpost] });
+  assert.equal(escort.attackTarget, defender, "troops still outrank buildings for everyone else");
+});
+
+check("Askerî AI v2 §17.1: the new ai.json blocks are validated, not silently dropped", () => {
+  const raw = JSON.parse(readFileSync("public/game-data/balance/ai.json", "utf8")) as Record<string, unknown>;
+  const withArmy = (army: Record<string, unknown>) => ({ ...raw, army: { ...(raw["army"] as object), ...army } });
+  const formationWeights = AI_TEST_BALANCE.army.formationWeights as unknown as Record<string, number>;
+  const tactics = AI_TEST_BALANCE.army.tactics as unknown as Record<string, number>;
+
+  // Every §7 term is present in the shipped file, and reachable by name.
+  for (const term of AI_FORMATION_WEIGHTS) {
+    assert.equal(typeof formationWeights[term], "number", `${term} is authored`);
+  }
+  assert.throws(
+    () => validateAiBalance(withArmy({ formationWeights: { ...formationWeights, sabotageFit: 1 } })),
+    GameDataError,
+    "an unknown formation term is a typo, not a feature",
+  );
+  assert.throws(
+    () => validateAiBalance(withArmy({ formationWeights: { missionFit: 1 } })),
+    GameDataError,
+    "a missing term would silently score as zero",
+  );
+  assert.throws(
+    () => validateAiBalance(withArmy({ formationWeights: { ...formationWeights, terrainFit: -1 } })),
+    GameDataError,
+    "a negative weight inverts a term instead of disabling it",
+  );
+
+  // §9's phases collapse into each other unless the three rings stay ordered.
+  assert.throws(
+    () => validateAiBalance(withArmy({ tactics: { ...tactics, deployDistance: tactics.approachDistance } })),
+    GameDataError,
+  );
+  assert.throws(
+    () => validateAiBalance(withArmy({ tactics: { ...tactics, engageDistance: tactics.deployDistance } })),
+    GameDataError,
+  );
+  // §12: a threshold outside 0..1 either never fires or always does.
+  assert.throws(() => validateAiBalance(withArmy({ tactics: { ...tactics, cohesionThreshold: 0 } })), GameDataError);
+  assert.throws(() => validateAiBalance(withArmy({ tactics: { ...tactics, cohesionThreshold: 1.5 } })), GameDataError);
+  // §10.4: a leash inside the deploy ring pulls the army out of every fight.
+  assert.throws(
+    () => validateAiBalance(withArmy({ tactics: { ...tactics, pursuitLeash: tactics.deployDistance - 1 } })),
+    GameDataError,
+  );
+});
+
+check("Askerî AI v2 §16: the panel explains the formation instead of just naming it", () => {
+  const lines = formatRtsAiDebug(aiTestSnapshot({
+    mission: "assaultTarget",
+    phase: "deploy",
+    formation: "wedge",
+    enemyClass: "ranged_heavy",
+    cohesion: 0.87,
+    formationReason: "görev 0.95 · arazi 0.90 · düşman 1.00 (ranged_heavy)",
+    formationScores: [
+      { formation: "wedge", score: 0.84, reason: "kama" },
+      { formation: "line", score: 0.61, reason: "hat" },
+    ],
+  }), [], 1).join("\n");
+  assert.match(lines, /taktik faz: deploy/);
+  assert.match(lines, /formasyon: wedge/);
+  assert.match(lines, /kohezyon 0\.87/);
+  assert.match(lines, /düşman sınıfı ranged_heavy/);
+  // The held formation is marked, so "which one won" reads at a glance.
+  assert.match(lines, /\*wedge 0\.84/);
+  assert.match(lines, /formasyon gerekçesi: .*ranged_heavy/);
 });
 
 // --- Faz 5 §38 Zafer: symmetric match result, and §69 stopping ---

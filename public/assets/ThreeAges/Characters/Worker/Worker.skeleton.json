@@ -1,7 +1,11 @@
 {
   "schema": 1,
   "sockets": [],
-  "animationSet": {},
+  "animationSet": {
+    "idle": "Worker_idle_natural",
+    "walk": "Worker_walking",
+    "run": "Worker_running"
+  },
   "animationVariants": {},
   "blendSpaces": [],
   "notifies": [],
@@ -9,24 +13,58 @@
   "rootMotion": [
     {
       "clip": "Worker_left_strafe",
-      "mode": "lockXYZ"
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
     },
     {
       "clip": "Worker_left_strafe_walking",
-      "mode": "lockXYZ"
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
     },
     {
       "clip": "Worker_running",
-      "mode": "lockXYZ"
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
     },
     {
       "clip": "Worker_walking",
-      "mode": "lockXYZ"
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Worker_box_walk_arc",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Worker_holding_walk",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Worker_wheelbarrow_walk_1",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Worker_wheelbarrow_walk_2",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Worker_wheelbarrow_walk_turn_left",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Worker_wheelbarrow_walk_turn_right",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
     }
   ],
   "physicsBodies": [],
   "physicsConstraints": [],
   "preview": {
-    "selectedClip": "Worker_walking"
+    "selectedClip": "Worker_wheelbarrow_walk_turn_right"
   }
 }

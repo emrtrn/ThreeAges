@@ -897,6 +897,12 @@ export interface AiTargetWeights {
   readonly victoryValue: number;
   readonly vulnerability: number;
   readonly proximity: number;
+  /**
+   * Askerî AI v2 planı §11: how much of the enemy's supply flow this target
+   * carries. This is the term that lets the AI prefer the depot three producers
+   * ship through over the identical depot next to it that feeds nothing.
+   */
+  readonly logisticsValue: number;
   /** Subtracted: defenders near a target push the army toward a softer one. */
   readonly defenseStrength: number;
 }
@@ -908,8 +914,67 @@ export const AI_TARGET_WEIGHTS: readonly (keyof AiTargetWeights)[] = [
   "victoryValue",
   "vulnerability",
   "proximity",
+  "logisticsValue",
   "defenseStrength",
 ];
+
+/**
+ * Askerî AI v2 planı §7: the formation-score term weights.
+ *
+ * Same shape and same rules as {@link AiTargetWeights} — every term is data, a
+ * negative weight is a typo rather than an inversion, and an unknown key is
+ * rejected instead of silently ignored. `transitionCost` is subtracted by the
+ * scorer, so it too is authored as a non-negative number.
+ */
+export interface AiFormationWeights {
+  readonly missionFit: number;
+  readonly terrainFit: number;
+  readonly enemyFit: number;
+  readonly compositionFit: number;
+  readonly cohesionFit: number;
+  /** Subtracted: how much changing shape at all has to be worth. */
+  readonly transitionCost: number;
+}
+
+/** The formation-score term names, in the order the §7 formula lists them. */
+export const AI_FORMATION_WEIGHTS: readonly (keyof AiFormationWeights)[] = [
+  "missionFit",
+  "terrainFit",
+  "enemyFit",
+  "compositionFit",
+  "cohesionFit",
+  "transitionCost",
+];
+
+/**
+ * Askerî AI v2 planı §9, §10.4, §12: the distances and ratios the tactical
+ * phase, the army-scale leash and the cohesion check are read off.
+ *
+ * These are world units and shares rather than code constants because they are
+ * exactly the numbers a playtest wants to move: how early the column unfolds
+ * into a line is the most visible tuning knob the army has.
+ */
+export interface AiTacticsBalance {
+  /** Beyond this from the target the army is still travelling (`march`). */
+  readonly approachDistance: number;
+  /** Inside this from the target the army forms up for contact (`deploy`). */
+  readonly deployDistance: number;
+  /** A seen enemy this close to the army centroid means contact (`engage`). */
+  readonly engageDistance: number;
+  /** §12: a unit within this of its slot counts as holding formation. */
+  readonly cohesionRadius: number;
+  /** §12: below this share of units in position, slots are re-assigned. */
+  readonly cohesionThreshold: number;
+  /**
+   * §10.4: how far the army centroid may drift from its mission target before
+   * the whole army is pulled back. The unit-scale leash (`attack.chaseRange`)
+   * already stops one soldier chasing; this stops the *army* being walked off
+   * the map by one runner.
+   */
+  readonly pursuitLeash: number;
+  /** §10.2: the gap the Archer support line tries to keep from the enemy. */
+  readonly archerStandoff: number;
+}
 
 /** §53: how many of each combat role the AI wants, as a ratio not a count. */
 export interface AiArmyComposition {
@@ -1102,6 +1167,10 @@ export interface AiBalance {
     readonly composition: Readonly<Record<SettlementAge, AiArmyComposition>>;
     /** §60: per-term weights of the target score. */
     readonly targetWeights: AiTargetWeights;
+    /** Askerî AI v2 §7: per-term weights of the formation score. */
+    readonly formationWeights: AiFormationWeights;
+    /** Askerî AI v2 §9/§10.4/§12: the distances the tactical phase is read off. */
+    readonly tactics: AiTacticsBalance;
   };
   readonly economy: {
     /** §35: worker count the economy intent drives toward, per age. */

@@ -1,7 +1,7 @@
 /** Shared combat-facing contract for RTS units and damageable structures. */
 import { Vector3 } from "three";
 
-import type { UnitArmorClass } from "../../data/gameDataTypes";
+import type { BuildingBalanceStats, UnitArmorClass } from "../../data/gameDataTypes";
 import type { HealthComponent } from "../units/health";
 import type { UnitOwner } from "../units/unit";
 
@@ -35,6 +35,19 @@ export interface CombatTarget {
    * footprint. Units use zero; command centres expose their perimeter.
    */
   readonly combatRadius?: number;
+  /**
+   * The balance row behind this target, when it is a building.
+   *
+   * Askerî AI v2 §10.3: a siege gun already prefers structures, but nothing told
+   * it *which* structure, so it shelled whichever wall happened to be nearest.
+   * Present on buildings and absent on people — which is exactly the question
+   * "is this a building I should rank", asked once.
+   *
+   * Deliberately not named `stats`: {@link Unit} already has a `stats` of its
+   * own with a different type, and a target contract that quietly collided with
+   * it would be a compile error at every call site rather than one field here.
+   */
+  readonly buildingStats?: BuildingBalanceStats;
   /**
    * True while this target is already going down — a body playing its defeat
    * pose rather than a threat still standing.

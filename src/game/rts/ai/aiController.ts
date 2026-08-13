@@ -34,12 +34,15 @@ import { AiInfrastructureManager, type AiInfrastructureStep } from "./aiInfrastr
 import { AiProductionManager } from "./aiProductionManager";
 import { AiTradeManager, type AiTradeStep } from "./aiTradeManager";
 import { AiUpgradeManager, type AiUpgradeStep } from "./aiUpgradeManager";
-import { ArmyManager, type AiObjectiveWatch, type AiRetreatReason } from "./armyManager";
+import { ArmyManager, type AiLogisticsWatch, type AiObjectiveWatch, type AiRetreatReason } from "./armyManager";
 import type { AiVisionFilter } from "./aiVisionFilter";
+import type { ProductionLogisticsSystem } from "../economy/productionLogisticsSystem";
 import type { PredatorStrike } from "../wildlife/predatorSystem";
 import { KingdomDirector } from "./kingdomDirector";
 import type { AiTargetScore } from "./armyTargeting";
-import type { AiArmyMission, AiExpansionStep, AiIntent, AiIntentScore, AiPlan } from "./aiTypes";
+import type { AiEnemyCompositionClass, AiFormationScore } from "./formationScorer";
+import type { RtsFormationId } from "../units/formations/rtsFormationTypes";
+import type { AiArmyMission, AiExpansionStep, AiIntent, AiIntentScore, AiPlan, AiTacticalPhase } from "./aiTypes";
 
 export interface AiControllerOptions extends AiBlackboardSources {
   readonly balance: AiBalance;
@@ -103,6 +106,23 @@ export interface AiControllerOptions extends AiBlackboardSources {
 }
 
 /** Everything the debug panel needs (§82), in one read. */
+/**
+ * Askerî AI v2 §11.3: "which producers ship through this structure", and
+ * nothing else.
+ *
+ * The narrowing is the point. `ProductionLogisticsSystem` can answer far more
+ * than the army has any business knowing, and handing the whole system to a
+ * combat decision is how a read turns into a dependency. §11 asks existing
+ * systems to be queried read-only; this is that query.
+ */
+function producerServiceWatch(logistics: ProductionLogisticsSystem): AiLogisticsWatch {
+  return {
+    producersServedBy: (structureId) => logistics.snapshots()
+      .filter((snapshot) => snapshot.depotStructureId === structureId)
+      .map((snapshot) => snapshot.structureId),
+  };
+}
+
 export interface AiControllerSnapshot {
   readonly owner: UnitOwner;
   readonly intent: AiIntent | null;
@@ -117,6 +137,18 @@ export interface AiControllerSnapshot {
   readonly target: AiTargetScore | null;
   /** §65: which retreat trigger stood the army down, while it is standing down. */
   readonly retreatReason: AiRetreatReason | null;
+  /** Askerî AI v2 §9: the tactical sub-state, null under a mission that has none. */
+  readonly phase: AiTacticalPhase | null;
+  /** §7: the formation the army is holding, null before its first choice. */
+  readonly formation: RtsFormationId | null;
+  /** §16: every formation's score at the last choice, best first. */
+  readonly formationScores: readonly AiFormationScore[];
+  /** §7: why the held formation won. */
+  readonly formationReason: string | null;
+  /** §8: what the seen enemy army reduces to. */
+  readonly enemyClass: AiEnemyCompositionClass;
+  /** §12: share of the field army standing on (or walking to) its slot. */
+  readonly cohesion: number;
   /** §69: the AI has stopped deciding because the match is over. */
   readonly concluded: boolean;
   readonly bottleneck: AiBottleneck;
@@ -183,6 +215,10 @@ export class AiController {
       this.log,
       options.objectives ?? null,
       options.vision ?? null,
+      // Askerî AI v2 §11.3: no new system and no new constructor argument — the
+      // blackboard already reads `ProductionLogisticsSystem`, so the army gets
+      // the one question it needs off the same source, narrowed to a read.
+      producerServiceWatch(options.logistics),
     );
     this.builds = new AiBuildManager(
       options.owner,
@@ -367,6 +403,12 @@ export class AiController {
       garrisonCount: armyState.garrisonCount,
       target: armyState.target,
       retreatReason: armyState.retreatReason,
+      phase: armyState.phase,
+      formation: armyState.formation,
+      formationScores: armyState.formationScores,
+      formationReason: armyState.formationReason,
+      enemyClass: armyState.enemyClass,
+      cohesion: armyState.cohesion,
       concluded: this.matchConcluded,
       bottleneck: this.economy.bottleneck,
       expansionStep: this.expansion.currentStep,

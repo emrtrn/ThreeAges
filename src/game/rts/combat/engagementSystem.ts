@@ -13,6 +13,7 @@ import { combatDistance } from "./combatTarget";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { Unit } from "../units/unit";
 import { issueAttackOrder } from "../units/attackPathing";
+import { structureRoleFor, type StructureRole } from "../structures/structureRole";
 
 /** Ground distance at which an attack-move counts as having arrived. */
 const ATTACK_MOVE_ARRIVAL_RADIUS = 1.5;
@@ -156,17 +157,58 @@ function nearestHostile(
   let best: CombatTarget | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
   let bestPreferred = false;
+  let bestRank = -1;
   for (const target of options.targets) {
     if (target === (unit as CombatTarget)) continue;
     if (target.owner === unit.owner || target.health.depleted) continue;
     const distance = combatDistance(unit.position, target);
     if (distance > range) continue;
     const preferred = (target.armorClass === "structure") === prefersStructures;
-    if (best && preferred === bestPreferred && distance >= bestDistance) continue;
     if (best && preferred !== bestPreferred && bestPreferred) continue;
+    if (best && preferred === bestPreferred) {
+      // §10.3: among the buildings a gun prefers, *which* building. Ranked
+      // first and only then by distance, so a Karakol two steps further away
+      // outranks the house the gun happens to be standing next to.
+      const rank = prefersStructures ? siegeStructureRank(target) : 0;
+      if (rank < bestRank) continue;
+      if (rank === bestRank && distance >= bestDistance) continue;
+      bestRank = rank;
+    } else {
+      bestRank = prefersStructures ? siegeStructureRank(target) : 0;
+    }
     best = target;
     bestDistance = distance;
     bestPreferred = preferred;
   }
   return best;
 }
+
+/**
+ * Askerî AI v2 §10.3: how much a gun should want to knock this building down,
+ * higher first.
+ *
+ * The design's order — Merkez > askerî üretim > Karakol > Depo > üretim yapısı
+ * — read off the same {@link structureRoleFor} classification the strategic
+ * target score uses, so the gun in the field and the army manager back at base
+ * cannot come to two different conclusions about what a Karakol is worth.
+ *
+ * A target with no building row (a person, a caravan animal) ranks 0: this is
+ * only ever consulted once the structure preference has already been applied.
+ */
+function siegeStructureRank(target: CombatTarget): number {
+  const stats = target.buildingStats;
+  if (!stats) return 0;
+  // A centre carries no economy/territory row of its own, and is the one
+  // building whose fall ends the match.
+  if (stats.id === "command_center") return SIEGE_STRUCTURE_RANK.center;
+  return SIEGE_STRUCTURE_RANK[structureRoleFor(stats)];
+}
+
+const SIEGE_STRUCTURE_RANK: Readonly<Record<StructureRole, number>> = {
+  center: 6,
+  military: 5,
+  outpost: 4,
+  depot: 3,
+  economy: 2,
+  support: 1,
+};

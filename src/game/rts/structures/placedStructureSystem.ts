@@ -226,6 +226,8 @@ export interface PlacedStructure {
   readonly position: Vector3;
   /** {@link CombatTarget}: every building is the §33 table's "structure" column. */
   readonly armorClass: "structure";
+  /** {@link CombatTarget}: the same row as {@link stats}, under the contract's name. */
+  readonly buildingStats: BuildingBalanceStats;
   /** Melee units strike the footprint edge rather than walking into the blocker. */
   readonly combatRadius: number;
   /** Level 1 at placement; per-instance upgrades may raise it up to 3. */
@@ -337,6 +339,7 @@ export class PlacedStructureSystem {
       id,
       owner,
       stats,
+      buildingStats: stats,
       x,
       z,
       groundY,

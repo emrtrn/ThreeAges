@@ -6,6 +6,15 @@
  * itself: the unit standing on the left of the group gets the right-hand slot and
  * walks through everyone. This module assigns slots by proximity instead, so the
  * group keeps its shape.
+ *
+ * The pipeline is deliberately split in two (Askerî AI v2 planı §5):
+ *
+ *     geometry → role bands → unit↔slot matching → per-pair spacing → pathing
+ *
+ * Everything up to and including the spacing pass is pure geometry over plain
+ * numbers; only the last step touches navigation. That is what lets the siege's
+ * radius widen its own neighbourhood without widening the whole formation, and
+ * what keeps the role bands testable without a nav grid.
  */
 import { Vector3 } from "three";
 
@@ -13,6 +22,12 @@ import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { Unit } from "./unit";
 import { formationOffsets as legacyFormationOffsets } from "./unitMovement";
 import { rtsFormationWorldSlots } from "./formations/rtsFormationGenerator";
+import {
+  formationBaseSpacing,
+  formationPairSpacing,
+  formationSpacingForRadii,
+  relaxSlotSpacing,
+} from "./formations/slotSpacing";
 import { DEFAULT_RTS_FORMATION, type RtsFormationId } from "./formations/rtsFormationTypes";
 
 /** One unit's share of a group order. A null `path` means "no route exists". */
@@ -63,7 +78,9 @@ export function assignGroupDestinations(
   }
   const centroid = combatUnits.reduce((total, unit) => total.add(unit.position), new Vector3())
     .multiplyScalar(1 / combatUnits.length);
-  const spacing = Math.max(...combatUnits.map((unit) => unit.navRadius * 2)) + 0.6;
+  // §5: the grid is laid out on the typical unit. A Topçu no longer sets the
+  // spacing for twenty Guards; it takes its own room in `relaxSlotSpacing`.
+  const spacing = formationBaseSpacing(combatUnits.map((unit) => unit.navRadius));
   const combatDestinations = assignFormationCombatDestinations(
     formation,
     combatUnits,
@@ -109,29 +126,8 @@ function assignFormationCombatDestinations(
   reservations: readonly DestinationReservation[],
 ): GroupDestination[] {
   const assign = (candidateSpacing: number, allowNearbyFallback: boolean): GroupDestination[] => {
-    if (formation === "line") {
-      return assignRoleAwareLineDestinations(
-        units, point, centroid, candidateSpacing, navigation, reservations, allowNearbyFallback,
-      );
-    }
-    if (formation === "square") {
-      return assignRoleAwareSquareDestinations(
-        units, point, centroid, candidateSpacing, navigation, reservations, allowNearbyFallback,
-      );
-    }
-    if (formation === "loose") {
-      return assignDestinationsToSlots(
-        units,
-        rtsFormationWorldSlots(formation, units.length, candidateSpacing, centroid, point),
-        point,
-        navigation,
-        reservations,
-        allowNearbyFallback,
-      );
-    }
-    return assignRoleAwareDepthDestinations(
-      formation, units, point, centroid, candidateSpacing, navigation, reservations, allowNearbyFallback,
-    );
+    const desired = formationSlotsForUnits(formation, units, point, centroid, candidateSpacing);
+    return planUnitDestinations(units, desired, point, navigation, reservations, allowNearbyFallback);
   };
   for (const multiplier of [1, 0.9, 0.8]) {
     const destinations = assign(spacing * multiplier, false);
@@ -140,6 +136,36 @@ function assignFormationCombatDestinations(
   const nearby = assign(spacing * 0.8, true);
   if (nearby.every((entry) => entry.path !== null && entry.fallback !== "free")) return nearby;
   return assignDestinationsToSlots(units, legacySlots(units.length, point), point, navigation, reservations);
+}
+
+/**
+ * The world slot each unit should stand on, index-aligned with `units`.
+ *
+ * Pure: geometry, role bands and per-pair spacing, no navigation. The final
+ * {@link relaxSlotSpacing} pass is what implements §5 — every branch below may
+ * lay its shape out on the base spacing and trust the relaxation to widen the
+ * few pairs that a wide-bodied unit actually touches.
+ */
+export function formationSlotsForUnits(
+  formation: RtsFormationId,
+  units: readonly Unit[],
+  point: Vector3,
+  centroid: Vector3,
+  spacing: number,
+): Vector3[] {
+  const groups = combatRoleGroups(units);
+  const forward = point.clone().sub(centroid).setY(0).normalize();
+  if (forward.lengthSq() === 0) forward.set(0, 0, 1);
+  const raw = groups.length <= 1
+    ? matchSlotsToUnits(units, rtsFormationWorldSlots(formation, units.length, spacing, centroid, point))
+    : formation === "line"
+      ? roleRankSlots(units, groups, point, centroid, forward)
+      : formation === "wedge"
+        ? wedgeWithSupportSlots(units, groups, point, centroid, forward)
+        : formation === "square"
+          ? roleRingSlots(units, groups, point, centroid, spacing, forward)
+          : roleDepthSlots(formation, units, groups, point, centroid, spacing, forward);
+  return relaxSlotSpacing(raw, units.map((unit) => unit.navRadius));
 }
 
 /** Guard, Archer, Siege, then any future combat role: front to back priority. */
@@ -152,151 +178,179 @@ function combatRoleGroups(units: readonly Unit[]): Unit[][] {
   ].filter((group) => group.length > 0);
 }
 
-function assignRoleAwareLineDestinations(
+function groupSpacing(group: readonly Unit[]): number {
+  return formationSpacingForRadii(group.map((unit) => unit.navRadius));
+}
+
+function groupRadius(group: readonly Unit[]): number {
+  return Math.max(0, ...group.map((unit) => unit.navRadius));
+}
+
+/**
+ * Hat: one rank per role, each rank laid out on *its own* spacing and separated
+ * from its neighbour by that pair's collision distance (§5).
+ *
+ * Guards take the forward rank, Archers the next, Siege the rear — and the
+ * gap in front of the Siege rank is the only one a gun's radius widens.
+ */
+function roleRankSlots(
   units: readonly Unit[],
+  groups: readonly Unit[][],
   point: Vector3,
   centroid: Vector3,
-  spacing: number,
-  navigation: RtsNavigation,
-  reservations: readonly DestinationReservation[],
-  allowNearbyFallback: boolean,
-): GroupDestination[] {
-  const groups = combatRoleGroups(units);
-  if (groups.length <= 1) {
-    return assignDestinationsToSlots(
-      units,
-      rtsFormationWorldSlots("line", units.length, spacing, centroid, point),
-      point,
-      navigation,
-      reservations,
-      allowNearbyFallback,
-    );
-  }
-  const forward = point.clone().sub(centroid).setY(0).normalize();
-  if (forward.lengthSq() === 0) forward.set(0, 0, 1);
-  const assigned: GroupDestination[] = [];
+  forward: Vector3,
+): Vector3[] {
+  const depths = rankDepths(groups);
+  const mean = depths.reduce((sum, depth) => sum + depth, 0) / depths.length;
+  const slotForUnit = new Map<Unit, Vector3>();
   groups.forEach((group, index) => {
     // Centre all ranks on the requested target: guards occupy the positive
     // forward rank, archers the next, and siege the rear-centre rank.
-    const rankOffset = ((groups.length - 1) / 2 - index) * spacing;
-    const rankTarget = point.clone().addScaledVector(forward, rankOffset);
-    const destinations = assignDestinationsToSlots(
-      group,
-      rtsFormationWorldSlots("line", group.length, spacing, centroid, rankTarget),
-      point,
-      navigation,
-      [
-        ...reservations,
-        ...assigned.map((entry) => ({ position: entry.destination, radius: entry.unit.navRadius })),
-      ],
-      allowNearbyFallback,
-    );
-    assigned.push(...destinations);
+    const rankTarget = point.clone().addScaledVector(forward, mean - (depths[index] ?? 0));
+    const slots = rtsFormationWorldSlots("line", group.length, groupSpacing(group), centroid, rankTarget);
+    matchSlotsToUnits(group, slots).forEach((slot, member) => {
+      const unit = group[member];
+      if (unit) slotForUnit.set(unit, slot);
+    });
   });
-  return destinationsInSelectionOrder(units, assigned, point);
+  return units.map((unit) => slotForUnit.get(unit)?.clone() ?? point.clone());
 }
 
-function assignRoleAwareDepthDestinations(
-  formation: Exclude<RtsFormationId, "line" | "square" | "loose">,
+/** Cumulative depth of each role rank behind the front one, in world units. */
+function rankDepths(groups: readonly Unit[][]): number[] {
+  const depths = [0];
+  for (let index = 1; index < groups.length; index += 1) {
+    const previous = groups[index - 1] ?? [];
+    const current = groups[index] ?? [];
+    depths.push((depths[index - 1] ?? 0) + formationPairSpacing(groupRadius(previous), groupRadius(current)));
+  }
+  return depths;
+}
+
+/**
+ * Kama — §4: an assault wedge with a support tail, not one geometric triangle.
+ *
+ * The front role forms the wedge; every role behind it forms a straight support
+ * rank at the pair distance behind the wedge's own rear. A twenty-unit army with
+ * two guns should not be a twenty-unit triangle with the guns forming its widest
+ * row — the tip is what charges, the tail is what shoots over it.
+ */
+function wedgeWithSupportSlots(
   units: readonly Unit[],
+  groups: readonly Unit[][],
+  point: Vector3,
+  centroid: Vector3,
+  forward: Vector3,
+): Vector3[] {
+  const vanguard = groups[0] ?? [];
+  const support = groups.slice(1);
+  const slotForUnit = new Map<Unit, Vector3>();
+  const wedgeSlots = rtsFormationWorldSlots("wedge", vanguard.length, groupSpacing(vanguard), centroid, point);
+  matchSlotsToUnits(vanguard, wedgeSlots).forEach((slot, member) => {
+    const unit = vanguard[member];
+    if (unit) slotForUnit.set(unit, slot);
+  });
+  // How far the wedge's rearmost rank already sits behind the command point;
+  // the first support rank starts a pair distance behind that.
+  const wedgeRear = Math.max(0, ...wedgeSlots.map((slot) =>
+    -((slot.x - point.x) * forward.x + (slot.z - point.z) * forward.z)));
+  let depth = wedgeRear;
+  let previous = vanguard;
+  for (const group of support) {
+    depth += formationPairSpacing(groupRadius(previous), groupRadius(group));
+    const rankTarget = point.clone().addScaledVector(forward, -depth);
+    const slots = rtsFormationWorldSlots("line", group.length, groupSpacing(group), centroid, rankTarget);
+    matchSlotsToUnits(group, slots).forEach((slot, member) => {
+      const unit = group[member];
+      if (unit) slotForUnit.set(unit, slot);
+    });
+    previous = group;
+  }
+  return units.map((unit) => slotForUnit.get(unit)?.clone() ?? point.clone());
+}
+
+/**
+ * Kare: fill from the outer ring inward, so Guards surround Archers and Siege.
+ *
+ * Higher Chebyshev radius means an outer ring slot. Filling from that ring
+ * inward puts guards around vulnerable archers and siege without assigning a
+ * stat bonus or requiring a rigid combat formation.
+ */
+function roleRingSlots(
+  units: readonly Unit[],
+  groups: readonly Unit[][],
   point: Vector3,
   centroid: Vector3,
   spacing: number,
-  navigation: RtsNavigation,
-  reservations: readonly DestinationReservation[],
-  allowNearbyFallback: boolean,
-): GroupDestination[] {
-  const groups = combatRoleGroups(units);
-  if (groups.length <= 1) {
-    return assignDestinationsToSlots(
-      units,
-      rtsFormationWorldSlots(formation, units.length, spacing, centroid, point),
-      point,
-      navigation,
-      reservations,
-      allowNearbyFallback,
-    );
-  }
-  const forward = point.clone().sub(centroid).setY(0).normalize();
-  if (forward.lengthSq() === 0) forward.set(0, 0, 1);
+  forward: Vector3,
+): Vector3[] {
+  const right = new Vector3(forward.z, 0, -forward.x);
+  const slots = rtsFormationWorldSlots("square", units.length, spacing, centroid, point);
+  const ring = (slot: Vector3): number => {
+    const offset = slot.clone().sub(point);
+    return Math.max(Math.abs(offset.dot(right)), Math.abs(offset.dot(forward)));
+  };
+  slots.sort((left, rightSlot) => ring(rightSlot) - ring(left));
+  return sliceSlotsPerGroup(units, groups, slots, point);
+}
+
+/**
+ * Every other shape (Kol, Hilal, Dağınık): one geometry, its slots ordered front
+ * to back and handed out in role order.
+ *
+ * §6 is why `loose` is in here rather than skipping the role branches. Dağınık
+ * used to be a bare index grid, which put Topçu wherever its index landed —
+ * regularly at the front. Ordering the same jittered slots by depth and filling
+ * them Guard → Archer → Siege gives the three invisible bands the plan asks for
+ * (roughly front 40% / middle 35% / rear 25% at the shipped composition ratio)
+ * while every slot position, including the deterministic jitter, is untouched.
+ */
+function roleDepthSlots(
+  formation: RtsFormationId,
+  units: readonly Unit[],
+  groups: readonly Unit[][],
+  point: Vector3,
+  centroid: Vector3,
+  spacing: number,
+  forward: Vector3,
+): Vector3[] {
   const slots = rtsFormationWorldSlots(formation, units.length, spacing, centroid, point)
     .sort((left, right) => (
       (right.x - point.x) * forward.x + (right.z - point.z) * forward.z
     ) - (
       (left.x - point.x) * forward.x + (left.z - point.z) * forward.z
     ));
-  const assigned: GroupDestination[] = [];
-  let slotIndex = 0;
-  for (const group of groups) {
-    const groupSlots = slots.slice(slotIndex, slotIndex + group.length);
-    slotIndex += group.length;
-    const destinations = assignDestinationsToSlots(group, groupSlots, point, navigation, [
-      ...reservations,
-      ...assigned.map((entry) => ({ position: entry.destination, radius: entry.unit.navRadius })),
-    ], allowNearbyFallback);
-    assigned.push(...destinations);
-  }
-  return destinationsInSelectionOrder(units, assigned, point);
+  return sliceSlotsPerGroup(units, groups, slots, point);
 }
 
-function assignRoleAwareSquareDestinations(
+/** Hand each role band its own contiguous slice of an already-ordered slot list. */
+function sliceSlotsPerGroup(
   units: readonly Unit[],
-  point: Vector3,
-  centroid: Vector3,
-  spacing: number,
-  navigation: RtsNavigation,
-  reservations: readonly DestinationReservation[],
-  allowNearbyFallback: boolean,
-): GroupDestination[] {
-  const groups = combatRoleGroups(units);
-  const slots = rtsFormationWorldSlots("square", units.length, spacing, centroid, point);
-  if (groups.length <= 1) {
-    return assignDestinationsToSlots(units, slots, point, navigation, reservations, allowNearbyFallback);
-  }
-  const forward = point.clone().sub(centroid).setY(0).normalize();
-  if (forward.lengthSq() === 0) forward.set(0, 0, 1);
-  const right = new Vector3(forward.z, 0, -forward.x);
-  // Higher Chebyshev radius means an outer ring slot. Filling from that ring
-  // inward puts guards around vulnerable archers and siege without assigning a
-  // stat bonus or requiring a rigid combat formation.
-  slots.sort((left, rightSlot) => {
-    const leftOffset = left.clone().sub(point);
-    const rightOffset = rightSlot.clone().sub(point);
-    const leftRing = Math.max(Math.abs(leftOffset.dot(right)), Math.abs(leftOffset.dot(forward)));
-    const rightRing = Math.max(Math.abs(rightOffset.dot(right)), Math.abs(rightOffset.dot(forward)));
-    return rightRing - leftRing;
-  });
-  const assigned: GroupDestination[] = [];
-  let slotIndex = 0;
-  for (const group of groups) {
-    const groupSlots = slots.slice(slotIndex, slotIndex + group.length);
-    slotIndex += group.length;
-    const destinations = assignDestinationsToSlots(group, groupSlots, point, navigation, [
-      ...reservations,
-      ...assigned.map((entry) => ({ position: entry.destination, radius: entry.unit.navRadius })),
-    ], allowNearbyFallback);
-    assigned.push(...destinations);
-  }
-  return destinationsInSelectionOrder(units, assigned, point);
-}
-
-function destinationsInSelectionOrder(
-  units: readonly Unit[],
-  destinations: readonly GroupDestination[],
-  point: Vector3,
-): GroupDestination[] {
-  const byUnit = new Map(destinations.map((entry) => [entry.unit, entry]));
-  return units.map((unit) => byUnit.get(unit) ?? { unit, destination: point.clone(), path: null });
-}
-
-function assignDestinationsToSlots(
-  units: readonly Unit[],
+  groups: readonly Unit[][],
   slots: readonly Vector3[],
   point: Vector3,
-  navigation: RtsNavigation,
-  reservations: readonly DestinationReservation[],
-  allowNearbyFallback = true,
-): GroupDestination[] {
+): Vector3[] {
+  const slotForUnit = new Map<Unit, Vector3>();
+  let slotIndex = 0;
+  for (const group of groups) {
+    const groupSlots = slots.slice(slotIndex, slotIndex + group.length);
+    slotIndex += group.length;
+    matchSlotsToUnits(group, groupSlots).forEach((slot, member) => {
+      const unit = group[member];
+      if (unit) slotForUnit.set(unit, slot);
+    });
+  }
+  return units.map((unit) => slotForUnit.get(unit)?.clone() ?? point.clone());
+}
+
+/**
+ * Match units to slots by proximity, closest pair first, and return the slot
+ * each unit won — index-aligned with `units`.
+ *
+ * Ties are broken by index so the assignment is deterministic, which is what
+ * lets a test assert an exact slot rather than "some slot".
+ */
+function matchSlotsToUnits(units: readonly Unit[], slots: readonly Vector3[]): Vector3[] {
   const pairs: Array<{ unit: number; slot: number; distance: number }> = [];
   units.forEach((unit, u) => {
     slots.forEach((slot, s) => {
@@ -304,8 +358,6 @@ function assignDestinationsToSlots(
       pairs.push({ unit: u, slot: s, distance });
     });
   });
-  // Ties are broken by index so the assignment is deterministic, which is what
-  // lets a test assert an exact slot rather than "some slot".
   pairs.sort((a, b) => a.distance - b.distance || a.unit - b.unit || a.slot - b.slot);
 
   const slotForUnit = new Array<number>(units.length).fill(-1);
@@ -318,14 +370,44 @@ function assignDestinationsToSlots(
     slotTaken[pair.slot] = true;
     assigned += 1;
   }
+  const fallback = slots[0] ?? new Vector3();
+  return units.map((_, u) => (slots[slotForUnit[u] ?? -1] ?? fallback).clone());
+}
 
+function assignDestinationsToSlots(
+  units: readonly Unit[],
+  slots: readonly Vector3[],
+  point: Vector3,
+  navigation: RtsNavigation,
+  reservations: readonly DestinationReservation[],
+  allowNearbyFallback = true,
+): GroupDestination[] {
+  return planUnitDestinations(
+    units,
+    matchSlotsToUnits(units, slots),
+    point,
+    navigation,
+    reservations,
+    allowNearbyFallback,
+  );
+}
+
+/** Turn one already-chosen slot per unit into a routed destination. */
+function planUnitDestinations(
+  units: readonly Unit[],
+  desired: readonly Vector3[],
+  point: Vector3,
+  navigation: RtsNavigation,
+  reservations: readonly DestinationReservation[],
+  allowNearbyFallback: boolean,
+): GroupDestination[] {
   // The formation slots are already unique. Keep the established one-plan-per-
   // unit fast path unless another *active order* has claimed a destination.
   // The reservation search below is intentionally exceptional: its grid probes
   // are only justified when a later command would otherwise stack units.
   if (reservations.length === 0) {
     return units.map((unit, u) => {
-      const slot = slots[slotForUnit[u] ?? 0] ?? point;
+      const slot = desired[u] ?? point;
       const path = navigation.isWalkable(slot.x, slot.z)
         ? navigation.plan(unit.position, slot)
         : null;
@@ -346,7 +428,7 @@ function assignDestinationsToSlots(
 
   const occupied = [...reservations];
   return units.map((unit, u) => {
-    const slot = slots[slotForUnit[u] ?? 0] ?? point;
+    const slot = desired[u] ?? point;
     const slotAvailable = navigation.isWalkable(slot.x, slot.z) && !occupied.some((reservation) => Math.hypot(
       slot.x - reservation.position.x,
       slot.z - reservation.position.z,

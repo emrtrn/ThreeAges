@@ -18,6 +18,8 @@ export type AiDecisionKind =
   | "plan-succeeded"
   | "plan-failed"
   | "army-mission"
+  /** Askerî AI v2 §7: the army changed shape, and why it was worth changing. */
+  | "army-formation"
   | "emergency"
   /** §69: the last entry of a match — the AI stops deciding after this. */
   | "match-ended";

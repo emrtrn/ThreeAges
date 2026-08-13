@@ -24,7 +24,7 @@
       "id": "workerMesh",
       "component": "SkeletalMeshComponent",
       "props": {
-        "assetId": "ual1-standard-rm",
+        "assetId": "worker",
         "position": [
           0,
           0,

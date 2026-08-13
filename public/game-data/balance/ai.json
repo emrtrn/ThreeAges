@@ -37,7 +37,25 @@
       "victoryValue": 1.0,
       "vulnerability": 0.5,
       "proximity": 0.4,
+      "logisticsValue": 0.9,
       "defenseStrength": 0.8
+    },
+    "formationWeights": {
+      "missionFit": 1.6,
+      "terrainFit": 0.5,
+      "enemyFit": 0.7,
+      "compositionFit": 0.5,
+      "cohesionFit": 0.3,
+      "transitionCost": 0.35
+    },
+    "tactics": {
+      "approachDistance": 45,
+      "deployDistance": 22,
+      "engageDistance": 13,
+      "cohesionRadius": 6,
+      "cohesionThreshold": 0.6,
+      "pursuitLeash": 30,
+      "archerStandoff": 6
     }
   },
   "economy": {

@@ -8,7 +8,7 @@
  * exact same way (tests feed readFileSync content).
  */
 import { isFeatureFlag } from "../core/featureFlags";
-import { AI_PROFILES, AI_TARGET_WEIGHTS, MAX_AURA_DAMAGE_RESISTANCE } from "./gameDataTypes";
+import { AI_FORMATION_WEIGHTS, AI_PROFILES, AI_TARGET_WEIGHTS, MAX_AURA_DAMAGE_RESISTANCE } from "./gameDataTypes";
 import type { MissionGoal, MissionGuide, MissionScript, MissionStep } from "../rts/tutorial/missionScript";
 
 /**
@@ -51,6 +51,8 @@ import type {
   AiProfile,
   AiProfileBalance,
   AiScoringBalance,
+  AiFormationWeights,
+  AiTacticsBalance,
   AiTargetWeights,
   AnimalBalance,
   AnimalBalanceStats,
@@ -1834,6 +1836,10 @@ export function validateAiBalance(value: unknown): AiBalance {
     rolePower: validateAiRolePower(armyObj["rolePower"], `${where}.army.rolePower`),
     composition: validateAiCompositions(armyObj["composition"], `${where}.army.composition`),
     targetWeights: validateAiTargetWeights(armyObj["targetWeights"], `${where}.army.targetWeights`),
+    formationWeights: validateAiFormationWeights(
+      armyObj["formationWeights"], `${where}.army.formationWeights`,
+    ),
+    tactics: validateAiTactics(armyObj["tactics"], `${where}.army.tactics`),
   };
   // §65: a health floor outside 0..1 would either never fire or retreat always.
   if (!(army.retreatHealthRatio >= 0 && army.retreatHealthRatio <= 1)) {
@@ -2198,6 +2204,63 @@ function validateAiTargetWeights(value: unknown, where: string): AiTargetWeights
     }
   }
   return weights;
+}
+
+/**
+ * Askerî AI v2 §7/§17.1: the formation weights, on the same terms as the target
+ * weights — every term required, no negatives, and an unknown key is a typo.
+ */
+function validateAiFormationWeights(value: unknown, where: string): AiFormationWeights {
+  const obj = asObject(value, where);
+  const weights = {} as Record<keyof AiFormationWeights, number>;
+  for (const term of AI_FORMATION_WEIGHTS) {
+    const weight = requireFiniteNumber(obj, term, where);
+    if (weight < 0) throw new GameDataError(`${where}: "${term}" must be >= 0`);
+    weights[term] = weight;
+  }
+  for (const key of Object.keys(obj)) {
+    if (!AI_FORMATION_WEIGHTS.includes(key as keyof AiFormationWeights)) {
+      throw new GameDataError(`${where}: unknown formation term "${key}"`);
+    }
+  }
+  return weights;
+}
+
+/**
+ * Askerî AI v2 §9/§10.4/§12: the tactical distances.
+ *
+ * The ordering rules are the point. A `deployDistance` at or beyond
+ * `approachDistance` collapses two phases into one, so the column would never be
+ * seen unfolding; an `engageDistance` beyond `deployDistance` means the army
+ * reaches contact before it ever forms up. Both are the kind of mis-tuning that
+ * silently deletes a behaviour rather than breaking a test.
+ */
+function validateAiTactics(value: unknown, where: string): AiTacticsBalance {
+  const obj = asObject(value, where);
+  const tactics: AiTacticsBalance = {
+    approachDistance: requirePositive(obj, "approachDistance", where),
+    deployDistance: requirePositive(obj, "deployDistance", where),
+    engageDistance: requirePositive(obj, "engageDistance", where),
+    cohesionRadius: requirePositive(obj, "cohesionRadius", where),
+    cohesionThreshold: requireFiniteNumber(obj, "cohesionThreshold", where),
+    pursuitLeash: requirePositive(obj, "pursuitLeash", where),
+    archerStandoff: requirePositive(obj, "archerStandoff", where),
+  };
+  if (!(tactics.engageDistance < tactics.deployDistance
+    && tactics.deployDistance < tactics.approachDistance)) {
+    throw new GameDataError(
+      `${where}: expected engageDistance < deployDistance < approachDistance`,
+    );
+  }
+  if (!(tactics.cohesionThreshold > 0 && tactics.cohesionThreshold <= 1)) {
+    throw new GameDataError(`${where}: cohesionThreshold must be within 0..1`);
+  }
+  // A leash inside the deploy ring would pull the army back out of every fight
+  // it walked into, which reads as an army that refuses to attack.
+  if (tactics.pursuitLeash < tactics.deployDistance) {
+    throw new GameDataError(`${where}: pursuitLeash must be >= deployDistance`);
+  }
+  return tactics;
 }
 
 /** Built-in road-paint tuning used when `roads.json` omits the `visual` block. */

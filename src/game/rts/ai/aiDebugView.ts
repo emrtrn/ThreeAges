@@ -47,6 +47,19 @@ export function formatRtsAiDebug(
   // cannot tell an army that lost the exchange from one that was ground down —
   // and those are two different balance problems.
   if (snapshot.retreatReason) lines.push(`geri çekilme: ${RETREAT_REASON_TEXT[snapshot.retreatReason]}`);
+  // Askerî AI v2 §16. The panel exists to answer one question — "AI neden bu
+  // kararı verdi?" — and a formation is the most visible decision the army makes,
+  // so a shape with no stated reason is the one that reads as a bug.
+  lines.push(
+    `taktik faz: ${snapshot.phase ?? "-"} · formasyon: ${snapshot.formation ?? "-"}`
+    + ` · kohezyon ${snapshot.cohesion.toFixed(2)} · düşman sınıfı ${snapshot.enemyClass}`,
+  );
+  if (snapshot.formationScores.length > 0) {
+    lines.push(`formasyon puanları: ${snapshot.formationScores
+      .map((score) => `${score.formation === snapshot.formation ? "*" : ""}${score.formation} ${score.score.toFixed(2)}`)
+      .join(" · ")}`);
+  }
+  if (snapshot.formationReason) lines.push(`formasyon gerekçesi: ${snapshot.formationReason}`);
   if (bb) {
     // §53: the shape of the army, not just its size — a power number alone
     // cannot show whether the composition ratio is actually being followed.

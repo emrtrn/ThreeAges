@@ -76,4 +76,33 @@ export type AiArmyMission =
   | "assaultTarget"
   | "regroup";
 
+/**
+ * Askerî AI v2 planı §9: the tactical sub-state of an *attacking* mission.
+ *
+ * Deliberately not a second state machine beside {@link AiArmyMission} — two of
+ * those have to be kept in sync, and that is the kind of debt that breaks
+ * silently. `march`/`approach`/`deploy`/`engage` only ever exist underneath
+ * `assaultTarget` and `harassEconomy`; every other mission has a null phase.
+ *
+ * The one line that matters: formation orders are issued in `march`, `approach`,
+ * `deploy` and `reposition`, and **never** in `engage`. Contact hands the army
+ * back to the per-unit combat systems (§15), so no soldier is ever tied to a
+ * slot by an invisible rubber band while it is fighting.
+ */
+export type AiTacticalPhase =
+  | "march"
+  | "approach"
+  | "deploy"
+  | "engage"
+  /** §10.4: pulled off the leash, or shaken loose — re-form before fighting on. */
+  | "reposition";
+
+export const AI_TACTICAL_PHASES: readonly AiTacticalPhase[] = [
+  "march",
+  "approach",
+  "deploy",
+  "engage",
+  "reposition",
+];
+
 export const AI_INTENTS: readonly AiIntent[] = ["economy", "ageUp", "expand", "defend", "attack"];
