@@ -505,9 +505,9 @@ const REST_FADE_SECONDS = 0.45;
  * so the heap stays where the gun was rather than spreading into a puddle.
  */
 const SIEGE_WRECK_DEFORMATION: StructureDeformationTuning = {
-  squash: 0.55,
-  splay: 0.18,
-  buckle: 0.12,
+  squash: 0.3,
+  splay: 0.1,
+  buckle: 0.1,
 };
 
 /**
