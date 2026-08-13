@@ -36424,14 +36424,14 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
         crew: {
           actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_SiegeCrew.actor.json",
           ownerActorRefs: { enemy: "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_SiegeCrew.actor.json" },
-          slots: [{ position: [-0.7, 0, -1.4] }, { position: [0.7, 0, -1.4] }],
+          slots: [{ position: [-0.56, 0, -1.18] }, { position: [0.56, 0, -1.18] }],
         },
       },
     },
     buildings: {},
     ui: {},
   }, context);
-  assert.deepEqual(crewedPilot.units.siege_placeholder?.crew?.slots.map((slot) => slot.position), [[-0.7, 0, -1.4], [0.7, 0, -1.4]], "crew slots remain authored local positions");
+  assert.deepEqual(crewedPilot.units.siege_placeholder?.crew?.slots.map((slot) => slot.position), [[-0.56, 0, -1.18], [0.56, 0, -1.18]], "crew slots remain authored local positions");
   // The crew names Actors directly rather than another balance id, so a crew
   // needs no producible, AI-visible unit entry just to own a mesh.
   assert.ok(rtsContentCatalogRefs(crewedPilot).includes("assets/ThreeAges/Actors/Units/BP_RTS_SiegeCrew.actor.json"), "crew Actors join the preflight load set");
@@ -37546,6 +37546,28 @@ check("Siege gun: an authored turn rate makes the carriage swing round instead o
   );
 });
 
+check("Siege gun: a forward route waits for both crewmen to lean in, then a retreat leaves promptly", () => {
+  const gun = new Unit("player", 0, 0, {
+    ...RTS_TEST_UNIT_STATS,
+    role: "siege",
+    moveSpeed: 3.8,
+    turnRateDegPerSecond: 70,
+  });
+  gun.setMoveTarget(0, 12);
+  updateUnitMovement([gun], 0.79);
+  assert.equal(gun.position.z, 0, "the carriage stays put during the crew's short push-start");
+  assert.equal(gun.isPreparingToMove, true, "and exposes that lead-in to the attached crew animation");
+  updateUnitMovement([gun], 0.02);
+  assert.equal(gun.position.z, 0, "finishing the lead-in consumes its last simulation slice without a lurch");
+  assert.equal(gun.isPreparingToMove, false, "the lead-in clears exactly once it has been paid");
+  updateUnitMovement([gun], 1 / 60);
+  assert.ok(gun.position.z > 0, "the next slice rolls the carriage forward");
+
+  gun.setPlayerRetreatPath([new Vector3(0, 0, 20)]);
+  updateUnitMovement([gun], 1 / 60);
+  assert.ok(gun.position.z > 3.8 / 60, "a reverse order has its own gait and is not delayed as a forward push");
+});
+
 /* ---------------------------------------------------------------------------
  * Siege crew — the two men who ride the gun (siege crew plan, Faz 1/2).
  * ------------------------------------------------------------------------- */
@@ -37610,6 +37632,7 @@ function siegeCrewInput(overrides: Partial<SiegeCrewInput> = {}): SiegeCrewInput
     yawRateDegPerSecond: 0,
     turnRateDegPerSecond: 70,
     backward: false,
+    preparingToMove: false,
     attacking: false,
     dying: false,
     impactCount: 0,

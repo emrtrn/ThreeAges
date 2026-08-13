@@ -126,6 +126,11 @@ export function updateUnitMovement(
       continue;
     }
 
+    // A cannon does not lurch forward as its crew is still leaning into the
+    // trail. The timer was armed at order issue, so this pauses only once per
+    // route and the presentation receives the same window as `preparingToMove`.
+    if (unit.advanceMovementStartDelay(dt)) continue;
+
     const pos = unit.position;
     scratchDir.set(target.x - pos.x, 0, target.z - pos.z);
     const dist = scratchDir.length();

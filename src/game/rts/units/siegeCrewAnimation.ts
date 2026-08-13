@@ -80,6 +80,12 @@ export interface SiegeCrewInput {
   readonly turnRateDegPerSecond: number;
   /** True while the gun travels without turning its body toward the route (`T`). */
   readonly backward: boolean;
+  /**
+   * True during the short, authored lean-in before the carriage is allowed to
+   * roll. It is movement intent made visible, not an order the crew can act on:
+   * the simulation owns both the timer and the eventual motion.
+   */
+  readonly preparingToMove: boolean;
   /** True while a live target is inside weapon range — the gun means to fire. */
   readonly attacking: boolean;
   /** True once the gun's defeat has begun. */
@@ -185,10 +191,19 @@ const STRAFE_YAW_FRACTION = 0.25;
 export interface SiegeCrewPushSections {
   readonly enterSeconds: number;
   readonly exitSeconds: number;
+  /** Playback multiplier that compresses the authored push-stop clip. */
+  readonly exitPlaybackRate?: number;
 }
 
 /** A crew asset with no authored push montage pushes with no wind-up or wind-down. */
 export const SIEGE_CREW_PUSH_INSTANT: SiegeCrewPushSections = { enterSeconds: 0, exitSeconds: 0 };
+
+/**
+ * The carriage waits this long after a forward order before taking its first
+ * step. It is slightly longer than the 0.65 s lean-in section so the second
+ * crew slot's deliberate 0.12 s phase offset finishes too.
+ */
+export const SIEGE_CREW_PUSH_START_DELAY_SECONDS = 0.8;
 
 /**
  * Classifies the continuous channel.
@@ -208,10 +223,14 @@ function advanceLocomotion(
 ): { readonly locomotion: SiegeCrewLocomotion; readonly locomotionRemainingSeconds: number } {
   const dt = Math.max(0, deltaSeconds);
   const moving = input.planarSpeed > tuning.walkSpeed;
+  // The carriage deliberately waits for the crew's lean-in. Treat that window
+  // as the first part of pushing so the men get onto the trail before its wheels
+  // begin to turn, rather than chasing the gun with their arms in the air.
+  const pushing = moving || input.preparingToMove;
 
   if (moving && input.backward) return { locomotion: "backward", locomotionRemainingSeconds: 0 };
 
-  if (moving) {
+  if (pushing) {
     if (state.locomotion === "pushLoop") return { locomotion: "pushLoop", locomotionRemainingSeconds: 0 };
     if (state.locomotion === "pushEnter") {
       const remaining = state.locomotionRemainingSeconds - dt;

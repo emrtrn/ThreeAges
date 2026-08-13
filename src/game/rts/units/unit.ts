@@ -35,6 +35,7 @@ import { createSelectionRing } from "../selection/selectionRing";
 import { AttackComponent } from "./attackComponent";
 import { HealthComponent } from "./health";
 import { HealthBar } from "./healthBar";
+import { SIEGE_CREW_PUSH_START_DELAY_SECONDS } from "./siegeCrewAnimation";
 
 /** Which army a unit belongs to. Ürün A is one player vs. one AI (plan §4.2). */
 export type UnitOwner = "player" | "enemy";
@@ -110,6 +111,8 @@ export interface RtsPresentationUpdate {
   readonly forceWalk?: boolean;
   /** True while the unit is travelling without turning its body toward the route. */
   readonly backward?: boolean;
+  /** True while a siege carriage is letting its crew lean into the trail before rolling. */
+  readonly preparingToMove?: boolean;
   /** True while a live target is inside weapon range — i.e. blows are landing. */
   readonly attacking: boolean;
   /** True once the defeat pose has begun. */
@@ -368,6 +371,8 @@ export class Unit {
   private fallbackBody: Mesh | null = null;
   private pickTargets: readonly Object3D[] = [];
   private movePath: Vector3[] = [];
+  /** Small authored lead-in held before a siege carriage starts a new route. */
+  private movementStartDelaySeconds = 0;
   /**
    * A ground route explicitly issued by the player. Automation and defensive
    * retaliation must leave this route alone until it ends: a right-click is a
@@ -540,6 +545,7 @@ export class Unit {
       yawRateDegPerSecond: this.measureYawRate(deltaSeconds),
       turnRateDegPerSecond: this.stats.turnRateDegPerSecond,
       backward: this.retreating,
+      preparingToMove: this.isPreparingToMove,
       attacking: this.isTradingBlows() || this.hunting,
       dying: this.dying,
       working: this.working,
@@ -736,6 +742,7 @@ export class Unit {
     this.collisionRecoverySeconds = 0;
     this.resumeAutomaticWorkerAssignment();
     this.moveTarget = new Vector3(x, 0, z);
+    this.prepareMovementStart();
   }
 
   /**
@@ -754,6 +761,7 @@ export class Unit {
     this.playerMoveOrder = true;
     this.retreating = false;
     this.rescuing = true;
+    this.prepareMovementStart();
   }
 
   /** Whether a rescue escort still owns this unit (true until it reaches clear ground). */
@@ -764,6 +772,24 @@ export class Unit {
   /** True while an active ground route or direct destination owns this unit. */
   get hasMovementOrder(): boolean {
     return this.movePath.length > 0 || this.moveTarget !== null;
+  }
+
+  /** Whether the presentation should show the artillery crew's lean-in. */
+  get isPreparingToMove(): boolean {
+    return this.movementStartDelaySeconds > 0 && this.hasMovementOrder;
+  }
+
+  /**
+   * Spend the carriage-only lead-in before its first movement step.
+   *
+   * Returns true while the movement system must keep the gun stationary. The
+   * delay is set only when a new order is issued, never for each waypoint, so a
+   * long route does not repeatedly look like the crew has stopped to reset.
+   */
+  advanceMovementStartDelay(deltaSeconds: number): boolean {
+    if (this.movementStartDelaySeconds <= 0) return false;
+    this.movementStartDelaySeconds = Math.max(0, this.movementStartDelaySeconds - Math.max(0, deltaSeconds));
+    return true;
   }
 
   /** Start a bounded unit-to-unit collision recovery without changing the order. */
@@ -856,6 +882,7 @@ export class Unit {
     this.retreating = retreating;
     this.rescuing = false;
     this.collisionRecoverySeconds = 0;
+    this.prepareMovementStart();
     if (!playerMoveOrder) this.resumeAutomaticWorkerAssignment();
   }
 
@@ -872,6 +899,7 @@ export class Unit {
     this.playerMoveOrder = false;
     this.retreating = false;
     this.collisionRecoverySeconds = 0;
+    this.prepareMovementStart();
   }
 
   /**
@@ -920,6 +948,7 @@ export class Unit {
     this.retreating = false;
     this.rescuing = false;
     this.collisionRecoverySeconds = 0;
+    this.movementStartDelaySeconds = 0;
     this.resumeAutomaticWorkerAssignment();
   }
 
@@ -941,6 +970,7 @@ export class Unit {
     this.movePath = [];
     this.retreating = false;
     this.collisionRecoverySeconds = 0;
+    this.movementStartDelaySeconds = 0;
   }
 
   /**
@@ -961,11 +991,20 @@ export class Unit {
     this.moveTarget = null;
     this.movePath = [];
     this.retreating = false;
+    this.movementStartDelaySeconds = 0;
     if (target) {
       this.playerMoveOrder = false;
       this.resumeAutomaticWorkerAssignment();
+      this.prepareMovementStart();
     }
     target?.setTargetedBy?.(1);
+  }
+
+  /** Arms the crew lead-in for an ordinary forward artillery order. */
+  private prepareMovementStart(): void {
+    this.movementStartDelaySeconds = this.role === "siege" && !this.retreating
+      ? SIEGE_CREW_PUSH_START_DELAY_SECONDS
+      : 0;
   }
 
   /**

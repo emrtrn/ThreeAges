@@ -313,11 +313,16 @@ class RtsAttachedCrewAnimator {
     const montage = source.skeleton.montages.find((entry) => entry.name === SIEGE_CREW_PUSH_MONTAGE_NAME);
     const section = montage?.sections.find((entry) => entry.name === SIEGE_CREW_PUSH_ENTER_SECTION);
     if (!montage || !section || !this.animator?.clips.has(montage.clip)) {
-      this.push = { enterSeconds: 0, exitSeconds };
+      this.push = { enterSeconds: 0, exitSeconds: Math.min(exitSeconds, SIEGE_CREW_PUSH_EXIT_SECONDS) };
       return null;
     }
     const window = { startSeconds: section.startSeconds, endSeconds: section.endSeconds };
-    this.push = { enterSeconds: Math.max(0, window.endSeconds - window.startSeconds), exitSeconds };
+    const shortenedExitSeconds = Math.min(exitSeconds, SIEGE_CREW_PUSH_EXIT_SECONDS);
+    this.push = {
+      enterSeconds: Math.max(0, window.endSeconds - window.startSeconds),
+      exitSeconds: shortenedExitSeconds,
+      exitPlaybackRate: shortenedExitSeconds > 0 ? exitSeconds / shortenedExitSeconds : 1,
+    };
     return { clip: montage.clip, section: window };
   }
 
@@ -367,6 +372,7 @@ class RtsAttachedCrewAnimator {
       yawRateDegPerSecond: state.yawRateDegPerSecond ?? 0,
       turnRateDegPerSecond: state.turnRateDegPerSecond ?? 0,
       backward: state.backward === true,
+      preparingToMove: state.preparingToMove === true,
       attacking: state.attacking,
       dying: state.dying,
       impactCount: state.impactCount,
@@ -393,6 +399,7 @@ class RtsAttachedCrewAnimator {
         const clip = SIEGE_CREW_CLIPS[selection.clipRole];
         if (!animator.clips.has(clip)) return;
         this.start(clip, clip, siegeCrewFadeSeconds(selection.clipRole), selection.loop);
+        if (selection.clipRole === "pushExit") animator.setPlaybackRate(this.push.exitPlaybackRate ?? 1);
         return;
       }
       case "death": {
@@ -516,6 +523,12 @@ const SIEGE_WRECK_DEFORMATION: StructureDeformationTuning = {
  * a gun crew getting into position is businesslike, not weary.
  */
 const SIEGE_CREW_BRACE_FADE_SECONDS = 0.3;
+/**
+ * `siege_push_stop` is a full 2.63 s clip; only its release is needed here.
+ * Playing it through in 0.7 s keeps the crew connected to a carriage that has
+ * just stopped instead of leaving two men pushing empty air.
+ */
+const SIEGE_CREW_PUSH_EXIT_SECONDS = 0.7;
 
 /** Which fade a crew clip blends in over, by the role asking for it. */
 function siegeCrewFadeSeconds(clipRole: SiegeCrewClipRole): number {

@@ -56,7 +56,7 @@
         {
           "name": "enter",
           "startSeconds": 0.0,
-          "endSeconds": 1.5,
+          "endSeconds": 0.65,
           "loop": false
         }
       ]
