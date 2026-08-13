@@ -205,6 +205,7 @@ import {
   rtsActionSequence,
   rtsLocomotionTuning,
   rtsPlaybackRate,
+  rtsWorkRoleForActivity,
   rtsWorkMontageSection,
   selectRtsAnimation,
   RTS_ACTION_NONE,
@@ -33997,6 +33998,7 @@ check("V2 Faz 4: a shepherd walks out, calms an animal, drives it home, and the 
 
   const seen = new Set<string>();
   let calmedWhileWorking = false;
+  let calmedWithLivestockActivity = false;
   const step = 0.25;
   for (let tick = 0; tick < 2400; tick += 1) {
     pasture.update(step);
@@ -34008,6 +34010,7 @@ check("V2 Faz 4: a shepherd walks out, calms an animal, drives it home, and the 
       // §2.4: the shepherd is *at work* while calming, not walking. That is what
       // puts him on the work montage instead of sliding in an idle pose.
       if (state === "calming" && worker.isWorking) calmedWhileWorking = true;
+      if (state === "calming" && worker.workerActivity === "livestock") calmedWithLivestockActivity = true;
     }
   }
 
@@ -34017,6 +34020,7 @@ check("V2 Faz 4: a shepherd walks out, calms an animal, drives it home, and the 
     "all three of §2's steps actually ran",
   );
   assert.equal(calmedWhileWorking, true, "calming is standing work, and the shepherd's pose says so");
+  assert.equal(calmedWithLivestockActivity, true, "the pasture owns and reports livestock activity while calming");
 
   const penned = wildlife.all().filter((animal) => animal.owner === "player");
   assert.equal(penned.length, capacity, "the drive filled the pen to its authored capacity, and stopped there");
@@ -34066,6 +34070,7 @@ check("V2 Faz 4: a shepherd walks out, calms an animal, drives it home, and the 
   // rule that nothing may hold a worker forever applies to herding too.
   for (const worker of workers) {
     assert.equal(pasture.isShepherd(worker), false, "no worker is left holding a job the pen has no room for");
+    assert.equal(worker.workerActivity, null, "a released shepherd keeps no stale livestock activity");
   }
   fixture.territory.dispose();
 });
@@ -38190,7 +38195,9 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
   for (const [role, clip] of Object.entries(baseRoles)) {
     assert.equal(worker.animationSet[role], clip, `${role} remains mapped to its authored Worker locomotion clip`);
   }
-  assert.deepEqual(worker.animationVariants, {}, "Faz 1 keeps activity and carrying clips out of the locomotion pool");
+  for (const role of ["idle", "walk", "run"] as const) {
+    assert.equal(worker.animationVariants[role], undefined, `Faz 1 keeps ${role} free of activity and carrying clips`);
+  }
   assert.deepEqual(saved.animationSet, worker.animationSet, "the Worker locomotion roles survive a skeleton editor save");
 
   const parsed = parseGlb(new Uint8Array(readFileSync(`public/${workerAsset.path}`)))
@@ -38255,6 +38262,73 @@ check("Worker Faz 2: nötr iş pozu yalnız iş noktasında locomotionun yerini 
     selectRtsAnimation(input(0, false), worker.animationSet, shipped, tuning)?.clip,
     "Worker_idle_natural",
     "ending the job clears the neutral pose back to idle",
+  );
+});
+
+check("Worker Faz 3: aktivite yalnız sunumsaldır ve ölümde temizlenir", () => {
+  const units = new UnitSystem();
+  const worker = units.spawn("player", 0, 0, RTS_TEST_WORKER_STATS);
+  worker.setWorkerActivity("construction");
+  assert.equal(worker.workerActivity, "construction", "a job system may expose its own assignment to presentation");
+  worker.health.damage(worker.health.max);
+  assert.equal(worker.beginDeath(), true, "the fixture actually starts the death state");
+  assert.equal(worker.workerActivity, null, "death clears the presentation-only assignment immediately");
+  assert.equal(worker.isWorking, false, "and no in-place work pose survives the death state");
+  units.clear();
+});
+
+check("Worker Faz 3: cultivation gerçek iş aktivitesiyle deterministik tarım havuzunu seçer", () => {
+  const raw = JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.skeleton.json", "utf8"),
+  ) as unknown;
+  const worker = normalizeAssetSkeleton(raw);
+  const saved = validateAssetSkeletonDef(raw);
+  assert.equal(worker.animationSet.workCultivation, "Worker_dig_and_plant_seeds");
+  assert.deepEqual(worker.animationVariants.workCultivation, ["Worker_plant_a_plant", "Worker_watering"]);
+  assert.equal(saved.animationSet?.workCultivation, "Worker_dig_and_plant_seeds", "the editor save retains the cultivation role");
+  assert.deepEqual(saved.animationVariants?.workCultivation, ["Worker_plant_a_plant", "Worker_watering"]);
+  assert.equal(rtsWorkRoleForActivity("cultivation"), "workCultivation");
+  assert.equal(rtsWorkRoleForActivity("generic"), "work", "neutral assignments keep the neutral work role");
+  assert.equal(rtsWorkRoleForActivity("livestock"), "workLivestock", "livestock has an opt-in future role, not a cow-milking guess");
+
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.glb")))
+    ?? assert.fail("the Worker model is a readable GLB");
+  const shipped = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
+  const cultivationPool = [worker.animationSet.workCultivation, ...(worker.animationVariants.workCultivation ?? [])]
+    .filter((clip): clip is string => clip !== undefined);
+  for (const clip of cultivationPool) assert.ok(shipped.has(clip), `"${clip}" is a shipped cultivation clip`);
+  assert.equal(new Set(cultivationPool).size, cultivationPool.length, "the cultivation pool has no duplicate clip");
+
+  const tuning = rtsLocomotionTuning(6);
+  const input = (activity: "cultivation" | "generic", planarSpeed = 0): RtsAnimationInput => ({
+    planarSpeed,
+    working: true,
+    workerActivity: activity,
+    attacking: false,
+    dying: false,
+    attackCount: 0,
+    impactCount: 0,
+  });
+  const stable = selectRtsAnimation(input("cultivation"), worker.animationSet, shipped, tuning, worker.animationVariants, 17);
+  assert.ok(cultivationPool.includes(stable?.clip ?? ""), "a settled farm worker selects only cultivation clips");
+  assert.deepEqual(
+    stable,
+    selectRtsAnimation(input("cultivation"), worker.animationSet, shipped, tuning, worker.animationVariants, 17),
+    "the same Worker and activity select the same cultivation clip",
+  );
+  const population = new Set(Array.from({ length: 20 }, (_, seed) =>
+    selectRtsAnimation(input("cultivation"), worker.animationSet, shipped, tuning, worker.animationVariants, seed + 1)?.clip,
+  ));
+  assert.ok(population.size > 1, "different Worker identities show deterministic cultivation variety");
+  assert.equal(
+    selectRtsAnimation(input("generic"), worker.animationSet, shipped, tuning, worker.animationVariants, 17)?.clip,
+    "Worker_kneeling_idle",
+    "generic gathering does not borrow a farming animation",
+  );
+  assert.equal(
+    selectRtsAnimation(input("cultivation", 3), worker.animationSet, shipped, tuning, worker.animationVariants, 17)?.clip,
+    "Worker_walking",
+    "a farm worker still travelling keeps locomotion over a cultivation loop",
   );
 });
 
@@ -41295,12 +41369,16 @@ check("Skeletal animasyon Faz F: insaat sistemi calisma bayragini kaldirir ve is
   // The flag is presentation-only and private; it is read the one way the
   // animation reads it, through the snapshot the unit hands its handle.
   let working = false;
+  let reportedActivity: string | null | undefined;
   const units = new UnitSystem();
   units.setPresentationFactory(() => ({
     root: new Group(),
     pickTargets: [],
     selectionRadius: 0.5,
-    update: (state) => { working = state.working; },
+    update: (state) => {
+      working = state.working;
+      reportedActivity = state.workerActivity;
+    },
     dispose: () => undefined,
   }));
   const worker = units.spawn("player", 6, 0, RTS_TEST_WORKER_STATS);
@@ -41321,6 +41399,7 @@ check("Skeletal animasyon Faz F: insaat sistemi calisma bayragini kaldirir ve is
   construction.update(1 / 60);
   assert.equal(construction.stateFor(worker), "moving");
   assert.equal(observe(), false, "nor is one still walking to the site");
+  assert.equal(reportedActivity, "construction", "the presentation receives the construction assignment while travelling");
 
   let reachedSite = false;
   for (let frame = 0; frame < 300 && !site.construction.complete; frame += 1) {
@@ -41334,6 +41413,7 @@ check("Skeletal animasyon Faz F: insaat sistemi calisma bayragini kaldirir ve is
   // worker kneeling at a finished house is the visible form of a leaked flag.
   assert.equal(construction.stateFor(worker), "idle");
   assert.equal(observe(), false, "and it stops working the moment the site is done");
+  assert.equal(reportedActivity, null, "completion clears the presentation activity with the assignment");
 
   structures.clear();
   units.clear();
@@ -42206,6 +42286,7 @@ check("RTS miners walk to the deposit, cut a load there, and carry it back to th
       // The montage owns the kneel: gameplay only asserts the worker is posed as
       // working for the whole cut, which is what keeps it from standing early.
       assert.equal(worker.isWorking, true, "a miner at the deposit is posed as working");
+      assert.equal(worker.workerActivity, "generic", "unmapped finite gathering remains neutral until an honest activity clip is accepted");
     }
     if (state === "returning") carriedHome ||= worker.position.x < 8;
   }
@@ -42225,6 +42306,7 @@ check("RTS miners walk to the deposit, cut a load there, and carry it back to th
   assert.equal(snapshot.status, "source-depleted");
   assert.equal(production.isAssigned(worker), false, "the miner is released once its deposit is empty");
   assert.equal(worker.isWorking, false, "and stands up when there is nothing left to cut");
+  assert.equal(worker.workerActivity, null, "source exhaustion clears the presentation activity");
 
   production.reset();
   structures.clear();
@@ -42439,6 +42521,7 @@ check("Tarladaki isci calisma pozunu takar, birakildiginda birakir", () => {
 
   production.update(1 / 60);
   assert.equal(worker.isWorking, false, "a worker still walking to the field is not working it");
+  assert.equal(worker.workerActivity, "cultivation", "the economy owner reports farm work without the renderer guessing the building");
   for (let frame = 0; frame < 600; frame += 1) {
     updateUnitMovement(units.all(), 1 / 60);
     production.update(1 / 60);
@@ -42461,6 +42544,7 @@ check("Tarladaki isci calisma pozunu takar, birakildiginda birakir", () => {
   assert.equal(worker.isWorking, true, "emptying the buffer puts the crew back to work");
   assert.equal(production.release(worker), true);
   assert.equal(worker.isWorking, false, "a released worker drops the pose with the job");
+  assert.equal(worker.workerActivity, null, "and clears the farm activity through the same release path");
 
   production.reset();
   structures.clear();

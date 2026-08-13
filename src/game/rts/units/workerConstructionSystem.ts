@@ -224,6 +224,7 @@ export class WorkerConstructionSystem {
     // no longer belongs to. Cleared here so every exit path — cancelled site,
     // player order, death, completion — goes through one place.
     assignment.worker.setWorking(false);
+    assignment.worker.setWorkerActivity(null);
     this.assignments.delete(worker.id);
     return true;
   }
@@ -248,6 +249,7 @@ export class WorkerConstructionSystem {
       const path = this.navigation.plan(worker.position, approach);
       if (!path) continue;
       worker.setMovePath(path);
+      worker.setWorkerActivity(job === "repair" ? "repair" : "construction");
       this.assignments.set(worker.id, { worker, structure, approach, source, job, state: "moving" });
       return true;
     }

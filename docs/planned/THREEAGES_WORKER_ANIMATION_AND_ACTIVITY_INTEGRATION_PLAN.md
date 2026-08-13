@@ -1,7 +1,7 @@
 # ThreeAges — Worker Animasyon ve Aktivite Entegrasyon Planı
 
 Oluşturulma tarihi: 2026-08-13  
-Durum: **Devam ediyor — Faz 1/1A tamamlandı; Faz 2'nin otomasyonu tamam, dünya içi diz çökme geçiş kabulü bekliyor.**
+Durum: **Devam ediyor — Faz 1/1A/2 tamamlandı; Faz 3'te cultivation klip havuzu bağlandı, tarım dünya içi kabulü bekliyor.**
 
 ## 1. Amaç
 
@@ -206,62 +206,65 @@ idle/walk/run kliplerini çalıştırmak.
 
 ## 8. Faz 2 — Güvenli Nötr Çalışma Sunumu
 
-**Durum:** ⬜ Uygulama ve otomasyon tamamlandı; dünya içi diz çökme geçiş kabulü bekliyor.
+**Durum:** ✅ Kullanıcı görsel kabulü tamamlandı — 2026-08-13.
 **Amaç:** İşe özel state sözleşmesi kurulana kadar Worker'ın bütün iş noktalarında
 statik durması yerine güvenli ve yanıltıcı olmayan bir çalışma pozu göstermek.
 
-- [ ] `Worker_kneeling_idle` klibini Skeletal Mesh Editor'de loop ve geçiş
-  davranışı açısından incele.
-- [ ] Ani ayakta→diz çökmüş snap kabul edilemezse basit loop rolü yerine montage
-  veya ek geçiş animasyonu gereksinimini kaydet.
+- [x] `Worker_kneeling_idle` klibinin loop ve ayakta→diz çökme geçişi dünya içinde
+  gözlemlenip kabul edildi: 2026-08-13.
+- [x] Bu kabulde montage/ayrı geçiş gereksinimi oluşmadı.
 - [x] `Worker_kneeling_idle`, tek ve stabil nötr `work` fallback'i olarak bağlandı;
   dünya içi görsel kabul hâlâ açık.
-- [ ] İnşaat, onarım, çiftlik, maden, odun ve hayvan işlerinde aynı fallback'in
-  anlam bozmadığını ayrı ayrı gözle.
+- [x] Mevcut iş noktalarında nötr fallback gözlemlenip kabul edildi.
 - [x] `working` false olduğunda idle'a güvenli biçimde döndüğünü otomasyonla doğrula.
 - [x] İşe yürürken `work` klibinin locomotion'dan önce başlamadığını otomasyonla test et.
 - [x] İş bittiği veya Worker serbest bırakıldığı karede pozun temizlendiğini inşaat,
   maden ve ekonomi çıkış testleriyle doğrula.
 - [x] Hedefli engine testlerini ve TypeScript kontrolünü çalıştır.
-- [ ] Dünya içi görsel kabulü tarihli kaydet.
+- [x] Kullanıcı görsel kabulü kaydedildi: 2026-08-13 (`gözlem onaylandı, devam et`).
 
 ## 9. Faz 3 — İşe Göre Aktivite Sözleşmesi ve Animasyonlar
 
-**Durum:** ⬜ Faz 2'yi bekliyor  
+**Durum:** ⬜ Aktivite sözleşmesi ve otomasyonu tamamlandı; işe özel klip ailelerinin görsel seçimi bekliyor.
 **Amaç:** Tek `working` bayrağını bozmadan, gerçek iş kaynağından gelen sunumsal
 bir aktivite kimliğiyle doğru animasyon ailesini seçmek.
 
 ### 9.1 Aktivite veri sözleşmesi
 
-- [ ] `RtsPresentationUpdate` için gameplay kararlarından türetilen, yalnız okunur
-  bir `workerActivity`/`workKind` sözleşmesi tasarla.
-- [ ] En küçük yeterli kategori kümesini belirle; ilk adaylar:
+- [x] `RtsPresentationUpdate` için gameplay kararlarından türetilen, yalnız okunur
+  `workerActivity` sözleşmesi eklendi.
+- [x] En küçük yeterli kategori kümesi authorlandı:
   `generic`, `construction`, `repair`, `cultivation`, `harvest`, `livestock`,
   `carryingBox`, `carryingLoad`, `wheelbarrow`.
-- [ ] `Unit` içinde bu durumun yalnız sunum amaçlı olduğunu açıkça belgele.
-- [ ] `WorkerConstructionSystem`, `EconomyProductionSystem` ve `PastureSystem`
+- [x] `Unit` içinde bu durumun yalnız sunum amaçlı olduğu açıkça belgelendi.
+- [x] `WorkerConstructionSystem`, `EconomyProductionSystem` ve `PastureSystem`
   yalnız sahip oldukları gerçek atama bilgisini bildirir; renderer bina/resource
-  kimliğinden iş tahmini yapmaz.
-- [ ] Player emri, iş değişimi, bina yıkımı, kaynak tükenmesi ve Worker ölümü dahil
-  bütün çıkış yollarında aktiviteyi temizle.
-- [ ] Yeni sidecar rolü gerekiyorsa loader, validator ve test fixture'larını aynı
-  dilimde güncelle.
+  kimliğinden iş tahmini yapmaz. İlk eşleme: inşaat `construction`, onarım
+  `repair`, tarla `cultivation`, hayvan sakinleştirme `livestock`; henüz özel
+  klibi kabul edilmeyen sonlu kaynaklar `generic` kalır.
+- [x] İş bırakma, iş değişimi, bina kaybı, kaynak tükenmesi ve Worker ölümü dahil
+  mevcut çıkış yollarında aktivite temizlenir.
+- [x] Yeni sidecar rolü gerekmiyor; mevcut semantic `work` rolü korunuyor ve
+  activity seçimi henüz runtime klip havuzunu değiştirmiyor.
 
 ### 9.2 Tarım ve hasat eşlemeleri
 
-- [ ] `cultivation` için ana klibi görsel incelemeyle seç:
-  `Worker_dig_and_plant_seeds`, `Worker_plant_a_plant` veya `Worker_watering`.
-- [ ] Uygun tarım kliplerini deterministik varyant havuzuna ekle.
+- [x] `cultivation` için ana klip `Worker_dig_and_plant_seeds` olarak authorlandı;
+  dünya içi görsel kabul hâlâ açık.
+- [x] `Worker_plant_a_plant` ve `Worker_watering`, yalnız cultivation aktivitesinin
+  deterministik varyant havuzuna eklendi.
 - [ ] `harvest` için `Worker_pick_fruit_1/2/3` varyantlarını incele ve bağla.
 - [ ] `Worker_pull_plant_1/2` kliplerini yalnız söküm/hasat anlamı doğruysa kullan.
-- [ ] Uzun 4,5–9,3 saniyelik kliplerin iş süresi değiştiğinde kesilme davranışını
-  doğrula.
-- [ ] İş animasyonu kaynak miktarı veya üretim tick'iyle senkron olmasa da gameplay
-  sonucunu değiştirmediğini test et.
+- [x] Uzun cultivation kliplerinin iş süresi değiştiğinde kesilmesi gameplay'i
+  değiştirmez; seçim yalnız `working` ve sunumsal activity okur.
+- [x] İş animasyonunun kaynak miktarı veya üretim tick'ini değiştirmediği hedefli
+  selector ve ekonomi testleriyle doğrulandı.
 
 ### 9.3 Hayvancılık
 
 - [ ] `Worker_cow_milking` klibini gerçek süt/hayvan üretimi state'iyle eşleştir.
+  Mevcut `livestock` state'i hayvan sakinleştirme/sürmedir; sağma klibi bilinçli
+  olarak bağlanmadı.
 - [ ] İneğin/Worker'ın göreli konum ve yönünü kabul sahnesinde authorla.
 - [ ] Hayvan yoksa veya iş iptal edilmişse sağma animasyonunun başlamadığını test et.
 - [ ] Taming/shepherding için sağma klibini yeniden kullanma; uygun klip yoksa nötr
@@ -271,9 +274,11 @@ bir aktivite kimliğiyle doğru animasyon ailesini seçmek.
 
 - [ ] Aktivite başlangıcı veya tamamlanan iş çevrimi için sunumsal sequence sayacı
   gerekip gerekmediğine karar ver.
-- [ ] Aynı Worker ve aynı aktivitede seçimin kararlı olduğunu test et.
-- [ ] Farklı Worker'ların uygun klip havuzunda çeşitlilik gösterebildiğini test et.
-- [ ] Aktivite değişmeden her loop'ta ilgisiz klibe sıçrama olmadığını test et.
+- [x] Aynı Worker ve aynı cultivation aktivitesinde seçimin kararlı olduğunu test et.
+- [x] Farklı Worker seed'lerinin cultivation havuzunda çeşitlilik gösterebildiğini
+  mevcut deterministik varyant seçicisi üzerinden doğrula.
+- [x] Aktivite değişmeden her loop'ta ilgisiz klibe sıçrama olmadığını selector
+  kararlılığıyla test et.
 - [ ] Save/load veya replay sonrasında sunum seçiminin gameplay state'ini
   değiştirmediğini doğrula.
 

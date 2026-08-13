@@ -28,7 +28,12 @@
       "rootNode": "mixamorigHips"
     },
     {
-      "clip": "siege_walk_forward",
+      "clip": "siege_strafe_left",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "siege_strafe_right",
       "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     }
@@ -36,6 +41,6 @@
   "physicsBodies": [],
   "physicsConstraints": [],
   "preview": {
-    "selectedClip": "siege_walk_forward"
+    "selectedClip": "siege_kick"
   }
 }

@@ -20,7 +20,8 @@
 export type RtsAnimationRole =
   | "idle" | "walk" | "run" | "walkBack" | "runBack"
   | "aimWalkForward" | "aimWalkBack" | "aimWalkLeft" | "aimWalkRight"
-  | "work" | "rest" | "hold" | "attack" | "hit" | "death";
+  | "work" | "workCultivation" | "workHarvest" | "workLivestock"
+  | "rest" | "hold" | "attack" | "hit" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
 export interface RtsAnimationInput {
@@ -45,6 +46,8 @@ export interface RtsAnimationInput {
    * has is performed from a standstill at an approach point.
    */
   readonly working: boolean;
+  /** Presentation-only Worker assignment category, authored by the owning job system. */
+  readonly workerActivity?: import("./unit").WorkerActivity | null;
   /**
    * True while the unit is standing still being restored in place — today, a
    * wounded soldier inside a Temple's support field (Guard plan Faz 4).
@@ -289,6 +292,12 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   // clip. An asset that authors none simply stands there, which is what the
   // capsule-era worker did and is never wrong — only less expressive.
   work: ["work", "idle"],
+  // A job-specific loop is opt-in. An asset that does not author the category
+  // simply uses its neutral work pose, so gameplay never depends on clip
+  // coverage and a partial sidecar remains readable.
+  workCultivation: ["workCultivation", "work", "idle"],
+  workHarvest: ["workHarvest", "work", "idle"],
+  workLivestock: ["workLivestock", "work", "idle"],
   // Continuous and looped like work, and it reaches its own clip for the same
   // reason: the unit holds this pose for as long as the mending takes. An asset
   // that authors none simply waits standing up, which is exactly what every unit
@@ -382,7 +391,8 @@ export function selectRtsAnimation(
   variantSeed = 0,
   directionalAimActive = false,
 ): RtsAnimationSelection | null {
-  const requested = classifyRtsAnimation(input, tuning, directionalAimActive);
+  const baseRequested = classifyRtsAnimation(input, tuning, directionalAimActive);
+  const requested = baseRequested === "work" ? rtsWorkRoleForActivity(input.workerActivity) : baseRequested;
   const resolved = resolveRtsAnimationRole(requested, animationSet, available);
   if (!resolved) return null;
   const clip = resolveRtsAnimationVariant(resolved.role, animationSet, variants, available, variantSeed);
@@ -393,6 +403,21 @@ export function selectRtsAnimation(
     clip,
     playbackRate: rtsPlaybackRate(resolved.role, input.planarSpeed, tuning),
   };
+}
+
+/**
+ * Maps an already-authoritative Worker assignment category onto the optional
+ * sidecar role that can present it. This never infers activity from the map,
+ * building id or resource: unrecognised and intentionally neutral activities
+ * stay on `work`.
+ */
+export function rtsWorkRoleForActivity(
+  activity: import("./unit").WorkerActivity | null | undefined,
+): Extract<RtsAnimationRole, `work${string}`> {
+  if (activity === "cultivation") return "workCultivation";
+  if (activity === "harvest") return "workHarvest";
+  if (activity === "livestock") return "workLivestock";
+  return "work";
 }
 
 /* ------------------------------------------------------------------------- *

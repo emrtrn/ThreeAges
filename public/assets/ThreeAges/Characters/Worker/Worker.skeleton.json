@@ -5,9 +5,15 @@
     "idle": "Worker_idle_natural",
     "walk": "Worker_walking",
     "run": "Worker_running",
-    "work": "Worker_kneeling_idle"
+    "work": "Worker_kneeling_idle",
+    "workCultivation": "Worker_dig_and_plant_seeds"
   },
-  "animationVariants": {},
+  "animationVariants": {
+    "workCultivation": [
+      "Worker_plant_a_plant",
+      "Worker_watering"
+    ]
+  },
   "blendSpaces": [],
   "notifies": [],
   "montages": [],

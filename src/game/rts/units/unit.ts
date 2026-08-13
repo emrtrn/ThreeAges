@@ -48,6 +48,18 @@ export type UnitRole = UnitRoleId;
  */
 export type UnitStance = "aggressive" | "hold";
 
+/** Presentation-only Worker assignment category, authored by the owning job system. */
+export type WorkerActivity =
+  | "generic"
+  | "construction"
+  | "repair"
+  | "cultivation"
+  | "harvest"
+  | "livestock"
+  | "carryingBox"
+  | "carryingLoad"
+  | "wheelbarrow";
+
 /**
  * Per-frame simulation summary handed to an animated presentation.
  *
@@ -75,6 +87,8 @@ export interface RtsPresentationUpdate {
   readonly dying: boolean;
   /** True while the unit is standing at an in-place job — a builder on its site (Faz F). */
   readonly working: boolean;
+  /** Job-system-authored Worker category; null means no job assignment. */
+  readonly workerActivity?: WorkerActivity | null;
   /**
    * True while a support field is restoring this body's hit points (Guard plan
    * Faz 4). An asset that authors a `rest` clip waits in that pose instead of
@@ -363,6 +377,8 @@ export class Unit {
   private working = false;
   /** See {@link setHunting}: presentation-only, written by the job system. */
   private hunting = false;
+  /** See {@link setWorkerActivity}: presentation-only, written by the job system. */
+  private workerActivityValue: WorkerActivity | null = null;
 
   constructor(
     owner: UnitOwner,
@@ -488,6 +504,7 @@ export class Unit {
       attacking: this.isTradingBlows() || this.hunting,
       dying: this.dying,
       working: this.working,
+      workerActivity: this.workerActivityValue,
       // The bridge from the support field to the pose: a body being mended waits
       // kneeling instead of standing, and rises the tick the mending stops —
       // which is the tick it reaches full health, or leaves the field.
@@ -518,6 +535,21 @@ export class Unit {
   /** Whether an in-place job is running; see {@link setWorking}. */
   get isWorking(): boolean {
     return this.working;
+  }
+
+  /**
+   * Report the current Worker assignment to presentation consumers.
+   *
+   * Unlike {@link setWorking}, this remains available during the walk to a job.
+   * It never feeds back into simulation; job-system release paths clear it.
+   */
+  setWorkerActivity(activity: WorkerActivity | null): void {
+    this.workerActivityValue = activity;
+  }
+
+  /** Current presentation-only Worker assignment category. */
+  get workerActivity(): WorkerActivity | null {
+    return this.workerActivityValue;
   }
 
   /**
@@ -903,6 +935,9 @@ export class Unit {
     if (!this.health.depleted || this.deathElapsed !== null) return false;
     this.deathElapsed = 0;
     this.stop();
+    this.setWorking(false);
+    this.setHunting(false);
+    this.setWorkerActivity(null);
     this.healthBar.object.visible = false;
     return true;
   }

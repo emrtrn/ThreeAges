@@ -241,6 +241,7 @@ export class PastureSystem {
     this.wildlife.releaseReservation(worker.id);
     worker.stop();
     worker.setWorking(false);
+    worker.setWorkerActivity(null);
     this.assignments.delete(worker.id);
     return true;
   }
@@ -402,6 +403,7 @@ export class PastureSystem {
         continue;
       }
       worker.setMovePath(path);
+      worker.setWorkerActivity("livestock");
       this.assignments.set(worker.id, {
         worker,
         pasture,
@@ -511,6 +513,7 @@ export class PastureSystem {
     this.wildlife.releaseReservation(worker.id);
     worker.stop();
     worker.setWorking(false);
+    worker.setWorkerActivity(null);
   }
 
   /**

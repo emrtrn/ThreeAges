@@ -10,7 +10,7 @@ import type { RtsNavigation } from "../navigation/rtsNavigation";
 import { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { PlacedStructure } from "../structures/placedStructureSystem";
 import { productionAdjacencyMultiplier } from "../structures/productionAdjacency";
-import type { Unit, UnitOwner } from "../units/unit";
+import type { Unit, UnitOwner, WorkerActivity } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { ResourceNodeSystem } from "./resourceNodeSystem";
 import type { ForestSystem } from "./forestSystem";
@@ -313,6 +313,7 @@ export class EconomyProductionSystem {
     // producer loss, death — the same way the construction system does it.
     worker.setWorking(false);
     worker.setHunting(false);
+    worker.setWorkerActivity(null);
     return true;
   }
 
@@ -727,6 +728,7 @@ export class EconomyProductionSystem {
       if (!assignment.worker.health.depleted && this.units.all().includes(assignment.worker)) continue;
       assignment.worker.setWorking(false);
       assignment.worker.setHunting(false);
+      assignment.worker.setWorkerActivity(null);
       this.releaseSourceClaims(workerId);
       producer.assignments.delete(workerId);
       this.assignmentByWorker.delete(workerId);
@@ -751,6 +753,7 @@ export class EconomyProductionSystem {
       assignment.worker.stop();
       assignment.worker.setWorking(false);
       assignment.worker.setHunting(false);
+      assignment.worker.setWorkerActivity(null);
       this.releaseSourceClaims(assignment.worker.id);
       this.assignmentByWorker.delete(assignment.worker.id);
     }
@@ -775,6 +778,7 @@ export class EconomyProductionSystem {
       const target = this.findReachableSource(worker, producer.structure, economy, requirement.source);
       if (!target) return false;
       worker.setMovePath(target.path);
+      worker.setWorkerActivity(this.activityForProducer(producer));
       const assignment: WorkerAssignment = {
         worker,
         approach: target.approach,
@@ -796,6 +800,7 @@ export class EconomyProductionSystem {
     const path = this.navigation.plan(worker.position, approach);
     if (!path) return false;
     worker.setMovePath(path);
+    worker.setWorkerActivity(this.activityForProducer(producer));
     const assignment: WorkerAssignment = {
       worker,
       approach,
@@ -808,6 +813,16 @@ export class EconomyProductionSystem {
     producer.assignments.set(worker.id, assignment);
     this.assignmentByWorker.set(worker.id, producer);
     return true;
+  }
+
+  /**
+   * This system owns the actual producer assignment, so it reports the category
+   * rather than leaving the renderer to infer one from a building or resource.
+   * Only the farm currently has a visually honest specific family; finite
+   * gathering remains neutral until its own clip has passed visual acceptance.
+   */
+  private activityForProducer(producer: ProducerRecord): WorkerActivity {
+    return producer.structure.stats.id === "farm" ? "cultivation" : "generic";
   }
 
   private returnToCamp(assignment: WorkerAssignment, structure: PlacedStructure): boolean {
