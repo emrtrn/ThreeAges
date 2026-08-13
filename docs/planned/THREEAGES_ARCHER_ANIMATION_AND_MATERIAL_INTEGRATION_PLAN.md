@@ -2,8 +2,8 @@
 
 Oluşturulma tarihi: 2026-08-12  
 Durum: **Uygulanıyor — Faz 1 geri çekilme görsel yeniden kabulü açık. Faz 2
-materyal görünümü, Faz 3 atış ve Faz 4 layered hit kullanıcı tarafından kabul
-edildi; Faz 5 socket temelli ok çıkış noktası kod/otomasyon diliminde uygulanıyor.**
+materyal görünümü, Faz 3 atış, Faz 4 layered hit ve Faz 5 gerçek ok çıkışı
+kullanıcı tarafından kabul edildi; Faz 5 recovery/reload görsel kabulü açık.**
 
 ## 1. Amaç
 
@@ -236,7 +236,7 @@ biçimde göstermek; hasar/cooldown davranışını değiştirmemek.
 ### 6.1 İlk güvenli dilim
 
 - [x] `attack` için ilk aday olarak `Archer_standing_aim_recoil` klibini seç.
-  GLB denetimindeki gerçek süresi `1.140 s`; Skeletal Mesh Editor'de oyun
+  Güncel GLB denetimindeki gerçek süresi `0.733 s`; Skeletal Mesh Editor'de oyun
   kamerasına yakın açıyla görsel önizleme açık kabul maddesidir.
 - [x] Klipi `attack` semantic rolüne ata; olay-senkron görsel okunabilirliği
   kullanıcı kabulünde doğrulanacak.
@@ -316,16 +316,16 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 
 ## 8. Faz 5 — Zengin Atış Döngüsü, Socket ve Notify
 
-**Durum:** 🟨 Gerçek ok mesh'i ve görsel kabul kapısı
+**Durum:** 🟨 Recovery/reload ve notify görsel kabul kapısı
 
 ### 8.1 Atış döngüsü
 
-- [ ] `aim_recoil` sonrasında `Archer_standing_draw_arrow` (`1.00 s`) oynatan
-  sunumsal recovery/reload dizisini tasarla.
-- [ ] Toplam yaklaşık `1.70 s` authored sürenin `1.60 s` gameplay cooldown'uyla
-  nasıl uzlaştırılacağını belirle: hafif playback ölçeği veya yeni atışta güvenli
-  kesme.
-- [ ] Reload animasyonu hiçbir durumda bir sonraki gerçek atışı geciktirmesin.
+- [x] `aim_recoil` sonrasında `Archer_standing_draw_arrow` (`1.033 s`) oynatan
+  sunumsal recovery/reload dizisini `attackRecovery` semantic rolüyle tasarla.
+- [x] Güncel `0.733 + 1.033 = 1.766 s` authored süreyi `1.60 s` gameplay
+  cooldown'uyla güvenli kesme yoluyla uzlaştır: yeni gerçek atış recovery'yi
+  anında kesip yeniden `aim_recoil` başlatır.
+- [x] Reload animasyonu hiçbir durumda bir sonraki gerçek atışı geciktirmesin.
 - [ ] `equip_bow` ve `disarm_bow` yalnızca gerçek silah hazırlama state'i
   tasarlanırsa bu döngüye girsin.
 
@@ -342,7 +342,7 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
   world konumundan çiz; hasarın uygulandığı anı değiştirme.
 - [x] Archer'ın gerçek ok olmayan generic küre tracer'ını kaldır; gerçek ok mesh'i
   hazır olana kadar atışın uçuş VFX'i görünmesin.
-- [ ] Yakın ve uzak hedeflerde okun elden/yaydan çıktığını gözle.
+- [x] Yakın ve uzak hedeflerde okun elden/yaydan çıktığını gözle.
 
 ### 8.3 Notify, VFX ve gelecekteki ses
 
@@ -539,3 +539,11 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
   Hasar/cooldown/hedef kararları değişmedi. `npx.cmd tsc --noEmit` geçti; Archer,
   Skeletal animasyon ve ranged filtrelerinde 25 kontrol geçti (`PARTIAL`). Dünya
   içi yakın/uzak atış görsel kabulü açık.
+- 2026-08-13 — Kullanıcı gerçek okun çıkışını kabul etti. Archer GLB ayrıştırma
+  sonrası `aim_recoil` süresi `0.733 s`, `draw_arrow` süresi `1.033 s` olarak
+  yeniden ölçüldü; eski `1.140 s` ölçümü önceki GLB sürümüne aitti. Generic
+  `attackRecovery` semantic rolü eklendi: attack bittiğinde draw-arrow başlar,
+  ancak yeni `attackCount` artışı onu keser ve hiçbir gameplay cooldown'u
+  bekletmez. Her iki klibin Hips translation'ı `lockXYZ` ile sabittir.
+  `npx.cmd tsc --noEmit` geçti; `Skeletal animasyon,Archer` filtresinde 24
+  kontrol geçti (`PARTIAL`). Recovery/reload dünya içi görsel kabulü açık.

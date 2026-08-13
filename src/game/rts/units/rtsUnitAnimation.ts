@@ -381,7 +381,7 @@ export function selectRtsAnimation(
 
 /** The one-shot currently overriding locomotion, if any. */
 export interface RtsActionState {
-  readonly kind: "none" | "attack" | "hit" | "death";
+  readonly kind: "none" | "attack" | "attackRecovery" | "hit" | "death";
   /** Seconds left of the running clip. Reaches 0 on the frame it finishes. */
   readonly remainingSeconds: number;
   /** The blow count this state was last reconciled against; see {@link advanceRtsAction}. */
@@ -417,6 +417,8 @@ export const RTS_ACTION_NONE: RtsActionState = {
  */
 export interface RtsActionDurations {
   readonly attack: number | null;
+  /** Optional visual tail of an attack; a new real attack may interrupt it. */
+  readonly attackRecovery?: number | null;
   readonly hit: number | null;
   readonly death: number | null;
 }
@@ -456,7 +458,9 @@ const NO_LAYERING: RtsActionLayering = { canLayerHit: false, walkSpeed: Infinity
  *     beaten, not as trading blows through it.
  *  3. **A new blow landed restarts the swing.** Any change in `attackCount`
  *     begins the attack clip from the top, even mid-swing.
- *  4. **Otherwise the running action runs down**, and locomotion resumes on the
+ *  4. **An authored attack recovery follows the swing** when present, but a new
+ *     real blow cuts that cosmetic tail immediately.
+ *  5. **Otherwise the running action runs down**, and locomotion resumes on the
  *     frame it expires.
  *
  * The returned state always carries the input's counters, so events that
@@ -503,6 +507,13 @@ export function advanceRtsAction(
   if (state.kind === "attack") {
     const remaining = state.remainingSeconds - dt;
     if (remaining > 0) return { kind: "attack", remainingSeconds: remaining, ...counters };
+    if (durations.attackRecovery !== null && durations.attackRecovery !== undefined) {
+      return { kind: "attackRecovery", remainingSeconds: durations.attackRecovery, ...counters };
+    }
+  }
+  if (state.kind === "attackRecovery") {
+    const remaining = state.remainingSeconds - dt;
+    if (remaining > 0) return { kind: "attackRecovery", remainingSeconds: remaining, ...counters };
   }
   return { kind: "none", remainingSeconds: 0, ...counters };
 }
@@ -521,7 +532,7 @@ export function advanceRtsAction(
  * on that would freeze a beaten unit on its first flinch frame.
  */
 export function rtsActionSequence(state: RtsActionState): number {
-  if (state.kind === "attack") return state.attackCount;
+  if (state.kind === "attack" || state.kind === "attackRecovery") return state.attackCount;
   if (state.kind === "hit") return state.impactCount;
   return 0;
 }
@@ -538,8 +549,9 @@ export function rtsActionClip(
   variantSeed = 0,
 ): string | null {
   if (state.kind === "none") return null;
+  const role = state.kind === "attackRecovery" ? "attackRecovery" : state.kind;
   return resolveRtsAnimationVariant(
-    state.kind,
+    role,
     animationSet,
     variants,
     available,

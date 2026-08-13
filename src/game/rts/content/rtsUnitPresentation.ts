@@ -288,7 +288,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private readonly tuning: RtsLocomotionTuning;
   /** The running one-shot (swing or fall), owned by the pure state machine. */
   private action: RtsActionState = RTS_ACTION_NONE;
-  private actionDurations: RtsActionDurations = { attack: null, hit: null, death: null };
+  private actionDurations: RtsActionDurations = { attack: null, attackRecovery: null, hit: null, death: null };
   /**
    * The continuous role the mixer was last told to play, for {@link locomotionFade}.
    *
@@ -404,6 +404,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // death length is what the unit's despawn timer then waits for.
     this.actionDurations = {
       attack: this.durationOfRole("attack"),
+      attackRecovery: this.durationOfRole("attackRecovery"),
       hit: this.durationOfRole("hit"),
       death: this.durationOfRole("death"),
     };
@@ -493,6 +494,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // to an event, so its cached length stands.
     this.action = advanceRtsAction(this.action, state, {
       attack: this.durationOfRole("attack", state.attackCount),
+      attackRecovery: this.actionDurations.attackRecovery ?? null,
       hit: this.durationOfRole("hit", state.impactCount),
       death: this.actionDurations.death,
     }, deltaSeconds, { canLayerHit: this.layered !== null, walkSpeed: this.tuning.walkSpeed });
@@ -665,7 +667,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   }
 
   /** Authored length of the clip a semantic role names, or null when unauthored. */
-  private durationOfRole(role: "attack" | "hit" | "death", sequence = 0): number | null {
+  private durationOfRole(role: "attack" | "attackRecovery" | "hit" | "death", sequence = 0): number | null {
     const clip = resolveRtsAnimationVariant(
       role,
       this.animationSet,

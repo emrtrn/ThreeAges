@@ -23,7 +23,7 @@
   "metalness": 0,
   "aoIntensity": 1,
   "opacity": 1,
-  "alphaMode": "opaque",
+  "alphaMode": "mask",
   "alphaTest": 0.5,
   "side": "front",
   "emissive": "#000000",

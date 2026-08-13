@@ -38132,6 +38132,7 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
     walkBack: "Archer_standing_walk_back",
     runBack: "Archer_standing_run_back",
     attack: "Archer_standing_aim_recoil",
+    attackRecovery: "Archer_standing_draw_arrow",
     hit: "Archer_standing_react_small_from_front",
     death: "Archer_standing_death_backward",
   });
@@ -38166,6 +38167,7 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
   assert.deepEqual(releaseSocket!.getWorldPosition(new Vector3()).toArray(), [1, 2, 3]);
   for (const clip of [
     "Archer_standing_aim_recoil",
+    "Archer_standing_draw_arrow",
     "Archer_standing_react_small_from_front",
     "Archer_standing_death_backward",
     "Archer_standing_death_forward",
@@ -38398,6 +38400,17 @@ check("Skeletal animasyon Faz D: tek atimlik saldiri her darbede bir kez, olum i
   state = advanceRtsAction(state, input({ attackCount: 3, attacking: true }), durations, 0.1);
   assert.equal(state.remainingSeconds, 0.5, "a fresh blow restarts the swing from the top");
 
+  // An authored recovery is a visual tail, never a second cooldown. It begins
+  // when the swing ends and the next real blow cuts it immediately.
+  const bowDurations = { attack: 0.5, attackRecovery: 0.6, hit: null, death: 1.2 };
+  let bow = advanceRtsAction(RTS_ACTION_NONE, input({ attackCount: 1, attacking: true }), bowDurations, 0);
+  bow = advanceRtsAction(bow, input({ attackCount: 1, attacking: true }), bowDurations, 0.5);
+  assert.equal(bow.kind, "attackRecovery", "the draw/reload clip follows a completed bow release");
+  assert.equal(bow.remainingSeconds, 0.6);
+  bow = advanceRtsAction(bow, input({ attackCount: 2, attacking: true }), bowDurations, 0.1);
+  assert.equal(bow.kind, "attack", "a second real attack interrupts the cosmetic recovery");
+  assert.equal(bow.remainingSeconds, 0.5, "recovery never delays the next cooldown-authorized attack");
+
   // Death latches: it interrupts a swing, never restarts, and never gives the
   // pose back. A unit must still be lying there when the death system despawns
   // it — returning to idle mid-fall would resurrect it on screen.
@@ -38418,9 +38431,14 @@ check("Skeletal animasyon Faz D: tek atimlik saldiri her darbede bir kez, olum i
   assert.equal(advanceRtsAction(RTS_ACTION_NONE, input({ dying: true }), unauthored, 0.1).kind, "none");
 
   // Clip resolution is data, not code: the role name indexes the sidecar.
-  const set = { idle: "Idle_Loop", attack: "Sword_Attack", death: "Death01" };
-  const shipped = new Set(["Idle_Loop", "Sword_Attack", "Death01"]);
+  const set = { idle: "Idle_Loop", attack: "Sword_Attack", attackRecovery: "Nock_Arrow", death: "Death01" };
+  const shipped = new Set(["Idle_Loop", "Sword_Attack", "Nock_Arrow", "Death01"]);
   assert.equal(rtsActionClip({ kind: "attack", remainingSeconds: 1, attackCount: 1, impactCount: 0, layered: false }, set, shipped), "Sword_Attack");
+  assert.equal(
+    rtsActionClip({ kind: "attackRecovery", remainingSeconds: 1, attackCount: 1, impactCount: 0, layered: false }, set, shipped),
+    "Nock_Arrow",
+    "the optional recovery resolves from its own sidecar role",
+  );
   assert.equal(rtsActionClip({ kind: "death", remainingSeconds: 1, attackCount: 1, impactCount: 0, layered: false }, set, shipped), "Death01");
   assert.equal(rtsActionClip(RTS_ACTION_NONE, set, shipped), null, "no action means locomotion owns the pose");
   assert.equal(
@@ -38573,6 +38591,7 @@ check("Skeletal animasyon Faz D: attack/death rolleri editor kaydinda hayatta ka
     assert.equal(roundTripped[role], `${role}-clip`, `the validator preserves the "${role}" role`);
   }
   assert.equal(roundTripped.attack, "attack-clip", "Faz D's swing survives a save");
+  assert.equal(roundTripped.attackRecovery, "attackRecovery-clip", "an attack recovery survives the same editor save");
   assert.equal(roundTripped.death, "death-clip", "so does its death");
 
   // And the loader reads back exactly what the validator wrote — one vocabulary,

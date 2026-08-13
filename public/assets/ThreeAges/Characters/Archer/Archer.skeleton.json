@@ -28,6 +28,7 @@
     "walkBack": "Archer_standing_walk_back",
     "runBack": "Archer_standing_run_back",
     "attack": "Archer_standing_aim_recoil",
+    "attackRecovery": "Archer_standing_draw_arrow",
     "hit": "Archer_standing_react_small_from_front",
     "death": "Archer_standing_death_backward"
   },
@@ -46,6 +47,11 @@
   "rootMotion": [
     {
       "clip": "Archer_standing_aim_recoil",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_draw_arrow",
       "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
