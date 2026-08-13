@@ -38043,6 +38043,7 @@ check("Siege crew Faz 4: the wreck runs a timeline and the gun stops tipping ove
   const intact = siegeWreckFrame(SIEGE_WRECK_NONE, 4);
   assert.equal(intact.collapseProgress, 0, "at t=0 the carriage is intact");
   assert.equal(intact.barrelDrop, 0, "the barrel is still on its pivot");
+  assert.equal(intact.barrelHop, 0, "and the blast has not lifted it before the wreck begins");
   assert.equal(intact.wheels.length, 4, "and it has its four wheels");
   assert.ok(intact.wheels.every((wheel) => wheel.travel === 0), "none of which has moved");
 
@@ -38088,10 +38089,17 @@ check("Siege crew Faz 4: the wreck runs a timeline and the gun stops tipping ove
   // The barrel drops and pitches, and it finishes falling.
   const dropping = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.barrelFallSeconds * 0.5).state, 4);
   assert.ok(dropping.barrelDrop > 0 && dropping.barrelPitch > 0, "the barrel comes off its pivot");
+  const hopping = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.barrelHopSeconds * 0.5).state, 4);
+  assert.ok(hopping.barrelHop > 0, "the opening blast gives the barrel a visible upward hop");
   const dropped = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.barrelFallSeconds + 1).state, 4);
   assert.ok(
     Math.abs(dropped.barrelDrop - SIEGE_WRECK_TIMING.barrelDropDistance) < 1e-9,
     "and comes to rest on the ground rather than falling forever",
+  );
+  assert.equal(dropped.barrelHop, 0, "the blast hop is finished before the barrel settles");
+  assert.ok(
+    SIEGE_WRECK_TIMING.barrelDropDistance < 0.95,
+    "the barrel's 0.95-unit pivot stays above ground instead of being driven through it",
   );
 
   // The carriage collapse reaches 1 and stops there — it drives a vertex patch,
@@ -38126,6 +38134,59 @@ check("Siege crew Faz 4: the wreck runs a timeline and the gun stops tipping ove
   for (const name of [SIEGE_WRECK_BLAST_NOTIFY, SIEGE_WRECK_FIRE_NOTIFY, SIEGE_WRECK_SMOKE_NOTIFY]) {
     assert.ok(RTS_NOTIFY_EFFECTS[name], `"${name}" is bound to an effect`);
   }
+});
+
+check("Siege crew Faz 4: carriage collapse never deforms the crew's death bodies", () => {
+  const root = new Group();
+  const carriageMaterial = new MeshStandardMaterial();
+  const carriage = new Mesh(new BoxGeometry(1, 1, 1), carriageMaterial);
+  root.add(carriage);
+  const barrelPivot = new Group();
+  barrelPivot.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial()));
+  root.add(barrelPivot);
+  const wheelPivot = new Group();
+  wheelPivot.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial()));
+  root.add(wheelPivot);
+
+  const crewRoot = new Group();
+  const crewMaterial = new MeshStandardMaterial();
+  const crewMesh = new Mesh(new BoxGeometry(1, 1, 1), crewMaterial);
+  crewRoot.add(crewMesh);
+  root.add(crewRoot);
+
+  const presentation = createRtsUnitPresentation({
+    root,
+    pickTargets: [],
+    selectionRadius: 0.9,
+    animation: null,
+    moveSpeed: 3.8,
+    gunRecoils: [{
+      node: barrelPivot,
+      recoil: { axis: "x", degrees: -13, recoverSeconds: 0.7 },
+      base: barrelPivot.quaternion.clone(),
+      shotsSeen: 0,
+      elapsed: null,
+    }],
+    wheelSpins: [{
+      node: wheelPivot,
+      motion: { kind: "wheelSpin", axis: "x", radius: 0.5, direction: 1 },
+    }],
+    crew: [{ root: crewRoot, animation: null }],
+  });
+  presentation.update?.({
+    deltaSeconds: 1 / 60,
+    planarSpeed: 0,
+    attacking: false,
+    dying: true,
+    working: false,
+    attackCount: 0,
+    impactCount: 0,
+    cameraDistanceSquared: null,
+  });
+
+  assert.notEqual(carriage.material, carriageMaterial, "the collapsing carriage receives its private deformation material");
+  assert.equal(crewMesh.material, crewMaterial, "the crew mesh is left for its own death animation, not melted with the chassis");
+  presentation.dispose();
 });
 
 check("Siege crew Faz 4: the two men fall differently and the shipped Siege authors both clips", () => {

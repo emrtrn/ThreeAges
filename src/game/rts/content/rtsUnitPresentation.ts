@@ -656,6 +656,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private startedContinuous: string | null = null;
   /** Crew mixers are visual children of this one unit, never independent units. */
   private readonly crew: readonly RtsAttachedCrewAnimator[];
+  /** Crew subtrees are animated bodies, never collapsible carriage geometry. */
+  private readonly crewRoots: readonly Object3D[];
   /**
    * Whether this presentation dies as a wreck rather than as a body (Faz 4).
    *
@@ -705,6 +707,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       (options.animationVariantSeed ?? 0) + index * 0x9e37,
       options.onNotify,
     ));
+    this.crewRoots = (options.crew ?? []).map((member) => member.root);
     this.wreckable = this.gunRecoils.length > 0 && this.wheelSpins.length > 0;
     if (this.wreckable) {
       // The one line that takes the code tip-over off the artillery (§2.5): a
@@ -1069,7 +1072,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
 
     if (rest.barrel) {
       const { node, position, quaternion } = rest.barrel;
-      node.position.set(position.x, position.y - frame.barrelDrop, position.z);
+      node.position.set(position.x, position.y + frame.barrelHop - frame.barrelDrop, position.z);
       node.quaternion.copy(quaternion);
       node.rotateX(frame.barrelPitch);
     }
@@ -1113,6 +1116,11 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     const excluded = new Set<Object3D>();
     for (const { node } of this.gunRecoils) node.traverse((child) => excluded.add(child));
     for (const { node } of this.wheelSpins) node.traverse((child) => excluded.add(child));
+    // The crew is parented beneath the cannon solely so it follows one
+    // selectable/gameplay unit. Its skinned meshes must keep their own death
+    // poses; treating them as chassis geometry makes the vertex collapse melt
+    // the men while their `siege_death` clips are trying to play.
+    for (const root of this.crewRoots) root.traverse((child) => excluded.add(child));
     // What is left is the carriage: the part that stays where the gun died and
     // settles into a heap, rather than dropping off it or rolling away from it.
     const carriage: Mesh[] = [];

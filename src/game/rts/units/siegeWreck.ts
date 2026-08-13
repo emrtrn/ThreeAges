@@ -46,6 +46,10 @@ export interface SiegeWreckTiming {
   readonly barrelFallSeconds: number;
   /** How far the muzzle drops, in world units. */
   readonly barrelDropDistance: number;
+  /** Peak upward hop the opening blast gives the barrel before it falls. */
+  readonly barrelHopHeight: number;
+  /** Duration of that hop; its landing blends straight into the fall. */
+  readonly barrelHopSeconds: number;
   /** How far the barrel pitches over as it falls, in radians. */
   readonly barrelPitchRadians: number;
   /** When the carriage has finished collapsing — the wreck's own `tBreak`. */
@@ -69,7 +73,13 @@ export const SIEGE_WRECK_TIMING: SiegeWreckTiming = {
   barrelFallSeconds: 0.9,
   // The barrel pivot sits about a metre up on the shipped carriage, and the
   // carriage is collapsing under it, so the drop is a little more than that.
-  barrelDropDistance: 1.05,
+  // The pivot rests at y=0.95. A 1.05 drop drove it below the terrain before
+  // the pitch even began; leave the fallen barrel visibly on the carriage.
+  barrelDropDistance: 0.62,
+  // The blast already has an authored effect. This small hop makes its force
+  // read on the barrel too, before gravity pulls it down.
+  barrelHopHeight: 0.28,
+  barrelHopSeconds: 0.2,
   barrelPitchRadians: 1.05,
   collapseSeconds: 1.8,
   fireStartSeconds: 0.3,
@@ -98,6 +108,8 @@ export interface SiegeWreckFrame {
   readonly collapseProgress: number;
   /** How far the barrel has dropped, in world units. */
   readonly barrelDrop: number;
+  /** Upward displacement from the opening blast, in world units. */
+  readonly barrelHop: number;
   /** How far it has pitched over, in radians, added to its authored rest pose. */
   readonly barrelPitch: number;
   readonly wheels: readonly SiegeWreckWheelFrame[];
@@ -203,6 +215,10 @@ export function siegeWreckFrame(
   const count = Math.max(0, Math.floor(wheelCount));
   const collapse = timing.collapseSeconds > 0 ? Math.min(1, Math.max(0, t / timing.collapseSeconds)) : 1;
   const fall = timing.barrelFallSeconds > 0 ? easeOut(t / timing.barrelFallSeconds) : 1;
+  const hopProgress = timing.barrelHopSeconds > 0
+    ? Math.min(1, Math.max(0, t / timing.barrelHopSeconds))
+    : 1;
+  const barrelHop = hopProgress < 1 ? Math.sin(Math.PI * hopProgress) * timing.barrelHopHeight : 0;
   const rolled = timing.wheelRollSeconds > 0
     ? easeOut((t - timing.wheelBreakSeconds) / timing.wheelRollSeconds)
     : t >= timing.wheelBreakSeconds ? 1 : 0;
@@ -225,6 +241,7 @@ export function siegeWreckFrame(
   return {
     collapseProgress: collapse,
     barrelDrop: fall * timing.barrelDropDistance,
+    barrelHop,
     barrelPitch: fall * timing.barrelPitchRadians,
     wheels,
   };
