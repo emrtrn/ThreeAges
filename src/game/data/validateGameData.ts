@@ -461,6 +461,14 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (attackRange <= 0) {
       throw new GameDataError(`${statsWhere}.attackRange: must be > 0`);
     }
+    const rawProjectileSpeed = stats["projectileSpeed"];
+    let projectileSpeed: number | undefined;
+    if (rawProjectileSpeed !== undefined) {
+      projectileSpeed = requireFiniteNumber(stats, "projectileSpeed", statsWhere);
+      if (projectileSpeed <= 0) {
+        throw new GameDataError(`${statsWhere}.projectileSpeed: must be > 0`);
+      }
+    }
     const acquisitionRange = requireFiniteNumber(stats, "acquisitionRange", statsWhere);
     if (acquisitionRange < 0) {
       throw new GameDataError(`${statsWhere}.acquisitionRange: must be >= 0`);
@@ -563,6 +571,7 @@ export function validateUnitBalance(value: unknown): UnitBalance {
       attackDamage,
       attackCooldown,
       attackRange,
+      ...(projectileSpeed === undefined ? {} : { projectileSpeed }),
       acquisitionRange,
       chaseRange,
       ...(holdDamageResistance === undefined ? {} : { holdDamageResistance }),

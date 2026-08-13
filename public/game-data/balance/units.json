@@ -41,6 +41,7 @@
     "attackDamage": 10,
     "attackCooldown": 1.6,
     "attackRange": 14,
+    "projectileSpeed": 25,
     "acquisitionRange": 18,
     "chaseRange": 22,
     "visionRadius": 28,

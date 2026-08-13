@@ -4135,6 +4135,8 @@ export class RtsApp {
         muzzle ?? shot.attacker.position,
         shot.target.position,
         muzzle ? 0 : undefined,
+        0,
+        shot.attacker.stats.projectileSpeed,
       );
     }
     // A Guard's blow against a building is thrown fire, not a swing: same

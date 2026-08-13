@@ -11,28 +11,86 @@
  * that unit", and the authored arrow says it without pretending to be gameplay.
  */
 import {
+  AdditiveBlending,
   Box3,
+  CatmullRomCurve3,
+  DoubleSide,
   Group,
   Mesh,
+  MeshBasicMaterial,
   Object3D,
+  TubeGeometry,
   Vector3,
 } from "three";
 
 import type { UnitOwner } from "../units/unit";
 
-/** World units/s. Fast enough to read as an arrow, slow enough to see. */
-const PROJECTILE_SPEED = 26;
+/** Fallback for non-unit Arrow sources such as the Karakol. */
+const FALLBACK_PROJECTILE_SPEED = 25;
 /** Impact height, so a shot lands around a target's torso rather than its feet. */
 const LAUNCH_HEIGHT = 1.25;
 /** The real Arrow asset is authored at this length; keeps future replacements legible. */
 const ARROW_LENGTH = 0.75;
+/** The gust leaves the feather/nock, not the shaft, and remains shorter than the Arrow. */
+const ARROW_WIND_TRAIL_LENGTH = 0.4;
+/**
+ * Trail'in tüy/nock ucundan imzalı yerel Z başlangıç uzaklığı. Görsel ayar için
+ * ana değer budur: trail'in tamamını ok ekseni üzerinde öne veya arkaya taşır.
+ */
+const ARROW_WIND_TRAIL_START_OFFSET = -0.4;
+/** Shared static geometry/material: every in-flight Arrow only owns a transform. */
+const ARROW_WIND_TRAIL_GEOMETRY = new TubeGeometry(new CatmullRomCurve3([
+  new Vector3(0, 0, 0),
+  new Vector3(0.018, -0.008, ARROW_WIND_TRAIL_LENGTH * 0.32),
+  new Vector3(-0.025, 0.014, ARROW_WIND_TRAIL_LENGTH * 0.68),
+  new Vector3(0.012, -0.018, ARROW_WIND_TRAIL_LENGTH),
+]), 16, 0.007, 4, false);
+const ARROW_WIND_TRAIL_MATERIAL = new MeshBasicMaterial({
+  color: 0xd9f3ff,
+  transparent: true,
+  opacity: 0.2,
+  depthWrite: false,
+  side: DoubleSide,
+  blending: AdditiveBlending,
+});
 
 interface Projectile {
   readonly model: Object3D;
+  readonly windTrail: Group;
   readonly from: Vector3;
   readonly to: Vector3;
   readonly duration: number;
+  readonly windPhase: number;
   elapsed: number;
+}
+
+/**
+ * A persistent local gust, parented to the Arrow instead of emitted into world
+ * space. `Object3D.lookAt()` points local -Z into flight, so local +Z is the
+ * tailward direction. Three thin curled wisps start behind the feather/nock and
+ * drift behind it. The parent is removed at impact, which
+ * makes the effect's lifetime exactly the arrow's lifetime without a second
+ * VFX queue or any gameplay coupling.
+ */
+function createArrowWindTrail(): Group {
+  const trail = new Group();
+  trail.name = "rts-arrow-wind-trail";
+  trail.position.z = ARROW_WIND_TRAIL_START_OFFSET;
+  for (let index = 0; index < 3; index += 1) {
+    const wisp = new Mesh(ARROW_WIND_TRAIL_GEOMETRY, ARROW_WIND_TRAIL_MATERIAL);
+    wisp.rotation.z = (Math.PI * 2 * index) / 3;
+    wisp.castShadow = false;
+    wisp.receiveShadow = false;
+    trail.add(wisp);
+  }
+  return trail;
+}
+
+/** A quiet flutter makes the local wisps read as air rather than a solid cone. */
+function animateArrowWindTrail(trail: Group, elapsed: number, phase: number): void {
+  const flutter = elapsed * 18 + phase;
+  trail.rotation.x = Math.sin(flutter) * 0.12;
+  trail.rotation.y = Math.cos(flutter * 1.31) * 0.09;
 }
 
 /**
@@ -57,6 +115,10 @@ function fitArrowModel(template: Object3D): Object3D {
     }
   });
   holder.add(model);
+  // Child, not world VFX: the gust follows the animated projectile for its
+  // whole flight and starts behind the Arrow's local feather/nock, rather than
+  // as a world-space effect over the shaft.
+  holder.add(createArrowWindTrail());
   return holder;
 }
 
@@ -83,7 +145,14 @@ export class ProjectileSystem {
   }
 
   /** Show one authored arrow travelling from the release point to where a target stood. */
-  spawn(_owner: UnitOwner, from: Vector3, to: Vector3, launchHeight = LAUNCH_HEIGHT, lateralOffset = 0): void {
+  spawn(
+    _owner: UnitOwner,
+    from: Vector3,
+    to: Vector3,
+    launchHeight = LAUNCH_HEIGHT,
+    lateralOffset = 0,
+    projectileSpeed = FALLBACK_PROJECTILE_SPEED,
+  ): void {
     if (!this.arrowTemplate) return;
     const start = new Vector3(from.x, from.y + launchHeight, from.z);
     const end = new Vector3(to.x, to.y + LAUNCH_HEIGHT, to.z);
@@ -100,10 +169,21 @@ export class ProjectileSystem {
     // zero-length flight dividing by zero below.
     if (distance < 0.01) return;
     const model = this.arrowTemplate.clone(true);
+    const windTrail = model.getObjectByName("rts-arrow-wind-trail");
+    if (!(windTrail instanceof Group)) return;
     model.position.copy(start);
     model.lookAt(end);
     this.root.add(model);
-    this.live.push({ model, from: start, to: end, duration: distance / PROJECTILE_SPEED, elapsed: 0 });
+    const speed = Number.isFinite(projectileSpeed) && projectileSpeed > 0 ? projectileSpeed : FALLBACK_PROJECTILE_SPEED;
+    this.live.push({
+      model,
+      windTrail,
+      from: start,
+      to: end,
+      duration: distance / speed,
+      windPhase: start.x * 0.73 + start.z * 1.37,
+      elapsed: 0,
+    });
   }
 
   update(dt: number): void {
@@ -124,6 +204,7 @@ export class ProjectileSystem {
       if (this.scratchAhead.distanceToSquared(projectile.model.position) > 1e-6) {
         projectile.model.lookAt(this.scratchAhead);
       }
+      animateArrowWindTrail(projectile.windTrail, projectile.elapsed, projectile.windPhase);
     }
   }
 

@@ -198,6 +198,12 @@ export interface UnitBalanceStats {
   /** Maximum ground-plane distance from which a hit may land; must be positive. */
   attackRange: number;
   /**
+   * Optional visual flight speed for a projectile this unit fires, in world
+   * units/s. It changes only the rendered projectile lifetime: combat damage
+   * and the attack cooldown remain authoritative elsewhere.
+   */
+  readonly projectileSpeed?: number;
+  /**
    * Distance at which an idle unit picks up a nearby enemy by itself. Zero opts
    * a unit out entirely, which is how workers stay out of combat.
    */

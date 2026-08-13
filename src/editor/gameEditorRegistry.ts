@@ -151,6 +151,12 @@ export interface EditorDataTableDef {
   /** Optional per-leaf presentation hints; keyed by dotted path. */
   readonly fields?: readonly EditorDataTableFieldMeta[];
   /**
+   * Project-owned values merged into one entry after its committed git default
+   * is restored. This keeps defaults for fields introduced after the current
+   * commit explicit, rather than silently dropping them on a per-entry reset.
+   */
+  readonly resetEntryDefaults?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /**
    * Optional friendly names for repeated blocks. When an entry contains arrays
    * of objects (progression tiers, upgrade levels), the editor renders one
    * collapsible sub-group per element; these labels title those groups. Blocks

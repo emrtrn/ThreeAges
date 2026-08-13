@@ -1,9 +1,9 @@
 # ThreeAges — Okçu Animasyon ve Materyal Entegrasyon Planı
 
 Oluşturulma tarihi: 2026-08-12  
-Durum: **Uygulanıyor — Faz 1 geri çekilme görsel yeniden kabulü açık. Faz 2
-materyal görünümü, Faz 3 atış, Faz 4 layered hit ve Faz 5 gerçek ok çıkışı
-kullanıcı tarafından kabul edildi; Faz 5 recovery/reload görsel kabulü açık.**
+Durum: **Uygulanıyor — Faz 1–5 dünya içi görsel kabulleri kullanıcı tarafından
+tamamlandı. Faz 5'te kalan `body-impact`, efekt bütçesi ve silah-hazırlama
+kararları görsel kabulün dışında, ileri backlog olarak açıktır.**
 
 ## 1. Amaç
 
@@ -113,7 +113,7 @@ adı tek başına gameplay gerçeği sayılmaz.
 
 ## 4. Faz 1 — Actor Bağlantısı ve Temel Locomotion
 
-**Durum:** 🟨 Kod ve otomasyon tamamlandı — dünya içi görsel kabul bekleniyor  
+**Durum:** ✅ Dünya içi görsel kabul tamamlandı
 **Amaç:** Yeni Archer assetini oyuncu ve AI Okçularına bağlamak; idle, ileri ve
 geri locomotion'ı simülasyon hareketiyle uyumlu çalıştırmak.
 
@@ -171,12 +171,12 @@ Otomatik hazırlık:
 
 - [x] Aynı anda en az 10 oyuncu ve 10 düşman Okçu oluştur.
 - [x] Kısa hedef, uzak hedef, açık alan ve dar geçitte walk/run gözle.
-- [ ] `T` geri çekilme emrinde walkBack/runBack yönünü gözle.
+- [x] `T` geri çekilme emrinde walkBack/runBack yönünü gözle.
 - [x] Dururken idle varyantlarının birimler arasında çeşitlilik gösterdiğini,
   aynı birimde restart sonrası değişmediğini doğrula.
 - [x] Modelin gameplay kökünden ayrılmadığını ve başlangıç noktasına sıçramadığını
   doğrula.
-- [ ] Ayak kayması, T-pose, ters yön, zemin altına girme veya her karede klip
+- [x] Ayak kayması, T-pose, ters yön, zemin altına girme veya her karede klip
   restart gözlenmediğinde kullanıcı kabulünü tarihli olarak kaydet.
 
 **Faz 1 çıkış kapısı:** Locomotion kullanıcı tarafından kabul edilmeden Faz 2
@@ -184,7 +184,7 @@ texture üretimi başlamaz.
 
 ## 5. Faz 2 — Imagegen Takım Dokuları ve Materyaller
 
-**Durum:** 🟨 Doku/materyal authoring'i ve AI bağlantısı tamamlandı — görsel kabul bekleniyor
+**Durum:** ✅ Kullanıcı görsel kabulü tamamlandı
 **Amaç:** Guard ile aynı yöntemle oyuncu için mavi, AI için kırmızı base-color
 texture üretmek ve tam-model tint ihtiyacını kaldırmak.
 
@@ -316,7 +316,7 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 
 ## 8. Faz 5 — Zengin Atış Döngüsü, Socket ve Notify
 
-**Durum:** 🟨 Recovery/reload ve notify görsel kabul kapısı
+**Durum:** ✅ Dünya içi görsel kabul tamamlandı — açık kalan maddeler ileri backlog
 
 ### 8.1 Atış döngüsü
 
@@ -326,6 +326,8 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
   cooldown'uyla güvenli kesme yoluyla uzlaştır: yeni gerçek atış recovery'yi
   anında kesip yeniden `aim_recoil` başlatır.
 - [x] Reload animasyonu hiçbir durumda bir sonraki gerçek atışı geciktirmesin.
+- [x] Kullanıcı `aim_recoil → draw_arrow` recovery/reload geçişini dünya içinde
+  kabul etti.
 - [ ] `equip_bow` ve `disarm_bow` yalnızca gerçek silah hazırlama state'i
   tasarlanırsa bu döngüye girsin.
 
@@ -346,15 +348,27 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 
 ### 8.3 Notify, VFX ve gelecekteki ses
 
-- [ ] Walk/run kliplerinin ayak temas zamanlarını ölç ve `footstep` notify'ları
-  authorla.
-- [ ] `aim_recoil` üzerindeki gerçek bırakma anını ölç ve `arrow-release` notify'ı
-  authorla.
+- [x] Walk/run kliplerinin ayak temas zamanlarını ölç ve her forward/backward
+  locomotion döngüsünde iki `footstep` notify'ı authorla: walk-forward `0.62 / 1.18`,
+  walk-back `0.65 / 1.35`, run-forward `0.42 / 0.82`, run-back `0.40 / 0.64`.
+- [x] `aim_recoil` üzerindeki sağ-el en yüksek açısal kopuşunu `0.200–0.233 s`
+  arasında ölç; `0.233 s`de `arrow-release` notify'ını authorla.
 - [ ] Hit klibi için uygun `body-impact` anını ölç.
 - [ ] Footstep/body-impact mevcut RTS notify VFX bütçesini kullansın.
-- [ ] `arrow-release` bugün tüketicisiz kalacaksa bunu açıkça belgele; gelecekteki
-  ses planı aynı notify'ı kullanabilsin.
-- [ ] Notify'lar gameplay hasarı, cooldown veya projectile kararı yazmasın.
+- [x] `arrow-release` bugün VFX tüketicisiz kalır; gelecekteki ses planı aynı
+  notify'ı kullanabilir. Gerçek ok, hâlâ simülasyonun zaten başlattığı uçuş
+  sunumudur; marker ikinci projectile/VFX üretmez.
+- [x] Gerçek okun tüy/nock ucundan başlayan, okun parent-child öğesi olarak tüm
+  uçuş boyunca onu takip eden kalıcı bir rüzgâr trail'i ekle. Trail dünya VFX'i,
+  ikinci projectile veya `arrow-release` notify tüketicisi değildir.
+- [x] Archer'ın görsel ok hızını `balance/units.json` içindeki `projectileSpeed`
+  alanından oku; bu değer hasar, hedefleme veya `attackCooldown` değiştirmez.
+- [x] Trail'in şaftı kaplamadığını doğrula: ayrı Arrow mesh'in kendi yönünü
+  koru; tüy/nock arkasında başlayan üç ince kıvrımlı wisp'i yerel +Z yönünde
+  hafif salınımla oynat. Başlangıç uzaklığı açık bir sabitten ayarlanabilir.
+- [x] Notify'lar gameplay hasarı, cooldown veya projectile kararı yazmaz.
+- [x] Kullanıcı gerçek ok yönü, yaydan çıkış, hız/veri-tablosu ayarı ve rüzgâr
+  trail görünümünü dünya içinde kabul etti.
 - [ ] Kalabalık volley sırasında global efekt bütçesini aşmadığını test et.
 
 ## 9. Faz 6 — İleri Animasyon Backlog'u
@@ -424,7 +438,7 @@ npm.cmd run build:verify
 
 Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
 
-- [ ] Faz 1 locomotion kodu, otomasyonu ve kullanıcı görsel kabulü tamamlandı.
+- [x] Faz 1 locomotion kodu, otomasyonu ve kullanıcı görsel kabulü tamamlandı.
 - [x] Faz 2 mavi/kırmızı Imagegen dokuları ve takım materyalleri kabul edildi.
 - [x] Faz 3 ranged attack, gerçek `attackCount` ile senkron ve görsel olarak kabul
   edildi.
@@ -547,3 +561,35 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
   bekletmez. Her iki klibin Hips translation'ı `lockXYZ` ile sabittir.
   `npx.cmd tsc --noEmit` geçti; `Skeletal animasyon,Archer` filtresinde 24
   kontrol geçti (`PARTIAL`). Recovery/reload dünya içi görsel kabulü açık.
+- 2026-08-13 — Kullanıcı `aim_recoil → draw_arrow` recovery/reload geçişini
+  kabul etti. Faz 5 notify ilk diliminde `aim_recoil` sağ el dönüşünün en büyük
+  açısal kopuşu `0.200–0.233 s` arasında ölçüldü ve `arrow-release` marker'ı
+  `0.233 s`ye authorlandı. RTS notify hattı marker'ı okuyabilir; ancak bu ad
+  bilinçli olarak VFX tablosunda tüketicisizdir. Gerçek okun simülasyonla başlayan
+  uçuşu, hasar, cooldown ve hedef kararı değişmedi. Notify görsel kabulü açık.
+- 2026-08-13 — Faz 5 notify ikinci diliminde Archer'ın dört runtime locomotion
+  klibinde ayak yüksekliği/temas döngüleri ölçüldü ve her klibe iki `footstep`
+  marker'ı authorlandı. Marker'lar mevcut global `rts-fx-footstep-dust` bütçesini
+  kullanır; yeni efekt, gameplay etkisi veya birim başına bütçe eklenmedi.
+- 2026-08-13 — Kullanıcı gerçek Arrow'un tüy ucundan başlayan rüzgâr trail'i
+  istedi. Trail, Arrow holder'ına yerel child olarak eklendi: +Z tailward
+  ekseninde `0.72` birim uzar, okun dönüşünü/konumunu parent'tan alır ve impact
+  veya restart'ta Arrow ile birlikte temizlenir. Yeni dünya VFX kuyruğu, ikinci
+  projectile ya da gameplay bağlantısı yoktur.
+- 2026-08-13 — Kullanıcı hız azaltınca trail'in bütün oku kapladığını bildirdi.
+  Ayrık Arrow GLB ölçümünde tüyler `minZ`, uç `+Z` tarafında çıktı; eski koni
+  aynı eksende şaftın üstüne biniyordu. Archer için başlangıçta `projectileSpeed: 5`
+  `balance/units.json`a taşındı. Mesh uçuş yönüne çevrildi; trail artık tüyde
+  başlayan üç ince, `0.48` birimlik kıvrımlı local wisp ve uçuşta hafif flutter
+  hareketidir. Hız yalnızca render uçuş süresini değiştirir.
+- 2026-08-13 — Varsayılan Archer görsel ok hızı `25` yapıldı. Rüzgâr trail
+  kökünün tüy/nock arkasındaki yerel konumu, kaynakta ayrı bir ayar sabitidir;
+  tasarımcı şaftla boşluğu bu sabitten ayarlayabilir.
+- 2026-08-13 — Görsel kontrolde Arrow'un yönü ters bulundu; export'un kendi
+  ekseni korunarak önceki `rotation.y = Math.PI` dönüşü kaldırıldı. Veri
+  Tablosu'nda ham `projectileSpeed` yerine `Ok uçuş hızı (birim/sn)` etiketi
+  gösterilir. Git HEAD bu alanı içermediğinden, Okçu satırında `Varsayılana dön`
+  artık proje varsayımı olan `25`i geri yükler.
+- 2026-08-13 — Kullanıcı Faz 1–5 dünya içi görsel kabullerinin tamamlandığını
+  bildirdi. Açık Faz 5 maddeleri (`body-impact`, efekt bütçesi ve gerçek
+  equip/disarm state'i) bu kabulün dışındaki ileri backlog olarak bırakıldı.

@@ -230,6 +230,13 @@ const UNITS_FIELDS = [
   { path: "attackDamage", label: "Saldırı hasarı", min: 0, step: 1 },
   { path: "attackCooldown", label: "Saldırı bekleme (sn)", min: 0, step: 0.1 },
   { path: "attackRange", label: "Saldırı menzili", min: 0, step: 0.1 },
+  {
+    path: "projectileSpeed",
+    label: "Ok uçuş hızı (birim/sn)",
+    min: 0.1,
+    step: 1,
+    hint: "Yalnızca okun görsel uçuş hızını değiştirir; hasar, menzil ve saldırı bekleme süresi değişmez.",
+  },
   { path: "acquisitionRange", label: "Hedef bulma menzili", min: 0, step: 0.1 },
   { path: "chaseRange", label: "Kovalama menzili", min: 0, step: 0.1 },
   { path: "visionRadius", label: "Görüş yarıçapı", min: 0, step: 1 },
@@ -825,6 +832,12 @@ export const GAME_EDITOR_CATALOG = {
       label: "Birim Dengesi",
       path: "game-data/balance/units.json",
       fields: UNITS_FIELDS,
+      // `projectileSpeed` was introduced after the committed units table. A
+      // reset must retain the gameplay-authored default instead of erasing the
+      // field by restoring that older git revision verbatim.
+      resetEntryDefaults: {
+        archer_placeholder: { projectileSpeed: 25 },
+      },
       validate: asTableValidator(validateUnitBalance),
     },
     {

@@ -1534,6 +1534,7 @@ const RTS_TEST_ARCHER_STATS = {
   attackType: "ranged",
   attackDamage: 10,
   attackRange: 7,
+  projectileSpeed: 25,
   acquisitionRange: 9,
   chaseRange: 11,
   damageMultipliers: { light: 1.2, heavy: 0.8, structure: 0.25 },
@@ -29684,6 +29685,16 @@ check("GAME_EDITOR_CATALOG satisfies the editor catalog contract once injected",
   const unitsTable = catalog.dataTables?.find((table) => table.id === "units")
     ?? assert.fail("units data table is not registered in the editor catalog");
   assert.equal(unitsTable.path, "game-data/balance/units.json");
+  assert.equal(
+    unitsTable.fields?.find((field) => field.path === "projectileSpeed")?.label,
+    "Ok uçuş hızı (birim/sn)",
+    "the Archer's visual speed has a Turkish authoring label",
+  );
+  assert.equal(
+    unitsTable.resetEntryDefaults?.archer_placeholder?.projectileSpeed,
+    25,
+    "reset restores the Archer visual Arrow speed even though git HEAD predates the field",
+  );
   const realUnits = JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown;
   assert.equal(unitsTable.validate(realUnits), null, "the shipped units file validates");
   const broken = JSON.parse(JSON.stringify(realUnits)) as Record<string, any>;
@@ -35041,6 +35052,10 @@ check("unit balance validates combat stats for stable unit ids", () => {
   }
   assert.equal(balance["guard_placeholder"]?.role, "guard");
   assert.equal(balance["archer_placeholder"]?.attackType, "ranged");
+  assert.ok(
+    (balance["archer_placeholder"]?.projectileSpeed ?? 0) > 0,
+    "the Archer owns a positive visual Arrow speed in balance data",
+  );
   assert.equal(balance["siege_placeholder"]?.role, "siege");
   // The siege line is a gun, not a battering ram: it throws its shot, and it throws it
   // from further out than the Archer walking beside it.
@@ -35119,6 +35134,11 @@ check("unit balance validates combat stats for stable unit ids", () => {
   assert.throws(
     () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, attackCooldown: 0 } }),
     GameDataError,
+  );
+  assert.throws(
+    () => validateUnitBalance({ archer_placeholder: { ...RTS_TEST_ARCHER_STATS, projectileSpeed: 0 } }),
+    GameDataError,
+    "a nonpositive projectile speed is invalid balance data",
   );
   assert.throws(
     () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, trainingSeconds: 0 } }),
@@ -38153,6 +38173,32 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
   }], "the Archer authors one release socket on its animated right hand");
+  assert.deepEqual(archer.notifies.filter((notify) => notify.name === "arrow-release"), [{
+    name: "arrow-release",
+    clip: "Archer_standing_aim_recoil",
+    time: 0.233,
+  }], "the Archer marks the measured right-hand release moment on its actual attack clip");
+  assert.equal(
+    RTS_NOTIFY_EFFECTS["arrow-release"],
+    undefined,
+    "the release marker is presentation data for a future sound consumer, never a second projectile or VFX trigger",
+  );
+  const locomotionClips = new Set([
+    archer.animationSet.walk,
+    archer.animationSet.run,
+    archer.animationSet.walkBack,
+    archer.animationSet.runBack,
+  ]);
+  const footsteps = archer.notifies.filter((notify) => notify.name === "footstep");
+  assert.equal(footsteps.length, locomotionClips.size * 2, "each shipped Archer locomotion loop marks both feet");
+  for (const clip of locomotionClips) {
+    assert.equal(footsteps.filter((notify) => notify.clip === clip).length, 2, `${String(clip)} has one marker for each foot`);
+  }
+  assert.equal(
+    RTS_NOTIFY_EFFECTS.footstep?.effectId,
+    "rts-fx-footstep-dust",
+    "Archer footfalls reuse the shared, globally throttled RTS dust budget",
+  );
   const socketTarget = new Group();
   const rightHand = new Group();
   rightHand.name = "mixamorigRightHand";
@@ -38190,6 +38236,19 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
   ].filter((clip): clip is string => clip !== undefined);
 
   for (const clip of runtimePool) assert.ok(shipped.has(clip), `"${clip}" is not a clip the Archer ships`);
+  const markerClipDurations = new Map([
+    ["Archer_standing_aim_recoil", 0.73333335],
+    ["Archer_standing_walk_forward", 1.23333335],
+    ["Archer_standing_walk_back", 1.5],
+    ["Archer_standing_run_forward", 0.9],
+    ["Archer_standing_run_back", 0.7],
+  ]);
+  for (const notify of archer.notifies) {
+    assert.ok(shipped.has(notify.clip), `"${notify.clip}" is not a clip the Archer ships`);
+    const duration = markerClipDurations.get(notify.clip);
+    assert.ok(duration !== undefined, `${notify.clip} has a measured marker duration`);
+    assert.ok(notify.time > 0 && notify.time < duration, `${notify.name} remains inside ${notify.clip}`);
+  }
   assert.equal(new Set(runtimePool).size, runtimePool.length, "the Archer locomotion pools contain no duplicate clip");
   assert.ok(!runtimePool.includes("Archer_unurmed_idle"), "the unarmed idle never enters the armed Archer pool");
   assert.ok(
@@ -45342,10 +45401,31 @@ check("Faz 7 ranged attacks fire an authored Arrow while melee does not", () => 
   const ranged: boolean[] = [];
   updateUnitCombat([archer, guard], 0, (hit) => {
     ranged.push(hit.ranged);
-    if (hit.ranged) projectiles.spawn(hit.attacker.owner, hit.attacker.position, hit.target.position);
+    if (hit.ranged) {
+      projectiles.spawn(
+        hit.attacker.owner,
+        hit.attacker.position,
+        hit.target.position,
+        undefined,
+        0,
+        hit.attacker.stats.projectileSpeed,
+      );
+    }
   });
   assert.deepEqual(ranged, [true, false], "only the Archer's hit asks for a tracer");
   assert.equal(projectiles.root.children.length, 1, "the ranged attack puts one authored Arrow in flight");
+  const arrowFlight = projectiles.root.children[0] ?? assert.fail("the authored Arrow is present in flight");
+  const authoredArrow = arrowFlight.children.find((child) => child.name !== "rts-arrow-wind-trail")
+    ?? assert.fail("the authored Arrow mesh remains in its supplied forward axis");
+  assert.equal(authoredArrow.rotation.y, 0, "the projectile does not reverse the supplied Arrow mesh");
+  const windTrail = arrowFlight.getObjectByName("rts-arrow-wind-trail") ?? assert.fail("the Arrow owns its wind trail");
+  assert.equal(windTrail.parent, arrowFlight, "the wind is a local Arrow child, not a separate world VFX");
+  assert.ok(Number.isFinite(windTrail.position.z), "the gust root keeps an author-tunable local tail offset");
+  assert.equal(windTrail.children.length, 3, "the tail is three fine wisps, not one solid cone over the shaft");
+  const initialFlutter = windTrail.rotation.clone();
+  projectiles.update(0.05);
+  assert.equal(windTrail.parent, arrowFlight, "the gust stays parented while the Arrow flies");
+  assert.notDeepEqual(windTrail.rotation.toArray(), initialFlutter.toArray(), "the local tail flutters while the Arrow flies");
 
   // Damage already landed at fire time, so an Arrow expiring changes nothing.
   const health = archerTarget.health.current;

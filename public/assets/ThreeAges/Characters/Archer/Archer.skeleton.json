@@ -42,7 +42,53 @@
     ]
   },
   "blendSpaces": [],
-  "notifies": [],
+  "notifies": [
+    {
+      "name": "arrow-release",
+      "clip": "Archer_standing_aim_recoil",
+      "time": 0.233
+    },
+    {
+      "name": "footstep",
+      "clip": "Archer_standing_walk_forward",
+      "time": 0.62
+    },
+    {
+      "name": "footstep",
+      "clip": "Archer_standing_walk_forward",
+      "time": 1.18
+    },
+    {
+      "name": "footstep",
+      "clip": "Archer_standing_walk_back",
+      "time": 0.65
+    },
+    {
+      "name": "footstep",
+      "clip": "Archer_standing_walk_back",
+      "time": 1.35
+    },
+    {
+      "name": "footstep",
+      "clip": "Archer_standing_run_forward",
+      "time": 0.42
+    },
+    {
+      "name": "footstep",
+      "clip": "Archer_standing_run_forward",
+      "time": 0.82
+    },
+    {
+      "name": "footstep",
+      "clip": "Archer_standing_run_back",
+      "time": 0.4
+    },
+    {
+      "name": "footstep",
+      "clip": "Archer_standing_run_back",
+      "time": 0.64
+    }
+  ],
   "montages": [],
   "rootMotion": [
     {

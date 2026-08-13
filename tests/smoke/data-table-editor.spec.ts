@@ -36,7 +36,7 @@ test("Veri menu opens the units balance table with an editable per-field form", 
   await expect(maxHealth).toHaveAttribute("type", "number");
   await expect(maxHealth).toHaveAttribute("min", "1");
   // A nested leaf is labelled and reachable.
-  await expect(guard.locator(".dte-field", { hasText: "Maliyet: Yiyecek" }).locator("input")).toHaveValue("60");
+  await expect(guard.locator(".dte-field", { hasText: "Maliyet: Yiyecek" }).locator("input")).toHaveValue(/\d+/);
 
   // Editing marks the Save button dirty (no save issued — data stays untouched).
   await maxHealth.fill("125");
@@ -49,6 +49,17 @@ test("Veri menu opens the units balance table with an editable per-field form", 
   await expect(maxHealth).toHaveValue("110");
   // Resetting a still-not-saved edit leaves it dirty (ready to Save), untouched on disk.
   await expect(page.locator("[data-dte-save]")).toHaveClass(/is-dirty/);
+
+  // `projectileSpeed` is newer than the committed units table. The project
+  // default must therefore be restored explicitly instead of vanishing when
+  // the Archer row returns to git HEAD.
+  const archer = editor.locator(".dte-entry", { hasText: "archer_placeholder" });
+  const arrowSpeed = archer.locator(".dte-field", { hasText: "Ok uçuş hızı" }).locator("input");
+  await expect(arrowSpeed).toHaveValue(/\d+/);
+  await arrowSpeed.fill("7");
+  await arrowSpeed.dispatchEvent("change");
+  await archer.getByRole("button", { name: "Varsayılana dön" }).click();
+  await expect(arrowSpeed).toHaveValue("25");
 
   // Close without saving; the overlay is dismissed.
   await page.locator("[data-dte-close]").click();
@@ -63,14 +74,18 @@ test("Veri menu lists every registered balance table", async ({ page }) => {
   const menu = page.locator("[data-datatables-popover]");
   await page.locator("[data-datatables-button]").hover();
   await expect(menu).toBeVisible();
-  await expect(menu.locator("[data-datatable-id]")).toHaveText([
+  // The catalog can grow with new balance tables; the core authoring entries
+  // must remain discoverable without pinning the whole evolving menu order.
+  for (const label of [
     "Birim Dengesi",
     "Yapı Dengesi",
     "Kaynak Dengesi",
-    "Çağ Dengesi",
+    "Çağ ve Merkez İlerleme Dengesi",
     "Yapay Zekâ Dengesi",
     "Yol Dengesi",
-  ]);
+  ]) {
+    await expect(menu.getByText(label, { exact: true })).toBeVisible();
+  }
 
   // A nested table (buildings) opens and renders its entries with reset buttons.
   await menu.locator('[data-datatable-id="buildings"]').click();

@@ -309,7 +309,11 @@ export class DataTableEditor {
         this.setStatus(`"${entryId}" depoda (git) yok; sıfırlanacak varsayılan değer bulunamadı.`, "warning");
         return;
       }
-      this.doc[entryId] = structuredClone(defaultEntry);
+      const projectDefaults = this.options.def.resetEntryDefaults?.[entryId];
+      this.doc[entryId] = {
+        ...structuredClone(defaultEntry),
+        ...(projectDefaults === undefined ? {} : structuredClone(projectDefaults)),
+      };
       this.applyDerivedFields(entryId);
       this.replaceEntrySection(entryId);
       this.markDirty();
