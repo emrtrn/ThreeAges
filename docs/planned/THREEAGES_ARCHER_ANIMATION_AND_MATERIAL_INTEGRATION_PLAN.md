@@ -2,8 +2,8 @@
 
 Oluşturulma tarihi: 2026-08-12  
 Durum: **Uygulanıyor — Faz 1 geri çekilme görsel yeniden kabulü açık. Faz 2
-materyal görünümü ve Faz 3 temel atış sunumu kullanıcı tarafından kabul edildi;
-Faz 4 hit/death kod ve otomasyon diliminde uygulanıyor.**
+materyal görünümü, Faz 3 atış ve Faz 4 layered hit kullanıcı tarafından kabul
+edildi; Faz 5 socket temelli ok çıkış noktası kod/otomasyon diliminde uygulanıyor.**
 
 ## 1. Amaç
 
@@ -277,7 +277,7 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 
 ## 7. Faz 4 — Hasar Tepkisi ve Ölüm
 
-**Durum:** 🟨 Kod ve otomasyon diliminde uygulanıyor
+**Durum:** ✅ Kullanıcı kabulü tamamlandı
 
 ### 7.1 Hit
 
@@ -307,16 +307,16 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 
 ### 7.3 Kabul
 
-- [ ] Duran, yürüyen ve koşan Okçuya Guard, Archer, kule ve yırtıcı kaynaklı
+- [x] Duran, yürüyen ve koşan Okçuya Guard, Archer, kule ve yırtıcı kaynaklı
   hasar uygula.
-- [ ] Hareket hâlindeki hit sırasında ayak kayması olmadığını doğrula.
-- [ ] En az 10 ölümde iki death varyantının görüldüğünü doğrula.
-- [ ] Hızlandırılmış simülasyonda death klibinin kesilmediğini doğrula.
-- [ ] Kullanıcı hit/death görünümünü kabul ettiğinde tarihi kaydet.
+- [x] Hareket hâlindeki hit sırasında ayak kayması olmadığını doğrula.
+- [x] En az 10 ölümde iki death varyantının görüldüğünü doğrula.
+- [x] Hızlandırılmış simülasyonda death klibinin kesilmediğini doğrula.
+- [x] Kullanıcı hit/death görünümünü kabul ettiğinde tarihi kaydet.
 
 ## 8. Faz 5 — Zengin Atış Döngüsü, Socket ve Notify
 
-**Durum:** ⬜ Tasarım ve görsel kabul kapısı
+**Durum:** 🟨 Gerçek ok mesh'i ve görsel kabul kapısı
 
 ### 8.1 Atış döngüsü
 
@@ -331,13 +331,17 @@ olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 
 ### 8.2 Ok çıkış noktası
 
-- [ ] `mixamorig:arrow` ve yay kemiklerini Skeletal Mesh Editor'de doğrula.
-- [ ] Mevcut Actor socket/runtime hattının skinned bone socket'i destekleyip
-  desteklemediğini ölç.
-- [ ] Gerekirse gameplay'den bağımsız, yalnızca sunumun projectile başlangıç
-  noktasını raporlayan bone/socket köprüsü ekle.
-- [ ] Projectile başlangıcını sabit `1.25` yükseklik yerine yay/ok kemiğinin world
-  konumundan çiz; hasarın uygulandığı anı değiştirme.
+- [x] `Archer_Arrow.glb` ayrık statik mesh'ini ve güncel Archer rig'inde kalan
+  `mixamorigRightHand` kemiğini GLB denetiminde doğrula. Ayırma işlemi eski
+  `mixamorig:arrow` kemiğini rig'den kaldırmıştır.
+- [x] Mevcut Actor socket/runtime hattının skinned bone socket'i desteklemediğini
+  ölç: socket'ler yalnızca editor önizlemesiyle sınırlıydı.
+- [x] Gameplay'den bağımsız, yalnızca sunumun gerçek ok mesh'i başlangıç noktasını
+  raporlayan bone/socket köprüsü ekle.
+- [x] Generic küre tracer yerine gerçek ok mesh'ini `arrow-release` socket'inin
+  world konumundan çiz; hasarın uygulandığı anı değiştirme.
+- [x] Archer'ın gerçek ok olmayan generic küre tracer'ını kaldır; gerçek ok mesh'i
+  hazır olana kadar atışın uçuş VFX'i görünmesin.
 - [ ] Yakın ve uzak hedeflerde okun elden/yaydan çıktığını gözle.
 
 ### 8.3 Notify, VFX ve gelecekteki ses
@@ -424,7 +428,7 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
 - [x] Faz 2 mavi/kırmızı Imagegen dokuları ve takım materyalleri kabul edildi.
 - [x] Faz 3 ranged attack, gerçek `attackCount` ile senkron ve görsel olarak kabul
   edildi.
-- [ ] Faz 4 hit/death akışı gerçek olaylara bağlı ve görsel olarak kabul edildi.
+- [x] Faz 4 hit/death akışı gerçek olaylara bağlı ve görsel olarak kabul edildi.
 - [ ] Faz 5 için ya zengin atış döngüsü/socket/notify tamamlandı ya da açık
   maddeler ayrı backlog'a taşındı.
 - [ ] Duplike `turn_90_right` hiçbir runtime sözleşmesine girmedi.
@@ -515,3 +519,23 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
   Kök neden Archer sidecar'ında `upperBodyBone` olmamasıydı; hit tam gövde
   oynuyordu. `mixamorigSpine` katmanı açıldı: hareket alt gövdede sürer, hit
   yalnızca bel üstünde oynar, death tam gövde kalır.
+- 2026-08-13 — Kullanıcı layered hit/death görünümünü kabul etti; Faz 4 kabul ve
+  teslim kapısı kapatıldı. Faz 5 ölçümünde sidecar socket'lerinin runtime
+  tüketicisi olmadığı görüldü. `arrow-release` / `mixamorigarrow` için generic,
+  yalnızca sunumsal bir socket köprüsü eklendi: tracer mevcut gerçek atıştan sonra
+  bu world konumundan çıkar; hasar, cooldown ve hedef kararlarını değiştirmez.
+  `npx.cmd tsc --noEmit` geçti; `Skeletal animasyon,Archer` filtresinde 24
+  kontrol geçti (`PARTIAL`) ve 10+10 Archer Chromium boot smoke'u 1/1 geçti.
+  Yakın/uzak hedefte okun yaydan çıkışının dünya içi görsel kabulü açık.
+- 2026-08-13 — Kullanıcı generic küre tracer'ını gerçek ok olarak kabul etmedi.
+  Archer'ın uçuş VFX'i kaldırıldı; `arrow-release` sidecar authoring verisi gerçek
+  ok mesh'i geldiğinde kullanılmak üzere korunuyor. Hasar ve cooldown akışı
+  değişmedi.
+- 2026-08-13 — Kullanıcı `Archer_Arrow.glb` ayrık asset'ini ekledi ve manifestte
+  `arrow` staticMesh'i olarak kaydetti. Ayırma eski `mixamorig:arrow` kemiğini
+  rig'den çıkardığı için `arrow-release`, mevcut `mixamorigRightHand` kemiğine
+  yeniden authorlandı. RTS prop hattı gerçek mesh'i bir kez yükler; her ranged
+  gerçek atışta socket world konumundan bir kopya çıkar ve uçuş yönüne döner.
+  Hasar/cooldown/hedef kararları değişmedi. `npx.cmd tsc --noEmit` geçti; Archer,
+  Skeletal animasyon ve ranged filtrelerinde 25 kontrol geçti (`PARTIAL`). Dünya
+  içi yakın/uzak atış görsel kabulü açık.

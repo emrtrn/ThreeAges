@@ -38,6 +38,7 @@ import { bindRtsWheelSpins } from "./rtsPresentationMotion";
 import { bindRtsGunRecoils, bindRtsMuzzle } from "./rtsGunMotion";
 import { bindRtsCargoSways, bindRtsCargoVisuals } from "./rtsCargoVisual";
 import {
+  bindRtsSkeletalSocket,
   collectRtsPickTargets,
   createRtsUnitPresentation,
   readRtsSelectionRadius,
@@ -324,6 +325,7 @@ export class RtsActorVisualFactory {
     // to the legacy code body — art that looks finished — which is how a missing
     // enemy variant used to pass unnoticed.
     const def = this.definitions.get(actorRef);
+    const animation = def ? this.animationSourceFor(root) : null;
     const crew = this.createUnitCrew(unitId, owner);
     for (const member of crew) root.add(member.root);
     // Crew meshes are pick targets for the parent unit: clicking a man at the
@@ -334,14 +336,16 @@ export class RtsActorVisualFactory {
       root,
       pickTargets,
       selectionRadius: readRtsSelectionRadius(def),
-      animation: def ? this.animationSourceFor(root) : null,
+      animation,
       animationVariantSeed,
       moveSpeed,
       wheelSpins: def ? bindRtsWheelSpins(def, root) : [],
       // The siege engine is what these two exist for: a barrel that kicks when
       // the gun goes off, and the point its shell is drawn leaving from.
       gunRecoils: def ? bindRtsGunRecoils(def, root) : [],
-      muzzle: def ? bindRtsMuzzle(def, root) : null,
+      // The artillery muzzle comes from an Actor component. Archer owns a bone
+      // socket because the release point follows its animated hand.
+      muzzle: (def ? bindRtsMuzzle(def, root) : null) ?? bindRtsSkeletalSocket(animation, "arrow-release"),
       crew,
       // Only units carry a notify consumer today: an animal's or a caravan's
       // sidecar authors no markers, and handing them a sink would buy a

@@ -1,6 +1,26 @@
 {
   "schema": 1,
-  "sockets": [],
+  "sockets": [
+    {
+      "name": "arrow-release",
+      "bone": "mixamorigRightHand",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    }
+  ],
   "animationSet": {
     "idle": "Archer_standing_idle",
     "walk": "Archer_standing_walk_forward",
@@ -31,6 +51,16 @@
     },
     {
       "clip": "Archer_standing_react_small_from_front",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_death_backward",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_death_forward",
       "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
@@ -133,7 +163,7 @@
   "physicsBodies": [],
   "physicsConstraints": [],
   "preview": {
-    "selectedClip": "Archer_standing_death_forward"
+    "selectedClip": "Archer_standing_aim_walk_right"
   },
   "upperBodyBone": "mixamorigSpine"
 }

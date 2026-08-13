@@ -182,6 +182,7 @@ import {
 } from "../src/game/rts/content/rtsCargoVisual";
 import { createRtsActorPlaceholder, isRtsActorPlaceholder } from "../src/game/rts/content/rtsActorPlaceholder";
 import {
+  bindRtsSkeletalSocket,
   collectRtsPickTargets,
   createRtsUnitPresentation,
   readRtsSelectionRadius,
@@ -38101,6 +38102,23 @@ check("Archer entegrasyonu: iki ordu gercek asseti, dogru takim yuzeyini ve seci
     const definition = JSON.parse(readFileSync(`public/${material.path}`, "utf8")) as { baseColorTexture?: unknown };
     assert.equal(definition.baseColorTexture, texture, `${id} uses its own team texture`);
   }
+
+  const arrow = rawManifest.assets.find((asset) => asset.id === "arrow")
+    ?? assert.fail("the authored Arrow is present in the asset manifest");
+  assert.equal(arrow.assetType, "staticMesh", "the fired Arrow is a standalone static mesh");
+  assert.equal(arrow.path, "assets/ThreeAges/Characters/Archer/Archer_Arrow.glb");
+  assert.ok(existsSync(`public/${arrow.path}`), "the authored Arrow GLB exists on disk");
+  const content = JSON.parse(readFileSync("public/game-data/content/rts-content.json", "utf8")) as {
+    props?: Record<string, string>;
+  };
+  assert.equal(content.props?.arrow, "arrow", "the projectile prop resolves through the RTS catalog");
+  const arrowGlb = parseGlb(new Uint8Array(readFileSync(`public/${arrow.path}`)))
+    ?? assert.fail("the authored Arrow is a readable GLB");
+  assert.equal(arrowGlb.json.skins?.length ?? 0, 0, "the flight Arrow needs no skeleton of its own");
+  assert.ok(
+    (arrowGlb.json.meshes ?? []).some((mesh) => mesh.name === "Erika_Archer_Arrow_Mesh.001"),
+    "the authored Arrow carries its visible mesh",
+  );
 });
 
 check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtime havuzuna girmez", () => {
@@ -38127,6 +38145,25 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
     "mixamorigSpine",
     "the Archer splits a moving hit above the hips while death remains a full-body action",
   );
+  assert.deepEqual(archer.sockets, [{
+    name: "arrow-release",
+    bone: "mixamorigRightHand",
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  }], "the Archer authors one release socket on its animated right hand");
+  const socketTarget = new Group();
+  const rightHand = new Group();
+  rightHand.name = "mixamorigRightHand";
+  rightHand.position.set(1, 2, 3);
+  socketTarget.add(rightHand);
+  const releaseSocket = bindRtsSkeletalSocket(
+    { target: socketTarget, clips: [], skeleton: archer },
+    "arrow-release",
+  );
+  assert.ok(releaseSocket, "the release socket binds to the Archer's animated right hand");
+  socketTarget.updateMatrixWorld(true);
+  assert.deepEqual(releaseSocket!.getWorldPosition(new Vector3()).toArray(), [1, 2, 3]);
   for (const clip of [
     "Archer_standing_aim_recoil",
     "Archer_standing_react_small_from_front",
@@ -45271,9 +45308,11 @@ check("Faz 7 a 40-unit engagement stays within frame budget", () => {
   );
 });
 
-check("Faz 7 ranged attacks fire a tracer while melee does not", () => {
+check("Faz 7 ranged attacks fire an authored Arrow while melee does not", () => {
   const units = new UnitSystem();
   const projectiles = new ProjectileSystem();
+  const arrowModel = new Mesh(new BoxGeometry(0.03, 0.03, 0.75));
+  projectiles.setArrowModel(arrowModel);
   const archer = units.spawn("player", 0, 0, RTS_TEST_ARCHER_STATS);
   const guard = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
   const archerTarget = units.spawn("enemy", 5, 0, RTS_TEST_UNIT_STATS);
@@ -45287,12 +45326,12 @@ check("Faz 7 ranged attacks fire a tracer while melee does not", () => {
     if (hit.ranged) projectiles.spawn(hit.attacker.owner, hit.attacker.position, hit.target.position);
   });
   assert.deepEqual(ranged, [true, false], "only the Archer's hit asks for a tracer");
-  assert.equal(projectiles.root.children.length, 1);
+  assert.equal(projectiles.root.children.length, 1, "the ranged attack puts one authored Arrow in flight");
 
-  // Damage already landed at fire time, so a tracer expiring changes nothing.
+  // Damage already landed at fire time, so an Arrow expiring changes nothing.
   const health = archerTarget.health.current;
   for (let i = 0; i < 60; i += 1) projectiles.update(1 / 60);
-  assert.equal(projectiles.root.children.length, 0, "tracers retire once they arrive");
+  assert.equal(projectiles.root.children.length, 0, "Arrows retire once they arrive");
   assert.equal(archerTarget.health.current, health);
   projectiles.dispose();
 });

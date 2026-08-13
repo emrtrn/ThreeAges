@@ -4127,7 +4127,15 @@ export class RtsApp {
       );
     }
     if (shot.ranged) {
-      this.projectiles.spawn(shot.attacker.owner, shot.attacker.position, shot.target.position);
+      // The Archer's release point rides its rendered right-hand socket. The
+      // resulting arrow is still presentation over an already-real combat shot.
+      const muzzle = shot.attacker.muzzleWorldPosition(this.scratchMuzzle);
+      this.projectiles.spawn(
+        shot.attacker.owner,
+        muzzle ?? shot.attacker.position,
+        shot.target.position,
+        muzzle ? 0 : undefined,
+      );
     }
     // A Guard's blow against a building is thrown fire, not a swing: same
     // point-blank attack and same damage, shown as an attempt to burn the
@@ -5344,9 +5352,13 @@ export class RtsApp {
       // The shell's art, which no Actor references because a shot in flight is a
       // pooled mesh rather than a placed Actor. A catalog that maps no such prop
       // leaves the system on its procedural iron sphere.
-      const cannonball = await this.actorVisuals.loadPropModel("cannonball");
+      const [cannonball, arrow] = await Promise.all([
+        this.actorVisuals.loadPropModel("cannonball"),
+        this.actorVisuals.loadPropModel("arrow"),
+      ]);
       if (this.disposed) return;
       if (cannonball) this.cannonballs.setBallModel(cannonball);
+      this.projectiles.setArrowModel(arrow);
       this.warmStructureDamageEffects();
       this.units.setPresentationFactory((unit) =>
         this.actorVisuals?.createUnitPresentation(

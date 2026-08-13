@@ -313,6 +313,7 @@
   "ui": {},
   "props": {
     "cannonball": "cannon-ball",
+    "arrow": "arrow",
     "guardHelmet": "guard-helmet",
     "guardShield": "guard-shield",
     "guardSword": "guard-sword"

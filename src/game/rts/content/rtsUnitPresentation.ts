@@ -14,7 +14,7 @@
  * (`@engine/perf/distanceUpdateRate`) that the subsystem uses — the cadence
  * policy is shared even though the tick owner is not.
  */
-import { Mesh, type AnimationClip, type Object3D } from "three";
+import { Group, Mesh, PropertyBinding, type AnimationClip, type Object3D } from "three";
 import type { ActorScriptDef } from "@engine/scene/actorScript";
 
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
@@ -74,6 +74,43 @@ export interface RtsUnitAnimationSource {
   readonly clips: readonly AnimationClip[];
   /** Sidecar authoring: which clip fills each semantic role, and root-motion locks. */
   readonly skeleton: AssetSkeletonDef;
+}
+
+/**
+ * Mount a sidecar-authored socket on a bone in a cloned RTS presentation.
+ *
+ * The marker is presentation-only: callers can read its rendered world position
+ * for a projectile, but no combat decision can flow back through it. Bone names
+ * are checked both as saved and as GLTFLoader sanitizes them, so a socket authored
+ * against a Mixamo name stays valid at runtime.
+ */
+export function bindRtsSkeletalSocket(
+  animation: RtsUnitAnimationSource | null,
+  socketName: string,
+): Object3D | null {
+  const socket = animation?.skeleton.sockets.find((candidate) => candidate.name === socketName);
+  if (!animation || !socket) return null;
+  const savedBone = PropertyBinding.sanitizeNodeName(socket.bone);
+  const matches: Object3D[] = [];
+  animation.target.traverse((candidate) => {
+    if (matches.length > 0 || candidate.name.length === 0) return;
+    if (candidate.name === socket.bone || PropertyBinding.sanitizeNodeName(candidate.name) === savedBone) {
+      matches.push(candidate);
+    }
+  });
+  const bone = matches[0];
+  if (!bone) return null;
+  const marker = new Group();
+  marker.name = `rts-socket:${socket.name}`;
+  marker.position.set(...socket.position);
+  marker.rotation.set(
+    socket.rotation[0] * Math.PI / 180,
+    socket.rotation[1] * Math.PI / 180,
+    socket.rotation[2] * Math.PI / 180,
+  );
+  marker.scale.set(...socket.scale);
+  bone.add(marker);
+  return marker;
 }
 
 export interface RtsUnitPresentationOptions {

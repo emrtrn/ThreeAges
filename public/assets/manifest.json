@@ -32699,7 +32699,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 3594932
+        "bytes": 3828060
       },
       "license": "Unknown"
     },
@@ -32953,6 +32953,75 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 682
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "arrow",
+      "name": "Archer_Arrow",
+      "assetType": "staticMesh",
+      "category": "Archer",
+      "path": "assets/ThreeAges/Characters/Archer/Archer_Arrow.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Archer",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4340
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archer-bow",
+      "name": "Archer Bow",
+      "assetType": "staticMesh",
+      "category": "Archer",
+      "path": "assets/ThreeAges/Characters/Archer/Archer_Bow.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Archer",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 15616
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archer-arrowbag",
+      "name": "Archer Arrow Bag",
+      "assetType": "staticMesh",
+      "category": "Archer",
+      "path": "assets/ThreeAges/Characters/Archer/Archer_ArrowBag.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Archer",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 11256
       },
       "license": "Unknown"
     }
