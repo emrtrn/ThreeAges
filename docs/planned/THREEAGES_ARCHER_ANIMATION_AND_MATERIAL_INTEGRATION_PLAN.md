@@ -2,8 +2,8 @@
 
 Oluşturulma tarihi: 2026-08-12  
 Durum: **Uygulanıyor — Faz 1 geri çekilme görsel yeniden kabulü açık. Faz 2
-materyal görünümü kullanıcı tarafından kabul edildi; Faz 3 ilk atış sunumu kod ve
-otomasyonda tamamlandı, dünya içi görsel kabul bekleniyor.**
+materyal görünümü ve Faz 3 temel atış sunumu kullanıcı tarafından kabul edildi;
+Faz 4 hit/death kod ve otomasyon diliminde uygulanıyor.**
 
 ## 1. Amaç
 
@@ -229,7 +229,7 @@ texture üretmek ve tam-model tint ihtiyacını kaldırmak.
 
 ## 6. Faz 3 — Temel Menzilli Saldırı Sunumu
 
-**Durum:** 🟨 İlk güvenli dilim kod/otomasyonda tamamlandı — görsel kabul bekleniyor
+**Durum:** ✅ Kullanıcı kabulü tamamlandı
 **Amaç:** Her gerçek `attackCount` artışında tek bir okun bırakıldığını okunur
 biçimde göstermek; hasar/cooldown davranışını değiştirmemek.
 
@@ -267,39 +267,42 @@ mevcut AI `peaceSeconds: 600` penceresi kendiliğinden volley başlatmaz. Bu kab
 için oyuncu birliğine açık bir saldırı veya attack-move emri ver; alternatif
 olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 
-- [ ] Tek Okçu ile en az üç ardışık atış izle.
-- [ ] On Okçu volley halinde aynı hedefe ateş ederken klip restart ve cadence'i
+- [x] Tek Okçu ile en az üç ardışık atış izle.
+- [x] On Okçu volley halinde aynı hedefe ateş ederken klip restart ve cadence'i
   gözle.
-- [ ] Hedef değişimi, hedef ölümü ve menzil dışına çıkışta idle/aim geçişini
+- [x] Hedef değişimi, hedef ölümü ve menzil dışına çıkışta idle/aim geçişini
   gözle.
-- [ ] Projectile'ın karakter yönüyle tutarlı çıktığını doğrula.
-- [ ] Okçu ateş ederken modelin hedefe baktığını doğrula.
+- [x] Projectile'ın karakter yönüyle tutarlı çıktığını doğrula.
+- [x] Okçu ateş ederken modelin hedefe baktığını doğrula.
 
 ## 7. Faz 4 — Hasar Tepkisi ve Ölüm
 
-**Durum:** ⬜ Faz 3 sonrasında
+**Durum:** 🟨 Kod ve otomasyon diliminde uygulanıyor
 
 ### 7.1 Hit
 
-- [ ] `hit` birincili olarak
-  `Archer_standing_react_small_from_front` (`1.27 s`) kullan.
+- [x] `hit` birincili olarak
+  `Archer_standing_react_small_from_front` kullan. GLB denetimindeki gerçek
+  süresi `1.789 s`.
 - [ ] `Archer_standing_react_small_from_headshot` klibini ilk dilimde genel
   varyant olarak bağlama; oyunda headshot olayı yokken yanlış anlam üretip
   üretmediğini görsel tasarım kapısında değerlendir.
-- [ ] Hareket hâlinde tam-gövde flinch ayak kaydırıyorsa Guard'daki gibi
-  `upperBodyBone` katmanlamasını `mixamorig:Spine` üzerinden etkinleştir.
-- [ ] Hit yalnızca gerçek `impactCount` artışında oynasın.
-- [ ] Önceliği `death > hit > attack > continuous pose/locomotion` olarak koru.
+- [x] Hareket hâlinde tam-gövde flinch ayak kaydırdığı için Guard'daki gibi
+  `upperBodyBone: "mixamorigSpine"` katmanlamasını etkinleştir. Hit yalnızca
+  bel üstünü oynatır; death tam gövde kalır.
+- [x] Hit yalnızca gerçek `impactCount` artışında oynasın.
+- [x] Önceliği `death > hit > attack > continuous pose/locomotion` olarak koru.
 
 ### 7.2 Death
 
-- [ ] `death` birincili olarak `Archer_standing_death_backward` (`3.07 s`) kullan.
-- [ ] `Archer_standing_death_forward` (`3.17 s`) klibini deterministik death
+- [x] `death` birincili olarak `Archer_standing_death_backward` kullan. GLB
+  denetimindeki gerçek süresi `3.878 s`.
+- [x] `Archer_standing_death_forward` klibini deterministik death
   varyantı olarak ekle.
-- [ ] Death tam gövde oynasın; üst-gövde katmanına alınmasın.
-- [ ] Ölüm klibinin sonuna kadar oynadığını, son karede donduğunu ve mevcut ceset
+- [x] Death tam gövde oynasın; üst-gövde katmanına alınmasın.
+- [x] Ölüm klibinin sonuna kadar oynadığını, son karede donduğunu ve mevcut ceset
   penceresi sonunda kaybolduğunu doğrula.
-- [ ] Death animasyonu despawn'ın gameplay sorgularını geciktirmesin; ölü birim
+- [x] Death animasyonu despawn'ın gameplay sorgularını geciktirmesin; ölü birim
   hedeflenebilir/komut alabilir hâle gelmesin.
 
 ### 7.3 Kabul
@@ -419,7 +422,7 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
 
 - [ ] Faz 1 locomotion kodu, otomasyonu ve kullanıcı görsel kabulü tamamlandı.
 - [x] Faz 2 mavi/kırmızı Imagegen dokuları ve takım materyalleri kabul edildi.
-- [ ] Faz 3 ranged attack, gerçek `attackCount` ile senkron ve görsel olarak kabul
+- [x] Faz 3 ranged attack, gerçek `attackCount` ile senkron ve görsel olarak kabul
   edildi.
 - [ ] Faz 4 hit/death akışı gerçek olaylara bağlı ve görsel olarak kabul edildi.
 - [ ] Faz 5 için ya zengin atış döngüsü/socket/notify tamamlandı ya da açık
@@ -500,3 +503,15 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
   saldırısını engelliyor; ayrıca oyuncu birimlerinin çoğu başlangıç inşaat
   paleti altında kalıyor. Route boot/asset smoke olarak tutuldu; atış kabulü
   kullanıcı komutuyla veya ayrı yakın-temas senaryosuyla yapılacak.
+- 2026-08-13 — Kullanıcı Faz 3 temel atış sunumunun çalıştığını kabul etti;
+  Faz 3 kabul ve teslim kapısı kapatıldı. Faz 4 hit/death ilk dilimine geçildi.
+- 2026-08-13 — Faz 4 hit/death ilk dilimi: `impactCount` için
+  `Archer_standing_react_small_from_front`, death için backward birincili ve
+  forward deterministik varyantı authorlandı. Üç klibin de Hips translation'ı
+  `lockXYZ` ile sidecar'da kilitlendi. `npx.cmd tsc --noEmit` geçti; `Skeletal
+  animasyon,Archer` filtresinde 24 kontrol (`PARTIAL`) ve 10+10 Archer Chromium
+  boot smoke'u 1/1 geçti. Hit/death dünya içi görsel kabulü açık.
+- 2026-08-13 — Kullanıcı hareket hâlinde hit'in ayak sürüklettiğini bildirdi.
+  Kök neden Archer sidecar'ında `upperBodyBone` olmamasıydı; hit tam gövde
+  oynuyordu. `mixamorigSpine` katmanı açıldı: hareket alt gövdede sürer, hit
+  yalnızca bel üstünde oynar, death tam gövde kalır.

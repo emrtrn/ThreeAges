@@ -38114,16 +38114,31 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
     walkBack: "Archer_standing_walk_back",
     runBack: "Archer_standing_run_back",
     attack: "Archer_standing_aim_recoil",
+    hit: "Archer_standing_react_small_from_front",
+    death: "Archer_standing_death_backward",
   });
   assert.deepEqual(archer.animationVariants.idle, [
     "Archer_standing_idle_examine",
     "Archer_standing_idle_looking",
   ]);
-  assert.deepEqual(
-    archer.rootMotion.find((entry) => entry.clip === "Archer_standing_aim_recoil"),
-    { clip: "Archer_standing_aim_recoil", mode: "lockXYZ", rootNode: "mixamorigHips" },
-    "the recoil clip's authored root translation is locked in place",
+  assert.deepEqual(archer.animationVariants.death, ["Archer_standing_death_forward"]);
+  assert.equal(
+    archer.upperBodyBone,
+    "mixamorigSpine",
+    "the Archer splits a moving hit above the hips while death remains a full-body action",
   );
+  for (const clip of [
+    "Archer_standing_aim_recoil",
+    "Archer_standing_react_small_from_front",
+    "Archer_standing_death_backward",
+    "Archer_standing_death_forward",
+  ]) {
+    assert.deepEqual(
+      archer.rootMotion.find((entry) => entry.clip === clip),
+      { clip, mode: "lockXYZ", rootNode: "mixamorigHips" },
+      `${clip}'s authored root translation is locked in place`,
+    );
+  }
   assert.equal(archer.animationVariants.walk, undefined, "forward walking never samples a reverse clip");
   assert.equal(archer.animationVariants.run, undefined, "forward running never samples a reverse clip");
 
@@ -38156,6 +38171,29 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
     ),
     "Archer_standing_aim_recoil",
     "one real Archer attackCount increment resolves to the authored recoil clip",
+  );
+  assert.equal(
+    rtsActionClip(
+      { kind: "hit", remainingSeconds: 1.789, attackCount: 1, impactCount: 1, layered: false },
+      archer.animationSet,
+      shipped,
+      archer.animationVariants,
+      17,
+    ),
+    "Archer_standing_react_small_from_front",
+    "one real Archer impactCount increment resolves to the authored hit clip",
+  );
+  const deathClips = new Set(Array.from({ length: 20 }, (_, seed) => rtsActionClip(
+    { kind: "death", remainingSeconds: 3.878, attackCount: 1, impactCount: 1, layered: false },
+    archer.animationSet,
+    shipped,
+    archer.animationVariants,
+    seed + 1,
+  )));
+  assert.deepEqual(
+    deathClips,
+    new Set(["Archer_standing_death_backward", "Archer_standing_death_forward"]),
+    "Archer death selection is deterministic and stays inside the two authored death clips",
   );
 
   const stableIdle = resolveRtsAnimationVariant("idle", archer.animationSet, archer.animationVariants, shipped, 17);

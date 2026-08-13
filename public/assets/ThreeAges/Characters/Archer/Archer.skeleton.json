@@ -7,12 +7,17 @@
     "run": "Archer_standing_run_forward",
     "walkBack": "Archer_standing_walk_back",
     "runBack": "Archer_standing_run_back",
-    "attack": "Archer_standing_aim_recoil"
+    "attack": "Archer_standing_aim_recoil",
+    "hit": "Archer_standing_react_small_from_front",
+    "death": "Archer_standing_death_backward"
   },
   "animationVariants": {
     "idle": [
       "Archer_standing_idle_examine",
       "Archer_standing_idle_looking"
+    ],
+    "death": [
+      "Archer_standing_death_forward"
     ]
   },
   "blendSpaces": [],
@@ -21,6 +26,11 @@
   "rootMotion": [
     {
       "clip": "Archer_standing_aim_recoil",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "Archer_standing_react_small_from_front",
       "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
@@ -123,6 +133,7 @@
   "physicsBodies": [],
   "physicsConstraints": [],
   "preview": {
-    "selectedClip": "T-Pose"
-  }
+    "selectedClip": "Archer_standing_death_forward"
+  },
+  "upperBodyBone": "mixamorigSpine"
 }
