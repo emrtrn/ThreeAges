@@ -198,6 +198,37 @@ export interface UnitBalanceStats {
   /** Maximum ground-plane distance from which a hit may land; must be positive. */
   attackRange: number;
   /**
+   * Minimum distance a shot may be fired from; below it the weapon holds fire
+   * (siege crew plan K-07).
+   *
+   * Optional, and absent means zero — which is what every weapon in the project
+   * did before this existed, and is right for anything a soldier swings or
+   * looses by hand. It is authored for the artillery, whose barrel cannot be
+   * depressed onto something standing against its own wheels.
+   *
+   * What it withholds is the *shot*, never the target: a gun that dropped its
+   * target the moment something closed inside the minimum would re-acquire it on
+   * the next tick and jitter between the two forever. The gun keeps aiming at
+   * what it was aiming at, and answers what is under its nose with
+   * {@link kickDamage} instead.
+   */
+  readonly minAttackRange?: number;
+  /**
+   * Damage of the shove this unit throws at whatever has closed inside its
+   * minimum range; absent for every unit that has no minimum to be inside of.
+   *
+   * Real damage, not a presentation: it resolves through the same `resolveDamage`
+   * every other blow does, so armour-class multipliers and a held unit's
+   * resistance apply to it in exactly one place. The three fields below it are
+   * required together — a shove with no reach or no cadence is not tunable, it
+   * is broken — and the validator refuses any partial set by name.
+   */
+  readonly kickDamage?: number;
+  /** How close an enemy must be for that shove to reach it. */
+  readonly kickRange?: number;
+  /** Seconds between shoves; its own cooldown, independent of `attackCooldown`. */
+  readonly kickCooldown?: number;
+  /**
    * Optional visual flight speed for a projectile this unit fires, in world
    * units/s. It changes only the rendered projectile lifetime: combat damage
    * and the attack cooldown remain authoritative elsewhere.

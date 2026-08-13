@@ -1,7 +1,7 @@
 # ThreeAges — Worker Animasyon ve Aktivite Entegrasyon Planı
 
 Oluşturulma tarihi: 2026-08-13  
-Durum: **Devam ediyor — Faz 1/1A/2 tamamlandı; Faz 3'te cultivation klip havuzu bağlandı, tarım dünya içi kabulü bekliyor.**
+Durum: **Devam ediyor — Faz 1/1A/2 ve cultivation kabulü tamamlandı; Faz 3, gerçek hasat/sağım state'i kararını bekliyor.**
 
 ## 1. Amaç
 
@@ -127,8 +127,9 @@ deterministik yapılır. Aktivite değişmeden seçimin kararlı kalması tercih
 ### K-04 — İnşaat için yanlış araç hareketi kullanılmaz
 
 Assette çekiç veya belirgin yapı onarım klibi yok. Tarım klipleri inşaat/onarım
-rolüne yalnız isim zenginliği uğruna bağlanmaz. Faz 2'de nötr diz çökme fallback'i
-kullanılır; gerçek inşaat klibi veya uygun prop bulunursa ayrıca authorlanır.
+rolüne yalnız isim zenginliği uğruna bağlanmaz. İnşaat/onarımda Worker ayakta
+nötr idle'da kalır; işin okunurluğunu mevcut yapı inşaat görseli ve ilerleme
+sunumu taşır. Gerçek inşaat klibi veya uygun prop bulunursa ayrıca authorlanır.
 
 ### K-05 — Prop görünürlüğü ve animasyon birlikte değişir
 
@@ -213,9 +214,9 @@ statik durması yerine güvenli ve yanıltıcı olmayan bir çalışma pozu gös
 - [x] `Worker_kneeling_idle` klibinin loop ve ayakta→diz çökme geçişi dünya içinde
   gözlemlenip kabul edildi: 2026-08-13.
 - [x] Bu kabulde montage/ayrı geçiş gereksinimi oluşmadı.
-- [x] `Worker_kneeling_idle`, tek ve stabil nötr `work` fallback'i olarak bağlandı;
-  dünya içi görsel kabul hâlâ açık.
-- [x] Mevcut iş noktalarında nötr fallback gözlemlenip kabul edildi.
+- [x] `Worker_kneeling_idle`, tek ve stabil genel `work` fallback'i olarak bağlandı.
+- [x] İnşaat ve onarımda diz çökme yanıltıcı bulunduğu için bu iki aktivite ayakta
+  nötr idle'a yönlendirildi; yapıdaki mevcut inşaat görseli/ilerleme sunumu korunur.
 - [x] `working` false olduğunda idle'a güvenli biçimde döndüğünü otomasyonla doğrula.
 - [x] İşe yürürken `work` klibinin locomotion'dan önce başlamadığını otomasyonla test et.
 - [x] İş bittiği veya Worker serbest bırakıldığı karede pozun temizlendiğini inşaat,
@@ -249,12 +250,14 @@ bir aktivite kimliğiyle doğru animasyon ailesini seçmek.
 
 ### 9.2 Tarım ve hasat eşlemeleri
 
-- [x] `cultivation` için ana klip `Worker_dig_and_plant_seeds` olarak authorlandı;
-  dünya içi görsel kabul hâlâ açık.
+- [x] `cultivation` için ana klip `Worker_dig_and_plant_seeds` authorlandı ve
+  dünya içi görsel kabulü kaydedildi: 2026-08-13 (`görsel kabul tamam, devam et`).
 - [x] `Worker_plant_a_plant` ve `Worker_watering`, yalnız cultivation aktivitesinin
   deterministik varyant havuzuna eklendi.
-- [ ] `harvest` için `Worker_pick_fruit_1/2/3` varyantlarını incele ve bağla.
-- [ ] `Worker_pull_plant_1/2` kliplerini yalnız söküm/hasat anlamı doğruysa kullan.
+- [x] Mevcut `Worker_pick_fruit_1/2/3` ve `Worker_pull_plant_1/2` klipleri için
+  bağlanacak gerçek ürün/meyve hasat ataması bulunmadığı kaydedildi. Odun, maden,
+  altın ve av işleri bu klipleri semantik olarak doğrulamaz; `generic` fallback
+  korunur.
 - [x] Uzun cultivation kliplerinin iş süresi değiştiğinde kesilmesi gameplay'i
   değiştirmez; seçim yalnız `working` ve sunumsal activity okur.
 - [x] İş animasyonunun kaynak miktarı veya üretim tick'ini değiştirmediği hedefli
@@ -264,7 +267,8 @@ bir aktivite kimliğiyle doğru animasyon ailesini seçmek.
 
 - [ ] `Worker_cow_milking` klibini gerçek süt/hayvan üretimi state'iyle eşleştir.
   Mevcut `livestock` state'i hayvan sakinleştirme/sürmedir; sağma klibi bilinçli
-  olarak bağlanmadı.
+  olarak bağlanmadı. Mevcut Ağıl geliri penned hayvanlardan Worker olmadan
+  üretildiği için sağım ataması yoktur.
 - [ ] İneğin/Worker'ın göreli konum ve yönünü kabul sahnesinde authorla.
 - [ ] Hayvan yoksa veya iş iptal edilmişse sağma animasyonunun başlamadığını test et.
 - [ ] Taming/shepherding için sağma klibini yeniden kullanma; uygun klip yoksa nötr
@@ -272,22 +276,27 @@ bir aktivite kimliğiyle doğru animasyon ailesini seçmek.
 
 ### 9.4 Deterministik çeşitlilik
 
-- [ ] Aktivite başlangıcı veya tamamlanan iş çevrimi için sunumsal sequence sayacı
-  gerekip gerekmediğine karar ver.
+- [x] Aktivite başlangıcı veya tamamlanan iş çevrimi için sunumsal sequence sayacı
+  bu dilimde gerekli değil: cultivation klipleri sürekli loop'tur ve seçici birim
+  kimliği + semantic rolle sabit seçim yapar. Gerçek, ayrık iş çevrimi/one-shot
+  eklendiğinde o olayın otoriter sayacı ayrıca sunuma aktarılacak; renderer sayacı
+  icat etmeyecek.
 - [x] Aynı Worker ve aynı cultivation aktivitesinde seçimin kararlı olduğunu test et.
 - [x] Farklı Worker seed'lerinin cultivation havuzunda çeşitlilik gösterebildiğini
   mevcut deterministik varyant seçicisi üzerinden doğrula.
 - [x] Aktivite değişmeden her loop'ta ilgisiz klibe sıçrama olmadığını selector
   kararlılığıyla test et.
-- [ ] Save/load veya replay sonrasında sunum seçiminin gameplay state'ini
-  değiştirmediğini doğrula.
+- [x] Mevcut RTS maçında match save/load bulunmadığı kaydedildi; yeniden oluşturulan
+  presentation/replay eşdeğeri aynı salt-okunur snapshot'tan aynı cultivation
+  seçimini üretir ve `workerActivity`/`working` gameplay state'ine yazmaz.
 
-**Çıkış kapısı:** Tarım, hasat ve hayvancılık için en az birer doğru dünya içi
-aktivite kabul edilmeden Faz 4 tamamlanmış sayılmaz.
+**Çıkış kapısı:** Tarım kabul edildi. Hasat ve sağım için doğru dünya içi aktivite,
+mevcut simülasyonda bulunmuyor; ürün-hasat ve Worker'lı sağım state'i tasarlanıp
+uygulanmadan Faz 4 tamamlanmış sayılmaz.
 
 ## 10. Faz 4 — Prop, Soket ve Taşıma Animasyonları
 
-**Durum:** ⬜ Faz 3'ü bekliyor  
+**Durum:** ⬜ İlk Crate taşıma dilimi otomasyonla hazır; görsel hizalama ve Faz 3'ün kalan kapıları açık.
 **Amaç:** Görünmez nesne taşıma hatası üretmeden kutu, genel yük ve el arabası
 animasyonlarını oyuna kazandırmak.
 
@@ -296,18 +305,39 @@ animasyonlarını oyuna kazandırmak.
 - [ ] Sol ve sağ el kemiklerini Skeletal Mesh Editor'de doğrula.
 - [ ] Tek elle bağlanacak prop için el soketi, iki elle taşınacak prop için stabil
   el/gövde sahipliği tasarla.
-- [ ] Soket adı ve transformlarını `Worker.skeleton.json` içinde authorla.
+- [x] İki elle tutulan Crate için gövde-stabil `carry-box` soketini `mixamorigHips`
+  üzerinde `Worker.skeleton.json` içinde authorla. Transform başlangıç değeri
+  `position: [0, 0.03, 0.24]`; gerçek klipte görsel hizalama kabulü hâlâ açık.
 - [ ] Prop'un zemin, gövde ve ellerle kesişmediğini idle/walk/turn kliplerinde
   ayrı ayrı doğrula.
 
 ### 10.2 Kutu taşıma
 
-- [ ] Mevcut `Crate.gltf` assetinin ölçek ve pivot uygunluğunu incele.
-- [ ] `Worker_box_idle` ve `Worker_box_walk_arc` kliplerini Crate görünürlüğüyle
-  aynı state'e bağla.
+- [x] Mevcut `Crate.gltf` assetinin pivotu tabanda ve ham boyutu yaklaşık
+  9×17×9 cm olarak incelendi; Worker üzerinde okunur taşıma için Actor'da 4×
+  ölçekle authorlandı. Gerçek klipte görsel uygunluk kabulü hâlâ açık.
+- [x] `Worker_box_idle` ve `Worker_box_walk_arc` kliplerini Crate görünürlüğüyle
+  aynı `carrying` state'ine bağla. Mevcut kaynak toplama dönüşü, bu state'in
+  otoriter kaynağıdır; kaynak miktarı ve rota değişmez.
 - [ ] `Worker_box_turn_left/right` kliplerinin root davranışını doğrula.
 - [ ] Kutu işi bittiğinde prop'un kaybolması ile animasyon dönüşünün aynı karede
   gerçekleştiğini test et.
+
+### 10.2A Eşek barrel yükleme — kabul edilen yön
+
+- [x] Uzak ekonomi üreticilerinin mevcut lojistikte yol üstü eşek karavanı ile
+  taşındığı; yakın üreticilerin doğrudan merkeze/depo hedefine gittiği doğrulandı.
+- [x] Mevcut eşek Actor'ında `loaded` durumunda görünür iki barrel pannier prop'u
+  bulunduğu, karavanın yükü taşıdığı `outbound` ve `unloading` evrelerinde bu
+  prop'ların göründüğü doğrulandı.
+- [ ] Gerçek kaynak devri için üreticiye atanmış Worker'ın yalnız `loading`
+  evresinde elinde/kucağında barrel göstermesini authorla; kaynak miktarı veya
+  karavan rotası bu sunum animasyonundan etkilenmez.
+- [ ] Devir anında tek bir presentation state ile Worker barrel'ını gizle ve
+  eşeğin pannier barrel'larını görünür yap; fazlar arasında çift barrel veya boş
+  bir kare oluşmadığını otomasyonla doğrula.
+- [ ] Worker, eşek ve hedef deposu için yaklaşma/ayrılma noktalarını belirle;
+  mevcut karavan varış-kapılı lojistik sözleşmesini bozma.
 
 ### 10.3 Genel elde taşıma
 
@@ -458,3 +488,13 @@ Plan ancak aşağıdaki koşullar birlikte sağlandığında tamam kabul edilir:
   root-motion verisi, materyal sidecar'ı, prop eksikleri ve performans riski
   kaydedildi.
 - 2026-08-13 — Bu plan oluşturuldu; henüz runtime veya asset dosyası değiştirilmedi.
+- 2026-08-13 — Cultivation varyantları için ayrı bir sunumsal iş çevrimi sayacına
+  gerek olmadığı kararlaştırıldı: loop seçimi Worker kimliği ve semantic rolle
+  sabit kalır. Yeniden oluşturulan presentation'ın salt-okunur snapshot'tan aynı
+  seçimi ürettiği ve `workerActivity`/`working` simülasyon state'ine yazmadığı
+  hedefli Worker Faz 3 testiyle doğrulandı.
+- 2026-08-13 — Faz 4 ilk dilimi: mevcut sonlu kaynak toplama dönüşündeki gerçek
+  `returning`/`unloading` yükü `carryingBox` ve görünür Crate ile aynı karede
+  sunuma aktarıldı. Worker box idle/walk rolleri, `carry-box` skeletal socket ve
+  Actor cargo prop'u authorlandı; hedefli Worker Faz 4 ve miner round-trip
+  kontrolleri geçti. Klip/prop hizalamasının dünya içi görsel kabulü açıktır.

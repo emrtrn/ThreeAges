@@ -313,6 +313,7 @@ export class EconomyProductionSystem {
     // producer loss, death — the same way the construction system does it.
     worker.setWorking(false);
     worker.setHunting(false);
+    worker.setCarrying(false);
     worker.setWorkerActivity(null);
     return true;
   }
@@ -562,6 +563,10 @@ export class EconomyProductionSystem {
       // kneel, so the pose would be cut off part-way down and read as a twitch.
       assignment.worker.setWorking(false);
       assignment.worker.setHunting(false);
+      const carriesCargo = assignment.cargoAmount > 0
+        && (assignment.state === "returning" || assignment.state === "unloading");
+      assignment.worker.setCarrying(carriesCargo);
+      if (carriesCargo) assignment.worker.setWorkerActivity("carryingBox");
       // Follow a source that moved out from under the worker. A tree never does,
       // so for wood and stone this is a distance check that always passes; a
       // hunted animal bolts, and a hunter who keeps walking to where it *was*
@@ -728,6 +733,7 @@ export class EconomyProductionSystem {
       if (!assignment.worker.health.depleted && this.units.all().includes(assignment.worker)) continue;
       assignment.worker.setWorking(false);
       assignment.worker.setHunting(false);
+      assignment.worker.setCarrying(false);
       assignment.worker.setWorkerActivity(null);
       this.releaseSourceClaims(workerId);
       producer.assignments.delete(workerId);
@@ -753,6 +759,7 @@ export class EconomyProductionSystem {
       assignment.worker.stop();
       assignment.worker.setWorking(false);
       assignment.worker.setHunting(false);
+      assignment.worker.setCarrying(false);
       assignment.worker.setWorkerActivity(null);
       this.releaseSourceClaims(assignment.worker.id);
       this.assignmentByWorker.delete(assignment.worker.id);
@@ -833,6 +840,12 @@ export class EconomyProductionSystem {
     assignment.approach = approach;
     assignment.worker.setMovePath(path);
     assignment.state = "returning";
+    // The route and the visible load change together. Deferring this to the
+    // next economy tick leaves one frame where a full worker is already walking
+    // home empty-handed, which is precisely the prop/animation split Faz 4
+    // avoids.
+    assignment.worker.setCarrying(assignment.cargoAmount > 0);
+    if (assignment.cargoAmount > 0) assignment.worker.setWorkerActivity("carryingBox");
     return true;
   }
 
@@ -857,6 +870,8 @@ export class EconomyProductionSystem {
     assignment.approach = target.approach;
     assignment.worker.setMovePath(target.path);
     assignment.state = "moving-to-source";
+    assignment.worker.setCarrying(false);
+    assignment.worker.setWorkerActivity(structure.stats.id === "farm" ? "cultivation" : "generic");
     return true;
   }
 

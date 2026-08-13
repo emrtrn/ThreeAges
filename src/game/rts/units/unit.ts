@@ -77,6 +77,35 @@ export interface RtsPresentationUpdate {
   readonly localVelocityX?: number;
   /** Measured velocity along the body's local forward axis (+forward, -back). */
   readonly localVelocityZ?: number;
+  /**
+   * Measured signed yaw rate of the body, degrees/s, positive turning left.
+   *
+   * The twin of {@link localVelocityX}: measured from actual rotation rather than
+   * read off the turn rate or the heading it is aiming at, so a gun that has
+   * finished lining up reports zero even though its order still names a target.
+   * Only a presentation that has something to do with turning in place reads it
+   * — today, the artillery crew that swings the carriage round.
+   */
+  readonly yawRateDegPerSecond?: number;
+  /**
+   * The unit's authored `turnRateDegPerSecond`, so a presentation can scale a
+   * threshold against it rather than against a constant that would be wrong for
+   * every unit but one. Omitted by callers that model no turn rate.
+   */
+  readonly turnRateDegPerSecond?: number | undefined;
+  /**
+   * Melee blows this unit has thrown outside its main weapon; each increment is
+   * one to play. Today only the artillery's kick writes it (siege crew plan
+   * Faz 3), and it is a separate counter from {@link attackCount} because the two
+   * come off different cooldowns and must not cancel each other's animation.
+   */
+  readonly meleeCount?: number;
+  /**
+   * Enemy structures this unit has brought down; each increment is one cheer to
+   * play (siege crew plan Faz 5). Written where the killing blow is already
+   * resolved, so the animation is told what happened and is told it late.
+   */
+  readonly triumphCount?: number;
   /** Keep a deliberately unhurried mover on its walk clip at any travel speed. */
   readonly forceWalk?: boolean;
   /** True while the unit is travelling without turning its body toward the route. */
@@ -332,6 +361,8 @@ export class Unit {
   private presentation: RtsPresentationHandle | null = null;
   /** Where the body stood at the last presentation frame; see `measureLocalPlanarVelocity`. */
   private readonly lastPresentationPosition = new Vector3();
+  /** Which way it faced at that frame; see `measureYawRate`. Presentation-local memory. */
+  private lastPresentationYaw = 0;
   /** Reused local motion sample; presentation measurement allocates nothing per frame. */
   private readonly presentationLocalVelocity = new Vector3();
   private fallbackBody: Mesh | null = null;
@@ -379,6 +410,12 @@ export class Unit {
   private hunting = false;
   /** See {@link setWorkerActivity}: presentation-only, written by the job system. */
   private workerActivityValue: WorkerActivity | null = null;
+  /** Visible job cargo only; it never participates in economy or movement. */
+  private carrying = false;
+  /** See {@link noteMeleeBlow}: presentation-only, written by `siegeMeleeSystem`. */
+  private meleeBlows = 0;
+  /** See {@link noteStructureDestroyed}: presentation-only, written where the wall falls. */
+  private triumphs = 0;
 
   constructor(
     owner: UnitOwner,
@@ -500,11 +537,14 @@ export class Unit {
       planarSpeed: Math.hypot(localVelocity.x, localVelocity.z),
       localVelocityX: localVelocity.x,
       localVelocityZ: localVelocity.z,
+      yawRateDegPerSecond: this.measureYawRate(deltaSeconds),
+      turnRateDegPerSecond: this.stats.turnRateDegPerSecond,
       backward: this.retreating,
       attacking: this.isTradingBlows() || this.hunting,
       dying: this.dying,
       working: this.working,
       workerActivity: this.workerActivityValue,
+      carrying: this.carrying,
       // The bridge from the support field to the pose: a body being mended waits
       // kneeling instead of standing, and rises the tick the mending stops —
       // which is the tick it reaches full health, or leaves the field.
@@ -515,6 +555,8 @@ export class Unit {
       holding: this.stance === "hold",
       attackCount: this.attack.blowCount,
       impactCount: this.health.impactCount,
+      meleeCount: this.meleeBlows,
+      triumphCount: this.triumphs,
       cameraDistanceSquared: cameraPosition ? this.object.position.distanceToSquared(cameraPosition) : null,
     });
   }
@@ -552,6 +594,16 @@ export class Unit {
     return this.workerActivityValue;
   }
 
+  /** Report whether a job's already-existing cargo is visible on this body. */
+  setCarrying(carrying: boolean): void {
+    this.carrying = carrying;
+  }
+
+  /** Whether this unit currently presents an already-authoritative load. */
+  get isCarrying(): boolean {
+    return this.carrying;
+  }
+
   /**
    * Mark the unit as bringing down prey.
    *
@@ -569,6 +621,43 @@ export class Unit {
   /** Whether prey is being brought down; see {@link setHunting}. */
   get isHunting(): boolean {
     return this.hunting;
+  }
+
+  /**
+   * Record one close-quarters shove, written by `siegeMeleeSystem` after the
+   * damage is already resolved.
+   *
+   * The twin of {@link AttackComponent.blowCount}, and separate from it for the
+   * reason the two cooldowns are separate: a kick and a shot are different
+   * events on different clocks, and sharing one counter would have each cancel
+   * the other's animation. Nothing in combat reads it — removing every
+   * presentation would leave the fight identical. Monotonic for the unit's life.
+   */
+  noteMeleeBlow(): void {
+    this.meleeBlows += 1;
+  }
+
+  /** How many shoves this unit has thrown; see {@link noteMeleeBlow}. */
+  get meleeCount(): number {
+    return this.meleeBlows;
+  }
+
+  /**
+   * Record one enemy structure brought down by this unit's own killing blow
+   * (siege crew plan Faz 5).
+   *
+   * Written where the blow is already resolved, so the cheer is a report and
+   * never a cause. Only the gun that landed the last hit is told — everything
+   * else shelling the same wall keeps its count, which is what makes the
+   * animation mean "you did that" rather than "something fell somewhere".
+   */
+  noteStructureDestroyed(): void {
+    this.triumphs += 1;
+  }
+
+  /** How many enemy structures this unit has felled; see {@link noteStructureDestroyed}. */
+  get triumphCount(): number {
+    return this.triumphs;
   }
 
   /**
@@ -599,6 +688,29 @@ export class Unit {
   }
 
   /**
+   * Signed yaw rate observed since the last presentation frame, in degrees/s.
+   *
+   * The rotational twin of {@link measureLocalPlanarVelocity}, and measured for
+   * the same reason: `turnRateDegPerSecond` is what the unit is *allowed* to
+   * turn at, while this is what it actually did — a gun already on its heading
+   * turns at zero even though it still holds the target that made it turn.
+   * Presentation-local memory, exactly like the position sample: nothing in
+   * movement, combat or death reads `lastPresentationYaw`.
+   *
+   * The delta is wrapped into (-π, π] so the seam at ±π reads as the small turn
+   * it was rather than as a full rotation in one frame.
+   */
+  private measureYawRate(deltaSeconds: number): number {
+    const yaw = this.object.rotation.y;
+    const previous = this.lastPresentationYaw;
+    this.lastPresentationYaw = yaw;
+    if (deltaSeconds <= 0) return 0;
+    let delta = yaw - previous;
+    delta -= Math.PI * 2 * Math.floor((delta + Math.PI) / (Math.PI * 2));
+    return delta * (180 / Math.PI) / deltaSeconds;
+  }
+
+  /**
    * Whether this unit is actually landing blows rather than merely walking after
    * something. Holding a target is not enough: a Guard chasing across the map
    * should still be shown walking.
@@ -606,7 +718,11 @@ export class Unit {
   private isTradingBlows(): boolean {
     const target = this.attackTarget;
     if (!target || target.health.depleted || this.dying) return false;
-    return combatDistance(this.position, target) <= this.attack.range;
+    // The firing *band*, not just its outer edge: a gun with something standing
+    // against its wheels is holding fire, and reporting it as engaged would
+    // brace its crew against a shot that is never coming — and leave them braced
+    // exactly when the shove that does answer needs them on their feet (K-07/K-08).
+    return this.attack.inFiringBand(combatDistance(this.position, target));
   }
 
   /** Order the unit to walk to a ground point (y is ignored). */
@@ -937,6 +1053,7 @@ export class Unit {
     this.stop();
     this.setWorking(false);
     this.setHunting(false);
+    this.setCarrying(false);
     this.setWorkerActivity(null);
     this.healthBar.object.visible = false;
     return true;

@@ -463,6 +463,50 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (attackRange <= 0) {
       throw new GameDataError(`${statsWhere}.attackRange: must be > 0`);
     }
+    // Optional: absent is a weapon with no minimum, which is every weapon a body
+    // swings or looses by hand. Present it must leave a band to fire in — a
+    // minimum at or above the range would be a gun that can never shoot at all,
+    // and the failure would show up as artillery that silently never fires.
+    const rawMinAttackRange = stats["minAttackRange"];
+    let minAttackRange: number | undefined;
+    if (rawMinAttackRange !== undefined) {
+      minAttackRange = requireFiniteNumber(stats, "minAttackRange", statsWhere);
+      if (minAttackRange < 0) {
+        throw new GameDataError(`${statsWhere}.minAttackRange: must be >= 0`);
+      }
+      if (minAttackRange >= attackRange) {
+        throw new GameDataError(`${statsWhere}.minAttackRange: must be < attackRange`);
+      }
+    }
+    // The close-quarters answer, and all of it or none of it. A shove authored
+    // with damage but no reach would resolve at any distance; with reach but no
+    // cooldown it would resolve every tick. Naming the missing field is the whole
+    // value of refusing it here rather than defaulting.
+    const kickFields = ["kickDamage", "kickRange", "kickCooldown"] as const;
+    const authoredKick = kickFields.filter((field) => stats[field] !== undefined);
+    if (authoredKick.length > 0 && authoredKick.length !== kickFields.length) {
+      const missing = kickFields.filter((field) => stats[field] === undefined);
+      throw new GameDataError(
+        `${statsWhere}: a melee shove needs ${kickFields.join(", ")} together — missing ${missing.join(", ")}`,
+      );
+    }
+    let kickDamage: number | undefined;
+    let kickRange: number | undefined;
+    let kickCooldown: number | undefined;
+    if (authoredKick.length === kickFields.length) {
+      kickDamage = requireFiniteNumber(stats, "kickDamage", statsWhere);
+      if (kickDamage <= 0) throw new GameDataError(`${statsWhere}.kickDamage: must be > 0`);
+      kickRange = requireFiniteNumber(stats, "kickRange", statsWhere);
+      if (kickRange <= 0) throw new GameDataError(`${statsWhere}.kickRange: must be > 0`);
+      kickCooldown = requireFiniteNumber(stats, "kickCooldown", statsWhere);
+      if (kickCooldown <= 0) throw new GameDataError(`${statsWhere}.kickCooldown: must be > 0`);
+      // The shove exists to cover the hole the minimum leaves. Reaching past the
+      // minimum would give the unit two live weapons over the same ground, and a
+      // shove that stopped short of it would leave a ring nothing at all answers.
+      if (minAttackRange !== undefined && kickRange > minAttackRange) {
+        throw new GameDataError(`${statsWhere}.kickRange: must be <= minAttackRange`);
+      }
+    }
     const rawProjectileSpeed = stats["projectileSpeed"];
     let projectileSpeed: number | undefined;
     if (rawProjectileSpeed !== undefined) {
@@ -573,6 +617,10 @@ export function validateUnitBalance(value: unknown): UnitBalance {
       attackDamage,
       attackCooldown,
       attackRange,
+      ...(minAttackRange === undefined ? {} : { minAttackRange }),
+      ...(kickDamage === undefined ? {} : { kickDamage }),
+      ...(kickRange === undefined ? {} : { kickRange }),
+      ...(kickCooldown === undefined ? {} : { kickCooldown }),
       ...(projectileSpeed === undefined ? {} : { projectileSpeed }),
       acquisitionRange,
       chaseRange,

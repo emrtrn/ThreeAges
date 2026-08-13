@@ -47,7 +47,7 @@ interface WorkerAssignment {
   readonly approach: Vector3;
   readonly source: AssignmentSource;
   readonly job: WorkerSiteJob;
-  /** "building" and "repairing" are both "settled and working", per job. */
+  /** "building" and "repairing" are both settled assignments, per job. */
   state: Exclude<WorkerConstructionState, "idle">;
 }
 
@@ -277,16 +277,17 @@ export class WorkerConstructionSystem {
         this.release(worker);
         continue;
       }
-      // The builder pose follows the assignment's own state, so it starts the
-      // frame the worker settles on its approach point and stops the frame the
-      // site is finished — no separate timer to drift out of step with. A
-      // repairer swings the same hammer, so both settled states pose alike.
-      worker.setWorking(assignment.state === "building" || assignment.state === "repairing");
+      // The Worker pack has no honest hammer/build clip. Keep the body in its
+      // standing idle instead of misrepresenting construction with the kneeling
+      // fallback; the site’s own construction visual and progress remain the
+      // presentation of the real build work. Activity still reports the job to
+      // future authored construction/repair clips without changing simulation.
+      worker.setWorking(false);
       if (assignment.state !== "moving") continue;
       if (worker.position.distanceTo(assignment.approach) <= BUILD_RANGE) {
         worker.stop();
         assignment.state = assignment.job === "repair" ? "repairing" : "building";
-        worker.setWorking(true);
+        worker.setWorking(false);
         continue;
       }
       // A failed/stopped route used to leave the assignment occupied forever.

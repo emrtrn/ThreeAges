@@ -81,6 +81,39 @@ export const RTS_NOTIFY_EFFECTS: Readonly<Record<string, RtsNotifyEffectBinding>
     maxDistance: 60,
     minIntervalSeconds: 0,
   },
+  /*
+   * The three the artillery's wreck asks for (siege crew plan Faz 4). They come
+   * through this channel rather than being played by the presentation for the
+   * reason every other one does: the presentation reports that a moment has
+   * arrived and holds no effect instance, so a burning wreck stops burning by
+   * the timeline no longer asking rather than by anything being torn down.
+   */
+  "wreck-blast": {
+    effectId: "rts-fx-explosion",
+    // Barrel height on the carriage — where the charge actually was.
+    heightOffset: 0.95,
+    // Further than a footfall by a wide margin: a gun going up is the loudest
+    // thing on the field, and culling it at conversational range would hide the
+    // one event the player most wants to have seen.
+    maxDistance: 110,
+    minIntervalSeconds: 0,
+  },
+  "wreck-fire": {
+    effectId: "rts-fx-fire-loop",
+    // Low in the collapsed carriage rather than at the old barrel height: by the
+    // time this catches, the thing that is burning has come down.
+    heightOffset: 0.35,
+    maxDistance: 70,
+    // The timeline already paces itself; this is the shared budget's floor for
+    // when several guns die at once.
+    minIntervalSeconds: 0.2,
+  },
+  "wreck-smoke": {
+    effectId: "rts-fx-ruin-smoke-black",
+    heightOffset: 0.9,
+    maxDistance: 90,
+    minIntervalSeconds: 0.5,
+  },
 };
 
 /**

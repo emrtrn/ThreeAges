@@ -26,6 +26,20 @@ export class AttackComponent {
     return this.stats.attackRange;
   }
 
+  /**
+   * Closest distance this weapon may fire from. Zero for anything that authors
+   * no minimum, which is every weapon a body swings or looses by hand — so the
+   * band check below reads the same for all of them.
+   */
+  get minRange(): number {
+    return this.stats.minAttackRange ?? 0;
+  }
+
+  /** Whether a target at this distance is inside the band this weapon can fire in. */
+  inFiringBand(distance: number): boolean {
+    return distance <= this.range && distance >= this.minRange;
+  }
+
   get ranged(): boolean {
     return this.stats.attackType === "ranged";
   }

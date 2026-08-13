@@ -1,12 +1,23 @@
 {
   "schema": 1,
-  "sockets": [],
+  "sockets": [
+    {
+      "name": "carry-box",
+      "bone": "mixamorigHips",
+      "position": [0, 0.03, 0.24],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1],
+      "previewAssetId": "crate"
+    }
+  ],
   "animationSet": {
     "idle": "Worker_idle_natural",
     "walk": "Worker_walking",
     "run": "Worker_running",
     "work": "Worker_kneeling_idle",
-    "workCultivation": "Worker_dig_and_plant_seeds"
+    "workCultivation": "Worker_dig_and_plant_seeds",
+    "carryIdle": "Worker_box_idle",
+    "carryWalk": "Worker_box_walk_arc"
   },
   "animationVariants": {
     "workCultivation": [

@@ -214,6 +214,32 @@ import {
   type RtsMontageSource,
 } from "../src/game/rts/units/rtsUnitAnimation";
 import {
+  advanceSiegeCrew,
+  siegeCrewSelection,
+  siegeCrewSlotPhaseSeconds,
+  SIEGE_CREW_CLIPS,
+  SIEGE_CREW_NONE,
+  SIEGE_CREW_PUSH_ENTER_SECTION,
+  SIEGE_CREW_PUSH_INSTANT,
+  SIEGE_CREW_PUSH_MONTAGE_NAME,
+  type SiegeCrewDurations,
+  type SiegeCrewInput,
+  type SiegeCrewPushSections,
+  type SiegeCrewState,
+} from "../src/game/rts/units/siegeCrewAnimation";
+import { updateSiegeMelee, SiegeMeleeState } from "../src/game/rts/combat/siegeMeleeSystem";
+import {
+  advanceSiegeWreck,
+  siegeWreckDeathSeconds,
+  siegeWreckFrame,
+  siegeWreckWheelHeading,
+  SIEGE_WRECK_BLAST_NOTIFY,
+  SIEGE_WRECK_FIRE_NOTIFY,
+  SIEGE_WRECK_NONE,
+  SIEGE_WRECK_SMOKE_NOTIFY,
+  SIEGE_WRECK_TIMING,
+} from "../src/game/rts/units/siegeWreck";
+import {
   formatRtsActorPresentationDebug,
   rtsContentAssetsState,
   type RtsActorVisualFactory,
@@ -36395,18 +36421,30 @@ check("Assetization Faz B/C: content catalog accepts known balance ids and the s
       guard_placeholder: { actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json" },
       siege_placeholder: {
         actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Siege.actor.json",
-        crew: { unitId: "guard_placeholder", slots: [{ position: [-0.7, 0, -1.4] }, { position: [0.7, 0, -1.4] }] },
+        crew: {
+          actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_SiegeCrew.actor.json",
+          ownerActorRefs: { enemy: "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_SiegeCrew.actor.json" },
+          slots: [{ position: [-0.7, 0, -1.4] }, { position: [0.7, 0, -1.4] }],
+        },
       },
     },
     buildings: {},
     ui: {},
   }, context);
   assert.deepEqual(crewedPilot.units.siege_placeholder?.crew?.slots.map((slot) => slot.position), [[-0.7, 0, -1.4], [0.7, 0, -1.4]], "crew slots remain authored local positions");
-  assert.ok(rtsContentCatalogRefs(crewedPilot).includes("assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json"), "crew Actors join the preflight load set");
+  // The crew names Actors directly rather than another balance id, so a crew
+  // needs no producible, AI-visible unit entry just to own a mesh.
+  assert.ok(rtsContentCatalogRefs(crewedPilot).includes("assets/ThreeAges/Actors/Units/BP_RTS_SiegeCrew.actor.json"), "crew Actors join the preflight load set");
+  assert.ok(rtsContentCatalogRefs(crewedPilot).includes("assets/ThreeAges/Actors/Units/BP_RTS_Enemy_SiegeCrew.actor.json"), "and so do their owner variants");
   assert.throws(
-    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", animals: {}, damage: minimalDamageSection(), units: { siege_placeholder: { actorRef: "assets/Siege.actor.json", crew: { unitId: "siege_placeholder", slots: [{ position: [0, 0, 0] }] } } }, buildings: {}, ui: {} }, context),
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", animals: {}, damage: minimalDamageSection(), units: { siege_placeholder: { actorRef: "assets/Siege.actor.json", crew: { actorRef: "assets/Siege.actor.json", slots: [{ position: [0, 0, 0] }] } } }, buildings: {}, ui: {} }, context),
     RtsContentCatalogError,
-    "a unit cannot recursively crew itself",
+    "a crew cannot render its own host Actor",
+  );
+  assert.throws(
+    () => validateRtsContentCatalog({ schema: 2, type: "rtsContentCatalog", animals: {}, damage: minimalDamageSection(), units: { siege_placeholder: { actorRef: "assets/Siege.actor.json", ownerActorRefs: { enemy: "assets/EnemySiege.actor.json" }, crew: { actorRef: "assets/Crew.actor.json", ownerActorRefs: { enemy: "assets/EnemySiege.actor.json" }, slots: [{ position: [0, 0, 0] }] } } }, buildings: {}, ui: {} }, context),
+    RtsContentCatalogError,
+    "and not through an owner override either",
   );
   // `props` is optional, so a catalog written before it existed still boots — and
   // resolves to no prop art, which is the runtime's procedural stand-in rather
@@ -37508,6 +37546,691 @@ check("Siege gun: an authored turn rate makes the carriage swing round instead o
   );
 });
 
+/* ---------------------------------------------------------------------------
+ * Siege crew — the two men who ride the gun (siege crew plan, Faz 1/2).
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Clip names and lengths as the shipped `Siege.glb` actually carries them.
+ *
+ * Read from the model rather than restated here, because restating them is the
+ * failure being guarded against: a re-export that renames or shortens a clip
+ * leaves the sidecar pointing at nothing, and a hard-coded table would agree
+ * with the sidecar right up until neither matched the asset.
+ */
+let siegeGlbClips: ReadonlyMap<string, number> | null = null;
+function siegeGlbClipDurations(): ReadonlyMap<string, number> {
+  if (siegeGlbClips) return siegeGlbClips;
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Siege/Siege.glb")))
+    ?? assert.fail("the Siege model is not a readable GLB");
+  const durations = new Map<string, number>();
+  for (const animation of parsed.json.animations ?? []) {
+    // A clip's length is the last key on any of its samplers' inputs.
+    let end = 0;
+    for (const sampler of animation.samplers ?? []) {
+      const accessor = parsed.json.accessors?.[sampler.input!];
+      const max = accessor?.max?.[0];
+      if (typeof max === "number") end = Math.max(end, max);
+    }
+    durations.set(animation.name ?? "", end);
+  }
+  siegeGlbClips = durations;
+  return durations;
+}
+function siegeGlbClipNames(): readonly string[] {
+  return [...siegeGlbClipDurations().keys()];
+}
+function siegeGlbClipSeconds(clip: string): number {
+  const seconds = siegeGlbClipDurations().get(clip);
+  assert.ok(seconds !== undefined && seconds > 0, `"${clip}" is not a clip on the Siege rig`);
+  return seconds!;
+}
+
+/** Clip lengths as the shipped `Siege.glb` actually carries them. */
+const SIEGE_CREW_TEST_DURATIONS: SiegeCrewDurations = {
+  strafeLeft: 1.33,
+  strafeRight: 1.17,
+  pushExit: 2.63,
+  crouchIn: 0.6,
+  braceIn: 0.5,
+  braced: 0.3,
+  braceImpact: 0.7,
+  braceOut: 0.53,
+  crouchOut: 0.53,
+  kick: 1.23,
+  triumph: 2.4,
+  death: 2.33,
+};
+
+const SIEGE_CREW_TEST_PUSH: SiegeCrewPushSections = { enterSeconds: 1.5, exitSeconds: 2.63 };
+
+function siegeCrewInput(overrides: Partial<SiegeCrewInput> = {}): SiegeCrewInput {
+  return {
+    planarSpeed: 0,
+    yawRateDegPerSecond: 0,
+    turnRateDegPerSecond: 70,
+    backward: false,
+    attacking: false,
+    dying: false,
+    impactCount: 0,
+    kickCount: 0,
+    triumphCount: 0,
+    ...overrides,
+  };
+}
+
+/** Runs the crew machine for `seconds` on one steady input and returns the end state. */
+function runSiegeCrew(
+  state: SiegeCrewState,
+  input: SiegeCrewInput,
+  seconds: number,
+  tuning = rtsLocomotionTuning(3.8),
+  push = SIEGE_CREW_TEST_PUSH,
+): SiegeCrewState {
+  let current = state;
+  const step = 1 / 60;
+  for (let elapsed = 0; elapsed < seconds; elapsed += step) {
+    current = advanceSiegeCrew(current, input, tuning, SIEGE_CREW_TEST_DURATIONS, push, step);
+  }
+  return current;
+}
+
+check("Siege crew Faz 1: locomotion reads the gun's measured travel and turn, never its orders", () => {
+  const tuning = rtsLocomotionTuning(3.8);
+  const clipOf = (state: SiegeCrewState) => siegeCrewSelection(state);
+
+  // Pushing: the wind-up is paid once, then the loop is held. The wind-up is what
+  // K-10 exists for — the raw 4.77s start clip would have a gun spend five
+  // seconds "beginning" and stop before ever reaching its push cycle.
+  const rolling = siegeCrewInput({ planarSpeed: 3.8 });
+  const started = advanceSiegeCrew(SIEGE_CREW_NONE, rolling, tuning, SIEGE_CREW_TEST_DURATIONS, SIEGE_CREW_TEST_PUSH, 1 / 60);
+  assert.equal(started.locomotion, "pushEnter", "a move order leans into the trail first");
+  assert.deepEqual(clipOf(started), { kind: "pushEnter" });
+  const looping = runSiegeCrew(started, rolling, 2);
+  assert.equal(looping.locomotion, "pushLoop", "and reaches the loop once the lean is paid for");
+  assert.deepEqual(clipOf(looping), { kind: "locomotion", locomotionRole: "walk" });
+
+  // Stopping winds down through its own clip rather than snapping to idle.
+  const stopped = advanceSiegeCrew(looping, siegeCrewInput(), tuning, SIEGE_CREW_TEST_DURATIONS, SIEGE_CREW_TEST_PUSH, 1 / 60);
+  assert.equal(stopped.locomotion, "pushExit", "and lets go of the gun before standing up");
+  assert.deepEqual(clipOf(stopped), { kind: "clip", clipRole: "pushExit", loop: false });
+  assert.equal(runSiegeCrew(stopped, siegeCrewInput(), 3).locomotion, "idle", "then it is idle");
+
+  // Retreat (§2.7): `T` + right-click. Reverse outranks push, because the gun is
+  // being pulled and the men walk backwards with it.
+  const retreating = runSiegeCrew(SIEGE_CREW_NONE, siegeCrewInput({ planarSpeed: 3.8, backward: true }), 3);
+  assert.equal(retreating.locomotion, "backward", "a reverse order plays the reverse gait");
+  assert.deepEqual(clipOf(retreating), { kind: "locomotion", locomotionRole: "walkBack" });
+
+  // Turning on the spot. K-06: the crew shoves the trail one way to swing the
+  // muzzle the other, so a gun turning *right* (negative yaw in Three's frame)
+  // side-steps with `siege_strafe_left`. It reads inverted here and correct on
+  // screen; the whole fix, if the model disagrees, is swapping the two.
+  const turningRight = runSiegeCrew(SIEGE_CREW_NONE, siegeCrewInput({ yawRateDegPerSecond: -60 }), 0.2);
+  assert.equal(turningRight.locomotion, "strafeLeft", "swinging the muzzle right pushes the trail left");
+  assert.equal(
+    (clipOf(turningRight) as { clipRole: keyof typeof SIEGE_CREW_CLIPS }).clipRole,
+    "strafeLeft",
+  );
+  const turningLeft = runSiegeCrew(SIEGE_CREW_NONE, siegeCrewInput({ yawRateDegPerSecond: 60 }), 0.2);
+  assert.equal(turningLeft.locomotion, "strafeRight", "and the mirror holds");
+
+  // A gun still settling onto a heading is not "turning in place": below a
+  // quarter of its authored rate the tail of every ordinary turn would otherwise
+  // leave two men side-stepping for a second after the gun had lined up.
+  const settling = runSiegeCrew(SIEGE_CREW_NONE, siegeCrewInput({ yawRateDegPerSecond: -10 }), 0.2);
+  assert.equal(settling.locomotion, "idle", "a turn inside the deadband is not a strafe");
+
+  // Turning while rolling is a manoeuvre, not a side-step: push wins.
+  const rollingTurn = runSiegeCrew(SIEGE_CREW_NONE, siegeCrewInput({ planarSpeed: 3.8, yawRateDegPerSecond: -60 }), 2);
+  assert.equal(rollingTurn.locomotion, "pushLoop", "a gun that turns while it rolls is still being pushed");
+});
+
+check("Siege crew Faz 1: an unauthored push montage degrades to the plain gait", () => {
+  // The half-authored case, and it must not freeze anybody: a crew whose asset
+  // ships no `push` montage simply leans straight into its walk loop.
+  const tuning = rtsLocomotionTuning(3.8);
+  const rolling = siegeCrewInput({ planarSpeed: 3.8 });
+  const state = advanceSiegeCrew(SIEGE_CREW_NONE, rolling, tuning, SIEGE_CREW_TEST_DURATIONS, SIEGE_CREW_PUSH_INSTANT, 1 / 60);
+  assert.equal(state.locomotion, "pushLoop", "with no wind-up authored the crew is pushing on frame one");
+  assert.deepEqual(siegeCrewSelection(state), { kind: "locomotion", locomotionRole: "walk" });
+});
+
+check("Siege crew Faz 1: the shipped sidecar authors every clip the crew driver asks for", () => {
+  // The failure this pins is silent: a renamed or re-exported clip leaves the
+  // crew resolving nothing and holding one pose for the whole match, and no
+  // other check in the suite reads these names.
+  const skeleton = JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Siege/Siege.skeleton.json", "utf8"),
+  ) as {
+    animationSet: Record<string, string>;
+    animationVariants: Record<string, string[]>;
+    notifies: { name: string; clip: string; time: number }[];
+    montages: { name: string; clip: string; sections: { name: string; startSeconds: number; endSeconds: number }[] }[];
+  };
+  const shipped = new Set(siegeGlbClipNames());
+
+  for (const [role, clip] of Object.entries(SIEGE_CREW_CLIPS)) {
+    assert.ok(shipped.has(clip), `the crew role "${role}" names a clip Siege.glb carries (${clip})`);
+  }
+  for (const role of ["idle", "walk", "walkBack"]) {
+    const clip = skeleton.animationSet[role];
+    assert.ok(clip && shipped.has(clip), `the sidecar authors ${role} (got ${clip})`);
+  }
+  assert.ok(
+    (skeleton.animationVariants.idle ?? []).every((clip) => shipped.has(clip)),
+    "and every idle variant is a real clip",
+  );
+  assert.ok(
+    (skeleton.animationVariants.idle ?? []).length > 0
+      && !(skeleton.animationVariants.idle ?? []).includes(skeleton.animationSet.idle!),
+    "the idle variant is a second clip, not the primary one repeated",
+  );
+
+  // The push wind-up, and the one number K-10 is revertible through.
+  const montage = skeleton.montages.find((entry) => entry.name === SIEGE_CREW_PUSH_MONTAGE_NAME);
+  assert.ok(montage, "the sidecar authors the push montage");
+  assert.ok(shipped.has(montage!.clip), "on a clip the model carries");
+  const enter = montage!.sections.find((section) => section.name === SIEGE_CREW_PUSH_ENTER_SECTION);
+  assert.ok(enter, "with an enter section");
+  // A window, not the whole clip: trimming the lean out of a 4.77s start clip is
+  // the entire point, so a section that covers the clip end to end is the bug.
+  const clipSeconds = siegeGlbClipSeconds(montage!.clip);
+  assert.ok(enter!.endSeconds - enter!.startSeconds > 0, "that spans real time");
+  assert.ok(
+    enter!.endSeconds < clipSeconds,
+    `and stops short of the clip's ${clipSeconds.toFixed(2)}s, which is what trims the wind-up`,
+  );
+
+  // Footsteps only where the crew actually walks, and inside their clips.
+  assert.ok(skeleton.notifies.length > 0, "the crew's gaits carry footstep markers");
+  for (const notify of skeleton.notifies) {
+    assert.ok(shipped.has(notify.clip), `notify "${notify.name}" is on a real clip (${notify.clip})`);
+    assert.ok(
+      notify.time > 0 && notify.time < siegeGlbClipSeconds(notify.clip),
+      `notify "${notify.name}" at ${notify.time}s falls inside ${notify.clip}`,
+    );
+  }
+  assert.ok(
+    rtsNotifyEffectIds().length > 0 && skeleton.notifies.some((notify) => notify.name === "footstep"),
+    "and footstep is a name the runtime already binds an effect to",
+  );
+});
+
+check("Siege crew Faz 2: the firing stance goes down once and stays down between rounds", () => {
+  const tuning = rtsLocomotionTuning(3.8);
+  const engaged = siegeCrewInput({ attacking: true });
+  const step = 1 / 60;
+
+  // The trigger is the engagement, never the shot. A 5.5s reload with the stance
+  // keyed off `attackCount` would stand two men up and kneel them back down
+  // between every round; keyed off `attacking` they crouch once for the fight.
+  let state = advanceSiegeCrew(SIEGE_CREW_NONE, engaged, tuning, SIEGE_CREW_TEST_DURATIONS, SIEGE_CREW_TEST_PUSH, step);
+  assert.equal(state.brace, "crouchIn", "an engagement drops the crew toward the carriage");
+  const phases: string[] = [state.brace];
+  for (let elapsed = 0; elapsed < 3; elapsed += step) {
+    state = advanceSiegeCrew(state, engaged, tuning, SIEGE_CREW_TEST_DURATIONS, SIEGE_CREW_TEST_PUSH, step);
+    if (phases[phases.length - 1] !== state.brace) phases.push(state.brace);
+  }
+  assert.deepEqual(phases, ["crouchIn", "braceIn", "braced"], "and reaches the brace through its authored order");
+  assert.deepEqual(
+    siegeCrewSelection(state),
+    { kind: "clip", clipRole: "braced", loop: true },
+    "the held phase loops rather than replaying the whole descent",
+  );
+  // Three more rounds' worth of cooldown: it must still be braced.
+  assert.equal(runSiegeCrew(state, engaged, 6).brace, "braced", "and it stays down across a reload");
+
+  // A blow taken while braced shakes the men and puts them back where they were.
+  const shaken = advanceSiegeCrew(state, { ...engaged, impactCount: 1 }, tuning, SIEGE_CREW_TEST_DURATIONS, SIEGE_CREW_TEST_PUSH, step);
+  assert.equal(shaken.oneShot, "braceImpact", "a shell landing on a braced gun shakes its crew");
+  assert.equal(shaken.brace, "braced", "without the stance forgetting where it was");
+  assert.equal(runSiegeCrew(shaken, engaged, 1.5).oneShot, "none", "and the shake plays through");
+  assert.equal(runSiegeCrew(shaken, engaged, 1.5).brace, "braced", "back to bracing");
+
+  // Standing, the same blow has no clip that reads: the shake was animated
+  // inside the crouch, and borrowing it would snap two upright men down for 0.7s
+  // every time something hit the gun on the move.
+  const standing = advanceSiegeCrew(SIEGE_CREW_NONE, siegeCrewInput({ impactCount: 1 }), tuning, SIEGE_CREW_TEST_DURATIONS, SIEGE_CREW_TEST_PUSH, step);
+  assert.equal(standing.oneShot, "none", "a standing crew does not borrow the bracing flinch");
+
+  // Leaving. A move order winds the stance *out* through its authored exit; it
+  // must never restart the descent it was in the middle of.
+  const leaving = advanceSiegeCrew(state, siegeCrewInput({ planarSpeed: 3.8 }), tuning, SIEGE_CREW_TEST_DURATIONS, SIEGE_CREW_TEST_PUSH, step);
+  assert.equal(leaving.brace, "braceOut", "a move order releases the carriage first");
+  const leavingPhases: string[] = [leaving.brace];
+  let out = leaving;
+  for (let elapsed = 0; elapsed < 3; elapsed += step) {
+    out = advanceSiegeCrew(out, siegeCrewInput({ planarSpeed: 3.8 }), tuning, SIEGE_CREW_TEST_DURATIONS, SIEGE_CREW_TEST_PUSH, step);
+    if (leavingPhases[leavingPhases.length - 1] !== out.brace) leavingPhases.push(out.brace);
+  }
+  assert.deepEqual(leavingPhases, ["braceOut", "crouchOut", "standing"], "and stands up through its own order");
+  assert.ok(!leavingPhases.includes("crouchIn"), "never back down through the descent");
+  // Only once the men are up does the push read; until then the stance owns them.
+  assert.deepEqual(siegeCrewSelection(leaving), { kind: "clip", clipRole: "braceOut", loop: false });
+
+  // Death cuts every phase where it stands. A man who politely stood up first
+  // would be finishing a posture the gun holding him up no longer has.
+  const felled = advanceSiegeCrew(state, { ...engaged, dying: true }, tuning, SIEGE_CREW_TEST_DURATIONS, SIEGE_CREW_TEST_PUSH, step);
+  assert.equal(felled.brace, "standing", "the fall interrupts the stance rather than winding it down");
+  assert.equal(felled.oneShot, "death", "and owns the body");
+  assert.deepEqual(siegeCrewSelection(felled), { kind: "death" });
+  // And it latches: a crew only falls once, and must still be down when the
+  // corpse window ends.
+  assert.equal(runSiegeCrew(felled, { ...engaged, dying: true }, 10).oneShot, "death", "the fall never releases");
+});
+
+check("Siege crew Faz 3: a gun holds fire inside its minimum range but keeps its target", () => {
+  // The jitter this pins: dropping the target instead of the shot would have the
+  // gun re-acquire the same enemy next tick and flicker between aiming and not.
+  const gun = new Unit("player", 0, 0, {
+    ...RTS_TEST_UNIT_STATS,
+    attackRange: 20,
+    minAttackRange: 4,
+    attackCooldown: 0.1,
+    attackDamage: 30,
+  });
+  const near = new Unit("enemy", 0, 2, RTS_TEST_UNIT_STATS);
+  gun.setAttackTarget(near);
+  const nearHealth = near.health.current;
+  for (let step = 0; step < 60; step += 1) updateUnitCombat([gun, near], 1 / 60);
+  assert.equal(near.health.current, nearHealth, "nothing inside the minimum is shot at");
+  assert.equal(gun.attackTarget, near, "and the target is kept rather than re-acquired every tick");
+
+  // The band above the minimum is unchanged: this is a hole in the middle of the
+  // range, not a shorter range.
+  const far = new Unit("enemy", 0, 10, RTS_TEST_UNIT_STATS);
+  const shooter = new Unit("player", 0, 0, {
+    ...RTS_TEST_UNIT_STATS,
+    attackRange: 20,
+    minAttackRange: 4,
+    attackCooldown: 0.1,
+    attackDamage: 30,
+  });
+  shooter.setAttackTarget(far);
+  const farHealth = far.health.current;
+  for (let step = 0; step < 60; step += 1) updateUnitCombat([shooter, far], 1 / 60);
+  assert.ok(far.health.current < farHealth, "a target between the minimum and the range is shot");
+
+  // And nothing without an authored minimum changed: every weapon a body swings
+  // still reaches anything it can touch.
+  const swordsman = new Unit("player", 0, 0, { ...RTS_TEST_UNIT_STATS, attackCooldown: 0.1 });
+  const adjacent = new Unit("enemy", 0, 0.5, RTS_TEST_UNIT_STATS);
+  swordsman.setAttackTarget(adjacent);
+  const adjacentHealth = adjacent.health.current;
+  for (let step = 0; step < 60; step += 1) updateUnitCombat([swordsman, adjacent], 1 / 60);
+  assert.ok(adjacent.health.current < adjacentHealth, "a weapon with no minimum is unaffected");
+});
+
+check("Siege crew Faz 3: the shove answers what the gun cannot, on its own cooldown", () => {
+  const kicker = () => new Unit("player", 0, 0, {
+    ...RTS_TEST_UNIT_STATS,
+    attackRange: 20,
+    minAttackRange: 4,
+    kickDamage: 12,
+    kickRange: 1.6,
+    kickCooldown: 2,
+  });
+
+  // Inside the shove's reach: it lands, and the damage goes through the shared
+  // resolver, so the counter table applies to it like any other blow (K-08).
+  const gun = kicker();
+  const victim = new Unit("enemy", 0, 1, RTS_TEST_UNIT_STATS);
+  const state = new SiegeMeleeState();
+  const expected = gun.stats.kickDamage! * gun.stats.damageMultipliers[victim.armorClass];
+  const before = victim.health.current;
+  updateSiegeMelee([gun, victim], [gun, victim], 1 / 60, state);
+  assert.ok(Math.abs((before - victim.health.current) - expected) < 1e-9, "the shove is worth its table value");
+  assert.equal(gun.meleeCount, 1, "and the crew is told exactly once");
+
+  // Its cooldown is its own: a full reload's worth of ticks would be one shot,
+  // and is several shoves.
+  for (let step = 0; step < 60; step += 1) updateSiegeMelee([gun, victim], [gun, victim], 1 / 60, state);
+  assert.equal(gun.meleeCount, 1, "a second shove waits out its own cooldown, not the gun's");
+  for (let step = 0; step < 120; step += 1) updateSiegeMelee([gun, victim], [gun, victim], 1 / 60, state);
+  assert.equal(gun.meleeCount, 2, "and lands once the cooldown elapses");
+
+  // Out of reach is out of reach, however deep inside the gun's minimum it is.
+  const outOfReach = kicker();
+  const distant = new Unit("enemy", 0, 3, RTS_TEST_UNIT_STATS);
+  const distantHealth = distant.health.current;
+  updateSiegeMelee([outOfReach, distant], [outOfReach, distant], 1 / 60, new SiegeMeleeState());
+  assert.equal(distant.health.current, distantHealth, "a body inside the minimum but past the reach is untouched");
+  assert.equal(outOfReach.meleeCount, 0);
+
+  // Allies are never shoved: hostility runs through the same check every other
+  // damage path uses, so friendly fire is absent by construction.
+  const friendly = kicker();
+  const comrade = new Unit("player", 0, 1, RTS_TEST_UNIT_STATS);
+  updateSiegeMelee([friendly, comrade], [friendly, comrade], 1 / 60, new SiegeMeleeState());
+  assert.equal(friendly.meleeCount, 0, "a gun does not shove its own side");
+
+  // A unit that authors no shove is never looked at, which is every unit but one.
+  const swordsman = new Unit("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const enemy = new Unit("enemy", 0, 1, RTS_TEST_UNIT_STATS);
+  updateSiegeMelee([swordsman, enemy], [swordsman, enemy], 1 / 60, new SiegeMeleeState());
+  assert.equal(swordsman.meleeCount, 0, "an unauthored unit has no second weapon");
+
+  // Cooldowns for units that have left the field are dropped rather than kept
+  // for the rest of the match.
+  const pruning = new SiegeMeleeState();
+  const leaving = kicker();
+  const bystander = new Unit("enemy", 0, 1, RTS_TEST_UNIT_STATS);
+  updateSiegeMelee([leaving, bystander], [leaving, bystander], 1 / 60, pruning);
+  assert.equal(pruning.size, 1, "the shove starts a cooldown");
+  updateSiegeMelee([bystander], [bystander], 1 / 60, pruning);
+  assert.equal(pruning.size, 0, "and it is forgotten when the gun leaves the field");
+});
+
+check("Siege crew Faz 3: the crew is on its feet exactly when the gun cannot fire", () => {
+  const tuning = rtsLocomotionTuning(3.8);
+  const step = 1 / 60;
+  // The bridge between K-07 and K-08: `attacking` means "inside the firing band",
+  // so a gun holding fire never braces — which is what leaves the men standing,
+  // which is the condition the shove needs. Without this the crew would kneel
+  // against a shot that is never coming and the kick would be unreachable.
+  const held = runSiegeCrew(SIEGE_CREW_NONE, siegeCrewInput({ attacking: false }), 3);
+  assert.equal(held.brace, "standing", "a gun holding fire leaves its crew upright");
+
+  const kicked = advanceSiegeCrew(held, siegeCrewInput({ kickCount: 1 }), tuning, SIEGE_CREW_TEST_DURATIONS, SIEGE_CREW_TEST_PUSH, step);
+  assert.equal(kicked.oneShot, "kick", "and the shove plays on them");
+  assert.deepEqual(siegeCrewSelection(kicked), { kind: "clip", clipRole: "kick", loop: false });
+  assert.equal(runSiegeCrew(kicked, siegeCrewInput({ kickCount: 1 }), 2).oneShot, "none", "once, then it is over");
+  // Re-triggered by the counter, exactly as a swing is by `attackCount`.
+  const again = advanceSiegeCrew(
+    runSiegeCrew(kicked, siegeCrewInput({ kickCount: 1 }), 2),
+    siegeCrewInput({ kickCount: 2 }),
+    tuning,
+    SIEGE_CREW_TEST_DURATIONS,
+    SIEGE_CREW_TEST_PUSH,
+    step,
+  );
+  assert.equal(again.oneShot, "kick", "a second shove replays it");
+});
+
+check("Siege crew Faz 3: the balance table keeps the minimum and the shove consistent", () => {
+  // Relationships, never magnitudes: these must survive any tuning pass, so the
+  // expectations are derived from the same table the game reads.
+  const balance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const siege = Object.values(balance).find((unit) => unit.role === "siege");
+  assert.ok(siege, "the balance table still ships a siege unit");
+  assert.ok(
+    typeof siege!.minAttackRange === "number" && siege!.minAttackRange > 0,
+    "the artillery authors a minimum range — without one, nothing above is reachable",
+  );
+  assert.ok(siege!.minAttackRange! < siege!.attackRange, "and it leaves a band to fire in");
+  assert.ok(
+    typeof siege!.kickDamage === "number" && siege!.kickDamage! > 0
+    && typeof siege!.kickRange === "number" && siege!.kickRange! > 0
+    && typeof siege!.kickCooldown === "number" && siege!.kickCooldown! > 0,
+    "and answers what closes inside it",
+  );
+  // The hole and its answer must line up: a reach past the minimum would give the
+  // gun two live weapons over the same ground.
+  assert.ok(siege!.kickRange! <= siege!.minAttackRange!, "the shove covers the hole and no more");
+  // The shove is a shove, not a second main gun.
+  assert.ok(siege!.kickDamage! < siege!.attackDamage, "and it is worth less than the shot it replaces");
+
+  // The validator refuses the shapes that would look like working data.
+  const rows = JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as Record<string, Record<string, unknown>>;
+  const withSiege = (patch: Record<string, unknown>) => ({
+    ...rows,
+    siege_placeholder: { ...rows.siege_placeholder, ...patch },
+  });
+  assert.throws(
+    () => validateUnitBalance(withSiege({ minAttackRange: rows.siege_placeholder!.attackRange })),
+    /minAttackRange/,
+    "a minimum at the range is a gun that can never fire",
+  );
+  assert.throws(
+    () => validateUnitBalance(withSiege({ kickRange: undefined, kickCooldown: undefined })),
+    /kickRange, kickCooldown/,
+    "a partial shove names the fields it is missing",
+  );
+  assert.throws(
+    () => validateUnitBalance(withSiege({ kickRange: (rows.siege_placeholder!.minAttackRange as number) + 1 })),
+    /kickRange/,
+    "a shove that reaches past the minimum is two weapons over one ring",
+  );
+});
+
+check("Siege crew Faz 4: the wreck runs a timeline and the gun stops tipping over", () => {
+  // §2.5, and the whole point of the phase: with no `deathSeconds` the gun's
+  // presentation reported nothing, so `updateDeath` rolled a wheeled carriage
+  // onto its side like a felled soldier. A defined length is exactly the
+  // condition that stops it — so the number has to cover everything on screen.
+  const crewFall = siegeGlbClipSeconds("siege_death_2");
+  assert.ok(
+    siegeWreckDeathSeconds(crewFall) >= crewFall,
+    "the defeat window is never shorter than the crew's own fall",
+  );
+  assert.ok(
+    siegeWreckDeathSeconds(null) >= SIEGE_WRECK_TIMING.collapseSeconds,
+    "and a gun with no crew still waits for its carriage to settle",
+  );
+  assert.ok(
+    siegeWreckDeathSeconds(null) < UNIT_CORPSE_SECONDS,
+    "while staying inside the corpse window, which is what keeps the wreck on the field",
+  );
+
+  // The timeline itself. Nothing here is simulated: the same elapsed time always
+  // produces the same pose, which is what makes a death reviewable.
+  const intact = siegeWreckFrame(SIEGE_WRECK_NONE, 4);
+  assert.equal(intact.collapseProgress, 0, "at t=0 the carriage is intact");
+  assert.equal(intact.barrelDrop, 0, "the barrel is still on its pivot");
+  assert.equal(intact.wheels.length, 4, "and it has its four wheels");
+  assert.ok(intact.wheels.every((wheel) => wheel.travel === 0), "none of which has moved");
+
+  const runWreck = (seconds: number) => {
+    let state = SIEGE_WRECK_NONE;
+    const fired: string[] = [];
+    for (let elapsed = 0; elapsed < seconds; elapsed += 1 / 60) {
+      const advanced = advanceSiegeWreck(state, 1 / 60);
+      state = advanced.state;
+      fired.push(...advanced.effects);
+    }
+    return { state, fired };
+  };
+
+  // The blast happens once, on the first frame, and never again.
+  const opening = runWreck(0.1);
+  assert.equal(
+    opening.fired.filter((name) => name === SIEGE_WRECK_BLAST_NOTIFY).length,
+    1,
+    "the gun goes up exactly once",
+  );
+  assert.ok(!opening.fired.includes(SIEGE_WRECK_FIRE_NOTIFY), "and does not catch fire in the same instant");
+
+  // The wheels wait a beat, then roll and stop.
+  const breaking = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.wheelBreakSeconds * 0.5).state, 4);
+  assert.ok(breaking.wheels.every((wheel) => wheel.travel === 0), "the wheels hold until the blast throws them");
+  const rolling = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.wheelBreakSeconds + 0.4).state, 4);
+  assert.ok(rolling.wheels.every((wheel) => wheel.travel > 0), "then every wheel is travelling");
+  assert.ok(rolling.wheels.every((wheel) => wheel.tiltRadians === 0), "and none has fallen over yet");
+  const settled = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.wheelBreakSeconds + SIEGE_WRECK_TIMING.wheelRollSeconds + 0.5).state, 4);
+  assert.ok(settled.wheels.every((wheel) => wheel.tiltRadians > 0), "a stopped wheel lies down");
+  assert.ok(
+    settled.wheels.every((wheel) => Math.abs(wheel.travel - SIEGE_WRECK_TIMING.wheelRollDistance) < 1e-9),
+    "having covered its authored distance and no more",
+  );
+  // Four wheels, four headings: a gun whose wheels all rolled the same way would
+  // read as the whole carriage sliding.
+  const headings = new Set(settled.wheels.map((wheel) => wheel.headingRadians.toFixed(6)));
+  assert.equal(headings.size, 4, "each wheel takes its own heading");
+  // Derived, never drawn: the same gun dies the same way on a replay.
+  assert.equal(siegeWreckWheelHeading(1, 4), siegeWreckWheelHeading(1, 4), "and the heading is deterministic");
+
+  // The barrel drops and pitches, and it finishes falling.
+  const dropping = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.barrelFallSeconds * 0.5).state, 4);
+  assert.ok(dropping.barrelDrop > 0 && dropping.barrelPitch > 0, "the barrel comes off its pivot");
+  const dropped = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.barrelFallSeconds + 1).state, 4);
+  assert.ok(
+    Math.abs(dropped.barrelDrop - SIEGE_WRECK_TIMING.barrelDropDistance) < 1e-9,
+    "and comes to rest on the ground rather than falling forever",
+  );
+
+  // The carriage collapse reaches 1 and stops there — it drives a vertex patch,
+  // and a progress past 1 would turn the model inside out.
+  const collapsed = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.collapseSeconds + 5).state, 4);
+  assert.equal(collapsed.collapseProgress, 1, "the carriage settles fully");
+
+  // The burn is a repeated *request*, so it stops by nothing asking rather than
+  // by an emitter being torn down — a wreck must not leave a bonfire behind.
+  const burning = runWreck(SIEGE_WRECK_TIMING.fireStartSeconds + SIEGE_WRECK_TIMING.fireIntervalSeconds * 3);
+  assert.ok(
+    burning.fired.filter((name) => name === SIEGE_WRECK_FIRE_NOTIFY).length >= 2,
+    "the wreck keeps asking for flame while it burns",
+  );
+  assert.ok(
+    burning.fired.filter((name) => name === SIEGE_WRECK_SMOKE_NOTIFY).length
+      < burning.fired.filter((name) => name === SIEGE_WRECK_FIRE_NOTIFY).length,
+    "and asks for smoke more rarely, so the two do not read as one effect",
+  );
+  const burntOut = runWreck(SIEGE_WRECK_TIMING.burnSeconds + 3);
+  const lateFire = runWreck(SIEGE_WRECK_TIMING.burnSeconds + 3).fired.length - burntOut.fired.length;
+  assert.equal(lateFire, 0, "and it is deterministic to the frame");
+  const beforeBurnout = runWreck(SIEGE_WRECK_TIMING.burnSeconds - 0.5).fired.length;
+  const afterBurnout = runWreck(SIEGE_WRECK_TIMING.burnSeconds + 6).fired.length;
+  assert.ok(
+    afterBurnout - beforeBurnout < 12,
+    "the fire burns out instead of running for the whole corpse window",
+  );
+
+  // Every name the timeline asks for must be one the game actually draws — an
+  // unbound name is a silent no-op, which is how a wreck ends up invisible.
+  for (const name of [SIEGE_WRECK_BLAST_NOTIFY, SIEGE_WRECK_FIRE_NOTIFY, SIEGE_WRECK_SMOKE_NOTIFY]) {
+    assert.ok(RTS_NOTIFY_EFFECTS[name], `"${name}" is bound to an effect`);
+  }
+});
+
+check("Siege crew Faz 4: the two men fall differently and the shipped Siege authors both clips", () => {
+  const skeleton = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Siege/Siege.skeleton.json", "utf8")) as unknown,
+  );
+  const shipped = new Set(siegeGlbClipNames());
+  assert.ok(
+    skeleton.animationSet.death && shipped.has(skeleton.animationSet.death),
+    "the crew authors a fall",
+  );
+  const variants = skeleton.animationVariants.death ?? [];
+  assert.ok(variants.length > 0 && variants.every((clip) => shipped.has(clip)), "and a second one");
+  assert.ok(!variants.includes(skeleton.animationSet.death!), "which is a different clip");
+
+  // K-05's other half: the crew's per-slot seed has to actually change the
+  // choice, or both men fall identically and the variant is decoration.
+  const available = new Set([skeleton.animationSet.death!, ...variants]);
+  const chosen = new Set(
+    [0, 1].map((slot) => resolveRtsAnimationVariant(
+      "death",
+      skeleton.animationSet,
+      skeleton.animationVariants,
+      available,
+      // The same mix the presentation builds: the unit's seed plus the slot.
+      1234 + slot * 0x9e37,
+    )),
+  );
+  assert.equal(chosen.size, 2, "the two crew slots pick different falls");
+  // And reproducibly: the same gun stages the same death on a replay.
+  assert.equal(
+    resolveRtsAnimationVariant("death", skeleton.animationSet, skeleton.animationVariants, available, 1234),
+    resolveRtsAnimationVariant("death", skeleton.animationSet, skeleton.animationVariants, available, 1234),
+    "and the same slot always picks the same one",
+  );
+});
+
+check("Siege crew Faz 5: only the gun that lands the killing blow cheers", () => {
+  const tuning = rtsLocomotionTuning(3.8);
+  const step = 1 / 60;
+
+  // The one-shot itself: rarest of the three, so it outranks a kick and a shake,
+  // and it interrupts the firing stance rather than waiting for it.
+  const braced = runSiegeCrew(SIEGE_CREW_NONE, siegeCrewInput({ attacking: true }), 3);
+  assert.equal(braced.brace, "braced", "the crew is at the carriage when the wall comes down");
+  const cheering = advanceSiegeCrew(
+    braced,
+    siegeCrewInput({ attacking: true, triumphCount: 1 }),
+    tuning,
+    SIEGE_CREW_TEST_DURATIONS,
+    SIEGE_CREW_TEST_PUSH,
+    step,
+  );
+  assert.equal(cheering.oneShot, "triumph", "and it cheers over the brace");
+  assert.deepEqual(siegeCrewSelection(cheering), { kind: "clip", clipRole: "triumph", loop: false });
+  assert.equal(cheering.brace, "braced", "without losing the stance underneath it");
+  const after = runSiegeCrew(cheering, siegeCrewInput({ attacking: true, triumphCount: 1 }), 3.5);
+  assert.equal(after.oneShot, "none", "the cheer plays once");
+  assert.equal(after.brace, "braced", "and the gun goes back to work");
+
+  // Ranked above the other two: a gun that fells a wall and takes a shell in the
+  // same instant celebrates. The shove and the shake come round again; this does
+  // not.
+  const both = advanceSiegeCrew(
+    braced,
+    siegeCrewInput({ attacking: true, triumphCount: 1, impactCount: 1, kickCount: 1 }),
+    tuning,
+    SIEGE_CREW_TEST_DURATIONS,
+    SIEGE_CREW_TEST_PUSH,
+    step,
+  );
+  assert.equal(both.oneShot, "triumph", "the cheer outranks a shove and a shake in the same frame");
+
+  // But death still outranks it: a crew that wins and dies together falls.
+  const felled = advanceSiegeCrew(
+    braced,
+    siegeCrewInput({ attacking: true, triumphCount: 1, dying: true }),
+    tuning,
+    SIEGE_CREW_TEST_DURATIONS,
+    SIEGE_CREW_TEST_PUSH,
+    step,
+  );
+  assert.equal(felled.oneShot, "death", "a crew that dies with its victory falls anyway");
+
+  // And the credit itself: the counter belongs to the gun that landed the blow.
+  // Everything else shelling the same wall keeps its count, which is what makes
+  // the animation mean "you did that".
+  const winner = new Unit("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const bystander = new Unit("player", 1, 0, RTS_TEST_UNIT_STATS);
+  assert.equal(winner.triumphCount, 0);
+  winner.noteStructureDestroyed();
+  assert.equal(winner.triumphCount, 1, "the gun that felled it is told");
+  assert.equal(bystander.triumphCount, 0, "the gun beside it is not");
+  // Monotonic and presentation-only, exactly like the blow and shove counters.
+  winner.noteStructureDestroyed();
+  assert.equal(winner.triumphCount, 2, "and a second wall is a second cheer");
+
+  // The credit runs off `buildingStats`, which the combat contract already uses
+  // to tell a building from a person. A unit kill must not be a triumph.
+  const wallShaped = { buildingStats: {} } as unknown as { buildingStats: unknown };
+  assert.ok(wallShaped.buildingStats !== undefined, "a building carries its balance row");
+  assert.equal(
+    (new Unit("enemy", 0, 0, RTS_TEST_UNIT_STATS) as unknown as { buildingStats?: unknown }).buildingStats,
+    undefined,
+    "and a person does not, which is the whole test",
+  );
+});
+
+check("Siege crew Faz 1: the artillery may be retreated, and its slot offsets are deterministic", () => {
+  // §2.7: the gun was deliberately outside `canPlayerRetreat` while its crew had
+  // no reverse clip. Now that it has one, the exclusion is the bug.
+  const source = readFileSync("src/game/rts/commands/commandSystem.ts", "utf8");
+  const guard = /function canPlayerRetreat[\s\S]*?\n}/.exec(source)?.[0] ?? "";
+  assert.ok(guard.includes('"siege"'), "the artillery is inside the reverse-move guard");
+  assert.ok(guard.includes("!unit.dying"), "and a body already falling still cannot be ordered back");
+
+  // K-05: two men on one gun must not hit every pose on the same frame, and the
+  // stagger must survive a replay — so it is derived from the slot, never drawn.
+  assert.equal(siegeCrewSlotPhaseSeconds(0), 0, "the first man is on the gun's own clock");
+  assert.ok(siegeCrewSlotPhaseSeconds(1) > 0, "the second lags him");
+  assert.ok(siegeCrewSlotPhaseSeconds(1) < 0.5, "but by a stagger, not a delay");
+  assert.equal(
+    siegeCrewSlotPhaseSeconds(1),
+    siegeCrewSlotPhaseSeconds(1),
+    "and the same slot always lags by the same amount",
+  );
+});
+
 check("Siege gun: the shipped muzzle rides the barrel and sits at the barrel model's mouth", () => {
   // The bug this pins: the muzzle is a hand-authored offset, and the barrel mesh
   // it belongs to gets nudged by eye during an art pass. Anchored to the wrong
@@ -38316,6 +39039,26 @@ check("Worker Faz 3: cultivation gerçek iş aktivitesiyle deterministik tarım 
     selectRtsAnimation(input("cultivation"), worker.animationSet, shipped, tuning, worker.animationVariants, 17),
     "the same Worker and activity select the same cultivation clip",
   );
+  // A presentation may be recreated after a view reload/replay. The selector
+  // receives a snapshot and is pure: neither the activity nor the in-place job
+  // is a presentation-owned state that a restored view could feed back into the
+  // simulation.
+  const simulation = new UnitSystem();
+  const simulatedWorker = simulation.spawn("player", 0, 0, RTS_TEST_WORKER_STATS);
+  simulatedWorker.setWorking(true);
+  simulatedWorker.setWorkerActivity("cultivation");
+  const restoredViewInput: RtsAnimationInput = {
+    ...input(simulatedWorker.workerActivity ?? "generic"),
+    working: simulatedWorker.isWorking,
+  };
+  assert.deepEqual(
+    selectRtsAnimation(restoredViewInput, worker.animationSet, shipped, tuning, worker.animationVariants, simulatedWorker.id),
+    selectRtsAnimation({ ...restoredViewInput }, worker.animationSet, shipped, tuning, worker.animationVariants, simulatedWorker.id),
+    "recreating the presentation from the same simulation snapshot keeps its deterministic cultivation selection",
+  );
+  assert.equal(simulatedWorker.workerActivity, "cultivation", "selection never writes the job-system activity back to simulation");
+  assert.equal(simulatedWorker.isWorking, true, "selection never changes the real job's in-place work state");
+  simulation.clear();
   const population = new Set(Array.from({ length: 20 }, (_, seed) =>
     selectRtsAnimation(input("cultivation"), worker.animationSet, shipped, tuning, worker.animationVariants, seed + 1)?.clip,
   ));
@@ -38329,6 +39072,62 @@ check("Worker Faz 3: cultivation gerçek iş aktivitesiyle deterministik tarım 
     selectRtsAnimation(input("cultivation", 3), worker.animationSet, shipped, tuning, worker.animationVariants, 17)?.clip,
     "Worker_walking",
     "a farm worker still travelling keeps locomotion over a cultivation loop",
+  );
+});
+
+check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir", () => {
+  const rawSkeleton = JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.skeleton.json", "utf8"),
+  ) as unknown;
+  const worker = normalizeAssetSkeleton(rawSkeleton);
+  const saved = validateAssetSkeletonDef(rawSkeleton);
+  assert.deepEqual(worker.sockets, [{
+    name: "carry-box",
+    bone: "mixamorigHips",
+    position: [0, 0.03, 0.24],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+    previewAssetId: "crate",
+  }], "the Worker owns one body-stable socket for a two-handed crate");
+  assert.equal(worker.animationSet.carryIdle, "Worker_box_idle");
+  assert.equal(worker.animationSet.carryWalk, "Worker_box_walk_arc");
+  assert.equal(saved.animationSet?.carryWalk, "Worker_box_walk_arc", "an editor save retains the carrying locomotion role");
+
+  const rawActor = JSON.parse(
+    readFileSync("public/assets/ThreeAges/Actors/Units/BP_RTS_Worker.actor.json", "utf8"),
+  ) as unknown;
+  const actor = normalizeActorScriptDef(rawActor);
+  assert.deepEqual(readRtsActorCargoVisuals(actor), { cargo: [["carriedCrate", "loaded"]] });
+  const crate = actor.components.find((component) => component.id === "carriedCrate");
+  assert.equal(crate?.props.assetId, "crate", "the Worker carries the authored Crate mesh rather than an invisible stand-in");
+  assert.equal(crate?.props.rtsSkeletalSocket, "carry-box", "the crate follows the sidecar socket, not the Actor root");
+
+  const shipped = new Set((parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.glb")))?.json.animations ?? [])
+    .map((clip) => clip.name));
+  const tuning = rtsLocomotionTuning(6);
+  const carryingInput = (planarSpeed: number): RtsAnimationInput => ({
+    planarSpeed,
+    carrying: true,
+    working: false,
+    attacking: false,
+    dying: false,
+    attackCount: 0,
+    impactCount: 0,
+  });
+  assert.equal(
+    selectRtsAnimation(carryingInput(0), worker.animationSet, shipped, tuning)?.clip,
+    "Worker_box_idle",
+    "a stopped loaded Worker holds the same box its Actor draws",
+  );
+  assert.equal(
+    selectRtsAnimation(carryingInput(6), worker.animationSet, shipped, tuning)?.clip,
+    "Worker_box_walk_arc",
+    "a loaded Worker uses the authored carry walk instead of running empty-handed",
+  );
+  assert.equal(
+    selectRtsAnimation({ ...carryingInput(6), carrying: false }, worker.animationSet, shipped, tuning)?.clip,
+    "Worker_running",
+    "clearing the real cargo snapshot restores ordinary locomotion immediately",
   );
 });
 
@@ -40287,6 +41086,25 @@ check("Muhafiz Faz 6: notify efekt tablosu manifestte karsiligi olan varliklari 
   const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
     assets: { id: string; assetType?: string; path: string }[];
   };
+  /*
+   * Two kinds of consumer share this channel, and they want different lengths.
+   *
+   * Most names are paced by an animation marker: a foot lands, a blade
+   * connects. Those must be over before the next one, or a marching company
+   * accumulates dust it never clears. The artillery's wreck (siege crew plan
+   * Faz 4) is paced by its own timeline instead, and deliberately asks again on
+   * an interval so a flame *does* overlap into a continuous burn — what those
+   * must not do is outlive the wreck that started them, because the
+   * presentation holds no instance and could not stop one if it did.
+   *
+   * Both are derived rather than restated: the second cap comes from the same
+   * timing table the wreck runs on, so retuning the burn cannot leave this
+   * check agreeing with a number nothing uses.
+   */
+  const wreckPaced = new Set([SIEGE_WRECK_BLAST_NOTIFY, SIEGE_WRECK_FIRE_NOTIFY, SIEGE_WRECK_SMOKE_NOTIFY]);
+  const wreckNames = new Map(
+    Object.entries(RTS_NOTIFY_EFFECTS).map(([name, binding]) => [binding.effectId, name] as const),
+  );
   for (const effectId of rtsNotifyEffectIds()) {
     const asset = manifest.assets.find((entry) => entry.id === effectId)
       ?? assert.fail(`notify effect "${effectId}" is not in the asset manifest`);
@@ -40296,7 +41114,17 @@ check("Muhafiz Faz 6: notify efekt tablosu manifestte karsiligi olan varliklari 
     const definition = normalizeEffectDefinition(
       JSON.parse(readFileSync(`public/${asset.path}`, "utf8")) as unknown,
     );
+    // The one rule with no exception: nothing on this channel may be a looping
+    // emitter. The caller reports that a moment arrived and keeps no handle, so
+    // an emitter that never ends is an emitter nobody can ever turn off.
     assert.equal(definition.system.loop, false, `${effectId} is a burst, not a looping emitter`);
+    if (wreckPaced.has(wreckNames.get(effectId) ?? "")) {
+      assert.ok(
+        definition.system.duration <= SIEGE_WRECK_TIMING.burnSeconds,
+        `${effectId} must burn out with the wreck rather than outliving it`,
+      );
+      continue;
+    }
     assert.ok(definition.system.duration <= 0.5, `${effectId} must be over before the next footfall`);
   }
 
@@ -41405,12 +42233,15 @@ check("Skeletal animasyon Faz F: insaat sistemi calisma bayragini kaldirir ve is
   for (let frame = 0; frame < 300 && !site.construction.complete; frame += 1) {
     updateUnitMovement(units.all(), 1 / 60);
     construction.update(1 / 60);
-    if (construction.stateFor(worker) === "building") reachedSite ||= observe();
+    if (construction.stateFor(worker) === "building") {
+      observe();
+      reachedSite ||= reportedActivity === "construction" && !working;
+    }
   }
-  assert.equal(reachedSite, true, "a worker that has settled on its approach point is working");
+  assert.equal(reachedSite, true, "a settled builder reports construction while the body stays standing without a false kneel");
   assert.equal(site.construction.complete, true, "the fixture actually finishes the building");
-  // Completion releases the assignment, and the pose has to end with it — a
-  // worker kneeling at a finished house is the visible form of a leaked flag.
+  // Completion releases the assignment, so no construction fact leaks onto the
+  // now-finished building.
   assert.equal(construction.stateFor(worker), "idle");
   assert.equal(observe(), false, "and it stops working the moment the site is done");
   assert.equal(reportedActivity, null, "completion clears the presentation activity with the assignment");
@@ -42288,7 +43119,11 @@ check("RTS miners walk to the deposit, cut a load there, and carry it back to th
       assert.equal(worker.isWorking, true, "a miner at the deposit is posed as working");
       assert.equal(worker.workerActivity, "generic", "unmapped finite gathering remains neutral until an honest activity clip is accepted");
     }
-    if (state === "returning") carriedHome ||= worker.position.x < 8;
+    if (state === "returning") {
+      carriedHome ||= worker.position.x < 8;
+      assert.equal(worker.isCarrying, true, "the existing return trip reports its real cargo to presentation");
+      assert.equal(worker.workerActivity, "carryingBox", "the carrying silhouette is owned by the source assignment, not renderer inference");
+    }
   }
 
   assert.ok(seen.has("moving-to-source"), "the miner walks out to the deposit");
@@ -42306,6 +43141,7 @@ check("RTS miners walk to the deposit, cut a load there, and carry it back to th
   assert.equal(snapshot.status, "source-depleted");
   assert.equal(production.isAssigned(worker), false, "the miner is released once its deposit is empty");
   assert.equal(worker.isWorking, false, "and stands up when there is nothing left to cut");
+  assert.equal(worker.isCarrying, false, "and clears the visible crate with the assignment");
   assert.equal(worker.workerActivity, null, "source exhaustion clears the presentation activity");
 
   production.reset();

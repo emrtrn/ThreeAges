@@ -72,8 +72,12 @@
     "attackDamage": 34,
     "attackCooldown": 5.5,
     "attackRange": 20,
+    "minAttackRange": 4,
     "acquisitionRange": 20,
     "chaseRange": 20,
+    "kickDamage": 12,
+    "kickRange": 1.6,
+    "kickCooldown": 2.0,
     "visionRadius": 21,
     "damageMultipliers": {
       "light": 4,

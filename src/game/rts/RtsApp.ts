@@ -138,6 +138,7 @@ import { Unit } from "./units/unit";
 import { updateUnitMovement } from "./units/unitMovement";
 import { settleStoppedUnitOverlaps } from "./units/unitSeparation";
 import { updateUnitCombat, type CombatHit, type CombatShot } from "./units/unitCombat";
+import { updateSiegeMelee, SiegeMeleeState } from "./combat/siegeMeleeSystem";
 import { updateUnitDeaths } from "./units/unitDeath";
 import { retaliateAgainstAttack, updateUnitEngagement } from "./combat/engagementSystem";
 import { ProjectileSystem } from "./combat/projectileSystem";
@@ -998,6 +999,8 @@ export class RtsApp {
   private readonly scratchMuzzle = new Vector3();
   /** Artillery damage waiting on the ball that is carrying it (see §21 wiring below). */
   private readonly pendingImpacts = new PendingImpactQueue();
+  /** The artillery's second cooldown: what it does to whatever is under its wheels. */
+  private readonly siegeMelee = new SiegeMeleeState();
   private readonly structureDefense = new StructureDefenseSystem();
   private readonly supportAuras = new SupportAuraSystem();
   private readonly hudBar = new RtsHudBar(
@@ -4042,6 +4045,14 @@ export class RtsApp {
         impacts: this.pendingImpacts,
       },
     );
+    // After the guns and before the deaths: a gun holding fire because something
+    // closed inside its minimum range answers it here instead (K-07/K-08). The
+    // full target list, not just units — a builder raising a wall against the
+    // wheels is exactly the thing being shoved off.
+    updateSiegeMelee(this.units.all(), this.combatTargets(), dt, this.siegeMelee, (hit) => {
+      this.creditStructureKill(hit.attacker, hit.target, hit.change.depleted);
+      if (hit.target instanceof Unit) retaliateAgainstAttack(hit.target, hit.attacker, this.navigation);
+    });
     this.structureDefense.update(this.structures.all(), this.combatTargets(), dt, (shot) => {
       // The Town-age Karakol fires the Topçu's gun rather than its bow, so it
       // gets the Topçu's presentation whole: a lobbed ball, an authored blast
@@ -4155,6 +4166,7 @@ export class RtsApp {
    */
   private resolveCombatHit(hit: CombatHit): void {
     this.debugWitness?.recordHit(hit);
+    this.creditStructureKill(hit.attacker, hit.target, hit.change.depleted);
     if (hit.target instanceof Caravan && hit.change.depleted && hit.target.beginDeath()) {
       this.units.clearAttackTargets(hit.target);
       if (hit.target.owner === PLAYER_OWNER) {
@@ -4168,6 +4180,30 @@ export class RtsApp {
     if (hit.target instanceof Unit) {
       retaliateAgainstAttack(hit.target, hit.attacker, this.navigation);
     }
+  }
+
+  /**
+   * Tell the unit whose blow just felled an enemy building that it did (Faz 5).
+   *
+   * Every building, not only the enemy centre. The centre is already a member of
+   * this set, and scoping the cheer to it alone would mean the animation
+   * effectively never played: a felled centre ends the match, `RtsMatchState`
+   * stops the simulation, and the crew would celebrate underneath the victory
+   * screen. Widening it is what puts the moment on screen while the match is
+   * still being watched (plan §6, S-1).
+   *
+   * `buildingStats` is the discriminator the combat contract already
+   * established — present on buildings, absent on people — so this needs no new
+   * type test and picks up the command centre for free. Hostility is not checked
+   * because it cannot be false: no path in the match resolves a blow onto a
+   * target of the attacker's own kingdom.
+   *
+   * Presentation-only in both directions: it is written after the damage is
+   * resolved, and nothing in combat, AI or scoring reads the counter back.
+   */
+  private creditStructureKill(attacker: Unit, target: CombatTarget, depleted: boolean): void {
+    if (!depleted || target.buildingStats === undefined) return;
+    attacker.noteStructureDestroyed();
   }
 
   /**

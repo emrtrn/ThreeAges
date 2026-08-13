@@ -76,6 +76,12 @@ export function updateUnitCombat(
     // reached its firing position has stopped moving, so nothing else is going
     // to turn it, and the Topçu's barrel has to point down its own line of fire.
     unit.faceTowards(target.position.x, target.position.z, dt);
+    // Too close to depress the barrel onto (K-07). The *shot* is withheld, never
+    // the target: dropping it here would have the gun re-acquire the same enemy
+    // on the next tick and jitter between aiming and not, and `engagementSystem`
+    // deliberately keeps its choice for the same reason. What answers something
+    // this close is `siegeMeleeSystem`, on its own cooldown.
+    if (distance < unit.attack.minRange) continue;
     const ranged = unit.attack.ranged;
     const damage = unit.attack.tryFire(target, distance);
     if (damage !== null) {

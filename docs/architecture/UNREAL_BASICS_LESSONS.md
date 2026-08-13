@@ -380,6 +380,39 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-08-13* - **Topçu muhafızı animasyonu + top enkazı (Faz 0-6 uygulandı).**
+  Plan: `docs/planned/THREEAGES_SIEGE_CREW_ANIMATION_AND_WRECK_PLAN.md`.
+  `Siege.glb`'nin 18 klibinin 18'i bağlandı; ekip artık Guard mesh'i yerine
+  Siege mesh'ini giyiyor ve topun durumunu okuyan bir durum makinesi sürüyor.
+  **Ne değişti:** (1) `crew` şeması denge kimliğinden Actor referansına taşındı
+  (`crew.actorRef` + `ownerActorRefs`) — eski `crew.unitId` her ekibi
+  `units.json`'da üretilebilir/AI'nın gördüğü bir birim olmaya zorluyordu; alan
+  taşınmadı, **kaldırıldı**. Yeni `BP_RTS_SiegeCrew` / `BP_RTS_Enemy_SiegeCrew`
+  Actor çifti Guard'ın doku setini paylaşıyor, yeni doku üretilmedi.
+  (2) `src/game/rts/units/siegeCrewAnimation.ts` — saf (Three.js'siz) üç kanallı
+  durum makinesi: locomotion (`idle`/`push*`/`backward`/`strafe*`), duruş
+  (`crouchIn→braceIn→braced→braceOut→crouchOut`), tek atım (ölüm > zafer > tekme
+  > darbe). Genel `RtsAnimationRole` sözlüğü **genişletilmedi**: "topa destek ol"
+  bu birimin kavramı, her asset'e ölü rol taşımanın anlamı yok (K-03).
+  (3) `Unit.measureYawRate` — `measureLocalPlanarVelocity`'nin ikizi, sunum-yerel
+  bellek; yerinde dönüşü ölçülmüş rotasyondan okur, emirden değil.
+  (4) `minAttackRange` denge alanı: **atış** düşer, **hedef** düşmez (aksi hâlde
+  top hedefini bırakıp yeniden edinip titrerdi). `isTradingBlows` artık atış
+  bandını okuyor — ateş edemeyen top ekibini boşuna çöktürmüyor, ki tekmenin
+  ayakta olma şartı ancak böyle erişilebilir. (5) `siegeMeleeSystem.ts` ikinci
+  bir cooldown + hasar yolu; hasar `resolveDamage`'dan geçiyor, zırh çarpanları
+  tek yerde. (6) `siegeWreck.ts` saf zaman çizgisi + `applyStructureDeformation`
+  yeniden kullanımı; raporlanan `deathSeconds` **kod tip-over'ını kapattı** —
+  topun yan yatması bitti. **Karar (S-1, kullanıcı):** zafer tetiği yalnızca
+  merkez değil, **yıkılan her düşman yapısı** — merkez düşünce maç bitiyor ve
+  animasyon zafer ekranının altında kalıyor. **Karar (S-2, kullanıcı):**
+  `minAttackRange 4 / kickRange 1.6 / kickDamage 12 / kickCooldown 2.0` ile
+  başlandı; denge dosyasında, koda dokunmadan ayarlanır. **Ölçüm:** ayak sesi
+  notify'ları tahmin değil, GLB'den FK ile ölçüldü (`siege_pushing` 2.70 s'de
+  ayak başına tek temas: 0.41/1.88; `siege_walk_backward` 0.35/0.99). Testler:
+  `--filter "Siege crew"` 12 check. **Kalan: görsel kabul** (her fazın son
+  maddesi) — özellikle K-06 yön eşlemesi (top sağa dönerken `strafe_left`),
+  kullanıcı gözlemiyle kapanır ve gerekirse tek satırda takas edilir.
 - *2026-07-24* - **Painted Roads Faz 5: çağ→katman görsel terfisi.** Kullanıcı
   Faz 0-4'ü test etti (çalışıyor) ve Faz 5'i onayladı: settlement çağında toprak,
   town çağında cobblestone. `roads.json` `visual.ageLayers` (`settlement→dirt`,

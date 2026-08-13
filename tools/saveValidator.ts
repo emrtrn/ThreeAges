@@ -2616,6 +2616,8 @@ const SKELETON_ANIMATION_SET_ROLES = [
   "workCultivation",
   "workHarvest",
   "workLivestock",
+  "carryIdle",
+  "carryWalk",
   "rest",
   "hold",
   "attack",

@@ -1,11 +1,67 @@
 {
   "schema": 1,
   "sockets": [],
-  "animationSet": {},
-  "animationVariants": {},
+  "animationSet": {
+    "idle": "siege_idle_1",
+    "walk": "siege_pushing",
+    "run": "siege_pushing",
+    "walkBack": "siege_walk_backward",
+    "death": "siege_death_1"
+  },
+  "animationVariants": {
+    "idle": [
+      "siege_idle_2"
+    ],
+    "death": [
+      "siege_death_2"
+    ]
+  },
   "blendSpaces": [],
-  "notifies": [],
-  "montages": [],
+  "notifies": [
+    {
+      "name": "footstep",
+      "clip": "siege_pushing",
+      "time": 0.41
+    },
+    {
+      "name": "footstep",
+      "clip": "siege_pushing",
+      "time": 1.88
+    },
+    {
+      "name": "footstep",
+      "clip": "siege_walk_backward",
+      "time": 0.35
+    },
+    {
+      "name": "footstep",
+      "clip": "siege_walk_backward",
+      "time": 0.99
+    },
+    {
+      "name": "body-impact",
+      "clip": "siege_kick",
+      "time": 0.54
+    }
+  ],
+  "montages": [
+    {
+      "name": "push",
+      "clip": "siege_push_start",
+      "slot": "fullBody",
+      "loop": false,
+      "blendInSeconds": 0.18,
+      "blendOutSeconds": 0.18,
+      "sections": [
+        {
+          "name": "enter",
+          "startSeconds": 0.0,
+          "endSeconds": 1.5,
+          "loop": false
+        }
+      ]
+    }
+  ],
   "rootMotion": [
     {
       "clip": "siege_push_start",

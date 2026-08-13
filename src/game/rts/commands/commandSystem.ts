@@ -40,9 +40,16 @@ interface PendingGroundOrder {
   readonly retreating: boolean;
 }
 
-/** Roles with authored reverse locomotion and a readable player retreat. */
+/**
+ * Roles with authored reverse locomotion and a readable player retreat.
+ *
+ * The artillery joined once its crew was given `siege_walk_backward`: a gun that
+ * has to turn its back to withdraw shows the enemy its flank for the length of
+ * the turn, which is exactly the moment a player pulls it out of. The Worker
+ * stays out — it has no reverse clip and nothing to withdraw *from*.
+ */
 function canPlayerRetreat(unit: Unit): boolean {
-  return (unit.role === "guard" || unit.role === "archer") && !unit.dying;
+  return (unit.role === "guard" || unit.role === "archer" || unit.role === "siege") && !unit.dying;
 }
 
 export class CommandSystem {
@@ -240,7 +247,7 @@ export class CommandSystem {
     return this.retreatArmed;
   }
 
-  /** Issue the armed reverse move; workers and siege keep their orders. */
+  /** Issue the armed reverse move; anything without a reverse gait keeps its orders. */
   private issueRetreatAt(x: number, y: number): void {
     const selected = this.selection.selected().filter(canPlayerRetreat);
     if (selected.length === 0) return;

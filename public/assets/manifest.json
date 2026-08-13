@@ -19588,6 +19588,65 @@
       "license": "Project-local RTS presentation asset"
     },
     {
+      "id": "threeages-rts-siege-crew-actor",
+      "name": "BP RTS Siege Crew.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Units",
+      "path": "assets/ThreeAges/Actors/Units/BP_RTS_SiegeCrew.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "unit",
+        "siege",
+        "crew"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 802
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-enemy-siege-crew-actor",
+      "name": "BP RTS Enemy Siege Crew.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Units",
+      "path": "assets/ThreeAges/Actors/Units/BP_RTS_Enemy_SiegeCrew.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "unit",
+        "siege",
+        "crew",
+        "enemy"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 811
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
       "id": "threeages-rts-archeryrange-firstage-t1-actor",
       "name": "BP RTS ArcheryRange FirstAge T1.Actor",
       "assetType": "prefab",
@@ -29797,29 +29856,6 @@
       "license": "Unknown"
     },
     {
-      "id": "meshy-ai-meshy-merged-animations",
-      "name": "Meshy AI Meshy Merged Animations",
-      "assetType": "skeletalMesh",
-      "category": "SkeletalMeshes",
-      "path": "assets/starter-content/SkeletalMeshes/Meshy_AI_Meshy_Merged_Animations.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "character",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "SkeletalMeshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 1779236
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "threeages-tex-tree-bark-bc",
       "name": "T_TA_Tree_Bark_BC",
       "assetType": "texture",
@@ -33045,6 +33081,29 @@
         "receiveShadow": true,
         "collision": true,
         "bytes": 1944376
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ual2-standard",
+      "name": "UAL2 Standard",
+      "assetType": "skeletalMesh",
+      "category": "SkeletalMeshes",
+      "path": "assets/starter-content/SkeletalMeshes/UAL2_Standard.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "SkeletalMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 8091444
       },
       "license": "Unknown"
     }

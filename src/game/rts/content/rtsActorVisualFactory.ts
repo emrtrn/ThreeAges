@@ -28,6 +28,7 @@ import {
 } from "./rtsContentValidation";
 import {
   buildActorPresentationTree,
+  findActorComponentNode,
   fitPresentationToFootprint,
   presentationExtent,
   tintedCopy,
@@ -326,6 +327,7 @@ export class RtsActorVisualFactory {
     // enemy variant used to pass unnoticed.
     const def = this.definitions.get(actorRef);
     const animation = def ? this.animationSourceFor(root) : null;
+    if (def && !this.bindSkeletalSocketProps(def, root, animation)) return null;
     const crew = this.createUnitCrew(unitId, owner);
     for (const member of crew) root.add(member.root);
     // Crew meshes are pick targets for the parent unit: clicking a man at the
@@ -340,6 +342,7 @@ export class RtsActorVisualFactory {
       animationVariantSeed,
       moveSpeed,
       wheelSpins: def ? bindRtsWheelSpins(def, root) : [],
+      cargoVisuals: def ? bindRtsCargoVisuals(def, root) : [],
       // The siege engine is what these two exist for: a barrel that kicks when
       // the gun goes off, and the point its shell is drawn leaving from.
       gunRecoils: def ? bindRtsGunRecoils(def, root) : [],
@@ -355,6 +358,30 @@ export class RtsActorVisualFactory {
   }
 
   /**
+   * Reparent an authored mesh component under an animated skeletal socket.
+   *
+   * Actor component trees remain asset-agnostic: the component names a sidecar
+   * socket, never a raw bone. A failed binding refuses the presentation rather
+   * than silently drawing its prop at the unit's feet.
+   */
+  private bindSkeletalSocketProps(
+    def: ActorScriptDef,
+    root: Object3D,
+    animation: RtsUnitAnimationSource | null,
+  ): boolean {
+    for (const component of def.components) {
+      const socketName = component.props.rtsSkeletalSocket;
+      if (socketName === undefined) continue;
+      if (typeof socketName !== "string" || socketName.length === 0) return false;
+      const node = findActorComponentNode(root, component.id);
+      const socket = bindRtsSkeletalSocket(animation, socketName);
+      if (!node || !socket) return false;
+      socket.add(node);
+    }
+    return true;
+  }
+
+  /**
    * Build a unit's authored crew as child visuals. The whole group follows the
    * parent root, which makes selection, targeting, death and turning remain the
    * one authoritative siege unit rather than three loosely coupled units.
@@ -362,8 +389,7 @@ export class RtsActorVisualFactory {
   private createUnitCrew(unitId: string, owner: UnitOwner): readonly { root: Object3D; animation: RtsUnitAnimationSource | null }[] {
     const spec = this.catalog.units[unitId]?.crew;
     if (!spec) return [];
-    const crewRef = rtsUnitActorRef(this.catalog, spec.unitId, owner);
-    if (!crewRef) return [];
+    const crewRef = spec.ownerActorRefs?.[owner] ?? spec.actorRef;
     const members: { root: Object3D; animation: RtsUnitAnimationSource | null }[] = [];
     for (const slot of spec.slots) {
       const root = this.createActorVisual(crewRef);

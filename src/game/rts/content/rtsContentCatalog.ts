@@ -44,9 +44,16 @@ export interface RtsUnitContentEntry {
    * Presentation-only crew that rides with this unit. Crew members are meshes
    * parented to the unit's Actor: they do not become independently selectable,
    * targetable, or population-counted simulation units.
+   *
+   * The crew names Actors directly rather than a balance id. An earlier shape
+   * pointed at another unit entry, which forced every crew to also be a
+   * producible, AI-visible unit just to own a mesh — and the only thing that
+   * indirection ever resolved to was this pair of refs.
    */
   readonly crew?: {
-    readonly unitId: string;
+    readonly actorRef: RtsActorRef;
+    /** Per-owner overrides, same rule as {@link RtsUnitContentEntry.ownerActorRefs}. */
+    readonly ownerActorRefs?: Readonly<Partial<Record<UnitOwner, RtsActorRef>>>;
     readonly slots: readonly RtsCrewSlot[];
   };
 }
@@ -525,32 +532,54 @@ function validateUnits(value: unknown, context: RtsContentCatalogValidationConte
     const entryWhere = `${where}."${id}"`;
     const entry = asObject(raw, entryWhere);
     requireExactKeys(entry, ["actorRef", "ownerActorRefs", "crew"], entryWhere);
+    const actorRef = requireActorRef(entry["actorRef"], `${entryWhere}.actorRef`);
+    const ownerActorRefs = entry["ownerActorRefs"] === undefined
+      ? undefined
+      : validateOwnerActorRefs(entry["ownerActorRefs"], `${entryWhere}.ownerActorRefs`);
     entries[id] = {
-      actorRef: requireActorRef(entry["actorRef"], `${entryWhere}.actorRef`),
-      ...(entry["ownerActorRefs"] === undefined
-        ? {}
-        : { ownerActorRefs: validateOwnerActorRefs(entry["ownerActorRefs"], `${entryWhere}.ownerActorRefs`) }),
+      actorRef,
+      ...(ownerActorRefs === undefined ? {} : { ownerActorRefs }),
       ...(entry["crew"] === undefined
         ? {}
-        : { crew: validateCrew(entry["crew"], `${entryWhere}.crew`, context, id) }),
+        : {
+          crew: validateCrew(
+            entry["crew"],
+            `${entryWhere}.crew`,
+            new Set<RtsActorRef>([actorRef, ...Object.values(ownerActorRefs ?? {})]),
+          ),
+        }),
     };
   }
   return entries;
 }
 
+/**
+ * The crew's own Actor pair, plus where it sits.
+ *
+ * `hostRefs` is what the host unit itself renders as. Naming one of those here
+ * would parent the cannon's own model to the cannon at a trail offset — a second
+ * ghost gun that follows the real one — so it is refused by name rather than
+ * left to be noticed on the field.
+ */
 function validateCrew(
   value: unknown,
   where: string,
-  context: RtsContentCatalogValidationContext,
-  hostUnitId: string,
+  hostRefs: ReadonlySet<RtsActorRef>,
 ): NonNullable<RtsUnitContentEntry["crew"]> {
   const raw = asObject(value, where);
-  requireExactKeys(raw, ["unitId", "slots"], where);
-  const unitId = raw["unitId"];
-  if (typeof unitId !== "string" || !context.unitBalance[unitId]) {
-    throw new RtsContentCatalogError(`${where}.unitId: must name a known unit balance id`);
+  requireExactKeys(raw, ["actorRef", "ownerActorRefs", "slots"], where);
+  const actorRef = requireActorRef(raw["actorRef"], `${where}.actorRef`);
+  const ownerActorRefs = raw["ownerActorRefs"] === undefined
+    ? undefined
+    : validateOwnerActorRefs(raw["ownerActorRefs"], `${where}.ownerActorRefs`);
+  for (const [field, ref] of [
+    ["actorRef", actorRef] as const,
+    ...Object.entries(ownerActorRefs ?? {}).map(([owner, ref]) => [`ownerActorRefs."${owner}"`, ref] as const),
+  ]) {
+    if (hostRefs.has(ref)) {
+      throw new RtsContentCatalogError(`${where}.${field}: a crew cannot render its own host Actor`);
+    }
   }
-  if (unitId === hostUnitId) throw new RtsContentCatalogError(`${where}.unitId: a unit cannot crew itself`);
   if (!Array.isArray(raw["slots"]) || raw["slots"].length === 0) {
     throw new RtsContentCatalogError(`${where}.slots: must contain at least one local slot`);
   }
@@ -567,7 +596,7 @@ function validateCrew(
     };
     return { position: vector("position"), ...(entry["rotation"] === undefined ? {} : { rotation: vector("rotation") }) };
   });
-  return { unitId, slots };
+  return { actorRef, ...(ownerActorRefs === undefined ? {} : { ownerActorRefs }), slots };
 }
 
 /**

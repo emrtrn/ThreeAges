@@ -14,7 +14,7 @@
  * (`@engine/perf/distanceUpdateRate`) that the subsystem uses — the cadence
  * policy is shared even though the tick owner is not.
  */
-import { Group, Mesh, PropertyBinding, type AnimationClip, type Object3D } from "three";
+import { Group, Mesh, PropertyBinding, Quaternion, Vector3, type AnimationClip, type Material, type Object3D } from "three";
 import type { ActorScriptDef } from "@engine/scene/actorScript";
 
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
@@ -49,9 +49,38 @@ import {
   type RtsAnimationSet,
   type RtsAnimationVariants,
   type RtsLocomotionTuning,
+  type RtsMontageSection,
   type RtsWorkMontage,
   type RtsWorkMontageState,
 } from "../units/rtsUnitAnimation";
+import {
+  advanceSiegeCrew,
+  siegeCrewSelection,
+  siegeCrewSlotPhaseSeconds,
+  SIEGE_CREW_CLIPS,
+  SIEGE_CREW_NONE,
+  SIEGE_CREW_PUSH_ENTER_SECTION,
+  SIEGE_CREW_PUSH_INSTANT,
+  SIEGE_CREW_PUSH_MONTAGE_NAME,
+  type SiegeCrewClipRole,
+  type SiegeCrewDurations,
+  type SiegeCrewInput,
+  type SiegeCrewPushSections,
+  type SiegeCrewSelection,
+  type SiegeCrewState,
+} from "../units/siegeCrewAnimation";
+import {
+  advanceSiegeWreck,
+  siegeWreckDeathSeconds,
+  siegeWreckFrame,
+  SIEGE_WRECK_NONE,
+  type SiegeWreckState,
+} from "../units/siegeWreck";
+import {
+  applyStructureDeformation,
+  type StructureDeformation,
+  type StructureDeformationTuning,
+} from "../structures/structureDeformation";
 import type { RtsPresentationHandle, RtsPresentationUpdate } from "../units/unit";
 import { advanceRtsWheelSpins, type RtsWheelSpinBinding } from "./rtsPresentationMotion";
 import { advanceRtsGunRecoils, type RtsGunRecoilBinding } from "./rtsGunMotion";
@@ -182,32 +211,235 @@ export interface RtsAttachedCrewPresentation {
   readonly animation: RtsUnitAnimationSource | null;
 }
 
+/**
+ * Drives one crew member from the gun's own per-frame snapshot.
+ *
+ * All of the judgement is in `../units/siegeCrewAnimation`, exactly as the unit
+ * animator's is in `rtsUnitAnimation`; what is left here is the Three.js half.
+ * The crew still has no simulation state of its own — every field it reads is
+ * one the cannon already reports to its own presentation.
+ */
 class RtsAttachedCrewAnimator {
   private animator: CrossfadeAnimator | null = null;
   private target: Object3D | null = null;
   private animationSet: RtsAnimationSet = {};
+  private animationVariants: RtsAnimationVariants = {};
   private readonly tuning: RtsLocomotionTuning;
+  /** Per-member seed, so two men on the same gun never pick the same idle. */
+  private readonly variantSeed: number;
+  private state: SiegeCrewState = SIEGE_CREW_NONE;
+  private durations: SiegeCrewDurations = {};
+  private push: SiegeCrewPushSections = SIEGE_CREW_PUSH_INSTANT;
+  private pushMontage: { readonly clip: string; readonly section: RtsMontageSection } | null = null;
+  /** What the mixer was last told to play, so a held pose is not restarted per frame. */
+  private startedIdentity: string | null = null;
+  /** Authored length of this crew's fall, reported up so the gun can outlive it. */
+  private deathClipSeconds: number | null = null;
+  private frozen = false;
+  private readonly notifiesByClip: ReadonlyMap<string, readonly NotifyMarker[]>;
+  private readonly notifies = new AnimationNotifyTracker();
+  private readonly onNotify: ((name: string) => void) | null;
+  /** Fixed lag applied to this member's view of the gun (K-05); 0 for slot 0. */
+  private readonly phaseSeconds: number;
+  /** Delay line backing that lag. Empty and unentered whenever the lag is zero. */
+  private readonly inputLine: { readonly at: number; readonly input: SiegeCrewInput }[] = [];
+  private elapsed = 0;
 
-  constructor(crew: RtsAttachedCrewPresentation, moveSpeed: number) {
+  constructor(
+    crew: RtsAttachedCrewPresentation,
+    moveSpeed: number,
+    slotIndex: number,
+    variantSeed: number,
+    onNotify?: ((name: string) => void) | undefined,
+  ) {
     this.tuning = rtsLocomotionTuning(moveSpeed);
+    this.variantSeed = variantSeed;
+    this.phaseSeconds = siegeCrewSlotPhaseSeconds(slotIndex);
+    this.onNotify = onNotify ?? null;
     const source = crew.animation;
-    if (!source || source.clips.length === 0) return;
+    if (!source || source.clips.length === 0) {
+      this.notifiesByClip = new Map();
+      return;
+    }
     this.target = source.target;
     this.animator = new CrossfadeAnimator(source.target, source.clips, { rootMotion: source.skeleton.rootMotion });
     this.animationSet = source.skeleton.animationSet;
-    const idle = this.animationSet.idle;
+    this.animationVariants = source.skeleton.animationVariants;
+    this.notifiesByClip = this.onNotify ? groupNotifiesByClip(source.skeleton.notifies) : new Map();
+    // Phase lengths come off the clips themselves — the sidecar names which clip
+    // fills each role, and only the model knows how long it runs. A role whose
+    // clip the model does not carry stays null and its phase is stepped through
+    // in zero time, which is what keeps a half-authored crew animating.
+    const durations: Record<string, number | null> = {};
+    for (const [role, clip] of Object.entries(SIEGE_CREW_CLIPS)) {
+      const seconds = this.animator.clips.has(clip) ? this.animator.clipDuration(clip) : null;
+      durations[role] = seconds !== null && seconds > 0 ? seconds : null;
+    }
+    const deathClip = resolveRtsAnimationVariant(
+      "death",
+      this.animationSet,
+      this.animationVariants,
+      this.animator.clips,
+      this.variantSeed,
+    );
+    this.deathClipSeconds = deathClip ? this.animator.clipDuration(deathClip) : null;
+    durations["death"] = this.deathClipSeconds;
+    this.durations = durations;
+    this.pushMontage = this.resolvePushMontage(source);
+    const idle = resolveRtsAnimationVariant(
+      "idle",
+      this.animationSet,
+      this.animationVariants,
+      this.animator.clips,
+      this.variantSeed,
+    );
     if (idle) this.animator.play(idle, 0);
   }
 
+  /**
+   * The window of the push wind-up, or null when the asset authors none.
+   *
+   * Read through the sidecar's generic montage list rather than a bespoke field
+   * for the same reason the work montage is: only the asset knows where in
+   * `siege_push_start` the crew has finished leaning into the trail, and a code
+   * constant for it would have to be re-found by hand every time the clip is
+   * re-exported (K-10). The wind-down needs no window — it is the whole of its
+   * own clip — so its length comes off the clip like every other phase's.
+   */
+  private resolvePushMontage(
+    source: RtsUnitAnimationSource,
+  ): { readonly clip: string; readonly section: RtsMontageSection } | null {
+    const exitSeconds = Math.max(0, this.durations.pushExit ?? 0);
+    const montage = source.skeleton.montages.find((entry) => entry.name === SIEGE_CREW_PUSH_MONTAGE_NAME);
+    const section = montage?.sections.find((entry) => entry.name === SIEGE_CREW_PUSH_ENTER_SECTION);
+    if (!montage || !section || !this.animator?.clips.has(montage.clip)) {
+      this.push = { enterSeconds: 0, exitSeconds };
+      return null;
+    }
+    const window = { startSeconds: section.startSeconds, endSeconds: section.endSeconds };
+    this.push = { enterSeconds: Math.max(0, window.endSeconds - window.startSeconds), exitSeconds };
+    return { clip: montage.clip, section: window };
+  }
+
+  /** How long this member's authored fall runs, or null when it ships none. */
+  get deathSeconds(): number | null {
+    return this.deathClipSeconds;
+  }
+
   update(state: RtsPresentationUpdate): void {
-    if (!this.animator || state.deltaSeconds <= 0) return;
-    // Crew has no separate combat or death state: it is part of the gun. It
-    // follows the gun's measured movement until purpose-built push animations
-    // are authored, at which point this small visual driver is the only seam.
+    const animator = this.animator;
+    if (!animator || state.deltaSeconds <= 0) return;
+    // A crew that has finished falling holds one pose for the rest of the corpse
+    // window, exactly as the unit animator's does, and every frame it is stepped
+    // after that evaluates a skinned clip's tracks for nothing.
+    if (this.frozen) return;
+    const input = this.inputFor(state, state.deltaSeconds);
+    if (!input) {
+      // Still inside this member's start-up lag: hold the pose rather than
+      // showing a first frame the man has not caught up to yet.
+      animator.update(state.deltaSeconds);
+      return;
+    }
+    this.state = advanceSiegeCrew(this.state, input, this.tuning, this.durations, this.push, state.deltaSeconds);
+    this.apply(siegeCrewSelection(this.state), state.planarSpeed);
+    animator.update(state.deltaSeconds);
+    if (this.notifiesByClip.size > 0 && this.onNotify) {
+      for (const notify of this.notifies.sample(animator.getActiveClip(), this.notifiesByClip)) {
+        this.onNotify(notify.name);
+      }
+    }
+    if (this.state.oneShot === "death" && this.state.oneShotRemainingSeconds <= 0) this.frozen = true;
+  }
+
+  /**
+   * This member's lagged view of the gun (K-05).
+   *
+   * Slot 0 passes straight through and allocates nothing. A later slot buffers
+   * the gun's snapshots and reads the newest one that is at least its own offset
+   * old, so the two men reach every phase a tenth of a second apart instead of
+   * hitting each pose on the same frame like one man drawn twice. The lag is
+   * derived from the slot index, never drawn at random, so a replayed match
+   * stages the crew identically.
+   */
+  private inputFor(state: RtsPresentationUpdate, deltaSeconds: number): SiegeCrewInput | null {
+    const input: SiegeCrewInput = {
+      planarSpeed: state.planarSpeed,
+      yawRateDegPerSecond: state.yawRateDegPerSecond ?? 0,
+      turnRateDegPerSecond: state.turnRateDegPerSecond ?? 0,
+      backward: state.backward === true,
+      attacking: state.attacking,
+      dying: state.dying,
+      impactCount: state.impactCount,
+      kickCount: state.meleeCount ?? 0,
+      triumphCount: state.triumphCount ?? 0,
+    };
+    if (this.phaseSeconds <= 0) return input;
+    this.elapsed += deltaSeconds;
+    this.inputLine.push({ at: this.elapsed, input });
+    const due = this.elapsed - this.phaseSeconds;
+    let chosen: SiegeCrewInput | null = null;
+    while (this.inputLine.length > 0 && this.inputLine[0]!.at <= due) {
+      chosen = this.inputLine.shift()!.input;
+    }
+    return chosen;
+  }
+
+  /** Starts whatever the pure machine asked for, restarting only on a real change. */
+  private apply(selection: SiegeCrewSelection, planarSpeed: number): void {
+    const animator = this.animator;
+    if (!animator) return;
+    switch (selection.kind) {
+      case "clip": {
+        const clip = SIEGE_CREW_CLIPS[selection.clipRole];
+        if (!animator.clips.has(clip)) return;
+        this.start(clip, clip, siegeCrewFadeSeconds(selection.clipRole), selection.loop);
+        return;
+      }
+      case "death": {
+        const clip = resolveRtsAnimationVariant(
+          "death",
+          this.animationSet,
+          this.animationVariants,
+          animator.clips,
+          this.variantSeed,
+        );
+        if (clip) this.start(clip, clip, ACTION_FADE_SECONDS, false);
+        return;
+      }
+      case "pushEnter": {
+        const montage = this.pushMontage;
+        if (!montage) {
+          // The asset authors no wind-up: lean straight into the push loop, which
+          // is what this crew did before the montage was authored for it.
+          this.playLocomotion("walk", planarSpeed);
+          return;
+        }
+        const { clip, section } = montage;
+        const identity = `${clip}@${section.startSeconds}:${section.endSeconds}`;
+        if (identity !== this.startedIdentity) {
+          animator.playRange(clip, { ...section, loop: false }, LOCOMOTION_FADE_SECONDS);
+          animator.setPlaybackRate(1);
+          this.startedIdentity = identity;
+          this.notifies.arm(clip, section.startSeconds);
+        }
+        return;
+      }
+      default:
+        this.playLocomotion(selection.locomotionRole, planarSpeed);
+    }
+  }
+
+  /** The shared selector's half of the job: an ordinary sidecar role, variants and all. */
+  private playLocomotion(role: "idle" | "walk" | "walkBack", planarSpeed: number): void {
+    const animator = this.animator;
+    if (!animator) return;
     const selection = selectRtsAnimation(
       {
-        planarSpeed: state.planarSpeed,
-        ...(state.forceWalk === undefined ? {} : { forceWalk: state.forceWalk }),
+        planarSpeed: role === "idle" ? 0 : planarSpeed,
+        backward: role === "walkBack",
+        // Never runs: the crew walks a gun forward, it does not sprint with it,
+        // and the push loop is the only forward gait the asset ships.
+        forceWalk: true,
         attacking: false,
         dying: false,
         working: false,
@@ -215,14 +447,22 @@ class RtsAttachedCrewAnimator {
         impactCount: 0,
       },
       this.animationSet,
-      this.animator.clips,
+      animator.clips,
       this.tuning,
+      this.animationVariants,
+      this.variantSeed,
     );
-    if (selection) {
-      this.animator.play(selection.clip, LOCOMOTION_FADE_SECONDS);
-      this.animator.setPlaybackRate(selection.playbackRate);
-    }
-    this.animator.update(state.deltaSeconds);
+    if (!selection) return;
+    this.start(selection.clip, selection.clip, LOCOMOTION_FADE_SECONDS, true);
+    animator.setPlaybackRate(selection.playbackRate);
+  }
+
+  private start(clip: string, identity: string, fadeSeconds: number, loop: boolean): void {
+    if (identity === this.startedIdentity) return;
+    this.startedIdentity = identity;
+    if (loop) this.animator?.play(clip, fadeSeconds);
+    else this.animator?.playOnce(clip, fadeSeconds);
+    this.notifies.arm(clip);
   }
 
   dispose(): void {
@@ -248,6 +488,52 @@ const ACTION_FADE_SECONDS = 0.06;
  * everything else moves at.
  */
 const REST_FADE_SECONDS = 0.45;
+
+/**
+ * How the artillery's carriage gives way (K-09).
+ *
+ * Its own numbers rather than a building's: a gun carriage is a small timber
+ * frame that folds where a stone hall settles. `squash` dominates because what
+ * the player has to read is "it came down", and the sideways terms stay modest
+ * so the heap stays where the gun was rather than spreading into a puddle.
+ */
+const SIEGE_WRECK_DEFORMATION: StructureDeformationTuning = {
+  squash: 0.55,
+  splay: 0.18,
+  buckle: 0.12,
+};
+
+/**
+ * Crossfade lengths for the artillery crew, in one place (Faz 6).
+ *
+ * Three, and each is the shared constant it belongs with plus one exception.
+ * Gaits blend at the ordinary {@link LOCOMOTION_FADE_SECONDS}; a shove, a shake,
+ * a cheer and a fall cut in at {@link ACTION_FADE_SECONDS} because all four are
+ * meant to read as sudden. The stance is the exception, and for the same reason
+ * {@link REST_FADE_SECONDS} exists: crouching against a carriage and letting go
+ * of it are changes of posture, not changes of gait, and at 0.18 s two men snap
+ * into the brace like dropped puppets. Shorter than the kneel's 0.45 s, though —
+ * a gun crew getting into position is businesslike, not weary.
+ */
+const SIEGE_CREW_BRACE_FADE_SECONDS = 0.3;
+
+/** Which fade a crew clip blends in over, by the role asking for it. */
+function siegeCrewFadeSeconds(clipRole: SiegeCrewClipRole): number {
+  switch (clipRole) {
+    case "crouchIn":
+    case "braceIn":
+    case "braced":
+    case "braceOut":
+    case "crouchOut":
+      return SIEGE_CREW_BRACE_FADE_SECONDS;
+    case "kick":
+    case "triumph":
+    case "braceImpact":
+      return ACTION_FADE_SECONDS;
+    default:
+      return LOCOMOTION_FADE_SECONDS;
+  }
+}
 
 /**
  * When a unit's animation may run on a reduced cadence, and how reduced.
@@ -304,7 +590,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   /** Which one-shot the mixer was last told to start, so it retriggers only on change. */
   private startedAction: RtsActionState = RTS_ACTION_NONE;
   /** See {@link RtsPresentationHandle.deathSeconds}: undefined when unauthored. */
-  readonly deathSeconds: number | undefined = undefined;
+  deathSeconds: number | undefined = undefined;
   /** Authored kneel/hold/stand sections of the job animation, or null when unauthored. */
   private workMontage: RtsWorkMontage | null = null;
   /** Which part of that montage is playing, owned by the pure state machine. */
@@ -357,6 +643,32 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private startedContinuous: string | null = null;
   /** Crew mixers are visual children of this one unit, never independent units. */
   private readonly crew: readonly RtsAttachedCrewAnimator[];
+  /**
+   * Whether this presentation dies as a wreck rather than as a body (Faz 4).
+   *
+   * Read off the art, which is the only honest source for it: an Actor with an
+   * authored barrel recoil *and* authored wheels is a wheeled gun, and those are
+   * the very nodes the wreck takes apart. A unit's role would be the wrong test —
+   * it is a gameplay fact, and a fork that gave the role a different model would
+   * get a barrel drop with no barrel.
+   */
+  private readonly wreckable: boolean;
+  /** The wreck's own clock, started on the first frame the gun is reported dying. */
+  private wreck: SiegeWreckState | null = null;
+  /** Rest transforms of the parts the wreck moves, captured before it moves them. */
+  private wreckRest: {
+    readonly barrel: { readonly node: Object3D; readonly position: Vector3; readonly quaternion: Quaternion } | null;
+    readonly wheels: readonly {
+      readonly node: Object3D;
+      readonly motion: RtsWheelSpinBinding["motion"];
+      readonly position: Vector3;
+      readonly quaternion: Quaternion;
+    }[];
+  } | null = null;
+  /** Vertex patches collapsing the carriage; empty when nothing could be deformed. */
+  private wreckDeformations: StructureDeformation[] = [];
+  /** Materials cloned so this wreck's collapse cannot bend every other gun. */
+  private wreckMaterials: Material[] = [];
 
   constructor(options: RtsUnitPresentationOptions) {
     this.root = options.root;
@@ -370,7 +682,29 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     this.gunRecoils = options.gunRecoils ?? [];
     this.muzzle = options.muzzle ?? null;
     this.onNotify = options.onNotify ?? null;
-    this.crew = (options.crew ?? []).map((member) => new RtsAttachedCrewAnimator(member, options.moveSpeed ?? 1));
+    // The seed mixes the unit's own with the slot index, so the two men on one
+    // gun make different choices from each other while the same gun in a replay
+    // still stages them identically (`resolveRtsAnimationVariant`'s contract).
+    this.crew = (options.crew ?? []).map((member, index) => new RtsAttachedCrewAnimator(
+      member,
+      options.moveSpeed ?? 1,
+      index,
+      (options.animationVariantSeed ?? 0) + index * 0x9e37,
+      options.onNotify,
+    ));
+    this.wreckable = this.gunRecoils.length > 0 && this.wheelSpins.length > 0;
+    if (this.wreckable) {
+      // The one line that takes the code tip-over off the artillery (§2.5): a
+      // presentation that reports a death length replaces `UNIT_DEATH_SECONDS`
+      // and the roll onto its side that came with it. The crew's fall is folded
+      // in so both finish on screen.
+      let crewDeath: number | null = null;
+      for (const member of this.crew) {
+        const seconds = member.deathSeconds;
+        if (seconds !== null && (crewDeath === null || seconds > crewDeath)) crewDeath = seconds;
+      }
+      this.deathSeconds = siegeWreckDeathSeconds(crewDeath);
+    }
 
     const animation = options.animation;
     if (!animation || animation.clips.length === 0) return;
@@ -468,8 +802,18 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // barrel would never kick if this waited for the animator. Driven by the shot
     // counter, not by measured speed — the one presentation motion here that a
     // standing unit is *supposed* to have.
-    advanceRtsGunRecoils(this.gunRecoils, state.attackCount, state.deltaSeconds);
+    // Suppressed once the gun is wrecked: the barrel belongs to the wreck's
+    // timeline from that frame on, and a recoil still writing its rest pose
+    // would snap it back upright every frame it fell.
+    if (!(state.dying && this.wreckable)) {
+      advanceRtsGunRecoils(this.gunRecoils, state.attackCount, state.deltaSeconds);
+    }
     for (const crew of this.crew) crew.update(state);
+    // Before the animator's early return, for the same reason the wheels are: a
+    // gun is static meshes on pivots with no mixer at all, so a wreck gated on
+    // one would never play. Full delta — the timeline is what the player is
+    // watching, and it must not be throttled with a distant unit's mixer.
+    if (state.dying && this.wreckable) this.advanceWreck(state.deltaSeconds);
 
     const animator = this.animator;
     if (!animator) return;
@@ -690,6 +1034,102 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     return restful ? REST_FADE_SECONDS : LOCOMOTION_FADE_SECONDS;
   }
 
+  /**
+   * Advance the gun's wreck by one frame and write it onto the authored pivots.
+   *
+   * All the judgement is in `../units/siegeWreck`; this is the Three.js half —
+   * capture the rest pose once, set each part from rest plus this instant's
+   * offset, and hand the effect names it asked for to the notify sink. Setting
+   * from rest rather than accumulating is what keeps the wreck idempotent: a
+   * frame replayed at a different delta lands the parts in the same place.
+   */
+  private advanceWreck(deltaSeconds: number): void {
+    if (!this.wreckRest) this.captureWreckRest();
+    const rest = this.wreckRest;
+    if (!rest) return;
+    const advanced = advanceSiegeWreck(this.wreck ?? SIEGE_WRECK_NONE, deltaSeconds);
+    this.wreck = advanced.state;
+    if (this.onNotify) for (const name of advanced.effects) this.onNotify(name);
+
+    const frame = siegeWreckFrame(this.wreck, rest.wheels.length);
+    for (const deformation of this.wreckDeformations) deformation.setProgress(frame.collapseProgress);
+
+    if (rest.barrel) {
+      const { node, position, quaternion } = rest.barrel;
+      node.position.set(position.x, position.y - frame.barrelDrop, position.z);
+      node.quaternion.copy(quaternion);
+      node.rotateX(frame.barrelPitch);
+    }
+    rest.wheels.forEach((wheel, index) => {
+      const authored = frame.wheels[index];
+      if (!authored) return;
+      const { node, motion, position, quaternion } = wheel;
+      node.position.set(
+        position.x + Math.sin(authored.headingRadians) * authored.travel,
+        position.y,
+        position.z + Math.cos(authored.headingRadians) * authored.travel,
+      );
+      node.quaternion.copy(quaternion);
+      // The same distance-over-radius the rolling wheel uses, so a wheel that
+      // breaks off keeps turning at the rate it was turning at.
+      const roll = (authored.rollRadians / motion.radius) * motion.direction;
+      if (motion.axis === "x") {
+        node.rotateX(roll);
+        node.rotateZ(authored.tiltRadians);
+      } else if (motion.axis === "y") {
+        node.rotateY(roll);
+        node.rotateX(authored.tiltRadians);
+      } else {
+        node.rotateZ(roll);
+        node.rotateX(authored.tiltRadians);
+      }
+    });
+  }
+
+  /**
+   * Freeze the wreck's starting pose and privatise the carriage's materials.
+   *
+   * Run once, on the first frame the gun is reported dying, because that is the
+   * first moment the cost is worth paying — every gun in the match would
+   * otherwise carry cloned materials it never deforms. The clones are the
+   * precondition {@link applyStructureDeformation} states and cannot check: the
+   * shipped models share their GLTF materials through the template cache, so
+   * patching them in place would collapse every other gun on the field.
+   */
+  private captureWreckRest(): void {
+    const excluded = new Set<Object3D>();
+    for (const { node } of this.gunRecoils) node.traverse((child) => excluded.add(child));
+    for (const { node } of this.wheelSpins) node.traverse((child) => excluded.add(child));
+    // What is left is the carriage: the part that stays where the gun died and
+    // settles into a heap, rather than dropping off it or rolling away from it.
+    const carriage: Mesh[] = [];
+    this.root.traverse((child) => {
+      if (child instanceof Mesh && !excluded.has(child)) carriage.push(child);
+    });
+    for (const mesh of carriage) {
+      const clone = (material: Material): Material => {
+        const copy = material.clone();
+        this.wreckMaterials.push(copy);
+        return copy;
+      };
+      mesh.material = Array.isArray(mesh.material) ? mesh.material.map(clone) : clone(mesh.material);
+      const deformation = applyStructureDeformation(mesh, SIEGE_WRECK_DEFORMATION, this.animationVariantSeed);
+      if (deformation) this.wreckDeformations.push(deformation);
+    }
+    const barrel = this.gunRecoils[0]?.node ?? null;
+    this.wreckRest = {
+      barrel: barrel
+        ? { node: barrel, position: barrel.position.clone(), quaternion: barrel.quaternion.clone() }
+        : null,
+      wheels: this.wheelSpins.map(({ node, motion }) => ({
+        node,
+        motion,
+        position: node.position.clone(),
+        quaternion: node.quaternion.clone(),
+      })),
+    };
+  }
+
   /** Authored length of the clip a semantic role names, or null when unauthored. */
   private durationOfRole(role: "attack" | "attackRecovery" | "hit" | "death", sequence = 0): number | null {
     const clip = resolveRtsAnimationVariant(
@@ -716,6 +1156,15 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       this.layered = null;
       this.animationTarget = null;
     }
+    // The wreck's own allocations, and only its own: the depth materials the
+    // patch created, and the material clones made so this collapse could not
+    // reach any other gun. The shared originals underneath are untouched, which
+    // is why the removal below is still safe.
+    for (const deformation of this.wreckDeformations) deformation.dispose();
+    this.wreckDeformations = [];
+    for (const material of this.wreckMaterials) material.dispose();
+    this.wreckMaterials = [];
+    this.wreckRest = null;
     // Detaching before the owning unit disposes its subtree is what keeps the
     // shared template's geometry and materials alive for every other instance.
     this.root.removeFromParent();

@@ -21,6 +21,7 @@ export type RtsAnimationRole =
   | "idle" | "walk" | "run" | "walkBack" | "runBack"
   | "aimWalkForward" | "aimWalkBack" | "aimWalkLeft" | "aimWalkRight"
   | "work" | "workCultivation" | "workHarvest" | "workLivestock"
+  | "carryIdle" | "carryWalk"
   | "rest" | "hold" | "attack" | "hit" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
@@ -48,6 +49,8 @@ export interface RtsAnimationInput {
   readonly working: boolean;
   /** Presentation-only Worker assignment category, authored by the owning job system. */
   readonly workerActivity?: import("./unit").WorkerActivity | null;
+  /** True only while the job system reports that this body has a visible load. */
+  readonly carrying?: boolean | undefined;
   /**
    * True while the unit is standing still being restored in place — today, a
    * wounded soldier inside a Temple's support field (Guard plan Faz 4).
@@ -248,6 +251,10 @@ export function classifyRtsAnimation(
     return localZ < 0 ? "aimWalkBack" : "aimWalkForward";
   }
   if (input.attacking) return "attack";
+  // A load owns the locomotion silhouette, but not the route or its speed: this
+  // is a presentation read of cargo already held by the job system. Carrying
+  // workers deliberately stay on their authored walk even at run speed.
+  if (input.carrying) return input.planarSpeed > tuning.walkSpeed ? "carryWalk" : "carryIdle";
   if (input.backward && !input.forceWalk && input.planarSpeed >= tuning.runSpeed) return "runBack";
   if (input.backward && input.planarSpeed > tuning.walkSpeed) return "walkBack";
   if (!input.forceWalk && input.planarSpeed >= tuning.runSpeed) return "run";
@@ -298,6 +305,11 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   workCultivation: ["workCultivation", "work", "idle"],
   workHarvest: ["workHarvest", "work", "idle"],
   workLivestock: ["workLivestock", "work", "idle"],
+  // Prop-dependent roles fall back before the prop can ever disappear: an
+  // incomplete sidecar keeps ordinary locomotion while the Actor's cargo mesh
+  // remains governed by the same carrying snapshot.
+  carryIdle: ["carryIdle", "idle"],
+  carryWalk: ["carryWalk", "walk", "run", "idle"],
   // Continuous and looped like work, and it reaches its own clip for the same
   // reason: the unit holds this pose for as long as the mending takes. An asset
   // that authors none simply waits standing up, which is exactly what every unit
@@ -358,6 +370,7 @@ export function rtsPlaybackRate(
   const reference = role === "run" || role === "runBack"
     ? tuning.runClipSpeed
     : role === "walk" || role === "walkBack"
+        || role === "carryWalk"
         || role === "aimWalkForward" || role === "aimWalkBack"
         || role === "aimWalkLeft" || role === "aimWalkRight"
       ? tuning.walkClipSpeed
