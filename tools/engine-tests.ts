@@ -38956,9 +38956,9 @@ check("Skeletal animasyon Faz D: hizlandirilmis simulasyonda dusus yarida kesilm
   units.clear();
 });
 
-check("Muhafiz techizat dokuntusu: her parca katalogda ve manifestte gercek bir staticMesh'e baglanir", () => {
-  // The Guard's helmet, shield and sword are welded into one merged mesh so a
-  // live soldier costs one draw call. The debris models are what pays that back,
+check("Birim techizat dokuntusu: her parca katalogda ve manifestte gercek bir staticMesh'e baglanir", () => {
+  // A soldier's equipped kit is welded into its live mesh so a
+  // live unit costs one draw call. The debris models are what pays that back,
   // and they reach the runtime through the catalog's prop table — which means a
   // rename on either side breaks the drop *silently*: no type error, no failed
   // load, just gear that never appears. This is that seam.
@@ -38993,7 +38993,7 @@ check("Muhafiz techizat dokuntusu: her parca katalogda ve manifestte gercek bir 
   }
 });
 
-check("Muhafiz techizat dokuntusu: kit ceset kaldirilirken dusulur, dusus biterken degil", () => {
+check("Birim techizat dokuntusu: kit ceset kaldirilirken dusulur, dusus biterken degil", () => {
   // The timing this pins is the whole reason the drop hangs off removal rather
   // than off a notify on the death clip. A body lies on the field for the corpse
   // window *wearing its kit* — it is one merged mesh, it cannot take the helmet
@@ -39034,7 +39034,7 @@ check("Muhafiz techizat dokuntusu: kit ceset kaldirilirken dusulur, dusus biterk
   units.clear();
 });
 
-check("Muhafiz techizat dokuntusu: parcalar araziye oturur, sis altinda cizilmez, havuz en eskiyi geri doner", () => {
+check("Birim techizat dokuntusu: parcalar araziye oturur, sis altinda cizilmez, havuz en eskiyi geri doner", () => {
   // Fixture geometry rather than the shipped GLBs: this is the pool and the
   // tumble under test, and the models are 8 MB apiece. The box's extents are
   // what the resting-height assertion is derived from, so the check stays true

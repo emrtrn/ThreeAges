@@ -1,5 +1,5 @@
 /**
- * The gear a fallen Guard leaves on the field — helmet, shield and sword.
+ * The gear a fallen soldier leaves on the field.
  *
  * The Guard's body is a single merged `SkinnedMesh`: helmet, shield and sword
  * are welded into it so a live soldier costs one draw call instead of four. That
@@ -42,9 +42,9 @@ import {
 } from "three";
 
 /** The pieces a body can shed. */
-export type RtsGearKind = "helmet" | "shield" | "sword";
+export type RtsGearKind = "helmet" | "shield" | "sword" | "bow" | "arrowBag";
 
-export const RTS_GEAR_KINDS: readonly RtsGearKind[] = ["helmet", "shield", "sword"];
+export const RTS_GEAR_KINDS: readonly RtsGearKind[] = ["helmet", "shield", "sword", "bow", "arrowBag"];
 
 /**
  * Catalog prop slot each kind's model is registered under
@@ -62,17 +62,19 @@ export const RTS_GEAR_PROP_SLOTS: Readonly<Record<RtsGearKind, string>> = {
   helmet: "guardHelmet",
   shield: "guardShield",
   sword: "guardSword",
+  bow: "archerBow",
+  arrowBag: "archerArrowBag",
 };
 
 /**
  * Which unit type sheds which gear, keyed by `Unit.typeId`.
  *
  * A type with no entry drops nothing, which is the correct behaviour for every
- * unit whose art is not the Guard's: an Archer's bow is part of a mesh nobody
- * has cut up, and inventing a dropped sword for it would be art nobody authored.
+ * unit without separate loose-kit props.
  */
 export const RTS_UNIT_GEAR: Readonly<Record<string, readonly RtsGearKind[]>> = {
   guard_placeholder: ["helmet", "shield", "sword"],
+  archer_placeholder: ["bow", "arrowBag"],
 };
 
 /**
@@ -86,6 +88,8 @@ const REST_PITCH: Readonly<Record<RtsGearKind, number>> = {
   helmet: 0,
   shield: -Math.PI / 2,
   sword: -Math.PI / 2,
+  bow: -Math.PI / 2,
+  arrowBag: -Math.PI / 2,
 };
 
 /**
