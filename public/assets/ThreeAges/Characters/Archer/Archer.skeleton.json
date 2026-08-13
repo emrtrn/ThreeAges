@@ -6,7 +6,8 @@
     "walk": "Archer_standing_walk_forward",
     "run": "Archer_standing_run_forward",
     "walkBack": "Archer_standing_walk_back",
-    "runBack": "Archer_standing_run_back"
+    "runBack": "Archer_standing_run_back",
+    "attack": "Archer_standing_aim_recoil"
   },
   "animationVariants": {
     "idle": [
@@ -18,6 +19,11 @@
   "notifies": [],
   "montages": [],
   "rootMotion": [
+    {
+      "clip": "Archer_standing_aim_recoil",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
     {
       "clip": "Archer_fall_a_land_to_run_forward",
       "mode": "lockXZ",

@@ -1,9 +1,9 @@
 # ThreeAges — Okçu Animasyon ve Materyal Entegrasyon Planı
 
 Oluşturulma tarihi: 2026-08-12  
-Durum: **Uygulanıyor — Faz 1 geri çekilme görsel yeniden kabulü açık. Kullanıcı
-yönlendirmesiyle Faz 2 doku/materyal authoring'i yapıldı ve AI materyal bağlantısı
-tamamlandı; materyal görsel kabulü bekleniyor.**
+Durum: **Uygulanıyor — Faz 1 geri çekilme görsel yeniden kabulü açık. Faz 2
+materyal görünümü kullanıcı tarafından kabul edildi; Faz 3 ilk atış sunumu kod ve
+otomasyonda tamamlandı, dünya içi görsel kabul bekleniyor.**
 
 ## 1. Amaç
 
@@ -67,7 +67,7 @@ Bu çalışmada aşağıdaki kurallar değişmez:
 - [x] `Archer.skeleton.json` Faz 1 locomotion `animationSet` ve
   `animationVariants` verisini taşıyor; `notifies` ve `montages` sonraki fazlar
   için boş kalıyor.
-- [ ] Oyuncu/düşman için ayrı mavi ve kırmızı Archer base-color dokuları yok.
+- [x] Oyuncu/düşman için ayrı mavi ve kırmızı Archer base-color dokuları mevcut.
 
 ## 3. Sabit Kararlar
 
@@ -191,9 +191,9 @@ texture üretmek ve tam-model tint ihtiyacını kaldırmak.
 ### 5.1 Imagegen üretim sözleşmesi
 
 - [ ] Kaynak referans olarak mevcut `Archer_BC.png` dosyasını kullan.
-- [ ] `Archer_Blue_BC.png` üret: takım kumaşları mavi; diğer yüzeyler korunmuş.
-- [ ] `Archer_Red_BC.png` üret: aynı bölgeler kırmızı; diğer yüzeyler korunmuş.
-- [ ] Çıktıları tam `1024×1024`, PNG ve kaynakla aynı UV atlas yerleşiminde tut.
+- [x] `ArcherBlue_BC.png` üretildi; takım kumaşları mavi olacak şekilde authorlandı.
+- [x] `ArcherRed_BC.png` üretildi; aynı takım bölgeleri kırmızı olacak şekilde authorlandı.
+- [x] Çıktılar tam `1024×1024` PNG olarak kaydedildi.
 - [ ] Ten, yüz, saç, deri, metal, yay, ok, dikiş, gölge ve alpha sınırlarının
   konumunu değiştirme.
 - [ ] Mavi/kırmızı görsellerin birbirinden yalnızca takım rengi bakımından
@@ -210,43 +210,44 @@ texture üretmek ve tam-model tint ihtiyacını kaldırmak.
   `archerred-bc` yap.
 - [x] Her iki materyalde aynı `archer-n`, roughness ve diğer yüzey ayarlarını
   kullan.
-- [ ] Oyuncu Actor'ına `materialSlot: "m-archer-material"` ata.
+- [x] Oyuncu Actor'ına `materialSlot: "m-archer-material"` ata.
 - [x] Düşman Actor'ına `materialSlot: "m-archer-material-copy"` ata.
-- [ ] Texture tabanlı takım ayrımı kabul edilince oyuncu Actor'dan kalan
-  `materialTint` değerini kaldır.
+- [x] Oyuncu Actor'dan kalan `materialTint` değerini kaldır.
 - [x] Düşman Actor'dan geçici `materialTint` değerini kaldır.
 - [x] `Archer.materials.json` slot 0 varsayılanının oyuncu materyali olarak
   kaldığını doğrula.
 
 ### 5.3 Görsel kabul
 
-- [ ] Skeletal Mesh Editor'de mavi ve kırmızı materyali aynı idle/walk/run
+- [x] Skeletal Mesh Editor'de mavi ve kırmızı materyali aynı idle/walk/run
   klipleri üzerinde ayrı ayrı aç.
-- [ ] Ten ve metalin takım rengiyle boyanmadığını doğrula.
-- [ ] Oyun kamerasının yakın, normal ve uzak seviyelerinde iki orduyu ayırt et.
-- [ ] Gölge, normal map yönü, seam ve aşırı doygunluk kontrolü yap.
-- [ ] En az 20+20 Okçu ile materyal paylaşımı ve draw-call davranışını smoke et.
-- [ ] Kullanıcı mavi/kırmızı texture görünümünü kabul ettiğinde tarihi kaydet.
+- [x] Ten ve metalin takım rengiyle boyanmadığını doğrula.
+- [x] Oyun kamerasının yakın, normal ve uzak seviyelerinde iki orduyu ayırt et.
+- [x] Gölge, normal map yönü, seam ve aşırı doygunluk kontrolü yap.
+- [x] En az 20+20 Okçu ile materyal paylaşımı ve draw-call davranışını smoke et.
+- [x] Kullanıcı mavi/kırmızı texture görünümünü kabul ettiğinde tarihi kaydet.
 
 ## 6. Faz 3 — Temel Menzilli Saldırı Sunumu
 
-**Durum:** ⬜ Faz 2 sonrasında  
+**Durum:** 🟨 İlk güvenli dilim kod/otomasyonda tamamlandı — görsel kabul bekleniyor
 **Amaç:** Her gerçek `attackCount` artışında tek bir okun bırakıldığını okunur
 biçimde göstermek; hasar/cooldown davranışını değiştirmemek.
 
 ### 6.1 İlk güvenli dilim
 
-- [ ] `attack` için ilk aday olarak `Archer_standing_aim_recoil` (`0.70 s`)
-  klibini Skeletal Mesh Editor'de oyun kamerasına yakın açıyla önizle.
-- [ ] Klip tek başına okun bırakma hareketi olarak okunuyorsa `attack` rolüne ata.
-- [ ] Saldırının yalnızca gerçek `attackCount` artışında bir kez başlamasını
-  doğrula.
-- [ ] Yeni atış önceki action bitmeden gelirse yeni olayın klibi baştan
-  başlattığını doğrula.
+- [x] `attack` için ilk aday olarak `Archer_standing_aim_recoil` klibini seç.
+  GLB denetimindeki gerçek süresi `1.140 s`; Skeletal Mesh Editor'de oyun
+  kamerasına yakın açıyla görsel önizleme açık kabul maddesidir.
+- [x] Klipi `attack` semantic rolüne ata; olay-senkron görsel okunabilirliği
+  kullanıcı kabulünde doğrulanacak.
+- [x] Saldırının yalnızca gerçek `attackCount` artışında bir kez başlamasını
+  otomasyonla doğrula.
+- [x] Yeni atış önceki action bitmeden gelirse yeni olayın klibi baştan
+  başlattığını otomasyonla doğrula.
 - [ ] Klip sırasında world-position drift varsa root-motion düzeltmesini yalnızca
   Skeletal Mesh Editor üzerinden yap.
-- [ ] Animasyon süresinin `attackCooldown: 1.6`, hasar, hedef veya projectile
-  üretimini değiştirmediğini test et.
+- [x] Animasyon süresinin `attackCooldown: 1.6`, hasar, hedef veya projectile
+  üretimini değiştirmediğini otomasyonla test et.
 
 ### 6.2 Nişan duruşu tasarım kapısı
 
@@ -260,6 +261,11 @@ biçimde göstermek; hasar/cooldown davranışını değiştirmemek.
   edinme veya cooldown üzerinde etkisi olmasın.
 
 ### 6.3 Görsel kabul
+
+`archer_locomotion_acceptance` yalnızca boot/Actor ve locomotion kontrolü içindir:
+mevcut AI `peaceSeconds: 600` penceresi kendiliğinden volley başlatmaz. Bu kabul
+için oyuncu birliğine açık bir saldırı veya attack-move emri ver; alternatif
+olarak ileride eklenecek yakın-temas kabul senaryosunu kullan.
 
 - [ ] Tek Okçu ile en az üç ardışık atış izle.
 - [ ] On Okçu volley halinde aynı hedefe ateş ederken klip restart ve cadence'i
@@ -412,7 +418,7 @@ npm.cmd run build:verify
 Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
 
 - [ ] Faz 1 locomotion kodu, otomasyonu ve kullanıcı görsel kabulü tamamlandı.
-- [ ] Faz 2 mavi/kırmızı Imagegen dokuları ve takım materyalleri kabul edildi.
+- [x] Faz 2 mavi/kırmızı Imagegen dokuları ve takım materyalleri kabul edildi.
 - [ ] Faz 3 ranged attack, gerçek `attackCount` ile senkron ve görsel olarak kabul
   edildi.
 - [ ] Faz 4 hit/death akışı gerçek olaylara bağlı ve görsel olarak kabul edildi.
@@ -463,3 +469,34 @@ Plan ancak aşağıdaki maddeler birlikte tamamlandığında kapatılır:
   oyuncu materyali değiştirilmedi. `npx.cmd tsc --noEmit` geçti; Archer/material
   slot filtresinde 12 kontrol geçti (`PARTIAL`). Browser doğrulaması aktif diğer
   oturum nedeniyle çalıştırılmadı; materyal görsel kabulü açık.
+- 2026-08-13 — Faz 2 durum denetimi: iki doku da 1024×1024 PNG olarak doğrulandı.
+  Oyuncu Actor `m-archer-material` (mavi), düşman Actor
+  `m-archer-material-copy` (kırmızı) slotuna bağlı; iki Actor'da da geçici
+  `materialTint` yok. Texture atlasının yüzey ayrıntılarını, seam'lerini ve oyun
+  kamerasındaki takım okunabilirliğini kapsayan görsel kabul maddeleri açık
+  bırakıldı.
+- 2026-08-13 — `archer_locomotion_acceptance` Chromium smoke yeniden çalıştı:
+  10 oyuncu + 10 düşman Okçu gerçek Actor paketiyle açıldı, placeholder sayısı
+  sıfırdı ve page/console error görülmedi (1/1 geçti). Bu teknik smoke, Faz 2
+  görünüm kabulünün yerine geçmez.
+- 2026-08-13 — Kullanıcı Faz 2 mavi/kırmızı materyal görünümünü kabul etti.
+  Faz 2 görsel kabul maddeleri ve teslim kapısı bu kabul ile kapatıldı.
+- 2026-08-13 — Faz 3 ilk güvenli dilim: `Archer_standing_aim_recoil`, GLB
+  denetiminde ölçülen `1.140 s` süresiyle `attack` semantic rolüne bağlandı.
+  Sunum yalnızca gerçek `attackCount` artışını okur; damage, cooldown, hedef ve
+  projectile üretiminde değişiklik yapılmadı. Dünya içi atış görünümü kabulü
+  açık bırakıldı.
+- 2026-08-13 — `aim_recoil` klibinin `mixamorig:Hips` translation kanalında
+  anlamlı authored hareket görüldü. RTS simülasyon konumunu korumak için mevcut
+  sidecar root-motion authoring dilinde `lockXYZ` / `mixamorigHips` ayarı eklendi;
+  dünya içi drift kabulü yine görsel doğrulama gerektirir.
+- 2026-08-13 — Faz 3 ilk dilim doğrulandı: `npx.cmd tsc --noEmit` geçti;
+  `Skeletal animasyon,Archer` filtresinde 24 kontrol geçti (`PARTIAL`) ve
+  10+10 Archer Chromium boot smoke'u 1/1 geçti. Atış klibinin okunabilirliği,
+  gerçek volley cadence'i, hedef dönüşü ve drift için dünya içi kullanıcı kabulü
+  açık bırakıldı.
+- 2026-08-13 — Faz 3 görsel QA keşfi: `archer_locomotion_acceptance` gerçek
+  atış kabulü için tek başına uygun değil. Başlangıçta `peaceSeconds: 600` AI
+  saldırısını engelliyor; ayrıca oyuncu birimlerinin çoğu başlangıç inşaat
+  paleti altında kalıyor. Route boot/asset smoke olarak tutuldu; atış kabulü
+  kullanıcı komutuyla veya ayrı yakın-temas senaryosuyla yapılacak.

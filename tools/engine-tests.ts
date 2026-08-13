@@ -38113,11 +38113,17 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
     run: "Archer_standing_run_forward",
     walkBack: "Archer_standing_walk_back",
     runBack: "Archer_standing_run_back",
+    attack: "Archer_standing_aim_recoil",
   });
   assert.deepEqual(archer.animationVariants.idle, [
     "Archer_standing_idle_examine",
     "Archer_standing_idle_looking",
   ]);
+  assert.deepEqual(
+    archer.rootMotion.find((entry) => entry.clip === "Archer_standing_aim_recoil"),
+    { clip: "Archer_standing_aim_recoil", mode: "lockXYZ", rootNode: "mixamorigHips" },
+    "the recoil clip's authored root translation is locked in place",
+  );
   assert.equal(archer.animationVariants.walk, undefined, "forward walking never samples a reverse clip");
   assert.equal(archer.animationVariants.run, undefined, "forward running never samples a reverse clip");
 
@@ -38139,6 +38145,17 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
   assert.ok(
     archer.notifies.every((notify) => notify.clip !== "Archer_standing_turn_90_right"),
     "the duplicate clip carries no runtime notify",
+  );
+  assert.equal(
+    rtsActionClip(
+      { kind: "attack", remainingSeconds: 1.14, attackCount: 1, impactCount: 0, layered: false },
+      archer.animationSet,
+      shipped,
+      archer.animationVariants,
+      17,
+    ),
+    "Archer_standing_aim_recoil",
+    "one real Archer attackCount increment resolves to the authored recoil clip",
   );
 
   const stableIdle = resolveRtsAnimationVariant("idle", archer.animationSet, archer.animationVariants, shipped, 17);
