@@ -339,7 +339,8 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
  * Null means "hold the current pose", not "stop": the caller keeps playing
  * whatever it was playing. Picking an arbitrary available clip instead would be
  * worse than useless — it is exactly how a unit ends up permanently frozen in
- * `A_TPose`, which is a real clip in the shipped UAL1 set.
+ * `A_TPose`, which is a real clip in rigs like the UAL1 pack this was built
+ * against.
  */
 export function resolveRtsAnimationRole(
   role: RtsAnimationRole,

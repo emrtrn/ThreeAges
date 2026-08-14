@@ -38831,7 +38831,7 @@ check("Skeletal animasyon Faz C: hiz esikleri, rol onceligi ve dusme zinciri", (
   );
 
   // The two null cases, and the reason the chain must never end in "any clip":
-  // A_TPose is a real clip in the shipped UAL1 set, so a lazy last-resort scan
+  // A_TPose is a real clip in rigs like the UAL1 pack, so a lazy last-resort scan
   // would pin a unit in the exact pose this whole track exists to avoid. Null
   // means "hold the pose you already have".
   assert.equal(resolveRtsAnimationRole("idle", {}, available), null, "an unauthored asset selects nothing");
@@ -39887,7 +39887,7 @@ check("Skeletal animasyon Faz D: attack/death rolleri editor kaydinda hayatta ka
   // The shipped Guard asset actually authors both, which is what makes Faz D
   // data-driven rather than a clip name compiled into the selector.
   const shipped = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/starter-content/SkeletalMeshes/UAL1_Standard_RM.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
   );
   assert.ok(shipped.animationSet.attack, "the Guard authors an attack clip");
   assert.ok(shipped.animationSet.death, "the Guard authors a death clip");
@@ -42267,9 +42267,9 @@ check("Skeletal animasyon Faz F: isci sitesinde calisir, yolda degil", () => {
 
   // Data, not code: the clip name lives in the shipped sidecar.
   const shipped = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/starter-content/SkeletalMeshes/UAL1_Standard_RM.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.skeleton.json", "utf8")) as unknown,
   );
-  assert.equal(shipped.animationSet.work, "Fixing_Kneeling", "the pack authors the worker's job clip");
+  assert.equal(shipped.animationSet.work, "Worker_kneeling_idle", "the pack authors the worker's job clip");
 });
 
 check("Skeletal animasyon Faz F: insaat sistemi calisma bayragini kaldirir ve isi bitince birakir", () => {
