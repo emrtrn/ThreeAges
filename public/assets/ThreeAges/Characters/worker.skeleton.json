@@ -6,10 +6,21 @@
   "blendSpaces": [],
   "notifies": [],
   "montages": [],
-  "rootMotion": [],
+  "rootMotion": [
+    {
+      "clip": "Farming_holding_walk",
+      "mode": "lockXYZ",
+      "rootNode": "Hips"
+    },
+    {
+      "clip": "Farming_wheelbarrow_walk",
+      "mode": "lockXYZ",
+      "rootNode": "Hips"
+    }
+  ],
   "physicsBodies": [],
   "physicsConstraints": [],
   "preview": {
-    "selectedClip": null
+    "selectedClip": "Walk_Loop"
   }
 }
