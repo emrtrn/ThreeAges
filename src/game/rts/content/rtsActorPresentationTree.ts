@@ -10,6 +10,7 @@
 import { Box3, Color, Group, Mesh, SkinnedMesh, type Material, type Object3D } from "three";
 import { clone as cloneSkeletonHierarchy } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { isMeshComponentKind, type ActorScriptDef } from "@engine/scene/actorScript";
+import { applyMaterialSlotOverrides } from "@/scene/assetMaterialSlotsLoader";
 
 const DEGREES_TO_RADIANS = Math.PI / 180;
 /** Foundation slabs stand this proud of the ground; models sit on top of them. */
@@ -73,6 +74,15 @@ function applyComponentMaterial(model: Object3D, material: Material): void {
   model.traverse((child) => {
     if (child instanceof Mesh) child.material = material;
   });
+}
+
+/**
+ * Actor-local replacements for selected asset material elements. Empty entries
+ * deliberately keep the asset sidecar's material for that element.
+ */
+function readComponentMaterialSlotOverrides(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.some((slot) => typeof slot !== "string")) return null;
+  return value;
 }
 
 /**
@@ -170,6 +180,14 @@ export function buildActorPresentationTree(
     if (typeof materialSlot === "string" && materialSlot.length > 0) {
       const material = resolveComponentMaterial?.(materialSlot);
       if (material) applyComponentMaterial(model, material);
+    }
+    const materialSlotOverrides = readComponentMaterialSlotOverrides(component.props.materialSlotOverrides);
+    if (materialSlotOverrides?.some((slot) => slot.length > 0)) {
+      applyMaterialSlotOverrides(
+        model,
+        { schema: 1, slots: materialSlotOverrides },
+        (materialId) => resolveComponentMaterial?.(materialId),
+      );
     }
     // Role and faction readability on a one-character pack: every unit is the
     // same rig, told apart by an authored tint — and the Guard authors one per

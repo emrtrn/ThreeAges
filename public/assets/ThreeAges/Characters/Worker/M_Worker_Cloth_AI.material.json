@@ -4,7 +4,7 @@
   "materialType": "standard",
   "name": "M_Worker_Cloth",
   "baseColor": "#ffffff",
-  "baseColorTexture": "worker-cloth-bc",
+  "baseColorTexture": "worker-cloth-red-bc",
   "normalTexture": "worker-cloth-n",
   "maskTexture": null,
   "roughnessTexture": "worker-cloth-orm",

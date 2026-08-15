@@ -1,5 +1,32 @@
 # ThreeAges — Worker Animasyon ve Aktivite Entegrasyon Planı
 
+## 0. Asset Değişimi — 2026-08-15
+
+Eski `public/assets/ThreeAges/Characters/Worker/Worker.glb` paketi kaldırıldı.
+RTS `worker` asset kimliği artık
+`public/assets/ThreeAges/Characters/Worker/worker.glb` dosyasını, bu dosyanın yanındaki
+`worker.skeleton.json` ve `worker.materials.json` sidecar'larını kullanır. Yeni
+dosya 65 eklemli rig, iki materyal slotu ve 51 klip içerir.
+
+Bu değişimde adı açık olan eşlemeler şöyledir:
+
+| RTS rolü | Yeni klip |
+| --- | --- |
+| `idle` / `walk` / `run` | `Idle_Loop` / `Walk_Loop` / `Sprint_Loop` |
+| genel `work` | `Farming_kneeling_idle` |
+| `workCultivation` | `Farming_dig_and_plant_seeds` + `Farming_plant_a_plant`, `Farming_watering` varyantları |
+| Crate `carryIdle` / `carryWalk` | `Farming_box_idle` / `Farming_holding_walk` |
+| `attack` / `death` | `Attack` / `Death` |
+
+Yeni rigde taşıma socket'i `Hips` kemiğindeki `carry-box`tır. Başlangıç transformu
+`position: [0, 0.03, 0.24]` olarak korundu; Crate'in el ve gövde hizası dünya içi
+görsel kabulde yeniden ayarlanacaktır. `React_Chest` ve `React_Head`, gerçek hasar
+tepkisi oldukları doğrulanmadan `hit` rolüne bağlanmayacaktır.
+
+Önceki 33 klipli Mixamo paketine dair aşağıdaki envanter, tarihsel kayıt olarak
+kalır; bu bölümdeki eski `Worker_*` klip adları artık aktif runtime sözleşmesi
+değildir.
+
 Oluşturulma tarihi: 2026-08-13  
 Durum: **Devam ediyor — Faz 1/1A/2 ve cultivation kabulü tamamlandı; Faz 3, gerçek hasat/sağım state'i kararını bekliyor.**
 

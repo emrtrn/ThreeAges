@@ -439,6 +439,15 @@ export function applyTransformFields(
     }
     target.materialSlot = entry.materialSlot;
   }
+  if (entry.materialSlotOverrides !== undefined) {
+    if (
+      !Array.isArray(entry.materialSlotOverrides)
+      || entry.materialSlotOverrides.some((slot) => typeof slot !== "string")
+    ) {
+      throw new Error(`invalid ${label} materialSlotOverrides`);
+    }
+    target.materialSlotOverrides = [...entry.materialSlotOverrides];
+  }
   if (entry.sensor === true) target.sensor = true;
   if (entry.simulatePhysics === true) target.simulatePhysics = true;
   const physics = validatePhysics(entry.physics, label);

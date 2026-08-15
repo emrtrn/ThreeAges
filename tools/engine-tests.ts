@@ -38985,9 +38985,12 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
   const workerAsset = rawManifest.assets.find((asset) => asset.id === "worker")
     ?? assert.fail("the Worker skeletal mesh is present in the manifest");
   assert.equal(workerAsset.assetType, "skeletalMesh");
-  assert.equal(workerAsset.path, "assets/ThreeAges/Characters/Worker/Worker.glb");
+  assert.equal(workerAsset.path, "assets/ThreeAges/Characters/Worker/worker.glb");
 
-  for (const file of ["BP_RTS_Worker", "BP_RTS_Enemy_Worker"]) {
+  for (const [file, expectedMaterialSlotOverrides] of [
+    ["BP_RTS_Worker", undefined],
+    ["BP_RTS_Enemy_Worker", ["", "m-worker-cloth-material-copy"]],
+  ] as const) {
     const ref = `public/assets/ThreeAges/Actors/Units/${file}.actor.json`;
     const actor = normalizeActorScriptDef(JSON.parse(readFileSync(ref, "utf8")) as unknown, ref);
     validateRtsPresentationActor(actor, ref, manifest);
@@ -38995,23 +38998,28 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
       ?? assert.fail(`${ref} has no skeletal mesh`);
     assert.equal(mesh.props.assetId, "worker", `${ref} renders the authored Worker rig`);
     assert.equal(mesh.props.materialSlot, undefined, `${ref} keeps the Worker asset material as its shared default`);
+    assert.deepEqual(
+      mesh.props.materialSlotOverrides,
+      expectedMaterialSlotOverrides,
+      `${ref} changes only the intended Worker material elements`,
+    );
     assert.equal(readRtsSelectionRadius(actor), 0.43, `${ref} keeps the Worker gameplay selection radius`);
   }
 
   const materials = normalizeAssetMaterialSlots(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.materials.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.materials.json", "utf8")) as unknown,
   );
-  assert.deepEqual(materials.slots, ["m-worker-material"], "the Worker asset supplies its own material slot");
+  assert.deepEqual(materials.slots, ["m-worker-face-material", "m-worker-cloth-material"], "the Worker asset supplies its own material slots");
 
   const rawSkeleton = JSON.parse(
-    readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.skeleton.json", "utf8"),
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
   ) as unknown;
   const worker = normalizeAssetSkeleton(rawSkeleton);
   const saved = validateAssetSkeletonDef(rawSkeleton);
   const baseRoles = {
-    idle: "Worker_idle_natural",
-    walk: "Worker_walking",
-    run: "Worker_running",
+    idle: "Idle_Loop",
+    walk: "Walk_Loop",
+    run: "Sprint_Loop",
   } as const;
   for (const [role, clip] of Object.entries(baseRoles)) {
     assert.equal(worker.animationSet[role], clip, `${role} remains mapped to its authored Worker locomotion clip`);
@@ -39027,19 +39035,19 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
   const runtimePool = Object.values(worker.animationSet).filter((clip): clip is string => clip !== undefined);
   for (const clip of Object.values(baseRoles)) assert.ok(shipped.has(clip), `"${clip}" is a clip the Worker ships`);
   assert.ok(!runtimePool.includes("T-Pose"), "T-Pose never enters a runtime Worker role");
-  for (const clip of ["Worker_walking", "Worker_running"]) {
+  for (const clip of ["Walk_Loop", "Sprint_Loop"]) {
     assert.deepEqual(
       worker.rootMotion.find((entry) => entry.clip === clip),
-      { clip, mode: "lockXYZ", rootNode: "mixamorigHips" },
+      { clip, mode: "lockXYZ", rootNode: "Hips" },
       `${clip}'s authored root translation remains locked for gameplay-driven movement`,
     );
   }
 
   const tuning = rtsLocomotionTuning(6);
   for (const [input, expected] of [
-    [{ planarSpeed: 0, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Worker_idle_natural"],
-    [{ planarSpeed: 3, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Worker_walking"],
-    [{ planarSpeed: 6, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Worker_running"],
+    [{ planarSpeed: 0, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Idle_Loop"],
+    [{ planarSpeed: 3, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Walk_Loop"],
+    [{ planarSpeed: 6, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Sprint_Loop"],
   ] as const) {
     assert.equal(selectRtsAnimation(input, worker.animationSet, shipped, tuning)?.clip, expected);
   }
@@ -39048,14 +39056,14 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
 
 check("Worker Faz 2: nötr iş pozu yalnız iş noktasında locomotionun yerini alır", () => {
   const worker = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8")) as unknown,
   );
   const saved = validateAssetSkeletonDef(worker);
-  assert.equal(worker.animationSet.work, "Worker_kneeling_idle");
-  assert.equal(saved.animationSet?.work, "Worker_kneeling_idle", "the neutral work role survives an editor save");
+  assert.equal(worker.animationSet.work, "Farming_kneeling_idle");
+  assert.equal(saved.animationSet?.work, "Farming_kneeling_idle", "the neutral work role survives an editor save");
   assert.deepEqual(worker.animationVariants.work, undefined, "Faz 2 keeps one stable, neutral work fallback");
 
-  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.glb")))
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")))
     ?? assert.fail("the Worker model is a readable GLB");
   const shipped = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
   assert.ok(shipped.has(worker.animationSet.work), "the neutral work role names a shipped Worker clip");
@@ -39071,17 +39079,17 @@ check("Worker Faz 2: nötr iş pozu yalnız iş noktasında locomotionun yerini 
   });
   assert.equal(
     selectRtsAnimation(input(0, true), worker.animationSet, shipped, tuning)?.clip,
-    "Worker_kneeling_idle",
+    "Farming_kneeling_idle",
     "a settled Worker presents the neutral kneeling work pose",
   );
   assert.equal(
     selectRtsAnimation(input(3, true), worker.animationSet, shipped, tuning)?.clip,
-    "Worker_walking",
+    "Walk_Loop",
     "a Worker still travelling to work keeps locomotion instead of kneeling on the route",
   );
   assert.equal(
     selectRtsAnimation(input(0, false), worker.animationSet, shipped, tuning)?.clip,
-    "Worker_idle_natural",
+    "Idle_Loop",
     "ending the job clears the neutral pose back to idle",
   );
 });
@@ -39100,19 +39108,19 @@ check("Worker Faz 3: aktivite yalnız sunumsaldır ve ölümde temizlenir", () =
 
 check("Worker Faz 3: cultivation gerçek iş aktivitesiyle deterministik tarım havuzunu seçer", () => {
   const raw = JSON.parse(
-    readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.skeleton.json", "utf8"),
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
   ) as unknown;
   const worker = normalizeAssetSkeleton(raw);
   const saved = validateAssetSkeletonDef(raw);
-  assert.equal(worker.animationSet.workCultivation, "Worker_dig_and_plant_seeds");
-  assert.deepEqual(worker.animationVariants.workCultivation, ["Worker_plant_a_plant", "Worker_watering"]);
-  assert.equal(saved.animationSet?.workCultivation, "Worker_dig_and_plant_seeds", "the editor save retains the cultivation role");
-  assert.deepEqual(saved.animationVariants?.workCultivation, ["Worker_plant_a_plant", "Worker_watering"]);
+  assert.equal(worker.animationSet.workCultivation, "Farming_dig_and_plant_seeds");
+  assert.deepEqual(worker.animationVariants.workCultivation, ["Farming_plant_a_plant", "Farming_watering"]);
+  assert.equal(saved.animationSet?.workCultivation, "Farming_dig_and_plant_seeds", "the editor save retains the cultivation role");
+  assert.deepEqual(saved.animationVariants?.workCultivation, ["Farming_plant_a_plant", "Farming_watering"]);
   assert.equal(rtsWorkRoleForActivity("cultivation"), "workCultivation");
   assert.equal(rtsWorkRoleForActivity("generic"), "work", "neutral assignments keep the neutral work role");
   assert.equal(rtsWorkRoleForActivity("livestock"), "workLivestock", "livestock has an opt-in future role, not a cow-milking guess");
 
-  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.glb")))
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")))
     ?? assert.fail("the Worker model is a readable GLB");
   const shipped = new Set((parsed.json.animations ?? []).map((clip) => clip.name));
   const cultivationPool = [worker.animationSet.workCultivation, ...(worker.animationVariants.workCultivation ?? [])]
@@ -39163,33 +39171,33 @@ check("Worker Faz 3: cultivation gerçek iş aktivitesiyle deterministik tarım 
   assert.ok(population.size > 1, "different Worker identities show deterministic cultivation variety");
   assert.equal(
     selectRtsAnimation(input("generic"), worker.animationSet, shipped, tuning, worker.animationVariants, 17)?.clip,
-    "Worker_kneeling_idle",
+    "Farming_kneeling_idle",
     "generic gathering does not borrow a farming animation",
   );
   assert.equal(
     selectRtsAnimation(input("cultivation", 3), worker.animationSet, shipped, tuning, worker.animationVariants, 17)?.clip,
-    "Worker_walking",
+    "Walk_Loop",
     "a farm worker still travelling keeps locomotion over a cultivation loop",
   );
 });
 
 check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir", () => {
   const rawSkeleton = JSON.parse(
-    readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.skeleton.json", "utf8"),
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
   ) as unknown;
   const worker = normalizeAssetSkeleton(rawSkeleton);
   const saved = validateAssetSkeletonDef(rawSkeleton);
   assert.deepEqual(worker.sockets, [{
     name: "carry-box",
-    bone: "mixamorigHips",
+    bone: "Hips",
     position: [0, 0.03, 0.24],
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     previewAssetId: "crate",
   }], "the Worker owns one body-stable socket for a two-handed crate");
-  assert.equal(worker.animationSet.carryIdle, "Worker_box_idle");
-  assert.equal(worker.animationSet.carryWalk, "Worker_box_walk_arc");
-  assert.equal(saved.animationSet?.carryWalk, "Worker_box_walk_arc", "an editor save retains the carrying locomotion role");
+  assert.equal(worker.animationSet.carryIdle, "Farming_box_idle");
+  assert.equal(worker.animationSet.carryWalk, "Farming_holding_walk");
+  assert.equal(saved.animationSet?.carryWalk, "Farming_holding_walk", "an editor save retains the carrying locomotion role");
 
   const rawActor = JSON.parse(
     readFileSync("public/assets/ThreeAges/Actors/Units/BP_RTS_Worker.actor.json", "utf8"),
@@ -39200,7 +39208,7 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
   assert.equal(crate?.props.assetId, "crate", "the Worker carries the authored Crate mesh rather than an invisible stand-in");
   assert.equal(crate?.props.rtsSkeletalSocket, "carry-box", "the crate follows the sidecar socket, not the Actor root");
 
-  const shipped = new Set((parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.glb")))?.json.animations ?? [])
+  const shipped = new Set((parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")))?.json.animations ?? [])
     .map((clip) => clip.name));
   const tuning = rtsLocomotionTuning(6);
   const carryingInput = (planarSpeed: number): RtsAnimationInput => ({
@@ -39214,17 +39222,17 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
   });
   assert.equal(
     selectRtsAnimation(carryingInput(0), worker.animationSet, shipped, tuning)?.clip,
-    "Worker_box_idle",
+    "Farming_box_idle",
     "a stopped loaded Worker holds the same box its Actor draws",
   );
   assert.equal(
     selectRtsAnimation(carryingInput(6), worker.animationSet, shipped, tuning)?.clip,
-    "Worker_box_walk_arc",
+    "Farming_holding_walk",
     "a loaded Worker uses the authored carry walk instead of running empty-handed",
   );
   assert.equal(
     selectRtsAnimation({ ...carryingInput(6), carrying: false }, worker.animationSet, shipped, tuning)?.clip,
-    "Worker_running",
+    "Sprint_Loop",
     "clearing the real cargo snapshot restores ordinary locomotion immediately",
   );
 });
@@ -42281,9 +42289,9 @@ check("Skeletal animasyon Faz F: isci sitesinde calisir, yolda degil", () => {
 
   // Data, not code: the clip name lives in the shipped sidecar.
   const shipped = normalizeAssetSkeleton(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/Worker.skeleton.json", "utf8")) as unknown,
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8")) as unknown,
   );
-  assert.equal(shipped.animationSet.work, "Worker_kneeling_idle", "the pack authors the worker's job clip");
+  assert.equal(shipped.animationSet.work, "Farming_kneeling_idle", "the pack authors the worker's job clip");
 });
 
 check("Skeletal animasyon Faz F: insaat sistemi calisma bayragini kaldirir ve isi bitince birakir", () => {

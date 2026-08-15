@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "slots": [
-    "m-worker-material"
+    "m-worker-face-material",
+    "m-worker-cloth-material"
   ]
 }

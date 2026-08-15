@@ -30174,57 +30174,11 @@
       "license": "Unknown"
     },
     {
-      "id": "worker-bc",
-      "name": "Worker_BC",
-      "assetType": "texture",
-      "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Worker/Worker_BC.png",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Characters",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 3631761
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "m-worker-material",
-      "name": "M_Worker",
-      "assetType": "material",
-      "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Worker/M_Worker.material.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Characters",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 682
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "worker",
-      "name": "Worker",
+      "name": "worker",
       "assetType": "skeletalMesh",
-      "category": "Worker",
-      "path": "assets/ThreeAges/Characters/Worker/Worker.glb",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Worker/worker.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -30234,11 +30188,11 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "Worker",
+        "loadGroup": "Characters",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 7546812
+        "bytes": 5923180
       },
       "license": "Unknown"
     },
@@ -30520,10 +30474,10 @@
     },
     {
       "id": "worker-cloth-bc",
-      "name": "Worker Cloth BC",
+      "name": "Worker_Cloth_BC",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Worker_Cloth_BC.jpg",
+      "path": "assets/ThreeAges/Characters/Worker/Worker_Cloth_BC.jpg",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -30542,11 +30496,57 @@
       "license": "Unknown"
     },
     {
-      "id": "worker-cloth-n",
-      "name": "Worker Cloth N",
+      "id": "worker-cloth-blue-bc",
+      "name": "Worker_Cloth_Blue_BC",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Worker_Cloth_N.jpg",
+      "path": "assets/ThreeAges/Characters/Worker/Worker_Cloth_Blue_BC.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2614714
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "worker-cloth-red-bc",
+      "name": "Worker_Cloth_Red_BC",
+      "assetType": "texture",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Worker/Worker_Cloth_Red_BC.png",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2563586
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "worker-cloth-n",
+      "name": "Worker_Cloth_N",
+      "assetType": "texture",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Worker/Worker_Cloth_N.jpg",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -30566,10 +30566,10 @@
     },
     {
       "id": "worker-cloth-orm",
-      "name": "Worker Cloth ORM",
+      "name": "Worker_Cloth_ORM",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Worker_Cloth_ORM.jpg",
+      "path": "assets/ThreeAges/Characters/Worker/Worker_Cloth_ORM.jpg",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -30589,10 +30589,10 @@
     },
     {
       "id": "worker-face-bc",
-      "name": "Worker Face BC",
+      "name": "Worker_Face_BC",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Worker_Face_BC.jpg",
+      "path": "assets/ThreeAges/Characters/Worker/Worker_Face_BC.jpg",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -30611,34 +30611,11 @@
       "license": "Unknown"
     },
     {
-      "id": "worker-2",
-      "name": "Worker",
-      "assetType": "skeletalMesh",
-      "category": "Characters",
-      "path": "assets/ThreeAges/Characters/worker.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "character",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Characters",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 5923180
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "m-worker-face-material",
-      "name": "M Worker Face.Material",
+      "name": "M_Worker_Face",
       "assetType": "material",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/M_Worker_Face.material.json",
+      "path": "assets/ThreeAges/Characters/Worker/M_Worker_Face.material.json",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -30658,10 +30635,10 @@
     },
     {
       "id": "m-worker-cloth-material",
-      "name": "M Worker Cloth.Material",
+      "name": "M_Worker_Cloth",
       "assetType": "material",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/M_Worker_Cloth.material.json",
+      "path": "assets/ThreeAges/Characters/Worker/M_Worker_Cloth.material.json",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -30676,6 +30653,52 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 688
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-worker-cloth-material-copy",
+      "name": "M_Worker_Cloth_AI",
+      "assetType": "material",
+      "category": "Characters",
+      "path": "assets/ThreeAges/Characters/Worker/M_Worker_Cloth_AI.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Characters",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 688
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "axe",
+      "name": "Axe",
+      "assetType": "staticMesh",
+      "category": "Props",
+      "path": "assets/ThreeAges/Props/Axe.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4667928
       },
       "license": "Unknown"
     }

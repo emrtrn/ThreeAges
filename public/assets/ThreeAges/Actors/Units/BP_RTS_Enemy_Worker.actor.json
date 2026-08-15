@@ -25,6 +25,10 @@
       "component": "SkeletalMeshComponent",
       "props": {
         "assetId": "worker",
+        "materialSlotOverrides": [
+          "",
+          "m-worker-cloth-material-copy"
+        ],
         "position": [
           0,
           0,

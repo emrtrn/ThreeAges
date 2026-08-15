@@ -561,8 +561,13 @@ export class RtsActorVisualFactory {
       .map(async (node) => {
         const assetId = node.props.assetId as string;
         const asset = this.manifestMeshes.get(assetId)!;
-        const materialSlot = node.props.materialSlot;
-        if (typeof materialSlot === "string" && materialSlot.length > 0) {
+        const materialIds = [
+          typeof node.props.materialSlot === "string" ? node.props.materialSlot : "",
+          ...(Array.isArray(node.props.materialSlotOverrides)
+            ? node.props.materialSlotOverrides.filter((slot): slot is string => typeof slot === "string")
+            : []),
+        ].filter((slot) => slot.length > 0);
+        for (const materialSlot of new Set(materialIds)) {
           const material = await this.slotMaterial(materialSlot);
           if (!material) {
             throw new RtsActorPresentationError(

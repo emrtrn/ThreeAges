@@ -3,7 +3,7 @@
   "sockets": [
     {
       "name": "carry-box",
-      "bone": "mixamorigHips",
+      "bone": "Hips",
       "position": [0, 0.03, 0.24],
       "rotation": [0, 0, 0],
       "scale": [1, 1, 1],
@@ -11,18 +11,20 @@
     }
   ],
   "animationSet": {
-    "idle": "Worker_idle_natural",
-    "walk": "Worker_walking",
-    "run": "Worker_running",
-    "work": "Worker_kneeling_idle",
-    "workCultivation": "Worker_dig_and_plant_seeds",
-    "carryIdle": "Worker_box_idle",
-    "carryWalk": "Worker_box_walk_arc"
+    "idle": "Idle_Loop",
+    "walk": "Walk_Loop",
+    "run": "Sprint_Loop",
+    "work": "Farming_kneeling_idle",
+    "workCultivation": "Farming_dig_and_plant_seeds",
+    "carryIdle": "Farming_box_idle",
+    "carryWalk": "Farming_holding_walk",
+    "attack": "Attack",
+    "death": "Death"
   },
   "animationVariants": {
     "workCultivation": [
-      "Worker_plant_a_plant",
-      "Worker_watering"
+      "Farming_plant_a_plant",
+      "Farming_watering"
     ]
   },
   "blendSpaces": [],
@@ -30,59 +32,29 @@
   "montages": [],
   "rootMotion": [
     {
-      "clip": "Worker_left_strafe",
+      "clip": "Walk_Loop",
       "mode": "lockXYZ",
-      "rootNode": "mixamorigHips"
+      "rootNode": "Hips"
     },
     {
-      "clip": "Worker_left_strafe_walking",
+      "clip": "Sprint_Loop",
       "mode": "lockXYZ",
-      "rootNode": "mixamorigHips"
+      "rootNode": "Hips"
     },
     {
-      "clip": "Worker_running",
+      "clip": "Farming_holding_walk",
       "mode": "lockXYZ",
-      "rootNode": "mixamorigHips"
+      "rootNode": "Hips"
     },
     {
-      "clip": "Worker_walking",
+      "clip": "Farming_wheelbarrow_walk",
       "mode": "lockXYZ",
-      "rootNode": "mixamorigHips"
-    },
-    {
-      "clip": "Worker_box_walk_arc",
-      "mode": "lockXYZ",
-      "rootNode": "mixamorigHips"
-    },
-    {
-      "clip": "Worker_holding_walk",
-      "mode": "lockXYZ",
-      "rootNode": "mixamorigHips"
-    },
-    {
-      "clip": "Worker_wheelbarrow_walk_1",
-      "mode": "lockXYZ",
-      "rootNode": "mixamorigHips"
-    },
-    {
-      "clip": "Worker_wheelbarrow_walk_2",
-      "mode": "lockXYZ",
-      "rootNode": "mixamorigHips"
-    },
-    {
-      "clip": "Worker_wheelbarrow_walk_turn_left",
-      "mode": "lockXYZ",
-      "rootNode": "mixamorigHips"
-    },
-    {
-      "clip": "Worker_wheelbarrow_walk_turn_right",
-      "mode": "lockXYZ",
-      "rootNode": "mixamorigHips"
+      "rootNode": "Hips"
     }
   ],
   "physicsBodies": [],
   "physicsConstraints": [],
   "preview": {
-    "selectedClip": "Worker_wheelbarrow_walk_turn_right"
+    "selectedClip": "Walk_Loop"
   }
 }
