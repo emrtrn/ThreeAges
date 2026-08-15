@@ -39017,7 +39017,7 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
   const worker = normalizeAssetSkeleton(rawSkeleton);
   const saved = validateAssetSkeletonDef(rawSkeleton);
   const baseRoles = {
-    idle: "Idle_Loop",
+    idle: "Idle_FoldArms_Loop",
     walk: "Walk_Loop",
     run: "Sprint_Loop",
   } as const;
@@ -39045,7 +39045,7 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
 
   const tuning = rtsLocomotionTuning(6);
   for (const [input, expected] of [
-    [{ planarSpeed: 0, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Idle_Loop"],
+    [{ planarSpeed: 0, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Idle_FoldArms_Loop"],
     [{ planarSpeed: 3, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Walk_Loop"],
     [{ planarSpeed: 6, attacking: false, dying: false, working: false, attackCount: 0, impactCount: 0 }, "Sprint_Loop"],
   ] as const) {
@@ -39059,8 +39059,8 @@ check("Worker Faz 2: nötr iş pozu yalnız iş noktasında locomotionun yerini 
     JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8")) as unknown,
   );
   const saved = validateAssetSkeletonDef(worker);
-  assert.equal(worker.animationSet.work, "Farming_kneeling_idle");
-  assert.equal(saved.animationSet?.work, "Farming_kneeling_idle", "the neutral work role survives an editor save");
+  assert.equal(worker.animationSet.work, "Fixing_Kneeling");
+  assert.equal(saved.animationSet?.work, "Fixing_Kneeling", "the fixing work role survives an editor save");
   assert.deepEqual(worker.animationVariants.work, undefined, "Faz 2 keeps one stable, neutral work fallback");
 
   const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")))
@@ -39079,8 +39079,8 @@ check("Worker Faz 2: nötr iş pozu yalnız iş noktasında locomotionun yerini 
   });
   assert.equal(
     selectRtsAnimation(input(0, true), worker.animationSet, shipped, tuning)?.clip,
-    "Farming_kneeling_idle",
-    "a settled Worker presents the neutral kneeling work pose",
+    "Fixing_Kneeling",
+    "a settled Worker presents the authored fixing work pose",
   );
   assert.equal(
     selectRtsAnimation(input(3, true), worker.animationSet, shipped, tuning)?.clip,
@@ -39089,7 +39089,7 @@ check("Worker Faz 2: nötr iş pozu yalnız iş noktasında locomotionun yerini 
   );
   assert.equal(
     selectRtsAnimation(input(0, false), worker.animationSet, shipped, tuning)?.clip,
-    "Idle_Loop",
+    "Idle_FoldArms_Loop",
     "ending the job clears the neutral pose back to idle",
   );
 });
@@ -39171,8 +39171,8 @@ check("Worker Faz 3: cultivation gerçek iş aktivitesiyle deterministik tarım 
   assert.ok(population.size > 1, "different Worker identities show deterministic cultivation variety");
   assert.equal(
     selectRtsAnimation(input("generic"), worker.animationSet, shipped, tuning, worker.animationVariants, 17)?.clip,
-    "Farming_kneeling_idle",
-    "generic gathering does not borrow a farming animation",
+    "Fixing_Kneeling",
+    "generic fallback does not borrow a farming animation",
   );
   assert.equal(
     selectRtsAnimation(input("cultivation", 3), worker.animationSet, shipped, tuning, worker.animationVariants, 17)?.clip,
@@ -39187,14 +39187,14 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
   ) as unknown;
   const worker = normalizeAssetSkeleton(rawSkeleton);
   const saved = validateAssetSkeletonDef(rawSkeleton);
-  assert.deepEqual(worker.sockets, [{
+  assert.deepEqual(worker.sockets.find((socket) => socket.name === "carry-box"), {
     name: "carry-box",
     bone: "Hips",
     position: [0, 0.03, 0.24],
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
     previewAssetId: "crate",
-  }], "the Worker owns one body-stable socket for a two-handed crate");
+  }, "the Worker owns one body-stable socket for a two-handed crate");
   assert.equal(worker.animationSet.carryIdle, "Farming_box_idle");
   assert.equal(worker.animationSet.carryWalk, "Farming_holding_walk");
   assert.equal(saved.animationSet?.carryWalk, "Farming_holding_walk", "an editor save retains the carrying locomotion role");
@@ -39234,6 +39234,87 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
     selectRtsAnimation({ ...carryingInput(6), carrying: false }, worker.animationSet, shipped, tuning)?.clip,
     "Sprint_Loop",
     "clearing the real cargo snapshot restores ordinary locomotion immediately",
+  );
+});
+
+check("Worker Faz 5: fixing, odun, av, tas ve yumruk klipleri gercek durumlarla eslesir", () => {
+  const raw = JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8")) as unknown;
+  const workerSkeleton = normalizeAssetSkeleton(raw);
+  const saved = validateAssetSkeletonDef(raw);
+  const shipped = new Set((parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")))?.json.animations ?? [])
+    .map((clip) => clip.name));
+  const tuning = rtsLocomotionTuning(6);
+
+  assert.equal(workerSkeleton.animationSet.idle, "Idle_FoldArms_Loop");
+  assert.equal(workerSkeleton.animationSet.work, "Fixing_Kneeling");
+  assert.equal(workerSkeleton.animationSet.workChopping, "TreeChopping_Loop");
+  assert.equal(workerSkeleton.animationSet.workHunting, "Attack");
+  assert.equal(workerSkeleton.animationSet.attack, "OverhandThrow");
+  assert.equal(workerSkeleton.animationSet.attackMelee, "Punch_Jab");
+  assert.deepEqual(workerSkeleton.animationVariants.attackMelee, ["Punch_Cross"]);
+  assert.equal(workerSkeleton.animationSet.hit, "React_Chest");
+  assert.deepEqual(workerSkeleton.animationVariants.hit, ["React_Head"]);
+  for (const clip of Object.values(workerSkeleton.animationSet)) assert.ok(shipped.has(clip!), `${clip} is shipped by Worker.glb`);
+  assert.equal(saved.animationSet?.attackMelee, "Punch_Jab", "the editor save keeps the close-combat role");
+
+  assert.equal(
+    selectRtsAnimation({ planarSpeed: 0, working: true, workerActivity: "lumber", attacking: false, dying: false, attackCount: 0, impactCount: 0 }, workerSkeleton.animationSet, shipped, tuning)?.clip,
+    "TreeChopping_Loop",
+    "a lumber-camp assignment selects the axe loop",
+  );
+  assert.equal(
+    selectRtsAnimation({ planarSpeed: 0, working: false, hunting: true, attacking: true, dying: false, attackCount: 0, impactCount: 0 }, workerSkeleton.animationSet, shipped, tuning)?.clip,
+    "Attack",
+    "prey hunting is a work animation, not an invented combat target",
+  );
+  const montage = resolveRtsWorkMontage(workerSkeleton.montages, shipped);
+  assert.deepEqual(montage, {
+    clip: "Fixing_Kneeling",
+    enter: { startSeconds: 0, endSeconds: 1.2 },
+    loop: { startSeconds: 1.2, endSeconds: 4 },
+    exit: { startSeconds: 4, endSeconds: 8.352 },
+  }, "construction, repair and mining have one authored kneel/hold/stand montage");
+
+  const unitBalance = validateUnitBalance(JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown);
+  const workerStats = unitBalance.worker_placeholder!;
+  const guardStats = unitBalance.guard_placeholder!;
+  assert.equal(workerStats.attackType, "ranged");
+  assert.equal(workerStats.minAttackRange, 1.25);
+  assert.equal(workerStats.kickRange, 1.25);
+  const thrower = new Unit("player", 0, 0, workerStats);
+  const distantEnemy = new Unit("enemy", 0, 3, guardStats);
+  thrower.setAttackTarget(distantEnemy, true);
+  const beforeThrow = distantEnemy.health.current;
+  let rangedShot = false;
+  updateUnitCombat([thrower, distantEnemy], 0.01, undefined, { onShot: (shot) => {
+    rangedShot = shot.ranged;
+    return 0;
+  } });
+  assert.ok(distantEnemy.health.current < beforeThrow, "a retaliating Worker damages a distant enemy with its stone weapon");
+  assert.equal(rangedShot, true, "the RtsApp can render that hit as Rock.gltf flight");
+  const throwAction = advanceRtsAction(RTS_ACTION_NONE, {
+    planarSpeed: 0, working: false, attacking: true, dying: false, attackCount: thrower.attack.blowCount, impactCount: 0,
+  }, { attack: 2.436, attackMelee: 0.864, hit: 1.188, death: 4.068 }, 0);
+  assert.equal(rtsActionClip(throwAction, workerSkeleton.animationSet, shipped, workerSkeleton.animationVariants), "OverhandThrow");
+
+  const puncher = new Unit("player", 0, 0, workerStats);
+  const closeEnemy = new Unit("enemy", 0, 0.8, guardStats);
+  puncher.setAttackTarget(closeEnemy, true);
+  updateSiegeMelee([puncher, closeEnemy], [puncher, closeEnemy], 0.01, new SiegeMeleeState());
+  assert.equal(puncher.meleeCount, 1, "inside the stone minimum a Worker lands the existing close hit instead");
+  const punchAction = advanceRtsAction(RTS_ACTION_NONE, {
+    planarSpeed: 0, working: false, attacking: false, dying: false, attackCount: 0, impactCount: 0, meleeCount: puncher.meleeCount,
+  }, { attack: 2.436, attackMelee: 0.864, hit: 1.188, death: 4.068 }, 0);
+  assert.ok(
+    ["Punch_Jab", "Punch_Cross"].includes(rtsActionClip(punchAction, workerSkeleton.animationSet, shipped, workerSkeleton.animationVariants, 17) ?? ""),
+    "the close hit plays a deterministic jab/cross variation",
+  );
+  const hitAction = advanceRtsAction(RTS_ACTION_NONE, {
+    planarSpeed: 0, working: false, attacking: false, dying: false, attackCount: 0, impactCount: 1,
+  }, { attack: 2.436, attackMelee: 0.864, hit: 1.188, death: 4.068 }, 0);
+  assert.ok(
+    ["React_Chest", "React_Head"].includes(rtsActionClip(hitAction, workerSkeleton.animationSet, shipped, workerSkeleton.animationVariants, 7) ?? ""),
+    "actual health impacts drive a deterministic chest/head reaction",
   );
 });
 
@@ -42291,7 +42372,7 @@ check("Skeletal animasyon Faz F: isci sitesinde calisir, yolda degil", () => {
   const shipped = normalizeAssetSkeleton(
     JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8")) as unknown,
   );
-  assert.equal(shipped.animationSet.work, "Farming_kneeling_idle", "the pack authors the worker's job clip");
+  assert.equal(shipped.animationSet.work, "Fixing_Kneeling", "the pack authors the worker's fixing clip");
 });
 
 check("Skeletal animasyon Faz F: insaat sistemi calisma bayragini kaldirir ve isi bitince birakir", () => {

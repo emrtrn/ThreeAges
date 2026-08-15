@@ -142,6 +142,7 @@ import { updateSiegeMelee, SiegeMeleeState } from "./combat/siegeMeleeSystem";
 import { updateUnitDeaths } from "./units/unitDeath";
 import { retaliateAgainstAttack, updateUnitEngagement } from "./combat/engagementSystem";
 import { ProjectileSystem } from "./combat/projectileSystem";
+import { ThrownRockSystem } from "./combat/thrownRockSystem";
 import { FirebrandSystem } from "./combat/firebrandSystem";
 import { CannonballSystem } from "./combat/cannonballSystem";
 import { PendingImpactQueue } from "./combat/pendingImpacts";
@@ -993,6 +994,7 @@ export class RtsApp {
   private readonly worldProgressOverlay = new RtsWorldProgressOverlay();
   private buildingLabelCache: ReadonlyMap<string, string> | null = null;
   private readonly projectiles = new ProjectileSystem();
+  private readonly thrownRocks = new ThrownRockSystem();
   private readonly firebrands = new FirebrandSystem();
   private readonly cannonballs = new CannonballSystem();
   /** Where the firing gun's barrel tip is; reused per shot, never held past `spawn`. */
@@ -2127,6 +2129,7 @@ export class RtsApp {
     this.selectionPanel.dispose();
     this.worldProgressOverlay.dispose();
     this.projectiles.dispose();
+    this.thrownRocks.dispose();
     this.firebrands.dispose();
     this.cannonballs.dispose();
     this.unitShadows.dispose();
@@ -2330,6 +2333,7 @@ export class RtsApp {
     this.gearDebris.setGroundSampler((x, z) => this.groundSurface.heightAt(x, z));
     this.gearDebris.setVisibilityTest(this.playerVisibilityTest() ?? null);
     this.scene.add(this.projectiles.root);
+    this.scene.add(this.thrownRocks.root);
     this.scene.add(this.firebrands.root);
     this.scene.add(this.cannonballs.root);
     // The shell's blast is an authored effect, not something the cannonball
@@ -2522,6 +2526,7 @@ export class RtsApp {
     // tracer and a health bar should look the same at any game speed.
     const projectileMark = this.perfMark();
     this.projectiles.update(dt);
+    this.thrownRocks.update(dt);
     this.firebrands.update(dt);
     this.perfMeasure("mermiler", projectileMark);
     // Cannonballs are deliberately absent here: they gate damage now, so they
@@ -2756,7 +2761,7 @@ export class RtsApp {
       },
       {
         id: "mermiler/efektler",
-        apply: hide([this.projectiles.root, this.firebrands.root, this.cannonballs.root]),
+        apply: hide([this.projectiles.root, this.thrownRocks.root, this.firebrands.root, this.cannonballs.root]),
       },
       {
         id: "dünya arayüzü",
@@ -4138,6 +4143,18 @@ export class RtsApp {
       );
     }
     if (shot.ranged) {
+      if (shot.attacker.role === "worker") {
+        // A Worker answers a distant attacker with the authored OverhandThrow
+        // clip and this Rock.gltf flight. Damage was already resolved by
+        // `unitCombat`; the stone is deliberately a report, not a hit detector.
+        const muzzle = shot.attacker.muzzleWorldPosition(this.scratchMuzzle);
+        this.thrownRocks.spawn(
+          muzzle ?? new Vector3(shot.attacker.position.x, shot.attacker.position.y + 1.25, shot.attacker.position.z),
+          shot.target.position,
+          shot.attacker.stats.projectileSpeed,
+        );
+        return 0;
+      }
       // The Archer's release point rides its rendered right-hand socket. The
       // resulting arrow is still presentation over an already-real combat shot.
       const muzzle = shot.attacker.muzzleWorldPosition(this.scratchMuzzle);
@@ -5160,6 +5177,7 @@ export class RtsApp {
     // painter is reset explicitly: pristine terrain restored, ready to repaint.
     this.roadPainter?.reset();
     this.projectiles.clear();
+    this.thrownRocks.clear();
     this.firebrands.clear();
     this.cannonballs.clear();
     // The last match's dead left their kit on ground the new match is about to
@@ -5390,13 +5408,15 @@ export class RtsApp {
       // The shell's art, which no Actor references because a shot in flight is a
       // pooled mesh rather than a placed Actor. A catalog that maps no such prop
       // leaves the system on its procedural iron sphere.
-      const [cannonball, arrow] = await Promise.all([
+      const [cannonball, arrow, rock] = await Promise.all([
         this.actorVisuals.loadPropModel("cannonball"),
         this.actorVisuals.loadPropModel("arrow"),
+        this.actorVisuals.loadPropModel("rock"),
       ]);
       if (this.disposed) return;
       if (cannonball) this.cannonballs.setBallModel(cannonball);
       this.projectiles.setArrowModel(arrow);
+      this.thrownRocks.setRockModel(rock);
       this.warmStructureDamageEffects();
       this.units.setPresentationFactory((unit) =>
         this.actorVisuals?.createUnitPresentation(

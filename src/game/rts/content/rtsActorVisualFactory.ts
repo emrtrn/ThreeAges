@@ -348,7 +348,9 @@ export class RtsActorVisualFactory {
       gunRecoils: def ? bindRtsGunRecoils(def, root) : [],
       // The artillery muzzle comes from an Actor component. Archer owns a bone
       // socket because the release point follows its animated hand.
-      muzzle: (def ? bindRtsMuzzle(def, root) : null) ?? bindRtsSkeletalSocket(animation, "arrow-release"),
+      muzzle: (def ? bindRtsMuzzle(def, root) : null)
+        ?? bindRtsSkeletalSocket(animation, "arrow-release")
+        ?? bindRtsSkeletalSocket(animation, "throw-release"),
       crew,
       // Only units carry a notify consumer today: an animal's or a caravan's
       // sidecar authors no markers, and handing them a sink would buy a

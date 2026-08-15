@@ -591,7 +591,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private readonly tuning: RtsLocomotionTuning;
   /** The running one-shot (swing or fall), owned by the pure state machine. */
   private action: RtsActionState = RTS_ACTION_NONE;
-  private actionDurations: RtsActionDurations = { attack: null, attackRecovery: null, hit: null, death: null };
+  private actionDurations: RtsActionDurations = { attack: null, attackMelee: null, attackRecovery: null, hit: null, death: null };
   /**
    * The continuous role the mixer was last told to play, for {@link locomotionFade}.
    *
@@ -761,6 +761,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // death length is what the unit's despawn timer then waits for.
     this.actionDurations = {
       attack: this.durationOfRole("attack"),
+      attackMelee: this.durationOfRole("attackMelee"),
       attackRecovery: this.durationOfRole("attackRecovery"),
       hit: this.durationOfRole("hit"),
       death: this.durationOfRole("death"),
@@ -861,6 +862,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // to an event, so its cached length stands.
     this.action = advanceRtsAction(this.action, state, {
       attack: this.durationOfRole("attack", state.attackCount),
+      attackMelee: this.durationOfRole("attackMelee", state.meleeCount ?? 0),
       attackRecovery: this.actionDurations.attackRecovery ?? null,
       hit: this.durationOfRole("hit", state.impactCount),
       death: this.actionDurations.death,
@@ -869,7 +871,15 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       canLayerAttack: this.layered !== null && this.canLayerAttack,
       walkSpeed: this.tuning.walkSpeed,
     });
-    this.workState = advanceRtsWorkMontage(this.workState, state, this.workMontage, this.tuning, deltaSeconds);
+    // Fixing_Kneeling is authored as one long kneel/work/stand clip. Only jobs
+    // that actually use a tool at the ground enter that montage; farming,
+    // hunting and chopping keep their own continuous clips.
+    const fixingState = {
+      ...state,
+      working: state.working && (state.workerActivity === "construction"
+        || state.workerActivity === "repair" || state.workerActivity === "mining"),
+    };
+    this.workState = advanceRtsWorkMontage(this.workState, fixingState, this.workMontage, this.tuning, deltaSeconds);
     const actionClip = rtsActionClip(
       this.action,
       this.animationSet,
@@ -1152,7 +1162,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   }
 
   /** Authored length of the clip a semantic role names, or null when unauthored. */
-  private durationOfRole(role: "attack" | "attackRecovery" | "hit" | "death", sequence = 0): number | null {
+  private durationOfRole(role: "attack" | "attackMelee" | "attackRecovery" | "hit" | "death", sequence = 0): number | null {
     const clip = resolveRtsAnimationVariant(
       role,
       this.animationSet,

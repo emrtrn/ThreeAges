@@ -57,6 +57,8 @@ export type WorkerActivity =
   | "cultivation"
   | "harvest"
   | "livestock"
+  | "mining"
+  | "lumber"
   | "carryingBox"
   | "carryingLoad"
   | "wheelbarrow";
@@ -115,6 +117,8 @@ export interface RtsPresentationUpdate {
   readonly preparingToMove?: boolean;
   /** True while a live target is inside weapon range — i.e. blows are landing. */
   readonly attacking: boolean;
+  /** True while a Worker is bringing down wildlife at a hunting camp. */
+  readonly hunting?: boolean;
   /** True once the defeat pose has begun. */
   readonly dying: boolean;
   /** True while the unit is standing at an in-place job — a builder on its site (Faz F). */
@@ -547,6 +551,7 @@ export class Unit {
       backward: this.retreating,
       preparingToMove: this.isPreparingToMove,
       attacking: this.isTradingBlows() || this.hunting,
+      hunting: this.hunting,
       dying: this.dying,
       working: this.working,
       workerActivity: this.workerActivityValue,

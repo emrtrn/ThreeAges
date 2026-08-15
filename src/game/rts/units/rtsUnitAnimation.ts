@@ -20,9 +20,9 @@
 export type RtsAnimationRole =
   | "idle" | "walk" | "run" | "walkBack" | "runBack"
   | "aimWalkForward" | "aimWalkBack" | "aimWalkLeft" | "aimWalkRight"
-  | "work" | "workCultivation" | "workHarvest" | "workLivestock"
+  | "work" | "workCultivation" | "workHarvest" | "workLivestock" | "workHunting" | "workChopping"
   | "carryIdle" | "carryWalk"
-  | "rest" | "hold" | "attack" | "hit" | "death";
+  | "rest" | "hold" | "attack" | "attackMelee" | "hit" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
 export interface RtsAnimationInput {
@@ -38,6 +38,8 @@ export interface RtsAnimationInput {
   readonly backward?: boolean;
   /** True while a live target is inside weapon range. */
   readonly attacking: boolean;
+  /** Wildlife hunting is a job animation, never a combat decision. */
+  readonly hunting?: boolean;
   /** True once the defeat pose has begun. */
   readonly dying: boolean;
   /**
@@ -96,6 +98,8 @@ export interface RtsAnimationInput {
    * told it late.
    */
   readonly impactCount: number;
+  /** Close blows outside the main weapon, such as the Worker's punches. */
+  readonly meleeCount?: number;
 }
 
 /**
@@ -250,6 +254,7 @@ export function classifyRtsAnimation(
     if (Math.abs(localX) > Math.abs(localZ)) return localX > 0 ? "aimWalkRight" : "aimWalkLeft";
     return localZ < 0 ? "aimWalkBack" : "aimWalkForward";
   }
+  if (input.hunting) return "workHunting";
   if (input.attacking) return "attack";
   // A load owns the locomotion silhouette, but not the route or its speed: this
   // is a presentation read of cargo already held by the job system. Carrying
@@ -305,6 +310,8 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   workCultivation: ["workCultivation", "work", "idle"],
   workHarvest: ["workHarvest", "work", "idle"],
   workLivestock: ["workLivestock", "work", "idle"],
+  workHunting: ["workHunting", "work", "idle"],
+  workChopping: ["workChopping", "work", "idle"],
   // Prop-dependent roles fall back before the prop can ever disappear: an
   // incomplete sidecar keeps ordinary locomotion while the Actor's cargo mesh
   // remains governed by the same carrying snapshot.
@@ -328,6 +335,7 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   // beaten. What the continuous channel wants for an engaged, struck or fallen
   // unit is the standing pose underneath the action.
   attack: ["idle"],
+  attackMelee: ["idle"],
   hit: ["idle"],
   death: ["idle"],
 };
@@ -431,6 +439,7 @@ export function rtsWorkRoleForActivity(
   if (activity === "cultivation") return "workCultivation";
   if (activity === "harvest") return "workHarvest";
   if (activity === "livestock") return "workLivestock";
+  if (activity === "lumber") return "workChopping";
   return "work";
 }
 
@@ -445,13 +454,15 @@ export function rtsWorkRoleForActivity(
 
 /** The one-shot currently overriding locomotion, if any. */
 export interface RtsActionState {
-  readonly kind: "none" | "attack" | "attackRecovery" | "hit" | "death";
+  readonly kind: "none" | "attack" | "attackMelee" | "attackRecovery" | "hit" | "death";
   /** Seconds left of the running clip. Reaches 0 on the frame it finishes. */
   readonly remainingSeconds: number;
   /** The blow count this state was last reconciled against; see {@link advanceRtsAction}. */
   readonly attackCount: number;
   /** The same, for blows taken rather than landed. */
   readonly impactCount: number;
+  /** Same event counter for the independent close weapon. */
+  readonly meleeCount?: number;
   /**
    * True when this one-shot owns only the upper body, leaving the legs on
    * locomotion — a walking unit can react or fire without stopping its stride.
@@ -471,6 +482,7 @@ export const RTS_ACTION_NONE: RtsActionState = {
   remainingSeconds: 0,
   attackCount: 0,
   impactCount: 0,
+  meleeCount: 0,
   layered: false,
 };
 
@@ -481,6 +493,7 @@ export const RTS_ACTION_NONE: RtsActionState = {
  */
 export interface RtsActionDurations {
   readonly attack: number | null;
+  readonly attackMelee?: number | null;
   /** Optional visual tail of an attack; a new real attack may interrupt it. */
   readonly attackRecovery?: number | null;
   readonly hit: number | null;
@@ -546,7 +559,12 @@ export function advanceRtsAction(
   layering: RtsActionLayering = NO_LAYERING,
 ): RtsActionState {
   const dt = Math.max(0, deltaSeconds);
-  const counters = { attackCount: input.attackCount, impactCount: input.impactCount, layered: false };
+  const counters = {
+    attackCount: input.attackCount,
+    impactCount: input.impactCount,
+    meleeCount: input.meleeCount ?? 0,
+    layered: false,
+  };
   if (input.dying) {
     if (state.kind === "death") {
       return { ...state, ...counters, remainingSeconds: Math.max(0, state.remainingSeconds - dt) };
@@ -566,6 +584,13 @@ export function advanceRtsAction(
     // `state.layered` last, overriding the default: the choice belongs to the
     // frame the flinch started, not to the speed the unit happens to have now.
     if (remaining > 0) return { kind: "hit", remainingSeconds: remaining, ...counters, layered: state.layered };
+  }
+  if ((input.meleeCount ?? 0) !== (state.meleeCount ?? 0) && durations.attackMelee !== null && durations.attackMelee !== undefined) {
+    return { kind: "attackMelee", remainingSeconds: durations.attackMelee, ...counters };
+  }
+  if (state.kind === "attackMelee") {
+    const remaining = state.remainingSeconds - dt;
+    if (remaining > 0) return { kind: "attackMelee", remainingSeconds: remaining, ...counters };
   }
   if (input.attackCount !== state.attackCount && durations.attack !== null) {
     const layered = layering.canLayerAttack === true && input.planarSpeed > layering.walkSpeed;
@@ -604,6 +629,7 @@ export function advanceRtsAction(
  */
 export function rtsActionSequence(state: RtsActionState): number {
   if (state.kind === "attack" || state.kind === "attackRecovery") return state.attackCount;
+  if (state.kind === "attackMelee") return state.meleeCount ?? 0;
   if (state.kind === "hit") return state.impactCount;
   return 0;
 }

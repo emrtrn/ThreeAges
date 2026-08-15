@@ -103,6 +103,10 @@ export function updateSiegeMelee(
     // The validator refuses a partial set, so one present means all three are.
     if (damage === undefined || reach === undefined || cooldown === undefined) continue;
     if (unit.dying || unit.health.depleted) continue;
+    // Workers remain passive until an actual hostile hit gave them the one
+    // defensive target `engagementSystem` permits. Their nearby punch must not
+    // turn the zero-acquisition worker role into an automatic attacker.
+    if (unit.role === "worker" && !unit.autoAcquired) continue;
     if (state.remaining(unit.id) > 0) continue;
 
     let nearest: CombatTarget | null = null;

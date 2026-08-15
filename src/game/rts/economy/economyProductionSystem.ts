@@ -785,7 +785,7 @@ export class EconomyProductionSystem {
       const target = this.findReachableSource(worker, producer.structure, economy, requirement.source);
       if (!target) return false;
       worker.setMovePath(target.path);
-      worker.setWorkerActivity(this.activityForProducer(producer));
+      worker.setWorkerActivity(this.activityForStructure(producer.structure));
       const assignment: WorkerAssignment = {
         worker,
         approach: target.approach,
@@ -807,7 +807,7 @@ export class EconomyProductionSystem {
     const path = this.navigation.plan(worker.position, approach);
     if (!path) return false;
     worker.setMovePath(path);
-    worker.setWorkerActivity(this.activityForProducer(producer));
+    worker.setWorkerActivity(this.activityForStructure(producer.structure));
     const assignment: WorkerAssignment = {
       worker,
       approach,
@@ -825,11 +825,17 @@ export class EconomyProductionSystem {
   /**
    * This system owns the actual producer assignment, so it reports the category
    * rather than leaving the renderer to infer one from a building or resource.
-   * Only the farm currently has a visually honest specific family; finite
-   * gathering remains neutral until its own clip has passed visual acceptance.
+   * The source-building identity is owned here, where the actual assignment is
+   * made. The renderer never guesses it from an arbitrary nearby mesh.
    */
-  private activityForProducer(producer: ProducerRecord): WorkerActivity {
-    return producer.structure.stats.id === "farm" ? "cultivation" : "generic";
+  private activityForStructure(structure: PlacedStructure): WorkerActivity {
+    switch (structure.stats.id) {
+      case "farm": return "cultivation";
+      case "lumber_camp": return "lumber";
+      case "quarry":
+      case "gold_mine": return "mining";
+      default: return "generic";
+    }
   }
 
   private returnToCamp(assignment: WorkerAssignment, structure: PlacedStructure): boolean {
@@ -871,7 +877,7 @@ export class EconomyProductionSystem {
     assignment.worker.setMovePath(target.path);
     assignment.state = "moving-to-source";
     assignment.worker.setCarrying(false);
-    assignment.worker.setWorkerActivity(structure.stats.id === "farm" ? "cultivation" : "generic");
+    assignment.worker.setWorkerActivity(this.activityForStructure(structure));
     return true;
   }
 

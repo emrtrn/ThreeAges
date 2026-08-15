@@ -14,7 +14,9 @@ export type { RootMotionMode, RootMotionUpAxis };
 
 /**
  * Semantic clip roles an asset may author. `idle`/`walk`/`run`/`jump`/`fall`/
- * `work`/`workCultivation`/`workHarvest`/`workLivestock`/`carryIdle`/`carryWalk`/`rest`/`hold` are continuous states; `attack`/`attackRecovery`/`hit`/`death` are one-shot
+ * `work`/`workCultivation`/`workHarvest`/`workLivestock`/`workHunting`/
+ * `workChopping`/`carryIdle`/`carryWalk`/`rest`/`hold` are continuous states;
+ * `attack`/`attackMelee`/`attackRecovery`/`hit`/`death` are one-shot
  * actions, played once per event rather than looped (RTS skeletal animation plan
  * Faz D, Guard animation plan Faz 2). `hit` is the flinch a body plays when damage
  * is applied to it, the mirror of `attack`. `rest` is the held pose a body waits in
@@ -41,11 +43,14 @@ export const ANIMATION_SET_ROLES = [
   "workCultivation",
   "workHarvest",
   "workLivestock",
+  "workHunting",
+  "workChopping",
   "carryIdle",
   "carryWalk",
   "rest",
   "hold",
   "attack",
+  "attackMelee",
   "attackRecovery",
   "hit",
   "death",

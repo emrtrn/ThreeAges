@@ -12,23 +12,29 @@ Bu değişimde adı açık olan eşlemeler şöyledir:
 
 | RTS rolü | Yeni klip |
 | --- | --- |
-| `idle` / `walk` / `run` | `Idle_Loop` / `Walk_Loop` / `Sprint_Loop` |
-| genel `work` | `Farming_kneeling_idle` |
+| `idle` / `walk` / `run` | `Idle_FoldArms_Loop` / `Walk_Loop` / `Sprint_Loop` |
+| construction / repair / mining `work` | `Fixing_Kneeling` montage (`enter` / `loop` / `exit`) |
 | `workCultivation` | `Farming_dig_and_plant_seeds` + `Farming_plant_a_plant`, `Farming_watering` varyantları |
+| `workHunting` / `workChopping` | `Attack` / `TreeChopping_Loop` |
 | Crate `carryIdle` / `carryWalk` | `Farming_box_idle` / `Farming_holding_walk` |
-| `attack` / `death` | `Attack` / `Death` |
+| ranged / melee / hit / death | `OverhandThrow`; `Punch_Jab` + `Punch_Cross`; `React_Chest` + `React_Head`; `Death` |
 
 Yeni rigde taşıma socket'i `Hips` kemiğindeki `carry-box`tır. Başlangıç transformu
 `position: [0, 0.03, 0.24]` olarak korundu; Crate'in el ve gövde hizası dünya içi
-görsel kabulde yeniden ayarlanacaktır. `React_Chest` ve `React_Head`, gerçek hasar
-tepkisi oldukları doğrulanmadan `hit` rolüne bağlanmayacaktır.
+görsel kabulde yeniden ayarlanacaktır. `React_Chest` ve `React_Head`, gerçek
+`impactCount` hasar olayına deterministik `hit` varyantları olarak bağlanır.
 
 Önceki 33 klipli Mixamo paketine dair aşağıdaki envanter, tarihsel kayıt olarak
 kalır; bu bölümdeki eski `Worker_*` klip adları artık aktif runtime sözleşmesi
 değildir.
 
 Oluşturulma tarihi: 2026-08-13  
-Durum: **Devam ediyor — Faz 1/1A/2 ve cultivation kabulü tamamlandı; Faz 3, gerçek hasat/sağım state'i kararını bekliyor.**
+Durum: **Devam ediyor — Faz 1/1A/2, cultivation ve Faz 5 combat/activity bağlantısı otomasyonla tamamlandı; dünya içi görsel kabul ve Faz 3 hasat/sağım kararları açık.**
+
+> **2026-08-15 aktif sözleşme notu:** Bölüm 4–10'daki eski `Worker_*` ve
+> `Farming_kneeling_idle` adları önceki 33-klipli paketin tarihsel kaydıdır.
+> Runtime için bu belgenin Bölüm 0 tablosu ve Faz 5'teki yeni Worker klip
+> eşlemeleri geçerlidir.
 
 ## 1. Amaç
 
@@ -153,10 +159,10 @@ deterministik yapılır. Aktivite değişmeden seçimin kararlı kalması tercih
 
 ### K-04 — İnşaat için yanlış araç hareketi kullanılmaz
 
-Assette çekiç veya belirgin yapı onarım klibi yok. Tarım klipleri inşaat/onarım
-rolüne yalnız isim zenginliği uğruna bağlanmaz. İnşaat/onarımda Worker ayakta
-nötr idle'da kalır; işin okunurluğunu mevcut yapı inşaat görseli ve ilerleme
-sunumu taşır. Gerçek inşaat klibi veya uygun prop bulunursa ayrıca authorlanır.
+Yeni paketteki `Fixing_Kneeling`, construction, repair ve mining için kabul edilen
+uygun iş klibidir. Tarım klipleri bu rollere bağlanmaz. Klip başlangıç/loop/bitiş
+bir arada olduğu için sidecar montage'i yalnız bir kez diz çöker, iş sürerken
+orta pencereyi loop'lar ve `working` bittiğinde yalnız bir kez kalkar.
 
 ### K-05 — Prop görünürlüğü ve animasyon birlikte değişir
 
@@ -263,7 +269,7 @@ bir aktivite kimliğiyle doğru animasyon ailesini seçmek.
   `workerActivity` sözleşmesi eklendi.
 - [x] En küçük yeterli kategori kümesi authorlandı:
   `generic`, `construction`, `repair`, `cultivation`, `harvest`, `livestock`,
-  `carryingBox`, `carryingLoad`, `wheelbarrow`.
+  `mining`, `lumber`, `carryingBox`, `carryingLoad`, `wheelbarrow`.
 - [x] `Unit` içinde bu durumun yalnız sunum amaçlı olduğu açıkça belgelendi.
 - [x] `WorkerConstructionSystem`, `EconomyProductionSystem` ve `PastureSystem`
   yalnız sahip oldukları gerçek atama bilgisini bildirir; renderer bina/resource
@@ -272,8 +278,9 @@ bir aktivite kimliğiyle doğru animasyon ailesini seçmek.
   klibi kabul edilmeyen sonlu kaynaklar `generic` kalır.
 - [x] İş bırakma, iş değişimi, bina kaybı, kaynak tükenmesi ve Worker ölümü dahil
   mevcut çıkış yollarında aktivite temizlenir.
-- [x] Yeni sidecar rolü gerekmiyor; mevcut semantic `work` rolü korunuyor ve
-  activity seçimi henüz runtime klip havuzunu değiştirmiyor.
+- [x] Construction, repair and mining mevcut `work` rolünü paylaşır;
+  `Fixing_Kneeling` montage'i yalnız bu üç activity için çalışır. Lumber ayrı
+  `workChopping` rolüne gider; renderer yapı/resource kimliğinden tahmin etmez.
 
 ### 9.2 Tarım ve hasat eşlemeleri
 
@@ -384,19 +391,28 @@ animasyonlarını oyuna kazandırmak.
   sunumsal one-shot olarak oynat.
 - [ ] Boşaltma animasyonu kaynak transferini başlatmaz veya geciktirmez.
 
-## 11. Faz 5 — Eksik Roller ve Takım Okunurluğu Karar Kapısı
+## 11. Faz 5 — Savaş Rolleri ve Takım Okunurluğu Karar Kapısı
 
-**Durum:** ⬜ Faz 4'ü bekliyor
+**Durum:** 🟨 Kod ve hedefli otomasyon tamam; dünya içi görsel kabul bekliyor.
 
 ### 11.1 Attack, hit ve death
 
-- [ ] Worker'ın avlanma/misilleme davranışı için uygun attack klibi bulunmadığını
-  açık backlog olarak koru.
-- [ ] Tarım klibini sahte saldırı klibi olarak kullanma.
-- [ ] Hit/death asseti eklenene kadar mevcut fallback/procedural ölüm sunumunun
-  davranışını doğrula.
-- [ ] Yeni klip sağlanırsa gerçek `attackCount`, `impactCount` ve death state'ine
-  Guard/Archer ile aynı olay-sonrası sunum ilkesiyle bağla.
+- [x] Av kampında prey kaynak sistemi `hunting` bildirdiğinde `Attack` sürekli
+  iş klibi seçilir; avın hasar/ürün miktarı bu sunumdan türetilmez.
+- [x] Worker uzaktaki otomatik misilleme hedefini 1.25–6 birim bandında
+  `OverhandThrow` ile vurur. `Rock.gltf` yalnız görsel uçuş izidir; gerçek hasar,
+  cooldown ve hedef `unitCombat` tarafından önceden kararlaştırılır.
+- [x] Hedef 1.25 birimin içindeyse mevcut yakın hasar yolu bağımsız sayacıyla
+  `Punch_Jab` / `Punch_Cross` varyantını oynatır.
+- [x] Gerçek health impact sayacı `React_Chest` / `React_Head` varyantını, death
+  state'i `Death` tek-atımını başlatır; ölüm tüm diğer kanallardan önceliklidir.
+- [x] `Idle_FoldArms_Loop`, boş Worker'ın idle rolüdür.
+- [x] `Fixing_Kneeling`, construction/repair/mining activity'sinde tek sefer diz
+  çökme, iş bitene kadar loop ve tek sefer kalkma montage'i olarak authorlandı.
+- [x] `TreeChopping_Loop`, yalnız lumber camp assignment'ının `lumber` activity
+  rolünde çalışır.
+- [ ] Montage zaman pencereleri, Worker kalabalığı, taş elden çıkışı ve punch
+  temaslarının dünya içi görsel kabulü kullanıcıyla doğrulanacak.
 
 ### 11.2 Oyuncu/AI materyal ayrımı — isteğe bağlı
 
@@ -525,3 +541,10 @@ Plan ancak aşağıdaki koşullar birlikte sağlandığında tamam kabul edilir:
   sunuma aktarıldı. Worker box idle/walk rolleri, `carry-box` skeletal socket ve
   Actor cargo prop'u authorlandı; hedefli Worker Faz 4 ve miner round-trip
   kontrolleri geçti. Klip/prop hizalamasının dünya içi görsel kabulü açıktır.
+- 2026-08-15 — Faz 5: `Idle_FoldArms_Loop`, `Attack`, `Death`,
+  `Fixing_Kneeling`, `OverhandThrow`, `Punch_Jab`, `Punch_Cross`,
+  `React_Chest`, `React_Head` ve `TreeChopping_Loop` gerçek Worker sunum
+  durumlarına bağlandı. `Fixing_Kneeling` 0–1.2 s enter, 1.2–4.0 s loop,
+  4.0–8.352 s exit montage'idir. Worker misillemesi 1.25–6 bandında taş atar;
+  daha yakında mevcut yakın hasar yolu Jab/Cross sunumunu kullanır. TypeScript ve
+  hedefli `Worker Faz 5` engine kontrolü geçti; dünya içi görsel kabul açıktır.

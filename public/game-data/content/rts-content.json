@@ -329,6 +329,7 @@
   "props": {
     "cannonball": "cannon-ball",
     "arrow": "arrow",
+    "rock": "rock",
     "guardHelmet": "guard-helmet",
     "guardShield": "guard-shield",
     "guardSword": "guard-sword",

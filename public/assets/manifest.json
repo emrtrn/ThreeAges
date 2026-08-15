@@ -30698,7 +30698,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 4667928
+        "bytes": 4663420
       },
       "license": "Unknown"
     }

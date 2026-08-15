@@ -2,6 +2,14 @@
   "schema": 1,
   "sockets": [
     {
+      "name": "throw-release",
+      "bone": "RightHand",
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1],
+      "previewAssetId": "rock"
+    },
+    {
       "name": "carry-box",
       "bone": "Hips",
       "position": [0, 0.03, 0.24],
@@ -11,25 +19,64 @@
     }
   ],
   "animationSet": {
-    "idle": "Idle_Loop",
+    "idle": "Idle_FoldArms_Loop",
     "walk": "Walk_Loop",
     "run": "Sprint_Loop",
-    "work": "Farming_kneeling_idle",
+    "work": "Fixing_Kneeling",
     "workCultivation": "Farming_dig_and_plant_seeds",
+    "workHunting": "Attack",
+    "workChopping": "TreeChopping_Loop",
     "carryIdle": "Farming_box_idle",
     "carryWalk": "Farming_holding_walk",
-    "attack": "Attack",
+    "attack": "OverhandThrow",
+    "attackMelee": "Punch_Jab",
+    "hit": "React_Chest",
     "death": "Death"
   },
   "animationVariants": {
     "workCultivation": [
       "Farming_plant_a_plant",
       "Farming_watering"
+    ],
+    "attackMelee": [
+      "Punch_Cross"
+    ],
+    "hit": [
+      "React_Head"
     ]
   },
   "blendSpaces": [],
   "notifies": [],
-  "montages": [],
+  "montages": [
+    {
+      "name": "work",
+      "clip": "Fixing_Kneeling",
+      "slot": "fullBody",
+      "loop": true,
+      "blendInSeconds": 0.12,
+      "blendOutSeconds": 0.2,
+      "sections": [
+        {
+          "name": "enter",
+          "startSeconds": 0,
+          "endSeconds": 1.2,
+          "loop": false
+        },
+        {
+          "name": "loop",
+          "startSeconds": 1.2,
+          "endSeconds": 4,
+          "loop": true
+        },
+        {
+          "name": "exit",
+          "startSeconds": 4,
+          "endSeconds": 8.352,
+          "loop": false
+        }
+      ]
+    }
+  ],
   "rootMotion": [
     {
       "clip": "Walk_Loop",
