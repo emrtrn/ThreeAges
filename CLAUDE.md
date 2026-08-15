@@ -83,6 +83,11 @@ engine/editor.
     skipped. **A matching filter also runs slow checks**, which is what makes the
     AI exception above work. Prints `PARTIAL` and is **never a green build**; a
     filter matching nothing exits 1 so typos aren't silent.
+  Always go through the npm script: `run-engine-tests.mjs` is what parses
+  `--filter` into `ENGINE_TESTS_FILTER`, so `npx tsx tools/engine-tests.ts
+  --filter x` silently runs **everything** instead. The runner also stops at the
+  first failing check, so one red hides every check behind it — fix it and re-run
+  before concluding anything about the rest.
   A check belongs in `checkSlow` by **cost alone** (>1s), never by importance.
   `ENGINE_TESTS_TIMING=1` appends per-check wall time — use it before tagging one.
   `docs/planned/ENGINE_TESTS_SPLIT_PLAN.md` carries the measurements and the plan
@@ -114,6 +119,17 @@ engine/editor.
   radius past the GDD cap) are refused in `validateGameData.ts`, where the error
   names the file and field. The check that this still holds: scale every
   magnitude in those files and run `npm run test:engine` — it must stay green.
+- **The same rule covers tuning constants that live in code.** Presentation
+  timings and poses — `SIEGE_WRECK_TIMING`, animation durations, offsets, drop
+  distances, pitch angles — are authored looks, not contracts, even though they
+  sit in `src/` rather than `public/game-data/`. They get retuned by eye, so a
+  test that pins one goes red on a change that was correct. Proven 2026-08-15:
+  `barrelPitchRadians` was retuned `1.05` → `-0.1` (the barrel now tips the other
+  way) and the check asserting `barrelPitch > 0` broke `main` — the code was
+  right and the test was wrong. Assert progress or relationship instead
+  (`barrelPitch / barrelPitchRadians` ∈ (0,1) — "part-way into its authored
+  pitch"), so any direction and magnitude stays green while the timeline's shape
+  is still pinned. Sign is tuning; movement is the contract.
 - **CI** (`.github/workflows/ci.yml`) runs `build:verify`
   (`tsc --noEmit` + `vite build` + `test:engine` + `verify:dist --strict`) and
   `check:assets` on every push/PR to `main` — the automated mirror of the local

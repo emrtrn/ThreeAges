@@ -6179,6 +6179,25 @@ await checkAsync("rapier builds a compound collider per authored primitive (gap 
   }
 });
 
+/**
+ * The eight corners of a unit cube, shared by every convex-hull fixture below.
+ *
+ * Declared here rather than beside its second user, ~4400 lines down: the checks
+ * in this file run as they are declared, so a `const` defined after its first
+ * use is a temporal-dead-zone crash the moment the suite is run any way that
+ * does not go through esbuild (`npx tsx tools/engine-tests.ts` did exactly that).
+ */
+const UNIT_CUBE_CORNERS: [number, number, number][] = [
+  [-0.5, -0.5, -0.5],
+  [0.5, -0.5, -0.5],
+  [0.5, 0.5, -0.5],
+  [-0.5, 0.5, -0.5],
+  [-0.5, -0.5, 0.5],
+  [0.5, -0.5, 0.5],
+  [0.5, 0.5, 0.5],
+  [-0.5, 0.5, 0.5],
+];
+
 await checkAsync("rapier builds a convex collider from hull points", async () => {
   const physics = new PhysicsSubsystem({ backend: "rapier" });
   physics.setGravity([0, 0, 0]);
@@ -10610,17 +10629,6 @@ check("navigation role uses placement override before asset collision default", 
   assert.equal(ignored ? readColliderComponent(ignored)?.navigationRole : undefined, "ignored");
   assert.equal(auto ? readColliderComponent(auto)?.navigationRole : undefined, "auto");
 });
-
-const UNIT_CUBE_CORNERS: [number, number, number][] = [
-  [-0.5, -0.5, -0.5],
-  [0.5, -0.5, -0.5],
-  [0.5, 0.5, -0.5],
-  [-0.5, 0.5, -0.5],
-  [-0.5, -0.5, 0.5],
-  [0.5, -0.5, 0.5],
-  [0.5, 0.5, 0.5],
-  [-0.5, 0.5, 0.5],
-];
 
 check("adapter keeps convex hull points and derives their AABB", () => {
   const convexLayout: RoomLayout = {
@@ -38088,7 +38096,13 @@ check("Siege crew Faz 4: the wreck runs a timeline and the gun stops tipping ove
 
   // The barrel drops and pitches, and it finishes falling.
   const dropping = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.barrelFallSeconds * 0.5).state, 4);
-  assert.ok(dropping.barrelDrop > 0 && dropping.barrelPitch > 0, "the barrel comes off its pivot");
+  assert.ok(dropping.barrelDrop > 0, "the barrel comes off its pivot");
+  // Which way it pitches is an authored look, not a contract — the shipped gun
+  // tips a tenth of a radian one way where it used to swing a full radian the
+  // other. So assert the *progress* through whatever angle is authored, which
+  // stays true at any retune, rather than the sign it happens to have today.
+  const pitchProgress = dropping.barrelPitch / SIEGE_WRECK_TIMING.barrelPitchRadians;
+  assert.ok(pitchProgress > 0 && pitchProgress < 1, "and is part-way into its authored pitch");
   const hopping = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.barrelHopSeconds * 0.5).state, 4);
   assert.ok(hopping.barrelHop > 0, "the opening blast gives the barrel a visible upward hop");
   const dropped = siegeWreckFrame(runWreck(SIEGE_WRECK_TIMING.barrelFallSeconds + 1).state, 4);
