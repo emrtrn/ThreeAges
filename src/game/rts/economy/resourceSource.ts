@@ -70,6 +70,13 @@ export interface ResourceHarvest {
    * simply means "it gave me something".
    */
   readonly working: boolean;
+  /**
+   * Optional presentation phase for a source whose first work tick differs
+   * visibly from gathering its yielded material. Wildlife uses `strike` for
+   * the single blow that drops the animal, then `gather` for butchering.
+   * Ordinary finite sources omit it.
+   */
+  readonly activity?: "strike" | "gather";
 }
 
 export interface ResourceSource {

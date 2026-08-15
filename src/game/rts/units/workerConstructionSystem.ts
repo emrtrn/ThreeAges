@@ -49,11 +49,49 @@ interface WorkerAssignment {
   readonly job: WorkerSiteJob;
   /** "building" and "repairing" are both settled assignments, per job. */
   state: Exclude<WorkerConstructionState, "idle">;
+  /** Seconds spent in `moving` without reaching build reach. See {@link STALLED_APPROACH_SECONDS}. */
+  movingSeconds: number;
 }
 
 const BUILD_RANGE = 1.25;
+
+/**
+ * How far outside the footprint edge a builder may stand and still be working.
+ *
+ * `BUILD_RANGE` alone measured the distance to {@link WorkerAssignment.approach},
+ * a synthetic point on a ring `BUILD_RANGE * 0.7` outside the footprint — which
+ * is *inside* the structure's own navigation blocker. The nav grid (cell size 1)
+ * therefore parks the builder on the nearest free cell, consistently ~1.5 out
+ * from the edge, so `distanceTo(approach) <= BUILD_RANGE` was never true: the
+ * assignment sat in `moving` forever, the site stayed at 0%, and — because the
+ * AI runs one build at a time — its whole build queue stopped behind it.
+ *
+ * So arrival is measured against the building itself rather than against a point
+ * that may be unreachable, with one nav cell of slack over `BUILD_RANGE` for the
+ * grid's own snapping. A builder this close is standing against the wall.
+ */
+const BUILD_REACH = BUILD_RANGE + 1;
+
+/**
+ * How long a builder may be en route without reaching build reach before the
+ * assignment is given up.
+ *
+ * The re-plan below only fires when the mover has no route left, so a worker
+ * whose route keeps "succeeding" short of the site retried forever without ever
+ * gaining ground. This is the backstop: release it, and `staffConstructionSites`
+ * offers the foundation a different worker and a different approach next tick.
+ */
+const STALLED_APPROACH_SECONDS = 20;
+
 /** Four unique footprint-edge work positions keep worker pathing readable. */
 const MAX_BUILDERS_PER_SITE = 4;
+
+/** Distance from a point to a structure's footprint rectangle, 0 when inside. */
+function distanceToFootprint(structure: PlacedStructure, x: number, z: number): number {
+  const dx = Math.max(Math.abs(x - structure.x) - structure.stats.footprint.width / 2, 0);
+  const dz = Math.max(Math.abs(z - structure.z) - structure.stats.footprint.depth / 2, 0);
+  return Math.hypot(dx, dz);
+}
 
 export class WorkerConstructionSystem {
   private readonly assignments = new Map<number, WorkerAssignment>();
@@ -250,7 +288,9 @@ export class WorkerConstructionSystem {
       if (!path) continue;
       worker.setMovePath(path);
       worker.setWorkerActivity(job === "repair" ? "repair" : "construction");
-      this.assignments.set(worker.id, { worker, structure, approach, source, job, state: "moving" });
+      this.assignments.set(worker.id, {
+        worker, structure, approach, source, job, state: "moving", movingSeconds: 0,
+      });
       return true;
     }
     return false;
@@ -282,12 +322,23 @@ export class WorkerConstructionSystem {
       // fallback; the site’s own construction visual and progress remain the
       // presentation of the real build work. Activity still reports the job to
       // future authored construction/repair clips without changing simulation.
-      worker.setWorking(false);
+      worker.setWorking(assignment.state === "building" || assignment.state === "repairing");
       if (assignment.state !== "moving") continue;
-      if (worker.position.distanceTo(assignment.approach) <= BUILD_RANGE) {
+      // Arrival is asked of the building, not of the approach point: the approach
+      // sits inside the site's own nav blocker, so a builder can be standing
+      // against the wall and still be metres from it (see {@link BUILD_REACH}).
+      if (worker.position.distanceTo(assignment.approach) <= BUILD_RANGE
+        || distanceToFootprint(structure, worker.position.x, worker.position.z) <= BUILD_REACH) {
         worker.stop();
         assignment.state = assignment.job === "repair" ? "repairing" : "building";
-        worker.setWorking(false);
+        worker.setWorking(true);
+        continue;
+      }
+      assignment.movingSeconds += deltaSeconds;
+      // Neither arriving nor gaining ground. Give the job up rather than hold the
+      // foundation — and, for the AI, its single build slot — open forever.
+      if (assignment.movingSeconds >= STALLED_APPROACH_SECONDS) {
+        this.release(worker);
         continue;
       }
       // A failed/stopped route used to leave the assignment occupied forever.

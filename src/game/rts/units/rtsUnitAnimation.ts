@@ -22,7 +22,7 @@ export type RtsAnimationRole =
   | "aimWalkForward" | "aimWalkBack" | "aimWalkLeft" | "aimWalkRight"
   | "work" | "workCultivation" | "workHarvest" | "workLivestock" | "workHunting" | "workChopping"
   | "carryIdle" | "carryWalk"
-  | "rest" | "hold" | "attack" | "attackMelee" | "hit" | "death";
+  | "rest" | "hold" | "attack" | "attackHunting" | "attackMelee" | "hit" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
 export interface RtsAnimationInput {
@@ -100,6 +100,8 @@ export interface RtsAnimationInput {
   readonly impactCount: number;
   /** Close blows outside the main weapon, such as the Worker's punches. */
   readonly meleeCount?: number;
+  /** Decisive wildlife strikes; separate from player-combat attack events. */
+  readonly huntStrikeCount?: number;
 }
 
 /**
@@ -335,6 +337,7 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   // beaten. What the continuous channel wants for an engaged, struck or fallen
   // unit is the standing pose underneath the action.
   attack: ["idle"],
+  attackHunting: ["idle"],
   attackMelee: ["idle"],
   hit: ["idle"],
   death: ["idle"],
@@ -439,6 +442,7 @@ export function rtsWorkRoleForActivity(
   if (activity === "cultivation") return "workCultivation";
   if (activity === "harvest") return "workHarvest";
   if (activity === "livestock") return "workLivestock";
+  if (activity === "hunting") return "workHunting";
   if (activity === "lumber") return "workChopping";
   return "work";
 }
@@ -454,7 +458,7 @@ export function rtsWorkRoleForActivity(
 
 /** The one-shot currently overriding locomotion, if any. */
 export interface RtsActionState {
-  readonly kind: "none" | "attack" | "attackMelee" | "attackRecovery" | "hit" | "death";
+  readonly kind: "none" | "attack" | "attackHunting" | "attackMelee" | "attackRecovery" | "hit" | "death";
   /** Seconds left of the running clip. Reaches 0 on the frame it finishes. */
   readonly remainingSeconds: number;
   /** The blow count this state was last reconciled against; see {@link advanceRtsAction}. */
@@ -463,6 +467,8 @@ export interface RtsActionState {
   readonly impactCount: number;
   /** Same event counter for the independent close weapon. */
   readonly meleeCount?: number;
+  /** Same event counter for the Worker's one-shot wildlife strike. */
+  readonly huntStrikeCount?: number;
   /**
    * True when this one-shot owns only the upper body, leaving the legs on
    * locomotion — a walking unit can react or fire without stopping its stride.
@@ -483,6 +489,7 @@ export const RTS_ACTION_NONE: RtsActionState = {
   attackCount: 0,
   impactCount: 0,
   meleeCount: 0,
+  huntStrikeCount: 0,
   layered: false,
 };
 
@@ -493,6 +500,7 @@ export const RTS_ACTION_NONE: RtsActionState = {
  */
 export interface RtsActionDurations {
   readonly attack: number | null;
+  readonly attackHunting?: number | null;
   readonly attackMelee?: number | null;
   /** Optional visual tail of an attack; a new real attack may interrupt it. */
   readonly attackRecovery?: number | null;
@@ -563,6 +571,7 @@ export function advanceRtsAction(
     attackCount: input.attackCount,
     impactCount: input.impactCount,
     meleeCount: input.meleeCount ?? 0,
+    huntStrikeCount: input.huntStrikeCount ?? 0,
     layered: false,
   };
   if (input.dying) {
@@ -584,6 +593,14 @@ export function advanceRtsAction(
     // `state.layered` last, overriding the default: the choice belongs to the
     // frame the flinch started, not to the speed the unit happens to have now.
     if (remaining > 0) return { kind: "hit", remainingSeconds: remaining, ...counters, layered: state.layered };
+  }
+  if ((input.huntStrikeCount ?? 0) !== (state.huntStrikeCount ?? 0)
+    && durations.attackHunting !== null && durations.attackHunting !== undefined) {
+    return { kind: "attackHunting", remainingSeconds: durations.attackHunting, ...counters };
+  }
+  if (state.kind === "attackHunting") {
+    const remaining = state.remainingSeconds - dt;
+    if (remaining > 0) return { kind: "attackHunting", remainingSeconds: remaining, ...counters };
   }
   if ((input.meleeCount ?? 0) !== (state.meleeCount ?? 0) && durations.attackMelee !== null && durations.attackMelee !== undefined) {
     return { kind: "attackMelee", remainingSeconds: durations.attackMelee, ...counters };
@@ -629,6 +646,7 @@ export function advanceRtsAction(
  */
 export function rtsActionSequence(state: RtsActionState): number {
   if (state.kind === "attack" || state.kind === "attackRecovery") return state.attackCount;
+  if (state.kind === "attackHunting") return state.huntStrikeCount ?? 0;
   if (state.kind === "attackMelee") return state.meleeCount ?? 0;
   if (state.kind === "hit") return state.impactCount;
   return 0;

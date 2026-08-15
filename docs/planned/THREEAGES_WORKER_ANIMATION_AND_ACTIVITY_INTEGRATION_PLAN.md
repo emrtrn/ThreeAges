@@ -12,10 +12,10 @@ Bu değişimde adı açık olan eşlemeler şöyledir:
 
 | RTS rolü | Yeni klip |
 | --- | --- |
-| `idle` / `walk` / `run` | `Idle_FoldArms_Loop` / `Walk_Loop` / `Sprint_Loop` |
+| `idle` / `walk` / `run` | `Farming_holding_idle`, `Idle_FoldArms_Loop`, `Idle_Loop` deterministic havuzu / `Walk_Loop` / `Sprint_Loop` |
 | construction / repair / mining `work` | `Fixing_Kneeling` montage (`enter` / `loop` / `exit`) |
 | `workCultivation` | `Farming_dig_and_plant_seeds` + `Farming_plant_a_plant`, `Farming_watering` varyantları |
-| `workHunting` / `workChopping` | `Attack` / `TreeChopping_Loop` |
+| av strike / post-kill work / `workChopping` | bir kez `Attack` / `Fixing_Kneeling` montage / `TreeChopping_Loop` |
 | Crate `carryIdle` / `carryWalk` | `Farming_box_idle` / `Farming_holding_walk` |
 | ranged / melee / hit / death | `OverhandThrow`; `Punch_Jab` + `Punch_Cross`; `React_Chest` + `React_Head`; `Death` |
 
@@ -544,7 +544,23 @@ Plan ancak aşağıdaki koşullar birlikte sağlandığında tamam kabul edilir:
 - 2026-08-15 — Faz 5: `Idle_FoldArms_Loop`, `Attack`, `Death`,
   `Fixing_Kneeling`, `OverhandThrow`, `Punch_Jab`, `Punch_Cross`,
   `React_Chest`, `React_Head` ve `TreeChopping_Loop` gerçek Worker sunum
-  durumlarına bağlandı. `Fixing_Kneeling` 0–1.2 s enter, 1.2–4.0 s loop,
-  4.0–8.352 s exit montage'idir. Worker misillemesi 1.25–6 bandında taş atar;
+  durumlarına bağlandı. `Fixing_Kneeling` 0–0.7 s enter, 0.7–4.033 s loop,
+  4.033–5.267 s exit montage'idir. Worker misillemesi 1.25–6 bandında taş atar;
   daha yakında mevcut yakın hasar yolu Jab/Cross sunumunu kullanır. TypeScript ve
   hedefli `Worker Faz 5` engine kontrolü geçti; dünya içi görsel kabul açıktır.
+- 2026-08-15 — Düzeltme: `WorkerConstructionSystem` aktif `building` ve
+  `repairing` assignment'larında gerçek `working=true` bildirir; böylece
+  `Fixing_Kneeling` montage'i enter → loop → exit yoluna girer. Hunting camp
+  assignment'ı gerçek `hunting` activity'si olarak raporlanır ve tüm av süresi
+  boyunca `Attack` kullanır; artık Fixing fallback'i tekrar etmez. İki Worker
+  Actor'ına `Axe.glb`, `right-hand-tool` socket'i ve yalnız `lumber` activity'si
+  için görünürlük eklendi. Idle havuzu deterministik olarak
+  `Farming_holding_idle`, `Idle_FoldArms_Loop`, `Idle_Loop` kliplerinden seçilir.
+
+- 2026-08-15 — Av düzeltmesi: Worker temas anında hayvanı tek vuruşla düşürür;
+  `attackHunting` olayı `Attack` klibini yalnız bir kez oynatır. Sonraki et
+  toplama `Fixing_Kneeling` montage'ına girer, bu nedenle ölü hayvanda Attack
+  tekrarlanmaz. Montage aralıkları klibin gerçek 5.267 sn süresine düzeltildi ve
+  `Fixing_Kneeling` Hips root hareketi `lockXYZ` yapıldı. Balta prop'u iki Worker
+  Actor'unda `right-hand-tool` socket'inde daha okunur ölçek/offset ile yalnız
+  lumber assignment'ta görünür.

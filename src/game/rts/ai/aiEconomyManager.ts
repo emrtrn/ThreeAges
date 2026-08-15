@@ -14,7 +14,7 @@
  */
 import type { AiBalance, BuildingBalance } from "../../data/gameDataTypes";
 import { buildingUnlocked } from "../progression/kingdomProgressionSystem";
-import type { AiBlackboard } from "./aiBlackboard";
+import { AI_RESOURCE_IDS, type AiBlackboard } from "./aiBlackboard";
 import type { AiBuildManager } from "./aiBuildManager";
 import type { AiDecisionLog } from "./aiDecisionLog";
 import type { AiFailureReason } from "./aiTypes";
@@ -40,6 +40,39 @@ export type AiBottleneck =
  * it cannot buy its way out of.
  */
 export const AI_WOOD_SAFETY_STOCK = 80;
+
+/**
+ * §24: hold the pending centre-level cost back from the building budget.
+ *
+ * The centre level is not one more building — it is the multiplier under every
+ * other building. A Yerleşim Lv1 lumber camp pays 40 wood per worker-minute and
+ * a levelled one pays 120, so the level is what *fixes* a weak economy rather
+ * than what a strong economy affords later.
+ *
+ * Without this the two halves deadlocked: the Economy executor spent every log
+ * as it arrived, so the stockpile never reached the 200 wood a level costs;
+ * {@link scoreAgeUp} only scores once the cost is affordable, so AgeUp stayed at
+ * ~0 and Economy kept the plan forever. Measured over eight procedural seeds,
+ * five never bought a single centre level in 24 minutes while banking thousands
+ * of food — they were not poor, they were never saving.
+ *
+ * So while a level is pending and the opening producers are up, the builder may
+ * only spend what is left *above* that cost. Housing is exempt for the same
+ * reason it is exempt from the wood stock: a population lock stops the workers
+ * who would earn the level in the first place.
+ */
+export function centerLevelReserveFor(bb: AiBlackboard, resourceId: string): number {
+  const cost = bb.centerLevelUpgradeCost;
+  if (!cost) return 0;
+  // The bootstrap gate {@link scoreAgeUp} already uses: before both staple
+  // producers are running, saving for a level starves the base that has to earn
+  // it. Held to the same condition so the two cannot drift apart.
+  const bootstrapReady = (bb.buildingCounts["farm"] ?? 0) > 0
+    && (bb.buildingCounts["lumber_camp"] ?? 0) > 0
+    && bb.disconnectedProducers === 0;
+  if (!bootstrapReady) return 0;
+  return cost[resourceId] ?? 0;
+}
 
 /** §37: report the one bottleneck worth acting on, most severe first. */
 export function detectBottleneck(bb: AiBlackboard, balance: AiBalance): AiBottleneck {
@@ -217,11 +250,13 @@ export class AiEconomyManager {
 
     for (const wanted of buildOrder(bb, this.balance, this.buildings)) {
       // §38: only Housing may dip into the safety stock, because housing is what
-      // the stock exists to guarantee.
+      // the stock exists to guarantee. §24's centre-level reserve is exempt for
+      // Housing on the same grounds — see {@link centerLevelReserveFor}.
       const reserve = wanted === "house" ? 0 : AI_WOOD_SAFETY_STOCK;
       // Not affordable yet: this want still owns the slot, so wait for it rather
       // than skipping ahead and spending the stock a higher priority needs.
       if ((bb.resourceStocks["wood"] ?? 0) < reserve) return;
+      if (this.heldByCenterLevelReserve(bb, wanted)) return;
 
       const outcome = this.builds.request(wanted, bb.now);
       // §43/§5: "waiting" and "busy" are normal and must stay quiet — logging
@@ -240,6 +275,26 @@ export class AiEconomyManager {
   reset(): void {
     this.lastBottleneck = null;
     this.exhausted.clear();
+  }
+
+  /**
+   * §24: whether this want must wait for the pending centre level to be paid.
+   *
+   * Two exemptions, and both are there to stop the reserve from trading one
+   * deadlock for another:
+   *
+   *  - **Housing**, as with {@link AI_WOOD_SAFETY_STOCK}: a population lock stops
+   *    the workers who earn the level.
+   *  - **A missing age requirement.** The Kasaba transition is gated on six named
+   *    buildings, so an AI that saved through every one of them would buy centre
+   *    levels forever and never qualify for the age those levels are for. The
+   *    quarry and the gold mine in particular are only ever built here.
+   */
+  private heldByCenterLevelReserve(bb: AiBlackboard, wanted: string): boolean {
+    if (wanted === "house") return false;
+    if (bb.ageMissingBuildingIds.includes(wanted)) return false;
+    return AI_RESOURCE_IDS.some((resourceId) =>
+      (bb.resourceStocks[resourceId] ?? 0) < centerLevelReserveFor(bb, resourceId));
   }
 
   /**

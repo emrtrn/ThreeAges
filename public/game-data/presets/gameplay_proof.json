@@ -5,16 +5,16 @@
     "fogOfWar": false
   },
   "startingResources": {
-    "food": 400,
-    "wood": 400,
-    "stone": 200,
-    "gold": 200
+    "food": 4000,
+    "wood": 4000,
+    "stone": 2000,
+    "gold": 2000
   },
   "startingUnits": {
-    "guard": 20,
+    "guard": 0,
     "worker": 8,
-    "siege": 4,
-    "archer": 10
+    "siege": 0,
+    "archer": 0
   },
   "enemyStartingResources": {
     "food": 500,
@@ -23,10 +23,10 @@
     "gold": 200
   },
   "enemyStartingUnits": {
-    "guard": 0,
+    "guard": 8,
     "worker": 8,
     "archer": 0,
-    "siege": 4
+    "siege": 0
   },
   "gameSpeed": 1,
   "mapState": "two_flanks_blockout",

@@ -18623,7 +18623,12 @@ check("RTS static mesh material slot sidecars name materials the manifest still 
   // renders with its exported flat colour again. Nothing throws, so this is the
   // only place it can be caught.
   const directory = "public/assets/ThreeAges/StaticMeshes";
-  const sidecars = readdirSync(directory).filter((name) => name.endsWith(".materials.json"));
+  // Recursive: models get filed into per-building subfolders (Archery/,
+  // Barracks/, ...) as the set grows, and a flat scan would quietly stop
+  // covering every sidecar that moved.
+  const sidecars = readdirSync(directory, { recursive: true })
+    .map((entry) => String(entry).replace(/\\/g, "/"))
+    .filter((name) => name.endsWith(".materials.json"));
   assert.ok(sidecars.length > 0, "expected authored material slot sidecars under ThreeAges/StaticMeshes");
   for (const fileName of sidecars) {
     const slots = normalizeAssetMaterialSlots(
@@ -31188,7 +31193,7 @@ check("RTS structure material groups classify the materials the shipped building
   // material name, so a model re-exported with different names is exactly the
   // regression this has to catch.
   const model = JSON.parse(
-    readFileSync("public/assets/ThreeAges/StaticMeshes/Barracks_FirstAge_Level1.gltf", "utf8"),
+    readFileSync("public/assets/ThreeAges/StaticMeshes/Barracks/Barracks_FirstAge_Level1.gltf", "utf8"),
   ) as { materials?: { name?: string }[] };
   const names = (model.materials ?? []).map((material) => material.name ?? "");
   assert.ok(names.length > 0, "the reference building model declares materials");
@@ -33595,14 +33600,14 @@ check("Faz 5: a hunter runs down its quarry, butchers it, and banks exactly what
   const quarry = wildlife.all()[0] ?? assert.fail("the herd spawned no animal");
 
   let banked = 0;
-  let sawHuntingPose = false;
+  let huntStrikes = 0;
   let depletedWhileMeatRemained = false;
   const step = 0.25;
   for (let tick = 0; tick < 4000; tick += 1) {
     wildlife.update(step, units.all().map((unit) => unit.position));
     updateUnitMovement(units.all(), step);
     production.update(step);
-    if (hunter.isHunting) sawHuntingPose = true;
+    huntStrikes = Math.max(huntStrikes, hunter.huntStrikeCount);
     // Stand in for the road/depot chain so the camp's buffer cannot cap the run:
     // one deer carries more meat than the camp can hold at once, by design.
     banked += production.withdrawBuffered(built.structure.id)?.amount ?? 0;
@@ -33610,7 +33615,7 @@ check("Faz 5: a hunter runs down its quarry, butchers it, and banks exactly what
     if (status === "source-depleted" && quarry.remainingMeat > 0) depletedWhileMeatRemained = true;
   }
 
-  assert.ok(sawHuntingPose, "the hunter took the attack pose while bringing the animal down");
+  assert.equal(huntStrikes, 1, "one contact drops the quarry and emits exactly one attack event");
   assert.equal(quarry.dead, true, "the quarry was brought down");
   assert.equal(quarry.remainingMeat, 0, "the carcass was picked clean");
   // Derived from the table, not pinned: retune `meatCapacity` and this still holds.
@@ -39024,9 +39029,14 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
   for (const [role, clip] of Object.entries(baseRoles)) {
     assert.equal(worker.animationSet[role], clip, `${role} remains mapped to its authored Worker locomotion clip`);
   }
-  for (const role of ["idle", "walk", "run"] as const) {
+  for (const role of ["walk", "run"] as const) {
     assert.equal(worker.animationVariants[role], undefined, `Faz 1 keeps ${role} free of activity and carrying clips`);
   }
+  assert.deepEqual(
+    worker.animationVariants.idle,
+    ["Farming_holding_idle", "Idle_Loop"],
+    "idle richness stays deterministic and uses only authored empty-hand clips",
+  );
   assert.deepEqual(saved.animationSet, worker.animationSet, "the Worker locomotion roles survive a skeleton editor save");
 
   const parsed = parseGlb(new Uint8Array(readFileSync(`public/${workerAsset.path}`)))
@@ -39249,6 +39259,7 @@ check("Worker Faz 5: fixing, odun, av, tas ve yumruk klipleri gercek durumlarla 
   assert.equal(workerSkeleton.animationSet.work, "Fixing_Kneeling");
   assert.equal(workerSkeleton.animationSet.workChopping, "TreeChopping_Loop");
   assert.equal(workerSkeleton.animationSet.workHunting, "Attack");
+  assert.equal(workerSkeleton.animationSet.attackHunting, "Attack");
   assert.equal(workerSkeleton.animationSet.attack, "OverhandThrow");
   assert.equal(workerSkeleton.animationSet.attackMelee, "Punch_Jab");
   assert.deepEqual(workerSkeleton.animationVariants.attackMelee, ["Punch_Cross"]);
@@ -39256,6 +39267,17 @@ check("Worker Faz 5: fixing, odun, av, tas ve yumruk klipleri gercek durumlarla 
   assert.deepEqual(workerSkeleton.animationVariants.hit, ["React_Head"]);
   for (const clip of Object.values(workerSkeleton.animationSet)) assert.ok(shipped.has(clip!), `${clip} is shipped by Worker.glb`);
   assert.equal(saved.animationSet?.attackMelee, "Punch_Jab", "the editor save keeps the close-combat role");
+  assert.equal(rtsWorkRoleForActivity("hunting"), "workHunting", "the travel/category mapping remains explicit for hunting");
+  for (const actorName of ["BP_RTS_Worker", "BP_RTS_Enemy_Worker"]) {
+    const actor = normalizeActorScriptDef(JSON.parse(readFileSync(`public/assets/ThreeAges/Actors/Units/${actorName}.actor.json`, "utf8")) as unknown);
+    const axe = actor.components.find((component) => component.id === "lumberAxe")
+      ?? assert.fail(`${actorName} mounts the authored axe`);
+    assert.equal(axe.props.assetId, "axe");
+    assert.equal(axe.props.rtsWorkerToolActivity, "lumber");
+    assert.equal(axe.props.rtsSkeletalSocket, "right-hand-tool");
+    assert.deepEqual(axe.props.position, [0, 0.45, 0], "the axe begins in the palm rather than at the actor root");
+    assert.deepEqual(axe.props.scale, [5.5, 5.5, 5.5], "the axe remains legible at RTS camera distance");
+  }
 
   assert.equal(
     selectRtsAnimation({ planarSpeed: 0, working: true, workerActivity: "lumber", attacking: false, dying: false, attackCount: 0, impactCount: 0 }, workerSkeleton.animationSet, shipped, tuning)?.clip,
@@ -39270,9 +39292,9 @@ check("Worker Faz 5: fixing, odun, av, tas ve yumruk klipleri gercek durumlarla 
   const montage = resolveRtsWorkMontage(workerSkeleton.montages, shipped);
   assert.deepEqual(montage, {
     clip: "Fixing_Kneeling",
-    enter: { startSeconds: 0, endSeconds: 1.2 },
-    loop: { startSeconds: 1.2, endSeconds: 4 },
-    exit: { startSeconds: 4, endSeconds: 8.352 },
+    enter: { startSeconds: 0, endSeconds: 0.7 },
+    loop: { startSeconds: 0.7, endSeconds: 4.033 },
+    exit: { startSeconds: 4.033, endSeconds: 5.267 },
   }, "construction, repair and mining have one authored kneel/hold/stand montage");
 
   const unitBalance = validateUnitBalance(JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown);
@@ -39296,6 +39318,12 @@ check("Worker Faz 5: fixing, odun, av, tas ve yumruk klipleri gercek durumlarla 
     planarSpeed: 0, working: false, attacking: true, dying: false, attackCount: thrower.attack.blowCount, impactCount: 0,
   }, { attack: 2.436, attackMelee: 0.864, hit: 1.188, death: 4.068 }, 0);
   assert.equal(rtsActionClip(throwAction, workerSkeleton.animationSet, shipped, workerSkeleton.animationVariants), "OverhandThrow");
+
+  const huntAction = advanceRtsAction(RTS_ACTION_NONE, {
+    planarSpeed: 0, working: false, attacking: false, dying: false, attackCount: 0, impactCount: 0, huntStrikeCount: 1,
+  }, { attack: 2.436, attackHunting: 1.5, attackMelee: 0.864, hit: 1.188, death: 4.068 }, 0);
+  assert.equal(huntAction.kind, "attackHunting", "a dropped animal emits one dedicated hunting action");
+  assert.equal(rtsActionClip(huntAction, workerSkeleton.animationSet, shipped, workerSkeleton.animationVariants), "Attack");
 
   const puncher = new Unit("player", 0, 0, workerStats);
   const closeEnemy = new Unit("enemy", 0, 0.8, guardStats);
@@ -42422,7 +42450,7 @@ check("Skeletal animasyon Faz F: insaat sistemi calisma bayragini kaldirir ve is
     construction.update(1 / 60);
     if (construction.stateFor(worker) === "building") {
       observe();
-      reachedSite ||= reportedActivity === "construction" && !working;
+      reachedSite ||= reportedActivity === "construction" && working;
     }
   }
   assert.equal(reachedSite, true, "a settled builder reports construction while the body stays standing without a false kneel");
@@ -43304,7 +43332,7 @@ check("RTS miners walk to the deposit, cut a load there, and carry it back to th
       // The montage owns the kneel: gameplay only asserts the worker is posed as
       // working for the whole cut, which is what keeps it from standing early.
       assert.equal(worker.isWorking, true, "a miner at the deposit is posed as working");
-      assert.equal(worker.workerActivity, "generic", "unmapped finite gathering remains neutral until an honest activity clip is accepted");
+      assert.equal(worker.workerActivity, "mining", "the deposit assignment names the category; the renderer never infers it from the nearby mesh");
     }
     if (state === "returning") {
       carriedHome ||= worker.position.x < 8;
@@ -43316,6 +43344,12 @@ check("RTS miners walk to the deposit, cut a load there, and carry it back to th
   assert.ok(seen.has("moving-to-source"), "the miner walks out to the deposit");
   assert.ok(workedAtDeposit, "and cuts at the deposit, not at the mine door");
   assert.ok(seen.has("returning") && carriedHome, "then carries the load back to the mine");
+  // What keeps the category honest: mining names the assignment but claims no
+  // clip of its own, so it rides the shared authored kneel. A dedicated pickaxe
+  // role may be added later — until a clip is actually shipped for it, mapping
+  // mining anywhere but `work` would silently request an animation that is not
+  // there and drop the worker back to idle at the deposit.
+  assert.equal(rtsWorkRoleForActivity("mining"), "work", "mining is presented by the shared kneel montage, not a clip that does not exist");
   // `unloading` is deliberately not asserted: arriving, emptying the load and
   // setting off again all happen inside one update, so the state is never
   // observable from outside. The delivered total below is the proof it ran.

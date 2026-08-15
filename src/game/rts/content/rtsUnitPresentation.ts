@@ -90,6 +90,7 @@ import {
   type RtsCargoSwayBinding,
   type RtsCargoVisualBinding,
 } from "./rtsCargoVisual";
+import { applyRtsWorkerTools, type RtsWorkerToolBinding } from "./rtsWorkerToolVisual";
 
 /** Everything an animated instance needs from the asset it was cloned from. */
 export interface RtsUnitAnimationSource {
@@ -181,6 +182,8 @@ export interface RtsUnitPresentationOptions {
    * that hangs off a body may rock, whether or not it appears and disappears.
    */
   readonly cargoSways?: readonly RtsCargoSwayBinding[] | undefined;
+  /** Job-specific hand tools, visible from the authoritative Worker activity. */
+  readonly workerTools?: readonly RtsWorkerToolBinding[] | undefined;
   /**
    * Authored barrel recoils already bound to their runtime nodes. Empty or
    * omitted for anything without a gun on it.
@@ -591,7 +594,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private readonly tuning: RtsLocomotionTuning;
   /** The running one-shot (swing or fall), owned by the pure state machine. */
   private action: RtsActionState = RTS_ACTION_NONE;
-  private actionDurations: RtsActionDurations = { attack: null, attackMelee: null, attackRecovery: null, hit: null, death: null };
+  private actionDurations: RtsActionDurations = { attack: null, attackHunting: null, attackMelee: null, attackRecovery: null, hit: null, death: null };
   /**
    * The continuous role the mixer was last told to play, for {@link locomotionFade}.
    *
@@ -618,6 +621,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   private readonly cargoVisuals: readonly RtsCargoVisualBinding[];
   /** Authored load sways, rocked by measured travel rather than by a clip. */
   private readonly cargoSways: readonly RtsCargoSwayBinding[];
+  private readonly workerTools: readonly RtsWorkerToolBinding[];
   /** Authored barrel pivots, kicked by the unit's shot counter rather than by a clip. */
   private readonly gunRecoils: readonly RtsGunRecoilBinding[];
   /** See {@link RtsPresentationHandle.muzzle}: null for anything that marks none. */
@@ -694,6 +698,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     this.wheelSpins = options.wheelSpins ?? [];
     this.cargoVisuals = options.cargoVisuals ?? [];
     this.cargoSways = options.cargoSways ?? [];
+    this.workerTools = options.workerTools ?? [];
     this.gunRecoils = options.gunRecoils ?? [];
     this.muzzle = options.muzzle ?? null;
     this.onNotify = options.onNotify ?? null;
@@ -761,6 +766,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // death length is what the unit's despawn timer then waits for.
     this.actionDurations = {
       attack: this.durationOfRole("attack"),
+      attackHunting: this.durationOfRole("attackHunting"),
       attackMelee: this.durationOfRole("attackMelee"),
       attackRecovery: this.durationOfRole("attackRecovery"),
       hit: this.durationOfRole("hit"),
@@ -804,6 +810,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       this.carrying = state.carrying;
       applyRtsCargoVisibility(this.cargoVisuals, state.carrying);
     }
+    applyRtsWorkerTools(this.workerTools, state.workerActivity);
     if (state.deltaSeconds <= 0) return;
     // Before the animator, and outside its early return: a siege engine is static
     // meshes on pivots with no mixer at all, so gating the wheels on an animator
@@ -862,6 +869,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // to an event, so its cached length stands.
     this.action = advanceRtsAction(this.action, state, {
       attack: this.durationOfRole("attack", state.attackCount),
+      attackHunting: this.durationOfRole("attackHunting", state.huntStrikeCount ?? 0),
       attackMelee: this.durationOfRole("attackMelee", state.meleeCount ?? 0),
       attackRecovery: this.actionDurations.attackRecovery ?? null,
       hit: this.durationOfRole("hit", state.impactCount),
@@ -872,12 +880,14 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       walkSpeed: this.tuning.walkSpeed,
     });
     // Fixing_Kneeling is authored as one long kneel/work/stand clip. Only jobs
-    // that actually use a tool at the ground enter that montage; farming,
-    // hunting and chopping keep their own continuous clips.
+    // that actually use a tool at the ground enter that montage. A hunt spends
+    // one Attack one-shot to drop prey, then uses the same kneeling montage to
+    // butcher the carcass.
     const fixingState = {
       ...state,
       working: state.working && (state.workerActivity === "construction"
-        || state.workerActivity === "repair" || state.workerActivity === "mining"),
+        || state.workerActivity === "repair" || state.workerActivity === "mining"
+        || (state.workerActivity === "hunting" && this.action.kind === "none")),
     };
     this.workState = advanceRtsWorkMontage(this.workState, fixingState, this.workMontage, this.tuning, deltaSeconds);
     const actionClip = rtsActionClip(
@@ -1162,7 +1172,7 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   }
 
   /** Authored length of the clip a semantic role names, or null when unauthored. */
-  private durationOfRole(role: "attack" | "attackMelee" | "attackRecovery" | "hit" | "death", sequence = 0): number | null {
+  private durationOfRole(role: "attack" | "attackHunting" | "attackMelee" | "attackRecovery" | "hit" | "death", sequence = 0): number | null {
     const clip = resolveRtsAnimationVariant(
       role,
       this.animationSet,

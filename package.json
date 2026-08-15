@@ -14,6 +14,7 @@
     "check:assets": "node tools/run-asset-manifest-health.mjs",
     "inventory:threeages-materials": "node tools/run-threeages-material-inventory.mjs",
     "texture:threeages": "python tools/threeages-texture-pipeline.py",
+    "optimize:glb": "node tools/optimize-building-glb.mjs",
     "perf:assets": "node tools/run-asset-perf-report.mjs",
     "perf:browser": "node tools/browser-perf-report.mjs",
     "perf:rts": "node tools/rts-perf-report.mjs",

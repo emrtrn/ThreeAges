@@ -2632,6 +2632,7 @@ const SKELETON_ANIMATION_SET_ROLES = [
   "rest",
   "hold",
   "attack",
+  "attackHunting",
   "attackMelee",
   "attackRecovery",
   "hit",

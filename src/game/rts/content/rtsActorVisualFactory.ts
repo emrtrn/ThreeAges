@@ -38,6 +38,7 @@ import { createRtsActorPlaceholder } from "./rtsActorPlaceholder";
 import { bindRtsWheelSpins } from "./rtsPresentationMotion";
 import { bindRtsGunRecoils, bindRtsMuzzle } from "./rtsGunMotion";
 import { bindRtsCargoSways, bindRtsCargoVisuals } from "./rtsCargoVisual";
+import { bindRtsWorkerTools } from "./rtsWorkerToolVisual";
 import {
   bindRtsSkeletalSocket,
   collectRtsPickTargets,
@@ -343,6 +344,7 @@ export class RtsActorVisualFactory {
       moveSpeed,
       wheelSpins: def ? bindRtsWheelSpins(def, root) : [],
       cargoVisuals: def ? bindRtsCargoVisuals(def, root) : [],
+      workerTools: def ? bindRtsWorkerTools(def, root) : [],
       // The siege engine is what these two exist for: a barrel that kicks when
       // the gun goes off, and the point its shell is drawn leaving from.
       gunRecoils: def ? bindRtsGunRecoils(def, root) : [],

@@ -19714,7 +19714,7 @@
       "name": "Archery First Age Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Archery_FirstAge_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Archery/Archery_FirstAge_Level1.gltf",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -19737,7 +19737,7 @@
       "name": "Archery First Age Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Archery_FirstAge_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Archery/Archery_FirstAge_Level2.gltf",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -19760,7 +19760,7 @@
       "name": "Archery First Age Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Archery_FirstAge_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Archery/Archery_FirstAge_Level3.gltf",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -19779,80 +19779,11 @@
       "license": "Unknown"
     },
     {
-      "id": "archery-secondage-level1",
-      "name": "Archery Second Age Level1",
-      "assetType": "staticMesh",
-      "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Archery_SecondAge_Level1.gltf",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "StaticMeshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 512349
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "archery-secondage-level2",
-      "name": "Archery Second Age Level2",
-      "assetType": "staticMesh",
-      "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Archery_SecondAge_Level2.gltf",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "StaticMeshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 594859
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "archery-secondage-level3",
-      "name": "Archery Second Age Level3",
-      "assetType": "staticMesh",
-      "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Archery_SecondAge_Level3.gltf",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "StaticMeshes",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 839513
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "barracks-firstage-level1",
       "name": "Barracks First Age Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Barracks_FirstAge_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks/Barracks_FirstAge_Level1.gltf",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -19875,7 +19806,7 @@
       "name": "Barracks First Age Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Barracks_FirstAge_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks/Barracks_FirstAge_Level2.gltf",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -19898,7 +19829,7 @@
       "name": "Barracks First Age Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Barracks_FirstAge_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks/Barracks_FirstAge_Level3.gltf",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -19921,7 +19852,7 @@
       "name": "Barracks Second Age Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Barracks_SecondAge_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks/Barracks_SecondAge_Level1.gltf",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -19944,7 +19875,7 @@
       "name": "Barracks Second Age Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Barracks_SecondAge_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks/Barracks_SecondAge_Level2.gltf",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -19967,7 +19898,7 @@
       "name": "Barracks Second Age Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Barracks_SecondAge_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks/Barracks_SecondAge_Level3.gltf",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -30699,6 +30630,75 @@
         "receiveShadow": true,
         "collision": true,
         "bytes": 4663420
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archery-secondage-level3",
+      "name": "Archery Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Archery/Archery_SecondAge_Level3.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1016024
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archery-secondage-level2",
+      "name": "Archery Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "Archery",
+      "path": "assets/ThreeAges/StaticMeshes/Archery/Archery_SecondAge_Level2.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Archery",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1078192
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archery-secondage-level1",
+      "name": "Archery Second Age Level1",
+      "assetType": "staticMesh",
+      "category": "Archery",
+      "path": "assets/ThreeAges/StaticMeshes/Archery/Archery_SecondAge_Level1.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Archery",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1055996
       },
       "license": "Unknown"
     }

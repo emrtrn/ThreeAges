@@ -2,6 +2,14 @@
   "schema": 1,
   "sockets": [
     {
+      "name": "right-hand-tool",
+      "bone": "RightHand",
+      "position": [0, 0, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1],
+      "previewAssetId": "axe"
+    },
+    {
       "name": "throw-release",
       "bone": "RightHand",
       "position": [0, 0, 0],
@@ -29,11 +37,16 @@
     "carryIdle": "Farming_box_idle",
     "carryWalk": "Farming_holding_walk",
     "attack": "OverhandThrow",
+    "attackHunting": "Attack",
     "attackMelee": "Punch_Jab",
     "hit": "React_Chest",
     "death": "Death"
   },
   "animationVariants": {
+    "idle": [
+      "Farming_holding_idle",
+      "Idle_Loop"
+    ],
     "workCultivation": [
       "Farming_plant_a_plant",
       "Farming_watering"
@@ -59,19 +72,19 @@
         {
           "name": "enter",
           "startSeconds": 0,
-          "endSeconds": 1.2,
+          "endSeconds": 0.7,
           "loop": false
         },
         {
           "name": "loop",
-          "startSeconds": 1.2,
-          "endSeconds": 4,
+          "startSeconds": 0.7,
+          "endSeconds": 4.033,
           "loop": true
         },
         {
           "name": "exit",
-          "startSeconds": 4,
-          "endSeconds": 8.352,
+          "startSeconds": 4.033,
+          "endSeconds": 5.267,
           "loop": false
         }
       ]
@@ -90,6 +103,11 @@
     },
     {
       "clip": "Farming_holding_walk",
+      "mode": "lockXYZ",
+      "rootNode": "Hips"
+    },
+    {
+      "clip": "Fixing_Kneeling",
       "mode": "lockXYZ",
       "rootNode": "Hips"
     },

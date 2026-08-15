@@ -105,6 +105,19 @@ export interface AiControllerOptions extends AiBlackboardSources {
   readonly marketTrade: MarketTradeSystem;
 }
 
+/**
+ * How long one fatal wolf strike keeps the AI's gatherers off the ground around
+ * the den that made it.
+ *
+ * Long enough that the AI does not walk the replacement crew straight back into
+ * the same pack — the pursuit radius is 26 on the shipped wolf, so a re-entry
+ * within seconds is another dead worker — and short enough that a den standing
+ * over the only grove in reach cannot end the kingdom's wood economy. It is a
+ * memory that fades, not a permanent write-off: if the wolves are still there,
+ * the next strike simply re-arms it.
+ */
+const PREDATOR_AVOIDANCE_SECONDS = 90;
+
 /** Everything the debug panel needs (§82), in one read. */
 /**
  * Askerî AI v2 §11.3: "which producers ship through this structure", and
@@ -197,7 +210,13 @@ export class AiController {
    * retained only while its pack is live, so clearing it makes the region safe
    * forever (KARAR 3).
    */
-  private readonly predatorThreats = new Map<string, { readonly homeX: number; readonly homeZ: number; readonly radius: number }>();
+  private readonly predatorThreats = new Map<string, {
+    readonly homeX: number;
+    readonly homeZ: number;
+    readonly radius: number;
+    /** Match seconds after which this den stops reserving ground. */
+    readonly expiresAt: number;
+  }>();
   /** P4 edge detector: one source-loss event produces one narrow replan. */
   private readonly depletedProducerIds = new Set<number>();
 
@@ -291,7 +310,12 @@ export class AiController {
     if (!predator) return;
     this.predatorThreats.set(
       `${strike.predator.homeX}:${strike.predator.homeZ}`,
-      { homeX: strike.predator.homeX, homeZ: strike.predator.homeZ, radius: predator.pursuitRadius },
+      {
+        homeX: strike.predator.homeX,
+        homeZ: strike.predator.homeZ,
+        radius: predator.pursuitRadius,
+        expiresAt: this.now + PREDATOR_AVOIDANCE_SECONDS,
+      },
     );
   }
 
@@ -301,10 +325,17 @@ export class AiController {
    * The den's own pursuit radius is the boundary, not a second AI tuning
    * number. Dead or tamed wolves are removed as they are read, so clearing a
    * pack restores the ordinary economy without a special reset path.
+   *
+   * The avoidance also *expires* (see {@link PREDATOR_AVOIDANCE_SECONDS}). It used
+   * to last until the pack died, and since this AI never hunts wolves that meant
+   * "forever": one lost worker wrote the whole grove inside a 26-unit pursuit
+   * radius off permanently, the only lumber camp sat at zero staff with a
+   * thousand trees in reach, and every centre level (200 wood) and the Town
+   * transition (400 wood) stalled behind it for the rest of the match.
    */
   workerLocationUnsafe(x: number, z: number): boolean {
     for (const [id, den] of this.predatorThreats) {
-      if (!this.options.isPredatorDenLive(den.homeX, den.homeZ)) {
+      if (den.expiresAt <= this.now || !this.options.isPredatorDenLive(den.homeX, den.homeZ)) {
         this.predatorThreats.delete(id);
         continue;
       }

@@ -82,6 +82,8 @@ interface WorkerAssignment {
   state: Exclude<EconomyWorkerState, "idle">;
   sourceId: string | null;
   cargoAmount: number;
+  /** Seconds in the current transit state without arriving. See {@link STALLED_TRANSIT_SECONDS}. */
+  transitSeconds: number;
 }
 
 /**
@@ -117,6 +119,40 @@ const WORK_RANGE = 1.25;
  * taken a step along it.
  */
 const SOURCE_FOLLOW_SLACK = WORK_RANGE * 3;
+
+/**
+ * How close to a camp's own footprint counts as having arrived at it.
+ *
+ * The approach ring {@link EconomyProductionSystem.findReachableApproach} builds
+ * sits `WORK_RANGE * 0.7` outside the footprint edge, and navigation does not
+ * always put a worker exactly on it — it delivers to the nearest cell its grid
+ * can stand on. Measuring the round trip's end against that synthetic point
+ * therefore let a worker stand against the camp wall and still count as "not
+ * back yet": it stayed `returning` for the rest of the match, holding its cargo
+ * and its assignment. Measured on the stalled seeds, wood workers spent three
+ * times as many samples `returning` as `gathering`.
+ *
+ * So arrival is asked of the building. A worker this close is at the camp.
+ */
+const CAMP_REACH = WORK_RANGE + 1;
+
+/**
+ * How long a worker may be walking — to a source or home again — without
+ * arriving before the leg is given up and re-planned from scratch.
+ *
+ * The backstop behind the reach test above: {@link
+ * EconomyProductionSystem.replanApproach} answers "still fine" for any worker
+ * that holds a route, so a route that keeps ending short of its goal renewed
+ * itself forever. This bounds that.
+ */
+const STALLED_TRANSIT_SECONDS = 20;
+
+/** Distance from a point to a structure's footprint rectangle, 0 when inside. */
+function distanceToFootprint(structure: PlacedStructure, x: number, z: number): number {
+  const dx = Math.max(Math.abs(x - structure.x) - structure.stats.footprint.width / 2, 0);
+  const dz = Math.max(Math.abs(z - structure.z) - structure.stats.footprint.depth / 2, 0);
+  return Math.hypot(dx, dz);
+}
 /**
  * How far into a walkable footprint a work post sits, as a fraction of its half
  * extent. Well inside the crop so the pose reads as working the field, but off
@@ -601,6 +637,19 @@ export class EconomyProductionSystem {
       }
       if (assignment.state === "moving-to-source") {
         if (assignment.worker.position.distanceTo(assignment.approach) > WORK_RANGE) {
+          assignment.transitSeconds += deltaSeconds;
+          // A source the worker cannot actually stand at would otherwise renew
+          // its own route forever. Drop this one and let the next tick reserve a
+          // different tree rather than keeping the crew walking at a tree.
+          if (assignment.transitSeconds >= STALLED_TRANSIT_SECONDS) {
+            assignment.transitSeconds = 0;
+            source.releaseReservation(assignment.worker.id);
+            assignment.sourceId = null;
+            if (!this.moveWorkerToSource(assignment, producer.structure, economy, source)) {
+              this.release(assignment.worker);
+            }
+            continue;
+          }
           if (!this.replanApproach(assignment)) {
             this.release(assignment.worker);
             continue;
@@ -609,6 +658,7 @@ export class EconomyProductionSystem {
           continue;
         }
         assignment.worker.stop();
+        assignment.transitSeconds = 0;
         assignment.state = "gathering";
       }
       if (assignment.state === "gathering") {
@@ -631,12 +681,15 @@ export class EconomyProductionSystem {
             deltaSeconds,
           })
           : { amount: 0, working: false };
-        // Still at it but nothing earned is a hunter whose quarry is not down
-        // yet — the one combination a tree or a deposit never reports. That is
-        // what tells the two poses apart without the loop knowing what wildlife
-        // is: fighting the source, versus gathering from it.
-        if (harvested.working && harvested.amount <= 0) assignment.worker.setHunting(true);
-        else assignment.worker.setWorking(true);
+        // Wildlife has two honest visual stages: one strike drops the animal,
+        // then the same assignment butchers the carcass. The event counter owns
+        // the former as a one-shot; the latter enters the Fixing_Kneeling work
+        // montage. Trees and deposits remain the ordinary in-place work branch.
+        if (producer.structure.stats.id === "hunting_camp" && harvested.activity === "strike") {
+          assignment.worker.noteHuntStrike();
+        } else {
+          assignment.worker.setWorking(harvested.working);
+        }
         assignment.cargoAmount += harvested.amount;
         // A full load, or a source that just ran out under the tool: either way
         // the trip is over and the stand-up plays.
@@ -646,8 +699,21 @@ export class EconomyProductionSystem {
         continue;
       }
       if (assignment.state === "returning") {
-        if (assignment.worker.position.distanceTo(assignment.approach) > WORK_RANGE) {
-          if (!this.replanApproach(assignment)) {
+        const home = assignment.worker.position.distanceTo(assignment.approach) <= WORK_RANGE
+          // Asked of the camp, not of the approach point (see {@link CAMP_REACH}).
+          || distanceToFootprint(producer.structure, assignment.worker.position.x, assignment.worker.position.z)
+            <= CAMP_REACH;
+        if (!home) {
+          assignment.transitSeconds += deltaSeconds;
+          // Neither home nor getting closer: re-cut the walk once, then give up
+          // rather than hold a loaded worker out of the economy indefinitely.
+          if (assignment.transitSeconds >= STALLED_TRANSIT_SECONDS) {
+            assignment.transitSeconds = 0;
+            if (!this.returnToCamp(assignment, producer.structure)) {
+              this.release(assignment.worker);
+              continue;
+            }
+          } else if (!this.replanApproach(assignment)) {
             this.release(assignment.worker);
             continue;
           }
@@ -655,6 +721,7 @@ export class EconomyProductionSystem {
           continue;
         }
         assignment.worker.stop();
+        assignment.transitSeconds = 0;
         assignment.state = "unloading";
       }
       if (assignment.state === "unloading") {
@@ -794,6 +861,7 @@ export class EconomyProductionSystem {
         state: "moving-to-source",
         sourceId: target.sourceId,
         cargoAmount: 0,
+        transitSeconds: 0,
       };
       producer.assignments.set(worker.id, assignment);
       this.assignmentByWorker.set(worker.id, producer);
@@ -816,6 +884,7 @@ export class EconomyProductionSystem {
       state: "moving",
       sourceId: null,
       cargoAmount: 0,
+      transitSeconds: 0,
     };
     producer.assignments.set(worker.id, assignment);
     this.assignmentByWorker.set(worker.id, producer);
@@ -831,6 +900,7 @@ export class EconomyProductionSystem {
   private activityForStructure(structure: PlacedStructure): WorkerActivity {
     switch (structure.stats.id) {
       case "farm": return "cultivation";
+      case "hunting_camp": return "hunting";
       case "lumber_camp": return "lumber";
       case "quarry":
       case "gold_mine": return "mining";

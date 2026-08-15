@@ -701,7 +701,8 @@ export class WildlifeSystem implements ResourceSource {
    * `working: true` with nothing earned, which keeps the hunter on station
    * instead of walking home empty-handed every frame.
    */
-  harvest({ workerId, sourceId, amount, deltaSeconds }: ResourceHarvestRequest): ResourceHarvest {
+  /** Drop prey once, then gather meat from the now-stationary carcass. */
+  harvest({ workerId, sourceId, amount }: ResourceHarvestRequest): ResourceHarvest {
     if (!Number.isFinite(amount) || amount < 0) {
       throw new RangeError("Requested meat harvest must be a non-negative finite number");
     }
@@ -710,13 +711,17 @@ export class WildlifeSystem implements ResourceSource {
       return { amount: 0, working: false };
     }
     if (!animal.dead) {
-      animal.health.damage((animal.stats.maxHealth / animal.stats.huntSeconds) * deltaSeconds);
-      return { amount: 0, working: true };
+      // Hunting is a single, decisive contact action. Letting a claimed animal
+      // keep roaming while its health trickled down made the worker continuously
+      // re-path and replay Attack. The economy still owns the kill; this only
+      // makes its one authoritative harvest contact decisive.
+      animal.health.damage(animal.stats.maxHealth);
+      return { amount: 0, working: true, activity: "strike" };
     }
     const taken = Math.min(amount, animal.remainingMeat);
     animal.remainingMeat -= taken;
     if (animal.remainingMeat <= MEAT_EPSILON) animal.remainingMeat = 0;
-    return { amount: taken, working: taken > 0 };
+    return { amount: taken, working: taken > 0, activity: "gather" };
   }
 
   releaseReservation(workerId: number): void {

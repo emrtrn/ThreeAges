@@ -57,6 +57,7 @@ export type WorkerActivity =
   | "cultivation"
   | "harvest"
   | "livestock"
+  | "hunting"
   | "mining"
   | "lumber"
   | "carryingBox"
@@ -103,6 +104,8 @@ export interface RtsPresentationUpdate {
    * come off different cooldowns and must not cancel each other's animation.
    */
   readonly meleeCount?: number;
+  /** One-shot wildlife strikes; kept separate from player-combat attacks. */
+  readonly huntStrikeCount?: number;
   /**
    * Enemy structures this unit has brought down; each increment is one cheer to
    * play (siege crew plan Faz 5). Written where the killing blow is already
@@ -423,6 +426,8 @@ export class Unit {
   private carrying = false;
   /** See {@link noteMeleeBlow}: presentation-only, written by `siegeMeleeSystem`. */
   private meleeBlows = 0;
+  /** One-shot wildlife strikes, written by the hunting economy after the kill resolves. */
+  private huntStrikes = 0;
   /** See {@link noteStructureDestroyed}: presentation-only, written where the wall falls. */
   private triumphs = 0;
 
@@ -567,6 +572,7 @@ export class Unit {
       attackCount: this.attack.blowCount,
       impactCount: this.health.impactCount,
       meleeCount: this.meleeBlows,
+      huntStrikeCount: this.huntStrikes,
       triumphCount: this.triumphs,
       cameraDistanceSquared: cameraPosition ? this.object.position.distanceToSquared(cameraPosition) : null,
     });
@@ -632,6 +638,16 @@ export class Unit {
   /** Whether prey is being brought down; see {@link setHunting}. */
   get isHunting(): boolean {
     return this.hunting;
+  }
+
+  /** Record the one decisive wildlife strike after the source has dropped prey. */
+  noteHuntStrike(): void {
+    this.huntStrikes += 1;
+  }
+
+  /** How many decisive wildlife strikes this worker has made. */
+  get huntStrikeCount(): number {
+    return this.huntStrikes;
   }
 
   /**
