@@ -34,6 +34,11 @@ export interface SettlementSiteCandidate {
   readonly score: number;
 }
 
+/** A candidate plus the sources it can work, kept only while the plan is ranked. */
+interface ScoredCandidate extends SettlementSiteCandidate {
+  readonly reach: readonly string[];
+}
+
 export interface SettlementLayoutPlan {
   readonly version: 1;
   readonly seed: number;
@@ -119,7 +124,7 @@ function planBuildingCandidates(
   // candidate at all, which is the explicit and safe failure state.
   const searchOrigins = sources.length > 0 ? sources : stats.economy && requiresExternalSource(stats) ? [] : [{ id: "", ...input.center }];
   const zoneBalance = input.layout.zones[zone];
-  const candidates: SettlementSiteCandidate[] = [];
+  const candidates: ScoredCandidate[] = [];
   for (const source of searchOrigins) {
     for (const point of gridPointsInRing(source, zoneBalance.minRadius, zoneBalance.maxRadius)) {
       const result = validateBuildingPlacement(stats, point.x, point.z, occupied, input.territory.control);
@@ -128,6 +133,10 @@ function planBuildingCandidates(
       const distance = Math.hypot(result.x - source.x, result.z - source.z);
       const preferredRadius = (zoneBalance.minRadius + zoneBalance.maxRadius) * 0.5;
       const key = candidateKey(input.seed, stats.id, source.id || undefined, result.x, result.z);
+      // What this site could actually work, not merely what it is near. A grove
+      // is scored as one centroid, so "within gatherRadius of the grove" says
+      // nothing about whether ten trees are in reach or one.
+      const reach = workableSources(stats, input.map, result.x, result.z);
       const score = roundScore(
         -Math.abs(distance - preferredRadius) * input.layout.scoring.distancePenalty
         // Resource sites still need a real source, but this soft preference
@@ -135,6 +144,7 @@ function planBuildingCandidates(
         // source and spending the opening wood bank on its access road.
         -Math.hypot(result.x - input.center.x, result.z - input.center.z)
           * input.layout.scoring.centerDistancePenalty
+        + reach.length * input.layout.scoring.sourceRichnessWeight
         + seededUnit(key) * input.layout.scoring.seedTieBreakWeight,
       );
       candidates.push({
@@ -145,12 +155,94 @@ function planBuildingCandidates(
         zone,
         ...(source.id ? { sourceId: source.id } : {}),
         score,
+        reach,
       });
     }
   }
-  return candidates
-    .sort((left, right) => right.score - left.score || left.key.localeCompare(right.key))
-    .slice(0, input.layout.candidateLimit);
+  return spreadOverSources(
+    candidates.sort((left, right) => right.score - left.score || left.key.localeCompare(right.key)),
+    input.layout.scoring.sourceOverlapPenalty,
+    input.layout.candidateLimit,
+  );
+}
+
+/**
+ * Rank the list so each successive entry works ground the ones above it do not.
+ *
+ * The plan is a *list*, and a building the age plan wants two of takes its first
+ * two entries. Sorting on score alone made those two neighbours — the same trees
+ * scored best twice — so the second camp doubled up on the first one's grove
+ * while the rest of the wood on the map stood untouched, which is exactly the
+ * shape a player never builds.
+ *
+ * Greedy rather than exhaustive: pick the best remaining, charge every candidate
+ * for the sources it now shares, repeat. That is enough to push the runner-up
+ * onto the next stand, and it keeps the pass linear in the candidate limit.
+ * Ties still fall through to `key`, so §80 determinism is untouched.
+ */
+function spreadOverSources(
+  ranked: readonly ScoredCandidate[],
+  overlapPenalty: number,
+  limit: number,
+): readonly SettlementSiteCandidate[] {
+  if (overlapPenalty <= 0) return ranked.slice(0, limit).map(stripReach);
+  const remaining = [...ranked];
+  const chosen: ScoredCandidate[] = [];
+  const taken = new Set<string>();
+  while (chosen.length < limit && remaining.length > 0) {
+    let bestIndex = 0;
+    let bestScore = Number.NEGATIVE_INFINITY;
+    for (let index = 0; index < remaining.length; index += 1) {
+      const candidate = remaining[index];
+      if (!candidate) continue;
+      const shared = candidate.reach.reduce((count, id) => count + (taken.has(id) ? 1 : 0), 0);
+      const adjusted = candidate.score - shared * overlapPenalty;
+      // Strictly greater, so an exact tie keeps the earlier entry and the list
+      // stays a deterministic function of the sorted input.
+      if (adjusted > bestScore) {
+        bestScore = adjusted;
+        bestIndex = index;
+      }
+    }
+    const [picked] = remaining.splice(bestIndex, 1);
+    if (!picked) break;
+    for (const id of picked.reach) taken.add(id);
+    chosen.push(picked);
+  }
+  return chosen.map(stripReach);
+}
+
+const stripReach = ({ reach: _reach, ...candidate }: ScoredCandidate): SettlementSiteCandidate => candidate;
+
+/**
+ * The individual sources this site could work, by id.
+ *
+ * Ids rather than a count, because {@link spreadOverSources} has to know *which*
+ * trees two camps would share, not merely how many each can see.
+ */
+function workableSources(
+  stats: BuildingBalanceStats,
+  map: RtsSpatialLayout,
+  x: number,
+  z: number,
+): readonly string[] {
+  const economy = stats.economy;
+  const radius = economy?.gatherRadius;
+  if (!economy || radius === undefined) return [];
+  const within = (px: number, pz: number): boolean =>
+    (px - x) * (px - x) + (pz - z) * (pz - z) <= radius * radius;
+  if (economy.requiresForest) {
+    return map.trees.filter((tree) => within(tree.x, tree.z)).map((tree) => `tree:${tree.id}`);
+  }
+  if (economy.requiresResourceNode) {
+    return map.resourceNodes
+      .filter((node) => node.resourceId === economy.resourceId && within(node.x, node.z))
+      .map((node) => `node:${node.id}`);
+  }
+  if (economy.requiresGame || economy.requiresLivestock) {
+    return map.herds.filter((herd) => within(herd.x, herd.z)).map((herd) => `herd:${herd.id}`);
+  }
+  return [];
 }
 
 function zoneFor(stats: BuildingBalanceStats): SettlementZone {

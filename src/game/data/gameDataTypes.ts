@@ -1269,6 +1269,26 @@ export interface AiLayoutBalance {
      * with centre distance so the pure planner never reaches into RoadGraph.
      */
     readonly centerDistancePenalty: number;
+    /**
+     * Reward per source a candidate can actually work, within the building's own
+     * `gatherRadius`.
+     *
+     * Without it a camp's score knew only two distances — to its grove's centroid
+     * and to the base — so on a long grove the AI always took the end nearest its
+     * centre regardless of how few trees stood there, and a second camp landed
+     * beside the first on the same handful of trees. This is what lets "more wood
+     * in reach" outweigh "slightly shorter access road".
+     */
+    readonly sourceRichnessWeight: number;
+    /**
+     * Penalty per source a candidate shares with a site already chosen for the
+     * same building.
+     *
+     * Two camps that overlap are one camp's worth of income for two camps' worth
+     * of wood, so the plan's second entry is pushed off the first one's trees and
+     * onto the next stand.
+     */
+    readonly sourceOverlapPenalty: number;
   };
 }
 

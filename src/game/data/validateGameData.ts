@@ -2012,7 +2012,13 @@ export const DEFAULT_AI_LAYOUT_BALANCE: AiLayoutBalance = {
     military: { minRadius: 18, maxRadius: 32 },
     resource: { minRadius: 4, maxRadius: 12 },
   },
-  scoring: { seedTieBreakWeight: 1.25, distancePenalty: 0.08, centerDistancePenalty: 0.08 },
+  scoring: {
+    seedTieBreakWeight: 1.25,
+    distancePenalty: 0.08,
+    centerDistancePenalty: 0.08,
+    sourceRichnessWeight: 0.08,
+    sourceOverlapPenalty: 0.25,
+  },
 };
 
 /** Validate the geometry-only AI settlement-layout tuning table. */
@@ -2048,17 +2054,37 @@ export function validateAiLayoutBalance(value: unknown): AiLayoutBalance {
   const centerDistancePenalty = optionalFiniteNumber(
     scoringObj, "centerDistancePenalty", `${where}.scoring`, DEFAULT_AI_LAYOUT_BALANCE.scoring.centerDistancePenalty,
   );
+  const sourceRichnessWeight = optionalFiniteNumber(
+    scoringObj, "sourceRichnessWeight", `${where}.scoring`, DEFAULT_AI_LAYOUT_BALANCE.scoring.sourceRichnessWeight,
+  );
+  const sourceOverlapPenalty = optionalFiniteNumber(
+    scoringObj, "sourceOverlapPenalty", `${where}.scoring`, DEFAULT_AI_LAYOUT_BALANCE.scoring.sourceOverlapPenalty,
+  );
+  const knownScoringFields = new Set([
+    "seedTieBreakWeight", "distancePenalty", "centerDistancePenalty",
+    "sourceRichnessWeight", "sourceOverlapPenalty",
+  ]);
   for (const key of Object.keys(scoringObj)) {
-    if (key !== "seedTieBreakWeight" && key !== "distancePenalty" && key !== "centerDistancePenalty") {
+    if (!knownScoringFields.has(key)) {
       throw new GameDataError(`${where}.scoring: unknown field "${key}"`);
     }
   }
   if (seedTieBreakWeight < 0 || seedTieBreakWeight > 10
     || distancePenalty < 0 || distancePenalty > 10
-    || centerDistancePenalty < 0 || centerDistancePenalty > 10) {
+    || centerDistancePenalty < 0 || centerDistancePenalty > 10
+    || sourceRichnessWeight < 0 || sourceRichnessWeight > 10
+    || sourceOverlapPenalty < 0 || sourceOverlapPenalty > 10) {
     throw new GameDataError(`${where}.scoring: weights must be between 0 and 10`);
   }
-  return { version: 1, candidateLimit, zones, scoring: { seedTieBreakWeight, distancePenalty, centerDistancePenalty } };
+  return {
+    version: 1,
+    candidateLimit,
+    zones,
+    scoring: {
+      seedTieBreakWeight, distancePenalty, centerDistancePenalty,
+      sourceRichnessWeight, sourceOverlapPenalty,
+    },
+  };
 }
 
 function validateAiLayoutZone(

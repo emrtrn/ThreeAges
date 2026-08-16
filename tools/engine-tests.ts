@@ -50666,8 +50666,15 @@ check("procedural settlement planner keeps safe candidates deterministic and see
       const candidates = planned.candidatesByBuilding.get(buildingId) ?? [];
       assert.ok(candidates.length > 0, `${buildingId} needs a safe base candidate on gameplay_proof (seed ${seed})`);
       assert.ok(candidates.length <= layout.candidateLimit, `${buildingId} retains only the configured candidate limit`);
-      assert.ok(candidates.every((candidate, index) => index === 0 || candidates[index - 1]!.score >= candidate.score),
-        `${buildingId} candidates are returned in descending score order`);
+      // The list is ranked by score *less* what each entry duplicates of the
+      // ones above it, so raw score is deliberately not monotonic: a slightly
+      // better site that works the same trees is worth less than a fresh stand.
+      // What must still hold is that the plan opens with the best site there is.
+      assert.equal(
+        candidates[0]?.score,
+        Math.max(...candidates.map((candidate) => candidate.score)),
+        `${buildingId} leads with its highest-scoring candidate (seed ${seed})`,
+      );
       for (const candidate of candidates) {
         const stats = buildings[candidate.buildingId] ?? assert.fail(`missing ${candidate.buildingId}`);
         const halfWidth = stats.footprint.width / 2;
@@ -52875,21 +52882,33 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   assert.equal(nextBuilding(bb({ population: 19, populationCap: 20 }), AI_TEST_BALANCE), "house");
   assert.equal(nextBuilding(bb(), AI_TEST_BALANCE), "farm");
   assert.equal(nextBuilding(bb({ buildingCounts: { farm: 1 } }), AI_TEST_BALANCE), "lumber_camp");
+  // The wood target is satisfied inside the opening rather than deferred: one
+  // camp works one grove, so a plan asking for two means two before the order
+  // moves on. Derived from the table so tuning it back to a single camp keeps
+  // this green rather than turning a valid retune red.
+  const woodTarget = AI_TEST_BALANCE.economy.buildingTargets.settlement["lumber_camp"] ?? 1;
+  if (woodTarget > 1) {
+    assert.equal(
+      nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1 } }), AI_TEST_BALANCE),
+      "lumber_camp",
+      "a wood target of two is not satisfied by one camp",
+    );
+  }
   // Faz 6: the hunting camp joins the opening behind both staples. Behind the
   // farm because the Town transition requires a farm by name; ahead of the
   // military because a herd is the one asset whose yield only shrinks with time.
   assert.equal(
-    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1 } }), AI_TEST_BALANCE),
+    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: woodTarget } }), AI_TEST_BALANCE),
     "hunting_camp",
   );
   // V2 Faz 7: the pasture stands beside the camp, and ahead of the military for a
   // sharper version of the camp's reason — cattle the opponent tames are gone for
   // good, so a pasture built late is a pasture built on nothing.
   assert.equal(
-    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1, hunting_camp: 1 } }), AI_TEST_BALANCE),
+    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: woodTarget, hunting_camp: 1 } }), AI_TEST_BALANCE),
     "pasture",
   );
-  const staples = { farm: 1, lumber_camp: 1, hunting_camp: 1, pasture: 1 };
+  const staples = { farm: 1, lumber_camp: woodTarget, hunting_camp: 1, pasture: 1 };
   assert.equal(nextBuilding(bb({ buildingCounts: staples }), AI_TEST_BALANCE), "barracks");
   // Base defence comes straight after the Barracks: the outpost is the only
   // building carrying a `defense` block, so an undefended base does not live long
@@ -52912,12 +52931,13 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
     ),
     "gold_mine",
   );
+  const afterExtractors = { ...staples, barracks: 1, outpost: 1, quarry: 1, gold_mine: 1 };
   // Faz M4 extends the opening by one: the Market, last, because it converts an
   // economy rather than making one — ahead of the extractors the AI would buy
   // stone at a spread while its own deposits sat untouched.
   assert.equal(
     nextBuilding(
-      bb({ buildingCounts: { ...staples, barracks: 1, outpost: 1, quarry: 1, gold_mine: 1 } }),
+      bb({ buildingCounts: { ...afterExtractors } }),
       AI_TEST_BALANCE,
     ),
     "market",
@@ -52928,7 +52948,7 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   const settlementPlan = AI_TEST_BALANCE.economy.buildingTargets.settlement;
   assert.equal(
     nextBuilding(
-      bb({ buildingCounts: { ...staples, barracks: 1, outpost: 1, quarry: 1, gold_mine: 1, market: 1 } }),
+      bb({ buildingCounts: { ...afterExtractors, market: 1 } }),
       AI_TEST_BALANCE,
     ),
     "house",
@@ -52962,7 +52982,13 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   // mine underneath it are never reached, so the Town age stays unreachable.
   assert.deepEqual(
     buildOrder(bb({ population: 19, populationCap: 20, buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 } }), AI_TEST_BALANCE),
-    ["house", "hunting_camp", "pasture", "outpost", "quarry", "gold_mine", "market"],
+    [
+      "house",
+      // Derived, not pinned: the shortfall against the plan's wood target, so
+      // tuning the table keeps this green instead of turning a retune red.
+      ...(woodTarget > 1 ? ["lumber_camp"] : []),
+      "hunting_camp", "pasture", "outpost", "quarry", "gold_mine", "market",
+    ],
     "a blocked priority still lets the ones below it through",
   );
   // Urgent housing is listed *once*, at the top: the settlement plan's own housing

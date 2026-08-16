@@ -137,13 +137,13 @@ export function buildOrder(
    * spending the §42 build slot on a request that can never succeed, which is
    * how one gated building freezes every want underneath it.
    */
-  const short = (buildingId: string): boolean => {
+  const short = (buildingId: string, cap = Number.POSITIVE_INFINITY): boolean => {
     const stats = buildings?.[buildingId];
     if (stats && !buildingUnlocked(stats, tier)) return false;
     const count = bb.sourceDepletedBuildingIds.includes(buildingId)
       ? (bb.activeBuildingCounts[buildingId] ?? 0)
       : (bb.buildingCounts[buildingId] ?? 0);
-    return count < (targets[buildingId] ?? 0);
+    return count < Math.min(targets[buildingId] ?? 0, cap);
   };
 
   const headroom = bb.populationCap - bb.population;
@@ -158,6 +158,16 @@ export function buildOrder(
   // position for the tier that opens it, where the Town transition still
   // requires a farm by name.
   if (short("farm")) order.push("farm");
+  // The plan's *whole* wood target, here in the opening, not one camp with the
+  // rest deferred. One camp works one grove — `gatherRadius` is what "one grove"
+  // means — so when those trees are cut out the kingdom's only wood income stops
+  // dead with live trees standing just past the radius, and wood is what every
+  // other building is priced in.
+  //
+  // Queueing the second camp after the age prerequisites instead was measured and
+  // was worse on every count: over eight procedural seeds it cost two kingdoms
+  // their Kasaba transition entirely and left one running on a spent grove for
+  // more than half the match. The camp's build time is cheaper than the stall.
   if (short("lumber_camp")) order.push("lumber_camp");
   // Additive food off a source that runs out, so it sits behind both staples and
   // ahead of everything else. Behind the farm in the *listing* because the Town
@@ -293,6 +303,14 @@ export class AiEconomyManager {
   private heldByCenterLevelReserve(bb: AiBlackboard, wanted: string): boolean {
     if (wanted === "house") return false;
     if (bb.ageMissingBuildingIds.includes(wanted)) return false;
+    // Saving is only possible while something is still earning. If a resource the
+    // level is priced in has no live producer left — the grove the only lumber
+    // camp stood in has been cut out — then holding the budget saves toward an
+    // income that no longer exists, and it blocks the replacement camp that would
+    // restore it. Supply is repaired first, and the level waits for the wood.
+    const starved = AI_RESOURCE_IDS.some((resourceId) =>
+      centerLevelReserveFor(bb, resourceId) > 0 && (bb.resourceProducerCounts[resourceId] ?? 0) === 0);
+    if (starved) return false;
     return AI_RESOURCE_IDS.some((resourceId) =>
       (bb.resourceStocks[resourceId] ?? 0) < centerLevelReserveFor(bb, resourceId));
   }

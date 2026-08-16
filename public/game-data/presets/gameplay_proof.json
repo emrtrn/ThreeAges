@@ -5,10 +5,10 @@
     "fogOfWar": false
   },
   "startingResources": {
-    "food": 4000,
-    "wood": 4000,
-    "stone": 2000,
-    "gold": 2000
+    "food": 400,
+    "wood": 400,
+    "stone": 200,
+    "gold": 200
   },
   "startingUnits": {
     "guard": 0,
@@ -23,7 +23,7 @@
     "gold": 200
   },
   "enemyStartingUnits": {
-    "guard": 8,
+    "guard": 0,
     "worker": 8,
     "archer": 0,
     "siege": 0
