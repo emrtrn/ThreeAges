@@ -278,6 +278,17 @@
           "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T2.actor.json",
           "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_SecondAge_T3.actor.json"
         }
+      },
+      "owners": {
+        "enemy": {
+          "ages": {
+            "settlement": {
+              "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Enemy_Barracks_FirstAge_T1.actor.json",
+              "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Enemy_Barracks_FirstAge_T2.actor.json",
+              "3": "assets/ThreeAges/Actors/Buildings/BP_RTS_Enemy_Barracks_FirstAge_T3.actor.json"
+            }
+          }
+        }
       }
     },
     "archery_range": {

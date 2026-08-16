@@ -36,6 +36,7 @@ import {
   MeshDepthMaterial,
   RGBADepthPacking,
   Vector3,
+  Vector4,
   type Material,
   type Object3D,
 } from "three";
@@ -67,43 +68,45 @@ export interface StructureDeformation {
 }
 
 /**
- * Which structural role a model's material stands for.
+ * How the collapse is staggered through a building: by *height*, per vertex.
  *
- * The building models are a single mesh split into one primitive per material —
- * `Wood`, `Stone`, `Stone_Light`, `Metal_Light`, `Gold`, `Main`, `Walls` — so
- * the sub-meshes we get for free are grouped by *material*, not by structure.
- * That is still enough to stagger a collapse convincingly: timber gives way
- * first and furthest, masonry last and least, and the roof/frame of these models
- * happens to be the timber. It is the only structural read available without
- * re-authoring 128 GLTF files.
+ * This used to key off material names — `Wood*` gave way first and furthest,
+ * `Stone*` last and least — which worked while every model was one mesh split
+ * into one primitive per authored material. The pack is migrating to baked
+ * single-material models (one texture, one slot, one draw call), and those carry
+ * exactly one material named something like `material.007`. Every mesh landed in
+ * the same group, so the stagger silently flattened into the uniform scale
+ * animation this module exists to avoid.
+ *
+ * Height reproduces the old read without depending on authoring: the upper
+ * structure — roof, frame, the parts that were the timber — gives way first and
+ * furthest, and the lower mass lags and barely compresses. It also works on a
+ * single mesh, because the ramp is evaluated per vertex in the shader rather
+ * than per material on the CPU.
+ *
+ * `delay` is the fraction of the collapse a vertex waits before it starts
+ * moving; `give` scales every amplitude. The endpoints are the old `timber` and
+ * `masonry` responses, so a building that used to stagger still does, and the
+ * midpoint of the ramp lands within a hair of the old middle group.
+ *
+ * Presentation tuning: retune freely, but keep `topGive` from growing without
+ * checking that `squash * (2 * topGive - baseGive) < 1`. Past that the ramp
+ * compresses the top harder than the height it has to travel and vertices pass
+ * through each other.
  */
-export type StructureMaterialGroup = "timber" | "masonry" | "fitting";
+export const HEIGHT_RESPONSE = {
+  baseDelay: 0.25,
+  topDelay: 0,
+  baseGive: 0.55,
+  topGive: 1,
+} as const;
 
 /**
- * Classify a GLTF material name. Prefix-matched because the models suffix
- * lighting variants onto the substance (`Stone_Light` is still stone), and
- * unknown names fall to the middle group rather than to an extreme — a material
- * we have never seen should not be the one that flattens hardest.
+ * Largest `squash` the ramp can carry before the top of a building compresses
+ * through the height beneath it. Derived rather than written down, so retuning
+ * {@link HEIGHT_RESPONSE} moves the limit with it.
  */
-export function structureMaterialGroup(materialName: string): StructureMaterialGroup {
-  const name = materialName.trim().toLowerCase();
-  if (name.startsWith("wood") || name.startsWith("timber") || name.startsWith("plank")) return "timber";
-  if (name.startsWith("stone") || name.startsWith("wall") || name.startsWith("brick")) return "masonry";
-  return "fitting";
-}
-
-/**
- * Per-group timing and amplitude. `delay` is the fraction of the collapse a
- * group waits before it starts moving, `give` scales every amplitude — so
- * timber sags immediately and fully while stone lags and barely compresses,
- * which is what makes one collapse read as a structure rather than as a scale
- * animation.
- */
-const MATERIAL_GROUP_RESPONSE: Record<StructureMaterialGroup, { readonly delay: number; readonly give: number }> = {
-  timber: { delay: 0, give: 1 },
-  fitting: { delay: 0.12, give: 0.8 },
-  masonry: { delay: 0.25, give: 0.55 },
-};
+export const MAX_SAFE_SQUASH = 1 / (2 * HEIGHT_RESPONSE.topGive - HEIGHT_RESPONSE.baseGive);
 
 /** Uniform names are prefixed so a patched shader can never collide with three's own. */
 const UNIFORM_PROGRESS = "rtsDeformProgress";
@@ -111,7 +114,8 @@ const UNIFORM_TO_ROOT = "rtsDeformToRoot";
 const UNIFORM_FROM_ROOT = "rtsDeformFromRoot";
 const UNIFORM_AMOUNT = "rtsDeformAmount";
 const UNIFORM_SPAN = "rtsDeformSpan";
-const UNIFORM_TIMING = "rtsDeformTiming";
+const UNIFORM_RESPONSE = "rtsDeformResponse";
+const UNIFORM_SEED = "rtsDeformSeed";
 
 /**
  * `customProgramCacheKey` contribution. The GLSL below is byte-identical for
@@ -134,40 +138,55 @@ uniform mat4 ${UNIFORM_TO_ROOT};
 uniform mat4 ${UNIFORM_FROM_ROOT};
 uniform vec3 ${UNIFORM_AMOUNT};
 uniform vec2 ${UNIFORM_SPAN};
-uniform vec2 ${UNIFORM_TIMING};
-
-float rtsDeformEased() {
-	float delay = ${UNIFORM_TIMING}.x;
-	return clamp( ( ${UNIFORM_PROGRESS} - delay ) / max( 1.0 - delay, 0.0001 ), 0.0, 1.0 );
-}
+uniform vec4 ${UNIFORM_RESPONSE};
+uniform float ${UNIFORM_SEED};
 
 float rtsDeformHeight( vec3 rootPos ) {
 	return clamp( ( rootPos.y - ${UNIFORM_SPAN}.x ) / max( ${UNIFORM_SPAN}.y, 0.0001 ), 0.0, 1.0 );
 }
 
+/**
+ * Delay and give at one normalised height — base values at the ground, top
+ * values at the eaves. This is the whole stagger: it is a ramp, not a lookup,
+ * so it works on a building that is one mesh with one material.
+ */
+vec2 rtsDeformResponseAt( float h ) {
+	return vec2(
+		mix( ${UNIFORM_RESPONSE}.x, ${UNIFORM_RESPONSE}.y, h ),
+		mix( ${UNIFORM_RESPONSE}.z, ${UNIFORM_RESPONSE}.w, h )
+	);
+}
+
+float rtsDeformEased( float delay ) {
+	return clamp( ( ${UNIFORM_PROGRESS} - delay ) / max( 1.0 - delay, 0.0001 ), 0.0, 1.0 );
+}
+
 /** Vertical compression and outward splay for one normalised height. */
-vec2 rtsDeformScales( float p, float h ) {
-	float squashed = max( 1.0 - p * ${UNIFORM_AMOUNT}.x, 0.0001 );
+vec2 rtsDeformScales( float p, float h, float give ) {
+	float squashed = max( 1.0 - p * ${UNIFORM_AMOUNT}.x * give, 0.0001 );
 	// Splay is biased low: a building folding in on itself bulges at the base,
 	// where the mass ends up, rather than fanning out at the eaves.
-	float splayed = 1.0 + p * ${UNIFORM_AMOUNT}.y * ( 0.35 + 0.65 * ( 1.0 - h ) );
+	float splayed = 1.0 + p * ${UNIFORM_AMOUNT}.y * give * ( 0.35 + 0.65 * ( 1.0 - h ) );
 	return vec2( splayed, squashed );
 }
 
 vec3 rtsDeformPosition( vec3 localPos ) {
-	float p = rtsDeformEased();
-	if ( p <= 0.0 ) return localPos;
+	// Height has to be known before the ease can be, so the cheap early-out is
+	// off raw progress rather than off the eased value it used to be.
+	if ( ${UNIFORM_PROGRESS} <= 0.0 ) return localPos;
 	vec3 rootPos = ( ${UNIFORM_TO_ROOT} * vec4( localPos, 1.0 ) ).xyz;
 	float h = rtsDeformHeight( rootPos );
-	vec2 scales = rtsDeformScales( p, h );
+	vec2 response = rtsDeformResponseAt( h );
+	float p = rtsDeformEased( response.x );
+	if ( p <= 0.0 ) return localPos;
+	vec2 scales = rtsDeformScales( p, h, response.y );
 	rootPos.y = ${UNIFORM_SPAN}.x + ( rootPos.y - ${UNIFORM_SPAN}.x ) * scales.y;
 	rootPos.xz *= scales.x;
 	// Cheap per-vertex hash off the *undeformed* local position, so a vertex
 	// wanders the same way for the whole animation instead of shimmering.
-	float seed = ${UNIFORM_TIMING}.y;
-	float n1 = sin( dot( localPos, vec3( 12.9898, 78.233, 37.719 ) ) + seed );
-	float n2 = sin( dot( localPos, vec3( 39.346, 11.135, 83.155 ) ) + seed * 1.7 );
-	rootPos.xz += vec2( n1, n2 ) * ${UNIFORM_AMOUNT}.z * p * h;
+	float n1 = sin( dot( localPos, vec3( 12.9898, 78.233, 37.719 ) ) + ${UNIFORM_SEED} );
+	float n2 = sin( dot( localPos, vec3( 39.346, 11.135, 83.155 ) ) + ${UNIFORM_SEED} * 1.7 );
+	rootPos.xz += vec2( n1, n2 ) * ${UNIFORM_AMOUNT}.z * response.y * p * h;
 	return ( ${UNIFORM_FROM_ROOT} * vec4( rootPos, 1.0 ) ).xyz;
 }
 
@@ -179,10 +198,13 @@ vec3 rtsDeformPosition( vec3 localPos ) {
  * job is only to stop flattened roof faces from lighting as if still pitched.
  */
 vec3 rtsDeformNormal( vec3 localPos, vec3 localNormal ) {
-	float p = rtsDeformEased();
-	if ( p <= 0.0 ) return localNormal;
+	if ( ${UNIFORM_PROGRESS} <= 0.0 ) return localNormal;
 	vec3 rootPos = ( ${UNIFORM_TO_ROOT} * vec4( localPos, 1.0 ) ).xyz;
-	vec2 scales = rtsDeformScales( p, rtsDeformHeight( rootPos ) );
+	float h = rtsDeformHeight( rootPos );
+	vec2 response = rtsDeformResponseAt( h );
+	float p = rtsDeformEased( response.x );
+	if ( p <= 0.0 ) return localNormal;
+	vec2 scales = rtsDeformScales( p, h, response.y );
 	vec3 rootNormal = mat3( ${UNIFORM_TO_ROOT} ) * localNormal;
 	rootNormal = normalize( vec3( rootNormal.x / scales.x, rootNormal.y / scales.y, rootNormal.z / scales.x ) );
 	return normalize( mat3( ${UNIFORM_FROM_ROOT} ) * rootNormal );
@@ -248,18 +270,22 @@ export function applyStructureDeformation(
   const progress: UniformRef<number> = { value: 0 };
   const patches: MeshPatch[] = [];
 
+  // Both are the same for every mesh of this building now that the stagger is a
+  // height ramp the shader evaluates: only the two matrices still differ per
+  // mesh, because only they depend on where the mesh sits under the root.
+  const amount = new Vector3(tuning.squash, tuning.splay, tuning.buckle);
+  const response = new Vector4(
+    HEIGHT_RESPONSE.baseDelay,
+    HEIGHT_RESPONSE.topDelay,
+    HEIGHT_RESPONSE.baseGive,
+    HEIGHT_RESPONSE.topGive,
+  );
+
   for (const mesh of meshes) {
     const meshToRoot = new Matrix4().multiplyMatrices(toRoot, mesh.matrixWorld);
     const meshFromRoot = new Matrix4().copy(meshToRoot).invert();
-    const response = MATERIAL_GROUP_RESPONSE[meshMaterialGroup(mesh)];
-    const amount = new Vector3(
-      tuning.squash * response.give,
-      tuning.splay * response.give,
-      tuning.buckle * response.give,
-    );
-    const timing = { delay: response.delay, seed };
     for (const material of materialList(mesh.material)) {
-      patchMaterial(material, progress, meshToRoot, meshFromRoot, amount, span, timing);
+      patchMaterial(material, progress, meshToRoot, meshFromRoot, amount, span, response, seed);
     }
     // The shadow pass renders through a separate depth material, so an unpatched
     // one leaves a collapsing building casting its original upright shadow. A
@@ -268,7 +294,7 @@ export function applyStructureDeformation(
     let depthMaterial: MeshDepthMaterial | null = null;
     if (mesh.castShadow) {
       depthMaterial = new MeshDepthMaterial({ depthPacking: RGBADepthPacking });
-      patchMaterial(depthMaterial, progress, meshToRoot, meshFromRoot, amount, span, timing);
+      patchMaterial(depthMaterial, progress, meshToRoot, meshFromRoot, amount, span, response, seed);
       mesh.customDepthMaterial = depthMaterial;
     }
     patches.push({ mesh, depthMaterial, previousDepthMaterial });
@@ -327,14 +353,6 @@ function materialList(material: Material | Material[]): readonly Material[] {
   return Array.isArray(material) ? material : [material];
 }
 
-/** A multi-material mesh is classified by its first named slot; GLTF gives one each. */
-function meshMaterialGroup(mesh: Mesh): StructureMaterialGroup {
-  for (const material of materialList(mesh.material)) {
-    if (material.name) return structureMaterialGroup(material.name);
-  }
-  return "fitting";
-}
-
 function patchMaterial(
   material: Material,
   progress: UniformRef<number>,
@@ -342,7 +360,8 @@ function patchMaterial(
   fromRoot: Matrix4,
   amount: Vector3,
   span: { base: number; height: number },
-  timing: { delay: number; seed: number },
+  response: Vector4,
+  seed: number,
 ): void {
   // Captured *before* reassignment, so the patch composes with anything already
   // on the material (the reflection-capture patch wraps materials the same way)
@@ -357,7 +376,8 @@ function patchMaterial(
     shader.uniforms[UNIFORM_FROM_ROOT] = { value: fromRoot };
     shader.uniforms[UNIFORM_AMOUNT] = { value: amount };
     shader.uniforms[UNIFORM_SPAN] = { value: new Vector3(span.base, span.height, 0) };
-    shader.uniforms[UNIFORM_TIMING] = { value: new Vector3(timing.delay, timing.seed, 0) };
+    shader.uniforms[UNIFORM_RESPONSE] = { value: response };
+    shader.uniforms[UNIFORM_SEED] = { value: seed };
     shader.vertexShader = shader.vertexShader.replace(MAIN_ANCHOR, `${VERTEX_PREAMBLE}\n${MAIN_ANCHOR}`);
     // Normals first: the depth material has no normal chunk, and patching an
     // absent include would silently do nothing anyway.

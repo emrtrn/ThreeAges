@@ -18,6 +18,7 @@
 import type { Group } from "three";
 
 import type { SettlementAge } from "../../data/gameDataTypes";
+import type { UnitOwner } from "../units/unit";
 import type { RtsActorVisualFactory } from "../content/rtsActorVisualFactory";
 import { createRtsActorPlaceholder } from "../content/rtsActorPlaceholder";
 import { findActorComponentNode, fitPresentationToFootprint } from "../content/rtsActorPresentationTree";
@@ -62,6 +63,7 @@ export class RtsBuildingVisuals {
       COMMAND_CENTER_VISUAL_FOOTPRINT,
       COMMAND_CENTER_VISUAL_FOOTPRINT,
       age,
+      center.owner,
     );
     if (visual) center.setVisual(visual);
   }
@@ -74,6 +76,7 @@ export class RtsBuildingVisuals {
       structure.stats.footprint.width,
       structure.stats.footprint.depth,
       age,
+      structure.owner,
     );
   }
 
@@ -83,8 +86,9 @@ export class RtsBuildingVisuals {
     footprintDepth: number,
     age: SettlementAge = "settlement",
     level = 1,
+    owner: UnitOwner = "player",
   ): Group | null {
-    return this.resolve(buildingId, "completed", level, footprintWidth, footprintDepth, age);
+    return this.resolve(buildingId, "completed", level, footprintWidth, footprintDepth, age, owner);
   }
 
   /**
@@ -101,12 +105,13 @@ export class RtsBuildingVisuals {
     footprintWidth: number,
     footprintDepth: number,
     age: SettlementAge,
+    owner: UnitOwner,
   ): Group | null {
-    return this.resolve(buildingId, "completed", level, footprintWidth, footprintDepth, age);
+    return this.resolve(buildingId, "completed", level, footprintWidth, footprintDepth, age, owner);
   }
 
   createConstructionVisual(
-    structure: Pick<PlacedStructure, "stats">,
+    structure: Pick<PlacedStructure, "stats" | "owner">,
     age: SettlementAge = "settlement",
     level = 1,
   ): Group | null {
@@ -117,6 +122,7 @@ export class RtsBuildingVisuals {
       structure.stats.footprint.width,
       structure.stats.footprint.depth,
       age,
+      structure.owner,
     );
   }
 
@@ -136,6 +142,7 @@ export class RtsBuildingVisuals {
     footprintWidth: number,
     footprintDepth: number,
     age: SettlementAge,
+    owner: UnitOwner,
   ): Group | null {
     const actorVisual = this.actorVisuals?.createBuildingVisual(
       buildingId,
@@ -144,6 +151,7 @@ export class RtsBuildingVisuals {
       footprintWidth,
       footprintDepth,
       age,
+      owner,
     );
     if (actorVisual) return actorVisual;
     if (!this.actorVisuals?.isReady()) return null;

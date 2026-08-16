@@ -291,7 +291,7 @@ import {
   PlacedStructureSystem,
   structureDamageStage,
 } from "../src/game/rts/structures/placedStructureSystem";
-import { structureMaterialGroup } from "../src/game/rts/structures/structureDeformation";
+import { HEIGHT_RESPONSE, MAX_SAFE_SQUASH } from "../src/game/rts/structures/structureDeformation";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { MarketPrices } from "../src/game/rts/economy/marketPricing";
 import { MarketStock } from "../src/game/rts/economy/marketStock";
@@ -31188,30 +31188,76 @@ function structureVisualMaterials(root: Object3D): Material[] {
   return materials;
 }
 
-check("RTS structure material groups classify the materials the shipped building models actually use", () => {
-  // Read off the content rather than retyped here: the collapse staggers by
-  // material name, so a model re-exported with different names is exactly the
-  // regression this has to catch.
-  const model = JSON.parse(
-    readFileSync("public/assets/ThreeAges/StaticMeshes/Barracks/Barracks_FirstAge_Level1.gltf", "utf8"),
-  ) as { materials?: { name?: string }[] };
-  const names = (model.materials ?? []).map((material) => material.name ?? "");
-  assert.ok(names.length > 0, "the reference building model declares materials");
-  const groups = new Set(names.map((name) => structureMaterialGroup(name)));
-  assert.ok(groups.has("timber"), "the models' Wood* materials read as timber");
-  assert.ok(groups.has("masonry"), "the models' Stone* materials read as masonry");
+check("RTS collapse staggers by height, so a single-material baked model still comes down as a structure", () => {
+  // The stagger used to be a per-mesh lookup on the material name, which went
+  // silent the moment a building shipped as one baked mesh named "material.007".
+  // The contract now is a ramp: the top of a building gives way earlier and
+  // further than its base, evaluated per vertex.
+  assert.ok(
+    HEIGHT_RESPONSE.topDelay < HEIGHT_RESPONSE.baseDelay,
+    "the upper structure starts moving before the mass under it",
+  );
+  assert.ok(
+    HEIGHT_RESPONSE.topGive > HEIGHT_RESPONSE.baseGive,
+    "and gives way further once it does",
+  );
+  assert.ok(HEIGHT_RESPONSE.baseGive > 0, "the base still compresses rather than standing rigid");
 
-  // The rule: substance prefix wins, a lighting variant stays in its substance's
-  // group, and an unrecognised material lands in the middle rather than at an
-  // extreme — a material nobody has classified must not be the one that
-  // flattens hardest.
-  assert.equal(structureMaterialGroup("Wood"), "timber");
-  assert.equal(structureMaterialGroup("Wood_Light"), "timber");
-  assert.equal(structureMaterialGroup("Stone"), "masonry");
-  assert.equal(structureMaterialGroup("Stone_Light"), "masonry");
-  assert.equal(structureMaterialGroup("Walls"), "masonry");
-  assert.equal(structureMaterialGroup("Gold"), "fitting");
-  assert.equal(structureMaterialGroup("SomethingNobodyHasAuthoredYet"), "fitting");
+  // Vertices must not overtake each other: the top is compressed by `give`
+  // against the height beneath it, and past this ratio the ramp folds the model
+  // through itself. Resolved per building rather than read off the defaults, so
+  // a per-building override cannot slip past, and derived from the same
+  // constants the shader reads, so retuning either side stays green while safe.
+  const catalog = shippedRtsContentCatalog();
+  const buildingIds = Object.keys(catalog.buildings);
+  assert.ok(buildingIds.length > 0, "the catalog maps buildings to check");
+  for (const buildingId of buildingIds) {
+    const squash = rtsBuildingDamagePresentation(catalog, buildingId).collapseDeformation.squash;
+    assert.ok(
+      squash < MAX_SAFE_SQUASH,
+      `${buildingId}: collapse squash ${squash} must stay under ${MAX_SAFE_SQUASH} or the ramp inverts the model`,
+    );
+  }
+});
+
+check("RTS collapse response no longer depends on what a model's materials are called", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house balance missing");
+  const structures = new PlacedStructureSystem();
+  const structure = structures.place("player", house, 0, 0);
+  structures.advanceConstruction(structure, house.constructionSeconds);
+  const visual = structure.object.getObjectByName("rts-complete-building-placeholder")
+    ?? assert.fail("the completed visual is missing");
+
+  // Rename the materials to the two extremes the old classifier cared about. If
+  // anything still reads the name, these two husks get different responses.
+  const materials = structureVisualMaterials(visual);
+  assert.ok(materials.length > 0, "the building has materials to rename");
+  materials.forEach((material, index) => {
+    material.name = index % 2 === 0 ? "Wood" : "Stone";
+  });
+
+  structures.destroy(structure);
+  const responses = structureVisualMaterials(visual).map((material) => {
+    const uniform = compileStructureDeformPatch(material).uniforms.rtsDeformResponse as {
+      value: { x: number; y: number; z: number; w: number };
+    };
+    return `${uniform.value.x},${uniform.value.y},${uniform.value.z},${uniform.value.w}`;
+  });
+  structures.clear();
+
+  assert.equal(
+    new Set(responses).size,
+    1,
+    `every material of one husk carries the same height ramp, got ${[...new Set(responses)].join(" | ")}`,
+  );
+  assert.equal(
+    responses[0],
+    `${HEIGHT_RESPONSE.baseDelay},${HEIGHT_RESPONSE.topDelay},${HEIGHT_RESPONSE.baseGive},${HEIGHT_RESPONSE.topGive}`,
+    "and it is the authored ramp, in base-then-top order",
+  );
 });
 
 check("RTS wildlife sidecars name clips the shipped animal models actually carry", () => {
@@ -34984,9 +35030,9 @@ check("RTS deformation amounts are authored in the damage table, not hard-coded 
 
   const single = squashUniform(0.3);
   const double = squashUniform(0.6);
-  // Proportionality, not a magnitude: the authored number is scaled by the
-  // mesh's material group on the way to the shader, so pinning the product here
-  // would make retuning that table a red build for no reason.
+  // Proportionality, not a magnitude: the shader scales the authored number by
+  // the height ramp per vertex, so pinning a product here would make retuning
+  // either the table or the ramp a red build for no reason.
   assert.ok(single.x > 0, "an authored squash reaches the shader");
   assert.ok(Math.abs(double.x / single.x - 2) < 1e-9, "doubling the authored squash doubles what the shader gets");
   assert.equal(single.z, 0, "an authored zero stays zero — buckle is opt-out from the table");
@@ -35524,6 +35570,66 @@ check("Actor presentation Faz 5: the catalog resolves art by age family and in-a
   assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 0, "settlement"), null);
   assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 9, "settlement"), null);
   assert.equal(rtsBuildingActorRef(catalog, "nonexistent", "completed", 1, "settlement"), null);
+});
+
+check("Actor presentation: a building's owner variant wins, and its absence falls back", () => {
+  const catalog = shippedRtsContentCatalog();
+  const actor = (name: string) => `assets/ThreeAges/Actors/Buildings/${name}.actor.json`;
+
+  // The Barracks flies the owner's colours, so the two armies resolve to
+  // different Actors at the age the variant is authored for.
+  for (const level of [1, 2, 3]) {
+    assert.equal(
+      rtsBuildingActorRef(catalog, "barracks", "completed", level, "settlement", "player"),
+      actor(`BP_RTS_Barracks_FirstAge_T${level}`),
+    );
+    assert.equal(
+      rtsBuildingActorRef(catalog, "barracks", "completed", level, "settlement", "enemy"),
+      actor(`BP_RTS_Enemy_Barracks_FirstAge_T${level}`),
+    );
+  }
+
+  // Only the settlement set is authored per owner. Town has to fall back to the
+  // shared art rather than resolve to nothing — an unauthored age is the normal
+  // state of this table, not a gap.
+  assert.equal(
+    rtsBuildingActorRef(catalog, "barracks", "completed", 2, "town", "enemy"),
+    actor("BP_RTS_Barracks_SecondAge_T2"),
+  );
+
+  // A building both sides share resolves identically for both, which is what
+  // keeps the override opt-in instead of something every building must author.
+  assert.equal(
+    rtsBuildingActorRef(catalog, "house", "completed", 2, "settlement", "enemy"),
+    rtsBuildingActorRef(catalog, "house", "completed", 2, "settlement", "player"),
+  );
+
+  // The ladder decides the scale each rung is fitted to, so it has to narrow by
+  // owner exactly as the single lookup does. A ladder that leaked the shared
+  // models here would size the enemy's Barracks against art it never draws.
+  const enemyLadder = rtsBuildingActorRefLadder(catalog, "barracks", "completed", "settlement", "enemy");
+  const playerLadder = rtsBuildingActorRefLadder(catalog, "barracks", "completed", "settlement", "player");
+  assert.deepEqual(
+    [...enemyLadder].sort(),
+    [1, 2, 3].map((level) => actor(`BP_RTS_Enemy_Barracks_FirstAge_T${level}`)).sort(),
+  );
+  assert.deepEqual(
+    [...playerLadder].sort(),
+    [1, 2, 3].map((level) => actor(`BP_RTS_Barracks_FirstAge_T${level}`)).sort(),
+  );
+  // Same rung count either way: the override replaces models, never the ladder's
+  // shape, so levelling up stays an increase in size on both sides.
+  assert.equal(enemyLadder.length, playerLadder.length);
+
+  // Owner variants are separate files. Left out of the preflight set they would
+  // load "successfully" and fail when the first enemy Barracks is drawn.
+  const refs = rtsContentCatalogRefs(catalog);
+  for (const level of [1, 2, 3]) {
+    assert.ok(
+      refs.includes(actor(`BP_RTS_Enemy_Barracks_FirstAge_T${level}`)),
+      `enemy Barracks T${level} joins the preflight load set`,
+    );
+  }
 });
 
 check("Faz M1 the Market is buildable and every balance building has art wired", () => {

@@ -474,9 +474,10 @@ export class RtsActorVisualFactory {
     footprintWidth: number,
     footprintDepth: number,
     age: SettlementAge = "settlement",
+    owner: UnitOwner = "player",
   ): Group | null {
     if (!this.ready) return null;
-    const actorRef = rtsBuildingActorRef(this.catalog, buildingId, state, level, age);
+    const actorRef = rtsBuildingActorRef(this.catalog, buildingId, state, level, age, owner);
     if (!actorRef) return null;
     const visual = this.createActorVisual(actorRef);
     if (!visual) return null;
@@ -485,7 +486,7 @@ export class RtsActorVisualFactory {
       visual,
       footprintWidth,
       footprintDepth,
-      this.ladderExtent(buildingId, state, age),
+      this.ladderExtent(buildingId, state, age, owner),
     );
     return visual;
   }
@@ -503,13 +504,17 @@ export class RtsActorVisualFactory {
     buildingId: string,
     state: "construction" | "completed",
     age: SettlementAge,
+    owner: UnitOwner,
   ): PresentationExtent | null {
-    const key = `${buildingId}|${state}|${age}`;
+    // Owner is part of the key because it is part of the ladder: two armies with
+    // different models for the same building have different largest rungs, and a
+    // shared cache entry would hand one of them the other's scale.
+    const key = `${buildingId}|${state}|${age}|${owner}`;
     const cached = this.ladderExtents.get(key);
     if (cached !== undefined) return cached;
     let width = 0;
     let depth = 0;
-    for (const ref of rtsBuildingActorRefLadder(this.catalog, buildingId, state, age)) {
+    for (const ref of rtsBuildingActorRefLadder(this.catalog, buildingId, state, age, owner)) {
       // Built and thrown away: the clone shares its templates' geometry and
       // materials, so measuring costs nodes, not GPU memory.
       const rung = this.createActorVisual(ref);

@@ -1434,6 +1434,10 @@ export class RtsApp {
           remembered.footprintWidth,
           remembered.footprintDepth,
           remembered.age,
+          // Remembered like every other field: the ghost has to wear the art of
+          // whoever owned it, or re-sighting an enemy Barracks swaps a blue
+          // model for a red one.
+          remembered.owner,
         ),
       );
       this.fogVisibility = new FogVisibilityBinder(
@@ -1822,6 +1826,7 @@ export class RtsApp {
         depth,
         this.ageOf(PLAYER_OWNER),
         this.progression.tierFor(PLAYER_OWNER).level,
+        PLAYER_OWNER,
       ));
     this.roadPlacement = new RoadPlacementSystem(
       canvas,
@@ -5438,6 +5443,7 @@ export class RtsApp {
           depth,
           this.ageOf(PLAYER_OWNER),
           this.progression.tierFor(PLAYER_OWNER).level,
+          PLAYER_OWNER,
         ));
       for (const center of this.centers.all()) this.buildingVisuals.applyToCenter(center, this.ageOf(center.owner));
       for (const structure of this.structures.all()) {

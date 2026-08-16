@@ -91,6 +91,19 @@ export interface RtsLogisticsContentSection {
   readonly caravan?: { readonly actorRef: RtsActorRef };
 }
 
+/**
+ * One owner's own art for a building, in the same `levels`/`ages` shape the
+ * building itself uses.
+ *
+ * Both members are optional because a variant is authored where it exists and
+ * nowhere else: the Barracks ships a red-flag settlement set and no town set, so
+ * an enemy Town Barracks resolves back to the shared art rather than to nothing.
+ */
+export interface RtsBuildingOwnerArt {
+  readonly levels?: Readonly<Record<string, RtsActorRef>>;
+  readonly ages?: Readonly<Partial<Record<SettlementAge, Readonly<Record<string, RtsActorRef>>>>>;
+}
+
 export interface RtsBuildingContentEntry {
   readonly constructionActorRef?: RtsActorRef;
   /** Completed-building Actor assets keyed by the in-age level ("1", "2", ...). */
@@ -101,6 +114,17 @@ export interface RtsBuildingContentEntry {
    * first; anything it does not map falls back to the age-agnostic `levels`.
    */
   readonly ages?: Readonly<Partial<Record<SettlementAge, Readonly<Record<string, RtsActorRef>>>>>;
+  /**
+   * Optional per-owner art, for buildings the two sides do not share — the
+   * Barracks flies the owner's colour, so each army needs its own model rather
+   * than a tint. Resolved ahead of {@link ages} and {@link levels} and falling
+   * back to them per level key, which is what lets one age be authored per owner
+   * without duplicating the rest of the ladder.
+   *
+   * Unlike units, a missing owner variant here is *not* a coverage gap: most
+   * buildings look the same on both sides and are meant to.
+   */
+  readonly owners?: Readonly<Partial<Record<UnitOwner, RtsBuildingOwnerArt>>>;
 }
 
 /** Whether a razed building topples sideways or settles where it stood. */
@@ -338,6 +362,10 @@ export function rtsUnitOwnerActorRefIsAuthored(
  * that is being raised — the completed Actor for the same age and level, drawn
  * translucent by the caller — rather than dropping to the legacy single-mesh
  * path, which would make the site and the finished model disagree.
+ *
+ * `owner` narrows before age does: an owner that authored this level wins even
+ * when the shared table has an entry for the same age, because an owner variant
+ * exists precisely to not be the shared model.
  */
 export function rtsBuildingActorRef(
   catalog: RtsContentCatalog,
@@ -345,11 +373,19 @@ export function rtsBuildingActorRef(
   state: "construction" | "completed",
   level: number,
   age: SettlementAge = "settlement",
+  owner: UnitOwner = "player",
 ): RtsActorRef | null {
   const entry = catalog.buildings[buildingId];
   if (state === "construction" && entry?.constructionActorRef) return entry.constructionActorRef;
   const key = String(level);
-  return entry?.ages?.[age]?.[key] ?? entry?.levels[key] ?? null;
+  const owned = entry?.owners?.[owner];
+  return (
+    owned?.ages?.[age]?.[key] ??
+    owned?.levels?.[key] ??
+    entry?.ages?.[age]?.[key] ??
+    entry?.levels[key] ??
+    null
+  );
 }
 
 /**
@@ -367,14 +403,22 @@ export function rtsBuildingActorRefLadder(
   buildingId: string,
   state: "construction" | "completed",
   age: SettlementAge = "settlement",
+  owner: UnitOwner = "player",
 ): readonly RtsActorRef[] {
   const entry = catalog.buildings[buildingId];
   if (!entry) return [];
   // A dedicated construction Actor answers for every level, so it is its own
   // ladder rather than one rung of the completed building's.
   if (state === "construction" && entry.constructionActorRef) return [entry.constructionActorRef];
+  // Applied least-specific first so the last write wins, which reproduces the
+  // ?? chain in rtsBuildingActorRef exactly. The two must not drift: the ladder
+  // decides the scale every rung is fitted to, so a ladder built from the shared
+  // models would size the enemy's variants against art it never renders.
   const byLevel = new Map<string, RtsActorRef>(Object.entries(entry.levels));
   for (const [key, ref] of Object.entries(entry.ages?.[age] ?? {})) byLevel.set(key, ref);
+  const owned = entry.owners?.[owner];
+  for (const [key, ref] of Object.entries(owned?.levels ?? {})) byLevel.set(key, ref);
+  for (const [key, ref] of Object.entries(owned?.ages?.[age] ?? {})) byLevel.set(key, ref);
   return [...byLevel.values()];
 }
 
@@ -669,6 +713,34 @@ function validateAges(
   return ages;
 }
 
+function validateBuildingOwners(
+  value: unknown,
+  where: string,
+): NonNullable<RtsBuildingContentEntry["owners"]> {
+  const rawOwners = asObject(value, where);
+  const owners: Partial<Record<UnitOwner, RtsBuildingOwnerArt>> = {};
+  for (const [owner, rawArt] of Object.entries(rawOwners)) {
+    if (!OVERRIDABLE_OWNERS.includes(owner as UnitOwner)) {
+      throw new RtsContentCatalogError(
+        `${where}: "${owner}" must be one of ${OVERRIDABLE_OWNERS.join(", ")}`,
+      );
+    }
+    const artWhere = `${where}."${owner}"`;
+    const art = asObject(rawArt, artWhere);
+    requireExactKeys(art, ["levels", "ages"], artWhere);
+    // An owner block that maps nothing is a typo that would render as "the
+    // variant silently never appears", so it is refused rather than ignored.
+    if (art["levels"] === undefined && art["ages"] === undefined) {
+      throw new RtsContentCatalogError(`${artWhere}: must author "levels" or "ages"`);
+    }
+    owners[owner as UnitOwner] = {
+      ...(art["levels"] === undefined ? {} : { levels: validateLevels(art["levels"], `${artWhere}.levels`) }),
+      ...(art["ages"] === undefined ? {} : { ages: validateAges(art["ages"], `${artWhere}.ages`) }),
+    };
+  }
+  return owners;
+}
+
 function validateBuildings(
   value: unknown,
   context: RtsContentCatalogValidationContext,
@@ -682,7 +754,7 @@ function validateBuildings(
     }
     const entryWhere = `${where}."${id}"`;
     const entry = asObject(raw, entryWhere);
-    requireExactKeys(entry, ["constructionActorRef", "levels", "ages"], entryWhere);
+    requireExactKeys(entry, ["constructionActorRef", "levels", "ages", "owners"], entryWhere);
     const levels = validateLevels(entry["levels"], `${entryWhere}.levels`);
     entries[id] = {
       ...(entry["constructionActorRef"] === undefined
@@ -690,6 +762,9 @@ function validateBuildings(
         : { constructionActorRef: requireActorRef(entry["constructionActorRef"], `${entryWhere}.constructionActorRef`) }),
       levels,
       ...(entry["ages"] === undefined ? {} : { ages: validateAges(entry["ages"], `${entryWhere}.ages`) }),
+      ...(entry["owners"] === undefined
+        ? {}
+        : { owners: validateBuildingOwners(entry["owners"], `${entryWhere}.owners`) }),
     };
   }
   return entries;

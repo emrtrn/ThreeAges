@@ -89,6 +89,15 @@ export function rtsContentCatalogRefs(catalog: RtsContentCatalog): readonly RtsA
     for (const levels of Object.values(entry.ages ?? {})) {
       for (const ref of Object.values(levels)) refs.add(ref);
     }
+    // Same reasoning as the unit owner variants above: an owner's models are
+    // their own files, and a building only reaches them when that owner is the
+    // one being drawn — the least likely case to be caught by hand.
+    for (const art of Object.values(entry.owners ?? {})) {
+      for (const ref of Object.values(art.levels ?? {})) refs.add(ref);
+      for (const levels of Object.values(art.ages ?? {})) {
+        for (const ref of Object.values(levels)) refs.add(ref);
+      }
+    }
   }
   return [...refs];
 }
