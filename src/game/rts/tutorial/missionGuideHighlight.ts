@@ -26,7 +26,12 @@
  *    owning one House while the population is full look identical from the
  *    outside; only the goal tells them apart, which is why the rule reads the
  *    goal rather than trusting the caller to ask at the right moment.
- * 4. **A structure action points twice, in order.** `trade-buy:wood` does not
+ * 4. **A road step points at the road tool, once.** No building is involved and
+ *    none is named; the pointer arms the tool and the card says what the road is
+ *    for. This is the *only* case that reaches the road tool as an instruction —
+ *    case 3 reaches it as a correction, which is why they carry different
+ *    prompts.
+ * 5. **A structure action points twice, in order.** `trade-buy:wood` does not
  *    exist on screen until a Market is selected, so while it is not, the pointer
  *    is on the *building* — "click your Market" — and only once the right
  *    building is selected does it move to the button inside the panel. Pulsing a
@@ -47,7 +52,17 @@ export type MissionGuidePrompt =
   /** The panel action is behind a selection the player has not made. */
   | { readonly kind: "select-building"; readonly buildingId: string }
   /** The building stands but is not connected; the road tool is the answer. */
-  | { readonly kind: "draw-road" };
+  | { readonly kind: "draw-road" }
+  /**
+   * The step's whole work is a road, and it has no building to talk about.
+   *
+   * Kept apart from `draw-road` rather than folded into it, because the two say
+   * opposite things about what the player has already done. `draw-road` is a
+   * correction — "the thing you built is not connected" — and names that
+   * building. This one is an opening instruction with no building in it at all,
+   * and a sentence naming one would be pointing at the wrong object.
+   */
+  | { readonly kind: "supply-road" };
 
 export interface MissionHighlight {
   /** Build-palette button id — a building id or {@link ROAD_PALETTE_TARGET}. */
@@ -76,6 +91,9 @@ export function missionGuideHighlight(
   const guide = step?.guide;
   if (!step || !guide) return NOTHING;
   const { action } = guide;
+  if (action.kind === "road") {
+    return { paletteTarget: ROAD_PALETTE_TARGET, actionId: null, prompt: { kind: "supply-road" } };
+  }
   if (action.kind === "build") {
     const measuresConnection = step.goal.kind === "producer-linked" || step.goal.kind === "outpost-connected";
     // The step's *quota*, not merely one: "connect two Lumber Camps" with one

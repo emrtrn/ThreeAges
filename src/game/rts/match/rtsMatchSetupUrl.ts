@@ -46,6 +46,29 @@ export function urlPinsMatchSetup(params: URLSearchParams): boolean {
 }
 
 /**
+ * The mode a URL asks for, or `fallback` when it does not say.
+ *
+ * Split out of {@link readMatchSetupFromUrl} because the *difficulty* default
+ * now depends on it (Faz 0.4: the tur opens on the baseline opponent rather than
+ * on the scenario preset's `hard`), and that default has to be settled while the
+ * fallback setup is still being built — one step before the full read happens.
+ *
+ * Exported rather than duplicated at the call site for the obvious reason: two
+ * readings of `?mode=` would eventually disagree, and the shape of that
+ * disagreement is a match whose difficulty was chosen for a mode it is not in.
+ */
+export function readMissionModeFromUrl(
+  params: URLSearchParams,
+  fallback: RtsMatchSetupValues["missionMode"],
+): RtsMatchSetupValues["missionMode"] {
+  // `?mission=<id>` is the older, still-supported door onto a specific chain.
+  // Asking for one *is* asking for the story mode, so it outranks `mode`.
+  return params.has("mission")
+    ? "story"
+    : pick(params.get(MATCH_SETUP_PARAMS.mode), MISSION_MODE_CHOICES, fallback);
+}
+
+/**
  * The setup a URL asks for, with `fallback` filling every gap.
  *
  * `fallback` is not a default table — it is the fully resolved boot state
@@ -59,11 +82,7 @@ export function readMatchSetupFromUrl(
   fallback: RtsMatchSetupValues,
 ): RtsMatchSetupValues {
   return {
-    // `?mission=<id>` is the older, still-supported door onto a specific chain.
-    // Asking for one *is* asking for the story mode, so it outranks `mode`.
-    missionMode: params.has("mission")
-      ? "story"
-      : pick(params.get(MATCH_SETUP_PARAMS.mode), MISSION_MODE_CHOICES, fallback.missionMode),
+    missionMode: readMissionModeFromUrl(params, fallback.missionMode),
     victoryCondition: pick(
       params.get(MATCH_SETUP_PARAMS.victory),
       VICTORY_CONDITION_CHOICES,

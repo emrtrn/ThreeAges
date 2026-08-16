@@ -49,6 +49,7 @@ import {
   matchSetupSearch,
   menuSearch,
   readMatchSetupFromUrl,
+  readMissionModeFromUrl,
   urlPinsMatchSetup,
 } from "@/game/rts/match/rtsMatchSetupUrl";
 import { RtsLoadingScreen } from "@/game/rts/ui/rtsLoadingScreen";
@@ -272,11 +273,29 @@ async function main(): Promise<void> {
     // defaults → preset → `?flags=` → stored choice inside `bootFoundation`, so
     // seeding from them is what keeps a `?flags=regionalVictory` URL or a §72
     // test preset from being quietly contradicted by the menu it opens.
+    // Resolved first because the difficulty default depends on it: the tur opens
+    // on the baseline opponent rather than on the scenario preset's `hard`, so
+    // the one player the mode exists for is not taught the game by the hardest
+    // AI in it. See `resolveAiProfile`.
+    //
+    // Read through the URL as well as through storage, because `?mode=` is what
+    // finally decides whether a tur is running: a hand-typed `?rts&mode=free`
+    // from a browser that has never seen the offer would otherwise be handed the
+    // tur's baseline for a free match. `readMatchSetupFromUrl` below re-derives
+    // the same value from the same function, so the two cannot drift.
+    const seededMissionMode = readMissionModeFromUrl(
+      params,
+      resolveMissionMode(setupStorage, missionSeenStorage()),
+    );
     const seededSetup: RtsMatchSetupValues = {
-      missionMode: resolveMissionMode(setupStorage, missionSeenStorage()),
+      missionMode: seededMissionMode,
       victoryCondition: victoryChoiceForFlag(regionalVictoryEnabled),
       fogOfWar: fogChoiceForFlag(fogOfWarEnabled),
-      aiProfile: resolveAiProfile(readStoredAiProfile(setupStorage), preset?.aiProfile),
+      aiProfile: resolveAiProfile(
+        readStoredAiProfile(setupStorage),
+        preset?.aiProfile,
+        seededMissionMode === "story",
+      ),
     };
     let setup = readMatchSetupFromUrl(params, seededSetup);
     let preload: ReturnType<typeof preloadRtsMatchData> | undefined;

@@ -70,6 +70,20 @@ export type MissionGuideAction =
   /** A build-palette button, by building id. */
   | { readonly kind: "build"; readonly buildingId: string }
   /**
+   * The palette's road tool — the answer to any step whose work is paving.
+   *
+   * Carries no target, and that is the deliberate half. The road tool is armed
+   * once and then drawn wherever the player decides; naming a destination here
+   * would be authoring the *route*, which is the decision the tur is teaching.
+   * What the card says instead ("the shelf fills from a supply site") is enough
+   * to send them looking, and the site's own art is already on the map.
+   *
+   * Distinct from the road *fallback* in `missionGuideHighlight.ts`, which fires
+   * on a build step whose building stands unconnected. That one is a correction;
+   * this one is the step's actual instruction.
+   */
+  | { readonly kind: "road" }
+  /**
    * A button on the selection panel of a particular building — the centre's
    * level-up, a Market trade, a Barracks order. Two-stage by nature: the player
    * has to select `buildingId` before `actionId` exists on screen at all, which
@@ -91,8 +105,39 @@ export type MissionGuideAction =
     readonly actionId: string;
   };
 
+/**
+ * A feature the level author placed, which the step's work is tied to — Faz 3.
+ *
+ * `key` is deliberately the *kind* of thing rather than one instance's id: a
+ * resource id for a deposit or a trade site, a species for a herd. Naming
+ * `player_safe_stone` would weld the chain to one map, and a chain is meant to
+ * be copied onto a fork's own level; naming `stone` still lands on the right
+ * rock because {@link nearestMissionLandmark} picks the one nearest the player's
+ * centre, and this project authors every deposit in mirrored pairs.
+ *
+ * Only steps whose "where" is *not* a decision carry one — see
+ * `missionLandmark.ts` for why that restriction is the whole design, and why the
+ * House and the Depot deliberately have none.
+ */
+export type MissionLandmark =
+  /** A resource deposit, by the resource it holds (`stone`, `gold`). */
+  | { readonly kind: "resource-node"; readonly key: string }
+  /** An animal herd, by species (`deer`). */
+  | { readonly kind: "herd"; readonly key: string }
+  /** A trade site, by the resource its caravans carry (`wood`). */
+  | { readonly kind: "trade-site"; readonly key: string };
+
 export interface MissionGuide {
   readonly action: MissionGuideAction;
+  /**
+   * The map feature to ring while this step is open, if any.
+   *
+   * Optional, and absent is the common case. It is also outranked: when the
+   * guide has something more urgent to point at — "your Quarry stands but has no
+   * road on it" — the marker goes to that building instead, because a correction
+   * beats orientation.
+   */
+  readonly landmark?: MissionLandmark;
 }
 
 /**
@@ -120,6 +165,24 @@ export type MissionGoal =
    * producer counts.
    */
   | { readonly kind: "producer-linked"; readonly resourceId?: string; readonly count: number }
+  /**
+   * `count` trade sites currently *supplying* the player's Market — the site is
+   * theirs and its caravan lane is live. `resourceId` narrows it to the goods
+   * one lane carries; omitted, any live lane counts.
+   *
+   * Narrowed by resource rather than by site type, which is a deviation from
+   * this goal's first sketch and the same call `producer-linked` already makes.
+   * The player is not paving to a *timber camp*; they are paving because the
+   * Market has no wood to sell, and a fork that ships two sites feeding one
+   * resource should have both answer the step. The site type is level content;
+   * the resource is what the objective is about.
+   *
+   * The one goal whose fact is stated from the player's point of view rather
+   * than carrying an owner: "supplying" already means *supplying me*, because a
+   * site held by somebody else and a site held by nobody are different states
+   * of the same lane (see `MarketSupplyState`).
+   */
+  | { readonly kind: "trade-site-supplying"; readonly resourceId?: string; readonly count: number }
   /**
    * `count` completed outposts of the player's that are road-connected back to
    * the Command Centre — the exact condition that swaps an outpost's control

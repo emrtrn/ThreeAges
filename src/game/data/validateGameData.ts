@@ -9,7 +9,13 @@
  */
 import { isFeatureFlag } from "../core/featureFlags";
 import { AI_FORMATION_WEIGHTS, AI_PROFILES, AI_TARGET_WEIGHTS, MAX_AURA_DAMAGE_RESISTANCE } from "./gameDataTypes";
-import type { MissionGoal, MissionGuide, MissionScript, MissionStep } from "../rts/tutorial/missionScript";
+import type {
+  MissionGoal,
+  MissionGuide,
+  MissionLandmark,
+  MissionScript,
+  MissionStep,
+} from "../rts/tutorial/missionScript";
 
 /**
  * Mirrors `RTS_WORLD_HALF_EXTENT` (`rts/world/rtsGround.ts`), duplicated rather
@@ -2705,6 +2711,15 @@ function validateMissionGuide(
   const obj = asObject(value, where);
   const action = asObject(obj["action"], `${where}.action`);
   const kind = requireString(action, "kind", `${where}.action`);
+  const landmark = obj["landmark"] === undefined
+    ? undefined
+    : validateMissionLandmark(obj["landmark"], `${where}.landmark`);
+  const withLandmark = <T extends MissionGuide>(guide: T): MissionGuide =>
+    landmark === undefined ? guide : { ...guide, landmark };
+  // The road tool is keyed by the tool, not by a building, so it is the one
+  // action with nothing to reference-check — and it must be answered before the
+  // `buildingId` read below, which would otherwise reject a perfectly valid one.
+  if (kind === "road") return withLandmark({ action: { kind } });
   if (kind !== "build" && kind !== "structure-action") {
     throw new GameDataError(`${where}.action.kind: unknown mission guide "${kind}"`);
   }
@@ -2713,8 +2728,30 @@ function validateMissionGuide(
     throw new GameDataError(`${where}.action.buildingId: unknown building "${buildingId}"`);
   }
   return kind === "build"
-    ? { action: { kind, buildingId } }
-    : { action: { kind, buildingId, actionId: requireString(action, "actionId", `${where}.action`) } };
+    ? withLandmark({ action: { kind, buildingId } })
+    : withLandmark({
+      action: { kind, buildingId, actionId: requireString(action, "actionId", `${where}.action`) },
+    });
+}
+
+/**
+ * The map feature a step rings — Faz 3.
+ *
+ * `key` is checked for shape but not against any table, the same call
+ * `producer-linked.resourceId` makes and for a reason that is stronger here:
+ * what it names lives in the *level*, not in the balance tables, and validation
+ * has no level in hand. A key nothing on the map matches costs a missing marker
+ * — the chain's objectives never read it — which is the same price a typo'd
+ * `actionId` pays. An engine test pins the shipped chain's keys against the
+ * shipped Level instead.
+ */
+function validateMissionLandmark(value: unknown, where: string): MissionLandmark {
+  const obj = asObject(value, where);
+  const kind = requireString(obj, "kind", where);
+  if (kind !== "resource-node" && kind !== "herd" && kind !== "trade-site") {
+    throw new GameDataError(`${where}.kind: unknown mission landmark "${kind}"`);
+  }
+  return { kind, key: requireString(obj, "key", where) };
 }
 
 function validateMissionGoal(
@@ -2748,6 +2785,20 @@ function validateMissionGoal(
       throw new GameDataError(`${where}.buildingId: unknown building "${buildingId}"`);
     }
     return { kind, buildingId, count };
+  }
+
+  if (kind === "trade-site-supplying") {
+    // Same optional, unchecked `resourceId` as `producer-linked` below, and for
+    // the same reason: `balance/resources.json` holds deposit profiles, not the
+    // tradable list, so `wood` — the id this goal is most likely to name — is
+    // legitimately absent from it.
+    const resourceId = obj["resourceId"];
+    if (resourceId !== undefined && (typeof resourceId !== "string" || resourceId.length === 0)) {
+      throw new GameDataError(`${where}.resourceId: must be a non-empty string when present`);
+    }
+    return resourceId === undefined
+      ? { kind, count }
+      : { kind, resourceId: resourceId as string, count };
   }
 
   if (kind === "producer-linked") {

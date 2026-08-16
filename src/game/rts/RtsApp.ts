@@ -311,7 +311,11 @@ import { missionGuideHighlight } from "./tutorial/missionGuideHighlight";
 import { MissionHintView } from "./tutorial/missionHintView";
 import { missionBuildVerdict, type MissionBuildRefusal } from "./tutorial/missionBuildPolicy";
 import type { MissionWorldSnapshot } from "./tutorial/missionPredicates";
-import type { MissionScript } from "./tutorial/missionScript";
+import {
+  nearestMissionLandmark,
+  type MissionLandmarkCandidate,
+} from "./tutorial/missionLandmark";
+import type { MissionLandmark, MissionScript } from "./tutorial/missionScript";
 import type { AiObjectiveWatch } from "./ai/armyManager";
 
 const MAX_PIXEL_RATIO = 2;
@@ -3153,7 +3157,13 @@ export class RtsApp {
    */
   private syncMissionGuide(state: MissionDirectorState): void {
     const guide = state.step?.guide;
-    const guideBuildingId = guide?.action.buildingId ?? null;
+    // The road action names no building, so there is none to look up — and the
+    // narrowing matters beyond types: `completedGuideBuildings` below must be 0
+    // for it, or a road step would be measured against a building count that
+    // has nothing to do with it.
+    const guideBuildingId = guide === undefined || guide.action.kind === "road"
+      ? null
+      : guide.action.buildingId;
     const highlight = missionGuideHighlight(
       state,
       this.selection.selectedStructure()?.stats.id ?? null,
@@ -3161,14 +3171,75 @@ export class RtsApp {
     );
     this.buildPalette.setMissionHighlight(highlight.paletteTarget);
     this.selectionPanel.setMissionHighlight(highlight.actionId);
-    this.missionPanel?.setGuidePrompt(
-      highlight.prompt === null
-        ? null
-        : highlight.prompt.kind === "draw-road"
-          ? `${this.buildingLabels.get(guideBuildingId ?? "") ?? "Yapı"} kuruldu ama bağlı değil — Yol aracıyla Merkez'in yoluna bağla.`
-          : `Önce ${this.buildingLabels.get(highlight.prompt.buildingId) ?? highlight.prompt.buildingId} yapısını seç.`,
+    this.missionPanel?.setGuidePrompt(this.missionGuideSentence(highlight.prompt, guideBuildingId));
+    this.syncMissionMarker(highlight.prompt, guideBuildingId, guide?.landmark ?? null);
+  }
+
+  /**
+   * Where the step's authored map feature stands — Faz 3.
+   *
+   * The candidate list is rebuilt per call rather than cached, and that is not
+   * an oversight worth fixing: it runs at the mission poll rate (seconds apart,
+   * see `MISSION_POLL_SECONDS`) over a handful of level-authored objects, and a
+   * cache here would be a second copy of level content to keep honest.
+   */
+  private missionLandmarkPosition(
+    landmark: MissionLandmark | null,
+  ): { readonly x: number; readonly z: number } | null {
+    if (!landmark) return null;
+    const center = this.centers.get(PLAYER_OWNER);
+    if (!center) return null;
+    const candidates: MissionLandmarkCandidate[] = [
+      ...this.spatial.resourceNodes.map((node) => ({
+        kind: "resource-node" as const,
+        key: node.resourceId,
+        x: node.x,
+        z: node.z,
+      })),
+      ...this.spatial.herds.map((herd) => ({
+        kind: "herd" as const,
+        key: herd.species,
+        x: herd.x,
+        z: herd.z,
+      })),
+      // Keyed by what the site *carries*, not by its type: the step is about the
+      // Market having no wood, and `trade-sites.json` is the one place that says
+      // which kind of site answers that.
+      ...this.spatial.tradeSites.map((site) => ({
+        kind: "trade-site" as const,
+        key: this.options.tradeSiteBalance[site.siteType]?.resourceId ?? "",
+        x: site.x,
+        z: site.z,
+      })),
+    ];
+    return nearestMissionLandmark(
+      landmark,
+      candidates,
+      center.position,
+      (x, z) => this.vision?.isExplored(PLAYER_OWNER, x, z) ?? true,
     );
-    this.syncMissionMarker(highlight.prompt, guideBuildingId);
+  }
+
+  /**
+   * The one line the card adds when the pulse cannot say it on its own.
+   *
+   * Lifted out of {@link syncMissionGuide} once a third prompt existed: three
+   * cases nested in a conditional expression is where a sentence gets attached
+   * to the wrong branch, and these are the sentences a lost player reads.
+   */
+  private missionGuideSentence(
+    prompt: ReturnType<typeof missionGuideHighlight>["prompt"],
+    guideBuildingId: string | null,
+  ): string | null {
+    if (prompt === null) return null;
+    switch (prompt.kind) {
+      case "supply-road":
+        return "Pazar'ın rafı boş — Yol aracıyla bir arz noktasını Pazar'ının yoluna bağla.";
+      case "draw-road":
+        return `${this.buildingLabels.get(guideBuildingId ?? "") ?? "Yapı"} kuruldu ama bağlı değil — Yol aracıyla Merkez'in yoluna bağla.`;
+      case "select-building":
+        return `Önce ${this.buildingLabels.get(prompt.buildingId) ?? prompt.buildingId} yapısını seç.`;
+    }
   }
 
   /**
@@ -3180,17 +3251,32 @@ export class RtsApp {
    * one of them is missing its road. Both point at something that already
    * exists; neither is a suggestion about ground.
    *
+   * Faz 3 added a second source with a *lower* claim: the step's authored
+   * landmark. That is what rings the trade site on `supply-road`, which names no
+   * building of the player's and would otherwise point at nothing — and the
+   * deposit or herd on a step whose "where" the map already decided. It rings a
+   * feature the author placed, never a proposed footprint; see
+   * `tutorial/missionLandmark.ts` for why that distinction is the design and not
+   * a detail.
+   *
    * No search, no timer, no cache: the answer is a building's position, so it is
    * looked up on the frame it is needed.
    */
   private syncMissionMarker(
     prompt: ReturnType<typeof missionGuideHighlight>["prompt"],
     guideBuildingId: string | null,
+    landmark: MissionLandmark | null,
   ): void {
     if (!this.missionHint) return;
-    this.missionMarker = prompt === null
+    // A prompt outranks the landmark: "your Quarry has no road on it" is a
+    // correction about something the player already did, and the deposit they
+    // built on is no longer the thing they need to look at. The landmark is what
+    // is left when there is nothing to correct — including on `supply-road`,
+    // whose prompt names no building at all and would otherwise ring nothing.
+    const promptPosition = prompt === null
       ? null
       : this.playerBuildingPosition(prompt.kind === "select-building" ? prompt.buildingId : guideBuildingId);
+    this.missionMarker = promptPosition ?? this.missionLandmarkPosition(landmark);
     this.missionHint.setTarget(
       this.missionMarker,
       this.missionMarker ? this.groundSurface.heightAt(this.missionMarker.x, this.missionMarker.z) : 0,
@@ -3324,6 +3410,19 @@ export class RtsApp {
           : {}),
       })),
       producers: this.productionLogistics.snapshots(),
+      // Read through `siteSupplyState` rather than off the raw snapshot, so the
+      // objective, the Market panel's supply line and the feed's supply notices
+      // are three readings of one function — including its fog rule, which is
+      // what stops a step being cleared by ground the player has never seen.
+      tradeSites: this.marketSupply.snapshots().map((site) => ({
+        resourceId: site.resourceId,
+        state: siteSupplyState(
+          site,
+          PLAYER_OWNER,
+          this.everSuppliedSites.has(site.siteId),
+          this.vision?.isExplored(PLAYER_OWNER, site.x, site.z) ?? true,
+        ),
+      })),
       units: this.units.all().map((unit) => ({ owner: unit.owner, role: unit.role })),
       tier: this.progression.tierFor(PLAYER_OWNER),
       populationHeadroom: Math.max(0, population.capacity - population.used),

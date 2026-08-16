@@ -33,6 +33,10 @@
         "action": {
           "kind": "build",
           "buildingId": "hunting_camp"
+        },
+        "landmark": {
+          "kind": "herd",
+          "key": "deer"
         }
       }
     },
@@ -69,9 +73,28 @@
       }
     },
     {
+      "id": "supply_wood",
+      "title": "Kereste Kampına Yol Çek",
+      "why": "Pazar yalnızca birinin taşıdığını satar: raf, yola bağladığın arz noktasından gelen kervanla dolar.",
+      "goal": {
+        "kind": "trade-site-supplying",
+        "resourceId": "wood",
+        "count": 1
+      },
+      "guide": {
+        "action": {
+          "kind": "road"
+        },
+        "landmark": {
+          "kind": "trade-site",
+          "key": "wood"
+        }
+      }
+    },
+    {
       "id": "buy_wood",
       "title": "Pazar'dan 100 Odun Al",
-      "why": "Pazar'ı seç: yiyecek sat, altınla odun al. Komisyon Merkez seviyesiyle düşer.",
+      "why": "Pazar'ı seç: yiyecek sat, altınla odun al. Raf ancak kervanın getirdiği kadar doludur.",
       "goal": {
         "kind": "market-bought",
         "resourceId": "wood",
@@ -137,7 +160,7 @@
     {
       "id": "second_lumber_camp",
       "title": "İkinci Oduncu Kampı Kur",
-      "why": "Çağ geçişi 500 odun ister; tek kamp bunu doldurmaya yetmez.",
+      "why": "Çağ geçişinin odun faturası tek kampın çıkarabileceğinden büyük; farkı ikinci kamp kapatır.",
       "goal": {
         "kind": "producer-linked",
         "resourceId": "wood",
@@ -194,6 +217,10 @@
         "action": {
           "kind": "build",
           "buildingId": "quarry"
+        },
+        "landmark": {
+          "kind": "resource-node",
+          "key": "stone"
         }
       }
     },
@@ -210,6 +237,10 @@
         "action": {
           "kind": "build",
           "buildingId": "gold_mine"
+        },
+        "landmark": {
+          "kind": "resource-node",
+          "key": "gold"
         }
       }
     },

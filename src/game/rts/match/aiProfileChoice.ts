@@ -78,10 +78,24 @@ export function writeStoredAiProfile(
  * the baseline. The whole precedence chain in one function, because the card
  * seeds itself from the same answer the AI is built with — a card showing "Zor"
  * over a normal opponent would be lying.
+ *
+ * `storyMode` is the one exception, and it exists because of what the two
+ * defaults meant together. The shipped scenario preset asks for `hard`; a player
+ * who has never chosen a difficulty has no stored answer, so the preset won —
+ * and the mission mode defaults to the tur for exactly that same player. The
+ * person being offered "let me show you the ropes" was being handed the fastest,
+ * economy-boosted opponent in the game to learn them against.
+ *
+ * It moves the *default* only. An explicit choice still wins in both directions:
+ * a player who picks "Zor" on the card gets it with the tur running, which is
+ * the whole reason the two rows are separate questions.
  */
 export function resolveAiProfile(
   chosen: AiProfile | null,
   presetProfile: AiProfile | null | undefined,
+  /** Whether the match being set up runs a story chain. */
+  storyMode = false,
 ): AiProfile {
-  return chosen ?? presetProfile ?? DEFAULT_AI_PROFILE;
+  if (chosen) return chosen;
+  return storyMode ? DEFAULT_AI_PROFILE : presetProfile ?? DEFAULT_AI_PROFILE;
 }

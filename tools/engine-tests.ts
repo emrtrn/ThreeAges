@@ -94,6 +94,10 @@ import type { MissionGoal, MissionScript } from "../src/game/rts/tutorial/missio
 import { missionGuideHighlight, ROAD_PALETTE_TARGET } from "../src/game/rts/tutorial/missionGuideHighlight";
 import { missionBuildVerdict } from "../src/game/rts/tutorial/missionBuildPolicy";
 import {
+  nearestMissionLandmark,
+  type MissionLandmarkCandidate,
+} from "../src/game/rts/tutorial/missionLandmark";
+import {
   DEFAULT_MISSION_SCRIPT_ID,
   hasSeenMission,
   markMissionSeen,
@@ -1477,7 +1481,13 @@ import {
 } from "../src/editor/dataTableLayout";
 import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 import { RTS_LOAD_TRACK_WEIGHTS, RtsLoadTracker } from "../src/game/rts/loading/rtsLoadProgress";
-import { matchSetupSearch, menuSearch, urlPinsMatchSetup } from "../src/game/rts/match/rtsMatchSetupUrl";
+import {
+  matchSetupSearch,
+  menuSearch,
+  readMatchSetupFromUrl,
+  readMissionModeFromUrl,
+  urlPinsMatchSetup,
+} from "../src/game/rts/match/rtsMatchSetupUrl";
 
 let checks = 0;
 let skipped = 0;
@@ -19979,24 +19989,55 @@ check("ThreeAges foliage-pine pilot material names registered BC/N/ORM textures"
   assert.equal(assetType(materialRecord!), "material");
 });
 
-check("ThreeAges Town Center water material registers normal motion and all three Water slots", () => {
+/**
+ * The water material's own contract — deliberately *not* which mesh wears it.
+ *
+ * This check used to end by pinning `threeages-mat-water-center` to slot 1 of
+ * `TownCenter_SecondAge_Level1` and slot 2 of Levels 2 and 3, and that half is
+ * gone. A slot index is a fact about one exported mesh, and the ThreeAges
+ * buildings are being re-exported with baked texture maps: the sidecars for the
+ * Town Centers, the Storages, the Mine and several Houses are all authored empty
+ * right now while their models are swapped. A test pinning an index there fails
+ * on a correct change and teaches "edit the test until it agrees", which is
+ * CLAUDE.md's balance-data rule applied to authoring rather than to numbers.
+ *
+ * Nothing is left unguarded by the removal. A sidecar naming a material that no
+ * longer exists is caught for *every* mesh by "RTS static mesh material slot
+ * sidecars name materials the manifest still has", and it keeps covering the new
+ * models the moment their slots are filled in — which is more than this check
+ * ever did, since it only knew about three files.
+ *
+ * What stays is what a re-export cannot invalidate: the material parses, it is
+ * assignable (registered as a material, with every texture it names registered
+ * too), and it is still water — two normal samples scrolling *against* each
+ * other, which is the mechanic rather than the tuning.
+ */
+check("ThreeAges water material stays assignable and keeps its two-sample normal motion", () => {
   const material = normalizeForgeMaterialDef(
     JSON.parse(readFileSync("public/assets/ThreeAges/Materials/M_TA_Water_Center.material.json", "utf8")),
     "M_TA_Water_Center",
   );
   assert.equal(material.normalTexture, "threeages-tex-water-center-n");
   assert.ok(material.normalMotion, "water must opt into the generic two-sample normal animation");
-  assert.ok(material.normalMotion!.primaryVelocity.x > 0);
-  assert.ok(material.normalMotion!.secondaryVelocity.x < 0);
+  // Opposition, not direction. Which way the two samples drift is an authored
+  // look that gets retuned by eye; that they drift *apart* is what stops the
+  // pair reading as one sliding texture, and it survives any retune that flips
+  // both. (The siege barrel-pitch lesson: sign is tuning, movement is contract.)
+  assert.ok(
+    material.normalMotion!.primaryVelocity.x * material.normalMotion!.secondaryVelocity.x < 0,
+    "the two normal samples must scroll against each other",
+  );
+
+  // Assignable: the material and every texture it names are in the manifest, so
+  // a re-exported mesh can pick it up by id the moment its slots are authored.
+  const materialRecord = assetManifest.assets.find((asset) => asset.id === "threeages-mat-water-center");
+  assert.ok(materialRecord, "the water material itself must be registered");
+  assert.equal(assetType(materialRecord!), "material");
   for (const textureId of [material.baseColorTexture, material.normalTexture, material.ormTexture]) {
-    assert.ok(assetManifest.assets.some((asset) => asset.id === textureId));
-  }
-  const waterSlotByLevel: Record<number, number> = { 1: 1, 2: 2, 3: 2 };
-  for (const level of [1, 2, 3]) {
-    const slots = normalizeAssetMaterialSlots(
-      JSON.parse(readFileSync(`public/assets/ThreeAges/StaticMeshes/TownCenter_SecondAge_Level${level}.materials.json`, "utf8")),
+    assert.ok(
+      assetManifest.assets.some((asset) => asset.id === textureId),
+      `water names texture "${textureId}", which the manifest does not have`,
     );
-    assert.equal(slots.slots[waterSlotByLevel[level]], "threeages-mat-water-center");
   }
 });
 
@@ -44483,6 +44524,21 @@ check("§72: the start card's difficulty outranks the preset, and only when the 
   assert.equal(resolveAiProfile(readStoredAiProfile(stored("easy")), "hard"), "easy");
   assert.equal(resolveAiProfile(readStoredAiProfile(stored("hard")), "easy"), "hard");
 
+  // Faz 0.4: the two defaults used to compound. The shipped scenario preset asks
+  // for `hard`; the mission mode defaults to the tur for a player with nothing
+  // stored — which is the *same* player, so the one person being offered a
+  // guided opening was handed the hardest opponent to learn it against.
+  assert.equal(resolveAiProfile(null, "hard", true), DEFAULT_AI_PROFILE);
+  assert.equal(
+    resolveAiProfile(null, "hard", false),
+    "hard",
+    "a free match still plays the scenario the preset describes",
+  );
+  // The default only. Wanting the tur and a hard opponent is a legitimate pair,
+  // and it is why the card asks the two questions separately.
+  assert.equal(resolveAiProfile(readStoredAiProfile(stored("hard")), "easy", true), "hard");
+  assert.equal(resolveAiProfile(readStoredAiProfile(stored("easy")), "hard", true), "easy");
+
   // Corrupt or stale storage is not a choice; it must not decide a match.
   assert.equal(readStoredAiProfile(stored("insane")), null);
   assert.equal(readStoredAiProfile(stored("")), null);
@@ -44540,6 +44596,7 @@ const missionWorld = (
 ): MissionWorldSnapshot => ({
   structures,
   producers,
+  tradeSites: [],
   units: [],
   tier: { age: "settlement", level: 1 },
   populationHeadroom: 0,
@@ -44903,10 +44960,33 @@ check("Sürüm 2 §12.5: the tur paces building, and only ever the player's own 
     "one at a time still holds where the quota does not",
   );
 
-  // A building the step does not name is paced, not quota'd: the player is free
-  // to run their own economy, they just cannot queue five of anything at once.
+  // Rule 3: a building the step does not name is not paced at all. Both pacing
+  // rules exist to stop one *lesson* being paid for twice; neither has anything
+  // to say about a player laying two Depots while being taught the Farm, and the
+  // chain runs to the Town age — a policy keyed on the request alone would
+  // police the whole opening.
   assert.deepEqual(
     missionBuildVerdict({ buildingId: "depot", step: farmStep, completed: 4, pending: 0 }),
+    { allowed: true },
+  );
+  assert.deepEqual(
+    missionBuildVerdict({ buildingId: "depot", step: farmStep, completed: 4, pending: 3 }),
+    { allowed: true },
+    "an unnamed building may be queued in parallel; only the taught one is paced",
+  );
+
+  // A step whose guide is not a build action paces nothing: the road step's work
+  // is paving, and refusing a House while it is open would be pacing a lesson
+  // that is not being taught.
+  const roadStep: MissionScript["steps"][number] = {
+    id: "r",
+    title: "t",
+    why: "w",
+    goal: { kind: "trade-site-supplying", resourceId: "wood", count: 1 },
+    guide: { action: { kind: "road" } },
+  };
+  assert.deepEqual(
+    missionBuildVerdict({ buildingId: "house", step: roadStep, completed: 2, pending: 2 }),
     { allowed: true },
   );
 
@@ -45122,6 +45202,10 @@ check("the shipped mission script validates, and a broken one fails at load", ()
       { owner: "player", resourceId: "gold", status: "linked" },
     ],
     {
+      // Faz 0.1: the Market's shelf is filled by a road, so a kingdom that has
+      // bought a lot is a kingdom with a live supply lane. Stating both in one
+      // fixture is what keeps the two steps honest about their order.
+      tradeSites: [{ resourceId: "wood", state: "supplying" }],
       units: [
         { owner: "player", role: "guard" },
         { owner: "player", role: "guard" },
@@ -45285,8 +45369,12 @@ check("the shipped mission script validates, and a broken one fails at load", ()
   // The guide is reference-checked on the same grounds as the goal: a pointer at
   // a building that does not exist is a hint that silently never appears.
   type GuidedSteps = { steps: { guide?: { action: { kind: string; buildingId: string } } }[] };
-  const guided = (script.steps.findIndex((step) => step.guide !== undefined));
-  assert.ok(guided >= 0, "the shipped chain must carry guides for this check to bite");
+  // A guide that *names a building*, specifically: the road action carries none,
+  // and the validator answers it before it ever reads a `buildingId` — so
+  // planting a typo on one would prove nothing and quietly pass.
+  const guided = script.steps.findIndex((step) => step.guide?.action.kind === "build"
+    || step.guide?.action.kind === "structure-action");
+  assert.ok(guided >= 0, "the shipped chain must carry building-named guides for this check to bite");
   const badBuilding = JSON.parse(JSON.stringify(raw)) as GuidedSteps;
   badBuilding.steps[guided]!.guide!.action.buildingId = "depoo";
   assert.throws(
@@ -45299,6 +45387,278 @@ check("the shipped mission script validates, and a broken one fails at load", ()
     () => validateMissionScript(badKind, "frontier_road", buildingIds),
     /unknown mission guide "wave-at-it"/,
   );
+
+  // The landmark's *kind* is a closed set, so a typo there is caught at load
+  // rather than becoming a marker that never appears. Its `key` deliberately is
+  // not — what it names lives in the level, which validation has no copy of.
+  type LandmarkSteps = { steps: { guide?: { landmark?: { kind: string; key: string } } }[] };
+  const marked = script.steps.findIndex((step) => step.guide?.landmark !== undefined);
+  assert.ok(marked >= 0, "the shipped chain must carry landmarks for this check to bite");
+  const badLandmark = JSON.parse(JSON.stringify(raw)) as LandmarkSteps;
+  badLandmark.steps[marked]!.guide!.landmark!.kind = "over-there";
+  assert.throws(
+    () => validateMissionScript(badLandmark, "frontier_road", buildingIds),
+    /unknown mission landmark "over-there"/,
+  );
+});
+
+check("Faz 0.1: a supply goal counts a live lane and nothing that merely looks like one", () => {
+  const goal: MissionGoal = { kind: "trade-site-supplying", resourceId: "wood", count: 1 };
+  const withSites = (
+    ...tradeSites: readonly { resourceId: string; state: string }[]
+  ): MissionWorldSnapshot => missionWorld([], [], { tradeSites });
+
+  assert.equal(isGoalMet(goal, withSites({ resourceId: "wood", state: "supplying" })), true);
+
+  // Every other reading of a site is a road that is not carrying anything, and
+  // each one is a different sentence on the Market panel. None of them may clear
+  // a step whose whole subject is that the shelf is being filled.
+  for (const state of ["cut", "unclaimed", "rival"]) {
+    assert.equal(
+      isGoalMet(goal, withSites({ resourceId: "wood", state })),
+      false,
+      `"${state}" is not a lane that pays`,
+    );
+  }
+
+  // Narrowed by resource: a live food lane does not answer "the Market has no
+  // wood to sell", which is the only reason the step exists.
+  assert.equal(isGoalMet(goal, withSites({ resourceId: "food", state: "supplying" })), false);
+  assert.equal(
+    isGoalMet({ kind: "trade-site-supplying", count: 1 }, withSites({ resourceId: "food", state: "supplying" })),
+    true,
+    "omitted, any live lane counts",
+  );
+
+  // And it measures, so a two-lane step can say "1/2" rather than only "not yet".
+  assert.deepEqual(
+    measureGoal(
+      { kind: "trade-site-supplying", count: 2 },
+      withSites({ resourceId: "wood", state: "supplying" }, { resourceId: "food", state: "cut" }),
+    ),
+    { current: 1, target: 2 },
+  );
+});
+
+check("Faz 0.1: a road step points at the road tool and names no building", () => {
+  const roadStep: MissionScript["steps"][number] = {
+    id: "supply",
+    title: "t",
+    why: "w",
+    goal: { kind: "trade-site-supplying", resourceId: "wood", count: 1 },
+    guide: { action: { kind: "road" } },
+  };
+  const state = {
+    step: roadStep,
+    index: 0,
+    total: 1,
+    finished: false,
+    progress: { current: 0, target: 1 },
+  };
+
+  const highlight = missionGuideHighlight(state, null, 0);
+  assert.equal(highlight.paletteTarget, ROAD_PALETTE_TARGET);
+  assert.equal(highlight.actionId, null);
+  // `supply-road`, not `draw-road`: the two say opposite things about what the
+  // player has already done, and only one of them has a building to name.
+  assert.deepEqual(highlight.prompt, { kind: "supply-road" });
+
+  // Unchanged by what happens to be selected. A road step has no two-stage
+  // "select the building first" shape, so a selection must not move the pointer.
+  assert.deepEqual(missionGuideHighlight(state, "market", 3), highlight);
+});
+
+check("Faz 3: the landmark marker names the nearest feature the player may know about", () => {
+  const stone = (x: number, z: number): MissionLandmarkCandidate =>
+    ({ kind: "resource-node", key: "stone", x, z });
+  const origin = { x: 0, z: 0 };
+
+  // Nearest to the player's own centre, which on a map authored in mirrored
+  // pairs is the difference between "your rock" and "the enemy's rock".
+  assert.deepEqual(
+    nearestMissionLandmark({ kind: "resource-node", key: "stone" }, [stone(40, 0), stone(10, 0)], origin),
+    stone(10, 0),
+  );
+
+  // Kind and key both have to match: a gold deposit is not a stone one, and a
+  // herd standing on the same ground is a different question entirely.
+  assert.equal(
+    nearestMissionLandmark({ kind: "resource-node", key: "gold" }, [stone(1, 0)], origin),
+    null,
+  );
+  assert.equal(
+    nearestMissionLandmark({ kind: "herd", key: "stone" }, [stone(1, 0)], origin),
+    null,
+  );
+  assert.equal(nearestMissionLandmark(null, [stone(1, 0)], origin), null, "no landmark, no marker");
+
+  // The fog rule, and it is the load-bearing one: a marker on ground never
+  // scouted would hand the player a scouting result from inside their own base.
+  // Under fog the near deposit is simply not offered until they have been there.
+  assert.deepEqual(
+    nearestMissionLandmark(
+      { kind: "resource-node", key: "stone" },
+      [stone(10, 0), stone(40, 0)],
+      origin,
+      (x) => x > 20,
+    ),
+    stone(40, 0),
+  );
+  assert.equal(
+    nearestMissionLandmark({ kind: "resource-node", key: "stone" }, [stone(10, 0)], origin, () => false),
+    null,
+    "nothing explored, nothing pointed at",
+  );
+
+  // Ties keep the level's authoring order rather than the last one seen, so two
+  // equidistant deposits cannot make the marker flicker between them — the exact
+  // complaint (§12.9) that retired the placement solver.
+  const first = stone(10, 0);
+  assert.equal(
+    nearestMissionLandmark({ kind: "resource-node", key: "stone" }, [first, stone(-10, 0)], origin),
+    first,
+  );
+});
+
+check("Faz 3: the shipped chain rings authored map features, never a placement decision", () => {
+  const buildingBalance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const script = validateMissionScript(
+    JSON.parse(readFileSync("public/game-data/missions/frontier_road.json", "utf8")) as unknown,
+    "frontier_road",
+    new Set(Object.keys(buildingBalance)),
+  );
+  const resourceBalance = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+
+  // Which resources actually *have* a place to point at, derived rather than
+  // listed: a deposit resource carries `safeNode`, while wood carries `tree` and
+  // is scattered over a hundred and fifty of them. Pointing at one tree would be
+  // arbitrary, and this is the data that says so — so a fork that turns wood
+  // into a node resource gets a chain it is allowed to mark, with no edit here.
+  const nodeResources = new Set(
+    Object.entries(resourceBalance)
+      .filter(([, stats]) => stats.safeNode !== undefined)
+      .map(([id]) => id),
+  );
+  assert.ok(nodeResources.size > 0, "some resource must come from an authored deposit");
+
+  for (const step of script.steps) {
+    const landmark = step.guide?.landmark;
+    const action = step.guide?.action;
+    if (action?.kind !== "build") continue;
+    const economy = buildingBalance[action.buildingId]?.economy;
+    // What this building needs the map for, if anything. The §12.9 rule in one
+    // expression: a House needs no feature, so a House may not be given one, and
+    // "where the House goes" stays the decision the tur is teaching.
+    const bound = economy?.requiresGame || economy?.requiresLivestock
+      ? "herd"
+      : economy && nodeResources.has(economy.resourceId)
+        ? "resource-node"
+        : null;
+    if (bound === null) {
+      assert.equal(
+        landmark,
+        undefined,
+        `step "${step.id}" rings a landmark for a building whose placement is the player's decision`,
+      );
+      continue;
+    }
+    assert.ok(landmark, `step "${step.id}" builds on authored map content but rings nothing`);
+    assert.equal(landmark!.kind, bound, `step "${step.id}" rings the wrong kind of feature`);
+  }
+
+  // And every key resolves on the map the story actually opens on — the same
+  // gate as Faz 0.5, for the same reason: a key nothing matches is a marker that
+  // silently never appears, and the player it strands is the one who cannot tell
+  // that the game is at fault rather than them.
+  const preset = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
+  const level = JSON.parse(readFileSync(`public/${preset.levelRef}`, "utf8")) as {
+    actors?: readonly { classRef?: string; variableOverrides?: Record<string, unknown> }[];
+  };
+  const siteBalance = validateTradeSiteBalance(
+    JSON.parse(readFileSync("public/game-data/balance/trade-sites.json", "utf8")) as unknown,
+  );
+  const authored = (classRef: string, read: (overrides: Record<string, unknown>) => string): Set<string> =>
+    new Set(
+      (level.actors ?? [])
+        .filter((actor) => actor.classRef?.endsWith(classRef))
+        .map((actor) => read(actor.variableOverrides ?? {})),
+    );
+  const byKind: Record<string, Set<string>> = {
+    "resource-node": authored("BP_RTS_ResourceNode.actor.json", (o) => String(o["resourceId"] ?? "")),
+    herd: authored("BP_RTS_Herd.actor.json", (o) => String(o["species"] ?? "")),
+    "trade-site": authored(
+      "BP_RTS_TradeSite.actor.json",
+      (o) => siteBalance[String(o["siteType"] ?? "")]?.resourceId ?? "",
+    ),
+  };
+  const marked = script.steps.filter((step) => step.guide?.landmark !== undefined);
+  assert.ok(marked.length > 0, "the chain must mark something for this check to bite");
+  for (const step of marked) {
+    const landmark = step.guide!.landmark!;
+    assert.ok(
+      byKind[landmark.kind]!.has(landmark.key),
+      `step "${step.id}" rings ${landmark.kind} "${landmark.key}", which "${preset.levelRef}" does not author`,
+    );
+  }
+});
+
+check("Faz 0.5: the shipped scenario authors a trade site for every resource the chain buys", () => {
+  // The gate the fixture-world check above cannot be: a chain step can be
+  // reachable in an object literal and impossible in the match that ships.
+  // `market-bought` is exactly that shape — the Market's buy button is fed by a
+  // caravan from a trade site, so a Level authoring no site of that resource
+  // closes the step permanently, and the chain's own test would stay green.
+  const buildingIds = new Set(Object.keys(
+    validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown),
+  ));
+  const script = validateMissionScript(
+    JSON.parse(readFileSync("public/game-data/missions/frontier_road.json", "utf8")) as unknown,
+    "frontier_road",
+    buildingIds,
+  );
+
+  const needed = new Set<string>();
+  for (const step of script.steps) {
+    if (step.goal.kind === "market-bought") needed.add(step.goal.resourceId);
+    if (step.goal.kind === "trade-site-supplying" && step.goal.resourceId !== undefined) {
+      needed.add(step.goal.resourceId);
+    }
+  }
+  assert.ok(needed.size > 0, "the chain must trade for this check to bite");
+
+  // The scenario the story mode actually opens on: `main.ts` defaults `?preset=`
+  // to `gameplay_proof`, and the preset names its own Level. Read through both
+  // rather than hard-coded, so retargeting either one re-points this gate with
+  // them instead of leaving it guarding a map nobody plays.
+  const preset = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
+  assert.ok(preset.levelRef, "the shipped scenario must name a Level");
+  const level = JSON.parse(readFileSync(`public/${preset.levelRef}`, "utf8")) as {
+    actors?: readonly { classRef?: string; variableOverrides?: Record<string, unknown> }[];
+  };
+  const siteBalance = validateTradeSiteBalance(
+    JSON.parse(readFileSync("public/game-data/balance/trade-sites.json", "utf8")) as unknown,
+  );
+  // Every authored site, whoever ends up holding it: a trade site has no owner
+  // in the Level — it belongs to the first kingdom whose road reaches it — so
+  // "a site the player could claim" is the honest thing to count, and reading a
+  // `player_` prefix out of the id would be inventing an ownership rule the
+  // simulation does not have.
+  const authored = new Set(
+    (level.actors ?? [])
+      .filter((actor) => actor.classRef?.endsWith("BP_RTS_TradeSite.actor.json"))
+      .map((actor) => siteBalance[String(actor.variableOverrides?.["siteType"] ?? "")]?.resourceId)
+      .filter((resourceId): resourceId is string => resourceId !== undefined),
+  );
+  for (const resourceId of needed) {
+    assert.ok(
+      authored.has(resourceId),
+      `the chain trades ${resourceId} but "${preset.levelRef}" authors no trade site producing it`,
+    );
+  }
 });
 
 /**
@@ -58266,6 +58626,46 @@ check("leaving a match un-pins the setup its URL was carrying", () => {
   assert.equal(menuParams.has("rts"), true);
   assert.equal(menuParams.has("debug"), true);
   assert.equal(menuParams.get("preset"), "gameplay_proof");
+});
+
+check("Faz 0.4: the URL's mode is what the difficulty default is chosen for", () => {
+  // The trap this exists for: the boot has to know whether a tur is running
+  // *before* it resolves the difficulty, and the answer it reaches for first
+  // (storage) is not the final one — `?mode=` outranks it. A hand-typed
+  // `?rts&mode=free` from a browser that has never met the offer would resolve
+  // "story" from storage and hand a free match the tur's baseline.
+  const neverSeen = "story" as const;
+  assert.equal(readMissionModeFromUrl(new URLSearchParams("?rts&mode=free"), neverSeen), "free");
+  assert.equal(readMissionModeFromUrl(new URLSearchParams("?rts"), neverSeen), "story", "silence falls back");
+  assert.equal(
+    readMissionModeFromUrl(new URLSearchParams("?rts&mode=vibes"), neverSeen),
+    "story",
+    "a typo falls back rather than failing the boot",
+  );
+  // `?mission=` outranks `?mode=`: asking for a chain by name is asking for the
+  // mode, and this is the door that predates the menu.
+  assert.equal(
+    readMissionModeFromUrl(new URLSearchParams("?rts&mode=free&mission=frontier_road"), "free"),
+    "story",
+  );
+
+  // And the two readings cannot drift, because the full read goes through the
+  // same function — which is the whole reason it is exported rather than
+  // repeated at the call site.
+  const fallback = {
+    missionMode: neverSeen,
+    victoryCondition: "military",
+    fogOfWar: "off",
+    aiProfile: "normal",
+  } as const;
+  for (const search of ["?rts&mode=free", "?rts", "?rts&mission=frontier_road"]) {
+    const params = new URLSearchParams(search);
+    assert.equal(
+      readMatchSetupFromUrl(params, fallback).missionMode,
+      readMissionModeFromUrl(params, fallback.missionMode),
+      `"${search}" must read the same mode twice`,
+    );
+  }
 });
 
 /**

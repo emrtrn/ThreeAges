@@ -55,9 +55,31 @@ export interface MissionProducerFact {
   readonly status: string;
 }
 
+/**
+ * What a goal needs to know about one trade site, *as the player reads it*.
+ *
+ * No `owner`, unlike every other fact here, and the omission is the point:
+ * `MarketSupplyState` is already relative to a reader — `supplying` means the
+ * site is this kingdom's *and* its lane is live, while a rival's site and an
+ * unclaimed one are separate states of the same question. An owner field would
+ * be a second, disagreeing way to ask what the state already answers.
+ */
+export interface MissionTradeSiteFact {
+  readonly resourceId: string;
+  /** `MarketSupplyState`; only `"supplying"` is a lane that is actually paying. */
+  readonly state: string;
+}
+
 export interface MissionWorldSnapshot {
   readonly structures: readonly MissionStructureFact[];
   readonly producers: readonly MissionProducerFact[];
+  /**
+   * Every trade site on the map, read from the player's side. Sites the player
+   * has not scouted are included and read as unclaimed, which is the same
+   * answer the Market panel gives — an objective must not know more than the
+   * screen explaining it.
+   */
+  readonly tradeSites: readonly MissionTradeSiteFact[];
   readonly units: readonly MissionUnitFact[];
   readonly tier: MissionTierFact;
   /** Population capacity still free (capacity minus used, never negative). */
@@ -126,6 +148,13 @@ export function measureGoal(goal: MissionGoal, world: MissionWorldSnapshot): Mis
           producer.owner === MISSION_OWNER
           && producer.status === "linked"
           && (goal.resourceId === undefined || producer.resourceId === goal.resourceId)).length,
+        target: goal.count,
+      };
+    case "trade-site-supplying":
+      return {
+        current: world.tradeSites.filter((site) =>
+          site.state === "supplying"
+          && (goal.resourceId === undefined || site.resourceId === goal.resourceId)).length,
         target: goal.count,
       };
     case "outpost-connected":

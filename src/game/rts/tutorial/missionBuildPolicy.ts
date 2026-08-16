@@ -15,7 +15,8 @@
  * only decline to spend the player's wood on the same building twice while they
  * are being taught what the first one does.
  *
- * Two rules, and both are about *pacing* rather than about what is legal:
+ * Three rules, and all of them are about *pacing* rather than about what is
+ * legal:
  *
  * 1. **One at a time.** No second site of a building type while one is still
  *    under construction. This is the whole of the reported problem: the wood is
@@ -24,6 +25,13 @@
  *    stand to satisfy the active step, another one is not the answer — the step
  *    is open for some *other* reason (a Farm with no road on it), and buying a
  *    second Farm is the mistake, not the fix.
+ * 3. **Only the building the step is teaching.** Rules 1 and 2 apply to the
+ *    active step's own `build` guide and to nothing else; every other building
+ *    is the player's business. Both rules exist to stop a *lesson* being spent
+ *    twice over, and neither has anything to say about a player who wants two
+ *    Houses up at once while being taught the Barracks. Getting this wrong is
+ *    not a small over-reach either: the chain now runs to the Town age, so a
+ *    policy keyed on the request alone would police the entire opening.
  *
  * Pure and DOM-free, so `test:engine` can state each rule directly.
  */
@@ -86,6 +94,13 @@ export function missionBuildQuota(step: MissionStep, buildingId: string): number
 
 export function missionBuildVerdict(request: MissionBuildRequest): MissionBuildVerdict {
   if (!request.step) return ALLOWED;
+  // Scope check first, and it is the whole of rule 3 above. Without it rule 1
+  // reached every building type in the game: told to build a Barracks, a player
+  // could not lay two Houses side by side either, for a whole chain that now
+  // runs to the Town age. Pacing the *taught* building is the rule; pacing the
+  // player's own parallel work was an accident of asking `pending` too early.
+  const guided = request.step.guide?.action;
+  if (guided?.kind !== "build" || guided.buildingId !== request.buildingId) return ALLOWED;
   if (request.pending > 0) return { allowed: false, refusal: "already-building" };
   const required = missionBuildQuota(request.step, request.buildingId);
   if (required !== null && request.completed >= required) {
