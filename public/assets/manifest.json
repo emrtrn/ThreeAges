@@ -20021,7 +20021,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 745152
+        "bytes": 744052
       },
       "license": "Unknown"
     },
@@ -20044,7 +20044,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 874532
+        "bytes": 870112
       },
       "license": "Unknown"
     },
@@ -20067,7 +20067,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 949848
+        "bytes": 947564
       },
       "license": "Unknown"
     },
@@ -22051,10 +22051,10 @@
     },
     {
       "id": "towncenter-firstage-level1",
-      "name": "Town Center First Age Level1",
+      "name": "TownCenter_FirstAge_Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/TownCenter_FirstAge_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter/TownCenter_FirstAge_Level1.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22068,16 +22068,16 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 66568
+        "bytes": 612308
       },
       "license": "Unknown"
     },
     {
       "id": "towncenter-firstage-level2",
-      "name": "Town Center First Age Level2",
+      "name": "TownCenter_FirstAge_Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/TownCenter_FirstAge_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter/TownCenter_FirstAge_Level2.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22091,16 +22091,16 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 214011
+        "bytes": 279564
       },
       "license": "Unknown"
     },
     {
       "id": "towncenter-firstage-level3",
-      "name": "Town Center First Age Level3",
+      "name": "TownCenter_FirstAge_Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/TownCenter_FirstAge_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter/TownCenter_FirstAge_Level3.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22114,16 +22114,16 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 321458
+        "bytes": 775496
       },
       "license": "Unknown"
     },
     {
       "id": "towncenter-secondage-level1",
-      "name": "Town Center Second Age Level1",
+      "name": "TownCenter_SecondAge_Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/TownCenter_SecondAge_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter/TownCenter_SecondAge_Level1.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22137,16 +22137,16 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 234182
+        "bytes": 703524
       },
       "license": "Unknown"
     },
     {
       "id": "towncenter-secondage-level2",
-      "name": "Town Center Second Age Level2",
+      "name": "TownCenter_SecondAge_Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/TownCenter_SecondAge_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter/TownCenter_SecondAge_Level2.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22160,16 +22160,16 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 379563
+        "bytes": 767996
       },
       "license": "Unknown"
     },
     {
       "id": "towncenter-secondage-level3",
-      "name": "Town Center Second Age Level3",
+      "name": "TownCenter_SecondAge_Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/TownCenter_SecondAge_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter/TownCenter_SecondAge_Level3.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22183,7 +22183,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 532793
+        "bytes": 900700
       },
       "license": "Unknown"
     },

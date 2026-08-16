@@ -1579,6 +1579,14 @@
     {
       "assetId": "archery-secondage-level3",
       "placements": []
+    },
+    {
+      "assetId": "towncenter-firstage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "barracks-secondage-level1",
+      "placements": []
     }
   ],
   "characters": [],
