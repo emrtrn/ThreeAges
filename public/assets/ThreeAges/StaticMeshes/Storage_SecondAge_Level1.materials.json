@@ -1,12 +1,4 @@
 {
   "schema": 1,
-  "slots": [
-    "",
-    "",
-    "threeages-mat-roof-clay",
-    "threeages-mat-wall-plaster",
-    "threeages-mat-stone-masonry",
-    "",
-    "starter-mat-metal"
-  ]
+  "slots": []
 }

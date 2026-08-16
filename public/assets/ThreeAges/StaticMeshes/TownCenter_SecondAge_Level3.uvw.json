@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "mapType": "box",
+  "mapType": null,
   "position": [
     0,
-    0.631,
+    0,
     0
   ],
   "rotation": [
@@ -12,8 +12,8 @@
     0
   ],
   "scale": [
-    0.4913,
-    0.4391,
-    0.5183
+    1,
+    1,
+    1
   ]
 }

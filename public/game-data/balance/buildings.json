@@ -962,7 +962,7 @@
     "icon": "/assets/ui/icons/building-barracks.png",
     "footprint": {
       "width": 8,
-      "depth": 8
+      "depth": 6
     },
     "cost": {
       "wood": 140
@@ -1012,7 +1012,7 @@
     "icon": "/assets/ui/icons/building-archery-range.png",
     "footprint": {
       "width": 8,
-      "depth": 8
+      "depth": 6
     },
     "cost": {
       "wood": 140,

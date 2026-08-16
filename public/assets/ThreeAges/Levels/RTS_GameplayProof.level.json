@@ -1555,6 +1555,30 @@
     {
       "assetId": "base-basic-shaded",
       "placements": []
+    },
+    {
+      "assetId": "barracs",
+      "placements": []
+    },
+    {
+      "assetId": "barracks-firstage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "enemy-watchtower-secondage-level2",
+      "placements": []
+    },
+    {
+      "assetId": "watchtower-secondage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "barracks-secondage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "archery-secondage-level3",
+      "placements": []
     }
   ],
   "characters": [],

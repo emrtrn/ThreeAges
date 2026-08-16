@@ -18878,6 +18878,161 @@
       "license": "Project-local RTS presentation asset"
     },
     {
+      "id": "threeages-rts-enemy-outpost-firstage-t1-actor",
+      "name": "BP RTS Enemy Outpost FirstAge T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Enemy_Outpost_FirstAge_T1.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "outpost",
+        "enemy",
+        "settlement",
+        "tier1"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 551
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-enemy-outpost-firstage-t2-actor",
+      "name": "BP RTS Enemy Outpost FirstAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Enemy_Outpost_FirstAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "outpost",
+        "enemy",
+        "settlement",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 551
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-enemy-outpost-firstage-t3-actor",
+      "name": "BP RTS Enemy Outpost FirstAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Enemy_Outpost_FirstAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "outpost",
+        "enemy",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 551
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-enemy-outpost-secondage-t2-actor",
+      "name": "BP RTS Enemy Outpost SecondAge T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Enemy_Outpost_SecondAge_T2.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "outpost",
+        "enemy",
+        "town",
+        "tier2"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 553
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-enemy-outpost-secondage-t3-actor",
+      "name": "BP RTS Enemy Outpost SecondAge T3.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Enemy_Outpost_SecondAge_T3.actor.json",
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "outpost",
+        "enemy",
+        "town",
+        "tier3"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 553
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
       "id": "threeages-rts-quarry-actor",
       "name": "BP RTS Quarry.Actor",
       "assetType": "prefab",
@@ -19866,7 +20021,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 824764
+        "bytes": 745152
       },
       "license": "Unknown"
     },
@@ -19889,7 +20044,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 955460
+        "bytes": 874532
       },
       "license": "Unknown"
     },
@@ -19912,7 +20067,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 981216
+        "bytes": 949848
       },
       "license": "Unknown"
     },
@@ -22221,7 +22376,7 @@
       "name": "Watch Tower First Age Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/WatchTower_FirstAge_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower/WatchTower_FirstAge_Level1.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22235,7 +22390,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 52593
+        "bytes": 475464
       },
       "license": "Unknown"
     },
@@ -22244,7 +22399,7 @@
       "name": "Watch Tower First Age Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/WatchTower_FirstAge_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower/WatchTower_FirstAge_Level2.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22258,7 +22413,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 71852
+        "bytes": 487240
       },
       "license": "Unknown"
     },
@@ -22267,7 +22422,7 @@
       "name": "Watch Tower First Age Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/WatchTower_FirstAge_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower/WatchTower_FirstAge_Level3.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22281,7 +22436,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 130098
+        "bytes": 666396
       },
       "license": "Unknown"
     },
@@ -22290,7 +22445,7 @@
       "name": "Watch Tower Second Age Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/WatchTower_SecondAge_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower/WatchTower_SecondAge_Level1.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22304,7 +22459,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 291886
+        "bytes": 845820
       },
       "license": "Unknown"
     },
@@ -22313,7 +22468,7 @@
       "name": "Watch Tower Second Age Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/WatchTower_SecondAge_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower/WatchTower_SecondAge_Level2.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22327,7 +22482,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 276170
+        "bytes": 891352
       },
       "license": "Unknown"
     },
@@ -22336,7 +22491,7 @@
       "name": "Watch Tower Second Age Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/WatchTower_SecondAge_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower/WatchTower_SecondAge_Level3.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -22350,9 +22505,159 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 257040
+        "bytes": 839240
       },
       "license": "Unknown"
+    },
+    {
+      "id": "enemy-watchtower-firstage-level1",
+      "name": "Enemy Watch Tower First Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower/Enemy_WatchTower_FirstAge_Level1.glb",
+      "tags": [
+        "threeages",
+        "rts",
+        "outpost",
+        "enemy",
+        "settlement",
+        "tier1"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 477752
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "enemy-watchtower-firstage-level2",
+      "name": "Enemy Watch Tower First Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower/Enemy_WatchTower_FirstAge_Level2.glb",
+      "tags": [
+        "threeages",
+        "rts",
+        "outpost",
+        "enemy",
+        "settlement",
+        "tier2"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 518716
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "enemy-watchtower-firstage-level3",
+      "name": "Enemy Watch Tower First Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower/Enemy_WatchTower_FirstAge_Level3.glb",
+      "tags": [
+        "threeages",
+        "rts",
+        "outpost",
+        "enemy",
+        "settlement",
+        "tier3"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 633380
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "enemy-watchtower-secondage-level2",
+      "name": "Enemy Watch Tower Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower/Enemy_WatchTower_SecondAge_Level2.glb",
+      "tags": [
+        "threeages",
+        "rts",
+        "outpost",
+        "enemy",
+        "town",
+        "tier2"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 898552
+      },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "enemy-watchtower-secondage-level3",
+      "name": "Enemy Watch Tower Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower/Enemy_WatchTower_SecondAge_Level3.glb",
+      "tags": [
+        "threeages",
+        "rts",
+        "outpost",
+        "enemy",
+        "town",
+        "tier3"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 903116
+      },
+      "license": "Project-local RTS presentation asset"
     },
     {
       "id": "windmill-firstage",

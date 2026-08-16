@@ -35621,6 +35621,24 @@ check("Actor presentation: a building's owner variant wins, and its absence fall
   // shape, so levelling up stays an increase in size on both sides.
   assert.equal(enemyLadder.length, playerLadder.length);
 
+  // A filename beginning with Enemy_ is an AI-only flag variant. No such
+  // second-age L1 file exists for the WatchTower, so both owners share it;
+  // L2 and L3 select the explicit enemy models.
+  assert.equal(
+    rtsBuildingActorRef(catalog, "outpost", "completed", 1, "settlement", "enemy"),
+    actor("BP_RTS_Enemy_Outpost_FirstAge_T1"),
+  );
+  assert.equal(
+    rtsBuildingActorRef(catalog, "outpost", "completed", 1, "town", "enemy"),
+    actor("BP_RTS_Outpost_SecondAge_T1"),
+  );
+  for (const level of [2, 3]) {
+    assert.equal(
+      rtsBuildingActorRef(catalog, "outpost", "completed", level, "town", "enemy"),
+      actor(`BP_RTS_Enemy_Outpost_SecondAge_T${level}`),
+    );
+  }
+
   // Owner variants are separate files. Left out of the preflight set they would
   // load "successfully" and fail when the first enemy Barracks is drawn.
   const refs = rtsContentCatalogRefs(catalog);

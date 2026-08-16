@@ -1,8 +1,4 @@
 {
   "schema": 1,
-  "slots": [
-    "m-gravel-material",
-    "threeages-mat-foliage-broadleaf",
-    "threeages-mat-water-center"
-  ]
+  "slots": []
 }
