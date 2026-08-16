@@ -1763,9 +1763,9 @@
           {
             "id": "supply-market-0",
             "position": [
-              46,
+              50,
               0,
-              -34
+              -30
             ],
             "pointType": "linear"
           },
@@ -2939,7 +2939,7 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json",
       "position": [
-        38,
+        36,
         0,
         -36
       ],
@@ -3361,9 +3361,10 @@
       "position": [
         46,
         0,
-        -36
+        -38
       ],
       "name": "Tree enemy-wood-4",
+      "scale": 1,
       "variableOverrides": {
         "treeId": "enemy-wood-4",
         "forestId": "enemy-grove",
@@ -5272,6 +5273,7 @@
         -38
       ],
       "name": "Enemy lumber_camp (50,-38)",
+      "scale": 1,
       "variableOverrides": {
         "owner": "enemy",
         "buildingId": "lumber_camp",
@@ -5345,20 +5347,6 @@
       "variableOverrides": {
         "owner": "enemy",
         "buildingId": "archery_range",
-        "regionId": "enemy-base"
-      }
-    },
-    {
-      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
-      "position": [
-        38,
-        0,
-        -60
-      ],
-      "name": "Enemy market (38,-60)",
-      "variableOverrides": {
-        "owner": "enemy",
-        "buildingId": "market",
         "regionId": "enemy-base"
       }
     },
@@ -6195,6 +6183,20 @@
       "variableOverrides": {
         "siteId": "enemy_stone_pit",
         "siteType": "stone_pit"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        38,
+        0,
+        -60
+      ],
+      "rotationYDeg": 0,
+      "scale": 1,
+      "variableOverrides": {
+        "buildingId": "market",
+        "regionId": "enemy-base"
       }
     }
   ]
