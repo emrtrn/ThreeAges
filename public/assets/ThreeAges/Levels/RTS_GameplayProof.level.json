@@ -1587,6 +1587,10 @@
     {
       "assetId": "barracks-secondage-level1",
       "placements": []
+    },
+    {
+      "assetId": "test",
+      "placements": []
     }
   ],
   "characters": [],
@@ -1598,23 +1602,22 @@
     "rayleigh": 1,
     "turbidity": 2,
     "mie": 0.004,
+    "mieDirectionalG": 0.8,
     "exposure": 1,
     "skyLightCapture": {
-      "intensity": 0.8
+      "intensity": 0.3
     }
   },
   "postProcess": {
-    "toneMapping": "aces",
+    "toneMapping": "none",
     "antialias": "smaa",
     "exposure": 1,
     "bloom": {
-      "enabled": true,
       "threshold": 1,
       "intensity": 1,
       "radius": 1
     },
     "vignette": {
-      "enabled": true,
       "intensity": 1,
       "offset": 1
     },
@@ -1655,7 +1658,7 @@
         0
       ],
       "color": "#ffffff",
-      "intensity": 5,
+      "intensity": 2,
       "castShadow": true
     }
   ],

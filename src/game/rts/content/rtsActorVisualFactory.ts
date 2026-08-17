@@ -328,13 +328,18 @@ export class RtsActorVisualFactory {
     // enemy variant used to pass unnoticed.
     const def = this.definitions.get(actorRef);
     const animation = def ? this.animationSourceFor(root) : null;
-    if (def && !this.bindSkeletalSocketProps(def, root, animation)) return null;
+    if (def && !this.bindSkeletalSocketProps(def, root, animation, actorRef)) return null;
     const crew = this.createUnitCrew(unitId, owner);
     for (const member of crew) root.add(member.root);
     // Crew meshes are pick targets for the parent unit: clicking a man at the
     // trail selects the cannon, never an invisible extra Guard.
     const pickTargets = collectRtsPickTargets(root);
-    if (pickTargets.length === 0) return null;
+    // Spoken for the same reason the socket bind above is: refusing here reverts
+    // the unit to primitive art with nothing in the log to say so.
+    if (pickTargets.length === 0) {
+      console.warn(`[rts] ${actorRef}: no pickable mesh, so the unit keeps its legacy body`);
+      return null;
+    }
     return createRtsUnitPresentation({
       root,
       pickTargets,
@@ -367,19 +372,41 @@ export class RtsActorVisualFactory {
    * Actor component trees remain asset-agnostic: the component names a sidecar
    * socket, never a raw bone. A failed binding refuses the presentation rather
    * than silently drawing its prop at the unit's feet.
+   *
+   * It says why, out loud. Refusing here drops the unit all the way back to its
+   * legacy code body — `refreshPresentations` treats a null as "keep the
+   * fallback" and moves on — so without a reason the symptom is a unit that
+   * silently reverts to primitive art while the Actor pack reports itself fully
+   * loaded and no placeholder is counted. That is the hardest kind of art
+   * regression to trace, and the only cost of avoiding it is this string.
    */
   private bindSkeletalSocketProps(
     def: ActorScriptDef,
     root: Object3D,
     animation: RtsUnitAnimationSource | null,
+    ref: RtsActorRef,
   ): boolean {
     for (const component of def.components) {
       const socketName = component.props.rtsSkeletalSocket;
       if (socketName === undefined) continue;
-      if (typeof socketName !== "string" || socketName.length === 0) return false;
+      if (typeof socketName !== "string" || socketName.length === 0) {
+        console.warn(`[rts] ${ref}: component "${component.id}" has an unusable rtsSkeletalSocket value`);
+        return false;
+      }
       const node = findActorComponentNode(root, component.id);
       const socket = bindRtsSkeletalSocket(animation, socketName);
-      if (!node || !socket) return false;
+      if (!node || !socket) {
+        // The two halves are named apart because they fail for opposite reasons:
+        // a missing node is an Actor-tree problem (renamed or deleted component),
+        // a missing socket is a sidecar/rig problem (socket absent, or its bone
+        // is not in this model).
+        console.warn(
+          `[rts] ${ref}: cannot mount component "${component.id}" on socket "${socketName}" — `
+          + `${!node ? "no such component in the Actor tree" : "the skeleton binds no such socket"}`
+          + `${animation ? "" : " (this Actor exposes no animated skeleton at all)"}`,
+        );
+        return false;
+      }
       socket.add(node);
     }
     return true;

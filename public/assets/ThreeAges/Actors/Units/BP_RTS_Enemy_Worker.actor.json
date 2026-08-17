@@ -54,7 +54,7 @@
       "props": {
         "assetId": "axe",
         "position": [0, 0, 0],
-        "scale": [5.5, 5.5, 5.5],
+        "scale": [3.5, 3.5, 3.5],
         "rtsWorkerToolActivity": "lumber",
         "rtsSkeletalSocket": "right-hand-tool"
       },

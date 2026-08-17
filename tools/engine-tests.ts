@@ -39429,6 +39429,48 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
   );
 });
 
+check("Skeletal sidecar: her iskeletli assetin sidecar dosya adi harfi harfine model adindan turer", () => {
+  // Windows resolves file names case-insensitively, so a sidecar saved as
+  // `Worker.skeleton.json` beside a `worker.glb` loads perfectly here and 404s
+  // on any case-sensitive host. What the runtime does with that 404 is the part
+  // worth pinning: the loader falls back to `defaultAssetSkeleton()`, which has
+  // no sockets and no animation roles, so the asset does not error — it silently
+  // becomes a rig that binds nothing, its unit's presentation is refused, and
+  // the unit reverts to primitive art. Proven on 2026-08-17, when exactly that
+  // renamed the Worker's sidecar and turned every worker into a capsule.
+  //
+  // `existsSync` cannot catch it for the same reason the eye cannot: the check
+  // has to compare against the directory listing, character for character.
+  const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
+    assets: { id: string; assetType: string; path: string }[];
+  };
+  const skeletal = manifest.assets.filter((asset) => asset.assetType === "skeletalMesh");
+  assert.ok(skeletal.length > 0, "the manifest still ships skeletal meshes for this check to cover");
+  const listings = new Map<string, Set<string>>();
+  let checked = 0;
+  for (const asset of skeletal) {
+    const sidecar = skeletonSidecarPath(asset.path);
+    const directory = `public/${sidecar.slice(0, sidecar.lastIndexOf("/"))}`;
+    const fileName = sidecar.slice(sidecar.lastIndexOf("/") + 1);
+    if (!existsSync(directory)) continue;
+    let listing = listings.get(directory);
+    if (!listing) {
+      listing = new Set(readdirSync(directory));
+      listings.set(directory, listing);
+    }
+    // A model with no sidecar at all is a legitimate asset — only a sidecar that
+    // exists under a differently-cased name is the trap.
+    if (!existsSync(`${directory}/${fileName}`)) continue;
+    assert.ok(
+      listing.has(fileName),
+      `${asset.id}: the sidecar beside ${asset.path} must be named exactly "${fileName}", `
+      + `but the directory holds ${[...listing].filter((name) => name.toLowerCase() === fileName.toLowerCase()).join(", ")}`,
+    );
+    checked += 1;
+  }
+  assert.ok(checked > 0, "at least one shipped skeletal mesh pairs with a sidecar this check can compare");
+});
+
 check("Worker Faz 4: sokete asilan prop, rigin export olceginden bagimsiz cizilir", () => {
   // The bug this pins: these character GLBs carry a centimetre conversion on
   // their scene root (`Root` at scale 0.01), so a prop parented straight onto a

@@ -75,9 +75,11 @@ export birimi ne olursa olsun. Authored `[0, 0.03, 0.24]` artık gerçekten 3 cm
 yukarı / 24 cm ileri demek.
 
 Ölçülen ham prop boyutları: Crate 9,75 × 8,65 × 9,75 cm (4× → ~39 cm),
-Axe 7,3 × 20 × 1,2 cm (5,5× → ~1,10 m). Baltanın `position: [0, 0.45, 0]` offset'i
-bozuk cm uzayında ayarlandığı için (gerçekte 4,5 mm) sıfırlandı; artık 45 cm
-anlamına gelip eli terk ederdi. Balta boyu ve kasa hizası görsel kabulde tunlanır.
+Axe 7,3 × 20 × 1,2 cm. Baltanın `position: [0, 0.45, 0]` offset'i bozuk cm
+uzayında ayarlandığı için (gerçekte 4,5 mm) sıfırlandı; artık 45 cm anlamına
+gelip eli terk ederdi. Balta ölçeği kullanıcı kabulünde 5,5 → **3,5** yapıldı
+(20 cm × 3,5 = **70 cm**): iki elle kullanılan kesim baltası değil, tek elle
+tutulan küçük bir el baltası isteniyor.
 
 ### 0.3 Materyal sözleşmesi
 
@@ -723,6 +725,22 @@ Plan ancak aşağıdaki koşullar birlikte sağlandığında tamam kabul edilir:
   alanı düzeltildi ve `Worker Faz 4` kontrolü iki Actor üzerinde dönen bir döngüye
   çevrildi (cargo state, `crate` mesh'i, `carry-box` soketi ve 4× ölçek pinlendi).
   `npx.cmd tsc --noEmit` temiz; `--filter "Worker Faz"` 6/6 yeşil (`PARTIAL`).
+- 2026-08-17 — **Regresyon: işçiler kapsüle döndü — sidecar dosya adının harf
+  durumu.** Düzeltmelerden sonra her Worker legacy kapsül gövdesine düştü. Konsolda
+  ne paket hatası ne placeholder vardı, çünkü yol tamamen sessizdi:
+  `createUnitPresentation` `null` dönüyor, `unitSystem.refreshPresentations`
+  bunu `continue` ile geçip fallback'i bırakıyordu. Sessizlik kaldırıldı
+  (`rtsActorVisualFactory` artık hangi bileşenin hangi sokete neden bağlanamadığını
+  yazıyor) ve sebep bir yenilemede çıktı: sidecar yolu modelden türetiliyor
+  (`worker.glb` → `worker.skeleton.json`), ama dosya diskte `Worker.skeleton.json`
+  olmuştu. Windows harf durumuna bakmadan çözdüğü için bu fark görünmez; fetch
+  404 dönüp loader `defaultAssetSkeleton()`'a düşüyor, yani **soketi ve rolü
+  olmayan bir iskelet** — hata vermeyen, yalnızca hiçbir şey bağlamayan bir rig.
+  Dosya `worker.skeleton.json`'a geri alındı. Yeni kontrol
+  (`Skeletal sidecar: …harfi harfine…`) her iskeletli asset için sidecar adını
+  dizin listesiyle karakter karakter karşılaştırıyor; `existsSync` bunu Windows'ta
+  yakalayamaz. Hata geri konularak kontrolün kırmızıya döndüğü doğrulandı.
+  Not: bu, case-sensitive bir sunucuda (CI/Linux deploy) her hâlükârda patlardı.
 - 2026-08-17 — **Dünya içi kabul turu: beş bulgu, üçü kök nedene indi.**
   1. **Soket ölçek hatası (§0.4).** Crate ve balta dünyada hiç görünmüyordu.
      Sebep görünürlük mantığı değil: socket marker'ı doğrudan kemiğe ekleniyordu,
