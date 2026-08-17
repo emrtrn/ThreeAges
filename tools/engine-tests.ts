@@ -48992,6 +48992,51 @@ check("RTS a road routes around a standing tree and straight through once it is 
   assert.ok(through.cells.some((cell) => cell.x === 0 && cell.z === 0), "the felled tree no longer diverts the road");
 });
 
+check("RTS road planning refuses exactly the cells a blocker overlaps, whatever its extents", () => {
+  // The planner tests candidate cells against a bucketed blocker index rather than
+  // the whole blocker list, because that scan grew with the match and made drawing
+  // a late-game road stall. An index is only allowed to be faster, never different,
+  // so this pins it against the plain overlap rule it replaced — including blockers
+  // whose edges land exactly on a bucket boundary and ones far larger than a bucket,
+  // which are the two shapes a grid index gets wrong.
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const blockers: NavBlocker[] = [
+    { min: [-1, 0, -1], max: [1, 3, 1] },        // one exact road cell at the origin
+    { min: [4, 0, 3.999], max: [8, 3, 12.001] }, // straddles the 4-unit bucket edges
+    { min: [-30, 0, 20], max: [30, 3, 24] },     // a wall many buckets wide
+    { min: [15.5, 0, -14.5], max: [16.5, 3, -13.5] }, // smaller than one cell, off-grid
+  ];
+  const roads = new RoadGraph(balance);
+  const half = balance.cellSize / 2;
+  const overlapsAny = (x: number, z: number): boolean => blockers.some((blocker) =>
+    x + half > blocker.min[0] && x - half < blocker.max[0]
+    && z + half > blocker.min[2] && z - half < blocker.max[2]);
+
+  let refused = 0;
+  let allowed = 0;
+  for (let z = -68; z <= 68; z += balance.cellSize) {
+    for (let x = -68; x <= 68; x += balance.cellSize) {
+      // A zero-length plan is the exact "may this cell be paved" question.
+      const planned = roads.plan({ x, z }, { x, z }, blockers) !== null;
+      assert.equal(planned, !overlapsAny(x, z), `cell ${x},${z} must agree with the overlap rule`);
+      if (planned) allowed += 1; else refused += 1;
+    }
+  }
+  assert.ok(refused > 0 && allowed > 0, "the fixture must exercise both answers");
+
+  // ...and a route across the wall still has to go around its open ends.
+  const around = roads.plan({ x: 0, z: 10 }, { x: 0, z: 40 }, blockers);
+  assert.ok(around, "the wall has open ends, so a route exists");
+  assert.ok(around.cells.every((cell) => !overlapsAny(cell.x, cell.z)), "no planned cell sits on a blocker");
+  const sealed = roads.plan({ x: 0, z: 10 }, { x: 0, z: 40 }, [
+    ...blockers,
+    { min: [-70, 0, 20], max: [70, 3, 24] },
+  ]);
+  assert.equal(sealed, null, "a wall across the whole map leaves no route at all");
+});
+
 check("RTS a road bends around a live stone deposit and paves straight through a depleted one", () => {
   const balance = validateRoadBalance(
     JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
@@ -49656,6 +49701,35 @@ check("RTS territory stores centre ownership per grid cell and gates normal buil
     "one T1 outpost controls the full footprint of a nearby quarry-sized building",
   );
   territory.dispose();
+});
+
+check("RTS a territory refresh reads its sources once, not once per grid cell", () => {
+  // The provider is not a field read: RtsApp rebuilds it from both building systems
+  // and asks the road graph, per outpost, whether it still reaches its capital — a
+  // network walk. Calling it per cell meant one refresh did thousands of those, and
+  // a refresh runs on every committed road, so paving a tile late in a match stalled
+  // the game for seconds. This is a cost contract, so it is asserted as a count.
+  let calls = 0;
+  const territory = new TerritoryControlSystem(() => {
+    calls += 1;
+    return [
+      { owner: "player" as const, x: -20, z: 0, radius: 14 },
+      { owner: "enemy" as const, x: 20, z: 0, radius: 14 },
+    ];
+  });
+  territory.refresh();
+  assert.equal(calls, 1, "one refresh consults the source provider exactly once");
+
+  // ...and it still resolves the same ownership it always did.
+  assert.equal(territory.ownerAt(-20, 0), "player");
+  assert.equal(territory.ownerAt(20, 0), "enemy");
+  assert.equal(territory.ownerAt(0, 0), "neutral", "the gap between the two stays unowned");
+  assert.equal(territory.ownerAt(-60, -60), "neutral", "and so does distant open ground");
+
+  calls = 0;
+  territory.refresh();
+  territory.refresh();
+  assert.equal(calls, 2, "each further refresh costs one more read, never more");
 });
 
 check("RTS destroying a completed outpost removes its territory source without deleting nearby structures", () => {

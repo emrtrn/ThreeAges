@@ -1600,8 +1600,7 @@
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "backgroundColor": "#ffffff",
-    "ambientIntensity": 1
+    "backgroundColor": "#ffffff"
   },
   "skyAtmosphere": {
     "rayleigh": 1,

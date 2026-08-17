@@ -69,6 +69,149 @@ interface RoadNode extends RoadCell {
   readonly key: string;
 }
 
+/**
+ * Uniform-grid index over the nav blockers a route has to avoid.
+ *
+ * The planner asks "is this cell blocked" for every cell it expands, and the
+ * blocker list is every standing tree, deposit, dock, building and paved cell on
+ * the map — so a linear scan per cell made planning cost grow with how far the
+ * match had progressed. The player pays that on *every pointer move* while drawing
+ * a road, which is what turned late-game road drawing into a stall.
+ *
+ * The predicate is unchanged: this only narrows which blockers are worth testing.
+ * A blocker spanning an unreasonable number of buckets (an authored map-wide
+ * volume) is kept in an always-test list rather than smeared across the grid.
+ */
+class BlockerIndex {
+  private static readonly BUCKET_SIZE = 4;
+  private static readonly MAX_BUCKETS_PER_BLOCKER = 64;
+  private readonly buckets = new Map<number, NavBlocker[]>();
+  private readonly everywhere: NavBlocker[] = [];
+
+  constructor(blockers: readonly NavBlocker[]) {
+    for (const blocker of blockers) {
+      const x0 = this.bucket(blocker.min[0]);
+      const x1 = this.bucket(blocker.max[0]);
+      const z0 = this.bucket(blocker.min[2]);
+      const z1 = this.bucket(blocker.max[2]);
+      if ((x1 - x0 + 1) * (z1 - z0 + 1) > BlockerIndex.MAX_BUCKETS_PER_BLOCKER) {
+        this.everywhere.push(blocker);
+        continue;
+      }
+      for (let z = z0; z <= z1; z += 1) {
+        for (let x = x0; x <= x1; x += 1) {
+          const key = this.key(x, z);
+          const bucket = this.buckets.get(key);
+          if (bucket) bucket.push(blocker);
+          else this.buckets.set(key, [blocker]);
+        }
+      }
+    }
+  }
+
+  /** Whether the axis-aligned cell box overlaps any blocker (strict, as before). */
+  blocks(centerX: number, centerZ: number, half: number): boolean {
+    const minX = centerX - half;
+    const maxX = centerX + half;
+    const minZ = centerZ - half;
+    const maxZ = centerZ + half;
+    const overlaps = (blocker: NavBlocker): boolean =>
+      maxX > blocker.min[0] && minX < blocker.max[0] && maxZ > blocker.min[2] && minZ < blocker.max[2];
+    if (this.everywhere.some(overlaps)) return true;
+    const x0 = this.bucket(minX);
+    const x1 = this.bucket(maxX);
+    const z0 = this.bucket(minZ);
+    const z1 = this.bucket(maxZ);
+    for (let z = z0; z <= z1; z += 1) {
+      for (let x = x0; x <= x1; x += 1) {
+        const bucket = this.buckets.get(this.key(x, z));
+        if (bucket?.some(overlaps)) return true;
+      }
+    }
+    return false;
+  }
+
+  private bucket(value: number): number {
+    return Math.floor(value / BlockerIndex.BUCKET_SIZE);
+  }
+
+  /**
+   * Bucket coordinates fold into one number. A blocker parked absurdly far out
+   * could fold onto an occupied key, which costs a few extra candidates and
+   * nothing else: every candidate is still settled by the exact overlap test.
+   */
+  private key(x: number, z: number): number {
+    return (z + 4096) * 8192 + (x + 4096);
+  }
+}
+
+/**
+ * Min-heap over the frontier, ordered by the planner's own comparator.
+ *
+ * The search used to re-sort its whole frontier before every pop, which is the
+ * same answer at O(n² log n) cost. The comparator is a strict total order (cell
+ * keys are unique), so the node this pops is exactly the one the sort would have
+ * put first — the route a player gets is unchanged, only the time it takes.
+ */
+class RoadFrontier {
+  private readonly nodes: RoadNode[] = [];
+  private readonly priorities: number[] = [];
+
+  get size(): number {
+    return this.nodes.length;
+  }
+
+  push(node: RoadNode, priority: number): void {
+    this.nodes.push(node);
+    this.priorities.push(priority);
+    let index = this.nodes.length - 1;
+    while (index > 0) {
+      const parent = (index - 1) >> 1;
+      if (!this.before(index, parent)) break;
+      this.swap(index, parent);
+      index = parent;
+    }
+  }
+
+  pop(): RoadNode | undefined {
+    const top = this.nodes[0];
+    if (top === undefined) return undefined;
+    const lastNode = this.nodes.pop()!;
+    const lastPriority = this.priorities.pop()!;
+    if (this.nodes.length > 0) {
+      this.nodes[0] = lastNode;
+      this.priorities[0] = lastPriority;
+      let index = 0;
+      for (;;) {
+        const left = index * 2 + 1;
+        const right = left + 1;
+        let smallest = index;
+        if (left < this.nodes.length && this.before(left, smallest)) smallest = left;
+        if (right < this.nodes.length && this.before(right, smallest)) smallest = right;
+        if (smallest === index) break;
+        this.swap(index, smallest);
+        index = smallest;
+      }
+    }
+    return top;
+  }
+
+  private before(a: number, b: number): boolean {
+    const delta = this.priorities[a]! - this.priorities[b]!;
+    if (delta !== 0) return delta < 0;
+    return this.nodes[a]!.key.localeCompare(this.nodes[b]!.key) < 0;
+  }
+
+  private swap(a: number, b: number): void {
+    const node = this.nodes[a]!;
+    this.nodes[a] = this.nodes[b]!;
+    this.nodes[b] = node;
+    const priority = this.priorities[a]!;
+    this.priorities[a] = this.priorities[b]!;
+    this.priorities[b] = priority;
+  }
+}
+
 /** Mutable, event-driven graph of completed road cells. */
 export class RoadGraph {
   private readonly cells = new Map<string, RoadCell>();
@@ -169,11 +312,11 @@ export class RoadGraph {
   plan(start: RoadCell, end: RoadCell, blockers: readonly NavBlocker[], perspective?: UnitOwner): RoadPlan | null {
     const source = this.snap(start);
     const goal = this.snap(end);
-    if (!this.isInside(source) || !this.isInside(goal) || this.isBlocked(source, blockers) || this.isBlocked(goal, blockers)) {
-      return null;
-    }
+    if (!this.isInside(source) || !this.isInside(goal)) return null;
+    const index = new BlockerIndex(blockers);
+    if (this.isBlocked(source, index) || this.isBlocked(goal, index)) return null;
     if (!this.passable(source, perspective) || !this.passable(goal, perspective)) return null;
-    const route = this.shortestRoute(source, goal, blockers, perspective);
+    const route = this.shortestRoute(source, goal, index, perspective);
     if (!route) return null;
     const newCells = route.filter((cell) => !this.cells.has(this.key(cell)));
     return { cells: route, newCells, woodCost: newCells.length * this.balance.woodCostPerCell };
@@ -431,16 +574,16 @@ export class RoadGraph {
   private shortestRoute(
     start: RoadCell,
     goal: RoadCell,
-    blockers: readonly NavBlocker[],
+    blockers: BlockerIndex,
     perspective?: UnitOwner,
   ): RoadCell[] | null {
     const startNode = this.node(start);
     const goalKey = this.key(goal);
-    const frontier: RoadNode[] = [startNode];
+    const frontier = new RoadFrontier();
+    frontier.push(startNode, this.distance(startNode, goal));
     const cameFrom = new Map<string, string | null>([[startNode.key, null]]);
-    while (frontier.length > 0) {
-      frontier.sort((a, b) => this.distance(a, goal) - this.distance(b, goal) || a.key.localeCompare(b.key));
-      const current = frontier.shift();
+    while (frontier.size > 0) {
+      const current = frontier.pop();
       if (!current) break;
       if (current.key === goalKey) return this.reconstruct(cameFrom, current.key);
       for (const neighbor of this.neighbors(current)) {
@@ -448,7 +591,7 @@ export class RoadGraph {
         if (!this.isInside(node) || this.isBlocked(node, blockers) || cameFrom.has(node.key)) continue;
         if (!this.passable(node, perspective)) continue;
         cameFrom.set(node.key, current.key);
-        frontier.push(node);
+        frontier.push(node, this.distance(node, goal));
       }
     }
     return null;
@@ -502,10 +645,8 @@ export class RoadGraph {
     return neighbor.z > cell.z ? "south" : "north";
   }
 
-  private isBlocked(cell: RoadCell, blockers: readonly NavBlocker[]): boolean {
-    const half = this.balance.cellSize / 2;
-    return blockers.some((blocker) => cell.x + half > blocker.min[0] && cell.x - half < blocker.max[0]
-      && cell.z + half > blocker.min[2] && cell.z - half < blocker.max[2]);
+  private isBlocked(cell: RoadCell, blockers: BlockerIndex): boolean {
+    return blockers.blocks(cell.x, cell.z, this.balance.cellSize / 2);
   }
 
   private isInside(cell: RoadCell): boolean {

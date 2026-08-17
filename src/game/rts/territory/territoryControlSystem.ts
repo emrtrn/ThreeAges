@@ -139,9 +139,17 @@ export class TerritoryControlSystem {
     const step = this.options.cellSize;
     const half = (step - 0.08) / 2;
     const corners: Record<UnitOwner, number[]> = { player: [], enemy: [] };
+    // Resolved once, not per cell. The provider is not a plain field read: it
+    // rebuilds its list from both building systems and asks the road graph whether
+    // each outpost still reaches its capital — a network walk. Asking that for all
+    // ~5k grid cells made one refresh cost thousands of road traversals, and a
+    // refresh runs on every committed road, which is what kept road building
+    // stalling for seconds late in a match. The source set cannot change midway
+    // through a refresh, so one call is also the only coherent reading of it.
+    const sources = this.sources();
     for (let x = -extent; x <= extent; x += step) {
       for (let z = -extent; z <= extent; z += step) {
-        const owner = this.resolveOwner(x, z);
+        const owner = this.resolveOwner(x, z, sources);
         this.ownership.set(this.key(x, z), owner);
         if (owner === "neutral") continue;
         this.pushCell(corners[owner], x, z, half);
@@ -264,10 +272,11 @@ export class TerritoryControlSystem {
     mesh.visible = positions.length > 0;
   }
 
-  private resolveOwner(x: number, z: number): TerritoryOwner {
+  /** Sources are passed in, never read here: see the note in {@link refresh}. */
+  private resolveOwner(x: number, z: number, sources: readonly TerritorySource[]): TerritoryOwner {
     let winner: TerritorySource | null = null;
     let winnerDistance = Number.POSITIVE_INFINITY;
-    for (const source of this.sources()) {
+    for (const source of sources) {
       if (!Number.isFinite(source.radius) || source.radius <= 0) continue;
       const distance = Math.hypot(x - source.x, z - source.z);
       if (distance > source.radius || distance >= winnerDistance) continue;
