@@ -89,6 +89,11 @@ export class MissionDirector {
     return this.script.intro;
   }
 
+  /** The fog line, or `null` when the chain has none written. */
+  get introFog(): string | null {
+    return this.script.introFog ?? null;
+  }
+
   get outro(): string {
     return this.script.outro;
   }

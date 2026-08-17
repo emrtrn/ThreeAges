@@ -1605,7 +1605,7 @@
     "mieDirectionalG": 0.8,
     "exposure": 1,
     "skyLightCapture": {
-      "intensity": 0.3
+      "intensity": 0.2
     }
   },
   "postProcess": {

@@ -85,8 +85,8 @@ Zincirin donduğu tarihten sonra gelen, **oyuncunun ekranında olan** mekanikler
 | Duruş (`H` bekle / `G` saldırgan), geri çekilme (`T`) | 27 Tem–2 Ağu | ❌ | `guards` adımı yalnızca eğitmeyi öğretiyor |
 | Boştaki işçileri seç (`I`), Merkez'e odaklan (`Home`) | ~1 Ağu | ❌ | — |
 | Ordu listesi şeridi (HUD) | 30–31 Tem | ❌ | — |
-| Ana menü + savaş kurulum kartı (sis/zafer/zorluk) | 8 Ağu | Kısmen | Hikâye modu bu satırlarla ilişkisiz seçiliyor |
-| Sis (fog of war) seçimi | 18 Tem → 3 Ağu | ❌ | Keşif hiç anlatılmıyor |
+| Ana menü + savaş kurulum kartı (sis/zafer/zorluk) | 8 Ağu | ✅ *(Faz 4)* | Zorluk varsayılanı, zafer cümlesi ve sis cümlesi moda bağlandı |
+| Sis (fog of war) seçimi | 18 Tem → 3 Ağu | ✅ *(Faz 4)* | Sis açıkken `introFog` keşfi anlatıyor |
 
 **Zincirin kapsadığı 17 adımın karşısında, öğretilmeyen en az 16 oyuncu mekaniği var.**
 Hikâye modu artık oyunun yarısını anlatıyor.
@@ -141,6 +141,9 @@ avantajı alan rakibiyle başlıyor. Kurulum kartı iki satırı bağımsız sun
 (`west_pass`, `east_pass`) görünmez ve işlevsiz. Gerekçe savunulabilir (zincir maçın
 hedefini sahiplenir), ama sonuç şu: **modu öğrenmek için seçen oyuncu, oyunun ikinci
 zafer koşulunu hiç görmüyor.**
+
+*(Faz 4'te (a) seçeneğiyle kapandı: sistemler hikâye turunda hâlâ kurulmuyor, ama `outro`
+artık geçitlerin serbest maçta ne olduğunu ve nasıl tutulduğunu söylüyor.)*
 
 ### K4 — Yol, zincirde birinci sınıf bir konu değil
 
@@ -436,16 +439,78 @@ Pazar paneli, arz bildirimleri ve ipucu **aynı okumanın** üç tüketicisi (si
 
 - ~~**K2:** hikâye satırı seçiliyken zorluk varsayılanı `normal`'a insin.~~ **Yapıldı**
   (Faz 0.4). Varsayılan URL'nin moduna bakıyor, depolamanınkine değil.
-- **K3, iki seçenek:**
-  - *(a) Basit:* hikâye modunda bölgesel zafer kapalı kalsın, ama zincirin sonuna
-    `strategic-point-held` hedefli **isteğe bağlı bir bonus adım** eklenmesin — bunun
-    yerine `outro` metni geçitlerin serbest maçta ne işe yaradığını bir cümleyle söylesin.
-  - *(b) Tam:* zincir bittikten sonra bölgesel zafer sistemleri **maç sürerken** ayağa
-    kalksın. Bu, `RtsApp`'ta geç kurulum gerektirir; maliyeti (a)'nın çok üstünde.
-  - **Öneri: (a).** Zincirin maçın hedefini sahiplenmesi doğru bir karar; kayıp bilgi
-    tek cümleyle kapanır.
-- Sis: hikâye modu sisi zorlamasın, ama `intro` metni sis açıksa keşiften bir cümle
-  etsin (`RtsApp` bayrağı zaten elinde).
+- ~~**K3, iki seçenek:**~~ **(a) uygulandı (17 Ağu 2026)** — `frontier_road.json` →
+  `outro`. Bölgesel zafer hikâye modunda kapalı kalmaya devam ediyor; zincir bittiğinde
+  oyuncu geçitlerin serbest maçta ne olduğunu bir cümleyle öğreniyor.
+  - *(b) Tam:* zincir bittikten sonra bölgesel zafer sistemlerinin **maç sürerken** ayağa
+    kalkması — `RtsApp`'ta geç kurulum gerektiriyordu; alınmadı.
+
+#### K3'ün verdiği üç karar
+
+1. **Cümle menünün etiketini değil, konusunu anıyor.** İlk taslak kurulum kartının
+   satırını tırnak içinde alıntılıyordu (`"Askerî + Bölgesel"`); bu, K6'nın metin
+   tarafındaki tuzağının aynısı — büyüklük yerine **arayüz dizesi** alıntılamak. Etiketi
+   değiştiren kişi zinciri de taşımak zorunda kalırdı. Metin artık kavramı ("bölgesel
+   zafer") anıyor, ki tracker başlığı ve kart etiketi zaten o kelimeyi taşıyor.
+2. **Kayıp bilgi "ikinci bir zafer var" değil, "nasıl alınır".** Cümlenin ikinci yarısı
+   geçidin **birlikle değil, yola bağlı karakolun kontrol alanıyla** tutulduğunu söylüyor —
+   yani zincirin `outpost` adımının karşılığı. Yalnız varlığını duyuran bir cümle, oyuncuyu
+   geçide ordu yürütmeye gönderirdi (`strategicPointSystem`: birlik ancak sayacı durdurur,
+   noktayı çevirmez). Süre (180 sn) bilerek yazılmadı: ayarlanabilir bir sayı.
+3. **Cümle haritayı anıyor, o yüzden haritaya bağlandı.** Faz 0.5'in kapısı `market-bought`
+   adımının ticaret noktası istemesiydi; bu cümle de geçit istiyor, ama **hiçbir hedef
+   geçidi okumadığı için** eksiklik tamamen sessiz olurdu. Yeni motor testi, `outro` geçidi
+   anıyorsa seçili Level'ın en az bir `BP_RTS_StrategicPoint` yazmasını şart koşuyor. Kapı
+   cümlenin **konusuna** bakıyor (metin eşleşmesi değil kelime): başka bir final yazan
+   çatal kapıyı da düşürür, kapı onu "farklı yazdın" diye kırmızıya çevirmez.
+
+**Faz 4'ün kalanı:** sis cümlesi (`intro`, `RtsApp` bayrağı elinde).
+- ~~Sis: hikâye modu sisi zorlamasın, ama `intro` metni sis açıksa keşiften bir cümle
+  etsin (`RtsApp` bayrağı zaten elinde).~~ **Yapıldı (17 Ağu 2026), ama planın ilk yarısı
+  kullanıcı kararıyla tersine çevrildi:** zincire opsiyonel `introFog` alanı geldi **ve
+  hikâye turu sisi zorluyor**. **Faz 4 kapandı.**
+
+**Planın "zorlamasın" maddesi neden düştü.** Kararı veren, modu oynamaya çalışan kullanıcı
+oldu: kurulum kartı tur seçiliyken sis anahtarını **gizliyor**, yani turu sisli oynamak
+*isteyen* oyuncunun basacağı bir yer yok — plan "zorlamasın" derken oyuncunun bir seçimi
+olduğunu varsayıyordu, oysa gizli kontrolün arkasındaki değer **başka bir maçın** tercihi.
+Kullanıcının gerekçesi bunun üstüne bir de tasarım: "bir harita, zafer elde edilmeden
+açılamamalı; yoksa sisin gizemi kalkar". Yeni kural `fogEnabledForMatch(chosen,
+missionRunning)` — bölgesel zaferin zorla **kapatılmasının** aynadaki hâli: tur öğrettiği
+maçın şeklini sabitler, sisi **açar**, bölgesel zaferi **kapatır**, gizli satırlardan
+yalnız zorluğu alır. Oyuncunun kayıtlı sis tercihi yazılmıyor: sonraki serbest maç yine
+son seçtiği hâlde açılıyor.
+
+#### Sis cümlesinin verdiği üç karar
+
+1. **Cümle veride, koşul kodda.** Metni `RtsApp`'a yazmak en kısa yoldu; ama o zaman
+   zincirin bütün anlatısı `frontier_road.json`'da, tek cümlesi kaynak kodda olurdu — ve
+   ikinci bir zincir yazan kişi kendi sis cümlesini yazamazdı. Yeni alan `introFog?: string`
+   (`MissionScript`), koşul ise çağıranın zaten elinde tuttuğu tek bayrak.
+2. **Bayrak değil, kurulmuş sistem soruluyor.** `RtsApp` `options.fogOfWarEnabled`'ı değil
+   `this.vision`'ı okuyor. İkisi bugün aynı şeyi söylüyor, ama cümlenin doğruluğunun
+   dayanağı oyuncunun gördüğü kanıtla — karanlık harita — aynı yerden gelmeli; bayrağı açık
+   olup sistemi kurulmamış bir yol, oyuncuya var olmayan bir sisi anlatırdı.
+3. **Ayrı kart, `intro`'ya ek değil.** `intro` zaten 175 karakter ve `mission` bildirimi 10
+   saniye duruyor; iki konuyu tek kartta birleştirmek ikisinden birinin okunmaması demek.
+   Ayrı `subject` ("intro-fog") ikisine de kendi kartını ve kendi süresini veriyor.
+
+**Zorlamanın Faz 3 işaretçilerine dokunduğu tek yer (ölçüldü).** Sis kuralı gereği
+keşfedilmemiş zemin işaretlenmiyor, yani zorunlu sis bazı `landmark`'ları maç açılışında
+susturabilir. Oyuncu Merkez'i `(-40, 40)`, Merkez görüşü 26 birim; zincirin işaretlediği
+dört şeyin başlangıç mesafesi: geyik **20.6**, altın yatağı **12.5**, taş yatağı **17.1** —
+üçü de açılışta görüş içinde. Dördüncüsü, `supply_wood`'un kereste ticaret noktası,
+**33.5** birimde: açılışta **sis altında**, yani o adımın oku oyuncu o yöne gidene kadar
+çıkmıyor (Oduncu Kampı'nın 9 birimlik görüşü ormana doğru kurulursa yetişebilir, ama bu
+garanti değil). Karar kullanıcıda: ya keşif o adımın bir parçası sayılır, ya da aktif
+adımın işareti sis kuralının istisnası olur — ikincisi Faz 3'ün 3. kararını (
+"işaret bir ifşa değil") gevşetir.
+
+**Test:** cümle değil, **taşınması** pinlendi — `validateMissionScript` sonucunu alan alan
+kuruyor, yani dönüş literalinin unuttuğu alan sessizce düşer (CLAUDE.md'nin kayıt
+allowlist'i ile aynı tuzak). Kapı üç şeyi söylüyor: alan doğrulamadan sağ çıkar, boş dize
+reddedilir, ve **alanın hiç olmaması meşrudur** — sisten söz etmeyen bir zincir yazan çatal
+boş dize yazmak zorunda kalmasın.
 
 ### Faz 5 — Doğrulama
 
@@ -472,7 +537,8 @@ Pazar paneli, arz bildirimleri ve ipucu **aynı okumanın** üç tüketicisi (si
    (`enemy-units-defeated`, `units-in-stance`) ve `unit-command` aksiyonu geldi; Faz 1'in
    kalan hedefleri (`structure-repaired`, `production-adjacency`, `aura-covered`,
    `livestock-penned`, `strategic-point-held`) Perde III/Faz 4 ile birlikte duruyor.
-5. **Faz 4** — kurulum kartı ilişkisi (K3'ün tek cümlesi + sis cümlesi). Sıra bunda.
+5. ~~**Faz 4** — kurulum kartı ilişkisi.~~ **Kapandı (17 Ağu 2026):** K2 (Faz 0.4),
+   K3'ün tek cümlesi ve sis cümlesi. Sıra 6'ya geçti.
 6. **Faz 2 Perde I/III dokunuşları** — kurt uyarısı, `R` otomasyon satırı,
    Ağıl/Değirmen/Tapınak adımları.
 

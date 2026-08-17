@@ -55,6 +55,27 @@ export function fogChoiceForFlag(fogEnabled: boolean): FogOfWarChoice {
   return fogEnabled ? "on" : "off";
 }
 
+/**
+ * Fog for the match about to start — the tur's one non-negotiable rule.
+ *
+ * A story chain **forces fog on**, the mirror of what `main.ts` already does to
+ * regional victory: the tur fixes the shape of the match it teaches, and the
+ * setup card hides these controls while it is selected, so what the free-match
+ * rows hold is a preference for a *different* match. Letting a fog-less run of
+ * that preference through was the bug — the mode meant to teach this game would
+ * open the whole map, and every lesson that starts with not knowing where
+ * something is (scouting, the remembered-building markers, an enemy who is blind
+ * in exactly the same way) is gone before the first objective.
+ *
+ * Deliberately not a *default* the way the difficulty is (`resolveAiProfile`):
+ * a default answers "what if the player has not said", and a hidden control
+ * never lets them say. So this is the rule, and it holds no matter where the
+ * other answer came from — stored choice, preset, or `?flags=`.
+ */
+export function fogEnabledForMatch(chosen: boolean, missionRunning: boolean): boolean {
+  return missionRunning || chosen;
+}
+
 /** The slice of `Storage` this needs; keeps the module free of DOM types. */
 export interface FogOfWarStorage {
   getItem(key: string): string | null;

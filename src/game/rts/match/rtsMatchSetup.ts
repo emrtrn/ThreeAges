@@ -89,7 +89,7 @@ const MISSION_MODE_ROWS: readonly ModeOption[] = [
     choice: "story",
     label: "Hikâye turu",
     blurb: "Sırayla verilen görevlerle öğren.",
-    hint: "Normal bir maç, sırayla verilen görevlerle. Yol, depo ve kontrol alanı kurallarını oynayarak öğrenirsin; zincir bittiğinde maç serbest devam eder.",
+    hint: "Normal bir maç, sırayla verilen görevlerle. Yol, depo ve kontrol alanı kurallarını oynayarak öğrenirsin; zincir bittiğinde maç serbest devam eder. Harita savaş sisi altında açılır: keşfetmek turun ilk dersi.",
   },
   {
     choice: "free",
@@ -179,9 +179,11 @@ export interface RtsMatchSetupValues {
  *
  * The free-match block is **hidden** while the tur is selected, not disabled:
  * the tur teaches a fixed shape of match and its three rules are not the
- * player's to set. They are not neutralised, though — the values behind the
- * hidden controls are still what the tur is built with, so a player who set fog
- * off last match gets a tur without fog.
+ * player's to set. What is behind the hidden controls is a preference for a
+ * *different* match, and `main.ts` treats it that way — the tur pins fog on and
+ * regional victory off whatever those rows hold (`fogEnabledForMatch`), and
+ * takes only the difficulty from them. The stored values are untouched either
+ * way, so the next free match opens on exactly what the player last chose.
  *
  * Native controls throughout, skinned rather than replaced: the cards and the
  * switch are labels wrapped around a real radio and a real checkbox, which is

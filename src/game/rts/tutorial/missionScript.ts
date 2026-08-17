@@ -325,6 +325,18 @@ export interface MissionScript {
   readonly label: string;
   /** Shown once when the chain opens; the story frame, not an instruction. */
   readonly intro: string;
+  /**
+   * A second opening line, shown only when the match is being played with fog of
+   * war on — Faz 4.
+   *
+   * Optional and separate from {@link intro} rather than folded into it, because
+   * fog is the player's choice on the menu and the tur may not overrule it: a
+   * chain that explained scouting in every match would be teaching a rule half
+   * its players are not playing under, and one that never explained it leaves
+   * the other half wondering why the valley is dark. The condition is the one
+   * flag the caller already holds; nothing here reads it.
+   */
+  readonly introFog?: string;
   /** Shown when the last step clears and the director detaches. */
   readonly outro: string;
   readonly steps: readonly MissionStep[];

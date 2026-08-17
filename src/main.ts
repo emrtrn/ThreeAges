@@ -29,6 +29,7 @@ import {
 import {
   fogChoiceEnablesFog,
   fogChoiceForFlag,
+  fogEnabledForMatch,
   fogOfWarFlagOverride,
   readStoredFogOfWar,
   writeStoredFogOfWar,
@@ -403,6 +404,11 @@ async function main(): Promise<void> {
       // round before the teaching chain is complete. Keep the saved free-match
       // preference intact, but never construct the regional systems for a story.
       const storyModeRegionalVictoryEnabled = !missionScript && regionalVictoryChosen;
+      // ...and the other half of the same rule, in the other direction: the tur
+      // is played under fog whatever the free-match rows hold, because the map
+      // being unknown is the premise every objective after the first is written
+      // against. See `fogEnabledForMatch`.
+      const storyModeFogEnabled = fogEnabledForMatch(fogOfWarChosen, Boolean(missionScript));
       // `?level=` (what the editor's Play button passes) outranks the preset's map,
       // so the level being edited is the level that opens. See `rtsLevelRef.ts`.
       //
@@ -444,7 +450,7 @@ async function main(): Promise<void> {
         debug: params.has("debug"),
         prosperityDebugEnabled,
         regionalVictoryEnabled: storyModeRegionalVictoryEnabled,
-        fogOfWarEnabled: fogOfWarChosen,
+        fogOfWarEnabled: storyModeFogEnabled,
         contentCatalog,
         ...(authoredLevel && levelRef
           ? { level: authoredLevel.definition, levelLayout: authoredLevel.layout, levelRef }

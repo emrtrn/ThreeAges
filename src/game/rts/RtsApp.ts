@@ -3150,6 +3150,14 @@ export class RtsApp {
     if (!this.missionIntroPosted) {
       this.missionIntroPosted = true;
       this.notifications.post({ kind: "mission", subject: "intro", text: missions.intro });
+      // Faz 4: the scouting line, and only where scouting is a thing. Asked of
+      // the constructed system rather than `options.fogOfWarEnabled` so the
+      // sentence is true by the same evidence the player has — a dark map — and
+      // its own card rather than an appendix to the intro, because two subjects
+      // in one ten-second notice is one of them going unread.
+      if (missions.introFog && this.vision) {
+        this.notifications.post({ kind: "mission", subject: "intro-fog", text: missions.introFog });
+      }
     }
 
     // Every frame, unlike the objectives themselves: what the pointer answers to

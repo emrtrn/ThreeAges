@@ -70,6 +70,7 @@ import {
   DEFAULT_FOG_OF_WAR,
   fogChoiceEnablesFog,
   fogChoiceForFlag,
+  fogEnabledForMatch,
   fogOfWarFlagOverride,
   readStoredFogOfWar,
   writeStoredFogOfWar,
@@ -45557,6 +45558,20 @@ check("the shipped mission script validates, and a broken one fails at load", ()
     /does not match file name/,
   );
 
+  // Faz 4: the optional fog line, pinned as a *carried* field rather than as a
+  // sentence. `validateMissionScript` builds its result key by key, so a field
+  // the return literal forgets is dropped in silence — the same allowlist shape
+  // CLAUDE.md warns about for layout saves, and here it would cost the chain the
+  // one line it has about scouting with nothing anywhere reporting a fault.
+  assert.equal(script.introFog, (raw as { introFog?: string }).introFog);
+  assert.ok(script.introFog, "the shipped chain must carry a fog line for this gate to bite");
+  const blankFog = { ...(raw as object), introFog: "" };
+  assert.throws(() => validateMissionScript(blankFog, "frontier_road", buildingIds), /introFog/);
+  // Absent is the other legal shape: a fork writing a chain with nothing to say
+  // about fog must not have to write an empty string to say so.
+  const { introFog: _dropped, ...noFog } = raw as { introFog?: string };
+  assert.equal(validateMissionScript(noFog, "frontier_road", buildingIds).introFog, undefined);
+
   const duplicate = JSON.parse(JSON.stringify(raw)) as { steps: { id: string }[] };
   duplicate.steps[1]!.id = duplicate.steps[0]!.id;
   assert.throws(() => validateMissionScript(duplicate, "frontier_road"), /duplicate step id/);
@@ -46064,6 +46079,40 @@ check("Faz 0.5: the shipped scenario authors a trade site for every resource the
       `the chain trades ${resourceId} but "${preset.levelRef}" authors no trade site producing it`,
     );
   }
+});
+
+check("Faz 4 K3: the chain's ending hands the player off to passes the shipped Level authors", () => {
+  // K3's cheap half. A story chain owns the match objective, so `main.ts` never
+  // constructs the regional systems for it: the player who picked the tur to
+  // *learn the game* is the one player who never sees its second win condition.
+  // The outro is where that information is given back, which makes it prose
+  // naming map features — K1's failure in sentence form if the scenario authors
+  // none of them, and just as silent, because no goal reads a pass.
+  const buildingIds = new Set(Object.keys(
+    validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown),
+  ));
+  const script = validateMissionScript(
+    JSON.parse(readFileSync("public/game-data/missions/frontier_road.json", "utf8")) as unknown,
+    "frontier_road",
+    buildingIds,
+  );
+  // Keyed on the *subject* the ending names rather than on the sentence: a fork
+  // that writes a different ending drops this gate with it instead of going red
+  // for not quoting a wording. What is pinned is the coupling, not the prose.
+  if (!/geçit/i.test(script.outro)) return;
+
+  const preset = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
+  assert.ok(preset.levelRef, "the shipped scenario must name a Level");
+  const level = JSON.parse(readFileSync(`public/${preset.levelRef}`, "utf8")) as {
+    actors?: readonly { classRef?: string }[];
+  };
+  const passes = (level.actors ?? []).filter(
+    (actor) => actor.classRef?.endsWith("BP_RTS_StrategicPoint.actor.json"),
+  );
+  assert.ok(
+    passes.length > 0,
+    `the chain's ending sends the player to the strategic passes, but "${preset.levelRef}" authors none`,
+  );
 });
 
 check("a chain buys in whole lots, and one caravan trip can fill the lot it asks for", () => {
@@ -59122,6 +59171,39 @@ check("Faz 0.4: the URL's mode is what the difficulty default is chosen for", ()
       `"${search}" must read the same mode twice`,
     );
   }
+});
+
+check("Faz 4: the tur is played under fog whatever the free-match rows hold", () => {
+  // The difference from the difficulty rule above, and the reason this is not
+  // written as another default: the setup card *hides* the fog switch while the
+  // tur is selected, so the value it carries is a preference for a free match
+  // the player is not starting. Honouring it opened the teaching mode with the
+  // whole map visible — every objective after the first is written against not
+  // knowing where things are.
+  assert.equal(fogEnabledForMatch(false, true), true, "a chain forces fog on");
+  assert.equal(fogEnabledForMatch(true, true), true);
+  // A free match is still entirely the player's: this rule adds fog, it never
+  // takes it away, so "off" outside the tur stays off.
+  assert.equal(fogEnabledForMatch(false, false), false);
+  assert.equal(fogEnabledForMatch(true, false), true);
+
+  // And the mirror image is still true of the second win condition — the two
+  // together are what "the tur fixes the shape of the match" means. Regional
+  // victory is forced *off* for a chain (a chain owns the objective), fog forced
+  // *on*; a fork that ever makes them agree has broken one of the two.
+  assert.equal(victoryChoiceEnablesRegional("military_regional"), true);
+  assert.equal(fogChoiceEnablesFog("on"), true);
+  assert.equal(fogChoiceEnablesFog("off"), false);
+  // The player's stored preference is untouched by either: what a tur pins is
+  // the match, not the setting the next free match opens on.
+  const store = (() => {
+    const data: Record<string, string> = {};
+    return { data, getItem: (k: string) => data[k] ?? null, setItem: (k: string, v: string) => { data[k] = v; } };
+  })();
+  writeStoredFogOfWar(store, "off");
+  assert.equal(readStoredFogOfWar(store), "off");
+  assert.equal(fogEnabledForMatch(fogChoiceEnablesFog(readStoredFogOfWar(store) ?? "on"), true), true);
+  assert.equal(readStoredFogOfWar(store), "off", "a tur does not rewrite the free-match choice");
 });
 
 /**

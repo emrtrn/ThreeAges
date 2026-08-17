@@ -2,7 +2,8 @@
   "id": "frontier_road",
   "label": "Sınır Yolu",
   "intro": "Kral seni terk edilmiş bir sınır vadisine gönderdi. Merkez ilk deposun: çevresindeki bedava yola değen her yapı hazineye çalışır. Sağ tık: birlik gönder · WASD: haritayı gez.",
-  "outro": "Rakip lordun ileri karakolu düştü. Vadi artık senin — buradan sonrası sana kalmış.",
+  "introFog": "Vadinin çoğu sis altında: yalnız birliklerinin ve yapılarının gördüğü yer açık kalır. Rakibin ne yaptığını görmek için keşfe birlik gönder.",
+  "outro": "Rakip lordun ileri karakolu düştü. Vadi artık senin. Serbest maçta bölgesel zaferi seçersen stratejik geçitler ikinci bir kazanma yolu olur: geçit birlikle değil, yola bağlı karakolun kontrol alanıyla tutulur.",
   "steps": [
     {
       "id": "wood_flowing",

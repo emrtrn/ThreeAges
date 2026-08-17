@@ -2707,10 +2707,18 @@ export function validateMissionScript(
     } satisfies MissionStep;
   });
 
+  // Optional, and checked rather than passed through: an `introFog` that is a
+  // number or an empty string would reach the feed as a blank card at the exact
+  // moment the chain is introducing itself. Absent is the only other legal shape.
+  const introFog = obj["introFog"] === undefined
+    ? undefined
+    : requireString(obj, "introFog", where);
+
   return {
     id,
     label: requireString(obj, "label", where),
     intro: requireString(obj, "intro", where),
+    ...(introFog === undefined ? {} : { introFog }),
     outro: requireString(obj, "outro", where),
     steps,
   };
