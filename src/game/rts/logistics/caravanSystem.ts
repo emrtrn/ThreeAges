@@ -13,6 +13,37 @@ export type { CaravanDispatch, CaravanLane, CaravanLaneProvider } from "./carava
 
 export type CaravanPhase = "loading" | "outbound" | "unloading" | "inbound";
 
+/**
+ * Which body is showing the shipment this frame — the single read both sides of
+ * the hand-off make (Worker plan §10.2A).
+ *
+ * It exists because "the worker holds the barrel until the donkey does" is one
+ * decision, and two systems asking it separately is exactly how a frame with two
+ * barrels (or none) appears. There is no third state to get wrong: the moment
+ * `loading` becomes `outbound` this answer changes from `worker` to `caravan`,
+ * so the prop leaves one pair of hands on the same frame it lands on the other.
+ *
+ * `none` is the honest answer for the empty walk home, and for a donkey standing
+ * at a producer that has not made a full shipment yet — nothing is being carried
+ * then, and putting a barrel in someone's hands for those minutes would show a
+ * hand-off that is not happening.
+ */
+export type CaravanLoadBearer = "worker" | "caravan" | "none";
+
+/**
+ * Resolve the bearer from the phase plus whether the load is actually going on
+ * right now ({@link Caravan.loadingActive}).
+ *
+ * The phase alone is not enough for the worker half: `loading` covers both the
+ * transfer and the wait before it, and only the transfer is something to show.
+ * The caravan half never needs the second argument, which is why
+ * {@link isCaravanCarrying} can still answer from the phase alone.
+ */
+export function caravanLoadBearer(phase: CaravanPhase, loadingActive: boolean): CaravanLoadBearer {
+  if (phase === "outbound" || phase === "unloading") return "caravan";
+  return phase === "loading" && loadingActive ? "worker" : "none";
+}
+
 export interface CaravanSnapshot {
   readonly id: string;
   /** The lane this animal runs; how its arrival is routed back to a system. */
@@ -58,6 +89,13 @@ export class Caravan implements CombatTarget {
   phase: CaravanPhase = "loading";
   /** A killed donkey stays briefly so its authored Death clip can finish. */
   private deathElapsed: number | null = null;
+  /**
+   * True only on frames where the load timer actually ran — see
+   * {@link loadingActive}. Recomputed from scratch every frame it is written, so
+   * an animal that stops being updated cannot leave a stale `true` behind and a
+   * worker holding a barrel forever.
+   */
+  private loadingActiveValue = false;
   private returningHome = false;
   private destination: RoadCell;
   private remainingLoadSeconds: number;
@@ -94,6 +132,19 @@ export class Caravan implements CombatTarget {
     return this.deathElapsed !== null;
   }
 
+  /**
+   * Whether this animal is taking its shipment on *right now*, rather than
+   * merely standing at the producer waiting for one.
+   *
+   * The distinction is the whole point: `loading` lasts as long as the building
+   * needs to make a full load — minutes, on a slow producer — while the transfer
+   * itself is the authored `loadSeconds` at the end of it. Only the second is a
+   * moment worth showing a man carrying a barrel for.
+   */
+  get loadingActive(): boolean {
+    return this.loadingActiveValue;
+  }
+
   get moveSpeed(): number {
     return this.balance.moveSpeed;
   }
@@ -109,6 +160,10 @@ export class Caravan implements CombatTarget {
     dispatch: CaravanDispatch,
   ): CaravanArrival | null {
     this.speed = 0;
+    // Cleared before anything can set it, so every path out of this method —
+    // dead, waiting, travelling, departing — leaves the flag false unless the
+    // load timer below actually ran this frame.
+    this.loadingActiveValue = false;
     if (this.health.depleted) return null;
     this.returningHome = false;
     this.carryCapacity = dispatch.carryCapacity;
@@ -118,10 +173,19 @@ export class Caravan implements CombatTarget {
       // full minute-sized load (or production is stopped with a partial load).
       // Unloading never waits: it has already arrived with a valid shipment.
       if (this.phase === "loading" && !dispatch.ready) return null;
+      // The transfer is under way from here down. Raised before the countdown
+      // rather than after it, so the first frame of the load is already showing
+      // the barrel; dropped again the frame the animal leaves, which is the
+      // frame its own panniers appear.
+      this.loadingActiveValue = this.phase === "loading";
       this.remainingLoadSeconds -= deltaSeconds;
       if (this.remainingLoadSeconds > 0) return null;
-      if (this.phase === "loading") this.beginTravel("outbound", source, destination);
-      else this.beginTravel("inbound", destination, source);
+      if (this.phase === "loading") {
+        this.loadingActiveValue = false;
+        this.beginTravel("outbound", source, destination);
+      } else {
+        this.beginTravel("inbound", destination, source);
+      }
       return null;
     }
 
@@ -153,6 +217,10 @@ export class Caravan implements CombatTarget {
   beginReturnHome(source: RoadCell): void {
     if (this.returningHome || this.health.depleted) return;
     this.speed = 0;
+    // This path runs *instead of* {@link update}, so the flag has to be cleared
+    // here too: an interrupted lane must not leave a worker holding a barrel for
+    // a shipment that is walking away from him.
+    this.loadingActiveValue = false;
     this.returningHome = true;
     if (this.phase === "loading") return;
     const anchor = this.route[this.routeState.waypointIndex];
@@ -332,6 +400,21 @@ export class CaravanSystem {
 
   reset(): void {
     this.caravans.clear();
+  }
+
+  /**
+   * Whether any live animal on this lane is taking its load on right now.
+   *
+   * The producer side's whole view of the caravan fleet, and deliberately a
+   * single boolean: the economy has no business knowing that a lane has animals,
+   * phases or a roster at all — only whether there is a shipment being handed
+   * over at its door this frame.
+   */
+  isLoadingOn(laneId: string): boolean {
+    for (const caravan of this.caravans.values()) {
+      if (caravan.laneId === laneId && !caravan.health.depleted && caravan.loadingActive) return true;
+    }
+    return false;
   }
 
   /**

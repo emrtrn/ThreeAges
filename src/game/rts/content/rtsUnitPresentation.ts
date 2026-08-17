@@ -82,7 +82,7 @@ import {
   type StructureDeformation,
   type StructureDeformationTuning,
 } from "../structures/structureDeformation";
-import type { RtsPresentationHandle, RtsPresentationUpdate } from "../units/unit";
+import type { RtsPresentationHandle, RtsPresentationUpdate, WorkerActivity } from "../units/unit";
 import { advanceRtsWheelSpins, type RtsWheelSpinBinding } from "./rtsPresentationMotion";
 import { advanceRtsGunRecoils, type RtsGunRecoilBinding } from "./rtsGunMotion";
 import {
@@ -623,6 +623,8 @@ class RtsUnitPresentation implements RtsPresentationHandle {
   readonly muzzle: Object3D | null;
   /** Last load state applied, so an unchanged frame touches no node at all. */
   private carrying: boolean | null = null;
+  /** The assignment that load belonged to; see the guard in {@link update}. */
+  private cargoActivity: WorkerActivity | null = null;
   /** Where an authored notify goes, or null when this caller consumes none. */
   private readonly onNotify: ((name: string) => void) | null;
   /** Authored markers keyed by clip; empty keeps the whole notify path unentered. */
@@ -801,9 +803,15 @@ class RtsUnitPresentation implements RtsPresentationHandle {
     // is a fact about this frame, not an animation to advance. A paused frame, a
     // far-away frame and a frame where the mixer is skipped must all still show
     // the right cargo, and the change guard is what keeps that free.
-    if (state.carrying !== undefined && state.carrying !== this.carrying) {
+    // The activity is part of the guard, not just of the call: a Worker who puts
+    // his crate down and picks a caravan barrel up never changes `carrying`, and
+    // guarding on that alone would leave him holding the wrong object.
+    const cargoActivity = state.workerActivity ?? null;
+    if (state.carrying !== undefined
+      && (state.carrying !== this.carrying || cargoActivity !== this.cargoActivity)) {
       this.carrying = state.carrying;
-      applyRtsCargoVisibility(this.cargoVisuals, state.carrying);
+      this.cargoActivity = cargoActivity;
+      applyRtsCargoVisibility(this.cargoVisuals, state.carrying, cargoActivity);
     }
     applyRtsWorkerTools(this.workerTools, state.workerActivity);
     if (state.deltaSeconds <= 0) return;

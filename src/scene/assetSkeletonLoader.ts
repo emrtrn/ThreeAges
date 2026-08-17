@@ -54,6 +54,7 @@ export const ANIMATION_SET_ROLES = [
   "carryPose",
   "rest",
   "hold",
+  "combatIdle",
   "attack",
   "attackHunting",
   "attackMelee",

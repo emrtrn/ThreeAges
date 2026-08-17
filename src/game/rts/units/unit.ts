@@ -120,6 +120,17 @@ export interface RtsPresentationUpdate {
   readonly preparingToMove?: boolean;
   /** True while a live target is inside weapon range — i.e. blows are landing. */
   readonly attacking: boolean;
+  /**
+   * True while a live enemy is inside this unit's close-quarters reach.
+   *
+   * Distinct from {@link attacking}, which asks whether the *weapon* is firing.
+   * A Worker with a Guard against it is inside its own stone minimum: nothing is
+   * being thrown, and yet it is very much in a fight. An asset that authors a
+   * `combatIdle` clip waits in that stance instead of its ordinary idle.
+   *
+   * Omitted by callers that model no close weapon, which keeps their idle.
+   */
+  readonly engagedClose?: boolean;
   /** True while a Worker is bringing down wildlife at a hunting camp. */
   readonly hunting?: boolean;
   /** True once the defeat pose has begun. */
@@ -556,6 +567,7 @@ export class Unit {
       backward: this.retreating,
       preparingToMove: this.isPreparingToMove,
       attacking: this.isTradingBlows() || this.hunting,
+      engagedClose: this.isEngagedAtCloseQuarters(),
       hunting: this.hunting,
       dying: this.dying,
       working: this.working,
@@ -750,6 +762,28 @@ export class Unit {
     // brace its crew against a shot that is never coming — and leave them braced
     // exactly when the shove that does answer needs them on their feet (K-07/K-08).
     return this.attack.inFiringBand(combatDistance(this.position, target));
+  }
+
+  /**
+   * Whether a live enemy is inside this unit's close reach — the shove
+   * `siegeMeleeSystem` resolves, not the weapon `unitCombat` fires.
+   *
+   * Read off `kickRange` because that is the same number the shove itself uses,
+   * so the stance covers exactly the band the blows land in and cannot drift
+   * from it. A unit that authors no close weapon has no such band and reports
+   * false, which leaves every pre-existing unit's idle untouched.
+   *
+   * Deliberately *not* folded into {@link isTradingBlows}: that one answers
+   * "is my weapon firing", which the artillery needs to stay false inside its
+   * minimum (K-07). This answers "is someone on top of me", and for a Worker
+   * standing inside its own stone minimum both are true at once.
+   */
+  private isEngagedAtCloseQuarters(): boolean {
+    const reach = this.stats.kickRange;
+    if (reach === undefined || this.dying) return false;
+    const target = this.attackTarget;
+    if (!target || target.health.depleted || (target.dying ?? false)) return false;
+    return combatDistance(this.position, target) <= reach;
   }
 
   /** Order the unit to walk to a ground point (y is ignored). */

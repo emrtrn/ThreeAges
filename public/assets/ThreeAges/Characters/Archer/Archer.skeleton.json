@@ -147,27 +147,27 @@
     },
     {
       "clip": "Archer_standing_dive_forward",
-      "mode": "driveMotion",
+      "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
     {
       "clip": "Archer_standing_dodge_backward",
-      "mode": "driveMotion",
+      "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
     {
       "clip": "Archer_standing_dodge_forward",
-      "mode": "driveMotion",
+      "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
     {
       "clip": "Archer_standing_dodge_left",
-      "mode": "driveMotion",
+      "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
     {
       "clip": "Archer_standing_dodge_right",
-      "mode": "driveMotion",
+      "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
     {

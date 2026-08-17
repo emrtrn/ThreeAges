@@ -21870,7 +21870,7 @@
       "name": "Temple First Age Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Temple_FirstAge_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_FirstAge_Level1.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -21884,7 +21884,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 371539
+        "bytes": 736972
       },
       "license": "Unknown"
     },
@@ -21893,7 +21893,7 @@
       "name": "Temple First Age Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Temple_FirstAge_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_FirstAge_Level2.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -21907,7 +21907,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 455362
+        "bytes": 574984
       },
       "license": "Unknown"
     },
@@ -21916,7 +21916,7 @@
       "name": "Temple First Age Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Temple_FirstAge_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_FirstAge_Level3.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -21930,7 +21930,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 846578
+        "bytes": 797056
       },
       "license": "Unknown"
     },
@@ -21939,7 +21939,7 @@
       "name": "Temple Second Age Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Temple_SecondAge_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_SecondAge_Level1.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -21953,7 +21953,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 36372
+        "bytes": 619624
       },
       "license": "Unknown"
     },
@@ -21962,7 +21962,7 @@
       "name": "Temple Second Age Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Temple_SecondAge_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_SecondAge_Level2.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -21976,7 +21976,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 168851
+        "bytes": 777496
       },
       "license": "Unknown"
     },
@@ -21985,7 +21985,7 @@
       "name": "Temple Second Age Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Temple_SecondAge_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_SecondAge_Level3.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -21999,7 +21999,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 391069
+        "bytes": 875672
       },
       "license": "Unknown"
     },

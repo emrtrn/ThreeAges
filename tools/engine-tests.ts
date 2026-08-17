@@ -199,6 +199,7 @@ import {
 import {
   RtsNotifyEffectBudget,
   RTS_NOTIFY_EFFECTS,
+  RTS_THROW_RELEASE_NOTIFY,
   rtsNotifyEffectIds,
 } from "../src/game/rts/content/rtsNotifyEffects";
 import {
@@ -210,12 +211,14 @@ import {
   resolveRtsWorkMontage,
   rtsActionClip,
   rtsActionSequence,
+  RTS_LOCOMOTION_CALIBRATION,
   rtsLocomotionTuning,
   rtsPlaybackRate,
   rtsWorkRoleForActivity,
   rtsWorkMontageSection,
   selectRtsAnimation,
   RTS_ACTION_NONE,
+  RTS_FLINCH_REFRACTORY_SECONDS,
   RTS_WORK_MONTAGE_NONE,
   type RtsAnimationInput,
   type RtsMontageSource,
@@ -329,7 +332,7 @@ import { AiExpansionCoordinator, AI_MAX_EXPANSION_PLANS } from "../src/game/rts/
 import { ProductionLogisticsSystem } from "../src/game/rts/economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
-import { Caravan, CaravanSystem } from "../src/game/rts/logistics/caravanSystem";
+import { Caravan, CaravanSystem, caravanLoadBearer } from "../src/game/rts/logistics/caravanSystem";
 import { ProducerCaravanLanes, producerLaneId } from "../src/game/rts/logistics/producerCaravanLanes";
 import { advanceCaravanRoute, startCaravanRoute } from "../src/game/rts/logistics/caravanRoute";
 import { isCaravanCarrying, isCaravanVisible } from "../src/game/rts/logistics/caravanView";
@@ -37444,7 +37447,11 @@ check("Caravan cargo: authored load meshes are validated, bound, and shown for e
   }, "BP_Pack");
 
   const good = readRtsActorCargoVisuals(defWith("loaded"));
-  assert.deepEqual("cargo" in good ? good.cargo : null, [["cargoLeft", "loaded"]], "a well-formed cargo flag is read off its mesh");
+  assert.deepEqual(
+    "cargo" in good ? good.cargo : null,
+    [{ componentId: "cargoLeft", visibility: "loaded", activity: null }],
+    "a well-formed cargo flag is read off its mesh, unfiltered by assignment",
+  );
   assert.ok("cargo" in readRtsActorCargoVisuals(defWith("empty")), "the empty-leg half is authorable too");
 
   // Each of these is a load that would never appear, which looks exactly like
@@ -37528,8 +37535,12 @@ check("Caravan cargo: the shipped donkey Actor carries authored panniers that ri
   const read = readRtsActorCargoVisuals(def);
   assert.ok("cargo" in read && read.cargo.length === 2, "the donkey authors a load on both flanks");
   assert.ok(
-    "cargo" in read && read.cargo.every(([, visibility]) => visibility === "loaded"),
+    "cargo" in read && read.cargo.every((node) => node.visibility === "loaded"),
     "both are outbound-only cargo",
+  );
+  assert.ok(
+    "cargo" in read && read.cargo.every((node) => node.activity === null),
+    "and unfiltered: a pack animal has one kind of load, so nothing narrows it by assignment",
   );
   // Mirrored, not stacked: two loads at the same X would read as one lump.
   const flanks = def.components
@@ -39501,8 +39512,13 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
     const actor = normalizeActorScriptDef(rawActor);
     assert.deepEqual(
       readRtsActorCargoVisuals(actor),
-      { cargo: [["carriedCrate", "loaded"]] },
-      `${actorName} drives its crate from the same loaded cargo state`,
+      {
+        cargo: [
+          { componentId: "carriedCrate", visibility: "loaded", activity: "carryingBox" },
+          { componentId: "carriedBarrel", visibility: "loaded", activity: "carryingLoad" },
+        ],
+      },
+      `${actorName} drives both of its loads from the same loaded cargo state, told apart by assignment`,
     );
     const crate = actor.components.find((component) => component.id === "carriedCrate");
     assert.equal(crate?.props.assetId, "crate", `${actorName} carries the authored Crate mesh rather than an invisible stand-in`);
@@ -39536,6 +39552,558 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
     selectRtsAnimation({ ...carryingInput(6), carrying: false }, worker.animationSet, shipped, tuning)?.clip,
     "Sprint_Loop",
     "clearing the real cargo snapshot restores ordinary locomotion immediately",
+  );
+
+  // §10.3: the holding pair is reachable *only* through a load. Asserted over
+  // every state an empty-handed worker can be in rather than at one speed,
+  // because the failure it guards is a worker miming a crate he does not have.
+  const holdingClips = new Set([worker.animationSet.carryIdle, worker.animationSet.carryWalk]);
+  for (const speed of [0, 0.1, 1, 3, 6, 12]) {
+    for (const working of [false, true]) {
+      const selection = selectRtsAnimation(
+        { ...carryingInput(speed), carrying: false, working },
+        worker.animationSet, shipped, tuning,
+      );
+      assert.ok(
+        selection && !holdingClips.has(selection.clip),
+        `an unloaded worker at ${speed} u/s${working ? " on his job" : ""} cannot reach a carrying clip`,
+      );
+    }
+  }
+
+  // §10.2: the prop and the pose are the same frame because they are the same
+  // snapshot — one `carrying` boolean reaches the cargo nodes and the selector,
+  // with nothing in between that could apply one a frame later than the other.
+  const droppedDef = normalizeActorScriptDef(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Actors/Units/BP_RTS_Worker.actor.json", "utf8")) as unknown,
+    "BP_RTS_Worker",
+  );
+  const droppedTree = buildActorPresentationTree(droppedDef, "BP_RTS_Worker", () => undefined);
+  const droppedCrate = findActorComponentNode(droppedTree, "carriedCrate")!;
+  const droppedFrame = { ...carryingInput(6), carrying: false, workerActivity: "lumber" as const };
+  applyRtsCargoVisibility(bindRtsCargoVisuals(droppedDef, droppedTree), droppedFrame.carrying, droppedFrame.workerActivity);
+  assert.equal(droppedCrate.visible, false, "the frame the load is released, the crate is already gone");
+  assert.ok(
+    !holdingClips.has(selectRtsAnimation(droppedFrame, worker.animationSet, shipped, tuning)?.clip ?? ""),
+    "and that same frame has already left the carrying pose",
+  );
+});
+
+/**
+ * Minimal forward kinematics over the Worker GLB, for checks that need to know
+ * where a bone actually is at a given instant.
+ *
+ * It exists because Faz 6's contract is "the marker is on the contact", and a
+ * contact is a fact about the animation data, not about the number somebody
+ * typed. Comparing an authored time against a remembered constant would pin the
+ * tuning; comparing it against the clip's own geometry pins the meaning, and
+ * survives any retime that keeps the marker on the moment it belongs to.
+ *
+ * Deliberately tiny: no Three.js, no skinning, no scene root. It walks the node
+ * parent chain with the clip's sampled TRS, which is all a bone position needs.
+ */
+function workerFk() {
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")))
+    ?? assert.fail("the Worker model is not a readable GLB");
+  const gltf = parsed.json as unknown as {
+    accessors: { bufferView: number; byteOffset?: number; componentType: number; count: number; type: string; max?: number[] }[];
+    bufferViews: { byteOffset?: number }[];
+    nodes: { name?: string; children?: number[]; translation?: number[]; rotation?: number[]; scale?: number[] }[];
+    animations: {
+      name: string;
+      channels: { sampler: number; target: { node: number; path: string } }[];
+      samplers: { input: number; output: number }[];
+    }[];
+  };
+  const bin = parsed.bin ?? assert.fail("the Worker GLB carries its animation buffer inline");
+  const parentOf = new Array<number>(gltf.nodes.length).fill(-1);
+  gltf.nodes.forEach((node, index) => (node.children ?? []).forEach((child) => { parentOf[child] = index; }));
+  const nodeByName = new Map(gltf.nodes.map((node, index) => [node.name ?? "", index]));
+  const floats = (index: number): Float32Array => {
+    const accessor = gltf.accessors[index]!;
+    const comps = { SCALAR: 1, VEC3: 3, VEC4: 4 }[accessor.type as "SCALAR" | "VEC3" | "VEC4"]!;
+    const start = (gltf.bufferViews[accessor.bufferView]?.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+    const dv = new DataView(bin.buffer, bin.byteOffset + start, accessor.count * comps * 4);
+    const out = new Float32Array(accessor.count * comps);
+    for (let i = 0; i < out.length; i += 1) out[i] = dv.getFloat32(i * 4, true);
+    return out;
+  };
+  const durationOf = (clip: string): number => {
+    const animation = gltf.animations.find((entry) => entry.name === clip);
+    if (!animation) return Number.NaN;
+    let end = 0;
+    for (const sampler of animation.samplers) end = Math.max(end, gltf.accessors[sampler.input]?.max?.[0] ?? 0);
+    return end;
+  };
+  const compose = (t: number[], r: number[], s: number[]): number[] => {
+    const [x, y, z, w] = r as [number, number, number, number];
+    const x2 = x + x, y2 = y + y, z2 = z + z;
+    const xx = x * x2, xy = x * y2, xz = x * z2, yy = y * y2, yz = y * z2, zz = z * z2;
+    const wx = w * x2, wy = w * y2, wz = w * z2;
+    return [
+      (1 - (yy + zz)) * s[0]!, (xy + wz) * s[0]!, (xz - wy) * s[0]!, 0,
+      (xy - wz) * s[1]!, (1 - (xx + zz)) * s[1]!, (yz + wx) * s[1]!, 0,
+      (xz + wy) * s[2]!, (yz - wx) * s[2]!, (1 - (xx + yy)) * s[2]!, 0,
+      t[0]!, t[1]!, t[2]!, 1,
+    ];
+  };
+  const mul = (a: number[], b: number[]): number[] => {
+    const out = new Array<number>(16).fill(0);
+    for (let col = 0; col < 4; col += 1) {
+      for (let row = 0; row < 4; row += 1) {
+        let sum = 0;
+        for (let k = 0; k < 4; k += 1) sum += a[k * 4 + row]! * b[col * 4 + k]!;
+        out[col * 4 + row] = sum;
+      }
+    }
+    return out;
+  };
+  const slerp = (a: number[], b: number[], t: number): number[] => {
+    let dot = a[0]! * b[0]! + a[1]! * b[1]! + a[2]! * b[2]! + a[3]! * b[3]!;
+    let end = b;
+    if (dot < 0) { end = b.map((v) => -v); dot = -dot; }
+    if (dot > 0.9995) return a.map((v, i) => v + (end[i]! - v) * t);
+    const theta = Math.acos(dot);
+    const sin = Math.sin(theta);
+    return a.map((v, i) => v * (Math.sin((1 - t) * theta) / sin) + end[i]! * (Math.sin(t * theta) / sin));
+  };
+
+  /** World-space Y of one bone across a clip, sampled at `hz`. */
+  const heightSeries = (clipName: string, boneName: string, hz = 60): { time: number; y: number }[] => {
+    const animation = gltf.animations.find((entry) => entry.name === clipName)
+      ?? assert.fail(`the Worker ships the authored clip "${clipName}"`);
+    const bone = nodeByName.get(boneName) ?? assert.fail(`the Worker rig has a bone named "${boneName}"`);
+    const tracks = animation.channels.map((channel) => ({
+      node: channel.target.node,
+      path: channel.target.path,
+      input: floats(animation.samplers[channel.sampler]!.input),
+      output: floats(animation.samplers[channel.sampler]!.output),
+      comps: { translation: 3, rotation: 4, scale: 3 }[channel.target.path as "translation" | "rotation" | "scale"] ?? 3,
+    }));
+    const duration = durationOf(clipName);
+    const frames = Math.max(2, Math.round(duration * hz) + 1);
+    const series: { time: number; y: number }[] = [];
+    for (let frame = 0; frame < frames; frame += 1) {
+      const time = (frame / (frames - 1)) * duration;
+      const pose = gltf.nodes.map((node) => ({
+        t: [...(node.translation ?? [0, 0, 0])],
+        r: [...(node.rotation ?? [0, 0, 0, 1])],
+        s: [...(node.scale ?? [1, 1, 1])],
+      }));
+      for (const track of tracks) {
+        const times = track.input;
+        let index = 0;
+        while (index < times.length - 1 && times[index + 1]! < time) index += 1;
+        const next = Math.min(index + 1, times.length - 1);
+        const span = times[next]! - times[index]!;
+        const alpha = span > 1e-9 ? (time - times[index]!) / span : 0;
+        const a = Array.from(track.output.slice(index * track.comps, index * track.comps + track.comps));
+        const b = Array.from(track.output.slice(next * track.comps, next * track.comps + track.comps));
+        const value = track.path === "rotation" ? slerp(a, b, alpha) : a.map((v, i) => v + (b[i]! - v) * alpha);
+        const target = pose[track.node]!;
+        if (track.path === "translation") target.t = value;
+        if (track.path === "rotation") target.r = value;
+        if (track.path === "scale") target.s = value;
+      }
+      let matrix = compose(pose[bone]!.t, pose[bone]!.r, pose[bone]!.s);
+      for (let parent = parentOf[bone]!; parent !== -1; parent = parentOf[parent]!) {
+        matrix = mul(compose(pose[parent]!.t, pose[parent]!.r, pose[parent]!.s), matrix);
+      }
+      series.push({ time, y: matrix[13]! });
+    }
+    return series;
+  };
+
+  return { durationOf, heightSeries };
+}
+
+check("Worker Faz 6: her isaret gercek bir klibin icinde ve ait oldugu rolde durur", () => {
+  const worker = normalizeAssetSkeleton(JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
+  ) as unknown);
+  assert.ok(worker.notifies.length > 0, "the Worker authors animation notifies");
+  const { durationOf } = workerFk();
+
+  for (const notify of worker.notifies) {
+    const duration = durationOf(notify.clip);
+    // A misspelled clip is the silent failure: the marker is authored, the file
+    // validates, and no playhead ever visits it.
+    assert.ok(Number.isFinite(duration), `"${notify.clip}" is not a clip on the Worker rig`);
+    assert.ok(notify.time > 0, `${notify.name} on ${notify.clip} sits at the very first frame`);
+    assert.ok(notify.time < duration, `${notify.name} at ${notify.time}s is past the end of ${notify.clip} (${duration}s)`);
+  }
+
+  // Which marker belongs on which clip is the authoring contract, expressed as a
+  // relationship: a footfall on a clip the unit walks with, a contact on one it
+  // strikes with, a flinch on one it is struck with. Exact instants stay free.
+  const clipsFor = (name: string): string[] =>
+    worker.notifies.filter((notify) => notify.name === name).map((notify) => notify.clip);
+  const locomotion = [worker.animationSet.walk, worker.animationSet.run, worker.animationSet.carryWalk]
+    .filter((clip): clip is string => typeof clip === "string");
+  const footsteps = clipsFor("footstep");
+  assert.ok(footsteps.length > 0, "the Worker marks its footfalls");
+  for (const clip of footsteps) assert.ok(locomotion.includes(clip), `footstep marked on non-locomotion clip ${clip}`);
+  for (const clip of locomotion) {
+    assert.equal(footsteps.filter((marked) => marked === clip).length, 2, `${clip} marks both feet`);
+  }
+
+  const flinches = [worker.animationSet.hit, ...(worker.animationVariants.hit ?? [])]
+    .filter((clip): clip is string => typeof clip === "string");
+  const impacts = clipsFor("body-impact");
+  assert.equal(impacts.length, flinches.length, "every flinch variant marks its contact");
+  for (const clip of impacts) assert.ok(flinches.includes(clip), `body-impact marked on non-flinch clip ${clip}`);
+
+  assert.deepEqual(clipsFor("chop-impact"), [worker.animationSet.workChopping], "the axe bite belongs to the lumber loop");
+  const cultivation = [worker.animationSet.workCultivation, ...(worker.animationVariants.workCultivation ?? [])];
+  for (const clip of clipsFor("dig-impact")) assert.ok(cultivation.includes(clip), `dig-impact marked on non-farming clip ${clip}`);
+  assert.deepEqual(clipsFor("throw-release"), [worker.animationSet.attack], "the release belongs to the throw");
+
+  // Every authored name has a consumer. A marker with neither an effect nor a
+  // runtime reader is not a gap in the table — it is a marker nothing will ever
+  // do anything with, and it should be removed rather than left to look wired.
+  const consumedByRuntime = new Set([RTS_THROW_RELEASE_NOTIFY]);
+  for (const notify of worker.notifies) {
+    assert.ok(
+      RTS_NOTIFY_EFFECTS[notify.name] !== undefined || consumedByRuntime.has(notify.name),
+      `"${notify.name}" is authored but nothing draws or reads it`,
+    );
+  }
+
+  // The sidecar allowlist gotcha (CLAUDE.md): a field the editor's save path
+  // drops vanishes the next time anyone opens the asset in the editor.
+  const saved = validateAssetSkeletonDef(JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
+  ) as unknown).notifies as { name: string; clip: string; time: number }[];
+  assert.equal(saved.length, worker.notifies.length, "an editor save keeps every authored marker");
+});
+
+check("Worker Faz 6: temas isaretleri, klibin kendi olculen temas penceresinin icinde durur", () => {
+  // The check that makes the rest of Faz 6 worth having. A footstep marker half a
+  // cycle out of phase still fires, still throttles, still draws — and shows dust
+  // under a foot that is in the air. Nothing but the animation data can catch it,
+  // so the animation data is what it is compared against.
+  const worker = normalizeAssetSkeleton(JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
+  ) as unknown);
+  const { heightSeries, durationOf } = workerFk();
+  /** Where in its own travel a bone sits at `time`, as 0 (lowest) to 1 (highest). */
+  const travelAt = (clip: string, bone: string, time: number): number => {
+    const series = heightSeries(clip, bone);
+    const ys = series.map((sample) => sample.y);
+    const low = Math.min(...ys), high = Math.max(...ys);
+    const nearest = series.reduce((best, sample) =>
+      (Math.abs(sample.time - time) < Math.abs(best.time - time) ? sample : best));
+    return high - low > 1e-9 ? (nearest.y - low) / (high - low) : 0;
+  };
+
+  const locomotion = [worker.animationSet.walk, worker.animationSet.run, worker.animationSet.carryWalk]
+    .filter((clip): clip is string => typeof clip === "string");
+  for (const clip of locomotion) {
+    const times = worker.notifies.filter((notify) => notify.name === "footstep" && notify.clip === clip)
+      .map((notify) => notify.time);
+    // Two assertions, and deliberately not "which foot is which". At a heel
+    // strike the *other* foot is still flat on the ground pushing off, so naming
+    // the stepping foot by whichever is lower picks the trailing one half the
+    // time — a discriminator that argues with the animation rather than reading
+    // it. What the contract actually needs is that each marker has a foot down,
+    // and that the two alternate rather than doubling up on one stride.
+    for (const time of times) {
+      const lowest = Math.min(travelAt(clip, "LeftFoot", time), travelAt(clip, "RightFoot", time));
+      assert.ok(
+        lowest < 0.3,
+        `${clip}: the footstep at ${time}s fires with both feet off the ground (nearest is ${lowest.toFixed(2)} up its travel)`,
+      );
+    }
+    const duration = durationOf(clip);
+    const gap = Math.abs(times[0]! - times[1]!);
+    const spacing = Math.min(gap, duration - gap) / duration;
+    assert.ok(
+      spacing > 0.35 && spacing <= 0.5,
+      `${clip}: the two footfalls are ${(spacing * 100).toFixed(0)}% of the cycle apart, which is a stumble rather than a gait`,
+    );
+  }
+
+  // The axe bite is the bottom of the swing arc, where the blade stops going
+  // down and the chips would fly.
+  const chopClip = worker.animationSet.workChopping!;
+  const chop = worker.notifies.find((notify) => notify.name === "chop-impact")!;
+  assert.ok(
+    travelAt(chopClip, "RightHand", chop.time) < 0.25,
+    `${chopClip}: the axe bite at ${chop.time}s is not at the bottom of the swing`,
+  );
+
+  // Spade strokes: the hand down at the soil rather than up between passes.
+  const digClip = worker.animationSet.workCultivation!;
+  for (const notify of worker.notifies.filter((entry) => entry.name === "dig-impact")) {
+    assert.ok(
+      travelAt(digClip, "RightHand", notify.time) < 0.25,
+      `${digClip}: the dig at ${notify.time}s fires with the hand away from the ground`,
+    );
+  }
+
+  // A flinch marker fires when the blow reads as landed, which is on the way into
+  // the recoil rather than at its extreme: the burst belongs to the impact, not
+  // to the pose the impact ends in.
+  for (const notify of worker.notifies.filter((entry) => entry.name === "body-impact")) {
+    const series = heightSeries(notify.clip, "Spine2");
+    const origin = series[0]!.y;
+    let peak = { time: 0, distance: 0 };
+    for (const sample of series) {
+      const distance = Math.abs(sample.y - origin);
+      if (distance > peak.distance) peak = { time: sample.time, distance };
+    }
+    assert.ok(
+      notify.time < peak.time,
+      `${notify.clip}: the impact burst at ${notify.time}s fires after the recoil has already peaked (${peak.time}s)`,
+    );
+  }
+});
+
+check("Worker Faz 6: gercek Worker sidecar'i yururken ayak isaretini gercekten atar", () => {
+  // The Guard's twin of this check earned its place when the first world-in
+  // acceptance reported no dust at all, and it is what proved the line was
+  // firing while the art was unreadable. The Worker needs its own because the
+  // things that can silence it are the Worker's own: its clip names, its
+  // `lockXYZ` walk, its `Spine` upper-body split, and — new here — clip
+  // durations that the authored marker times have to fit inside. A marker at
+  // 1.308s on a 1.133s clip validates, saves and never fires.
+  const worker = normalizeAssetSkeleton(JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
+  ) as unknown);
+  const { durationOf } = workerFk();
+  const node = (name: string): Object3D => { const object = new Object3D(); object.name = name; return object; };
+  const model = node("Worker_Rig");
+  const hips = node("Hips");
+  hips.add(node("Spine"), node("LeftUpLeg"), node("RightUpLeg"));
+  model.add(hips);
+  const root = new Group();
+  root.add(model);
+  const names = new Set<string>();
+  for (const clip of Object.values(worker.animationSet)) if (clip) names.add(clip);
+  for (const list of Object.values(worker.animationVariants)) for (const clip of list ?? []) names.add(clip);
+  // Real durations, straight off the model: a fixture that gave every clip the
+  // same convenient length would prove the machinery and hide the one mistake
+  // this check exists to catch.
+  const clips = [...names].map((name) => {
+    const duration = durationOf(name);
+    assert.ok(Number.isFinite(duration) && duration > 0, `${name} is a clip the Worker model actually ships`);
+    return new AnimationClip(name, duration, [
+      // A hip track for the root-motion lock to bite on: the walk is `lockXYZ`,
+      // so a fixture without one would run a different path than the game does.
+      new VectorKeyframeTrack("Hips.position", [0, duration], [0, 0, 0, 0, 0, 2]),
+      new VectorKeyframeTrack("Spine.position", [0, duration], [0, 0, 0, 0, 0, 0]),
+      new VectorKeyframeTrack("LeftUpLeg.position", [0, duration], [0, 0, 0, 0, 0, 0]),
+    ]);
+  });
+  const fired: string[] = [];
+  const presentation = createRtsUnitPresentation({
+    root,
+    pickTargets: [],
+    selectionRadius: 0.43,
+    moveSpeed: 6,
+    animation: { target: model, clips, skeleton: worker },
+    onNotify: (name) => fired.push(name),
+  });
+  // Walking at the speed the walk clip is calibrated to (half of `moveSpeed`),
+  // so playback runs at rate 1 and the marker count below is the clip's own
+  // arithmetic rather than a number that happens to come out right. Still under
+  // the 0.55 run threshold, so this is the walk clip and not the sprint.
+  const walkSpeed = 6 * RTS_LOCOMOTION_CALIBRATION.walkClipSpeed;
+  const seconds = 5;
+  for (let step = 0; step < seconds * 60; step += 1) {
+    presentation.update?.({
+      deltaSeconds: 1 / 60,
+      planarSpeed: walkSpeed,
+      attacking: false,
+      dying: false,
+      working: false,
+      attackCount: 0,
+      impactCount: 0,
+      cameraDistanceSquared: 400,
+    });
+  }
+  presentation.dispose();
+  assert.ok(fired.length > 0, "five seconds of walking marked no footfall at all");
+  assert.deepEqual([...new Set(fired)], ["footstep"], "and marked nothing else");
+  // Both authored markers reach the sink, not one doing all the work. Derived
+  // from the clip's own length rather than counted by hand, so a re-exported
+  // walk of a different duration keeps this honest: two per cycle, less one for
+  // the tick spent arming and one for a partial cycle at the end.
+  const cycles = seconds / durationOf(worker.animationSet.walk!);
+  const expected = Math.floor(cycles) * 2 - 1;
+  assert.ok(
+    fired.length >= expected,
+    `both authored footfalls fire each cycle (got ${fired.length}, expected at least ${expected})`,
+  );
+});
+
+check("Worker Faz 1: varyant havuzundaki klipler gercekten farkli animasyon verisi tasir", () => {
+  // §3.1's open question, and a real trap rather than a hypothetical one:
+  // `Idle_Loop` and `Idle_FoldArms_Loop` share a duration, a channel count and a
+  // key count, which is exactly what a duplicated export looks like. If they ever
+  // *were* the same data, the deterministic variant pool would still pick between
+  // them, still pass every selector check, and show one pose — variety that costs
+  // memory and delivers nothing, with no symptom to trace it by.
+  //
+  // Compared as animation data, not by name or duration: two clips are the same
+  // clip when every channel targets the same node with the same path and the same
+  // sampler bytes. Measured 2026-08-18: all 51 clips are distinct.
+  const parsed = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")));
+  assert.ok(parsed?.bin, "the Worker GLB carries its animation buffer inline");
+  const gltf = parsed!.json as unknown as {
+    accessors: { bufferView: number; byteOffset?: number; componentType: number; count: number; type: string }[];
+    bufferViews: { byteOffset?: number }[];
+    nodes: { name?: string }[];
+    animations: {
+      name: string;
+      channels: { sampler: number; target: { node: number; path: string } }[];
+      samplers: { input: number; output: number; interpolation?: string }[];
+    }[];
+  };
+  const componentBytes: Record<number, number> = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
+  const componentCount: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
+  const accessorBytes = (index: number): Uint8Array => {
+    const accessor = gltf.accessors[index]!;
+    const start = (gltf.bufferViews[accessor.bufferView]?.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
+    const length = accessor.count * componentBytes[accessor.componentType]! * componentCount[accessor.type]!;
+    return parsed!.bin!.subarray(start, start + length);
+  };
+  const signatureOf = (name: string): string => {
+    const animation = gltf.animations.find((clip) => clip.name === name)
+      ?? assert.fail(`the Worker ships the authored clip "${name}"`);
+    return animation.channels
+      .map((channel) => {
+        const sampler = animation.samplers[channel.sampler]!;
+        return [
+          channel.target.path,
+          gltf.nodes[channel.target.node]?.name ?? channel.target.node,
+          Buffer.from(accessorBytes(sampler.input)).toString("base64"),
+          Buffer.from(accessorBytes(sampler.output)).toString("base64"),
+        ].join("|");
+      })
+      .sort()
+      .join("\n");
+  };
+
+  const worker = normalizeAssetSkeleton(JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
+  ) as unknown);
+  // Every pool the sidecar authors, so a future variant added to any role is
+  // covered without this check being edited.
+  let pools = 0;
+  for (const [role, variants] of Object.entries(worker.animationVariants)) {
+    const clips = [...new Set([worker.animationSet[role], ...(variants ?? [])])]
+      .filter((clip): clip is string => typeof clip === "string");
+    if (clips.length < 2) continue;
+    pools += 1;
+    const seen = new Map<string, string>();
+    for (const clip of clips) {
+      const signature = signatureOf(clip);
+      const twin = seen.get(signature);
+      assert.equal(
+        twin,
+        undefined,
+        `the "${role}" pool offers ${clip} and ${twin} as alternatives, but they carry identical animation data`,
+      );
+      seen.set(signature, clip);
+    }
+  }
+  assert.ok(pools > 0, "the Worker still authors at least one multi-clip variant pool for this to cover");
+});
+
+check("Worker Faz 4A: yuk isciden esege tek karede gecer, iki kez veya bos kare gorunmeden", () => {
+  // §10.2A's whole requirement is a *negative* one — never two barrels, never a
+  // gap — so it is asserted as an invariant over a real trip rather than at a
+  // hand-picked instant. Both sides are derived from the same phase read, which
+  // is what makes the invariant structural instead of a coincidence of ordering.
+  for (const [phase, active, bearer] of [
+    ["loading", false, "none"],
+    ["loading", true, "worker"],
+    ["outbound", false, "caravan"],
+    ["outbound", true, "caravan"],
+    ["unloading", false, "caravan"],
+    ["inbound", false, "none"],
+    ["inbound", true, "none"],
+  ] as const) {
+    assert.equal(
+      caravanLoadBearer(phase, active),
+      bearer,
+      `${phase}${active ? " while loading" : ""} is carried by ${bearer}`,
+    );
+  }
+  for (const phase of ["loading", "outbound", "unloading", "inbound"] as const) {
+    assert.equal(
+      isCaravanCarrying(phase),
+      caravanLoadBearer(phase, false) === "caravan",
+      `the donkey's own panniers read the shared decision on ${phase}`,
+    );
+  }
+
+  // Read here rather than through the caravan suite's helper: that one is a
+  // `const` declared much further down this file, and this check runs first.
+  const balance = validateCaravanBalance(
+    JSON.parse(readFileSync("public/game-data/balance/logistics.json", "utf8")) as unknown,
+  );
+  const roads = roadGraphOf([[{ x: -4, z: 0 }, { x: 4, z: 0 }]]);
+  const caravan = new Caravan(
+    "caravan:handoff", producerLaneId(1), "player",
+    { x: -4, z: 0 }, { x: 4, z: 0 }, balance, roads, 30,
+  );
+  const dispatch = { carryCapacity: 30, ready: true, canReceive: true };
+  // Small steps, so the frame the load changes hands is actually one of the
+  // frames observed rather than something a coarse delta stepped over.
+  const step = balance.loadSeconds / 8;
+  const frames: { worker: boolean; donkey: boolean }[] = [];
+  for (let index = 0; index < 40; index += 1) {
+    caravan.update(step, { x: -4, z: 0 }, { x: 4, z: 0 }, dispatch);
+    const bearer = caravanLoadBearer(caravan.phase, caravan.loadingActive);
+    frames.push({ worker: bearer === "worker", donkey: bearer === "caravan" });
+  }
+  assert.ok(frames.some((frame) => frame.worker), "the trip contains frames where a worker holds the shipment");
+  assert.ok(frames.some((frame) => frame.donkey), "and frames where the animal does");
+  assert.ok(
+    frames.every((frame) => !(frame.worker && frame.donkey)),
+    "no frame ever draws the same shipment twice",
+  );
+  const lastWorkerFrame = frames.map((frame) => frame.worker).lastIndexOf(true);
+  assert.equal(
+    frames[lastWorkerFrame + 1]?.donkey,
+    true,
+    "the frame after the worker puts the load down is the frame the animal has it — no empty frame between them",
+  );
+
+  // The other half of the same rule, on the Actor: one `carrying` boolean, two
+  // authored loads, and the assignment is what tells them apart. Without the
+  // filter a worker loading a caravan would sprout his gathering crate as well.
+  const def = normalizeActorScriptDef(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Actors/Units/BP_RTS_Worker.actor.json", "utf8")) as unknown,
+    "BP_RTS_Worker",
+  );
+  const tree = buildActorPresentationTree(def, "BP_RTS_Worker", () => undefined);
+  const bindings = bindRtsCargoVisuals(def, tree);
+  const crate = findActorComponentNode(tree, "carriedCrate")!;
+  const barrel = findActorComponentNode(tree, "carriedBarrel")!;
+  applyRtsCargoVisibility(bindings, true, "carryingBox");
+  assert.deepEqual([crate.visible, barrel.visible], [true, false], "a gathering return shows the crate alone");
+  applyRtsCargoVisibility(bindings, true, "carryingLoad");
+  assert.deepEqual([crate.visible, barrel.visible], [false, true], "loading a caravan shows the barrel alone");
+  applyRtsCargoVisibility(bindings, false, "lumber");
+  assert.deepEqual([crate.visible, barrel.visible], [false, false], "an empty-handed worker shows neither");
+
+  // And the pose follows the prop from the same snapshot: a barrel is a load,
+  // so the body carries it rather than standing empty-handed beside it.
+  const worker = normalizeAssetSkeleton(JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
+  ) as unknown);
+  const shipped = new Set((parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")))?.json.animations ?? [])
+    .map((clip) => clip.name));
+  assert.equal(
+    selectRtsAnimation(
+      { planarSpeed: 0, carrying: true, workerActivity: "carryingLoad", working: true, attacking: false, dying: false, attackCount: 0, impactCount: 0 },
+      worker.animationSet, shipped, rtsLocomotionTuning(6),
+    )?.role,
+    "carryIdle",
+    "a worker holding a caravan barrel is carrying, not kneeling at his job",
   );
 });
 
@@ -39809,6 +40377,208 @@ check("Worker Faz 5: fixing, odun, av, tas ve yumruk klipleri gercek durumlarla 
     ["React_Chest", "React_Head"].includes(rtsActionClip(hitAction, workerSkeleton.animationSet, shipped, workerSkeleton.animationVariants, 7) ?? ""),
     "actual health impacts drive a deterministic chest/head reaction",
   );
+});
+
+/**
+ * How long a clip runs in a parsed GLB, or null when the model does not ship it.
+ *
+ * The generic twin of {@link siegeGlbClipSeconds}, which is pinned to one rig.
+ * A clip's length is the last key on any of its samplers' inputs.
+ */
+function glbClipSeconds(parsed: ReturnType<typeof parseGlb>, clip: string): number | null {
+  const animation = parsed?.json.animations?.find((candidate) => candidate.name === clip);
+  if (!animation) return null;
+  let end = 0;
+  for (const sampler of animation.samplers ?? []) {
+    const max = parsed?.json.accessors?.[sampler.input!]?.max?.[0];
+    if (typeof max === "number") end = Math.max(end, max);
+  }
+  return end;
+}
+
+check("Worker Faz 5B: tas atisi yururken govdeye ayrilir ve elden birakma ani authored", () => {
+  const path = "public/assets/ThreeAges/Characters/Worker/worker.skeleton.json";
+  const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  const worker = normalizeAssetSkeleton(raw);
+  const saved = validateAssetSkeletonDef(raw);
+  const glb = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")));
+  const shipped = new Set((glb?.json.animations ?? []).map((clip) => clip.name));
+  const tuning = rtsLocomotionTuning(6);
+
+  // --- Katman: yürüyen bir atıcı bacaklarını kendi yürüyüşünde tutar ---
+  assert.equal(worker.layerAttackWhenMoving, true, "the Worker opts its throw into the upper body");
+  assert.equal(saved.layerAttackWhenMoving, true, "the editor save keeps that opt-in");
+  assert.equal(typeof worker.upperBodyBone, "string", "layering needs a split point, and the sidecar authors one");
+
+  const layering = { canLayerHit: true, canLayerAttack: true, walkSpeed: tuning.walkSpeed };
+  const durations = { attack: 1.4, attackMelee: 0.9, hit: 0.8, death: 2.4 };
+  const throwWhileWalking = advanceRtsAction(RTS_ACTION_NONE, {
+    planarSpeed: tuning.walkSpeed * 1.5, working: false, attacking: true, dying: false,
+    attackCount: 1, impactCount: 0,
+  }, durations, 1 / 60, layering);
+  assert.equal(throwWhileWalking.kind, "attack");
+  assert.equal(throwWhileWalking.layered, true, "a moving thrower keeps its stride under the throw");
+  const throwWhileStanding = advanceRtsAction(RTS_ACTION_NONE, {
+    planarSpeed: 0, working: false, attacking: true, dying: false, attackCount: 1, impactCount: 0,
+  }, durations, 1 / 60, layering);
+  assert.equal(throwWhileStanding.layered, false, "a standing thrower still throws with its whole body");
+
+  // --- Bırakma anı: notify gerçek klibin içinde ve elin soketi authored ---
+  const throwClip = worker.animationSet.attack ?? assert.fail("the Worker authors a throw clip");
+  const release = worker.notifies.find((notify) => notify.name === "throw-release")
+    ?? assert.fail("the Worker authors the release marker its thrown stone waits for");
+  assert.equal(release.clip, throwClip, "the marker sits on the same clip the attack role names");
+  assert.ok(
+    saved.notifies?.some((notify) => notify.name === "throw-release" && notify.clip === throwClip),
+    "the editor save keeps the release marker (saveValidator allowlist)",
+  );
+  // Derived from the shipped clip, so retiming the release stays green and only
+  // a marker that has fallen outside its own clip goes red.
+  const clipSeconds = glbClipSeconds(glb, throwClip);
+  assert.ok(clipSeconds !== null && clipSeconds > 0, `${throwClip} is shipped and has a real length`);
+  assert.ok(
+    release.time > 0 && release.time < clipSeconds!,
+    `the release lands inside the throw (${release.time}s of ${clipSeconds!.toFixed(3)}s), not before or after it`,
+  );
+  assert.ok(
+    worker.sockets.some((socket) => socket.name === "throw-release"),
+    "the stone leaves a socket that exists, so the flight starts at the animated hand",
+  );
+  for (const clip of Object.values(worker.animationSet)) assert.ok(shipped.has(clip!), `${clip} is shipped`);
+});
+
+check("Worker Faz 5C: dovus arasinda idle'a degil dovus durusuna donulur", () => {
+  const raw = JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8")) as unknown;
+  const worker = normalizeAssetSkeleton(raw);
+  const saved = validateAssetSkeletonDef(raw);
+  const tuning = rtsLocomotionTuning(6);
+  const base = { planarSpeed: 0, working: false, attacking: false, dying: false, attackCount: 0, impactCount: 0 };
+
+  const stance = worker.animationSet.combatIdle ?? assert.fail("the Worker authors a combat stance");
+  assert.equal(saved.animationSet?.combatIdle, stance, "the editor save keeps the stance role (saveValidator allowlist)");
+  assert.notEqual(stance, worker.animationSet.idle, "the stance is not the peacetime idle it replaces");
+  assert.ok(
+    ![worker.animationSet.idle, ...(worker.animationVariants.idle ?? [])].includes(stance),
+    "the idle pool cannot serve the combat stance, or a safe Worker would stand guard for nothing",
+  );
+
+  // Close quarters: the stone's own minimum makes `attacking` false here, which
+  // is exactly the gap that used to read as a man idling through a beating.
+  assert.equal(
+    classifyRtsAnimation({ ...base, engagedClose: true }, tuning), "combatIdle",
+    "an enemy inside close reach holds the body in its combat stance",
+  );
+  assert.equal(
+    classifyRtsAnimation({ ...base, engagedClose: true, working: true }, tuning), "combatIdle",
+    "the danger outranks the job it was assigned",
+  );
+  assert.equal(
+    classifyRtsAnimation({ ...base, engagedClose: true, planarSpeed: tuning.walkSpeed * 2 }, tuning), "walk",
+    "but it never pins a unit that has been ordered away",
+  );
+  assert.equal(classifyRtsAnimation(base, tuning), "idle", "and a Worker with nobody on it still idles");
+
+  // The ranged half of the same complaint: `attacking` is a one-shot's trigger,
+  // so the continuous channel underneath it must be the stance, not the idle.
+  const shipped = new Set(Object.values(worker.animationSet).filter((clip): clip is string => typeof clip === "string"));
+  assert.equal(
+    selectRtsAnimation({ ...base, attacking: true }, worker.animationSet, shipped, tuning)?.clip,
+    stance,
+    "a Worker waiting out its throw cooldown holds the stance too",
+  );
+
+  // Asset opt-in: an asset that authors no stance is untouched, which is what
+  // keeps every other unit in the project on the idle it always had.
+  const withoutStance = { ...worker.animationSet, combatIdle: undefined };
+  assert.equal(
+    selectRtsAnimation({ ...base, engagedClose: true }, withoutStance, shipped, tuning)?.clip,
+    worker.animationSet.idle,
+    "no authored stance falls back to the ordinary idle rather than holding a pose",
+  );
+  // And specifically not by way of `hold`: that clip is the stand-ground *order*
+  // (the Guard authors one), so borrowing it would show an order nobody gave and
+  // make the real one unreadable by showing it in every fight.
+  const guard = normalizeAssetSkeleton(
+    JSON.parse(readFileSync("public/assets/ThreeAges/Characters/Guard/Guard.skeleton.json", "utf8")) as unknown,
+  );
+  assert.ok(typeof guard.animationSet.hold === "string", "the Guard authors a stand-ground pose");
+  assert.equal(guard.animationSet.combatIdle, undefined, "and authors no combat stance");
+  const guardClips = new Set(Object.values(guard.animationSet).filter((clip): clip is string => typeof clip === "string"));
+  assert.equal(
+    selectRtsAnimation({ ...base, attacking: true }, guard.animationSet, guardClips, rtsLocomotionTuning(6))?.clip,
+    guard.animationSet.idle,
+    "an engaged Guard keeps its ordinary idle instead of borrowing its hold pose",
+  );
+});
+
+check("RTS irkilme araligi: dovulen birim kendi darbesini de ekranda gosterir", () => {
+  // Every length is derived from the refractory itself, so retuning that
+  // constant cannot turn this red: the flinch must be shorter than the gap for
+  // a gap to exist at all, the beating must be faster than the gap for the cap
+  // to do anything, and the unit's own blow must be slower than the flinch.
+  const durations = {
+    attack: RTS_FLINCH_REFRACTORY_SECONDS,
+    attackMelee: RTS_FLINCH_REFRACTORY_SECONDS * 0.5,
+    hit: RTS_FLINCH_REFRACTORY_SECONDS * 0.45,
+    death: RTS_FLINCH_REFRACTORY_SECONDS * 1.5,
+  };
+  const beatEvery = RTS_FLINCH_REFRACTORY_SECONDS * 0.7;
+  const punchEvery = RTS_FLINCH_REFRACTORY_SECONDS * 1.1;
+
+  const dt = 1 / 60;
+  let action = RTS_ACTION_NONE;
+  let started = { kind: action.kind, sequence: rtsActionSequence(action) };
+  let impacts = 0;
+  let punches = 0;
+  const flinchStartTimes: number[] = [];
+  let meleeStarts = 0;
+  for (let step = 1; step <= Math.ceil((RTS_FLINCH_REFRACTORY_SECONDS * 8) / dt); step += 1) {
+    const time = step * dt;
+    if (time >= (impacts + 1) * beatEvery) impacts += 1;
+    if (time >= (punches + 1) * punchEvery) punches += 1;
+    action = advanceRtsAction(action, {
+      planarSpeed: 0, working: false, attacking: true, dying: false,
+      attackCount: 0, impactCount: impacts, meleeCount: punches,
+    }, durations, dt);
+    const sequence = rtsActionSequence(action);
+    if (action.kind !== started.kind || sequence !== started.sequence) {
+      if (action.kind === "hit") flinchStartTimes.push(time);
+      if (action.kind === "attackMelee") meleeStarts += 1;
+      started = { kind: action.kind, sequence };
+    }
+    // A withheld flinch is dropped, never queued: the state reconciles against
+    // the live counter every frame, so nothing can replay it once the gap ends.
+    assert.equal(action.impactCount, impacts, `frame ${step} keeps the state reconciled against the live impact counter`);
+  }
+
+  assert.ok(flinchStartTimes.length >= 2, "a unit under a sustained beating still flinches");
+  assert.ok(
+    flinchStartTimes.length < impacts,
+    `the cap withholds some flinches (${flinchStartTimes.length} shown of ${impacts} blows taken)`,
+  );
+  for (let index = 1; index < flinchStartTimes.length; index += 1) {
+    assert.ok(
+      flinchStartTimes[index]! - flinchStartTimes[index - 1]! >= RTS_FLINCH_REFRACTORY_SECONDS - dt,
+      "two flinches never start closer together than the authored gap",
+    );
+  }
+  // The point of the whole cap: a unit being beaten faster than it can react is
+  // still seen answering. Measured on a Worker punching back at a Guard, where
+  // three landed blows had reached the screen as one.
+  assert.ok(meleeStarts >= 1, "the beaten unit's own blow reaches the screen at least once");
+
+  // And the priority itself is unchanged — a blow taken outranks a swing the
+  // moment the gap has elapsed.
+  const swinging = advanceRtsAction(RTS_ACTION_NONE, {
+    planarSpeed: 0, working: false, attacking: true, dying: false,
+    attackCount: 0, impactCount: 0, meleeCount: 1,
+  }, durations, dt);
+  assert.equal(swinging.kind, "attackMelee", "a landed close blow starts its swing");
+  const interrupted = advanceRtsAction({ ...swinging, flinchHoldSeconds: 0 }, {
+    planarSpeed: 0, working: false, attacking: true, dying: false,
+    attackCount: 0, impactCount: 1, meleeCount: 1,
+  }, durations, dt);
+  assert.equal(interrupted.kind, "hit", "a blow taken still interrupts a running swing once the gap has elapsed");
 });
 
 check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtime havuzuna girmez", () => {
@@ -40956,6 +41726,11 @@ check("Muhafiz Faz 2: darbe klibi olumden sonra gelir, saldiridan once, ve gecmi
 
   // The priority the plan fixes: a blow taken outranks a blow landed, in both
   // directions. It interrupts a swing…
+  //
+  // The wait is {@link RTS_FLINCH_REFRACTORY_SECONDS} doing its job: flinches
+  // are capped to one per gap, so this checks the *priority* on a body that is
+  // allowed to flinch rather than on one still inside the previous one's shadow.
+  state = advanceRtsAction(state, input({ impactCount: 1 }), durations, RTS_FLINCH_REFRACTORY_SECONDS);
   state = advanceRtsAction(state, input({ attackCount: 1, impactCount: 1, attacking: true }), durations, 0.1);
   assert.equal(state.kind, "attack");
   state = advanceRtsAction(state, input({ attackCount: 1, impactCount: 2, attacking: true }), durations, 0.1);
@@ -40972,19 +41747,30 @@ check("Muhafiz Faz 2: darbe klibi olumden sonra gelir, saldiridan once, ve gecmi
   state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 2, attacking: true }), durations, 0.3);
   assert.equal(state.kind, "none", "the flinch ends into locomotion, not into the swing it swallowed");
 
-  // Rapid fire: three blows inside one flinch are the *last* one played from the
-  // top, never three flinches queued behind each other.
+  // Rapid fire, inside the gap: the extra blows are withheld outright — one
+  // flinch, not three, and not one restarted three times. This is the cap, and
+  // it is what leaves a beaten unit frames its own blows can be seen in.
+  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 2 }), durations, RTS_FLINCH_REFRACTORY_SECONDS);
   state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 3 }), durations, 0.1);
+  assert.equal(state.kind, "hit", "the first of a burst still flinches");
   state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 4 }), durations, 0.1);
   state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 5 }), durations, 0.1);
-  assert.equal(state.remainingSeconds, 0.3, "the newest blow restarts the flinch from the top");
-  assert.equal(state.impactCount, 5);
-  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 5 }), durations, 0.31);
-  assert.equal(state.kind, "none", "and the older ones are never played back afterwards");
+  assert.ok(
+    Math.abs(state.remainingSeconds - 0.1) < 1e-9,
+    "the blows behind it neither restart it nor extend it — it simply runs down",
+  );
+  assert.equal(state.impactCount, 5, "while the counter still tracks every blow that landed");
+  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 5 }), durations, 0.11);
+  assert.equal(state.kind, "none", "and the withheld ones are never played back afterwards");
+
+  // Spaced beyond the gap, the original rule is untouched: a new blow starts a
+  // new flinch from the top.
+  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 5 }), durations, RTS_FLINCH_REFRACTORY_SECONDS);
+  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 6 }), durations, 0.1);
+  assert.equal(state.kind, "hit", "a blow landed after the gap flinches again");
+  assert.equal(state.remainingSeconds, 0.3, "from the clip's whole length");
 
   // Death outranks it, and the blows that killed him do not stand him back up.
-  state = advanceRtsAction(state, input({ attackCount: 2, impactCount: 6 }), durations, 0.1);
-  assert.equal(state.kind, "hit");
   state = advanceRtsAction(state, input({ dying: true, attackCount: 2, impactCount: 7 }), durations, 0.1);
   assert.equal(state.kind, "death", "the fall interrupts the flinch");
   assert.equal(state.remainingSeconds, 1.2);
@@ -41594,7 +42380,8 @@ check("Muhafiz Faz 6: her isaret bir kez atilir ve kare boyu bunu degistirmez", 
   paused.presentation.dispose();
 
   // An asset that authors no markers never enters the path at all: this feature
-  // has to cost the archer, the worker and every animal exactly nothing.
+  // has to cost the archer and every animal exactly nothing. (The Worker was on
+  // that list until its own Faz 6 authored its footfalls and job contacts.)
   const unmarked = driveRtsNotifies({ notifies: [] });
   for (let step = 0; step < 120; step += 1) {
     unmarked.presentation.update?.({ ...RTS_NOTIFY_WALK, deltaSeconds: 1 / 60 });
@@ -42220,6 +43007,23 @@ check("Muhafiz Faz 2b: yuruyen birim darbeyi belden yukarisi oynatir, duran biri
   moving = advanceRtsAction(moving, input({ planarSpeed: 0, impactCount: 1 }), durations, 0.25, layering);
   assert.equal(moving.kind, "none", "and it still ends on its own length");
   assert.equal(moving.layered, false, "which hands the torso back");
+
+  // The other half of that one-way rule, and the one a struck Archer exposed:
+  // a blow taken standing is full-body, but a move order arriving mid-flinch has
+  // to promote it. Without this the simulation slides the unit forward while the
+  // impact clip holds its feet — the same foot-skate the moving case above
+  // removes, reached from the opposite direction.
+  const standingHit = advanceRtsAction(RTS_ACTION_NONE, input({ impactCount: 1 }), durations, 0, layering);
+  assert.equal(standingHit.layered, false);
+  let marchedMidFlinch = advanceRtsAction(
+    standingHit, input({ planarSpeed: 4, impactCount: 1 }), durations, 0.1, layering,
+  );
+  assert.equal(marchedMidFlinch.kind, "hit");
+  assert.equal(marchedMidFlinch.layered, true, "a move order mid-flinch lifts the reaction above the waist");
+  marchedMidFlinch = advanceRtsAction(
+    marchedMidFlinch, input({ planarSpeed: 0, impactCount: 1 }), durations, 0.1, layering,
+  );
+  assert.equal(marchedMidFlinch.layered, true, "and stopping again cannot pop it back to full body");
 
   // The other two one-shots are never demoted. A swing is thrown from a
   // standstill and a fall is the whole body by definition, so neither has legs

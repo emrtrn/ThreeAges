@@ -77,7 +77,7 @@
     "chaseRange": 20,
     "kickDamage": 12,
     "kickRange": 1.6,
-    "kickCooldown": 2.0,
+    "kickCooldown": 2,
     "visionRadius": 21,
     "damageMultipliers": {
       "light": 4,
@@ -105,7 +105,7 @@
     "maxHealth": 50,
     "moveSpeed": 6,
     "attackType": "ranged",
-    "attackDamage": 1,
+    "attackDamage": 5,
     "attackCooldown": 2,
     "attackRange": 6,
     "minAttackRange": 1.25,

@@ -75,7 +75,7 @@ import {
   rtsContentAssetsState,
   type RtsActorLoadReport,
 } from "./content/rtsActorVisualFactory";
-import { RtsNotifyEffectBudget, rtsNotifyEffectIds } from "./content/rtsNotifyEffects";
+import { RTS_THROW_RELEASE_NOTIFY, RtsNotifyEffectBudget, rtsNotifyEffectIds } from "./content/rtsNotifyEffects";
 import { AiController } from "./ai/aiController";
 import { SettlementAiSiteProvider } from "./ai/aiSiteProvider";
 import { proceduralDepotRoadRank, proceduralRoadSiteFailure } from "./ai/aiRoadSiteFilter";
@@ -325,6 +325,12 @@ import type {
 import type { AiObjectiveWatch } from "./ai/armyManager";
 
 const MAX_PIXEL_RATIO = 2;
+/**
+ * How long a fired-but-unreleased stone waits for its notify before it is
+ * dropped. Comfortably longer than any authored throw clip, so only a genuinely
+ * interrupted throw expires; a tuning value, not a contract.
+ */
+const PENDING_THROW_TIMEOUT_SECONDS = 3;
 const ADAPTIVE_TICK_INTERVAL_SECONDS = 0.5;
 const PERFORMANCE_SNAPSHOT_INTERVAL_SECONDS = 0.5;
 /**
@@ -827,6 +833,15 @@ export class RtsApp {
   private readonly unitNotifyBudget = new RtsNotifyEffectBudget();
   /** Monotonic real-seconds reading the notify rate cap measures against. */
   private unitNotifyClock = 0;
+  /**
+   * Stones fired but not yet released by the throwing arm, keyed by unit id.
+   *
+   * Presentation-only bookkeeping: every entry describes damage that has already
+   * been applied, so losing one costs a visible rock and nothing else. Held here
+   * rather than on the `Unit` for the same reason `SiegeMeleeState` is — a unit
+   * that never throws should not carry a field for it.
+   */
+  private readonly pendingThrows = new Map<number, { target: Vector3; speed: number | undefined; firedAt: number }>();
   /**
    * Real-time accumulators for the repeating damage slots, keyed `<id>:<slot>`.
    * Reconciled against the live set every frame, so a building that heals, dies
@@ -1575,6 +1590,9 @@ export class RtsApp {
       // choice to escort a worker into wolf territory.
       (owner, x, z) => owner === AI_OWNER && this.ai.workerLocationUnsafe(x, z),
       (owner) => owner !== PLAYER_OWNER || this.automaticWorkerAssignmentEnabled,
+      // Read lazily rather than captured: the caravan fleet is built further down
+      // this constructor, and this is only ever asked during a tick.
+      (producerStructureId) => this.caravans.isLoadingOn(producerLaneId(producerStructureId)),
     );
     this.logisticsTransfers = new LogisticsTransferSystem(
       this.economyProduction,
@@ -3568,6 +3586,11 @@ export class RtsApp {
    * burst it is chasing.
    */
   private playUnitNotify(unit: Unit, name: string): void {
+    // The one notify with a consumer other than a puff of particles: it releases
+    // a stone whose damage `unitCombat` already applied (see `launchShot`).
+    // Handled before the effect budget, because a throttled *effect* must never
+    // become a throw that never left the hand.
+    if (name === RTS_THROW_RELEASE_NOTIFY) this.releasePendingThrow(unit);
     const position = unit.position;
     const binding = this.unitNotifyBudget.request(
       name,
@@ -3578,6 +3601,42 @@ export class RtsApp {
     this.unitNotifyVfx.play(binding.effectId, {
       position: [position.x, position.y + binding.heightOffset, position.z],
     });
+  }
+
+  /**
+   * Put the stone this thrower already threw into the air, from the hand it is
+   * leaving right now.
+   *
+   * The start point is the unit's muzzle, which for a Worker is its
+   * `throw-release` socket — so the rock leaves the animated hand rather than a
+   * fixed height on the body. A thrower whose Actor marks no muzzle keeps the
+   * old chest-height origin instead of losing the stone altogether.
+   */
+  private releasePendingThrow(unit: Unit): void {
+    const pending = this.pendingThrows.get(unit.id);
+    if (!pending) return;
+    this.pendingThrows.delete(unit.id);
+    const muzzle = unit.muzzleWorldPosition(this.scratchMuzzle);
+    this.thrownRocks.spawn(
+      muzzle ?? new Vector3(unit.position.x, unit.position.y + 1.25, unit.position.z),
+      pending.target,
+      pending.speed,
+    );
+  }
+
+  /**
+   * Drop throws whose release never arrived.
+   *
+   * A flinch, a death or a move order can cut the throw clip before its notify,
+   * and that stone is simply not thrown — the arm never completed the motion, and
+   * the blow it reported landed regardless. Without this the entry would sit in
+   * the map until that unit threw again, and a unit that died mid-wind-up would
+   * leave one behind for the rest of the match.
+   */
+  private sweepPendingThrows(): void {
+    for (const [id, pending] of this.pendingThrows) {
+      if (this.unitNotifyClock - pending.firedAt > PENDING_THROW_TIMEOUT_SECONDS) this.pendingThrows.delete(id);
+    }
   }
 
   /**
@@ -4184,6 +4243,11 @@ export class RtsApp {
     const arrivals = this.caravans.update(dt);
     this.logisticsTransfers.update(arrivals);
     this.marketSupply.deliver(arrivals);
+    // Deliberately here rather than inside the economy tick above (Worker plan
+    // §10.2A): the donkey's panniers and the worker's barrel are both decided
+    // from the phase this update just wrote, so the shipment changes hands on one
+    // frame instead of appearing twice on the frame the animal leaves.
+    this.economyProduction?.applyCaravanLoadPresentation();
     this.perfMeasure("lojistik", logisticsMark);
     // Only the human kingdom's production is narrated; the AI's own queue events
     // are surfaced by its decision log in a later slice.
@@ -4353,12 +4417,19 @@ export class RtsApp {
         // A Worker answers a distant attacker with the authored OverhandThrow
         // clip and this Rock.gltf flight. Damage was already resolved by
         // `unitCombat`; the stone is deliberately a report, not a hit detector.
-        const muzzle = shot.attacker.muzzleWorldPosition(this.scratchMuzzle);
-        this.thrownRocks.spawn(
-          muzzle ?? new Vector3(shot.attacker.position.x, shot.attacker.position.y + 1.25, shot.attacker.position.z),
-          shot.target.position,
-          shot.attacker.stats.projectileSpeed,
-        );
+        //
+        // Which is exactly why the stone may wait for the arm. Spawning it here
+        // put it in the air on the clip's first frame, with the hand still cocked
+        // behind the head — the rock left from a point the thrower had not
+        // reached yet. So the flight is parked until the `throw-release` notify
+        // says the hand is at full extension, and released from the socket it is
+        // actually in at that moment. Nothing in combat waits on it.
+        this.pendingThrows.set(shot.attacker.id, {
+          target: shot.target.position.clone(),
+          speed: shot.attacker.stats.projectileSpeed,
+          firedAt: this.unitNotifyClock,
+        });
+        this.sweepPendingThrows();
         return 0;
       }
       // The Archer's release point rides its rendered right-hand socket. The

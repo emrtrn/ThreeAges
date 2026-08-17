@@ -37,6 +37,7 @@
     "carryIdle": "Farming_holding_idle",
     "carryWalk": "Farming_holding_walk",
     "carryPose": "Farming_box_idle",
+    "combatIdle": "Idle_Torch_Loop",
     "attack": "OverhandThrow",
     "attackHunting": "Attack",
     "attackMelee": "Punch_Jab",
@@ -59,7 +60,68 @@
     ]
   },
   "blendSpaces": [],
-  "notifies": [],
+  "notifies": [
+    {
+      "name": "throw-release",
+      "clip": "OverhandThrow",
+      "time": 0.41
+    },
+    {
+      "name": "footstep",
+      "clip": "Walk_Loop",
+      "time": 0.642
+    },
+    {
+      "name": "footstep",
+      "clip": "Walk_Loop",
+      "time": 1.308
+    },
+    {
+      "name": "footstep",
+      "clip": "Sprint_Loop",
+      "time": 0.358
+    },
+    {
+      "name": "footstep",
+      "clip": "Sprint_Loop",
+      "time": 0.675
+    },
+    {
+      "name": "footstep",
+      "clip": "Farming_holding_walk",
+      "time": 0.375
+    },
+    {
+      "name": "footstep",
+      "clip": "Farming_holding_walk",
+      "time": 1.067
+    },
+    {
+      "name": "body-impact",
+      "clip": "React_Chest",
+      "time": 0.092
+    },
+    {
+      "name": "body-impact",
+      "clip": "React_Head",
+      "time": 0.108
+    },
+    {
+      "name": "chop-impact",
+      "clip": "TreeChopping_Loop",
+      "time": 0.3
+    },
+    {
+      "name": "dig-impact",
+      "clip": "Farming_dig_and_plant_seeds",
+      "time": 1.433
+    },
+    {
+      "name": "dig-impact",
+      "clip": "Farming_dig_and_plant_seeds",
+      "time": 2.933
+    }
+  ],
   "montages": [
     {
       "name": "work",
@@ -120,6 +182,7 @@
   "physicsBodies": [],
   "physicsConstraints": [],
   "upperBodyBone": "Spine",
+  "layerAttackWhenMoving": true,
   "preview": {
     "selectedClip": "Walk_Loop"
   }

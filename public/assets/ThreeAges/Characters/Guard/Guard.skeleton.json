@@ -150,28 +150,33 @@
     },
     {
       "clip": "guard_sword_and_sheld_attack_1",
-      "mode": "driveMotion",
+      "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
     {
       "clip": "guard_sword_and_sheld_attack_2",
-      "mode": "driveMotion",
+      "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
     {
       "clip": "guard_sword_and_sheld_attack_3",
-      "mode": "driveMotion",
+      "mode": "lockXYZ",
+      "rootNode": "mixamorigHips"
+    },
+    {
+      "clip": "guard_sword_and_sheld_attack_4",
+      "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
     {
       "clip": "guard_sword_and_shield_slash_5",
       "mode": "lockXYZ",
-      "rootNode": "mixamorig:Hips"
+      "rootNode": "mixamorigHips"
     },
     {
       "clip": "guard_sword_and_shield_kick",
       "mode": "lockXYZ",
-      "rootNode": "mixamorig:Hips"
+      "rootNode": "mixamorigHips"
     },
     {
       "clip": "guard_sword_and_shield_jump_1",
@@ -180,12 +185,12 @@
     },
     {
       "clip": "guard_sword_and_shield_slash_2",
-      "mode": "driveMotion",
+      "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     },
     {
       "clip": "guard_sword_and_shield_slash_4",
-      "mode": "driveMotion",
+      "mode": "lockXYZ",
       "rootNode": "mixamorigHips"
     }
   ],

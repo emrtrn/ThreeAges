@@ -22,7 +22,7 @@ export type RtsAnimationRole =
   | "aimWalkForward" | "aimWalkBack" | "aimWalkLeft" | "aimWalkRight"
   | "work" | "workCultivation" | "workHarvest" | "workLivestock" | "workHunting" | "workChopping"
   | "carryIdle" | "carryWalk" | "carryPose"
-  | "rest" | "hold" | "attack" | "attackHunting" | "attackMelee" | "hit" | "death";
+  | "rest" | "hold" | "combatIdle" | "attack" | "attackHunting" | "attackMelee" | "hit" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
 export interface RtsAnimationInput {
@@ -81,6 +81,22 @@ export interface RtsAnimationInput {
    * Optional: a caller with no notion of stance omits it and keeps its idle.
    */
   readonly holding?: boolean;
+  /**
+   * True while a live hostile is close enough to trade close blows with —
+   * inside the unit's own shove reach, not its weapon's firing band.
+   *
+   * The two are genuinely different questions, and a Worker is where they come
+   * apart: its stone has a *minimum* range, so an enemy standing against it is
+   * simultaneously "too close to throw at" ({@link attacking} false) and "the
+   * thing it is punching". Without this the body reads that gap as nothing
+   * happening and drops to its ordinary idle between punches — a man being
+   * beaten standing with his arms folded.
+   *
+   * A condition, not an order: it reports what the simulation has already put in
+   * reach, and it clears itself when the target dies or the distance opens.
+   * Optional — a caller with no close weapon omits it and keeps its idle.
+   */
+  readonly engagedClose?: boolean;
   /**
    * How many blows this unit has landed so far. Only its *changes* are read —
    * one swing animation per increment — so the presentation stays event-driven
@@ -266,6 +282,11 @@ export function classifyRtsAnimation(
   if (input.backward && input.planarSpeed > tuning.walkSpeed) return "walkBack";
   if (!input.forceWalk && input.planarSpeed >= tuning.runSpeed) return "run";
   if (input.planarSpeed > tuning.walkSpeed) return "walk";
+  // Above the job and below the feet. An enemy inside close reach outranks
+  // whatever this body was assigned to do — a builder does not go back to
+  // kneeling at his site while a soldier is hitting him — but it never pins a
+  // unit that is walking, so a worker ordered away still leaves.
+  if (input.engagedClose) return "combatIdle";
   if (input.working) return "work";
   // Below work, above idle. A wounded builder inside the field is still a
   // builder — the job it was sent to do outranks the mending it happens to be
@@ -335,16 +356,26 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   // ready stance waits in its ordinary idle, which is exactly what every unit
   // did before this role existed — the order still works, it just does not show.
   hold: ["hold", "idle"],
+  // The stance a unit waits in *between* blows while an enemy is still there.
+  // Straight to `idle` when unauthored rather than by way of `hold`: a hold
+  // clip is the *order* to stand ground (the Guard's block idle), and borrowing
+  // it here would show that order on a unit nobody gave it to — and make the
+  // real order invisible by showing it all the time. Asset opt-in, so every unit
+  // that authors no stance keeps exactly the idle it always had.
+  combatIdle: ["combatIdle", "idle"],
   // `attack`, `hit` and `death` deliberately do *not* reach their own clips
   // here. This chain feeds the continuous, looping channel, and those three
   // clips are one-shots played per event by {@link advanceRtsAction} — looping a
   // sword swing between blows would show a unit attacking on a cadence its
   // cooldown never had, and a looping flinch would show one permanently being
   // beaten. What the continuous channel wants for an engaged, struck or fallen
-  // unit is the standing pose underneath the action.
-  attack: ["idle"],
+  // unit is the standing pose underneath the action — and for the first two that
+  // pose is the combat stance, not the folded arms a unit waits out a peaceful
+  // afternoon in. Same opt-in as `combatIdle` above, and it matters most here:
+  // every ranged unit in the project passes through this chain between shots.
+  attack: ["combatIdle", "idle"],
   attackHunting: ["idle"],
-  attackMelee: ["idle"],
+  attackMelee: ["combatIdle", "idle"],
   hit: ["idle"],
   death: ["idle"],
 };
@@ -480,13 +511,41 @@ export interface RtsActionState {
    * locomotion — a walking unit can react or fire without stopping its stride.
    *
    * A layered action never demotes while it is running. Moving ranged attacks
-   * may promote from full-body to upper-body when a move order takes effect
-   * mid-shot; after that promotion the choice stays latched through recovery.
-   * This one-way rule prevents both foot skating and a torso/full-body pop when
-   * the unit later slows down again.
+   * and flinches may promote from full-body to upper-body when a move order takes
+   * effect mid-action; after that promotion the choice stays latched (through
+   * recovery, for a shot). This one-way rule prevents both foot skating and a
+   * torso/full-body pop when the unit later slows down again.
    */
   readonly layered: boolean;
+  /**
+   * Seconds left before this unit may flinch again; see
+   * {@link RTS_FLINCH_REFRACTORY_SECONDS}. Counts down on every frame regardless
+   * of which action owns the body, so the gap is measured from one flinch to the
+   * next rather than from whatever happened to follow it.
+   */
+  readonly flinchHoldSeconds?: number;
 }
+
+/**
+ * Shortest gap between two flinches on the same unit.
+ *
+ * A flinch outranks every swing (rule 2 below) *and* drops the events that land
+ * under it, so a unit hit faster than it can react spends the whole fight
+ * flinching and never appears to answer. Measured on a Worker beaten by a Guard:
+ * three punches actually landed and only one of them ever reached the screen.
+ *
+ * This does not change the priority — a blow taken still interrupts a swing —
+ * it only caps how *often* a body may be interrupted, which is what leaves the
+ * gaps its own blows can be seen in. Presentation-only either way: nothing here
+ * moves a hit, and the counters keep advancing while a flinch is withheld, so a
+ * suppressed reaction is dropped rather than queued.
+ *
+ * An authored look, not a contract: it has to sit above the fastest weapon
+ * cadence in the match to open any gap at all, and beyond that it is tuned by
+ * eye. Tests assert the relationship (a beaten unit gets its own blow on screen),
+ * never this magnitude.
+ */
+export const RTS_FLINCH_REFRACTORY_SECONDS = 1.8;
 
 /** A unit that has neither swung, flinched nor fallen. */
 export const RTS_ACTION_NONE: RtsActionState = {
@@ -497,6 +556,7 @@ export const RTS_ACTION_NONE: RtsActionState = {
   meleeCount: 0,
   huntStrikeCount: 0,
   layered: false,
+  flinchHoldSeconds: 0,
 };
 
 /**
@@ -548,7 +608,9 @@ const NO_LAYERING: RtsActionLayering = { canLayerHit: false, canLayerAttack: fal
  *  2. **A blow taken restarts the flinch**, outranking a swing either way
  *     round: it interrupts one that is running, and one landed while a flinch
  *     is running does not interrupt it. A unit being beaten reads as being
- *     beaten, not as trading blows through it.
+ *     beaten, not as trading blows through it — but only
+ *     {@link RTS_FLINCH_REFRACTORY_SECONDS} apart, or a unit under a fast weapon
+ *     never gets a frame to be seen answering in.
  *  3. **A new blow landed restarts the swing.** Any change in `attackCount`
  *     begins the attack clip from the top, even mid-swing.
  *  4. **An authored attack recovery follows the swing** when present, but a new
@@ -579,6 +641,9 @@ export function advanceRtsAction(
     meleeCount: input.meleeCount ?? 0,
     huntStrikeCount: input.huntStrikeCount ?? 0,
     layered: false,
+    // Spread into every return below, so the gap keeps closing while a swing,
+    // a montage or plain locomotion owns the body.
+    flinchHoldSeconds: Math.max(0, (state.flinchHoldSeconds ?? 0) - dt),
   };
   if (input.dying) {
     if (state.kind === "death") {
@@ -590,15 +655,28 @@ export function advanceRtsAction(
     }
     return { kind: "death", remainingSeconds: durations.death, ...counters };
   }
-  if (input.impactCount !== state.impactCount && durations.hit !== null) {
+  if (input.impactCount !== state.impactCount && durations.hit !== null && counters.flinchHoldSeconds <= 0) {
     const layered = layering.canLayerHit && input.planarSpeed > layering.walkSpeed;
-    return { kind: "hit", remainingSeconds: durations.hit, ...counters, layered };
+    return {
+      kind: "hit",
+      remainingSeconds: durations.hit,
+      ...counters,
+      layered,
+      flinchHoldSeconds: RTS_FLINCH_REFRACTORY_SECONDS,
+    };
   }
   if (state.kind === "hit") {
     const remaining = state.remainingSeconds - dt;
-    // `state.layered` last, overriding the default: the choice belongs to the
-    // frame the flinch started, not to the speed the unit happens to have now.
-    if (remaining > 0) return { kind: "hit", remainingSeconds: remaining, ...counters, layered: state.layered };
+    // One-way, exactly like the ranged swing below. The frame the flinch started
+    // owns the choice, so a unit shoved to a halt mid-reaction keeps the torso
+    // clip it began — but a *move order* arriving mid-flinch promotes it, because
+    // from that frame on the simulation is sliding the body forward while the
+    // full-body impact clip pins the feet. That is the foot-skate a struck Archer
+    // walked away with: hit standing, ordered to march, legs frozen mid-recoil
+    // for the rest of the flinch.
+    const layered = state.layered
+      || (layering.canLayerHit && input.planarSpeed > layering.walkSpeed);
+    if (remaining > 0) return { kind: "hit", remainingSeconds: remaining, ...counters, layered };
   }
   if ((input.huntStrikeCount ?? 0) !== (state.huntStrikeCount ?? 0)
     && durations.attackHunting !== null && durations.attackHunting !== undefined) {

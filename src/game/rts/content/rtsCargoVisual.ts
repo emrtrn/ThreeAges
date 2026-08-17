@@ -22,6 +22,7 @@
  */
 import { isMeshComponentKind, type ActorScriptDef } from "@engine/scene/actorScript";
 import { Quaternion, Vector3, type Object3D } from "three";
+import type { WorkerActivity } from "../units/unit";
 import { findActorComponentNode } from "./rtsActorPresentationTree";
 
 /**
@@ -34,6 +35,21 @@ import { findActorComponentNode } from "./rtsActorPresentationTree";
 export type RtsCargoVisibility = "loaded" | "empty";
 
 const VISIBILITIES: readonly RtsCargoVisibility[] = ["loaded", "empty"];
+
+/**
+ * Job categories a load may be authored *for*, narrowing an otherwise
+ * unconditional cargo node — the second half of the Worker plan's §10.2A
+ * hand-off.
+ *
+ * A carrier with one kind of load needs none of this: `carrying` alone says
+ * whether the crate is in his hands. A Worker has two, and they are two
+ * different objects — his own crate coming back from a tree, and the producer's
+ * barrel going onto a donkey — so the boolean has to be told *which*. Restricted
+ * to the carrying activities on purpose: a filter naming `lumber` would be a
+ * hand tool, and {@link bindRtsWorkerTools} already owns those.
+ */
+const CARGO_ACTIVITIES = ["carryingBox", "carryingLoad", "wheelbarrow"] as const satisfies readonly WorkerActivity[];
+export type RtsCargoActivity = (typeof CARGO_ACTIVITIES)[number];
 
 /**
  * Read the cargo prop off one component's props.
@@ -55,6 +71,26 @@ export function readRtsCargoVisibility(
 }
 
 /**
+ * Read the optional activity filter off one component's props.
+ *
+ * Null for a node that authors none — which is every carrier with a single load,
+ * and keeps them on exactly the behaviour they had before the filter existed. A
+ * broken value is a problem for the same reason a broken visibility is: it is
+ * the shape of a typo, and read as "no filter" it would put a Worker's barrel
+ * and his crate in his arms at once.
+ */
+export function readRtsCargoActivity(
+  props: Readonly<Record<string, unknown>>,
+): { readonly activity: RtsCargoActivity } | { readonly problem: string } | null {
+  const raw = props.rtsCargoActivity;
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== "string" || !CARGO_ACTIVITIES.includes(raw as RtsCargoActivity)) {
+    return { problem: `rtsCargoActivity must be one of ${CARGO_ACTIVITIES.join(", ")}` };
+  }
+  return { activity: raw as RtsCargoActivity };
+}
+
+/**
  * Every authored cargo node in a def, as `[componentId, visibility]`, or the
  * first problem found.
  *
@@ -65,8 +101,8 @@ export function readRtsCargoVisibility(
  */
 export function readRtsActorCargoVisuals(
   def: ActorScriptDef,
-): { readonly cargo: readonly (readonly [string, RtsCargoVisibility])[] } | { readonly problem: string } {
-  const cargo: (readonly [string, RtsCargoVisibility])[] = [];
+): { readonly cargo: readonly RtsCargoVisualDef[] } | { readonly problem: string } {
+  const cargo: RtsCargoVisualDef[] = [];
   const childCount = new Map<string, number>();
   for (const node of def.components) {
     if (node.parent === undefined) continue;
@@ -74,20 +110,41 @@ export function readRtsActorCargoVisuals(
   }
   for (const node of def.components) {
     const read = readRtsCargoVisibility(node.props);
-    if (read === null) continue;
+    const readActivity = readRtsCargoActivity(node.props);
+    if (readActivity !== null && "problem" in readActivity) {
+      return { problem: `component "${node.id}": ${readActivity.problem}` };
+    }
+    if (read === null) {
+      // A filter with nothing to filter is the same class of typo as a flag on a
+      // node with no mesh: it reads as authored and does nothing at all.
+      if (readActivity !== null) {
+        return { problem: `component "${node.id}": rtsCargoActivity needs rtsCargoVisibility beside it` };
+      }
+      continue;
+    }
     if ("problem" in read) return { problem: `component "${node.id}": ${read.problem}` };
     if (!isMeshComponentKind(node.component) && (childCount.get(node.id) ?? 0) === 0) {
       return { problem: `component "${node.id}": rtsCargoVisibility needs a mesh here or under it` };
     }
-    cargo.push([node.id, read.visibility]);
+    cargo.push({ componentId: node.id, visibility: read.visibility, activity: readActivity?.activity ?? null });
   }
   return { cargo };
+}
+
+/** One authored cargo node, before it is paired with the runtime tree. */
+export interface RtsCargoVisualDef {
+  readonly componentId: string;
+  readonly visibility: RtsCargoVisibility;
+  /** Null when the node belongs to every load this carrier can hold. */
+  readonly activity: RtsCargoActivity | null;
 }
 
 /** An authored cargo flag bound to the runtime node it shows and hides. */
 export interface RtsCargoVisualBinding {
   readonly node: Object3D;
   readonly visibility: RtsCargoVisibility;
+  /** Null when this node is shown for any load; see {@link CARGO_ACTIVITIES}. */
+  readonly activity: RtsCargoActivity | null;
 }
 
 /**
@@ -101,20 +158,29 @@ export function bindRtsCargoVisuals(def: ActorScriptDef, root: Object3D): readon
   const read = readRtsActorCargoVisuals(def);
   if ("problem" in read) return [];
   const bindings: RtsCargoVisualBinding[] = [];
-  for (const [componentId, visibility] of read.cargo) {
+  for (const { componentId, visibility, activity } of read.cargo) {
     const node = findActorComponentNode(root, componentId);
-    if (node) bindings.push({ node, visibility });
+    if (node) bindings.push({ node, visibility, activity });
   }
   return bindings;
 }
 
-/** Show the half of the authored cargo that matches this trip, hide the other. */
+/**
+ * Show the half of the authored cargo that matches this trip, hide the other.
+ *
+ * `activity` narrows a carrier that authors more than one kind of load. An
+ * unfiltered node ignores it entirely, so a caller that models no worker
+ * assignment (the pack donkey) may leave it undefined and get the behaviour it
+ * always had.
+ */
 export function applyRtsCargoVisibility(
   bindings: readonly RtsCargoVisualBinding[],
   carrying: boolean,
+  activity?: WorkerActivity | null,
 ): void {
-  for (const { node, visibility } of bindings) {
-    node.visible = carrying === (visibility === "loaded");
+  for (const { node, visibility, activity: filter } of bindings) {
+    node.visible = carrying === (visibility === "loaded")
+      && (filter === null || filter === activity);
   }
 }
 

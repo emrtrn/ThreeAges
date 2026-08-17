@@ -14,6 +14,20 @@
  * second one.
  */
 
+/**
+ * The authored marker that says a thrower's hand has reached full extension.
+ *
+ * The one notify name with a *runtime* consumer rather than a drawn one: the
+ * stone's flight starts here (`RtsApp.releasePendingThrow`), which is why it has
+ * no entry in the effect table below and is not a gap.
+ *
+ * Named rather than inline because three things have to agree on the spelling
+ * and they live in different files: that consumer, the `notifies` entry in the
+ * thrower's `*.skeleton.json`, and the check that holds them together. A typo on
+ * any side is a stone that is never thrown, with nothing to report it.
+ */
+export const RTS_THROW_RELEASE_NOTIFY = "throw-release";
+
 /** How one notify name is drawn, and what keeps it affordable. */
 export interface RtsNotifyEffectBinding {
   /** Manifest effect id played at the notify. */
@@ -80,6 +94,48 @@ export const RTS_NOTIFY_EFFECTS: Readonly<Record<string, RtsNotifyEffectBinding>
     heightOffset: 0.9,
     maxDistance: 60,
     minIntervalSeconds: 0,
+  },
+  /*
+   * The Worker's two job contacts (Worker plan Faz 6). Both are placed from the
+   * clip's own measured geometry rather than by eye — see the notify times in
+   * `worker.skeleton.json` — because a burst that misses the moment it belongs
+   * to reads as a bug in the animation rather than as a missing effect.
+   *
+   * Separate names even where the drawn effect is shared, for the reason the
+   * module header gives: the name is the contract, and audio subscribes to the
+   * same stream. A spade and a boot both raise dust; they will not both want the
+   * same sound.
+   */
+  "chop-impact": {
+    effectId: "rts-fx-debris-wood",
+    /*
+     * Where the blade meets the trunk, not where the hand is. Measured: at the
+     * bottom of the swing the right hand passes 1.10m, and the axe is a 0.70m
+     * head-forward tool, so the bite lands roughly half its length below that.
+     * An authored look — the trunk it is hitting is a different width on every
+     * tree — so it is tuned by eye and never asserted as a magnitude.
+     */
+    heightOffset: 0.7,
+    maxDistance: 60,
+    /*
+     * One chop per 1.03s clip, so a lone lumberjack is nowhere near this. It is
+     * the camp of six that the cap is for, and it is global for the same reason
+     * the footstep's is: the budget being protected is one shared pool.
+     */
+    minIntervalSeconds: 0.08,
+  },
+  "dig-impact": {
+    // The same small ground puff a boot raises: it is the same dust, and
+    // inventing a second dirt effect to say "spade" would be art nobody asked
+    // for. The name still separates them for the audio pass.
+    effectId: "rts-fx-footstep-dust",
+    // Clear of the soil for the reason the footstep is: a puff that hugs the
+    // terrain reads as ground texture, and the worker's own body covers it.
+    heightOffset: 0.2,
+    maxDistance: 60,
+    // Twice per 5.5s clip per farmer — rarer than a footfall, and capped well
+    // under it so a large farm cannot crowd the boots off the field.
+    minIntervalSeconds: 0.1,
   },
   /*
    * The three the artillery's wreck asks for (siege crew plan Faz 4). They come
