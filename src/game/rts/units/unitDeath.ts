@@ -28,12 +28,25 @@ export function updateUnitDeaths(
    * the time this runs, and nothing it does is read back.
    */
   onRemoved?: (unit: Unit) => void,
+  /**
+   * Called once, on the frame a unit is defeated — `beginDeath` returns true
+   * exactly once, which is what makes this a tally point rather than a condition
+   * a caller has to de-duplicate.
+   *
+   * Kept apart from {@link onRemoved} because the two are a corpse-linger apart
+   * (~30s): "this unit died" is news now, while "its kit hits the ground" is news
+   * when the body goes. A mission counting kills on removal would credit them
+   * half a minute after the fight, which on a step gated on defending is the
+   * difference between the card reacting and the card looking broken.
+   */
+  onDefeated?: (unit: Unit) => void,
 ): void {
   for (const unit of [...units.all()]) {
     if (!unit.health.depleted) continue;
     if (unit.beginDeath()) {
       selection.remove(unit);
       units.clearAttackTargets(unit);
+      onDefeated?.(unit);
     }
     if (!unit.updateDeath(dt, simulationSpeed)) continue;
     onRemoved?.(unit);

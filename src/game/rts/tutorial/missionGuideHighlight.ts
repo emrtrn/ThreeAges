@@ -52,6 +52,7 @@
  */
 import { missionBuildQuota } from "./missionBuildPolicy";
 import type { MissionDirectorState } from "./missionDirector";
+import type { MissionGuideCommand } from "./missionScript";
 
 /** The palette's road tool, whose button is keyed by this id rather than a building. */
 export const ROAD_PALETTE_TARGET = "road";
@@ -89,7 +90,18 @@ export type MissionGuidePrompt =
    * screen is the wrong answer. Telling them to pave again would be worse than
    * silence — it would read as the game not noticing the road they just drew.
    */
-  | { readonly kind: "await-caravan" };
+  | { readonly kind: "await-caravan" }
+  /**
+   * The step's answer is a key, so the card has to say which one — Perde IV.
+   *
+   * The second prompt that comes with no pointer, and for a stronger reason than
+   * `await-caravan`'s: there is no control on screen to point *at*. A stance is
+   * shown in the unit panel as a fact, never as a button, so a step teaching one
+   * would have no hint at all if the card did not carry the letter. The letter
+   * itself is not here — presentation looks it up from the input layer's binding
+   * table, so this stays a statement about *which order*, not about which key.
+   */
+  | { readonly kind: "press-key"; readonly command: MissionGuideCommand };
 
 /**
  * Whether the Market would actually serve this step's purchase right now.
@@ -152,6 +164,9 @@ export function missionGuideHighlight(
   const { action } = guide;
   if (action.kind === "road") {
     return { paletteTarget: ROAD_PALETTE_TARGET, actionId: null, prompt: { kind: "supply-road" } };
+  }
+  if (action.kind === "unit-command") {
+    return { paletteTarget: null, actionId: null, prompt: { kind: "press-key", command: action.command } };
   }
   if (action.kind === "build") {
     const measuresConnection = step.goal.kind === "producer-linked" || step.goal.kind === "outpost-connected";

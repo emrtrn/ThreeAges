@@ -72,7 +72,30 @@ const COMMAND_KEYS = {
   Escape: "pause",
 } as const;
 
-type RtsCommandKey = (typeof COMMAND_KEYS)[keyof typeof COMMAND_KEYS];
+export type RtsCommandKey = (typeof COMMAND_KEYS)[keyof typeof COMMAND_KEYS];
+
+/**
+ * Which key fires a command, as a player would write it — "H", "1", "Home".
+ *
+ * Inverted from {@link COMMAND_KEYS} rather than listed again, and that is the
+ * whole reason it lives here instead of in the UI that shows it: the story card's
+ * key hint and the key that actually works are then the *same fact*. Rebind a
+ * command and the hint follows in the same edit; there is no second table to
+ * forget. Returns null for a command nothing is bound to, so a caller has to
+ * decide what to show rather than printing "undefined" at a player.
+ *
+ * The first binding wins when a command has several (pan keys aside, none does
+ * today) — the map is authored with the intended key first.
+ */
+export function commandKeyLabel(command: RtsCommandKey): string | null {
+  for (const [code, bound] of Object.entries(COMMAND_KEYS)) {
+    if (bound !== command) continue;
+    // `KeyH` → "H", `Digit1` → "1", and anything already legible (`Home`,
+    // `Escape`) stays as it is.
+    return code.replace(/^Key/, "").replace(/^Digit/, "");
+  }
+  return null;
+}
 
 export class RtsInput {
   private readonly held = new Set<string>();

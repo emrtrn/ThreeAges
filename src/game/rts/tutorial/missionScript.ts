@@ -16,6 +16,7 @@
  * the validator, the director, and `test:engine` alike.
  */
 import type { SettlementAge, UnitRoleId } from "../../data/gameDataTypes";
+import type { UnitStance } from "../units/unit";
 
 /**
  * One step of the chain.
@@ -103,7 +104,38 @@ export type MissionGuideAction =
      * not a stuck step — the objective itself never depends on it.
      */
     readonly actionId: string;
-  };
+  }
+  /**
+   * A unit order that lives only on the keyboard — Perde IV.
+   *
+   * The first action with **nothing on screen to pulse**: stances, stop and
+   * attack-move are keys, and the unit panel shows the resulting stance as a fact
+   * rather than as a button. So the whole of this action's hint is the card's key
+   * line, which is why {@link MissionGuideCommand} is a closed union rather than a
+   * free string — the letter is looked up from the binding table the input layer
+   * actually reads (`rtsInput.ts`), never retyped here. Rebind the key and the
+   * card follows; author a command the input layer does not have and an engine
+   * test says so.
+   */
+  | { readonly kind: "unit-command"; readonly command: MissionGuideCommand };
+
+/**
+ * The unit orders a step may ask for, named as the input layer names them.
+ *
+ * Deliberately *not* every entry of `COMMAND_KEYS`: the palette toggles and the
+ * category digits are UI plumbing rather than orders, and a story step pointing
+ * at "open the build palette" would be pointing at a door instead of at the
+ * thing behind it. What is here is the set a chain can teach as a decision.
+ */
+export type MissionGuideCommand =
+  | "stop"
+  | "attackMove"
+  | "hold"
+  | "aggressive"
+  | "retreat"
+  | "selectIdleWorkers"
+  | "toggleWorkerAutomation"
+  | "focusCenter";
 
 /**
  * A feature the level author placed, which the step's work is tied to — Faz 3.
@@ -254,7 +286,39 @@ export type MissionGoal =
    * a world query — the thing it counts no longer exists — so a step using it is
    * inherently one-shot and does not need `latch`.
    */
-  | { readonly kind: "enemy-structure-razed"; readonly buildingId: string; readonly count: number };
+  | { readonly kind: "enemy-structure-razed"; readonly buildingId: string; readonly count: number }
+  /**
+   * `count` of the player's living units currently standing in `stance`, narrowed
+   * to one `role` when given — Perde IV.
+   *
+   * A *state*, not a tally, and that is what makes it answerable at all: "pressed
+   * H once" leaves nothing behind, while "three Guards are holding position" is
+   * something the world can be asked about at any moment. It is the shape
+   * {@link MissionGoal} `population-headroom` already has.
+   *
+   * Which is also why a step using it **must** carry `latch`. The director
+   * re-opens any cleared step whose goal stops holding, and a player who sets the
+   * stance, learns the key, and then quite correctly presses `G` to send that
+   * army somewhere would be dragged back to a lesson they have already passed.
+   * The stance is a state to *reach*, not a state to keep.
+   */
+  | {
+    readonly kind: "units-in-stance";
+    readonly stance: UnitStance;
+    readonly role?: UnitRoleId;
+    readonly count: number;
+  }
+  /**
+   * `count` enemy units killed this match, narrowed to one `role` when given.
+   *
+   * A tally for the same reason as `enemy-structure-razed`, and one-shot for the
+   * same reason: a corpse is not a state the world keeps. Deliberately indifferent
+   * to *where* the killing happened — defending a depot and clearing the escort
+   * off an outpost are the same lesson (an army is for using), and a goal that
+   * insisted on defence would be unclearable against an opponent who never
+   * attacks.
+   */
+  | { readonly kind: "enemy-units-defeated"; readonly role?: UnitRoleId; readonly count: number };
 
 export interface MissionScript {
   readonly id: string;

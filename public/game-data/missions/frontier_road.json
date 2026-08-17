@@ -278,6 +278,24 @@
       }
     },
     {
+      "id": "hold_stance",
+      "title": "Muhafızları Pozisyonu Koru Duruşuna Al",
+      "why": "Serbest duruşta birlik gördüğünü kovalar ve hattını açık bırakır; koruma duruşunda yerinden oynamaz.",
+      "latch": true,
+      "goal": {
+        "kind": "units-in-stance",
+        "stance": "hold",
+        "role": "guard",
+        "count": 3
+      },
+      "guide": {
+        "action": {
+          "kind": "unit-command",
+          "command": "hold"
+        }
+      }
+    },
+    {
       "id": "town",
       "title": "Kasaba Çağına Geç",
       "why": "Kasaba yeni yapı ve birlikleri açar; geçiş sırasında zayıf düşersin.",
@@ -292,6 +310,32 @@
           "buildingId": "command_center",
           "actionId": "age-up"
         }
+      }
+    },
+    {
+      "id": "archery_range",
+      "title": "Okçuluk Alanı Kur",
+      "why": "Kasaba'nın açtığı ilk askerî yapı: okçu menzilden vurur, muhafız yaklaşmak zorundadır.",
+      "latch": true,
+      "goal": {
+        "kind": "structure-built",
+        "buildingId": "archery_range",
+        "count": 1
+      },
+      "guide": {
+        "action": {
+          "kind": "build",
+          "buildingId": "archery_range"
+        }
+      }
+    },
+    {
+      "id": "defend",
+      "title": "Üç Düşman Birliğini Düşür",
+      "why": "Rakip lord vadiyi geri istiyor; ordunu kullanmadığın sürece yalnızca hedefsin.",
+      "goal": {
+        "kind": "enemy-units-defeated",
+        "count": 3
       }
     },
     {

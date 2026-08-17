@@ -256,15 +256,16 @@ hafıza eklemez):
 | `production-adjacency` `{ buildingId, count }` | Komşuluk çarpanı aktif üretici sayısı | Değirmen |
 | `aura-covered` `{ count }` | Destek aurası altındaki bina/birim | Tapınak |
 | `livestock-penned` `{ count }` | Ağıla kapatılmış hayvan | Ağıl ekonomisi |
-| `enemy-units-defeated` `{ role?, count }` *(sayaç)* | Bu maçta öldürülen düşman birimi | Savunma / karşı saldırı |
+| `enemy-units-defeated` `{ role?, count }` *(sayaç)* — ✅ | Bu maçta öldürülen düşman birimi | Savunma / karşı saldırı |
 | `strategic-point-held` `{ count, seconds }` | Kontrol altındaki geçit | Bölgesel zafer (K3'ün karşılığı) |
+| **`units-in-stance` `{ stance, role?, count }`** — ✅ *(planda yoktu)* | O duruşta duran birlik sayısı | Duruş (`H`/`G`) |
 
 Yeni `MissionGuideAction` üyeleri:
 
 | Aksiyon | İşaret ettiği |
 |---|---|
-| `{ kind: "road", target: { siteId \| buildingId \| pointId } }` | Yol aracı + dünyadaki hedefe ok |
-| `{ kind: "unit-command", command: "hold" \| "retreat" \| "attackMove" \| … }` | İlgili tuş/panel düğmesi |
+| `{ kind: "road" }` — ✅ *(hedefsiz; Faz 0'da geldi, rota oyuncunun kararı)* | Yol aracı + `landmark` ile dünyadaki noktaya ok |
+| `{ kind: "unit-command", command }` — ✅ | Hiçbir düğme: kartın tuş satırı (`commandKeyLabel`) |
 | `{ kind: "formation", formationId }` | Formasyon paneli |
 
 **Kural (mimariyi korumak için):** her yeni hedef türü `missionPredicates.ts`'te tam olarak
@@ -288,16 +289,42 @@ otomasyon anahtarını (`R`) tanıtan tek satır.
 `outpost` → `quarry` → `gold_mine` → `pasture` *(veya `windmill`, Lv3'e bağlı)*
 → `road_to_stone_pit` *(opsiyonel, ikinci arz hattı)*
 
-**Perde IV — Ordu ve sınır** — bugünkü 14-17 + yeni
-`barracks` → `guards` → `hold_stance` *(duruş/geri çekilme)* → `town`
-→ `archery_range` *(Kasaba'nın ödülü)* → `defend` (`enemy-units-defeated`)
-→ `raze`
+**Perde IV — Ordu ve sınır** — ✅ **uygulandı (17 Ağu 2026)**
+`barracks` → `guards` → `hold_stance` → `town` → `archery_range` → `defend` → `raze`
+Zincir 18 → **21 adım**; Kasaba çağı artık açılıp hemen kapanmıyor.
 
 **Öneri:** `market-bought`, `unit-trained`, `enemy-structure-razed` ve yeni sayaç
 hedefleri zaten doğaları gereği tek atımlık; `structure-built` tipli ara adımlara
 (`pasture`, `archery_range`) `latch: true` verilmeli — oyuncunun *sahip olduğu* değil
 *yaptığı* şeyi ölçtükleri için değil, zincirin ilerlemesini geç oyundaki bir yıkımın
-geri almasını engellemek için.
+geri almasını engellemek için. *(Uygulandı: `archery_range` ve `hold_stance` latch'li.)*
+
+#### Perde IV'ün verdiği dört karar
+
+1. **Duruş bir sayaç değil, ulaşılacak bir durum.** "H'ye bastı" arkasında hiçbir şey
+   bırakmaz; "üç muhafız pozisyonu koruyor" dünyaya her an sorulabilir — yani
+   `population-headroom`'un şekli. Bu yüzden yeni hedef `units-in-stance
+   { stance, role?, count }`, ve **latch zorunlu**: direktör, hedefi bozulan tamamlanmış
+   adımı yeniden açar; duruşu öğrenip sonra pekâlâ doğru bir sebeple `G`'ye basan oyuncu
+   geçtiği derse geri sürüklenirdi. Duruş korunacak değil **varılacak** bir durum.
+2. **Tuş ipucu, tuş tablosundan türetiliyor.** `{ kind: "unit-command", command }`
+   işaret edilecek hiçbir düğme taşımıyor — duruş birim panelinde bir *bilgi*, düğme
+   değil — yani adımın bütün ipucu kartın tuş satırı. Harf `rtsInput.ts`'in
+   `COMMAND_KEYS` haritasından **ters çevrilerek** okunuyor (`commandKeyLabel`), yani
+   tuşu yeniden bağlayan kişi ipucunu aynı düzenlemede taşır; ikinci bir harf tablosu yok.
+   Duruş adı da `STANCE_LABEL`'dan geliyor: kart "Bekle" öğretip panel "Pozisyonu Koru"
+   raporlarsa, ikisi yeni oyuncuya iki ayrı emir gibi okunur. Bu, Faz 3'ün kalan
+   maddesini de kapatıyor.
+3. **`defend` nerede olduğunu sormuyor.** Depoyu savunmak ile karakolun muhafızını
+   temizlemek aynı dersin iki hâli ("ordu kullanılmak içindir"), ve savunma şart koşan bir
+   hedef hiç saldırmayan bir rakibe karşı **kapanamaz** olurdu. Sayaç role de bakmıyor:
+   `role` verilmediğinde bütün roller **toplanıyor**, yoksa karışık bir çatışma
+   oyuncuya "öldürdüklerin olmadı" derdi.
+4. **Sayaç ölüm karesinde alınıyor, cesedin kaldırıldığı karede değil.** `beginDeath()`
+   tam bir kez döner; `updateUnitDeaths`'e eklenen `onDefeated` bu yüzden `onRemoved`'dan
+   ayrı — ikisi bir ceset ömrü (~30 sn) arayla. Kaldırmada sayılan bir öldürme, kartı
+   çatışmadan yarım dakika sonra hareket ettirirdi ki savunma adımında bu "kart bozuk"
+   demektir.
 
 ### Faz 3 — Rehber ve kart — ✅ **işaretçi kısmı uygulandı (16 Ağu 2026)**
 
@@ -345,11 +372,9 @@ Faz 3'ün kalan işi (kart cümleleri, tuş ipuçları) duruyor.
   adımına değil dört adıma birden.
 - ~~`missionGuideHighlight`'a **"düğme reddedecek"** kuralı.~~ **Yapıldı (17 Ağu 2026)** —
   aşağıdaki üç kararla.
-- Kartta **kontrol ipucu satırı**: aktif adımın `guide`'ı bir tuş komutuysa tuşu yaz.
-  **Faz 1'e bağlı ve orada bekliyor:** bugünkü `MissionGuideAction` üyelerinin (`build`,
-  `road`, `structure-action`) hiçbiri tuş komutu değil, hepsi fare hedefi. Yazacak tuş,
-  `{ kind: "unit-command" }` aksiyonuyla birlikte doğuyor; ondan önce eklenen bir ipucu
-  satırı, veriden değil tahminden okunan bir tuş gösterirdi.
+- ~~Kartta **kontrol ipucu satırı**.~~ **Yapıldı (17 Ağu 2026)**, Perde IV'ün
+  `{ kind: "unit-command" }` aksiyonuyla birlikte — beklediği şey buydu. Harf tuş
+  tablosundan türetiliyor; bkz. Perde IV kararı 2. **Faz 3 kapandı.**
 
 #### "Düğme reddedecek" kuralının verdiği üç karar
 
@@ -442,9 +467,14 @@ Pazar paneli, arz bildirimleri ve ipucu **aynı okumanın** üç tüketicisi (si
 3. ~~**Faz 3** — rehber genişletmesi.~~ İşaretçi tarafı kapandı (landmark + "düğme
    reddedecek"). Kalan tek madde — karttaki tuş ipucu satırı — Faz 1'deki
    `unit-command` aksiyonunu bekliyor, yani sıra fiilen 4'e geçti.
-4. **Faz 2 Perde IV + Faz 1 kalan hedefler** — askerî katman ve Kasaba çağının ödülü.
-5. **Faz 4** — kurulum kartı ilişkisi.
-6. **Faz 2 Perde III'ün opsiyonel adımları** — Ağıl/Değirmen/Tapınak.
+4. ~~**Faz 2 Perde IV + Faz 1 kalan hedefler**~~ — **yapıldı (17 Ağu 2026):** askerî
+   katman ve Kasaba çağının ödülü. Perde IV'ün ihtiyacı olan iki hedef
+   (`enemy-units-defeated`, `units-in-stance`) ve `unit-command` aksiyonu geldi; Faz 1'in
+   kalan hedefleri (`structure-repaired`, `production-adjacency`, `aura-covered`,
+   `livestock-penned`, `strategic-point-held`) Perde III/Faz 4 ile birlikte duruyor.
+5. **Faz 4** — kurulum kartı ilişkisi (K3'ün tek cümlesi + sis cümlesi). Sıra bunda.
+6. **Faz 2 Perde I/III dokunuşları** — kurt uyarısı, `R` otomasyon satırı,
+   Ağıl/Değirmen/Tapınak adımları.
 
 ---
 

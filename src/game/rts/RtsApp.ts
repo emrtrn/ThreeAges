@@ -82,7 +82,7 @@ import { proceduralDepotRoadRank, proceduralRoadSiteFailure } from "./ai/aiRoadS
 import { planSettlementLayout } from "./ai/settlementLayoutPlanner";
 import { formatRtsAiDebug } from "./ai/aiDebugView";
 import { RtsCameraController } from "./camera/rtsCameraController";
-import { RtsInput } from "./input/rtsInput";
+import { RtsInput, commandKeyLabel } from "./input/rtsInput";
 import { RtsPointer } from "./input/rtsPointer";
 import { createRtsGround, RTS_WORLD_HALF_EXTENT } from "./world/rtsGround";
 import { AuthoredRtsGroundSurface, FLAT_RTS_GROUND, RtsDeckGroundSurface, type RtsGroundSurface } from "./world/rtsTerrainSurface";
@@ -223,6 +223,7 @@ import {
   TRAIN_WORKER_ACTION,
   WORKER_ASSIGNMENT_ACTION_PREFIX,
   CENTER_LEVEL_UP_ACTION,
+  STANCE_LABEL,
   type RtsSelectionView,
   type StructureDetailView,
   type CenterProgressionView,
@@ -315,7 +316,12 @@ import {
   nearestMissionLandmark,
   type MissionLandmarkCandidate,
 } from "./tutorial/missionLandmark";
-import type { MissionGoal, MissionLandmark, MissionScript } from "./tutorial/missionScript";
+import type {
+  MissionGoal,
+  MissionGuideCommand,
+  MissionLandmark,
+  MissionScript,
+} from "./tutorial/missionScript";
 import type { AiObjectiveWatch } from "./ai/armyManager";
 
 const MAX_PIXEL_RATIO = 2;
@@ -375,6 +381,32 @@ const PERF_TOTAL_REGION = "kare";
  * on "go build a depot" and a fraction of the cost of doing it every frame.
  */
 const MISSION_POLL_SECONDS = 0.25;
+
+/**
+ * What a keyboard order is called on the mission card — Perde IV.
+ *
+ * The two stances borrow {@link STANCE_LABEL} rather than spelling themselves,
+ * because the unit panel shows the resulting stance in those exact words: a card
+ * that taught "Bekle" and a panel that then reported "Pozisyonu Koru" would look
+ * like two different orders to the only player who needs either.
+ *
+ * A `Record` over the union, so adding a command the chain may name without giving
+ * it a name is a compile error rather than a blank in a sentence.
+ *
+ * `selected` is carried per command rather than assumed, because half of these
+ * act on a selection and half do not: "Birlikleri seç, sonra Home tuşuna bas"
+ * would be instructing a player to select an army in order to move the camera.
+ */
+const MISSION_COMMAND_LABEL: Record<MissionGuideCommand, { label: string; selected: boolean }> = {
+  stop: { label: "Dur", selected: true },
+  attackMove: { label: "Saldır-yürü", selected: true },
+  hold: { label: STANCE_LABEL.hold, selected: true },
+  aggressive: { label: STANCE_LABEL.aggressive, selected: true },
+  retreat: { label: "Geri çekil", selected: true },
+  selectIdleWorkers: { label: "Boştaki işçileri seç", selected: false },
+  toggleWorkerAutomation: { label: "İşçi otomasyonunu aç/kapat", selected: false },
+  focusCenter: { label: "Merkez'e dön", selected: false },
+};
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
 const MAX_FRAME_SECONDS = 1 / 15;
 /**
@@ -949,6 +981,14 @@ export class RtsApp {
    * that let "train three Guards" clear itself before the Barracks existed.
    */
   private playerUnitsTrained: Record<string, number> = {};
+  /**
+   * Enemy units the player has defeated this match, by role — Perde IV's tally,
+   * and the fourth mission fact the world cannot answer for the same reason the
+   * razed buildings cannot: what it counts is gone. Taken on the frame
+   * `beginDeath` fires (one place, once per unit) rather than by diffing the army
+   * list, which would credit a kill to whoever happened to poll next.
+   */
+  private playerEnemyUnitsDefeated: Record<string, number> = {};
   private readonly match = new RtsMatchState();
   /** §51: whether the simulation should be running; `match` owns who won. */
   private readonly flow = new RtsMatchFlow();
@@ -3161,9 +3201,9 @@ export class RtsApp {
     // narrowing matters beyond types: `completedGuideBuildings` below must be 0
     // for it, or a road step would be measured against a building count that
     // has nothing to do with it.
-    const guideBuildingId = guide === undefined || guide.action.kind === "road"
-      ? null
-      : guide.action.buildingId;
+    const guideBuildingId = guide?.action.kind === "build" || guide?.action.kind === "structure-action"
+      ? guide.action.buildingId
+      : null;
     const highlight = missionGuideHighlight(
       state,
       this.selection.selectedStructure()?.stats.id ?? null,
@@ -3264,6 +3304,18 @@ export class RtsApp {
         return `${this.buildingLabels.get(guideBuildingId ?? "") ?? "Yapı"} kuruldu ama bağlı değil — Yol aracıyla Merkez'in yoluna bağla.`;
       case "select-building":
         return `Önce ${this.buildingLabels.get(prompt.buildingId) ?? prompt.buildingId} yapısını seç.`;
+      case "press-key": {
+        // The letter comes from the binding table, so a rebind moves the hint with
+        // it. An unbound command loses the letter rather than the sentence: the
+        // order still has a name worth saying, and "undefined tuşuna bas" would be
+        // the one hint that actively misleads.
+        const key = commandKeyLabel(prompt.command);
+        const { label, selected } = MISSION_COMMAND_LABEL[prompt.command];
+        if (key === null) return `${label} komutunu ver.`;
+        return selected
+          ? `Birlikleri seç, sonra ${key} tuşuna bas — ${label}.`
+          : `${key} tuşuna bas — ${label}.`;
+      }
     }
   }
 
@@ -3452,13 +3504,14 @@ export class RtsApp {
           this.vision?.isExplored(PLAYER_OWNER, site.x, site.z) ?? true,
         ),
       })),
-      units: this.units.all().map((unit) => ({ owner: unit.owner, role: unit.role })),
+      units: this.units.all().map((unit) => ({ owner: unit.owner, role: unit.role, stance: unit.stance })),
       tier: this.progression.tierFor(PLAYER_OWNER),
       populationHeadroom: Math.max(0, population.capacity - population.used),
       razedEnemyBuildings: this.razedEnemyBuildings,
       marketTrades: this.playerMarketTrades,
       marketPurchases: this.playerMarketPurchases,
       unitsTrained: this.playerUnitsTrained,
+      enemyUnitsDefeated: this.playerEnemyUnitsDefeated,
     };
   }
 
@@ -4218,7 +4271,19 @@ export class RtsApp {
     // The speed matters here and nowhere else in this method: the defeat window
     // waits for a clip the presentation plays on the rendered clock, so it is
     // the one duration that has to be told how fast this one is running.
-    updateUnitDeaths(this.units, this.selection, dt, this.simulationSpeed, (unit) => this.dropUnitGear(unit));
+    updateUnitDeaths(
+      this.units,
+      this.selection,
+      dt,
+      this.simulationSpeed,
+      (unit) => this.dropUnitGear(unit),
+      (unit) => {
+        // Owner-agnostic in the call, owner-checked here: the mode speaks for the
+        // player, so only the other side's losses are a mission fact.
+        if (unit.owner === PLAYER_OWNER) return;
+        this.playerEnemyUnitsDefeated[unit.role] = (this.playerEnemyUnitsDefeated[unit.role] ?? 0) + 1;
+      },
+    );
     this.destroyRuinedStructures();
     this.perfMeasure("savaş", combatMark);
     // §59, before the objectives below and before anything reads the AI: fog is
@@ -5361,6 +5426,7 @@ export class RtsApp {
     this.playerMarketTrades = 0;
     this.playerMarketPurchases = {};
     this.playerUnitsTrained = {};
+    this.playerEnemyUnitsDefeated = {};
     this.missionPanel?.setState(null);
     this.missionMarker = null;
     if (this.missions) this.syncMissionGuide(this.missions.state());

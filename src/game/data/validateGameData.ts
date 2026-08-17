@@ -12,6 +12,7 @@ import { AI_FORMATION_WEIGHTS, AI_PROFILES, AI_TARGET_WEIGHTS, MAX_AURA_DAMAGE_R
 import type {
   MissionGoal,
   MissionGuide,
+  MissionGuideCommand,
   MissionLandmark,
   MissionScript,
   MissionStep,
@@ -325,6 +326,26 @@ export function validateGamePreset(
 }
 
 const UNIT_ROLES: readonly UnitRoleId[] = ["guard", "archer", "siege", "worker"];
+
+/**
+ * Every {@link MissionGuideCommand} a chain may name, as something the validator
+ * can check a string against.
+ *
+ * A `Record` keyed by the union rather than an array of the same strings, so
+ * extending the union without extending this is a compile error here instead of a
+ * command the validator quietly refuses at load — the one failure mode that turns
+ * a data check into a liar.
+ */
+const MISSION_GUIDE_COMMANDS: Record<MissionGuideCommand, true> = {
+  stop: true,
+  attackMove: true,
+  hold: true,
+  aggressive: true,
+  retreat: true,
+  selectIdleWorkers: true,
+  toggleWorkerAutomation: true,
+  focusCenter: true,
+};
 const UNIT_ATTACK_TYPES: readonly UnitAttackType[] = ["melee", "ranged"];
 const UNIT_STRUCTURE_ATTACK_VFX: readonly UnitStructureAttackVfx[] = ["firebrand", "cannonball"];
 /** Same id shape the RTS content catalog accepts, so one table cannot be laxer. */
@@ -2720,6 +2741,18 @@ function validateMissionGuide(
   // action with nothing to reference-check — and it must be answered before the
   // `buildingId` read below, which would otherwise reject a perfectly valid one.
   if (kind === "road") return withLandmark({ action: { kind } });
+  // Keyed by the order rather than by a building, like the road tool — but unlike
+  // it, the name *is* checked: the command is what the card's key line is looked
+  // up by, so a typo there is a step whose only hint silently disappears.
+  if (kind === "unit-command") {
+    const command = requireString(action, "command", `${where}.action`);
+    if (!Object.prototype.hasOwnProperty.call(MISSION_GUIDE_COMMANDS, command)) {
+      throw new GameDataError(
+        `${where}.action.command: must be one of ${Object.keys(MISSION_GUIDE_COMMANDS).join(", ")}`,
+      );
+    }
+    return withLandmark({ action: { kind, command: command as MissionGuideCommand } });
+  }
   if (kind !== "build" && kind !== "structure-action") {
     throw new GameDataError(`${where}.action.kind: unknown mission guide "${kind}"`);
   }
@@ -2837,7 +2870,35 @@ function validateMissionGoal(
     return { kind, role: role as UnitRoleId, count };
   }
 
+  // Perde IV's two. `role` is optional on both — "any three of them" is a real
+  // objective — so it is checked through one helper rather than by repeating the
+  // enum test, and a *present* but wrong role is still refused: it would silently
+  // narrow the goal to a role no unit has, which reads as a step that never moves.
+  if (kind === "units-in-stance") {
+    const stance = requireString(obj, "stance", where);
+    if (stance !== "hold" && stance !== "aggressive") {
+      throw new GameDataError(`${where}.stance: must be "hold" or "aggressive"`);
+    }
+    const role = optionalUnitRole(obj, where);
+    return { kind, stance, ...(role === undefined ? {} : { role }), count };
+  }
+
+  if (kind === "enemy-units-defeated") {
+    const role = optionalUnitRole(obj, where);
+    return { kind, ...(role === undefined ? {} : { role }), count };
+  }
+
   throw new GameDataError(`${where}.kind: unknown mission goal "${kind}"`);
+}
+
+/** A goal's optional `role`: absent means "any", present must name a real one. */
+function optionalUnitRole(obj: Record<string, unknown>, where: string): UnitRoleId | undefined {
+  const role = obj["role"];
+  if (role === undefined) return undefined;
+  if (typeof role !== "string" || !UNIT_ROLES.includes(role as UnitRoleId)) {
+    throw new GameDataError(`${where}.role: must be one of ${UNIT_ROLES.join(", ")} when present`);
+  }
+  return role as UnitRoleId;
 }
 
 /**

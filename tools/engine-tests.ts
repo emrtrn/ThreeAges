@@ -88,9 +88,11 @@ import {
   measureGoal,
   type MissionProducerFact,
   type MissionStructureFact,
+  type MissionUnitFact,
   type MissionWorldSnapshot,
 } from "../src/game/rts/tutorial/missionPredicates";
-import type { MissionGoal, MissionScript } from "../src/game/rts/tutorial/missionScript";
+import type { MissionGoal, MissionGuideCommand, MissionScript } from "../src/game/rts/tutorial/missionScript";
+import { commandKeyLabel } from "../src/game/rts/input/rtsInput";
 import { missionGuideHighlight, ROAD_PALETTE_TARGET } from "../src/game/rts/tutorial/missionGuideHighlight";
 import { missionBuildVerdict } from "../src/game/rts/tutorial/missionBuildPolicy";
 import {
@@ -44794,6 +44796,7 @@ const missionWorld = (
   marketTrades: 0,
   marketPurchases: {},
   unitsTrained: {},
+  enemyUnitsDefeated: {},
   ...extra,
 });
 
@@ -45353,9 +45356,12 @@ check("abandoning the chain ends it without claiming it was completed", () => {
 });
 
 check("the shipped mission script validates, and a broken one fails at load", () => {
-  const buildingIds = new Set(Object.keys(
-    validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown),
-  ));
+  const balance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const buildingIds = new Set(Object.keys(balance));
+  const market = Object.values(balance).find((stats) => stats.market)?.market
+    ?? assert.fail("the template must ship a trading building");
   const raw = JSON.parse(readFileSync("public/game-data/missions/frontier_road.json", "utf8")) as unknown;
   const script = validateMissionScript(raw, "frontier_road", buildingIds);
   // Sürüm 2 opens on a *linked* producer rather than a built one: with the centre
@@ -45378,6 +45384,9 @@ check("the shipped mission script validates, and a broken one fails at load", ()
       { owner: "player", buildingId: "market", complete: true },
       { owner: "player", buildingId: "outpost", complete: true, roadConnected: true },
       { owner: "player", buildingId: "barracks", complete: true },
+      // Perde IV: the Town age's own reward, which the chain used to unlock and
+      // then never mention.
+      { owner: "player", buildingId: "archery_range", complete: true },
     ],
     // Two of the wood and food lines: the chain's late "second Lumber Camp /
     // second Farm" steps exist because one of each cannot pay for a Town, and
@@ -45396,19 +45405,27 @@ check("the shipped mission script validates, and a broken one fails at load", ()
       // bought a lot is a kingdom with a live supply lane. Stating both in one
       // fixture is what keeps the two steps honest about their order.
       tradeSites: [{ resourceId: "wood", state: "supplying" }],
+      // Standing in the stance Perde IV teaches, because the step measures a
+      // state rather than a keypress — and it is *this* fixture that says the
+      // stance step and the "three Guards" step can be true of one army at once.
       units: [
-        { owner: "player", role: "guard" },
-        { owner: "player", role: "guard" },
-        { owner: "player", role: "guard" },
+        { owner: "player", role: "guard", stance: "hold" },
+        { owner: "player", role: "guard", stance: "hold" },
+        { owner: "player", role: "guard", stance: "hold" },
       ],
       tier: { age: "town", level: 1 },
       populationHeadroom: 5,
       razedEnemyBuildings: { outpost: 1 },
       marketTrades: 1,
-      marketPurchases: { wood: 100 },
+      // One lot, computed rather than typed: the shipped lot moved from 100 to 50
+      // and a literal here would have gone on passing while meaning something else.
+      marketPurchases: { wood: market.lotSize },
       // Trained, not merely alive: the shipped preset opens with an army, and
       // the chain's military step measures what came out of the Barracks.
       unitsTrained: { guard: 3, worker: 4 },
+      // Perde IV's tally. Split across roles on purpose: the shipped `defend` step
+      // names no role, so this also proves the sum is what answers it.
+      enemyUnitsDefeated: { guard: 2, worker: 1 },
     },
   );
   const walked = new MissionDirector(script);
@@ -45431,9 +45448,6 @@ check("the shipped mission script validates, and a broken one fails at load", ()
   // Hence the invariant: the buildings demanded before wood starts flowing must
   // cost well under the leanest shipped stockpile, leaving the rest for roads
   // (`roads.json` charges wood per cell too) and for a misplaced building or two.
-  const balance = validateBuildingBalance(
-    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
-  );
   const woodFlowing = script.steps.findIndex((step) =>
     step.goal.kind === "producer-linked" && step.goal.resourceId === "wood");
   assert.ok(woodFlowing >= 0, "the chain must connect a wood producer at some point");
@@ -45738,6 +45752,125 @@ check("Faz 3: the guide never points at a Market button that is about to refuse"
     "trade-buy:wood",
     "a step a sale can clear is outside the stock rule",
   );
+});
+
+check("Perde IV: a stance is a state to reach and a kill is a tally, and neither reads the other side's world", () => {
+  const holdingGuards: MissionGoal = { kind: "units-in-stance", stance: "hold", role: "guard", count: 2 };
+  const withUnits = (...units: readonly MissionUnitFact[]): MissionWorldSnapshot =>
+    missionWorld([], [], { units });
+
+  assert.equal(
+    isGoalMet(holdingGuards, withUnits(
+      { owner: "player", role: "guard", stance: "hold" },
+      { owner: "player", role: "guard", stance: "hold" },
+    )),
+    true,
+  );
+  // Narrowed three ways, and each one is a different mistake it would otherwise
+  // make: the wrong stance, the wrong role, and the wrong army entirely.
+  assert.equal(
+    isGoalMet(holdingGuards, withUnits(
+      { owner: "player", role: "guard", stance: "aggressive" },
+      { owner: "player", role: "guard", stance: "hold" },
+    )),
+    false,
+    "a free-roaming Guard is not a holding one",
+  );
+  assert.equal(
+    isGoalMet(holdingGuards, withUnits(
+      { owner: "player", role: "worker", stance: "hold" },
+      { owner: "player", role: "archer", stance: "hold" },
+    )),
+    false,
+    "the role narrows it",
+  );
+  assert.equal(
+    isGoalMet(holdingGuards, withUnits(
+      { owner: "enemy", role: "guard", stance: "hold" },
+      { owner: "enemy", role: "guard", stance: "hold" },
+    )),
+    false,
+    "a mission speaks for the player's side only",
+  );
+  // A unit whose stance was never stated cannot satisfy a stance goal — the same
+  // safe direction `roadConnected` takes for buildings that have no such notion.
+  assert.equal(
+    isGoalMet(
+      { kind: "units-in-stance", stance: "aggressive", count: 1 },
+      withUnits({ owner: "player", role: "guard" }),
+    ),
+    false,
+    "an unstated stance is not a matching stance",
+  );
+
+  const defeated: MissionGoal = { kind: "enemy-units-defeated", count: 3 };
+  assert.deepEqual(
+    measureGoal(defeated, missionWorld([], [], { enemyUnitsDefeated: { guard: 2 } })),
+    { current: 2, target: 3 },
+    "the card can say 2/3 rather than only 'not yet'",
+  );
+  // No role named, so every role counts *together*: a mixed fight is still three
+  // enemies down, and a goal that only knew how to add up one column would tell
+  // the player their kills did not happen.
+  assert.equal(
+    isGoalMet(defeated, missionWorld([], [], { enemyUnitsDefeated: { guard: 2, worker: 1 } })),
+    true,
+  );
+  assert.equal(
+    isGoalMet(
+      { kind: "enemy-units-defeated", role: "guard", count: 3 },
+      missionWorld([], [], { enemyUnitsDefeated: { guard: 2, worker: 1 } }),
+    ),
+    false,
+    "a named role does not accept the other columns",
+  );
+});
+
+check("Perde IV: a keyboard-only order has no button to pulse, and its key comes from the binding table", () => {
+  const holdStep: MissionScript["steps"][number] = {
+    id: "hold_stance",
+    title: "t",
+    why: "w",
+    latch: true,
+    goal: { kind: "units-in-stance", stance: "hold", role: "guard", count: 3 },
+    guide: { action: { kind: "unit-command", command: "hold" } },
+  };
+  const state = { step: holdStep, index: 0, total: 1, finished: false, progress: { current: 0, target: 3 } };
+
+  // Nothing is pointed at, and that is the answer rather than a gap: a stance is
+  // shown in the unit panel as a fact, never as a button, so pulsing anything here
+  // would be pulsing something that does not do it.
+  assert.deepEqual(missionGuideHighlight(state, "market", 0), {
+    paletteTarget: null,
+    actionId: null,
+    prompt: { kind: "press-key", command: "hold" },
+  });
+
+  // The letter is *derived* from the map the input layer dispatches on, so a
+  // rebind moves the card's hint in the same edit. This is the assertion that
+  // fails if someone adds a second table of letters for the UI to read.
+  assert.equal(commandKeyLabel("hold"), "H");
+  assert.equal(commandKeyLabel("retreat"), "T");
+  assert.equal(commandKeyLabel("focusCenter"), "Home", "an already legible key keeps its own name");
+  assert.equal(commandKeyLabel("buildCategory1"), "1", "a digit loses the `Digit` prefix");
+
+  // And every command a chain is *allowed* to name must actually be bound —
+  // otherwise the step's only hint is a sentence with a hole in it.
+  const script = validateMissionScript(
+    JSON.parse(readFileSync("public/game-data/missions/frontier_road.json", "utf8")) as unknown,
+    "frontier_road",
+    new Set(Object.keys(validateBuildingBalance(
+      JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+    ))),
+  );
+  const commands = script.steps
+    .map((step) => step.guide?.action)
+    .filter((action) => action?.kind === "unit-command")
+    .map((action) => (action as { command: MissionGuideCommand }).command);
+  assert.ok(commands.length > 0, "the shipped chain must teach at least one order");
+  for (const command of commands) {
+    assert.ok(commandKeyLabel(command) !== null, `the chain teaches "${command}" but no key fires it`);
+  }
 });
 
 check("Faz 3: the landmark marker names the nearest feature the player may know about", () => {

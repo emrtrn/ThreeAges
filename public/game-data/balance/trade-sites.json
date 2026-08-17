@@ -30,8 +30,8 @@
     "icon": "/assets/ui/icons/trade-site-stone-pit.png",
     "resourceId": "stone",
     "perMinute": 40,
-    "carryCapacity": 40,
-    "bufferCapacity": 80,
+    "carryCapacity": 50,
+    "bufferCapacity": 100,
     "caravanCount": 1,
     "dock": {
       "width": 4,

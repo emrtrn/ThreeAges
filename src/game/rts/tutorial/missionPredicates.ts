@@ -39,6 +39,14 @@ export interface MissionStructureFact {
 export interface MissionUnitFact {
   readonly owner: UnitOwner;
   readonly role: UnitRoleId;
+  /**
+   * The order stance this unit is standing in, when it has one — the same
+   * `absent means the notion does not apply` shape as
+   * {@link MissionStructureFact.roadConnected}. A stance goal therefore can never
+   * be satisfied by a unit whose stance was not stated, which is the safe
+   * direction for a fact the caller has to remember to fill in.
+   */
+  readonly stance?: string;
 }
 
 /** The player kingdom's centre-led tier. */
@@ -112,6 +120,12 @@ export interface MissionWorldSnapshot {
    * cleared by the army they were given.
    */
   readonly unitsTrained: Readonly<Record<string, number>>;
+  /**
+   * Enemy units the player has killed this match, keyed by role. A tally for the
+   * same reason as {@link razedEnemyBuildings}: what it counts has left the world,
+   * and a corpse that lingers for its collapse is not a thing to count twice.
+   */
+  readonly enemyUnitsDefeated: Readonly<Record<string, number>>;
 }
 
 /**
@@ -192,6 +206,24 @@ export function measureGoal(goal: MissionGoal, world: MissionWorldSnapshot): Mis
       return { current: world.marketPurchases[goal.resourceId] ?? 0, target: goal.count };
     case "unit-trained":
       return { current: world.unitsTrained[goal.role] ?? 0, target: goal.count };
+    case "units-in-stance":
+      return {
+        current: world.units.filter((unit) =>
+          unit.owner === MISSION_OWNER
+          && unit.stance === goal.stance
+          && (goal.role === undefined || unit.role === goal.role)).length,
+        target: goal.count,
+      };
+    case "enemy-units-defeated":
+      // Summed across roles when the goal names none, rather than read from a
+      // total the caller also keeps: one tally with one writer cannot disagree
+      // with itself, and "any three of them" is a question about the same table.
+      return {
+        current: goal.role === undefined
+          ? Object.values(world.enemyUnitsDefeated).reduce((total, killed) => total + killed, 0)
+          : world.enemyUnitsDefeated[goal.role] ?? 0,
+        target: goal.count,
+      };
   }
 }
 

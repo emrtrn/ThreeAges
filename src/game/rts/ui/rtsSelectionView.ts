@@ -559,7 +559,12 @@ const ARMOR_CLASS_LABEL: Record<UnitArmorClass, string> = {
   structure: "yapı",
 };
 
-const STANCE_LABEL: Record<UnitStance, string> = {
+/**
+ * Exported so the story card's key hint can name a stance in exactly the words
+ * the unit panel uses. Two spellings of "Pozisyonu Koru" would read as two
+ * different orders to the player being taught the first one.
+ */
+export const STANCE_LABEL: Record<UnitStance, string> = {
   aggressive: "Serbest",
   hold: "Pozisyonu Koru",
 };
