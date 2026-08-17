@@ -22,9 +22,8 @@
  *   which way to face, where the road runs — all still the player's. The step
  *   answers "where is the stone", which is scouting, not design.
  * - It cannot jump. The candidate set is static level content and the origin is
- *   the player's centre, so nothing recomputes into a different answer mid-step.
- *   (The one thing that can move it is fog lifting to reveal a nearer feature,
- *   which is the marker becoming *more* correct, not less.)
+ *   the player's centre, so nothing recomputes into a different answer mid-step —
+ *   fog included, since Faz 4 (see {@link nearestMissionLandmark}).
  *
  * The buildings whose placement genuinely *is* the lesson — House, Depot, Farm,
  * Market, Barracks, Outpost — carry no landmark, and that omission is the rule
@@ -55,8 +54,7 @@ export interface MissionLandmarkOrigin {
 }
 
 /**
- * The feature a landmark means, or null when the map has none the player may
- * know about.
+ * The feature a landmark means, or null when the map authors none of that kind.
  *
  * **Nearest to the player's own centre**, which is the only ordering that reads
  * as an answer rather than as a suggestion: on a map authored in pairs (this
@@ -64,11 +62,21 @@ export interface MissionLandmarkOrigin {
  * on the opponent's bank) the near one is the one being talked about, and the
  * far one is across the river in enemy territory.
  *
- * `isExplored` is the same fog gate the Market's supply panel applies, and for
- * the same reason: a marker on ground the player has never scouted would be
- * handing them a scouting result from inside their own base. Under fog the
- * marker simply does not appear until they have been there — which makes it
- * confirmation of something seen, never a reveal.
+ * **Fog does not hide the marker (Faz 4).** It used to: an earlier pass applied
+ * the same `isExplored` gate the Market's supply panel does, on the grounds that
+ * a marker on unscouted ground hands the player a scouting result. Forcing fog
+ * on for the tur is what took that argument apart. The chain's own step 5 points
+ * at a trade site 33.5 units from a centre that sees 26, so the gate silenced the
+ * arrow on exactly the step that needed it — the one whose lesson the player
+ * cannot guess — and the player's answer was the right one: the arrow is what
+ * *sends* them to scout. What it reveals is a single authored position, not the
+ * ground around it: they still have to walk a unit there to see what is on it,
+ * and the fog behaves in every other way as it did.
+ *
+ * Removing the gate also made the choice unconditional, which is worth more than
+ * it sounds: the marker can no longer move to a nearer feature the moment fog
+ * lifts, so what a step points at is fixed by the level, not by where the player
+ * has been.
  *
  * Ties break on the candidate order the caller passed, which is the level's
  * authoring order — stable, so the marker cannot flicker between two features
@@ -78,14 +86,12 @@ export function nearestMissionLandmark(
   landmark: MissionLandmark | null | undefined,
   candidates: readonly MissionLandmarkCandidate[],
   origin: MissionLandmarkOrigin,
-  isExplored: (x: number, z: number) => boolean = () => true,
 ): MissionLandmarkCandidate | null {
   if (!landmark) return null;
   let best: MissionLandmarkCandidate | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
   for (const candidate of candidates) {
     if (candidate.kind !== landmark.kind || candidate.key !== landmark.key) continue;
-    if (!isExplored(candidate.x, candidate.z)) continue;
     const dx = candidate.x - origin.x;
     const dz = candidate.z - origin.z;
     const distance = dx * dx + dz * dz;

@@ -359,8 +359,10 @@ değil, ve aday kümesi statik olduğu için hiçbir şey yerinden oynamıyor.
 2. **Uyarı işareti geçer.** Bir adımda hem düzeltme ("Ocağın var ama yol değmiyor") hem
    işaret varsa düzeltme kazanır — oyuncunun bakması gereken artık yatak değil, kendi
    binası. İşaret, düzeltilecek bir şey yokken kalan şey.
-3. **Sis kuralı aynen.** Keşfedilmemiş zemin işaretlenmez; işaret bir ifşa değil, görülmüş
-   bir şeyin teyidi.
+3. ~~**Sis kuralı aynen.** Keşfedilmemiş zemin işaretlenmez; işaret bir ifşa değil, görülmüş
+   bir şeyin teyidi.~~ **Faz 4'te geri alındı (17 Ağu 2026)** — bkz. aşağıdaki "Sis kuralı
+   neden düştü". Zorunlu sisle birlikte bu kural, oku tam da ihtiyaç duyulan adımda
+   söndürüyordu.
 
 **Kural teste bağlandı, listeye değil.** "Hangi yapı işaretlenebilir" `resources.json`'dan
 türetiliyor: `safeNode` taşıyan kaynak bir yatağa iner, `tree` taşıyan odun 153 ağaca
@@ -501,10 +503,30 @@ susturabilir. Oyuncu Merkez'i `(-40, 40)`, Merkez görüşü 26 birim; zincirin 
 dört şeyin başlangıç mesafesi: geyik **20.6**, altın yatağı **12.5**, taş yatağı **17.1** —
 üçü de açılışta görüş içinde. Dördüncüsü, `supply_wood`'un kereste ticaret noktası,
 **33.5** birimde: açılışta **sis altında**, yani o adımın oku oyuncu o yöne gidene kadar
-çıkmıyor (Oduncu Kampı'nın 9 birimlik görüşü ormana doğru kurulursa yetişebilir, ama bu
-garanti değil). Karar kullanıcıda: ya keşif o adımın bir parçası sayılır, ya da aktif
-adımın işareti sis kuralının istisnası olur — ikincisi Faz 3'ün 3. kararını (
-"işaret bir ifşa değil") gevşetir.
+çıkmıyordu (Oduncu Kampı'nın 9 birimlik görüşü ormana doğru kurulursa yetişebilir, ama bu
+garanti değil).
+
+#### Sis kuralı neden düştü (kullanıcı kararı, 17 Ağu 2026)
+
+Ölçüm sunulunca karar tek cümleyle geldi: *"Kereste kampının üstündeki ok, sis olsa bile
+görünmeli. Oyuncu ok işaretini görüp oraya bir işçi yollayabilir ve sisi açabilir."* Faz
+3'ün 3. kararı ("işaret bir ifşa değil, görülmüş bir şeyin teyidi") bu yüzden geri alındı,
+ve gerekçesi düzeltmenin kendisinden daha genel:
+
+1. **Kapı, oku tam da kazanan adımda söndürüyordu.** Zincirin işaretlediği dört şeyden üçü
+   açılışta zaten görüş içinde; kapının tek gerçek etkisi, cevabı oyuncunun **tahmin
+   edemeyeceği** adımı (`supply_wood`) işaretsiz bırakmaktı. Yani kural, koruduğunu iddia
+   ettiği şeyin bedelini yalnız en çok yardıma ihtiyaç duyan adımda ödetiyordu.
+2. **Ok bir ifşa değil, bir emir.** İşaret tek bir yazılı konumu söylüyor; orada ne
+   durduğu, çevresinde ne olduğu hâlâ karanlık. Oyuncu bir birim yürütmeden hiçbir şey
+   görmüyor — yani ok keşfin **yerine** geçmiyor, keşfi **başlatıyor**.
+3. **Yan kazanç: seçim artık koşulsuz.** Kapı kalkınca işaret sis açıldığında daha yakın
+   bir özelliğe **atlayamaz** hâle geldi; bir adımın neyi gösterdiğini artık seviye
+   belirliyor, oyuncunun nerelere gittiği değil. Faz 3'ün "işaret zıplamamalı" derdinin
+   son kalan kenar durumu da böylece kapandı.
+
+`nearestMissionLandmark` artık sis okuyucusu **almıyor**; motor testi dördüncü bir
+argümanın geri sızmasını da kapatıyor (`.length === 3`).
 
 **Test:** cümle değil, **taşınması** pinlendi — `validateMissionScript` sonucunu alan alan
 kuruyor, yani dönüş literalinin unuttuğu alan sessizce düşer (CLAUDE.md'nin kayıt

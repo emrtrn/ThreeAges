@@ -45912,22 +45912,23 @@ check("Faz 3: the landmark marker names the nearest feature the player may know 
   );
   assert.equal(nearestMissionLandmark(null, [stone(1, 0)], origin), null, "no landmark, no marker");
 
-  // The fog rule, and it is the load-bearing one: a marker on ground never
-  // scouted would hand the player a scouting result from inside their own base.
-  // Under fog the near deposit is simply not offered until they have been there.
+  // Faz 4 reversed the fog rule this check used to pin, and the reversal is the
+  // load-bearing part now: the tur is played under forced fog, and the chain's
+  // road step points at a trade site 33.5 units from a centre that sees 26 — so
+  // a fog-gated marker went dark on the one step whose answer the player cannot
+  // guess. The arrow is what *sends* them scouting; it names a position and
+  // reveals nothing else, so what stands there is still dark until a unit walks
+  // over it. The function therefore takes no fog reader at all: an unexplored
+  // near feature outranks an explored far one, exactly as it does in daylight.
   assert.deepEqual(
-    nearestMissionLandmark(
-      { kind: "resource-node", key: "stone" },
-      [stone(10, 0), stone(40, 0)],
-      origin,
-      (x) => x > 20,
-    ),
-    stone(40, 0),
+    nearestMissionLandmark({ kind: "resource-node", key: "stone" }, [stone(40, 0), stone(10, 0)], origin),
+    stone(10, 0),
+    "the near feature is named whether or not it has been scouted",
   );
   assert.equal(
-    nearestMissionLandmark({ kind: "resource-node", key: "stone" }, [stone(10, 0)], origin, () => false),
-    null,
-    "nothing explored, nothing pointed at",
+    (nearestMissionLandmark as (...args: unknown[]) => unknown).length,
+    3,
+    "no fog reader may creep back in as a fourth argument",
   );
 
   // Ties keep the level's authoring order rather than the last one seen, so two

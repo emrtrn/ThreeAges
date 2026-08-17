@@ -3283,12 +3283,12 @@ export class RtsApp {
         z: site.z,
       })),
     ];
-    return nearestMissionLandmark(
-      landmark,
-      candidates,
-      center.position,
-      (x, z) => this.vision?.isExplored(PLAYER_OWNER, x, z) ?? true,
-    );
+    // No fog gate: the arrow is what sends the player scouting, so hiding it
+    // until they have scouted is the one order that cannot work (Faz 4, and
+    // `nearestMissionLandmark`'s own note). The fog itself is untouched — the
+    // marker names a position, and what stands there stays dark until a unit
+    // walks over it.
+    return nearestMissionLandmark(landmark, candidates, center.position);
   }
 
   /**

@@ -1596,7 +1596,8 @@
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "backgroundColor": "#ffffff"
+    "backgroundColor": "#ffffff",
+    "ambientIntensity": 1
   },
   "skyAtmosphere": {
     "rayleigh": 1,
@@ -1605,7 +1606,7 @@
     "mieDirectionalG": 0.8,
     "exposure": 1,
     "skyLightCapture": {
-      "intensity": 0.2
+      "intensity": 0.1
     }
   },
   "postProcess": {
