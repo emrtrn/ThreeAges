@@ -45658,6 +45658,88 @@ check("Faz 0.1: a road step points at the road tool and names no building", () =
   assert.deepEqual(missionGuideHighlight(state, "market", 3), highlight);
 });
 
+check("Faz 3: the guide never points at a Market button that is about to refuse", () => {
+  // K1's permanent half. Faz 0.1 fixed the *content* — the chain now teaches the
+  // supply road before it asks for a purchase — and this fixes the *rule*: with
+  // an empty shelf, `trade-buy:wood` answers `out-of-stock`, so a pointer sitting
+  // on it is the pulse telling the player to do something the game will refuse.
+  const buyStep: MissionScript["steps"][number] = {
+    id: "buy",
+    title: "t",
+    why: "w",
+    goal: { kind: "market-bought", resourceId: "wood", count: 100 },
+    guide: { action: { kind: "structure-action", buildingId: "market", actionId: "trade-buy:wood" } },
+  };
+  const stateFor = (step: MissionScript["steps"][number]) => ({
+    step,
+    index: 0,
+    total: 1,
+    finished: false,
+    progress: { current: 0, target: 100 },
+  });
+  const state = stateFor(buyStep);
+
+  // A shelf with a lot on it changes nothing: the ordinary two-stage pointer.
+  const full = { stocked: true, supplyState: "supplying" };
+  assert.deepEqual(missionGuideHighlight(state, "market", 0, full), {
+    paletteTarget: null,
+    actionId: "trade-buy:wood",
+    prompt: null,
+  });
+  assert.deepEqual(
+    missionGuideHighlight(state, null, 0, full).prompt,
+    { kind: "select-building", buildingId: "market" },
+    "a stocked shelf still sends the player to select the Market first",
+  );
+
+  // Empty with no lane carrying — every reading that means "the answer is out on
+  // the map" — hands over to the road tool, with the sentence the road *step*
+  // gets. Same move, so the same prompt rather than a second kind saying it.
+  for (const supplyState of ["cut", "unclaimed", "rival", "absent"]) {
+    assert.deepEqual(
+      missionGuideHighlight(state, "market", 0, { stocked: false, supplyState }),
+      { paletteTarget: ROAD_PALETTE_TARGET, actionId: null, prompt: { kind: "supply-road" } },
+      `"${supplyState}" is a road problem, not a button problem`,
+    );
+  }
+
+  // Empty *while* a lane is live is the opposite instruction: the player already
+  // paved, the goods are moving, and there is nothing on screen to press. Telling
+  // them to pave again would read as the game not noticing the road they drew.
+  assert.deepEqual(
+    missionGuideHighlight(state, "market", 0, { stocked: false, supplyState: "supplying" }),
+    { paletteTarget: null, actionId: null, prompt: { kind: "await-caravan" } },
+    "a caravan already on its way leaves nothing to point at",
+  );
+  assert.deepEqual(
+    missionGuideHighlight(state, null, 0, { stocked: false, supplyState: "supplying" }),
+    missionGuideHighlight(state, "market", 0, { stocked: false, supplyState: "supplying" }),
+    "and selecting the Market cannot revive the refused button",
+  );
+
+  // No shelf reading at all — the project does not gate this resource's buy side
+  // on stock — must leave the plain pointer alone. A fork trading out of gold
+  // has no refusal to steer around.
+  assert.equal(
+    missionGuideHighlight(state, "market", 0, null).actionId,
+    "trade-buy:wood",
+    "an ungated resource keeps its button",
+  );
+
+  // And the rule reads the goal, not merely the shelf it was handed: `market-trade`
+  // is satisfied by a *sale*, which needs no shelf, so an empty one must not take
+  // that step's pointer away.
+  const sellStep: MissionScript["steps"][number] = {
+    ...buyStep,
+    goal: { kind: "market-trade", count: 1 },
+  };
+  assert.equal(
+    missionGuideHighlight(stateFor(sellStep), "market", 0, { stocked: false, supplyState: "cut" }).actionId,
+    "trade-buy:wood",
+    "a step a sale can clear is outside the stock rule",
+  );
+});
+
 check("Faz 3: the landmark marker names the nearest feature the player may know about", () => {
   const stone = (x: number, z: number): MissionLandmarkCandidate =>
     ({ kind: "resource-node", key: "stone", x, z });
@@ -45847,6 +45929,57 @@ check("Faz 0.5: the shipped scenario authors a trade site for every resource the
     assert.ok(
       authored.has(resourceId),
       `the chain trades ${resourceId} but "${preset.levelRef}" authors no trade site producing it`,
+    );
+  }
+});
+
+check("a chain buys in whole lots, and one caravan trip can fill the lot it asks for", () => {
+  // Both halves are *relationships* between tables that are meant to be retuned,
+  // computed from those tables rather than pinned as numbers: the lot moved from
+  // 100 to 50 the day the story mode asked for it, and neither of these lines
+  // needed editing to keep saying what it says.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const market = Object.values(buildings).find((stats) => stats.market)?.market
+    ?? assert.fail("the template must ship a trading building");
+  const script = validateMissionScript(
+    JSON.parse(readFileSync("public/game-data/missions/frontier_road.json", "utf8")) as unknown,
+    "frontier_road",
+    new Set(Object.keys(buildings)),
+  );
+  const siteBalance = validateTradeSiteBalance(
+    JSON.parse(readFileSync("public/game-data/balance/trade-sites.json", "utf8")) as unknown,
+  );
+
+  const bought = script.steps
+    .map((step) => step.goal)
+    .filter((goal): goal is Extract<MissionGoal, { kind: "market-bought" }> => goal.kind === "market-bought");
+  assert.ok(bought.length > 0, "the chain must buy something for this check to bite");
+  for (const goal of bought) {
+    // Whole lots: the Market hands over `lotSize` per click and nothing smaller,
+    // so a step asking for one and a half lots is a step whose own arithmetic the
+    // player can never land on. It clears — the tally passes the target on the
+    // next click — but the number in the title stops being the number they did.
+    assert.equal(
+      goal.count % market.lotSize,
+      0,
+      `"buy ${goal.count} ${goal.resourceId}" is not a whole number of ${market.lotSize}-unit lots`,
+    );
+
+    // And the wait has to be one caravan, not two. A stocked resource's shelf
+    // fills only on arrival, and a caravan leaves with a full load
+    // (`carryCapacity`), so a lot larger than every load that could fill it makes
+    // the step sit through a second round trip before the button opens — which is
+    // exactly the pacing complaint this lot size was chosen to answer.
+    if (!market.stocked.includes(goal.resourceId)) continue;
+    const loads = Object.values(siteBalance)
+      .filter((site) => site.resourceId === goal.resourceId)
+      .map((site) => site.carryCapacity);
+    assert.ok(loads.length > 0, `no trade site carries ${goal.resourceId}`);
+    assert.ok(
+      Math.max(...loads) >= market.lotSize,
+      `one lot of ${goal.resourceId} is ${market.lotSize} but the best caravan load is ${Math.max(...loads)}`,
     );
   }
 });

@@ -126,6 +126,19 @@ export class MarketTradeSystem {
     };
   }
 
+  /**
+   * How much one trade moves, or 0 when nothing trades in this project.
+   *
+   * Exposed beside {@link requiresStock} for readers that need the *threshold*
+   * without the rates — the story tur asks "would a buy refuse for stock?" every
+   * frame, and building a whole {@link MarketTradeSnapshot} (with its price table)
+   * to read one number would be paying for the panel's work to answer the hint's
+   * question.
+   */
+  get lotSize(): number {
+    return this.balance?.lotSize ?? 0;
+  }
+
   /** True when this project's data makes the resource's buy side need supply. */
   requiresStock(resourceId: string): boolean {
     return this.balance?.stocked.includes(resourceId) ?? false;

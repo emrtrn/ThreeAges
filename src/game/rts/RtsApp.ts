@@ -307,7 +307,7 @@ import { formatVisionDebug } from "./vision/formatVisionDebug";
 import { RtsObjectiveTracker } from "./ui/rtsObjectiveTracker";
 import { RtsMissionPanel } from "./ui/rtsMissionPanel";
 import { MissionDirector, type MissionDirectorState } from "./tutorial/missionDirector";
-import { missionGuideHighlight } from "./tutorial/missionGuideHighlight";
+import { missionGuideHighlight, type MissionMarketShelf } from "./tutorial/missionGuideHighlight";
 import { MissionHintView } from "./tutorial/missionHintView";
 import { missionBuildVerdict, type MissionBuildRefusal } from "./tutorial/missionBuildPolicy";
 import type { MissionWorldSnapshot } from "./tutorial/missionPredicates";
@@ -315,7 +315,7 @@ import {
   nearestMissionLandmark,
   type MissionLandmarkCandidate,
 } from "./tutorial/missionLandmark";
-import type { MissionLandmark, MissionScript } from "./tutorial/missionScript";
+import type { MissionGoal, MissionLandmark, MissionScript } from "./tutorial/missionScript";
 import type { AiObjectiveWatch } from "./ai/armyManager";
 
 const MAX_PIXEL_RATIO = 2;
@@ -3168,11 +3168,34 @@ export class RtsApp {
       state,
       this.selection.selectedStructure()?.stats.id ?? null,
       guideBuildingId === null ? 0 : this.completedPlayerBuildings(guideBuildingId),
+      this.missionMarketShelf(state.step?.goal ?? null),
     );
     this.buildPalette.setMissionHighlight(highlight.paletteTarget);
     this.selectionPanel.setMissionHighlight(highlight.actionId);
     this.missionPanel?.setGuidePrompt(this.missionGuideSentence(highlight.prompt, guideBuildingId));
     this.syncMissionMarker(highlight.prompt, guideBuildingId, guide?.landmark ?? null);
+  }
+
+  /**
+   * How the Market's shelf reads for a "buy N of X" step — Faz 3, plan K1.
+   *
+   * Null for every other step, and also for a resource this project does not
+   * gate on stock: with no shelf to be empty there is no refusal to steer around,
+   * and a fork that trades straight out of gold must keep the plain pointer.
+   *
+   * Both readings come from the systems that do the refusing and the narrating —
+   * `MarketTradeSystem`'s own stock and lot size, and the same
+   * {@link marketSupplyLinesFor} the Market panel and the supply feed read — so
+   * the hint cannot claim the shelf is empty while the panel says otherwise.
+   */
+  private missionMarketShelf(goal: MissionGoal | null): MissionMarketShelf | null {
+    if (goal?.kind !== "market-bought") return null;
+    if (!this.marketTrade.requiresStock(goal.resourceId)) return null;
+    const [line] = this.marketSupplyLinesFor(PLAYER_OWNER, [goal.resourceId]);
+    return {
+      stocked: this.marketTrade.stock.amount(PLAYER_OWNER, goal.resourceId) >= this.marketTrade.lotSize,
+      supplyState: line?.state ?? "absent",
+    };
   }
 
   /**
@@ -3235,6 +3258,8 @@ export class RtsApp {
     switch (prompt.kind) {
       case "supply-road":
         return "Pazar'ın rafı boş — Yol aracıyla bir arz noktasını Pazar'ının yoluna bağla.";
+      case "await-caravan":
+        return "Kervan yolda: raf dolunca alım açılır. Pazar'ı seçip rafın durumunu izleyebilirsin.";
       case "draw-road":
         return `${this.buildingLabels.get(guideBuildingId ?? "") ?? "Yapı"} kuruldu ama bağlı değil — Yol aracıyla Merkez'in yoluna bağla.`;
       case "select-building":
@@ -3271,8 +3296,12 @@ export class RtsApp {
     // A prompt outranks the landmark: "your Quarry has no road on it" is a
     // correction about something the player already did, and the deposit they
     // built on is no longer the thing they need to look at. The landmark is what
-    // is left when there is nothing to correct — including on `supply-road`,
-    // whose prompt names no building at all and would otherwise ring nothing.
+    // is left when there is nothing to correct — which is how the road step's
+    // `supply-road` reaches the trade site: its guide names no building, so there
+    // is no position for the prompt to resolve to. The *same* prompt raised on the
+    // purchase step (an empty shelf, plan K1) does name one — the Market — and
+    // rings it, which is the honest answer there: the road the sentence asks for
+    // is the one that has to reach that building.
     const promptPosition = prompt === null
       ? null
       : this.playerBuildingPosition(prompt.kind === "select-building" ? prompt.buildingId : guideBuildingId);

@@ -93,12 +93,12 @@
     },
     {
       "id": "buy_wood",
-      "title": "Pazar'dan 100 Odun Al",
+      "title": "Pazar'dan 50 Odun Al",
       "why": "Pazar'ı seç: yiyecek sat, altınla odun al. Raf ancak kervanın getirdiği kadar doludur.",
       "goal": {
         "kind": "market-bought",
         "resourceId": "wood",
-        "count": 100
+        "count": 50
       },
       "guide": {
         "action": {

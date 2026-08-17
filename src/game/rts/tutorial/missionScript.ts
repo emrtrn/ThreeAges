@@ -238,9 +238,15 @@ export type MissionGoal =
    * button once" — the player has to sell something first to afford it, and the
    * count is what states how much.
    *
-   * Counts the lot, not the click: one buy at the shipped `lotSize` of 100 is
-   * the whole goal, and a project that trades in smaller lots gets a step that
-   * asks for several without the data changing.
+   * Counts the lot, not the click: the shipped chain asks for exactly one lot at
+   * the shipped `lotSize`, so the step clears on the first successful purchase,
+   * and a project that trades in smaller lots gets a step that asks for several
+   * without the data changing.
+   *
+   * That coupling is authored, not derived, and an engine test holds it: a `count`
+   * that is not a whole multiple of the lot would leave a step whose last click
+   * always overshoots it, which is a story asking for a quantity the Market has no
+   * way to hand over.
    */
   | { readonly kind: "market-bought"; readonly resourceId: string; readonly count: number }
   /**

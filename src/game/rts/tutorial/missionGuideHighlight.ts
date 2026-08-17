@@ -37,6 +37,18 @@
  *    building is selected does it move to the button inside the panel. Pulsing a
  *    button the player cannot see would be indistinguishable from no hint at
  *    all, and pulsing both at once would be pointing at two different things.
+ * 6. **…unless that button is going to refuse.** A Market trade for a stocked
+ *    resource needs a lot on the shelf, and the shelf only fills from a caravan
+ *    (`marketSupplySystem.ts`). A pointer on `trade-buy:wood` with an empty
+ *    shelf sends the player to press a button that answers `out-of-stock` —
+ *    which is the one failure the pulse is supposed to be incapable of, and the
+ *    exact shape of the bug the chain shipped with (plan K1). What replaces it
+ *    depends on *why* the shelf is empty, because the two answers are opposite
+ *    instructions: with no live lane the work is a road, and with a lane already
+ *    running the work is over and the only honest hint is that nothing is to be
+ *    pressed yet. Case 3 is the same principle one layer down — never point at a
+ *    control that is about to say no — and the two share `missionBuildQuota` and
+ *    the shelf reading with the surfaces that do the refusing.
  */
 import { missionBuildQuota } from "./missionBuildPolicy";
 import type { MissionDirectorState } from "./missionDirector";
@@ -61,8 +73,45 @@ export type MissionGuidePrompt =
    * correction — "the thing you built is not connected" — and names that
    * building. This one is an opening instruction with no building in it at all,
    * and a sentence naming one would be pointing at the wrong object.
+   *
+   * Shared with case 6's empty shelf rather than split in two, because there the
+   * player's next move is the same move and the sentence would be the same
+   * sentence. A second kind whose only difference is which step asked for it
+   * would be a distinction with no consequence on screen.
    */
-  | { readonly kind: "supply-road" };
+  | { readonly kind: "supply-road" }
+  /**
+   * The shelf is short but a lane is already carrying — there is nothing to
+   * press, and saying so is the hint.
+   *
+   * The one prompt that accompanies *no* pointer at all, and deliberately: the
+   * player has already done the work (paved to a site), so every control on
+   * screen is the wrong answer. Telling them to pave again would be worse than
+   * silence — it would read as the game not noticing the road they just drew.
+   */
+  | { readonly kind: "await-caravan" };
+
+/**
+ * Whether the Market would actually serve this step's purchase right now.
+ *
+ * Two facts rather than one, because "the shelf is empty" alone cannot choose
+ * between the two sentences case 6 needs. Stated as narrow readings in the
+ * tutorial layer's own vocabulary — the `MissionTradeSiteFact` precedent — so a
+ * test can build one from a literal instead of standing up the trade system.
+ */
+export interface MissionMarketShelf {
+  /** A full lot is on hand: `MarketTradeSystem.buy` will not say `out-of-stock`. */
+  readonly stocked: boolean;
+  /**
+   * `MarketSupplyLineState` for the goal's resource, resolved across every site
+   * that could feed it. Only `"supplying"` means goods are already on their way;
+   * `cut`, `unclaimed` and `rival` are all "the answer is out on the map", which
+   * is what makes them one branch. `absent` — no such site authored at all —
+   * lands there too, and the level gate of Faz 0.5 is what keeps that from being
+   * a road the player can never draw.
+   */
+  readonly supplyState: string;
+}
 
 export interface MissionHighlight {
   /** Build-palette button id — a building id or {@link ROAD_PALETTE_TARGET}. */
@@ -86,6 +135,16 @@ export function missionGuideHighlight(
    * the caller already holds the mission world snapshot.
    */
   completedGuideBuildings = 0,
+  /**
+   * How the Market's shelf reads for a `market-bought` step's resource, or null
+   * when the step is not one — or when the project does not gate that resource's
+   * buy side on stock at all, in which case there is no refusal to avoid.
+   *
+   * Passed in for the same reason as `completedGuideBuildings`: the caller holds
+   * the trade and supply systems, and this function stays a pure statement of the
+   * rule rather than a second reader of the economy.
+   */
+  marketShelf: MissionMarketShelf | null = null,
 ): MissionHighlight {
   const step = state?.step;
   const guide = step?.guide;
@@ -105,6 +164,21 @@ export function missionGuideHighlight(
     return measuresConnection && quota !== null && completedGuideBuildings >= quota
       ? { paletteTarget: ROAD_PALETTE_TARGET, actionId: null, prompt: { kind: "draw-road" } }
       : { paletteTarget: action.buildingId, actionId: null, prompt: null };
+  }
+  // Case 6, and it is checked *before* the selection stage rather than after:
+  // "select your Market" would be a true instruction leading to a button that
+  // refuses, so the shelf has to settle the question before the pointer starts
+  // walking the player towards it.
+  //
+  // Keyed on the goal as well as on the shelf, the way case 3 is: the caller can
+  // only read a shelf for a step that names a resource to buy, but a rule that
+  // depends on the caller having been careful is a rule that reads as luck. A
+  // `market-trade` step is deliberately outside it — that goal takes either
+  // direction, and a sale needs no shelf.
+  if (step.goal.kind === "market-bought" && marketShelf !== null && !marketShelf.stocked) {
+    return marketShelf.supplyState === "supplying"
+      ? { paletteTarget: null, actionId: null, prompt: { kind: "await-caravan" } }
+      : { paletteTarget: ROAD_PALETTE_TARGET, actionId: null, prompt: { kind: "supply-road" } };
   }
   return selectedBuildingId === action.buildingId
     ? { paletteTarget: null, actionId: action.actionId, prompt: null }

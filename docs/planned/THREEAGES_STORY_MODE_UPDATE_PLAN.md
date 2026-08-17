@@ -109,6 +109,8 @@ Hikâye modu artık oyunun yarısını anlatıyor.
 5. `frontier_road.json`'da ticaret noktasına yol çektiren adım **yok**.
 6. `missionGuideHighlight` `market-bought` hedefinde Pazar'ın `trade-buy:wood` düğmesini
    işaret ediyor — yani **oyuncuya reddedilecek bir düğmeyi bastırıyor**.
+   *(6. madde Faz 3'te kapandı: raf boşken işaretçi artık o düğmeye hiç gitmiyor.
+   1-5 tarihsel kayıt olarak duruyor; içeriği Faz 0.1 çözdü.)*
 
 **Maliyet ölçüsü (kaba, L şeklinde yol; oyun içi ölçüm gerekir):** Oyuncu Merkez'i
 `(-40, 40)`; `player_timber_camp` `(-8, 50)` → ~21 hücre → **~84 odun**.
@@ -341,11 +343,69 @@ Faz 3'ün kalan işi (kart cümleleri, tuş ipuçları) duruyor.
 
 - ~~Yol aksiyonu için dünya işaretçisi.~~ **Yapıldı** — `landmark` ile, ve yalnız yol
   adımına değil dört adıma birden.
-- `missionGuideHighlight`'a **"düğme reddedecek"** kuralı: `market-bought` hedefinde stok
-  yoksa işaretçi `trade-buy:*` yerine yol aracına düşsün ve kart *"Pazar'ın rafı boş —
-  önce bir arz noktasına yol çek"* desin. (K1'in kalıcı savunması; 0.1 içeriği çözer, bu
-  kural benzer bir hatanın tekrarını çözer.)
+- ~~`missionGuideHighlight`'a **"düğme reddedecek"** kuralı.~~ **Yapıldı (17 Ağu 2026)** —
+  aşağıdaki üç kararla.
 - Kartta **kontrol ipucu satırı**: aktif adımın `guide`'ı bir tuş komutuysa tuşu yaz.
+  **Faz 1'e bağlı ve orada bekliyor:** bugünkü `MissionGuideAction` üyelerinin (`build`,
+  `road`, `structure-action`) hiçbiri tuş komutu değil, hepsi fare hedefi. Yazacak tuş,
+  `{ kind: "unit-command" }` aksiyonuyla birlikte doğuyor; ondan önce eklenen bir ipucu
+  satırı, veriden değil tahminden okunan bir tuş gösterirdi.
+
+#### "Düğme reddedecek" kuralının verdiği üç karar
+
+**K1'in kalıcı yarısı.** Faz 0.1 *içeriği* düzeltti (zincir artık alımdan önce arz yolunu
+öğretiyor); bu kural *işaretçiyi* düzeltiyor: raf boşken `trade-buy:wood`
+`out-of-stock` döner, yani o düğmedeki nabız oyuncuya oyunun reddedeceği şeyi bastırır.
+Kural, Faz C'nin yol geri düşüşüyle aynı ilkenin bir katman aşağısı — *"hayır diyecek bir
+kontrolü asla işaret etme"* — ve reddi veren yüzeyle aynı sayıyı okuyor.
+
+1. **Boş rafın iki cevabı var, tek cevabı değil.** Plan tek cümle öneriyordu ("yol çek").
+   Ama raf iki farklı sebeple boş olabilir ve bunların talimatı **zıt**: canlı bir hat
+   yoksa iş bir yoldur; hat çalışıyor ve kervan yoldaysa **iş bitmiştir** ve dürüst tek
+   ipucu "şimdilik basılacak bir şey yok"tur. İkinci durumda "yine yol çek" demek,
+   oyuncunun az önce çektiği yolu görmemek gibi okunurdu. Bu yüzden ikinci bir istem
+   türü var: `await-caravan` — **hiçbir işaretçi taşımayan tek istem** (`paletteTarget` ve
+   `actionId` ikisi de `null`).
+2. **`supply-road` istemi paylaşıldı, çoğaltılmadı.** Boş raf + ölü hat durumunda oyuncunun
+   hamlesi yol adımının hamlesiyle aynı, cümlesi de aynı; yalnızca "hangi adım sordu"
+   bilgisiyle ayrılan ikinci bir tür, ekranda sonucu olmayan bir ayrım olurdu.
+   `cut`/`unclaimed`/`rival`/`absent` da tek dal: hepsinde cevap haritada. `absent` (o
+   kaynağı taşıyan hiç nokta yok) çekilemeyecek bir yolu işaret etmiş olurdu — onu
+   **Faz 0.5'in seviye kapısı** engelliyor, bu kural değil.
+3. **Kural hedefi de okuyor, yalnız verilen rafı değil.** `market-trade` hedefi *satışla*
+   da karşılanır, satış raf istemez; o adım kuralın dışında. Çağıranın dikkatine bağlı bir
+   kural, şans olarak okunur — bu yüzden koşul `step.goal.kind === "market-bought"` ile
+   birlikte yazıldı.
+
+#### Lot boyutu 50 (17 Ağu 2026) — bekleme süresinin kaynağı
+
+Kural işaretçiyi düzelttikten sonra kalan şey **beklemenin kendisiydi**: lot 100 iken
+Oduncu Kampı noktasının kervanı 80 birim taşıdığı için raf bir lotu ancak **iki turda**
+dolduruyordu, yani zincirin 6. adımı işaretçisi doğru olduğu hâlde iki kervan seferi
+boyunca kapalı kalıyordu. Lot **50**'ye çekildi (`buildings.json` → `market.lotSize`),
+zincirin `buy_wood` adımı da **bir lot** = 50 odun oldu (başlık dâhil).
+
+**Fiyat da yarıya indi, ve bu bir tercih değil zorunluluktu.** `marketPricing.ts`'te
+`basePrice` *birim* fiyatı değil **lot** fiyatı (`rawPrice = basePrice × index`). Yalnız
+lotu yarıya indirmek, altın cinsinden her şeyin fiyatını sessizce **ikiye katlardı** —
+istenen granülerlik değişikliği bir zam olarak inerdi. `basePrice` de yarıya indi
+(odun/yiyecek 10→5, taş 20→10), böylece takas oranı bugünküyle aynı kaldı; değişen tek
+şey işlemin büyüklüğü.
+
+İki ilişki teste bağlandı (ikisi de tablolardan hesaplanıyor, hiçbiri büyüklük pinlemiyor):
+zincirin alım adımı **tam lot** ister, ve aldığı kaynağın lotunu **tek kervan seferi**
+doldurabilir (`carryCapacity ≥ lotSize`). İkincisi tam bu bekleme şikâyetinin nöbetçisi.
+
+> Kapsam dışı bıraktığım bir kenar durum: **Taş Sahası** 40 taşıyor, yani 50'lik taş lotu
+> hâlâ iki sefer istiyor. Zincir taş satın almıyor (Ocak'ı kendisi kuruyor), o yüzden test
+> de bunu şart koşmuyor — ama serbest maçta taş rafı yavaş dolar. `carryCapacity`'yi 50'ye
+> çekmek tek satır, kararı sende.
+
+**Yan not (ölçüm):** raf okuması her karede yapılıyor (işaretçi seçim hızında yenilenir),
+bu yüzden `MarketTradeSystem`'e bir `lotSize` getirici eklendi — tek bir eşiği okumak için
+fiyat tablosuyla birlikte bütün `MarketTradeSnapshot`'ı kurmak, ipucunun sorusunu panelin
+işini ödeyerek cevaplamak olurdu. Arz durumu `marketSupplyLinesFor`'dan geliyor, yani
+Pazar paneli, arz bildirimleri ve ipucu **aynı okumanın** üç tüketicisi (sis kuralı dâhil).
 
 ### Faz 4 — Mod ile kurulum kartının ilişkisi
 
@@ -379,7 +439,9 @@ Faz 3'ün kalan işi (kart cümleleri, tuş ipuçları) duruyor.
 1. **Faz 0** — kilit çözme. Bu yapılmadan hikâye modu ilk kez oynayan biri için bozuk.
 2. **Faz 1.1 + Faz 2 Perde II** — yol/ticaret perdesi. Oyunun en özgün mekaniği ve K1'in
    kalıcı çözümü.
-3. **Faz 3** — rehber genişletmesi. Yeni adımlar işaretçisiz yarım kalır.
+3. ~~**Faz 3** — rehber genişletmesi.~~ İşaretçi tarafı kapandı (landmark + "düğme
+   reddedecek"). Kalan tek madde — karttaki tuş ipucu satırı — Faz 1'deki
+   `unit-command` aksiyonunu bekliyor, yani sıra fiilen 4'e geçti.
 4. **Faz 2 Perde IV + Faz 1 kalan hedefler** — askerî katman ve Kasaba çağının ödülü.
 5. **Faz 4** — kurulum kartı ilişkisi.
 6. **Faz 2 Perde III'ün opsiyonel adımları** — Ağıl/Değirmen/Tapınak.

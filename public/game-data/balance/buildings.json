@@ -855,11 +855,11 @@
     "maxHealth": 100,
     "visionRadius": 12,
     "market": {
-      "lotSize": 100,
+      "lotSize": 50,
       "basePrice": {
-        "food": 10,
-        "wood": 10,
-        "stone": 20
+        "food": 5,
+        "wood": 5,
+        "stone": 10
       },
       "priceStep": 0.02,
       "indexMin": 0.3,
