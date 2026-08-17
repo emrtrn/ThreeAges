@@ -39197,11 +39197,17 @@ check("Worker Faz 1: iki ordu temel locomotion icin authored Worker rigini kulla
   for (const role of ["walk", "run"] as const) {
     assert.equal(worker.animationVariants[role], undefined, `Faz 1 keeps ${role} free of activity and carrying clips`);
   }
-  assert.deepEqual(
-    worker.animationVariants.idle,
-    ["Farming_holding_idle", "Idle_Loop"],
-    "idle richness stays deterministic and uses only authored empty-hand clips",
+  const idlePool = worker.animationVariants.idle ?? [];
+  assert.ok(idlePool.length > 0, "idle richness stays authored rather than collapsing to a single clip");
+  const carryingClips = new Set(
+    [worker.animationSet.carryIdle, worker.animationSet.carryWalk].filter((clip): clip is string => typeof clip === "string"),
   );
+  for (const clip of idlePool) {
+    assert.ok(
+      !carryingClips.has(clip),
+      `an empty-handed Worker never idles on the carrying clip ${clip}`,
+    );
+  }
   assert.deepEqual(saved.animationSet, worker.animationSet, "the Worker locomotion roles survive a skeleton editor save");
 
   const parsed = parseGlb(new Uint8Array(readFileSync(`public/${workerAsset.path}`)))
@@ -39370,18 +39376,29 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
     scale: [1, 1, 1],
     previewAssetId: "crate",
   }, "the Worker owns one body-stable socket for a two-handed crate");
-  assert.equal(worker.animationSet.carryIdle, "Farming_box_idle");
+  assert.equal(worker.animationSet.carryIdle, "Farming_holding_idle");
   assert.equal(worker.animationSet.carryWalk, "Farming_holding_walk");
   assert.equal(saved.animationSet?.carryWalk, "Farming_holding_walk", "an editor save retains the carrying locomotion role");
+  assert.ok(
+    !(worker.animationVariants.idle ?? []).includes(worker.animationSet.carryIdle ?? ""),
+    "the carrying idle pose belongs to the carrying role alone, never to the empty-handed idle pool",
+  );
 
-  const rawActor = JSON.parse(
-    readFileSync("public/assets/ThreeAges/Actors/Units/BP_RTS_Worker.actor.json", "utf8"),
-  ) as unknown;
-  const actor = normalizeActorScriptDef(rawActor);
-  assert.deepEqual(readRtsActorCargoVisuals(actor), { cargo: [["carriedCrate", "loaded"]] });
-  const crate = actor.components.find((component) => component.id === "carriedCrate");
-  assert.equal(crate?.props.assetId, "crate", "the Worker carries the authored Crate mesh rather than an invisible stand-in");
-  assert.equal(crate?.props.rtsSkeletalSocket, "carry-box", "the crate follows the sidecar socket, not the Actor root");
+  for (const actorName of ["BP_RTS_Worker", "BP_RTS_Enemy_Worker"]) {
+    const rawActor = JSON.parse(
+      readFileSync(`public/assets/ThreeAges/Actors/Units/${actorName}.actor.json`, "utf8"),
+    ) as unknown;
+    const actor = normalizeActorScriptDef(rawActor);
+    assert.deepEqual(
+      readRtsActorCargoVisuals(actor),
+      { cargo: [["carriedCrate", "loaded"]] },
+      `${actorName} drives its crate from the same loaded cargo state`,
+    );
+    const crate = actor.components.find((component) => component.id === "carriedCrate");
+    assert.equal(crate?.props.assetId, "crate", `${actorName} carries the authored Crate mesh rather than an invisible stand-in`);
+    assert.equal(crate?.props.rtsSkeletalSocket, "carry-box", `${actorName} hangs the crate off the sidecar socket, not the Actor root`);
+    assert.deepEqual(crate?.props.scale, [4, 4, 4], `${actorName} draws the crate at the accepted authored size`);
+  }
 
   const shipped = new Set((parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")))?.json.animations ?? [])
     .map((clip) => clip.name));
@@ -39397,7 +39414,7 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
   });
   assert.equal(
     selectRtsAnimation(carryingInput(0), worker.animationSet, shipped, tuning)?.clip,
-    "Farming_box_idle",
+    worker.animationSet.carryIdle,
     "a stopped loaded Worker holds the same box its Actor draws",
   );
   assert.equal(
@@ -39410,6 +39427,123 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
     "Sprint_Loop",
     "clearing the real cargo snapshot restores ordinary locomotion immediately",
   );
+});
+
+check("Worker Faz 4: sokete asilan prop, rigin export olceginden bagimsiz cizilir", () => {
+  // The bug this pins: these character GLBs carry a centimetre conversion on
+  // their scene root (`Root` at scale 0.01), so a prop parented straight onto a
+  // bone inherits it and draws at 1% of its authored size — a 0.36m crate as
+  // 3.6mm, which is why both the crate and the axe were invisible on screen
+  // while every automated check still passed. The contract is world units: what
+  // an Actor authors is what the camera sees, whatever the rig exported at.
+  const worker = normalizeAssetSkeleton(JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
+  ) as unknown);
+  const carryBox = worker.sockets.find((socket) => socket.name === "carry-box");
+  assert.ok(carryBox, "the Worker still authors the crate socket this check is about");
+
+  const exportRoot = new Group();
+  exportRoot.name = "Root";
+  exportRoot.scale.setScalar(0.01);
+  const hips = new Group();
+  hips.name = "Hips";
+  exportRoot.add(hips);
+  const socket = bindRtsSkeletalSocket({ target: exportRoot, clips: [], skeleton: worker }, "carry-box");
+  assert.ok(socket, "the crate socket binds to the authored hip bone");
+
+  const prop = new Group();
+  prop.scale.setScalar(4);
+  socket!.add(prop);
+  exportRoot.updateMatrixWorld(true);
+  const propScale = prop.getWorldScale(new Vector3());
+  for (const axis of ["x", "y", "z"] as const) {
+    assert.ok(
+      Math.abs(propScale[axis] - 4) < 1e-6,
+      `an Actor prop authored at 4x draws at 4x on ${axis}, not at the rig's 0.01 export scale`,
+    );
+  }
+  // The offset travels with the scale: authored as metres, it must arrive as
+  // metres, or a crate authored 24cm in front of the hips would sit 2.4mm away
+  // and read as buried inside the body.
+  const offset = socket!.getWorldPosition(new Vector3());
+  for (const [index, axis] of (["x", "y", "z"] as const).entries()) {
+    assert.ok(
+      Math.abs(offset[axis] - carryBox!.position[index]!) < 1e-6,
+      `the authored socket offset arrives in world units on ${axis}`,
+    );
+  }
+});
+
+check("Worker Faz 4: yuk ust govdede tutulur, bacaklar kendi yuruyusunu surdurur", () => {
+  const worker = normalizeAssetSkeleton(JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
+  ) as unknown);
+  const saved = validateAssetSkeletonDef(JSON.parse(
+    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
+  ) as unknown);
+  const glb = parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")));
+  const shipped = new Set((glb?.json.animations ?? []).map((clip) => clip.name));
+  const nodeNames = new Set((glb?.json.nodes ?? []).map((node) => node.name));
+
+  assert.ok(worker.upperBodyBone, "the Worker authors an upper-body bone, without which the carry layer is a no-op");
+  assert.ok(
+    nodeNames.has(worker.upperBodyBone!),
+    `the authored upper-body bone ${String(worker.upperBodyBone)} is a real node in the shipped rig`,
+  );
+  assert.equal(saved.upperBodyBone, worker.upperBodyBone, "an editor save retains the upper-body mask root");
+  const carryPose = worker.animationSet.carryPose;
+  assert.ok(carryPose && shipped.has(carryPose), "the authored carry pose is a clip the GLB actually ships");
+  assert.equal(saved.animationSet?.carryPose, carryPose, "an editor save retains the carry pose role");
+
+  // The point of the layer, asserted as a relationship rather than as two clip
+  // names: the legs must be free to run while the arms hold the load, which the
+  // full-body `carryWalk` path could never do.
+  const tuning = rtsLocomotionTuning(6);
+  const running = {
+    planarSpeed: 6,
+    carrying: true,
+    working: false,
+    attacking: false,
+    dying: false,
+    attackCount: 0,
+    impactCount: 0,
+  } satisfies RtsAnimationInput;
+  assert.equal(
+    selectRtsAnimation({ ...running, carrying: false }, worker.animationSet, shipped, tuning)?.clip,
+    worker.animationSet.run,
+    "the layered lower body classifies as if empty-handed, so a loaded Worker still runs",
+  );
+
+  const root = new Group();
+  const spine = new Group();
+  spine.name = worker.upperBodyBone!;
+  root.add(spine);
+  const clip = (name: string) => new AnimationClip(name, 1, [
+    new VectorKeyframeTrack(`${spine.name}.position`, [0, 1], [0, 0, 0, 0, 1, 0]),
+  ]);
+  const animator = new LayeredClipAnimator(
+    root,
+    [clip(worker.animationSet.walk!), clip(worker.animationSet.run!), clip(carryPose!), clip(worker.animationSet.hit!)],
+    worker.upperBodyBone!,
+  );
+  animator.play(worker.animationSet.walk!, 0);
+  animator.setUpperBodyPose(carryPose!, 0);
+  assert.equal(animator.lowerClip, worker.animationSet.walk, "the legs keep the gait the simulation asked for");
+  assert.equal(animator.upperClip, carryPose, "the torso holds the load instead of mirroring the legs");
+  // Changing gait under a held load must not disturb the arms — this is the
+  // frame-by-frame case, since locomotion is re-issued every frame.
+  animator.play(worker.animationSet.run!, 0);
+  assert.equal(animator.lowerClip, worker.animationSet.run, "a carrier that speeds up changes gait");
+  assert.equal(animator.upperClip, carryPose, "and keeps holding the same load while doing it");
+  // A blow still outranks the pose, and hands it back rather than the gait.
+  animator.playUpperOnce(worker.animationSet.hit!, 0);
+  assert.equal(animator.upperClip, worker.animationSet.hit, "a struck carrier flinches from the waist up");
+  animator.releaseUpperBody(0);
+  assert.equal(animator.upperClip, carryPose, "the flinch ends back into the carry, not into the walk cycle");
+  // And putting the load down returns the torso to the legs, with nothing held.
+  animator.setUpperBodyPose(null, 0);
+  assert.equal(animator.upperClip, worker.animationSet.run, "an unloaded torso goes back to mirroring the legs");
+  assert.equal(animator.upperBodyPose, null, "and holds no pose at all");
 });
 
 check("Worker Faz 5: fixing, odun, av, tas ve yumruk klipleri gercek durumlarla eslesir", () => {
@@ -39440,8 +39574,22 @@ check("Worker Faz 5: fixing, odun, av, tas ve yumruk klipleri gercek durumlarla 
     assert.equal(axe.props.assetId, "axe");
     assert.equal(axe.props.rtsWorkerToolActivity, "lumber");
     assert.equal(axe.props.rtsSkeletalSocket, "right-hand-tool");
-    assert.deepEqual(axe.props.position, [0, 0.45, 0], "the axe begins in the palm rather than at the actor root");
-    assert.deepEqual(axe.props.scale, [5.5, 5.5, 5.5], "the axe remains legible at RTS camera distance");
+    // Offset and scale are both authored looks that get retuned by eye — the
+    // socket fix moved them from centimetre space into world units, and pinning
+    // either magnitude would have gone red on a change that was correct. What
+    // must hold is the shape: an authored offset, and a uniform enlargement,
+    // since the raw prop is a 20cm model that has to read at RTS camera range.
+    const axePosition = axe.props.position;
+    assert.ok(
+      Array.isArray(axePosition) && axePosition.length === 3 && axePosition.every((axis) => typeof axis === "number" && Number.isFinite(axis)),
+      `${actorName} authors the axe's socket offset rather than leaving it undefined`,
+    );
+    const axeScale = axe.props.scale;
+    assert.ok(
+      Array.isArray(axeScale) && axeScale.length === 3 && new Set(axeScale).size === 1
+        && typeof axeScale[0] === "number" && axeScale[0] > 1,
+      `${actorName} enlarges the axe uniformly so it stays legible at RTS camera distance`,
+    );
   }
 
   assert.equal(

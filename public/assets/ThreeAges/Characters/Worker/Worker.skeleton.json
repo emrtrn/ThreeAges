@@ -34,8 +34,9 @@
     "workCultivation": "Farming_dig_and_plant_seeds",
     "workHunting": "Attack",
     "workChopping": "TreeChopping_Loop",
-    "carryIdle": "Farming_box_idle",
+    "carryIdle": "Farming_holding_idle",
     "carryWalk": "Farming_holding_walk",
+    "carryPose": "Farming_box_idle",
     "attack": "OverhandThrow",
     "attackHunting": "Attack",
     "attackMelee": "Punch_Jab",
@@ -44,7 +45,6 @@
   },
   "animationVariants": {
     "idle": [
-      "Farming_holding_idle",
       "Idle_Loop"
     ],
     "workCultivation": [
@@ -108,7 +108,7 @@
     },
     {
       "clip": "Fixing_Kneeling",
-      "mode": "lockXYZ",
+      "mode": "lockXZ",
       "rootNode": "Hips"
     },
     {
@@ -119,6 +119,7 @@
   ],
   "physicsBodies": [],
   "physicsConstraints": [],
+  "upperBodyBone": "Spine",
   "preview": {
     "selectedClip": "Walk_Loop"
   }

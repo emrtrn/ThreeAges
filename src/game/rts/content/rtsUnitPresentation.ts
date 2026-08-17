@@ -14,12 +14,13 @@
  * (`@engine/perf/distanceUpdateRate`) that the subsystem uses — the cadence
  * policy is shared even though the tick owner is not.
  */
-import { Group, Mesh, PropertyBinding, Quaternion, Vector3, type AnimationClip, type Material, type Object3D } from "three";
+import { Mesh, PropertyBinding, Quaternion, Vector3, type AnimationClip, type Material, type Object3D } from "three";
 import type { ActorScriptDef } from "@engine/scene/actorScript";
 
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
 import { collectSubtreeNodeNames } from "@engine/render-three/bodyMask";
 import { LayeredClipAnimator, type UnitClipAnimator } from "@engine/render-three/layeredClipAnimator";
+import { mountSkeletalSocket } from "@engine/render-three/skeletalSocket";
 import {
   consumeDistanceUpdateDelta,
   isFarFromFocus,
@@ -130,17 +131,11 @@ export function bindRtsSkeletalSocket(
   });
   const bone = matches[0];
   if (!bone) return null;
-  const marker = new Group();
-  marker.name = `rts-socket:${socket.name}`;
-  marker.position.set(...socket.position);
-  marker.rotation.set(
-    socket.rotation[0] * Math.PI / 180,
-    socket.rotation[1] * Math.PI / 180,
-    socket.rotation[2] * Math.PI / 180,
-  );
-  marker.scale.set(...socket.scale);
-  bone.add(marker);
-  return marker;
+  // Through the shared mount, never straight onto the bone: these rigs export at
+  // scale 0.01, so a prop parented to a raw bone draws at 1% of its authored
+  // size. See `mountSkeletalSocket` — the editor's overlay uses the same path, so
+  // what an author positions is what ships.
+  return mountSkeletalSocket(bone, socket, `rts-socket:${socket.name}`).socket;
 }
 
 export interface RtsUnitPresentationOptions {
@@ -975,10 +970,16 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       return;
     }
 
+    // A loaded body splits in two rather than swapping clip: the arms hold the
+    // load, the legs keep the gait they would have had empty-handed. That is why
+    // the locomotion below is asked to classify as if nothing were carried —
+    // otherwise the carry clip would take the whole body and the legs would walk
+    // at whatever pace that clip was authored at, however fast the unit moves.
+    const carryPose = this.resolveCarryPose(state);
     // A null selection means the asset has no clip for this state; the current
     // pose is held rather than replaced with an arbitrary one.
     const selection = selectRtsAnimation(
-      state,
+      carryPose ? { ...state, carrying: false } : state,
       this.animationSet,
       animator.clips,
       this.tuning,
@@ -995,7 +996,32 @@ class RtsUnitPresentation implements RtsPresentationHandle {
       animator.setPlaybackRate(selection.playbackRate);
       this.markContinuous(selection.clip, selection.clip, 0);
     }
+    // After the locomotion write, never before it: `play` is what hands the
+    // torso its passthrough clip, so setting the pose first would be overwritten
+    // on the very frame the load appeared. Re-stated every frame and idempotent
+    // by clip name, so it costs nothing while the load is unchanged and clears
+    // itself on the frame the crate is put down.
+    this.layered?.setUpperBodyPose(carryPose, LOCOMOTION_FADE_SECONDS);
     this.tick(deltaSeconds);
+  }
+
+  /**
+   * The clip this unit's torso holds while loaded, or null for every unit and
+   * every frame that carries nothing.
+   *
+   * Null is also the honest answer for an asset with no upper-body bone or no
+   * authored carry pose: those keep the full-body `carryIdle`/`carryWalk` path,
+   * which is what a pack animal and every pre-layering carrier still use.
+   */
+  private resolveCarryPose(state: RtsPresentationUpdate): string | null {
+    if (!this.layered || state.carrying !== true) return null;
+    return resolveRtsAnimationVariant(
+      "carryPose",
+      this.animationSet,
+      this.animationVariants,
+      this.layered.clips,
+      this.animationVariantSeed,
+    );
   }
 
   /**

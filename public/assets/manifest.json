@@ -28529,29 +28529,6 @@
       "license": "Project-local ThreeAges metal material"
     },
     {
-      "id": "windmill-firstage-2",
-      "name": "Windmill First Age",
-      "assetType": "staticMesh",
-      "category": "Windmill",
-      "path": "assets/ThreeAges/StaticMeshes/Windmill/Windmill_FirstAge.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Windmill",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 110544
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "windmill-firstage-mill",
       "name": "Windmill First Age Mill",
       "assetType": "staticMesh",
@@ -28570,7 +28547,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 29308
+        "bytes": 187408
       },
       "license": "Unknown"
     },
@@ -28593,7 +28570,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 92476
+        "bytes": 424296
       },
       "license": "Unknown"
     },
@@ -28616,7 +28593,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 34480
+        "bytes": 204628
       },
       "license": "Unknown"
     },
@@ -31168,6 +31145,29 @@
         "bytes": 548
       },
       "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "windmill-firstage-2",
+      "name": "Windmill First Age",
+      "assetType": "staticMesh",
+      "category": "Windmill",
+      "path": "assets/ThreeAges/StaticMeshes/Windmill/Windmill_FirstAge.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Windmill",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 684408
+      },
+      "license": "Unknown"
     }
   ]
 }

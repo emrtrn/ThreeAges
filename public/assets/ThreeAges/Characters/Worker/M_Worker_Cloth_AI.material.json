@@ -2,7 +2,7 @@
   "schema": 1,
   "type": "material",
   "materialType": "standard",
-  "name": "M_Worker_Cloth",
+  "name": "M_Worker_Cloth_AI",
   "baseColor": "#ffffff",
   "baseColorTexture": "worker-cloth-red-bc",
   "normalTexture": "worker-cloth-n",

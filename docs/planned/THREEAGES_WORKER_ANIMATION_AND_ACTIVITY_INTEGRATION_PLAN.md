@@ -1,51 +1,103 @@
 # ThreeAges — Worker Animasyon ve Aktivite Entegrasyon Planı
 
-## 0. Asset Değişimi — 2026-08-15
+Oluşturulma tarihi: 2026-08-13
+Son asset güncellemesi: 2026-08-15 (yeni Worker paketi)
+Son ölçüm/denetim: 2026-08-16
+Durum: **Devam ediyor — Faz 1/1A/2, cultivation ve Faz 5 kod bağlantısı tamam;
+dünya içi görsel kabul, hasat/hayvancılık gameplay state'i ve Faz 4'ün taşıma
+dilimleri açık.**
 
-Eski `public/assets/ThreeAges/Characters/Worker/Worker.glb` paketi kaldırıldı.
-RTS `worker` asset kimliği artık
-`public/assets/ThreeAges/Characters/Worker/worker.glb` dosyasını, bu dosyanın yanındaki
-`worker.skeleton.json` ve `worker.materials.json` sidecar'larını kullanır. Yeni
-dosya 65 eklemli rig, iki materyal slotu ve 51 klip içerir.
+## 0. Aktif Asset Sözleşmesi — `worker.glb`
 
-Bu değişimde adı açık olan eşlemeler şöyledir:
+Eski `Characters/Worker/Worker.glb` (33 klipli Mixamo paketi) kaldırıldı. RTS
+`worker` asset kimliği artık `public/assets/ThreeAges/Characters/Worker/worker.glb`
+dosyasını ve yanındaki `worker.skeleton.json` / `worker.materials.json`
+sidecar'larını kullanır.
 
-| RTS rolü | Yeni klip |
+### 0.1 Ölçülen asset gerçeği (2026-08-16, GLB'den doğrudan okundu)
+
+| Özellik | Değer |
 | --- | --- |
-| `idle` / `walk` / `run` | `Farming_holding_idle`, `Idle_FoldArms_Loop`, `Idle_Loop` deterministic havuzu / `Walk_Loop` / `Sprint_Loop` |
-| construction / repair / mining `work` | `Fixing_Kneeling` montage (`enter` / `loop` / `exit`) |
-| `workCultivation` | `Farming_dig_and_plant_seeds` + `Farming_plant_a_plant`, `Farming_watering` varyantları |
-| av strike / post-kill work / `workChopping` | bir kez `Attack` / `Fixing_Kneeling` montage / `TreeChopping_Loop` |
-| Crate `carryIdle` / `carryWalk` | `Farming_box_idle` / `Farming_holding_walk` |
-| ranged / melee / hit / death | `OverhandThrow`; `Punch_Jab` + `Punch_Cross`; `React_Chest` + `React_Head`; `Death` |
+| Dosya boyutu | 5,65 MB |
+| Animasyon klibi | 51 |
+| Skin / eklem | 1 skin, 65 eklem |
+| Mesh / primitive | 2 (`avaturn_body`, `avaturn_look_0`) |
+| Vertex / üçgen | 10.409 vertex, 18.201 üçgen |
+| GLB içi texture | Yok — görünüm dış sidecar materyallerinden gelir |
+| Bind-pose boy | ~1,847 m (kalça yüksekliği ~0,967 m) |
+| Sahne kökü | `Root`, ölçek 0,01 — animasyon track'leri **santimetre** birimindedir |
+| Rig adlandırma | `mixamorig:*` **değil**; sade `Hips`, `RightHand`, `LeftHand` ailesi |
+| `T-Pose` klibi | Yeni pakette **yok** |
 
-Yeni rigde taşıma socket'i `Hips` kemiğindeki `carry-box`tır. Başlangıç transformu
-`position: [0, 0.03, 0.24]` olarak korundu; Crate'in el ve gövde hizası dünya içi
-görsel kabulde yeniden ayarlanacaktır. `React_Chest` ve `React_Head`, gerçek
-`impactCount` hasar olayına deterministik `hit` varyantları olarak bağlanır.
+Bu, eski paketin karakterinden temel bir kopuştur: eski Worker 60.000 üçgen ve
+33 eklemliydi, yenisi 18.201 üçgen ve 65 eklemli. Faz 7'nin bütün performans
+gerekçesi bu yüzden yeniden yazıldı (§13).
 
-Önceki 33 klipli Mixamo paketine dair aşağıdaki envanter, tarihsel kayıt olarak
-kalır; bu bölümdeki eski `Worker_*` klip adları artık aktif runtime sözleşmesi
-değildir.
+### 0.2 Runtime rol eşlemesi (bugün `worker.skeleton.json` içinde authored)
 
-Oluşturulma tarihi: 2026-08-13  
-Durum: **Devam ediyor — Faz 1/1A/2, cultivation ve Faz 5 combat/activity bağlantısı otomasyonla tamamlandı; dünya içi görsel kabul ve Faz 3 hasat/sağım kararları açık.**
+| RTS rolü | Klip | Süre (s) |
+| --- | --- | ---: |
+| `idle` | `Idle_FoldArms_Loop` | 2,567 |
+| `idle` varyantı | `Idle_Loop` | 2,567 |
+| `walk` | `Walk_Loop` | 1,400 |
+| `run` | `Sprint_Loop` | 0,733 |
+| `work` (construction / repair / mining) | `Fixing_Kneeling` montage | 5,267 |
+| `workCultivation` | `Farming_dig_and_plant_seeds` | 5,533 |
+| `workCultivation` varyantları | `Farming_plant_a_plant` / `Farming_watering` | 7,500 / 5,600 |
+| `workHunting` | `Attack` | 2,300 |
+| `workChopping` | `TreeChopping_Loop` | 1,033 |
+| `carryPose` (üst gövde katmanı) | `Farming_box_idle` | 5,967 |
+| `carryIdle` (katmansız yedek) | `Farming_holding_idle` | 5,900 |
+| `carryWalk` (katmansız yedek) | `Farming_holding_walk` | 1,367 |
+| `attack` (menzilli misilleme) | `OverhandThrow` | 1,400 |
+| `attackHunting` | `Attack` | 2,300 |
+| `attackMelee` | `Punch_Jab` (+ `Punch_Cross`) | 0,933 / 1,067 |
+| `hit` | `React_Chest` (+ `React_Head`) | 0,800 / 1,000 |
+| `death` | `Death` | 2,467 |
 
-> **2026-08-15 aktif sözleşme notu:** Bölüm 4–10'daki eski `Worker_*` ve
-> `Farming_kneeling_idle` adları önceki 33-klipli paketin tarihsel kaydıdır.
-> Runtime için bu belgenin Bölüm 0 tablosu ve Faz 5'teki yeni Worker klip
-> eşlemeleri geçerlidir.
+Soketler: `right-hand-tool` (`RightHand`, önizleme `axe`), `throw-release`
+(`RightHand`, önizleme `rock`), `carry-box` (`Hips`, `position: [0, 0.03, 0.24]`,
+önizleme `crate`). Crate'in el/gövde hizası hâlâ dünya içi görsel kabul bekliyor.
+
+### 0.4 Soket ölçek sözleşmesi (2026-08-17'de düzeltildi)
+
+Sahne kökü 0,01 ölçekli olduğu için **kemiğe doğrudan asılan her prop, authored
+boyutunun %1'i kadar çiziliyordu** — 39 cm'lik Crate 3,9 mm, balta birkaç
+milimetre. İkisinin de dünyada görünmemesinin sebebi buydu; kod, test ve
+görünürlük mantığı doğru çalışıyordu, prop yalnızca ölçek altında yok oluyordu.
+Aynı hata editörün socket overlay'inde de vardı (4 cm'lik işaretçi 0,4 mm), yani
+soketler görsel olarak hiç authorlanamamıştı.
+
+`engine/render-three/skeletalSocket.ts` artık kemik ile soket arasına ölçeği
+iptal eden bir mount düğümü koyuyor; **runtime ve editör aynı yoldan geçiyor**.
+Sözleşme: soket offset'i ve prop ölçeği **dünya birimindedir (metre)**, rigin
+export birimi ne olursa olsun. Authored `[0, 0.03, 0.24]` artık gerçekten 3 cm
+yukarı / 24 cm ileri demek.
+
+Ölçülen ham prop boyutları: Crate 9,75 × 8,65 × 9,75 cm (4× → ~39 cm),
+Axe 7,3 × 20 × 1,2 cm (5,5× → ~1,10 m). Baltanın `position: [0, 0.45, 0]` offset'i
+bozuk cm uzayında ayarlandığı için (gerçekte 4,5 mm) sıfırlandı; artık 45 cm
+anlamına gelip eli terk ederdi. Balta boyu ve kasa hizası görsel kabulde tunlanır.
+
+### 0.3 Materyal sözleşmesi
+
+`worker.materials.json` iki slot bildirir: `m-worker-face-material` ve
+`m-worker-cloth-material`. Kumaş materyali `Worker_Cloth_Blue_BC.png` +
+normal + ORM kullanır; düşman Actor'u slot 1'i `m-worker-cloth-material-copy`
+(`Worker_Cloth_Red_BC.png`) ile override eder. Yani takım renk ayrımı **asset
+tarafında yapılmıştır** (§11.2).
 
 ## 1. Amaç
 
-`public/assets/ThreeAges/Characters/Worker/Worker.glb` içindeki 33 animasyonu RTS
-Worker biriminde aşamalı biçimde kullanmak; önce güvenli temel locomotion'ı
-kurmak, ardından Worker'ın gerçek işiyle eşleşen aktivite animasyonlarını,
-prop/soket bağlantılarını ve sunumsal efektleri eklemek.
+`worker.glb` içindeki 51 animasyonu RTS Worker biriminde aşamalı biçimde
+kullanmak; önce güvenli temel locomotion'ı kurmak, ardından Worker'ın gerçek
+işiyle eşleşen aktivite animasyonlarını, prop/soket bağlantılarını ve sunumsal
+efektleri eklemek.
 
 Bu planın hedefi yalnızca daha çok klip oynatmak değildir. Her animasyon,
 simülasyonun gerçekten ürettiği bir Worker durumunu doğru ve okunur biçimde
-göstermelidir.
+göstermelidir. Paketin 51 klibinin yaklaşık üçte ikisinin RTS'de karşılığı
+yoktur ve olmaması normaldir (§4.4).
 
 ## 2. Değişmez Kurallar
 
@@ -53,7 +105,7 @@ göstermelidir.
   hasarı ve ölüm kararı simülasyonun otoritesinde kalır.
 - Animasyon, montage ve notify yalnızca gerçekleşmiş durumu gösterir; ekonomi
   tick'ini, kaynak kazancını, inşaat ilerlemesini veya saldırı sonucunu belirlemez.
-- Root-motion kaynağı `Worker.skeleton.json` ve Skeletal Mesh Editor'dür. Kullanıcı
+- Root-motion kaynağı `worker.skeleton.json` ve Skeletal Mesh Editor'dür. Kullanıcı
   tarafından authorlanan root-motion satırları korunur; kaynak GLB destructive
   biçimde yeniden yazılmaz.
 - Varyant seçimi `Math.random()` kullanmaz. Aynı birim, aynı aktivite ve aynı olay
@@ -69,69 +121,124 @@ göstermelidir.
 
 ### 3.1 Asset envanteri
 
-- [x] `Worker.glb` manifestte `worker` kimliğiyle kayıtlı.
-- [x] Yeni GLB, önceki 8 klip yerine toplam 33 klip taşıyor; geometri değişmeden
-  25 yeni animasyon eklenmiş.
-- [x] GLB; 1 skin, 33 eklem, 1 skinned primitive, 86.782 vertex ve 60.000 triangle
-  içeriyor.
-- [x] Model yaklaşık 1,86 m yüksekliğinde ve standart `mixamorig:*` rig ailesini
-  kullanıyor.
-- [x] Birebir aynı animasyon verisi taşıyan duplicate klip bulunmadı.
-- [x] `gltf-transform validate` hata vermedi.
-- [x] `NODE_SKINNED_MESH_NON_ROOT` uyarısı kaydedildi; entegrasyon öncesinde
-  destructive mesh değişikliği gerektiren bir doğrulama hatası yok.
-- [x] GLB içinde texture yok; kalıcı görünüm dış sidecar materyalinden geliyor.
-- [x] `Worker.materials.json` slot 0'ı `m-worker-material` materyaline bağlıyor.
-- [x] `M_Worker.material.json`, 2048×2048 `Worker_BC.png` base-color texture'ını
-  kullanıyor.
+- [x] `worker.glb` manifestte `worker` kimliğiyle, `assetType: "skeletalMesh"`
+  olarak kayıtlı (`Worker Faz 1` kontrolü yolu da pinliyor).
+- [x] 51 klip, 65 eklem, 2 primitive, 10.409 vertex, 18.201 üçgen ölçüldü.
+- [x] Model ~1,847 m; rig `mixamorig:` öneki taşımıyor, root eklem `Hips`.
+- [x] Animasyon track'leri santimetre biriminde; sahne kökü `Root` 0,01 ölçekli.
+- [x] GLB içinde texture yok; görünüm `M_Worker_Face` ve `M_Worker_Cloth`
+  sidecar materyallerinden geliyor.
+- [x] `worker.materials.json` iki slotu (`face`, `cloth`) doğru sırada bildiriyor.
+- [ ] Yeni GLB için `gltf-transform validate` çalıştırılmadı; eski pakette alınan
+  temiz sonuç bu dosya için geçerli değil. Faz 7 teslimi öncesinde çalıştır.
+- [ ] Yeni pakette birebir aynı animasyon verisini taşıyan duplicate klip taraması
+  yapılmadı (`Idle_Loop` ve `Idle_FoldArms_Loop` aynı süreyi ve aynı Hips
+  ölçümlerini paylaşıyor; ikisinin gerçekten farklı olduğunu doğrula).
 
 ### 3.2 Mevcut runtime bağlantısı
 
-- [x] `BP_RTS_Worker.actor.json` `worker` assetini kullanıyor.
-- [x] `BP_RTS_Enemy_Worker.actor.json` `worker` assetini kullanıyor.
-- [x] `Worker.skeleton.json` temel `idle`/`walk`/`run` `animationSet` rollerini authorlıyor; `animationVariants` boş kalıyor.
-- [x] Mevcut RTS animasyon seçicisi `idle`, `walk`, `run`, `work`, `attack`, `hit`
-  ve `death` gibi semantic rolleri destekliyor.
-- [x] Mevcut Worker sunum verisi bütün ekonomik işleri tek bir `working` bayrağıyla
-  bildiriyor; tarım, inşaat, hasat ve hayvancılık henüz ayırt edilmiyor.
-- [x] Worker için oyuncu/AI materyal ayrımı bulunmuyor; iki taraf modelin kendi
-  renklerini kullanıyor ve takım okunurluğu seçim halkasına dayanıyor.
+- [x] `BP_RTS_Worker.actor.json` ve `BP_RTS_Enemy_Worker.actor.json` `worker`
+  assetini kullanıyor; ikisi de `selectionRadius: 0.43` koruyor.
+- [x] Düşman Actor'u yalnız kumaş slotunu (`m-worker-cloth-material-copy`)
+  override ediyor; asset varsayılanı değiştirilmiyor.
+- [x] `worker.skeleton.json` §0.2'deki 14 semantic rolü, 4 varyant havuzunu,
+  3 soketi, `work` montage'ını ve 5 root-motion satırını authorlıyor.
+- [x] Runtime selector `work`, `workCultivation`, `workHarvest`, `workLivestock`,
+  `workHunting`, `workChopping`, `carryIdle`, `carryWalk`, `attack`,
+  `attackHunting`, `attackMelee`, `hit`, `death` rollerini destekliyor
+  (`src/game/rts/units/rtsUnitAnimation.ts`).
+- [x] **`workHarvest` ve `workLivestock` runtime'da var ama sidecar'da yok.** İkisi
+  de `work` fallback'ine düşüyor. Eksik olan kod değil, klip bağlaması ve gerçek
+  gameplay state'i (§9.3).
+- [x] Oyuncu/AI Worker materyal ayrımı mavi/kırmızı kumaş texture'ıyla yapıldı.
 
-### 3.3 Root-motion başlangıç durumu
+### 3.3 Root-motion başlangıç durumu (2026-08-16 ölçümü)
 
-- [x] Kullanıcı tarafından on hareket klibi için `lockXYZ` authorlandı.
-- [x] Temel `Worker_walking` ve `Worker_running` klipleri kilit listesinde.
-- [x] Kutu, elde taşıma ve el arabası yürüyüş klipleri kilit listesinde.
-- [x] Ham glTF rig adı `mixamorig:Hips`; Three.js runtime yolunun sanitize ettiği
-  `mixamorigHips` adı mevcut sidecar'da kayıtlı.
-- [x] Temel yürüyüşün ham root ilerlemesi yaklaşık 1,69 m, koşunun yaklaşık
-  3,01 m; RTS'de bu ilerleme gameplay hareketiyle çift uygulanmamalı.
-- [ ] Dönüş kliplerinin root translation/rotation davranışını dünya içinde ayrıca
-  doğrula; doğrulanmadan turn havuzuna ekleme.
+Hips translation track'i santimetre biriminde okunup metreye çevrildi. `lockXYZ`
+kökün üç bileşenini de klibin ilk karesine sabitler (`engine/render-three/rootMotion.ts`).
 
-## 4. Animasyon Kataloğu ve Hedef Kullanımlar
+| Klip | Net XZ ilerleme | Dikey salınım | Kilit |
+| --- | ---: | ---: | --- |
+| `Walk_Loop` | 0,000 m | 5,6 cm | `lockXYZ` |
+| `Sprint_Loop` | 0,000 m | 14,6 cm | `lockXYZ` |
+| `Farming_holding_walk` | 1,598 m | 5,8 cm | `lockXYZ` |
+| `Farming_wheelbarrow_walk` | 1,570 m | 8,9 cm | `lockXYZ` |
+| `Fixing_Kneeling` | 0,000 m | 52,5 cm | `lockXYZ` |
+| `Death` | 0,485 m | 87,1 cm | kilitsiz |
+| `Farming_holding_turn_left` / `_right` | 0,298 / 0,205 m | ~1,7 cm | kilitsiz |
+| `Farming_box_turn_left` / `_right` | 0,184 / 0,136 m | ~1,1 cm | kilitsiz |
 
-| Grup | Klipler | Hedef kullanım | Başlangıç kararı |
-| --- | --- | --- | --- |
-| Temel | `Worker_idle_natural`, `Worker_walking`, `Worker_running` | Stand, normal hareket | Faz 1 |
-| Yön/dönüş | `Worker_left_strafe`, `Worker_left_strafe_walking`, `Worker_right_turn`, `Worker_right_turn_90` | Yön değiştirme sunumu | Faz 6 backlog kapısı |
-| Tarım | `Worker_dig_and_plant_seeds`, `Worker_plant_a_plant`, `Worker_plant_tree`, `Worker_watering`, `Worker_pull_plant_1/2` | Ekim, dikim, sulama ve söküm | Faz 3 |
-| Hasat | `Worker_pick_fruit_1/2/3` | Meyve/ürün toplama | Faz 3 |
-| Hayvancılık | `Worker_cow_milking` | Süt üretimi/hayvan işi | Faz 3 |
-| Nötr iş pozu | `Worker_kneeling_idle` | Spesifik klip bulunmayan yerde güvenli fallback | Faz 2 |
-| Elde taşıma | `Worker_holding_idle`, `Worker_holding_turn_left/right`, `Worker_holding_walk` | Görünür yük taşıma | Faz 4; prop zorunlu |
-| Kutu | `Worker_box_idle`, `Worker_box_turn_left/right`, `Worker_box_walk_arc` | Depo/market lojistiği | Faz 4; Crate prop zorunlu |
-| El arabası | `Worker_wheelbarrow_idle`, `Worker_wheelbarrow_walk_1/2`, `Worker_wheelbarrow_walk_turn_left/right`, `Worker_wheelbarrow_dump` | Yük taşıma/boşaltma | Faz 4; yeni prop zorunlu |
-| Referans | `T-Pose` | Editor/rig kontrolü | Runtime havuzuna girmez |
+Bundan çıkan üç açık iş:
 
-Assette Worker'a özgü attack, hit veya death klibi bulunmuyor. Bu eksik roller
-başka kliplerle yanıltıcı biçimde doldurulmayacak.
+- [ ] `Walk_Loop` ve `Sprint_Loop` **zaten yerinde kliplerdir**; eski pakette
+  gerekçe olan "1,69 m / 3,01 m ham ilerleme" yeni pakette yoktur. Buradaki
+  `lockXYZ` artık yalnız yürüyüş/koşu dikey salınımını siliyor. Salınımın geri
+  gelmesi isteniyorsa `lockXZ` yeterlidir — bu bir görsel karardır, kullanıcıya
+  sorulacak.
+- [ ] `Fixing_Kneeling` diz çökerken kalçayı 52,5 cm indiriyor; `lockXYZ` bu inişi
+  de pinliyor. Diz çökme dünya içinde doğru görünüyor mu, yoksa `lockXZ`'ye mi
+  geçmeli — görsel kabulde ayrıca bakılacak.
+- [ ] `Death` klibi 0,485 m ilerliyor ve kilitli değil; ölen Worker'ın gameplay
+  kökünden kayıp kaymadığını doğrula.
+- [ ] Dönüş klipleri (`box_turn_*`, `holding_turn_*`) 0,14–0,30 m taşıyor. Bu
+  klipler taşıma havuzuna girecekse önce kilit kararı verilmeli (§10.2).
+
+## 4. Animasyon Kataloğu — 51 Klip
+
+### 4.1 Runtime'a bağlı klipler (19)
+
+§0.2 tablosundaki 19 klip. Bunların dışındaki hiçbir klip bugün oynatılmıyor.
+
+### 4.2 Bağlanmayı bekleyen tarım/hasat ailesi (9)
+
+| Klip | Süre (s) | Not |
+| --- | ---: | --- |
+| `Farm_Harvest` | 2,567 | Kısa, döngüye uygun hasat; `workHarvest` için ilk aday |
+| `Farm_PlantSeed` | 2,833 | `Farming_dig_and_plant_seeds`'in kısa alternatifi |
+| `Farm_Watering` | 3,867 | `Farming_watering`'in kısa alternatifi |
+| `Farming_pick_fruit_1/2/3` | 8,033 / 6,167 / 7,133 | Meyve toplama; uzun |
+| `Farming_pull_plant_1/2` | 4,700 / 4,767 | Ürün söküm |
+| `Farming_plant_tree` | 9,133 | Ağaç dikimi; RTS'de karşılığı yok |
+
+Bu ailenin tamamı gerçek bir **ürün hasadı gameplay state'i** olmadığı için
+bağlanmadı. Odun, maden, altın ve av işleri bu klipleri semantik olarak
+doğrulamaz.
+
+### 4.3 Bağlanmayı bekleyen taşıma ailesi (8)
+
+| Klip | Süre (s) | Faz |
+| --- | ---: | --- |
+| `Farming_box_turn_left` / `_right` | 1,567 / 1,167 | Faz 4; root kilidi kararı gerekli |
+| `Farming_holding_idle` | 5,900 | Bugün `idle` varyantı; taşıma rolünde değil |
+| `Farming_holding_turn_left` / `_right` | 1,067 / 1,067 | Faz 4; root kilidi kararı gerekli |
+| `Farming_wheelbarrow_idle` | 1,433 | Faz 4; el arabası prop'u yok |
+| `Farming_wheelbarrow_walk` | 1,000 | Kilitli ama bağlı değil; tek walk klibi (eski `walk_1/2` yok) |
+| `Farming_wheelbarrow_dump` | 6,267 | Faz 4; gerçek boşaltma olayı yok |
+| `Farming_kneeling_idle` | 4,300 | Nötr diz çökme pozu; `Fixing_Kneeling` tercih edildiği için boşta |
+
+### 4.4 RTS Worker'ında karşılığı olmayan genel karakter klipleri (15)
+
+`Chest_Open`, `Consume`, `Crouch_Fwd_Loop`, `Crouch_Idle_Loop`, `Idle_Torch_Loop`,
+`Interact`, `Jog_Fwd_Loop`, `LayToIdle`, `PickUp_Table`, `Push_Loop`, `Roll`,
+`Sitting_Enter`, `Sitting_Exit`, `Sitting_Idle_Loop`, `Sitting_Talking_Loop`.
+
+Bunlar asset içeriği olarak kalır, runtime havuzuna girmez. Tek istisna adayı:
+`Jog_Fwd_Loop` (1,000 s), `Walk_Loop` ile `Sprint_Loop` arasında ara bir yürüyüş
+kademesi gerekirse değerlendirilebilir — bugün böyle bir gameplay hız bandı yok.
+
+### 4.5 Yeni pakette **olmayan** ve bu yüzden iptal edilen hedefler
+
+- **`Worker_cow_milking` yok.** Sağım animasyonu artık asset'te bulunmuyor; §9.3
+  bu yüzden yeniden yazıldı.
+- **Genel strafe/turn klibi yok.** Eski `left_strafe`, `right_turn`,
+  `right_turn_90` gitti; yeni pakette yalnız taşıma durumuna özel dönüşler var.
+  §11.3 buna göre daraltıldı.
+- **`T-Pose` yok.** "T-Pose runtime rolüne girmez" kontrolü artık boş küme
+  üzerinde çalışıyor; koruyucu olarak kalabilir.
 
 ## 5. Sabit Tasarım Kararları
 
 ### K-01 — Uygulama sırası
-
-Fazlar aşağıdaki sırada ilerler:
 
 1. Actor bağlantısı ve temel locomotion,
 2. locomotion dünya içi kabulü,
@@ -147,7 +254,7 @@ Bir fazın görsel kabul kapısı kapanmadan onu temel alan sonraki faza geçilm
 ### K-02 — Sidecar semantiği, gameplay gerçeğini izler
 
 Klip adları runtime koduna dağılmaz. Birincil roller, varyantlar, root-motion,
-socket, montage ve notify verileri `Worker.skeleton.json` içinde tutulur. Ancak
+socket, montage ve notify verileri `worker.skeleton.json` içinde tutulur. Ancak
 "hangi işi yapıyor" bilgisi sidecar'da tahmin edilmez; gerçek Worker atama
 sisteminden sunuma aktarılır.
 
@@ -159,10 +266,11 @@ deterministik yapılır. Aktivite değişmeden seçimin kararlı kalması tercih
 
 ### K-04 — İnşaat için yanlış araç hareketi kullanılmaz
 
-Yeni paketteki `Fixing_Kneeling`, construction, repair ve mining için kabul edilen
-uygun iş klibidir. Tarım klipleri bu rollere bağlanmaz. Klip başlangıç/loop/bitiş
-bir arada olduğu için sidecar montage'i yalnız bir kez diz çöker, iş sürerken
-orta pencereyi loop'lar ve `working` bittiğinde yalnız bir kez kalkar.
+`Fixing_Kneeling`, construction, repair ve mining için kabul edilen iş klibidir.
+Tarım klipleri bu rollere bağlanmaz. Klip başlangıç/loop/bitiş bir arada olduğu
+için sidecar montage'i yalnız bir kez diz çöker (0–0,7 s), iş sürerken orta
+pencereyi loop'lar (0,7–4,033 s) ve `working` bittiğinde yalnız bir kez kalkar
+(4,033–5,267 s).
 
 ### K-05 — Prop görünürlüğü ve animasyon birlikte değişir
 
@@ -170,20 +278,22 @@ Kutu, yük ve el arabası için animasyon seçimi ile prop görünürlüğü ayn
 presentation state'inden beslenir. Animasyon değişip prop bir kare geriden gelmez;
 uzak animasyon throttle'ı prop görünürlüğünü geciktirmez.
 
+### K-06 — Bir rolün runtime desteği, o rolün bağlanabilir olduğu anlamına gelmez
+
+`workHarvest` ve `workLivestock` selector'da mevcut ve `work`'e düşüyor. Bu roller
+ancak simülasyonda gerçek bir hasat/hayvan işi ataması doğduğunda sidecar'a
+bağlanır; klip var diye state uydurulmaz.
+
 ## 6. Faz 1 — Actor Bağlantısı ve Temel Locomotion
 
-**Durum:** ✅ Tamamlandı — kullanıcı dünya içi locomotion kabulü: 2026-08-13.
-**Amaç:** Yeni Worker modelini iki takımın Actor'ına bağlamak ve yalnız kanıtlı
-idle/walk/run kliplerini çalıştırmak.
+**Durum:** ✅ Tamamlandı — kullanıcı dünya içi locomotion kabulü: 2026-08-13,
+yeni `worker.glb` paketiyle yeniden bağlandı: 2026-08-15.
 
 ### 6.1 Actor ve materyal bağlantısı
 
-- [x] `BP_RTS_Worker.actor.json` içindeki skeletal mesh `assetId` değerini
-  `worker` yap.
-- [x] `BP_RTS_Enemy_Worker.actor.json` içindeki skeletal mesh `assetId` değerini
-  `worker` yap.
-- [x] Asset sidecar varsayılanı `m-worker-material` olarak doğrulandı; iki Actor için
-  ayrı `materialSlot` override'ı gerekmedi.
+- [x] İki Actor'ın skeletal mesh `assetId` değeri `worker`.
+- [x] Asset varsayılan materyal slotları (`face`, `cloth`) doğrulandı; oyuncu
+  Actor'u override kullanmaz.
 - [x] `selectionRadius: 0.43` gameplay sözleşmesi korundu.
 - [x] Model yönü, ölçeği ve zemin oturuşu dünya içi locomotion kabulünde doğrulandı.
 
@@ -191,31 +301,28 @@ idle/walk/run kliplerini çalıştırmak.
 
 | RTS rolü | Klip | Süre | Durum |
 | --- | --- | ---: | --- |
-| `idle` | `Worker_idle_natural` | 8,37 s | ✅ |
-| `walk` | `Worker_walking` | 1,07 s | ✅ |
-| `run` | `Worker_running` | 0,73 s | ✅ |
+| `idle` | `Idle_FoldArms_Loop` | 2,567 s | ✅ |
+| `walk` | `Walk_Loop` | 1,400 s | ✅ |
+| `run` | `Sprint_Loop` | 0,733 s | ✅ |
 
-- [x] Üç temel rolü `Worker.skeleton.json.animationSet` içine ekle.
-- [x] Bu fazda kutu, holding, wheelbarrow, strafe veya turn kliplerini genel
-  locomotion varyantlarına ekleme.
-- [x] `Worker_walking` ve `Worker_running` root-motion ayarlarını değiştirme.
-- [x] Worker `moveSpeed: 6` ile walk/run eşiklerini ve playback rate'i test et.
-- [x] Animasyonun birim konumu, rotası veya varış kararını değiştirmediğini pinle.
+- [x] Üç temel rol `worker.skeleton.json.animationSet` içinde.
+- [x] Bu fazda kutu, holding, wheelbarrow veya turn klipleri genel locomotion
+  varyantlarına eklenmedi.
+- [x] Worker `moveSpeed: 6` ile walk/run eşikleri ve playback rate test edildi
+  (`rtsPlaybackRate("run", 6) === 1`).
+- [x] Animasyonun birim konumu, rotası veya varış kararını değiştirmediği pinlendi.
 
 ### 6.3 Otomasyon
 
-- [x] İki Worker Actor'ının `worker` assetini kullandığını test et.
-- [x] Sidecar'daki her temel rolün GLB'de gerçekten bulunduğunu test et.
-- [x] `T-Pose` klibinin hiçbir runtime rolüne girmediğini test et.
-- [x] `Worker.skeleton.json` normalize/save beklentilerini güncelle.
-- [x] `npx.cmd tsc --noEmit` çalıştır.
-- [x] `npm.cmd run test:engine -- --filter "Worker Faz 1"`
-  eklenen kontrol etiketine karşılık gelen dar filtreyi çalıştır.
+- [x] `Worker Faz 1` kontrolü: manifest yolu, iki Actor, materyal slotları,
+  sidecar rolleri, GLB'de klip varlığı, root-motion kilitleri ve selector çıktısı.
+- [x] `T-Pose` hiçbir runtime rolüne girmiyor (yeni pakette klip zaten yok).
+- [x] `npx.cmd tsc --noEmit` ve `npm.cmd run test:engine -- --filter "Worker Faz 1"`.
 
 ## 7. Faz 1A — Locomotion Dünya İçi Görsel Kabulü
 
-**Durum:** ✅ Kullanıcı kabulü tamamlandı — 2026-08-13.
-**Amaç:** Temel model bağlantısını iş animasyonlarıyla karıştırmadan kabul etmek.
+**Durum:** ✅ Kullanıcı kabulü: 2026-08-13 (eski paket) — **yeni paketle
+tekrarlanmadı.**
 
 ### 7.1 Kabul ortamı
 
@@ -229,223 +336,258 @@ idle/walk/run kliplerini çalıştırmak.
 
 - [ ] Kısa hedefte yürüyüşe başlama ve duruşa dönüşü gözle.
 - [ ] Uzun hedefte koşu döngüsünü ve playback hızını gözle.
-- [ ] Açık alan, dar geçit ve kalabalık varışta ayak kaymasını kontrol et.
+- [ ] Açık alan, dar geçit ve kalabalık varışta ayak kaymasını kontrol et
+  (yeni walk/run yerinde klipler; kayma varsa neden `lockXYZ` değil playback rate).
 - [ ] Keskin yön değişiminde root drift, ters yön ve modelin gameplay kökünden
   ayrılmasını kontrol et.
-- [ ] Idle klibinin tekrarında sıçrama veya her karede restart olmadığını doğrula.
-- [ ] Modelin zemin altına girmediğini ve seçim halkasına doğru oturduğunu doğrula.
-- [x] Kullanıcı locomotion kabulü kaydedildi: 2026-08-13 (`çalışıyor, devam et`).
+- [ ] Idle havuzunun (`Idle_FoldArms_Loop`, `Farming_holding_idle`, `Idle_Loop`)
+  tekrarında sıçrama veya her karede restart olmadığını doğrula.
+- [ ] Yürüyüş/koşu dikey salınımının silinmiş olması (§3.3) kabul edilebilir mi,
+  karar ver.
+- [x] Eski paket locomotion kabulü kaydedildi: 2026-08-13 (`çalışıyor, devam et`).
 
-**Çıkış kapısı:** Locomotion kullanıcı tarafından kabul edilmeden Faz 2 başlamaz.
+**Çıkış kapısı:** Yeni paketin locomotion'ı kullanıcı tarafından kabul edilmeden
+sonraki fazların görsel kapıları kapanmış sayılmaz.
 
 ## 8. Faz 2 — Güvenli Nötr Çalışma Sunumu
 
-**Durum:** ✅ Kullanıcı görsel kabulü tamamlandı — 2026-08-13.
-**Amaç:** İşe özel state sözleşmesi kurulana kadar Worker'ın bütün iş noktalarında
-statik durması yerine güvenli ve yanıltıcı olmayan bir çalışma pozu göstermek.
+**Durum:** ✅ Sözleşme tamam — nötr poz klibi yeni pakette `Fixing_Kneeling`
+montage'ıyla değiştirildi (2026-08-15).
 
-- [x] `Worker_kneeling_idle` klibinin loop ve ayakta→diz çökme geçişi dünya içinde
-  gözlemlenip kabul edildi: 2026-08-13.
-- [x] Bu kabulde montage/ayrı geçiş gereksinimi oluşmadı.
-- [x] `Worker_kneeling_idle`, tek ve stabil genel `work` fallback'i olarak bağlandı.
-- [x] İnşaat ve onarımda diz çökme yanıltıcı bulunduğu için bu iki aktivite ayakta
-  nötr idle'a yönlendirildi; yapıdaki mevcut inşaat görseli/ilerleme sunumu korunur.
-- [x] `working` false olduğunda idle'a güvenli biçimde döndüğünü otomasyonla doğrula.
-- [x] İşe yürürken `work` klibinin locomotion'dan önce başlamadığını otomasyonla test et.
-- [x] İş bittiği veya Worker serbest bırakıldığı karede pozun temizlendiğini inşaat,
-  maden ve ekonomi çıkış testleriyle doğrula.
-- [x] Hedefli engine testlerini ve TypeScript kontrolünü çalıştır.
-- [x] Kullanıcı görsel kabulü kaydedildi: 2026-08-13 (`gözlem onaylandı, devam et`).
+- [x] Genel `work` fallback'i tek ve stabil bir klibe bağlı.
+- [x] İnşaat ve onarım artık ayakta nötr idle'a değil, `Fixing_Kneeling`
+  montage'ına gider (K-04); bu, eski "diz çökme yanıltıcı" kararının bilinçli
+  revizyonudur — yeni klip alet kullanan bir onarım pozudur.
+- [x] `working` false olduğunda idle'a güvenli dönüş otomasyonla doğrulandı.
+- [x] İşe yürürken `work` klibinin locomotion'dan önce başlamadığı test edildi.
+- [x] İş bittiği veya Worker serbest bırakıldığı karede pozun temizlendiği inşaat,
+  maden ve ekonomi çıkış testleriyle doğrulandı.
+- [x] Kullanıcı görsel kabulü (eski klip): 2026-08-13.
+- [x] **Havada diz çökme düzeltildi (2026-08-17).** Kullanıcı dünyada Worker'ın
+  zeminin üstünde asılı diz çöktüğünü gördü; sebebi §3.3'ün önceden işaret ettiği
+  şeydi: `lockXYZ` klibin 52,5 cm'lik kalça inişini de pinliyordu, yani gövde
+  çömelirken kalça ayakta kalıyordu. `Fixing_Kneeling` artık `lockXZ` — yatay
+  kayma hâlâ kilitli, dikey iniş oynuyor. Görsel kabul yine de bekliyor.
+- [ ] Montage'ın enter → loop → exit geçişi dünya içinde kabul edilmedi.
+- [ ] `Farming_kneeling_idle` boşta duruyor; `Fixing_Kneeling` kabul görmezse
+  yedek nötr poz adayıdır.
 
 ## 9. Faz 3 — İşe Göre Aktivite Sözleşmesi ve Animasyonlar
 
-**Durum:** ⬜ Aktivite sözleşmesi ve otomasyonu tamamlandı; işe özel klip ailelerinin görsel seçimi bekliyor.
-**Amaç:** Tek `working` bayrağını bozmadan, gerçek iş kaynağından gelen sunumsal
-bir aktivite kimliğiyle doğru animasyon ailesini seçmek.
+**Durum:** 🟨 Aktivite sözleşmesi ve cultivation tamam; hasat ve hayvancılık
+gameplay state'i yok.
 
 ### 9.1 Aktivite veri sözleşmesi
 
 - [x] `RtsPresentationUpdate` için gameplay kararlarından türetilen, yalnız okunur
   `workerActivity` sözleşmesi eklendi.
-- [x] En küçük yeterli kategori kümesi authorlandı:
-  `generic`, `construction`, `repair`, `cultivation`, `harvest`, `livestock`,
-  `mining`, `lumber`, `carryingBox`, `carryingLoad`, `wheelbarrow`.
-- [x] `Unit` içinde bu durumun yalnız sunum amaçlı olduğu açıkça belgelendi.
+- [x] Kategori kümesi: `generic`, `construction`, `repair`, `cultivation`,
+  `harvest`, `livestock`, `mining`, `lumber`, `hunting`, `carryingBox`,
+  `carryingLoad`, `wheelbarrow`.
+- [x] `Unit` içinde bu durumun yalnız sunum amaçlı olduğu belgelendi.
 - [x] `WorkerConstructionSystem`, `EconomyProductionSystem` ve `PastureSystem`
   yalnız sahip oldukları gerçek atama bilgisini bildirir; renderer bina/resource
-  kimliğinden iş tahmini yapmaz. İlk eşleme: inşaat `construction`, onarım
-  `repair`, tarla `cultivation`, hayvan sakinleştirme `livestock`; henüz özel
-  klibi kabul edilmeyen sonlu kaynaklar `generic` kalır.
+  kimliğinden iş tahmini yapmaz.
 - [x] İş bırakma, iş değişimi, bina kaybı, kaynak tükenmesi ve Worker ölümü dahil
-  mevcut çıkış yollarında aktivite temizlenir.
-- [x] Construction, repair and mining mevcut `work` rolünü paylaşır;
-  `Fixing_Kneeling` montage'i yalnız bu üç activity için çalışır. Lumber ayrı
-  `workChopping` rolüne gider; renderer yapı/resource kimliğinden tahmin etmez.
+  bütün çıkış yollarında aktivite temizlenir.
+- [x] Construction, repair ve mining `work` rolünü paylaşır; lumber ayrı
+  `workChopping`, av ayrı `workHunting` rolüne gider.
 
-### 9.2 Tarım ve hasat eşlemeleri
+### 9.2 Tarım eşlemeleri
 
-- [x] `cultivation` için ana klip `Worker_dig_and_plant_seeds` authorlandı ve
-  dünya içi görsel kabulü kaydedildi: 2026-08-13 (`görsel kabul tamam, devam et`).
-- [x] `Worker_plant_a_plant` ve `Worker_watering`, yalnız cultivation aktivitesinin
-  deterministik varyant havuzuna eklendi.
-- [x] Mevcut `Worker_pick_fruit_1/2/3` ve `Worker_pull_plant_1/2` klipleri için
-  bağlanacak gerçek ürün/meyve hasat ataması bulunmadığı kaydedildi. Odun, maden,
-  altın ve av işleri bu klipleri semantik olarak doğrulamaz; `generic` fallback
-  korunur.
+- [x] `cultivation` ana klibi `Farming_dig_and_plant_seeds`; dünya içi görsel
+  kabul: 2026-08-13 (eski paketin aynı adlı klibiyle).
+- [x] `Farming_plant_a_plant` ve `Farming_watering` yalnız cultivation'ın
+  deterministik varyant havuzunda.
 - [x] Uzun cultivation kliplerinin iş süresi değiştiğinde kesilmesi gameplay'i
   değiştirmez; seçim yalnız `working` ve sunumsal activity okur.
 - [x] İş animasyonunun kaynak miktarı veya üretim tick'ini değiştirmediği hedefli
   selector ve ekonomi testleriyle doğrulandı.
+- [ ] Yeni paketin cultivation kliplerinin dünya içi kabulü tekrarlanmadı.
+- [ ] Kısa alternatifler (`Farm_PlantSeed` 2,833 s, `Farm_Watering` 3,867 s) uzun
+  klipler yerine daha okunur mu, kullanıcıyla karşılaştır.
 
-### 9.3 Hayvancılık
+### 9.3 Hasat ve hayvancılık — asset değişimiyle yeniden yazıldı
 
-- [ ] `Worker_cow_milking` klibini gerçek süt/hayvan üretimi state'iyle eşleştir.
-  Mevcut `livestock` state'i hayvan sakinleştirme/sürmedir; sağma klibi bilinçli
-  olarak bağlanmadı. Mevcut Ağıl geliri penned hayvanlardan Worker olmadan
-  üretildiği için sağım ataması yoktur.
-- [ ] İneğin/Worker'ın göreli konum ve yönünü kabul sahnesinde authorla.
-- [ ] Hayvan yoksa veya iş iptal edilmişse sağma animasyonunun başlamadığını test et.
-- [ ] Taming/shepherding için sağma klibini yeniden kullanma; uygun klip yoksa nötr
-  fallback'i koru.
+Yeni pakette **sağım klibi yoktur**; eski `Worker_cow_milking` gitti. Buna karşılık
+`workHarvest` ve `workLivestock` rolleri runtime'da hazır ve `Farm_Harvest`,
+`Farming_pick_fruit_*`, `Farming_pull_plant_*` klipleri assette duruyor.
+
+- [ ] Ürün hasadı için gerçek bir gameplay ataması tasarla (hangi bina, hangi
+  kaynak, hangi Worker döngüsü). Bu olmadan `workHarvest` bağlanmaz.
+- [ ] Hasat ataması doğduğunda `Farm_Harvest`'i ana klip, `Farming_pick_fruit_1/2/3`
+  ve `Farming_pull_plant_1/2`'yi deterministik varyant havuzu yap.
+- [ ] Hayvancılık: mevcut `livestock` state'i hayvan sakinleştirme/sürmedir ve
+  Ağıl geliri penned hayvanlardan Worker olmadan üretilir. Sağım klibi olmadığı
+  için `workLivestock` **bağlanmayacak**; sakinleştirme `work` fallback'inde kalır.
+- [ ] Sağım gerçekten istenirse bu yeni bir asset işidir (klip üretimi + inek
+  hizası), plan işi değildir. Karar kullanıcıya ait.
+- [ ] Uygun klip yokken hiçbir rolü yanıltıcı klip ile doldurma; nötr fallback korunur.
 
 ### 9.4 Deterministik çeşitlilik
 
-- [x] Aktivite başlangıcı veya tamamlanan iş çevrimi için sunumsal sequence sayacı
-  bu dilimde gerekli değil: cultivation klipleri sürekli loop'tur ve seçici birim
-  kimliği + semantic rolle sabit seçim yapar. Gerçek, ayrık iş çevrimi/one-shot
-  eklendiğinde o olayın otoriter sayacı ayrıca sunuma aktarılacak; renderer sayacı
-  icat etmeyecek.
-- [x] Aynı Worker ve aynı cultivation aktivitesinde seçimin kararlı olduğunu test et.
-- [x] Farklı Worker seed'lerinin cultivation havuzunda çeşitlilik gösterebildiğini
-  mevcut deterministik varyant seçicisi üzerinden doğrula.
-- [x] Aktivite değişmeden her loop'ta ilgisiz klibe sıçrama olmadığını selector
-  kararlılığıyla test et.
-- [x] Mevcut RTS maçında match save/load bulunmadığı kaydedildi; yeniden oluşturulan
-  presentation/replay eşdeğeri aynı salt-okunur snapshot'tan aynı cultivation
-  seçimini üretir ve `workerActivity`/`working` gameplay state'ine yazmaz.
+- [x] Cultivation klipleri sürekli loop olduğu için ayrı sunumsal sequence sayacı
+  gerekmedi; seçici birim kimliği + semantic rolle sabit seçim yapar.
+- [x] Aynı Worker ve aynı aktivitede seçimin kararlı olduğu test edildi.
+- [x] Farklı Worker seed'lerinin havuzda çeşitlilik gösterdiği doğrulandı.
+- [x] Aktivite değişmeden her loop'ta ilgisiz klibe sıçrama olmadığı test edildi.
+- [x] Yeniden oluşturulan presentation aynı salt-okunur snapshot'tan aynı seçimi
+  üretir ve `workerActivity`/`working` gameplay state'ine yazmaz.
 
-**Çıkış kapısı:** Tarım kabul edildi. Hasat ve sağım için doğru dünya içi aktivite,
-mevcut simülasyonda bulunmuyor; ürün-hasat ve Worker'lı sağım state'i tasarlanıp
-uygulanmadan Faz 4 tamamlanmış sayılmaz.
+**Çıkış kapısı:** Tarım kabul edildi. Hasat için gameplay state'i tasarlanmadan,
+hayvancılık için de sağım klibi olmadığı açıkça kabul edilmeden Faz 3 kapanmaz.
 
 ## 10. Faz 4 — Prop, Soket ve Taşıma Animasyonları
 
-**Durum:** ⬜ İlk Crate taşıma dilimi otomasyonla hazır; görsel hizalama ve Faz 3'ün kalan kapıları açık.
-**Amaç:** Görünmez nesne taşıma hatası üretmeden kutu, genel yük ve el arabası
-animasyonlarını oyuna kazandırmak.
+**Durum:** 🟨 Crate taşıma iki Actor'da da bağlı ve taşıma poz ailesi karara
+bağlandı (2026-08-17); soket hizasının görsel kabulü, eşek barrel devri ve el
+arabası açık.
 
 ### 10.1 Soket sözleşmesi
 
-- [ ] Sol ve sağ el kemiklerini Skeletal Mesh Editor'de doğrula.
-- [ ] Tek elle bağlanacak prop için el soketi, iki elle taşınacak prop için stabil
-  el/gövde sahipliği tasarla.
-- [x] İki elle tutulan Crate için gövde-stabil `carry-box` soketini `mixamorigHips`
-  üzerinde `Worker.skeleton.json` içinde authorla. Transform başlangıç değeri
-  `position: [0, 0.03, 0.24]`; gerçek klipte görsel hizalama kabulü hâlâ açık.
+- [x] `right-hand-tool` (`RightHand`) ve `throw-release` (`RightHand`) soketleri
+  authorlandı; balta ve taş bunları kullanıyor.
+- [x] İki elle tutulan Crate için gövde-stabil `carry-box` soketi `Hips` üzerinde,
+  `position: [0, 0.03, 0.24]` ile authorlandı.
+- [ ] Sol el kemiğini (`LeftHand`) ve tek elle bağlanacak prop ihtiyacını
+  Skeletal Mesh Editor'de değerlendir.
 - [ ] Prop'un zemin, gövde ve ellerle kesişmediğini idle/walk/turn kliplerinde
   ayrı ayrı doğrula.
 
 ### 10.2 Kutu taşıma
 
-- [x] Mevcut `Crate.gltf` assetinin pivotu tabanda ve ham boyutu yaklaşık
-  9×17×9 cm olarak incelendi; Worker üzerinde okunur taşıma için Actor'da 4×
-  ölçekle authorlandı. Gerçek klipte görsel uygunluk kabulü hâlâ açık.
-- [x] `Worker_box_idle` ve `Worker_box_walk_arc` kliplerini Crate görünürlüğüyle
-  aynı `carrying` state'ine bağla. Mevcut kaynak toplama dönüşü, bu state'in
-  otoriter kaynağıdır; kaynak miktarı ve rota değişmez.
-- [ ] `Worker_box_turn_left/right` kliplerinin root davranışını doğrula.
+- [x] `Crate.gltf` pivotu tabanda, ham boyut ~9×17×9 cm; Actor'da 4× ölçekle
+  authorlandı.
+- [x] `carryIdle` = `Farming_holding_idle`, `carryWalk` = `Farming_holding_walk`;
+  görünürlük Crate ile aynı `loaded` state'inden besleniyor.
+- [x] **AI Worker'da Crate eklendi (2026-08-17).** `BP_RTS_Enemy_Worker.actor.json`
+  artık oyuncu Actor'undaki `carriedCrate` bileşenini birebir taşıyor (`crate`,
+  4× ölçek, `rtsCargoVisibility: "loaded"`, `carry-box` soketi); `Worker Faz 4`
+  kontrolü iki Actor'u birden pinliyor.
+- [x] **Kullanıcı kararı (2026-08-17), iki adımda:** önce holding çiftine geçildi
+  (`Farming_box_walk` klibi olmadığı için kutu idle'ı ↔ elde yürüyüş sıçraması
+  kabul edilmemişti). Ardından kullanıcı dünyada bakıp asıl çözümü istedi:
+  **katmanlı blend.** Artık `carryPose` = `Farming_box_idle` yalnız üst gövdede
+  tutuluyor, bacaklar normal `walk`/`run`/`idle` oynuyor. Poz sıçraması sorunu
+  ortadan kalktı, çünkü ortada tek bir taşıma klibi kalmadı: gövde yükü tutuyor,
+  bacaklar birimin gerçek hızıyla yürüyor. Holding çifti katmansız yedek olarak
+  duruyor (üst gövde kemiği veya `carryPose` authorlamayan asset'ler için).
+- [ ] Crate'in `carry-box` hizasının gerçek kliplerde görsel kabulü.
 - [ ] Kutu işi bittiğinde prop'un kaybolması ile animasyon dönüşünün aynı karede
   gerçekleştiğini test et.
+- [ ] `Farming_box_turn_left/right` ve `Farming_holding_turn_left/right`
+  bağlanacaksa önce root kilidi kararı (§3.3): bu klipler 0,14–0,30 m taşıyor.
 
 ### 10.2A Eşek barrel yükleme — kabul edilen yön
 
-- [x] Uzak ekonomi üreticilerinin mevcut lojistikte yol üstü eşek karavanı ile
-  taşındığı; yakın üreticilerin doğrudan merkeze/depo hedefine gittiği doğrulandı.
-- [x] Mevcut eşek Actor'ında `loaded` durumunda görünür iki barrel pannier prop'u
-  bulunduğu, karavanın yükü taşıdığı `outbound` ve `unloading` evrelerinde bu
-  prop'ların göründüğü doğrulandı.
-- [ ] Gerçek kaynak devri için üreticiye atanmış Worker'ın yalnız `loading`
-  evresinde elinde/kucağında barrel göstermesini authorla; kaynak miktarı veya
-  karavan rotası bu sunum animasyonundan etkilenmez.
-- [ ] Devir anında tek bir presentation state ile Worker barrel'ını gizle ve
-  eşeğin pannier barrel'larını görünür yap; fazlar arasında çift barrel veya boş
-  bir kare oluşmadığını otomasyonla doğrula.
+- [x] Uzak ekonomi üreticilerinin yol üstü eşek karavanıyla, yakın üreticilerin
+  doğrudan merkeze taşındığı doğrulandı.
+- [x] Eşek Actor'unda `loaded` durumunda iki barrel pannier prop'u bulunduğu ve
+  `outbound`/`unloading` evrelerinde göründüğü doğrulandı.
+- [ ] Üreticiye atanmış Worker'ın yalnız `loading` evresinde barrel göstermesini
+  authorla; kaynak miktarı veya karavan rotası bu sunumdan etkilenmez.
+- [ ] Devir anında tek presentation state ile Worker barrel'ını gizle ve eşeğin
+  pannier'larını görünür yap; çift barrel veya boş kare olmadığını otomasyonla test et.
 - [ ] Worker, eşek ve hedef deposu için yaklaşma/ayrılma noktalarını belirle;
   mevcut karavan varış-kapılı lojistik sözleşmesini bozma.
 
 ### 10.3 Genel elde taşıma
 
-- [ ] `Worker_holding_idle` ve `Worker_holding_walk` için taşınacak gerçek yük
-  türünü belirle.
+- [x] `Farming_holding_walk` `carryWalk` rolünde kullanılıyor.
+- [x] **Kullanıcı kararı (2026-08-17): `Farming_holding_idle` taşıma rolüne ait.**
+  `idle` varyant havuzundan çıkarıldı; boş elli Worker artık "elinde bir şey
+  tutuyor" pozunu oynayamaz. Havuz `Idle_FoldArms_Loop` + `Idle_Loop` olarak kaldı.
+  `Worker Faz 1` kontrolü bunu ilişki olarak pinliyor: idle havuzu hiçbir taşıma
+  klibini içeremez (klip adı sabitlemeden).
 - [ ] Yük yokken holding kliplerinin seçilemediğini test et.
 - [ ] Yükü depoya bırakma sırasında prop görünürlüğü ve idle dönüşünü doğrula.
 
 ### 10.4 El arabası
 
+Yeni pakette üç klip var: `Farming_wheelbarrow_idle` (1,433 s),
+`Farming_wheelbarrow_walk` (1,000 s, `lockXYZ` ile kilitli ama role bağlı değil),
+`Farming_wheelbarrow_dump` (6,267 s). Eski plandaki `walk_1/2` ve dönüş klipleri
+**yok**; tek yürüyüş klibi var.
+
 - [ ] Uygun wheelbarrow assetini üret veya projeye ekle; prop olmadan klipleri
   bağlama.
 - [ ] Teker pivotu, el tutuşu ve zemin yüksekliğini authorla.
-- [ ] `walk_1/2` kliplerini deterministik ve görsel olarak anlamlı kullan.
-- [ ] Dönüş kliplerinde oyun yönelimiyle çift dönüş oluşmadığını doğrula.
-- [ ] `Worker_wheelbarrow_dump` klibini yalnız gerçek boşaltma olayı sırasında
+- [ ] `wheelbarrow` activity'sinin hangi gerçek lojistik işine karşılık geldiğini
+  belirle; bugün bu activity üretilmiyor.
+- [ ] Tek yürüyüş klibiyle dönüşlerin oyun yönelimine bindiğini doğrula (dönüş
+  klibi yok, çift dönüş riski de yok).
+- [ ] `Farming_wheelbarrow_dump` klibini yalnız gerçek boşaltma olayı sırasında
   sunumsal one-shot olarak oynat.
 - [ ] Boşaltma animasyonu kaynak transferini başlatmaz veya geciktirmez.
 
-## 11. Faz 5 — Savaş Rolleri ve Takım Okunurluğu Karar Kapısı
+## 11. Faz 5 — Savaş Rolleri ve Takım Okunurluğu
 
-**Durum:** 🟨 Kod ve hedefli otomasyon tamam; dünya içi görsel kabul bekliyor.
+**Durum:** 🟨 Kod, materyal ayrımı ve hedefli otomasyon tamam; dünya içi görsel
+kabul bekliyor.
 
 ### 11.1 Attack, hit ve death
 
-- [x] Av kampında prey kaynak sistemi `hunting` bildirdiğinde `Attack` sürekli
-  iş klibi seçilir; avın hasar/ürün miktarı bu sunumdan türetilmez.
-- [x] Worker uzaktaki otomatik misilleme hedefini 1.25–6 birim bandında
-  `OverhandThrow` ile vurur. `Rock.gltf` yalnız görsel uçuş izidir; gerçek hasar,
-  cooldown ve hedef `unitCombat` tarafından önceden kararlaştırılır.
-- [x] Hedef 1.25 birimin içindeyse mevcut yakın hasar yolu bağımsız sayacıyla
-  `Punch_Jab` / `Punch_Cross` varyantını oynatır.
+- [x] Av kampında prey kaynak sistemi `hunting` bildirdiğinde `workHunting`
+  rolüyle `Attack` çalışır; temas anında hayvan tek vuruşla düşer ve
+  `attackHunting` olayı `Attack` klibini yalnız bir kez oynatır.
+- [x] Ölü hayvandan et toplama `Fixing_Kneeling` montage'ına girer; Attack
+  tekrarlanmaz.
+- [x] Worker uzaktaki otomatik misilleme hedefini 1,25–6 birim bandında
+  `OverhandThrow` ile vurur. `Rock.gltf` yalnız görsel uçuş izidir.
+- [x] Hedef 1,25 birimin içindeyse `Punch_Jab` / `Punch_Cross` varyantı oynar.
 - [x] Gerçek health impact sayacı `React_Chest` / `React_Head` varyantını, death
-  state'i `Death` tek-atımını başlatır; ölüm tüm diğer kanallardan önceliklidir.
-- [x] `Idle_FoldArms_Loop`, boş Worker'ın idle rolüdür.
-- [x] `Fixing_Kneeling`, construction/repair/mining activity'sinde tek sefer diz
-  çökme, iş bitene kadar loop ve tek sefer kalkma montage'i olarak authorlandı.
-- [x] `TreeChopping_Loop`, yalnız lumber camp assignment'ının `lumber` activity
-  rolünde çalışır.
+  state'i `Death` tek-atımını başlatır; ölüm tüm kanallardan önceliklidir.
+- [x] `TreeChopping_Loop` yalnız lumber assignment'ının `workChopping` rolünde
+  çalışır; `Axe.glb` iki Actor'da `right-hand-tool` soketinde yalnız bu
+  activity'de görünür. **2026-08-17: balta dünyada görünmüyordu** — görünürlük
+  mantığı doğruydu, prop §0.4'teki 0,01 ölçek hatası yüzünden birkaç milimetre
+  çiziliyordu. Soket mount'u düzeltildi, `position` offset'i sıfırlandı.
 - [ ] Montage zaman pencereleri, Worker kalabalığı, taş elden çıkışı ve punch
-  temaslarının dünya içi görsel kabulü kullanıcıyla doğrulanacak.
+  temaslarının dünya içi görsel kabulü.
+- [ ] `Death` klibinin 0,485 m'lik kilitsiz root ilerlemesini gözle (§3.3).
+- [ ] `throw-release` soketi authorlandı ama taşın gerçekten bu soketten çıkıp
+  çıkmadığı dünya içinde doğrulanmadı.
 
-### 11.2 Oyuncu/AI materyal ayrımı — isteğe bağlı
+### 11.2 Oyuncu/AI materyal ayrımı — uygulandı
 
-- [ ] Seçim halkasının normal RTS mesafesinde Worker takımını ayırmak için yeterli
-  olup olmadığını kullanıcıyla değerlendir.
-- [ ] Yetersizse mevcut UV atlasını koruyan mavi/kırmızı Worker base-color texture
-  planı hazırla.
-- [ ] Oyuncu ve AI materyallerini Actor `materialSlot` üzerinden ayır; asset
-  varsayılanını değiştirerek iki tarafı birden boyama.
-- [ ] Materyal değişikliğini locomotion ve iş animasyonu kabulünden ayrı bir görsel
-  kapı olarak yürüt.
+- [x] Asset iki materyal slotu taşıyor: `m-worker-face-material`,
+  `m-worker-cloth-material`.
+- [x] Oyuncu Worker'ı asset varsayılanını (mavi kumaş) kullanır; düşman Worker'ı
+  yalnız slot 1'i `m-worker-cloth-material-copy` (kırmızı kumaş) ile override eder.
+- [x] Mavi/kırmızı base-color mevcut UV atlasını korur; normal ve ORM paylaşılır.
+- [x] `Worker Faz 1` kontrolü override listesini birebir pinliyor.
+- [ ] Renk ayrımının normal RTS kamera mesafesinde yeterli okunduğunu kullanıcıyla
+  doğrula; seçim halkasına ek olarak ayırt edici mi?
+- [x] `M_Worker_Cloth_AI.material.json` `name` alanı `M_Worker_Cloth_AI` oldu
+  (2026-08-17); manifest zaten bu adı taşıyordu, editördeki ad çakışması bitti.
 
-### 11.3 Turn/strafe backlog'u
+### 11.3 Turn/strafe backlog'u — daraltıldı
 
-- [ ] Mevcut local velocity ve facing verisinin Worker dönüş klipleri için yeterli
-  olup olmadığını incele.
-- [ ] Simülasyon yönelimiyle animasyon root dönüşünün üst üste binmediğini kanıtla.
-- [ ] Yalnız gerçek bir yön state'i varsa strafe/turn semantic rolü ekle.
-- [ ] Gerekli state yoksa klipleri kullanılabilir asset içeriği olarak tut, genel
-  varyant havuzuna ekleme.
+Yeni pakette genel strafe veya turn klibi yoktur (§4.5). Elde yalnız taşıma
+durumuna özel dört dönüş klibi var, onlar da §10.2'ye ait.
+
+- [ ] Genel yön değiştirme sunumu bu asset ile mümkün değil; ya kapsam dışı
+  bırakılır ya da yeni klip üretimi gerekir. Kararı kaydet.
+- [ ] Taşıma dönüş klipleri bağlanırsa simülasyon yönelimiyle animasyon root
+  dönüşünün üst üste binmediğini kanıtla.
 
 ## 12. Faz 6 — Notify, VFX ve SFX
 
-**Durum:** ⬜ İlgili iş kliplerinin görsel kabulünü bekliyor  
+**Durum:** ⬜ İlgili iş kliplerinin görsel kabulünü bekliyor
 **Amaç:** Kabul edilmiş hareketleri küçük, bütçeli sunum efektleriyle güçlendirmek.
 
-- [ ] Ayak teması notify zamanlarını walk/run kliplerinden ölç.
-- [ ] Toprak kazma, dikim, meyve toplama, sulama, sağma ve wheelbarrow dump için
-  yalnız görünür temas anlarını authorla.
+`worker.skeleton.json.notifies` bugün boştur; bu fazın tamamı açıktır.
+
+- [ ] Ayak teması notify zamanlarını `Walk_Loop` ve `Sprint_Loop` kliplerinden ölç.
+- [ ] Toprak kazma (`Farming_dig_and_plant_seeds`), sulama (`Farming_watering`),
+  balta teması (`TreeChopping_Loop`), onarım teması (`Fixing_Kneeling` loop
+  penceresi), taş bırakma (`OverhandThrow`) ve varsa dump için yalnız görünür
+  temas anlarını authorla.
 - [ ] Notify'ları toz, küçük debris, su parçacığı ve ses tetikleme gibi sunumsal
   tüketicilere bağla.
 - [ ] Notify hiçbir ekonomi miktarını veya iş tamamlanma anını belirlemez.
 - [ ] Uzak animasyon cadence'inde notify atlama/çift atma olmadığını test et.
+- [ ] Montage bölüm sınırlarında (0,7 s ve 4,033 s) notify'ın çift atmadığını test et.
 - [ ] Global hız limiti ve ayrı VFX bütçesiyle kalabalık Worker grubunu koru.
 - [ ] Pause/resume, crossfade ve kesilen kliplerde kuyruk işaretlerinin yanlış
   zamanda atılmadığını test et.
@@ -453,34 +595,47 @@ animasyonlarını oyuna kazandırmak.
 
 ## 13. Faz 7 — Performans, LOD ve Nihai Teslim
 
-**Durum:** ⬜ Önceki fazları bekliyor  
-**Gerekçe:** Worker 60.000 triangle ile mevcut Guard'dan yaklaşık 4 kat, Archer'dan
-yaklaşık 2,9 kat daha ağır. Başlangıçtaki 8+8 Worker yaklaşık 960.000 triangle;
-iki tarafta 22'şer Worker senaryosu yalnız Worker gövdelerinde yaklaşık 2,64
-milyon triangle üretir.
+**Durum:** ⬜ Önceki fazları bekliyor
+**Gerekçe (2026-08-16'da yeniden ölçüldü):** Eski paketin 60.000 üçgenlik yükü
+yok. Yeni Worker 18.201 üçgen ile Guard'ın (14.990) ~1,21 katı, Archer'ın
+(20.926) ~0,87'si, Siege'in (14.660) ~1,24 katıdır — yani mevcut birim ailesinin
+ortasında.
+
+| Senaryo | Worker sayısı | Yalnız Worker gövdesi üçgen |
+| --- | ---: | ---: |
+| Başlangıç 8+8 | 16 | ~291.000 |
+| Orta 16+16 | 32 | ~582.000 |
+| Yoğun 22+22 | 44 | ~801.000 |
+
+Eski plandaki 2,64 milyon üçgenlik risk tablosu geçersizdir; LOD bu yüzden artık
+öncelikli bir gereklilik değil, ölçümle karar verilecek bir kapıdır.
 
 ### 13.1 Ölçüm
 
 - [ ] 8+8, 16+16 ve 22+22 Worker için CPU frame, GPU frame, draw call, triangle
   ve animation mixer maliyetini ölç.
+- [ ] 65 eklemli rigin (eski 33 eklemin ~2 katı) mixer maliyetine etkisini ayrı
+  ölç; bu paketin asıl yeni maliyeti üçgen değil eklem sayısıdır.
+- [ ] İki materyal slotunun (face + cloth) draw call'a etkisini ölç; her Worker
+  artık en az iki çizim.
 - [ ] Yakın/uzak kamera ve 15 Hz uzak animasyon throttle davranışını ayrı ölç.
 - [ ] Idle, toplu hareket ve çoklu iş animasyonu sahnelerini karşılaştır.
-- [ ] Prop'lu ve propsuz Worker maliyetini karşılaştır.
+- [ ] Prop'lu (crate/axe) ve propsuz Worker maliyetini karşılaştır.
 - [ ] Ölçüm sonuçlarını bu belgeye tarih ve donanım bilgisiyle kaydet.
 
 ### 13.2 Optimizasyon karar kapısı
 
-- [ ] Mevcut maliyet bütçe içindeyse kaynak mesh kalitesini koru.
-- [ ] Bütçe dışındaysa kaynak GLB'yi silmeden optimize edilmiş runtime türevi veya
-  LOD yaklaşımını değerlendir.
-- [ ] Mesh sadeleştirmenin skin ağırlıklarını, silueti, UV'yi ve animasyonları
-  bozmadığını doğrula.
+- [ ] Mevcut maliyet bütçe içindeyse kaynak mesh kalitesini koru (ilk beklenti bu).
+- [ ] Bütçe dışındaysa önce eklem sayısı ve animasyon cadence'ini, sonra mesh'i
+  değerlendir.
+- [ ] Mesh sadeleştirme gerekirse skin ağırlıklarını, silueti, UV'yi ve
+  animasyonları bozmadığını doğrula.
 - [ ] Uzak Worker için gölge, animation cadence ve prop görünürlüğü maliyetlerini
   birlikte değerlendir.
-- [ ] Optimizasyon öncesi/sonrası aynı kabul rotasında görsel karşılaştırma yap.
 
 ### 13.3 Nihai doğrulama
 
+- [ ] Yeni GLB için `gltf-transform validate` temiz geçer (§3.1).
 - [ ] `npx.cmd tsc --noEmit` temiz geçer.
 - [ ] İlgili filtreli engine kontrolleri temiz geçer; filtreli sonucun `PARTIAL`
   olduğu raporda açıkça belirtilir.
@@ -490,32 +645,43 @@ milyon triangle üretir.
   davranışında regresyon üretmez.
 - [ ] Kullanıcı nihai dünya içi görünümü kabul eder.
 
-## 14. Önerilen İlk Uygulama Dilimi
+## 14. Sıradaki Uygulama Dilimi
 
-İlk uygulama oturumunda yalnız şu dar kapsam alınır:
+Eski "ilk dilim" (Actor bağlantısı + temel roller) tamamlandı. Sıradaki dar
+kapsam önerisi:
 
-1. Oyuncu ve AI Worker Actor'larını `worker` assetine bağlamak.
-2. `idle`, `walk` ve `run` rollerini sidecar'a eklemek.
-3. Kullanıcı-authored root-motion ayarlarını aynen korumak.
-4. Actor/sidecar clip testlerini eklemek.
-5. TypeScript ve hedefli engine testini çalıştırmak.
-6. Worker locomotion kabul presetini hazırlayıp dünya içi kullanıcı kabuline
-   sunmak.
+1. ~~AI Worker Actor'una eksik `carriedCrate` bileşenini ekle ve `Worker Faz 4`
+   kontrolünü iki Actor'a genişlet (§10.2).~~ **Tamam (2026-08-17).**
+2. ~~`carryIdle`/`carryWalk` çiftinin box/holding tutarsızlığını karara bağla.~~
+   **Tamam (2026-08-17): holding çifti seçildi.**
+3. ~~`Farming_holding_idle`'ın idle havuzunda mı taşıma rolünde mi kalacağını
+   karara bağla.~~ **Tamam (2026-08-17): taşıma rolünde, idle havuzundan çıktı.**
+4. ~~`M_Worker_Cloth_AI` materyalinin adını düzelt.~~ **Tamam (2026-08-17).**
+5. ~~`npx.cmd tsc --noEmit` + `npm.cmd run test:engine -- --filter "Worker Faz"`.~~
+   **Tamam (2026-08-17): tsc temiz, 6 Worker kontrolü yeşil (`PARTIAL`).**
+6. Yeni paketin locomotion, `Fixing_Kneeling` montage'ı ve Crate hizası için tek
+   bir dünya içi kabul turu iste — **artık iki taraftaki Crate de bu turda
+   bakılacak.**
 
-Bu dilimde iş animasyonu, prop, yeni materyal, attack/hit/death, notify veya LOD
-uygulanmaz. Böylece model bağlantısı ve locomotion sorunu varsa kök neden başka
-sunum sistemleriyle karışmaz.
+**§14 dilimi kapandı; geriye yalnız 6. maddedeki tek dünya içi kabul turu kaldı.**
+
+Bu dilimde hasat state'i, el arabası, notify veya LOD işi yapılmaz.
 
 ## 15. Teslim Kapısı
 
 Plan ancak aşağıdaki koşullar birlikte sağlandığında tamam kabul edilir:
 
-- [ ] Player ve AI Worker yeni `worker` assetini kullanıyor.
-- [ ] Temel locomotion otomatik kontrolleri ve dünya içi görsel kabul tamam.
-- [ ] En az nötr çalışma pozu ve tarım/hasat/hayvancılık aktivite ayrımı gerçek
-  gameplay state'lerinden besleniyor.
-- [ ] Prop gerektiren hiçbir klip görünmez propsuz oynatılmıyor.
-- [ ] Attack/hit/death ve turn/strafe eksikleri uygulanmış veya açık backlog kararı
+- [x] Player ve AI Worker yeni `worker` assetini kullanıyor.
+- [x] Takım okunurluğu için oyuncu/AI materyal ayrımı uygulandı.
+- [ ] Temel locomotion otomatik kontrolleri ve **yeni paketin** dünya içi görsel
+  kabulü tamam.
+- [ ] Nötr çalışma pozu ve tarım aktivite ayrımı gerçek gameplay state'lerinden
+  besleniyor; hasat ve hayvancılık için ya state uygulanmış ya da kapsam dışı
+  kararı belgelenmiş.
+- [x] Prop gerektiren hiçbir klip görünmez propsuz oynatılmıyor; iki Worker
+  Actor'u da Crate ve Axe prop'unu taşıyor (2026-08-17). Crate'in soket hizası
+  ayrıca görsel kabul bekliyor (§10.2).
+- [ ] Attack/hit/death uygulanmış; turn/strafe eksikliği açık backlog kararı
   olarak belgelenmiş.
 - [ ] Performans ölçümü tamamlanmış ve gerekiyorsa optimizasyon uygulanmış.
 - [ ] Tam doğrulama temiz geçmiş.
@@ -523,44 +689,71 @@ Plan ancak aşağıdaki koşullar birlikte sağlandığında tamam kabul edilir:
 
 ## 16. Uygulama Günlüğü
 
-- 2026-08-13 — `Worker.glb` salt-okuma incelendi. 33 animasyon, 33 eklem,
-  86.782 vertex ve 60.000 triangle doğrulandı; GLB validation hatasız geçti.
-- 2026-08-13 — Yeni dosyanın önceki 8 klibe 25 yeni animasyon eklediği ve mesh
-  geometrisini değiştirmediği doğrulandı.
-- 2026-08-13 — Mevcut Actor bağlantıları, boş semantic set, kullanıcı-authored
-  root-motion verisi, materyal sidecar'ı, prop eksikleri ve performans riski
-  kaydedildi.
-- 2026-08-13 — Bu plan oluşturuldu; henüz runtime veya asset dosyası değiştirilmedi.
-- 2026-08-13 — Cultivation varyantları için ayrı bir sunumsal iş çevrimi sayacına
-  gerek olmadığı kararlaştırıldı: loop seçimi Worker kimliği ve semantic rolle
-  sabit kalır. Yeniden oluşturulan presentation'ın salt-okunur snapshot'tan aynı
-  seçimi ürettiği ve `workerActivity`/`working` simülasyon state'ine yazmadığı
-  hedefli Worker Faz 3 testiyle doğrulandı.
-- 2026-08-13 — Faz 4 ilk dilimi: mevcut sonlu kaynak toplama dönüşündeki gerçek
-  `returning`/`unloading` yükü `carryingBox` ve görünür Crate ile aynı karede
-  sunuma aktarıldı. Worker box idle/walk rolleri, `carry-box` skeletal socket ve
-  Actor cargo prop'u authorlandı; hedefli Worker Faz 4 ve miner round-trip
-  kontrolleri geçti. Klip/prop hizalamasının dünya içi görsel kabulü açıktır.
-- 2026-08-15 — Faz 5: `Idle_FoldArms_Loop`, `Attack`, `Death`,
-  `Fixing_Kneeling`, `OverhandThrow`, `Punch_Jab`, `Punch_Cross`,
-  `React_Chest`, `React_Head` ve `TreeChopping_Loop` gerçek Worker sunum
-  durumlarına bağlandı. `Fixing_Kneeling` 0–0.7 s enter, 0.7–4.033 s loop,
-  4.033–5.267 s exit montage'idir. Worker misillemesi 1.25–6 bandında taş atar;
-  daha yakında mevcut yakın hasar yolu Jab/Cross sunumunu kullanır. TypeScript ve
-  hedefli `Worker Faz 5` engine kontrolü geçti; dünya içi görsel kabul açıktır.
-- 2026-08-15 — Düzeltme: `WorkerConstructionSystem` aktif `building` ve
-  `repairing` assignment'larında gerçek `working=true` bildirir; böylece
-  `Fixing_Kneeling` montage'i enter → loop → exit yoluna girer. Hunting camp
-  assignment'ı gerçek `hunting` activity'si olarak raporlanır ve tüm av süresi
-  boyunca `Attack` kullanır; artık Fixing fallback'i tekrar etmez. İki Worker
-  Actor'ına `Axe.glb`, `right-hand-tool` socket'i ve yalnız `lumber` activity'si
-  için görünürlük eklendi. Idle havuzu deterministik olarak
-  `Farming_holding_idle`, `Idle_FoldArms_Loop`, `Idle_Loop` kliplerinden seçilir.
-
-- 2026-08-15 — Av düzeltmesi: Worker temas anında hayvanı tek vuruşla düşürür;
-  `attackHunting` olayı `Attack` klibini yalnız bir kez oynatır. Sonraki et
-  toplama `Fixing_Kneeling` montage'ına girer, bu nedenle ölü hayvanda Attack
-  tekrarlanmaz. Montage aralıkları klibin gerçek 5.267 sn süresine düzeltildi ve
-  `Fixing_Kneeling` Hips root hareketi `lockXYZ` yapıldı. Balta prop'u iki Worker
-  Actor'unda `right-hand-tool` socket'inde daha okunur ölçek/offset ile yalnız
-  lumber assignment'ta görünür.
+- 2026-08-13 — Eski `Worker.glb` (33 klip, 33 eklem, 86.782 vertex, 60.000
+  üçgen) incelendi ve bu plan oluşturuldu.
+- 2026-08-13 — Faz 1 ve Faz 1A: iki Actor `worker` assetine bağlandı, temel
+  locomotion rolleri authorlandı, kullanıcı locomotion kabulü alındı.
+- 2026-08-13 — Faz 2: nötr iş pozu bağlandı, kullanıcı görsel kabulü alındı.
+- 2026-08-13 — Faz 3: `workerActivity` sunum sözleşmesi ve cultivation havuzu
+  eklendi; seçimin deterministik ve salt sunumsal olduğu testlerle pinlendi.
+- 2026-08-13 — Faz 4 ilk dilimi: gerçek `returning`/`unloading` yükü `carryingBox`
+  ve görünür Crate ile aynı karede sunuma aktarıldı; `carry-box` soketi ve oyuncu
+  Actor'unun cargo prop'u authorlandı.
+- 2026-08-15 — **Asset değişimi:** eski Mixamo paketi kaldırıldı, `worker.glb`
+  (51 klip, 65 eklem) bağlandı. Faz 5 rolleri (`Idle_FoldArms_Loop`, `Attack`,
+  `Death`, `Fixing_Kneeling`, `OverhandThrow`, `Punch_Jab`, `Punch_Cross`,
+  `React_Chest`, `React_Head`, `TreeChopping_Loop`) gerçek sunum durumlarına
+  bağlandı. `Fixing_Kneeling` 0–0,7 / 0,7–4,033 / 4,033–5,267 s montage'ı;
+  misilleme 1,25–6 biriminde taş, daha yakında yumruk.
+- 2026-08-15 — Av düzeltmesi: temas anında tek vuruş, sonra `Fixing_Kneeling` ile
+  et toplama. Balta prop'u iki Actor'da `right-hand-tool` soketinde yalnız lumber
+  assignment'ta görünür. Oyuncu/AI kumaş materyali mavi/kırmızı olarak ayrıldı.
+- 2026-08-16 — **Plan yeni asset'e göre yeniden yazıldı.** GLB doğrudan okunarak
+  51 klip, süreleri, 65 eklem, 18.201 üçgen, 10.409 vertex, 1,847 m boy ve
+  santimetre birimli track ölçeği doğrulandı; Guard/Archer/Siege ile üçgen
+  karşılaştırması yapıldı. Her klibin Hips root ilerlemesi ölçülüp §3.3'e
+  işlendi: `Walk_Loop` ve `Sprint_Loop` yerinde kliplerdir (eski 1,69 m / 3,01 m
+  gerekçesi geçersiz), `Death` 0,485 m kilitsiz taşır, dönüş klipleri
+  0,14–0,30 m taşır, `Fixing_Kneeling` 52,5 cm'lik kalça inişi `lockXYZ` ile
+  pinlenmiştir. Sağım klibinin pakette olmadığı, genel strafe/turn kliplerinin
+  kalktığı ve `T-Pose`'un bulunmadığı kaydedildi. Yeni bulunan boşluk: AI Worker
+  Actor'unda `carriedCrate` bileşeni eksik.
+- 2026-08-17 — §14'ün mekanik dilimi: AI Worker Actor'una `carriedCrate` eklendi
+  (oyuncu Actor'uyla birebir aynı props), `M_Worker_Cloth_AI` materyalinin `name`
+  alanı düzeltildi ve `Worker Faz 4` kontrolü iki Actor üzerinde dönen bir döngüye
+  çevrildi (cargo state, `crate` mesh'i, `carry-box` soketi ve 4× ölçek pinlendi).
+  `npx.cmd tsc --noEmit` temiz; `--filter "Worker Faz"` 6/6 yeşil (`PARTIAL`).
+- 2026-08-17 — **Dünya içi kabul turu: beş bulgu, üçü kök nedene indi.**
+  1. **Soket ölçek hatası (§0.4).** Crate ve balta dünyada hiç görünmüyordu.
+     Sebep görünürlük mantığı değil: socket marker'ı doğrudan kemiğe ekleniyordu,
+     kemik de sahne kökünün 0,01 export ölçeğini miras alıyordu — yani her prop
+     authored boyutunun %1'i kadar çiziliyordu. Aynı hata editörün socket
+     overlay'inde de vardı, bu yüzden soketler görsel olarak hiç authorlanamamıştı.
+     Yeni `engine/render-three/skeletalSocket.ts` ölçeği iptal eden bir mount
+     düğümü koyuyor ve **runtime ile editör aynı yoldan geçiyor**. Baltanın
+     `position: [0, 0.45, 0]` offset'i bozuk cm uzayında ayarlandığı için (gerçek
+     etkisi 4,5 mm) sıfırlandı.
+  2. **Havada diz çökme (§8).** `Fixing_Kneeling` `lockXYZ` → `lockXZ`.
+  3. **Katmanlı taşıma (§10.2/§10.3).** Kullanıcı üst gövdede kutu pozu, alt
+     gövdede yürüyüş istedi. `LayeredClipAnimator.setUpperBodyPose` eklendi
+     (bugüne dek yalnız one-shot katmanı vardı; bu tutulan bir *durum*, süresi
+     olan bir *olay* değil), yeni `carryPose` rolü + Worker'a `upperBodyBone:
+     "Spine"` authorlandı. Yük varken locomotion "eli boşmuş gibi" sınıflanıyor,
+     böylece yüklü Worker gerçek hızıyla koşuyor; darbe yerse gövdeden irkiliyor
+     ve irkilme yürüyüşe değil **yüke** geri dönüyor.
+  4. Boş elli Worker'ın "elinde bir şey tutuyor" pozu artık yok (bu turda
+     doğrulandı — aynı gün yapılan idle havuzu düzeltmesi tuttu).
+  Yeni engine kontrolleri: prop'un rig export ölçeğinden bağımsız çizildiği ve
+  yükün üst gövdede tutulup bacakların kendi yürüyüşünü sürdürdüğü pinlendi.
+  `Worker Faz 5`'teki balta `position`/`scale` assert'i tuning sabitliyordu ve
+  bu düzeltmede kırmızıya döndü; şekil sözleşmesine çevrildi (authored offset +
+  düzgün büyütme), CLAUDE.md'nin tuning kuralı gereği.
+- 2026-08-17 — **Taşıma pozu kararı (kullanıcı):** holding çiftine geçildi.
+  `carryIdle` `Farming_box_idle` → `Farming_holding_idle` oldu ve aynı klip `idle`
+  varyant havuzundan çıkarıldı, böylece iki açık madde tek düzenlemeyle kapandı:
+  taşıyan Worker durup yürürken poz ailesi değiştirmiyor, boş elli Worker da
+  taşıma pozu oynamıyor. `Worker Faz 1` kontrolü artık klip adı sabitlemek yerine
+  ilişkiyi pinliyor ("idle havuzu hiçbir taşıma klibini içeremez"), `Worker Faz 4`
+  selector beklentisi de sidecar'ın `carryIdle` değerinden türetiliyor.
+  `Farming_box_idle` boşta; iki elle kutu pozu istenirse yedek adaydır.
+  `npx.cmd tsc --noEmit` temiz; `--filter "Worker Faz"` 6/6 yeşil (`PARTIAL`).

@@ -38,11 +38,22 @@
       "parent": "root"
     },
     {
+      "id": "carriedCrate",
+      "component": "StaticMeshComponent",
+      "props": {
+        "assetId": "crate",
+        "scale": [4, 4, 4],
+        "rtsCargoVisibility": "loaded",
+        "rtsSkeletalSocket": "carry-box"
+      },
+      "parent": "root"
+    },
+    {
       "id": "lumberAxe",
       "component": "StaticMeshComponent",
       "props": {
         "assetId": "axe",
-        "position": [0, 0.45, 0],
+        "position": [0, 0, 0],
         "scale": [5.5, 5.5, 5.5],
         "rtsWorkerToolActivity": "lumber",
         "rtsSkeletalSocket": "right-hand-tool"

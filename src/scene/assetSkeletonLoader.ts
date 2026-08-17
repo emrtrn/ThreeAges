@@ -15,7 +15,11 @@ export type { RootMotionMode, RootMotionUpAxis };
 /**
  * Semantic clip roles an asset may author. `idle`/`walk`/`run`/`jump`/`fall`/
  * `work`/`workCultivation`/`workHarvest`/`workLivestock`/`workHunting`/
- * `workChopping`/`carryIdle`/`carryWalk`/`rest`/`hold` are continuous states;
+ * `workChopping`/`carryIdle`/`carryWalk`/`carryPose`/`rest`/`hold` are continuous
+ * states; `carryPose` is the odd one — it is held on the *upper body alone*, over
+ * whatever the legs are doing, so a loaded body walks and runs normally while its
+ * arms stay around the load. It needs {@link AssetSkeletonDef.upperBodyBone};
+ * without one, `carryIdle`/`carryWalk` still cover carrying as full-body clips.
  * `attack`/`attackHunting`/`attackMelee`/`attackRecovery`/`hit`/`death` are one-shot
  * actions, played once per event rather than looped (RTS skeletal animation plan
  * Faz D, Guard animation plan Faz 2). `hit` is the flinch a body plays when damage
@@ -47,6 +51,7 @@ export const ANIMATION_SET_ROLES = [
   "workChopping",
   "carryIdle",
   "carryWalk",
+  "carryPose",
   "rest",
   "hold",
   "attack",

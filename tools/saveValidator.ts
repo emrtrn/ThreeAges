@@ -2629,6 +2629,7 @@ const SKELETON_ANIMATION_SET_ROLES = [
   "workChopping",
   "carryIdle",
   "carryWalk",
+  "carryPose",
   "rest",
   "hold",
   "attack",

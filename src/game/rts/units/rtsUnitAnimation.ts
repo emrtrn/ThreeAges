@@ -21,7 +21,7 @@ export type RtsAnimationRole =
   | "idle" | "walk" | "run" | "walkBack" | "runBack"
   | "aimWalkForward" | "aimWalkBack" | "aimWalkLeft" | "aimWalkRight"
   | "work" | "workCultivation" | "workHarvest" | "workLivestock" | "workHunting" | "workChopping"
-  | "carryIdle" | "carryWalk"
+  | "carryIdle" | "carryWalk" | "carryPose"
   | "rest" | "hold" | "attack" | "attackHunting" | "attackMelee" | "hit" | "death";
 
 /** Per-frame simulation summary, mirroring `RtsPresentationUpdate`'s gameplay half. */
@@ -319,6 +319,12 @@ const ROLE_FALLBACKS: Record<RtsAnimationRole, readonly RtsAnimationRole[]> = {
   // remains governed by the same carrying snapshot.
   carryIdle: ["carryIdle", "idle"],
   carryWalk: ["carryWalk", "walk", "run", "idle"],
+  // The upper-body carry layer, and the one role with no locomotion in its
+  // chain: it is blended *over* the gait rather than instead of it, so falling
+  // back to a walk clip would put a second pair of striding legs on the torso.
+  // An asset that authors neither pose leaves the torso on the legs' clip, which
+  // is what every carrier looked like before layering existed.
+  carryPose: ["carryPose", "carryIdle"],
   // Continuous and looped like work, and it reaches its own clip for the same
   // reason: the unit holds this pose for as long as the mending takes. An asset
   // that authors none simply waits standing up, which is exactly what every unit

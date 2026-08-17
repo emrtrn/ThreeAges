@@ -40,6 +40,7 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 import { VertexNormalsHelper } from "three/examples/jsm/helpers/VertexNormalsHelper.js";
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
+import { mountSkeletalSocket } from "@engine/render-three/skeletalSocket";
 import {
   ROOT_MOTION_UP_AXES,
   applyRootMotionToClips,
@@ -159,7 +160,10 @@ interface MorphTargetControl {
 }
 
 interface SocketOverlay {
+  /** The authored socket node: what the gizmo drives and what saves verbatim. */
   root: Group;
+  /** The scale-cancelling parent on the bone; removing this unmounts the pair. */
+  mount: Group;
   marker: Mesh;
   socket: AssetSkeletonSocketDef;
   previewRoot: Object3D | null;
@@ -1636,17 +1640,19 @@ export class SkeletalMeshEditor {
     for (const socket of this.skeleton.sockets) {
       const bone = this.bones.find((item) => item.name === socket.bone);
       if (!bone) continue;
-      const root = new Group();
-      root.name = `Socket:${socket.name}`;
-      applySocketTransform(root, socket);
+      // The same mount the runtime binds through, so the preview is drawn at the
+      // size and offset the Actor will ship: these rigs export at scale 0.01, and
+      // a socket parented straight to the bone previews a 4cm marker as 0.4mm.
+      // The socket node keeps the authored transform verbatim, which is what lets
+      // `socketFromObject` write a gizmo drag back with no unit conversion.
+      const { socket: root, mount } = mountSkeletalSocket(bone, socket, `Socket:${socket.name}`);
       const marker = new Mesh(
         new SphereGeometry(0.04, 14, 8),
         new MeshBasicMaterial({ color: socket.name === this.selectedSocketName ? 0xffb648 : 0x7ac7ff, depthTest: false }),
       );
       marker.renderOrder = 5;
       root.add(marker);
-      bone.add(root);
-      const overlay: SocketOverlay = { root, marker, socket, previewRoot: null, previewAssetId: null };
+      const overlay: SocketOverlay = { root, mount, marker, socket, previewRoot: null, previewAssetId: null };
       this.socketOverlays.push(overlay);
       void this.attachSocketPreview(overlay);
     }
@@ -1656,7 +1662,9 @@ export class SkeletalMeshEditor {
   private disposeSocketOverlays(): void {
     for (const overlay of this.socketOverlays) {
       this.clearSocketPreview(overlay);
-      overlay.root.removeFromParent();
+      // The mount, not the socket: unmounting the child would leave the
+      // scale-cancelling group behind on the bone, one per rebuild.
+      overlay.mount.removeFromParent();
       overlay.marker.geometry.dispose();
       if (Array.isArray(overlay.marker.material)) {
         for (const material of overlay.marker.material) material.dispose();
@@ -3445,17 +3453,6 @@ function formatVec3Array(value: Vec3): string {
 
 function formatRoleLabel(role: AnimationSetRole): string {
   return role.length > 0 ? role[0]!.toUpperCase() + role.slice(1) : role;
-}
-
-function applySocketTransform(root: Object3D, socket: AssetSkeletonSocketDef): void {
-  root.position.set(socket.position[0], socket.position[1], socket.position[2]);
-  root.rotation.set(
-    MathUtils.degToRad(socket.rotation[0]),
-    MathUtils.degToRad(socket.rotation[1]),
-    MathUtils.degToRad(socket.rotation[2]),
-    "XYZ",
-  );
-  root.scale.set(socket.scale[0], socket.scale[1], socket.scale[2]);
 }
 
 function socketFromObject(root: Object3D, socket: AssetSkeletonSocketDef): AssetSkeletonSocketDef {
