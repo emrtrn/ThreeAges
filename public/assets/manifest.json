@@ -20697,7 +20697,7 @@
       "name": "Houses First Age 3 Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_3_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_3_Level1.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20711,7 +20711,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 23673
+        "bytes": 140852
       },
       "license": "Unknown"
     },
@@ -20720,7 +20720,7 @@
       "name": "Houses First Age 3 Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_3_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_3_Level2.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20734,7 +20734,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 49179
+        "bytes": 232112
       },
       "license": "Unknown"
     },
@@ -20743,7 +20743,7 @@
       "name": "Houses First Age 3 Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_3_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_3_Level3.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20757,7 +20757,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 124075
+        "bytes": 294796
       },
       "license": "Unknown"
     },
@@ -22114,7 +22114,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 775056
+        "bytes": 799188
       },
       "license": "Unknown"
     },
