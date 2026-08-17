@@ -85,6 +85,9 @@ export class RoadGraph {
   private componentsCacheRevision = "";
   private readonly routeCache = new Map<string, readonly RoadCell[] | null>();
   private routeCacheRevision = "";
+  /** Same idea for {@link wouldDisconnect}, which the erase tool asks per hover. */
+  private readonly splitCache = new Map<string, boolean>();
+  private splitCacheRevision = -1;
 
   constructor(
     private readonly balance: RoadBalance,
@@ -243,6 +246,21 @@ export class RoadGraph {
     const target = this.snap(cell);
     const targetKey = this.key(target);
     if (!this.cells.has(targetKey)) return false;
+    // The erase tool asks this for every pointer move, and the answer is a whole-
+    // network BFS. It is ownership-blind (it walks committed cells, not passable
+    // ones), so the committed revision alone is an exact cache generation.
+    if (this.splitCacheRevision !== this.revision) {
+      this.splitCache.clear();
+      this.splitCacheRevision = this.revision;
+    }
+    const cached = this.splitCache.get(targetKey);
+    if (cached !== undefined) return cached;
+    const answer = this.computeWouldDisconnect(target, targetKey);
+    this.splitCache.set(targetKey, answer);
+    return answer;
+  }
+
+  private computeWouldDisconnect(target: RoadCell, targetKey: string): boolean {
     const neighbors = this.neighbors(target).filter((neighbor) => this.cells.has(this.key(neighbor)));
     const first = neighbors[0];
     if (!first || neighbors.length < 2) return false;

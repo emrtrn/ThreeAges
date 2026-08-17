@@ -1,6 +1,6 @@
 import type { ColliderPrimitive } from "./components";
 import type { LayoutLandscape, Vec3 } from "./layout";
-import { evaluateLandscapeSplineSegment } from "./landscapeSplineAdapter";
+import { buildLandscapeSplineAdjacency, landscapeSplineSegmentSampler } from "./landscapeSplineAdapter";
 
 /**
  * Render-agnostic Landscape model: resolved settings + defaults, the sidecar
@@ -452,10 +452,13 @@ export function splineToPolyline(
   spline: ForgeLandscapeSpline,
   subdivisions: number = LANDSCAPE_SPLINE_CURVE_SUBDIVISIONS,
 ): LandscapeSplineSubSegment[] {
-  const pointById = new Map(spline.points.map((point) => [point.id, point] as const));
   const out: LandscapeSplineSubSegment[] = [];
   const smooth = spline.smooth === true;
   const steps = smooth ? Math.max(1, Math.floor(subdivisions)) : 1;
+  // One shared curve context for the whole spline, and one sampler per segment:
+  // resolving either per sample made this quadratic in segment count.
+  const adjacency = buildLandscapeSplineAdjacency(spline);
+  const pointById = adjacency.points;
 
   for (const segment of spline.segments) {
     const p1 = pointById.get(segment.startPointId);
@@ -469,11 +472,12 @@ export function splineToPolyline(
       });
       continue;
     }
+    const sampleAt = landscapeSplineSegmentSampler(spline, segment, adjacency);
     let prev: LandscapeSplinePolylineSample = { position: p1.position, width: p1.width, falloff: p1.falloff };
     for (let step = 1; step <= steps; step += 1) {
       const u = step / steps;
       const sample: LandscapeSplinePolylineSample = {
-        position: evaluateLandscapeSplineSegment(spline, segment, u) ?? p2.position,
+        position: sampleAt?.(u) ?? p2.position,
         width: p1.width + (p2.width - p1.width) * u,
         falloff: p1.falloff + (p2.falloff - p1.falloff) * u,
       };
@@ -935,37 +939,146 @@ function corridorInfluence(distance: number, halfWidth: number, falloff: number)
   return f * f * (3 - 2 * f);
 }
 
+/** Landscape-local reach box of one sub-segment's corridor (centerline + falloff). */
+function subSegmentReachBox(sub: LandscapeSplineSubSegment): {
+  minX: number;
+  minZ: number;
+  maxX: number;
+  maxZ: number;
+} {
+  const reach =
+    Math.max(0, sub.start.width, sub.end.width) / 2 + Math.max(0, sub.start.falloff, sub.end.falloff);
+  const ax = sub.start.position[0];
+  const az = sub.start.position[2];
+  const bx = sub.end.position[0];
+  const bz = sub.end.position[2];
+  return {
+    minX: Math.min(ax, bx) - reach,
+    minZ: Math.min(az, bz) - reach,
+    maxX: Math.max(ax, bx) + reach,
+    maxZ: Math.max(az, bz) + reach,
+  };
+}
+
+/** Cap on index buckets, so a huge spline degrades to coarser cells, not to memory. */
+const CORRIDOR_INDEX_MAX_BUCKETS = 1 << 18;
+
 /**
- * Finds the (sub-)segment whose corridor most strongly covers a landscape-local
- * X/Z among precomputed sub-segments (see {@link splineToPolyline}, which lets a
- * smooth spline's corridor follow its curve). Width/falloff interpolate along each
- * sub-segment so a spline can taper between control points.
+ * Uniform-grid index over a spline's resolved sub-segments, so a corridor lookup
+ * tests only the pieces that can actually reach the sampled vertex.
+ *
+ * This exists for cost, not for behaviour: an apply pass walks every vertex in the
+ * corridor's bounding box, and scanning all sub-segments at each one made the pass
+ * quadratic in network size — the RTS road painter repaints its whole network on
+ * every commit, which turned a late-game road into a multi-second freeze. A
+ * sub-segment outside its own reach box contributes zero influence and could never
+ * win the scan, so restricting candidates to the sampled vertex's bucket returns
+ * the identical sample; ties still resolve to the earliest sub-segment because
+ * buckets keep insertion (i.e. polyline) order.
  */
-function bestCorridorSample(
-  subSegments: readonly LandscapeSplineSubSegment[],
-  localX: number,
-  localZ: number,
-): SplineCorridorSample | null {
-  let best: SplineCorridorSample | null = null;
-  for (const { segment, start, end } of subSegments) {
-    const ax = start.position[0];
-    const az = start.position[2];
-    const bx = end.position[0];
-    const bz = end.position[2];
-    const dx = bx - ax;
-    const dz = bz - az;
-    const lengthSq = dx * dx + dz * dz;
-    const t = lengthSq <= 1e-9 ? 0 : Math.min(1, Math.max(0, ((localX - ax) * dx + (localZ - az) * dz) / lengthSq));
-    const closestX = ax + dx * t;
-    const closestZ = az + dz * t;
-    const distance = Math.hypot(localX - closestX, localZ - closestZ);
-    const halfWidth = (start.width + (end.width - start.width) * t) / 2;
-    const falloff = start.falloff + (end.falloff - start.falloff) * t;
-    const influence = corridorInfluence(distance, halfWidth, falloff);
-    if (influence <= 0) continue;
-    if (!best || influence > best.influence) best = { influence, t, segment, start, end };
+class SplineCorridorIndex {
+  private readonly buckets: (LandscapeSplineSubSegment[] | undefined)[];
+  private readonly bucketSize: number;
+  private readonly gridX: number;
+  private readonly gridZ: number;
+  private readonly minX: number;
+  private readonly minZ: number;
+  /** Landscape-local reach box of the whole corridor; null when it is empty. */
+  readonly reach: { minX: number; minZ: number; maxX: number; maxZ: number } | null;
+
+  constructor(private readonly subSegments: readonly LandscapeSplineSubSegment[], cellSize: number) {
+    let minX = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxZ = -Infinity;
+    const boxes = subSegments.map((sub) => {
+      const box = subSegmentReachBox(sub);
+      minX = Math.min(minX, box.minX);
+      minZ = Math.min(minZ, box.minZ);
+      maxX = Math.max(maxX, box.maxX);
+      maxZ = Math.max(maxZ, box.maxZ);
+      return box;
+    });
+    if (boxes.length === 0 || !Number.isFinite(minX) || !Number.isFinite(minZ)) {
+      this.reach = null;
+      this.buckets = [];
+      this.bucketSize = 1;
+      this.gridX = 0;
+      this.gridZ = 0;
+      this.minX = 0;
+      this.minZ = 0;
+      return;
+    }
+    this.reach = { minX, minZ, maxX, maxZ };
+    this.minX = minX;
+    this.minZ = minZ;
+    // Grow the cell until the grid fits the bucket cap, so a map-wide corridor
+    // stays indexed (coarsely) instead of allocating an unbounded grid.
+    let size = Math.max(cellSize, 1e-3);
+    let gridX = Math.floor((maxX - minX) / size) + 1;
+    let gridZ = Math.floor((maxZ - minZ) / size) + 1;
+    while (gridX * gridZ > CORRIDOR_INDEX_MAX_BUCKETS) {
+      size *= 2;
+      gridX = Math.floor((maxX - minX) / size) + 1;
+      gridZ = Math.floor((maxZ - minZ) / size) + 1;
+    }
+    this.bucketSize = size;
+    this.gridX = gridX;
+    this.gridZ = gridZ;
+    this.buckets = new Array(gridX * gridZ);
+    for (const [index, box] of boxes.entries()) {
+      const sub = subSegments[index]!;
+      const x0 = Math.max(0, Math.floor((box.minX - minX) / size));
+      const x1 = Math.min(gridX - 1, Math.floor((box.maxX - minX) / size));
+      const z0 = Math.max(0, Math.floor((box.minZ - minZ) / size));
+      const z1 = Math.min(gridZ - 1, Math.floor((box.maxZ - minZ) / size));
+      for (let z = z0; z <= z1; z += 1) {
+        for (let x = x0; x <= x1; x += 1) {
+          const key = z * gridX + x;
+          const bucket = this.buckets[key];
+          if (bucket) bucket.push(sub);
+          else this.buckets[key] = [sub];
+        }
+      }
+    }
   }
-  return best;
+
+  get empty(): boolean {
+    return this.subSegments.length === 0;
+  }
+
+  /**
+   * Finds the (sub-)segment whose corridor most strongly covers a landscape-local
+   * X/Z (see {@link splineToPolyline}, which lets a smooth spline's corridor follow
+   * its curve). Width/falloff interpolate along each sub-segment so a spline can
+   * taper between control points.
+   */
+  sample(localX: number, localZ: number): SplineCorridorSample | null {
+    if (!this.reach) return null;
+    const bx = Math.floor((localX - this.minX) / this.bucketSize);
+    const bz = Math.floor((localZ - this.minZ) / this.bucketSize);
+    if (bx < 0 || bz < 0 || bx >= this.gridX || bz >= this.gridZ) return null;
+    const candidates = this.buckets[bz * this.gridX + bx];
+    if (!candidates) return null;
+    let best: SplineCorridorSample | null = null;
+    for (const { segment, start, end } of candidates) {
+      const ax = start.position[0];
+      const az = start.position[2];
+      const dx = end.position[0] - ax;
+      const dz = end.position[2] - az;
+      const lengthSq = dx * dx + dz * dz;
+      const t = lengthSq <= 1e-9 ? 0 : Math.min(1, Math.max(0, ((localX - ax) * dx + (localZ - az) * dz) / lengthSq));
+      const closestX = ax + dx * t;
+      const closestZ = az + dz * t;
+      const distance = Math.hypot(localX - closestX, localZ - closestZ);
+      const halfWidth = (start.width + (end.width - start.width) * t) / 2;
+      const falloff = start.falloff + (end.falloff - start.falloff) * t;
+      const influence = corridorInfluence(distance, halfWidth, falloff);
+      if (influence <= 0) continue;
+      if (!best || influence > best.influence) best = { influence, t, segment, start, end };
+    }
+    return best;
+  }
 }
 
 function expandBounds(bounds: LandscapeSplineApplyBounds | null, x: number, z: number): LandscapeSplineApplyBounds {
@@ -978,37 +1091,89 @@ function expandBounds(bounds: LandscapeSplineApplyBounds | null, x: number, z: n
 }
 
 /**
- * Grid rectangle that can possibly receive influence from these corridor pieces.
- * The actual blend still asks `bestCorridorSample`, so this is deliberately a
- * conservative over-approximation. It avoids walking an entire heightfield when
- * a short road or editor spline only occupies a small part of it.
+ * Grid rectangle that can possibly receive influence from an indexed corridor.
+ * The actual blend still asks {@link SplineCorridorIndex.sample}, so this is
+ * deliberately a conservative over-approximation. It avoids walking an entire
+ * heightfield when a short road or editor spline only occupies a small part of it.
  */
 function corridorApplyBounds(
   data: ForgeLandscapeData,
-  subSegments: readonly LandscapeSplineSubSegment[],
+  index: SplineCorridorIndex,
 ): LandscapeSplineApplyBounds | null {
-  if (subSegments.length === 0) return null;
   const { verticesX, verticesZ, spacing } = data.size;
   const { originX, originZ } = landscapeGridOrigin(data.size);
-  let minX = Infinity;
-  let minZ = Infinity;
-  let maxX = -Infinity;
-  let maxZ = -Infinity;
-  for (const { start, end } of subSegments) {
-    for (const sample of [start, end]) {
-      const reach = Math.max(0, sample.width / 2) + Math.max(0, sample.falloff);
-      minX = Math.min(minX, sample.position[0] - reach);
-      minZ = Math.min(minZ, sample.position[2] - reach);
-      maxX = Math.max(maxX, sample.position[0] + reach);
-      maxZ = Math.max(maxZ, sample.position[2] + reach);
-    }
-  }
+  const reach = index.reach;
+  if (!reach) return null;
   return {
-    x0: Math.max(0, Math.floor((minX + originX) / spacing)),
-    z0: Math.max(0, Math.floor((minZ + originZ) / spacing)),
-    x1: Math.min(verticesX - 1, Math.ceil((maxX + originX) / spacing)),
-    z1: Math.min(verticesZ - 1, Math.ceil((maxZ + originZ) / spacing)),
+    x0: Math.max(0, Math.floor((reach.minX + originX) / spacing)),
+    z0: Math.max(0, Math.floor((reach.minZ + originZ) / spacing)),
+    x1: Math.min(verticesX - 1, Math.ceil((reach.maxX + originX) / spacing)),
+    z1: Math.min(verticesZ - 1, Math.ceil((reach.maxZ + originZ) / spacing)),
   };
+}
+
+/**
+ * Drops corridor pieces that cannot reach any vertex of a clipped apply pass. A
+ * piece outside the clip's own world box contributes zero influence everywhere the
+ * pass will sample, so this only removes work — it never changes a sample.
+ */
+function subSegmentsWithinClip(
+  data: ForgeLandscapeData,
+  subSegments: readonly LandscapeSplineSubSegment[],
+  clip: LandscapeSplineApplyBounds | null | undefined,
+): readonly LandscapeSplineSubSegment[] {
+  if (!clip) return subSegments;
+  const { spacing } = data.size;
+  const { originX, originZ } = landscapeGridOrigin(data.size);
+  const minX = clip.x0 * spacing - originX;
+  const maxX = clip.x1 * spacing - originX;
+  const minZ = clip.z0 * spacing - originZ;
+  const maxZ = clip.z1 * spacing - originZ;
+  return subSegments.filter((sub) => {
+    const box = subSegmentReachBox(sub);
+    return box.maxX >= minX && box.minX <= maxX && box.maxZ >= minZ && box.minZ <= maxZ;
+  });
+}
+
+/**
+ * Grid rectangle covering a landscape-local XZ box, clamped to the heightfield;
+ * null when the box falls entirely outside it. Callers that track their own edited
+ * region (the RTS road painter does) turn it into an apply `clip` with this, so the
+ * grid math stays in one place.
+ */
+export function landscapeGridBoundsForLocalBox(
+  size: LandscapeSize,
+  box: { minX: number; minZ: number; maxX: number; maxZ: number },
+): LandscapeSplineApplyBounds | null {
+  const { verticesX, verticesZ, spacing } = size;
+  const { originX, originZ } = landscapeGridOrigin(size);
+  const x0 = Math.max(0, Math.floor((box.minX + originX) / spacing));
+  const z0 = Math.max(0, Math.floor((box.minZ + originZ) / spacing));
+  const x1 = Math.min(verticesX - 1, Math.ceil((box.maxX + originX) / spacing));
+  const z1 = Math.min(verticesZ - 1, Math.ceil((box.maxZ + originZ) / spacing));
+  if (x0 > x1 || z0 > z1) return null;
+  return { x0, z0, x1, z1 };
+}
+
+/**
+ * Narrows an apply pass to a caller-supplied grid rectangle, or returns null when
+ * the two do not overlap at all. This is what lets a runtime repaint touch only
+ * the region its edit could have changed: paint and deform are per-vertex
+ * independent, so applying the same ordered operations over a sub-rectangle
+ * reproduces exactly the values a full pass would have written there.
+ */
+function clipApplyBounds(
+  bounds: LandscapeSplineApplyBounds | null,
+  clip: LandscapeSplineApplyBounds | null | undefined,
+): LandscapeSplineApplyBounds | null {
+  if (!bounds) return null;
+  if (!clip) return bounds;
+  const x0 = Math.max(bounds.x0, clip.x0);
+  const z0 = Math.max(bounds.z0, clip.z0);
+  const x1 = Math.min(bounds.x1, clip.x1);
+  const z1 = Math.min(bounds.z1, clip.z1);
+  if (x0 > x1 || z0 > z1) return null;
+  return { x0, z0, x1, z1 };
 }
 
 /**
@@ -1020,6 +1185,7 @@ function corridorApplyBounds(
 export function applyLandscapeSplineDeform(
   data: ForgeLandscapeData,
   spline: ForgeLandscapeSpline,
+  clip?: LandscapeSplineApplyBounds | null,
 ): LandscapeSplineApplyResult {
   const { verticesX, spacing, heightScale } = data.size;
   const { originX, originZ } = landscapeGridOrigin(data.size);
@@ -1027,8 +1193,11 @@ export function applyLandscapeSplineDeform(
   const accept = (segment: ForgeLandscapeSplineSegment): boolean =>
     !!segment.deform && segment.deform.enabled && (segment.deform.flatten || segment.deform.raiseTerrain || segment.deform.lowerTerrain);
   if (!spline.segments.some(accept)) return { changed: false, bounds: null };
-  const subSegments = splineToPolyline(spline).filter((sub) => accept(sub.segment));
-  const applyBounds = corridorApplyBounds(data, subSegments);
+  const corridor = new SplineCorridorIndex(
+    subSegmentsWithinClip(data, splineToPolyline(spline).filter((sub) => accept(sub.segment)), clip),
+    spacing * 4,
+  );
+  const applyBounds = clipApplyBounds(corridorApplyBounds(data, corridor), clip);
   if (!applyBounds) return { changed: false, bounds: null };
 
   let changed = false;
@@ -1037,7 +1206,7 @@ export function applyLandscapeSplineDeform(
     const localZ = z * spacing - originZ;
     for (let x = applyBounds.x0; x <= applyBounds.x1; x += 1) {
       const localX = x * spacing - originX;
-      const sample = bestCorridorSample(subSegments, localX, localZ);
+      const sample = corridor.sample(localX, localZ);
       if (!sample) continue;
       const deform = sample.segment.deform!;
       const targetLocalY =
@@ -1068,6 +1237,7 @@ export function applyLandscapeSplineDeform(
 export function applyLandscapeSplinePaint(
   data: ForgeLandscapeData,
   spline: ForgeLandscapeSpline,
+  clip?: LandscapeSplineApplyBounds | null,
 ): LandscapeSplineApplyResult {
   const { verticesX, spacing } = data.size;
   const { originX, originZ } = landscapeGridOrigin(data.size);
@@ -1077,8 +1247,11 @@ export function applyLandscapeSplinePaint(
     segment.paint.strength > 0 &&
     data.layers.some((layer) => layer.id === segment.paint!.layerId);
   if (!spline.segments.some(accept)) return { changed: false, bounds: null };
-  const subSegments = splineToPolyline(spline).filter((sub) => accept(sub.segment));
-  const applyBounds = corridorApplyBounds(data, subSegments);
+  const corridor = new SplineCorridorIndex(
+    subSegmentsWithinClip(data, splineToPolyline(spline).filter((sub) => accept(sub.segment)), clip),
+    spacing * 4,
+  );
+  const applyBounds = clipApplyBounds(corridorApplyBounds(data, corridor), clip);
   if (!applyBounds) return { changed: false, bounds: null };
   const layerIndexById = new Map(data.layers.map((layer, index) => [layer.id, index]));
 
@@ -1088,7 +1261,7 @@ export function applyLandscapeSplinePaint(
     const localZ = z * spacing - originZ;
     for (let x = applyBounds.x0; x <= applyBounds.x1; x += 1) {
       const localX = x * spacing - originX;
-      const sample = bestCorridorSample(subSegments, localX, localZ);
+      const sample = corridor.sample(localX, localZ);
       if (!sample) continue;
       const paint = sample.segment.paint!;
       const activeIndex = layerIndexById.get(paint.layerId) ?? -1;
@@ -1183,6 +1356,7 @@ export interface LandscapeRectDeform {
 export function applyLandscapeRectPaint(
   data: ForgeLandscapeData,
   rects: readonly LandscapeRectPaint[],
+  clip?: LandscapeSplineApplyBounds | null,
 ): LandscapeSplineApplyResult {
   const { verticesX, verticesZ, spacing } = data.size;
   const { originX, originZ } = landscapeGridOrigin(data.size);
@@ -1195,10 +1369,17 @@ export function applyLandscapeRectPaint(
     const reach = Math.max(0, rect.falloff);
     const gridX = (local: number): number => (local + originX) / spacing;
     const gridZ = (local: number): number => (local + originZ) / spacing;
-    const x0 = Math.max(0, Math.floor(gridX(rect.centerX - rect.halfWidth - reach)));
-    const x1 = Math.min(verticesX - 1, Math.ceil(gridX(rect.centerX + rect.halfWidth + reach)));
-    const z0 = Math.max(0, Math.floor(gridZ(rect.centerZ - rect.halfDepth - reach)));
-    const z1 = Math.min(verticesZ - 1, Math.ceil(gridZ(rect.centerZ + rect.halfDepth + reach)));
+    const rectBounds = clipApplyBounds(
+      {
+        x0: Math.max(0, Math.floor(gridX(rect.centerX - rect.halfWidth - reach))),
+        x1: Math.min(verticesX - 1, Math.ceil(gridX(rect.centerX + rect.halfWidth + reach))),
+        z0: Math.max(0, Math.floor(gridZ(rect.centerZ - rect.halfDepth - reach))),
+        z1: Math.min(verticesZ - 1, Math.ceil(gridZ(rect.centerZ + rect.halfDepth + reach))),
+      },
+      clip,
+    );
+    if (!rectBounds) continue;
+    const { x0, x1, z0, z1 } = rectBounds;
     for (let z = z0; z <= z1; z += 1) {
       const localZ = z * spacing - originZ;
       const dz = Math.max(Math.abs(localZ - rect.centerZ) - rect.halfDepth, 0);
@@ -1225,6 +1406,7 @@ export function applyLandscapeRectPaint(
 export function applyLandscapeRectDeform(
   data: ForgeLandscapeData,
   rects: readonly LandscapeRectDeform[],
+  clip?: LandscapeSplineApplyBounds | null,
 ): LandscapeSplineApplyResult {
   const { verticesX, verticesZ, spacing, heightScale } = data.size;
   const { originX, originZ } = landscapeGridOrigin(data.size);
@@ -1235,10 +1417,17 @@ export function applyLandscapeRectDeform(
     const reach = Math.max(0, rect.falloff);
     const gridX = (local: number): number => (local + originX) / spacing;
     const gridZ = (local: number): number => (local + originZ) / spacing;
-    const x0 = Math.max(0, Math.floor(gridX(rect.centerX - rect.halfWidth - reach)));
-    const x1 = Math.min(verticesX - 1, Math.ceil(gridX(rect.centerX + rect.halfWidth + reach)));
-    const z0 = Math.max(0, Math.floor(gridZ(rect.centerZ - rect.halfDepth - reach)));
-    const z1 = Math.min(verticesZ - 1, Math.ceil(gridZ(rect.centerZ + rect.halfDepth + reach)));
+    const rectBounds = clipApplyBounds(
+      {
+        x0: Math.max(0, Math.floor(gridX(rect.centerX - rect.halfWidth - reach))),
+        x1: Math.min(verticesX - 1, Math.ceil(gridX(rect.centerX + rect.halfWidth + reach))),
+        z0: Math.max(0, Math.floor(gridZ(rect.centerZ - rect.halfDepth - reach))),
+        z1: Math.min(verticesZ - 1, Math.ceil(gridZ(rect.centerZ + rect.halfDepth + reach))),
+      },
+      clip,
+    );
+    if (!rectBounds) continue;
+    const { x0, x1, z0, z1 } = rectBounds;
     const targetRaw = rect.targetHeight / scale;
     for (let z = z0; z <= z1; z += 1) {
       const localZ = z * spacing - originZ;

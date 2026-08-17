@@ -28,6 +28,8 @@ import {
   applyLandscapeRectPaint,
   applyLandscapeRectDeform,
   applyLandscapeSplinePaint,
+  landscapeGridBoundsForLocalBox,
+  splineToPolyline,
   type ForgeLandscapeData,
   type LandscapeRectDeform,
   type ForgeLandscapeSpline,
@@ -187,9 +189,14 @@ function traceOwnerGroup(
     return id;
   };
 
-  let segIndex = 0;
+  // Ids are derived from the two endpoints, never from emission order. Point ids
+  // are already content-derived (`n:`/`j:` + cell), so a segment keeps the same id
+  // across repaints for as long as the corridor piece itself is unchanged — which
+  // is what lets {@link RoadPaintSurface} diff two networks and repaint only the
+  // difference. An order-based counter would renumber every downstream segment the
+  // moment a cell is inserted mid-network, and the diff would degrade to "all".
   const addSegment = (startPointId: string, endPointId: string): void => {
-    splineSegments.push({ id: `s:${owner}:${segIndex++}`, startPointId, endPointId, paint: { ...paint } });
+    splineSegments.push({ id: `s:${startPointId}>${endPointId}`, startPointId, endPointId, paint: { ...paint } });
   };
 
   const consumed = new Set<string>();
@@ -326,6 +333,149 @@ export function structurePadsToRectDeforms(
   }));
 }
 
+// --- Incremental repaint bookkeeping ----------------------------------------
+
+/** Landscape-local XZ box; the unit the input diff below works in. */
+interface LocalBox {
+  minX: number;
+  minZ: number;
+  maxX: number;
+  maxZ: number;
+}
+
+/**
+ * What one repaint was built from, in the shape the next repaint diffs against.
+ *
+ * Both maps are keyed by content, not by position in a list: a spline segment by
+ * its endpoint-derived id, a rect by its own numbers. That is what makes the diff
+ * survive an edit in the middle of the network — inserting one road cell must not
+ * make every later corridor piece look new.
+ */
+interface AppliedPaintInputs {
+  /** Segment id → resolved geometry + paint config, and the box it can reach. */
+  readonly segments: Map<string, { geometry: number[]; paintKey: string; box: LocalBox }>;
+  /** Rect content key → how many identical rects carry it, and their shared box. */
+  readonly rects: Map<string, { count: number; box: LocalBox }>;
+  /** Set when the inputs could not be described unambiguously (duplicate ids). */
+  readonly ambiguous: boolean;
+}
+
+function expandLocalBox(target: LocalBox | null, box: LocalBox): LocalBox {
+  if (!target) return { ...box };
+  target.minX = Math.min(target.minX, box.minX);
+  target.minZ = Math.min(target.minZ, box.minZ);
+  target.maxX = Math.max(target.maxX, box.maxX);
+  target.maxZ = Math.max(target.maxZ, box.maxZ);
+  return target;
+}
+
+/** Reach box of a rounded-rect pad, including its soft edge. */
+function rectBox(rect: LandscapeRectPaint | LandscapeRectDeform): LocalBox {
+  const reach = Math.max(0, rect.falloff);
+  return {
+    minX: rect.centerX - rect.halfWidth - reach,
+    minZ: rect.centerZ - rect.halfDepth - reach,
+    maxX: rect.centerX + rect.halfWidth + reach,
+    maxZ: rect.centerZ + rect.halfDepth + reach,
+  };
+}
+
+function rectKey(rect: LandscapeRectPaint | LandscapeRectDeform): string {
+  return "layerId" in rect
+    ? `p|${rect.layerId}|${rect.centerX}|${rect.centerZ}|${rect.halfWidth}|${rect.halfDepth}|${rect.falloff}|${rect.strength}`
+    : `d|${rect.centerX}|${rect.centerZ}|${rect.halfWidth}|${rect.halfDepth}|${rect.falloff}|${rect.targetHeight}`;
+}
+
+function describeRects(rects: readonly (LandscapeRectPaint | LandscapeRectDeform)[]): AppliedPaintInputs["rects"] {
+  const out: AppliedPaintInputs["rects"] = new Map();
+  for (const rect of rects) {
+    const key = rectKey(rect);
+    const existing = out.get(key);
+    if (existing) existing.count += 1;
+    else out.set(key, { count: 1, box: rectBox(rect) });
+  }
+  return out;
+}
+
+/**
+ * Resolves the inputs of one repaint into the comparable form above. The spline is
+ * resolved through the same {@link splineToPolyline} the engine's apply pass uses,
+ * so a corner that curves differently because its *neighbour* moved still reads as
+ * changed — the diff never has to reason about Catmull-Rom adjacency itself.
+ */
+function describePaintInputs(
+  spline: ForgeLandscapeSpline,
+  rects: readonly (LandscapeRectPaint | LandscapeRectDeform)[],
+): AppliedPaintInputs {
+  const segments: AppliedPaintInputs["segments"] = new Map();
+  let ambiguous = false;
+  for (const sub of splineToPolyline(spline)) {
+    const id = sub.segment.id;
+    const paint = sub.segment.paint;
+    const paintKey = `${paint?.enabled === true}|${paint?.layerId ?? ""}|${paint?.strength ?? 0}`;
+    const reach = Math.max(0, sub.start.width, sub.end.width) / 2 + Math.max(0, sub.start.falloff, sub.end.falloff);
+    const box: LocalBox = {
+      minX: Math.min(sub.start.position[0], sub.end.position[0]) - reach,
+      minZ: Math.min(sub.start.position[2], sub.end.position[2]) - reach,
+      maxX: Math.max(sub.start.position[0], sub.end.position[0]) + reach,
+      maxZ: Math.max(sub.start.position[2], sub.end.position[2]) + reach,
+    };
+    const geometry = [
+      sub.start.position[0], sub.start.position[2], sub.start.width, sub.start.falloff,
+      sub.end.position[0], sub.end.position[2], sub.end.width, sub.end.falloff,
+    ];
+    const existing = segments.get(id);
+    if (!existing) {
+      segments.set(id, { geometry, paintKey, box });
+      continue;
+    }
+    if (existing.paintKey !== paintKey) ambiguous = true;
+    existing.geometry.push(...geometry);
+    expandLocalBox(existing.box, box);
+  }
+  return { segments, rects: describeRects(rects), ambiguous };
+}
+
+function sameGeometry(a: readonly number[], b: readonly number[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/**
+ * The landscape-local box covering every vertex whose painted value could differ
+ * between two input sets, or `"all"` when the difference cannot be localised.
+ * `null` means the two describe exactly the same paint.
+ *
+ * Restoring that box to pristine and replaying the *whole* ordered operation list
+ * clipped to it reproduces the full pass exactly: paint and deform are per-vertex
+ * independent, and any vertex outside the box is still touched by the identical
+ * ordered subsequence of unchanged operations.
+ */
+function changedInputBox(previous: AppliedPaintInputs, next: AppliedPaintInputs): LocalBox | "all" | null {
+  if (previous.ambiguous || next.ambiguous) return "all";
+  let changed: LocalBox | null = null;
+  for (const [id, entry] of next.segments) {
+    const before = previous.segments.get(id);
+    if (before && before.paintKey === entry.paintKey && sameGeometry(before.geometry, entry.geometry)) continue;
+    changed = expandLocalBox(changed, entry.box);
+    if (before) changed = expandLocalBox(changed, before.box);
+  }
+  for (const [id, entry] of previous.segments) {
+    if (next.segments.has(id)) continue;
+    changed = expandLocalBox(changed, entry.box);
+  }
+  for (const [key, entry] of next.rects) {
+    if (previous.rects.get(key)?.count === entry.count) continue;
+    changed = expandLocalBox(changed, entry.box);
+  }
+  for (const [key, entry] of previous.rects) {
+    if (next.rects.has(key)) continue;
+    changed = expandLocalBox(changed, entry.box);
+  }
+  return changed;
+}
+
 /** Union of two inclusive grid-space bounds; `null` operands are ignored. */
 function unionBounds(
   a: LandscapeSplineApplyBounds | null,
@@ -405,16 +555,24 @@ function changedHeightBounds(
 /**
  * Owns a landscape's mount-time paint snapshot and re-derives the road corridor
  * from scratch on every network change. Pure (no render object): each
- * {@link repaint} restores the previously painted region to pristine, applies the
- * fresh spline, and returns the union of both regions as the geometry-dirty
+ * {@link repaint} restores painted vertices to pristine, applies the fresh spline
+ * over them, and returns the region that actually moved as the geometry-dirty
  * bounds (or `null` when nothing changed). Restoring guarantees a removed/rerouted
  * road leaves zero residue and any hand-authored paint under the corridor returns.
+ *
+ * Which vertices that covers is decided by diffing the new inputs against the last
+ * ones: an edit only restores and re-applies the region it could have changed,
+ * while an input the diff cannot localise still falls back to the whole corridor.
+ * Both paths write the same values — see the engine check "a network grown and cut
+ * one edit at a time equals one repaint of the result".
  */
 export class RoadPaintSurface {
   private readonly pristine: number[][];
   /** Last values submitted to the landscape renderer, for exact dirty bounds. */
   private readonly rendered: number[][];
   private paintedBounds: LandscapeSplineApplyBounds | null = null;
+  /** What the last repaint was built from; `null` forces the next one to be full. */
+  private applied: AppliedPaintInputs | null = null;
 
   constructor(private readonly data: ForgeLandscapeData) {
     this.pristine = data.layers.map((layer) => layer.weights.slice());
@@ -422,18 +580,35 @@ export class RoadPaintSurface {
   }
 
   /**
-   * Repaint the whole settlement footprint on the terrain: the road corridor
-   * first, then the building pads on top, both derived from scratch. Returns the
-   * union of the restored and freshly painted regions as geometry-dirty bounds.
+   * Repaint the settlement footprint on the terrain: the road corridor first, then
+   * the building pads on top. Returns the geometry-dirty bounds, or null when the
+   * inputs describe paint that is already on the terrain.
+   *
+   * Only the region the inputs actually changed is touched. A full restore and
+   * repaint used to run on every committed cell, which made the cost of laying one
+   * road proportional to the size of the whole network — a late-game road or erase
+   * froze the game for seconds. The corridor is still derived from scratch (so a
+   * removed road can leave no residue and hand-painted terrain still returns); what
+   * is bounded now is how much of it gets re-applied.
    */
   repaint(spline: ForgeLandscapeSpline, rects: readonly LandscapeRectPaint[] = []): LandscapeSplineApplyBounds | null {
-    const restored = this.paintedBounds;
+    const next = describePaintInputs(spline, rects);
+    const changedBox = this.applied ? changedInputBox(this.applied, next) : "all";
+    this.applied = next;
+    if (changedBox === null) return null;
+    const clip = changedBox === "all" ? null : landscapeGridBoundsForLocalBox(this.data.size, changedBox);
+    if (changedBox !== "all" && !clip) return null;
+
+    const restored = clip ?? this.paintedBounds;
     if (restored) this.restore(restored);
     const painted = unionBounds(
-      applyLandscapeSplinePaint(this.data, spline).bounds,
-      applyLandscapeRectPaint(this.data, rects).bounds,
+      applyLandscapeSplinePaint(this.data, spline, clip).bounds,
+      applyLandscapeRectPaint(this.data, rects, clip).bounds,
     );
-    this.paintedBounds = painted;
+    // A clipped pass only knows about its own region, so the total painted
+    // coverage — what `reset` and the next full repaint have to restore — grows
+    // by union rather than being replaced.
+    this.paintedBounds = clip ? unionBounds(this.paintedBounds, painted) : painted;
     return changedWeightBounds(this.data, this.rendered, unionBounds(restored, painted));
   }
 
@@ -442,6 +617,7 @@ export class RoadPaintSurface {
     const restored = this.paintedBounds;
     if (restored) this.restore(restored);
     this.paintedBounds = null;
+    this.applied = null;
     return changedWeightBounds(this.data, this.rendered, restored);
   }
 
@@ -471,17 +647,32 @@ export class StructurePadTerrainSurface {
   /** Last values submitted to the landscape renderer, for exact dirty bounds. */
   private readonly rendered: number[];
   private flattenedBounds: LandscapeSplineApplyBounds | null = null;
+  /** Pads the last rebuild was built from; `null` forces the next one to be full. */
+  private applied: AppliedPaintInputs["rects"] | null = null;
 
   constructor(private readonly data: ForgeLandscapeData) {
     this.pristine = data.heights.slice();
     this.rendered = data.heights.slice();
   }
 
+  /** Same bounded-region rule as {@link RoadPaintSurface.repaint}, for heights. */
   rebuild(rects: readonly LandscapeRectDeform[]): LandscapeSplineApplyBounds | null {
-    const restored = this.flattenedBounds;
+    const next = describeRects(rects);
+    const changedBox = this.applied
+      ? changedInputBox(
+        { segments: new Map(), rects: this.applied, ambiguous: false },
+        { segments: new Map(), rects: next, ambiguous: false },
+      )
+      : "all";
+    this.applied = next;
+    if (changedBox === null) return null;
+    const clip = changedBox === "all" ? null : landscapeGridBoundsForLocalBox(this.data.size, changedBox);
+    if (changedBox !== "all" && !clip) return null;
+
+    const restored = clip ?? this.flattenedBounds;
     if (restored) this.restore(restored);
-    const flattened = applyLandscapeRectDeform(this.data, rects).bounds;
-    this.flattenedBounds = flattened;
+    const flattened = applyLandscapeRectDeform(this.data, rects, clip).bounds;
+    this.flattenedBounds = clip ? unionBounds(this.flattenedBounds, flattened) : flattened;
     return changedHeightBounds(this.data, this.rendered, unionBounds(restored, flattened));
   }
 
@@ -489,6 +680,7 @@ export class StructurePadTerrainSurface {
     const restored = this.flattenedBounds;
     if (restored) this.restore(restored);
     this.flattenedBounds = null;
+    this.applied = null;
     return changedHeightBounds(this.data, this.rendered, restored);
   }
 
@@ -604,8 +796,12 @@ export class RoadTerrainPainter {
    * `ownershipVersion` is a second staleness input, not a nicety: a border that
    * moves repaints a road nobody touched — the stretch that just fell inside a
    * kingdom's control takes that kingdom's age layer.
+   *
+   * The network arrives as a thunk because the caller polls this every frame:
+   * `RoadGraph.all()` rebuilds and sorts the whole network on each call, which is
+   * pure garbage on the frames — nearly all of them — where nothing was paved.
    */
-  sync(segments: readonly RoadSegment[], version: number, ownershipVersion = 0): void {
+  sync(resolveSegments: () => readonly RoadSegment[], version: number, ownershipVersion = 0): void {
     if (version !== this.lastVersion || ownershipVersion !== this.lastOwnershipVersion) {
       this.lastVersion = version;
       this.lastOwnershipVersion = ownershipVersion;
@@ -613,6 +809,7 @@ export class RoadTerrainPainter {
     }
     if (!this.dirty) return;
     this.dirty = false;
+    const segments = resolveSegments();
     const startedAt = paintNow();
     const spline = roadGraphToLandscapeSpline(segments, {
       cellSize: this.cellSize,

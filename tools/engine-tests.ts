@@ -470,7 +470,7 @@ import type { RtsStrategicPoint } from "../src/game/rts/world/rtsMapBlockout";
 import { simulationSteps, type RtsSimulationSpeed } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
 import { planAutoRoadConnection } from "../src/game/rts/roads/autoRoadConnector";
-import { roadGraphToLandscapeSpline, RoadPaintSurface, StructurePadTerrainSurface, structurePadsToRectDeforms, structurePadsToRectPaints } from "../src/game/rts/roads/roadTerrainPainter";
+import { roadGraphToLandscapeSpline, RoadPaintSurface, StructurePadTerrainSurface, structurePadsToRectDeforms, structurePadsToRectPaints, type StructurePad } from "../src/game/rts/roads/roadTerrainPainter";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import {
@@ -22345,6 +22345,113 @@ check("RoadPaintSurface reports only the changed end of a shortened road", () =>
   assert.ok(changed, "removing one end still changes its local paint");
   assert.ok(changed.x0 > first.x0, "unchanged left-hand road paint is not sent back to the renderer");
   assert.ok(changed.x0 > 45, "the dirty rectangle stays at the removed road end");
+});
+
+check("a network grown and cut one edit at a time equals one repaint of the result", () => {
+  // The repaint is incremental: each call restores and re-applies only the region
+  // its inputs changed, because repainting the whole network per committed cell is
+  // what made a late-game road freeze the game for seconds. That is only sound if
+  // it is indistinguishable from the full pass, so this is the invariant that has
+  // to hold — including for edits made in the *middle* of an existing network,
+  // which is what renumbers order-derived spline ids.
+  const commits: [RoadCell, RoadCell][] = [
+    [{ x: -24, z: -8 }, { x: 24, z: -8 }],
+    [{ x: -24, z: 8 }, { x: 24, z: 8 }],
+    [{ x: -16, z: -8 }, { x: -16, z: 8 }],
+    [{ x: 16, z: -8 }, { x: 16, z: 8 }],
+    [{ x: 0, z: -8 }, { x: 0, z: 8 }],   // inserted between the two crossings
+    [{ x: -8, z: -8 }, { x: -8, z: 8 }], // and another, further left again
+  ];
+  const pads: StructurePad[] = [
+    { x: -16, z: 0, width: 6, depth: 6, groundY: 0 },
+    { x: 16, z: 0, width: 4, depth: 4, groundY: 0 },
+  ];
+  const paint = (
+    data: ForgeLandscapeData,
+    surface: RoadPaintSurface,
+    heights: StructurePadTerrainSurface,
+    roads: RoadGraph,
+    activePads: readonly StructurePad[],
+  ): void => {
+    surface.repaint(
+      roadGraphToLandscapeSpline(roads.all(), ROAD_PAINT_OPTS),
+      structurePadsToRectPaints(activePads, [0, 0, 0], BUILDING_PAD_VISUAL),
+    );
+    heights.rebuild(structurePadsToRectDeforms(activePads, [0, 0, 0], BUILDING_PAD_VISUAL));
+  };
+
+  const stepwise = createFlatLandscapeData("small");
+  const stepSurface = new RoadPaintSurface(stepwise);
+  const stepHeights = new StructurePadTerrainSurface(stepwise);
+  const roads = roadGraphOf([]);
+  let activePads: StructurePad[] = [];
+  for (const [index, [start, end]] of commits.entries()) {
+    const plan = roads.plan(start, end, []);
+    assert.ok(plan, "fixture route must be paved");
+    roads.commit(plan);
+    if (index < pads.length) activePads = [...activePads, pads[index]!];
+    paint(stepwise, stepSurface, stepHeights, roads, activePads);
+  }
+  // ...then erase across the middle and drop a building, still one edit at a time.
+  for (const cell of [{ x: 0, z: 0 }, { x: 0, z: -2 }, { x: -8, z: 4 }, { x: 16, z: -8 }]) {
+    roads.remove([cell]);
+    paint(stepwise, stepSurface, stepHeights, roads, activePads);
+  }
+  activePads = activePads.slice(0, 1);
+  paint(stepwise, stepSurface, stepHeights, roads, activePads);
+
+  const oneShot = createFlatLandscapeData("small");
+  paint(oneShot, new RoadPaintSurface(oneShot), new StructurePadTerrainSurface(oneShot), roads, activePads);
+  assert.deepEqual(stepwise.layers, oneShot.layers, "stepwise paint equals one repaint of the final network");
+  assert.deepEqual(stepwise.heights, oneShot.heights, "and so do the pad foundations");
+
+  // The incremental bookkeeping must not leak into the reset path either.
+  const pristine = createFlatLandscapeData("small");
+  stepSurface.reset();
+  stepHeights.reset();
+  assert.deepEqual(stepwise.layers, pristine.layers, "reset still returns every weight to mount state");
+  assert.deepEqual(stepwise.heights, pristine.heights, "reset still returns every height to mount state");
+});
+
+check("a clipped spline paint writes exactly what the unclipped pass writes there", () => {
+  // The clip is what makes an incremental repaint possible, and the corridor index
+  // behind it only tests sub-segments that can reach the sampled vertex. Both are
+  // cost-only: inside the clip the result has to be the full pass, vertex for vertex.
+  const segs = roadGraphOf([
+    [{ x: -24, z: 0 }, { x: 24, z: 0 }],
+    [{ x: 0, z: 0 }, { x: 0, z: 20 }],
+  ]).all();
+  const spline = roadGraphToLandscapeSpline(segs, ROAD_PAINT_OPTS);
+  const clip = { x0: 30, z0: 28, x1: 40, z1: 38 };
+
+  const full = createFlatLandscapeData("small");
+  applyLandscapeSplinePaint(full, spline);
+  const clipped = createFlatLandscapeData("small");
+  const result = applyLandscapeSplinePaint(clipped, spline, clip);
+  assert.ok(result.changed && result.bounds, "the clip covers part of the corridor");
+  assert.ok(
+    result.bounds!.x0 >= clip.x0 && result.bounds!.x1 <= clip.x1
+    && result.bounds!.z0 >= clip.z0 && result.bounds!.z1 <= clip.z1,
+    "a clipped pass reports only vertices inside the clip",
+  );
+
+  const { verticesX } = full.size;
+  for (const [index, layer] of full.layers.entries()) {
+    for (let z = clip.z0; z <= clip.z1; z += 1) {
+      for (let x = clip.x0; x <= clip.x1; x += 1) {
+        const vertex = z * verticesX + x;
+        assert.equal(
+          clipped.layers[index]!.weights[vertex],
+          layer.weights[vertex],
+          `layer ${layer.id} vertex ${x},${z} must match the unclipped pass`,
+        );
+      }
+    }
+  }
+  // ...and nothing outside it moved at all.
+  const untouched = createFlatLandscapeData("small");
+  const outside = (clip.z1 + 4) * verticesX + clip.x0;
+  assert.equal(clipped.layers[0]!.weights[outside], untouched.layers[0]!.weights[outside]);
 });
 
 check("Faz 5: an age layer swap promotes the same road with no old-layer residue", () => {

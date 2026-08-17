@@ -5156,7 +5156,7 @@ export class RtsApp {
         groundY: structure.groundY,
       })),
     ]);
-    painter.sync(this.roads.all(), this.roads.version, this.roads.ownershipVersion);
+    painter.sync(() => this.roads.all(), this.roads.version, this.roads.ownershipVersion);
   }
 
   /**
@@ -5198,7 +5198,7 @@ export class RtsApp {
    */
   private syncRoadVisuals(): void {
     this.roadPlacement.renderNetwork();
-    this.roadPainter?.sync(this.roads.all(), this.roads.version, this.roads.ownershipVersion);
+    this.roadPainter?.sync(() => this.roads.all(), this.roads.version, this.roads.ownershipVersion);
   }
 
   /** Defer a road commit's presentation effects while its structure pad is prepared. */

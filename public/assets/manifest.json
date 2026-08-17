@@ -20021,7 +20021,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 744052
+        "bytes": 745352
       },
       "license": "Unknown"
     },
@@ -20044,7 +20044,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 870112
+        "bytes": 870120
       },
       "license": "Unknown"
     },
@@ -20067,7 +20067,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 947564
+        "bytes": 942760
       },
       "license": "Unknown"
     },
@@ -21148,7 +21148,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 229348
+        "bytes": 222632
       },
       "license": "Unknown"
     },
@@ -21502,7 +21502,7 @@
       "name": "Resource Pine Tree Group Cut",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Resource_PineTree_Group_Cut.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_PineTree_Group_Cut.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -21516,7 +21516,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 41985
+        "bytes": 161540
       },
       "license": "Unknown"
     },

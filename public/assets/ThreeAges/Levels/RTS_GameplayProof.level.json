@@ -1591,6 +1591,10 @@
     {
       "assetId": "test",
       "placements": []
+    },
+    {
+      "assetId": "barracks-secondage-level2",
+      "placements": []
     }
   ],
   "characters": [],
