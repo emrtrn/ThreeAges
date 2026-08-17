@@ -534,15 +534,43 @@ allowlist'i ile aynı tuzak). Kapı üç şeyi söylüyor: alan doğrulamadan sa
 reddedilir, ve **alanın hiç olmaması meşrudur** — sisten söz etmeyen bir zincir yazan çatal
 boş dize yazmak zorunda kalmasın.
 
-### Faz 5 — Doğrulama
+### Faz 5 — Doğrulama — ✅ **otomatik kapılar geçti (17 Ağu 2026)**; kabul maçı kullanıcıda
 
-| Kapı | Ne kanıtlar |
-|---|---|
-| `npx tsc --noEmit` | Şema genişletmesi derleniyor |
-| `npm run test:engine -- --filter mission` | Yeni yüklemler + zincir tamamlanabilirliği |
-| **Yeni:** "zincirin hedefleri seçili Level'da karşılanabilir" | K10'un kapanması — market stoklu bir adım varsa ticaret noktası, `raze` adımı varsa düşman genişleme alanı ister |
-| `npm run build:verify` | Birleştirmeden önce |
-| **Kabul maçı (kullanıcı)** | Zincirin baştan sona tek oturumda oynanması — CLAUDE.md: görsel/oynanış kabulü kullanıcının kararı |
+| Kapı | Ne kanıtlar | Durum |
+|---|---|---|
+| `npx tsc --noEmit` | Şema genişletmesi derleniyor | ✅ |
+| `npm run test:engine -- --filter mission,chain` | Yeni yüklemler + zincir tamamlanabilirliği | ✅ 41 kontrol |
+| **Yeni:** "zincirin hedefleri seçili Level'da karşılanabilir" | K10'un kapanması — market stoklu bir adım varsa ticaret noktası (Faz 0.5), `raze` adımı varsa düşman yapı yuvası | ✅ |
+| `npm run build:verify` | Birleştirmeden önce | ✅ |
+| **Kabul maçı (kullanıcı)** | Zincirin baştan sona tek oturumda oynanması — CLAUDE.md: görsel/oynanış kabulü kullanıcının kararı | ⏳ kullanıcıda |
+
+#### `raze` kapısının verdiği üç karar
+
+1. **Kapı "genişleme alanı" değil, "düşman yuvası" istiyor.** Plan `raze` için *genişleme
+   alanı* şart koşuyordu; uygulanan kapı hedefin adlandırdığı **binayı** arıyor ve iki
+   kaynağı birden kabul ediyor: yazılı genişleme bölgesi üyeleri (§47 tarifi:
+   karakol/depo/üretim) ve `owner: "enemy"` yazılı inşa çıpaları. Gerekçe: zincir bir
+   *kaynak* değil bir *bina* adlandırıyor (`enemy-structure-razed { buildingId }`), ve
+   hangisinin o binayı diktiği seviye yazarının işi. Bugünkü zincir karakol istiyor,
+   karakolu yalnızca genişleme bölgesi dikiyor (yerleşim plancısı hiç karakol adayı
+   üretmiyor) — yani kapı bugün planın istediği şeyi zaten şart koşuyor, ama üretim binası
+   yazan bir çatalı yanlışlıkla kırmızıya çevirmiyor.
+2. **Kapı seviyeyi ham okumuyor, *uyarlıyor*.** İki komşusu (Faz 0.5 ve K3) `classRef` +
+   `variableOverrides` üzerinden ham geçiyor; bu kapı `adaptRtsLevel`'dan geçiyor. Sebep
+   ölçüldü: varsayılanında bırakılmış bir işaretçi `variableOverrides`'a **hiç satır
+   yazmıyor**, yani ham okuma tam da düzenlenmesi gerekmeyen yuvayı kaçırırdı. Kanıt
+   seviyenin kendisinde: `market` çıpası `owner` yazmıyor ve sahibini aktörün
+   varsayılanından (`enemy`) alıyor — ham okuma onu sahipsiz sayardı.
+3. **Kapının ısırdığı ölçüldü, varsayılmadı.** Seviyenin düşmana verdiği yuvalar:
+   `archery_range, barracks, depot, farm, gold_mine, house, hunting_camp, lumber_camp,
+   market, outpost, pasture, quarry`. Tapınak yazan bir `raze` adımı kırmızı olur — yani
+   kapı boş bir tavsiye değil. Vakumluluğa karşı ikinci bir kilit de var: zincir hiç yıkım
+   istemiyorsa kontrol **kendisi** düşüyor (`razed.size > 0`), yoksa hedefi silen bir
+   düzenleme kapıyı sessizce yeşile boyardı.
+
+> **Filtre notu:** bu kümenin etiketleri "mission" değil **"chain"** diyor
+> (`the mission chain…`, `Faz 0.5: … the chain buys`), yani planın yazdığı
+> `--filter mission` gates'in yarısını atlıyordu. Doğrusu `--filter mission,chain`.
 
 ---
 
@@ -563,6 +591,9 @@ boş dize yazmak zorunda kalmasın.
    K3'ün tek cümlesi ve sis cümlesi. Sıra 6'ya geçti.
 6. **Faz 2 Perde I/III dokunuşları** — kurt uyarısı, `R` otomasyon satırı,
    Ağıl/Değirmen/Tapınak adımları.
+
+> **Faz 5** bir sıra değil, her sıranın kapısı: otomatik kapıları 17 Ağu 2026'da geçti
+> (K10 kapandı). Perde I/III geldiğinde yeniden koşar; kabul maçı hep kullanıcıda.
 
 ---
 

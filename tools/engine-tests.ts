@@ -46116,6 +46116,79 @@ check("Faz 4 K3: the chain's ending hands the player off to passes the shipped L
   );
 });
 
+check("Faz 5: the shipped scenario authors an enemy slot for every structure the chain razes", () => {
+  // K10's other half, and the same shape as the trade-site gate above: the
+  // chain's own completability test proves `enemy-structure-razed` from an
+  // object literal that simply *says* the enemy owns an outpost. The match that
+  // ships has to hand the enemy one, and only the Level can promise that — the
+  // AI raises an outpost from an authored expansion region (§47's recipe) and
+  // its base buildings from authored anchors, so a scenario authoring neither
+  // leaves the last step permanently open while every test stays green.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const script = validateMissionScript(
+    JSON.parse(readFileSync("public/game-data/missions/frontier_road.json", "utf8")) as unknown,
+    "frontier_road",
+    new Set(Object.keys(buildings)),
+  );
+  const razed = new Set(
+    script.steps
+      .map((step) => step.goal)
+      .filter((goal): goal is Extract<MissionGoal, { kind: "enemy-structure-razed" }> => (
+        goal.kind === "enemy-structure-razed"
+      ))
+      .map((goal) => goal.buildingId),
+  );
+  assert.ok(razed.size > 0, "the chain must ask for a demolition for this check to bite");
+
+  const preset = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
+  assert.ok(preset.levelRef, "the shipped scenario must name a Level");
+  // Adapted rather than read as raw actors, unlike its two neighbours: a marker
+  // left at its authored default carries no `variableOverrides` entry, so a raw
+  // read of `buildingId` would miss exactly the slot that needed no editing.
+  const layout = JSON.parse(readFileSync(`public/${preset.levelRef}`, "utf8")) as {
+    actors: Array<{
+      classRef: string;
+      position: [number, number, number];
+      variableOverrides?: Record<string, string | number | boolean | string[]>;
+    }>;
+    splines: Parameters<typeof adaptRtsLevel>[1];
+  };
+  const level = adaptRtsLevel(
+    layout.actors.map((instance, index) => ({
+      index,
+      instance,
+      def: normalizeActorScriptDef(
+        JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown,
+        instance.classRef,
+      ),
+    })),
+    layout.splines,
+    {
+      buildings,
+      resources: validateResourceBalance(
+        JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+      ),
+      animals: shippedAnimalBalance(),
+    },
+  );
+  // Both sources, because the chain names a building and not a source: an
+  // expansion region is what raises an outpost, an enemy anchor is what raises
+  // a base building, and which one answers is the Level author's business.
+  const enemySlots = new Set([
+    ...level.buildAnchors.filter((anchor) => anchor.owner === "enemy").map((anchor) => anchor.buildingId),
+    ...level.expansions.flatMap((region) => [region.outpost, region.depot, region.production])
+      .map((member) => member.buildingId),
+  ]);
+  for (const buildingId of razed) {
+    assert.ok(
+      enemySlots.has(buildingId),
+      `the chain ends by razing ${buildingId}, but "${preset.levelRef}" authors the enemy no slot for one`,
+    );
+  }
+});
+
 check("a chain buys in whole lots, and one caravan trip can fill the lot it asks for", () => {
   // Both halves are *relationships* between tables that are meant to be retuned,
   // computed from those tables rather than pinned as numbers: the lot moved from

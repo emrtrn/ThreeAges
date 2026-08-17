@@ -21134,7 +21134,7 @@
       "name": "Mine",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Mine.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Mine.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -21148,7 +21148,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 190856
+        "bytes": 229348
       },
       "license": "Unknown"
     },
