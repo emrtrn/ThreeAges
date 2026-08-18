@@ -1232,38 +1232,7 @@
     },
     {
       "assetId": "logs",
-      "placements": [
-        {
-          "position": [
-            -5.8,
-            0,
-            52.4
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            35,
-            0
-          ],
-          "scale": 3
-        },
-        {
-          "position": [
-            5.8,
-            0,
-            -52.4
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            215,
-            0
-          ],
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "mine",

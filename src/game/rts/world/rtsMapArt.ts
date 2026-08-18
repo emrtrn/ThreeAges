@@ -8,7 +8,6 @@ import type { ResourceNodeSnapshot, ResourceNodeSystem } from "../economy/resour
 const STATIC_MESH_ROOT = "/assets/ThreeAges/StaticMeshes";
 
 const MODELS = {
-  ridge: `${STATIC_MESH_ROOT}/Mountain_Group_1.gltf`,
   ridgeRock: `${STATIC_MESH_ROOT}/Rock_Group.gltf`,
   treePine: `${STATIC_MESH_ROOT}/Resource_PineTree.gltf`,
   tree1: `${STATIC_MESH_ROOT}/Resource_Tree1.gltf`,
@@ -72,15 +71,12 @@ export class RtsMapArt {
     const includeRidge = options.includeRidge ?? true;
     const modelIds = includeRidge
       ? (Object.keys(MODELS) as MapModelId[])
-      : (Object.keys(MODELS) as MapModelId[]).filter((id) => id !== "ridge" && id !== "ridgeRock");
+      : (Object.keys(MODELS) as MapModelId[]).filter((id) => id !== "ridgeRock");
     const entries = await Promise.all(modelIds
       .map(async (id) => [id, (await this.loader.loadAsync(MODELS[id])).scene] as const));
     for (const [id, scene] of entries) this.templates.set(id, scene);
 
-    if (includeRidge) {
-      this.replaceRidgePlaceholder(root);
-      root.add(this.createRidge());
-    }
+    if (includeRidge) root.add(this.createRidge());
     root.add(this.createResourceNodes(nodes));
     root.add(this.createForest(forests));
   }
@@ -131,17 +127,22 @@ export class RtsMapArt {
     this.nodeObjects.clear();
   }
 
-  private replaceRidgePlaceholder(root: Group): void {
-    const placeholder = root.getObjectByName("rts-central-ridge");
-    if (!placeholder) return;
-    root.remove(placeholder);
-    disposeModel(placeholder);
-  }
-
+  /**
+   * The legacy ridge: the blockout's own box plus two rock groups dressing its
+   * flanks.
+   *
+   * It used to fit a mountain model over the box and delete the box underneath
+   * it. That model is no longer shipped, and because every template here is
+   * awaited together, one missing file took the forest and the deposits down
+   * with it. So the box stays — it is already sized from the same
+   * `navigationBlockers` entry the ridge blocks with, which makes it the one
+   * ridge visual that cannot disagree with where units may walk — and the rocks
+   * still break up its silhouette. The authored Level mounts its own ridge and
+   * never reaches this path.
+   */
   private createRidge(): Group {
     const ridge = new Group();
     ridge.name = "rts-central-ridge-art";
-    ridge.add(this.model("ridge", 0, 0, 22, 7));
     ridge.add(this.model("ridgeRock", -7.2, 0.1, 7, 4));
     ridge.add(this.model("ridgeRock", 7.4, -0.2, 7, 4));
     return ridge;

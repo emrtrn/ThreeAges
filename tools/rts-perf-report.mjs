@@ -7,8 +7,20 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { spawn } from "node:child_process";
 import { chromium } from "playwright";
+import {
+  browserMetricDelta,
+  collectFrameSamples,
+  formatBytes,
+  metricMap,
+  numeric,
+  readPositiveNumber,
+  startVite,
+  stopProcess,
+  summarizeFrames,
+  wait,
+  waitForHttp,
+} from "./perf/browserPerfHarness.mjs";
 
 const DEFAULT_URL = "http://127.0.0.1:4174/?rts&debug";
 const DEFAULT_DURATION_MS = 10_000;
@@ -35,100 +47,6 @@ function selectedScenarios() {
   return selected;
 }
 
-function readPositiveNumber(name, fallback) {
-  const raw = process.env[name];
-  if (raw === undefined || raw.trim() === "") return fallback;
-  const value = Number(raw);
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${name} must be a positive number; received ${JSON.stringify(raw)}`);
-  }
-  return value;
-}
-
-function wait(ms) {
-  return new Promise((resolveWait) => setTimeout(resolveWait, ms));
-}
-
-async function waitForHttp(url, timeoutMs = 120_000) {
-  const deadline = Date.now() + timeoutMs;
-  let lastError = "unknown error";
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return;
-      lastError = `HTTP ${response.status}`;
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-    await wait(250);
-  }
-  throw new Error(`Local Vite server did not become ready: ${lastError}`);
-}
-
-function startVite() {
-  const viteEntry = resolve("node_modules/vite/bin/vite.js");
-  const child = spawn(process.execPath, [viteEntry, "--host", "127.0.0.1", "--port", "4174", "--strictPort"], {
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
-  let output = "";
-  child.stdout.on("data", (chunk) => { output += String(chunk); });
-  child.stderr.on("data", (chunk) => { output += String(chunk); });
-  child.once("exit", (code) => {
-    if (code !== 0 && code !== null) console.error(`[rts-perf] local Vite exited early (${code}):\n${output}`);
-  });
-  return child;
-}
-
-async function stopProcess(child) {
-  if (!child || child.exitCode !== null) return;
-  child.kill();
-  await Promise.race([new Promise((resolveExit) => child.once("exit", resolveExit)), wait(5_000)]);
-  if (child.exitCode === null) child.kill("SIGKILL");
-}
-
-function percentile(values, fraction) {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * fraction) - 1))];
-}
-
-function summarizeFrames(samples) {
-  const valid = samples.filter((sample) => Number.isFinite(sample) && sample > 0 && sample < 5_000);
-  const averageMs = valid.reduce((sum, sample) => sum + sample, 0) / Math.max(1, valid.length);
-  const over = (threshold) => valid.filter((sample) => sample > threshold).length;
-  return {
-    sampleCount: valid.length,
-    averageMs,
-    p50Ms: percentile(valid, 0.5),
-    p95Ms: percentile(valid, 0.95),
-    p99Ms: percentile(valid, 0.99),
-    maxMs: valid.length === 0 ? 0 : Math.max(...valid),
-    estimatedFps: averageMs > 0 ? 1000 / averageMs : 0,
-    over33ms: over(33.3),
-    over50ms: over(50),
-    over100ms: over(100),
-    discardedSamples: samples.length - valid.length,
-  };
-}
-
-function metricMap(metrics) {
-  return Object.fromEntries(metrics.map(({ name, value }) => [name, value]));
-}
-
-function browserMetricDelta(start, end, durationMs) {
-  const seconds = durationMs / 1000;
-  const perSecond = (name) => ((end[name] ?? 0) - (start[name] ?? 0)) / seconds;
-  return {
-    taskMsPerSecond: perSecond("TaskDuration") * 1000,
-    scriptMsPerSecond: perSecond("ScriptDuration") * 1000,
-    layoutMsPerSecond: perSecond("LayoutDuration") * 1000,
-    styleMsPerSecond: perSecond("RecalcStyleDuration") * 1000,
-    jsHeapUsedBytes: end.JSHeapUsedSize ?? null,
-    nodes: end.Nodes ?? null,
-  };
-}
-
 async function stopTracing(client) {
   let streamHandle = null;
   const completed = new Promise((resolveCompleted) => {
@@ -150,37 +68,6 @@ async function stopTracing(client) {
   }
   if (streamHandle) await client.send("IO.close", { handle: streamHandle });
   return trace;
-}
-
-async function collectScenarioSamples(page, durationMs) {
-  return page.evaluate(async (duration) => {
-    const canvas = document.querySelector("#game-canvas");
-    if (!(canvas instanceof HTMLCanvasElement)) throw new Error("RTS canvas not found");
-    const frames = [];
-    const snapshots = [];
-    const startedAt = performance.now();
-    let previous = startedAt;
-    let nextSnapshotAt = startedAt;
-    await new Promise((resolveFrame) => {
-      const tick = (now) => {
-        frames.push(now - previous);
-        previous = now;
-        if (now >= nextSnapshotAt) {
-          nextSnapshotAt = now + 500;
-          try {
-            const snapshot = JSON.parse(canvas.dataset.rtsPerf ?? "null");
-            if (snapshot) snapshots.push({ atMs: now - startedAt, ...snapshot });
-          } catch {
-            // A partial DOM update can never invalidate a performance run.
-          }
-        }
-        if (now - startedAt >= duration) resolveFrame();
-        else requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    });
-    return { frames, snapshots };
-  }, durationMs);
 }
 
 async function driveCameraScenario(page, durationMs) {
@@ -241,14 +128,6 @@ function latestSnapshot(snapshots) {
   return snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
 }
 
-function numeric(value, digits = 2) {
-  return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "-";
-}
-
-function formatBytes(value) {
-  return typeof value === "number" && Number.isFinite(value) ? `${(value / 1024 / 1024).toFixed(1)} MB` : "-";
-}
-
 function markdownReport(report) {
   const rows = report.results.map((result) => {
     const runtime = result.runtime;
@@ -292,7 +171,7 @@ async function runScenario(browser, scenario, durationMs, warmupMs, headless) {
       categories: ["devtools.timeline", "disabled-by-default-devtools.timeline", "disabled-by-default-devtools.timeline.frame", "v8.execute", "toplevel"].join(","),
     });
     const startMetrics = metricMap((await client.send("Performance.getMetrics")).metrics);
-    const [samples] = await Promise.all([collectScenarioSamples(page, durationMs), driveCameraScenario(page, durationMs)]);
+    const [samples] = await Promise.all([collectFrameSamples(page, durationMs), driveCameraScenario(page, durationMs)]);
     const endMetrics = metricMap((await client.send("Performance.getMetrics")).metrics);
     const trace = await stopTracing(client);
     return {
@@ -324,7 +203,7 @@ async function main() {
   try {
     if (ownsServer) {
       console.log("[rts-perf] starting local Vite server (development mode)");
-      server = startVite();
+      server = startVite(4174, "rts-perf");
       await waitForHttp("http://127.0.0.1:4174");
     }
     browser = await chromium.launch({ headless });

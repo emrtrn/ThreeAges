@@ -34,6 +34,7 @@ import { VfxSubsystem } from "@engine/render-three/vfxSubsystem";
 import { FrameMetricsMonitor } from "@engine/perf/frameMetrics";
 import { AdaptiveQualityController } from "@engine/perf/adaptiveQuality";
 import { classifyBottleneck } from "@engine/perf/bottleneckClassifier";
+import { isFarFromFocus } from "@engine/perf/distanceUpdateRate";
 import { SubsystemProfiler } from "@engine/core/subsystemProfiler";
 import { evaluatePerfBudget } from "@engine/perf/perfBudget";
 import {
@@ -76,6 +77,7 @@ import {
   type RtsActorLoadReport,
 } from "./content/rtsActorVisualFactory";
 import { RTS_THROW_RELEASE_NOTIFY, RtsNotifyEffectBudget, rtsNotifyEffectIds } from "./content/rtsNotifyEffects";
+import { RTS_ANIMATION_DISTANCE_SETTINGS } from "./content/rtsUnitPresentation";
 import { AiController } from "./ai/aiController";
 import { SettlementAiSiteProvider } from "./ai/aiSiteProvider";
 import { proceduralDepotRoadRank, proceduralRoadSiteFailure } from "./ai/aiRoadSiteFilter";
@@ -2978,6 +2980,16 @@ export class RtsApp {
     const memory = readRenderMemory(this.renderer);
     const shadowCasters = this.shadowCasterStats();
     const graph = this.sceneGraphStats();
+    // Sampled once and handed to both readers below, for the same reason the
+    // counters are: the visible panel and the recorded witness must be describing
+    // the same frame, and a second `perfCosts()` call would not be.
+    const costs = this.perfCosts();
+    const scene = {
+      units: this.units.all().length,
+      structures: this.structures.all().length,
+      caravans: this.caravans.all().length,
+      wildlife: this.wildlife.all().length,
+    };
     const frameStats = {
       averageMs: frame.averageFrameTimeMs,
       p95Ms: frame.p95FrameTimeMs,
@@ -2995,6 +3007,29 @@ export class RtsApp {
       // Event-driven terrain work, not a per-frame timer. Browser performance
       // captures can correlate a road/build hitch with its exact repaint scope.
       terrainPaint: this.roadPainter?.snapshot() ?? null,
+      // The per-region CPU table and the scene census used to reach only the
+      // on-screen panel, which made every question about *which part of the
+      // frame* a change moved a screenshot-reading exercise. Worker Faz 7 needs
+      // the presentation region in particular: mixer evaluation is what an army
+      // of 65-joint rigs actually costs, and it is invisible in a frame total.
+      //
+      // Every measured region, not the panel's curated seven: the panel is a
+      // reading order for a human mid-match, and the sub-step that answers this
+      // question (`birim sunumu`) is deliberately not in it. A recorded witness
+      // has no such budget, so it carries whatever was timed.
+      regions: this.perfProfiler?.snapshot().subsystems.map((timing) => ({
+        id: timing.id,
+        averageMs: timing.averageMs,
+        maxMs: timing.maxMs,
+        samples: timing.samples,
+      })) ?? [],
+      scene,
+      // What the 15 Hz distance throttle is actually doing this frame, rather
+      // than what the camera height suggests it should be doing. Sampled here on
+      // the snapshot cadence — the per-frame path already computes each unit's
+      // camera distance, but it does not count them, and a census that ran every
+      // frame would be a cost added to explain a cost.
+      animationCadence: this.animationCadenceCensus(),
       quality: this.userSettings.graphics.selectedQualityLevel,
       adaptiveEnabled: this.userSettings.graphics.adaptiveOptimizationEnabled,
       adaptiveReductionDepth: this.adaptiveQuality.reductionDepth,
@@ -3020,20 +3055,46 @@ export class RtsApp {
         { label: "harita", ...shadowCasters.mapArt },
         { label: "diğer", ...shadowCasters.other },
       ],
-      costs: this.perfCosts(),
+      costs,
       graph,
       quality: {
         level: this.userSettings.graphics.selectedQualityLevel,
         adaptiveEnabled: this.userSettings.graphics.adaptiveOptimizationEnabled,
         reductionDepth: this.adaptiveQuality.reductionDepth,
       },
-      scene: {
-        units: this.units.all().length,
-        structures: this.structures.all().length,
-        caravans: this.caravans.all().length,
-        wildlife: this.wildlife.all().length,
-      },
+      scene,
     });
+  }
+
+  /**
+   * How many live units are far enough from the camera to have their mixers run
+   * on the reduced cadence, and how many are not.
+   *
+   * The threshold is read from {@link RTS_ANIMATION_DISTANCE_SETTINGS} rather
+   * than written here, so this reports the rule the presentations actually
+   * follow instead of a copy of it that can drift.
+   */
+  private animationCadenceCensus(): {
+    near: number;
+    far: number;
+    farDistance: number | null;
+    farHz: number | null;
+  } {
+    const cameraPosition = this.cameraController.camera.position;
+    let near = 0;
+    let far = 0;
+    for (const unit of this.units.all()) {
+      // The presentation's own predicate, not a re-derived threshold: whichever
+      // way the settings are tuned, the census and the mixers answer together.
+      if (isFarFromFocus(unit.position.distanceToSquared(cameraPosition), RTS_ANIMATION_DISTANCE_SETTINGS)) far += 1;
+      else near += 1;
+    }
+    return {
+      near,
+      far,
+      farDistance: RTS_ANIMATION_DISTANCE_SETTINGS.farDistance ?? null,
+      farHz: RTS_ANIMATION_DISTANCE_SETTINGS.farUpdateHz ?? null,
+    };
   }
 
   /**

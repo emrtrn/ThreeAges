@@ -1,0 +1,34 @@
+{
+  "id": "worker_perf_00",
+  "label": "Worker Perf 0v0",
+  "flags": {
+    "fogOfWar": false
+  },
+  "startingResources": {
+    "food": 0,
+    "wood": 0,
+    "stone": 0,
+    "gold": 0
+  },
+  "startingUnits": {
+    "guard": 0,
+    "worker": 0,
+    "archer": 0,
+    "siege": 0
+  },
+  "enemyStartingResources": {
+    "food": 0,
+    "wood": 0,
+    "stone": 0,
+    "gold": 0
+  },
+  "enemyStartingUnits": {
+    "guard": 0,
+    "worker": 0,
+    "archer": 0,
+    "siege": 0
+  },
+  "gameSpeed": 1,
+  "mapState": "two_flanks_blockout",
+  "aiProfile": "normal"
+}

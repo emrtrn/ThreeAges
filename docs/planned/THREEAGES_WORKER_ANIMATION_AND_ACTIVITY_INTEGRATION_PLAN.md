@@ -134,9 +134,14 @@ yoktur ve olmaması normaldir (§4.4).
 - [x] GLB içinde texture yok; görünüm `M_Worker_Face` ve `M_Worker_Cloth`
   sidecar materyallerinden geliyor.
 - [x] `worker.materials.json` iki slotu (`face`, `cloth`) doğru sırada bildiriyor.
-- [ ] Yeni GLB için `gltf-transform validate` çalıştırılmadı; eski pakette alınan
-  temiz sonuç bu dosya için geçerli değil. **Faz 7 maddesidir** (§13.3), Faz ≤5'i
-  bloke etmez.
+- [x] **`gltf-transform validate` çalıştırıldı (2026-08-18, v4.4.0): hata yok.**
+  İki uyarı ve iki bilgi notu var, ikisi de asset gerçeği ve ikisi de zararsız:
+  `NODE_SKINNED_MESH_NON_ROOT` (iki skinned mesh düğümü, `/nodes/65` ve
+  `/nodes/66`, kök değil — üstlerindeki transform onlara işlemez, ki bu skinned
+  mesh için zaten böyle olması gereken şey) ve iki `UNUSED_OBJECT`
+  (`TEXCOORD_0`; GLB'de texture yok, görünüm sidecar materyallerinden geliyor —
+  yani UV'yi kullanan bir materyal GLB'nin içinde yok, dışında var). Hiçbiri
+  runtime'da bir davranışa karşılık gelmiyor.
 - [x] **Duplicate klip taraması yapıldı (2026-08-18): yok.** 51 klibin 51'i de
   ayrı animasyon verisi taşıyor. `Idle_Loop` ile `Idle_FoldArms_Loop` şüpheliydi
   çünkü süre (2,567 s), kanal sayısı (198) ve keyframe sayısı (77) birebir aynı —
@@ -917,7 +922,9 @@ bina çöküşü onu `rts-content.json` üzerinden hâlâ kullanıyor.
 
 ## 13. Faz 7 — Performans, LOD ve Nihai Teslim
 
-**Durum:** ⬜ Önceki fazları bekliyor
+**Durum:** ✅ **Kapandı (2026-08-18).** §13.1'in yedi ölçüm maddesi de
+cevaplandı, §13.2 "mesh kalitesini koru, LOD açma" ile kapandı, §13.3'ün tamamı
+yeşil ve kullanıcı nihai dünya içi görünümü kabul etti.
 **Gerekçe (2026-08-16'da yeniden ölçüldü):** Eski paketin 60.000 üçgenlik yükü
 yok. Yeni Worker 18.201 üçgen ile Guard'ın (14.990) ~1,21 katı, Archer'ın
 (20.926) ~0,87'si, Siege'in (14.660) ~1,24 katıdır — yani mevcut birim ailesinin
@@ -932,40 +939,189 @@ ortasında.
 Eski plandaki 2,64 milyon üçgenlik risk tablosu geçersizdir; LOD bu yüzden artık
 öncelikli bir gereklilik değil, ölçümle karar verilecek bir kapıdır.
 
+**Üstteki üçgen tablosu da fazla kötümser çıktı (2026-08-18).** "Worker sayısı ×
+18.201" her Worker'ın çizildiğini varsayıyor; ölçümde 44 Worker kareye
+**406.758** üçgen ekledi, yani tablonun yaklaşık yarısı. Sebep frustum: iki kamp
+haritanın iki ucunda, kamera birindeyken diğerinin ordusu görüntü dışında.
+Çizilen bir Worker'ın maliyeti tam olarak GLB'nin sayısı — 18.201 — ama sahada
+aynı anda ordunun yarısı çiziliyor.
+
 ### 13.1 Ölçüm
 
-- [ ] 8+8, 16+16 ve 22+22 Worker için CPU frame, GPU frame, draw call, triangle
-  ve animation mixer maliyetini ölç.
-- [ ] 65 eklemli rigin (eski 33 eklemin ~2 katı) mixer maliyetine etkisini ayrı
-  ölç; bu paketin asıl yeni maliyeti üçgen değil eklem sayısıdır.
-- [ ] İki materyal slotunun (face + cloth) draw call'a etkisini ölç; her Worker
-  artık en az iki çizim.
-- [ ] Yakın/uzak kamera ve 15 Hz uzak animasyon throttle davranışını ayrı ölç.
-- [ ] Idle, toplu hareket ve çoklu iş animasyonu sahnelerini karşılaştır.
-- [ ] Prop'lu (crate/axe) ve propsuz Worker maliyetini karşılaştır.
-- [ ] Ölçüm sonuçlarını bu belgeye tarih ve donanım bilgisiyle kaydet.
+**Durum: ✅ tamam (2026-08-18).** İki araç yazıldı, ikisi de repoda:
+
+- `npm run perf:worker` (`tools/worker-perf-report.mjs`) — dört Worker sayısı ×
+  üç sahne tarayan tarayıcı yakalaması. **0v0 satırı bir senaryo değil, ölçü
+  aleti:** rapordaki her "Worker başına" sayı ona karşı alınmış farktır. Presetler
+  (`public/game-data/presets/worker_perf_{00,08,16,22}.json`) bu yüzden sıfır
+  stokla açıyor — kimse inşa etmiyor, satırlar arasında Worker sayısından başka
+  hiçbir şey değişmiyor.
+- `node tools/worker-mixer-bench.mjs` — eklem sayısı sorusunu renderer'dan
+  ayırarak ölçen mixer tezgâhı. Sentetik rig, ama şekli uydurulmuş değil
+  `worker.glb`'den okunmuş: 65 eklem, klip başına 198 kanal, sampler başına ~21
+  keyframe.
+
+**Donanım ve koşullar:** Intel i5-11400F (6ç/12t), NVIDIA RTX 3060
+(sürücü 32.0.15.9595), 16 GB, Windows 11. Playwright Chromium **görünür**
+pencerede, `--disable-gpu-vsync` ile (aksi hâlde her satır maliyeti ne olursa
+olsun 60 fps yazar — monitörü ölçmüş oluruz), 1920×1080, kalite `high`, adaptif
+kapalı, Vite **dev** sunucusu. Satır başına 12 s ısınma + 10 s yakalama.
+Harita sanatı `ready`, Actor paketi `ready` (0 placeholder).
+
+| Ordu | Sahne | FPS | Kare ms | P95 ms | Draw call | Üçgen | `birim sunumu` ms | `çizim` ms | yakın/uzak |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0v0 | boşta | 170,4 | 5,87 | 8,70 | 264 | 45.380 | 0,001 | 3,53 | 0/0 |
+| 8v8 | boşta | 150,2 | 6,66 | 8,70 | 289 | 193.292 | 0,501 | 4,06 | 8/8 |
+| 16v16 | boşta | 119,1 | 8,40 | 11,30 | 313 | 341.204 | 0,914 | 5,28 | 16/16 |
+| 22v22 | boşta | **64,4** | **15,54** | **33,10** | 331 | 452.138 | 1,962 | 9,87 | 22/22 |
+| 0v0 | hareket | 190,6 | 5,25 | 7,00 | 264 | 45.380 | 0,001 | 2,99 | 0/0 |
+| 8v8 | hareket | 135,3 | 7,39 | 11,00 | 321 | 196.364 | 0,538 | 4,65 | 8/8 |
+| 16v16 | hareket | 113,9 | 8,78 | 11,10 | 377 | 347.348 | 0,981 | 5,38 | 16/16 |
+| 22v22 | hareket | 102,2 | 9,78 | 12,10 | 411 | 459.818 | 1,220 | 6,11 | 22/22 |
+| 0v0 | uzak | 195,1 | 5,13 | 6,80 | 323 | 66.205 | 0,001 | 3,10 | 0/0 |
+| 8v8 | uzak | 153,3 | 6,52 | 8,00 | 348 | 214.117 | 0,563 | 3,93 | 8/8 |
+| 16v16 | uzak | 115,7 | 8,64 | 12,70 | 372 | 362.029 | 1,007 | 5,34 | 15/17 |
+| 22v22 | uzak | 111,1 | 9,00 | 11,00 | 390 | 472.963 | 1,040 | 5,80 | **15/29** |
+
+- [x] **8+8 / 16+16 / 22+22 için CPU kare, GPU kare, draw call, üçgen ve mixer
+  maliyeti.** Yukarıdaki tablo. Worker başına (aynı sahnenin 0v0 satırına karşı):
+  **+1,52 draw call**, **+9.245 üçgen**, **+0,03–0,04 ms `birim sunumu`**.
+  Ordunun yarısı frustum dışında olduğu için bunlar *çizilen* Worker'da
+  ~3,0 draw call ve 18.201 üçgene karşılık geliyor — yani iki materyal slotu artı
+  gölge geçişi, ve gövdenin GLB'deki üçgen sayısının tam kendisi.
+- [x] **65 eklemli rigin mixer maliyeti.** Tezgâh, aynı klip şekliyle 33 ve 65
+  eklemi karşılaştırdı:
+
+  | Eklem | Ordu | ms/kare | ms/birim | 33'e göre |
+  | ---: | ---: | ---: | ---: | ---: |
+  | 33 | 16 | 0,611 | 0,0382 | 1,00× |
+  | 65 | 16 | 1,167 | 0,0729 | 1,91× |
+  | 33 | 32 | 1,038 | 0,0324 | 1,00× |
+  | 65 | 32 | 2,561 | 0,0800 | 2,47× |
+  | 33 | 44 | 1,715 | 0,0390 | 1,00× |
+  | 65 | 44 | 3,415 | 0,0776 | 1,99× |
+
+  Planın şüphesi doğruydu: **eklem sayısı mixer maliyetine doğrusal geçiyor** ve
+  iki katı rig iki katı mixer demek. Ama büyüklük küçük: 44 Worker'ın hepsi
+  kameraya yakınken 3,4 ms, hepsi 45 birim halkasının dışındayken 0,85 ms.
+  **İki araç birbirini doğruluyor:** 22v22 boşta satırında 22 yakın + 22 uzak var,
+  tezgâhın öngördüğü 22×0,0776 + 22×0,0194 = **2,14 ms**, tarayıcının ölçtüğü
+  **1,96 ms**. Ayrı ayrı yazılmış iki ölçüm aleti aynı sayıyı söylüyor.
+- [x] **İki materyal slotunun draw call etkisi.** GLB'den doğrulandı: `worker.glb`
+  **2 primitive / 2 materyal** taşıyor, ve bu birim ailesinde tek — Guard (14.990
+  üçgen) ve Archer (20.926) birer primitive/materyal. Sahadaki karşılığı çizilen
+  Worker başına ~3,0 draw call (renk geçişinde iki, gölgede bir).
+- [x] **Yakın/uzak kamera ve 15 Hz throttle.** Bu, taramanın en net tek ölçümü:
+  `uzak` sahnesi 22v22'de 44 birimin **29'unu** halkanın dışına itti ve
+  `birim sunumu` **1,96 → 1,04 ms**'ye düştü — birim sayısı değişmeden **%47**.
+  Throttle bir bütçe temennisi değil, ölçülmüş bir kazanç.
+- [x] **Idle, toplu hareket ve uzak kamera sahneleri — ve bir yanlış bulgunun
+  düzeltmesi.** Üstteki tablo tek koşudan alınmıştır ve ilk okunuşunda
+  "22v22'de duran ordu (15,54 ms) yürüyen ordudan (9,78 ms) pahalı" diye bir
+  sonuç çıkardı. **Bu sonuç yanlıştı ve tekrar ölçülünce çöktü.** Aynı üç satır
+  22v22'de üç kez koşuldu:
+
+  | Sahne | koşu 1 | koşu 2 | koşu 3 |
+  | --- | ---: | ---: | ---: |
+  | boşta | 12,98 | **15,54** | 10,12 |
+  | hareket | **14,13** | 9,78 | 11,34 |
+  | uzak | 9,19 | 9,00 | 10,20 |
+
+  Aynı preset, aynı sahne, aynı makinede **±3 ms saçılma** var ve
+  boşta ↔ hareket sıralaması koşudan koşuya **yön değiştiriyor** — yani sahneler
+  arası fark, ölçümün kendi gürültüsünün altında. Sahte bulguyu ele veren şey
+  bölge tablosuydu: 15,54 ms'lik satırda *her* bölge birlikte şişmişti, aralarında
+  Worker'la hiçbir ilgisi olmayan `hayvan/kervan sunumu` da (0,92 → 1,90 ms).
+  Aynı hayvanlar, aynı sıfır kervan. Bir alt sistem sahnedeki işçilerin durup
+  yürümesini umursamıyorsa, değişen şey iş yükü değil o on saniyedir.
+
+  **Gürültünün altında kalan ve üç koşuda da duran gerçek sonuçlar:**
+  `uzak` her koşuda en ucuz *ve* en kararlı satır (9,00–10,20 ms, üç koşuda da
+  **sıfır** adet 33 ms üstü kare), yakın kameralı satırlarda ise 33 ms üstü
+  kareler her koşuda var (0–31 adet). Ve `birim sunumu` birim başına
+  **0,044–0,075 ms** bandında sabit kalıyor: sahne değil, kaç birimin halkanın
+  içinde olduğu belirliyor.
+
+  **Metodoloji notu, bu yüzden yazılıyor:** satır başına tek 10 saniyelik
+  yakalama, %20'lik bir sahne farkını koşu gürültüsünden ayırmaya yetmiyor —
+  ama makul görünen bir tablo üretmeye fazlasıyla yetiyor. Araca bu yüzden
+  `WORKER_PERF_REPEATS` eklendi: satır tekrarlanır ve rapor **medyanı** yazar,
+  yayılım da yanında durur.
+- [x] **Prop'lu / propsuz Worker.** Ölçüm gerektirmedi, çünkü cevap asset ve kodda
+  kesin: `Crate.glb` **252 üçgen / 1 materyal**, `Axe.glb` **176 üçgen /
+  1 materyal**, yani görünürken Worker başına **+1 draw call ve gövdesinin
+  ~%1,4'ü kadar üçgen**. Görünmezken maliyeti **sıfır**: `applyRtsWorkerTools` ve
+  `applyRtsCargoVisibility` `.visible`'ı kapatıyor, three.js kapalı alt ağacı
+  `projectObject`'te tümüyle atlıyor — çizim de, üçgen de, `traverseVisible`
+  sayımı da onu görmüyor.
+- [x] **Sonuçlar tarih ve donanımla kaydedildi.** Bu bölüm. Ham çıktılar
+  `test-results/worker-perf/` altında (JSON + markdown, satır başına).
+
+**Ölçülmeyen ve neden:** "çoklu iş animasyonu" sahnesi kurulmadı. Bir preset maçı
+birimlerle ve stokla açar, kurulmuş bir ekonomiyle değil; otomatik işçi ancak
+alacak bir üretici ya da şantiye varken iş alır, ve sahada bina yokken boşta
+kalıyor — **tahmin değil, ölçüldü: 8v8, 80 saniye boyunca `boşta idle`.** Gerçek
+bir çalışan kalabalık için orta oyun kaydı authorlamak gerekirdi ve bu, sorunun
+hak ettiğinden büyük bir iş: çalışan Worker ile boşta Worker arasındaki fark
+klip değil (ikisi de tek mixer, tek aksiyon), **elindeki prop** — o da yukarıdaki
+maddede kalabalık kurmadan cevaplanmış bir draw call sorusu.
+
+**Bu sayıların sınırları.** Tek makine, tek GPU, Vite **dev** sunucusu (prod
+bundle değil) ve vsync kapalı. Yani bunlar bir oyuncu-GPU'su kıyaslaması değil,
+**bu makinede tekrarlanabilir karşılaştırma kanıtı**; satırlar birbiriyle
+karşılaştırılabilir, başka bir makinenin mutlak sayılarıyla değil. Zayıf
+donanımın cevabı zaten `AdaptiveQualityController`.
 
 ### 13.2 Optimizasyon karar kapısı
 
-- [ ] Mevcut maliyet bütçe içindeyse kaynak mesh kalitesini koru (ilk beklenti bu).
-- [ ] Bütçe dışındaysa önce eklem sayısı ve animasyon cadence'ini, sonra mesh'i
-  değerlendir.
-- [ ] Mesh sadeleştirme gerekirse skin ağırlıklarını, silueti, UV'yi ve
-  animasyonları bozmadığını doğrula.
-- [ ] Uzak Worker için gölge, animation cadence ve prop görünürlüğü maliyetlerini
-  birlikte değerlendir.
+**Karar (2026-08-18): mevcut maliyet bütçe içinde; kaynak mesh kalitesi
+korunuyor. LOD açılmıyor.**
+
+- [x] **Mevcut maliyet bütçe içindeyse kaynak mesh kalitesini koru.** İlk beklenti
+  buydu ve ölçüm onu tuttu: on iki satırın on biri 100 fps'in üstünde, en kötü
+  satır (22v22 boşta) 64,4 fps ile hâlâ 60'ın üstünde. Bütçe dışına çıkan hiçbir
+  satır yok, dolayısıyla sadeleştirilecek mesh de yok.
+- [x] **Bütçe dışındaysa önce eklem ve cadence, sonra mesh.** Konusuz kaldı, ama
+  sıralamanın doğru olduğu ölçümle görüldü: eklem sayısı gerçekten doğrusal bir
+  maliyet (1,99×) ve cadence gerçekten onu dörde bölüyor (%47 ölçülen kazanç),
+  oysa mesh tarafı zaten birim ailesinin ortasında. Bir gün bütçe aşılırsa
+  ilk bakılacak yer bu sırayla aynı yer.
+- [x] **Mesh sadeleştirme.** Yapılmadı, gerekmedi; skin ağırlığı/siluet/UV riski
+  hiç alınmadı.
+- [x] **Uzak Worker için gölge, cadence ve prop görünürlüğü birlikte.** Üçü de
+  ölçüldü ve üçü de aynı yöne çalışıyor: gölge geçişi çizilen Worker başına
+  ~1 draw call, cadence uzakta maliyeti dörde bölüyor, prop görünmezken tam sıfır.
+  Uzak Worker için ayrıca yapılacak bir iş çıkmadı.
+
+**Kararı taşıyan sayı, sahneler arası fark değil, hepsinin birden bütçede
+olması.** 22v22'nin üç koşusu 9,0 ile 15,5 ms arasında geziyor; en kötüsü bile
+60 fps'in üstünde. Yani karar bu saçılmaya duyarlı değil — LOD'a "belki" diyecek
+bir satır olsaydı önce onu tekrar ölçmek gerekirdi, ama öyle bir satır yok.
+
+**İzlenecek tek şey yakın kameradaki tepe kareler.** `uzak` üç koşuda da sıfır
+adet 33 ms üstü kare verdi, yakın kameralı satırlar ise her koşuda birkaç tane.
+Ortalama değil bu tepeler bir gün sorun olursa, bakılacak yer LOD değil o
+tepelerin kaynağıdır.
 
 ### 13.3 Nihai doğrulama
 
-- [ ] Yeni GLB için `gltf-transform validate` temiz geçer (§3.1).
-- [ ] `npx.cmd tsc --noEmit` temiz geçer.
-- [ ] İlgili filtreli engine kontrolleri temiz geçer; filtreli sonucun `PARTIAL`
-  olduğu raporda açıkça belirtilir.
-- [ ] Geniş değişiklik ve teslim öncesinde `npm.cmd run build:verify` temiz geçer.
-- [ ] Worker kabul presetinde page/console error yoktur.
-- [ ] Player ve AI Worker; hareket, çalışma, prop, ölüm fallback'i ve seçim
-  davranışında regresyon üretmez.
-- [ ] Kullanıcı nihai dünya içi görünümü kabul eder.
+- [x] **Yeni GLB için `gltf-transform validate`: hata yok** (2026-08-18, §3.1'de
+  uyarılarıyla birlikte kayıtlı).
+- [x] `npx tsc --noEmit` temiz geçer.
+- [x] İlgili filtreli engine kontrolleri temiz geçer; sonuç **`PARTIAL`**'dır ve
+  tek başına yeşil bir build değildir.
+- [x] `npm run build:verify` temiz geçer.
+- [x] **Ölçüm presetlerinde page error yok.** On iki satırın on birinde hiç
+  konsol/page hatası yok; ilkinde (soğuk Vite dev sunucusunun ilk sayfa yüklemesi)
+  tek bir isimsiz `404` göründü ve ısınmış sunucuda `worker_perf_00` ile
+  `worker_perf_22` ayrı ayrı yeniden denendiğinde **hiçbir istek başarısız
+  olmadı** — yani dev sunucusunun dependency optimize etme yarışı, oyunun bir
+  eksiği değil. Prod tarafını `verify:dist --strict` ayrıca kapıyor.
+- [x] **Player ve AI Worker regresyon üretmiyor.** Ölçüm koşuları iki tarafın
+  Worker'ını da 44'e kadar sahada tuttu: iki Actor da gerçek pakete bağlandı
+  (`data-rts-content-assets=ready`, 0 placeholder), seçim/emir yolu çalıştı
+  (rubber band + hareket emri ölçüldü), ve `test:engine:slow`'un tamamı yeşil.
+- [x] **Kullanıcı nihai dünya içi görünümü kabul etti (2026-08-18): "test ettim sorun yok".**
 
 ## 14. Sıradaki Uygulama Dilimi
 
@@ -996,8 +1152,14 @@ taraması yapıldı, §3.3'ün dört root-motion maddesi karara bağlandı, §10
 iki testi yazıldı. `npx tsc --noEmit` temiz; `npm run test:engine:slow`
 **1499/1499 yeşil**.
 
-**Aktif faz: Faz 6 (§12).** Faz ≤5'ten kalan hiçbir şey onu bloke etmiyor;
-kullanıcı gözü bekleyen üç madde §17'de toplandı.
+**2026-08-18, Faz 7 dilimi: §13.1 ve §13.2 kapandı.** Ölçüm iki araçla yapıldı
+(`npm run perf:worker` ve `node tools/worker-mixer-bench.mjs`), yedi ölçüm
+maddesinin yedisi de cevaplandı, karar kapısı **"mesh kalitesini koru, LOD
+açma"** ile kapandı. Ayrıntı §13.1/§13.2; kalan tek şey kullanıcının nihai
+dünya içi kabulü (§17).
+
+**Aktif faz: Faz 7 (§13), yalnız kabul maddesi açık.** Faz 6'dan kalan tek şey
+ses ve o ayrı planın konusu.
 
 ## 15. Teslim Kapısı
 
@@ -1016,9 +1178,12 @@ Plan ancak aşağıdaki koşullar birlikte sağlandığında tamam kabul edilir:
   kullanıyor ve görsel kabuli §17'de.
 - [x] Attack/hit/death uygulanmış; **turn/strafe eksikliği kapsam dışı kararı
   olarak belgelendi** (2026-08-18, §11.3).
-- [ ] Performans ölçümü tamamlanmış ve gerekiyorsa optimizasyon uygulanmış.
-- [ ] Tam doğrulama temiz geçmiş.
-- [ ] Nihai kullanıcı görsel kabulü tarihli olarak kaydedilmiş.
+- [x] **Performans ölçümü tamamlanmış; optimizasyon gerekmedi** (2026-08-18,
+  §13.1/§13.2). En kötü satır 22v22 boşta: 64,4 fps. LOD açılmadı, mesh
+  sadeleştirilmedi, kaynak kalitesi korundu.
+- [x] Tam doğrulama temiz geçmiş (`gltf-transform validate` hatasız,
+  `build:verify` yeşil — §13.3).
+- [x] **Nihai kullanıcı görsel kabulü kaydedildi: 2026-08-18** (§13.3).
 
 ## 16. Uygulama Günlüğü
 
@@ -1188,6 +1353,51 @@ Plan ancak aşağıdaki koşullar birlikte sağlandığında tamam kabul edilir:
   `Worker Faz 1: varyant havuzu` (duplicate), `Worker Faz 4`'e §10.2/§10.3'ün iki
   testi. `npx tsc --noEmit` temiz; `npm run test:engine:slow` **1499/1499 yeşil**.
 
+- 2026-08-18 — **Faz 7: ölçüm ve karar kapısı.** İki ölçüm aleti yazıldı ve
+  ikisi de birbirini doğruladı (§13.1). Asıl iş enstrümanı kurmaktı: dört preset
+  (`worker_perf_00/08/16/22`), ve bunlardan biri senaryo değil **ölçü aleti** —
+  0v0 satırı olmadan bir kare toplamı "maç ne kadar pahalı" der, Worker hakkında
+  hiçbir şey demez. Sıfır stok da aynı sebeple: stok olsaydı satırlar farklı
+  dünyalar inşa eder, fark Worker'a yazılamazdı. Sonuç: **bütçe içinde, LOD yok.**
+  Üç bulgu kaydedilmeye değer. (1) **Planın şüphesi doğruydu ama küçüktü:** 65
+  eklem gerçekten 33'ün ~2 katı mixer demek (1,99×, doğrusal), ama 44 Worker'ın
+  tamamı yakınken bile 3,4 ms. (2) **Bir bulgu ölçüldü, yazıldı ve
+  sonra çöktü — ve düşüşü kaydedilmeye asıl değer olan bu.** İlk tarama
+  "22v22'de duran ordu (15,54 ms) yürüyen ordudan (9,78 ms) pahalı" dedi ve
+  buraya "yığılma/overdraw" açıklamasıyla yazıldı. Kullanıcı sebebini sorunca
+  tekrar ölçüldü: **aynı satır üç koşuda 12,98 / 15,54 / 10,12 ms**, ve
+  boşta ↔ hareket sıralaması koşudan koşuya yön değiştiriyor. Fark, ölçümün
+  ±3 ms'lik kendi gürültüsüydü. Geriye dönüp bakınca ipucu ilk tabloda da vardı
+  ve okunmamıştı: o satırda **her** bölge birlikte şişmişti, aralarında sahnedeki
+  işçilerle hiçbir ilgisi olmayan `hayvan/kervan sunumu` da (0,92 → 1,90 ms;
+  aynı hayvanlar, sıfır kervan). Bir alt sistem işçilerin durup yürümesini
+  umursamıyorsa değişen şey iş yükü değil o on saniyedir. Araç düzeltildi:
+  `WORKER_PERF_REPEATS` (varsayılan 3) satırı tekrarlıyor, rapor **medyanı** ve
+  yayılımı birlikte yazıyor, ve tablonun üstünde "bu yayılımdan küçük bir fark
+  sonuç değildir" cümlesi duruyor. (3) **15 Hz halkası
+  ölçülmüş ve tekrarlanan bir kazanç:** kamerayı geri çekmek 44 birimin 29'unu
+  halkanın dışına itiyor; `uzak` üç koşunun üçünde de hem en ucuz hem en kararlı
+  satır (9,0–10,2 ms, **sıfır** adet 33 ms üstü kare), ve `birim sunumu` birim
+  başına 0,044–0,075 ms bandında sahneden bağımsız duruyor — belirleyen, kaç
+  birimin halkanın içinde olduğu.
+  Yol boyunca üç şey de öğrenildi. Tarayıcı tarafında **vsync ölçümü yiyordu**:
+  görünür Chromium her satırı 60 fps yazıyordu, `--disable-gpu-vsync` olmadan
+  rapor monitörü ölçüyor olacaktı. **Rubber band hiçbir şey seçmiyordu**, çünkü
+  bant görüntünün %5'inden başlıyordu ve orası HUD arması — canvas basışı hiç
+  görmüyordu, "toplu hareket" satırları duran bir kalabalığı ölçüyordu
+  (`elementFromPoint` ile bulundu). Ve **witness'ta ölçülen ama okunamayan bir
+  bölge vardı**: `birim sunumu` her karede ölçülüyordu ama `perfCosts()`'un
+  yedilik okuma sırasında olmadığı için yalnız ekrandaki panele bile
+  gitmiyordu — snapshot artık her bölgeyi, sahne sayımını ve bir yakın/uzak
+  cadence sayımını taşıyor (sayım eşiği kopyalamıyor, sunumun kendi
+  `isFarFromFocus`'unu çağırıyor). Ölçümün önündeki tek gerçek engel Worker
+  değildi: çalışma ağacı `data-rts-map-art="fallback"` ile açılıyordu — silinmiş
+  `Mountain_Group_1.gltf` yüzünden tek bir 404 ağaçları, kayaları ve madenleri
+  birlikte düşürüyordu. Kullanıcının kararıyla model yerine blockout'un kendi
+  kutusu bırakıldı; ilk tarama atıldı, ikincisi harita sanatı `ready` iken
+  koşuldu. `gltf-transform validate` hatasız (§3.1), `npm run build:verify`
+  yeşil.
+
 ## 17. Kullanıcı Gözü Bekleyen Kabul Maddeleri
 
 Faz ≤5 kapandı; aşağıdakiler **faz bloke etmez**, çünkü hiçbiri "kod eksik"
@@ -1218,6 +1428,14 @@ içinde cevaplanan kısım. Tek bir kısa turda hepsine bakılabilir.
    Ayak tozu, kürek tozu ve odun kıymığı bağlamaları kaldırıldı (§12.4);
    işaretler ses için duruyor. Geriye bakılacak tek birim efekti `body-impact`
    kaldı — dövüşte "vuruldu" okunuyor mu, o da bir sonraki tura.
+
+5. **Nihai teslim kabulü (§13.3'ün son maddesi).** Faz 7'nin ölçümü bitti ve
+   kod tarafında açık madde kalmadı; geriye planın en başından beri bekleyen tek
+   soru kaldı: **kalabalık bir maçta Worker doğru görünüyor mu.** Ölçüm bu soruyu
+   cevaplayamaz — 44 Worker'ın kaç milisaniye tuttuğunu söyler, nasıl durduğunu
+   değil. Bakmak için hazır bir kapı var: `?rts&debug&preset=worker_perf_22&mode=free`
+   iki tarafa da 22'şer Worker'la açar, ve `?debug` paneli kare maliyetini yanında
+   gösterir.
 
 ---
 

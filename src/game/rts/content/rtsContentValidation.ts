@@ -293,6 +293,18 @@ export interface RtsCoverageRequest {
    * a fork with half-authored art needs the same escape hatch.
    */
   readonly approvedUnitExceptions?: readonly string[];
+  /**
+   * Whether a building can actually be raised at a tier, i.e. the unlock gate.
+   *
+   * Without it the sweep demands art for every (building, age, level) the ladder
+   * has room for, including the ones the gate closes — a Farm at Settlement Lv1
+   * (`requiredSettlementLevel: 2`), an Archery Range in the Settlement age
+   * (`requiredAge: "town"`). Those are sites the player can never place, so
+   * shipping Actors for them is art nobody sees, and deleting that art must not
+   * read as missing coverage. Omitted, every tier is treated as reachable, which
+   * keeps a caller that has no balance data on the strict old behaviour.
+   */
+  readonly isTierReachable?: (buildingId: string, age: SettlementAge, level: number) => boolean;
 }
 
 /**
@@ -317,6 +329,7 @@ export function rtsContentCoverageGaps(
   for (const buildingId of request.buildingIds) {
     for (const [age, maxLevel] of Object.entries(request.levelsByAge) as [SettlementAge, number][]) {
       for (let level = 1; level <= maxLevel; level += 1) {
+        if (request.isTierReachable && !request.isTierReachable(buildingId, age, level)) continue;
         if (!rtsBuildingActorRef(catalog, buildingId, "completed", level, age)) {
           gaps.push(`${buildingId}@${age}#${level}`);
         }
