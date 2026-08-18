@@ -20076,7 +20076,7 @@
       "name": "Barrel",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Barrel.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Barrel.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20090,7 +20090,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 30797
+        "bytes": 83084
       },
       "license": "Unknown"
     },
@@ -20099,7 +20099,7 @@
       "name": "Crate",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Crate.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Crate.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20113,7 +20113,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 20750
+        "bytes": 45504
       },
       "license": "Unknown"
     },
