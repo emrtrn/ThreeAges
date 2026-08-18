@@ -382,6 +382,7 @@ import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
 import { updateStructureDestruction } from "../src/game/rts/structures/structureDestruction";
 import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
 import { buildingCostForAge } from "../src/game/rts/economy/buildingCost";
+import { isFreeCost, resourceCostTotal, scaleResourceCost } from "../src/game/rts/economy/resourceCost";
 import { hasRequiredAdjacentCompletedBuilding, productionAdjacencyMultiplier } from "../src/game/rts/structures/productionAdjacency";
 import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
 import { centerAccessRoadPlan } from "../src/game/rts/roads/centerAccessRoad";
@@ -22238,7 +22239,7 @@ const BUILDING_PAD_VISUAL = { layerId: "dirt", padding: 0.5, falloff: 1, strengt
 function roadGraphOf(commits: ReadonlyArray<readonly [RoadCell, RoadCell]>): RoadGraph {
   const roads = new RoadGraph({
     cellSize: 2,
-    woodCostPerCell: 4,
+    costPerCell: { wood: 4 },
     visual: ROAD_PAINT_VISUAL,
     buildingPad: BUILDING_PAD_VISUAL,
   });
@@ -49847,6 +49848,44 @@ check("V4 Faz 4: an occupied depot sends its caravan to the command centre", () 
   centers.clear();
 });
 
+check("a road cell is priced by the age that paves it, and an ownerless preview falls back to the base rate", () => {
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  // Same allowlist reflex as `costByAge`: a per-age block the validator does not
+  // name is dropped in silence, and the game then charges the opening rate for
+  // the whole match with nothing to show that the authoring was ignored.
+  const townRate = balance.costPerCellByAge?.town
+    ?? assert.fail("the shipped roads must price the Kasaba age, and validateRoadBalance must keep it");
+  assert.ok(resourceCostTotal(townRate) > 0, "a Kasaba cell is bought, not free");
+
+  // Which resource and how much is tuning. That the graph *asks* — and asks per
+  // owner, since two kingdoms reach Kasaba at their own pace — is the contract.
+  const ages: Record<string, "settlement" | "town"> = { player: "settlement", enemy: "town" };
+  const roads = new RoadGraph(balance, undefined, (owner) =>
+    (owner ? balance.costPerCellByAge?.[ages[owner]!] : undefined) ?? balance.costPerCell);
+  const from = { x: -6, z: 0 };
+  const to = { x: 6, z: 0 };
+
+  const settlement = roads.plan(from, to, [], "player") ?? assert.fail("a clear route must plan");
+  assert.deepEqual(
+    settlement.cost,
+    scaleResourceCost(balance.costPerCell, settlement.newCells.length),
+    "a Yerleşim kingdom pays the base rate",
+  );
+  const town = roads.plan(from, to, [], "enemy") ?? assert.fail("a clear route must plan");
+  assert.deepEqual(
+    town.cost,
+    scaleResourceCost(townRate, town.newCells.length),
+    "and a Kasaba kingdom pays the Kasaba rate over the very same cells",
+  );
+  assert.deepEqual(
+    (roads.plan(from, to, []) ?? assert.fail("an ownerless preview must still plan")).cost,
+    settlement.cost,
+    "a preview drawn before anyone is named quotes the base rate rather than nothing",
+  );
+});
+
 check("RTS road graph finds obstacle-free cells, charges new segments, and keeps alternate connectivity", () => {
   const balance = validateRoadBalance(
     JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
@@ -49857,7 +49896,7 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
   // cellSize is not tuning: placement, footprints and the road grid all assume
   // the same 2-unit cell, so changing it is a code change wearing a data hat.
   assert.equal(balance.cellSize, 2);
-  assert.ok(balance.woodCostPerCell > 0, "a paved cell costs wood");
+  assert.ok(resourceCostTotal(balance.costPerCell) > 0, "a paved cell is bought, not free");
   assert.ok((balance.autoConnect?.maxCells ?? 0) > 0, "a building near the network links itself");
   assert.ok(balance.visual && typeof balance.visual.width === "number", "visual tuning still parses");
   const roads = new RoadGraph(balance);
@@ -49865,7 +49904,11 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
   const detour = roads.plan({ x: -6, z: 0 }, { x: 6, z: 0 }, blockers);
   assert.ok(detour, "road graph finds a flank around a blocked cell");
   assert.ok(detour.cells.every((cell) => cell.x !== 0 || cell.z !== 0), "route avoids the occupied road cell");
-  assert.equal(detour.woodCost, detour.newCells.length * balance.woodCostPerCell);
+  assert.deepEqual(
+    detour.cost,
+    scaleResourceCost(balance.costPerCell, detour.newCells.length),
+    "a route is priced at the per-cell rate times the cells it actually adds",
+  );
   roads.commit(detour);
   assert.equal(roads.connected({ x: -6, z: 0 }, { x: 6, z: 0 }), true);
   assert.ok(roads.all().some((segment) => segment.kind === "corner"), "detour produces corner segments");
@@ -49884,7 +49927,7 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
 
   const overlap = roads.plan({ x: -6, z: 0 }, { x: 6, z: 0 }, blockers);
   assert.ok(overlap);
-  assert.equal(overlap.woodCost, 0, "existing road cells are never charged twice");
+  assert.deepEqual(overlap.cost, {}, "existing road cells are never charged twice");
 
   const redundant = new RoadGraph(balance);
   for (const [start, end] of [
@@ -49912,7 +49955,7 @@ check("RTS a caravan route uses only committed road cells", () => {
 check("RTS a caravan route is deterministic", () => {
   const roads = new RoadGraph({
     cellSize: 2,
-    woodCostPerCell: 4,
+    costPerCell: { wood: 4 },
     visual: ROAD_PAINT_VISUAL,
     buildingPad: BUILDING_PAD_VISUAL,
   });
@@ -49921,7 +49964,7 @@ check("RTS a caravan route is deterministic", () => {
     { x: 0, z: 2 }, { x: 4, z: 2 },
     { x: 0, z: 4 }, { x: 2, z: 4 }, { x: 4, z: 4 },
   ];
-  roads.commit({ cells, newCells: cells, woodCost: 0 });
+  roads.commit({ cells, newCells: cells, cost: {} });
   assert.deepEqual(
     roads.route({ x: 0, z: 0 }, { x: 4, z: 4 }),
     roads.route({ x: 0, z: 0 }, { x: 4, z: 4 }),
@@ -51924,14 +51967,14 @@ check("RTS headless road construction charges the building kingdom's wood", () =
   const construction = new RoadConstructionService(roads, kingdoms, () => [], () => { renders += 1; });
 
   const plan = construction.plan({ x: 0, z: 0 }, { x: 0, z: 8 });
-  assert.ok(plan && plan.woodCost > 0, "planning reports a cost without spending");
+  assert.ok(plan && !isFreeCost(plan.cost), "planning reports a cost without spending");
   assert.equal(kingdoms.get("enemy").wallet.amount("wood"), 200, "a plan alone never charges");
 
   const built = construction.build("enemy", { x: 0, z: 0 }, { x: 0, z: 8 });
   assert.equal(built.built, true);
   assert.equal(renders, 1, "a committed route notifies the view exactly once");
   assert.equal(kingdoms.get("player").wallet.amount("wood"), 200, "the player did not pay for the AI's road");
-  assert.equal(kingdoms.get("enemy").wallet.amount("wood"), 200 - (plan?.woodCost ?? 0));
+  assert.equal(kingdoms.get("enemy").wallet.amount("wood"), 200 - (plan?.cost["wood"] ?? 0));
 
   // Re-walking existing cells is idempotent and free, as in the pointer flow.
   const enemyWoodAfter = kingdoms.get("enemy").wallet.amount("wood");

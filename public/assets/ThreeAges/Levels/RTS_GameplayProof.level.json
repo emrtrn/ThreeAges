@@ -185,30 +185,30 @@
       "placements": [
         {
           "position": [
-            4.61,
-            0.14,
-            17.91
+            4.2,
+            -0.77,
+            18.21
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
-            120,
+            35.5,
             0
           ],
           "scale": 3
         },
         {
           "position": [
-            -4.61,
-            0.14,
-            -17.91
+            -4.98,
+            -0.78,
+            -17.18
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
-            300,
+            222,
             0
           ],
           "scale": 3

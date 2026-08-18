@@ -19,7 +19,8 @@
  */
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 
-import type { RoadBalance } from "../../data/gameDataTypes";
+import type { RoadBalance, StartingResources } from "../../data/gameDataTypes";
+import { scaleResourceCost } from "../economy/resourceCost";
 import type { UnitOwner } from "../units/unit";
 import { RTS_WORLD_HALF_EXTENT } from "../world/rtsGround";
 
@@ -57,7 +58,13 @@ export interface RoadSegment extends RoadCell {
 export interface RoadPlan {
   readonly cells: readonly RoadCell[];
   readonly newCells: readonly RoadCell[];
-  readonly woodCost: number;
+  /**
+   * What committing this route costs, in whatever the planner's kingdom paves
+   * with right now. A record rather than the old `woodCost` number: the material
+   * changes with the age, and a field named for one resource is a field that
+   * quietly keeps charging it.
+   */
+  readonly cost: StartingResources;
 }
 
 export interface RoadComponent {
@@ -239,6 +246,14 @@ export class RoadGraph {
      * exactly the behaviour every caller had before ground ownership existed.
      */
     private readonly ownership?: RoadOwnershipSource,
+    /**
+     * One cell's price for this kingdom, right now. Injected on the same terms
+     * as a building's cost resolver: the graph is a topology, and which age a
+     * kingdom is in is not its business. Omitted, every cell is charged the
+     * data's base rate — the behaviour every caller had before ages priced
+     * paving differently.
+     */
+    private readonly costPerCellFor: (owner?: UnitOwner) => StartingResources = () => balance.costPerCell,
   ) {}
 
   get cellSize(): number {
@@ -246,8 +261,8 @@ export class RoadGraph {
   }
 
   /** Cost of one newly committed cell; shaped planners use this to price their route. */
-  get woodCostPerCell(): number {
-    return this.balance.woodCostPerCell;
+  costPerCell(owner?: UnitOwner): StartingResources {
+    return this.costPerCellFor(owner);
   }
 
   /** The short access-road reach, reused as the local no-caravan logistics radius. */
@@ -319,7 +334,7 @@ export class RoadGraph {
     const route = this.shortestRoute(source, goal, index, perspective);
     if (!route) return null;
     const newCells = route.filter((cell) => !this.cells.has(this.key(cell)));
-    return { cells: route, newCells, woodCost: newCells.length * this.balance.woodCostPerCell };
+    return { cells: route, newCells, cost: scaleResourceCost(this.costPerCell(perspective), newCells.length) };
   }
 
   /** Commit a previewed plan. Existing cells are idempotent and remain free. */

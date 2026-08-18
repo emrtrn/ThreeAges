@@ -156,7 +156,8 @@ export async function loadTradeSiteBalance(): Promise<TradeSiteBalance> {
 export async function loadRoadBalance(): Promise<RoadBalance> {
   const url = `${GAME_DATA_ROOT}/balance/roads.json`;
   const balance = validateRoadBalance(await fetchJson(url));
-  log.debug(`loaded road balance (${balance.cellSize}u cell, ${balance.woodCostPerCell} wood/cell)`);
+  const perCell = Object.entries(balance.costPerCell).map(([id, amount]) => `${amount} ${id}`).join(" + ");
+  log.debug(`loaded road balance (${balance.cellSize}u cell, ${perCell}/cell)`);
   return balance;
 }
 

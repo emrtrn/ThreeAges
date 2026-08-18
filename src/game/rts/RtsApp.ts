@@ -903,6 +903,20 @@ export class RtsApp {
    */
   private readonly buildingCostFor: BuildingCostResolver = (owner, stats) =>
     buildingCostForAge(stats, this.progression.tierFor(owner).age);
+  /**
+   * The same answer for one road cell. Roads turn to cobblestone at Kasaba and
+   * are paid for in it, so the price moves with the age exactly as a building's
+   * does — and for the same reason it is resolved here rather than inside the
+   * road graph, which is a topology and knows nothing about tiers.
+   *
+   * An ownerless plan (a preview drawn before anyone is named) is quoted at the
+   * data's base rate, which is the settlement price.
+   */
+  private readonly roadCostPerCellFor = (owner?: UnitOwner): StartingResources => {
+    const balance = this.options.roadBalance;
+    if (!owner) return balance.costPerCell;
+    return balance.costPerCellByAge?.[this.progression.tierFor(owner).age] ?? balance.costPerCell;
+  };
   private readonly ai: AiController;
   private readonly structureConstruction: StructureConstructionService;
   private readonly roadConstruction: RoadConstructionService;
@@ -1384,7 +1398,7 @@ export class RtsApp {
     this.mapArt = new RtsMapArt(this.renderer);
     // A road belongs to whoever holds the ground it runs over, so the graph reads
     // ownership straight off territory control rather than storing a payer.
-    this.roads = new RoadGraph(this.options.roadBalance, this.territory);
+    this.roads = new RoadGraph(this.options.roadBalance, this.territory, this.roadCostPerCellFor);
     this.roadDebugView = new RoadDebugView(this.roads);
     this.roadOverlayVisible = Boolean(this.options.debug);
     this.roadDebugView.root.visible = this.roadOverlayVisible;

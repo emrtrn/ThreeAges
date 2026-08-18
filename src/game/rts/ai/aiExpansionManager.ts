@@ -30,6 +30,7 @@ import type { RtsExpansionRegion } from "../world/rtsMapBlockout";
 import type { RoadConstructionService } from "../roads/roadConstructionService";
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { UnitOwner } from "../units/unit";
+import { isFreeCost } from "../economy/resourceCost";
 import type { AiBlackboard } from "./aiBlackboard";
 import type { AiBuildManager } from "./aiBuildManager";
 import type { AiDecisionLog } from "./aiDecisionLog";
@@ -170,7 +171,7 @@ export class AiExpansionManager {
       // an intact leg be skipped without a commit — and therefore without the
       // territory refresh a commit triggers, which re-scans the whole world grid.
       const existing = this.roads.plan(from, to, this.owner);
-      if (existing && existing.woodCost === 0) continue;
+      if (existing && isFreeCost(existing.cost)) continue;
       const result = this.roads.build(this.owner, from, to);
       if (result.built) continue;
       // §38: no wood yet is a wait, not a failure — try again next tick.

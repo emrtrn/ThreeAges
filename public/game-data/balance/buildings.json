@@ -442,11 +442,6 @@
     "cost": {
       "wood": 60
     },
-    "costByAge": {
-      "town": {
-        "stone": 60
-      }
-    },
     "constructionSeconds": 10,
     "maxHealth": 100,
     "visionRadius": 10,
@@ -535,11 +530,6 @@
     },
     "cost": {
       "wood": 70
-    },
-    "costByAge": {
-      "town": {
-        "stone": 70
-      }
     },
     "constructionSeconds": 10,
     "maxHealth": 100,
@@ -630,11 +620,6 @@
     "cost": {
       "wood": 80
     },
-    "costByAge": {
-      "town": {
-        "stone": 80
-      }
-    },
     "constructionSeconds": 10,
     "maxHealth": 100,
     "visionRadius": 9,
@@ -722,11 +707,11 @@
       "depth": 6
     },
     "cost": {
-      "wood": 120
+      "wood": 80
     },
     "costByAge": {
       "town": {
-        "stone": 120
+        "stone": 80
       }
     },
     "constructionSeconds": 20,
@@ -810,11 +795,11 @@
       "depth": 6
     },
     "cost": {
-      "wood": 120
+      "wood": 80
     },
     "costByAge": {
       "town": {
-        "stone": 120
+        "stone": 80
       }
     },
     "constructionSeconds": 20,
@@ -899,11 +884,6 @@
     },
     "cost": {
       "wood": 20
-    },
-    "costByAge": {
-      "town": {
-        "stone": 20
-      }
     },
     "constructionSeconds": 20,
     "maxHealth": 100,

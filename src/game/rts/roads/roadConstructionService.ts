@@ -14,6 +14,7 @@
  */
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import { roadCellsTouchingFootprint } from "../economy/depotLogisticsSystem";
+import { isFreeCost } from "../economy/resourceCost";
 import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
 import type { UnitOwner } from "../units/unit";
 import { planAutoRoadConnection, type AutoRoadFootprint } from "./autoRoadConnector";
@@ -71,9 +72,9 @@ export class RoadConstructionService {
    */
   buildPlanned(owner: UnitOwner, plan: RoadPlan | null): RoadBuildResult {
     if (!plan) return { built: false, reason: "invalid-route", plan: null };
-    if (plan.woodCost > 0) {
+    if (!isFreeCost(plan.cost)) {
       const wallet = this.kingdoms.get(owner).wallet;
-      const reservation = wallet.reserve({ wood: plan.woodCost });
+      const reservation = wallet.reserve(plan.cost);
       if (!reservation) return { built: false, reason: "insufficient-resources", plan };
       wallet.commit(reservation);
     }

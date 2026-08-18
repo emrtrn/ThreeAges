@@ -7,6 +7,7 @@
  * their existing services.
  */
 import type { BuildingBalance } from "../../data/gameDataTypes";
+import { resourceCostTotal } from "../economy/resourceCost";
 import type { RoadConstructionService } from "../roads/roadConstructionService";
 import type { UnitOwner } from "../units/unit";
 import type { RtsMapPoint } from "../world/rtsMapBlockout";
@@ -82,7 +83,7 @@ export function proceduralDepotRoadRank(
     // residual logistics distance; beyond it, only the gap matters.
     return total + Math.max(0, (nearest ?? 0) - roads.autoConnectMaximumDistance);
   }, 0);
-  return access.woodCost + residualProducerGap;
+  return resourceCostTotal(access.cost) + residualProducerGap;
 }
 
 /** The authored supply spine stays a live fallback during P3, so do not bury it. */

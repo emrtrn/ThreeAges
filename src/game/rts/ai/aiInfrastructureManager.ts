@@ -24,6 +24,7 @@ import type { RtsBuildAnchor, RtsMapPoint } from "../world/rtsMapBlockout";
 import type { RoadConstructionService } from "../roads/roadConstructionService";
 import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { UnitOwner } from "../units/unit";
+import { isFreeCost } from "../economy/resourceCost";
 import type { AiBlackboard } from "./aiBlackboard";
 import type { AiBuildManager } from "./aiBuildManager";
 import type { AiDecisionLog } from "./aiDecisionLog";
@@ -100,7 +101,7 @@ export class AiInfrastructureManager {
       // Asked as this kingdom, so a leg that happens to be paved on ground it
       // does not hold is not mistaken for a leg it has already built.
       const existing = this.roads.plan(from, to, this.owner);
-      if (existing && existing.woodCost === 0) continue;
+      if (existing && isFreeCost(existing.cost)) continue;
       const result = this.roads.build(this.owner, from, to);
       if (result.built) continue;
       // §38: no wood yet is a wait, not a failure — the spine resumes next tick

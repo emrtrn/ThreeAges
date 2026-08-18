@@ -2505,14 +2505,23 @@ export function validateRoadBalance(value: unknown): RoadBalance {
   const where = "balance/roads.json";
   const obj = asObject(value, where);
   const cellSize = requireFiniteNumber(obj, "cellSize", where);
-  const woodCostPerCell = requireFiniteNumber(obj, "woodCostPerCell", where);
-  if (cellSize <= 0 || woodCostPerCell <= 0) {
-    throw new GameDataError(`${where}: cell size and wood cost must be > 0`);
+  if (cellSize <= 0) {
+    throw new GameDataError(`${where}: cell size must be > 0`);
   }
+  const costPerCell = validateStartingResources(obj["costPerCell"] ?? {}, `${where}.costPerCell`);
+  // A free road is not a tuning choice, it is a missing field: paving would stop
+  // being a decision and the whole logistics economy with it.
+  if (Object.keys(costPerCell).length === 0) {
+    throw new GameDataError(`${where}.costPerCell: must name at least one resource`);
+  }
+  const costPerCellByAge = obj["costPerCellByAge"] === undefined
+    ? undefined
+    : validateCostByAge(obj["costPerCellByAge"], `${where}.costPerCellByAge`, undefined);
   const autoConnect = validateRoadAutoConnect(obj["autoConnect"], where);
   return {
     cellSize,
-    woodCostPerCell,
+    costPerCell,
+    ...(costPerCellByAge ? { costPerCellByAge } : {}),
     visual: validateRoadVisual(obj["visual"], where),
     buildingPad: validateBuildingPadVisual(obj["buildingPad"], where),
     ...(autoConnect ? { autoConnect } : {}),

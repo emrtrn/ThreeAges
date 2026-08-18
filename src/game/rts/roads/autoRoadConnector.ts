@@ -17,6 +17,7 @@
 import { roadCellsTouchingFootprint } from "../economy/depotLogisticsSystem";
 import type { UnitOwner } from "../units/unit";
 import { ROAD_TOUCH_EPSILON, roadCellTouchesFootprint, roadTouchLines } from "./roadFootprintTouch";
+import { scaleResourceCost } from "../economy/resourceCost";
 import type { RoadCell, RoadGraph, RoadPlan } from "./roadGraph";
 
 export interface AutoRoadFootprint {
@@ -73,7 +74,7 @@ export function planAutoRoadConnection(
   const existing = new Set(roads.all().map((cell) => key(cell)));
   // Preferred shape: a straight stem out of the centre of the face pointing at
   // the road, so the road meets the building head-on (see centredStemPlan).
-  const centred = centredStemPlan(roads, footprint, target, plan, existing, options.maxNewCells);
+  const centred = centredStemPlan(roads, footprint, target, plan, existing, options.maxNewCells, options.owner);
   if (centred) return centred;
   // Fallback for a boxed-in face (a tree or building right behind it): the
   // nearest feasible touching anchor, still ordered centred-first, routed freely.
@@ -102,6 +103,7 @@ function centredStemPlan(
   plan: (start: RoadCell, end: RoadCell) => RoadPlan | null,
   existing: ReadonlySet<string>,
   maxNewCells: number,
+  owner: UnitOwner | undefined,
 ): RoadPlan | null {
   const step = roads.cellSize;
   const alongZ = Math.abs(target.z - footprint.z) >= Math.abs(target.x - footprint.x);
@@ -125,7 +127,7 @@ function centredStemPlan(
   // The plan is also used by the AI's paid infrastructure builder. Player
   // placement still commits it through `commitFree`, but retaining the router's
   // real new-cell cost lets that caller pay for exactly this spur.
-  return { cells, newCells, woodCost: newCells.length * roads.woodCostPerCell };
+  return { cells, newCells, cost: scaleResourceCost(roads.costPerCell(owner), newCells.length) };
 }
 
 /**

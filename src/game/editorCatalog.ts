@@ -796,7 +796,8 @@ const TRADE_SITE_FIELDS = [
 
 const ROADS_FIELDS = [
   { path: "cellSize", label: "Hücre boyutu (birim)", min: 0.1, step: 0.1 },
-  { path: "woodCostPerCell", label: "Hücre başına odun maliyeti", min: 0, step: 1 },
+  { path: "costPerCell.wood", label: "Hücre başına odun maliyeti (Yerleşim)", min: 0, step: 1 },
+  { path: "costPerCellByAge.town.stone", label: "Hücre başına taş maliyeti (Kasaba)", min: 0, step: 1 },
   { path: "visual.cornerRoundness", label: "Köşe yuvarlaklığı", min: 0, max: 1, step: 0.05 },
 ];
 

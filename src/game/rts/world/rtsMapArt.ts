@@ -9,9 +9,9 @@ const STATIC_MESH_ROOT = "/assets/ThreeAges/StaticMeshes";
 
 const MODELS = {
   ridgeRock: `${STATIC_MESH_ROOT}/Rock_Group.gltf`,
-  treePine: `${STATIC_MESH_ROOT}/Resource_PineTree.gltf`,
-  tree1: `${STATIC_MESH_ROOT}/Resource_Tree1.gltf`,
-  tree2: `${STATIC_MESH_ROOT}/Resource_Tree2.gltf`,
+  treePine: `${STATIC_MESH_ROOT}/Resource_PineTree.glb`,
+  tree1: `${STATIC_MESH_ROOT}/Resource_Tree1.glb`,
+  tree2: `${STATIC_MESH_ROOT}/Resource_Tree2.glb`,
   gold1: `${STATIC_MESH_ROOT}/Resource_Gold_1.gltf`,
   gold2: `${STATIC_MESH_ROOT}/Resource_Gold_2.gltf`,
   gold3: `${STATIC_MESH_ROOT}/Resource_Gold_3.gltf`,

@@ -20048,7 +20048,7 @@
       "name": "Farm Second Age Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Farm/Farm_SecondAge_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Farm/Farm_SecondAge_Level1.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20062,7 +20062,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 172557
+        "bytes": 715728
       },
       "license": "Unknown"
     },
@@ -20140,7 +20140,7 @@
       "name": "Farm Second Age Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Farm/Farm_SecondAge_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Farm/Farm_SecondAge_Level3.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20154,7 +20154,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 311869
+        "bytes": 836268
       },
       "license": "Unknown"
     },
@@ -20646,7 +20646,7 @@
       "name": "Port Second Age Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Port_SecondAge_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Port_SecondAge_Level3.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20660,7 +20660,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 719218
+        "bytes": 916276
       },
       "license": "Unknown"
     },
@@ -20738,7 +20738,7 @@
       "name": "Resource Pine Tree",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Resource_PineTree.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_PineTree.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20752,7 +20752,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 16537
+        "bytes": 72792
       },
       "license": "Unknown"
     },
@@ -20922,7 +20922,7 @@
       "name": "Resource Tree1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Resource_Tree1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Tree1.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20936,7 +20936,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 18032
+        "bytes": 44948
       },
       "license": "Unknown"
     },
@@ -20945,7 +20945,7 @@
       "name": "Resource Tree2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Resource_Tree2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Tree2.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20959,7 +20959,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 13736
+        "bytes": 65096
       },
       "license": "Unknown"
     },

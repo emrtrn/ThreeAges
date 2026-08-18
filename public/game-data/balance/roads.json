@@ -1,6 +1,13 @@
 {
   "cellSize": 2,
-  "woodCostPerCell": 4,
+  "costPerCell": {
+    "wood": 4
+  },
+  "costPerCellByAge": {
+    "town": {
+      "stone": 2
+    }
+  },
   "autoConnect": {
     "maxCells": 4
   },

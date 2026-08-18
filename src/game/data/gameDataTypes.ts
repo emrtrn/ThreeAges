@@ -1371,8 +1371,14 @@ export interface BuildingPadVisual {
 export interface RoadBalance {
   /** Grid cell width in world units; intentionally independent from unit navigation. */
   readonly cellSize: number;
-  /** Wood charged for each newly created road cell. */
-  readonly woodCostPerCell: number;
+  /** Charged for each newly created road cell, in the settlement age. */
+  readonly costPerCell: StartingResources;
+  /**
+   * Per-age override of {@link costPerCell}, on the same terms as a building's
+   * `costByAge`: this project's roads turn to cobblestone at Kasaba, so that is
+   * what they are paid for. An age with no entry pays {@link costPerCell}.
+   */
+  readonly costPerCellByAge?: Readonly<Partial<Record<SettlementAge, StartingResources>>>;
   /** Presentational road-paint tuning; absent in data falls back to built-in defaults. */
   readonly visual: RoadVisual;
   /**

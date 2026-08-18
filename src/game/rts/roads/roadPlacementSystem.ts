@@ -267,7 +267,7 @@ export class RoadPlacementSystem {
     const cell = this.roads.cellAt(point);
     this.target = cell ? { cell, splits: this.roads.wouldDisconnect(cell) } : null;
     this.reason = cell ? "choose-erase" : "no-road-here";
-    this.renderPreview(cell ? { cells: [cell], newCells: [], woodCost: 0 } : null, ERASE_COLOR);
+    this.renderPreview(cell ? { cells: [cell], newCells: [], cost: {} } : null, ERASE_COLOR);
     return this.state();
   }
 

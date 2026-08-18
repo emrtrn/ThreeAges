@@ -35,5 +35,5 @@ export function centerAccessRoadPlan(roads: RoadGraph, center: CenterRoadAnchor)
   }
 
   const newCells = cells.filter((cell) => roads.cellAt(cell) === null);
-  return { cells, newCells, woodCost: 0 };
+  return { cells, newCells, cost: {} };
 }

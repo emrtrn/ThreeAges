@@ -416,12 +416,12 @@ export class RtsBuildPalette {
         ? "Bir yol karosuna tıklayın · Sağ tık: çık"
         : state.target.splits
           ? "Uyarı: bu karo ağı ikiye böler · Tıkla: sil · İade yok"
-          : "Tıkla: sil · Odun iadesi yok";
+          : "Tıkla: sil · İade yok";
       return;
     }
     this.status.textContent = state.start ? "Yol çiziliyor" : "Yol çizimi";
     this.roadHint.textContent = state.plan
-      ? `Sol tık: yolu kur · ${state.plan.newCells.length} hücre · ${state.plan.woodCost} Odun`
+      ? `Sol tık: yolu kur · ${state.plan.newCells.length} hücre · ${formatResourceCost(state.plan.cost)}`
       : state.reason === "invalid-route"
         ? "Geçersiz rota · başka kare seç"
         : state.reason === "insufficient-resources"
