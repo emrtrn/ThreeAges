@@ -1590,9 +1590,6 @@ export class RtsApp {
       // choice to escort a worker into wolf territory.
       (owner, x, z) => owner === AI_OWNER && this.ai.workerLocationUnsafe(x, z),
       (owner) => owner !== PLAYER_OWNER || this.automaticWorkerAssignmentEnabled,
-      // Read lazily rather than captured: the caravan fleet is built further down
-      // this constructor, and this is only ever asked during a tick.
-      (producerStructureId) => this.caravans.isLoadingOn(producerLaneId(producerStructureId)),
     );
     this.logisticsTransfers = new LogisticsTransferSystem(
       this.economyProduction,
@@ -4243,11 +4240,6 @@ export class RtsApp {
     const arrivals = this.caravans.update(dt);
     this.logisticsTransfers.update(arrivals);
     this.marketSupply.deliver(arrivals);
-    // Deliberately here rather than inside the economy tick above (Worker plan
-    // §10.2A): the donkey's panniers and the worker's barrel are both decided
-    // from the phase this update just wrote, so the shipment changes hands on one
-    // frame instead of appearing twice on the frame the animal leaves.
-    this.economyProduction?.applyCaravanLoadPresentation();
     this.perfMeasure("lojistik", logisticsMark);
     // Only the human kingdom's production is narrated; the AI's own queue events
     // are surfaced by its decision log in a later slice.

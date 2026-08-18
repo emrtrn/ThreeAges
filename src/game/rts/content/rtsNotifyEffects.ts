@@ -56,86 +56,51 @@ export interface RtsNotifyEffectBinding {
 }
 
 /**
+ * The notify names authored on the units' clips that this game deliberately
+ * does *not* draw.
+ *
+ * Every one of them is a real, measured moment with a planned consumer — the
+ * audio pass subscribes to this same event stream — so the marker stays in the
+ * sidecar. What is missing is only the particle burst, and for two reasons that
+ * are worth keeping apart:
+ *
+ * - `sword-swing`, `arrow-release` and `throw-release`'s neighbours never had
+ *   one: a grounded medieval swing has no particle to it, and inventing a glow
+ *   to prove the line works would be art nobody asked for.
+ * - `footstep`, `dig-impact` and `chop-impact` *were* drawn and were removed on
+ *   2026-08-18, on the user's call after looking at the running match. At the
+ *   RTS camera's working distance the dust (8 sprites, half opacity, dust-beige
+ *   on dirt) could not be made out at all, and the axe debris was not worth the
+ *   channel it cost. A burst nobody can see is not a subtle effect, it is a
+ *   frame cost with no reader — so the binding went and the marker stayed.
+ *
+ * Membership here is asserted, not just documented: it is what separates "this
+ * name is waiting for audio" from "somebody mistyped a name", which is the one
+ * failure the notify line cannot otherwise report.
+ */
+export const RTS_NOTIFY_AUDIO_ONLY: ReadonlySet<string> = new Set([
+  "footstep",
+  "chop-impact",
+  "dig-impact",
+  "sword-swing",
+  "arrow-release",
+]);
+
+/**
  * The notify names this game draws, and how.
  *
- * `sword-swing` is authored on the Guard's clips but deliberately absent here:
- * a grounded medieval swing has no particle to it, and inventing a glow to
- * prove the line works would be art nobody asked for. It stays in the asset
- * because the event is real and its consumer (audio) is planned.
+ * Short by design — see `RTS_NOTIFY_AUDIO_ONLY` for the names that are authored
+ * and deliberately undrawn. What survives here is what a player actually reads
+ * at the RTS camera's distance: a blow landing on a body, and a gun coming
+ * apart.
  */
 export const RTS_NOTIFY_EFFECTS: Readonly<Record<string, RtsNotifyEffectBinding>> = {
-  footstep: {
-    effectId: "rts-fx-footstep-dust",
-    /*
-     * Just above the ground the foot met — the unit's own origin is its feet,
-     * and `syncUnitsToGround` has already written the heightfield into it.
-     *
-     * Not *at* it (0.05 was the first attempt): a puff that hugs the terrain
-     * reads as part of the ground texture, especially in dust colours on dirt,
-     * and the soldier's own legs cover what is left. A hand's height clears the
-     * body and silhouettes the cloud against the ground instead of into it.
-     */
-    heightOffset: 0.2,
-    /*
-     * The cull is "don't draw what the player cannot make out", and it has to be
-     * measured the way it is applied: camera-to-*unit*, not camera-to-focus. The
-     * camera sits at most 40 units from its focus point, so a unit at the edge of
-     * the view is already past that — a 42 here culled most of a visible army
-     * while looking, from the tuning table, like it culled nothing.
-     */
-    maxDistance: 60,
-    // 20 a second across the field. Enough that a marching company kicks up a
-    // near-continuous trail, capped well under the shared instance budget.
-    minIntervalSeconds: 0.05,
-  },
   "body-impact": {
     effectId: "rts-fx-body-impact",
     // Chest height on a unit whose body is about one world unit tall.
     heightOffset: 0.9,
     maxDistance: 60,
     minIntervalSeconds: 0,
-  },
-  /*
-   * The Worker's two job contacts (Worker plan Faz 6). Both are placed from the
-   * clip's own measured geometry rather than by eye — see the notify times in
-   * `worker.skeleton.json` — because a burst that misses the moment it belongs
-   * to reads as a bug in the animation rather than as a missing effect.
-   *
-   * Separate names even where the drawn effect is shared, for the reason the
-   * module header gives: the name is the contract, and audio subscribes to the
-   * same stream. A spade and a boot both raise dust; they will not both want the
-   * same sound.
-   */
-  "chop-impact": {
-    effectId: "rts-fx-debris-wood",
-    /*
-     * Where the blade meets the trunk, not where the hand is. Measured: at the
-     * bottom of the swing the right hand passes 1.10m, and the axe is a 0.70m
-     * head-forward tool, so the bite lands roughly half its length below that.
-     * An authored look — the trunk it is hitting is a different width on every
-     * tree — so it is tuned by eye and never asserted as a magnitude.
-     */
-    heightOffset: 0.7,
-    maxDistance: 60,
-    /*
-     * One chop per 1.03s clip, so a lone lumberjack is nowhere near this. It is
-     * the camp of six that the cap is for, and it is global for the same reason
-     * the footstep's is: the budget being protected is one shared pool.
-     */
-    minIntervalSeconds: 0.08,
-  },
-  "dig-impact": {
-    // The same small ground puff a boot raises: it is the same dust, and
-    // inventing a second dirt effect to say "spade" would be art nobody asked
-    // for. The name still separates them for the audio pass.
-    effectId: "rts-fx-footstep-dust",
-    // Clear of the soil for the reason the footstep is: a puff that hugs the
-    // terrain reads as ground texture, and the worker's own body covers it.
-    heightOffset: 0.2,
-    maxDistance: 60,
-    // Twice per 5.5s clip per farmer — rarer than a footfall, and capped well
-    // under it so a large farm cannot crowd the boots off the field.
-    minIntervalSeconds: 0.1,
   },
   /*
    * The three the artillery's wreck asks for (siege crew plan Faz 4). They come

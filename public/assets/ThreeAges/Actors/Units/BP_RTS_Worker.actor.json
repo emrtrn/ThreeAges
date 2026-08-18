@@ -38,21 +38,12 @@
       "component": "StaticMeshComponent",
       "props": {
         "assetId": "crate",
-        "scale": [4, 4, 4],
+        "scale": [
+          5,
+          5,
+          5
+        ],
         "rtsCargoVisibility": "loaded",
-        "rtsCargoActivity": "carryingBox",
-        "rtsSkeletalSocket": "carry-box"
-      },
-      "parent": "root"
-    },
-    {
-      "id": "carriedBarrel",
-      "component": "StaticMeshComponent",
-      "props": {
-        "assetId": "barrel",
-        "scale": [3, 3, 3],
-        "rtsCargoVisibility": "loaded",
-        "rtsCargoActivity": "carryingLoad",
         "rtsSkeletalSocket": "carry-box"
       },
       "parent": "root"
@@ -62,8 +53,16 @@
       "component": "StaticMeshComponent",
       "props": {
         "assetId": "axe",
-        "position": [0, 0, 0],
-        "scale": [3.5, 3.5, 3.5],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          3.5,
+          3.5,
+          3.5
+        ],
         "rtsWorkerToolActivity": "lumber",
         "rtsSkeletalSocket": "right-hand-tool"
       },

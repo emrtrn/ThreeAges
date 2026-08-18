@@ -2,7 +2,8 @@
 
 Oluşturulma tarihi: 2026-08-13
 Son asset güncellemesi: 2026-08-15 (yeni Worker paketi)
-Son ölçüm/denetim: 2026-08-18 (Faz ≤5 kapanışı + Faz 6 ilk dilimi)
+Son ölçüm/denetim: 2026-08-18 (Faz ≤5 kapanışı + Faz 6 ilk dilimi + barrel devrinin
+kaldırılması + toz/kıymık bağlamalarının kaldırılması, §12.4)
 Durum: **Faz 1, 1A, 2, 3, 4 ve 5 kapandı (2026-08-18). Faz 6'nın işaret dilimi
 uygulandı (§12.1); Faz 6'dan kalan ses (ayrı plan) ve efekt okunurluk kabulü.
 Sıradaki: Faz 7 (performans/teslim). Kullanıcı gözü bekleyen kabul maddeleri
@@ -473,34 +474,37 @@ hayvancılık için kapsam dışı kararı belgelendi.
 
 **Durum:** ✅ **Kapandı (2026-08-18).** Crate taşıma iki Actor'da da bağlı, poz
 ailesi karara bağlandı, soket hizası dünya içinde kabul edildi (2026-08-17),
-**eşek barrel devri uygulandı (§10.2A)** ve el arabası kapsam dışı bırakıldı
-(§10.4).
+**eşek barrel devri kaldırıldı (§10.2A, kullanıcı kararı)** ve el arabası kapsam
+dışı bırakıldı (§10.4).
 
 ### 10.1 Soket sözleşmesi
 
 - [x] `right-hand-tool` (`RightHand`) ve `throw-release` (`RightHand`) soketleri
   authorlandı; balta ve taş bunları kullanıyor.
-- [x] İki elle tutulan Crate için gövde-stabil `carry-box` soketi `Hips` üzerinde,
-  `position: [0, 0.03, 0.24]` ile authorlandı.
+- [x] İki elle tutulan Crate için gövde-stabil `carry-box` soketi `Hips` üzerinde
+  authorlandı; offset'i editörden pozlanıyor (son tur 2026-08-18).
 - [x] **`LeftHand` soketi açılmadı (karar 2026-08-18).** Bugün tek elle bağlanan
-  hiçbir prop yok: balta sağ elde, taş sağ elde, crate ve barrel gövdede
-  (`carry-box`). Kullanılmayan soket, sidecar'da doğrulaması olmayan ölü veridir;
+  hiçbir prop yok: balta sağ elde, taş sağ elde, crate gövdede (`carry-box`). Kullanılmayan soket, sidecar'da doğrulaması olmayan ölü veridir;
   ihtiyaç doğduğunda tek satır authoring işi.
 - [x] **Prop kesişmesi kabul turunda doğrulandı (2026-08-17).** Crate ve balta iki
   Actor'da da izlendi; `carry-box` hizası ve baltanın el hizası kabul edildi.
   `turn` klipleri bu maddenin kapsamında değil çünkü hiçbiri bağlanmıyor (§11.3).
-  Yeni barrel aynı sokete asıldığı için aynı hizayı miras alıyor; onun görsel
-  kabulü §17'de.
+  Soket 2026-08-18'de editörde yeniden pozlandı; yeni hizanın kabulü §17'de.
 
 ### 10.2 Kutu taşıma
 
-- [x] `Crate.gltf` pivotu tabanda, ham boyut ~9×17×9 cm; Actor'da 4× ölçekle
-  authorlandı.
+- [x] `Crate.gltf` pivotu tabanda, ham boyut ~9×17×9 cm. Ölçek 2026-08-18'de
+  büyütüldü (4× → önce 6,4×, ardından kullanıcı editörde **5×**'te karar kıldı) ve
+  `carry-box` soketi editörde yeniden pozlandı. Ölçek de soket transformu da
+  authored görünüş, sözleşme değil: kontroller artık sayıyı değil **iki Worker'ın
+  aynı ölçeği taşıdığını**, ölçeğin pozitif/tekdüze olduğunu ve soketin `Hips`
+  üzerinde durup kaydı atlatmadığını pinliyor — eski `[4, 4, 4]` ve
+  `position: [0, 0.03, 0.24]` assert'leri tam da bu authoring turunda kırıldı.
 - [x] `carryIdle` = `Farming_holding_idle`, `carryWalk` = `Farming_holding_walk`;
   görünürlük Crate ile aynı `loaded` state'inden besleniyor.
 - [x] **AI Worker'da Crate eklendi (2026-08-17).** `BP_RTS_Enemy_Worker.actor.json`
   artık oyuncu Actor'undaki `carriedCrate` bileşenini birebir taşıyor (`crate`,
-  4× ölçek, `rtsCargoVisibility: "loaded"`, `carry-box` soketi); `Worker Faz 4`
+  aynı ölçek, `rtsCargoVisibility: "loaded"`, `carry-box` soketi); `Worker Faz 4`
   kontrolü iki Actor'u birden pinliyor.
 - [x] **Kullanıcı kararı (2026-08-17), iki adımda:** önce holding çiftine geçildi
   (`Farming_box_walk` klibi olmadığı için kutu idle'ı ↔ elde yürüyüş sıçraması
@@ -525,48 +529,42 @@ ailesi karara bağlandı, soket hizası dünya içinde kabul edildi (2026-08-17)
   bir yön değiştirme sunumu kurmaya yetmezler ve tek başlarına bağlanınca
   simülasyonun yönelimiyle çakışma riski taşırlar (0,14–0,30 m root taşıması).
 
-### 10.2A Eşek barrel yükleme — **uygulandı (2026-08-18)**
+### 10.2A Eşek barrel yükleme — **KALDIRILDI (2026-08-18)**
 
-- [x] Uzak ekonomi üreticilerinin yol üstü eşek karavanıyla, yakın üreticilerin
-  doğrudan merkeze taşındığı doğrulandı.
-- [x] Eşek Actor'unda `loaded` durumunda iki barrel pannier prop'u bulunduğu ve
-  `outbound`/`unloading` evrelerinde göründüğü doğrulandı.
-- [x] **Worker barrel'ı yalnız yükleme anında görünüyor.** Evrenin tamamı değil,
-  gerçekten devrin olduğu an: `loading` evresi üreticinin tam bir sevkiyat
-  üretmesini beklediği süreyi de kapsıyor (yavaş bir üreticide dakikalar), oysa
-  devir onun sonundaki authored `loadSeconds`. Bunu ayıran yeni okuma
-  `Caravan.loadingActive` — sayaç bu karede gerçekten işlediyse true. Böylece
-  işçi, eşeğin yanında dakikalarca kucağında fıçıyla beklemiyor.
-- [x] **Devir tek presentation state'ten besleniyor.** Ortak karar
-  `caravanLoadBearer(phase, loadingActive) → "worker" | "caravan" | "none"`
-  (`caravanSystem.ts`); eşeğin pannier'ları da işçinin barrel'ı da **bu tek
-  fonksiyonu** okuyor, yani "iki barrel" ya da "boş kare" yapısal olarak
-  imkânsız — iki ayrı yerde sorulan iki soru kalmadı.
-- [x] **Sıralama düzeltmesi — asıl tuzak buydu.** Ekonomi tick'i karavan
-  fleet'inden **önce** koşuyor (`RtsApp` 4234 vs 4252), yani işçinin barrel'ı
-  ekonominin içinde hesaplansaydı bir kare eski evreyi okurdu: `loading →
-  outbound` karesinde eşek fıçılarını takar, işçininki hâlâ elinde olurdu — tam
-  da yasaklanan çift barrel. Bu yüzden sunum geçişi ayrı bir metot
-  (`EconomyProductionSystem.applyCaravanLoadPresentation`) ve **`caravans.update`
-  sonrasında** çağrılıyor. Kontrol bunu gerçek bir sefer üzerinde iddia ediyor:
-  hiçbir karede ikisi birden yok, ve işçinin bıraktığı kareden **sonraki** kare
-  eşeğin taşıdığı kare (arada boşluk yok).
-- [x] **Yaklaşma/ayrılma noktası eklenmedi — kasıtlı.** Barrel'ı taşıyan işçi,
-  üreticinin ayak izine `WORK_RANGE` içinde zaten duran atanmış işçiler arasından
-  **deterministik** seçiliyor (en küçük birim kimliği) ve pencere boyunca
-  mandallanıyor, yoksa kampın önünden geçen ekip fıçıyı elden ele verirdi.
-  Kimse yakında değilse kimse taşımaz ve eşek yine zamanında yola çıkar: sunum
-  sevkiyatı bekletmiyor. Böylece varış-kapılı lojistik sözleşmesine hiç
-  dokunulmadı — yeni rota, yeni bekleme, yeni transfer yolu yok.
-- [x] **Çift prop tehlikesi kaynağında kesildi.** Tek `carrying` boolean'ı iki
-  farklı yükü çizemezdi; cargo düğümleri artık isteğe bağlı bir `rtsCargoActivity`
-  filtresi taşıyor (`carriedCrate` → `carryingBox`, `carriedBarrel` →
-  `carryingLoad`). Filtresiz düğüm (eşeğin pannier'ları) eskisi gibi davranıyor.
-  Kendi sandığını taşıyan işçi barrel adayı olamıyor, ve `rtsCargoActivity`
-  `rtsCargoVisibility` olmadan authorlanırsa Actor reddediliyor — sessizce hiçbir
-  şey yapmayan bir prop yerine yüksek sesli bir hata.
-- [x] İki Worker Actor'u da (oyuncu + AI) barrel bileşenini birebir taşıyor;
-  `Worker Faz 4A` kontrolü devri, filtreyi ve pozu birlikte pinliyor.
+**Kullanıcı kararı:** mekanik tamamen sökülsün. Uzakta kamp kurup bekleyerek
+denendi ve fıçı yine görünmedi; kullanıcı bunun peşine daha fazla düşmek yerine
+özelliğin kalkmasını istedi.
+
+Neden ısrar edilmedi — özelliğin bilançosu baştan kötüydü ve ölçüldü: fıçı
+penceresi sevkiyat başına `loadSeconds` = **2 saniye**, sevkiyat aralığı tam
+kadrolu bir üreticide **~1 dakika**. Yani en iyi ihtimalle oyun süresinin %3'ü,
+ve yalnız merkeze 8 birimden uzak (`autoConnect.maxCells × cellSize`), yolla
+bağlı üreticilerde — yakın üreticiler zaten `transport: "direct"`, hiç eşek
+görmüyor. Görünürlüğü bu kadar düşük bir sunum için taşınan yük yüksekti: iki
+sistemin senkronize ettiği bir presentation state, ayrı bir tick sırası
+sözleşmesi, cargo düğümlerinde bir activity filtresi ve iki Actor'da ikinci bir
+prop.
+
+**Sökülenler:**
+- `EconomyProductionSystem.applyCaravanLoadPresentation` / `pickLoadBearer` /
+  `loadBearers` / `isCaravanLoadingAt` ctor parametresi.
+- `RtsApp`'teki çağrı ve `caravans.isLoadingOn(producerLaneId(...))` kablolaması.
+- `Caravan.loadingActive`, `CaravanSystem.isLoadingOn`, `caravanLoadBearer` /
+  `CaravanLoadBearer`. `isCaravanCarrying` artık doğrudan evreden cevap veriyor
+  (`outbound || unloading`) — eşeğin **kendi** pannier'ları aynen duruyor.
+- `rtsCargoVisual.ts`'teki activity filtresi tümüyle: `rtsCargoActivity` prop'u,
+  `readRtsCargoActivity`, `CARGO_ACTIVITIES`, `RtsCargoVisualDef.activity`,
+  `applyRtsCargoVisibility`'nin üçüncü parametresi. Tek yükü olan bir taşıyıcıya
+  filtre gerekmiyordu; filtre yalnız §10.2A için vardı.
+- `WorkerActivity`'den `carryingLoad`.
+- İki Worker Actor'undan `carriedBarrel` bileşeni ve crate'in üzerindeki
+  `rtsCargoActivity`.
+- Kontroller: `Worker Faz 4A` (devir) ve bu oturumda eklenen kapsam kontrolü.
+
+**Duran:** eşeğin kendi fıçıları (`BP_RTS_Donkey` pannier'ları, `rtsCargoSway`),
+üreticiden merkeze kervan lojistiğinin tamamı, işçinin kendi crate'i. Yani
+ekranda değişen tek şey, işçinin elinde 2 saniyeliğine beliren fıçının artık hiç
+belirmemesi.
 
 ### 10.3 Genel elde taşıma
 
@@ -599,8 +597,9 @@ gerekçe var ve ikisi de kendi başına yeterli:
    asset üretilmeden bu klipler zaten bağlanamaz.
 2. **Karşılığı olan gameplay yok.** `wheelbarrow` activity'si hiçbir sistem
    tarafından üretilmiyor ve K-06 gereği klip var diye state uydurulmuyor.
-   §10.2A'nın devri, "uzak üreticinin yükü nasıl taşınır" sorusunu **eşekle**
-   cevapladı; el arabası aynı soruya ikinci bir cevap olurdu.
+   "Uzak üreticinin yükü nasıl taşınır" sorusunun cevabı **eşek kervanı**; el
+   arabası aynı soruya ikinci bir cevap olurdu. (§10.2A'nın işçi-eşek devir
+   sunumu sonradan kaldırıldı, ama kervan lojistiğinin kendisi duruyor.)
 
 - [x] Wheelbarrow asseti üretilmediği için klipler bağlanmadı.
 - [x] `Farming_wheelbarrow_idle/walk/dump` assette bağlanmadan duruyor;
@@ -803,7 +802,8 @@ kendisiydi**. Hepsi GLB'den FK ile ölçüldü (120 Hz), hiçbiri göz kararı d
   İkincisi kasten aynı efekti paylaşıyor: kürek de bot da aynı tozu kaldırır ve
   "kürek" demek için ikinci bir toz efekti üretmek kimsenin istemediği bir iş
   olurdu. Ad yine de ayrı, çünkü **ad sözleşmedir** ve ses planı aynı akışa
-  abone olacak.
+  abone olacak. **Üçü de 2026-08-18'de geri alındı — bkz. §12.4.** İşaretler
+  duruyor, kalkan yalnız çizim.
 - [x] Notify hiçbir ekonomi miktarını veya iş tamamlanma anını belirlemiyor —
   K-02 zaten `Muhafiz Faz 6: notify tuketicisi simulasyonu … degistiremez` ile
   pinli, tüketici tarafı değişmedi.
@@ -855,10 +855,11 @@ olmadığını gösterdi. Uydurmak yerine kaydedildi:
 
 ### 12.3 Faz 6'dan kalan
 
-`worker.skeleton.json.notifies` artık **bir** işaret taşıyor: `throw-release`
-(§11.1B). Bu, notify hattının Worker'da ilk gerçek tüketicisi — ve tüketicisi bir
-efekt değil, taşın uçuşunun başlangıcı. Fazın geri kalanı (ayak teması, kazma,
-sulama, balta, onarım, dump) hâlâ açıktır.
+`worker.skeleton.json.notifies` bugün **on iki** işaret taşıyor: `throw-release`
+(§11.1B), altı `footstep`, iki `body-impact`, bir `chop-impact` ve iki
+`dig-impact`. Sulama, onarım ve dump ölçüm sonucu kapsam dışıdır (§12.2), yani
+authorlanacak işaret kalmadı. Çizim tarafı §12.4 ile daraldı; kalan iki madde
+aşağıda.
 
 - [x] Montage bölüm sınırlarında (0,7 s ve 4,033 s) çift atma **konusuz kaldı:**
   Worker montage klibinde (`Fixing_Kneeling`) hiç işaret authorlanmadı, çünkü
@@ -868,11 +869,51 @@ sulama, balta, onarım, dump) hâlâ açıktır.
   `docs/planned/THREEAGES_AUDIO_DESIGN_AND_PRODUCTION_PLAN.md`'nin konusu.
   `rtsNotifyEffects.ts` bunu zaten böyle belgeliyor: aynı akışa abone olunacak,
   ikinci bir hat kurulmayacak.
-- [ ] **Efektlerin dünya içi okunurluk kabulü (kullanıcı).** Normal ve uzak
-  kamerada: ayak tozu bir kalabalıkta okunuyor mu, odun kıymıkları baltanın
-  ısırdığı yerde mi çıkıyor (yükseklik 0,7 authored bir görünüş — kütüğün
-  kalınlığına göre gözle ayarlanır), kürek tozu ayak tozundan ayırt ediliyor mu.
-  Bu madde §17'ye ait ve Faz 7'yi bloke etmez.
+- [x] **Efektlerin dünya içi okunurluk kabulü (kullanıcı) — cevaplandı
+  2026-08-18: hayır.** Kullanıcı çalışan maçta baktı; ayak tozu RTS kamerasının
+  çalışma mesafesinde hiç seçilmiyordu, odun kıymığı da kanalın maliyetine
+  değmiyordu. Üç bağlama kaldırıldı (§12.4). Geriye kalan tek birim efekti
+  `body-impact` — kırmızı, tam opak, dövüşün okunur yarısı.
+
+### 12.4 Toz ve kıymık bağlamalarının kaldırılması (2026-08-18)
+
+Kullanıcı çalışan maçta bakıp tek cümleyle söyledi: efekt görünmüyor, zor
+görülenleri kaldıralım. Doğruydu ve asset'ten okunabiliyordu —
+`FX_RTS_Footstep_Dust` 8 sprite, `startOpacity 0,5`, toprak üstünde bej
+`#b0a48f`, 0,45–0,7 s. RTS kamerasının mesafesinde bu, ince bir efekt değil,
+okuyucusu olmayan bir kare maliyeti.
+
+Kaldırılan **üç bağlama** (`RTS_NOTIFY_EFFECTS`):
+
+| İşaret | Eski efekt | Etkilenen birimler |
+| --- | --- | --- |
+| `footstep` | `rts-fx-footstep-dust` | Guard, Archer, Worker, topçu ekibi |
+| `dig-impact` | `rts-fx-footstep-dust` | Worker (tarım) |
+| `chop-impact` | `rts-fx-debris-wood` | Worker (oduncu) |
+
+Kalan: `body-impact` (kırmızı, tam opak, dövüş geri bildirimi) ve topçu enkazının
+üçlüsü (`wreck-blast`/`-fire`/`-smoke`). `rts-fx-debris-wood` asset'i **silinmedi**;
+bina çöküşü onu `rts-content.json` üzerinden hâlâ kullanıyor.
+
+Üç karar bunu ucuz tutuyor:
+
+- **İşaretler yerinde kaldı.** GLB'den FK ile ölçülmüş yirmiden fazla zaman
+  damgası korundu; ses planı zaten aynı akışa abone olacak ve yeniden ölçmek işin
+  pahalı yarısı. `arrow-release` ve `sword-swing` bunu zaten böyle yapıyordu, yani
+  yeni bir desen değil — var olanın genişlemesi.
+- **"Ses bekleyen ad" artık iddia ediliyor, sadece belgelenmiyor.** Yeni
+  `RTS_NOTIFY_AUDIO_ONLY` (`rtsNotifyEffects.ts`) o adları sayıyor, ve üç kontrol
+  her authored işaretin ya çizildiğini, ya runtime'da okunduğunu, ya da bu
+  listede olduğunu doğruluyor. Sebep: bağlama kalkınca "efekti yok" ile "adı
+  yanlış yazılmış" görsel olarak aynı şeye dönüşüyordu — hattın kendi başına
+  bildiremediği tek hata bu.
+- **Hız limiti kontrolü sabit ada bağlı değil.** Testler `footstep`'in kapağını
+  ismen sürüyordu; artık tabloda `minIntervalSeconds > 0` olan **ilk** bağlamayı
+  buluyor ve onu sürüyor, yani kapağın kendisi pinli kalıyor ama hangi efektin
+  taşıdığı serbest.
+
+`npx tsc --noEmit` temiz; `--filter "Faz 6,Worker,Archer,Siege crew,Muhafiz"`
+94/94 yeşil.
 
 ## 13. Faz 7 — Performans, LOD ve Nihai Teslim
 
@@ -947,7 +988,8 @@ kapsam önerisi:
 **§14 dilimi kapandı.**
 
 **2026-08-18 dilimi de kapandı: Faz ≤5 tamamen kapatıldı.** Yapılanlar:
-eşek barrel devri uygulandı (§10.2A), hasat/hayvancılık (§9.3), el arabası
+eşek barrel devri uygulandı (§10.2A — sonradan kaldırıldı), hasat/hayvancılık
+(§9.3), el arabası
 (§10.4), turn/strafe (§11.3), `LeftHand` soketi (§10.1) ve kısa tarım
 alternatifleri (§9.2) kapsam dışı kararlarıyla kapatıldı, §3.1'in duplicate klip
 taraması yapıldı, §3.3'ün dört root-motion maddesi karara bağlandı, §10.2/§10.3'ün
@@ -1162,19 +1204,20 @@ içinde cevaplanan kısım. Tek bir kısa turda hepsine bakılabilir.
    `Crouch_Idle_Loop` (çömelmiş), `Farming_kneeling_idle`. Karar tek satırlık
    sidecar düzenlemesi; sözleşme klip seçiminden bağımsız ve pinli.
 3. **Yeni ve tekrarlanan sunumlar.**
-   (a) **Barrel devri (§10.2A):** uzak bir üreticinin eşeği yüklenirken işçinin
-   elinde fıçı görünüyor mu, boyu ve hizası doğru mu (ölçek 3, `carry-box`
-   soketi), eşek yola çıktığı anda işçininki kayboluyor mu.
+   (a) **Crate boyutu ve soket pozu (§10.2):** ölçek 5×, `carry-box` editörde
+   yeniden pozlandı (2026-08-18). Sandık gövdeye göre doğru boyutta mı, hizası
+   yürürken kayıyor mu. (Barrel devri §10.2A ile birlikte kaldırıldı; artık
+   bakılacak bir fıçı yok.)
    (b) **Cultivation (§9.2):** yeni rigin tarım hareketi — klip bağlaması eski
    paketle aynı, değişen yalnız rig.
    (c) **`Death` root kayması (§3.3):** düşen işçinin gövdesi yarım metre öne
    taşınıyor. Düşüş gibi mi, kayma gibi mi okunuyor? Kayma ise düzeltme tek
    satır: sidecar'da `Death` için `lockXZ`.
 
-4. **Faz 6 efektleri (§12.3).** Normal ve uzak kamerada: ayak tozu kalabalıkta
-   okunuyor mu, odun kıymıkları baltanın ısırdığı yerde mi çıkıyor (yükseklik
-   0,7 authored bir görünüş, kütük kalınlığına göre gözle ayarlanır), kürek tozu
-   ayak tozundan ayırt ediliyor mu.
+4. ~~**Faz 6 efektleri (§12.3).**~~ **Cevaplandı 2026-08-18: görünmüyorlardı.**
+   Ayak tozu, kürek tozu ve odun kıymığı bağlamaları kaldırıldı (§12.4);
+   işaretler ses için duruyor. Geriye bakılacak tek birim efekti `body-impact`
+   kaldı — dövüşte "vuruldu" okunuyor mu, o da bir sonraki tura.
 
 ---
 
@@ -1195,3 +1238,51 @@ taşındı, artık üç taraf da onu okuyor); ve uçtan uca kontrolün fixture k
 süreleri modelden alınmalıydı, çünkü yakalamak için var olduğu hata tam olarak
 "1,133 s'lik klipte 1,308 s'ye konmuş, hiç ateşlenmeyen işaret". `npx tsc
 --noEmit` temiz; `npm run test:engine:slow` **1502/1502 yeşil**.
+
+---
+
+*Günlük notu (2026-08-18, üçüncü dilim) — Faz 6 öncesi iki görsel eksik:*
+Kullanıcı dünyada bakıp iki şey söyledi ve ikisi de gerçekti. Birincisi kolaydı:
+crate RTS kamerasında çok küçük kalıyordu, ölçek 4 → 6,4 (iki Worker Actor'unda
+da). Bunu yaparken eski `assert.deepEqual(crate.props.scale, [4, 4, 4])` kırıldı
+— tam olarak CLAUDE.md'nin uyardığı tuning pinlemesi — ve sözleşmeye çevrildi:
+ölçek pozitif, tekdüze, ve **iki Worker'da aynı**. Sayı serbest, ayrışma yasak.
+
+İkincisi asıl bulgu. "Eşeğe barrel yüklemesi hiç olmuyor" doğruydu ve sebebi
+§10.2A'nın yazdığı hiçbir şey değildi: karar tek kaynaktan (`caravanLoadBearer`),
+sıralama doğru (`applyCaravanLoadPresentation`, `caravans.update` sonrası),
+filtre çalışıyor, `isCaravanLoadingAt` gerçekten bağlı. Kırık olan **uygunluk**tı:
+`pickLoadBearer` adayı `WORK_RANGE` (1,25) içinde arıyordu, oysa eve dönmüş
+toplayıcı ekip footprint'ten ~2,1 ötede durur — kodun kendisi bunu biliyor,
+`CAMP_REACH` (2,25) zaten bu yüzden var. Tahmin etmek yerine ölçtüm: gerçekçi bir
+sevkiyat döngüsünde (tampon dolunca kalkan, `loadSeconds` yüklenen eşek) fıçı
+**3 pencerenin 0'ında** görünüyordu; düzeltmeden sonra 3/3.
+
+Mevcut `Worker Faz 4A` kontrolünün bunu yakalayamamasının sebebi öğretici:
+`caravanLoadBearer`'ı ve `Caravan`'ı doğrudan çağırıyor, yani *kararı* pinliyor
+ama kararın sorulacağı bir işçinin var olup olmadığını hiç sormuyor. Yeni kontrol
+üretim sistemini gerçekten koşturuyor ve **kapsam** iddia ediyor: her sevkiyat
+penceresinde tam bir taşıyıcı, hiç iki tane değil. Mesafe yazmıyor — halka,
+yaklaşma noktası veya yükleme süresi retune edilirse yine de devir görünür kalmalı.
+`npx tsc --noEmit` temiz; `npm run test:engine` **1494/1494** (9 yavaş kontrol
+atlandı); `--filter "Faz 8"` 12/12.
+
+---
+
+*Günlük notu (2026-08-18, dördüncü dilim) — barrel devri kaldırıldı:*
+Kullanıcı uzağa kamp kurup bekledi ve fıçıyı yine göremedi; mekaniğin
+kaldırılmasını istedi. Kaldırıldı (§10.2A). Peşine düşülmemesi doğru karar:
+pencere sevkiyat başına 2 saniye, sevkiyat aralığı tam kadroda ~1 dakika, ve
+yalnız merkeze 8 birimden uzak yollu üreticilerde — yani en iyi ihtimalle
+sürenin %3'ü. Bu görünürlük için taşınan sözleşme yükü (iki sistemin
+senkronladığı presentation state, ayrı tick sırası, cargo activity filtresi,
+ikinci prop) orantısızdı.
+
+Sökme sırasında iki eski assert daha düştü ve ikisi de aynı türdendi — tuning
+pinlemesi: crate ölçeği `[4, 4, 4]` (kullanıcı editörde 5'e aldı) ve `carry-box`
+soketinin `position: [0, 0.03, 0.24]`'ü (editörde yeniden pozlandı). İkisi de
+ilişkiye çevrildi: ölçek pozitif/tekdüze ve **iki Worker'da aynı**; soket `Hips`
+üzerinde, crate önizlemeli ve save round-trip'inden sağ çıkıyor. Sayılar serbest.
+
+`npm run build:verify` yeşil: `tsc` temiz, `vite build` geçti, **1501/1501**
+kontrol, `verify:dist --strict` temiz.

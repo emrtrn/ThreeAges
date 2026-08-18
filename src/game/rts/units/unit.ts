@@ -61,7 +61,6 @@ export type WorkerActivity =
   | "mining"
   | "lumber"
   | "carryingBox"
-  | "carryingLoad"
   | "wheelbarrow";
 
 /**

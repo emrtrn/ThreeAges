@@ -175,15 +175,6 @@ export class EconomyProductionSystem {
    * which source a worker who is being dropped mid-cycle belonged to.
    */
   private readonly sources: readonly ResourceSource[];
-  /**
-   * Workers currently showing a caravan barrel, by unit id.
-   *
-   * Kept so the same pass that raises the prop can put it back down: an in-place
-   * producer's tick never writes `carrying` at all, so without this a bearer
-   * would keep the barrel long after his donkey had gone. See
-   * {@link applyCaravanLoadPresentation}.
-   */
-  private readonly loadBearers = new Set<number>();
 
   constructor(
     private readonly units: UnitSystem,
@@ -212,16 +203,6 @@ export class EconomyProductionSystem {
     private readonly isWorkerLocationUnsafe: (owner: UnitOwner, x: number, z: number) => boolean = () => false,
     /** Player-owned automatic staffing can be disabled without changing AI behaviour. */
     private readonly isAutomaticWorkerAssignmentEnabled: (owner: UnitOwner) => boolean = () => true,
-    /**
-     * Whether this producer's pack animal is taking its shipment on right now
-     * (Worker plan §10.2A) — the only thing this system knows about caravans.
-     *
-     * A function for the same reason {@link livestockYield} is one: the answer
-     * belongs to the logistics fleet, and asking for exactly the boolean keeps
-     * lanes, phases and roads out of the economy. The default answers no, so a
-     * runtime built without caravans simply never shows the hand-off.
-     */
-    private readonly isCaravanLoadingAt: (structureId: number) => boolean = () => false,
   ) {
     const sources: ResourceSource[] = [];
     if (forests) sources.push(forests);
@@ -236,73 +217,6 @@ export class EconomyProductionSystem {
     }
     this.syncCompletedProducers();
     for (const producer of this.producers.values()) this.updateProducer(producer, deltaSeconds);
-  }
-
-  /**
-   * Put a barrel in one worker's hands for as long as his producer's donkey is
-   * actually taking the shipment on — Worker plan §10.2A.
-   *
-   * **Called after the caravan fleet has run, not inside {@link update}.** That
-   * ordering is the feature: the animal's own panniers are decided from the same
-   * post-update phase, so the frame `loading` becomes `outbound` is the frame the
-   * barrel leaves the man and appears on the donkey. Run from inside the economy
-   * tick it would read a phase one frame stale, and the hand-off would show two
-   * barrels for exactly one frame — the thing this presentation exists to avoid.
-   *
-   * Presentation only, and it can be skipped entirely without the shipment
-   * changing: the load timer, the route and the wallet never look at who is
-   * standing at the door. When no assigned worker is near enough, nobody carries
-   * anything and the donkey still leaves on time.
-   */
-  applyCaravanLoadPresentation(): void {
-    const bearing = new Set<number>();
-    for (const producer of this.producers.values()) {
-      if (!this.isCaravanLoadingAt(producer.structure.id)) continue;
-      const bearer = this.pickLoadBearer(producer);
-      if (!bearer) continue;
-      bearing.add(bearer.worker.id);
-      bearer.worker.setCarrying(true);
-      bearer.worker.setWorkerActivity("carryingLoad");
-    }
-    for (const workerId of this.loadBearers) {
-      if (bearing.has(workerId)) continue;
-      // Put down only what this pass picked up, and only for a worker who is
-      // still on the books: every other exit path (released, reassigned, dead)
-      // has already cleared both fields, and reaching in after it would restore
-      // an assignment the worker no longer has.
-      const producer = this.assignmentByWorker.get(workerId);
-      const assignment = producer?.assignments.get(workerId);
-      if (!producer || !assignment) continue;
-      assignment.worker.setCarrying(false);
-      assignment.worker.setWorkerActivity(this.activityForStructure(producer.structure));
-    }
-    this.loadBearers.clear();
-    for (const workerId of bearing) this.loadBearers.add(workerId);
-  }
-
-  /**
-   * The one assigned worker who shoulders this shipment, or null when none is
-   * close enough to be the man doing it.
-   *
-   * Deterministic by unit id, never by proximity ranking or randomness, so a
-   * replay puts the barrel in the same hands. It latches: whoever picked it up
-   * keeps it for the whole window, or a crew cycling past the camp would pass
-   * one barrel hand to hand every few frames.
-   */
-  private pickLoadBearer(producer: ProducerRecord): WorkerAssignment | null {
-    let best: WorkerAssignment | null = null;
-    for (const assignment of producer.assignments.values()) {
-      const worker = assignment.worker;
-      if (worker.dying || worker.health.depleted) continue;
-      // A worker already holding his own crate is showing a load; a second one in
-      // the same arms is the double prop the hand-off rule forbids. The bearer
-      // from last frame is exempt, because the load he is holding is this one.
-      if (worker.isCarrying && !this.loadBearers.has(worker.id)) continue;
-      if (distanceToFootprint(producer.structure, worker.position.x, worker.position.z) > WORK_RANGE) continue;
-      if (this.loadBearers.has(worker.id)) return assignment;
-      if (!best || worker.id < best.worker.id) best = assignment;
-    }
-    return best;
   }
 
   /** True while a worker is travelling to or producing at a resource building. */
@@ -364,7 +278,6 @@ export class EconomyProductionSystem {
   }
 
   reset(): void {
-    this.loadBearers.clear();
     for (const producer of this.producers.values()) this.releaseProducer(producer);
     this.producers.clear();
     this.assignmentByWorker.clear();

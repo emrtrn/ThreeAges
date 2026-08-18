@@ -4,25 +4,61 @@
     {
       "name": "right-hand-tool",
       "bone": "RightHand",
-      "position": [0, 0, 0],
-      "rotation": [0, 0, 0],
-      "scale": [1, 1, 1],
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
       "previewAssetId": "axe"
     },
     {
       "name": "throw-release",
       "bone": "RightHand",
-      "position": [0, 0, 0],
-      "rotation": [0, 0, 0],
-      "scale": [1, 1, 1],
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
       "previewAssetId": "rock"
     },
     {
       "name": "carry-box",
       "bone": "Hips",
-      "position": [0, 0.03, 0.24],
-      "rotation": [0, 0, 0],
-      "scale": [1, 1, 1],
+      "position": [
+        -0.001,
+        0.0196,
+        0.3326
+      ],
+      "rotation": [
+        14.457,
+        0.314,
+        -0.636
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ],
       "previewAssetId": "crate"
     }
   ],
@@ -181,9 +217,9 @@
   ],
   "physicsBodies": [],
   "physicsConstraints": [],
-  "upperBodyBone": "Spine",
-  "layerAttackWhenMoving": true,
   "preview": {
-    "selectedClip": "Walk_Loop"
-  }
+    "selectedClip": "Farming_box_idle"
+  },
+  "upperBodyBone": "Spine",
+  "layerAttackWhenMoving": true
 }

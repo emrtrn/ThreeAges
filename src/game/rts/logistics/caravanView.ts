@@ -3,7 +3,7 @@ import type { Group } from "three";
 
 import type { RtsPresentationHandle } from "../units/unit";
 import type { UnitOwner } from "../units/unit";
-import { caravanLoadBearer, type Caravan, type CaravanPhase } from "./caravanSystem";
+import type { Caravan, CaravanPhase } from "./caravanSystem";
 
 /** The single logistics Actor is data-mapped rather than pretending to be wildlife. */
 export type CaravanPresentationFactory = (
@@ -57,10 +57,7 @@ export class CaravanView {
         attacking: false,
         dying: caravan.dying,
         working: isLoading(caravan.phase),
-        // Through the shared decision rather than a local phase test, so this
-        // side and the worker's barrel (Worker plan §10.2A) can never disagree
-        // about who is holding the shipment on a given frame.
-        carrying: caravanLoadBearer(caravan.phase, caravan.loadingActive) === "caravan",
+        carrying: isCaravanCarrying(caravan.phase),
         attackCount: 0,
         // A caravan never swings, but it is very much shot at — and the pack
         // animal reporting its real blow count costs nothing until an asset
@@ -123,10 +120,7 @@ function isLoading(phase: CaravanPhase): boolean {
  * makes the round trip readable at a glance without the simulation gaining a
  * single field — {@link CaravanPhase} already knew all of this.
  *
- * Answered from the phase alone, which is exact: the second argument of
- * {@link caravanLoadBearer} only ever separates a *worker* frame from an idle
- * one, and neither of those puts anything on the animal.
  */
 export function isCaravanCarrying(phase: CaravanPhase): boolean {
-  return caravanLoadBearer(phase, false) === "caravan";
+  return phase === "outbound" || phase === "unloading";
 }

@@ -198,6 +198,7 @@ import {
 } from "../src/game/rts/content/rtsUnitPresentation";
 import {
   RtsNotifyEffectBudget,
+  RTS_NOTIFY_AUDIO_ONLY,
   RTS_NOTIFY_EFFECTS,
   RTS_THROW_RELEASE_NOTIFY,
   rtsNotifyEffectIds,
@@ -332,7 +333,7 @@ import { AiExpansionCoordinator, AI_MAX_EXPANSION_PLANS } from "../src/game/rts/
 import { ProductionLogisticsSystem } from "../src/game/rts/economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
-import { Caravan, CaravanSystem, caravanLoadBearer } from "../src/game/rts/logistics/caravanSystem";
+import { Caravan, CaravanSystem } from "../src/game/rts/logistics/caravanSystem";
 import { ProducerCaravanLanes, producerLaneId } from "../src/game/rts/logistics/producerCaravanLanes";
 import { advanceCaravanRoute, startCaravanRoute } from "../src/game/rts/logistics/caravanRoute";
 import { isCaravanCarrying, isCaravanVisible } from "../src/game/rts/logistics/caravanView";
@@ -37449,8 +37450,8 @@ check("Caravan cargo: authored load meshes are validated, bound, and shown for e
   const good = readRtsActorCargoVisuals(defWith("loaded"));
   assert.deepEqual(
     "cargo" in good ? good.cargo : null,
-    [{ componentId: "cargoLeft", visibility: "loaded", activity: null }],
-    "a well-formed cargo flag is read off its mesh, unfiltered by assignment",
+    [{ componentId: "cargoLeft", visibility: "loaded" }],
+    "a well-formed cargo flag is read off its mesh",
   );
   assert.ok("cargo" in readRtsActorCargoVisuals(defWith("empty")), "the empty-leg half is authorable too");
 
@@ -37537,10 +37538,6 @@ check("Caravan cargo: the shipped donkey Actor carries authored panniers that ri
   assert.ok(
     "cargo" in read && read.cargo.every((node) => node.visibility === "loaded"),
     "both are outbound-only cargo",
-  );
-  assert.ok(
-    "cargo" in read && read.cargo.every((node) => node.activity === null),
-    "and unfiltered: a pack animal has one kind of load, so nothing narrows it by assignment",
   );
   // Mirrored, not stacked: two loads at the same X would read as one lump.
   const flanks = def.components
@@ -38073,10 +38070,18 @@ check("Siege crew Faz 1: the shipped sidecar authors every clip the crew driver 
       `notify "${notify.name}" at ${notify.time}s falls inside ${notify.clip}`,
     );
   }
-  assert.ok(
-    rtsNotifyEffectIds().length > 0 && skeleton.notifies.some((notify) => notify.name === "footstep"),
-    "and footstep is a name the runtime already binds an effect to",
-  );
+  // The crew's footfalls are authored for the audio pass, not for dust: the
+  // burst was removed on 2026-08-18 because it could not be made out at the RTS
+  // camera's distance. So what is pinned is that the name is one the runtime
+  // *knows* — a marker that is neither drawn nor on the audio roster is a typo,
+  // and a typo on this line is a marker that silently never reaches anything.
+  assert.ok(skeleton.notifies.some((notify) => notify.name === "footstep"), "the crew marks its footfalls");
+  for (const notify of skeleton.notifies) {
+    assert.ok(
+      RTS_NOTIFY_EFFECTS[notify.name] !== undefined || RTS_NOTIFY_AUDIO_ONLY.has(notify.name),
+      `notify "${notify.name}" is neither drawn nor on the audio roster`,
+    );
+  }
 });
 
 check("Siege crew Faz 2: the firing stance goes down once and stays down between rounds", () => {
@@ -39489,14 +39494,20 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
   ) as unknown;
   const worker = normalizeAssetSkeleton(rawSkeleton);
   const saved = validateAssetSkeletonDef(rawSkeleton);
-  assert.deepEqual(worker.sockets.find((socket) => socket.name === "carry-box"), {
-    name: "carry-box",
-    bone: "Hips",
-    position: [0, 0.03, 0.24],
-    rotation: [0, 0, 0],
-    scale: [1, 1, 1],
-    previewAssetId: "crate",
-  }, "the Worker owns one body-stable socket for a two-handed crate");
+  // The socket's own transform is authored by eye and gets nudged in the editor
+  // (it was re-posed on 2026-08-18), so what is pinned is the contract: one
+  // body-stable socket on the hips, previewing the crate, and surviving a save.
+  // A `deepEqual` on the offsets here turns every alignment pass into a red build.
+  const carryBox = worker.sockets.find((socket) => socket.name === "carry-box");
+  assert.ok(carryBox, "the Worker owns a socket for a two-handed crate");
+  assert.equal(carryBox!.bone, "Hips", "and hangs it off the body rather than a hand, so both arms stay free");
+  assert.equal(carryBox!.previewAssetId, "crate", "the editor previews the prop the socket exists for");
+  assert.deepEqual(carryBox!.scale, [1, 1, 1], "the prop's size is the Actor's business, not the socket's");
+  assert.equal(
+    saved.sockets?.find((socket) => socket.name === "carry-box")?.bone,
+    "Hips",
+    "and an editor save round-trip keeps the socket rather than dropping it",
+  );
   assert.equal(worker.animationSet.carryIdle, "Farming_holding_idle");
   assert.equal(worker.animationSet.carryWalk, "Farming_holding_walk");
   assert.equal(saved.animationSet?.carryWalk, "Farming_holding_walk", "an editor save retains the carrying locomotion role");
@@ -39505,6 +39516,10 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
     "the carrying idle pose belongs to the carrying role alone, never to the empty-handed idle pool",
   );
 
+  // Collected across both Actors rather than asserted per Actor: the size itself
+  // is authored by eye and gets retuned in the editor, so the contract is that
+  // the two Workers never drift apart, not that the number is any particular one.
+  const crateScales: (readonly [string, unknown])[] = [];
   for (const actorName of ["BP_RTS_Worker", "BP_RTS_Enemy_Worker"]) {
     const rawActor = JSON.parse(
       readFileSync(`public/assets/ThreeAges/Actors/Units/${actorName}.actor.json`, "utf8"),
@@ -39512,19 +39527,26 @@ check("Worker Faz 4: kaynak donusu kutu propuyla ayni sunum state'ini kullanir",
     const actor = normalizeActorScriptDef(rawActor);
     assert.deepEqual(
       readRtsActorCargoVisuals(actor),
-      {
-        cargo: [
-          { componentId: "carriedCrate", visibility: "loaded", activity: "carryingBox" },
-          { componentId: "carriedBarrel", visibility: "loaded", activity: "carryingLoad" },
-        ],
-      },
-      `${actorName} drives both of its loads from the same loaded cargo state, told apart by assignment`,
+      { cargo: [{ componentId: "carriedCrate", visibility: "loaded" }] },
+      `${actorName} draws exactly one load, from the loaded cargo state alone`,
     );
     const crate = actor.components.find((component) => component.id === "carriedCrate");
     assert.equal(crate?.props.assetId, "crate", `${actorName} carries the authored Crate mesh rather than an invisible stand-in`);
     assert.equal(crate?.props.rtsSkeletalSocket, "carry-box", `${actorName} hangs the crate off the sidecar socket, not the Actor root`);
-    assert.deepEqual(crate?.props.scale, [4, 4, 4], `${actorName} draws the crate at the accepted authored size`);
+    const crateScale = crate?.props.scale;
+    assert.ok(
+      Array.isArray(crateScale) && crateScale.length === 3
+        && crateScale.every((axis) => typeof axis === "number" && Number.isFinite(axis) && axis > 0)
+        && new Set(crateScale).size === 1,
+      `${actorName} draws the crate at a positive uniform authored size`,
+    );
+    crateScales.push([actorName, crateScale] as const);
   }
+  assert.deepEqual(
+    crateScales[1]?.[1],
+    crateScales[0]?.[1],
+    "both Workers carry the same crate at the same size; a retune has to move both",
+  );
 
   const shipped = new Set((parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")))?.json.animations ?? [])
     .map((clip) => clip.name));
@@ -39758,15 +39780,28 @@ check("Worker Faz 6: her isaret gercek bir klibin icinde ve ait oldugu rolde dur
   for (const clip of clipsFor("dig-impact")) assert.ok(cultivation.includes(clip), `dig-impact marked on non-farming clip ${clip}`);
   assert.deepEqual(clipsFor("throw-release"), [worker.animationSet.attack], "the release belongs to the throw");
 
-  // Every authored name has a consumer. A marker with neither an effect nor a
-  // runtime reader is not a gap in the table — it is a marker nothing will ever
-  // do anything with, and it should be removed rather than left to look wired.
+  // Every authored name is accounted for by exactly one of three things: an
+  // effect that draws it, a runtime reader, or the explicit roster of markers
+  // waiting on the audio pass. A name in none of them is not a gap in the table
+  // — it is a marker nothing will ever do anything with, which in practice
+  // means a misspelling, and nothing else on this line can report one.
   const consumedByRuntime = new Set([RTS_THROW_RELEASE_NOTIFY]);
   for (const notify of worker.notifies) {
     assert.ok(
-      RTS_NOTIFY_EFFECTS[notify.name] !== undefined || consumedByRuntime.has(notify.name),
-      `"${notify.name}" is authored but nothing draws or reads it`,
+      RTS_NOTIFY_EFFECTS[notify.name] !== undefined
+        || consumedByRuntime.has(notify.name)
+        || RTS_NOTIFY_AUDIO_ONLY.has(notify.name),
+      `"${notify.name}" is authored but nothing draws, reads or is waiting on it`,
     );
+  }
+  // The Worker's three job/gait contacts are on the audio roster rather than
+  // drawn (removed 2026-08-18: invisible at the RTS camera's distance). The
+  // measured markers must survive that removal, because remeasuring them is the
+  // expensive half and the audio pass still needs them.
+  for (const name of ["footstep", "chop-impact", "dig-impact"]) {
+    assert.ok(clipsFor(name).length > 0, `${name} is still authored for the audio pass`);
+    assert.equal(RTS_NOTIFY_EFFECTS[name], undefined, `${name} draws nothing`);
+    assert.ok(RTS_NOTIFY_AUDIO_ONLY.has(name), `${name} is on the audio roster rather than silently orphaned`);
   }
 
   // The sidecar allowlist gotcha (CLAUDE.md): a field the editor's save path
@@ -40009,102 +40044,6 @@ check("Worker Faz 1: varyant havuzundaki klipler gercekten farkli animasyon veri
     }
   }
   assert.ok(pools > 0, "the Worker still authors at least one multi-clip variant pool for this to cover");
-});
-
-check("Worker Faz 4A: yuk isciden esege tek karede gecer, iki kez veya bos kare gorunmeden", () => {
-  // §10.2A's whole requirement is a *negative* one — never two barrels, never a
-  // gap — so it is asserted as an invariant over a real trip rather than at a
-  // hand-picked instant. Both sides are derived from the same phase read, which
-  // is what makes the invariant structural instead of a coincidence of ordering.
-  for (const [phase, active, bearer] of [
-    ["loading", false, "none"],
-    ["loading", true, "worker"],
-    ["outbound", false, "caravan"],
-    ["outbound", true, "caravan"],
-    ["unloading", false, "caravan"],
-    ["inbound", false, "none"],
-    ["inbound", true, "none"],
-  ] as const) {
-    assert.equal(
-      caravanLoadBearer(phase, active),
-      bearer,
-      `${phase}${active ? " while loading" : ""} is carried by ${bearer}`,
-    );
-  }
-  for (const phase of ["loading", "outbound", "unloading", "inbound"] as const) {
-    assert.equal(
-      isCaravanCarrying(phase),
-      caravanLoadBearer(phase, false) === "caravan",
-      `the donkey's own panniers read the shared decision on ${phase}`,
-    );
-  }
-
-  // Read here rather than through the caravan suite's helper: that one is a
-  // `const` declared much further down this file, and this check runs first.
-  const balance = validateCaravanBalance(
-    JSON.parse(readFileSync("public/game-data/balance/logistics.json", "utf8")) as unknown,
-  );
-  const roads = roadGraphOf([[{ x: -4, z: 0 }, { x: 4, z: 0 }]]);
-  const caravan = new Caravan(
-    "caravan:handoff", producerLaneId(1), "player",
-    { x: -4, z: 0 }, { x: 4, z: 0 }, balance, roads, 30,
-  );
-  const dispatch = { carryCapacity: 30, ready: true, canReceive: true };
-  // Small steps, so the frame the load changes hands is actually one of the
-  // frames observed rather than something a coarse delta stepped over.
-  const step = balance.loadSeconds / 8;
-  const frames: { worker: boolean; donkey: boolean }[] = [];
-  for (let index = 0; index < 40; index += 1) {
-    caravan.update(step, { x: -4, z: 0 }, { x: 4, z: 0 }, dispatch);
-    const bearer = caravanLoadBearer(caravan.phase, caravan.loadingActive);
-    frames.push({ worker: bearer === "worker", donkey: bearer === "caravan" });
-  }
-  assert.ok(frames.some((frame) => frame.worker), "the trip contains frames where a worker holds the shipment");
-  assert.ok(frames.some((frame) => frame.donkey), "and frames where the animal does");
-  assert.ok(
-    frames.every((frame) => !(frame.worker && frame.donkey)),
-    "no frame ever draws the same shipment twice",
-  );
-  const lastWorkerFrame = frames.map((frame) => frame.worker).lastIndexOf(true);
-  assert.equal(
-    frames[lastWorkerFrame + 1]?.donkey,
-    true,
-    "the frame after the worker puts the load down is the frame the animal has it — no empty frame between them",
-  );
-
-  // The other half of the same rule, on the Actor: one `carrying` boolean, two
-  // authored loads, and the assignment is what tells them apart. Without the
-  // filter a worker loading a caravan would sprout his gathering crate as well.
-  const def = normalizeActorScriptDef(
-    JSON.parse(readFileSync("public/assets/ThreeAges/Actors/Units/BP_RTS_Worker.actor.json", "utf8")) as unknown,
-    "BP_RTS_Worker",
-  );
-  const tree = buildActorPresentationTree(def, "BP_RTS_Worker", () => undefined);
-  const bindings = bindRtsCargoVisuals(def, tree);
-  const crate = findActorComponentNode(tree, "carriedCrate")!;
-  const barrel = findActorComponentNode(tree, "carriedBarrel")!;
-  applyRtsCargoVisibility(bindings, true, "carryingBox");
-  assert.deepEqual([crate.visible, barrel.visible], [true, false], "a gathering return shows the crate alone");
-  applyRtsCargoVisibility(bindings, true, "carryingLoad");
-  assert.deepEqual([crate.visible, barrel.visible], [false, true], "loading a caravan shows the barrel alone");
-  applyRtsCargoVisibility(bindings, false, "lumber");
-  assert.deepEqual([crate.visible, barrel.visible], [false, false], "an empty-handed worker shows neither");
-
-  // And the pose follows the prop from the same snapshot: a barrel is a load,
-  // so the body carries it rather than standing empty-handed beside it.
-  const worker = normalizeAssetSkeleton(JSON.parse(
-    readFileSync("public/assets/ThreeAges/Characters/Worker/worker.skeleton.json", "utf8"),
-  ) as unknown);
-  const shipped = new Set((parseGlb(new Uint8Array(readFileSync("public/assets/ThreeAges/Characters/Worker/worker.glb")))?.json.animations ?? [])
-    .map((clip) => clip.name));
-  assert.equal(
-    selectRtsAnimation(
-      { planarSpeed: 0, carrying: true, workerActivity: "carryingLoad", working: true, attacking: false, dying: false, attackCount: 0, impactCount: 0 },
-      worker.animationSet, shipped, rtsLocomotionTuning(6),
-    )?.role,
-    "carryIdle",
-    "a worker holding a caravan barrel is carrying, not kneeling at his job",
-  );
 });
 
 check("Skeletal sidecar: her iskeletli assetin sidecar dosya adi harfi harfine model adindan turer", () => {
@@ -40644,10 +40583,11 @@ check("Archer Faz 1: locomotion rolleri gercek kliplerdir ve duplike klip runtim
     assert.equal(footsteps.filter((notify) => notify.clip === clip).length, 2, `${String(clip)} has one marker for each foot`);
   }
   assert.equal(
-    RTS_NOTIFY_EFFECTS.footstep?.effectId,
-    "rts-fx-footstep-dust",
-    "Archer footfalls reuse the shared, globally throttled RTS dust budget",
+    RTS_NOTIFY_EFFECTS.footstep,
+    undefined,
+    "Archer footfalls raise no dust: the burst was unreadable at the RTS camera's distance and was removed",
   );
+  assert.ok(RTS_NOTIFY_AUDIO_ONLY.has("footstep"), "but the measured markers stay, for the same sound consumer as the release");
   const socketTarget = new Group();
   const rightHand = new Group();
   rightHand.name = "mixamorigRightHand";
@@ -42592,19 +42532,19 @@ check("Muhafiz Faz 6: notify efekt tablosu manifestte karsiligi olan varliklari 
       );
       continue;
     }
-    assert.ok(definition.system.duration <= 0.5, `${effectId} must be over before the next footfall`);
+    assert.ok(definition.system.duration <= 0.5, `${effectId} must be over before the moment that asked for it repeats`);
   }
 
   // The rate cap is what keeps an ambient emitter from spending an event
   // budget: a company of forty is forty units each politely under a per-unit
   // limit, so the cap has to be global, and this is that.
   const budget = new RtsNotifyEffectBudget();
-  const footstep = RTS_NOTIFY_EFFECTS.footstep ?? assert.fail("footsteps are drawn");
-  assert.ok(footstep.minIntervalSeconds > 0, "footfalls are throttled");
-  assert.ok(budget.request("footstep", 0, 1) !== null, "the first footfall is drawn");
-  assert.equal(budget.request("footstep", footstep.minIntervalSeconds / 2, 1), null, "a second one too soon is dropped");
+  const [pacedName, paced] = Object.entries(RTS_NOTIFY_EFFECTS).find(([, binding]) => binding.minIntervalSeconds > 0)
+    ?? assert.fail("at least one drawn name is rate-capped, or the cap below is exercising nothing");
+  assert.ok(budget.request(pacedName, 0, 1) !== null, "the first burst is drawn");
+  assert.equal(budget.request(pacedName, paced.minIntervalSeconds / 2, 1), null, "a second one too soon is dropped");
   assert.ok(
-    budget.request("footstep", footstep.minIntervalSeconds * 1.01, 1) !== null,
+    budget.request(pacedName, paced.minIntervalSeconds * 1.01, 1) !== null,
     "and the one after the interval is drawn again",
   );
 
