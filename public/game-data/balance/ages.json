@@ -10,7 +10,8 @@
         "level": 2,
         "cost": {
           "food": 200,
-          "wood": 200
+          "wood": 200,
+          "gold": 50
         },
         "durationSeconds": 10
       },
@@ -29,10 +30,10 @@
     "id": "town",
     "label": "Kasaba",
     "cost": {
-      "food": 400,
-      "wood": 400,
+      "food": 200,
+      "wood": 200,
       "stone": 200,
-      "gold": 100
+      "gold": 50
     },
     "upgradeSeconds": 30,
     "requiredBuildingIds": [
@@ -52,8 +53,8 @@
         "level": 2,
         "cost": {
           "food": 200,
-          "wood": 200,
-          "stone": 100,
+          "wood": 50,
+          "stone": 200,
           "gold": 50
         },
         "durationSeconds": 10
@@ -62,8 +63,8 @@
         "level": 3,
         "cost": {
           "food": 200,
-          "wood": 200,
-          "stone": 100,
+          "wood": 50,
+          "stone": 200,
           "gold": 50
         },
         "durationSeconds": 10

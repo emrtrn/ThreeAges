@@ -35,6 +35,7 @@ import { createSelectionRing } from "../selection/selectionRing";
 import { AttackComponent } from "./attackComponent";
 import { HealthComponent } from "./health";
 import { HealthBar } from "./healthBar";
+import { RTS_LOCOMOTION_CALIBRATION } from "./rtsUnitAnimation";
 import { SIEGE_CREW_PUSH_START_DELAY_SECONDS } from "./siegeCrewAnimation";
 
 /** Which army a unit belongs to. Ürün A is one player vs. one AI (plan §4.2). */
@@ -232,6 +233,18 @@ export const UNIT_DEATH_SECONDS = 0.35;
 export const UNIT_CORPSE_SECONDS = 30;
 /** A worker rests at a player-chosen point before automatic work may reclaim it. */
 export const WORKER_RETURN_DELAY_SECONDS = 3;
+
+/**
+ * Fraction of its move speed a unit travels at while a load is on its back.
+ *
+ * A crate has weight, so the walk home is a walk, not a sprint — and the number
+ * is taken from the locomotion calibration rather than picked, because that is
+ * the speed the walk clip is authored for. Loaded travel therefore lands under
+ * the walk/run boundary (`runThreshold`) *and* at playback rate 1, so the legs
+ * neither break into a run nor skate: one constant buys both halves. Retuning
+ * `walkClipSpeed` moves them together, which is the point of deriving it.
+ */
+const LOADED_SPEED_FACTOR = RTS_LOCOMOTION_CALIBRATION.walkClipSpeed;
 
 /**
  * Per-role silhouette. GDD 06 §3.4 asks that a role be readable before its UI
@@ -630,6 +643,24 @@ export class Unit {
   /** Whether this unit currently presents an already-authoritative load. */
   get isCarrying(): boolean {
     return this.carrying;
+  }
+
+  /**
+   * Ground speed this unit actually travels at right now.
+   *
+   * {@link speed} is what the unit is worth empty-handed; this is what movement
+   * asks for, and it is the one place a load changes the route's pace. A loaded
+   * worker walking his crate home at running speed was the tell that the cargo
+   * was pure presentation — the animation already refused to run
+   * ({@link classifyRtsAnimation} pins a carrier to `carryWalk`), while the body
+   * underneath it crossed the field at full sprint.
+   *
+   * Only the load slows the unit: nothing here reads the terrain, the crowd or a
+   * stance, so a shoved or blocked unit still loses its ground to
+   * `unitSeparation` exactly as before.
+   */
+  get travelSpeed(): number {
+    return this.carrying ? this.speed * LOADED_SPEED_FACTOR : this.speed;
   }
 
   /**

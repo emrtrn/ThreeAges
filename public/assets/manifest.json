@@ -20186,7 +20186,7 @@
       "name": "Houses First Age 1 Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/House/Houses_FirstAge_1_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/House/Houses_FirstAge_1_Level1.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20200,7 +20200,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 32724
+        "bytes": 203088
       },
       "license": "Unknown"
     },
@@ -20209,7 +20209,7 @@
       "name": "Houses First Age 1 Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/House/Houses_FirstAge_1_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/House/Houses_FirstAge_1_Level2.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20223,7 +20223,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 49081
+        "bytes": 204420
       },
       "license": "Unknown"
     },
@@ -20232,7 +20232,7 @@
       "name": "Houses First Age 1 Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/House/Houses_FirstAge_1_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/House/Houses_FirstAge_1_Level3.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20246,7 +20246,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 77593
+        "bytes": 258204
       },
       "license": "Unknown"
     },
@@ -20393,7 +20393,7 @@
       "name": "Houses Second Age 1 Level1",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/House/Houses_SecondAge_1_Level1.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/House/Houses_SecondAge_1_Level1.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20407,7 +20407,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 145717
+        "bytes": 272340
       },
       "license": "Unknown"
     },
@@ -20416,7 +20416,7 @@
       "name": "Houses Second Age 1 Level2",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/House/Houses_SecondAge_1_Level2.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/House/Houses_SecondAge_1_Level2.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20430,7 +20430,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 210869
+        "bytes": 315516
       },
       "license": "Unknown"
     },
@@ -20439,7 +20439,7 @@
       "name": "Houses Second Age 1 Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/House/Houses_SecondAge_1_Level3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/House/Houses_SecondAge_1_Level3.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20453,7 +20453,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 206024
+        "bytes": 277700
       },
       "license": "Unknown"
     },
@@ -20499,7 +20499,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 825928
+        "bytes": 333128
       },
       "license": "Unknown"
     },
@@ -20522,7 +20522,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 877076
+        "bytes": 367744
       },
       "license": "Unknown"
     },
@@ -20545,7 +20545,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 864560
+        "bytes": 370816
       },
       "license": "Unknown"
     },
@@ -20591,7 +20591,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 935480
+        "bytes": 421924
       },
       "license": "Unknown"
     },
@@ -20614,7 +20614,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 1073960
+        "bytes": 540004
       },
       "license": "Unknown"
     },

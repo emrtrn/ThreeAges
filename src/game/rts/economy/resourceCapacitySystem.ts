@@ -15,7 +15,7 @@ export const STOCK_RESOURCE_IDS = ["food", "wood", "stone", "gold"] as const;
 export const COMMAND_CENTER_STORAGE_CAPACITY: StartingResources = {
   food: 500,
   wood: 500,
-  stone: 300,
+  stone: 500,
   gold: 300,
 };
 

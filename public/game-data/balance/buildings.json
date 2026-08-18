@@ -151,7 +151,7 @@
           "storageCapacity": {
             "food": 1000,
             "wood": 1000,
-            "stone": 600,
+            "stone": 1000,
             "gold": 600
           }
         },
@@ -161,7 +161,7 @@
           "storageCapacity": {
             "food": 1200,
             "wood": 1200,
-            "stone": 800,
+            "stone": 1200,
             "gold": 800
           }
         },
@@ -171,7 +171,7 @@
           "storageCapacity": {
             "food": 1400,
             "wood": 1400,
-            "stone": 1000,
+            "stone": 1400,
             "gold": 1000
           }
         }
@@ -691,8 +691,8 @@
     "economy": {
       "resourceId": "stone",
       "workerCapacity": 3,
-      "perWorkerPerMinute": 5,
-      "localBufferCapacity": 30,
+      "perWorkerPerMinute": 20,
+      "localBufferCapacity": 120,
       "requiresResourceNode": true,
       "gatherRadius": 8,
       "carryCapacity": 5
@@ -704,8 +704,8 @@
           "maxHealth": 200,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 5,
-            "localBufferCapacity": 30
+            "perWorkerPerMinute": 20,
+            "localBufferCapacity": 120
           }
         },
         {
@@ -713,8 +713,8 @@
           "maxHealth": 220,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 6,
-            "localBufferCapacity": 36
+            "perWorkerPerMinute": 30,
+            "localBufferCapacity": 180
           }
         },
         {
@@ -722,8 +722,8 @@
           "maxHealth": 240,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 7,
-            "localBufferCapacity": 42
+            "perWorkerPerMinute": 40,
+            "localBufferCapacity": 240
           }
         }
       ],
@@ -733,8 +733,8 @@
           "maxHealth": 260,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 8,
-            "localBufferCapacity": 64
+            "perWorkerPerMinute": 50,
+            "localBufferCapacity": 400
           }
         },
         {
@@ -742,8 +742,8 @@
           "maxHealth": 280,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 9,
-            "localBufferCapacity": 72
+            "perWorkerPerMinute": 60,
+            "localBufferCapacity": 480
           }
         },
         {
@@ -751,8 +751,8 @@
           "maxHealth": 300,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 10,
-            "localBufferCapacity": 80
+            "perWorkerPerMinute": 70,
+            "localBufferCapacity": 560
           }
         }
       ]

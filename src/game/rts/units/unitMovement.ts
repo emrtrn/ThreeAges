@@ -160,7 +160,8 @@ export function updateUnitMovement(
       continue;
     }
 
-    const step = Math.min(dist, unit.speed * dt);
+    // `travelSpeed`, not `speed`: a worker carrying a load home walks it.
+    const step = Math.min(dist, unit.travelSpeed * dt);
     scratchDir.multiplyScalar(step / dist);
     pos.x += scratchDir.x;
     pos.z += scratchDir.z;
