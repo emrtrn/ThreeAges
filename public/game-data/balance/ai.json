@@ -66,8 +66,8 @@
     "populationPressureBuffer": 3,
     "incomeTargetsPerMinute": {
       "food": 20,
-      "wood": 18,
-      "stone": 10,
+      "wood": 14,
+      "stone": 20,
       "gold": 6
     },
     "buildingTargets": {

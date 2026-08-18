@@ -57,6 +57,11 @@
     "cost": {
       "wood": 40
     },
+    "costByAge": {
+      "town": {
+        "stone": 40
+      }
+    },
     "constructionSeconds": 10,
     "maxHealth": 100,
     "visionRadius": 8,
@@ -107,6 +112,11 @@
     },
     "cost": {
       "wood": 60
+    },
+    "costByAge": {
+      "town": {
+        "stone": 60
+      }
     },
     "constructionSeconds": 10,
     "maxHealth": 100,
@@ -187,6 +197,11 @@
     },
     "cost": {
       "wood": 100
+    },
+    "costByAge": {
+      "town": {
+        "stone": 100
+      }
     },
     "constructionSeconds": 20,
     "maxHealth": 500,
@@ -317,6 +332,11 @@
     "cost": {
       "wood": 40
     },
+    "costByAge": {
+      "town": {
+        "stone": 40
+      }
+    },
     "constructionSeconds": 10,
     "requiredSettlementLevel": 2,
     "maxHealth": 100,
@@ -396,8 +416,12 @@
       "depth": 6
     },
     "cost": {
-      "wood": 100,
-      "stone": 50
+      "wood": 100
+    },
+    "costByAge": {
+      "town": {
+        "stone": 100
+      }
     },
     "constructionSeconds": 18,
     "requiredSettlementLevel": 3,
@@ -417,6 +441,11 @@
     },
     "cost": {
       "wood": 60
+    },
+    "costByAge": {
+      "town": {
+        "stone": 60
+      }
     },
     "constructionSeconds": 10,
     "maxHealth": 100,
@@ -507,6 +536,11 @@
     "cost": {
       "wood": 70
     },
+    "costByAge": {
+      "town": {
+        "stone": 70
+      }
+    },
     "constructionSeconds": 10,
     "maxHealth": 100,
     "visionRadius": 10,
@@ -595,6 +629,11 @@
     },
     "cost": {
       "wood": 80
+    },
+    "costByAge": {
+      "town": {
+        "stone": 80
+      }
     },
     "constructionSeconds": 10,
     "maxHealth": 100,
@@ -685,6 +724,11 @@
     "cost": {
       "wood": 120
     },
+    "costByAge": {
+      "town": {
+        "stone": 120
+      }
+    },
     "constructionSeconds": 20,
     "maxHealth": 200,
     "visionRadius": 9,
@@ -767,6 +811,11 @@
     },
     "cost": {
       "wood": 120
+    },
+    "costByAge": {
+      "town": {
+        "stone": 120
+      }
     },
     "constructionSeconds": 20,
     "maxHealth": 200,
@@ -851,6 +900,11 @@
     "cost": {
       "wood": 20
     },
+    "costByAge": {
+      "town": {
+        "stone": 20
+      }
+    },
     "constructionSeconds": 20,
     "maxHealth": 100,
     "visionRadius": 12,
@@ -918,6 +972,11 @@
     "cost": {
       "wood": 200
     },
+    "costByAge": {
+      "town": {
+        "stone": 200
+      }
+    },
     "constructionSeconds": 60,
     "maxHealth": 400,
     "visionRadius": 14,
@@ -967,6 +1026,11 @@
     "cost": {
       "wood": 140
     },
+    "costByAge": {
+      "town": {
+        "stone": 140
+      }
+    },
     "constructionSeconds": 30,
     "maxHealth": 400,
     "visionRadius": 12,
@@ -1015,8 +1079,7 @@
       "depth": 6
     },
     "cost": {
-      "wood": 140,
-      "stone": 40
+      "stone": 140
     },
     "constructionSeconds": 30,
     "requiredAge": "town",

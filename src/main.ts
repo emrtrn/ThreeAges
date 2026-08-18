@@ -472,8 +472,11 @@ async function main(): Promise<void> {
         // answer on top of it.
         aiProfile: setup.aiProfile,
         // A bad preset must not turn the fallback RTS route into an unwinnable
-        // no-build state; mirror the standard core-match stockpile.
-        startingResources: preset?.startingResources ?? { food: 500, wood: 500 },
+        // no-build state; mirror the standard core-match stockpile — which is
+        // `gameplay_proof`, stone and gold included. Those two are not optional
+        // once Kasaba construction is bought with stone: a fallback opening at
+        // zero stone cannot raise its first Town building at all.
+        startingResources: preset?.startingResources ?? { food: 400, wood: 400, stone: 200, gold: 200 },
         startingUnits: preset?.startingUnits ?? {},
         // Enemy handicaps are opt-in: without them the AI mirrors the player.
         ...(preset?.enemyStartingResources

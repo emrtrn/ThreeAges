@@ -20,6 +20,7 @@
  * own panel can do.
  */
 import type { BuildingBalance, StartingResources } from "../../data/gameDataTypes";
+import { buildingCostForAge } from "../economy/buildingCost";
 import { buildingUnlocked, type ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { RoadPlacementState } from "../roads/roadPlacementSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
@@ -131,7 +132,10 @@ export class RtsBuildPalette {
     {
       readonly button: HTMLButtonElement;
       readonly cost: HTMLSpanElement;
-      readonly price: StartingResources;
+      /** The data row, held so the age can re-price the card without a rebuild. */
+      readonly stats: BuildingBalance[string];
+      /** The live price for the centre's current age; see {@link setTierState}. */
+      price: StartingResources;
       readonly requiredAge: BuildingBalance[string]["requiredAge"];
       readonly requiredSettlementLevel: BuildingBalance[string]["requiredSettlementLevel"];
       /** Tier-gated shut. Held so the tooltip can outrank the price. */
@@ -287,6 +291,7 @@ export class RtsBuildPalette {
     this.buildButtons.set(id, {
       button,
       cost,
+      stats,
       price: stats.cost,
       requiredAge: stats.requiredAge,
       requiredSettlementLevel: stats.requiredSettlementLevel,
@@ -379,8 +384,18 @@ export class RtsBuildPalette {
       entry.locked = !buildingUnlocked(entry, { age: snapshot.age, level: snapshot.level });
       entry.lockedReason = entry.locked ? buildingUnlockRequirement(entry) : "";
       entry.button.disabled = entry.locked;
+      // The age can change what a building is bought with, so the card is
+      // re-priced here rather than at creation. Both the label and the
+      // affordability pass read `price`, which is what stops the palette from
+      // quoting timber for a wall the builder will charge stone for.
+      entry.price = buildingCostForAge(entry.stats, snapshot.age);
+      entry.cost.textContent = formatResourceCost(entry.price);
       this.syncTitle(entry);
     }
+    // §51's affordability pass short-circuits on an unchanged signature, and the
+    // stock does not move just because the age did — without this the freshly
+    // re-priced cards would keep the previous age's greyed-out state.
+    this.affordabilitySignature = "";
   }
 
   /** Road mode is owned by the road system; the palette only narrates it. */

@@ -13,6 +13,7 @@
  * açılışını tamamlıyor" is testable without running a renderer.
  */
 import type { AiBalance, BuildingBalance } from "../../data/gameDataTypes";
+import { buildingCostForAge } from "../economy/buildingCost";
 import { buildingUnlocked } from "../progression/kingdomProgressionSystem";
 import { AI_RESOURCE_IDS, type AiBlackboard } from "./aiBlackboard";
 import type { AiBuildManager } from "./aiBuildManager";
@@ -31,7 +32,7 @@ export type AiBottleneck =
   | "no-gold-production"
   | "disconnected-production"
   | "no-available-worker"
-  | "wood-shortage"
+  | "build-material-shortage"
   | null;
 
 /**
@@ -39,7 +40,29 @@ export type AiBottleneck =
  * after any other purchase, or the AI can trade itself into a population lock
  * it cannot buy its way out of.
  */
-export const AI_WOOD_SAFETY_STOCK = 80;
+export const AI_BUILD_MATERIAL_SAFETY_STOCK = 80;
+
+/**
+ * *Which* resource the reserve above is held in.
+ *
+ * The stock exists for exactly one purpose — keeping the next house affordable —
+ * so the resource to protect is whatever a house is bought with right now, and
+ * under this project's age rule that stops being timber at Kasaba. Hard-coding
+ * "wood" here made the AI hoard a material it no longer spends while running dry
+ * of the one it does, which is a population lock reached by a different road.
+ *
+ * Falls back to wood when no building table is supplied: the pure-blackboard
+ * tests have no data to read, and they were written against the timber opening.
+ */
+export function buildMaterialFor(
+  bb: Pick<AiBlackboard, "age">,
+  buildings: BuildingBalance | null,
+): string {
+  const house = buildings?.["house"];
+  if (!house) return "wood";
+  const [resourceId] = Object.keys(buildingCostForAge(house, bb.age));
+  return resourceId ?? "wood";
+}
 
 /**
  * §24: hold the pending centre-level cost back from the building budget.
@@ -75,7 +98,11 @@ export function centerLevelReserveFor(bb: AiBlackboard, resourceId: string): num
 }
 
 /** §37: report the one bottleneck worth acting on, most severe first. */
-export function detectBottleneck(bb: AiBlackboard, balance: AiBalance): AiBottleneck {
+export function detectBottleneck(
+  bb: AiBlackboard,
+  balance: AiBalance,
+  buildings: BuildingBalance | null = null,
+): AiBottleneck {
   // §27: no workers is worse than a full population — nothing rebuilds itself.
   if (bb.workerCount === 0) return "workers-lost";
   // V3 Faz 7. A camp whose crew was eaten is not evidence that the map needs
@@ -96,7 +123,9 @@ export function detectBottleneck(bb: AiBlackboard, balance: AiBalance): AiBottle
   if ((bb.resourceProducerCounts["stone"] ?? 0) === 0) return "no-stone-production";
   if ((bb.resourceProducerCounts["gold"] ?? 0) === 0) return "no-gold-production";
   if (bb.workerCount < workerTargetFor(bb, balance) && bb.idleWorkerCount === 0) return "no-available-worker";
-  if ((bb.resourceStocks["wood"] ?? 0) < AI_WOOD_SAFETY_STOCK) return "wood-shortage";
+  if ((bb.resourceStocks[buildMaterialFor(bb, buildings)] ?? 0) < AI_BUILD_MATERIAL_SAFETY_STOCK) {
+    return "build-material-shortage";
+  }
   return null;
 }
 
@@ -256,16 +285,17 @@ export class AiEconomyManager {
    * what keeps an exhausted priority from freezing the ones below it.
    */
   update(bb: AiBlackboard): void {
-    this.reportBottleneck(detectBottleneck(bb, this.balance), bb.now);
+    this.reportBottleneck(detectBottleneck(bb, this.balance, this.buildings), bb.now);
 
+    const material = buildMaterialFor(bb, this.buildings);
     for (const wanted of buildOrder(bb, this.balance, this.buildings)) {
       // §38: only Housing may dip into the safety stock, because housing is what
       // the stock exists to guarantee. §24's centre-level reserve is exempt for
       // Housing on the same grounds — see {@link centerLevelReserveFor}.
-      const reserve = wanted === "house" ? 0 : AI_WOOD_SAFETY_STOCK;
+      const reserve = wanted === "house" ? 0 : AI_BUILD_MATERIAL_SAFETY_STOCK;
       // Not affordable yet: this want still owns the slot, so wait for it rather
       // than skipping ahead and spending the stock a higher priority needs.
-      if ((bb.resourceStocks["wood"] ?? 0) < reserve) return;
+      if ((bb.resourceStocks[material] ?? 0) < reserve) return;
       if (this.heldByCenterLevelReserve(bb, wanted)) return;
 
       const outcome = this.builds.request(wanted, bb.now);
@@ -293,7 +323,7 @@ export class AiEconomyManager {
    * Two exemptions, and both are there to stop the reserve from trading one
    * deadlock for another:
    *
-   *  - **Housing**, as with {@link AI_WOOD_SAFETY_STOCK}: a population lock stops
+   *  - **Housing**, as with {@link AI_BUILD_MATERIAL_SAFETY_STOCK}: a population lock stops
    *    the workers who earn the level.
    *  - **A missing age requirement.** The Kasaba transition is gated on six named
    *    buildings, so an AI that saved through every one of them would buy centre

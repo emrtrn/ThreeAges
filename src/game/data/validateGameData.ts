@@ -699,6 +699,9 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     if (requiredAge !== undefined && !SETTLEMENT_AGES.includes(requiredAge)) {
       throw new GameDataError(`${statsWhere}.requiredAge: must be one of ${SETTLEMENT_AGES.join(", ")}`);
     }
+    const costByAge = stats["costByAge"] === undefined
+      ? undefined
+      : validateCostByAge(stats["costByAge"], `${statsWhere}.costByAge`, requiredAge);
     // The level half of the same gate. Refused outside 1..3 rather than clamped:
     // a "level 4" building would be one no tier ever opens, and a silent clamp
     // would ship it as unlocked from the start — the opposite of what was meant.
@@ -961,6 +964,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       ...(icon ? { icon } : {}),
       footprint: { width, depth },
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
+      ...(costByAge ? { costByAge } : {}),
       constructionSeconds,
       ...(requiredAge ? { requiredAge } : {}),
       ...(requiredSettlementLevel !== undefined ? { requiredSettlementLevel } : {}),
@@ -1255,6 +1259,47 @@ function validateBuildingProgression(
     throw new GameDataError(`${where}.town[0].tradeCommission: Town Lv1 must improve on Settlement Lv3`);
   }
   return byAge;
+}
+
+/**
+ * Validate the optional per-age price table (`costByAge`).
+ *
+ * Three things are refused here rather than left to a play-test, because all
+ * three are silent in the game and loud only in the balance:
+ *
+ *  - **An unknown age key.** A typo would simply never match, so the building
+ *    would quietly keep its base price in the age that was meant to change.
+ *  - **An empty override.** `{}` is a legal `cost` (the Merkez is free), but an
+ *    age block spelling out "free" is far more likely to be a half-finished
+ *    edit than an intended gift.
+ *  - **An age the building can never be built in.** A `requiredAge: "town"`
+ *    building carrying a `settlement` price is dead data that reads as if it
+ *    were live, which is worse than no data at all.
+ */
+function validateCostByAge(
+  value: unknown,
+  where: string,
+  requiredAge: SettlementAge | undefined,
+): Readonly<Partial<Record<SettlementAge, StartingResources>>> {
+  const data = asObject(value, where);
+  const out: Partial<Record<SettlementAge, StartingResources>> = {};
+  for (const [age, raw] of Object.entries(data)) {
+    if (!SETTLEMENT_AGES.includes(age as SettlementAge)) {
+      throw new GameDataError(`${where}."${age}": must be one of ${SETTLEMENT_AGES.join(", ")}`);
+    }
+    if (requiredAge !== undefined
+      && SETTLEMENT_AGES.indexOf(age as SettlementAge) < SETTLEMENT_AGES.indexOf(requiredAge)) {
+      throw new GameDataError(
+        `${where}."${age}": this building needs ${requiredAge}, so a ${age} price can never be paid`,
+      );
+    }
+    const cost = validateStartingResources(raw, `${where}."${age}"`);
+    if (Object.keys(cost).length === 0) {
+      throw new GameDataError(`${where}."${age}": must name at least one resource`);
+    }
+    out[age as SettlementAge] = cost;
+  }
+  return out;
 }
 
 function validateStorageCapacity(value: unknown, where: string): Readonly<Record<string, number>> {

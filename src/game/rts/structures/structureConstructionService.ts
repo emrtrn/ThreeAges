@@ -12,6 +12,7 @@
  */
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { BuildingBalance, BuildingBalanceStats } from "../../data/gameDataTypes";
+import { baseBuildingCost, type BuildingCostResolver } from "../economy/buildingCost";
 import type { ResourceReservation } from "../economy/resourceWallet";
 import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
@@ -88,6 +89,15 @@ export class StructureConstructionService {
     private readonly isUnlocked: (owner: UnitOwner, stats: BuildingBalanceStats) => boolean = () => true,
     /** Optional owner-aware rule for relationships between friendly structures. */
     private readonly ownerPlacementFailure: (owner: UnitOwner, stats: BuildingBalanceStats, x: number, z: number) => PlacementResult["reason"] = () => null,
+    /**
+     * What this owner pays for this building *now*. Injected rather than read
+     * off `stats.cost` because the price is a fact about the kingdom's age as
+     * well as about the building, and this service deliberately knows nothing
+     * about progression — the same reason {@link isUnlocked} arrives as a
+     * callback. Both kingdoms are quoted through it, so "the AI builds under the
+     * player's rules" stays a property of the code rather than a convention.
+     */
+    private readonly costFor: BuildingCostResolver = baseBuildingCost,
   ) {}
 
   /**
@@ -132,7 +142,7 @@ export class StructureConstructionService {
       // A failed proposal always names a reason; default keeps the type total.
       return { built: false, reason: result.reason ?? "blocked", result };
     }
-    const reservation = this.kingdoms.get(owner).wallet.reserve(stats.cost);
+    const reservation = this.kingdoms.get(owner).wallet.reserve(this.costFor(owner, stats));
     if (!reservation) {
       return {
         built: false,

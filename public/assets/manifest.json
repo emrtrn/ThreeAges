@@ -20499,7 +20499,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 333128
+        "bytes": 825928
       },
       "license": "Unknown"
     },
@@ -20522,7 +20522,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 367744
+        "bytes": 877076
       },
       "license": "Unknown"
     },
@@ -20545,7 +20545,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 370816
+        "bytes": 864560
       },
       "license": "Unknown"
     },
@@ -20591,7 +20591,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 421924
+        "bytes": 935568
       },
       "license": "Unknown"
     },
@@ -20614,7 +20614,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 540004
+        "bytes": 1073960
       },
       "license": "Unknown"
     },

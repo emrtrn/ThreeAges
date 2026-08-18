@@ -352,7 +352,7 @@ import { AiBuildManager, AI_ANCHOR_FAILURE_LIMIT } from "../src/game/rts/ai/aiBu
 import { SettlementAiSiteProvider } from "../src/game/rts/ai/aiSiteProvider";
 import { proceduralDepotRoadRank, proceduralRoadSiteFailure } from "../src/game/rts/ai/aiRoadSiteFilter";
 import { planSettlementLayout } from "../src/game/rts/ai/settlementLayoutPlanner";
-import { buildOrder, detectBottleneck, nextBuilding } from "../src/game/rts/ai/aiEconomyManager";
+import { buildMaterialFor, buildOrder, detectBottleneck, nextBuilding } from "../src/game/rts/ai/aiEconomyManager";
 import { scoreIntents } from "../src/game/rts/ai/intentScorer";
 import {
   bestTarget,
@@ -381,6 +381,7 @@ import { GpuFrameTimer, type GpuTimerContext } from "@engine/perf/gpuTimer";
 import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
 import { updateStructureDestruction } from "../src/game/rts/structures/structureDestruction";
 import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
+import { buildingCostForAge } from "../src/game/rts/economy/buildingCost";
 import { hasRequiredAdjacentCompletedBuilding, productionAdjacencyMultiplier } from "../src/game/rts/structures/productionAdjacency";
 import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
 import { centerAccessRoadPlan } from "../src/game/rts/roads/centerAccessRoad";
@@ -34090,6 +34091,141 @@ check("V2 Faz 3: a pasture is refused away from tameable animals, and deer are n
   territory.dispose();
 });
 
+check("a building's price follows the centre's age, and the shipped data says so for every age it can be raised in", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  // The allowlist gotcha this project keeps re-learning: a new data field that no
+  // validator names is silently dropped, and the game then runs on the fallback
+  // as if the authoring had never happened. So the first thing asserted is simply
+  // that `costByAge` survives validation at all.
+  const overridden = Object.values(buildings).filter((stats) => stats.costByAge !== undefined);
+  assert.ok(overridden.length > 0, "validateBuildingBalance must not drop costByAge");
+
+  for (const stats of Object.values(buildings)) {
+    // A free building (the Merkez) stays free in every age; everything else must
+    // resolve to a payable price in each age it can be raised in, or the age
+    // silently inherits a material the project may have moved off.
+    const ages = stats.requiredAge ? [stats.requiredAge] : (["settlement", "town"] as const);
+    for (const age of ages) {
+      const price = buildingCostForAge(stats, age);
+      assert.equal(
+        Object.keys(price).length === 0,
+        Object.keys(stats.cost).length === 0,
+        `${stats.id} @${age}: an age may not turn a priced building free, nor a free one priced`,
+      );
+      for (const [resourceId, amount] of Object.entries(price)) {
+        assert.ok(amount > 0, `${stats.id} @${age}.${resourceId}: a price line must be positive`);
+      }
+    }
+    // Derivation rather than tuning: an override is *an override*, so the age it
+    // names must actually resolve to it, and an age it does not name must fall
+    // back. Which resource and how much is a balance question this cannot pin.
+    for (const [age, override] of Object.entries(stats.costByAge ?? {})) {
+      assert.deepEqual(
+        buildingCostForAge(stats, age as "settlement" | "town"),
+        override,
+        `${stats.id}: the ${age} override must win over the base price`,
+      );
+    }
+    if (stats.costByAge?.town === undefined) {
+      assert.deepEqual(
+        buildingCostForAge(stats, "town"),
+        stats.cost,
+        `${stats.id}: an age with no override falls back to the base price`,
+      );
+    }
+  }
+});
+
+check("the builder charges, and the repair quotes, the price of the age the kingdom is standing in", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  // The House is the subject because it is the one building raised in both ages
+  // in every match. Its two prices are read from the data, so this stays a test
+  // of the wiring at any tuning — including a tuning that makes them identical,
+  // which the assertion below tolerates by comparing wallets rather than resources.
+  const houseStats = buildings.house ?? assert.fail("house balance missing");
+  const settlementPrice = buildingCostForAge(houseStats, "settlement");
+  const townPrice = buildingCostForAge(houseStats, "town");
+
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const navigation = new RtsNavigation();
+  // Funded from the prices themselves rather than a literal: a wallet spelled out
+  // here becomes "insufficient-resources" the first time a house gets dearer.
+  const purse: Record<string, number> = {};
+  for (const price of [settlementPrice, townPrice]) {
+    for (const [resourceId, amount] of Object.entries(price)) {
+      purse[resourceId] = (purse[resourceId] ?? 0) + amount * 4;
+    }
+  }
+  const kingdoms = new KingdomRegistry(["player"], units, structures, purse, 20);
+  const territory = new TerritoryControlSystem(() => [{ owner: "player", x: 0, z: 0, radius: 1000 }]);
+  territory.refresh();
+  let age: "settlement" | "town" = "settlement";
+  const costFor = (_owner: UnitOwner, stats: BuildingBalanceStats) => buildingCostForAge(stats, age);
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => structures.navigationBlockers(),
+    territory,
+    () => {},
+    () => {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    costFor,
+  );
+
+  const spendOn = (x: number, z: number): Record<string, number> => {
+    const before = kingdoms.get("player").wallet.snapshot();
+    const built = construction.build("player", "house", x, z);
+    assert.equal(built.built, true, `the house must be affordable at ${age}`);
+    const after = kingdoms.get("player").wallet.snapshot();
+    const spent: Record<string, number> = {};
+    for (const resourceId of Object.keys(before)) {
+      const delta = (before[resourceId] ?? 0) - (after[resourceId] ?? 0);
+      if (delta > 0) spent[resourceId] = delta;
+    }
+    return spent;
+  };
+
+  assert.deepEqual(spendOn(0, 0), { ...settlementPrice }, "a Yerleşim house is bought at the Yerleşim price");
+  age = "town";
+  assert.deepEqual(spendOn(20, 0), { ...townPrice }, "the same house is bought at the Kasaba price once the age moves");
+
+  // The repair follows the same clock. Quoted off the *current* age rather than
+  // the age the walls went up in: the second house below was raised in Kasaba,
+  // and patching it must not reach back to a settlement price list.
+  const raised = structures.ownedBy("player")[0] ?? assert.fail("the house must have been placed");
+  structures.advanceConstruction(raised, houseStats.constructionSeconds);
+  raised.health.damage(Math.floor(raised.health.max / 2));
+  const repair = new StructureRepairSystem(kingdoms, costFor);
+  const quote = repair.quote(raised) ?? assert.fail("a damaged house must quote a repair");
+  assert.deepEqual(
+    Object.keys(quote.cost).sort(),
+    Object.keys(townPrice).sort(),
+    "a repair in Kasaba is billed in what Kasaba builds with",
+  );
+  // Derived from the same table the quote reads, so the arithmetic holds at any
+  // tuning of either the price or the repair fraction.
+  for (const [resourceId, amount] of Object.entries(townPrice)) {
+    assert.equal(
+      quote.cost[resourceId],
+      Math.ceil(amount * REPAIR_FRACTION_OF_BUILD * (raised.health.max - raised.health.current) / raised.health.max),
+      `the ${resourceId} half of the repair is derived from the age's price`,
+    );
+  }
+  territory.dispose();
+});
+
 check("V2 Faz 3: a completed pasture stands with an empty pen, hires no one, and is not counted as a food supply", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -51934,7 +52070,9 @@ function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
     // A settled four-resource economy at its income targets: every AI-2 term is
     // satisfied by default, so a test perturbs exactly the one it is about.
     resourceStocks: { food: 200, wood: 200, stone: 100, gold: 100 },
-    resourceIncomePerMinute: { food: 20, wood: 18, stone: 10, gold: 6 },
+    // Derived for the same reason `workerCount` below is: "settled" means *at the
+    // targets*, so a literal here silently becomes "in deficit" the day one moves.
+    resourceIncomePerMinute: { ...AI_TEST_BALANCE.economy.incomeTargetsPerMinute },
     // Read off the balance rather than pinned: "settled" means *at the target*,
     // and a literal here silently becomes "understaffed" the day the target moves.
     workerCount: AI_TEST_BALANCE.economy.workerTarget.settlement,
@@ -53127,7 +53265,7 @@ check("Faz 8 §48: intent scoring is data-driven and reads all four resources", 
   const builtCity = { ...AI_TEST_BALANCE.economy.buildingTargets.settlement };
   const noStone = aiTestBlackboard({
     buildingCounts: builtCity,
-    resourceIncomePerMinute: { food: 20, wood: 18, stone: 0, gold: 6 },
+    resourceIncomePerMinute: { ...AI_TEST_BALANCE.economy.incomeTargetsPerMinute, stone: 0 },
   });
   assert.equal(scoreFor(noStone, "economy").reason, "stone geliri yetersiz");
   const settled = aiTestBlackboard({ buildingCounts: builtCity });
@@ -55009,7 +55147,40 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
       buildingCounts: fourResources,
       resourceStocks: { food: 200, wood: 10 },
     }), AI_TEST_BALANCE),
-    "wood-shortage",
+    "build-material-shortage",
+  );
+  // ...and the same shortage measured in whatever the *age* builds with. Handed
+  // the shipped table, a Kasaba kingdom sitting on timber it no longer spends is
+  // not stocked, and one holding only stone is — which is the whole point of the
+  // reserve: it exists to keep the next house affordable, not to hoard a
+  // particular resource. Read off the data, so a fork whose second age still
+  // builds in timber stays green here.
+  const shippedBuildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const townCrew = {
+    age: "town" as const,
+    workerCount: AI_TEST_BALANCE.economy.workerTarget.town,
+    buildingCounts: fourResources,
+  };
+  const townMaterial = buildMaterialFor({ age: "town" }, shippedBuildings);
+  assert.equal(
+    detectBottleneck(
+      bb({ ...townCrew, resourceStocks: { food: 200, wood: 10_000, [townMaterial]: 10 } }),
+      AI_TEST_BALANCE,
+      shippedBuildings,
+    ),
+    "build-material-shortage",
+    "a Kasaba kingdom short of its build material is short, whatever its timber says",
+  );
+  assert.equal(
+    detectBottleneck(
+      bb({ ...townCrew, resourceStocks: { food: 200, wood: 0, [townMaterial]: 10_000 } }),
+      AI_TEST_BALANCE,
+      shippedBuildings,
+    ),
+    null,
+    "and stocked once it holds that material, with no timber at all",
   );
   // §27: losing every worker outranks even a full population — nothing rebuilds
   // itself, so this is the one bottleneck that must win.

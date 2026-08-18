@@ -18,6 +18,7 @@
  */
 import type { StartingResources } from "../../data/gameDataTypes";
 import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
+import { baseBuildingCost, type BuildingCostResolver } from "../economy/buildingCost";
 import type { ResourceReservation } from "../economy/resourceWallet";
 import type { PlacedStructure } from "./placedStructureSystem";
 
@@ -110,13 +111,25 @@ export function isRepairable(structure: PlacedStructure): boolean {
  * Price and duration of putting this building back to full, right now. Null when
  * there is nothing to repair, so a caller cannot quote a free, instant job.
  */
-export function quoteStructureRepair(structure: PlacedStructure): StructureRepairQuote | null {
+export function quoteStructureRepair(
+  structure: PlacedStructure,
+  /**
+   * What raising this building costs *today*, which is what fixing it is priced
+   * against. Under this project's age rule a Yerleşim house was raised in timber
+   * and is patched in stone once the kingdom reaches Kasaba — the repair follows
+   * the kingdom's current material, not the one the walls went up in.
+   *
+   * Defaulted to the base price so the headless tests, which have no tier, keep
+   * quoting the row they authored.
+   */
+  buildCost: StartingResources = structure.stats.cost,
+): StructureRepairQuote | null {
   if (!isRepairable(structure)) return null;
   const missingHealth = structure.health.max - structure.health.current;
   if (missingHealth <= 0) return null;
   const missingRatio = missingHealth / structure.health.max;
   const cost: Record<string, number> = {};
-  for (const [resourceId, amount] of Object.entries(structure.stats.cost)) {
+  for (const [resourceId, amount] of Object.entries(buildCost)) {
     // Rounded up, and only when it rounds to something: a 1-wood scratch on a
     // 40-wood house should still cost the wood, but a building that was free to
     // raise stays free to fix.
@@ -133,11 +146,15 @@ export function quoteStructureRepair(structure: PlacedStructure): StructureRepai
 export class StructureRepairSystem {
   private readonly jobs = new Map<number, RepairJob>();
 
-  constructor(private readonly kingdoms: KingdomRegistry) {}
+  constructor(
+    private readonly kingdoms: KingdomRegistry,
+    /** The owner's live building price; see {@link BuildingCostResolver}. */
+    private readonly costFor: BuildingCostResolver = baseBuildingCost,
+  ) {}
 
   /** See {@link quoteStructureRepair}; exposed here so the UI has one entry point. */
   quote(structure: PlacedStructure): StructureRepairQuote | null {
-    return quoteStructureRepair(structure);
+    return quoteStructureRepair(structure, this.costFor(structure.owner, structure.stats));
   }
 
   /**
@@ -149,7 +166,7 @@ export class StructureRepairSystem {
   begin(structure: PlacedStructure): RepairOrderResult {
     if (!isRepairable(structure)) return "not-repairable";
     if (this.jobs.has(structure.id)) return "already-repairing";
-    const quote = quoteStructureRepair(structure);
+    const quote = this.quote(structure);
     if (!quote) return "undamaged";
     const reservation = this.kingdoms.get(structure.owner).wallet.reserve(quote.cost);
     if (!reservation) return "insufficient-resources";

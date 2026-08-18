@@ -267,6 +267,7 @@ import { ResourceCapacitySystem } from "./economy/resourceCapacitySystem";
 import { roadLinkCellFor } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { StructureRepairSystem } from "./structures/structureRepairSystem";
+import { buildingCostForAge, type BuildingCostResolver } from "./economy/buildingCost";
 import type { HealthComponent } from "./units/health";
 import type { UnitOwner } from "./units/unit";
 import { BarracksProductionSystem, unitQueueCapacityForBuildingLevel } from "./structures/barracksProductionSystem";
@@ -891,6 +892,17 @@ export class RtsApp {
     }))));
   private readonly kingdoms: KingdomRegistry;
   private readonly progression: KingdomProgressionSystem;
+  /**
+   * The one place a building's live price is answered, for both kingdoms.
+   *
+   * An arrow property rather than a method so it can be handed to the builder
+   * and the repair system as a plain callback: neither of them takes a
+   * progression system, and neither should — what they need is a price, and the
+   * age is this class's business. It reads `this.progression` lazily, so the
+   * declaration order of the systems below does not matter.
+   */
+  private readonly buildingCostFor: BuildingCostResolver = (owner, stats) =>
+    buildingCostForAge(stats, this.progression.tierFor(owner).age);
   private readonly ai: AiController;
   private readonly structureConstruction: StructureConstructionService;
   private readonly roadConstruction: RoadConstructionService;
@@ -1540,7 +1552,7 @@ export class RtsApp {
       (workers) => this.releaseWorkerTasks(workers),
       (structure, target) => this.orderStructureAttack(structure, target),
     );
-    this.structureRepair = new StructureRepairSystem(this.kingdoms);
+    this.structureRepair = new StructureRepairSystem(this.kingdoms, this.buildingCostFor);
     // Built before the two systems it cross-checks, and reads them through
     // closures rather than references: all three answer the same question about a
     // worker ("is somebody else already using him") and none of them may be the
@@ -1759,6 +1771,7 @@ export class RtsApp {
       (owner, stats, x, z) => hasRequiredAdjacentCompletedBuilding(stats, owner, x, z, this.structures.all())
         ? null
         : "missing-adjacent-building",
+      this.buildingCostFor,
     );
     this.roadConstruction = new RoadConstructionService(
       this.roads,

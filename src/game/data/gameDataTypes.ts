@@ -337,6 +337,17 @@ export interface BuildingBalanceStats {
   readonly footprint: { readonly width: number; readonly depth: number };
   /** Resource reservation is implemented in the following Phase 2 slice. */
   readonly cost: StartingResources;
+  /**
+   * Per-age override of {@link cost}, for buildings whose price is paid in a
+   * different material once the kingdom builds in a different material.
+   *
+   * Data rather than a code rule on purpose: "Kasaba builds in stone" is a
+   * statement about this project, not about the platform, and a fork whose
+   * second age still builds in timber must be able to say so by deleting a
+   * block rather than by editing the engine. An age with no entry falls back to
+   * {@link cost}, so a building priced the same in every age says nothing.
+   */
+  readonly costByAge?: Readonly<Partial<Record<SettlementAge, StartingResources>>>;
   readonly constructionSeconds: number;
   /** The earliest settlement age in which this building may be placed. */
   readonly requiredAge?: SettlementAge;
