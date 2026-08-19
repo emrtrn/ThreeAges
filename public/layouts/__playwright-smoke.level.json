@@ -155,19 +155,19 @@
             -4
           ],
           "name": "Smoke Checkpoint",
-          "scale": [
-            12,
-            4,
-            3
-          ],
-          "sensor": true,
           "collisionPreset": "trigger",
+          "sensor": true,
           "behavior": {
             "script": "checkpoint",
             "params": {
               "slot": "quick"
             }
-          }
+          },
+          "scale": [
+            12,
+            4,
+            3
+          ]
         },
         {
           "position": [
@@ -176,20 +176,20 @@
             -6
           ],
           "name": "Smoke Interact",
-          "scale": [
-            12,
-            4,
-            2
-          ],
-          "sensor": true,
           "collisionPreset": "trigger",
+          "sensor": true,
           "behavior": {
             "script": "interact"
           },
           "interaction": {
             "action": "activate",
             "prompt": "Activate"
-          }
+          },
+          "scale": [
+            12,
+            4,
+            2
+          ]
         },
         {
           "position": [
@@ -198,20 +198,20 @@
             -10
           ],
           "name": "Smoke Portal",
-          "scale": [
-            12,
-            4,
-            3
-          ],
-          "sensor": true,
           "collisionPreset": "trigger",
+          "sensor": true,
           "behavior": {
             "script": "level-travel",
             "params": {
               "targetLevel": "layouts/__playwright-smoke-target.level.json",
               "targetSpawn": "arrival"
             }
-          }
+          },
+          "scale": [
+            12,
+            4,
+            3
+          ]
         }
       ]
     },
@@ -1594,9 +1594,9 @@
             0,
             -1.5
           ],
+          "scaleLocked": true,
           "rotationYDeg": 0,
-          "scale": 3,
-          "scaleLocked": true
+          "scale": 3
         }
       ]
     }
@@ -1674,9 +1674,12 @@
       "castShadow": true
     }
   ],
+  "reflectionPlanes": [],
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
   "blockingVolumes": [],
+  "aiNavigationVolumes": [],
+  "targetPoints": [],
   "splines": [
     {
       "id": "enemy-base-route",
@@ -2947,8 +2950,5 @@
       "reflectionStrength": 0.6
     }
   ],
-  "actors": [],
-  "targetPoints": [],
-  "aiNavigationVolumes": [],
-  "reflectionPlanes": []
+  "actors": []
 }

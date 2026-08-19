@@ -32,6 +32,7 @@
   "hud.speed.aria.debug": "Geliştirici oyun hızı",
   "hud.speed.label": "Hız",
   "hud.speed.label.debug": "Hız (Geliştirici)",
+  "hud.roster.aria": "Ordu",
   "hud.roster.chip.aria": "{count} {unit} — hepsini seç",
   "hud.roster.chip.aria_idle": "{count} {unit}, {idle} boşta — hepsini seç",
   "hud.roster.chip.tooltip": "{label} (Shift: seçime ekle)"

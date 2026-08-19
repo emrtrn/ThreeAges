@@ -206,6 +206,7 @@
   "selection.train.queue_full": "Kuyruk dolu ({queued}/{capacity}).",
   "selection.train.action": "{unit} Üret",
   "selection.train.cost": "{cost} · {population} Nüfus",
+  "selection.health.aria": "Can",
   "selection.panel.aria": "Seçim",
   "selection.panel.health_tooltip": "Can: {current}/{max}",
   "selection.panel.slot_tooltip": "{count} {unit}",

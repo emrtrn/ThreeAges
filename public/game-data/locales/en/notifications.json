@@ -102,6 +102,7 @@
   "command.progression.level.shortfall": "{tier} needs {shortfall} more (total {cost}).",
   "command.progression.level.insufficient": "Not enough resources for {tier}.",
   "notification.supply.captured": "{site} captured: the {resource} supply is yours now.",
+  "notification.feed.aria": "Notifications",
   "notification.supply.reconnected": "{site} reconnected: the {resource} supply continues.",
   "notification.supply.linked": "{site} linked: {resource} has started flowing to the Market.",
   "notification.supply.lost": "{site} has fallen to your rival: your {resource} supply is cut.",

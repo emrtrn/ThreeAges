@@ -32,6 +32,7 @@
   "hud.speed.aria.debug": "Developer game speed",
   "hud.speed.label": "Speed",
   "hud.speed.label.debug": "Speed (Dev)",
+  "hud.roster.aria": "Army",
   "hud.roster.chip.aria": "{count} {unit} — select all",
   "hud.roster.chip.aria_idle": "{count} {unit}, {idle} idle — select all",
   "hud.roster.chip.tooltip": "{label} (Shift: add to selection)"

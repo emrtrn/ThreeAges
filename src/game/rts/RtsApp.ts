@@ -1103,6 +1103,8 @@ export class RtsApp {
     this.missionPanel?.retranslate();
     this.gameSpeedControls.retranslate();
     this.debugSpeedControls?.retranslate();
+    this.armyRoster.retranslate();
+    this.notificationFeed.retranslate();
   });
   private readonly projectiles = new ProjectileSystem();
   private readonly thrownRocks = new ThrownRockSystem();

@@ -1475,7 +1475,11 @@ bir satır için değil, yer değiştiren bir satır için kırmızıya dönerdi
 
 # Faz 3 — Pseudo-localization ve UI dayanıklılığı
 
-**Durum:** açık. Yeni bir oturumda yapılacak (19 Ağustos 2026 kararı).
+**Durum:** kod tarafı tamamlandı (19 Ağustos 2026); **görsel tur kullanıcıda**.
+
+Doğrulama: `npx tsc --noEmit` temiz, `npm run test:engine` yeşil (1507/1507,
+9 slow atlandı). Kabul kriterinin kalan yarısı bir test değil, bir bakış —
+aşağıdaki "Kullanıcının yürüyeceği tur"a bakın.
 
 ## Amaç
 
@@ -1484,7 +1488,7 @@ Yeni gerçek diller eklenmeden önce layout problemlerini ortaya çıkarmak.
 ## Başlarken: hazır olan ne, iş nerede başlıyor
 
 Bu fazın ilk iki kalemi **altyapı olarak zaten duruyor** — Faz 1 yazdı, Faz 3
-onları kullanacak, yeniden yazmayacak:
+onları kullandı, yeniden yazmadı:
 
 - `qps-ploc`, `LocalizationDebug.ts` içinde tanımlı ve registry'de `enabled:
   false` (§20: dil seçicide asla görünmez).
@@ -1499,30 +1503,176 @@ taşanları düzeltmek**. Dil seçici (§27) bu turu ucuzlattı: pseudo'ya URL'd
 girip, bir taşmayı gördükten sonra reload'suz Türkçe/İngilizce'ye dönüp
 karşılaştırabilirsiniz.
 
-İki nokta baştan biliniyor:
+İki nokta baştan biliniyordu:
 
-- **Ölçüsü olan tek yüzey görev kartı.** Faz 2 `title ≤ 40` / `why ≤ 110`
+- **Ölçüsü olan tek yüzey görev kartıydı.** Faz 2 `title ≤ 40` / `why ≤ 110`
   sınırlarını yayınlanan her dilden okuyan bir engine-test'e bağladı. Geri kalan
-  panellerin böyle bir bütçesi yok; §15.1 istiyor, kimse ölçmüyor.
+  panellerin böyle bir bütçesi yoktu; §15.1 istiyor, kimse ölçmüyordu. Bu faz
+  dört yuvaya bütçe koydu (aşağıda).
 - **Görsel kabul kullanıcının.** Taşma "kod doğru mu" sorusu değil; CLAUDE.md'nin
-  kuralı gereği bu tur için Playwright screenshot-diff süiti kurulmayacak,
+  kuralı gereği bu tur için Playwright screenshot-diff süiti kurulmadı,
   ekrana bakılacak.
+
+## Yedi taşma, ve neden ekrana bakmadan bulunabildiler
+
+Faz 3'ün taraması CSS okunarak yapıldı, çünkü aranan şey bir *görüntü* değil bir
+*yapı*: metin taşıyan bir kutunun sabit bir genişliği/yüksekliği var mı, ve
+taştığında ne oluyor. Bu soruyu kaynak cevaplıyor. Bulunan yedi yerin ortak
+özelliği, taşmanın **sessiz** olması — hiçbiri bozuk görünmüyor, hepsi eksik
+görünüyor.
+
+RTS UI'sinin çoğu zaten dayanıklıydı (`text-overflow: ellipsis`,
+`-webkit-line-clamp`, `minmax(0, 1fr)`, kaydırılan konteynerler). Düzeltilenler:
+
+1. **`.rts-hud-resource-label`** — kaynak adı 136px'lik sabit bir sütunda, ve HUD
+   şeridi sabit yükseklikte. Uzun bir ad satır kırıyor, `.rts-hud-resource`'un
+   `overflow: hidden`'ı ikinci satırı **harfin ortasından kesiyordu**. Artık tek
+   satır + ellipsis.
+2. **`.rts-hud-status`** — `flex-shrink: 0` idi. Şerit `nowrap` olduğu için bu
+   blok kısalmayı reddettiğinde kendisi taşmıyor, **arkasındaki
+   `.rts-hud-utility-controls`'u ekranın dışına itiyordu** — yani duraklat
+   düğmesini. 1366px'te "Population: 12/20" şeridin en geniş düzyazısı,
+   dolayısıyla uzun bir dilin emileceği yer burası. Artık `flex: 0 1 auto` +
+   `min-width: 0` + `overflow: hidden`.
+3. **`.rts-objective-bar`** — sütunlar `58px 1fr 34px` idi. Grid öğeleri
+   varsayılan `min-width: auto` taşır, yani "Sen 2/3"ten uzun bir etiket
+   kırpılmıyor, **çubuğun üstüne çiziliyordu**. Artık
+   `minmax(0, max-content) minmax(36px, 1fr) 34px` + etikette ellipsis.
+4. **`.rts-build-status`** — `max-height: 1.35em`, yani tam olarak bir satır. Bu
+   satırın taşıdığı en uzun dizeler tam cümle ("Geçersiz konum: Taş Ocağı veya
+   Altın Madeni uygun kaynak düğümünü örtmeli."); satır kıran bir dil ikinci
+   satırı **tamamen kaybediyordu** — ret gösteriliyor, ama çaresini söyleyen
+   yarısı yok. Artık iki satır; `min-height` durağan düzeni koruyor.
+5. **`.rts-build-choice-label`** — kart `aspect-ratio: 1` + `overflow: hidden`,
+   etiket alta hizalı. Dördüncü satıra taşan bir ad kartı büyütmüyor, **kartın
+   üstünden çıkıp scrim'in bittiği yerde çıplak illüstrasyonun üzerine
+   yazıyordu**. Üç satırda kapatıldı; hizalama `align-content: safe end` ile
+   korundu, böylece kırpma ilk satırı değil sonuncuyu alıyor.
+6. **`.rts-selection-action-tray .rts-selection-action`** — sabit 156×50px
+   kartlar (pazar grid'i bu ölçüye bağlı), `overflow` yoktu: uzun bir fiil
+   düğmenin kendi kenarlığını aşıp **altındaki kartın üzerine** basıyordu. Artık
+   kırpılıyor, etiket iki satırda kelepçeleniyor, tam metin `title`'da duruyor.
+7. **`.rts-match-toggle-state`** — `nowrap`, ama kırpma yok: kartın üçte birlik
+   sütununda uzun bir durum kelimesi kendini kısaltmak yerine **anahtarı kendi
+   sütunundan itiyordu**.
+
+## Faz 2'den kaçan dört dize daha
+
+§27'nin bulduğu `"Formasyon"` yalnız değilmiş. Faz 2'nin tarayıcısı **anahtar
+biçimli literal** arıyor, dolayısıyla `t(...)` içermeyen çıplak bir Türkçe kelime
+onun için görünmez:
+
+- `rtsArmyRosterStrip.ts` — şeridin `aria-label`'ı `"Ordu"` → `hud.roster.aria`.
+- `rtsNotificationFeed.ts` — canlı bölgenin `aria-label`'ı `"Bildirimler"` →
+  `notification.feed.aria`.
+- `rtsSelectionPanel.ts` — can çubuğunun `aria-label`'ı `"Can"` →
+  `selection.health.aria`.
+- `rtsHudBar.ts` — gelir hücresinin tohum değeri `"+0.0/dk"`, yani ilk itmeye
+  kadar İngilizce HUD'da duran Türkçe bir oran. Artık aynı desenden
+  (`hud.resource.income`) üretiliyor.
+
+İlk üçü `markStaticAria` ile işaretlendi (bir kez yazılan metin), ve şerit ile
+bildirim akışı `retranslate()` kazandı — `RtsApp`'in `onLocaleChanged`
+aboneliğinden sürülüyorlar.
+
+## §13'ün üçüncü kaçağı: HUD kaynak adları
+
+Daha büyüğü: `.rts-hud-resource-label`'ın metni constructor'da bir kez yazılıyor
+ve `resourceCells` yalnız `{amount, income}` tutuyordu — yani **dil
+değiştikten sonra "Yiyecek / Odun / Taş / Altın" eski dilde kalıyordu**, HUD'un
+geri kalanı çevrilmiş haldeyken. Etiket artık hücreyle birlikte saklanıyor ve
+`RtsHudBar.applyStaticText()` içinde yeniden çözülüyor; şeridin kendi
+`onLocaleChanged` aboneliği zaten vardı, eksik olan tek şey bu döngüydü.
+
+## Ölçü: `Lokalizasyon Faz 3` engine-test'i
+
+"§15.1 istiyor, kimse ölçmüyor" kalemi kapandı. `tools/engine-tests.ts` içindeki
+`UI_TEXT_SLOTS` tablosu, **genişliği CSS'te sabit** dört yuvayı ve her birinin
+tuttuğu metni tarif ediyor:
+
+| yuva | genişlik | bütçe |
+| --- | --- | --- |
+| `.rts-hud-resource-label` | `136 − 26 − 8` px, tek satır, uppercase | ~14 karakter |
+| `.rts-build-tab` | `(544 − 48 − 12) / 4 − 10` px, tek satır | ~18 karakter |
+| `.rts-selection-formation-label` | `(372 − 30) / 6 − 2` px, tek satır | ~10 karakter |
+| `.rts-build-status` | `544 − 48` px, iki satır | ~150 karakter |
+
+Bütçe **yazılmıyor, türetiliyor**: aritmetik CSS'in kendisi, karakter sayısı
+`widthPx × lines / (fontPx × AVG_GLYPH_EM)`'den çıkıyor. Bir sütun genişliği
+değişirse düzenlenecek şey gerçekten değişen piksel sayısı; bütçe onu takip
+ediyor. Hiçbir ifade sabitlenmiyor — yalnız ifadenin ne kadar yeri olduğu.
+`AVG_GLYPH_EM` bilerek geniş tarafta (`0.55`): sığan bir etiket için kırmızıya
+dönen bir kapı okunmaz, düzenlenip atılır.
+
+Kapının çalıştığı denendi: `"Crescent"` → `"Halbmondformation"` yapıldığında test
+dosyayı, anahtarı, karakter sayısını ve yuvanın aritmetiğini adıyla söyleyerek
+düştü.
+
+Aynı check pseudo-locale'in **sınırlı** kaldığını da tutuyor: `qps-ploc`'un
+yukarıdaki bütçeleri aşması normal (`%35` + `[!! … !!]` çerçevesi zaten amaç),
+ama sınırsız büyüseydi bulduğu taşma hiçbir gerçek dilin yaşamayacağı bir taşma
+olurdu — yani hiçbir şey kanıtlamazdı.
+
+## Kullanıcının yürüyeceği tur
+
+Kabul kriterinin kalan yarısı. Tarayıcıyı **1366×768**'e getirin ve
+`http://127.0.0.1:5173/?locale=qps-ploc` ile açın. Her metin
+`[!! Àççèñţèð ẍẍẍ !!]` biçiminde, yani hepsi ~%35 uzun.
+
+1. **Ana menü** — başlık, mod kartları, üç ayar sütunu, alttaki dil seçici. Savaş
+   sisi anahtarının durum kelimesi kendi sütununda kalıyor mu.
+2. **Maça girin, HUD şeridi** — dört kaynak adı tek satırda ellipsis'le bitiyor
+   mu, sağ uçtaki duraklat düğmesi ekranda mı.
+3. **Yapı paleti** — dört sekme, kart adları (üç satırda kapanmalı,
+   illüstrasyonun üstüne taşmamalı), bir yapı kuşanın: durum satırı iki satıra
+   çıkabiliyor mu, bir ret mesajı (kaynak yetersizken) tam okunuyor mu.
+4. **Yol modu** — yol ipucu satırı (üç satır bütçesi var).
+5. **Seçim paneli** — bir birim, bir grup (formasyon kartları), bir üretim yapısı
+   (chip'ler + ilerleme çubuğu), Merkez (ayrık komut tepsisi: 156×50px kartlar),
+   Pazar (2×3 komut grid'i).
+6. **Bildirim kartları** — bir yapı bitirin ya da bir yolu kesin.
+7. **Görev takipçisi / misyon kartı** — sağ üst; ilerleme çubuğunun etiketi
+   çubuğun üstüne binmiyor mu.
+8. **Duraklat kartı** — ayarlar satırları ve dil seçici. Buradan reload'suz
+   `Türkçe`'ye dönün: HUD kaynak adları, palet sekmeleri, seçim paneli ve açık
+   olan kategori aynı anda dönmeli.
+9. Sonra tarayıcıyı daraltıp `1180px` ve `840px` breakpoint'lerini geçin — şerit
+   sırasıyla kaynak etiketlerini gizliyor, sonra iki satıra geçiyor.
 
 ## Görevler
 
 - [x] pseudo-locale oluştur — Faz 1 (`PSEUDO_LOCALE`, `qps-ploc`)
 - [x] metinleri yaklaşık `%30–40` uzat — Faz 1 (`pseudoLocalize`, `%35`)
-- [ ] bütün ana UI ekranlarını test et
-- [ ] buton overflow'larını düzelt
-- [ ] tooltip wrapping'i doğrula
-- [ ] bildirim kartlarını doğrula
-- [ ] seçim paneli taşmalarını doğrula
-- [ ] 1366×768 minimum çalışma çözünürlüğünü test et
-- [ ] responsive breakpoint'leri test et
+- [x] buton overflow'larını düzelt — komut tepsisi, yapı kartı, palet sekmesi
+- [x] bildirim kartlarını doğrula — grid'i zaten `minmax(0, 1fr)`, kart dikey
+      büyüyor; düzeltilen tek şey `aria-label`'ı oldu
+- [x] seçim paneli taşmalarını doğrula — başlık/chip/formasyon/kart etiketleri
+      zaten kelepçeliydi; açık olan tek yer ayrık komut tepsisiydi
+- [x] 1366×768 minimum çalışma çözünürlüğünü test et — `.rts-hud-status`'un
+      duraklat düğmesini ittiği yer burasıydı; yuva bütçeleri de bu genişlikten
+      ölçüldü
+- [ ] bütün ana UI ekranlarını gez (yukarıdaki tur — kullanıcıda)
+- [ ] tooltip wrapping'i doğrula (tarayıcının kendi `title` balonu; ekranda
+      görülecek)
+- [ ] responsive breakpoint'leri gez (turun 9. adımı — kullanıcıda)
 
 ## Kabul kriteri
 
-Pseudo-localization ile temel UI'da kritik clipping veya okunamaz taşma bulunmamalıdır.
+Pseudo-localization ile temel UI'da kritik clipping veya okunamaz taşma
+bulunmamalıdır.
+
+## Devredilenler
+
+- Turda bulunan her taşma buraya, düzeltmesiyle birlikte yazılacak.
+- `.rts-selection-body`'nin iki satırlık grid'i
+  (`grid-template-rows: repeat(2, max-content)`) hâlâ dört satırlık bir bütçe:
+  pseudo'da satırlar kırıldığında kırpılır. Kasıtlı olarak dokunulmadı — panel
+  yüksekliği `rts-building-placement.spec.ts`'in tıklama noktasını türettiği
+  ölçü, ve düzeltmesi `describeSelection`'ın satır sayısını azaltmak, CSS değil.
+  Turda okunaksız çıkarsa orada ele alınacak.
+- `[data-rts-action-layout="single"]` yıkım düğmesi 20px'lik bir satırda
+  `overflow: visible` ile duruyor. Bilerek bırakıldı (kısa tek kelime), ama uzun
+  bir dilde panel çerçevesinin dışına yazabilir.
 
 ---
 

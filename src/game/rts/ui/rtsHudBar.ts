@@ -46,6 +46,12 @@ function keyHint(command: Parameters<typeof commandKeyLabel>[0]): string {
 }
 
 interface ResourceCell {
+  /**
+   * Held only so a language change can rewrite it. The name is the one part of
+   * a cell `RtsApp` never pushes — it is written at construction and would
+   * otherwise still read "Yiyecek" after the player picked English (Plan §13).
+   */
+  readonly label: HTMLElement;
   readonly amount: HTMLElement;
   readonly income: HTMLElement;
 }
@@ -95,19 +101,20 @@ export class RtsHudBar {
       icon.setAttribute("aria-hidden", "true");
       const label = document.createElement("span");
       label.className = "rts-hud-resource-label";
-      label.textContent = resourceLabel(resourceId);
       const amount = document.createElement("span");
       amount.className = "rts-hud-resource-amount";
       amount.textContent = "0";
       const income = document.createElement("span");
       income.className = "rts-hud-resource-income";
-      income.textContent = "+0.0/dk";
+      // Seeded through the pattern, not with "+0.0/dk": the literal was a
+      // Turkish rate on an English HUD for the frame before the first push.
+      income.textContent = t("hud.resource.income", { rate: 0 });
       const values = document.createElement("span");
       values.className = "rts-hud-resource-values";
       values.append(label, amount, income);
       cell.append(icon, values);
       resources.appendChild(cell);
-      this.resourceCells.set(resourceId, { amount, income });
+      this.resourceCells.set(resourceId, { label, amount, income });
     }
     this.root.appendChild(resources);
 
@@ -170,6 +177,9 @@ export class RtsHudBar {
    */
   private applyStaticText(): void {
     this.root.setAttribute("aria-label", t("hud.aria.kingdom_status"));
+    for (const [resourceId, cell] of this.resourceCells) {
+      cell.label.textContent = resourceLabel(resourceId);
+    }
     this.identity.setAttribute("aria-label", t("hud.aria.kingdom"));
     this.crest.alt = t("hud.crest.alt");
     const selectKey = keyHint("selectIdleWorkers");

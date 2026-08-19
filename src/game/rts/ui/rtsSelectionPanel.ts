@@ -88,7 +88,7 @@ export class RtsSelectionPanel {
     this.header.className = "rts-selection-header";
     this.summary.className = "rts-selection-summary";
     this.health.className = "rts-selection-health";
-    this.health.setAttribute("aria-label", "Can");
+    markStaticAria(this.health, "selection.health.aria");
     this.healthFill.className = "rts-selection-health-fill";
     this.health.appendChild(this.healthFill);
     this.slots.className = "rts-selection-slots";

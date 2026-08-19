@@ -57445,6 +57445,137 @@ await checkAsync("Lokalizasyon §27: the language picker offers only shipped loc
   assert.equal(activeLocale(), previous.getLocale(), "the probe bundle is back for the checks after this one");
 });
 
+/**
+ * Average glyph advance, as a fraction of the font size, for Latin text in the
+ * two faces the RTS UI uses. Deliberately one number: the budgets below are a
+ * guard-rail against gross expansion (§15.1 budgets 30-40%, and a compound word
+ * can double a label), not a pixel simulation of a particular font. The CSS
+ * ellipsis is what handles the last few percent; this is what catches a string
+ * that was never going to fit at all.
+ *
+ * Erring wide on purpose. A tight constant turns the first language that spells
+ * "Crescent" with one more letter into a red build, and a gate that goes red for
+ * a label which fits gets edited away rather than read.
+ */
+const AVG_GLYPH_EM = 0.55;
+
+/** `text-transform: uppercase` costs roughly this much extra advance. */
+const UPPERCASE_WIDENING = 1.15;
+
+/**
+ * The UI slots whose width is fixed in CSS, and the text each one has to hold —
+ * Localization Plan §15.1, Faz 3.
+ *
+ * The panels that grow with their content need nothing here. These four cannot:
+ * each is a slot whose pixel width is written into `src/style.css` and does not
+ * move with the string inside it, so a language that overruns one does not get a
+ * taller panel — it gets a truncated word (the first three) or a sentence with
+ * its tail cut off (the last). Faz 3 gave all four a graceful clip; this is the
+ * gate that says the clip stays a safety net rather than becoming the design.
+ *
+ * Every width is measured at 1366x768, the minimum working resolution the plan
+ * names, because that is where the slots are narrowest.
+ *
+ * A budget is *derived*, never typed: the arithmetic below is the CSS, so
+ * retuning a column width means editing the pixel number that actually changed
+ * and letting the character count follow. Nothing here pins a wording — only
+ * how much room the wording has.
+ */
+const UI_TEXT_SLOTS: readonly {
+  readonly slot: string;
+  /** Usable text width in CSS pixels, written as the arithmetic it comes from. */
+  readonly widthPx: number;
+  readonly fontPx: number;
+  readonly lines: number;
+  readonly uppercase?: boolean;
+  /** Which keys land in the slot. Prefix match against the merged bundle. */
+  readonly keyPrefixes: readonly string[];
+  readonly keySuffix?: string;
+}[] = [
+  {
+    // `.rts-hud-resource-label`: a 136px grid column at the <=1400px breakpoint,
+    // less the 26px icon and the cell's 8px gap. The bar publishes a fixed
+    // height, so this label may never become two lines.
+    slot: ".rts-hud-resource-label",
+    widthPx: 136 - 26 - 8,
+    fontPx: 11,
+    lines: 1,
+    uppercase: true,
+    keyPrefixes: ["common.resource."],
+    keySuffix: ".name",
+  },
+  {
+    // `.rts-build-tab`: the palette is 544px wide with 24px padding, and the tab
+    // row is four equal columns with 4px gaps, less the tab's own 5px padding.
+    slot: ".rts-build-tab",
+    widthPx: (544 - 48 - 12) / 4 - 10,
+    fontPx: 11,
+    lines: 1,
+    keyPrefixes: ["building.category."],
+  },
+  {
+    // `.rts-selection-formation-label`: six cards across the 372px formation
+    // column with 6px gaps, less the card's 1px side padding.
+    slot: ".rts-selection-formation-label",
+    widthPx: (372 - 30) / 6 - 2,
+    fontPx: 10,
+    lines: 1,
+    keyPrefixes: ["selection.formation."],
+    keySuffix: ".name",
+  },
+  {
+    // `.rts-build-status`: the palette's inner width, and the two lines Faz 3
+    // gave it. Every string here is a placement verdict — the one line that
+    // explains why a click was refused, and the half of it that fell off the
+    // bottom used to be the half naming the fix.
+    slot: ".rts-build-status",
+    widthPx: 544 - 48,
+    fontPx: 12,
+    lines: 2,
+    keyPrefixes: ["placement.prompt.", "placement.valid", "placement.error.", "road.status."],
+  },
+];
+
+check("Lokalizasyon Faz 3: fixed-width UI slots hold every shipped locale's text", () => {
+  for (const slot of UI_TEXT_SLOTS) {
+    const advance = slot.fontPx * AVG_GLYPH_EM * (slot.uppercase === true ? UPPERCASE_WIDENING : 1);
+    const budget = Math.floor((slot.widthPx * slot.lines) / advance);
+    assert.ok(budget > 0, `${slot.slot}: the derived budget is not a usable width`);
+
+    let matched = 0;
+    for (const entry of selectableLocales()) {
+      for (const [key, value] of readShippedLocale(entry.code)) {
+        if (!slot.keyPrefixes.some((prefix) => key.startsWith(prefix))) continue;
+        if (slot.keySuffix !== undefined && !key.endsWith(slot.keySuffix)) continue;
+        matched += 1;
+        assert.ok(
+          value.length <= budget,
+          `${entry.code} / ${key} is ${value.length} chars in ${slot.slot}, which holds about `
+          + `${budget} (${slot.widthPx.toFixed(0)}px x ${slot.lines} line(s) at ${slot.fontPx}px): "${value}"`,
+        );
+      }
+    }
+    // A prefix that stopped matching is a slot this check silently gave up on.
+    assert.ok(matched > 0, `${slot.slot}: no shipped key matched ${slot.keyPrefixes.join(", ")}`);
+  }
+
+  // The pseudo-locale is the surface Faz 3 actually walks (§20), and it is
+  // derived rather than authored — so it has to stay a *model* of a translation.
+  // It is allowed to overrun the budgets above: a 35% expansion plus the
+  // `[!! … !!]` frame is the point, and the graceful clip is what the walk is
+  // checking. What must hold is that the expansion stays bounded, because a
+  // pseudo string that grew without limit would prove nothing about a real
+  // language — no real language expands like that, so an overflow it found
+  // would not be one anybody ever hits.
+  for (const [, value] of readShippedLocale(SOURCE_LOCALE)) {
+    const pseudo = pseudoLocalize(value);
+    assert.ok(
+      pseudo.length <= value.length * 2 + 16,
+      `pseudo-localization grew "${value}" past twice its length, so it no longer models a translation`,
+    );
+  }
+});
+
 check("Faz 9 §51: the build lock agrees with the wallet that takes the money", () => {
   assert.equal(canAffordCost({ wood: 80 }, { wood: 80 }), true, "exact change buys it");
   assert.equal(canAffordCost({ wood: 80 }, { wood: 79 }), false);

@@ -7,6 +7,7 @@
  * without a browser.
  */
 import type { RtsNotification } from "./rtsNotifications";
+import { markStaticAria, refreshStaticText } from "./rtsStaticText";
 
 const ICON_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "population-full": "⌂",
@@ -81,10 +82,20 @@ export class RtsNotificationFeed {
     // `.rts-notification-feed` (0,1,0), so the computed value was `auto` and the
     // feed *was* eating map clicks, top-centre, exactly where it appears.
     this.root.className = "rts-notification-feed";
-    this.root.setAttribute("aria-label", "Bildirimler");
+    markStaticAria(this.root, "notification.feed.aria");
     this.root.setAttribute("aria-live", "polite");
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setNotifications([]);
+  }
+
+  /**
+   * §13: the feed's own label. Its notices need nothing — their sentences are
+   * resolved by `RtsNotifications` and re-pushed — but the region's
+   * `aria-label` is written once, and a screen-reader user is the one player
+   * who cannot see that a panel is still announcing itself in the old language.
+   */
+  retranslate(): void {
+    refreshStaticText(this.root);
   }
 
   /**

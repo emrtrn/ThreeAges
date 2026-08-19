@@ -102,6 +102,7 @@
   "command.progression.level.shortfall": "{tier} için {shortfall} daha gerekli (toplam {cost}).",
   "command.progression.level.insufficient": "{tier} için kaynak yetersiz.",
   "notification.supply.captured": "{site} ele geçirildi: {resource} arzı artık sizin.",
+  "notification.feed.aria": "Bildirimler",
   "notification.supply.reconnected": "{site} yeniden bağlandı: {resource} arzı sürüyor.",
   "notification.supply.linked": "{site} bağlandı: {resource} Pazar'a akmaya başladı.",
   "notification.supply.lost": "{site} rakibin eline geçti: {resource} arzınız kesildi.",

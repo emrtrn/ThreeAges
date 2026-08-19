@@ -846,12 +846,20 @@ body {
 }
 
 /* Says *what* is switched on: a bare switch reads "on", never "fog". */
+/*
+ * `nowrap` so "On"/"Off" cannot become two lines and move the switch beside
+ * it; Faz 3 adds the clip, because in a third of the card a longer word was
+ * pushing the switch out of its own column rather than shortening itself.
+ */
 .rts-match-toggle-state {
+  min-width: 0;
+  overflow: hidden;
   color: var(--ta-ink);
   font-size: 12px;
   letter-spacing: normal;
   text-transform: none;
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .rts-match-card button {
@@ -1401,10 +1409,17 @@ body {
 
 .rts-hud-resource-label {
   grid-column: 1 / -1;
+  overflow: hidden;
   color: var(--ta-ink-muted);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  /* Faz 3 (§15.1): the cell is a fixed slot and the bar a fixed height, so a
+     name too long for the column has to end in an ellipsis. Without this it
+     wrapped, and `.rts-hud-resource`'s `overflow: hidden` sliced the second
+     line in half — a label that is silently unreadable rather than shortened. */
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /*
@@ -1438,7 +1453,17 @@ body {
 
 .rts-hud-status {
   display: flex;
-  flex-shrink: 0;
+  /*
+   * Faz 3 (§15.1): shrinkable, not rigid. The bar is `nowrap`, so a status
+   * block that refuses to shrink does not overflow itself — it pushes the
+   * utility controls after it off the right edge, and the pause button is the
+   * one HUD control a player cannot do without. At 1366px the readouts here
+   * ("Population: 12/20") are the widest prose in the strip, so this is where
+   * a long locale has to be absorbed.
+   */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   align-items: center;
   gap: 8px;
   /* Pins the status block to the right edge whether or not the warning between
@@ -2220,9 +2245,16 @@ body {
   margin-top: 8px;
 }
 
+/*
+ * Faz 3 (§15.1): the label column was a flat `58px`, which is "You 2/3" in
+ * English and an overlap with the bar in anything longer — grid items default
+ * to `min-width: auto`, so the word did not clip, it drew over the track.
+ * Content-sized with a floor under the bar instead: the label takes what it
+ * needs, the track gives way first, and the ellipsis below is the last resort.
+ */
 .rts-objective-bar {
   display: grid;
-  grid-template-columns: 58px 1fr 34px;
+  grid-template-columns: minmax(0, max-content) minmax(36px, 1fr) 34px;
   align-items: center;
   gap: 6px;
 }
@@ -2231,6 +2263,13 @@ body {
 .rts-objective-bar-remaining {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+.rts-objective-bar-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .rts-objective-bar-remaining {
@@ -2408,6 +2447,13 @@ body {
   transform: translateX(-50%);
 }
 
+/*
+ * Faz 3 (§15.1): the tray's cards are a fixed 156 x 50px — the market grid
+ * below depends on it — so the text has to be the part that yields. Without
+ * `overflow: hidden` a longer verb wrapped past the button's own border and
+ * printed over the card beneath it; clamped, it ends in an ellipsis inside its
+ * frame, and the button's `title` still carries the full command.
+ */
 .rts-selection-action-tray .rts-selection-action {
   box-sizing: border-box;
   flex: 0 0 156px;
@@ -2415,8 +2461,17 @@ body {
   height: 50px;
   min-height: 50px;
   padding: 5px 8px;
+  overflow: hidden;
   font-size: 10px;
   line-height: 1.1;
+}
+
+.rts-selection-action-tray .rts-selection-action-label {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 /* Every floating command uses the same 156 × 50px card. The market fills a
@@ -3498,10 +3553,22 @@ body {
   pointer-events: none;
 }
 
+/*
+ * Faz 3 (§15.1): capped at three lines. The card is a square with
+ * `overflow: hidden`, and the label is bottom-aligned inside it, so a name
+ * that needs a fourth line does not grow the card — it climbs out of the top
+ * of it and is cut mid-word over raw artwork, above where the scrim reaches.
+ * Three lines is what the scrim can carry legibly; past that the name is cut
+ * inside its own box and the card's `title` still holds the whole of it.
+ */
 .rts-build-category-panel .rts-build-choice-label {
   display: grid;
   min-height: 22px;
-  align-content: end;
+  max-height: 3.15em;
+  /* `safe`: bottom-aligned while the name fits — that is what lines a one-line
+     card's price up with a two-line card's — and start-aligned the moment it
+     does not, so the clip above takes the last line instead of the first. */
+  align-content: safe end;
   overflow: hidden;
   color: #f6e7c4;
   font-size: 10px;
@@ -3690,9 +3757,17 @@ body {
   line-height: 1.1;
 }
 
+/*
+ * Faz 3 (§15.1): two lines of headroom, not one. The taller strings this line
+ * carries are whole sentences ("Invalid spot: a Quarry or Gold Mine must cover
+ * a matching resource node."), and at `max-height: 1.35em` a locale that
+ * wrapped them lost the second line outright — the refusal was still shown, and
+ * still unreadable. `min-height` keeps the resting layout, so nothing moves
+ * until the text actually needs the room.
+ */
 .rts-build-status {
   min-height: 1.35em;
-  max-height: 1.35em;
+  max-height: 2.7em;
   margin-top: 3px;
   color: var(--ta-ink);
   font-size: 12px;

@@ -206,6 +206,7 @@
   "selection.train.queue_full": "The queue is full ({queued}/{capacity}).",
   "selection.train.action": "Train {unit}",
   "selection.train.cost": "{cost} · {population} Pop",
+  "selection.health.aria": "Health",
   "selection.panel.aria": "Selection",
   "selection.panel.health_tooltip": "Health: {current}/{max}",
   "selection.panel.slot_tooltip": "{count} {unit}",
