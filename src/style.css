@@ -3388,6 +3388,13 @@ body {
   gap: 4px;
 }
 
+/* Flat tabs have no group heading, but their first card still needs the same
+   breathing room as Economy's first group. This also leaves room for the armed
+   card's gold outer glow instead of clipping it against the scroll panel. */
+.rts-build-category-panel:not(.is-grouped) {
+  padding-top: 14px;
+}
+
 /*
  * Sub-headed category (e.g. Ekonomi → Gıda · Ham Madde · Ticaret). The panel
  * stops being the card grid and becomes a stack of them, one per group; each

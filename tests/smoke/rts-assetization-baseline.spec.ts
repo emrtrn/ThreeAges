@@ -219,7 +219,7 @@ test("Landscape Faz 5: command and build placement picking work over the mounted
   await canvas.hover({ position: { x: 640, y: 400 } });
   await expect(status).toContainText(/konum|çakış|kontrol|Geçerli|Geçersiz/);
   await canvas.click({ button: "right", position: { x: 640, y: 400 } });
-  await expect(status).toHaveText("Bir yapı seçin.");
+  await expect(status).toBeHidden();
 
   // The road tool arms the same plane; its start-point prompt confirms picking is
   // live over the terrain, and right-clicking backs out without an error.
@@ -235,7 +235,7 @@ test("Landscape Faz 5: command and build placement picking work over the mounted
   await canvas.hover({ position: { x: 640, y: 400 } });
   await expect(status).toContainText("Silmek için");
   await canvas.click({ button: "right", position: { x: 640, y: 400 } });
-  await expect(status).toHaveText("Bir yapı seçin.");
+  await expect(status).toBeHidden();
 
   expect(errors, "gameplay picking over the landscape must not error").toEqual([]);
 });

@@ -181,61 +181,196 @@
     },
     {
       "assetId": "dock-firstage",
-      "placements": [
-        {
-          "position": [
-            -3.24,
-            -0.49,
-            -4.36
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -55,
-            0
-          ],
-          "scale": [
-            8,
-            8,
-            10
-          ]
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "port-secondage-level3",
       "placements": [
         {
           "position": [
-            4.61,
-            0.14,
-            17.91
+            4.2,
+            -0.77,
+            18.21
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
-            120,
+            35.5,
             0
           ],
           "scale": 3
         },
         {
           "position": [
-            -4.61,
-            0.14,
-            -17.91
+            -4.98,
+            -0.78,
+            -17.18
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
           "rotation": [
             0,
-            300,
+            222,
             0
           ],
           "scale": 3
         }
       ]
+    },
+    {
+      "assetId": "birchtree-1",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-2",
+      "placements": []
+    },
+    {
+      "assetId": "bush-flowers",
+      "placements": []
+    },
+    {
+      "assetId": "bush-large-flowers",
+      "placements": []
+    },
+    {
+      "assetId": "bush-large",
+      "placements": []
+    },
+    {
+      "assetId": "bush-small-flowers",
+      "placements": []
+    },
+    {
+      "assetId": "bush-small",
+      "placements": []
+    },
+    {
+      "assetId": "bush",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-1",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-5",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-4",
+      "placements": []
+    },
+    {
+      "assetId": "birchtree-3",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-10",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-2",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-3",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-4",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-5",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-6",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-7",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-8",
+      "placements": []
+    },
+    {
+      "assetId": "deadtree-9",
+      "placements": []
+    },
+    {
+      "assetId": "flower-1-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-1",
+      "placements": []
+    },
+    {
+      "assetId": "flower-2-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-2",
+      "placements": [
+        {
+          "position": [
+            -48.7,
+            0.01,
+            50.04
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "flower-3-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-4-clump",
+      "placements": []
+    },
+    {
+      "assetId": "flower-5-clump",
+      "placements": []
+    },
+    {
+      "assetId": "grass-large-extruded",
+      "placements": []
+    },
+    {
+      "assetId": "grass-large",
+      "placements": []
+    },
+    {
+      "assetId": "grass-small",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-1",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-2",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-3",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-4",
+      "placements": []
+    },
+    {
+      "assetId": "mapletree-5",
+      "placements": []
     },
     {
       "assetId": "naturemega-clover-1",
@@ -777,7 +912,6 @@
             2.41,
             38.17
           ],
-          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -792,7 +926,6 @@
             1.68,
             69.98
           ],
-          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -807,7 +940,6 @@
             0.38,
             84.54
           ],
-          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -822,7 +954,6 @@
             -1.21,
             82.97
           ],
-          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -837,7 +968,6 @@
             -1.21,
             81.88
           ],
-          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -852,7 +982,6 @@
             -1.21,
             85.04
           ],
-          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -867,7 +996,6 @@
             -1.21,
             85.58
           ],
-          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -882,7 +1010,6 @@
             1.98,
             59.65
           ],
-          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -897,7 +1024,6 @@
             0.73,
             32.93
           ],
-          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -908,12 +1034,124 @@
         },
         {
           "position": [
+            78.25,
+            0.73,
+            -1.65
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -164,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            86.7,
+            -1.4,
+            -37.95
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -314.5,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            75.59,
+            -1.28,
+            -71.22
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -275.5,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            47.71,
+            -1.28,
+            -84.46
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -275.5,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            21.93,
+            -1.28,
+            -82.16
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -275.5,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -9.27,
+            -1.28,
+            -84.8
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -143.5,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -38.8,
+            -1.28,
+            -78.28
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -70,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -92.32,
+            -1.28,
+            -82.75
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -25,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
             -106.97,
             -1.62,
             -36.01
           ],
           "scaleLocked": true,
-          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -929,7 +1167,6 @@
             3.22
           ],
           "scaleLocked": true,
-          "groupId": "group-msivqy5d-73n",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -1100,38 +1337,7 @@
     },
     {
       "assetId": "logs",
-      "placements": [
-        {
-          "position": [
-            -5.8,
-            0,
-            52.4
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            35,
-            0
-          ],
-          "scale": 3
-        },
-        {
-          "position": [
-            5.8,
-            0,
-            -52.4
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            215,
-            0
-          ],
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "mine",
@@ -1185,16 +1391,6 @@
       "placements": [
         {
           "position": [
-            -42.46,
-            -0.03,
-            -54.04
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 6
-        },
-        {
-          "position": [
             -43.77,
             -0.03,
             -44.43
@@ -1204,161 +1400,6 @@
           "rotation": [
             0,
             -52,
-            0
-          ],
-          "scale": 6
-        },
-        {
-          "position": [
-            -39.91,
-            -0.03,
-            -64.26
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 6
-        },
-        {
-          "position": [
-            -28.55,
-            -0.03,
-            -65.12
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 6
-        },
-        {
-          "position": [
-            -30.46,
-            -0.03,
-            -55.3
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            25.5,
-            0
-          ],
-          "scale": 6
-        },
-        {
-          "position": [
-            -17.1,
-            -0.03,
-            -63.33
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            25.5,
-            0
-          ],
-          "scale": 6
-        },
-        {
-          "position": [
-            -7.85,
-            -0.03,
-            -64.1
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -2,
-            0
-          ],
-          "scale": 6
-        },
-        {
-          "position": [
-            2.7,
-            -0.03,
-            -64.88
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -2,
-            0
-          ],
-          "scale": 6
-        },
-        {
-          "position": [
-            13.46,
-            -0.03,
-            -64.59
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -2,
-            0
-          ],
-          "scale": 6
-        },
-        {
-          "position": [
-            24.29,
-            -0.03,
-            -63.32
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90.5,
-            0
-          ],
-          "scale": 6
-        },
-        {
-          "position": [
-            49.7,
-            -0.03,
-            -63.72
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90.5,
-            0
-          ],
-          "scale": 6
-        },
-        {
-          "position": [
-            60.56,
-            -0.03,
-            -63.39
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90.5,
-            0
-          ],
-          "scale": 6
-        },
-        {
-          "position": [
-            62.47,
-            -0.03,
-            -52.68
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90.5,
             0
           ],
           "scale": 6
@@ -1401,6 +1442,90 @@
       ]
     },
     {
+      "assetId": "towncenter-secondage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "towncenter-secondage-level2",
+      "placements": []
+    },
+    {
+      "assetId": "towncenter-secondage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "towncenter-firstage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "shape:sphere",
+      "placements": []
+    },
+    {
+      "assetId": "base-basic-shaded",
+      "placements": []
+    },
+    {
+      "assetId": "barracs",
+      "placements": []
+    },
+    {
+      "assetId": "barracks-firstage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "enemy-watchtower-secondage-level2",
+      "placements": []
+    },
+    {
+      "assetId": "watchtower-secondage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "barracks-secondage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "archery-secondage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "towncenter-firstage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "barracks-secondage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "test",
+      "placements": []
+    },
+    {
+      "assetId": "barracks-secondage-level2",
+      "placements": []
+    },
+    {
+      "assetId": "stone-bridge",
+      "placements": [
+        {
+          "position": [
+            -3.23,
+            -0.12,
+            -4.18
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            32,
+            0
+          ],
+          "scale": 3
+        }
+      ]
+    },
+    {
       "assetId": "marker:playerStart",
       "placements": [
         {
@@ -1438,25 +1563,69 @@
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "ambientIntensity": 1,
+    "backgroundColor": "#ffffff",
     "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
     "locale": "en"
+  },
+  "skyAtmosphere": {
+    "rayleigh": 1,
+    "turbidity": 2,
+    "mie": 0.004,
+    "mieDirectionalG": 0.8,
+    "exposure": 1,
+    "skyLightCapture": {
+      "intensity": 0.2
+    }
+  },
+  "postProcess": {
+    "toneMapping": "none",
+    "antialias": "smaa",
+    "exposure": 1,
+    "bloom": {
+      "threshold": 1,
+      "intensity": 1,
+      "radius": 1
+    },
+    "vignette": {
+      "intensity": 1,
+      "offset": 1
+    },
+    "chromaticAberration": {
+      "amount": 0.1
+    },
+    "grain": {
+      "intensity": 0.2
+    },
+    "dof": {
+      "focusDistance": 40,
+      "aperture": 1,
+      "maxBlur": 1
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1,
+      "intensity": 1
+    },
+    "saturation": 1,
+    "contrast": 1,
+    "temperature": 0,
+    "tint": 0
   },
   "lights": [
     {
       "id": "directional-light-mrzeo4fp-7bl",
       "type": "directional",
       "position": [
-        0,
-        5,
-        0
+        -28.05,
+        3.93,
+        4.77
       ],
       "name": "Directional Light",
       "rotation": [
-        -55,
-        35,
+        40,
+        140,
         0
       ],
       "color": "#ffffff",
@@ -1465,29 +1634,8 @@
     }
   ],
   "reflectiveSurfaces": [],
-  "blockingVolumes": [
-    {
-      "id": "blocking-volume-1",
-      "position": [
-        -3.38,
-        -0.35,
-        -4.29
-      ],
-      "name": "Blocking Volume",
-      "rotation": [
-        0,
-        -55,
-        0
-      ],
-      "scale": 1,
-      "size": [
-        4,
-        1,
-        12
-      ],
-      "navigationRole": "walkable"
-    }
-  ],
+  "reflectionCaptures": [],
+  "blockingVolumes": [],
   "splines": [
     {
       "id": "enemy-base-route",
@@ -1599,9 +1747,9 @@
           {
             "id": "supply-market-0",
             "position": [
-              46,
+              50,
               0,
-              -34
+              -30
             ],
             "pointType": "linear"
           },
@@ -1671,9 +1819,9 @@
           {
             "id": "supply-port-4",
             "position": [
-              6,
+              2,
               0,
-              -26
+              -20
             ],
             "pointType": "linear"
           },
@@ -1691,7 +1839,7 @@
             "position": [
               6,
               0,
-              -44
+              -46
             ],
             "pointType": "linear"
           },
@@ -1725,7 +1873,7 @@
           {
             "id": "supply-stone-3",
             "position": [
-              22,
+              24,
               0,
               -10
             ],
@@ -2753,9 +2901,13 @@
           "intensity": 0.7
         }
       ],
-      "reflectionQuality": "high",
-      "reflectionStrength": 0.9
+      "reflectionMode": "sharedPlanar",
+      "reflectionQuality": "medium",
+      "reflectionStrength": 0.6
     }
   ],
-  "actors": []
+  "actors": [],
+  "targetPoints": [],
+  "aiNavigationVolumes": [],
+  "reflectionPlanes": []
 }

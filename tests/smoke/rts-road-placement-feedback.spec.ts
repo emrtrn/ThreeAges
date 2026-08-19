@@ -23,6 +23,6 @@ test("road placement finishes its route on the second left-click", async ({ page
   await expect(page.locator(".rts-build-road-hint")).toContainText(/Sol tık: yolu kur · \d+ hücre · \d+ Odun/);
   await canvas.click({ position: { x: 720, y: 420 } });
   await expect(page.locator(".rts-build-road-hint")).toBeHidden();
-  await expect(page.locator(".rts-build-status")).toHaveText("Bir yapı seçin.");
+  await expect(page.locator(".rts-build-status")).toBeHidden();
   expect(errors).toEqual([]);
 });

@@ -395,25 +395,25 @@ export class RtsBuildPalette {
     this.syncArmedButtons();
     this.syncPlacementMode();
     if (!state.activeBuildingId) {
-      this.status.textContent = t("placement.prompt.select_building");
+      this.setStatus(null);
       return;
     }
     if (!state.result) {
-      this.status.textContent = t(state.activeBuildingId === "outpost"
+      this.setStatus(t(state.activeBuildingId === "outpost"
         ? "placement.prompt.outpost"
-        : "placement.prompt.pick_location");
+        : "placement.prompt.pick_location"));
       return;
     }
     if (state.result.valid) {
-      this.status.textContent = t("placement.valid");
+      this.setStatus(t("placement.valid"));
       return;
     }
     // A null reason (and any reason the table does not name) reads as the
     // generic overlap: the fallback is a sentence, never a blank status line.
     const reason = state.result.reason;
-    this.status.textContent = t(
+    this.setStatus(t(
       (reason === null ? undefined : PLACEMENT_ERROR_KEY[reason]) ?? "placement.error.blocked",
-    );
+    ));
   }
 
   /**
@@ -456,7 +456,7 @@ export class RtsBuildPalette {
     this.syncArmedButtons();
     this.syncPlacementMode();
     if (!state.active) {
-      this.status.textContent = t("placement.prompt.select_building");
+      this.setStatus(null);
       this.roadHint.hidden = true;
       return;
     }
@@ -464,7 +464,7 @@ export class RtsBuildPalette {
     if (state.mode === "erase") {
       // The split warning is the §44 "bağlantı etkisi": it is the one erase whose
       // cost is not the tile itself, so it has to be readable before the click.
-      this.status.textContent = t("road.status.erasing");
+      this.setStatus(t("road.status.erasing"));
       this.roadHint.textContent = t(!state.target
         ? "road.hint.pick_tile"
         : state.target.splits
@@ -472,7 +472,7 @@ export class RtsBuildPalette {
           : "road.hint.erase");
       return;
     }
-    this.status.textContent = t(state.start ? "road.status.drawing" : "road.status.draw_mode");
+    this.setStatus(t(state.start ? "road.status.drawing" : "road.status.draw_mode"));
     this.roadHint.textContent = state.plan
       ? t("road.hint.plan", {
           cells: state.plan.newCells.length,
@@ -483,6 +483,12 @@ export class RtsBuildPalette {
         : state.reason === "insufficient-resources"
           ? t("road.hint.insufficient_resources")
           : t(state.start ? "road.hint.pick_end" : "road.hint.pick_start");
+  }
+
+  /** The palette needs no idle instruction; live placement feedback remains visible. */
+  private setStatus(message: string | null): void {
+    this.status.hidden = message === null;
+    this.status.textContent = message ?? "";
   }
 
   /**
