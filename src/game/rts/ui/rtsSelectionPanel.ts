@@ -576,7 +576,9 @@ export class RtsSelectionPanel {
       // A refused action always names its rule. A legal one carries no excuse,
       // but may still have something to say about its price — which is the only
       // place the player can read it before committing to the click.
-      button.title = action.reason ?? action.hint ?? "";
+      button.title = [action.label, action.reason ?? action.hint]
+        .filter((part): part is string => Boolean(part))
+        .join("\n");
     }
     // After the rebuild branch above, which drops every class the buttons carried.
     this.syncMissionHighlight();

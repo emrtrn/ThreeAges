@@ -109,10 +109,12 @@ export interface AuthoredWorldHandle {
    * in plain sight on ground the player has never scouted, and the only way to
    * fog a new prop would be to name it in game code.
    *
-   * Three things are deliberately *not* here. Landscape and water are the ground
-   * itself, which GDD 08 §40 keeps visible once seen rather than hiding piece by
-   * piece; painted foliage is ground cover in the tens of thousands, and a
-   * per-blade rule would cost more than it could ever be worth.
+   * Landscape and water are deliberately *not* here: they are the ground itself,
+   * which GDD 08 §40 keeps visible once seen rather than hiding piece by piece.
+   * Painted foliage is not here either, but only because it is not a layout
+   * instance — it is mounted from its own sidecar and exposed whole as
+   * {@link foliageRoot}, which a shell applying a per-fragment rule should take
+   * alongside this array (the RTS does; see `vision/fogMask.ts`).
    *
    * A shell that ignores this field pays nothing: the array is already built to
    * mount the world.
@@ -145,10 +147,12 @@ export interface AuthoredWorldHandle {
   /**
    * The painted foliage's own subtree, or null when the Level paints none.
    *
-   * Exposed for measurement, not for editing: a diagnostic that wants to know
-   * what ground cover costs has to be able to take it off the screen for one
-   * frame, and the alternative — finding it by node name under `root` — breaks
-   * silently the day the group is renamed.
+   * Exposed for measurement and for whole-subtree render rules, not for editing.
+   * A diagnostic that wants to know what ground cover costs has to be able to
+   * take it off the screen for one frame, and a shell masking the world per
+   * fragment has to be able to reach materials that are not in
+   * {@link staticInstanceMeshes}; the alternative for both — finding it by node
+   * name under `root` — breaks silently the day the group is renamed.
    */
   readonly foliageRoot: Object3D | null;
   /**

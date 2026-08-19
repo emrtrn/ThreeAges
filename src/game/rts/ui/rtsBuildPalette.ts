@@ -20,7 +20,7 @@
  * own panel can do.
  */
 import { t } from "../../localization/LocalizationService";
-import { markStaticAria, markStaticText, refreshStaticText } from "./rtsStaticText";
+import { markStaticAria, markStaticText, markStaticTitle, refreshStaticText } from "./rtsStaticText";
 import type { BuildingBalance, StartingResources } from "../../data/gameDataTypes";
 import { buildingCostForAge } from "../economy/buildingCost";
 import { buildingUnlocked, type ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
@@ -328,6 +328,7 @@ export class RtsBuildPalette {
     // Keep the action's accessible name concise while the visual label shows
     // the explicit resource cost needed for faster purchase decisions.
     markStaticAria(button, stats.nameKey);
+    markStaticTitle(button, stats.nameKey);
     if (stats.icon) {
       const icon = document.createElement("img");
       icon.className = "rts-build-choice-icon";
@@ -368,6 +369,7 @@ export class RtsBuildPalette {
     button.dataset.rtsBuilding = mode === "build" ? "road" : "road-erase";
     const nameKey = `building.road.${mode === "build" ? "build" : "erase"}.name`;
     markStaticAria(button, nameKey);
+    markStaticTitle(button, nameKey);
     const icon = document.createElement("img");
     icon.className = "rts-build-choice-icon";
     icon.src = mode === "build" ? PALETTE_ROAD_ICON : PALETTE_ROAD_ERASE_ICON;

@@ -5035,6 +5035,14 @@ export class RtsApp {
       // and it cuts per fragment — a backdrop mountain that straddles the
       // frontier is drawn up to it rather than waiting to arrive whole.
       this.fogMask?.apply(handle.staticInstanceMeshes);
+      // Painted foliage is mounted as its own subtree rather than as layout
+      // instances, so it is not in `staticInstanceMeshes` and was drawn across the
+      // whole map on ground nobody had scouted. It was left out back when fog was
+      // object-level — a worklist entry per prop, which tens of thousands of
+      // plants could not carry — and the mask that replaced it holds no per-object
+      // state at all: patching one chunk material costs the same whether it draws
+      // one plant or ten thousand. So it rides the same mask as everything else.
+      if (handle.foliageRoot) this.fogMask?.apply([handle.foliageRoot]);
       // The world arrives after setup's fog pass, and on the start screen there
       // is no simulation tick coming to catch it up — the same reason the map
       // art does this a few lines into its own loader.

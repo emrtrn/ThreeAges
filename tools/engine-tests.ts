@@ -47947,6 +47947,71 @@ check("§59: an authored Level placement is masked without game code naming it",
   view.dispose();
 });
 
+check("§59: painted foliage rides the same mask as the Level's placements", () => {
+  // Foliage is not a layout instance, so it is absent from `staticInstanceMeshes`
+  // and reaches the mask only through `foliageRoot` — which is why it spent a
+  // while drawn across the whole map, lit on ground nobody had scouted, while
+  // every authored prop beside it faded correctly. What this pins is that the
+  // subtree the world handle exposes is maskable end to end: chunk batches build
+  // their own materials, so "the group's material was patched" is not the same
+  // statement as "every chunk drawn is".
+  const vision = new VisionSystem(() => [], { cellSize: 2, worldHalfExtent: 40 });
+  const view = new FogView(vision, "player");
+  const mask = new FogMask(view.maskSpan);
+  mask.setTexture(view.maskTexture);
+
+  const scene = new Group();
+  scene.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial()));
+  const gltf = { scene } as unknown as GLTF;
+  const type = normalizeFoliageType({
+    schema: 1,
+    type: "foliageType",
+    name: "t",
+    meshAssetId: "m",
+    castShadow: true,
+  });
+  const binding = new FoliageRenderBinding();
+  binding.rebuild(
+    normalizeFoliageData({
+      schema: 1,
+      type: "foliage",
+      groups: [
+        {
+          id: "g",
+          foliageTypeId: "t",
+          target: { kind: "landscape", id: "l" },
+          // A chunk apart, so this is two batches and not one.
+          instances: [
+            { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+            { position: [100, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          ],
+        },
+      ],
+    }),
+    { getType: () => type, getModel: () => gltf },
+  );
+  const meshes = binding.allMeshes();
+  assert.equal(meshes.length, 2, "two chunks, so two batches to patch");
+
+  mask.apply([binding.root]);
+  const compiled = (material: Material): boolean =>
+    Object.prototype.hasOwnProperty.call(material, "onBeforeCompile");
+  for (const mesh of meshes) {
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    assert.ok(materials.every(compiled), "every foliage chunk drawn is behind the mask");
+    // A plant hidden by the mask that still writes the shadow map lays its shadow
+    // on ground the player *can* see — the same failure a masked mountain has.
+    assert.ok(
+      mesh.customDepthMaterial && compiled(mesh.customDepthMaterial),
+      "and a shadow-casting Foliage Type's depth material with it",
+    );
+  }
+
+  mask.dispose();
+  binding.dispose();
+  view.dispose();
+});
+
 check("§59: the fog surface covers the backdrop beyond the playable grid", () => {
   // The map does not end where the grid does — a Level dresses the horizon with
   // scenery standing outside the border. A surface sized to the grid left that

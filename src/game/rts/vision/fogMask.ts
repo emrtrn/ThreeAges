@@ -33,7 +33,9 @@
  * across a fog boundary leaks the position of the other half. Trees, deposits
  * and wildlife keep their own `visible` loops for the reason those loops exist —
  * they already own `visible` for depletion, and a second writer would fight
- * them.
+ * them. Painted *foliage* is not one of those: it is decoration with no
+ * simulation behind it, nothing writes its `visible`, and it is under this mask
+ * like the rest of the Level's art (`RtsApp.loadAuthoredWorld`).
  *
  * View-side only: it reads the fog texture and patches materials. It never
  * decides what is visible, and the {@link VisionSystem} grid it ultimately comes

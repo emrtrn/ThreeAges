@@ -155,19 +155,19 @@
             -4
           ],
           "name": "Smoke Checkpoint",
-          "collisionPreset": "trigger",
+          "scale": [
+            12,
+            4,
+            3
+          ],
           "sensor": true,
+          "collisionPreset": "trigger",
           "behavior": {
             "script": "checkpoint",
             "params": {
               "slot": "quick"
             }
-          },
-          "scale": [
-            12,
-            4,
-            3
-          ]
+          }
         },
         {
           "position": [
@@ -176,20 +176,20 @@
             -6
           ],
           "name": "Smoke Interact",
-          "collisionPreset": "trigger",
+          "scale": [
+            12,
+            4,
+            2
+          ],
           "sensor": true,
+          "collisionPreset": "trigger",
           "behavior": {
             "script": "interact"
           },
           "interaction": {
             "action": "activate",
             "prompt": "Activate"
-          },
-          "scale": [
-            12,
-            4,
-            2
-          ]
+          }
         },
         {
           "position": [
@@ -198,20 +198,20 @@
             -10
           ],
           "name": "Smoke Portal",
-          "collisionPreset": "trigger",
+          "scale": [
+            12,
+            4,
+            3
+          ],
           "sensor": true,
+          "collisionPreset": "trigger",
           "behavior": {
             "script": "level-travel",
             "params": {
               "targetLevel": "layouts/__playwright-smoke-target.level.json",
               "targetSpawn": "arrival"
             }
-          },
-          "scale": [
-            12,
-            4,
-            3
-          ]
+          }
         }
       ]
     },
@@ -225,7 +225,36 @@
     },
     {
       "assetId": "dock-firstage",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            40.56,
+            -3.43,
+            33.85
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -23.5,
+            0
+          ],
+          "scale": 8
+        },
+        {
+          "position": [
+            -45.86,
+            -3.51,
+            -31.37
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -40.5,
+            0
+          ],
+          "scale": 8
+        }
+      ]
     },
     {
       "assetId": "port-secondage-level3",
@@ -1594,9 +1623,9 @@
             0,
             -1.5
           ],
-          "scaleLocked": true,
           "rotationYDeg": 0,
-          "scale": 3
+          "scale": 3,
+          "scaleLocked": true
         }
       ]
     }
@@ -1674,12 +1703,9 @@
       "castShadow": true
     }
   ],
-  "reflectionPlanes": [],
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
   "blockingVolumes": [],
-  "aiNavigationVolumes": [],
-  "targetPoints": [],
   "splines": [
     {
       "id": "enemy-base-route",
@@ -2654,222 +2680,6 @@
         "color": "#ffffff",
         "resolution": 16
       }
-    },
-    {
-      "id": "spline-3",
-      "position": [
-        38.09,
-        0,
-        41.28
-      ],
-      "spline": {
-        "schema": 1,
-        "closed": false,
-        "defaultUp": [
-          0,
-          1,
-          0
-        ],
-        "reparamStepsPerSegment": 8,
-        "points": [
-          {
-            "id": "spline-point-1",
-            "position": [
-              0.76,
-              -0.01,
-              -1.28
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-6",
-            "position": [
-              2.64,
-              -0.3,
-              -1.13
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-2",
-            "position": [
-              4.37,
-              -0.85,
-              -0.97
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-7",
-            "position": [
-              6.38,
-              -1.06,
-              -0.93
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-5",
-            "position": [
-              8.27,
-              -1.05,
-              -0.7
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-3",
-            "position": [
-              10.24,
-              -0.89,
-              -0.74
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-9",
-            "position": [
-              12.01,
-              -0.42,
-              -0.77
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-4",
-            "position": [
-              13.41,
-              0.07,
-              -0.72
-            ],
-            "pointType": "curveAuto"
-          }
-        ]
-      },
-      "name": "Spline 3",
-      "rotation": [
-        0,
-        60,
-        0
-      ],
-      "scale": 1,
-      "generators": [
-        {
-          "id": "instances",
-          "type": "instances",
-          "meshAsset": "naturemega-rock-path-square-wide",
-          "spacing": 2,
-          "placementMode": "point"
-        }
-      ]
-    },
-    {
-      "id": "spline-4",
-      "position": [
-        -48.89,
-        0,
-        -24.49
-      ],
-      "spline": {
-        "schema": 1,
-        "closed": false,
-        "defaultUp": [
-          0,
-          1,
-          0
-        ],
-        "reparamStepsPerSegment": 8,
-        "points": [
-          {
-            "id": "spline-point-1",
-            "position": [
-              0.74,
-              0.21,
-              -1.28
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-6",
-            "position": [
-              2.64,
-              -0.31,
-              -1.13
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-2",
-            "position": [
-              4.37,
-              -0.85,
-              -0.97
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-7",
-            "position": [
-              6.38,
-              -1.06,
-              -0.93
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-5",
-            "position": [
-              8.27,
-              -1.05,
-              -0.7
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-3",
-            "position": [
-              10.24,
-              -0.89,
-              -0.74
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-9",
-            "position": [
-              12.12,
-              -0.42,
-              -0.52
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-4",
-            "position": [
-              14.06,
-              0.29,
-              -0.32
-            ],
-            "pointType": "curveAuto"
-          }
-        ]
-      },
-      "name": "Spline 3 2",
-      "rotation": [
-        0,
-        60,
-        0
-      ],
-      "scale": 1,
-      "generators": [
-        {
-          "id": "instances",
-          "type": "instances",
-          "meshAsset": "naturemega-rock-path-square-wide",
-          "spacing": 2,
-          "placementMode": "point"
-        }
-      ]
     }
   ],
   "landscapes": [
@@ -2950,5 +2760,8 @@
       "reflectionStrength": 0.6
     }
   ],
-  "actors": []
+  "actors": [],
+  "targetPoints": [],
+  "aiNavigationVolumes": [],
+  "reflectionPlanes": []
 }

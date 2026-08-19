@@ -1663,6 +1663,14 @@ bulunmamalıdır.
 
 ## Devredilenler
 
+- 19 Ağustos 2026 otomatik pseudo-locale turu, `840px`te merkezdeki bildirim
+  akışının görev kartının altına girdiğini buldu. `src/style.css`, bu breakpoint'te
+  akışı sol kolona alıyor; `tests/smoke/rts-localization-pseudo.spec.ts` hem
+  kutuların çakışmadığını hem yatay sayfa taşması olmadığını doğruluyor. Aynı tur,
+  üç satırda kısaltılan yapı kartlarının `title` tooltip'i olmadığını da buldu;
+  kartlar ve seçim komutları artık tam, aktif locale metnini tooltip'te tutuyor.
+  Bu otomatik/browser kanıtıdır; aşağıdaki kullanıcı görsel kabul maddeleri açık
+  kalır.
 - Turda bulunan her taşma buraya, düzeltmesiyle birlikte yazılacak.
 - `.rts-selection-body`'nin iki satırlık grid'i
   (`grid-template-rows: repeat(2, max-content)`) hâlâ dört satırlık bir bütçe:

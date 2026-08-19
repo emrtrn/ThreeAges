@@ -1900,6 +1900,15 @@ body {
     right: max(18px, env(safe-area-inset-right));
     left: max(18px, env(safe-area-inset-left));
   }
+
+  /* At this breakpoint the mission card still owns the top-right corner.
+   * Keeping the feed geometrically centred would put its long pseudo-locale
+   * notices underneath that card. The left column is clear above the palette,
+   * so reserve the right side for the objective instead. */
+  #ui-overlay .rts-notification-feed {
+    left: max(12px, env(safe-area-inset-left));
+    transform: none;
+  }
 }
 
 /*
