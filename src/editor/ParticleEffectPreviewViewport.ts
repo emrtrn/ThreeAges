@@ -81,11 +81,19 @@ export class ParticleEffectPreviewViewport {
    * @param resolveTextureUrl Turns a `renderer.texture` asset id into a fetchable
    *   image URL (the editor injects a manifest-backed resolver). Absent keeps the
    *   procedural sprite, matching a texture-less effect.
+   * @param applyModelAuthoredSurface Applies a mesh source's asset-level material
+   *   slot assignments (`*.materials.json`) to the freshly loaded root, so the
+   *   preview shows the surface the game will render rather than the GLB's
+   *   exported default. Absent leaves the model exactly as it was exported.
    */
   constructor(
     private readonly host: HTMLElement,
     private readonly resolveTextureUrl?: (textureId: string) => string | null,
     private readonly resolveModelUrl?: (modelId: string) => string | null,
+    private readonly applyModelAuthoredSurface?: (
+      modelId: string,
+      root: Object3D,
+    ) => Promise<void>,
   ) {
     this.renderer = new WebGLRenderer({ antialias: true });
     this.modelLoader = new GltfModelLoader(this.renderer);
@@ -210,7 +218,11 @@ export class ParticleEffectPreviewViewport {
           const url = this.resolveModelUrl?.(id);
           if (!url) return null;
           try {
-            return (await this.modelLoader.load(id, url)).scene;
+            const scene = (await this.modelLoader.load(id, url)).scene;
+            // Before the effect is built: `MeshParticleEffect` reads the root's
+            // materials at construction, so a slot swap afterwards never lands.
+            await this.applyModelAuthoredSurface?.(id, scene);
+            return scene;
           } catch {
             return null;
           }

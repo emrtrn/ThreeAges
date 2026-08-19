@@ -20,11 +20,21 @@
  * snapshot history of the def — one entry per field-edit session.
  */
 
+import { TextureLoader, type Material, type Object3D } from "three";
+
 import type { ParticleEffectDefinition } from "@engine/vfx/particleEffectTypes";
+import type { AssetManifest, AssetRecord } from "@engine/assets/manifest";
 import { loadEffectAsset, saveEffectAsset } from "@/editor/particleEffectStore";
 import { ParticleEffectPreviewViewport } from "@/editor/ParticleEffectPreviewViewport";
 import { particleEffectPresetDefinition } from "@engine/vfx/particleEffectPresets";
 import { projectFileUrl } from "@/project/ProjectSystem";
+import {
+  applyMaterialSlotOverrides,
+  assignedMaterialSlotIds,
+  hasAssignedMaterialSlots,
+  loadAssetMaterialSlots,
+} from "@/scene/assetMaterialSlotsLoader";
+import { loadForgeMaterial } from "@/scene/materialAssets";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -158,6 +168,9 @@ export class ParticleEffectEditor {
   private path: string;
   private label: string;
   private readonly assets: readonly ParticleEffectEditorAsset[];
+  /** Preview-only slot materials, keyed by material asset id; disposed on close. */
+  private readonly previewSlotMaterials = new Map<string, Material>();
+  private readonly previewTextureLoader = new TextureLoader();
 
   private readonly undoStack: ParticleEffectDefinition[] = [];
   private readonly redoStack: ParticleEffectDefinition[] = [];
@@ -264,6 +277,7 @@ export class ParticleEffectEditor {
       this.preview = new ParticleEffectPreviewViewport(this.previewHost, (id) =>
         this.resolveTextureUrl(id),
         (id) => this.resolveModelUrl(id),
+        (id, root) => this.applyModelAuthoredSurface(id, root),
       );
       this.preview.setDefinition(this.def);
       this.statsTimer = window.setInterval(() => this.updateHud(), 150);
@@ -577,6 +591,57 @@ export class ParticleEffectEditor {
   private resolveModelUrl(modelId: string): string | null {
     const asset = this.assets.find((a) => a.id === modelId && a.assetType === "staticMesh");
     return asset ? projectFileUrl(asset.path) : null;
+  }
+
+  /**
+   * Puts the mesh source's authored material on it before the preview builds.
+   *
+   * Kit meshes carry a single default GLB material and get their real surface
+   * from a `*.materials.json` slot assignment, so a raw GLTF load shows the grey
+   * export — the preview would then disagree with the game about what the effect
+   * looks like. A slot that fails to load leaves the exported material in place,
+   * which is still a rendered preview rather than an empty one.
+   */
+  private async applyModelAuthoredSurface(modelId: string, root: Object3D): Promise<void> {
+    const asset = this.assets.find((a) => a.id === modelId && a.assetType === "staticMesh");
+    if (!asset) return;
+    const slots = await loadAssetMaterialSlots(asset.path);
+    if (!hasAssignedMaterialSlots(slots)) return;
+    const manifest = this.previewAssetManifest();
+    for (const id of new Set(assignedMaterialSlotIds(slots))) {
+      if (this.previewSlotMaterials.has(id)) continue;
+      try {
+        this.previewSlotMaterials.set(
+          id,
+          await loadForgeMaterial(manifest, id, this.previewTextureLoader),
+        );
+      } catch {
+        this.setStatus(`Preview material failed: ${id}`, "warning");
+      }
+    }
+    if (this.disposed) return;
+    applyMaterialSlotOverrides(root, slots, (id) => this.previewSlotMaterials.get(id));
+  }
+
+  /** The material/texture slice of the project manifest `loadForgeMaterial` needs. */
+  private previewAssetManifest(): AssetManifest {
+    const assets: AssetRecord[] = [];
+    for (const asset of this.assets) {
+      if (asset.assetType !== "material" && asset.assetType !== "texture") continue;
+      assets.push({
+        id: asset.id,
+        name: asset.name,
+        assetType: asset.assetType,
+        category: "",
+        path: asset.path,
+        tags: [],
+        placeable: false,
+        placement: { surface: "floor", snapToWall: false, allowRotation: true, allowScale: true },
+        runtime: { loadGroup: "editor", castShadow: false, receiveShadow: false, collision: false, bytes: 0 },
+        license: "unknown",
+      });
+    }
+    return { version: 1, generated: "particle-effect-editor-preview", ktx2: false, assets };
   }
 
   private bindDetailInputs(): void {
@@ -995,6 +1060,8 @@ export class ParticleEffectEditor {
     this.statsTimer = 0;
     this.preview?.dispose();
     this.preview = null;
+    for (const material of this.previewSlotMaterials.values()) material.dispose();
+    this.previewSlotMaterials.clear();
     this.overlay.remove();
     if (ParticleEffectEditor.activeInstance === this) ParticleEffectEditor.activeInstance = null;
   }

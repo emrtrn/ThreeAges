@@ -1,0 +1,10 @@
+{
+  "common.resource.food.name": "Food",
+  "common.resource.wood.name": "Wood",
+  "common.resource.stone.name": "Stone",
+  "common.resource.gold.name": "Gold",
+  "common.cost.free": "Free",
+  "common.age.settlement.name": "Settlement",
+  "common.age.town.name": "Town",
+  "common.worker.count": "{count, plural, one {# worker} other {# workers}}"
+}

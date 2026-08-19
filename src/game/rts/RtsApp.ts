@@ -29,7 +29,6 @@ import {
 
 import { createSceneRenderer, readRenderMemory, readRenderStats } from "@engine/render-three/renderer";
 import { advanceForgeMaterialAnimations } from "@engine/render-three/materials";
-import { GltfModelLoader } from "@engine/render-three/gltfModelLoader";
 import { VfxSubsystem } from "@engine/render-three/vfxSubsystem";
 import { FrameMetricsMonitor } from "@engine/perf/frameMetrics";
 import { AdaptiveQualityController } from "@engine/perf/adaptiveQuality";
@@ -789,7 +788,6 @@ export class RtsApp {
   private readonly caravanView = new CaravanView(this.caravanRoot);
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
-  private readonly structureDamageModelLoader: GltfModelLoader;
   /**
    * RTS-owned use of the general Forge VFX runtime; effect assets stay editable.
    *
@@ -1342,7 +1340,6 @@ export class RtsApp {
       z: this.spatial.playerStart.z * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
     };
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
-    this.structureDamageModelLoader = new GltfModelLoader(this.renderer);
     this.userSettingsStore = createRtsUserSettingsStore();
     this.userSettings = this.userSettingsStore?.read() ?? defaultUserSettings();
     this.qualitySettings = resolveQualitySettings(
@@ -3887,13 +3884,18 @@ export class RtsApp {
    * allowlist gave — a VFX asset can never name an arbitrary path or URL — but it
    * no longer costs a code change per imported model, which is the whole point of
    * moving the assignment into the table.
+   *
+   * Loaded through the Actor visual factory rather than a bare GLTF load, so the
+   * mesh arrives with the material its asset assigns (`*.materials.json`) and its
+   * authored UVW. The debris GLBs export one default grey material and get their
+   * clay/wood surface from that sidecar, so a raw load rendered them untextured.
    */
   private async loadStructureDamageModels(modelIds: readonly string[]): Promise<readonly Object3D[]> {
+    const visuals = this.actorVisuals;
+    if (!visuals) return [];
     const models = await Promise.all(modelIds.map(async (id): Promise<Object3D | null> => {
-      const path = this.actorVisuals?.staticMeshAssetPath(id);
-      if (!path) return null;
       try {
-        return (await this.structureDamageModelLoader.load(id, projectFileUrl(path))).scene;
+        return await visuals.loadStaticMeshModel(id);
       } catch {
         return null;
       }

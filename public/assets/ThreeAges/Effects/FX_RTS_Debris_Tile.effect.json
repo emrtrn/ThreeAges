@@ -1,0 +1,108 @@
+{
+  "schema": 3,
+  "type": "particleEffect",
+  "name": "RTS Debris Stone",
+  "category": "RTS Damage",
+  "tags": [
+    "rts",
+    "damage",
+    "debris",
+    "stone",
+    "collapse"
+  ],
+  "system": {
+    "enabled": true,
+    "loop": false,
+    "duration": 0.35,
+    "seed": null,
+    "maxParticles": 12,
+    "bounds": {
+      "mode": "fixed",
+      "min": [
+        -5,
+        -2,
+        -5
+      ],
+      "max": [
+        5,
+        5,
+        5
+      ],
+      "showInPreview": true
+    }
+  },
+  "spawn": {
+    "mode": "burst",
+    "rate": 0,
+    "count": 8,
+    "delay": 0,
+    "interval": 0,
+    "shape": "sphere",
+    "radius": 0.35,
+    "boxSize": [
+      0,
+      0,
+      0
+    ]
+  },
+  "initialize": {
+    "lifetime": [
+      1,
+      2
+    ],
+    "startSize": [
+      3,
+      4
+    ],
+    "startColor": "#9a8b70",
+    "startOpacity": 1,
+    "direction": [
+      0,
+      2,
+      0
+    ],
+    "speed": [
+      2.1,
+      4.1
+    ],
+    "spreadAngleDeg": 72,
+    "rotation": [
+      0,
+      360
+    ],
+    "angularVelocity": [
+      -360,
+      360
+    ]
+  },
+  "update": {
+    "gravityScale": 1,
+    "drag": 0.28,
+    "acceleration": [
+      0,
+      0,
+      0
+    ],
+    "endSize": [
+      0.5,
+      1
+    ],
+    "endColor": "#655a49",
+    "endOpacity": 1,
+    "fadeInTime": 0,
+    "fadeOutTime": 0
+  },
+  "renderer": {
+    "type": "mesh",
+    "modelIds": [
+      "debris-tile-1",
+      "debris-tile-2",
+      "debris-tile-3"
+    ],
+    "modelSelection": "random",
+    "materialMode": "tint",
+    "castShadow": false,
+    "receiveShadow": true,
+    "maxModelParticles": 12
+  }
+}

@@ -1497,6 +1497,44 @@ import {
   readMissionModeFromUrl,
   urlPinsMatchSetup,
 } from "../src/game/rts/match/rtsMatchSetupUrl";
+import { getLogLevel, setLogLevel } from "../src/game/core/logger";
+import {
+  extractPlaceholders,
+  formatList,
+  formatMessage,
+  formatNumber,
+  formatPercent,
+  LocalizationSyntaxError,
+} from "../src/game/localization/LocalizationFormatter";
+import {
+  isMissingKeyMarker,
+  missingKeyMarker,
+  parseLocalizationDebugOptions,
+  pseudoLocalize,
+  PSEUDO_LOCALE,
+} from "../src/game/localization/LocalizationDebug";
+import {
+  createPseudoBundle,
+  mergeLocaleDomains,
+} from "../src/game/localization/LocalizationLoader";
+import {
+  fallbackChain,
+  localeDescriptor,
+  localeRegistry,
+  matchBrowserLocale,
+  selectableLocales,
+  SOURCE_LOCALE,
+} from "../src/game/localization/localeRegistry";
+import {
+  LocalizationService,
+  resolveInitialLocale,
+} from "../src/game/localization/LocalizationService";
+import {
+  LOCALE_DOMAINS,
+  type LocaleDomain,
+  type LocaleDomainFile,
+  type LocalizationIssue,
+} from "../src/game/localization/LocalizationTypes";
 
 let checks = 0;
 let skipped = 0;
@@ -56688,6 +56726,356 @@ check("Lokalizasyon: no player-facing text attaches a Turkish case suffix to an 
       );
       const label = requiredAge === "town" ? "Kasaba" : "Yerleşim";
       assert.ok(sentence.startsWith(label), `"${sentence}" must name the age it waits on`);
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Localization Faz 1 — infrastructure contracts (Localization Plan §6, §11–§13,
+// §19–§20). These pin the *shape* of the system, never a translation: the text
+// under `public/game-data/locales/` is authored content that Faz 2 rewrites and
+// later tunes, so a check that quoted a sentence would go red on a correct edit.
+// ---------------------------------------------------------------------------
+
+/** Silence the deliberate warnings a missing-key / bad-pattern check provokes. */
+async function quietly(fn: () => Promise<void>): Promise<void> {
+  const previous = getLogLevel();
+  setLogLevel("error");
+  try {
+    await fn();
+  } finally {
+    setLogLevel(previous);
+  }
+}
+
+check("Lokalizasyon Faz 1: plural branches come from Intl, not from count === 1", () => {
+  // Plan §11.1 forbids hand-written plural logic, and the reason is that
+  // English is the *simplest* case, not the representative one: Russian needs
+  // one/few/many, and Turkish needs none of them. Hard-coding `n === 1` in the
+  // UI would look correct for exactly two of the eight Tier 1 languages.
+  const english = "{count, plural, one {# worker} other {# workers}}";
+  assert.equal(formatMessage(english, "en", { count: 1 }), "1 worker");
+  assert.equal(formatMessage(english, "en", { count: 2 }), "2 workers");
+  assert.equal(formatMessage(english, "en", { count: 0 }), "0 workers");
+
+  // Russian: 1 → one, 2 → few, 5 → many. The branch chosen must be the one
+  // Intl picks for the locale the *text* is written in.
+  const russian = "{count, plural, one {рабочий} few {рабочих} many {рабочих} other {рабочего}}";
+  assert.equal(formatMessage(russian, "ru", { count: 1 }), "рабочий");
+  assert.equal(formatMessage(russian, "ru", { count: 2 }), "рабочих");
+  assert.equal(formatMessage(russian, "ru", { count: 5 }), "рабочих");
+
+  // Exact `=0` wins over the category, which is how "no workers" gets its own
+  // sentence without a second key.
+  const zeroed = "{count, plural, =0 {idle} one {# worker} other {# workers}}";
+  assert.equal(formatMessage(zeroed, "en", { count: 0 }), "idle");
+  assert.equal(formatMessage(zeroed, "en", { count: 1 }), "1 worker");
+
+  // Turkish keeps the noun singular after a number — the reason the codebase has
+  // no plural logic today (inventory §7.8) and would have shipped none.
+  assert.equal(formatMessage("{count} işçi", "tr", { count: 3 }), "3 işçi");
+});
+
+check("Lokalizasyon Faz 1: the formatter is locale-aware and fails loudly on bad patterns", () => {
+  // §11.2 / inventory §7.7: grouping, decimal separator and percent *position*
+  // are formatting decisions, not translations. Asserting the separators, not
+  // one rendering, keeps this true whatever Intl's data does with the digits.
+  const grouped = formatNumber("en", 12345);
+  assert.ok(grouped !== "12345", "a four-plus digit number must be grouped");
+  assert.equal(formatNumber("en", 12345).replace(/\D/gu, ""), "12345");
+  assert.notEqual(formatNumber("de", 12345), formatNumber("en", 12345));
+  assert.ok(formatPercent("en", 0.3).endsWith("%"), "English puts the sign after");
+  assert.ok(formatPercent("tr", 0.3).startsWith("%"), "Turkish puts the sign before");
+  assert.equal(formatNumber("en", Number.NaN), "—", "a broken number never prints NaN");
+
+  // Lists: joining with ", " in code bakes English punctuation into every
+  // language (inventory §7.5).
+  assert.ok(formatList("en", ["wood", "stone", "gold"]).includes("and"));
+  assert.equal(formatList("en", []), "");
+
+  // ICU apostrophe rule, which Turkish depends on: a lone apostrophe is text.
+  assert.equal(formatMessage("Kışla'dan çıktı.", "tr"), "Kışla'dan çıktı.");
+  assert.equal(formatMessage("'{'not a placeholder'}'", "en"), "{not a placeholder}");
+
+  // A pattern the subset does not understand is an authoring error, and must
+  // surface where it is written rather than render half a sentence in eight
+  // languages. This is the trade made when the project chose an in-repo subset.
+  for (const broken of [
+    "{n, date}",
+    "{n, plural, one {#}}",
+    "{n, number, currency}",
+    "{n",
+    "unbalanced }",
+  ]) {
+    assert.throws(
+      () => formatMessage(broken, "en", { n: 1 }),
+      LocalizationSyntaxError,
+      `"${broken}" must be rejected`,
+    );
+  }
+
+  // A missing parameter degrades visibly and is reported — it never blanks the
+  // label and never throws in front of a player.
+  const issues: string[] = [];
+  const rendered = formatMessage("{amount} odun gerekli", "tr", {}, (issue) =>
+    issues.push(issue.kind),
+  );
+  assert.equal(rendered, "{amount} odun gerekli");
+  assert.deepEqual(issues, ["missing-parameter"]);
+
+  // Placeholder extraction is what Plan §19.1's cross-locale check will compare.
+  assert.deepEqual(
+    extractPlaceholders("{count, plural, one {# of {total}} other {# of {total}}}"),
+    ["count", "total"],
+  );
+});
+
+check("Lokalizasyon Faz 1: the registry decides locale matching, and refuses to guess", () => {
+  // Plan §12.1: similar locales are not interchangeable. Every claim below is a
+  // deliberate registry entry; the refusals are the point of the check.
+  assert.equal(matchBrowserLocale(["tr-TR"]), "tr", "a region variant reaches its language");
+  assert.equal(matchBrowserLocale(["fr-CA", "en-GB"]), "en", "an unshipped locale is skipped");
+  assert.equal(matchBrowserLocale(["xx"]), null, "an unknown tag matches nothing");
+  const all = { enabledOnly: false };
+  assert.equal(matchBrowserLocale(["de-AT"], all), "de");
+  assert.equal(matchBrowserLocale(["pt"], all), "pt-BR");
+  assert.equal(matchBrowserLocale(["pt-PT"], all), null, "§12.1: pt-PT is not pt-BR");
+  assert.equal(matchBrowserLocale(["zh-Hans"], all), "zh-CN");
+  assert.equal(matchBrowserLocale(["zh-Hant"], all), null, "§12.2: Traditional is not Simplified");
+
+  // §12.2's chain: predictable, and it always terminates at the source locale.
+  assert.deepEqual(fallbackChain("tr"), ["tr", SOURCE_LOCALE]);
+  assert.deepEqual(fallbackChain(SOURCE_LOCALE), [SOURCE_LOCALE]);
+  for (const entry of localeRegistry()) {
+    const chain = fallbackChain(entry.code);
+    assert.equal(chain[0], entry.code);
+    assert.equal(chain.at(-1), SOURCE_LOCALE, `${entry.code} must fall back to the source locale`);
+    assert.equal(new Set(chain).size, chain.length, `${entry.code} has a fallback cycle`);
+    assert.ok(entry.nativeName.length > 0 && entry.englishName.length > 0);
+  }
+  assert.equal(localeDescriptor(SOURCE_LOCALE)?.fallback, null, "the source locale ends the chain");
+  assert.equal(localeDescriptor(PSEUDO_LOCALE)?.enabled, false, "§20: never offered to a player");
+
+  // §12.1's order, as one function: URL override → saved → browser → English.
+  const browser = ["tr-TR"];
+  assert.equal(resolveInitialLocale({ savedLocale: "en", browserLanguages: browser }), "en");
+  assert.equal(resolveInitialLocale({ browserLanguages: browser }), "tr");
+  assert.equal(resolveInitialLocale({ browserLanguages: ["fr-FR"] }), SOURCE_LOCALE);
+  assert.equal(
+    resolveInitialLocale({ forcedLocale: PSEUDO_LOCALE, savedLocale: "tr", browserLanguages: browser }),
+    PSEUDO_LOCALE,
+    "a forced locale may be one the picker never offers",
+  );
+  assert.equal(
+    resolveInitialLocale({ savedLocale: "de", browserLanguages: browser }),
+    "tr",
+    "a saved locale that is not shipped yet is ignored, not loaded",
+  );
+});
+
+check("Lokalizasyon Faz 1: pseudo-localization lengthens text without breaking syntax", () => {
+  // Plan §20: the pseudo-locale exists to break layouts before a translator
+  // does. It is worthless if it also breaks the message, so placeholders must
+  // survive it byte for byte.
+  const pattern = "{count, plural, one {# worker} other {# workers}} on {building}";
+  const pseudo = pseudoLocalize(pattern);
+  assert.deepEqual(extractPlaceholders(pseudo), extractPlaceholders(pattern));
+  assert.ok(pseudo.length > pattern.length * 1.1, "§15.1: the string must actually grow");
+  assert.equal(formatMessage(pseudo, "en", { count: 2, building: "Barracks" }).includes("2"), true);
+  // Quoted literals stay literal, so an escaped brace does not become syntax.
+  assert.ok(pseudoLocalize("'{'x'}'").includes("'{'"));
+
+  // Generated, never authored: the bundle is derived from the source locale, so
+  // it cannot go stale when a key is added.
+  const source = mergeLocaleDomains("en", [
+    { domain: "common", entries: { "a.b": "Barracks", "c.d": "{n} of {m}" } },
+  ]);
+  const derived = createPseudoBundle(source, PSEUDO_LOCALE);
+  assert.deepEqual([...derived.entries.keys()], [...source.entries.keys()]);
+  assert.notEqual(derived.entries.get("a.b"), source.entries.get("a.b"));
+  assert.deepEqual(extractPlaceholders(derived.entries.get("c.d")!), ["m", "n"]);
+
+  // The debug switches are read from the URL, not from a global.
+  assert.deepEqual(parseLocalizationDebugOptions("?locale=qps-ploc&loc-debug=keys"), {
+    forcedLocale: PSEUDO_LOCALE,
+    displayMode: "keys",
+  });
+  assert.deepEqual(parseLocalizationDebugOptions(""), {
+    forcedLocale: null,
+    displayMode: "translated",
+  });
+});
+
+check("Lokalizasyon Faz 1: merging domain files refuses duplicate and malformed keys", () => {
+  // §7.2 splits the files so two translators can work at once; that only holds
+  // if a key claimed twice is an error instead of a last-write-wins accident.
+  const issues: LocalizationIssue[] = [];
+  const bundle = mergeLocaleDomains(
+    "tr",
+    [
+      { domain: "common", entries: { "x.y": "first" } },
+      { domain: "hud", entries: { "x.y": "second", "z.w": "kept" } },
+    ],
+    (issue) => issues.push(issue),
+  );
+  assert.equal(bundle.entries.get("x.y"), "first", "the first declaration wins, loudly");
+  assert.equal(bundle.entries.get("z.w"), "kept");
+  assert.equal(bundle.keyDomains.get("z.w"), "hud");
+  assert.deepEqual(
+    issues.map((issue) => issue.kind),
+    ["duplicate-key"],
+  );
+});
+
+await checkAsync("Lokalizasyon Faz 1: locale switches at runtime and falls back key by key", async () => {
+  // The Faz 1 acceptance criteria, as a test: switch without a reload, fall back
+  // per key, report what is missing, and keep the choice.
+  const files = (entries: Record<string, string>): readonly LocaleDomainFile[] => [
+    { domain: "common" as LocaleDomain, entries },
+  ];
+  const bundles: Record<string, Record<string, string>> = {
+    en: {
+      "a.name": "Barracks",
+      "b.only_source": "Source only",
+      "c.count": "{n, plural, one {# unit} other {# units}}",
+      "d.source_count": "{n, plural, one {# rider} other {# riders}}",
+    },
+    tr: { "a.name": "Kışla", "c.count": "{n} birim" },
+  };
+  const loaded: string[] = [];
+  const issues: LocalizationIssue[] = [];
+  let saved: string | null = null;
+  const service = new LocalizationService({
+    loadDomains: async (locale) => {
+      loaded.push(locale);
+      return files(bundles[locale] ?? {});
+    },
+    preferences: {
+      read: () => saved,
+      write: (locale) => {
+        saved = locale;
+      },
+    },
+    onIssue: (issue) => issues.push(issue),
+    browserLanguages: ["tr-TR"],
+  });
+
+  const events: string[] = [];
+  const unsubscribe = service.onLocaleChanged((event) => {
+    events.push(`${event.previousLocale ?? "-"}->${event.locale}`);
+  });
+
+  await quietly(async () => {
+    // §12.1: no saved preference, so the browser decides.
+    assert.equal(await service.initialize(), "tr");
+    assert.equal(service.getLocale(), "tr");
+    assert.equal(saved, null, "resolving a locale at boot is not a player choice");
+    assert.deepEqual(events, ["en->tr"]);
+
+    assert.equal(service.t("a.name"), "Kışla");
+    // §12.2: the gap falls back per key, not per file, and says so.
+    assert.equal(service.t("b.only_source"), "Source only");
+    assert.ok(issues.some((issue) => issue.kind === "fallback-used" && issue.key === "b.only_source"));
+    assert.equal(service.t("c.count", { n: 1 }), "1 birim", "the active locale answers first");
+    // A key served by the fallback is formatted with the *source* locale's
+    // plural rules: the text is English prose whatever the active locale is.
+    assert.equal(service.t("d.source_count", { n: 1 }), "1 rider");
+    assert.equal(service.t("d.source_count", { n: 4 }), "4 riders");
+
+    // §20: a key that exists nowhere is visible, collected, and never thrown.
+    const missing = service.t("nope.at.all");
+    assert.ok(isMissingKeyMarker(missing), `expected a marker, got "${missing}"`);
+    assert.equal(missing, missingKeyMarker("nope.at.all"));
+    assert.deepEqual(service.missingKeys(), ["nope.at.all"]);
+
+    // §13: switching is a runtime operation, and it is what the player chose.
+    await service.setLocale("en");
+    assert.equal(service.t("a.name"), "Barracks");
+    assert.equal(service.t("c.count", { n: 2 }), "2 units");
+    assert.equal(saved, "en", "an explicit switch is persisted");
+    assert.deepEqual(events, ["en->tr", "tr->en"]);
+    assert.deepEqual(loaded, ["en", "tr"], "a bundle is fetched once and cached");
+
+    // The test-coupling contract (inventory §7.10): in key mode every lookup
+    // renders its key, so an assertion can bind to the key instead of the
+    // sentence and survive any retuning of the text.
+    service.setDisplayMode("keys");
+    assert.equal(service.t("a.name"), "a.name");
+    service.setDisplayMode("translated");
+
+    // An unregistered locale is refused rather than fetched.
+    await service.setLocale("xx-YY");
+    assert.equal(service.getLocale(), SOURCE_LOCALE);
+    assert.ok(issues.some((issue) => issue.kind === "load-failed" && issue.locale === "xx-YY"));
+    assert.ok(!loaded.includes("xx-YY"));
+
+    // A saved preference outranks the browser on the next boot.
+    const second = new LocalizationService({
+      loadDomains: async (locale) => files(bundles[locale] ?? {}),
+      preferences: { read: () => saved, write: () => {} },
+      browserLanguages: ["tr-TR"],
+    });
+    assert.equal(await second.initialize(), "en");
+  });
+
+  unsubscribe();
+  await service.setLocale("tr");
+  assert.deepEqual(events, ["en->tr", "tr->en"], "an unsubscribed listener stops hearing changes");
+});
+
+check("Lokalizasyon Faz 1: shipped locale folders match the registry and the source keys", () => {
+  // Plan §19's validator lands with Faz 2; until then this is the gate that
+  // keeps the folders honest. It asserts structure and parity only — never a
+  // wording — so translating or retuning a string cannot turn the build red.
+  const shipped = selectableLocales();
+  assert.ok(
+    shipped.some((entry) => entry.code === SOURCE_LOCALE) && shipped.length >= 2,
+    "the dev pair (en/tr) must both be selectable",
+  );
+  const read = (locale: string, domain: string): Record<string, unknown> => {
+    const path = `public/game-data/locales/${locale}/${domain}.json`;
+    assert.ok(existsSync(path), `${path} is missing — every locale carries every domain`);
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    assert.ok(
+      typeof parsed === "object" && parsed !== null && !Array.isArray(parsed),
+      `${path} must be a flat JSON object`,
+    );
+    return parsed as Record<string, unknown>;
+  };
+
+  const sourceKeys = new Map<string, string>();
+  for (const domain of LOCALE_DOMAINS) {
+    for (const [key, value] of Object.entries(read(SOURCE_LOCALE, domain))) {
+      assert.equal(typeof value, "string", `${SOURCE_LOCALE}/${domain}.json: ${key} is not a string`);
+      assert.ok((value as string).trim().length > 0, `${SOURCE_LOCALE}/${domain}.json: ${key} is empty`);
+      assert.ok(!sourceKeys.has(key), `${key} is declared in two domain files of ${SOURCE_LOCALE}`);
+      // §8.2: keys are dotted paths, never derived from the visible text.
+      assert.match(key, /^[a-z0-9_]+(\.[a-z0-9_]+)+$/u, `${key} is not a <domain>.<entity>.<field> key`);
+      sourceKeys.set(key, value as string);
+      // A pattern the formatter cannot parse would fail in front of a player.
+      extractPlaceholders(value as string);
+    }
+  }
+  assert.ok(sourceKeys.size > 0, "the source locale must carry at least the seeded keys");
+
+  for (const entry of shipped) {
+    if (entry.code === SOURCE_LOCALE) continue;
+    const seen = new Set<string>();
+    for (const domain of LOCALE_DOMAINS) {
+      for (const [key, value] of Object.entries(read(entry.code, domain))) {
+        assert.equal(typeof value, "string", `${entry.code}/${domain}.json: ${key} is not a string`);
+        assert.ok(!seen.has(key), `${key} is declared twice in ${entry.code}`);
+        seen.add(key);
+        // §3.1: English is the source of truth, so a target locale cannot
+        // invent a key the source does not have.
+        assert.ok(sourceKeys.has(key), `${entry.code} declares "${key}", which ${SOURCE_LOCALE} does not`);
+        // §19.1: the placeholders must match, or the translation drops a value.
+        assert.deepEqual(
+          extractPlaceholders(value as string),
+          extractPlaceholders(sourceKeys.get(key)!),
+          `${entry.code} / ${key}: placeholders differ from ${SOURCE_LOCALE}`,
+        );
+      }
     }
   }
 });

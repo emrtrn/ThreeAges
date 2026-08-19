@@ -681,7 +681,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const models = await Promise.all(
         modelIds.map(async (id) => {
           try {
-            return (await this.assetLoader!.loadModel(id)).scene;
+            const scene = (await this.assetLoader!.loadModel(id)).scene;
+            await this.applyVfxMeshMaterialSlots(id, scene);
+            return scene;
           } catch {
             return null;
           }
@@ -4457,6 +4459,34 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.instanceMeshes.set(assetId, meshes);
     this.instanceProbeMaterials.set(assetId, clonedMaterials);
     return group;
+  }
+
+  /**
+   * Gives a VFX mesh source the material its asset authors assigned.
+   *
+   * A mesh particle's look usually lives in a `*.materials.json` slot assignment
+   * rather than in the GLB — a debris tile exports one default grey material and
+   * gets its clay surface from the sidecar. The instanced particle renderer reads
+   * the loaded root's materials directly, so without this it renders untextured.
+   * Same gap the spline generator assets had, and for the same reason: an effect's
+   * mesh ids are not in `layout.instances`, so `loadSceneMaterials` never saw them.
+   */
+  private async applyVfxMeshMaterialSlots(assetId: string, root: Object3D): Promise<void> {
+    const manifest =
+      this.assetManifest ?? (this.assetLoader ? await this.assetLoader.loadManifest() : null);
+    if (!manifest) return;
+    let slots = this.assetMaterialSlots.get(assetId);
+    if (!slots) {
+      const asset = manifest.assets.find((entry) => entry.id === assetId);
+      if (!asset) return;
+      slots = await loadAssetMaterialSlots(assetPath(asset));
+      if (!hasAssignedMaterialSlots(slots)) return;
+      this.assetMaterialSlots.set(assetId, slots);
+    }
+    await Promise.all(
+      assignedMaterialSlotIds(slots).map((id) => this.ensureMaterialLoaded(id).catch(() => undefined)),
+    );
+    applyMaterialSlotOverrides(root, slots, (materialId) => this.materialCache.get(materialId));
   }
 
   private resolveAssetMaterialSlots(assetId: string): AssetMaterialSlotsDef | undefined {

@@ -1141,25 +1141,96 @@ Dil yükleme, lookup, fallback ve runtime değiştirme sistemini kurmak.
 
 ## Görevler
 
-- [ ] `LocalizationService` oluştur
-- [ ] locale registry oluştur
-- [ ] locale loader oluştur
-- [ ] `en` fallback uygula
-- [ ] locale preference saklama mekanizması ekle
-- [ ] browser locale detection ekle
-- [ ] runtime `setLocale()` akışını kur
-- [ ] `localeChanged` event'i ekle
-- [ ] missing-key debug davranışını ekle
-- [ ] `Intl.NumberFormat` ortak formatter ekle
-- [ ] plural/message format yaklaşımını belirle
+- [x] `LocalizationService` oluştur
+- [x] locale registry oluştur
+- [x] locale loader oluştur
+- [x] `en` fallback uygula
+- [x] locale preference saklama mekanizması ekle
+- [x] browser locale detection ekle
+- [x] runtime `setLocale()` akışını kur
+- [x] `localeChanged` event'i ekle
+- [x] missing-key debug davranışını ekle
+- [x] `Intl.NumberFormat` ortak formatter ekle
+- [x] plural/message format yaklaşımını belirle
 
 ## Kabul kriterleri
 
-- [ ] `en` ve `tr` arasında sayfa yenilemeden geçiş yapılabiliyor
-- [ ] eksik `tr` key'i `en` değerine düşüyor
-- [ ] eksik `en` key'i debug'da açıkça görünüyor
-- [ ] locale tercihi yeniden açılışta korunuyor
-- [ ] TypeScript kontrolü geçiyor
+- [x] `en` ve `tr` arasında sayfa yenilemeden geçiş yapılabiliyor
+- [x] eksik `tr` key'i `en` değerine düşüyor
+- [x] eksik `en` key'i debug'da açıkça görünüyor
+- [x] locale tercihi yeniden açılışta korunuyor
+- [x] TypeScript kontrolü geçiyor
+
+## Durum: tamamlandı (19 Ağustos 2026)
+
+**Kod** — `src/game/localization/`: `LocalizationTypes.ts`, `localeRegistry.ts`,
+`LocalizationFormatter.ts`, `LocalizationLoader.ts`, `LocalizationDebug.ts`,
+`LocalizationService.ts`, artı `bootLocalization.ts`. Yedinci dosya bilinçli:
+`window` / `navigator` / `localStorage` ne varsa orada toplandı, §33'ün altı
+dosyası saf ve node'da test edilebilir kaldı.
+
+**Veri** — `public/game-data/locales/{en,tr}/`: envanter §9.1'in on domain
+dosyası. `common.json` çekirdek anahtarlarla (kaynak adları, çağ adları, bir
+çoğul örneği) dolduruldu; kalan dokuzu Faz 2'nin yazacağı boş `{}`.
+
+**Boot** — `src/main.ts` → `bootFoundation()`. Locale bundle preset fetch'iyle
+paralel iner ve boot'un sonunda beklenir; menü de UI olduğu için metin ilk
+çizimden önce hazır olmak zorunda.
+
+**Test** — `tools/engine-tests.ts` içinde yedi yeni kontrol
+(`Lokalizasyon Faz 1: …`). Hiçbiri bir çeviriyi alıntılamıyor: yapı, eşlik ve
+türetme doğrulanıyor, cümle değil (CLAUDE.md'nin "tuning'i değil sözleşmeyi
+doğrula" kuralı).
+
+### Faz 1'de verilen kararlar
+
+1. **ICU MessageFormat: repo içi alt küme** (`LocalizationFormatter.ts`, ~470
+   satır), `intl-messageformat` bağımlılığı yerine. `Intl.PluralRules` /
+   `NumberFormat` / `ListFormat` üstünde `{ad}`, `{n, number[, integer|percent]}`,
+   `{n, plural, =0/one/few/other {…}}` (`#` ve `offset:` dâhil),
+   `{x, select, …}` ve ICU kesme işareti kuralı destekleniyor. Desteklenmeyen
+   söz dizimi **sessizce geçilmiyor, parse hatası veriyor** — sekiz dilde yarım
+   cümle basmaktansa yazıldığı yerde patlaması tercih edildi. Gerekçe: sıfır
+   runtime bağımlılığı + reponun kendi validator'ları/test koşucusu yazma
+   kültürü. Karşılığı: iç içe mesajlarda ince hata riski, karşılığında da
+   `test:engine` kapsamı.
+2. **Test kuplajı: testler anahtara bakar** (envanter §7.10, öneri 4).
+   `service.setDisplayMode("keys")` ve `?loc-debug=keys` her lookup'ı kendi
+   anahtarına çeviriyor; `?locale=qps-ploc` picker'ın hiç göstermediği
+   pseudo-locale'e URL'den erişiyor. 294 assertion'ın taşınması Faz 2'nin işi,
+   ama taşınacağı hedef artık var.
+3. **Dosya biçimi: düz tam anahtar.** `common.json` içinde
+   `"building.lumber_camp.name": "…"` — iç içe JSON değil. Domain dosyası bir
+   *teslimat birimi*, namespace değil: `errors.json` hem `placement.error.*`
+   hem `road.hint.*` taşıyor. Bir anahtarın iki domain dosyasında geçmesi hata
+   (son yazan kazanmıyor), çünkü dosyaları bölmenin amacı iki çevirmenin
+   birbirini ezmemesi.
+4. **Tarayıcı eşlemesi kör değil** (§12.1). Dil alt etiketi yalnız *kodu o dil
+   olan* locale'e düşer: `de-AT → de` ✓, ama `pt-PT → pt-BR` ✗ ve
+   `zh-Hant → zh-CN` ✗. Genel `pt` yine `pt-BR`'ye gider, çünkü `pt-BR` onu
+   registry'de açıkça talep ediyor. Talep etmeyen hiçbir etiket eşleşmez.
+5. **Eksik anahtar dev ve release'de farklı.** Dev'de `⟦missing:key⟧`,
+   release'de ham anahtar: oyuncuya `⟦missing:…⟧` gösterilmez, geliştiricinin
+   ise kaçırması mümkün olmamalı. Her iki durumda da `missingKeys()` topluyor ve
+   çağrı asla exception atmıyor.
+6. **Tier 1/2 locale'leri registry'de kayıtlı ama `enabled: false`.** Fallback
+   zinciri, font grubu ve tarayıcı talebi bir kere kararlaştırılıp gözden
+   geçirilebilsin diye; §33 gereği klasörleri **açılmadı**.
+
+### Faz 2'ye devredilenler
+
+- `tools/validate-locales.ts` (§19). Bugünkü karşılığı engine-test'teki
+  "shipped locale folders match the registry and the source keys" kontrolü:
+  klasör/anahtar/placeholder eşliğini tutuyor ama ayrı bir araç değil.
+- Envanter §7.10'un 294 assertion'ı — hedef karar verildi, taşıma yapılmadı.
+- `resourceLabels.ts` ↔ `resources.json` kaynak adı ikiliği (envanter §7.2):
+  tek anahtar `common.resource.<id>.name` altında birleşecek.
+- Klavye harflerinin `{key}` parametresine çıkarılması (envanter §7.6).
+- `rtsObjectiveTracker.ts`'deki `innerHTML` → `textContent` (envanter §7.9).
+
+Not: pseudo-locale altyapısı (`qps-ploc`, üretilen bundle, `%35` uzatma) Faz
+1'de yazıldı; **Faz 3 hâlâ açık** — orası altyapı değil, UI'yi o locale'de gezip
+taşmaları düzeltme işi.
 
 ---
 

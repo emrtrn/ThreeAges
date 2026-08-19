@@ -1,0 +1,10 @@
+{
+  "common.resource.food.name": "Yiyecek",
+  "common.resource.wood.name": "Odun",
+  "common.resource.stone.name": "Taş",
+  "common.resource.gold.name": "Altın",
+  "common.cost.free": "Ücretsiz",
+  "common.age.settlement.name": "Yerleşim",
+  "common.age.town.name": "Kasaba",
+  "common.worker.count": "{count} işçi"
+}

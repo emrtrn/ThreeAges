@@ -47,18 +47,18 @@
   },
   "initialize": {
     "lifetime": [
-      0.65,
-      1.05
+      1,
+      2
     ],
     "startSize": [
-      2,
-      3
+      0.5,
+      1
     ],
     "startColor": "#9a8b70",
     "startOpacity": 1,
     "direction": [
       0,
-      1,
+      2,
       0
     ],
     "speed": [
@@ -84,8 +84,8 @@
       0
     ],
     "endSize": [
-      2.1,
-      3.2
+      0.5,
+      1
     ],
     "endColor": "#655a49",
     "endOpacity": 1,
@@ -95,7 +95,9 @@
   "renderer": {
     "type": "mesh",
     "modelIds": [
-      "rock"
+      "naturemega-pebble-round-1",
+      "naturemega-pebble-round-2",
+      "naturemega-pebble-round-3"
     ],
     "modelSelection": "random",
     "materialMode": "tint",

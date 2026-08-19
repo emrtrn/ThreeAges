@@ -433,9 +433,9 @@ Son satır dikkat çekici: bilinmeyen bir kaynak için ham ID basılıyor — pl
 1. **Domain dosyası bölümlemesi** plan §7.1'e göre şu olsun (bu envanterin §3 başlıkları):
    `common`, `menu`, `hud`, `buildings`, `errors`, `selection`, `notifications`, `objectives`, `match`, `units`.
    `selection.json` tek başına toplamın ~%35'i; plan §7.2'nin "tek büyük JSON kullanma" gerekçesi burada somutlaşıyor.
-2. **ICU MessageFormat kararı Faz 1'de verilsin** (§7.8) — İngilizce kaynak metin yazılmadan önce, çünkü çoğul olmadan `en` dosyası yazılamaz.
+2. **ICU MessageFormat kararı Faz 1'de verilsin** (§7.8) — İngilizce kaynak metin yazılmadan önce, çünkü çoğul olmadan `en` dosyası yazılamaz. ✅ **Karar verildi (19 Ağustos 2026):** repo içi ICU alt kümesi (`src/game/localization/LocalizationFormatter.ts`), `Intl.PluralRules` üstünde; desteklenmeyen söz dizimi parse hatası. Ayrıntı: planın Faz 1 durum bölümü, karar 1.
 3. **Tarama script'i kalıcılaşsın**: bu envanterin ürettiği çıkarıcı, `tools/validate-locales.ts` (plan §19) içinde "kodda kalan hardcoded metin" kontrolü olarak yeniden kullanılabilir. Faz 2'nin "hardcoded gameplay UI metni kalmamış" kabul kriterini ölçülebilir yapan tek şey budur.
-4. **Test kuplajı Faz 1 kapsamına alınsın** (§7.10) — 294 assertion'ın nasıl taşınacağı Faz 2 başlamadan kararlaştırılmalı.
+4. **Test kuplajı Faz 1 kapsamına alınsın** (§7.10) — 294 assertion'ın nasıl taşınacağı Faz 2 başlamadan kararlaştırılmalı. ✅ **Karar verildi (19 Ağustos 2026):** testler metne değil **anahtara** bakacak; `setDisplayMode("keys")` / `?loc-debug=keys` ve `?locale=qps-ploc` Faz 1'de yazıldı. Taşımanın kendisi Faz 2'de.
 5. **Debug namespace'i kapsam dışında kalsın** (§6.1), ama karar belgeye yazılsın ki Faz 9'da yeniden tartışılmasın.
 6. **§7.3'teki ek hatası bir bug olarak ayrı ele alınsın** — lokalizasyondan bağımsız olarak bugün yanlış metin üretiyor olabilir.
 

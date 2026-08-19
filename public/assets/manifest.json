@@ -21928,10 +21928,10 @@
     },
     {
       "id": "rts-fx-debris-stone",
-      "name": "RTS Debris Stone",
+      "name": "FX_RTS_Debris_Tile",
       "assetType": "effect",
       "category": "RTS Damage",
-      "path": "assets/ThreeAges/Effects/FX_RTS_Debris_Stone.effect.json",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Debris_Tile.effect.json",
       "tags": [
         "rts",
         "damage",
@@ -22477,834 +22477,6 @@
         "receiveShadow": true,
         "collision": true,
         "bytes": 3175890
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "birchtree-1",
-      "name": "Birch Tree 1",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/BirchTree_1.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 436704
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "birchtree-2",
-      "name": "Birch Tree 2",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/BirchTree_2.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 528208
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "birchtree-3",
-      "name": "Birch Tree 3",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/BirchTree_3.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 672712
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "birchtree-4",
-      "name": "Birch Tree 4",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/BirchTree_4.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 374568
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "birchtree-5",
-      "name": "Birch Tree 5",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/BirchTree_5.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 415448
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "bush",
-      "name": "Bush",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Bush.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 65704
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "bush-flowers",
-      "name": "Bush Flowers",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Bush_Flowers.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 116400
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "bush-large",
-      "name": "Bush Large",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Bush_Large.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 57032
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "bush-large-flowers",
-      "name": "Bush Large Flowers",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Bush_Large_Flowers.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 109808
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "bush-small",
-      "name": "Bush Small",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Bush_Small.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 51008
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "bush-small-flowers",
-      "name": "Bush Small Flowers",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Bush_Small_Flowers.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 101964
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "deadtree-1",
-      "name": "Dead Tree 1",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/DeadTree_1.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 196744
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "deadtree-10",
-      "name": "Dead Tree 10",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/DeadTree_10.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 200048
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "deadtree-2",
-      "name": "Dead Tree 2",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/DeadTree_2.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 210972
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "deadtree-3",
-      "name": "Dead Tree 3",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/DeadTree_3.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 200152
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "deadtree-4",
-      "name": "Dead Tree 4",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/DeadTree_4.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 164804
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "deadtree-5",
-      "name": "Dead Tree 5",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/DeadTree_5.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 109588
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "deadtree-6",
-      "name": "Dead Tree 6",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/DeadTree_6.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 194320
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "deadtree-7",
-      "name": "Dead Tree 7",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/DeadTree_7.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 207264
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "deadtree-8",
-      "name": "Dead Tree 8",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/DeadTree_8.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 243968
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "deadtree-9",
-      "name": "Dead Tree 9",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/DeadTree_9.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 139628
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "flower-1",
-      "name": "Flower 1",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Flower_1.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 53980
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "flower-1-clump",
-      "name": "Flower 1 Clump",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Flower_1_Clump.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 71236
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "flower-2",
-      "name": "Flower 2",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Flower_2.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 48816
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "flower-2-clump",
-      "name": "Flower 2 Clump",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Flower_2_Clump.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 51644
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "flower-3-clump",
-      "name": "Flower 3 Clump",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Flower_3_Clump.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 51644
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "flower-4-clump",
-      "name": "Flower 4 Clump",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Flower_4_Clump.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 51620
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "flower-5-clump",
-      "name": "Flower 5 Clump",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Flower_5_Clump.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 51616
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "grass-large",
-      "name": "Grass Large",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Grass_Large.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 10436
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "grass-large-extruded",
-      "name": "Grass Large Extruded",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Grass_Large_Extruded.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 31520
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "grass-small",
-      "name": "Grass Small",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/Grass_Small.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 7896
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "mapletree-1",
-      "name": "Maple Tree 1",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/MapleTree_1.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 316436
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "mapletree-2",
-      "name": "Maple Tree 2",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/MapleTree_2.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 359624
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "mapletree-3",
-      "name": "Maple Tree 3",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/MapleTree_3.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 426980
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "mapletree-4",
-      "name": "Maple Tree 4",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/MapleTree_4.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 231504
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "mapletree-5",
-      "name": "Maple Tree 5",
-      "assetType": "staticMesh",
-      "category": "Environment",
-      "path": "assets/ThreeAges/Environment/MapleTree_5.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 352408
       },
       "license": "Unknown"
     },
@@ -25122,10 +24294,10 @@
     },
     {
       "id": "mountain4k",
-      "name": "Mountain4 K",
+      "name": "Mountain4K",
       "assetType": "staticMesh",
       "category": "Landscape",
-      "path": "assets/ThreeAges/Landscape/Mountain4K.glb",
+      "path": "assets/ThreeAges/Props/Mountain4K.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -30059,6 +29231,196 @@
         "bytes": 645696
       },
       "license": "Unknown"
+    },
+    {
+      "id": "stone-bridge",
+      "name": "StoneBridge",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/StoneBridge.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1282176
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "debris-tile-1",
+      "name": "Debris Tile 1",
+      "assetType": "staticMesh",
+      "category": "Props",
+      "path": "assets/ThreeAges/Props/Debris_Tile_1.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3540
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "debris-tile-2",
+      "name": "Debris Tile 2",
+      "assetType": "staticMesh",
+      "category": "Props",
+      "path": "assets/ThreeAges/Props/Debris_Tile_2.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3180
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "debris-tile-3",
+      "name": "Debris Tile 3",
+      "assetType": "staticMesh",
+      "category": "Props",
+      "path": "assets/ThreeAges/Props/Debris_Tile_3.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2296
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "debris-wood-1",
+      "name": "Debris Wood 1",
+      "assetType": "staticMesh",
+      "category": "Props",
+      "path": "assets/ThreeAges/Props/Debris_Wood_1.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2624
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "debris-wood-2",
+      "name": "Debris Wood 2",
+      "assetType": "staticMesh",
+      "category": "Props",
+      "path": "assets/ThreeAges/Props/Debris_Wood_2.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2396
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "debris-wood-3",
+      "name": "Debris Wood 3",
+      "assetType": "staticMesh",
+      "category": "Props",
+      "path": "assets/ThreeAges/Props/Debris_Wood_3.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2572
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "rts-fx-debris-stone-copy",
+      "name": "FX_RTS_Debris_Stone",
+      "assetType": "effect",
+      "category": "RTS Damage",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Debris_Stone.effect.json",
+      "tags": [
+        "rts",
+        "damage",
+        "debris",
+        "stone",
+        "collapse"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "RTS Damage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1213
+      },
+      "license": "Project-local RTS effect"
     }
   ]
 }

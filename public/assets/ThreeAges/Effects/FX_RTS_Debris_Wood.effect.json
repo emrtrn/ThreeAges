@@ -3,14 +3,33 @@
   "type": "particleEffect",
   "name": "RTS Debris Wood",
   "category": "RTS Damage",
-  "tags": ["rts", "damage", "debris", "wood", "collapse"],
+  "tags": [
+    "rts",
+    "damage",
+    "debris",
+    "wood",
+    "collapse"
+  ],
   "system": {
     "enabled": true,
     "loop": false,
     "duration": 0.3,
     "seed": null,
     "maxParticles": 8,
-    "bounds": { "mode": "fixed", "min": [-5, -2, -5], "max": [5, 5, 5], "showInPreview": true }
+    "bounds": {
+      "mode": "fixed",
+      "min": [
+        -5,
+        -2,
+        -5
+      ],
+      "max": [
+        5,
+        5,
+        5
+      ],
+      "showInPreview": true
+    }
   },
   "spawn": {
     "mode": "burst",
@@ -20,24 +39,54 @@
     "interval": 0,
     "shape": "sphere",
     "radius": 0.3,
-    "boxSize": [0, 0, 0]
+    "boxSize": [
+      0,
+      0,
+      0
+    ]
   },
   "initialize": {
-    "lifetime": [0.6, 1],
-    "startSize": [0.32, 0.55],
+    "lifetime": [
+      0.6,
+      2
+    ],
+    "startSize": [
+      2,
+      3
+    ],
     "startColor": "#8a5a33",
     "startOpacity": 1,
-    "direction": [0, 1, 0],
-    "speed": [1.8, 3.4],
+    "direction": [
+      0,
+      1,
+      0
+    ],
+    "speed": [
+      1.8,
+      3.4
+    ],
     "spreadAngleDeg": 68,
-    "rotation": [0, 360],
-    "angularVelocity": [-420, 420]
+    "rotation": [
+      0,
+      360
+    ],
+    "angularVelocity": [
+      -420,
+      420
+    ]
   },
   "update": {
     "gravityScale": 1,
     "drag": 0.22,
-    "acceleration": [0, 0, 0],
-    "endSize": [0.28, 0.42],
+    "acceleration": [
+      0,
+      0,
+      0
+    ],
+    "endSize": [
+      1,
+      2
+    ],
     "endColor": "#56391f",
     "endOpacity": 1,
     "fadeInTime": 0,
@@ -45,7 +94,12 @@
   },
   "renderer": {
     "type": "mesh",
-    "modelIds": ["logs"],
+    "modelIds": [
+      "debris-wood-1",
+      "debris-wood-2",
+      "debris-wood-3"
+    ],
+    "modelSelection": "random",
     "materialMode": "tint",
     "castShadow": false,
     "receiveShadow": true,

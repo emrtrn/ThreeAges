@@ -19,6 +19,7 @@ import {
 } from "@/game/core/runtimeConfig";
 import { loadAgeBalance, loadAiBalance, loadAiLayoutBalance, loadAnimalBalance, loadBuildingBalance, loadCaravanBalance, loadGamePreset, loadMissionScript, loadResourceBalance, loadRoadBalance, loadTradeSiteBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
 import { loadRtsContentCatalog } from "@/game/rts/content/rtsContentLoader";
+import { bootLocalization } from "@/game/localization/bootLocalization";
 import {
   readStoredVictoryCondition,
   victoryChoiceEnablesRegional,
@@ -137,6 +138,11 @@ async function bootFoundation(): Promise<BootFoundationResult> {
   const presetId = params.get("preset") ?? "gameplay_proof";
   const log = logger("System");
 
+  // Text has to be resolvable before anything draws — the main menu is UI too.
+  // Started here and awaited at the end of boot so the locale bundle rides along
+  // with the preset fetch instead of queueing behind it.
+  const localizationReady = bootLocalization();
+
   let preset: GamePreset | null = null;
   try {
     preset = await loadGamePreset(presetId);
@@ -167,6 +173,7 @@ async function bootFoundation(): Promise<BootFoundationResult> {
       config: snapshotRuntimeConfig(config),
     };
   }
+  await localizationReady;
   return {
     preset,
     levelAssetsEnabled: config.flags.levelAssets,

@@ -159,26 +159,7 @@
     },
     {
       "assetId": "dock-firstage",
-      "placements": [
-        {
-          "position": [
-            -3.24,
-            -0.49,
-            -4.36
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -55,
-            0
-          ],
-          "scale": [
-            8,
-            8,
-            10
-          ]
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "port-secondage-level3",
@@ -1564,6 +1545,26 @@
     {
       "assetId": "barracks-secondage-level2",
       "placements": []
+    },
+    {
+      "assetId": "stone-bridge",
+      "placements": [
+        {
+          "position": [
+            -3.23,
+            -0.12,
+            -4.18
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            32,
+            0
+          ],
+          "scale": 3
+        }
+      ]
     }
   ],
   "characters": [],
@@ -1637,29 +1638,7 @@
   ],
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
-  "blockingVolumes": [
-    {
-      "id": "blocking-volume-1",
-      "position": [
-        -3.38,
-        -0.35,
-        -4.29
-      ],
-      "name": "Blocking Volume",
-      "rotation": [
-        0,
-        -55,
-        0
-      ],
-      "scale": 1,
-      "size": [
-        4,
-        1,
-        12
-      ],
-      "navigationRole": "walkable"
-    }
-  ],
+  "blockingVolumes": [],
   "splines": [
     {
       "id": "enemy-base-route",

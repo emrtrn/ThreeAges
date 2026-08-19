@@ -208,6 +208,29 @@ export class RtsActorVisualFactory {
   }
 
   /**
+   * A manifest static mesh loaded through the same template path Actors use, so
+   * the asset-level authoring rides along with it — material slots first, then
+   * the UVW projection (see {@link applyAuthoredSurface}).
+   *
+   * VFX mesh sources go through here rather than a bare GLTF load. The look of a
+   * kit mesh usually lives in its `*.materials.json` sidecar, not in the GLB:
+   * `Debris_Tile_1.glb` exports a single default grey `Material` and gets its
+   * clay surface from the sidecar. A raw load never reads that file, so the
+   * debris rendered with the exported grey — "the mesh inside the VFX has no
+   * material". The template cache is shared with the Actor path, so a debris
+   * model that an Actor already pulled costs no second download.
+   */
+  async loadStaticMeshModel(assetId: string): Promise<Object3D | null> {
+    const path = this.staticMeshAssetPath(assetId);
+    if (path === null) return null;
+    const cached = this.templates.get(assetId);
+    if (cached) return cached.scene;
+    const template = await this.templateFor(assetId, path);
+    this.templates.set(assetId, template);
+    return template.scene;
+  }
+
+  /**
    * `onProgress` feeds the boot curtain (`rtsLoadProgress.ts`). The denominator
    * is the catalog's ref count, which is only knowable after the manifest fetch
    * below — hence reported with every tick rather than promised up front.

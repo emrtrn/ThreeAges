@@ -351,7 +351,7 @@
   "damage": {
     "defaults": {
       "collapseStyle": "inPlace",
-      "ruinSeconds": 3,
+      "ruinSeconds": 4,
       "collapseDeformation": {
         "squash": 0.34,
         "splay": 0.16,
@@ -379,7 +379,6 @@
         },
         "heavySmoke": {
           "effects": [
-            "rts-fx-collapse-dust",
             "rts-fx-fire-loop"
           ],
           "anchor": {
@@ -394,8 +393,7 @@
         },
         "ruinSmoke": {
           "effects": [
-            "rts-fx-ruin-smoke-black",
-            "rts-fx-collapse-dust"
+            "rts-fx-ruin-smoke-black"
           ],
           "anchor": {
             "mode": "ground",
@@ -409,14 +407,13 @@
         },
         "impactDebris": {
           "effects": [
-            "rts-fx-debris-stone",
             "rts-fx-debris-wood"
           ],
           "anchor": {
             "mode": "roof",
             "offset": [
               0,
-              0,
+              1,
               0
             ]
           },
@@ -437,14 +434,13 @@
         },
         "collapseDebris": {
           "effects": [
-            "rts-fx-debris-stone",
             "rts-fx-debris-wood"
           ],
           "anchor": {
             "mode": "roof",
             "offset": [
               0,
-              0,
+              1,
               0
             ]
           }
@@ -508,7 +504,7 @@
         },
         "collapseDeformation": {
           "squash": 0.58,
-          "splay": 0.26,
+          "splay": 0,
           "buckle": 0.04
         }
       },
