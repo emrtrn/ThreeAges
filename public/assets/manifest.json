@@ -19933,7 +19933,7 @@
       "name": "Dock First Age",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Dock_FirstAge.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Dock_FirstAge.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -19947,7 +19947,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 25164
+        "bytes": 177624
       },
       "license": "Unknown"
     },
