@@ -1,0 +1,8 @@
+{
+  "menu.title": "Grenzkönigreiche",
+  "menu.tagline": "Baue deine Wirtschaft auf, verbinde deine Straßen und zerstöre das feindliche Zentrum.",
+  "menu.start_match": "Spiel starten",
+  "menu.loading.title": "Laden",
+  "menu.loading.percent": "{ratio, number, percent}",
+  "menu.loading.preparing": "Wird vorbereitet…"
+}

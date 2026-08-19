@@ -1236,8 +1236,8 @@ doğrula" kuralı).
 - `rtsObjectiveTracker.ts`'deki `innerHTML` → `textContent` (envanter §7.9).
 
 Not: pseudo-locale altyapısı (`qps-ploc`, üretilen bundle, `%35` uzatma) Faz
-1'de yazıldı; **Faz 3 hâlâ açık** — orası altyapı değil, UI'yi o locale'de gezip
-taşmaları düzeltme işi.
+1'de yazıldı; **Faz 3 tamamlandı** — UI, pseudo-locale ile gezildi ve bulunan
+taşmalar düzeltildi (kullanıcı görsel kabulü: OK).
 
 ---
 
@@ -1475,7 +1475,7 @@ bir satır için değil, yer değiştiren bir satır için kırmızıya dönerdi
 
 # Faz 3 — Pseudo-localization ve UI dayanıklılığı
 
-**Durum:** kod tarafı tamamlandı (19 Ağustos 2026); **görsel tur kullanıcıda**.
+**Durum:** tamamlandı (19 Ağustos 2026); kod, browser QA ve kullanıcı görsel kabulü: **OK**.
 
 Doğrulama: `npx tsc --noEmit` temiz, `npm run test:engine` yeşil (1507/1507,
 9 slow atlandı). Kabul kriterinin kalan yarısı bir test değil, bir bakış —
@@ -1651,10 +1651,11 @@ Kabul kriterinin kalan yarısı. Tarayıcıyı **1366×768**'e getirin ve
 - [x] 1366×768 minimum çalışma çözünürlüğünü test et — `.rts-hud-status`'un
       duraklat düğmesini ittiği yer burasıydı; yuva bütçeleri de bu genişlikten
       ölçüldü
-- [ ] bütün ana UI ekranlarını gez (yukarıdaki tur — kullanıcıda)
-- [ ] tooltip wrapping'i doğrula (tarayıcının kendi `title` balonu; ekranda
-      görülecek)
-- [ ] responsive breakpoint'leri gez (turun 9. adımı — kullanıcıda)
+- [x] bütün ana UI ekranlarını gez — kullanıcı görsel kabulü: OK
+- [x] tooltip wrapping'i doğrula — kullanıcı görsel kabulü: OK
+- [x] responsive breakpoint'leri gez — `qps-ploc` ile `1180px` ve `840px`
+      browser turu; 840px bildirim/görev kartı çakışması düzeltildi ve smoke
+      testi yatay taşma olmadığını doğruluyor
 
 ## Kabul kriteri
 
@@ -1669,8 +1670,8 @@ bulunmamalıdır.
   kutuların çakışmadığını hem yatay sayfa taşması olmadığını doğruluyor. Aynı tur,
   üç satırda kısaltılan yapı kartlarının `title` tooltip'i olmadığını da buldu;
   kartlar ve seçim komutları artık tam, aktif locale metnini tooltip'te tutuyor.
-  Bu otomatik/browser kanıtıdır; aşağıdaki kullanıcı görsel kabul maddeleri açık
-  kalır.
+  Bu otomatik/browser kanıtı, kullanıcı tarafından verilen ana UI turu ve
+  tarayıcının yerel tooltip balonu görsel kabulüyle tamamlandı: OK.
 - Turda bulunan her taşma buraya, düzeltmesiyle birlikte yazılacak.
 - `.rts-selection-body`'nin iki satırlık grid'i
   (`grid-template-rows: repeat(2, max-content)`) hâlâ dört satırlık bir bütçe:
@@ -1696,6 +1697,10 @@ bulunmamalıdır.
 ## Amaç
 
 Latin alfabeli genişleme dillerini eklemek ve üretim hattını doğrulamak.
+
+**İlerleme (19 Ağustos 2026):** Almanca (`de`) üretimi başladı. `common`,
+`menu`, `buildings` ve `units` domainleri çevrildi ve kaynak anahtar/placeholder
+eşliği doğrulandı. Dil, kalan domainler tamamlanmadan seçilebilir yapılmayacak.
 
 ## Her dil için checklist
 

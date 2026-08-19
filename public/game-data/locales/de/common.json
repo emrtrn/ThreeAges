@@ -1,0 +1,16 @@
+{
+  "common.resource.food.name": "Nahrung",
+  "common.resource.wood.name": "Holz",
+  "common.resource.stone.name": "Stein",
+  "common.resource.gold.name": "Gold",
+  "common.cost.free": "Kostenlos",
+  "common.cost.entry": "{amount} {resource}",
+  "common.age.settlement.name": "Siedlung",
+  "common.age.town.name": "Stadt",
+  "common.worker.count": "{count, plural, one {# Arbeiter} other {# Arbeiter}}",
+  "common.tier.name": "{age} Stufe {level}",
+  "common.tier.unknown": "die erforderliche Stufe",
+  "common.building.military": "ein Militärgebäude",
+  "common.language.label": "Sprache",
+  "common.language.hint": "Ändert die Sprache sofort; das Spiel merkt sich die Auswahl."
+}
