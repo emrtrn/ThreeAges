@@ -222,5 +222,6 @@
   "selection.formation.square.name": "Square",
   "selection.formation.square.description": "Keeps fragile units in the middle.",
   "selection.formation.loose.name": "Loose",
-  "selection.formation.loose.description": "Widens the spacing between units."
+  "selection.formation.loose.description": "Widens the spacing between units.",
+  "selection.formation.title": "Formation"
 }

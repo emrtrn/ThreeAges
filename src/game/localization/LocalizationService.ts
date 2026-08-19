@@ -371,6 +371,35 @@ export function localizedCompare(left: string, right: string): number {
  * has to be told. Returns a no-op unsubscribe when no service is installed, so
  * a component can always call it unconditionally.
  */
+/**
+ * The locales a language picker may offer — Plan §27.
+ *
+ * Reads the registry rather than the loaded bundles: a locale is offered because
+ * it is declared shipped (`enabled`), not because someone already fetched it.
+ * That is also why the pseudo-locale never appears here — it is `enabled: false`
+ * and stays reachable only through `?locale=qps-ploc` (Plan §20).
+ */
+export function availableLocales(): readonly LocaleDescriptor[] {
+  return activeService?.availableLocales() ?? selectableLocales();
+}
+
+/** The locale the game is currently speaking. Source locale before boot. */
+export function activeLocale(): LocaleCode {
+  return activeService?.getLocale() ?? SOURCE_LOCALE;
+}
+
+/**
+ * Switch language through the ambient service — the write half of {@link t}.
+ *
+ * Awaits the bundle, so by the time it resolves every `t()` already answers in
+ * the new language and every `onLocaleChanged` listener has run. A caller that
+ * disables its control while this is in flight is doing the right thing: the
+ * fetch is the only slow part of a language change.
+ */
+export async function changeLocale(code: LocaleCode): Promise<void> {
+  await activeService?.setLocale(code);
+}
+
 export function onLocaleChanged(listener: LocaleChangedListener): () => void {
   return activeService?.onLocaleChanged(listener) ?? (() => {});
 }

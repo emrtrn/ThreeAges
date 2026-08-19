@@ -1391,16 +1391,127 @@ imajının diline değil, seçilmiş tek bir dile bağlıyor.
 
 ---
 
+# §27 ara işi — Dil seçici UI
+
+**Durum:** tamamlandı (19 Ağustos 2026).
+
+Doğrulama: `npm run build:verify` yeşil (`verify:imports` PASS · `tsc` temiz ·
+`vite build` · `test:engine` 1515/1515 · `verify:dist --strict` PASS) ve dil
+değişimi çalışan oyunda kullanıcı tarafından onaylandı — bu fazın asıl kabulü
+oydu, çünkü buradaki soru "kod doğru mu" değil, "ekranda dil dönüyor mu"ydu.
+
+Faz 1 dili reload'suz değiştirebilen bir servis kurdu, Faz 2 bütün metni onun
+arkasına taşıdı — ama ekranda `setLocale`'i çağıran hiçbir şey yoktu. Dil
+yalnız `?locale=`, kayıtlı tercih ve `navigator.languages`'tan çözülüyordu, yani
+oyuncunun dili değiştirme yolu yoktu. Bu iş o eksik kontrolü koyuyor.
+
+## Ne eklendi
+
+- `src/game/rts/ui/rtsLanguageSelect.ts` — tek bileşen, iki yere monte:
+  ana menü kartının altına (maça girmeden önce) ve duraklat kartının ayarlar
+  bloğuna (maç içinde, teslim olmadan). Satırlar registry'nin `nativeName`'i,
+  hiçbir zaman çevrilmiyor: kendi dilini arayan oyuncu kendi yazacağı kelimeyi
+  tarar. `qps-ploc` listede yok (§20) — aktifken devre dışı bir satırla itiraf
+  ediliyor, sessizce başka bir dil gösterilmiyor.
+- Ambient yazma ucu: `availableLocales()` / `activeLocale()` / `changeLocale()`
+  (`LocalizationService.ts`), `t()` ile aynı şekilde.
+- `common.language.label` / `common.language.hint` (en + tr).
+
+## §13'ün ikinci yarısı: açık ekranların yeniden metinlenmesi
+
+Picker, nadir ve geliştirici-özel bir olayı iki tıklık bir kontrole çevirdi — ve
+HUD'un yarısı eski dilde kalıyordu. HUD'un çoğu her kare snapshot'tan yazdığı
+için bedava düzeliyor; düzelmeyen, **constructor'da bir kez yazılan** metin.
+
+`ui/rtsStaticText.ts` bunu duraklat kartının zaten kullandığı işaretleme
+numarasından çıkardı (`markStaticText` / `markStaticTitle` / `markStaticAria` +
+`refreshStaticText`). `retranslate()` kazanan yüzeyler: yapı paleti (başlık,
+sekmeler, grup başlıkları, kart adları, fiyatlar, kilit ipuçları), seçim paneli,
+görev takipçisi, misyon kartı, hız kontrolleri — hepsi `RtsApp`'in mevcut
+`onLocaleChanged` aboneliğinden sürülüyor. Hiçbiri yeniden kurulmuyor: açık
+kategori, seçili birim ve armed yapı dil değişiminden sağ çıkıyor.
+
+## Olay-tetikli itmenin bıraktığı iz
+
+Panellerin çoğu her kare (`selectionPanel.setSelection`) ya da her tick
+(`syncHudBar`) itiliyor, yani dil değişimini kendiliğinden yakalıyor. Yapı
+paleti öyle değil: `syncPlacementUi` / `syncRoadUi` yalnız **yerleştirme
+olduğunda** çağrılıyor. Sonuç, kullanıcının bildirdiği hata — "Bir yapı seç"
+satırı dil değişiminden sonra oyuncu bir araç kuşanana ya da iptal edene kadar
+eski dilde kalıyordu, yani palet rastgele bir anda dil değiştiriyormuş gibi
+görünüyordu.
+
+Düzeltme paletin içinde: son itilen `BuildingPlacementState` /
+`RoadPlacementState` ve hangisinin durum satırını en son yazdığı tutuluyor,
+`retranslate()` **yalnız onu** yeniden oynatıyor (ikisini sabit sırayla
+oynatmak, yaşayan bir yol ipucunu gizler ya da yerleştirmenin üstüne yol
+istemi basardı). Aksiyon mesajı da (`setActionMessage`) artık cümleyi değil
+**cümleyi üreten çağrıyı** alıyor: "Kasaba çağı gerekli" gibi bir ret, kendisini
+temizleyecek bir sonraki eylemi beklemeden yeni dilde geri geliyor.
+
+## Faz 2'den kaçan tek dize
+
+`rtsSelectionPanel.ts` içindeki `formationTitle.textContent = "Formasyon"`.
+Faz 2'nin tarayıcısı **anahtar biçimli literal** arıyor, Türkçe cümle değil; bu
+satırda hiç `t(...)` çağrısı olmadığı için görünmezdi. Artık
+`selection.formation.title`. Bu, "bir dil seçici olmadan lokalizasyonun bitip
+bitmediğini bilemezsiniz" tezinin somut kanıtı.
+
+## Test
+
+`Lokalizasyon §27: the language picker offers only shipped locales, and its
+choice sticks` (`tools/engine-tests.ts`): picker'ın listesi registry'nin
+`enabled` kümesi, her satırın boş olmayan `nativeName`/`intlLocale`'i var,
+`qps-ploc` asla listede değil, kaynak dil her zaman listede (her anahtarı tanımlayan
+tek dile dönüş yolu kapanamaz), iki satır aynı kelimeyi okuyamaz — ve seçim
+kalıcı: `changeLocale` yazdığını bir sonraki boot'un `resolveInitialLocale`'i
+okuyor, gönderilmemiş bir kayıtlı locale ise yok sayılıyor.
+
+Smoke: `rts-building-placement.spec.ts` ayar satırlarını artık indeksle değil
+sahip oldukları slider ile buluyor — blok bir satır kazandı ve indeks, kırılan
+bir satır için değil, yer değiştiren bir satır için kırmızıya dönerdi.
+
+---
+
 # Faz 3 — Pseudo-localization ve UI dayanıklılığı
+
+**Durum:** açık. Yeni bir oturumda yapılacak (19 Ağustos 2026 kararı).
 
 ## Amaç
 
 Yeni gerçek diller eklenmeden önce layout problemlerini ortaya çıkarmak.
 
+## Başlarken: hazır olan ne, iş nerede başlıyor
+
+Bu fazın ilk iki kalemi **altyapı olarak zaten duruyor** — Faz 1 yazdı, Faz 3
+onları kullanacak, yeniden yazmayacak:
+
+- `qps-ploc`, `LocalizationDebug.ts` içinde tanımlı ve registry'de `enabled:
+  false` (§20: dil seçicide asla görünmez).
+- Bundle **kaynak locale'den türetiliyor** (`createPseudoBundle`,
+  `LocalizationLoader.ts`), diskteki bir dosyadan değil: bir anahtar eklendiği
+  anda pseudo karşılığı da var, yani bayat bir pseudo-locale yanlış layout'u
+  test edemez.
+- Uzatma `%35`, plan aralığının (`%30–40`) ortası.
+
+Yani Faz 3'ün işi altyapı değil, **`?locale=qps-ploc` ile açıp UI'yi gezmek ve
+taşanları düzeltmek**. Dil seçici (§27) bu turu ucuzlattı: pseudo'ya URL'den
+girip, bir taşmayı gördükten sonra reload'suz Türkçe/İngilizce'ye dönüp
+karşılaştırabilirsiniz.
+
+İki nokta baştan biliniyor:
+
+- **Ölçüsü olan tek yüzey görev kartı.** Faz 2 `title ≤ 40` / `why ≤ 110`
+  sınırlarını yayınlanan her dilden okuyan bir engine-test'e bağladı. Geri kalan
+  panellerin böyle bir bütçesi yok; §15.1 istiyor, kimse ölçmüyor.
+- **Görsel kabul kullanıcının.** Taşma "kod doğru mu" sorusu değil; CLAUDE.md'nin
+  kuralı gereği bu tur için Playwright screenshot-diff süiti kurulmayacak,
+  ekrana bakılacak.
+
 ## Görevler
 
-- [ ] pseudo-locale oluştur
-- [ ] metinleri yaklaşık `%30–40` uzat
+- [x] pseudo-locale oluştur — Faz 1 (`PSEUDO_LOCALE`, `qps-ploc`)
+- [x] metinleri yaklaşık `%30–40` uzat — Faz 1 (`pseudoLocalize`, `%35`)
 - [ ] bütün ana UI ekranlarını test et
 - [ ] buton overflow'larını düzelt
 - [ ] tooltip wrapping'i doğrula
@@ -1765,24 +1876,46 @@ Lokalizasyon süreci yeni gameplay kapsamı icat etmemelidir.
 
 # 30. Definition of Done — Lokalizasyon sistemi
 
-Lokalizasyon altyapısı tamamlanmış sayılmak için:
+Lokalizasyon altyapısı tamamlanmış sayılmak için (durum: 19 Ağustos 2026,
+Faz 0–2 + §27 sonrası):
 
-- [ ] bütün oyuncu metinleri localization key üzerinden geliyor
-- [ ] English teknik source/fallback olarak çalışıyor
-- [ ] Turkish tam geliştirme dili olarak çalışıyor
-- [ ] runtime locale switch çalışıyor
-- [ ] locale preference saklanıyor
-- [ ] browser locale detection çalışıyor
-- [ ] missing key sistemi bulunuyor
-- [ ] parametreli mesaj sistemi bulunuyor
-- [ ] plural sistem locale-aware
-- [ ] number formatting locale-aware
+- [x] bütün oyuncu metinleri localization key üzerinden geliyor
+- [x] English teknik source/fallback olarak çalışıyor
+- [x] Turkish tam geliştirme dili olarak çalışıyor
+- [x] runtime locale switch çalışıyor
+- [x] locale preference saklanıyor
+- [x] browser locale detection çalışıyor
+- [x] missing key sistemi bulunuyor
+- [x] parametreli mesaj sistemi bulunuyor
+- [x] plural sistem locale-aware
+- [x] number formatting locale-aware
 - [ ] font registry locale-aware
-- [ ] pseudo-localization bulunuyor
+- [x] pseudo-localization bulunuyor
 - [ ] locale validator bulunuyor
-- [ ] CI/build localization gate bulunuyor
-- [ ] terminoloji sözlüğü bulunuyor
+- [x] CI/build localization gate bulunuyor
+- [x] terminoloji sözlüğü bulunuyor
 - [ ] yeni feature localization prosedürü tanımlı
+
+Açık kalan dördünün neden açık olduğu:
+
+- **font registry locale-aware** — `LocaleDescriptor.fontGroup` tanımlı ama
+  hiçbir yerde *okunmuyor*: `latin` / `cyrillic` / `cjk` ayrımı bugün yalnız bir
+  kayıt. Gerçek işi Faz 5 (Russian) ve Faz 6 (Simplified Chinese) getirecek —
+  §14 zaten oraya bağlı, çünkü yüklenecek font olmadan gruplamanın karşılığı yok.
+- **locale validator** — §19'un `tools/validate-locales.ts`'i hâlâ ayrı bir araç
+  değil. Karşılığı `tools/engine-tests.ts` içindeki iki kontrol (klasör/anahtar/
+  placeholder eşliği + veri dosyalarının `nameKey`'leri); yaptığı işi yapıyor,
+  ama tek başına çalıştırılabilir bir çevirmen aracı değil.
+- **CI/build gate** işaretli, çünkü o iki kontrol `build:verify` ve CI'nın
+  koştuğu süitin içinde — eksik anahtar `main`'e giremiyor.
+- **yeni feature prosedürü** — bu belge fazları tanımlıyor, "yeni bir yapı/birim
+  eklerken lokalizasyon adımları şunlar" diyen bir bölümü yok. Faz 9'un (sürekli
+  bakım) yazacağı şey.
+- **"bütün oyuncu metinleri"** işaretli ama kapsam §6.1'in çizdiği yerde:
+  debug yüzeyleri (`aiDebugView`, `formatVisionDebug`, `rtsSimulationWitness`,
+  perf bölge adları) kasten Türkçe. Ayrıca §27 turu Faz 2'nin taramasından kaçan
+  bir dize buldu (`"Formasyon"`) — tarayıcı anahtar biçimli literal arıyor,
+  Türkçe cümle değil, yani bu sınıf hata sessiz kalabiliyor.
 
 ---
 

@@ -10,5 +10,7 @@
   "common.worker.count": "{count, plural, one {# worker} other {# workers}}",
   "common.tier.name": "{age} Lv{level}",
   "common.tier.unknown": "the required tier",
-  "common.building.military": "a military building"
+  "common.building.military": "a military building",
+  "common.language.label": "Language",
+  "common.language.hint": "Changes the language right away; the game remembers it."
 }

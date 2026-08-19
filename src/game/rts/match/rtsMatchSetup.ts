@@ -159,6 +159,14 @@ const AI_PROFILE_ROWS: readonly SetupOption<AiProfile>[] = [
   },
 ];
 
+/** A rendered mode card, kept so a language change can rewrite its three strings. */
+interface ModeCard {
+  readonly row: ModeOption;
+  readonly card: HTMLLabelElement;
+  readonly label: HTMLSpanElement;
+  readonly blurb: HTMLSpanElement;
+}
+
 /** Everything the boot needs to know before it can build a match. */
 export interface RtsMatchSetupValues {
   readonly missionMode: MissionModeChoice;
@@ -204,6 +212,14 @@ export class RtsMatchSetup {
   private readonly victorySelect: SetupSelect<VictoryConditionChoice>;
   private readonly aiProfileSelect: SetupSelect<AiProfile>;
   private readonly fogToggle: SetupToggle;
+  private readonly legend = document.createElement("legend");
+  /**
+   * The mode cards, kept rather than re-queried: {@link retranslate} has to
+   * write three strings back into each of them, and finding them again through
+   * the DOM would mean the label, the blurb and the tooltip were each located by
+   * a selector that nothing keeps in step with the markup above.
+   */
+  private readonly modeCards: ModeCard[] = [];
   /** Everything that only describes a free match, shown and hidden as one. */
   private readonly freeOptions = document.createElement("div");
 
@@ -216,9 +232,8 @@ export class RtsMatchSetup {
     this.element.className = "rts-match-setup";
     const group = document.createElement("fieldset");
     group.className = "rts-match-setup-group";
-    const legend = document.createElement("legend");
-    legend.textContent = t("match.setup.legend");
-    group.appendChild(legend);
+    this.legend.textContent = t("match.setup.legend");
+    group.appendChild(this.legend);
 
     // The mode comes first: it decides what kind of match this is, and everything
     // below is a rule *inside* that match. Reading them the other way round asks
@@ -226,7 +241,7 @@ export class RtsMatchSetup {
     // walked through it.
     const modes = document.createElement("div");
     modes.className = "rts-match-mode-cards";
-    for (const row of MISSION_MODE_ROWS) modes.appendChild(this.buildModeCard(row));
+    for (const row of MISSION_MODE_ROWS) modes.appendChild(this.buildModeCard(row).card);
     group.appendChild(modes);
 
     this.freeOptions.className = "rts-match-setup-free";
@@ -234,15 +249,15 @@ export class RtsMatchSetup {
     // a word or two wide, so giving the two dropdowns half the card each left
     // them stretched over empty space while the switch sat alone underneath —
     // three columns is both tighter and one rule per column.
-    this.victorySelect = buildSetupSelect("rtsVictoryCondition", t("match.setup.victory.caption"), VICTORY_CONDITION_ROWS, (choice) => {
+    this.victorySelect = buildSetupSelect("rtsVictoryCondition", "match.setup.victory.caption", VICTORY_CONDITION_ROWS, (choice) => {
       this.victoryCondition = choice;
       syncSetupSelect(this.victorySelect, choice);
     });
-    this.aiProfileSelect = buildSetupSelect("rtsAiProfile", t("match.setup.difficulty.caption"), AI_PROFILE_ROWS, (choice) => {
+    this.aiProfileSelect = buildSetupSelect("rtsAiProfile", "match.setup.difficulty.caption", AI_PROFILE_ROWS, (choice) => {
       this.aiProfile = choice;
       syncSetupSelect(this.aiProfileSelect, choice);
     });
-    this.fogToggle = buildSetupToggle("rtsFogOfWar", t("match.setup.fog.caption"), FOG_OF_WAR_ROWS, (choice) => {
+    this.fogToggle = buildSetupToggle("rtsFogOfWar", "match.setup.fog.caption", FOG_OF_WAR_ROWS, (choice) => {
       this.fogOfWar = choice;
       syncSetupToggle(this.fogToggle, choice);
     });
@@ -255,6 +270,29 @@ export class RtsMatchSetup {
     this.setMissionMode(this.missionMode);
     syncSetupSelect(this.victorySelect, this.victoryCondition);
     syncSetupSelect(this.aiProfileSelect, this.aiProfile);
+    syncSetupToggle(this.fogToggle, this.fogOfWar);
+  }
+
+  /**
+   * Re-resolve every string on the block — Plan §13.
+   *
+   * The menu is the one screen where the language picker and the controls it
+   * would re-word are on screen together, so this runs while the player is
+   * looking straight at it. Values are untouched: a language change answers
+   * "what is this called", never "what did you pick".
+   */
+  retranslate(): void {
+    this.legend.textContent = t("match.setup.legend");
+    for (const entry of this.modeCards) {
+      entry.card.title = t("match.setup.option_tooltip", {
+        label: t(entry.row.labelKey),
+        hint: t(entry.row.hintKey),
+      });
+      entry.label.textContent = t(entry.row.labelKey);
+      entry.blurb.textContent = t(entry.row.blurbKey);
+    }
+    retranslateSetupSelect(this.victorySelect, this.victoryCondition);
+    retranslateSetupSelect(this.aiProfileSelect, this.aiProfile);
     syncSetupToggle(this.fogToggle, this.fogOfWar);
   }
 
@@ -278,7 +316,7 @@ export class RtsMatchSetup {
    * `:checked`, so it is set by the same method that owns the value and cannot
    * drift from it.
    */
-  private buildModeCard(row: ModeOption): HTMLLabelElement {
+  private buildModeCard(row: ModeOption): ModeCard {
     const card = document.createElement("label");
     card.className = "rts-match-mode-card";
     card.title = t("match.setup.option_tooltip", { label: t(row.labelKey), hint: t(row.hintKey) });
@@ -298,7 +336,9 @@ export class RtsMatchSetup {
     blurb.className = "rts-match-mode-card-blurb";
     blurb.textContent = t(row.blurbKey);
     card.append(input, label, blurb);
-    return card;
+    const entry: ModeCard = { row, card, label, blurb };
+    this.modeCards.push(entry);
+    return entry;
   }
 
   private setMissionMode(choice: MissionModeChoice): void {
@@ -322,9 +362,16 @@ export class RtsMatchSetup {
 /** A captioned dropdown plus everything needed to keep its tooltip honest. */
 interface SetupSelect<T extends string> {
   readonly field: HTMLLabelElement;
+  /** The caption element, so a language change rewrites it in place. */
+  readonly captionText: HTMLSpanElement;
   readonly select: HTMLSelectElement;
   readonly options: readonly SetupOption<T>[];
-  readonly caption: string;
+  /**
+   * The caption's *key*, not its text. Holding the resolved word here would
+   * freeze it in the language that was active when the menu was built, which is
+   * exactly the language the picker beside it exists to change.
+   */
+  readonly captionKey: string;
 }
 
 /**
@@ -337,7 +384,7 @@ interface SetupSelect<T extends string> {
  */
 function buildSetupSelect<T extends string>(
   hook: string,
-  caption: string,
+  captionKey: string,
   options: readonly SetupOption<T>[],
   onChange: (choice: T) => void,
 ): SetupSelect<T> {
@@ -345,7 +392,7 @@ function buildSetupSelect<T extends string>(
   field.className = "rts-match-setup-field";
   const text = document.createElement("span");
   text.className = "rts-match-setup-caption";
-  text.textContent = caption;
+  text.textContent = t(captionKey);
   const select = document.createElement("select");
   select.dataset[hook] = "";
   for (const row of options) {
@@ -362,7 +409,7 @@ function buildSetupSelect<T extends string>(
     if (choice) onChange(choice.choice);
   });
   field.append(text, select);
-  return { field, select, options, caption };
+  return { field, captionText: text, select, options, captionKey };
 }
 
 /** Reflect a choice in its control and tooltip. Fires no handler. */
@@ -371,20 +418,40 @@ function syncSetupSelect<T extends string>(target: SetupSelect<T>, choice: T): v
   const option = target.options.find((row) => row.choice === choice);
   target.field.title = option
     ? t("match.setup.field_tooltip", {
-        caption: target.caption,
+        caption: t(target.captionKey),
         label: t(option.labelKey),
         hint: t(option.hintKey),
       })
-    : target.caption;
+    : t(target.captionKey);
+}
+
+/**
+ * Rewrite a dropdown in the active language, then re-sync it — Plan §13.
+ *
+ * The option rows are rebuilt in place rather than recreated: `select.value` is
+ * restored by {@link syncSetupSelect} either way, but replacing the elements
+ * would drop an open dropdown out from under a player mid-language-change.
+ */
+function retranslateSetupSelect<T extends string>(target: SetupSelect<T>, choice: T): void {
+  target.captionText.textContent = t(target.captionKey);
+  for (const [index, row] of target.options.entries()) {
+    const option = target.select.options.item(index);
+    if (!option) continue;
+    option.textContent = t(row.labelKey);
+    option.title = t(row.hintKey);
+  }
+  syncSetupSelect(target, choice);
 }
 
 /** A captioned switch over a two-answer choice, plus what its tooltip needs. */
 interface SetupToggle {
   readonly field: HTMLLabelElement;
+  readonly captionText: HTMLSpanElement;
   readonly input: HTMLInputElement;
   readonly state: HTMLSpanElement;
   readonly options: readonly [SetupOption<FogOfWarChoice>, SetupOption<FogOfWarChoice>];
-  readonly caption: string;
+  /** The caption's key, for the same reason {@link SetupSelect} keeps one. */
+  readonly captionKey: string;
 }
 
 /**
@@ -398,7 +465,7 @@ interface SetupToggle {
  */
 function buildSetupToggle(
   hook: string,
-  caption: string,
+  captionKey: string,
   options: readonly [SetupOption<FogOfWarChoice>, SetupOption<FogOfWarChoice>],
   onChange: (choice: FogOfWarChoice) => void,
 ): SetupToggle {
@@ -406,7 +473,7 @@ function buildSetupToggle(
   field.className = "rts-match-setup-field rts-match-setup-toggle";
   const text = document.createElement("span");
   text.className = "rts-match-setup-caption";
-  text.textContent = caption;
+  text.textContent = t(captionKey);
   const input = document.createElement("input");
   input.type = "checkbox";
   input.dataset[hook] = "";
@@ -427,7 +494,7 @@ function buildSetupToggle(
   row.className = "rts-match-toggle-row";
   row.append(state, track);
   field.append(text, input, row);
-  return { field, input, state, options, caption };
+  return { field, captionText: text, input, state, options, captionKey };
 }
 
 /** Reflect a choice in the switch, its printed state and its tooltip. */
@@ -435,9 +502,13 @@ function syncSetupToggle(target: SetupToggle, choice: FogOfWarChoice): void {
   const [on, off] = target.options;
   const option = choice === on.choice ? on : off;
   target.input.checked = choice === on.choice;
+  // The caption too, which is what lets `retranslate` reuse this rather than
+  // needing a `retranslateSetupToggle` beside it: everything the switch draws is
+  // resolved here, and the only thing a dropdown adds is its closed option list.
+  target.captionText.textContent = t(target.captionKey);
   target.state.textContent = t(option.labelKey);
   target.field.title = t("match.setup.field_tooltip", {
-    caption: target.caption,
+    caption: t(target.captionKey),
     label: t(option.labelKey),
     hint: t(option.hintKey),
   });

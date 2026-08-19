@@ -20,6 +20,7 @@
  * own panel can do.
  */
 import { t } from "../../localization/LocalizationService";
+import { markStaticAria, markStaticText, refreshStaticText } from "./rtsStaticText";
 import type { BuildingBalance, StartingResources } from "../../data/gameDataTypes";
 import { buildingCostForAge } from "../economy/buildingCost";
 import { buildingUnlocked, type ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
@@ -199,6 +200,26 @@ export class RtsBuildPalette {
   private armedRoadMode: "build" | "erase" | null = null;
   /** The building the story chain is currently pointing at, if any. */
   private missionHighlightId: string | null = null;
+  /**
+   * The last state each pusher sent, and which of the two wrote the status line.
+   *
+   * Unlike the HUD bar and the selection panel — pushed every tick and every
+   * frame respectively — the palette is told about placement only when placement
+   * *happens*. That is right for placement and wrong for language: after a
+   * switch the status line kept saying "Bir yapı seç" until the player next
+   * armed or cancelled a tool, so the palette appeared to change language at
+   * random. {@link retranslate} replays the last push instead.
+   */
+  private lastPlacementState: BuildingPlacementState | null = null;
+  private lastRoadState: RoadPlacementState | null = null;
+  private lastStatusSource: "placement" | "road" = "placement";
+  /**
+   * The live action message, held as the *call* that produces it rather than as
+   * the sentence it produced. A refusal ("Kasaba çağı gerekli") stays on screen
+   * until the next placement action clears it, which is long enough for a player
+   * to change language underneath it.
+   */
+  private actionMessageSource: (() => string) | null = null;
 
   constructor(
     buildings: BuildingBalance,
@@ -207,9 +228,9 @@ export class RtsBuildPalette {
     private readonly onChooseRoadErase: () => void = () => {},
   ) {
     this.root.className = "rts-build-palette ui-interactive";
-    this.root.setAttribute("aria-label", t("building.palette.aria"));
+    markStaticAria(this.root, "building.palette.aria");
     const title = document.createElement("strong");
-    title.textContent = t("building.palette.title");
+    markStaticText(title, "building.palette.title");
     this.root.appendChild(title);
     // Anything the categories do not name still has to reach the player: a new
     // building added to the data must not vanish from the palette because nobody
@@ -241,8 +262,7 @@ export class RtsBuildPalette {
       tab.className = "rts-build-tab";
       // Text from the key, identity *as* the key: the tab map and the panel
       // attribute must not change meaning when the language does.
-      tab.textContent = t(category.titleKey);
-      tab.dataset.rtsText = category.titleKey;
+      markStaticText(tab, category.titleKey);
       tab.addEventListener("click", () => this.selectCategory(category.titleKey));
       this.tabs.set(category.titleKey, tab);
       tabRow.appendChild(tab);
@@ -262,8 +282,7 @@ export class RtsBuildPalette {
           section.className = "rts-build-group";
           const heading = document.createElement("p");
           heading.className = "rts-build-group-title";
-          heading.textContent = t(group.titleKey);
-          heading.dataset.rtsText = group.titleKey;
+          markStaticText(heading, group.titleKey);
           const cards = document.createElement("div");
           cards.className = "rts-build-group-choices";
           section.append(heading, cards);
@@ -308,7 +327,7 @@ export class RtsBuildPalette {
     button.dataset.rtsBuilding = id;
     // Keep the action's accessible name concise while the visual label shows
     // the explicit resource cost needed for faster purchase decisions.
-    button.setAttribute("aria-label", t(stats.nameKey));
+    markStaticAria(button, stats.nameKey);
     if (stats.icon) {
       const icon = document.createElement("img");
       icon.className = "rts-build-choice-icon";
@@ -319,9 +338,11 @@ export class RtsBuildPalette {
     }
     const label = document.createElement("span");
     label.className = "rts-build-choice-label";
-    label.textContent = t(stats.nameKey);
+    markStaticText(label, stats.nameKey);
     const cost = document.createElement("span");
     cost.className = "rts-build-choice-cost";
+    // Not marked: a cost is not a key but an amount rendered from `price`, which
+    // the age re-prices. `retranslate` rebuilds it from the same call.
     cost.textContent = formatResourceCost(stats.cost);
     button.append(label, cost);
     button.addEventListener("click", () => this.onChoose(id));
@@ -345,8 +366,8 @@ export class RtsBuildPalette {
     button.type = "button";
     button.className = "rts-build-choice";
     button.dataset.rtsBuilding = mode === "build" ? "road" : "road-erase";
-    const text = t(`building.road.${mode === "build" ? "build" : "erase"}.name`);
-    button.setAttribute("aria-label", text);
+    const nameKey = `building.road.${mode === "build" ? "build" : "erase"}.name`;
+    markStaticAria(button, nameKey);
     const icon = document.createElement("img");
     icon.className = "rts-build-choice-icon";
     icon.src = mode === "build" ? PALETTE_ROAD_ICON : PALETTE_ROAD_ERASE_ICON;
@@ -354,10 +375,12 @@ export class RtsBuildPalette {
     attachIconFallback(icon);
     const label = document.createElement("span");
     label.className = "rts-build-choice-label";
-    label.textContent = text;
+    markStaticText(label, nameKey);
     const cost = document.createElement("span");
     cost.className = "rts-build-choice-cost";
-    cost.textContent = t(`building.road.${mode === "build" ? "build" : "erase"}.cost`);
+    // The road's price is a sentence ("yol başına"), not an amount, so unlike a
+    // building's cost it *is* a key and sweeps with the rest.
+    markStaticText(cost, `building.road.${mode === "build" ? "build" : "erase"}.cost`);
     button.append(icon, label, cost);
     button.addEventListener("click", mode === "build" ? this.onChooseRoad : this.onChooseRoadErase);
     this.roadButtons.set(mode, button);
@@ -365,6 +388,8 @@ export class RtsBuildPalette {
   }
 
   setState(state: BuildingPlacementState): void {
+    this.lastPlacementState = state;
+    this.lastStatusSource = "placement";
     this.roadHint.hidden = true;
     this.armedBuildingId = state.activeBuildingId;
     this.syncArmedButtons();
@@ -425,6 +450,8 @@ export class RtsBuildPalette {
 
   /** Road mode is owned by the road system; the palette only narrates it. */
   setRoadState(state: RoadPlacementState): void {
+    this.lastRoadState = state;
+    this.lastStatusSource = "road";
     this.armedRoadMode = state.active ? state.mode : null;
     this.syncArmedButtons();
     this.syncPlacementMode();
@@ -541,9 +568,17 @@ export class RtsBuildPalette {
     }
   }
 
-  /** Persist completion/error feedback while placement hover state keeps changing. */
-  setActionMessage(message: string | null): void {
-    this.actionMessage.textContent = message ?? "";
+  /**
+   * Persist completion/error feedback while placement hover state keeps changing.
+   *
+   * Takes a thunk, not a string: the messages are built by the caller out of
+   * building names and refusal reasons, so there is no single key the palette
+   * could re-resolve on its own. Asking again is the only way to get the same
+   * sentence in another language.
+   */
+  setActionMessage(message: (() => string) | null): void {
+    this.actionMessageSource = message;
+    this.actionMessage.textContent = message?.() ?? "";
   }
 
   toggleVisible(): void {
@@ -668,6 +703,30 @@ export class RtsBuildPalette {
       this.root.style.height = "";
     };
     this.root.addEventListener("transitionend", finish);
+  }
+
+  /**
+   * Re-resolve everything written once — Plan §13, driven by `RtsApp`.
+   *
+   * The status line, the road hint and the affordability state are pushed every
+   * frame and need nothing from here; what does not come back on its own is the
+   * marked text, the prices and the lock tooltips, and those are what this
+   * rebuilds. Nothing is recreated, so the open category and the armed building
+   * survive a language change untouched.
+   */
+  retranslate(): void {
+    refreshStaticText(this.root);
+    for (const entry of this.buildButtons.values()) {
+      entry.cost.textContent = formatResourceCost(entry.price);
+      if (entry.locked) entry.lockedReason = buildingUnlockRequirement(entry);
+      this.syncTitle(entry);
+    }
+    this.actionMessage.textContent = this.actionMessageSource?.() ?? "";
+    // Only the pusher that wrote the line last, because the two disagree about
+    // the road hint: replaying both in a fixed order would show a road prompt
+    // over a building placement, or hide a live one.
+    if (this.lastStatusSource === "road" && this.lastRoadState) this.setRoadState(this.lastRoadState);
+    else if (this.lastPlacementState) this.setState(this.lastPlacementState);
   }
 
   dispose(): void {

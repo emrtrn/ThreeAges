@@ -334,9 +334,18 @@ test("RTS Phase 9 build tools: categories, the affordability lock, and settings 
   // control the player drags while nothing happens (§13's "yarım sistem").
   await page.keyboard.press("Escape");
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
-  await expect(page.locator(".rts-match-setting").nth(0)).toContainText("Kamera hızı");
-  await expect(page.locator(".rts-match-setting").nth(1)).toContainText("Yakınlaştırma yumuşaklığı");
+  // Found by the slider each row owns, not by position: the block gained a
+  // language picker above them (Localization Plan §27) and an index would have
+  // gone red for a row that moved rather than for a row that broke.
+  const settingRow = (key: string) =>
+    page.locator(".rts-match-setting", { has: page.locator(`[data-rts-setting="${key}"]`) });
+  await expect(settingRow("panSpeed")).toContainText("Kamera hızı");
+  await expect(settingRow("smoothing")).toContainText("Yakınlaştırma yumuşaklığı");
   await expect(page.locator("[data-rts-setting]")).toHaveCount(2);
+  // The picker is the one setting on this card that is not about this match, so
+  // it leads the block and stays out of "Varsayılan"'s reach.
+  await expect(page.locator(".rts-match-setting").nth(0)).toContainText("Dil");
+  await expect(page.locator("[data-rts-language]")).toHaveValue("tr");
   await expect(page.locator("[data-rts-setting-value]")).toHaveText(["Normal", "Dengeli"]);
   await expect(page.locator("[data-rts-graphics-quality]")).toHaveValue("1");
   await expect(page.locator("[data-rts-graphics-quality-value]")).toHaveText("Orta");

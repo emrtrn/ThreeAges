@@ -438,14 +438,6 @@ body {
   font-size: 14px;
 }
 
-.rts-match-card button.rts-match-settings-reset {
-  min-height: 0;
-  padding: 4px 8px;
-  color: var(--ta-ink-muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
 .rts-match-setting {
   display: grid;
   grid-template-columns: minmax(132px, 1fr) minmax(180px, 1.25fr);
@@ -721,7 +713,8 @@ body {
   min-width: 0;
 }
 
-.rts-match-setup-free > .rts-match-setup-field select {
+.rts-match-setup-free > .rts-match-setup-field select,
+.rts-language-select select {
   width: 100%;
   min-width: 0;
 }
@@ -755,18 +748,21 @@ body {
   border-radius: 4px;
 }
 
-.rts-match-setup-field select:hover {
+.rts-match-setup-field select:hover,
+.rts-language-select select:hover {
   border-color: rgb(226 185 92 / 60%);
 }
 
-.rts-match-setup-field select:focus-visible {
+.rts-match-setup-field select:focus-visible,
+.rts-language-select select:focus-visible {
   outline: 2px solid var(--ta-gold);
   outline-offset: 1px;
 }
 
 /* Native dropdown lists inherit nothing from the card; give them the card's ink
    on the card's ground so an open menu is not white-on-white. */
-.rts-match-setup-field select option {
+.rts-match-setup-field select option,
+.rts-language-select select option {
   color: var(--ta-ink);
   background: #1b120a;
 }
@@ -939,6 +935,78 @@ body {
     linear-gradient(180deg, rgb(13 10 6 / 82%) 0%, rgb(13 10 6 / 92%) 100%),
     var(--ta-surface-raised);
   box-shadow: 0 24px 64px rgb(0 0 0 / 55%);
+}
+
+/*
+ * The language picker — Localization Plan §27.
+ *
+ * One component in two hosts, so the layout rules are split the same way: the
+ * menu gives it a footer of its own under the start button, the pause card lets
+ * it be an ordinary settings row. Everything the two share — the dropdown skin —
+ * is borrowed from `.rts-match-setup-field select` above rather than restated.
+ */
+.rts-main-menu-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding-top: 12px;
+  /* A rule, not a gap: the language is not one of the questions the card asks,
+     and the line is what says the card's argument ended above it. */
+  border-top: 1px solid rgb(198 152 64 / 18%);
+}
+
+/* In the footer the caption sits beside the control on one line; in the pause
+   card the `.rts-match-setting` grid already owns the two columns. */
+.rts-main-menu-footer > .rts-language-select {
+  gap: 8px;
+}
+
+.rts-language-select select {
+  min-width: 132px;
+  min-height: 30px;
+  padding: 5px 30px 5px 9px;
+  appearance: none;
+  color: var(--ta-ink);
+  font-family: var(--ta-font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  background:
+    linear-gradient(45deg, transparent 50%, #f0c55d 50%) calc(100% - 14px) 52% / 6px 6px no-repeat,
+    linear-gradient(135deg, #f0c55d 50%, transparent 50%) calc(100% - 9px) 52% / 6px 6px no-repeat,
+    linear-gradient(180deg, rgb(65 45 20 / 84%) 0%, rgb(25 17 9 / 92%) 100%);
+  border: 1px solid rgb(226 185 92 / 48%);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 38%),
+    inset 0 1px 0 rgb(255 224 145 / 12%),
+    0 1px 2px rgb(0 0 0 / 42%);
+  text-shadow: 0 1px 1px rgb(0 0 0 / 75%);
+  transition: border-color 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.rts-language-select select:hover {
+  box-shadow:
+    inset 0 0 0 1px rgb(255 225 139 / 14%),
+    inset 0 1px 0 rgb(255 224 145 / 18%),
+    0 0 7px rgb(226 185 92 / 18%);
+  filter: brightness(1.06);
+}
+
+/* The settings row's control column is built for a value + slider pair; with a
+   single dropdown in it, let the dropdown have the whole column. */
+.rts-language-select-control {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.rts-language-select-control select {
+  width: 100%;
+}
+
+.rts-language-select select:disabled {
+  cursor: progress;
+  opacity: 0.6;
 }
 
 .rts-main-menu .rts-main-menu-card h1 {

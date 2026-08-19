@@ -10,5 +10,7 @@
   "common.worker.count": "{count} işçi",
   "common.tier.name": "{age} Lv{level}",
   "common.tier.unknown": "gerekli kademe",
-  "common.building.military": "askerî yapı"
+  "common.building.military": "askerî yapı",
+  "common.language.label": "Dil",
+  "common.language.hint": "Dili anında değiştirir; oyun bu seçimi hatırlar."
 }

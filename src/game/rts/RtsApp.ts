@@ -1082,9 +1082,27 @@ export class RtsApp {
   private cancelConstructionArmed: PlacedStructure | null = null;
   private readonly worldProgressOverlay = new RtsWorldProgressOverlay();
   private buildingLabelCache: ReadonlyMap<string, string> | null = null;
-  /** Drops {@link buildingLabels} when the player changes language mid-match. */
+  /**
+   * The match's half of a language change — Plan §13, and the reason the pause
+   * card can carry a language picker at all (§27).
+   *
+   * Most of the HUD needs nothing here: it is pushed a snapshot every frame and
+   * writes its text from that, so it is already speaking the new language on the
+   * next tick. Two kinds of thing are not:
+   *
+   *  - the label cache, which memoises resolved building names and would keep
+   *    serving the old language until something invalidated it;
+   *  - text a panel wrote once in its constructor, which has no frame to come
+   *    back on and is re-resolved through each panel's `retranslate`.
+   */
   private readonly stopLocaleWatch = onLocaleChanged(() => {
     this.buildingLabelCache = null;
+    this.buildPalette.retranslate();
+    this.selectionPanel.retranslate();
+    this.objectiveTracker?.retranslate();
+    this.missionPanel?.retranslate();
+    this.gameSpeedControls.retranslate();
+    this.debugSpeedControls?.retranslate();
   });
   private readonly projectiles = new ProjectileSystem();
   private readonly thrownRocks = new ThrownRockSystem();
@@ -1936,7 +1954,7 @@ export class RtsApp {
           // Named from the data, not spelled out: the Okçuluk Alanı is only the
           // first Town-gated building and the Tarla only the first level-gated
           // one, and the next would have been refused under its neighbour's name.
-          this.buildPalette.setActionMessage(buildingUnlockRequirement(stats, t(stats.nameKey)));
+          this.buildPalette.setActionMessage(() => buildingUnlockRequirement(stats, t(stats.nameKey)));
           return;
         }
         if (!this.beginMissionGatedPlacement(id)) return;
@@ -1967,7 +1985,6 @@ export class RtsApp {
     this.matchOverlay = new RtsMatchOverlay({
       onResume: this.resumeMatch,
       onRestart: this.restartMatch,
-      onSurrender: this.surrenderMatch,
       // Applied live while the card is up: §51's pause deliberately keeps the
       // camera running, so the player can judge the dial by moving the map.
       onCameraSettings: (settings) => this.cameraController.setSettings(settings),
@@ -2078,7 +2095,7 @@ export class RtsApp {
         // placement already disarm themselves after their single confirmation.
         if (this.rallyPointPending) {
           this.rallyPointPending = false;
-          this.buildPalette.setActionMessage(t("placement.rally.cancelled"));
+          this.buildPalette.setActionMessage(() => t("placement.rally.cancelled"));
           return;
         }
         if (this.roadPlacement.isActive) {
@@ -3563,11 +3580,14 @@ export class RtsApp {
   private beginMissionGatedPlacement(buildingId: string): boolean {
     const refusal = this.missionBuildRefusal(buildingId);
     if (refusal === null) return true;
-    const label = this.buildingLabels.get(buildingId) ?? buildingId;
-    this.buildPalette.setActionMessage(
+    this.buildPalette.setActionMessage(() =>
       t(refusal === "already-building"
         ? "mission.build.already_building"
-        : "mission.build.one_is_enough", { building: label }),
+        : "mission.build.one_is_enough",
+        // Read inside the thunk, not captured: `buildingLabels` is a cache the
+        // locale watch above drops, so re-asking is what makes the refusal come
+        // back naming the building in the new language.
+        { building: this.buildingLabels.get(buildingId) ?? buildingId }),
     );
     return false;
   }
@@ -4225,7 +4245,7 @@ export class RtsApp {
     if (!point) {
       // Still a mode prompt rather than a result: the click missed the ground, so
       // the palette line keeps asking for the one it is waiting on.
-      this.buildPalette.setActionMessage(t("placement.rally.pick"));
+      this.buildPalette.setActionMessage(() => t("placement.rally.pick"));
       return;
     }
     this.barracksProduction.setRallyPoint(PLAYER_OWNER, point);
@@ -5520,16 +5540,6 @@ export class RtsApp {
   };
 
   /**
-   * §51 "Teslim ol". Routed through the match's own one-way door, so resigning
-   * lands on the same defeat screen a razed centre does — with its own reason.
-   */
-  private readonly surrenderMatch = (): void => {
-    if (!this.match.surrender()) return;
-    this.log.info("Defeat: the player surrendered");
-    this.showMatchResult();
-  };
-
-  /**
    * Pause, unless there is a pending placement to back out of first. Escape
    * means "undo the thing I am in the middle of", and a half-placed building is
    * more immediate than the menu.
@@ -5548,7 +5558,7 @@ export class RtsApp {
     }
     if (this.rallyPointPending) {
       this.rallyPointPending = false;
-      this.buildPalette.setActionMessage(t("placement.rally.cancelled"));
+      this.buildPalette.setActionMessage(() => t("placement.rally.cancelled"));
       return;
     }
     if (!this.flow.togglePause()) return;
@@ -6252,7 +6262,7 @@ export class RtsApp {
       this.placement.cancel();
       this.roadPlacement.cancel();
       this.rallyPointPending = true;
-      this.buildPalette.setActionMessage(t("placement.rally.pick"));
+      this.buildPalette.setActionMessage(() => t("placement.rally.pick"));
       return;
     }
     if (id === RESCUE_ACTION) {

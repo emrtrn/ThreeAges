@@ -1,4 +1,4 @@
-import { t } from "../../localization/LocalizationService";
+import { markStaticAria, markStaticText, refreshStaticText } from "./rtsStaticText";
 import {
   RTS_SIMULATION_SPEEDS,
   type RtsSimulationSpeed,
@@ -39,10 +39,10 @@ export class RtsGameSpeedControls {
     this.root.className = "rts-game-speed ui-interactive";
     const mode = options.mode ?? "player";
     this.root.dataset.rtsSpeedMode = mode;
-    this.root.setAttribute("aria-label", t(mode === "debug" ? "hud.speed.aria.debug" : "hud.speed.aria"));
+    markStaticAria(this.root, mode === "debug" ? "hud.speed.aria.debug" : "hud.speed.aria");
     const label = document.createElement("span");
     label.className = "rts-game-speed-label";
-    label.textContent = t(mode === "debug" ? "hud.speed.label.debug" : "hud.speed.label");
+    markStaticText(label, mode === "debug" ? "hud.speed.label.debug" : "hud.speed.label");
     const choices = document.createElement("div");
     choices.className = "rts-game-speed-choices";
     for (const speed of options.speeds ?? RTS_SIMULATION_SPEEDS) {
@@ -61,6 +61,14 @@ export class RtsGameSpeedControls {
   /** The HUD owns placement; this control owns only speed-selection state. */
   mount(parent: HTMLElement): void {
     parent.appendChild(this.root);
+  }
+
+  /**
+   * Re-resolve the caption and aria label — Plan §13. The speed buttons say
+   * "1x"/"2x", which no language rewrites.
+   */
+  retranslate(): void {
+    refreshStaticText(this.root);
   }
 
   dispose(): void {

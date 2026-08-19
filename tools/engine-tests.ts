@@ -1527,6 +1527,9 @@ import {
   SOURCE_LOCALE,
 } from "../src/game/localization/localeRegistry";
 import {
+  activeLocale,
+  availableLocales,
+  changeLocale,
   LocalizationService,
   resolveInitialLocale,
   setActiveLocalization,
@@ -57365,6 +57368,81 @@ check("Lokalizasyon Faz 2: gameplay data names its text by key, and every key re
   for (const point of RTS_BLOCKOUT_MAP.strategicPoints) {
     resolves(point.nameKey, `strategic point "${point.id}"`);
   }
+});
+
+await checkAsync("Lokalizasyon §27: the language picker offers only shipped locales, and its choice sticks", async () => {
+  // `ui/rtsLanguageSelect.ts` is DOM and cannot run here, but everything it is
+  // *allowed to be wrong about* is in this file: which locales it lists, what it
+  // prints for each of them, and whether the choice a player makes is still the
+  // choice the next boot resolves. The control itself is three lines of
+  // `appendChild` around these four facts.
+  const offered = availableLocales();
+  assert.ok(offered.length > 0, "a picker with nothing in it is a dead control");
+  assert.deepEqual(
+    offered.map((entry) => entry.code),
+    selectableLocales().map((entry) => entry.code),
+    "the picker's list is the registry's enabled set, not a second list beside it",
+  );
+  for (const descriptor of offered) {
+    assert.ok(descriptor.enabled, `${descriptor.code} is offered but not enabled`);
+    // The rows are printed verbatim from the registry — a blank one is a row the
+    // player can see and cannot identify.
+    assert.ok(descriptor.nativeName.trim().length > 0, `${descriptor.code} has no native name`);
+    // Set as the option's `lang`, so the row is shaped by its own language.
+    assert.ok(descriptor.intlLocale.trim().length > 0, `${descriptor.code} has no Intl locale`);
+    assert.notEqual(descriptor.code, PSEUDO_LOCALE, "§20: the pseudo-locale is never offered");
+  }
+  assert.ok(
+    offered.some((entry) => entry.code === SOURCE_LOCALE),
+    "the source locale is the one that defines every key: a player must always be able to reach it",
+  );
+  assert.equal(
+    new Set(offered.map((entry) => entry.nativeName)).size,
+    offered.length,
+    "two rows reading the same word are two rows the player cannot choose between",
+  );
+
+  // What the picker writes has to be what the next boot reads, or the control
+  // works once and forgets — §12.1's saved preference, driven from the ambient
+  // helpers the component actually calls.
+  const previous = testLocalization;
+  let saved: string | null = null;
+  const service = new LocalizationService({
+    loadDomains: async () => [{ domain: "common" as LocaleDomain, entries: { "a.name": "x" } }],
+    preferences: {
+      read: () => saved,
+      write: (locale) => {
+        saved = locale;
+      },
+    },
+    browserLanguages: ["tr-TR"],
+  });
+  await quietly(async () => {
+    await service.initialize();
+    setActiveLocalization(service);
+    try {
+      assert.equal(activeLocale(), "tr", "the browser decides before anyone has chosen");
+      assert.equal(saved, null, "boot resolution is not a player choice");
+      await changeLocale(SOURCE_LOCALE);
+      assert.equal(activeLocale(), SOURCE_LOCALE);
+      assert.equal(saved, SOURCE_LOCALE, "picking a language persists it");
+      // The picker refuses a locale it never offered; the service refuses it too,
+      // so a forced `?locale=` cannot be laundered into a stored preference.
+      assert.equal(
+        resolveInitialLocale({ savedLocale: PSEUDO_LOCALE, browserLanguages: ["tr-TR"] }),
+        "tr",
+        "an unshipped saved locale is ignored, not restored",
+      );
+      assert.equal(
+        resolveInitialLocale({ savedLocale: saved, browserLanguages: ["tr-TR"] }),
+        SOURCE_LOCALE,
+        "the stored choice outranks the browser on the next boot",
+      );
+    } finally {
+      setActiveLocalization(previous);
+    }
+  });
+  assert.equal(activeLocale(), previous.getLocale(), "the probe bundle is back for the checks after this one");
 });
 
 check("Faz 9 §51: the build lock agrees with the wallet that takes the money", () => {

@@ -19,6 +19,7 @@
  * Presentation only. It decides nothing; `RtsApp` hands it the state.
  */
 import { t } from "../../localization/LocalizationService";
+import { markStaticAria, markStaticText, refreshStaticText } from "./rtsStaticText";
 import { formatMatchDuration } from "../match/rtsMatchClock";
 import type { RegionalVictoryProgress } from "../objectives/regionalVictorySystem";
 import type { StrategicPointStatus } from "../objectives/strategicPointSystem";
@@ -69,7 +70,7 @@ export class RtsObjectiveTracker {
   constructor() {
     this.root.className = "rts-objective-tracker";
     this.root.dataset.rtsObjectives = "";
-    this.root.setAttribute("aria-label", t("objective.panel.aria"));
+    markStaticAria(this.root, "objective.panel.aria");
     this.toggle.type = "button";
     this.toggle.className = "rts-objective-toggle ui-interactive";
     this.toggle.setAttribute("aria-expanded", "true");
@@ -77,7 +78,7 @@ export class RtsObjectiveTracker {
     // `textContent` per element rather than one `innerHTML`: translated text is
     // data, and a language that happens to contain "<" must not become markup.
     const toggleLabel = document.createElement("span");
-    toggleLabel.textContent = t("objective.panel.title");
+    markStaticText(toggleLabel, "objective.panel.title");
     const toggleIcon = document.createElement("span");
     toggleIcon.setAttribute("aria-hidden", "true");
     toggleIcon.textContent = "⌃";
@@ -87,7 +88,7 @@ export class RtsObjectiveTracker {
       this.syncCollapsedState();
     });
     const heading = document.createElement("strong");
-    heading.textContent = t("objective.regional_victory.title");
+    markStaticText(heading, "objective.regional_victory.title");
     this.content.id = "rts-objective-content";
     this.content.className = "rts-objective-content";
     this.pointList.className = "rts-objective-points";
@@ -111,6 +112,17 @@ export class RtsObjectiveTracker {
     this.root.hidden = false;
     this.renderPoints(state.points);
     this.renderBars(state.progress);
+  }
+
+  /**
+   * Re-resolve the text written once — Plan §13.
+   *
+   * The bars and the point rows are rebuilt from the snapshot the tracker is
+   * pushed, so they follow the language on their own; the panel title and the
+   * regional heading are the two that do not.
+   */
+  retranslate(): void {
+    refreshStaticText(this.root);
   }
 
   dispose(): void {

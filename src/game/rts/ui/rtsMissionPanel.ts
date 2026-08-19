@@ -13,6 +13,7 @@
  * button; it never changes mission or simulation state.
  */
 import { t } from "../../localization/LocalizationService";
+import { markStaticAria, markStaticText, refreshStaticText } from "./rtsStaticText";
 import type { MissionDirectorState } from "../tutorial/missionDirector";
 
 export class RtsMissionPanel {
@@ -43,7 +44,7 @@ export class RtsMissionPanel {
   constructor(private readonly onShow?: () => void) {
     this.root.className = "rts-mission-panel";
     this.root.dataset.rtsMission = "";
-    this.root.setAttribute("aria-label", t("mission.panel.aria"));
+    markStaticAria(this.root, "mission.panel.aria");
     // A step change is an instruction the player has to notice without staring
     // at the panel, so it is announced. `polite` rather than `assertive`: it must
     // wait its turn behind anything urgent the match is saying.
@@ -81,7 +82,7 @@ export class RtsMissionPanel {
     this.show.type = "button";
     this.show.className = "rts-mission-show ui-interactive";
     this.show.dataset.rtsMissionShow = "";
-    this.show.textContent = t("mission.panel.show");
+    markStaticText(this.show, "mission.panel.show");
     this.show.hidden = true;
     this.show.addEventListener("click", () => this.onShow?.());
     this.content.append(this.why);
@@ -135,6 +136,17 @@ export class RtsMissionPanel {
     const hidden = !available || this.onShow === undefined;
     if (hidden === this.show.hidden) return;
     this.show.hidden = hidden;
+  }
+
+  /**
+   * Re-resolve the text written once — Plan §13.
+   *
+   * The step title, the "why" line and the step counter all come from
+   * `setState`, which the mission poll pushes; the panel's aria label and the
+   * "Göster" button are written in the constructor and need this.
+   */
+  retranslate(): void {
+    refreshStaticText(this.root);
   }
 
   dispose(): void {

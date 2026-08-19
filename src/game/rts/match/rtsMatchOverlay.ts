@@ -20,6 +20,7 @@
  */
 import { onLocaleChanged, t } from "../../localization/LocalizationService";
 import { DEFAULT_RTS_CAMERA_SETTINGS, type RtsCameraSettings } from "../camera/rtsCameraConfig";
+import { RtsLanguageSelect } from "../ui/rtsLanguageSelect";
 import { formatMatchDuration } from "./rtsMatchClock";
 import type { RtsMatchEndReason, RtsMatchOutcome } from "./rtsMatchState";
 
@@ -44,7 +45,6 @@ export interface RtsGraphicsSettings {
 export interface RtsMatchOverlayHandlers {
   readonly onResume: () => void;
   readonly onRestart: () => void;
-  readonly onSurrender: () => void;
   /** §51 "Minimal ayarlar": camera feel, changed live behind the pause card. */
   readonly onCameraSettings: (settings: RtsCameraSettings) => void;
   /** Current RTS graphics state, persisted and applied by the runtime. */
@@ -132,13 +132,6 @@ export class RtsMatchOverlay {
   /** §53: match length, shown on the result card only. */
   private readonly duration = document.createElement("p");
   private readonly actions = document.createElement("div");
-  /**
-   * Surrender is one click from throwing the match away, and it sits next to
-   * "Yeniden Başlat" in the same menu. The confirm is local to the overlay: it
-   * is a property of the button, not of the match, and pushing it into the flow
-   * would put a UI affordance into the simulation's state.
-   */
-  private surrenderArmed = false;
   private readonly settings = document.createElement("div");
   private cameraSettings: RtsCameraSettings = DEFAULT_RTS_CAMERA_SETTINGS;
   private graphicsSettings: RtsGraphicsSettings | null;
@@ -157,6 +150,12 @@ export class RtsMatchOverlay {
       }
     | null = null;
   private readonly stopLocaleWatch: () => void;
+  /**
+   * The in-match half of the language picker (Localization Plan §27). The menu
+   * one is gone by the time a match is running, and a player who wants to change
+   * language mid-match should not have to surrender to reach the control.
+   */
+  private readonly language = new RtsLanguageSelect("settings");
 
   constructor(private readonly handlers: RtsMatchOverlayHandlers) {
     this.graphicsSettings = handlers.graphicsSettings ?? null;
@@ -226,16 +225,9 @@ export class RtsMatchOverlay {
     header.className = "rts-match-settings-header";
     const heading = document.createElement("strong");
     heading.dataset.rtsText = "match.settings.title";
-    const reset = document.createElement("button");
-    reset.type = "button";
-    reset.className = "rts-match-settings-reset";
-    reset.dataset.rtsText = "match.settings.reset";
-    reset.addEventListener("click", () => {
-      this.applyCameraSettings(DEFAULT_RTS_CAMERA_SETTINGS);
-      this.applyGraphicsSettings({ quality: "medium", adaptiveEnabled: true });
-    });
-    header.append(heading, reset);
+    header.appendChild(heading);
     this.settings.appendChild(header);
+    this.settings.appendChild(this.language.element);
     for (const row of CAMERA_SETTING_ROWS) {
       const wrapper = document.createElement("label");
       wrapper.className = "rts-match-setting";
@@ -380,9 +372,6 @@ export class RtsMatchOverlay {
       ...(this.handlers.onExitToMenu
         ? [{ label: t("match.action.exit_to_menu"), action: this.handlers.onExitToMenu, key: "exit-to-menu" }]
         : []),
-      this.surrenderArmed
-        ? { label: t("match.action.surrender_confirm"), action: this.handlers.onSurrender, key: "surrender", danger: true }
-        : { label: t("match.action.surrender"), action: this.armSurrender, key: "surrender" },
     ], "neutral", true);
   }
 
@@ -419,23 +408,14 @@ export class RtsMatchOverlay {
   }
 
   hide(): void {
-    this.surrenderArmed = false;
     this.root.classList.remove("is-visible");
   }
 
   dispose(): void {
     this.stopLocaleWatch();
+    this.language.dispose();
     this.root.remove();
   }
-
-  private readonly armSurrender = (): void => {
-    this.surrenderArmed = true;
-    // Re-open the card it was armed from. Without the remembered flag this
-    // second render dropped "Serbest oyuna çevir" for a player who armed
-    // surrender during a live story chain, because `showPause` defaults to no
-    // mission and the card had no memory of one.
-    this.showPause(this.openCard?.kind === "pause" ? this.openCard.missionRunning : false);
-  };
 
   private render(
     title: string,

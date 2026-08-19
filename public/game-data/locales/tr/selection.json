@@ -222,5 +222,6 @@
   "selection.formation.square.name": "Kare",
   "selection.formation.square.description": "Kırılgan birlikleri merkezde korur.",
   "selection.formation.loose.name": "Dağınık",
-  "selection.formation.loose.description": "Birimler arasındaki mesafeyi artırır."
+  "selection.formation.loose.description": "Birimler arasındaki mesafeyi artırır.",
+  "selection.formation.title": "Formasyon"
 }

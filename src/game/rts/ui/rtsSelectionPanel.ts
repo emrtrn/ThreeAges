@@ -24,6 +24,7 @@ import {
   type WorkerAssignmentTarget,
 } from "./rtsSelectionView";
 import { t } from "../../localization/LocalizationService";
+import { markStaticAria, markStaticText, refreshStaticText } from "./rtsStaticText";
 import { isRtsFormationId, type RtsFormationId } from "../units/formations/rtsFormationTypes";
 
 export class RtsSelectionPanel {
@@ -77,7 +78,7 @@ export class RtsSelectionPanel {
     // title, summary, hints, padding — lets the click through to the map, the
     // same rule the notification feed states for itself.
     this.root.className = "rts-selection-panel";
-    this.root.setAttribute("aria-label", t("selection.panel.aria"));
+    markStaticAria(this.root, "selection.panel.aria");
     this.portrait.className = "rts-selection-portrait";
     this.portraitImage.className = "rts-selection-portrait-image";
     this.portraitImage.alt = "";
@@ -149,7 +150,10 @@ export class RtsSelectionPanel {
     this.formation.hidden = true;
     const formationTitle = document.createElement("strong");
     formationTitle.className = "rts-selection-formation-title";
-    formationTitle.textContent = "Formasyon";
+    // Faz 2 moved every visible string behind a key and this one was missed:
+    // it is written once in the constructor, so no `t(...)` call site existed for
+    // the migration scan to find. The language picker is what made it visible.
+    markStaticText(formationTitle, "selection.formation.title");
     this.formationOptions.className = "rts-selection-formation-options";
     this.formation.append(this.formationOptions, formationTitle);
     this.workerAssignments.className = "rts-selection-worker-assignments ui-interactive";
@@ -188,6 +192,16 @@ export class RtsSelectionPanel {
     if (actionId === this.missionHighlightId) return;
     this.missionHighlightId = actionId;
     this.syncMissionHighlight();
+  }
+
+  /**
+   * Re-resolve the text written once — Plan §13.
+   *
+   * Nearly everything here is rewritten from `setSelection` every frame, so the
+   * marked set is small: the panel's aria label and the formation heading.
+   */
+  retranslate(): void {
+    refreshStaticText(this.root);
   }
 
   dispose(): void {

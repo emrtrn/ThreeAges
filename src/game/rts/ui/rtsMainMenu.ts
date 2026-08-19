@@ -21,8 +21,9 @@
  * suite, which finds the start button through them (plan §9). Reskinning the menu
  * separately would have cost a CSS copy and eight spec rewrites to look identical.
  */
-import { t } from "../../localization/LocalizationService";
+import { onLocaleChanged, t } from "../../localization/LocalizationService";
 import { RtsMatchSetup, type RtsMatchSetupValues } from "../match/rtsMatchSetup";
+import { RtsLanguageSelect } from "./rtsLanguageSelect";
 
 /**
  * Background art, dropped in by the author (plan §10). Referenced before the file
@@ -37,7 +38,18 @@ export class RtsMainMenu {
   private readonly card = document.createElement("section");
   private readonly actions = document.createElement("div");
   private readonly startButton = document.createElement("button");
+  private readonly title = document.createElement("h1");
+  private readonly detail = document.createElement("p");
   private readonly setup: RtsMatchSetup;
+  /**
+   * The language picker (Localization Plan §27) lives here rather than only in
+   * the pause menu because this is the first screen the game shows: a player
+   * whose browser resolved a language they cannot read must be able to fix it
+   * *before* committing to a match, not from a menu they have to start a match
+   * to reach.
+   */
+  private readonly language = new RtsLanguageSelect("setup");
+  private readonly stopLocaleWatch: () => void;
   private disposed = false;
 
   constructor(initial: RtsMatchSetupValues) {
@@ -57,10 +69,8 @@ export class RtsMainMenu {
     // focus on open (see `choose`), while Tab still lands on the start button.
     this.card.tabIndex = -1;
 
-    const title = document.createElement("h1");
-    title.textContent = t("menu.title");
-    const detail = document.createElement("p");
-    detail.textContent = t("menu.tagline");
+    this.title.textContent = t("menu.title");
+    this.detail.textContent = t("menu.tagline");
 
     this.actions.className = "rts-match-actions";
     this.startButton.type = "button";
@@ -69,9 +79,29 @@ export class RtsMainMenu {
     this.startButton.dataset.primary = "true";
     this.actions.appendChild(this.startButton);
 
-    this.card.append(title, detail, this.setup.element, this.actions);
+    // Under the actions, not above them: the language is a setting about the
+    // menu itself rather than one of the questions the card is asking, and
+    // putting it in the setup block would make it look like a property of the
+    // match about to be started.
+    const footer = document.createElement("div");
+    footer.className = "rts-main-menu-footer";
+    footer.appendChild(this.language.element);
+
+    this.card.append(this.title, this.detail, this.setup.element, this.actions, footer);
     this.root.append(art, this.card);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
+    // The menu is the only screen that can change its own language *while it is
+    // the whole screen*, so it is the one that has to prove §13: nothing here is
+    // rebuilt, every string is written again over the card the player is looking
+    // at, and the match they had already set up is still set up.
+    this.stopLocaleWatch = onLocaleChanged(() => this.applyLocale());
+  }
+
+  private applyLocale(): void {
+    this.title.textContent = t("menu.title");
+    this.detail.textContent = t("menu.tagline");
+    this.startButton.textContent = t("menu.start_match");
+    this.setup.retranslate();
   }
 
   /**
@@ -102,6 +132,8 @@ export class RtsMainMenu {
 
   dispose(): void {
     this.disposed = true;
+    this.stopLocaleWatch();
+    this.language.dispose();
     this.root.remove();
   }
 }
