@@ -29,6 +29,8 @@ import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
 import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
 import type { MarketSupplyLine, MarketSupplyState } from "../economy/marketSupplySystem";
+import { localizedList, t } from "../../localization/LocalizationService";
+import { commandKeyLabel } from "../input/rtsInput";
 import { formatCostShortfall, formatResourceCost, resourceLabel } from "./resourceLabels";
 import { describeArmyRoster } from "./rtsArmyRosterView";
 import {
@@ -166,6 +168,15 @@ export interface OutpostDetailView {
 
 export interface MilitaryDetailView {
   readonly kind: "military";
+  /**
+   * What this training building is called, from the balance data.
+   *
+   * Carried rather than derived, because the refusal names it: the panel used to
+   * pick between two hardcoded names by production id, so a fork that added a
+   * third training building would have had its Stables tell the player it was a
+   * Barracks.
+   */
+  readonly buildingLabel: string;
   readonly queue: BarracksQueueSnapshot;
   readonly rallySet: boolean;
   readonly connected: boolean;
@@ -553,10 +564,13 @@ export const TRADE_SELL_ACTION_PREFIX = "trade-sell:";
 /** A worker-group card command; suffix is the target structure's runtime id. */
 export const WORKER_ASSIGNMENT_ACTION_PREFIX = "assign-workers:";
 
-const ARMOR_CLASS_LABEL: Record<UnitArmorClass, string> = {
-  light: "hafif birim",
-  heavy: "ağır birim",
-  structure: "yapı",
+// Key tables, not text: every one of these is built when the module loads,
+// which is before a locale exists and before a language change can be heard.
+// The sentence is resolved where it is shown (Plan §13).
+const ARMOR_CLASS_KEY: Record<UnitArmorClass, string> = {
+  light: "unit.armor_class.light",
+  heavy: "unit.armor_class.heavy",
+  structure: "unit.armor_class.structure",
 };
 
 /**
@@ -564,39 +578,44 @@ const ARMOR_CLASS_LABEL: Record<UnitArmorClass, string> = {
  * the unit panel uses. Two spellings of "Pozisyonu Koru" would read as two
  * different orders to the player being taught the first one.
  */
-export const STANCE_LABEL: Record<UnitStance, string> = {
-  aggressive: "Serbest",
-  hold: "Pozisyonu Koru",
+export const STANCE_KEY: Record<UnitStance, string> = {
+  aggressive: "unit.stance.aggressive",
+  hold: "unit.stance.hold",
 };
 
-const WORKER_JOB_LABEL: Record<WorkerJob, string> = {
-  idle: "boşta",
-  moving: "yolda",
-  building: "inşaatta",
-  repairing: "tamirde",
-  producing: "üretimde",
-  unreachable: "erişemiyor",
+/** The stance in the player's language — the words the unit panel itself uses. */
+export function stanceLabel(stance: UnitStance): string {
+  return t(STANCE_KEY[stance]);
+}
+
+const WORKER_JOB_KEY: Record<WorkerJob, string> = {
+  idle: "unit.job.idle",
+  moving: "unit.job.moving",
+  building: "unit.job.building",
+  repairing: "unit.job.repairing",
+  producing: "unit.job.producing",
+  unreachable: "unit.job.unreachable",
 };
 
-const PRODUCTION_STATUS_LABEL: Record<EconomyProductionStatus, string> = {
-  "awaiting-workers": "İşçi bekliyor",
-  "workers-moving": "İşçiler yolda",
-  producing: "Üretiyor",
-  "buffer-full": "Tampon dolu",
-  "missing-resource-node": "Kaynak düğümü yok",
-  "missing-forest": "Yakında orman yok",
-  "missing-game": "Yakında av yok",
-  "missing-livestock": "Yakında evcil hayvan yok",
-  "source-depleted": "Kaynak tükendi",
+const PRODUCTION_STATUS_KEY: Record<EconomyProductionStatus, string> = {
+  "awaiting-workers": "selection.production.status.awaiting_workers",
+  "workers-moving": "selection.production.status.workers_moving",
+  producing: "selection.production.status.producing",
+  "buffer-full": "selection.production.status.buffer_full",
+  "missing-resource-node": "selection.production.status.missing_resource_node",
+  "missing-forest": "selection.production.status.missing_forest",
+  "missing-game": "selection.production.status.missing_game",
+  "missing-livestock": "selection.production.status.missing_livestock",
+  "source-depleted": "selection.production.status.source_depleted",
 };
 
-const LOGISTICS_LABEL: Record<ProducerLogisticsStatus, string> = {
-  linked: "Bağlı",
-  "outside-control": "Kontrol Dışı",
-  "unlinked-road": "Yol Yok",
-  "unlinked-depot": "Depo Yok",
-  "unlinked-main-network": "Merkez Ağı Yok",
-  "depot-occupied": "Depo İşgal Altında",
+const LOGISTICS_KEY: Record<ProducerLogisticsStatus, string> = {
+  linked: "selection.logistics.status.linked",
+  "outside-control": "selection.logistics.status.outside_control",
+  "unlinked-road": "selection.logistics.status.unlinked_road",
+  "unlinked-depot": "selection.logistics.status.unlinked_depot",
+  "unlinked-main-network": "selection.logistics.status.unlinked_main_network",
+  "depot-occupied": "selection.logistics.status.depot_occupied",
 };
 
 /**
@@ -641,18 +660,40 @@ const PRODUCTION_STATUS_TONE: Record<EconomyProductionStatus, SelectionChipTone>
   "source-depleted": "bad",
 };
 
-const LOGISTICS_REASON: Record<ProducerLogisticsStatus, string> = {
-  linked: "Bu üretim yapısı, aynı yol ağındaki Depoya bağlı.",
-  "outside-control": "Kontrol alanı kaybedildi; Karakolu veya alanı geri alın.",
-  "unlinked-road": "Yapı footprint’ine temas eden bir yol hücresi gerekli.",
-  "unlinked-depot": "Aynı yol ağında tamamlanmış bir Depo gerekli.",
-  "unlinked-main-network": "Yolu, Merkezin başlangıç yol halkasına bağlayın.",
-  "depot-occupied": "Bağlı Depo düşman işgali altında; işgali kaldırın.",
+const LOGISTICS_REASON_KEY: Record<ProducerLogisticsStatus, string> = {
+  linked: "selection.logistics.reason.linked",
+  "outside-control": "selection.logistics.reason.outside_control",
+  "unlinked-road": "selection.logistics.reason.unlinked_road",
+  "unlinked-depot": "selection.logistics.reason.unlinked_depot",
+  "unlinked-main-network": "selection.logistics.reason.unlinked_main_network",
+  "depot-occupied": "selection.logistics.reason.depot_occupied",
 };
 
-const WORKER_HINT = "Sağ tık: inşaata veya üretim yapısına ata · X: Görevi bırak";
-const ARMY_HINT = "F: Saldırı-Hareket · T ardından sağ tık: Geri Çekil · H: Koru · G: Serbest · X: Dur";
-const OUTPOST_HINT = "Sağ tık: menzildeki düşmana saldırı emri ver";
+/**
+ * The command hints, with their letters taken from the binding table.
+ *
+ * The letters used to be written into the sentence, so rebinding a command made
+ * the hint lie in every language at once (inventory §7.6). `commandKeyLabel` is
+ * the same source the key handler reads, and an unbound command shows a dash
+ * rather than "undefined".
+ */
+function commandKey(command: Parameters<typeof commandKeyLabel>[0]): string {
+  return commandKeyLabel(command) ?? "—";
+}
+
+function workerHint(): string {
+  return t("selection.hint.worker", { stop: commandKey("stop") });
+}
+
+function armyHint(): string {
+  return t("selection.hint.army", {
+    attackMove: commandKey("attackMove"),
+    retreat: commandKey("retreat"),
+    hold: commandKey("hold"),
+    aggressive: commandKey("aggressive"),
+    stop: commandKey("stop"),
+  });
+}
 
 /** Above this an attacker is meaningfully strong; below its mirror, weak. */
 const STRONG_MULTIPLIER = 1.1;
@@ -661,11 +702,11 @@ const WEAK_MULTIPLIER = 0.9;
 /** The panel's whole answer for one selection, including its stable empty frame. */
 export function describeSelection(view: RtsSelectionView): SelectionPanelContent {
   if (view.kind === "none") return {
-    title: "Seçim yok",
-    summary: "Haritada bir birlik veya yapı seçin.",
+    title: t("selection.empty.title"),
+    summary: t("selection.empty.summary"),
     lines: [],
     actions: [],
-    hint: "Sol tıkla seçin · çift tıkla aynı birlik türünü seçin.",
+    hint: t("selection.empty.hint"),
     tooltip: null,
     portrait: null,
     selectionCount: 0,
@@ -701,27 +742,33 @@ function describeTradeSite(site: SelectedTradeSiteView): SelectionPanelContent {
   const resource = resourceLabel(site.resourceId);
   const held = site.holder === "self";
   const lines = [
-    `${resource} arz noktası · ${site.perMinute}/dk üretir`,
+    t("selection.trade_site.production", { resource, rate: site.perMinute }),
     // The buffer is the site's own throughput story: full means the lane behind
     // it is too small, which is the reading `bufferFull` exists to prompt.
     held && site.buffered !== null
-      ? `Tampon: ${Math.floor(site.buffered)} / ${site.bufferCapacity}`
-      : `Tampon: ${site.bufferCapacity} kapasiteli — içi yalnızca sahibine görünür`,
+      ? t("selection.trade_site.buffer", {
+          held: Math.floor(site.buffered),
+          capacity: site.bufferCapacity,
+        })
+      : t("selection.trade_site.buffer_hidden", { capacity: site.bufferCapacity }),
     held && site.caravansOnRoad !== null
-      ? `Yolda: ${site.caravansOnRoad} / ${site.caravanCount} eşek`
-      : `Filo: ${site.caravanCount} eşek`,
+      ? t("selection.trade_site.caravans_on_road", {
+          onRoad: site.caravansOnRoad,
+          total: site.caravanCount,
+        })
+      : t("selection.trade_site.fleet", { total: site.caravanCount }),
   ];
   return {
     title: site.label,
-    summary: TRADE_SITE_SUMMARY[site.state],
+    summary: t(TRADE_SITE_SUMMARY_KEY[site.state]),
     lines,
     chips: [
       {
         id: "holder",
         icon: CHIP_ICON.logistics,
-        value: site.holder === "self" ? "Sizin" : site.holder === "rival" ? "Rakipte" : "Sahipsiz",
+        value: t(`selection.trade_site.holder.${site.holder ?? "none"}`),
         tone: site.holder === "self" ? "good" : site.holder === "rival" ? "bad" : "neutral",
-        tooltip: TRADE_SITE_HOLDER_TOOLTIP[site.holder === null ? "none" : site.holder],
+        tooltip: t(`selection.trade_site.holder.${site.holder ?? "none"}.tooltip`),
       },
       // The buffer badge only exists for a site the observer holds: a "dolu"
       // chip on a rival's port would be reporting the inside of something the
@@ -730,19 +777,19 @@ function describeTradeSite(site: SelectedTradeSiteView): SelectionPanelContent {
         ? [{
           id: "buffer-full",
           icon: CHIP_ICON.delivery,
-          value: "Tampon dolu",
+          value: t("selection.trade_site.buffer_full"),
           tone: "warn" as const,
           // The one number on this panel the player can act on twice over, so
           // both remedies are named — the same pair a producer's full buffer offers.
-          tooltip: "Üretim durdu: eşekler yetişmiyor. Filoyu büyütün ya da Pazarı yaklaştırın.",
+          tooltip: t("selection.trade_site.buffer_full.tooltip"),
         }]
         : []),
     ],
     actions: [],
     // The whole mechanic in one sentence, and it has to be here: a panel with an
     // empty command deck otherwise reads as an unfinished building.
-    hint: "Arz noktası inşa edilmez, yıkılmaz, işçi istemez. Tek karar: buraya yol çekmek.",
-    tooltip: TRADE_SITE_SUMMARY[site.state],
+    hint: t("selection.trade_site.hint"),
+    tooltip: t(TRADE_SITE_SUMMARY_KEY[site.state]),
     portrait: site.icon ?? null,
     selectionCount: 1,
     health: null,
@@ -750,19 +797,13 @@ function describeTradeSite(site: SelectedTradeSiteView): SelectionPanelContent {
 }
 
 /** One sentence per state — the panel's answer to "why is nothing arriving?". */
-const TRADE_SITE_SUMMARY: Readonly<Record<MarketSupplyState, string>> = {
-  supplying: "Bağlı: yükler Pazarınıza taşınıyor.",
-  cut: "Bağlantı koptu: mal burada birikiyor, Pazara ulaşmıyor. Yolu onarın.",
-  unclaimed: "Sahipsiz: buraya ilk yolu çeken krallık burayı tutar.",
-  rival: "Rakibin elinde: arz yolunu kesin ya da kendi yolunuzu çekin.",
-};
-
-const TRADE_SITE_HOLDER_TOOLTIP: Readonly<Record<"self" | "rival" | "none", string>> = {
-  self: "Bu arz noktası sizin: yolunuz ona değiyor ve yükler Pazarınıza iniyor.",
+const TRADE_SITE_SUMMARY_KEY: Readonly<Record<MarketSupplyState, string>> = {
+  supplying: "selection.trade_site.state.supplying",
+  cut: "selection.trade_site.state.cut",
+  unclaimed: "selection.trade_site.state.unclaimed",
   // Named as a consequence rather than as a state, because the remedy is the
   // information: a site is held by a road, so it is taken by cutting one.
-  rival: "Bu arz noktasını rakip tutuyor. Onun yolunu kesin; rota koptuğu anda nokta serbest kalır.",
-  none: "Bu arz noktasını kimse tutmuyor. Rıhtımına değen ilk yol onu sahiplenir.",
+  rival: "selection.trade_site.state.rival",
 };
 
 /**
@@ -776,11 +817,11 @@ function rescueActions(units: readonly SelectedUnitView[]): SelectionAction[] {
   if (trapped === 0) return [];
   return [{
     id: RESCUE_ACTION,
-    label: "Kurtar",
+    label: t("selection.rescue.action"),
     cost: null,
     enabled: true,
     reason: null,
-    hint: `${trapped} birim bir yapının içine sıkışmış; en yakın boş zemine çıkarır.`,
+    hint: t("selection.rescue.hint", { count: trapped }),
   }];
 }
 
@@ -798,7 +839,10 @@ function describeUnits(
   const roster = describeArmyRoster(units);
   const health = units.reduce((total, unit) => total + unit.health, 0);
   const maxHealth = units.reduce((total, unit) => total + unit.maxHealth, 0);
-  const summary = `Can: ${Math.ceil(health)}/${Math.ceil(maxHealth)}`;
+  const summary = t("selection.units.health", {
+    current: Math.ceil(health),
+    max: Math.ceil(maxHealth),
+  });
   const workersOnly = units.every((unit) => unit.role === "worker");
 
   // More than one unit: answer "what did I just grab" with a card per type and
@@ -869,15 +913,15 @@ function describeUnits(
   // the worker panel separately for exactly this reason.
   if (workersOnly) {
     return {
-      title: "İşçi",
+      title: t("selection.workers.title"),
       summary,
-      lines: [`Görev: ${jobBreakdown(units)}`],
+      lines: [t("selection.units.job", { jobs: jobBreakdown(units) })],
       // A worker's verbs are all world gestures — right-click to assign, X to
       // drop the job — so the only button it ever carries is the rescue, and
       // only while one of these workers is trapped inside a footprint.
       actions: rescueActions(units),
-      hint: WORKER_HINT,
-      tooltip: "Boşta bir işçi, oyuncunun oyuna borçlu olduğu bir karardır.",
+      hint: workerHint(),
+      tooltip: t("selection.workers.tooltip"),
       portrait: sample.stats.icon ?? null,
       selectionCount,
       health: { current: health, max: maxHealth },
@@ -887,11 +931,15 @@ function describeUnits(
 
   const stances = new Set(units.map((unit) => unit.stance));
   return {
-    title: sample.stats.label,
+    title: t(sample.stats.nameKey),
     summary,
     lines: [
-      `Duruş: ${stances.size > 1 ? "Karışık" : STANCE_LABEL[[...stances][0] ?? "aggressive"]}`,
-      `Komut: ${orderBreakdown(units)}`,
+      t("selection.units.stance", {
+        stance: stances.size > 1
+          ? t("unit.order.mixed")
+          : stanceLabel([...stances][0] ?? "aggressive"),
+      }),
+      t("selection.units.order", { order: orderBreakdown(units) }),
       counterText(sample.stats),
     ],
     // Army verbs are keyboard commands with a world target (F/H/G/X); the hint
@@ -902,7 +950,7 @@ function describeUnits(
     // Commands remain keyboard-first. Presenting them as flat text rather than
     // button-shaped cards prevents a false promise that a click will issue a
     // ground-target command.
-    hint: ARMY_HINT,
+    hint: armyHint(),
     tooltip: null,
     portrait: sample.stats.icon ?? null,
     selectionCount,
@@ -917,9 +965,13 @@ function formationControls(active: RtsFormationId, combatUnitCount: number): Sel
     combatUnitCount,
     options: RTS_FORMATION_DEFINITIONS.map((formation) => ({
       id: formation.id,
-      label: formation.label,
+      label: t(formation.labelKey),
       enabled: combatUnitCount >= formation.minUnits,
-      tooltip: `${formation.label}: ${formation.description} En az ${formation.minUnits} asker gerekir.`,
+      tooltip: t("selection.formation.tooltip", {
+        formation: t(formation.labelKey),
+        description: t(formation.descriptionKey),
+        min: formation.minUnits,
+      }),
       iconDots: formation.iconDots,
     })),
   };
@@ -972,20 +1024,20 @@ function cancelConstructionAction(structure: SelectedStructureView): SelectionAc
   if (structure.cancelConstructionArmed) {
     return {
       id: CANCEL_CONSTRUCTION_ACTION,
-      label: "İptali Onayla",
+      label: t("selection.construction.cancel_confirm.action"),
       cost: null,
       enabled: true,
       reason: null,
-      hint: `${structure.label} şantiyesi kaldırılacak; tüm kaynaklar iade edilecek.`,
+      hint: t("selection.construction.cancel_confirm.hint", { building: structure.label }),
     };
   }
   return {
     id: CANCEL_CONSTRUCTION_ACTION,
-    label: "İnşaatı İptal Et",
+    label: t("selection.construction.cancel.action"),
     cost: null,
     enabled: true,
     reason: null,
-    hint: "Şantiyeyi kaldırır ve harcanan kaynakları tam iade eder. Onay ister.",
+    hint: t("selection.construction.cancel.hint"),
   };
 }
 
@@ -1008,14 +1060,14 @@ function repairAction(structure: SelectedStructureView): SelectionAction | null 
   if (repair.active) {
     return {
       id: REPAIR_ACTION,
-      label: "Tamiri Durdur",
+      label: t("selection.repair.stop.action"),
       cost: null,
       enabled: true,
       active: true,
       reason: null,
-      hint: repair.progress > 0
-        ? "Tamir sürüyor. Durdurursanız şu ana kadarki onarım kalır; ödeme geri gelmez."
-        : "İşçiler henüz gelmedi; şimdi durdurursanız ödeme tam iade edilir.",
+      hint: t(repair.progress > 0
+        ? "selection.repair.stop.hint_started"
+        : "selection.repair.stop.hint_pending"),
     };
   }
   if (repair.missingHealth <= 0) return null;
@@ -1023,13 +1075,16 @@ function repairAction(structure: SelectedStructureView): SelectionAction | null 
   const shortfall = formatCostShortfall(repair.cost, repair.stock);
   return {
     id: REPAIR_ACTION,
-    label: "Tamir Et",
+    label: t("selection.repair.action"),
     cost,
     enabled: shortfall === null,
-    reason: shortfall === null ? null : `Kaynak yetersiz: ${shortfall} gerekli.`,
+    reason: shortfall === null ? null : t("selection.repair.insufficient", { shortfall }),
     // Quoted as one worker's time, because that is the number the player can
     // check against the crew they are about to send: two workers halve it.
-    hint: `${Math.ceil(repair.missingHealth)} can onarılır · tek işçiyle ${Math.ceil(repair.workerSeconds)} sn.`,
+    hint: t("selection.repair.hint", {
+      health: Math.ceil(repair.missingHealth),
+      seconds: Math.ceil(repair.workerSeconds),
+    }),
   };
 }
 
@@ -1047,11 +1102,16 @@ function repairChips(structure: SelectedStructureView): SelectionChip[] {
   return [{
     id: "repair",
     icon: CHIP_ICON.repair,
-    value: `%${Math.floor(repair.progress * 100)}`,
+    // The percent sign sits in front in Turkish and behind in English; `Intl`
+    // owns that, not the sentence (inventory §7.7).
+    value: t("selection.repair.chip", { progress: repair.progress }),
     tone: repair.workers === 0 ? "warn" : "good",
     tooltip: repair.workers === 0
-      ? `Tamir %${Math.floor(repair.progress * 100)} — işçi bekliyor.`
-      : `Tamir %${Math.floor(repair.progress * 100)} · ${repair.workers} işçi çalışıyor.`,
+      ? t("selection.repair.chip.waiting", { progress: repair.progress })
+      : t("selection.repair.chip.working", {
+          progress: repair.progress,
+          workers: repair.workers,
+        }),
   }];
 }
 
@@ -1074,26 +1134,29 @@ function demolishAction(structure: SelectedStructureView): SelectionAction {
   if (structure.demolishArmed) {
     return {
       id: DEMOLISH_ACTION,
-      label: "Yıkımı Onayla",
+      label: t("selection.demolish.confirm.action"),
       cost: null,
       enabled: true,
       reason: null,
-      hint: `${structure.label} kalıcı olarak yıkılacak. Harcanan kaynaklar geri gelmez.`,
+      hint: t("selection.demolish.confirm.hint", { building: structure.label }),
     };
   }
   return {
     id: DEMOLISH_ACTION,
-    label: "Yık",
+    label: t("selection.demolish.action"),
     cost: null,
     enabled: true,
     reason: null,
-    hint: "Bu yapıyı kaldırır. Onay ister; kaynak iadesi yoktur.",
+    hint: t("selection.demolish.hint"),
   };
 }
 
 /** Player-facing name of the tier one centre action produces, e.g. "Kasaba Lv2". */
 function tierName(view: CenterProgressionView, age: "settlement" | "town", level: number): string {
-  return `${age === "town" ? view.townLabel : view.settlementLabel} Lv${level}`;
+  return t("selection.tier.name", {
+    age: age === "town" ? view.townLabel : view.settlementLabel,
+    level,
+  });
 }
 
 /**
@@ -1106,8 +1169,10 @@ function centerProgress(view: CenterProgressionView): SelectionProgress | null {
   if (!snapshot.upgrading || !snapshot.nextAction) return null;
   const action = snapshot.nextAction;
   const label = action.kind === "town"
-    ? `${view.townLabel} Çağı`
-    : `${tierName(view, action.targetAge, action.targetLevel)} yükseltmesi`;
+    ? t("selection.progress.town", { age: view.townLabel })
+    : t("selection.progress.tier", {
+        tier: tierName(view, action.targetAge, action.targetLevel),
+      });
   return { label, value: view.progress, remainingSeconds: snapshot.remainingSeconds };
 }
 
@@ -1128,37 +1193,51 @@ function centerProgressionAction(view: CenterProgressionView): SelectionAction {
   if (!action) {
     return {
       id: CENTER_LEVEL_UP_ACTION,
-      label: "En Üst Seviyede",
+      label: t("selection.progression.max.action"),
       cost: null,
       enabled: false,
-      reason: `Krallık en yüksek kademede (${tierName(view, snapshot.age, snapshot.level)}).`,
+      reason: t("selection.progression.max.reason", {
+        tier: tierName(view, snapshot.age, snapshot.level),
+      }),
     };
   }
   const cost = formatResourceCost(action.cost);
   const shortfall = formatCostShortfall(action.cost, view.stock);
   // A shortfall is what the stock cannot cover, so its presence is the "cannot
   // afford" gate — same flooring the HUD prints, so the button and the wallet agree.
-  const unaffordableReason = shortfall ? `Kaynak yetersiz — eksik: ${shortfall}.` : null;
+  const unaffordableReason = shortfall
+    ? t("selection.progression.insufficient", { shortfall })
+    : null;
   if (action.kind === "town") {
     const missing = action.missingBuildingIds.map((id) => view.requiredBuildingLabels.get(id) ?? id);
     const reason = snapshot.upgrading
-      ? `${view.townLabel} Çağı yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
+      ? t("selection.progression.town.upgrading", {
+          age: view.townLabel,
+          seconds: Math.ceil(snapshot.remainingSeconds),
+        })
       : missing.length > 0
-        ? `Önce şu yapılar gerekir: ${missing.join(", ")}.`
+        // `localizedList`, not `join(", ")` — the separator is the language's
+        // (inventory §7.5).
+        ? t("selection.progression.town.missing_buildings", { buildings: localizedList(missing) })
         : unaffordableReason;
     return {
       id: AGE_UP_ACTION,
-      label: `${view.townLabel} Çağına Geç`,
+      label: t("selection.progression.town.action", { age: view.townLabel }),
       cost,
       enabled: reason === null,
       active: snapshot.upgrading,
       reason,
-      hint: shortfall ? `Eksik: ${shortfall}. Toplam maliyet: ${cost}.` : `Maliyet: ${cost}.`,
+      hint: shortfall
+        ? t("selection.progression.hint.shortfall", { shortfall, cost })
+        : t("selection.progression.hint.cost", { cost }),
     };
   }
   const targetLabel = tierName(view, action.targetAge, action.targetLevel);
   const reason = snapshot.upgrading
-    ? `${targetLabel} yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
+    ? t("selection.progression.level.upgrading", {
+        tier: targetLabel,
+        seconds: Math.ceil(snapshot.remainingSeconds),
+      })
     : unaffordableReason;
   return {
     id: CENTER_LEVEL_UP_ACTION,
@@ -1166,29 +1245,38 @@ function centerProgressionAction(view: CenterProgressionView): SelectionAction {
     // from the level number, so `'ye` is right for Lv2 (ikiye) and wrong for
     // Lv3 (üçe → `'e`). Both levels ship in `ages.json`, so the old form was
     // live-wrong on every Lv2→Lv3 upgrade.
-    label: `Yükselt: ${targetLabel}`,
+    label: t("selection.progression.level.action", { tier: targetLabel }),
     cost,
     enabled: reason === null,
     active: snapshot.upgrading,
     reason,
     hint: shortfall
-      ? `Tüm yapılar ${targetLabel} olur. Eksik: ${shortfall}.`
-      : `Tüm yapılar ${targetLabel} olur. Maliyet: ${cost}.`,
+      ? t("selection.progression.level.hint.shortfall", { tier: targetLabel, shortfall })
+      : t("selection.progression.level.hint.cost", { tier: targetLabel, cost }),
   };
 }
 
 function describeStructureDetail(structure: SelectedStructureView): SelectionPanelContent {
   const { detail } = structure;
-  const summary = `Can: ${Math.ceil(structure.health)}/${Math.ceil(structure.maxHealth)}`;
+  const summary = t("selection.structure.health", {
+    current: Math.ceil(structure.health),
+    max: Math.ceil(structure.maxHealth),
+  });
   const title = structure.ageLabel
-    ? `${structure.label} · ${structure.ageLabel} Lv${structure.level}`
-    : structure.level > 1 ? `${structure.label} Lv${structure.level}` : structure.label;
+    ? t("selection.structure.title.tier", {
+        building: structure.label,
+        age: structure.ageLabel,
+        level: structure.level,
+      })
+    : structure.level > 1
+      ? t("selection.structure.title.level", { building: structure.label, level: structure.level })
+      : structure.label;
   switch (detail.kind) {
     case "construction":
       return {
         title,
         summary,
-        lines: [`İnşaat: %${Math.floor(detail.progress * 100)}`],
+        lines: [t("selection.construction.progress", { progress: detail.progress })],
         // Same glyph a producer's crew gets. A site with nobody on it and a Farm
         // with nobody on it are the same problem with the same fix, and they
         // should be recognisable from across the screen as such.
@@ -1198,14 +1286,14 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
           value: `${detail.assignedWorkers}`,
           tone: detail.assignedWorkers === 0 ? "bad" : "good",
           tooltip: detail.assignedWorkers === 0
-            ? "İşçi yok — inşaat durdu."
-            : `${detail.assignedWorkers} işçi çalışıyor.`,
+            ? t("selection.construction.no_workers")
+            : t("selection.construction.workers", { count: detail.assignedWorkers }),
         }],
         actions: [],
         hint: "",
-        tooltip: detail.assignedWorkers === 0
-          ? "Bir işçi seçip bu şantiyeye sağ tıklayın; işçisiz şantiye ilerlemez."
-          : "Daha fazla işçi atamak inşaatı doğrusal olarak hızlandırır.",
+        tooltip: t(detail.assignedWorkers === 0
+          ? "selection.construction.tooltip.idle"
+          : "selection.construction.tooltip.working"),
       };
     case "producer":
       return describeProducer(title, summary, detail);
@@ -1213,69 +1301,78 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
       return {
         title,
         summary,
-        lines: [`Teslim eden yapı: ${detail.linkedProducers}`],
+        lines: [t("selection.depot.linked_producers", { count: detail.linkedProducers })],
         chips: [
           {
             id: "logistics",
             icon: CHIP_ICON.logistics,
-            value: detail.status === "linked"
-              ? "Bağlı"
-              : detail.status === "unlinked-main-network" ? "Ağ dışı" : "Yol yok",
-            tone: detail.status === "linked" ? "good" : "bad",
-            tooltip: detail.status === "linked"
-              ? "Yol: Merkez ağına bağlı."
+            value: t(detail.status === "linked"
+              ? "selection.depot.status.linked"
               : detail.status === "unlinked-main-network"
-                ? "Yol: Merkez ağına bağlı değil."
-                : "Yol: yok. Depo footprint’ine temas eden bir yol hücresi kurun.",
+                ? "selection.depot.status.off_network"
+                : "selection.depot.status.no_road"),
+            tone: detail.status === "linked" ? "good" : "bad",
+            tooltip: t(detail.status === "linked"
+              ? "selection.depot.tooltip.linked"
+              : detail.status === "unlinked-main-network"
+                ? "selection.depot.tooltip.off_network"
+                : "selection.depot.tooltip.no_road"),
           },
           ...(detail.occupied
             ? [{
               id: "occupied",
               icon: CHIP_ICON.siege,
-              value: "İşgal altında",
+              value: t("selection.depot.occupied"),
               tone: "bad" as const,
-              tooltip: "Düşman işgali altında — teslimat durdu.",
+              tooltip: t("selection.depot.occupied.tooltip"),
             }]
             : []),
         ],
         actions: [],
         hint: "",
         tooltip: detail.occupied
-          ? "İşgali kaldırmadan bu Depoya bağlı üreticiler global stoğa aktaramaz."
+          ? t("selection.depot.tooltip.occupied")
           : detail.status === "linked"
-            ? "Bu Depo, Merkeze bağlı yol ağındaki üreticilerin çıktısını global stoğa aktarır ve kapasite ekler."
-            : detail.status === "unlinked-main-network"
-              ? "Depo yola bağlı, ancak bu yol Merkezin başlangıç halkasına ulaşmıyor."
-              : "Depo footprint’ine temas eden bir yol hücresi kurun.",
+            ? t("selection.depot.tooltip.role")
+            : t(detail.status === "unlinked-main-network"
+              ? "selection.depot.tooltip.off_network_detail"
+              : "selection.depot.tooltip.needs_road"),
       };
     case "outpost":
       return {
         title,
         summary,
         lines: [
-          `Kontrol yarıçapı: ${detail.roadConnected && detail.connectedControlRadius !== null
-            ? detail.connectedControlRadius
-            : detail.controlRadius}`,
+          t("selection.outpost.control_radius", {
+            radius: detail.roadConnected && detail.connectedControlRadius !== null
+              ? detail.connectedControlRadius
+              : detail.controlRadius,
+          }),
         ],
         chips: [{
           id: "logistics",
           icon: CHIP_ICON.logistics,
-          value: detail.roadConnected ? "Bağlı" : "Yol yok",
+          value: t(detail.roadConnected
+            ? "selection.outpost.status.linked"
+            : "selection.outpost.status.no_road"),
           // Not "bad": an unroaded Outpost still holds ground, it just holds
           // less of it. The red is kept for a link that was there and is gone.
           tone: detail.roadConnected ? "good" : "warn",
-          tooltip: detail.roadConnected
-            ? "Merkez yol ağına bağlı — tam alan açık."
-            : "Yol bağlantısı yok — yalnız küçük alan açık.",
+          tooltip: t(detail.roadConnected
+            ? "selection.outpost.tooltip.linked"
+            : "selection.outpost.tooltip.no_road"),
         }],
         actions: [],
-        hint: OUTPOST_HINT,
+        hint: t("selection.hint.outpost"),
         // "yerine" rather than a number + case suffix: Turkish suffixes follow
         // the vowel of the *spoken* number (16 → "16’dan", 20 → "20’ye"), which
         // a template cannot pick for a value it does not know at build time.
         tooltip: detail.roadConnected
-          ? "Karakol yıkılırsa açtığı alan kapanır; alandaki yapılar yerinde kalır."
-          : `Merkeze yol çekin: bağlantı, kontrol yarıçapını ${detail.controlRadius} yerine ${detail.connectedControlRadius ?? detail.controlRadius} yapar.`,
+          ? t("selection.outpost.hint.linked")
+          : t("selection.outpost.hint.connect", {
+              current: detail.controlRadius,
+              connected: detail.connectedControlRadius ?? detail.controlRadius,
+            }),
       };
     case "military":
       return describeMilitary(title, summary, detail);
@@ -1288,9 +1385,9 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
         title,
         summary,
         lines: [
-          `Etki alanı: ${detail.radius} birim yarıçap`,
-          `İyileştirme: saniyede ${detail.healPerSecond} can`,
-          `Hasar direnci: %${Math.round(detail.damageResistance * 100)}`,
+          t("selection.aura.radius", { radius: detail.radius }),
+          t("selection.aura.heal", { amount: detail.healPerSecond }),
+          t("selection.aura.resistance", { ratio: detail.damageResistance }),
         ],
         // How many bodies the field actually reached is the one live state here;
         // the three lines above are the building's fixed stats.
@@ -1300,21 +1397,20 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
           value: `${detail.sustainedUnits}`,
           tone: detail.sustainedUnits > 0 ? "good" : "neutral",
           tooltip: detail.sustainedUnits > 0
-            ? `Alan içinde ${detail.sustainedUnits} birim korunuyor.`
-            : "Alanda birim yok.",
+            ? t("selection.aura.sustained", { count: detail.sustainedUnits })
+            : t("selection.aura.empty"),
         }],
         actions: [],
         hint: "",
-        tooltip: "Alandaki kendi birimleriniz sürekli iyileşir ve aldıkları hasar azalır;"
-          + " üst üste binen tapınaklar toplanmaz, en güçlü etki geçerlidir.",
+        tooltip: t("selection.aura.tooltip"),
       };
     case "passive":
       return {
         title,
         summary,
         lines: detail.populationCapacity > 0
-          ? [`Nüfus kapasitesi: +${detail.populationCapacity}`]
-          : ["Pasif yapı."],
+          ? [t("selection.passive.population", { amount: detail.populationCapacity })]
+          : [t("selection.passive.summary")],
         actions: [],
         hint: "",
         tooltip: null,
@@ -1336,29 +1432,41 @@ function describeCenter(
     title,
     summary,
     lines: [
-      `Kuyruk: ${queue.queued}/${queue.capacity}`,
+      t("selection.center.queue", { queued: queue.queued, capacity: queue.capacity }),
       // Same rule as the Barracks: the bar below states what is training and for
       // how long, except while an upgrade owns the bar — then the queue is either
       // paused or unshown, and the prose has to carry it.
       ...(queue.trainingRemainingSeconds === null
-        ? ["Üretim yok."]
+        ? [t("selection.center.no_production")]
         : snapshot.upgrading
-          ? [`Üretiliyor: ${detail.workerStats.label} — ${Math.ceil(queue.trainingRemainingSeconds)} sn`]
+          ? [t("selection.center.training", {
+              unit: t(detail.workerStats.nameKey),
+              seconds: Math.ceil(queue.trainingRemainingSeconds),
+            })]
           : []),
-      `Kademe: ${tierName(progression, snapshot.age, snapshot.level)}${snapshot.upgrading ? " (yükseltiliyor)" : ""}`,
-      `Kontrol yarıçapı: ${detail.controlRadius}`,
+      // Two keys rather than a parenthetical appended to one: "(yükseltiliyor)"
+      // is a clause, and a language may not put it at the end.
+      t(snapshot.upgrading ? "selection.center.tier_upgrading" : "selection.center.tier", {
+        tier: tierName(progression, snapshot.age, snapshot.level),
+      }),
+      t("selection.outpost.control_radius", { radius: detail.controlRadius }),
     ],
     actions: [
       {
         id: TRAIN_WORKER_ACTION,
-        label: `${detail.workerStats.label} Üret`,
-        cost: `${formatResourceCost(detail.workerStats.cost)} · ${detail.workerStats.populationCost} Nüfus`,
+        label: t("selection.center.train_action", { unit: t(detail.workerStats.nameKey) }),
+        cost: t("selection.center.train_cost", {
+          cost: formatResourceCost(detail.workerStats.cost),
+          population: detail.workerStats.populationCost,
+        }),
         // The centre's own gates only. Cost and population are checked when the
         // order is placed and answered with a message: pre-computing them here
         // would restate two systems' rules and could disagree with them.
         enabled: !townUpgrading,
         active: queue.queued > 0,
-        reason: townUpgrading ? `${progression.townLabel} Çağı yükseltmesi sürerken Merkez üretim yapamaz.` : null,
+        reason: townUpgrading
+          ? t("selection.center.train_refused", { age: progression.townLabel })
+          : null,
       },
       centerProgressionAction(progression),
     ],
@@ -1370,9 +1478,9 @@ function describeCenter(
     // of an upgrade; the orders keep their reservation and the ✕ returns with it.
     progress: centerProgress(progression) ?? workerTrainingProgress(detail),
     hint: "",
-    tooltip: snapshot.upgrading
-      ? "Yükseltme tamamlanınca Merkez etkileri tüm yapılara uygulanır."
-      : "Merkez işçi üretir, krallığın kademesini yükseltir ve kontrol alanının çekirdeğidir.",
+    tooltip: t(snapshot.upgrading
+      ? "selection.center.tooltip.upgrading"
+      : "selection.center.tooltip"),
   };
 }
 
@@ -1383,10 +1491,10 @@ function workerTrainingProgress(detail: CenterDetailView): SelectionProgress | n
   const duration = queue.trainingDurationSeconds;
   if (remaining === null || duration === null || !Number.isFinite(duration) || duration <= 0) return null;
   return {
-    label: `${detail.workerStats.label} üretiliyor`,
+    label: t("selection.center.training_progress", { unit: t(detail.workerStats.nameKey) }),
     value: 1 - Math.min(1, Math.max(0, remaining / duration)),
     remainingSeconds: remaining,
-    cancel: cancelQueueAction(CANCEL_WORKER_ACTION, detail.workerStats.label),
+    cancel: cancelQueueAction(CANCEL_WORKER_ACTION, t(detail.workerStats.nameKey)),
   };
 }
 
@@ -1410,12 +1518,25 @@ function describeProducer(
     title,
     summary,
     lines: [
-      `Üretim: ${production.productionPerMinute.toFixed(1)} ${resourceLabel(production.resourceId)}/dk`,
-      `Yerel tampon: ${production.localBuffer.toFixed(1)}/${production.localBufferCapacity}`,
-      ...(livestock ? [`Ağıl: ${livestock.pennedAnimals}/${livestock.livestockCapacity} hayvan`] : []),
+      // `::.0` instead of `toFixed(1)`: the decimal separator is the locale's
+      // (inventory §7.7).
+      t("selection.producer.output", {
+        rate: production.productionPerMinute,
+        resource: resourceLabel(production.resourceId),
+      }),
+      t("selection.producer.buffer", {
+        held: production.localBuffer,
+        capacity: production.localBufferCapacity,
+      }),
+      ...(livestock
+        ? [t("selection.producer.pen", {
+            penned: livestock.pennedAnimals,
+            capacity: livestock.livestockCapacity,
+          })]
+        : []),
       ...(production.sourceRemaining === null
         ? []
-        : [`Düğüm: ${production.sourceRemaining.toFixed(1)} kaldı`]),
+        : [t("selection.producer.node", { remaining: production.sourceRemaining })]),
     ],
     chips: producerChips(detail),
     // Staffing a producer is a world gesture (select workers, right-click it),
@@ -1423,10 +1544,10 @@ function describeProducer(
     actions: [],
     hint: "",
     tooltip: transport === "direct"
-      ? "Merkez veya bağlı Depo yerel erişim mesafesinde; kaynak kervan beklemeden aktarılır."
+      ? t("selection.producer.transport.direct")
       : logistics
-      ? LOGISTICS_REASON[logistics]
-      : "Yapı tamamlanınca lojistik bağlantısı hesaplanır.",
+      ? t(LOGISTICS_REASON_KEY[logistics])
+      : t("selection.producer.transport.pending"),
   };
 }
 
@@ -1452,21 +1573,29 @@ function producerChips(detail: ProducerDetailView): SelectionChip[] {
         ? "warn"
         : "good",
     tooltip: livestock
-      ? `${crew}/${capacity} çoban görevde.`
-      : `${production.assignedWorkers}/${capacity} işçi atandı, ${production.workingWorkers} tanesi çalışıyor.`,
+      ? t("selection.producer.crew.shepherds", { crew, capacity })
+      : t("selection.producer.crew.workers", {
+          assigned: production.assignedWorkers,
+          capacity,
+          working: production.workingWorkers,
+        }),
   });
 
   const direct = transport === "direct";
   chips.push({
     id: "logistics",
     icon: CHIP_ICON.logistics,
-    value: direct ? "Yerel aktarım" : logistics ? LOGISTICS_LABEL[logistics] : "Bekleniyor",
+    value: direct
+      ? t("selection.producer.chip.local_transfer")
+      : logistics
+        ? t(LOGISTICS_KEY[logistics])
+        : t("selection.producer.chip.waiting"),
     tone: direct || logistics === "linked" ? "good" : logistics === null ? "neutral" : "bad",
     tooltip: direct
-      ? "Merkez veya bağlı Depo yerel erişim mesafesinde; kaynak kervan beklemeden aktarılır."
+      ? t("selection.producer.transport.direct")
       : logistics
-        ? LOGISTICS_REASON[logistics]
-        : "Yapı tamamlanınca lojistik bağlantısı hesaplanır.",
+        ? t(LOGISTICS_REASON_KEY[logistics])
+        : t("selection.producer.transport.pending"),
   });
 
   const caravanChip = describeCaravanChip(production, logistics, transport, caravan, caravanStorageFull);
@@ -1478,9 +1607,11 @@ function producerChips(detail: ProducerDetailView): SelectionChip[] {
     chips.push({
       id: "status",
       icon: CHIP_ICON.warning,
-      value: PRODUCTION_STATUS_LABEL[production.status],
+      value: t(PRODUCTION_STATUS_KEY[production.status]),
       tone: PRODUCTION_STATUS_TONE[production.status],
-      tooltip: `Durum: ${PRODUCTION_STATUS_LABEL[production.status]}`,
+      tooltip: t("selection.producer.status_tooltip", {
+        status: t(PRODUCTION_STATUS_KEY[production.status]),
+      }),
     });
   }
   return chips;
@@ -1509,28 +1640,48 @@ function describeCaravanChip(
 ): SelectionChip | null {
   const chip = (value: string, tone: SelectionChipTone, tooltip: string): SelectionChip =>
     ({ id: "caravan", icon: CHIP_ICON.caravan, value, tone, tooltip });
-  if (transport === "direct") {
-    return storageFull
-      ? chip("Stok dolu", "warn", "Global stokta yer yok; kaynak üreticide bekliyor.")
-      : null;
-  }
+  const storageFullChip = (): SelectionChip => chip(
+    t("selection.caravan.storage_full"),
+    "warn",
+    t("selection.caravan.storage_full.tooltip"),
+  );
+  if (transport === "direct") return storageFull ? storageFullChip() : null;
   if (logistics !== "linked" || !caravan) {
-    return chip("Yol bekliyor", "warn", "Kervan, yol bağlantısı kurulana kadar sefere çıkamaz.");
+    return chip(
+      t("selection.caravan.awaiting_road"),
+      "warn",
+      t("selection.caravan.awaiting_road.tooltip"),
+    );
   }
-  if (storageFull) return chip("Stok dolu", "warn", "Global stokta yer yok; kaynak üreticide bekliyor.");
-  const threshold = caravan.carryCapacity.toFixed(1);
+  if (storageFull) return storageFullChip();
+  const threshold = caravan.carryCapacity;
   switch (caravan.phase) {
     case "outbound":
-      return chip("Teslimatta", "neutral", `Kervan teslim noktasına gidiyor (yük eşiği ${threshold}).`);
+      return chip(
+        t("selection.caravan.outbound"),
+        "neutral",
+        t("selection.caravan.outbound.tooltip", { threshold }),
+      );
     case "unloading":
-      return chip("Boşaltıyor", "neutral", "Kervan teslim noktasında boşaltıyor.");
+      return chip(
+        t("selection.caravan.unloading"),
+        "neutral",
+        t("selection.caravan.unloading.tooltip"),
+      );
     case "inbound":
-      return chip("Dönüyor", "neutral", "Kervan üreticiye dönüyor.");
+      return chip(
+        t("selection.caravan.inbound"),
+        "neutral",
+        t("selection.caravan.inbound.tooltip"),
+      );
     case "loading":
       return chip(
-        "Yük bekliyor",
+        t("selection.caravan.loading"),
         "neutral",
-        `Kervan yükleniyor: ${production.localBuffer.toFixed(1)}/${threshold}.`,
+        t("selection.caravan.loading.tooltip", {
+          held: production.localBuffer,
+          threshold,
+        }),
       );
   }
 }
@@ -1545,23 +1696,23 @@ function describeMilitary(
     title,
     summary,
     lines: [
-      `Kuyruk: ${queue.queued}/${queue.capacity}`,
+      t("selection.center.queue", { queued: queue.queued, capacity: queue.capacity }),
       // What is training, and how long it has left, is the progress bar's line
       // now — repeating it as prose directly above the bar said it twice. The
       // pending roll-call went with it: "Kuyruk: 3/5" already carries how much
       // is waiting, and naming each order made the longest line in the panel out
       // of the least actionable fact.
-      ...(queue.trainingLabel === null ? ["Üretim yok."] : []),
+      ...(queue.trainingNameKey === null ? [t("selection.center.no_production")] : []),
     ],
     chips: [
       {
         id: "rally",
         icon: CHIP_ICON.rally,
-        value: detail.rallySet ? "Belirlendi" : "Yok",
+        value: t(detail.rallySet ? "selection.military.rally.set" : "selection.military.rally.none"),
         tone: detail.rallySet ? "good" : "neutral",
-        tooltip: detail.rallySet
-          ? "Toplanma noktası belirlendi; yeni birlikler oraya yürür."
-          : "Toplanma noktası yok; yeni birlikler Kışlanın yanında bekler.",
+        tooltip: t(detail.rallySet
+          ? "selection.military.rally.set.tooltip"
+          : "selection.military.rally.none.tooltip"),
       },
       // The two things that stop a Barracks silently. Only shown when true: a
       // healthy Barracks does not need a badge saying nothing is wrong with it.
@@ -1569,9 +1720,9 @@ function describeMilitary(
         ? [{
           id: "upgrading",
           icon: CHIP_ICON.warning,
-          value: "Yükseltiliyor",
+          value: t("selection.military.upgrading"),
           tone: "warn" as const,
-          tooltip: "Seviye yükseltmesi sürüyor — üretim duraklatıldı.",
+          tooltip: t("selection.military.upgrading.tooltip"),
         }]
         : []),
       ...(detail.connected
@@ -1579,16 +1730,18 @@ function describeMilitary(
         : [{
           id: "logistics",
           icon: CHIP_ICON.logistics,
-          value: "Kontrol Dışı",
+          value: t("selection.military.disconnected"),
           tone: "bad" as const,
-          tooltip: "Kontrol Dışı — bu Kışla birlik üretemez.",
+          // The building names itself rather than the sentence naming one kind:
+          // this panel serves the Barracks and the Archery Range alike.
+          tooltip: t("selection.military.disconnected.tooltip", { building: title }),
         }]),
     ],
     actions: [
       ...detail.roster.map((entry) => trainAction(entry, detail)),
       {
         id: RALLY_ACTION,
-        label: "Toplanma Noktası",
+        label: t("selection.military.rally_action"),
         cost: null,
         enabled: true,
         reason: null,
@@ -1597,11 +1750,11 @@ function describeMilitary(
     actionLayout: "command-deck",
     progress: trainingProgress(queue),
     hint: "",
-    tooltip: !detail.connected
-      ? "Kontrol alanı kaybedilen askerî yapı üretim yapamaz; alanı geri alın."
+    tooltip: t(!detail.connected
+      ? "selection.military.tooltip.disconnected"
       : detail.upgrading
-        ? "Yükseltme tamamlanınca kuyruk kaldığı yerden devam eder."
-        : "Yeni birlikler Toplanma Noktasına yürür.",
+        ? "selection.military.tooltip.upgrading"
+        : "selection.military.tooltip.rally"),
   };
 }
 
@@ -1627,7 +1780,6 @@ function describeMarket(
   detail: MarketDetailView,
 ): SelectionPanelContent {
   const { trade } = detail;
-  const commissionPercent = Math.round(trade.commission * 100);
   const supplyByResource = new Map(detail.supply.map((line) => [line.resourceId, line]));
   // One chip per stocked resource, and none at all when this project stocks
   // nothing — an empty `stocked` list must leave the panel exactly as it was.
@@ -1653,19 +1805,27 @@ function describeMarket(
     return {
       id: `stock:${resourceId}`,
       icon: CHIP_ICON.delivery,
-      value: `${resourceLabel(resourceId)} ${Math.floor(held)}/${trade.lotSize}`,
+      value: t("selection.market.stock_chip", {
+        resource: resourceLabel(resourceId),
+        held: Math.floor(held),
+        lot: trade.lotSize,
+      }),
       tone: buyable ? (flowing ? "good" : "warn") : "bad",
-      tooltip: buyable
-        ? `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)} — ${lots} lot (${lots} × ${trade.lotSize}) satın alınabilir. ${supplyAdvice(line)}`
-        : `${resourceLabel(resourceId)} stoğu: ${Math.floor(held)}/${trade.lotSize}. ${supplyAdvice(line)}`,
+      tooltip: t(buyable ? "selection.market.stock.buyable" : "selection.market.stock.short", {
+        resource: resourceLabel(resourceId),
+        held: Math.floor(held),
+        lots,
+        lot: trade.lotSize,
+        advice: supplyAdvice(line),
+      }),
     };
   });
   return {
     title,
     summary,
     lines: [
-      `Lot: ${trade.lotSize} birim · komisyon %${commissionPercent}`,
-      "Fiyat ve endeks, aşağıdaki Al/Sat kartlarında.",
+      t("selection.market.lot_line", { lot: trade.lotSize, commission: trade.commission }),
+      t("selection.market.price_line"),
     ],
     chips: [
       ...(detail.connected
@@ -1673,9 +1833,9 @@ function describeMarket(
         : [{
           id: "logistics",
           icon: CHIP_ICON.logistics,
-          value: "Kontrol Dışı",
+          value: t("selection.market.disconnected"),
           tone: "bad" as const,
-          tooltip: "Kontrol Dışı — bu Pazar ticaret yapamaz.",
+          tooltip: t("selection.market.disconnected.tooltip"),
         }]),
       ...stockChips,
     ],
@@ -1690,9 +1850,9 @@ function describeMarket(
     ]),
     actionLayout: "market",
     hint: "",
-    tooltip: detail.connected
-      ? "Alım fiyatı yükseltir, satım düşürür. Komisyon yüzünden anlık al-sat her zaman zarardır."
-      : "Kontrol alanı kaybedilen Pazar ticaret yapamaz; alanı geri alın.",
+    tooltip: t(detail.connected
+      ? "selection.market.tooltip"
+      : "selection.market.tooltip.disconnected"),
   };
 }
 
@@ -1734,20 +1894,35 @@ function tradeAction(
   const supplied = stock === null || stock >= lotSize;
   return {
     id: `${buying ? TRADE_BUY_ACTION_PREFIX : TRADE_SELL_ACTION_PREFIX}${resourceId}`,
-    label: `${lotSize} ${resourceLabel(resourceId)} ${buying ? "Al" : "Sat"}`,
+    label: t(buying ? "selection.market.buy_action" : "selection.market.sell_action", {
+      lot: lotSize,
+      resource: resourceLabel(resourceId),
+    }),
     // Signed against the player's gold, so the two directions cannot be
     // mistaken for each other at a glance.
-    cost: `${buying ? "-" : "+"}${price} ${goldLabel}`,
+    cost: t(buying ? "selection.market.buy_cost" : "selection.market.sell_cost", {
+      price,
+      gold: goldLabel,
+    }),
     enabled: connected && supplied,
     reason: !connected
-      ? "Kontrol Dışı: bu Pazar ticaret yapamaz."
+      ? t("selection.market.refused.disconnected")
       : supplied
         ? null
         // Names the shortfall *and* the reason for it: "128/200" says how far off
         // the lot is, the advice says which of the four different things the
         // player would have to do about it.
-        : `Pazarda stok yok: ${Math.floor(stock ?? 0)}/${lotSize}. ${supplyAdvice(supply)}`,
-    hint: `${resourceLabel(resourceId)} endeksi ×${index.toFixed(2)}. ${buying ? "Alım" : "Satım"} fiyatı: ${price} ${goldLabel}.`,
+        : t("selection.market.refused.out_of_stock", {
+          held: Math.floor(stock ?? 0),
+          lot: lotSize,
+          advice: supplyAdvice(supply),
+        }),
+    hint: t(buying ? "selection.market.buy_hint" : "selection.market.sell_hint", {
+      resource: resourceLabel(resourceId),
+      index,
+      price,
+      gold: goldLabel,
+    }),
   };
 }
 
@@ -1762,30 +1937,30 @@ function tradeAction(
  * honestly be said without knowing where the goods come from.
  */
 function supplyAdvice(supply: MarketSupplyLine | null): string {
-  if (supply === null) return "Bir arz noktasına yol çekin.";
-  const site = supply.siteLabel ?? "Arz noktası";
+  if (supply === null) return t("selection.supply.generic");
+  const site = supply.siteNameKey === null ? t("selection.supply.site_fallback") : t(supply.siteNameKey);
   switch (supply.state) {
     case "supplying":
       // Not a problem at all — the lane is running and the lot is still being
       // carried. Saying "draw a road" here would send the player to build a
       // second road to a site already delivering on the first.
-      return `${site} bağlı: yük yolda, stok doluyor.`;
+      return t("selection.supply.supplying", { site });
     case "cut":
-      return `${site} ile bağlantı koptu: yolu onarın.`;
+      return t("selection.supply.cut", { site });
     case "rival":
-      return `${site} rakibin elinde: arz yolunu kesin ya da kendi yolunuzu çekin.`;
+      return t("selection.supply.rival", { site });
     case "unclaimed":
       // Phrased like its three siblings — site first, then the verb — rather
       // than `${site}'na`. A case suffix cannot be attached in code: it changes
       // with the label's last vowel and with whether that label already carries
       // a possessive ending, so `-na` is only right for the three sites this
       // map happens to ship (all ending in one).
-      return `${site} sahipsiz: buraya yol çekin.`;
+      return t("selection.supply.unclaimed", { site });
     case "absent":
       // The one answer no road can fix, and the reason `absent` is a state
       // rather than a missing line: a player who paves the whole map looking
       // for a port that was never authored has been lied to by this panel.
-      return "Bu haritada bu kaynağın arz noktası yok.";
+      return t("selection.supply.absent");
   }
 }
 
@@ -1801,12 +1976,15 @@ function trainingProgress(queue: BarracksQueueSnapshot): SelectionProgress | nul
   const remaining = queue.trainingRemainingSeconds;
   const duration = queue.trainingDurationSeconds;
   if (remaining === null || duration === null || !Number.isFinite(duration) || duration <= 0) return null;
-  const newest = queue.pendingLabels.at(-1) ?? queue.trainingLabel ?? "sipariş";
+  const newestKey = queue.pendingNameKeys.at(-1) ?? queue.trainingNameKey;
+  const newest = newestKey === undefined || newestKey === null
+    ? t("selection.queue.order_fallback")
+    : t(newestKey);
   return {
     // The queue count stays a body line rather than being repeated here: an
     // upgrade can take this bar away from the queue, and the count must not
     // vanish with it.
-    label: `${queue.trainingLabel ?? "Birlik"} üretiliyor`,
+    label: t("selection.queue.training", { unit: t(queue.trainingNameKey ?? "unit.unknown.name") }),
     value: 1 - Math.min(1, Math.max(0, remaining / duration)),
     remainingSeconds: remaining,
     cancel: cancelQueueAction(CANCEL_TRAIN_ACTION, newest),
@@ -1822,11 +2000,11 @@ function trainingProgress(queue: BarracksQueueSnapshot): SelectionProgress | nul
 function cancelQueueAction(id: string, newestLabel: string): SelectionAction {
   return {
     id,
-    label: `Son siparişi iptal et: ${newestLabel}`,
+    label: t("selection.queue.cancel_action", { unit: newestLabel }),
     cost: null,
     enabled: true,
     reason: null,
-    hint: `Kuyruktaki en son siparişi (${newestLabel}) iptal eder; maliyeti tam iade edilir.`,
+    hint: t("selection.queue.cancel_hint", { unit: newestLabel }),
   };
 }
 
@@ -1838,25 +2016,38 @@ function cancelQueueAction(id: string, newestLabel: string): SelectionAction {
  */
 function trainAction(entry: RosterEntry, detail: MilitaryDetailView): SelectionAction {
   const full = detail.queue.queued >= detail.queue.capacity;
-  const buildingLabel = entry.stats.productionBuildingId === "archery_range" ? "Okçuluk Alanı" : "Kışla";
+  // The building names itself from the data rather than from a hardcoded pair:
+  // a fork that adds a third training building would otherwise be told its
+  // Stables is a Barracks.
+  const buildingLabel = detail.buildingLabel;
   // The gate is the kingdom's global centre tier, not this building's level: a
   // pure age gate (Lv1) reads "… Çağında açılır"; a higher tier names the level.
-  const reqAgeLabel = entry.stats.requiredAge === "town" ? "Kasaba" : "Yerleşim";
+  const age = t(`common.age.${entry.stats.requiredAge === "town" ? "town" : "settlement"}.name`);
   const reason = !entry.unlocked
     ? entry.stats.requiredSettlementLevel <= 1
-      ? `${entry.stats.label} ${reqAgeLabel} Çağında açılır.`
-      : `${entry.stats.label} için ${reqAgeLabel} Lv${entry.stats.requiredSettlementLevel} gerekir.`
+      ? t("selection.train.locked_age", { unit: t(entry.stats.nameKey), age })
+      : t("selection.train.locked_tier", {
+          unit: t(entry.stats.nameKey),
+          age,
+          level: entry.stats.requiredSettlementLevel,
+        })
     : !detail.connected
-      ? `Kontrol Dışı: bu ${buildingLabel} birlik üretemez.`
+      ? t("selection.train.disconnected", { building: buildingLabel })
       : detail.upgrading
-        ? "Seviye yükseltmesi sürerken kuyruk duraklatıldı."
+        ? t("selection.train.upgrading")
         : full
-          ? `Kuyruk dolu (${detail.queue.queued}/${detail.queue.capacity}).`
+          ? t("selection.train.queue_full", {
+              queued: detail.queue.queued,
+              capacity: detail.queue.capacity,
+            })
           : null;
   return {
     id: `${TRAIN_ACTION_PREFIX}${entry.id}`,
-    label: `${entry.stats.label} Üret`,
-    cost: `${formatResourceCost(entry.stats.cost)} · ${entry.stats.populationCost} Nüfus`,
+    label: t("selection.train.action", { unit: t(entry.stats.nameKey) }),
+    cost: t("selection.train.cost", {
+      cost: formatResourceCost(entry.stats.cost),
+      population: entry.stats.populationCost,
+    }),
     enabled: reason === null,
     reason,
   };
@@ -1873,32 +2064,37 @@ function jobBreakdown(units: readonly SelectedUnitView[]): string {
   const order: readonly WorkerJob[] = ["idle", "moving", "building", "repairing", "producing", "unreachable"];
   return order
     .filter((job) => (counts.get(job) ?? 0) > 0)
-    .map((job) => `${counts.get(job)} ${WORKER_JOB_LABEL[job]}`)
+    .map((job) => t("selection.units.job_count", {
+      count: counts.get(job) ?? 0,
+      job: t(WORKER_JOB_KEY[job]),
+    }))
     .join(" · ");
 }
 
-const UNIT_ORDER_LABEL: Record<UnitOrder, string> = {
-  idle: "Bekliyor",
-  moving: "Hareket ediyor",
-  attacking: "Saldırıyor",
-  "attack-moving": "Saldırı-hareket",
+const UNIT_ORDER_KEY: Record<UnitOrder, string> = {
+  idle: "unit.order.idle",
+  moving: "unit.order.moving",
+  attacking: "unit.order.attacking",
+  "attack-moving": "unit.order.attack_move",
 };
 
 /** A mixed group must not claim every unit is following the first unit's order. */
 function orderBreakdown(units: readonly SelectedUnitView[]): string {
   const orders = new Set(units.map((unit) => unit.order ?? "idle"));
-  if (orders.size !== 1) return "Karışık";
-  return UNIT_ORDER_LABEL[[...orders][0] ?? "idle"];
+  if (orders.size !== 1) return t("unit.order.mixed");
+  return t(UNIT_ORDER_KEY[[...orders][0] ?? "idle"]);
 }
 
 
 /** Read the §33 row straight off the unit's data rather than restating it. */
 function counterText(stats: UnitBalanceStats): string {
   const entries = Object.entries(stats.damageMultipliers) as [UnitArmorClass, number][];
-  const strong = entries.filter(([, value]) => value >= STRONG_MULTIPLIER).map(([key]) => ARMOR_CLASS_LABEL[key]);
-  const weak = entries.filter(([, value]) => value <= WEAK_MULTIPLIER).map(([key]) => ARMOR_CLASS_LABEL[key]);
+  const strong = entries.filter(([, value]) => value >= STRONG_MULTIPLIER).map(([key]) => t(ARMOR_CLASS_KEY[key]));
+  const weak = entries.filter(([, value]) => value <= WEAK_MULTIPLIER).map(([key]) => t(ARMOR_CLASS_KEY[key]));
+  // `localizedList`, not `join(", ")`: English wants "light units and structures",
+  // and the separator is the language's business (inventory §7.5).
   return [
-    strong.length > 0 ? `Güçlü: ${strong.join(", ")}` : null,
-    weak.length > 0 ? `Zayıf: ${weak.join(", ")}` : null,
-  ].filter((part): part is string => part !== null).join(" · ") || "Dengeli hasar.";
+    strong.length > 0 ? t("selection.counter.strong", { classes: localizedList(strong) }) : null,
+    weak.length > 0 ? t("selection.counter.weak", { classes: localizedList(weak) }) : null,
+  ].filter((part): part is string => part !== null).join(" · ") || t("selection.counter.balanced");
 }

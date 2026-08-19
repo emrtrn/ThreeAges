@@ -41,12 +41,34 @@ export class LocalizationSyntaxError extends Error {
 
 export type NumberStyle = "decimal" | "integer" | "percent";
 
+/**
+ * A resolved number format: a named style, plus the fraction digits an ICU
+ * skeleton asked for.
+ *
+ * The skeleton half exists because a rate reads as a rate only with its decimal
+ * (`+0.0/min`, not `+0/min`), and `toFixed(1)` cannot produce that — it writes a
+ * dot into languages that use a comma (inventory §7.7). `{rate, number, ::.0}`
+ * is the ICU spelling of "exactly one fraction digit, in this locale's script".
+ */
+export interface NumberFormatSpec {
+  readonly style: NumberStyle;
+  /** null = leave it to `Intl`'s default for the style. */
+  readonly minimumFractionDigits: number | null;
+  readonly maximumFractionDigits: number | null;
+}
+
+const DEFAULT_NUMBER_SPEC: NumberFormatSpec = {
+  style: "decimal",
+  minimumFractionDigits: null,
+  maximumFractionDigits: null,
+};
+
 const PLURAL_CATEGORIES = new Set(["zero", "one", "two", "few", "many", "other"]);
 
 export type MessageNode =
   | { readonly kind: "text"; readonly value: string }
   | { readonly kind: "arg"; readonly name: string }
-  | { readonly kind: "number"; readonly name: string; readonly style: NumberStyle }
+  | { readonly kind: "number"; readonly name: string; readonly format: NumberFormatSpec }
   | {
       readonly kind: "plural";
       readonly name: string;
@@ -192,23 +214,55 @@ class MessageParser {
   }
 
   private parseNumber(name: string): MessageNode {
-    let style: NumberStyle = "decimal";
+    let format = DEFAULT_NUMBER_SPEC;
     if (this.peek() === ",") {
       this.index += 1;
       this.skipWhitespace();
-      const raw = this.readIdentifier();
-      if (raw !== "decimal" && raw !== "integer" && raw !== "percent") {
-        throw new LocalizationSyntaxError(
-          `Unsupported number style "${raw}" (supported: decimal, integer, percent)`,
-          this.pattern,
-          this.index,
-        );
-      }
-      style = raw;
+      format = this.pattern.startsWith("::", this.index)
+        ? this.parseNumberSkeleton()
+        : { ...DEFAULT_NUMBER_SPEC, style: this.parseNumberStyle() };
       this.skipWhitespace();
     }
     this.expect("}");
-    return { kind: "number", name, style };
+    return { kind: "number", name, format };
+  }
+
+  private parseNumberStyle(): NumberStyle {
+    const raw = this.readIdentifier();
+    if (raw !== "decimal" && raw !== "integer" && raw !== "percent") {
+      throw new LocalizationSyntaxError(
+        `Unsupported number style "${raw}" (supported: decimal, integer, percent, ::skeleton)`,
+        this.pattern,
+        this.index,
+      );
+    }
+    return raw;
+  }
+
+  /**
+   * The fraction-digit corner of ICU's number skeletons: `::.0`, `::.00`,
+   * `::.0#`, `::.##`. Zeros are required digits, hashes optional ones. Anything
+   * else in a skeleton is refused rather than half-understood — a skeleton the
+   * formatter silently ignored would print the wrong number, not a wrong word.
+   */
+  private parseNumberSkeleton(): NumberFormatSpec {
+    const start = this.index;
+    this.index += 2;
+    const skeleton = this.readWhile((char) => char !== "}").trim();
+    const match = /^\.(0*)(#*)$/u.exec(skeleton);
+    if (!match) {
+      throw new LocalizationSyntaxError(
+        `Unsupported number skeleton "::${skeleton}" (supported: ::.0, ::.00, ::.0#, ::.#)`,
+        this.pattern,
+        start,
+      );
+    }
+    const required = match[1]!.length;
+    return {
+      style: "decimal",
+      minimumFractionDigits: required,
+      maximumFractionDigits: required + match[2]!.length,
+    };
   }
 
   private parsePlural(name: string): MessageNode {
@@ -354,17 +408,25 @@ const numberFormatters = new Map<string, Intl.NumberFormat>();
 const pluralRules = new Map<string, Intl.PluralRules>();
 const listFormatters = new Map<string, Intl.ListFormat>();
 
-function numberFormatter(locale: string, style: NumberStyle): Intl.NumberFormat {
-  const cacheKey = `${locale}|${style}`;
+function numberFormatter(locale: string, spec: NumberFormatSpec): Intl.NumberFormat {
+  const cacheKey = `${locale}|${spec.style}|${spec.minimumFractionDigits}|${spec.maximumFractionDigits}`;
   const cached = numberFormatters.get(cacheKey);
   if (cached) return cached;
-  const options: Intl.NumberFormatOptions =
-    style === "integer"
+  const base: Intl.NumberFormatOptions =
+    spec.style === "integer"
       ? { maximumFractionDigits: 0 }
-      : style === "percent"
+      : spec.style === "percent"
         ? { style: "percent", maximumFractionDigits: 0 }
         : {};
-  const formatter = new Intl.NumberFormat(locale, options);
+  const formatter = new Intl.NumberFormat(locale, {
+    ...base,
+    ...(spec.minimumFractionDigits === null
+      ? {}
+      : { minimumFractionDigits: spec.minimumFractionDigits }),
+    ...(spec.maximumFractionDigits === null
+      ? {}
+      : { maximumFractionDigits: spec.maximumFractionDigits }),
+  });
   numberFormatters.set(cacheKey, formatter);
   return formatter;
 }
@@ -387,8 +449,12 @@ export function formatNumber(
   value: number,
   style: NumberStyle = "decimal",
 ): string {
+  return formatNumberSpec(locale, value, { ...DEFAULT_NUMBER_SPEC, style });
+}
+
+function formatNumberSpec(locale: string, value: number, spec: NumberFormatSpec): string {
   if (!Number.isFinite(value)) return "—";
-  return numberFormatter(locale, style).format(value);
+  return numberFormatter(locale, spec).format(value);
 }
 
 /** `ratio` is a fraction (0.3 → `%30` in tr, `30%` in en). */
@@ -481,7 +547,7 @@ function renderNodes(nodes: readonly MessageNode[], context: RenderContext): str
           out += `{${node.name}}`;
           break;
         }
-        out += formatNumber(context.locale, value, node.style);
+        out += formatNumberSpec(context.locale, value, node.format);
         break;
       }
       case "plural": {

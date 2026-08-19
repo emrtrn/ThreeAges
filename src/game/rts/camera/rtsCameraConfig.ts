@@ -91,8 +91,8 @@ function clamp01(value: number): number {
 
 export const DEFAULT_RTS_CAMERA_CONFIG: RtsCameraConfig = {
   pitchDeg: 55,
-  minDistance: 10,
-  maxDistance: 40,
+  minDistance: 20,
+  maxDistance: 120,
   startDistance: 30,
   panSpeed: 26,
   panReferenceDistance: 34,

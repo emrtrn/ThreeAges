@@ -23,6 +23,7 @@
  *    simply has no row — the roster is a census, not a catalogue.
  */
 import type { SettlementAge, UnitBalanceStats, UnitRoleId } from "../../data/gameDataTypes";
+import { localizedCompare, t } from "../../localization/LocalizationService";
 
 /**
  * The part of a `Unit` this model reads. Structural rather than the class, so
@@ -41,7 +42,7 @@ export interface RosterUnit {
 /** One unit type the player currently owns at least one of. */
 export interface ArmyRosterEntry {
   readonly typeId: string;
-  /** From `stats.label`; the roster never invents a name for a unit id. */
+  /** Resolved from `stats.nameKey`; the roster never invents a name for a unit id. */
   readonly label: string;
   readonly icon: string | null;
   readonly role: UnitRoleId;
@@ -142,7 +143,7 @@ export function describeArmyRoster<T extends RosterUnit>(
 
   const entries: ArmyRosterEntry[] = [...groups].map(([typeId, group]) => ({
     typeId,
-    label: group.stats.label,
+    label: t(group.stats.nameKey),
     icon: group.stats.icon ?? null,
     role: group.stats.role,
     count: group.count,
@@ -183,7 +184,7 @@ function compareEntries(
     const ageA = AGE_ORDER[groups.get(a.typeId)!.stats.requiredAge];
     const ageB = AGE_ORDER[groups.get(b.typeId)!.stats.requiredAge];
     if (ageA !== ageB) return ageA - ageB;
-    const byLabel = a.label.localeCompare(b.label, "tr");
+    const byLabel = localizedCompare(a.label, b.label);
     if (byLabel !== 0) return byLabel;
     return a.typeId.localeCompare(b.typeId);
   };

@@ -11,6 +11,7 @@
  *
  * Debug route only, exactly as before.
  */
+import { t } from "../../localization/LocalizationService";
 import { formatMatchDuration } from "../match/rtsMatchClock";
 import type { RtsMatchOutcome } from "../match/rtsMatchState";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
@@ -149,7 +150,7 @@ export class RtsSimulationWitness {
     lines.push(`nüfus: ${populationState.used}/${populationState.capacity} (mevcut ${populationState.current})`);
     for (const building of production?.snapshots() ?? []) {
       lines.push(
-        `${building.structureLabel}: ${building.assignedWorkers}/${building.workerCapacity} işçi (${building.workingWorkers} çalışıyor) · ${building.resourceId} ${building.localBuffer.toFixed(1)}/${building.localBufferCapacity} · üretim +${building.lastProductionTick.toFixed(2)} · aktarım +${building.lastTransferTick.toFixed(2)} · ${building.status}`,
+        `${t(building.structureNameKey)}: ${building.assignedWorkers}/${building.workerCapacity} işçi (${building.workingWorkers} çalışıyor) · ${building.resourceId} ${building.localBuffer.toFixed(1)}/${building.localBufferCapacity} · üretim +${building.lastProductionTick.toFixed(2)} · aktarım +${building.lastTransferTick.toFixed(2)} · ${building.status}`,
       );
     }
     const roadComponents = roads.components();

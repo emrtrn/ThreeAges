@@ -4,7 +4,11 @@
   "common.resource.stone.name": "Taş",
   "common.resource.gold.name": "Altın",
   "common.cost.free": "Ücretsiz",
+  "common.cost.entry": "{amount} {resource}",
   "common.age.settlement.name": "Yerleşim",
   "common.age.town.name": "Kasaba",
-  "common.worker.count": "{count} işçi"
+  "common.worker.count": "{count} işçi",
+  "common.tier.name": "{age} Lv{level}",
+  "common.tier.unknown": "gerekli kademe",
+  "common.building.military": "askerî yapı"
 }

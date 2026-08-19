@@ -1,7 +1,7 @@
 {
   "settlement": {
     "id": "settlement",
-    "label": "Yerleşim",
+    "nameKey": "common.age.settlement.name",
     "commandCenter": {
       "controlRadius": 28
     },
@@ -28,7 +28,7 @@
   },
   "town": {
     "id": "town",
-    "label": "Kasaba",
+    "nameKey": "common.age.town.name",
     "cost": {
       "food": 200,
       "wood": 200,

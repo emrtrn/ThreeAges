@@ -80,9 +80,18 @@ export interface RtsExpansionRegion {
  */
 export interface RtsStrategicPoint {
   readonly id: string;
-  /** Shown in the countdown UI and in notifications; §60 replaced the minimap
-   *  with "stratejik nokta isimleri", so this name is a navigation aid. */
-  readonly name: string;
+  /**
+   * Localization key for the name shown in the countdown UI and in
+   * notifications; §60 replaced the minimap with "stratejik nokta isimleri", so
+   * this name is a navigation aid.
+   *
+   * Derived from {@link id} rather than authored beside it (Localization Plan
+   * §9's second option): a marker has no per-instance sentence to write, so an
+   * authored field would only be a second place for the same fact to live — and
+   * the one that used to hold "Batı Geçidi" is exactly why every pass on the
+   * shipped map was Turkish-only.
+   */
+  readonly nameKey: string;
   readonly x: number;
   readonly z: number;
   /** World radius inside which an enemy unit contests the hold (§58). */
@@ -208,8 +217,8 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
   strategicPoints: [
     // Named west/east: x reads the same for both kingdoms, while "north/south"
     // would be the enemy's z convention worn by a label the player also reads.
-    { id: "west_pass", name: "Batı Geçidi", x: -20, z: -20, captureRadius: 10 },
-    { id: "east_pass", name: "Doğu Geçidi", x: 20, z: 20, captureRadius: 10 },
+    { id: "west_pass", nameKey: "objective.point.west_pass.name", x: -20, z: -20, captureRadius: 10 },
+    { id: "east_pass", nameKey: "objective.point.east_pass.name", x: 20, z: 20, captureRadius: 10 },
   ],
   // Authored around the north-east enemy centre at (38, -38): every slot is grid-snapped,
   // clear of the 8x8 centre footprint and of its neighbours, and inside the

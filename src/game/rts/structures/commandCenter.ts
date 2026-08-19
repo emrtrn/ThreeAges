@@ -241,7 +241,7 @@ export class CommandCenter implements UpgradableStructure {
 function placeholderCenterStats(maxHealth: number): BuildingBalanceStats {
   return {
     id: "command_center",
-    label: "Merkez",
+    nameKey: "building.command_center.name",
     footprint: { width: COMMAND_CENTER_FOOTPRINT, depth: COMMAND_CENTER_FOOTPRINT },
     cost: {},
     constructionSeconds: 0,

@@ -121,6 +121,30 @@ function requireString(
   return value;
 }
 
+/**
+ * A localization key, not a sentence — Localization Plan §8.2, §9.
+ *
+ * Balance data names its text by key; the text itself lives in
+ * `public/game-data/locales/`. The shape check is what makes that rule
+ * self-enforcing: `"label": "Merkez"` renamed to `"nameKey": "Merkez"` would
+ * otherwise load fine and print `⟦missing:Merkez⟧` in the HUD, one screen away
+ * from where the mistake is. Lowercase, dot-separated, at least two segments —
+ * the standard §8.2 writes down.
+ */
+function requireLocalizationKey(
+  obj: Record<string, unknown>,
+  key: string,
+  where: string,
+): string {
+  const value = requireString(obj, key, where);
+  if (!/^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/.test(value)) {
+    throw new GameDataError(
+      `${where}.${key}: "${value}" is not a localization key (expected lowercase dotted segments, e.g. "building.house.name")`,
+    );
+  }
+  return value;
+}
+
 function requireStringAllowEmpty(
   obj: Record<string, unknown>,
   key: string,
@@ -633,7 +657,7 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     }
     units[id] = {
       id,
-      label: requireString(stats, "label", statsWhere),
+      nameKey: requireLocalizationKey(stats, "nameKey", statsWhere),
       ...(icon ? { icon } : {}),
       role: role as UnitRoleId,
       armorClass: armorClass as Exclude<UnitArmorClass, "structure">,
@@ -960,7 +984,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     const icon = optionalUiAssetPath(stats, "icon", statsWhere);
     buildings[id] = {
       id,
-      label: requireString(stats, "label", statsWhere),
+      nameKey: requireLocalizationKey(stats, "nameKey", statsWhere),
       ...(icon ? { icon } : {}),
       footprint: { width, depth },
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
@@ -1536,7 +1560,7 @@ export function validateAnimalBalance(value: unknown): AnimalBalance {
     }
     animals[id] = {
       id,
-      label: requireString(stats, "label", statsWhere),
+      nameKey: requireLocalizationKey(stats, "nameKey", statsWhere),
       meatCapacity: positive("meatCapacity"),
       maxHealth: positive("maxHealth"),
       moveSpeed,
@@ -1731,7 +1755,6 @@ export function validateResourceBalance(value: unknown): ResourceBalance {
     }
     const statsWhere = `${where}."${id}"`;
     const stats = asObject(raw, statsWhere);
-    const label = requireString(stats, "label", statsWhere);
     const hasTree = stats.tree !== undefined;
     const hasNodes = stats.safeNode !== undefined || stats.externalNode !== undefined;
     if (hasTree && hasNodes) {
@@ -1747,7 +1770,7 @@ export function validateResourceBalance(value: unknown): ResourceBalance {
       // A tree that holds nothing is a blocker with no yield: it reserves build
       // space and a worker's trip, and hands back zero wood.
       if (capacity <= 0) throw new GameDataError(`${treeWhere}.capacity: must be > 0`);
-      resources[id] = { id, label, tree: { capacity } };
+      resources[id] = { id, tree: { capacity } };
       continue;
     }
     const node = (key: "safeNode" | "externalNode") => {
@@ -1765,7 +1788,7 @@ export function validateResourceBalance(value: unknown): ResourceBalance {
     if (externalNode.capacity <= safeNode.capacity) {
       throw new GameDataError(`${statsWhere}.externalNode.capacity: must exceed safeNode.capacity`);
     }
-    resources[id] = { id, label, safeNode, externalNode };
+    resources[id] = { id, safeNode, externalNode };
   }
   for (const id of ["stone", "gold"]) {
     if (!resources[id]?.safeNode) {
@@ -1814,13 +1837,13 @@ export function validateAgeBalance(value: unknown): AgeBalance {
   return {
     settlement: {
       id: "settlement",
-      label: requireString(settlement, "label", `${where}.settlement`),
+      nameKey: requireLocalizationKey(settlement, "nameKey", `${where}.settlement`),
       commandCenter: validateCommandCenterAge(settlement["commandCenter"], `${where}.settlement.commandCenter`),
       levelUpgrades: validateCenterLevelUpgrades(settlement["levelUpgrades"], `${where}.settlement.levelUpgrades`),
     },
     town: {
       id: "town",
-      label: requireString(town, "label", `${where}.town`),
+      nameKey: requireLocalizationKey(town, "nameKey", `${where}.town`),
       cost,
       upgradeSeconds,
       requiredBuildingIds: [...requirements] as string[],
@@ -2564,7 +2587,7 @@ export function validateCaravanBalance(value: unknown): CaravanBalance {
     throw new GameDataError(`${caravanWhere}.armorClass: must be "light" or "heavy"`);
   }
   return {
-    label: requireString(caravan, "label", caravanWhere),
+    nameKey: requireLocalizationKey(caravan, "nameKey", caravanWhere),
     moveSpeed: positive("moveSpeed"),
     walkClipSpeed: positive("walkClipSpeed"),
     maxHealth: positive("maxHealth"),
@@ -2634,7 +2657,7 @@ export function validateTradeSiteBalance(value: unknown): TradeSiteBalance {
     }
     const icon = optionalUiAssetPath(site, "icon", siteWhere);
     sites[id] = {
-      label: requireString(site, "label", siteWhere),
+      nameKey: requireLocalizationKey(site, "nameKey", siteWhere),
       ...(icon ? { icon } : {}),
       resourceId,
       perMinute: positive("perMinute"),
@@ -2753,27 +2776,27 @@ export function validateMissionScript(
       : validateMissionGuide(step["guide"], `${scope}.guide`, knownBuildingIds);
     return {
       id: stepId,
-      title: requireString(step, "title", scope),
-      why: requireString(step, "why", scope),
+      titleKey: requireLocalizationKey(step, "titleKey", scope),
+      whyKey: requireLocalizationKey(step, "whyKey", scope),
       goal: validateMissionGoal(step["goal"], `${scope}.goal`, knownBuildingIds),
       ...(latch === undefined ? {} : { latch }),
       ...(guide === undefined ? {} : { guide }),
     } satisfies MissionStep;
   });
 
-  // Optional, and checked rather than passed through: an `introFog` that is a
+  // Optional, and checked rather than passed through: an `introFogKey` that is a
   // number or an empty string would reach the feed as a blank card at the exact
   // moment the chain is introducing itself. Absent is the only other legal shape.
-  const introFog = obj["introFog"] === undefined
+  const introFogKey = obj["introFogKey"] === undefined
     ? undefined
-    : requireString(obj, "introFog", where);
+    : requireLocalizationKey(obj, "introFogKey", where);
 
   return {
     id,
-    label: requireString(obj, "label", where),
-    intro: requireString(obj, "intro", where),
-    ...(introFog === undefined ? {} : { introFog }),
-    outro: requireString(obj, "outro", where),
+    nameKey: requireLocalizationKey(obj, "nameKey", where),
+    introKey: requireLocalizationKey(obj, "introKey", where),
+    ...(introFogKey === undefined ? {} : { introFogKey }),
+    outroKey: requireLocalizationKey(obj, "outroKey", where),
     steps,
   };
 }

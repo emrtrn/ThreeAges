@@ -224,7 +224,7 @@ import {
   TRAIN_WORKER_ACTION,
   WORKER_ASSIGNMENT_ACTION_PREFIX,
   CENTER_LEVEL_UP_ACTION,
-  STANCE_LABEL,
+  stanceLabel,
   type RtsSelectionView,
   type StructureDetailView,
   type CenterProgressionView,
@@ -257,7 +257,7 @@ import { WildlifeView } from "./wildlife/wildlifeView";
 import { Caravan, CaravanSystem, type CaravanDispatch } from "./logistics/caravanSystem";
 import { ProducerCaravanLanes, producerLaneId } from "./logistics/producerCaravanLanes";
 import { CaravanView } from "./logistics/caravanView";
-import { buildingUnlocked, KingdomProgressionSystem, type UpgradableStructure } from "./progression/kingdomProgressionSystem";
+import { buildingUnlocked, KingdomProgressionSystem, TOWN_REQUIRED_SETTLEMENT_LEVEL, type UpgradableStructure } from "./progression/kingdomProgressionSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { type ProducerLogisticsStatus, ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
@@ -291,6 +291,7 @@ import { RtsNotificationFeed } from "./ui/rtsNotificationFeed";
 import { supplyNotice } from "./ui/rtsSupplyNotices";
 import { RtsAttackWatch } from "./ui/rtsAttackWatch";
 import { formatCostShortfall, formatResourceCost, resourceLabel, RESOURCE_ORDER } from "./ui/resourceLabels";
+import { localizedCompare, localizedList, onLocaleChanged, t } from "../localization/LocalizationService";
 import { TerritoryControlSystem } from "./territory/territoryControlSystem";
 import { StrategicPointSystem } from "./objectives/strategicPointSystem";
 import { StrategicPointView } from "./objectives/strategicPointView";
@@ -393,7 +394,7 @@ const MISSION_POLL_SECONDS = 0.25;
 /**
  * What a keyboard order is called on the mission card — Perde IV.
  *
- * The two stances borrow {@link STANCE_LABEL} rather than spelling themselves,
+ * The two stances borrow {@link stanceLabel} rather than spelling themselves,
  * because the unit panel shows the resulting stance in those exact words: a card
  * that taught "Bekle" and a panel that then reported "Pozisyonu Koru" would look
  * like two different orders to the only player who needs either.
@@ -405,15 +406,18 @@ const MISSION_POLL_SECONDS = 0.25;
  * act on a selection and half do not: "Birlikleri seç, sonra Home tuşuna bas"
  * would be instructing a player to select an army in order to move the camera.
  */
-const MISSION_COMMAND_LABEL: Record<MissionGuideCommand, { label: string; selected: boolean }> = {
-  stop: { label: "Dur", selected: true },
-  attackMove: { label: "Saldır-yürü", selected: true },
-  hold: { label: STANCE_LABEL.hold, selected: true },
-  aggressive: { label: STANCE_LABEL.aggressive, selected: true },
-  retreat: { label: "Geri çekil", selected: true },
-  selectIdleWorkers: { label: "Boştaki işçileri seç", selected: false },
-  toggleWorkerAutomation: { label: "İşçi otomasyonunu aç/kapat", selected: false },
-  focusCenter: { label: "Merkez'e dön", selected: false },
+const MISSION_COMMAND_LABEL: Record<MissionGuideCommand, { labelKey: string; selected: boolean }> = {
+  stop: { labelKey: "mission.command.stop", selected: true },
+  attackMove: { labelKey: "mission.command.attack_move", selected: true },
+  // The two stances borrow the unit panel's own keys rather than declaring a
+  // second wording: a card that taught one word and a panel that reported
+  // another would read as two different orders.
+  hold: { labelKey: "unit.stance.hold", selected: true },
+  aggressive: { labelKey: "unit.stance.aggressive", selected: true },
+  retreat: { labelKey: "mission.command.retreat", selected: true },
+  selectIdleWorkers: { labelKey: "mission.command.select_idle_workers", selected: false },
+  toggleWorkerAutomation: { labelKey: "mission.command.toggle_worker_automation", selected: false },
+  focusCenter: { labelKey: "mission.command.focus_center", selected: false },
 };
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
 const MAX_FRAME_SECONDS = 1 / 15;
@@ -1078,6 +1082,10 @@ export class RtsApp {
   private cancelConstructionArmed: PlacedStructure | null = null;
   private readonly worldProgressOverlay = new RtsWorldProgressOverlay();
   private buildingLabelCache: ReadonlyMap<string, string> | null = null;
+  /** Drops {@link buildingLabels} when the player changes language mid-match. */
+  private readonly stopLocaleWatch = onLocaleChanged(() => {
+    this.buildingLabelCache = null;
+  });
   private readonly projectiles = new ProjectileSystem();
   private readonly thrownRocks = new ThrownRockSystem();
   private readonly firebrands = new FirebrandSystem();
@@ -1928,7 +1936,7 @@ export class RtsApp {
           // Named from the data, not spelled out: the Okçuluk Alanı is only the
           // first Town-gated building and the Tarla only the first level-gated
           // one, and the next would have been refused under its neighbour's name.
-          this.buildPalette.setActionMessage(`${stats.label} ${buildingUnlockRequirement(stats)}`);
+          this.buildPalette.setActionMessage(buildingUnlockRequirement(stats, t(stats.nameKey)));
           return;
         }
         if (!this.beginMissionGatedPlacement(id)) return;
@@ -2070,7 +2078,7 @@ export class RtsApp {
         // placement already disarm themselves after their single confirmation.
         if (this.rallyPointPending) {
           this.rallyPointPending = false;
-          this.buildPalette.setActionMessage("Toplanma noktası seçimi iptal edildi.");
+          this.buildPalette.setActionMessage(t("placement.rally.cancelled"));
           return;
         }
         if (this.roadPlacement.isActive) {
@@ -2144,10 +2152,17 @@ export class RtsApp {
     return this.kingdoms.get(PLAYER_OWNER);
   }
 
-  /** Building id → player-facing label, built once from the balance data. */
+  /**
+   * Building id → player-facing name, resolved once per language.
+   *
+   * Cached because the centre's progression view rebuilds it every frame, and
+   * invalidated on `localeChanged` rather than never: the cache now holds
+   * *translated* text, so a mid-match language switch has to be able to throw it
+   * away (Localization Plan §13).
+   */
   private get buildingLabels(): ReadonlyMap<string, string> {
     this.buildingLabelCache ??= new Map(
-      Object.entries(this.options.buildingBalance).map(([id, stats]) => [id, stats.label]),
+      Object.entries(this.options.buildingBalance).map(([id, stats]) => [id, t(stats.nameKey)]),
     );
     return this.buildingLabelCache;
   }
@@ -2185,6 +2200,7 @@ export class RtsApp {
 
   dispose(): void {
     this.disposed = true;
+    this.stopLocaleWatch();
     this.running = false;
     delete this.canvas.dataset.rtsCursor;
     // The canvas outlives this app — "Ana Menü" hands it straight to the menu —
@@ -3249,14 +3265,14 @@ export class RtsApp {
 
     if (!this.missionIntroPosted) {
       this.missionIntroPosted = true;
-      this.notifications.post({ kind: "mission", subject: "intro", text: missions.intro });
+      this.notifications.post({ kind: "mission", subject: "intro", text: t(missions.introKey) });
       // Faz 4: the scouting line, and only where scouting is a thing. Asked of
       // the constructed system rather than `options.fogOfWarEnabled` so the
       // sentence is true by the same evidence the player has — a dark map — and
       // its own card rather than an appendix to the intro, because two subjects
       // in one ten-second notice is one of them going unread.
-      if (missions.introFog && this.vision) {
-        this.notifications.post({ kind: "mission", subject: "intro-fog", text: missions.introFog });
+      if (missions.introFogKey && this.vision) {
+        this.notifications.post({ kind: "mission", subject: "intro-fog", text: t(missions.introFogKey) });
       }
     }
 
@@ -3280,10 +3296,10 @@ export class RtsApp {
         this.notifications.post({
           kind: "mission",
           subject: `done:${event.step.id}`,
-          text: `Görev tamam: ${event.step.title}`,
+          text: t("mission.step_completed", { step: t(event.step.titleKey) }),
         });
       } else if (event.kind === "chain-finished") {
-        this.notifications.post({ kind: "mission", subject: "outro", text: missions.outro });
+        this.notifications.post({ kind: "mission", subject: "outro", text: t(missions.outroKey) });
         // Finishing resolves the offer exactly as declining it does: the player
         // has met the tur, and the next tab should open on a free match.
         this.options.onMissionResolved?.();
@@ -3405,24 +3421,30 @@ export class RtsApp {
     if (prompt === null) return null;
     switch (prompt.kind) {
       case "supply-road":
-        return "Pazar'ın rafı boş — Yol aracıyla bir arz noktasını Pazar'ının yoluna bağla.";
+        return t("mission.guide.supply_road");
       case "await-caravan":
-        return "Kervan yolda: raf dolunca alım açılır. Pazar'ı seçip rafın durumunu izleyebilirsin.";
+        return t("mission.guide.await_caravan");
       case "draw-road":
-        return `${this.buildingLabels.get(guideBuildingId ?? "") ?? "Yapı"} kuruldu ama bağlı değil — Yol aracıyla Merkez'in yoluna bağla.`;
+        return t("mission.guide.draw_road", {
+          building: this.buildingLabels.get(guideBuildingId ?? "") ?? t("building.unknown.name"),
+        });
       case "select-building":
-        return `Önce ${this.buildingLabels.get(prompt.buildingId) ?? prompt.buildingId} yapısını seç.`;
+        return t("mission.guide.select_building", {
+          building: this.buildingLabels.get(prompt.buildingId) ?? prompt.buildingId,
+        });
       case "press-key": {
         // The letter comes from the binding table, so a rebind moves the hint with
         // it. An unbound command loses the letter rather than the sentence: the
         // order still has a name worth saying, and "undefined tuşuna bas" would be
         // the one hint that actively misleads.
         const key = commandKeyLabel(prompt.command);
-        const { label, selected } = MISSION_COMMAND_LABEL[prompt.command];
-        if (key === null) return `${label} komutunu ver.`;
-        return selected
-          ? `Birlikleri seç, sonra ${key} tuşuna bas — ${label}.`
-          : `${key} tuşuna bas — ${label}.`;
+        const { labelKey, selected } = MISSION_COMMAND_LABEL[prompt.command];
+        const command = t(labelKey);
+        if (key === null) return t("mission.guide.no_key", { command });
+        return t(selected ? "mission.guide.press_key_selected" : "mission.guide.press_key", {
+          key,
+          command,
+        });
       }
     }
   }
@@ -3543,9 +3565,9 @@ export class RtsApp {
     if (refusal === null) return true;
     const label = this.buildingLabels.get(buildingId) ?? buildingId;
     this.buildPalette.setActionMessage(
-      refusal === "already-building"
-        ? `${label} zaten inşa ediliyor — bitmesini bekle.`
-        : `Bu görev için bir ${label} yeterli.`,
+      t(refusal === "already-building"
+        ? "mission.build.already_building"
+        : "mission.build.one_is_enough", { building: label }),
     );
     return false;
   }
@@ -3579,7 +3601,7 @@ export class RtsApp {
     this.notifications.post({
       kind: "mission",
       subject: "abandoned",
-      text: "Görev zinciri kapatıldı. Maç serbest devam ediyor.",
+      text: t("mission.chain_abandoned"),
     });
   }
 
@@ -3941,7 +3963,9 @@ export class RtsApp {
         y: 8,
         z: structure.z,
         progress: structure.construction.progress,
-        label: `İnşa %${Math.floor(structure.construction.progress * 100)}`,
+        // `{progress, number, percent}`: Turkish writes the sign in front of the
+        // number and English behind it, which is a formatting fact, not a word.
+        label: t("hud.world_progress.construction", { progress: structure.construction.progress }),
       }));
     const center = this.centers.get(PLAYER_OWNER);
     const age = this.progression.snapshot(PLAYER_OWNER);
@@ -3957,9 +3981,12 @@ export class RtsApp {
         // Only the Town transition pauses this queue. Ordinary centre level-ups
         // leave worker production running, so their world label must not claim
         // the active order was suspended.
-        label: age.upgrading && age.upgradeKind === "town"
-          ? `İşçi duraklatıldı · ${queue.queued}/${queue.capacity}`
-          : `İşçi üretiliyor · ${queue.queued}/${queue.capacity}`,
+        label: t(
+          age.upgrading && age.upgradeKind === "town"
+            ? "hud.world_progress.worker_paused"
+            : "hud.world_progress.worker_training",
+          { queued: queue.queued, capacity: queue.capacity },
+        ),
       });
     }
     for (const structure of this.structures.all()) {
@@ -3976,7 +4003,11 @@ export class RtsApp {
             y: 8.5,
             z: structure.z,
             progress: 1 - Math.min(1, queue.trainingRemainingSeconds / queue.trainingDurationSeconds),
-            label: `${queue.trainingLabel ?? "Asker"} üretiliyor · ${queue.queued}/${queue.capacity}`,
+            label: t("hud.world_progress.unit_training", {
+              unit: t(queue.trainingNameKey ?? "unit.unknown.name"),
+              queued: queue.queued,
+              capacity: queue.capacity,
+            }),
           });
         }
       }
@@ -4018,9 +4049,13 @@ export class RtsApp {
     // ladder and the age transition, and they are mutually exclusive by nature.
     if (center && age.upgrading && age.nextAction) {
       const duration = age.nextAction.durationSeconds;
+      const seconds = Math.ceil(age.remainingSeconds);
       const label = age.upgradeKind === "town"
-        ? `${this.options.ageBalance.town.label} Çağı · ${Math.ceil(age.remainingSeconds)} sn`
-        : `${this.tierLabel(age.nextAction.targetAge, age.nextAction.targetLevel)} · ${Math.ceil(age.remainingSeconds)} sn`;
+        ? t("hud.world_progress.age_upgrade", { age: t(this.options.ageBalance.town.nameKey), seconds })
+        : t("hud.world_progress.tier_upgrade", {
+            tier: this.tierLabel(age.nextAction.targetAge, age.nextAction.targetLevel),
+            seconds,
+          });
       entries.push({
         id: "player-center-progression",
         x: center.position.x,
@@ -4065,7 +4100,10 @@ export class RtsApp {
       y,
       z,
       progress: health.ratio,
-      label: owner === PLAYER_OWNER ? `Can ${current}/${max}` : `Düşman · ${current}/${max}`,
+      label: t(
+        owner === PLAYER_OWNER ? "hud.world_progress.health" : "hud.world_progress.enemy_health",
+        { current, max },
+      ),
       variant: "health",
       healthTone: health.ratio >= 0.6 ? "healthy" : health.ratio >= 0.3 ? "warning" : "critical",
     };
@@ -4187,13 +4225,13 @@ export class RtsApp {
     if (!point) {
       // Still a mode prompt rather than a result: the click missed the ground, so
       // the palette line keeps asking for the one it is waiting on.
-      this.buildPalette.setActionMessage("Toplanma noktası için harita üzerinde bir konum seçin.");
+      this.buildPalette.setActionMessage(t("placement.rally.pick"));
       return;
     }
     this.barracksProduction.setRallyPoint(PLAYER_OWNER, point);
     this.commandMarkers.spawn(point, "#8fe08f");
     this.buildPalette.setActionMessage(null);
-    this.announce("orders", "Toplanma noktası belirlendi.");
+    this.announce("orders", t("command.orders.rally_set"));
   }
 
   /** Advance match systems; camera and UI keep the unscaled rendered-frame delta. */
@@ -4233,7 +4271,7 @@ export class RtsApp {
         if (event.type === "completed" && event.kind === "town") {
           this.notifications.post({
             kind: "enemy-age-upgraded",
-            text: `Düşman ${this.options.ageBalance.town.label} Çağına geçti.`,
+            text: t("notification.age.enemy_upgraded", { age: t(this.options.ageBalance.town.nameKey) }),
           });
         }
         continue;
@@ -4242,14 +4280,17 @@ export class RtsApp {
         this.notifications.post({
           kind: "age-upgraded",
           text: event.kind === "town"
-            ? `${this.options.ageBalance.town.label} Çağı tamamlandı: tüm yapılarınız ${tierLabel} oldu.`
-            : `${tierLabel} tamamlandı: tüm yapılarınız gelişti.`,
+            ? t("notification.age.completed", {
+                age: t(this.options.ageBalance.town.nameKey),
+                tier: tierLabel,
+              })
+            : t("notification.tier.completed", { tier: tierLabel }),
         });
       }
       // A completed upgrade already has its own `age-upgraded` notice above; only
       // the cancellation needs saying here, and it is not the player's doing.
       if (event.type !== "completed") {
-        this.announce("progression", "Merkez yıkıldığı için ilerleme iptal edildi; kaynaklar iade edildi.", "refused");
+        this.announce("progression", t("command.progression.cancelled"), "refused");
       }
     }
     this.perfMeasure("ilerleme", progressionMark);
@@ -4338,8 +4379,8 @@ export class RtsApp {
       if (event.owner !== PLAYER_OWNER) continue;
       if (event.type === "completed") {
         this.tallyTrainedUnit("worker");
-        this.announce("production", "Yeni işçi Merkez'den çıktı.");
-      } else this.announce("production", "İşçi çıkışı engelli; Merkez çevresini açın.", "refused");
+        this.announce("production", t("command.production.worker_ready"));
+      } else this.announce("production", t("command.production.worker_blocked"), "refused");
     }
     for (const event of this.barracksProduction.update(dt)) {
       if (event.structure.owner !== PLAYER_OWNER) continue;
@@ -4351,9 +4392,15 @@ export class RtsApp {
         // a possessive ("Okçuluk Alanı'ndan"), and wrong for one that does not
         // ("Kışla'dan"). Kışla trains the Guard and the Siege gun, so two of the
         // three trainable units said it wrong.
-        this.announce("production", `${event.structure.stats.label}: ${event.label} hazır.`);
+        this.announce("production", t("command.production.unit_ready", {
+          building: t(event.structure.stats.nameKey),
+          unit: t(event.unitNameKey),
+        }));
       } else {
-        this.announce("production", `${event.label} çıkışı engelli; ${event.structure.stats.label} çevresini açın.`, "refused");
+        this.announce("production", t("command.production.unit_blocked", {
+          unit: t(event.unitNameKey),
+          building: t(event.structure.stats.nameKey),
+        }), "refused");
       }
     }
     this.perfMeasure("eğitim kuyruğu", trainingMark);
@@ -4549,7 +4596,7 @@ export class RtsApp {
         this.notifications.post({
           kind: "caravan-destroyed",
           subject: hit.target.id,
-          text: "Kervan vuruldu: taşıdığı yük kayboldu.",
+          text: t("notification.caravan_lost"),
         });
       }
     }
@@ -4703,7 +4750,9 @@ export class RtsApp {
     if (victory.warning(AI_OWNER)) {
       this.notifications.post({
         kind: "regional-victory-warning",
-        text: `Düşman stratejik geçitleri tutuyor: ${formatMatchDuration(victory.progressFor(AI_OWNER).remainingSeconds)} kaldı.`,
+        text: t("notification.regional_victory.enemy", {
+          time: formatMatchDuration(victory.progressFor(AI_OWNER).remainingSeconds),
+        }),
       });
     }
   }
@@ -4721,7 +4770,7 @@ export class RtsApp {
         .filter((status) => status.holder === PLAYER_OWNER)
         .map((status) => ({
           id: status.point.id,
-          name: status.point.name,
+          name: t(status.point.nameKey),
           x: status.point.x,
           z: status.point.z,
         })),
@@ -4744,7 +4793,7 @@ export class RtsApp {
         const id = structure.stats.id;
         this.razedEnemyBuildings[id] = (this.razedEnemyBuildings[id] ?? 0) + 1;
       }
-      this.log.info(`${structure.stats.label} destroyed (${structure.owner})`);
+      this.log.info(`${t(structure.stats.nameKey)} destroyed (${structure.owner})`);
     });
     if (destroyed.length === 0) return;
     if (territoryChanged) this.territory.refresh();
@@ -4839,12 +4888,21 @@ export class RtsApp {
     return this.progression.tierFor(owner).age;
   }
 
-  /** Player-facing name of one tier, e.g. "Yerleşim Lv2" / "Kasaba Lv1". */
+  /** Player-facing name of one age, from the balance data's key. */
+  private ageLabel(age: SettlementAge): string {
+    return t(age === "town"
+      ? this.options.ageBalance.town.nameKey
+      : this.options.ageBalance.settlement.nameKey);
+  }
+
+  /**
+   * Player-facing name of one tier, e.g. "Yerleşim Lv2" / "Town Lv1".
+   *
+   * Through `common.tier.name` rather than `${age} Lv${level}`: the level marker
+   * is a word in some languages and a prefix in others (Plan §10).
+   */
   private tierLabel(age: SettlementAge, level: number): string {
-    const ageLabel = age === "town"
-      ? this.options.ageBalance.town.label
-      : this.options.ageBalance.settlement.label;
-    return `${ageLabel} Lv${level}`;
+    return t("common.tier.name", { age: this.ageLabel(age), level });
   }
 
   /**
@@ -5490,7 +5548,7 @@ export class RtsApp {
     }
     if (this.rallyPointPending) {
       this.rallyPointPending = false;
-      this.buildPalette.setActionMessage("Toplanma noktası seçimi iptal edildi.");
+      this.buildPalette.setActionMessage(t("placement.rally.cancelled"));
       return;
     }
     if (!this.flow.togglePause()) return;
@@ -5911,10 +5969,10 @@ export class RtsApp {
         kind: "structure",
         structure: {
           id: structure.id,
-          label: structure.stats.label,
+          label: t(structure.stats.nameKey),
           icon: structure.stats.icon,
           level: structure.level,
-          ageLabel: this.ageOf(structure.owner) === "town" ? "Kasaba" : "Yerleşim",
+          ageLabel: this.ageLabel(this.ageOf(structure.owner)),
           health: structure.health.current,
           maxHealth: structure.health.max,
           demolishArmed: this.demolishArmed === structure,
@@ -5932,10 +5990,10 @@ export class RtsApp {
       kind: "structure",
       structure: {
         id: 0,
-        label: this.options.buildingBalance["command_center"]?.label ?? "Merkez",
+        label: t(this.options.buildingBalance["command_center"]?.nameKey ?? "building.unknown.name"),
         icon: this.options.buildingBalance["command_center"]?.icon,
         level: center.level,
-        ageLabel: this.ageOf(center.owner) === "town" ? "Kasaba" : "Yerleşim",
+        ageLabel: this.ageLabel(this.ageOf(center.owner)),
         health: center.health.current,
         maxHealth: center.health.max,
         detail: {
@@ -5984,7 +6042,7 @@ export class RtsApp {
       kind: "trade-site",
       site: {
         siteId,
-        label: snapshot.label,
+        label: t(snapshot.nameKey),
         icon: this.options.tradeSiteBalance[snapshot.siteType]?.icon,
         resourceId: snapshot.resourceId,
         state,
@@ -6044,8 +6102,8 @@ export class RtsApp {
       snapshot,
       progress,
       requiredBuildingLabels: this.buildingLabels,
-      settlementLabel: this.options.ageBalance.settlement.label,
-      townLabel: this.options.ageBalance.town.label,
+      settlementLabel: t(this.options.ageBalance.settlement.nameKey),
+      townLabel: t(this.options.ageBalance.town.nameKey),
       stock: this.kingdoms.get(owner).wallet.snapshot(),
     };
   }
@@ -6072,12 +6130,12 @@ export class RtsApp {
     if (!structure || structure.owner !== PLAYER_OWNER) return;
     if (this.demolishArmed !== structure) {
       this.demolishArmed = structure;
-      this.announce("structure", `${structure.stats.label} yıkılacak. Onaylamak için tekrar basın.`, "refused");
+      this.announce("structure", t("command.structure.demolish_confirm", { building: t(structure.stats.nameKey) }), "refused");
       return;
     }
     this.demolishArmed = null;
     structure.health.damage(structure.health.max);
-    this.announce("structure", `${structure.stats.label} yıkıldı.`);
+    this.announce("structure", t("command.structure.demolished", { building: t(structure.stats.nameKey) }));
   }
 
   /**
@@ -6105,25 +6163,29 @@ export class RtsApp {
       // button — which carries no crew — can mean "stop".
       if (workers.length > 0) {
         if (!this.staffStructureRepair(structure, workers)) {
-          this.announce("structure", "Tamir ekibi dolu; daha fazla işçi eklenemedi.", "refused");
+          this.announce("structure", t("command.structure.repair_crew_full"), "refused");
         }
         return true;
       }
       this.workerConstruction.cancelRepair(structure);
       this.structureRepair.cancel(structure);
-      this.announce("structure", `${structure.stats.label} tamiri durduruldu.`, "refused");
+      this.announce("structure", t("command.structure.repair_stopped", { building: t(structure.stats.nameKey) }), "refused");
       return true;
     }
     const quote = this.structureRepair.quote(structure);
     const result = this.structureRepair.begin(structure);
     if (result !== "started") {
+      const building = t(structure.stats.nameKey);
       const message: Record<typeof result, string> = {
-        "not-repairable": "Yalnız tamamlanmış yapılar tamir edilebilir.",
-        undamaged: `${structure.stats.label} zaten tam canda.`,
-        "already-repairing": `${structure.stats.label} zaten tamir ediliyor.`,
+        "not-repairable": t("command.structure.repair.not_repairable"),
+        undamaged: t("command.structure.repair.undamaged", { building }),
+        "already-repairing": t("command.structure.repair.already_repairing", { building }),
         "insufficient-resources": quote
-          ? `${structure.stats.label} tamiri için kaynak yetersiz (${formatResourceCost(quote.cost)}).`
-          : `${structure.stats.label} tamiri için kaynak yetersiz.`,
+          ? t("command.structure.repair.insufficient_resources_cost", {
+              building,
+              cost: formatResourceCost(quote.cost),
+            })
+          : t("command.structure.repair.insufficient_resources", { building }),
       };
       this.announce("structure", message[result], "refused");
       return true;
@@ -6131,7 +6193,7 @@ export class RtsApp {
     if (this.staffStructureRepair(structure, workers)) return true;
     // Nobody could be sent, so the order never happened: unwind it in full.
     this.structureRepair.cancel(structure);
-    this.announce("structure", "Tamir için uygun işçi yok.", "refused");
+    this.announce("structure", t("command.structure.repair_no_worker"), "refused");
     return true;
   }
 
@@ -6143,7 +6205,7 @@ export class RtsApp {
         ? this.workerConstruction.assignedRepairWorkers(structure)
         : 0;
     if (assigned === 0) return false;
-    this.announce("structure", `${assigned} işçi ${structure.stats.label} tamirine gönderildi.`);
+    this.announce("structure", t("command.structure.repair_staffed", { count: assigned, building: t(structure.stats.nameKey) }));
     return true;
   }
 
@@ -6153,13 +6215,13 @@ export class RtsApp {
     if (!structure || structure.owner !== PLAYER_OWNER || structure.construction.complete) return;
     if (this.cancelConstructionArmed !== structure) {
       this.cancelConstructionArmed = structure;
-      this.announce("structure", `${structure.stats.label} inşaatı iptal edilecek. Onaylamak için tekrar basın.`, "refused");
+      this.announce("structure", t("command.structure.cancel_construction_confirm", { building: t(structure.stats.nameKey) }), "refused");
       return;
     }
     this.cancelConstructionArmed = null;
     if (!this.structureConstruction.cancel(PLAYER_OWNER, structure)) return;
     this.selection.reconcileStructures(this.structures.all());
-    this.announce("structure", `${structure.stats.label} inşaatı iptal edildi; kaynaklar iade edildi.`);
+    this.announce("structure", t("command.structure.construction_cancelled", { building: t(structure.stats.nameKey) }));
   }
 
   private runSelectionAction(id: string): void {
@@ -6167,12 +6229,12 @@ export class RtsApp {
       const structureId = Number(id.slice(WORKER_ASSIGNMENT_ACTION_PREFIX.length));
       const structure = this.structures.all().find((candidate) => candidate.id === structureId);
       if (!structure) {
-        this.announce("workers", "Bu iş noktası artık yok.", "refused");
+        this.announce("workers", t("command.workers.job_gone"), "refused");
         return;
       }
       const workers = this.selection.selected().filter((worker) => this.isManualAssignmentCandidate(worker));
       if (workers.length === 0) {
-        this.announce("workers", "Atanacak boşta işçi kalmadı.", "refused");
+        this.announce("workers", t("command.workers.none_to_assign"), "refused");
         return;
       }
       this.assignSelectedWorkersToStructure(workers, structure);
@@ -6190,7 +6252,7 @@ export class RtsApp {
       this.placement.cancel();
       this.roadPlacement.cancel();
       this.rallyPointPending = true;
-      this.buildPalette.setActionMessage("Toplanma noktası için haritada bir konum seçin.");
+      this.buildPalette.setActionMessage(t("placement.rally.pick"));
       return;
     }
     if (id === RESCUE_ACTION) {
@@ -6253,7 +6315,7 @@ export class RtsApp {
     const trapped = this.selection.selected()
       .filter((unit) => !this.navigation.isWalkable(unit.position.x, unit.position.z));
     if (trapped.length === 0) {
-      this.announce("orders", "Kurtarılacak sıkışmış birim yok.", "refused");
+      this.announce("orders", t("command.orders.no_stuck_units"), "refused");
       return;
     }
     let rescued = 0;
@@ -6263,8 +6325,8 @@ export class RtsApp {
       unit.beginRescue(exit.x, exit.z);
       rescued += 1;
     }
-    if (rescued > 0) this.announce("orders", `${rescued} birim boş zemine çıkarılıyor.`);
-    else this.announce("orders", "Yakında boş zemin bulunamadı; birimler kurtarılamadı.", "refused");
+    if (rescued > 0) this.announce("orders", t("command.orders.rescued", { count: rescued }));
+    else this.announce("orders", t("command.orders.rescue_failed"), "refused");
   }
 
   /**
@@ -6326,7 +6388,7 @@ export class RtsApp {
     if (additive) {
       this.selection.addUnits(matching);
       this.rosterTourTypeId = null;
-      this.announce("orders", `${matching.length} ${sample.stats.label} seçime eklendi.`);
+      this.announce("orders", t("command.orders.added_to_selection", { count: matching.length, building: t(sample.stats.nameKey) }));
       return;
     }
 
@@ -6339,7 +6401,7 @@ export class RtsApp {
       this.rosterTourTypeId = typeId;
       this.rosterTourIndex = 0;
     }
-    this.announce("orders", `${matching.length} ${sample.stats.label} seçildi.`);
+    this.announce("orders", t("command.orders.selected_structures", { count: matching.length, building: t(sample.stats.nameKey) }));
   }
 
   /** Select every player worker that is free for automatic staffing (I). */
@@ -6349,23 +6411,23 @@ export class RtsApp {
     // by a card order, `R`, a normal move/stop command, or when selection moves.
     for (const worker of workers) worker.holdForManualAssignment();
     this.selection.selectUnits(workers);
-    if (workers.length > 0) this.announce("workers", `${workers.length} boşta işçi seçildi.`);
-    else this.announce("workers", "Seçilecek boşta işçi yok.", "refused");
+    if (workers.length > 0) this.announce("workers", t("command.workers.idle_selected", { count: workers.length }));
+    else this.announce("workers", t("command.workers.no_idle_to_select"), "refused");
   }
 
   /** Release a held selection into the normal construction-then-production queue. */
   private releaseSelectedWorkersToAutomation(): void {
     const workers = this.selection.selected().filter((worker) => this.isManualAssignmentCandidate(worker));
     if (workers.length === 0) {
-      this.announce("workers", "İşe gönderilecek boşta işçi seçili değil.", "refused");
+      this.announce("workers", t("command.workers.none_selected_for_work"), "refused");
       return;
     }
     for (const worker of workers) worker.resumeAutomaticWorkerAssignment();
     this.workerConstruction.assignIdleWorkers();
     this.economyProduction?.assignIdleWorkers();
     const assigned = workers.filter((worker) => !this.isIdleWorker(worker)).length;
-    if (assigned > 0) this.announce("workers", `${assigned} işçi uygun işe gönderildi.`);
-    else this.announce("workers", "Şu anda işçi bekleyen uygun bir iş yok.", "refused");
+    if (assigned > 0) this.announce("workers", t("command.workers.sent_to_work", { count: assigned }));
+    else this.announce("workers", t("command.workers.no_open_job"), "refused");
   }
 
   /** Toggle player staffing; turning it on releases held workers and immediately fills open jobs. */
@@ -6373,7 +6435,7 @@ export class RtsApp {
     this.automaticWorkerAssignmentEnabled = !this.automaticWorkerAssignmentEnabled;
     this.hudBar.setWorkerAutomationEnabled(this.automaticWorkerAssignmentEnabled);
     if (!this.automaticWorkerAssignmentEnabled) {
-      this.announce("workers", "Otomatik işçi ataması kapalı: işçileri elle dağıtabilirsiniz.");
+      this.announce("workers", t("command.workers.automation_off"));
       return;
     }
     // Preserve the former one-shot helper for a held selection, then offer all
@@ -6384,7 +6446,7 @@ export class RtsApp {
     for (const worker of this.units.workersOf(PLAYER_OWNER)) worker.resumeAutomaticWorkerAssignment();
     this.workerConstruction.assignIdleWorkers();
     this.economyProduction?.assignIdleWorkers();
-    this.announce("workers", "Otomatik işçi ataması açık: boş işçiler uygun işlere gönderiliyor.");
+    this.announce("workers", t("command.workers.automation_on"));
   }
 
   private isIdleWorker(worker: Unit): boolean {
@@ -6426,7 +6488,7 @@ export class RtsApp {
           const available = this.workerConstruction.availableWorkerSlots(structure);
           return available === 0 ? [] : [{
             structureId: structure.id,
-            label: structure.stats.label,
+            label: t(structure.stats.nameKey),
             icon: structure.stats.icon ?? null,
             assignedWorkers: this.workerConstruction.assignedWorkers(structure),
             workerCapacity: this.workerConstruction.assignedWorkers(structure) + available,
@@ -6438,7 +6500,7 @@ export class RtsApp {
           || producer.status === "buffer-full" || producer.assignedWorkers >= producer.workerCapacity) return [];
         return [{
           structureId: structure.id,
-          label: structure.stats.label,
+          label: t(structure.stats.nameKey),
           icon: structure.stats.icon ?? null,
           assignedWorkers: producer.assignedWorkers,
           workerCapacity: producer.workerCapacity,
@@ -6446,7 +6508,7 @@ export class RtsApp {
         }];
       })
       .sort((left, right) => (right.workerCapacity - right.assignedWorkers) - (left.workerCapacity - left.assignedWorkers)
-        || left.label.localeCompare(right.label, "tr"));
+        || localizedCompare(left.label, right.label));
   }
 
   private structureDetail(structure: PlacedStructure): StructureDetailView {
@@ -6526,6 +6588,7 @@ export class RtsApp {
     if (this.barracksProduction.trainableUnits(structure).length > 0) {
       return {
         kind: "military",
+        buildingLabel: t(structure.stats.nameKey),
         queue: this.barracksProduction.queueSnapshot(structure),
         rallySet: this.barracksProduction.rallyPoint(structure.owner) !== null,
         // Deliberately the *same* predicate the production system is wired with
@@ -6587,7 +6650,10 @@ export class RtsApp {
     if (population.used >= population.capacity) {
       this.notifications.post({
         kind: "population-full",
-        text: `Nüfus dolu (${population.used}/${population.capacity}): yeni birim üretmek için Ev kurun.`,
+        text: t("notification.population_full", {
+          used: population.used,
+          capacity: population.capacity,
+        }),
       });
     }
 
@@ -6600,7 +6666,10 @@ export class RtsApp {
         // with the same decision.
         kind: "resource-depleted",
         subject: producer.resourceId,
-        text: `${resourceLabel(producer.resourceId)} yatağı tükendi: ${producer.structureLabel} artık üretmiyor.`,
+        text: t("notification.resource_depleted", {
+          resource: resourceLabel(producer.resourceId),
+          building: t(producer.structureNameKey),
+        }),
       });
     }
 
@@ -6615,7 +6684,7 @@ export class RtsApp {
         this.notifications.post({
           kind: "logistics-cut",
           subject,
-          text: `${resourceLabel(producer.resourceId)} üretimi durdu: lojistik bağlantısı kesildi.`,
+          text: t("notification.logistics_cut", { resource: resourceLabel(producer.resourceId) }),
         });
         continue;
       }
@@ -6628,7 +6697,9 @@ export class RtsApp {
         this.notifications.post({
           kind: "logistics-restored",
           subject,
-          text: `${resourceLabel(producer.resourceId)} lojistik bağlantısı kuruldu: depoya aktarım başladı.`,
+          text: t("notification.logistics_restored", {
+            resource: resourceLabel(producer.resourceId),
+          }),
         });
       }
     }
@@ -6718,7 +6789,7 @@ export class RtsApp {
     if (this.peaceAnnounceStage === 0) {
       this.notifications.post({
         kind: "peace-active",
-        text: `Saldırmazlık süresi etkin: düşman ilk ${formatMatchDuration(peaceSeconds)} boyunca saldırmayacak.`,
+        text: t("notification.peace.started", { duration: formatMatchDuration(peaceSeconds) }),
       });
       this.peaceAnnounceStage = 1;
     }
@@ -6730,14 +6801,14 @@ export class RtsApp {
       const remaining = Math.max(1, Math.ceil(peaceSeconds - now));
       this.notifications.post({
         kind: "peace-ending",
-        text: `Saldırmazlık süresi bitmek üzere (${remaining} sn): savunmanı hazırla!`,
+        text: t("notification.peace.ending", { seconds: remaining }),
       });
       this.peaceAnnounceStage = 2;
     }
     if (now >= peaceSeconds) {
       this.notifications.post({
         kind: "peace-ended",
-        text: "Saldırmazlık süresi sona erdi — düşman artık saldırabilir!",
+        text: t("notification.peace.ended"),
       });
       this.peaceAnnounceStage = 3;
     }
@@ -6769,7 +6840,7 @@ export class RtsApp {
       if (id === "center") {
         this.notifications.post({
           kind: "center-under-attack",
-          text: "Merkeziniz saldırı altında!",
+          text: t("notification.under_attack.center"),
         });
         continue;
       }
@@ -6782,7 +6853,7 @@ export class RtsApp {
         // Keyed per outpost: two outposts under attack are two places the player
         // has to choose between, which is the decision the notice exists to prompt.
         subject: id,
-        text: "Karakolunuz saldırı altında.",
+        text: t("notification.under_attack.outpost"),
       });
     }
     // Deliberately *not* keyed per worker, unlike the outposts. A raid catches
@@ -6793,9 +6864,10 @@ export class RtsApp {
     if (woundedWorkers > 0) {
       this.notifications.post({
         kind: "worker-under-attack",
-        text: woundedWorkers > 1
-          ? `${woundedWorkers} işçiniz saldırı altında!`
-          : "İşçiniz saldırı altında!",
+        // One key, not a `> 1` branch: the singular/plural split is the
+        // language's business, and Turkish (which keeps the noun singular after
+        // a number) and Russian (which has three forms) disagree about it.
+        text: t("notification.under_attack.workers", { count: woundedWorkers }),
       });
     }
   }
@@ -6806,19 +6878,19 @@ export class RtsApp {
     // Both kingdoms build through this hook, but only the human has a palette:
     // narrating an AI site here would put the AI's problems in the player's HUD.
     if (structure.owner !== PLAYER_OWNER || result.assigned) return;
-    this.announce("workers", result.reason === "no-idle-worker"
-      ? "İnşaat bekliyor: boşta işçi yok."
-      : "İnşaat bekliyor: işçi bu yapıya erişemiyor.", "refused");
+    this.announce("workers", t(result.reason === "no-idle-worker"
+      ? "command.workers.construction_awaiting_idle"
+      : "command.workers.construction_unreachable"), "refused");
   }
 
   /** Handle a selected Karakol's right-click target order. */
   private orderStructureAttack(structure: PlacedStructure, target: CombatTarget): boolean {
     const result = this.structureDefense.orderAttack(structure, target);
     const message: Record<typeof result, string> = {
-      ordered: `${structure.stats.label} hedefe yönlendirildi.`,
-      "not-defensive": "Bu yapı saldırı emri veremez.",
-      incomplete: "Karakol tamamlanmadan saldırı emri verilemez.",
-      "out-of-range": "Hedef Karakol menzilinin dışında.",
+      ordered: t("command.orders.attack.ordered", { building: t(structure.stats.nameKey) }),
+      "not-defensive": t("command.orders.attack.not_defensive"),
+      incomplete: t("command.orders.attack.incomplete"),
+      "out-of-range": t("command.orders.attack.out_of_range"),
     };
     this.announce("orders", message[result], result === "ordered" ? "done" : "refused");
     return true;
@@ -6830,11 +6902,11 @@ export class RtsApp {
     if (!structure.construction.complete) {
       const result = this.workerConstruction.assignWorkers(structure, workers);
       if (result.assignedWorkers > 0) {
-        this.announce("workers", `${result.assignedWorkers} işçi inşaata atandı.`);
+        this.announce("workers", t("command.workers.assigned_to_construction", { count: result.assignedWorkers }));
       } else {
-        this.announce("workers", result.reason === "unreachable"
-          ? "İşçiler bu inşaata erişemiyor."
-          : "İnşaat için uygun işçi yok.", "refused");
+        this.announce("workers", t(result.reason === "unreachable"
+          ? "command.workers.workers_unreachable"
+          : "command.workers.no_worker_for_construction"), "refused");
       }
       return true;
     }
@@ -6854,9 +6926,9 @@ export class RtsApp {
     for (const worker of workers) this.workerConstruction.release(worker);
     const result = this.economyProduction.assignWorkers(structure, workers);
     if (result.assignedWorkers > 0) {
-      this.announce("workers", `${result.assignedWorkers} işçi ${structure.stats.label} görevine atandı.`);
+      this.announce("workers", t("command.workers.assigned_to_structure", { count: result.assignedWorkers, building: t(structure.stats.nameKey) }));
     } else {
-      this.announce("workers", "Bu yapıda uygun işçi kontenjanı yok.", "refused");
+      this.announce("workers", t("command.workers.no_slot"), "refused");
     }
     return true;
   }
@@ -6873,30 +6945,56 @@ export class RtsApp {
     }
   }
 
+  /**
+   * Player-facing name of one unit id. Falls back to the generic
+   * `unit.unknown.name` rather than to the raw id: a refusal that names
+   * "worker_placeholder" is a data id leaking into a sentence.
+   */
+  private unitLabel(unitId: string): string {
+    return t(this.options.unitBalance[unitId]?.nameKey ?? "unit.unknown.name");
+  }
+
   private queueUnit(unitId: string): void {
-    const label = this.options.unitBalance[unitId]?.label ?? unitId;
+    const label = this.unitLabel(unitId);
     const stats = this.options.unitBalance[unitId];
     const requiredTier = stats
-      ? `${stats.requiredAge === "town" ? this.options.ageBalance.town.label : this.options.ageBalance.settlement.label} Lv${stats.requiredSettlementLevel}`
-      : "gerekli kademe";
+      ? t("common.tier.name", {
+          age: stats.requiredAge === "town"
+            ? t(this.options.ageBalance.town.nameKey)
+            : t(this.options.ageBalance.settlement.nameKey),
+          level: stats.requiredSettlementLevel,
+        })
+      : t("common.tier.unknown");
     const buildingLabel = stats
-      ? this.options.buildingBalance[stats.productionBuildingId]?.label ?? stats.productionBuildingId
-      : "askerî yapı";
+      ? t(this.options.buildingBalance[stats.productionBuildingId]?.nameKey ?? "building.unknown.name")
+      : t("common.building.military");
     const result = this.barracksProduction.queueUnit(PLAYER_OWNER, unitId);
     const queuedCount = this.barracksProduction.queuedCount(PLAYER_OWNER);
     const queueCapacity = this.barracksProduction.queueCapacity(PLAYER_OWNER);
+    const queue = { queued: queuedCount, capacity: queueCapacity };
     const message: Record<typeof result, string> = {
-      queued: `${label} üretim kuyruğa alındı (${queuedCount}/${queueCapacity}).`,
-      "unknown-unit": `${label} askerî yapıda üretilemiyor.`,
-      "no-completed-production-building": `Önce tamamlanmış bir ${buildingLabel} kurun.`,
-      "requires-town-age": `${label} Kasaba Çağında açılır.`,
-      "requires-production-building-upgrade": `${label} için ${requiredTier} gerekir (Merkezden yükseltin).`,
-      "queue-full": `Üretim kuyruğu dolu (${queuedCount}/${queueCapacity}).`,
-      "exit-blocked": `${label} çıkışı engelli; ${buildingLabel} çevresini açın.`,
-      "insufficient-resources": `${label} için kaynak yetersiz.`,
-      "population-full": "Nüfus dolu: önce Ev kurun.",
-      "structure-upgrading": `${buildingLabel} seviye yükseltmesi sürerken ${label} üretimi durur.`,
-      disconnected: `${buildingLabel} kontrol alanınızın dışında kaldı; üretim durdu.`,
+      queued: t("command.train.queued", { unit: label, ...queue }),
+      "unknown-unit": t("command.train.unknown_unit", { unit: label }),
+      "no-completed-production-building": t("command.train.no_building", { building: buildingLabel }),
+      // The age is named from the balance data rather than written into the
+      // sentence: "Kasaba" is a label a fork can rename, not a word.
+      "requires-town-age": t("command.train.requires_town", {
+        unit: label,
+        age: t(this.options.ageBalance.town.nameKey),
+      }),
+      "requires-production-building-upgrade": t("command.train.requires_upgrade", {
+        unit: label,
+        tier: requiredTier,
+      }),
+      "queue-full": t("command.train.queue_full", queue),
+      "exit-blocked": t("command.train.exit_blocked", { unit: label, building: buildingLabel }),
+      "insufficient-resources": t("command.train.insufficient_resources", { unit: label }),
+      "population-full": t("command.train.population_full"),
+      "structure-upgrading": t("command.train.structure_upgrading", {
+        building: buildingLabel,
+        unit: label,
+      }),
+      disconnected: t("command.train.disconnected", { building: buildingLabel }),
     };
     this.announce("production", message[result], result === "queued" ? "done" : "refused");
     this.syncPlacementUi();
@@ -6915,22 +7013,22 @@ export class RtsApp {
     const cancelled = this.barracksProduction.cancelLatestUnit(structure);
     const queue = this.barracksProduction.queueSnapshot(structure);
     if (cancelled) {
-      this.announce("production", `${cancelled.label} siparişi iptal edildi; maliyeti iade edildi (${queue.queued}/${queue.capacity}).`);
+      this.announce("production", t("command.train.order_cancelled", { unit: t(cancelled.nameKey), queued: queue.queued, capacity: queue.capacity }));
     } else {
-      this.announce("production", `${structure.stats.label} kuyruğunda iptal edilecek sipariş yok.`, "refused");
+      this.announce("production", t("command.train.nothing_to_cancel", { building: t(structure.stats.nameKey) }), "refused");
     }
     this.syncPlacementUi();
   }
 
   /** The centre's counterpart to {@link cancelLatestUnitOrder}: one worker order back. */
   private cancelWorkerOrder(): void {
-    const label = this.options.unitBalance["worker_placeholder"]?.label ?? "İşçi";
+    const label = this.unitLabel("worker_placeholder");
     const result = this.workerProduction.cancelWorker(PLAYER_OWNER);
     const queued = this.workerProduction.queuedCount(PLAYER_OWNER);
     const capacity = this.workerQueueCapacity(PLAYER_OWNER);
     const message: Record<WorkerCancelResult, string> = {
-      cancelled: `${label} siparişi iptal edildi; maliyeti iade edildi (${queued}/${capacity}).`,
-      "not-queued": `Merkez kuyruğunda iptal edilecek ${label} siparişi yok.`,
+      cancelled: t("command.worker_train.order_cancelled", { unit: label, queued, capacity }),
+      "not-queued": t("command.worker_train.nothing_to_cancel", { unit: label }),
     };
     this.announce("production", message[result], result === "cancelled" ? "done" : "refused");
     this.syncPlacementUi();
@@ -6958,15 +7056,19 @@ export class RtsApp {
     }
     const message: Record<MarketTradeResult, string> = {
       traded: direction === "buy"
-        ? `${lot} ${label} alındı (${quote?.buyPrice ?? 0} altın).`
-        : `${lot} ${label} satıldı (+${quote?.sellPrice ?? 0} altın).`,
-      "untraded-resource": `${label} Pazar'da işlem görmüyor.`,
-      "no-completed-market": "Önce tamamlanmış bir Pazar kurun.",
-      disconnected: "Pazar kontrol alanınızın dışında kaldı; ticaret durdu.",
-      "out-of-stock": `Pazarda ${lot} ${label} yok; bir arz noktasına yol çekin.`,
-      "insufficient-gold": `${lot} ${label} için ${quote?.buyPrice ?? 0} altın gerekir.`,
-      "insufficient-resources": `Satmak için ${lot} ${label} gerekir.`,
-      "storage-full": "Depolama kapasitesi dolu; Depo kurun veya yükseltin.",
+        ? t("command.trade.bought", { lot, resource: label, price: quote?.buyPrice ?? 0 })
+        : t("command.trade.sold", { lot, resource: label, price: quote?.sellPrice ?? 0 }),
+      "untraded-resource": t("command.trade.untraded_resource", { resource: label }),
+      "no-completed-market": t("command.trade.no_market"),
+      disconnected: t("command.trade.disconnected"),
+      "out-of-stock": t("command.trade.out_of_stock", { lot, resource: label }),
+      "insufficient-gold": t("command.trade.insufficient_gold", {
+        lot,
+        resource: label,
+        price: quote?.buyPrice ?? 0,
+      }),
+      "insufficient-resources": t("command.trade.insufficient_resources", { lot, resource: label }),
+      "storage-full": t("command.trade.storage_full"),
     };
     this.announce("trade", message[result], result === "traded" ? "done" : "refused");
     this.syncPlacementUi();
@@ -6976,13 +7078,21 @@ export class RtsApp {
     const result = this.workerProduction.queueWorker(PLAYER_OWNER);
     const queuedCount = this.workerProduction.queuedCount(PLAYER_OWNER);
     const queueCapacity = this.workerQueueCapacity(PLAYER_OWNER);
+    const queue = { queued: queuedCount, capacity: queueCapacity };
     const message: Record<typeof result, string> = {
-      queued: `İşçi üretim kuyruğa alındı (${queuedCount}/${queueCapacity}).`,
-      "queue-full": `İşçi üretim kuyruğu dolu (${queuedCount}/${queueCapacity}).`,
-      "insufficient-resources": "İşçi için 50 yiyecek gerekli.",
-      "population-full": "Nüfus dolu: önce Ev kurun.",
-      "no-command-center": "İşçi üretmek için Merkez gerekli.",
-      "center-upgrading": "Merkez Kasaba Çağına yükselirken işçi üretimi durur.",
+      queued: t("command.worker_train.queued", queue),
+      "queue-full": t("command.worker_train.queue_full", queue),
+      // The price came from the balance table, but the sentence used to spell it
+      // out ("50 yiyecek"): a retune left the refusal quoting a price nobody
+      // charged any more.
+      "insufficient-resources": t("command.worker_train.insufficient_resources", {
+        cost: formatResourceCost(this.options.unitBalance["worker_placeholder"]?.cost ?? {}),
+      }),
+      "population-full": t("command.worker_train.population_full"),
+      "no-command-center": t("command.worker_train.no_center"),
+      "center-upgrading": t("command.worker_train.center_upgrading", {
+        age: t(this.options.ageBalance.town.nameKey),
+      }),
     };
     this.announce("production", message[result], result === "queued" ? "done" : "refused");
     this.syncPlacementUi();
@@ -6998,18 +7108,38 @@ export class RtsApp {
     const shortfall = formatCostShortfall(cost, this.kingdoms.get(PLAYER_OWNER).wallet.snapshot());
     const result = this.progression.startTownUpgrade(PLAYER_OWNER);
     const snapshot = this.progression.snapshot(PLAYER_OWNER);
-    const townLabel = this.options.ageBalance.town.label;
+    const townLabel = t(this.options.ageBalance.town.nameKey);
     const message: Record<typeof result, string> = {
-      started: `${townLabel} Çağı yükseltmesi başladı (${this.options.ageBalance.town.upgradeSeconds} sn). Merkez işçi üretimi durdu.`,
-      "already-town": `Zaten ${townLabel} Çağındasınız.`,
-      "already-upgrading": `Merkez ilerlemesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`,
-      "no-command-center": `${townLabel} Çağı için Merkez gerekli.`,
-      "settlement-level":
-        `${townLabel} Çağı için önce ${this.options.ageBalance.settlement.label} Lv3 gerekir (şu an Lv${snapshot.level}).`,
-      "missing-requirements": `${townLabel} Çağı için eksik yapılar: ${missingLabels.join(", ")}.`,
+      started: t("command.progression.town.started", {
+        age: townLabel,
+        seconds: this.options.ageBalance.town.upgradeSeconds,
+      }),
+      "already-town": t("command.progression.town.already", { age: townLabel }),
+      "already-upgrading": t("command.progression.upgrading", {
+        seconds: Math.ceil(snapshot.remainingSeconds),
+      }),
+      "no-command-center": t("command.progression.town.no_center", { age: townLabel }),
+      "settlement-level": t("command.progression.town.settlement_level", {
+        age: townLabel,
+        required: t("common.tier.name", {
+          age: t(this.options.ageBalance.settlement.nameKey),
+          level: TOWN_REQUIRED_SETTLEMENT_LEVEL,
+        }),
+        level: snapshot.level,
+      }),
+      // `formatList`, not `join(", ")`: the separator and the conjunction are
+      // the language's, and English wants "a, b and c" (inventory §7.5).
+      "missing-requirements": t("command.progression.town.missing_buildings", {
+        age: townLabel,
+        buildings: localizedList(missingLabels),
+      }),
       "insufficient-resources": shortfall
-        ? `${townLabel} Çağı için ${shortfall} daha gerekli (toplam ${formatResourceCost(cost)}).`
-        : `${townLabel} Çağı için kaynak yetersiz (${formatResourceCost(cost)}).`,
+        ? t("command.progression.town.shortfall", {
+            age: townLabel,
+            shortfall,
+            cost: formatResourceCost(cost),
+          })
+        : t("command.progression.town.insufficient", { age: townLabel, cost: formatResourceCost(cost) }),
     };
     this.announce("progression", message[result], result === "started" ? "done" : "refused");
     this.syncAgeUi();
@@ -7030,13 +7160,19 @@ export class RtsApp {
     const result = this.progression.startLevelUpgrade(PLAYER_OWNER);
     const snapshot = this.progression.snapshot(PLAYER_OWNER);
     const message: Record<typeof result, string> = {
-      started: `${targetLabel} yükseltmesi başladı: tamamlanınca tüm yapılarınız gelişir.`,
-      "at-max-level": "Krallık en yüksek kademede.",
-      "already-upgrading": `Merkez ilerlemesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`,
-      "no-command-center": "Seviye yükseltmesi için Merkez gerekli.",
+      started: t("command.progression.level.started", { tier: targetLabel }),
+      "at-max-level": t("command.progression.level.at_max"),
+      "already-upgrading": t("command.progression.upgrading", {
+        seconds: Math.ceil(snapshot.remainingSeconds),
+      }),
+      "no-command-center": t("command.progression.level.no_center"),
       "insufficient-resources": shortfall
-        ? `${targetLabel} için ${shortfall} daha gerekli (toplam ${formatResourceCost(cost)}).`
-        : `${targetLabel} için kaynak yetersiz.`,
+        ? t("command.progression.level.shortfall", {
+            tier: targetLabel,
+            shortfall,
+            cost: formatResourceCost(cost),
+          })
+        : t("command.progression.level.insufficient", { tier: targetLabel }),
     };
     this.announce("progression", message[result], result === "started" ? "done" : "refused");
     this.syncAgeUi();

@@ -1,6 +1,6 @@
 {
   "deer": {
-    "label": "Geyik",
+    "nameKey": "unit.animal.deer.name",
     "meatCapacity": 120,
     "maxHealth": 40,
     "moveSpeed": 7.5,
@@ -18,7 +18,7 @@
     "tameable": false
   },
   "stag": {
-    "label": "Erkek Geyik",
+    "nameKey": "unit.animal.stag.name",
     "meatCapacity": 200,
     "maxHealth": 70,
     "moveSpeed": 7,
@@ -36,7 +36,7 @@
     "tameable": false
   },
   "cow": {
-    "label": "İnek",
+    "nameKey": "unit.animal.cow.name",
     "meatCapacity": 150,
     "maxHealth": 60,
     "moveSpeed": 5.5,
@@ -57,7 +57,7 @@
     "breedSeconds": 90
   },
   "bull": {
-    "label": "Boğa",
+    "nameKey": "unit.animal.bull.name",
     "meatCapacity": 220,
     "maxHealth": 100,
     "moveSpeed": 6,
@@ -82,7 +82,7 @@
     }
   },
   "wolf": {
-    "label": "Kurt",
+    "nameKey": "unit.animal.wolf.name",
     "meatCapacity": 60,
     "maxHealth": 55,
     "moveSpeed": 8.5,
@@ -108,7 +108,7 @@
     }
   },
   "fox": {
-    "label": "Tilki",
+    "nameKey": "unit.animal.fox.name",
     "meatCapacity": 20,
     "maxHealth": 25,
     "moveSpeed": 9,

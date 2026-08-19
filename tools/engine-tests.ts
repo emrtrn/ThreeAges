@@ -1516,6 +1516,7 @@ import {
 import {
   createPseudoBundle,
   mergeLocaleDomains,
+  readLocaleDomainEntries,
 } from "../src/game/localization/LocalizationLoader";
 import {
   fallbackChain,
@@ -1528,6 +1529,8 @@ import {
 import {
   LocalizationService,
   resolveInitialLocale,
+  setActiveLocalization,
+  t,
 } from "../src/game/localization/LocalizationService";
 import {
   LOCALE_DOMAINS,
@@ -1535,6 +1538,62 @@ import {
   type LocaleDomainFile,
   type LocalizationIssue,
 } from "../src/game/localization/LocalizationTypes";
+
+/**
+ * Localization for the checks — the Faz 1 decision, applied.
+ *
+ * Every check runs against a *probe* bundle: each shipped key is replaced by a
+ * synthetic pattern that renders its own name and its own parameters,
+ *
+ *     selection.repair.hint  ->  "selection.repair.hint health={health} seconds={seconds}"
+ *
+ * so a migrated UI function returns `selection.repair.hint health=80 seconds=4`.
+ * Assertions bind to the key *and* to the numbers, and never to the wording —
+ * which is the whole point: Faz 2 and every later language pass retune text
+ * constantly, and none of that may turn this suite red. A key the source locale
+ * does not define renders as the bare key, so a typo still stands out.
+ *
+ * The wording itself is held to account by the locale-file checks, which compare
+ * structure and parity rather than sentences.
+ */
+function localizationProbeEntries(): Record<string, string> {
+  const entries: Record<string, string> = {};
+  for (const domain of LOCALE_DOMAINS) {
+    const file = JSON.parse(
+      readFileSync(`public/game-data/locales/en/${domain}.json`, "utf8"),
+    ) as Record<string, string>;
+    for (const [key, pattern] of Object.entries(file)) {
+      const params = extractPlaceholders(pattern);
+      entries[key] = params.length === 0
+        ? key
+        : `${key} ${params.map((name) => `${name}={${name}}`).join(" ")}`;
+    }
+  }
+  return entries;
+}
+
+/**
+ * How the probe bundle renders one resource name, and one "<amount> <resource>"
+ * cost entry.
+ *
+ * `formatResourceCost` now goes through `common.cost.entry`, so a cost line is
+ * two nested probe patterns rather than a Turkish sentence. Building the
+ * expectation from the same ids the call passes keeps these assertions about
+ * *which resource and how much*, which is the part worth pinning, and leaves the
+ * wording to the locale-file checks.
+ */
+const probeResourceName = (resourceId: string): string => `common.resource.${resourceId}.name`;
+const probeCostEntry = (amount: number, resourceId: string): string =>
+  `common.cost.entry amount=${amount} resource=${probeResourceName(resourceId)}`;
+const probeCostLine = (...entries: readonly (readonly [number, string])[]): string =>
+  entries.map(([amount, resourceId]) => probeCostEntry(amount, resourceId)).join(" · ");
+
+const testLocalization = new LocalizationService({
+  loadDomains: async () => [{ domain: "common", entries: localizationProbeEntries() }],
+  missingKeyMode: "key",
+});
+await testLocalization.initialize();
+setActiveLocalization(testLocalization);
 
 let checks = 0;
 let skipped = 0;
@@ -1582,7 +1641,7 @@ const slowEnabled = process.env.ENGINE_TESTS_SLOW === "1" || testFilters.length 
  */
 const RTS_TEST_UNIT_STATS = {
   id: "guard_placeholder",
-  label: "Test Muhafızı",
+  nameKey: "unit.guard.name",
   icon: "/assets/ui/icons/unit-guard.png",
   role: "guard",
   armorClass: "heavy",
@@ -1609,7 +1668,7 @@ const RTS_TEST_WORKER_STATS = {
   ...RTS_TEST_UNIT_STATS,
   id: "worker_placeholder",
   productionBuildingId: "command_center",
-  label: "Test İşçisi",
+  nameKey: "unit.worker.name",
   role: "worker",
   armorClass: "light",
   maxHealth: 60,
@@ -1621,7 +1680,7 @@ const RTS_TEST_WORKER_STATS = {
 const RTS_TEST_ARCHER_STATS = {
   ...RTS_TEST_UNIT_STATS,
   id: "archer_placeholder",
-  label: "Test Okçusu",
+  nameKey: "unit.archer.name",
   role: "archer",
   armorClass: "light",
   maxHealth: 60,
@@ -1640,7 +1699,7 @@ const RTS_TEST_ARCHER_STATS = {
 const RTS_TEST_SIEGE_STATS = {
   ...RTS_TEST_UNIT_STATS,
   id: "siege_placeholder",
-  label: "Test Topçu",
+  nameKey: "unit.siege.name",
   role: "siege",
   armorClass: "heavy",
   maxHealth: 180,
@@ -30419,14 +30478,15 @@ check("RTS resource costs read in HUD order and name every resource (plan §51)"
   // them next to a HUD bar that is always food-wood-stone-gold.
   assert.equal(
     formatResourceCost({ gold: 20, food: 50, stone: 10 }),
-    "50 Yiyecek · 10 Taş · 20 Altın",
+    probeCostLine([50, "food"], [10, "stone"], [20, "gold"]),
   );
   // A zero is not a cost; printing "0 Altın" invents a requirement.
-  assert.equal(formatResourceCost({ food: 50, gold: 0 }), "50 Yiyecek");
-  assert.equal(formatResourceCost({}), "Ücretsiz");
-  // An unlabelled resource stays visible rather than vanishing from a cost line.
-  assert.equal(formatResourceCost({ mythril: 5 }), "5 mythril");
-  assert.equal(resourceLabel("stone"), "Taş");
+  assert.equal(formatResourceCost({ food: 50, gold: 0 }), probeCostEntry(50, "food"));
+  assert.equal(formatResourceCost({}), "common.cost.free");
+  // An unnamed resource stays visible rather than vanishing from a cost line:
+  // no key is invented for it, so the raw id is what the entry carries.
+  assert.equal(formatResourceCost({ mythril: 5 }), "common.cost.entry amount=5 resource=mythril");
+  assert.equal(resourceLabel("stone"), probeResourceName("stone"));
 });
 
 check("RTS notifications refresh rather than stack, and mute after expiry (plan §52)", () => {
@@ -31152,7 +31212,7 @@ check("RTS single-click selects one unit and double-click selects every matching
   // A second unit sharing `role: "guard"`. Double-click must not sweep it up
   // with the plain Guards: the gesture is the in-world twin of clicking that
   // unit's HUD chip, and the two disagreeing would make one of them a trap.
-  const heavyGuardStats = { ...RTS_TEST_UNIT_STATS, id: "heavy_guard", label: "Ağır Muhafız" } as const;
+  const heavyGuardStats = { ...RTS_TEST_UNIT_STATS, id: "heavy_guard", nameKey: "unit.heavy_guard.name" } as const;
   const heavyGuards = [
     units.spawn("player", -3, 6, heavyGuardStats),
     units.spawn("player", -1, 6, heavyGuardStats),
@@ -33582,7 +33642,7 @@ check("Faz 7: fog hides a herd, and unlike a forest it hides it again when the s
 
 check("the animal validator refuses data that could never make sense", () => {
   const sane = {
-    label: "Geyik",
+    nameKey: "unit.animal.deer.name",
     meatCapacity: 120,
     maxHealth: 40,
     moveSpeed: 7.5,
@@ -35704,11 +35764,11 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
   assert.equal(buildings.house?.icon, "/assets/ui/icons/building-house.png");
   assert.equal(buildings.house?.portrait, undefined, "selection artwork reuses the building icon");
   assert.throws(
-    () => validateBuildingBalance({ house: { label: "Ev", footprint: { width: 0, depth: 4 }, cost: {}, constructionSeconds: 25 } }),
+    () => validateBuildingBalance({ house: { nameKey: "building.house.name", footprint: { width: 0, depth: 4 }, cost: {}, constructionSeconds: 25 } }),
     GameDataError,
   );
   assert.throws(
-    () => validateBuildingBalance({ house: { label: "Ev", icon: "https://example.invalid/house.svg", footprint: { width: 4, depth: 4 }, cost: {}, constructionSeconds: 25, maxHealth: 100, visionRadius: 8 } }),
+    () => validateBuildingBalance({ house: { nameKey: "building.house.name", icon: "https://example.invalid/house.svg", footprint: { width: 4, depth: 4 }, cost: {}, constructionSeconds: 25, maxHealth: 100, visionRadius: 8 } }),
     GameDataError,
     "UI assets are packaged paths, not arbitrary URLs",
   );
@@ -35716,11 +35776,11 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
   // come out of a vector tool, and forcing SVG pushed forks toward a fake
   // conversion (a PNG wrapped in an <svg>) that defeats the check entirely.
   const rasterIcon = validateBuildingBalance({
-    house: { label: "Ev", icon: "/assets/ui/icons/building-house.png", footprint: { width: 4, depth: 4 }, cost: {}, constructionSeconds: 25, maxHealth: 100, visionRadius: 8 },
+    house: { nameKey: "building.house.name", icon: "/assets/ui/icons/building-house.png", footprint: { width: 4, depth: 4 }, cost: {}, constructionSeconds: 25, maxHealth: 100, visionRadius: 8 },
   });
   assert.equal(rasterIcon.house?.icon, "/assets/ui/icons/building-house.png");
   assert.throws(
-    () => validateBuildingBalance({ house: { label: "Ev", icon: "/assets/ui/icons/building-house.webp", footprint: { width: 4, depth: 4 }, cost: {}, constructionSeconds: 25, maxHealth: 100, visionRadius: 8 } }),
+    () => validateBuildingBalance({ house: { nameKey: "building.house.name", icon: "/assets/ui/icons/building-house.webp", footprint: { width: 4, depth: 4 }, cost: {}, constructionSeconds: 25, maxHealth: 100, visionRadius: 8 } }),
     GameDataError,
     "the allowed extensions stay an explicit list, not anything image-shaped",
   );
@@ -35795,13 +35855,13 @@ check("wood is balanced as a per-tree capacity, and only as a capacity", () => {
   assert.ok(!("perWorkerPerMinute" in (wood.tree as object)),
     "cutting speed belongs to the lumber camp's tiers, not to the tree");
 
-  assert.throws(() => validateResourceBalance({ ...raw, wood: { label: "Odun" } }), GameDataError,
+  assert.throws(() => validateResourceBalance({ ...raw, wood: {} }), GameDataError,
     "a resource must say how it is worked");
   assert.throws(() => validateResourceBalance({
     ...raw,
-    wood: { label: "Odun", tree: { capacity: 60 }, safeNode: { capacity: 1, perWorkerPerMinute: 1 } },
+    wood: { tree: { capacity: 60 }, safeNode: { capacity: 1, perWorkerPerMinute: 1 } },
   }), GameDataError, "trees and deposits are exclusive shapes");
-  assert.throws(() => validateResourceBalance({ ...raw, wood: { label: "Odun", tree: { capacity: 0 } } }),
+  assert.throws(() => validateResourceBalance({ ...raw, wood: { tree: { capacity: 0 } } }),
     GameDataError, "a tree that holds nothing is a blocker with no yield");
   assert.throws(() => validateResourceBalance({ stone: raw.stone, gold: raw.gold }), GameDataError,
     "every authored tree needs this number, so it is required");
@@ -45499,8 +45559,8 @@ check("RTS match enters victory when the enemy command center is depleted", () =
  */
 function regionalVictoryTestWorld() {
   const points: RtsStrategicPoint[] = [
-    { id: "west", name: "Batı", x: -20, z: 0, captureRadius: 8 },
-    { id: "east", name: "Doğu", x: 20, z: 0, captureRadius: 8 },
+    { id: "west", nameKey: "objective.point.west.name", x: -20, z: 0, captureRadius: 8 },
+    { id: "east", nameKey: "objective.point.east.name", x: 20, z: 0, captureRadius: 8 },
   ];
   const sources: TerritorySource[] = [];
   const territory = new TerritoryControlSystem(() => sources);
@@ -46608,9 +46668,23 @@ check("the shipped mission script validates, and a broken one fails at load", ()
   // restating what the selection panel already says. Short is the design, so it
   // is a gate rather than a promise — `why` is one sentence, `title` is an
   // instruction, and neither may grow back one edit at a time.
-  for (const step of script.steps) {
-    assert.ok(step.title.length <= 40, `step "${step.id}" title is ${step.title.length} chars (max 40)`);
-    assert.ok(step.why.length <= 110, `step "${step.id}" why is ${step.why.length} chars (max 110)`);
+  //
+  // Localization Faz 2 moved the sentences out of the mission file, so the gate
+  // now reads them back out of every shipped locale rather than off the script:
+  // a card that fits in English and overruns in Turkish is still a card that
+  // overruns, and Plan §15.1's expansion budget is exactly this measurement.
+  for (const locale of ["en", "tr"] as const) {
+    const objectives = JSON.parse(
+      readFileSync(`public/game-data/locales/${locale}/objectives.json`, "utf8"),
+    ) as Record<string, string>;
+    const text = (key: string): string =>
+      objectives[key] ?? assert.fail(`${locale}/objectives.json has no "${key}"`);
+    for (const step of script.steps) {
+      const title = text(step.titleKey);
+      const why = text(step.whyKey);
+      assert.ok(title.length <= 40, `${locale} step "${step.id}" title is ${title.length} chars (max 40)`);
+      assert.ok(why.length <= 110, `${locale} step "${step.id}" why is ${why.length} chars (max 110)`);
+    }
   }
 
   // Sürüm 2 §12.6: the card and the pulsing button must be talking about the
@@ -46676,14 +46750,14 @@ check("the shipped mission script validates, and a broken one fails at load", ()
   // the return literal forgets is dropped in silence — the same allowlist shape
   // CLAUDE.md warns about for layout saves, and here it would cost the chain the
   // one line it has about scouting with nothing anywhere reporting a fault.
-  assert.equal(script.introFog, (raw as { introFog?: string }).introFog);
-  assert.ok(script.introFog, "the shipped chain must carry a fog line for this gate to bite");
-  const blankFog = { ...(raw as object), introFog: "" };
-  assert.throws(() => validateMissionScript(blankFog, "frontier_road", buildingIds), /introFog/);
+  assert.equal(script.introFogKey, (raw as { introFogKey?: string }).introFogKey);
+  assert.ok(script.introFogKey, "the shipped chain must carry a fog line for this gate to bite");
+  const blankFog = { ...(raw as object), introFogKey: "" };
+  assert.throws(() => validateMissionScript(blankFog, "frontier_road", buildingIds), /introFogKey/);
   // Absent is the other legal shape: a fork writing a chain with nothing to say
   // about fog must not have to write an empty string to say so.
-  const { introFog: _dropped, ...noFog } = raw as { introFog?: string };
-  assert.equal(validateMissionScript(noFog, "frontier_road", buildingIds).introFog, undefined);
+  const { introFogKey: _dropped, ...noFog } = raw as { introFogKey?: string };
+  assert.equal(validateMissionScript(noFog, "frontier_road", buildingIds).introFogKey, undefined);
 
   const duplicate = JSON.parse(JSON.stringify(raw)) as { steps: { id: string }[] };
   duplicate.steps[1]!.id = duplicate.steps[0]!.id;
@@ -49534,7 +49608,10 @@ check("V4 Faz 1: the caravan validator refuses data that could never make sense"
   refuse({ spawnPerProducer: 1.5 }, "half a donkey is not a caravan");
   refuse({ spawnPerProducer: 0 }, "a producer with no caravan would never ship anything");
   refuse({ armorClass: "structure" }, "a pack animal is not a building");
-  refuse({ label: "" }, "the table entry has to name itself");
+  refuse({ nameKey: "" }, "the table entry has to name itself");
+  // Localization Faz 2's own gate: the field holds a *key*, and a Turkish name
+  // pasted back into it would load fine and print ⟦missing:…⟧ one screen away.
+  refuse({ nameKey: "Yük Eşeği" }, "a display string is not a localization key");
   // Zero is the one legal floor: a brisk tuning, not a broken one.
   assert.ok(
     validateCaravanBalance({ caravan: { ...caravan, loadSeconds: 0 } }).loadSeconds === 0,
@@ -51152,9 +51229,10 @@ check("Yapı tamiri: buton yalnız hasar varken çıkar, çalışırken kendi ip
   }, 120)) ?? assert.fail("a damaged building must offer a repair");
   assert.equal(affordable.enabled, true);
   assert.equal(affordable.reason, null, "a legal action carries no excuse");
-  assert.match(affordable.cost ?? "", /8 Odun/);
-  assert.match(affordable.hint ?? "", /80 can onarılır/);
-  assert.match(affordable.hint ?? "", /4 sn/);
+  assert.equal(affordable.cost, probeCostEntry(8, "wood"));
+  assert.match(affordable.hint ?? "", /^selection\.repair\.hint\b/);
+  assert.match(affordable.hint ?? "", /health=80/);
+  assert.match(affordable.hint ?? "", /seconds=4/);
 
   // A price the wallet cannot meet is named, not merely refused — the same
   // contract every other costed button in the panel lives under.
@@ -51162,13 +51240,13 @@ check("Yapı tamiri: buton yalnız hasar varken çıkar, çalışırken kendi ip
     missingHealth: 80, cost: { wood: 8 }, workerSeconds: 4, active: false, progress: 0, workers: 0, stock: { wood: 3 },
   }, 120)) ?? assert.fail("an unaffordable repair is still offered, and refused with a number");
   assert.equal(broke.enabled, false);
-  assert.match(broke.reason ?? "", /5 Odun/);
+  assert.ok((broke.reason ?? "").includes(probeCostEntry(5, "wood")), "the refusal names the shortfall");
 
   const running = panel({
     missingHealth: 40, cost: { wood: 4 }, workerSeconds: 2, active: true, progress: 0.5, workers: 2, stock: { wood: 100 },
   }, 160);
   const stop = action(running) ?? assert.fail("a running repair must be cancellable");
-  assert.equal(stop.label, "Tamiri Durdur");
+  assert.equal(stop.label, "selection.repair.stop.action");
   assert.equal(stop.enabled, true);
   assert.equal(stop.active, true);
   // A running repair is a badge, not a body line: repair is offered on every
@@ -51176,8 +51254,9 @@ check("Yapı tamiri: buton yalnız hasar varken çıkar, çalışırken kendi ip
   // had — and on a producer that was the eighth line of a six-slot grid.
   const repairChip = (content: SelectionPanelContent): SelectionChip =>
     content.chips?.find((candidate) => candidate.id === "repair") ?? assert.fail("no repair chip");
-  assert.equal(repairChip(running).value, "%50");
-  assert.match(repairChip(running).tooltip, /Tamir %50 · 2 işçi/);
+  assert.equal(repairChip(running).value, "selection.repair.chip progress=0.5");
+  assert.match(repairChip(running).tooltip, /^selection\.repair\.chip\.working\b/);
+  assert.match(repairChip(running).tooltip, /workers=2/);
   assert.equal(repairChip(running).tone, "good");
 
   // Ordered but not yet staffed reads differently: the player has paid and is
@@ -51185,9 +51264,9 @@ check("Yapı tamiri: buton yalnız hasar varken çıkar, çalışırken kendi ip
   const waiting = panel({
     missingHealth: 40, cost: { wood: 4 }, workerSeconds: 2, active: true, progress: 0, workers: 0, stock: { wood: 100 },
   }, 160);
-  assert.match(repairChip(waiting).tooltip, /işçi bekliyor/);
+  assert.match(repairChip(waiting).tooltip, /^selection\.repair\.chip\.waiting\b/);
   assert.equal(repairChip(waiting).tone, "warn", "paid for and unstaffed is a thing the player can go and fix");
-  assert.match(action(waiting)?.hint ?? "", /tam iade/);
+  assert.match(action(waiting)?.hint ?? "", /^selection\.repair\.stop\.hint_pending\b/);
 });
 
 check("RTS a player foundation staffs itself to capacity, and preempts only one gatherer", () => {
@@ -51572,7 +51651,7 @@ check("a cancelled unit order returns its exact reservation, newest order first"
   assert.ok(wallet.amount("food") < opening["food"]!, "the order held its food");
   assert.deepEqual(
     production.cancelLatestUnit(barracks),
-    { unitId: "guard_placeholder", label: RTS_TEST_UNIT_STATS.label },
+    { unitId: "guard_placeholder", nameKey: RTS_TEST_UNIT_STATS.nameKey },
     "the cancel names what it took, so the message need not re-read a changed queue",
   );
   assert.deepEqual(wallet.snapshot(), opening, "cancelling returns precisely what was reserved");
@@ -51592,18 +51671,18 @@ check("a cancelled unit order returns its exact reservation, newest order first"
   production.update(1);
   const training = production.queueSnapshot(barracks);
   assert.equal(training.queued, 3);
-  assert.deepEqual(training.pendingLabels, [RTS_TEST_SIEGE_STATS.label, RTS_TEST_UNIT_STATS.label]);
+  assert.deepEqual(training.pendingNameKeys, [RTS_TEST_SIEGE_STATS.nameKey, RTS_TEST_UNIT_STATS.nameKey]);
   assert.equal(training.trainingRemainingSeconds, 4, "the first order is under way but unfinished");
   assert.equal(training.trainingDurationSeconds, 5, "and the bar can read a fraction from its own duration");
   assert.equal(production.cancelLatestUnit(barracks)?.unitId, "guard_placeholder", "the newest order goes first");
   const afterCancel = production.queueSnapshot(barracks);
-  assert.equal(afterCancel.trainingLabel, RTS_TEST_UNIT_STATS.label, "the Guard in progress kept its place");
+  assert.equal(afterCancel.trainingNameKey, RTS_TEST_UNIT_STATS.nameKey, "the Guard in progress kept its place");
   assert.equal(
     afterCancel.trainingRemainingSeconds,
     training.trainingRemainingSeconds,
     "and kept its progress — the cancel took the queued duplicate instead",
   );
-  assert.deepEqual(afterCancel.pendingLabels, [RTS_TEST_SIEGE_STATS.label]);
+  assert.deepEqual(afterCancel.pendingNameKeys, [RTS_TEST_SIEGE_STATS.nameKey]);
 
   // Repeated clicks walk the queue back; each one is scoped to the building the
   // panel is showing, never to a Barracks the player cannot see.
@@ -56704,10 +56783,26 @@ check("Lokalizasyon: no player-facing text attaches a Turkish case suffix to an 
     });
   }
 
-  // The derivation half: the one suffix-free format that is exported runs
-  // against every age and every level the balance data actually defines, so a
-  // fork that renames an age or adds a tier is covered by the same check rather
-  // than by a literal nobody updates.
+  // Faz 2 moved these sentences into `tr/*.json`, and the rule moved with them:
+  // a translation file is now the place a case ending can be welded onto a value
+  // the sentence does not own. Same pattern, applied to where the text lives.
+  for (const domain of LOCALE_DOMAINS) {
+    const path = `public/game-data/locales/tr/${domain}.json`;
+    const entries = JSON.parse(readFileSync(path, "utf8")) as Record<string, string>;
+    for (const [key, value] of Object.entries(entries)) {
+      const hit = value.match(suffixed)?.[0];
+      assert.ok(
+        hit === undefined,
+        `${path}: "${key}" attaches "${hit}" to an interpolated value — ${value}`,
+      );
+    }
+  }
+
+  // The derivation half: the exported requirement runs against every age and
+  // every level the balance data defines. It asserts the *key* it resolves to,
+  // not the sentence — which is the point of the migration. A tier above Lv1
+  // must reach the tier key, because that is the one whose Turkish text carries
+  // "Lv{level} ile" instead of a locative that only harmonises with one number.
   const ages = validateAgeBalance(
     JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
   );
@@ -56718,14 +56813,21 @@ check("Lokalizasyon: no player-facing text attaches a Turkish case suffix to an 
   assert.ok(levels.size > 1, "the balance data must define a level-up for this check to bite");
   for (const requiredAge of ["settlement", "town"] as const) {
     for (const level of levels) {
-      const sentence = buildingUnlockRequirement({ requiredAge, requiredSettlementLevel: level });
-      assert.doesNotMatch(
-        sentence,
-        /\d'[a-zçğıöşü]/u,
-        `unlock requirement suffixes the level number: "${sentence}"`,
+      const stats = { requiredAge, requiredSettlementLevel: level };
+      const requirement = buildingUnlockRequirement(stats);
+      assert.ok(
+        requirement.startsWith(level > 1 ? "building.unlock.tier" : "building.unlock.age"),
+        `wrong key for level ${level}: ${requirement}`,
       );
-      const label = requiredAge === "town" ? "Kasaba" : "Yerleşim";
-      assert.ok(sentence.startsWith(label), `"${sentence}" must name the age it waits on`);
+      // Naming the building is a different sentence, not the same one with a
+      // label glued to its front (Plan §10).
+      const named = buildingUnlockRequirement(stats, "Kışla");
+      assert.ok(
+        named.startsWith(level > 1 ? "building.locked.tier" : "building.locked.age"),
+        `wrong key for a named building: ${named}`,
+      );
+      assert.match(named, /building=Kışla/, "the building name reaches the sentence");
+      if (level > 1) assert.match(named, new RegExp(`level=${level}`));
     }
   }
 });
@@ -56788,6 +56890,14 @@ check("Lokalizasyon Faz 1: the formatter is locale-aware and fails loudly on bad
   assert.ok(formatPercent("tr", 0.3).startsWith("%"), "Turkish puts the sign before");
   assert.equal(formatNumber("en", Number.NaN), "—", "a broken number never prints NaN");
 
+  // ICU fraction skeletons: a rate reads as a rate only with its decimal, and
+  // `toFixed(1)` would write a dot into a language that uses a comma.
+  assert.equal(formatMessage("+{rate, number, ::.0}/min", "en", { rate: 0 }), "+0.0/min");
+  assert.equal(formatMessage("+{rate, number, ::.0}/dk", "tr", { rate: 0 }), "+0,0/dk");
+  assert.equal(formatMessage("{n, number, ::.0}", "en", { n: 2.46 }), "2.5");
+  assert.equal(formatMessage("{n, number, ::.0#}", "en", { n: 2 }), "2.0");
+  assert.equal(formatMessage("{n, number, ::.0#}", "en", { n: 2.46 }), "2.46");
+
   // Lists: joining with ", " in code bakes English punctuation into every
   // language (inventory §7.5).
   assert.ok(formatList("en", ["wood", "stone", "gold"]).includes("and"));
@@ -56804,6 +56914,7 @@ check("Lokalizasyon Faz 1: the formatter is locale-aware and fails loudly on bad
     "{n, date}",
     "{n, plural, one {#}}",
     "{n, number, currency}",
+    "{n, number, ::compact-short}",
     "{n",
     "unbalanced }",
   ]) {
@@ -57077,6 +57188,182 @@ check("Lokalizasyon Faz 1: shipped locale folders match the registry and the sou
         );
       }
     }
+  }
+});
+
+/** Every `.ts` under a source root, for the key scanner below. */
+function listSourceFiles(root: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const path = `${root}/${entry.name}`;
+    if (entry.isDirectory()) files.push(...listSourceFiles(path));
+    else if (entry.isFile() && entry.name.endsWith(".ts")) files.push(path);
+  }
+  return files;
+}
+
+/** Read one locale's shipped files straight off disk, merged as the game sees them. */
+function readShippedLocale(locale: string): ReadonlyMap<string, string> {
+  const files = LOCALE_DOMAINS.map((domain) => ({
+    domain,
+    entries: readLocaleDomainEntries(
+      locale,
+      domain,
+      JSON.parse(readFileSync(`public/game-data/locales/${locale}/${domain}.json`, "utf8")) as unknown,
+    ),
+  }));
+  return mergeLocaleDomains(locale, files).entries;
+}
+
+check("Lokalizasyon Faz 2: every localization key the game names exists in en and tr", () => {
+  // Faz 2 moves ~530 strings behind keys, and the failure mode of that move is
+  // silent: a mistyped key renders a marker in dev and the bare key in release,
+  // in one panel, on one branch nobody opened. This is the gate that makes it
+  // loud — inventory §9.3 asked for exactly this, as the measurable half of
+  // "no hardcoded gameplay UI text left".
+  //
+  // It scans for key-*shaped* literals rather than for `t(...)` calls, because a
+  // key is just as often written into a table or a `data-` attribute as passed
+  // to `t` directly. The namespace list is what keeps that from matching every
+  // dotted string in the codebase.
+  const namespaces = [
+    "common",
+    "menu",
+    "hud",
+    "building",
+    "placement",
+    "road",
+    "selection",
+    "notification",
+    "command",
+    "objective",
+    "mission",
+    "match",
+    "unit",
+    "state",
+  ];
+  const keyLiteral = new RegExp(`"((?:${namespaces.join("|")})(?:\\.[a-z0-9_]+)+)"`, "gu");
+  const en = readShippedLocale("en");
+  const tr = readShippedLocale("tr");
+
+  const named = new Map<string, string>();
+  for (const file of listSourceFiles("src/game")) {
+    // The localization module itself names keys in its own doc comments and
+    // fixtures; debug surfaces are out of scope (inventory §6.1).
+    if (file.includes("/localization/") || file.includes("/debug/")) continue;
+    const source = readFileSync(file, "utf8");
+    for (const match of source.matchAll(keyLiteral)) {
+      if (!named.has(match[1]!)) named.set(match[1]!, file);
+    }
+  }
+  assert.ok(named.size > 0, "the scanner must find the keys Faz 2 has migrated so far");
+  // Some literals are key *roots* rather than keys — a table row that owns a
+  // `.label`, a `.hint` and three `.value.*` words holds the stem and appends
+  // the leaf at render time. A root still has to lead somewhere: one that no
+  // key hangs off is the same typo this check exists to catch.
+  const defines = (bundle: ReadonlyMap<string, string>, key: string): boolean =>
+    bundle.has(key) || [...bundle.keys()].some((candidate) => candidate.startsWith(`${key}.`));
+  for (const [key, file] of named) {
+    assert.ok(defines(en, key), `${file} names "${key}", which en does not define`);
+    // Turkish is a full development language (Plan §3.2), not a target that may
+    // lag: a gap here would show the player an English sentence mid-match.
+    assert.ok(defines(tr, key), `${file} names "${key}", which tr does not define`);
+  }
+
+  // Keys the code assembles at runtime cannot be scanned, so the enumerable
+  // families are derived from the ids they are built out of — the same ids the
+  // match state and the graphics settings actually switch on.
+  for (const outcome of ["victory", "defeat"] as const) {
+    assert.ok(en.has(`match.result.${outcome}.title`));
+    for (const reason of ["center_destroyed", "surrendered", "regional_control"]) {
+      const key = `match.result.${outcome}.${reason}`;
+      assert.ok(en.has(key), `en is missing ${key}`);
+      assert.ok(tr.has(key), `tr is missing ${key}`);
+    }
+  }
+  for (const quality of ["low", "medium", "high"]) {
+    assert.ok(en.has(`match.settings.graphics.quality.${quality}`));
+    assert.ok(tr.has(`match.settings.graphics.quality.${quality}`));
+  }
+  for (const [row, words] of [
+    ["pan_speed", ["slow", "normal", "fast"]],
+    ["smoothing", ["instant", "balanced", "smooth"]],
+  ] as const) {
+    for (const word of words) {
+      const key = `match.settings.camera.${row}.value.${word}`;
+      assert.ok(en.has(key), `en is missing ${key}`);
+      assert.ok(tr.has(key), `tr is missing ${key}`);
+    }
+  }
+});
+
+check("Lokalizasyon Faz 2: gameplay data names its text by key, and every key resolves", () => {
+  // Faz 2 item 9. Balance and mission files used to carry the player-facing name
+  // itself ("Merkez", "Oduncu Kampı"), which made the data table a second place
+  // for a language to live and left every one of those names Turkish-only. They
+  // now carry a *key*; this is the gate that keeps them carrying one, and keeps
+  // the key leading somewhere in both development languages.
+  const en = readShippedLocale("en");
+  const tr = readShippedLocale("tr");
+  const resolves = (key: string, where: string): void => {
+    assert.ok(en.has(key), `${where} names "${key}", which en does not define`);
+    assert.ok(tr.has(key), `${where} names "${key}", which tr does not define`);
+  };
+
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  for (const [id, stats] of Object.entries(buildings)) resolves(stats.nameKey, `buildings.json "${id}"`);
+  const units = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  for (const [id, stats] of Object.entries(units)) resolves(stats.nameKey, `units.json "${id}"`);
+  const animals = validateAnimalBalance(
+    JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as unknown,
+  );
+  for (const [id, stats] of Object.entries(animals)) resolves(stats.nameKey, `animals.json "${id}"`);
+  const sites = validateTradeSiteBalance(
+    JSON.parse(readFileSync("public/game-data/balance/trade-sites.json", "utf8")) as unknown,
+  );
+  for (const [id, stats] of Object.entries(sites)) resolves(stats.nameKey, `trade-sites.json "${id}"`);
+  const ages = validateAgeBalance(
+    JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
+  );
+  resolves(ages.settlement.nameKey, "ages.json settlement");
+  resolves(ages.town.nameKey, "ages.json town");
+  const caravan = validateCaravanBalance(
+    JSON.parse(readFileSync("public/game-data/balance/logistics.json", "utf8")) as unknown,
+  );
+  resolves(caravan.nameKey, "logistics.json caravan");
+
+  const mission = validateMissionScript(
+    JSON.parse(readFileSync("public/game-data/missions/frontier_road.json", "utf8")) as unknown,
+    "frontier_road",
+    new Set(Object.keys(buildings)),
+  );
+  resolves(mission.nameKey, "the mission script");
+  resolves(mission.introKey, "the mission script");
+  resolves(mission.outroKey, "the mission script");
+  if (mission.introFogKey) resolves(mission.introFogKey, "the mission script");
+  for (const step of mission.steps) {
+    resolves(step.titleKey, `mission step "${step.id}"`);
+    resolves(step.whyKey, `mission step "${step.id}"`);
+  }
+
+  // The four resource names had *two* homes — `resourceLabels.ts` and a `label`
+  // in `resources.json` (the duplication Faz 1's handover named). One survives.
+  const rawResources = JSON.parse(
+    readFileSync("public/game-data/balance/resources.json", "utf8"),
+  ) as Record<string, Record<string, unknown>>;
+  for (const [id, entry] of Object.entries(rawResources)) {
+    assert.equal("label" in entry, false, `resources.json "${id}" still carries a display name`);
+    resolves(`common.resource.${id}.name`, `resources.json "${id}"`);
+  }
+
+  // A marker's name is derived from its id rather than authored, so the shipped
+  // map's passes are the case that proves the derivation lands on real keys.
+  for (const point of RTS_BLOCKOUT_MAP.strategicPoints) {
+    resolves(point.nameKey, `strategic point "${point.id}"`);
   }
 });
 
@@ -57489,11 +57776,13 @@ check("the army roster counts unit types, not roles, and orders them from data",
   // unit must be its own row — merged into the first one it would be
   // uncountable and, once the HUD hangs a "select all" off a row, unselectable
   // as itself.
-  const heavyGuard = { ...RTS_TEST_UNIT_STATS, id: "heavy_guard", label: "Ağır Muhafız" } as const;
+  const heavyGuard = { ...RTS_TEST_UNIT_STATS, id: "heavy_guard", nameKey: "unit.heavy_guard.name" } as const;
   const twoGuardTypes = describeArmyRoster([...of(RTS_TEST_UNIT_STATS, 3), ...of(heavyGuard, 2)]);
   assert.deepEqual(
     twoGuardTypes.entries.map((entry) => [entry.typeId, entry.count]),
-    [["heavy_guard", 2], ["guard_placeholder", 3]],
+    // Sorted by name within the role, which under the probe bundle means by key
+    // — the *tie-break* is the contract here, not which Turkish word wins it.
+    [["guard_placeholder", 3], ["heavy_guard", 2]],
     "two units sharing role \"guard\" are two rows, not one",
   );
   assert.equal(twoGuardTypes.totalCount, 5);
@@ -57510,7 +57799,7 @@ check("the army roster counts unit types, not roles, and orders them from data",
     "one roster row per shipped unit definition, no more and no fewer",
   );
   for (const entry of live.entries) {
-    assert.equal(entry.label, balance[entry.typeId]!.label, "the row's name comes from its own stats");
+    assert.equal(entry.label, t(balance[entry.typeId]!.nameKey), "the row's name comes from its own stats");
   }
 
   // Ordering is derived (role -> unlock age -> label), so neither the order
@@ -57607,7 +57896,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   // no unit content — no actions, no lines, a zero count — so nothing stale can
   // render through it, and an empty unit list resolves to the same placeholder.
   const emptyPanel = describeSelection({ kind: "none" });
-  assert.equal(emptyPanel.title, "Seçim yok");
+  assert.equal(emptyPanel.title, "selection.empty.title");
   assert.deepEqual(emptyPanel.actions, [], "the placeholder offers no verbs");
   assert.deepEqual(emptyPanel.lines, [], "and shows no unit lines");
   assert.equal(emptyPanel.selectionCount ?? 0, 0);
@@ -57622,16 +57911,16 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   // shape in which every one of them is true.
   const one = describeSelection({ kind: "units", units: [guard(1)] })
     ?? assert.fail("a unit selection has a panel");
-  assert.equal(one.title, "Test Muhafızı");
+  assert.equal(one.title, "unit.guard.name");
   assert.equal(one.portrait, RTS_TEST_UNIT_STATS.icon, "the enlarged selection visual comes from the unit icon");
-  assert.equal(one.summary, "Can: 80/100");
+  assert.equal(one.summary, "selection.units.health current=80 max=100");
   assert.equal(one.selectionCount, 1);
   // §33: the matchup line is read off the same multipliers combat resolves
   // against, so the panel cannot advertise a matchup the data does not give.
-  assert.match(one.lines.join(" | "), /Güçlü: ağır birim/);
-  assert.match(one.lines.join(" | "), /Duruş: Serbest/);
-  assert.match(one.lines.join(" | "), /Komut: Bekliyor/);
-  assert.match(one.hint, /F: Saldırı-Hareket/);
+  assert.match(one.lines.join(" | "), /selection\.counter\.strong classes=unit\.armor_class\.heavy/);
+  assert.match(one.lines.join(" | "), /selection\.units\.stance stance=unit\.stance\.aggressive/);
+  assert.match(one.lines.join(" | "), /selection\.units\.order order=unit\.order\.idle/);
+  assert.match(one.hint, /^selection\.hint\.army\b/);
   assert.equal(one.cards, undefined, "one unit is not a group");
 
   // MORE THAN ONE: the panel changes shape rather than aggregating. Every
@@ -57642,7 +57931,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
     ?? assert.fail("an army selection has a panel");
   assert.deepEqual(
     army.cards?.map((card) => [card.typeId, card.label, card.count]),
-    [["guard_placeholder", "Test Muhafızı", 2]],
+    [["guard_placeholder", "unit.guard.name", 2]],
     "one card per type, carrying its own name and count",
   );
   assert.equal(army.cards?.[0]?.icon, RTS_TEST_UNIT_STATS.icon);
@@ -57680,7 +57969,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
     "a legal formation is selectable for two combat units",
   );
   assert.equal(DEFAULT_RTS_FORMATION, "line", "Hat inherited the default seat when Serbest was removed");
-  assert.match(one.hint, /F: Saldırı-Hareket/, "the verbs are still taught on a single selection");
+  assert.match(one.hint, /^selection\.hint\.army\b/, "the verbs are still taught on a single selection");
 
   // Two units that disagree used to force a "Duruş: Karışık" line. There is no
   // stance row in a group panel at all now, which is the point — the panel does
@@ -57698,7 +57987,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   }) ?? assert.fail("panel missing");
   assert.deepEqual(
     mixed.cards?.map((card) => [card.label, card.count]),
-    [["Test İşçisi", 3], ["Test Muhafızı", 2]],
+    [["unit.worker.name", 3], ["unit.guard.name", 2]],
     "cards read left to right in roster order, not in the order the box swept them up",
   );
 
@@ -57708,7 +57997,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   // directly above it.
   const heavy = (id: number): SelectedUnitView => ({
     ...guard(id),
-    stats: { ...RTS_TEST_UNIT_STATS, id: "heavy_guard", label: "Ağır Muhafız" },
+    stats: { ...RTS_TEST_UNIT_STATS, id: "heavy_guard", nameKey: "unit.heavy_guard.name" },
   });
   const twoGuardTypes = describeSelection({
     kind: "units",
@@ -57716,7 +58005,9 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   }) ?? assert.fail("panel missing");
   assert.deepEqual(
     twoGuardTypes.cards?.map((card) => [card.label, card.count]),
-    [["Ağır Muhafız", 1], ["Test Muhafızı", 2]],
+    // Within one role the tie-break is the unit's name; under the probe bundle
+    // that is its key, so the *split* is what this pins, not which word sorts first.
+    [["unit.guard.name", 2], ["unit.heavy_guard.name", 1]],
     "a second Guard-role unit is its own card, under its own name",
   );
 
@@ -57729,7 +58020,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   }) ?? assert.fail("panel missing");
   assert.deepEqual(
     oneEach.cards?.map((card) => [card.label, card.count]),
-    [["Test İşçisi", 1], ["Test Muhafızı", 1]],
+    [["unit.worker.name", 1], ["unit.guard.name", 1]],
   );
   assert.equal(oneEach.selectionCount ?? null, null, "no group-wide count competes with the per-card ones");
 
@@ -57737,9 +58028,9 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   // stance, and the army panel has no answer for what it is doing instead.
   const workers = describeSelection({ kind: "units", units: [worker(1, "building")] })
     ?? assert.fail("panel missing");
-  assert.equal(workers.title, "İşçi");
-  assert.equal(workers.lines[0], "Görev: 1 inşaatta");
-  assert.ok(!workers.lines.join(" | ").includes("Duruş"), "a worker has no stance to report");
+  assert.equal(workers.title, "selection.workers.title");
+  assert.equal(workers.lines[0], "selection.units.job jobs=selection.units.job_count count=1 job=unit.job.building");
+  assert.ok(!workers.lines.join(" | ").includes("selection.units.stance"), "a worker has no stance to report");
 
   // A worker *group* takes the same card shape as an army group. Note what this
   // costs: the job breakdown ("2 inşaatta · 1 üretimde") is a group fact the
@@ -57750,10 +58041,10 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
     kind: "units",
     units: [worker(1, "idle"), worker(2, "building"), worker(3, "producing"), worker(4, "building")],
   }) ?? assert.fail("panel missing");
-  assert.deepEqual(workerGang.cards?.map((card) => [card.label, card.count]), [["Test İşçisi", 4]]);
+  assert.deepEqual(workerGang.cards?.map((card) => [card.label, card.count]), [["unit.worker.name", 4]]);
   assert.deepEqual(workerGang.lines, []);
   assert.equal(workerGang.hint, "");
-  assert.match(workers.hint, /Sağ tık/, "a single worker still explains how it is put to work");
+  assert.match(workers.hint, /^selection\.hint\.worker\b/, "a single worker still explains how it is put to work");
 
   // The rescue button is not a standing verb: a healthy selection — one unit or
   // a group — offers no buttons at all, because a unit's commands are world
@@ -57799,7 +58090,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   const armyRescue = trappedArmy.actions.find((action) => action.id === RESCUE_ACTION)
     ?? assert.fail("a trapped army offers the rescue button");
   assert.equal(armyRescue.enabled, true, "the rescue is never a refusal — it always has clear ground to try");
-  assert.match(armyRescue.hint ?? "", /1 birim/, "the hint counts only the trapped unit");
+  assert.match(armyRescue.hint ?? "", /^selection\.rescue\.hint count=1\b/, "the hint counts only the trapped unit");
 
   const trappedWorkers = describeSelection({
     kind: "units",
@@ -57807,7 +58098,7 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
   }) ?? assert.fail("panel missing");
   const workerRescue = trappedWorkers.actions.find((action) => action.id === RESCUE_ACTION)
     ?? assert.fail("trapped workers offer the rescue button");
-  assert.match(workerRescue.hint ?? "", /2 birim/, "two of three workers are trapped");
+  assert.match(workerRescue.hint ?? "", /^selection\.rescue\.hint count=2/, "two of three workers are trapped");
 });
 
 check("Faz 9 §51: every building kind explains itself, working or not", () => {
@@ -57833,17 +58124,17 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   const BODY_LINE_BUDGET = 4;
 
   // A levelled building says so in its title: level is the whole reason it cost twice.
-  assert.equal(structure({ kind: "passive", populationCapacity: 8 }, "Ev", 2).title, "Ev Lv2");
+  assert.equal(structure({ kind: "passive", populationCapacity: 8 }, "Ev", 2).title, "selection.structure.title.level building=Ev level=2");
   assert.equal(structure({ kind: "passive", populationCapacity: 5 }, "Ev").title, "Ev");
-  assert.match(structure({ kind: "passive", populationCapacity: 5 }, "Ev").summary, /Can: 200\/400/);
+  assert.match(structure({ kind: "passive", populationCapacity: 5 }, "Ev").summary, /selection\.structure\.health current=200 max=400/);
 
   // §52 "bir yapı çalışmadığında nedeni gösteriliyor" — the stalled site names
   // the fix, not just the state.
   const stalled = structure({ kind: "construction", progress: 0.42, assignedWorkers: 0 });
-  assert.match(stalled.lines.join(" | "), /İnşaat: %42/);
-  assert.match(chip(stalled, "workers").tooltip, /İşçi yok/);
+  assert.match(stalled.lines.join(" | "), /selection\.construction\.progress progress=0\.42/);
+  assert.match(chip(stalled, "workers").tooltip, /^selection\.construction\.no_workers\b/);
   assert.equal(chip(stalled, "workers").tone, "bad", "an unmanned site is stuck, not merely waiting");
-  assert.match(stalled.tooltip ?? "", /sağ tıklayın/);
+  assert.match(stalled.tooltip ?? "", /^selection\.construction\.tooltip\.idle\b/);
   const staffedSite = structure({ kind: "construction", progress: 0.42, assignedWorkers: 2 });
   assert.equal(chip(staffedSite, "workers").value, "2");
   assert.equal(chip(staffedSite, "workers").tone, "good");
@@ -57852,7 +58143,7 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
     kind: "producer",
     logistics: "unlinked-depot",
     production: {
-      structureId: 1, structureLabel: "Tarla", resourceId: "food",
+      structureId: 1, structureNameKey: "building.farm.name", resourceId: "food",
       assignedWorkers: 2, workingWorkers: 1, workerCapacity: 3,
       perWorkerPerMinute: 7, productionPerMinute: 7,
       localBuffer: 40, localBufferCapacity: 40,
@@ -57863,22 +58154,22 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   // What stays as prose is what the player *reads* off a producer: three
   // measurements. Everything else became a badge, which is what keeps the body
   // inside the six slots the two-column grid holds.
-  assert.match(producer.lines.join(" | "), /Üretim: 7\.0 Yiyecek\/dk/);
-  assert.match(producer.lines.join(" | "), /Yerel tampon: 40\.0\/40/);
+  assert.match(producer.lines.join(" | "), /selection\.producer\.output rate=7 resource=common\.resource\.food\.name/);
+  assert.match(producer.lines.join(" | "), /selection\.producer\.buffer capacity=40 held=40/);
   assert.ok(
     producer.lines.length <= BODY_LINE_BUDGET,
     "the body must fit the two-column grid; past its budget a clipped third column opens",
   );
   assert.equal(chip(producer, "workers").value, "2/3");
   assert.equal(chip(producer, "workers").tone, "warn", "understaffed is neither working nor broken");
-  assert.match(chip(producer, "workers").tooltip, /2\/3 işçi atandı, 1 tanesi çalışıyor/);
-  assert.equal(chip(producer, "logistics").value, "Depo Yok");
+  assert.match(chip(producer, "workers").tooltip, /^selection\.producer\.crew\.workers assigned=2 capacity=3 working=1/);
+  assert.equal(chip(producer, "logistics").value, "selection.logistics.status.unlinked_depot");
   assert.equal(chip(producer, "logistics").tone, "bad");
-  assert.match(chip(producer, "logistics").tooltip, /Depo gerekli/, "the chip resolves the state it reports");
+  assert.match(chip(producer, "logistics").tooltip, /^selection\.logistics\.reason\.unlinked_depot\b/, "the chip resolves the state it reports");
   // The status is a translated phrase, not the raw enum the Faz 3 palette leaked.
-  assert.equal(chip(producer, "status").value, "Tampon dolu");
+  assert.equal(chip(producer, "status").value, "selection.production.status.buffer_full");
   assert.equal(chip(producer, "status").tone, "warn", "a full buffer clears itself; it is not an alarm");
-  assert.match(producer.tooltip ?? "", /Depo gerekli/, "the tooltip resolves the state it reports");
+  assert.match(producer.tooltip ?? "", /^selection\.logistics\.reason\.unlinked_depot/, "the tooltip resolves the state it reports");
 
   // A working producer carries no badge saying nothing is wrong with it — the
   // rule the Barracks panel already followed and this one did not.
@@ -57887,7 +58178,7 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
     logistics: "linked",
     transport: "direct",
     production: {
-      structureId: 1, structureLabel: "Tarla", resourceId: "food",
+      structureId: 1, structureNameKey: "building.farm.name", resourceId: "food",
       assignedWorkers: 3, workingWorkers: 3, workerCapacity: 3,
       perWorkerPerMinute: 7, productionPerMinute: 21,
       localBuffer: 4, localBufferCapacity: 40,
@@ -57899,7 +58190,7 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   assert.equal(chip(healthyProducer, "workers").tone, "good");
   // A local lane has no donkey, and the logistics chip beside it already says
   // so: a second chip repeating "Yerel aktarım" was the clearest duplication.
-  assert.equal(chip(healthyProducer, "logistics").value, "Yerel aktarım");
+  assert.equal(chip(healthyProducer, "logistics").value, "selection.producer.chip.local_transfer");
   assert.equal(healthyProducer.chips?.some((entry) => entry.id === "caravan"), false);
 
   const fullStoreProducer = structure({
@@ -57911,7 +58202,7 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
       destinationX: 4, destinationZ: 0, facing: 0, speed: 0, carryCapacity: 30, phase: "loading",
     },
     production: {
-      structureId: 1, owner: "player", structureLabel: "Tarla", resourceId: "food",
+      structureId: 1, owner: "player", structureNameKey: "building.farm.name", resourceId: "food",
       assignedWorkers: 3, workingWorkers: 3, workerCapacity: 3,
       perWorkerPerMinute: 10, productionPerMinute: 30, maximumProductionPerMinute: 30,
       localBuffer: 30, localBufferCapacity: 30,
@@ -57919,8 +58210,8 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
       sourceRemaining: null, status: "buffer-full",
     },
   });
-  assert.equal(chip(fullStoreProducer, "caravan").value, "Stok dolu");
-  assert.match(chip(fullStoreProducer, "caravan").tooltip, /Global stokta yer yok/);
+  assert.equal(chip(fullStoreProducer, "caravan").value, "selection.caravan.storage_full");
+  assert.match(chip(fullStoreProducer, "caravan").tooltip, /^selection\.caravan\.storage_full\.tooltip\b/);
   // The loading leg no longer prints its numbers: they are the same measurement
   // as the `Yerel tampon` line above it. The carry threshold is worth knowing
   // when it differs from the buffer, so it moved to the tooltip.
@@ -57932,7 +58223,7 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
       destinationX: 4, destinationZ: 0, facing: 0, speed: 0, carryCapacity: 120, phase: "loading",
     },
     production: {
-      structureId: 1, structureLabel: "Oduncu Kampı", resourceId: "wood",
+      structureId: 1, structureNameKey: "building.lumber_camp.name", resourceId: "wood",
       assignedWorkers: 3, workingWorkers: 3, workerCapacity: 3,
       perWorkerPerMinute: 40, productionPerMinute: 120,
       localBuffer: 19.4, localBufferCapacity: 120,
@@ -57940,25 +58231,25 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
       sourceRemaining: 2371.9, status: "producing",
     },
   });
-  assert.equal(chip(loadingProducer, "caravan").value, "Yük bekliyor");
-  assert.match(chip(loadingProducer, "caravan").tooltip, /19\.4\/120\.0/);
-  assert.equal(chip(loadingProducer, "logistics").value, "Bağlı");
-  assert.match(loadingProducer.lines.join(" | "), /Düğüm: 2371\.9 kaldı/);
+  assert.equal(chip(loadingProducer, "caravan").value, "selection.caravan.loading");
+  assert.match(chip(loadingProducer, "caravan").tooltip, /^selection\.caravan\.loading\.tooltip held=19\.4 threshold=120/);
+  assert.equal(chip(loadingProducer, "logistics").value, "selection.logistics.status.linked");
+  assert.match(loadingProducer.lines.join(" | "), /selection\.producer\.node remaining=2,?371\.9/);
 
   const depot = structure({
     kind: "depot", status: "linked", componentId: 3, linkedProducers: 2, occupied: true,
   }, "Depo");
   // The panel names the network state in the player's terms; the raw component
   // id it used to print was a debugging leak, not an answer to "is this working".
-  assert.equal(chip(depot, "logistics").value, "Bağlı");
-  assert.match(chip(depot, "logistics").tooltip, /Merkez ağına bağlı/);
-  assert.match(depot.lines.join(" | "), /Teslim eden yapı: 2/);
-  assert.match(chip(depot, "occupied").tooltip, /işgali altında/, "an occupied depot says why nothing arrives");
+  assert.equal(chip(depot, "logistics").value, "selection.depot.status.linked");
+  assert.match(chip(depot, "logistics").tooltip, /^selection\.depot\.tooltip\.linked\b/);
+  assert.match(depot.lines.join(" | "), /selection\.depot\.linked_producers count=2/);
+  assert.match(chip(depot, "occupied").tooltip, /^selection\.depot\.occupied\.tooltip\b/, "an occupied depot says why nothing arrives");
   assert.equal(chip(depot, "occupied").tone, "bad");
   const unroadedDepot = structure({
     kind: "depot", status: "unlinked-main-network", componentId: 3, linkedProducers: 0, occupied: false,
   }, "Depo");
-  assert.equal(chip(unroadedDepot, "logistics").value, "Ağ dışı");
+  assert.equal(chip(unroadedDepot, "logistics").value, "selection.depot.status.off_network");
   assert.equal(chip(unroadedDepot, "logistics").tone, "bad");
   assert.equal(unroadedDepot.chips?.some((entry) => entry.id === "occupied"), false);
 
@@ -57967,19 +58258,19 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   const outpost = structure({
     kind: "outpost", controlRadius: 16, connectedControlRadius: 20, roadConnected: false,
   }, "Karakol");
-  assert.match(outpost.lines.join(" | "), /Kontrol yarıçapı: 16/);
-  assert.match(chip(outpost, "logistics").tooltip, /Yol bağlantısı yok/);
+  assert.match(outpost.lines.join(" | "), /selection\.outpost\.control_radius radius=16/);
+  assert.match(chip(outpost, "logistics").tooltip, /^selection\.outpost\.tooltip\.no_road\b/);
   // Not "bad": an unroaded Outpost still holds ground, it just holds less. The
   // red is reserved for a link that was there and is gone.
   assert.equal(chip(outpost, "logistics").tone, "warn");
   // Worded to avoid a number + case suffix: Turkish picks the suffix from the
   // spoken number, so "16’dan 20’ye" cannot be templated over live radii.
-  assert.match(outpost.tooltip ?? "", /16 yerine 20 yapar/);
+  assert.match(outpost.tooltip ?? "", /^selection\.outpost\.hint\.connect connected=20 current=16/);
   const roaded = structure({
     kind: "outpost", controlRadius: 16, connectedControlRadius: 20, roadConnected: true,
   }, "Karakol");
-  assert.match(roaded.lines.join(" | "), /Kontrol yarıçapı: 20/, "the connected radius is the live one");
-  assert.equal(chip(roaded, "logistics").value, "Bağlı");
+  assert.match(roaded.lines.join(" | "), /selection\.outpost\.control_radius radius=20/, "the connected radius is the live one");
+  assert.equal(chip(roaded, "logistics").value, "selection.outpost.status.linked");
   assert.equal(chip(roaded, "logistics").tone, "good");
 
   const roster = [
@@ -57988,28 +58279,29 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   ];
   const barracks = structure({
     kind: "military",
+    buildingLabel: "Kışla",
     rallySet: true,
     connected: true,
     upgrading: false,
     roster,
     queue: {
       structureId: 1, queued: 3, capacity: 5,
-      trainingLabel: "Muhafız", trainingRemainingSeconds: 4.2, trainingDurationSeconds: 8,
-      pendingLabels: ["Okçu", "Okçu"],
+      trainingNameKey: "unit.guard.name", trainingRemainingSeconds: 4.2, trainingDurationSeconds: 8,
+      pendingNameKeys: ["unit.archer.name", "unit.archer.name"],
     },
   }, "Kışla");
-  assert.match(barracks.lines.join(" | "), /Kuyruk: 3\/5/);
-  assert.equal(chip(barracks, "rally").value, "Belirlendi");
+  assert.match(barracks.lines.join(" | "), /selection\.center\.queue capacity=5 queued=3/);
+  assert.equal(chip(barracks, "rally").value, "selection.military.rally.set");
   assert.equal(chip(barracks, "rally").tone, "good");
   // What is training and how long it has left is the bar's job now, so the body
   // must not say it a second time directly above the bar — and the pending
   // roll-call is gone with it: "Kuyruk: 3/5" already says how much is waiting.
-  assert.ok(!barracks.lines.join(" | ").includes("Üretiliyor"));
+  assert.ok(!barracks.lines.join(" | ").includes("selection.center.training"));
   assert.ok(!barracks.lines.join(" | ").includes("Sırada"));
   // The queued labels still reach the panel, but only so the ✕ can name what it
   // would take — the newest order, not the one the bar is showing.
-  assert.match(barracks.progress?.cancel?.label ?? "", /Son siparişi iptal et: Okçu/);
-  assert.equal(barracks.progress?.label, "Muhafız üretiliyor");
+  assert.match(barracks.progress?.cancel?.label ?? "", /^selection\.queue\.cancel_action unit=unit\.archer\.name/);
+  assert.equal(barracks.progress?.label, "selection.queue.training unit=unit.guard.name");
   assert.equal(barracks.progress?.remainingSeconds, 4.2);
   assert.ok(Math.abs((barracks.progress?.value ?? 0) - 0.475) < 1e-9, "the fill is elapsed over the order's own duration");
   // A healthy Barracks does not carry lines *or badges* saying nothing is wrong
@@ -58022,22 +58314,23 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
 
   const severed = structure({
     kind: "military",
+    buildingLabel: "Kışla",
     rallySet: false,
     connected: false,
     upgrading: true,
     roster,
     queue: {
       structureId: 1, queued: 0, capacity: 5,
-      trainingLabel: null, trainingRemainingSeconds: null, trainingDurationSeconds: null,
-      pendingLabels: [],
+      trainingNameKey: null, trainingRemainingSeconds: null, trainingDurationSeconds: null,
+      pendingNameKeys: [],
     },
   }, "Kışla");
-  assert.match(severed.lines.join(" | "), /Üretim yok/);
-  assert.equal(chip(severed, "logistics").value, "Kontrol Dışı");
+  assert.match(severed.lines.join(" | "), /selection\.center\.no_production/);
+  assert.equal(chip(severed, "logistics").value, "selection.military.disconnected");
   assert.equal(chip(severed, "logistics").tone, "bad");
-  assert.match(chip(severed, "upgrading").tooltip, /Seviye yükseltmesi sürüyor/);
-  assert.equal(chip(severed, "rally").value, "Yok");
-  assert.match(severed.tooltip ?? "", /alanı geri alın/);
+  assert.match(chip(severed, "upgrading").tooltip, /^selection\.military\.upgrading\.tooltip\b/);
+  assert.equal(chip(severed, "rally").value, "selection.military.rally.none");
+  assert.match(severed.tooltip ?? "", /^selection\.military\.tooltip\.disconnected\b/);
   assert.equal(severed.progress ?? null, null, "an idle Barracks shows no bar, so there is nothing to cancel");
 
   // Every panel this test built, in its most talkative state, against the grid
@@ -58052,7 +58345,7 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
       logistics: "linked",
       livestock: { pennedAnimals: 4, livestockCapacity: 6, shepherds: 1 },
       production: {
-        structureId: 1, structureLabel: "Ağıl", resourceId: "food",
+        structureId: 1, structureNameKey: "building.pasture.name", resourceId: "food",
         assignedWorkers: 1, workingWorkers: 1, workerCapacity: 2,
         perWorkerPerMinute: 6, productionPerMinute: 6,
         localBuffer: 2, localBufferCapacity: 30,
@@ -58081,6 +58374,7 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
         id: 1, label: "Kışla", level: 1, health: 650, maxHealth: 650,
         detail: {
           kind: "military",
+          buildingLabel: "Kışla",
           rallySet: false,
           connected: true,
           upgrading: false,
@@ -58090,8 +58384,8 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
           ],
           queue: {
             structureId: 1, queued: 0, capacity: 5,
-            trainingLabel: null, trainingRemainingSeconds: null, trainingDurationSeconds: null,
-            pendingLabels: [],
+            trainingNameKey: null, trainingRemainingSeconds: null, trainingDurationSeconds: null,
+            pendingNameKeys: [],
           },
           ...detail,
         },
@@ -58106,30 +58400,35 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   const healthy = militaryPanel();
   assert.equal(action(healthy, "train:guard_placeholder").enabled, true);
   assert.equal(action(healthy, "train:guard_placeholder").reason, null, "a legal action carries no excuse");
-  assert.match(action(healthy, "train:guard_placeholder").cost ?? "", /50 Yiyecek · 1 Nüfus/);
+  assert.ok(
+    action(healthy, "train:guard_placeholder").cost?.startsWith(
+      `selection.train.cost cost=${probeCostEntry(50, "food")} population=1`,
+    ),
+    "the train button prices itself from the same cost line the palette prints",
+  );
   const locked = action(healthy, "train:siege_placeholder");
   assert.equal(locked.enabled, false);
-  assert.match(locked.reason ?? "", /Yerleşim Lv2 gerekir/);
+  assert.match(locked.reason ?? "", /^selection\.train\.locked_tier age=common\.age\.settlement\.name level=2 unit=.*/);
   assert.ok(action(healthy, "rally"), "a Barracks can always be given a rally point");
 
   // The refusal order mirrors BarracksProductionSystem.queueUnit: a player who
   // cannot build the unit at all is told *that*, not that their ground was taken.
   const severed = militaryPanel({ connected: false });
-  assert.match(action(severed, "train:guard_placeholder").reason ?? "", /Kontrol Dışı/);
+  assert.match(action(severed, "train:guard_placeholder").reason ?? "", /^selection\.train\.disconnected\b/);
   assert.match(
     action(severed, "train:siege_placeholder").reason ?? "",
-    /Yerleşim Lv2 gerekir/,
+    /^selection\.train\.locked_tier age=common\.age\.settlement\.name level=2/,
     "the tier gate outranks the territory gate, as the production system reports it",
   );
 
   const full = militaryPanel({
     queue: {
       structureId: 1, queued: 5, capacity: 5,
-      trainingLabel: "Muhafız", trainingRemainingSeconds: 2, trainingDurationSeconds: 8,
-      pendingLabels: ["Muhafız", "Muhafız", "Muhafız", "Okçu"],
+      trainingNameKey: "unit.guard.name", trainingRemainingSeconds: 2, trainingDurationSeconds: 8,
+      pendingNameKeys: ["unit.guard.name", "unit.guard.name", "unit.guard.name", "unit.archer.name"],
     },
   });
-  assert.match(action(full, "train:guard_placeholder").reason ?? "", /Kuyruk dolu \(5\/5\)/);
+  assert.match(action(full, "train:guard_placeholder").reason ?? "", /^selection\.train\.queue_full capacity=5 queued=5/);
 
   // The cancel is not a card in the deck — it rides on the training bar, so the
   // deck keeps exactly the verbs it had before: produce, produce, rally.
@@ -58141,7 +58440,7 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   // the one the bar is showing.
   const cancel = full.progress?.cancel ?? assert.fail("no cancel on the training bar");
   assert.equal(cancel.id, "cancel-train");
-  assert.match(cancel.label, /Son siparişi iptal et: Okçu/);
+  assert.match(cancel.label, /^selection\.queue\.cancel_action unit=unit\.archer\.name/);
   assert.equal(cancel.enabled, true, "a paid order is always the player's to take back");
   assert.equal(cancel.cost, null, "a refund quotes no price on a 15px button");
   assert.equal(healthy.progress ?? null, null, "an idle Barracks has no bar, so no cancel");
@@ -58153,8 +58452,8 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
     upgrading: true,
     queue: {
       structureId: 1, queued: 2, capacity: 5,
-      trainingLabel: "Muhafız", trainingRemainingSeconds: 2, trainingDurationSeconds: 8,
-      pendingLabels: ["Muhafız"],
+      trainingNameKey: "unit.guard.name", trainingRemainingSeconds: 2, trainingDurationSeconds: 8,
+      pendingNameKeys: ["unit.guard.name"],
     },
   });
   assert.equal(severedQueue.progress?.cancel?.enabled, true);
@@ -58169,11 +58468,11 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   const single = militaryPanel({
     queue: {
       structureId: 1, queued: 1, capacity: 5,
-      trainingLabel: "Muhafız", trainingRemainingSeconds: 2, trainingDurationSeconds: 8,
-      pendingLabels: [],
+      trainingNameKey: "unit.guard.name", trainingRemainingSeconds: 2, trainingDurationSeconds: 8,
+      pendingNameKeys: [],
     },
   });
-  assert.match(single.progress?.cancel?.label ?? "", /Son siparişi iptal et: Muhafız/);
+  assert.match(single.progress?.cancel?.label ?? "", /^selection\.queue\.cancel_action unit=unit\.guard\.name/);
 
   // The centre: its single progression verb (a level-up, or the Town transition
   // at Settlement Lv3) plus worker training, under the centre-led rules.
@@ -58229,28 +58528,36 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
 
   // Settlement Lv1: the next action is the level-up, and worker training is open.
   const lv1 = centerPanel({});
-  assert.match(lv1.lines.join(" | "), /Kuyruk: 1\/5/);
+  assert.match(lv1.lines.join(" | "), /selection\.center\.queue capacity=5 queued=1/);
   // The training line moved to the bar (asserted below); the body says it again
   // only when an upgrade has taken the bar away from the queue.
-  assert.ok(!lv1.lines.join(" | ").includes("Üretiliyor"));
-  assert.match(lv1.lines.join(" | "), /Kademe: Yerleşim Lv1/);
+  assert.ok(!lv1.lines.join(" | ").includes("selection.center.training "));
+  assert.match(lv1.lines.join(" | "), /selection\.center\.tier tier=selection\.tier\.name age=Yerleşim level=1/);
   assert.equal(action(lv1, "train-worker").enabled, true);
   const levelBtn = action(lv1, "center-level-up");
   assert.equal(levelBtn.enabled, true);
-  assert.match(levelBtn.label, /Yerleşim Lv2/);
-  assert.match(levelBtn.hint ?? "", /Tüm yapılar Yerleşim Lv2 olur/);
+  assert.match(levelBtn.label, /^selection\.progression\.level\.action tier=selection\.tier\.name age=Yerleşim level=2/);
+  assert.match(levelBtn.hint ?? "", /^selection\.progression\.level\.hint\.cost cost=.* tier=selection\.tier\.name age=Yerleşim level=2/);
   // Short of the level-up price the button disables, matching the age button's
   // fade, and its reason names the shortfall rather than hiding it in the hint.
   const lv1Poor = centerPanel({ stock: { food: 0, wood: 0 } });
   const levelBtnPoor = action(lv1Poor, "center-level-up");
   assert.equal(levelBtnPoor.enabled, false, "a level-up the wallet cannot afford is disabled");
-  assert.match(levelBtnPoor.reason ?? "", /Kaynak yetersiz — eksik: 150 Yiyecek · 150 Odun/);
+  assert.ok(
+    levelBtnPoor.reason?.startsWith(
+      `selection.progression.insufficient shortfall=${probeCostLine([150, "food"], [150, "wood"])}`,
+    ),
+    "the refusal names every resource still missing",
+  );
 
   // Settlement Lv3: the action becomes the Town transition, which names its
   // missing buildings in the player's words, not the data model's ids.
   const blocked = centerPanel({ level: 3, nextAction: { kind: "town", targetAge: "town", targetLevel: 1, cost: townCost, durationSeconds: 105, missingBuildingIds: ["farm", "barracks"] } });
   assert.equal(action(blocked, "age-up").enabled, false);
-  assert.equal(action(blocked, "age-up").reason, "Önce şu yapılar gerekir: Tarla, Kışla.");
+  assert.equal(
+    action(blocked, "age-up").reason,
+    "selection.progression.town.missing_buildings buildings=Tarla and Kışla",
+  );
   assert.equal(action(blocked, "train-worker").enabled, true, "a missing building stops the age, not the worker line");
   const unlabelled = centerPanel({ level: 3, nextAction: { kind: "town", targetAge: "town", targetLevel: 1, cost: townCost, durationSeconds: 105, missingBuildingIds: ["mythril_forge"] } });
   assert.match(action(unlabelled, "age-up").reason ?? "", /mythril_forge/);
@@ -58258,19 +58565,31 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   // A ready Town transition quotes its price on the button and enables it.
   const townReady = centerPanel({ level: 3 });
   assert.equal(action(townReady, "age-up").enabled, true);
-  assert.equal(action(townReady, "age-up").cost, "600 Yiyecek · 350 Odun · 150 Taş · 150 Altın");
-  assert.match(action(townReady, "age-up").hint ?? "", /^Maliyet: /);
+  assert.equal(
+    action(townReady, "age-up").cost,
+    probeCostLine([600, "food"], [350, "wood"], [150, "stone"], [150, "gold"]),
+  );
+  assert.match(action(townReady, "age-up").hint ?? "", /^selection\.progression\.hint\.cost cost=/);
   // Short of it, the button disables and its reason names the shortfall, while
   // the hint still quotes the full price — the age and level buttons fade alike.
   const poor = centerPanel({ level: 3, stock: { food: 600, wood: 350, stone: 30, gold: 0 } });
   assert.equal(action(poor, "age-up").enabled, false, "a price the wallet cannot meet disables the age button");
-  assert.match(action(poor, "age-up").reason ?? "", /Kaynak yetersiz — eksik: 120 Taş · 150 Altın/);
-  assert.match(action(poor, "age-up").hint ?? "", /Eksik: 120 Taş · 150 Altın/);
+  assert.ok(
+    action(poor, "age-up").reason?.startsWith(
+      `selection.progression.insufficient shortfall=${probeCostLine([120, "stone"], [150, "gold"])}`,
+    ),
+  );
+  assert.ok(
+    action(poor, "age-up").hint?.startsWith("selection.progression.hint.shortfall cost=")
+      && action(poor, "age-up").hint?.endsWith(
+        `shortfall=${probeCostLine([120, "stone"], [150, "gold"])}`,
+      ),
+  );
 
   // A Town-kind upgrade in flight pauses worker training; a plain level-up does not.
   const townUpgrading = centerPanel({ level: 3, upgrading: true, upgradeKind: "town", nextAction: { kind: "town", targetAge: "town", targetLevel: 1, cost: townCost, durationSeconds: 105, missingBuildingIds: [] } });
   assert.equal(action(townUpgrading, "train-worker").enabled, false, "the Town transition pauses the centre's worker line");
-  assert.match(action(townUpgrading, "age-up").reason ?? "", /sürüyor/);
+  assert.match(action(townUpgrading, "age-up").reason ?? "", /^selection\.progression\.town\.upgrading\b/);
   const levelUpgrading = centerPanel({ upgrading: true, upgradeKind: "level" });
   assert.equal(action(levelUpgrading, "train-worker").enabled, true, "a level-up leaves worker training open");
 
@@ -58278,26 +58597,26 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   // and the deck keeps only the two verbs it had.
   assert.deepEqual(lv1.actions.map((candidate) => candidate.id), ["train-worker", "center-level-up"]);
   assert.equal(lv1.progress?.cancel?.id, "cancel-worker");
-  assert.match(lv1.progress?.cancel?.label ?? "", /Son siparişi iptal et: Test İşçisi/);
-  assert.equal(lv1.progress?.label, "Test İşçisi üretiliyor");
+  assert.match(lv1.progress?.cancel?.label ?? "", /^selection\.queue\.cancel_action unit=unit.worker.name/);
+  assert.equal(lv1.progress?.label, "selection.center.training_progress unit=unit.worker.name");
   assert.ok(Math.abs((lv1.progress?.value ?? 0) - 0.385) < 1e-9);
   const idleCenter = centerPanel({
     queue: { queued: 0, capacity: 5, trainingRemainingSeconds: null, trainingDurationSeconds: null },
   });
   assert.equal(idleCenter.progress ?? null, null, "a centre training nothing shows no bar and no ✕");
-  assert.match(idleCenter.lines.join(" | "), /Üretim yok/);
+  assert.match(idleCenter.lines.join(" | "), /selection\.center\.no_production/);
 
   // One bar, two candidate jobs: an upgrade in flight outranks the worker queue,
   // so the queue's state falls back to prose for as long as it runs.
-  assert.match(townUpgrading.progress?.label ?? "", /Kasaba Çağı/);
+  assert.match(townUpgrading.progress?.label ?? "", /^selection\.progress\.town age=Kasaba/);
   assert.equal(townUpgrading.progress?.cancel ?? null, null, "a kingdom upgrade already spent its cost");
-  assert.match(townUpgrading.lines.join(" | "), /Üretiliyor: Test İşçisi — 13 sn/);
-  assert.match(levelUpgrading.progress?.label ?? "", /yükseltmesi/);
+  assert.match(townUpgrading.lines.join(" | "), /selection\.center\.training seconds=13 unit=unit.worker.name/);
+  assert.match(levelUpgrading.progress?.label ?? "", /^selection\.progress\.tier\b/);
 
   // Town Lv3 is the top of the progression: the action is a disabled note.
   const maxed = centerPanel({ age: "town", level: 3, nextAction: null });
   assert.equal(action(maxed, "center-level-up").enabled, false);
-  assert.match(action(maxed, "center-level-up").reason ?? "", /en yüksek kademe/);
+  assert.match(action(maxed, "center-level-up").reason ?? "", /^selection\.progression\.max\.reason\b/);
 });
 
 check("Faz 9 §51: a price the wallet cannot meet is named, not just refused", () => {
@@ -58305,14 +58624,14 @@ check("Faz 9 §51: a price the wallet cannot meet is named, not just refused", (
   // amount still owed rather than the amount the price asks for.
   assert.equal(
     formatCostShortfall({ food: 100, wood: 50, stone: 40 }, { food: 100, wood: 10, stone: 0 }),
-    "40 Odun · 40 Taş",
+    probeCostLine([40, "wood"], [40, "stone"]),
   );
   assert.equal(formatCostShortfall({ wood: 50 }, { wood: 50 }), null, "a covered price is not a shortfall");
   assert.equal(formatCostShortfall({}, {}), null);
-  assert.equal(formatCostShortfall({ wood: 50 }, {}), "50 Odun", "an absent resource is wholly missing");
+  assert.equal(formatCostShortfall({ wood: 50 }, {}), probeCostEntry(50, "wood"), "an absent resource is wholly missing");
   // Floored exactly as the HUD prints the stock: a player shown "79 Odun" is one
   // short of 80, and must not be told they are zero short because the float is 79.6.
-  assert.equal(formatCostShortfall({ wood: 80 }, { wood: 79.6 }), "1 Odun");
+  assert.equal(formatCostShortfall({ wood: 80 }, { wood: 79.6 }), probeCostEntry(1, "wood"));
   // canAffordCost and this must never disagree — they are one judgement, and the
   // whole reason both live in resourceLabels.ts is so they cannot drift apart.
   for (const stock of [{ wood: 79.6 }, { wood: 80 }, {}, { wood: 200 }]) {
@@ -58751,7 +59070,8 @@ check("Faz S2: the trade site validator refuses data that could never make sense
   refuse({ carryCapacity: 0 }, "a caravan that carries nothing never delivers a lot");
   refuse({ caravanCount: 0 }, "a lane with no animals on it is not a supply line");
   refuse({ caravanCount: 2.5 }, "half a donkey is not a caravan");
-  refuse({ label: "" }, "the table entry has to name itself");
+  refuse({ nameKey: "" }, "the table entry has to name itself");
+  refuse({ nameKey: "Nehir Limanı" }, "a display string is not a localization key");
   refuse({ resourceId: "gold" }, "gold is the numeraire, so no buy button exists for a supply chain to feed");
   refuse({ dock: { width: 0, depth: 8 } }, "a dock with no extent is a landing no road can touch");
   refuse(
@@ -59585,7 +59905,7 @@ function supplySnapshotOf(overrides: Partial<MarketSupplySnapshot> = {}): Market
   return {
     siteId: "player_river_port",
     siteType: "river_port",
-    label: "Nehir Limanı",
+    nameKey: "building.trade_site.river_port.name",
     resourceId: "food",
     x: -1,
     z: 20,
@@ -59638,7 +59958,7 @@ check("Faz S5: a stopped supply names which of the four things to do about it", 
   // has it" is a lie that would send the player to war over a spare port.
   const pair = [
     supplySnapshotOf({ siteId: "player_port", owner: null, status: "unlinked-road", roadCell: null }),
-    supplySnapshotOf({ siteId: "enemy_port", label: "Nehir Limanı (Doğu)", owner: "enemy", x: 1, z: -20 }),
+    supplySnapshotOf({ siteId: "enemy_port", nameKey: "building.trade_site.river_port.name", owner: "enemy", x: 1, z: -20 }),
   ];
   assert.equal(marketSupplyLines(pair, "player", ["food"])[0]?.state, "unclaimed");
   assert.equal(marketSupplyLines(pair, "player", ["food"])[0]?.siteId, "player_port", "and it names the free one");
@@ -59694,7 +60014,7 @@ check("Faz S5: a stopped supply names which of the four things to do about it", 
 });
 
 check("Faz S5: the feed says a lane linked, stopped, or changed hands — and nothing else", () => {
-  const site = { siteId: "player_river_port", label: "Nehir Limanı", resourceId: "food" };
+  const site = { siteId: "player_river_port", nameKey: "building.trade_site.river_port.name", resourceId: "food" };
   const notify = (state: MarketSupplyState, previous: MarketSupplyState | undefined, everSupplied: boolean) =>
     supplyNotice(site, state, previous, everSupplied);
 
@@ -59703,29 +60023,38 @@ check("Faz S5: the feed says a lane linked, stopped, or changed hands — and no
   // already-linked, the frame it starts flowing is worth saying out loud.
   const linked = notify("supplying", "unclaimed", false);
   assert.equal(linked.post?.kind, "supply-linked");
-  assert.match(linked.post?.text ?? "", /Nehir Limanı bağlandı/);
-  assert.match(linked.post?.text ?? "", /Yiyecek/, "and it names what now flows");
+  assert.match(linked.post?.text ?? "", /^notification\.supply\.linked /);
+  assert.ok(
+    linked.post?.text.includes("site=building.trade_site.river_port.name"),
+    "the line names the site through its own key",
+  );
+  assert.ok(
+    linked.post?.text.includes(probeResourceName("food")),
+    "and it names what now flows",
+  );
   assert.equal(linked.clearCut, true, "a link retires any live cut warning for the same site");
   assert.equal(notify("supplying", "supplying", true).post, null, "a steady lane is not news every frame");
 
   // Three different arrivals, three different sentences — the wording is the
   // only thing carrying "you took this from somebody" versus "your road is back".
-  assert.match(notify("supplying", "cut", true).post?.text ?? "", /yeniden bağlandı/);
-  assert.match(notify("supplying", "rival", true).post?.text ?? "", /ele geçirildi/);
+  // Three different arrivals, three different keys: the *wording* is the locale
+  // files' business, but which of the three a state change earns is this rule's.
+  assert.match(notify("supplying", "cut", true).post?.text ?? "", /^notification\.supply\.reconnected /);
+  assert.match(notify("supplying", "rival", true).post?.text ?? "", /^notification\.supply\.captured /);
 
   // §2 item 7 made audible: the severance itself is Faz S3's, but nothing said
   // so — a Market looks fine while its shelf quietly stops moving and the cell
   // that broke is somewhere else on the map, possibly in fog.
   const cut = notify("cut", "supplying", true);
   assert.equal(cut.post?.kind, "supply-cut");
-  assert.match(cut.post?.text ?? "", /yolu kesildi/);
+  assert.match(cut.post?.text ?? "", /^notification\.supply\.cut /);
   assert.equal(cut.clearCut, false);
 
   // KARAR 4-A's hand-over, once per change of hands rather than while it lasts:
   // the road is what holds a site, so this is an event with a date.
   const lost = notify("rival", "cut", true);
   assert.equal(lost.post?.kind, "supply-lost");
-  assert.match(lost.post?.text ?? "", /rakibin eline geçti/);
+  assert.match(lost.post?.text ?? "", /^notification\.supply\.lost /);
   assert.equal(notify("rival", "rival", true).post, null, "and it is not re-raised while it holds");
 
   // The gate that keeps the feed readable *and* keeps it inside what the player
@@ -59787,30 +60116,30 @@ check("Faz S5: the Market panel turns a stopped lane into the repair that fixes 
     resourceId: "wood",
     state,
     siteId: state === "absent" ? null : "player_timber_camp",
-    siteLabel: state === "absent" ? null : "Bağımsız Oduncu Kampı",
+    siteNameKey: state === "absent" ? null : "building.trade_site.timber_camp.name",
   });
 
   // Every state's sentence names a *different* action. This is the assertion
   // that the split earns its keep: if two of these read the same, one of the
   // states is not worth carrying.
-  assert.match(reason([line("cut")]), /Bağımsız Oduncu Kampı ile bağlantı koptu: yolu onarın/);
-  assert.match(reason([line("unclaimed")]), /Bağımsız Oduncu Kampı sahipsiz: buraya yol çekin/);
-  assert.match(reason([line("rival")]), /rakibin elinde/);
-  assert.match(reason([line("absent")]), /Bu haritada bu kaynağın arz noktası yok/);
+  assert.match(reason([line("cut")]), /advice=selection\.supply\.cut site=building\.trade_site\.timber_camp\.name/);
+  assert.match(reason([line("unclaimed")]), /advice=selection\.supply\.unclaimed site=building\.trade_site\.timber_camp\.name/);
+  assert.match(reason([line("rival")]), /advice=selection\.supply\.rival\b/);
+  assert.match(reason([line("absent")]), /advice=selection\.supply\.absent\b/);
   // The one that was actively wrong before: a lane that is running and has simply
   // not made a lot yet was told to go and draw a road it already has.
-  assert.match(reason([line("supplying")]), /yük yolda, stok doluyor/);
-  assert.doesNotMatch(reason([line("supplying")]), /yol çekin/);
+  assert.match(reason([line("supplying")]), /advice=selection\.supply\.supplying\b/);
+  assert.doesNotMatch(reason([line("supplying")]), /selection\.supply\.(unclaimed|generic)/);
   // Every branch still leads with the shortfall — how far off the lot is and why
   // are two different facts, and the player needs both.
   for (const state of ["supplying", "cut", "unclaimed", "rival", "absent"] as const) {
-    assert.match(reason([line(state)]), /^Pazarda stok yok: 0\/100\./);
+    assert.match(reason([line(state)]), /^selection\.market\.refused\.out_of_stock advice=.*held=0 lot=100/);
   }
 
   // Faz S1's fallback survives: a project with no supply chain wired keeps the
   // generic advice, because that is all that can honestly be said without
   // knowing where the goods come from.
-  assert.match(reason([]), /Bir arz noktasına yol çekin/);
+  assert.match(reason([]), /advice=selection\.supply\.generic\b/);
 
   // A full shelf on a dead lane is the one state the number alone reads
   // backwards — the player sees 240, plans around it, and does not know this is
@@ -59825,7 +60154,7 @@ check("Faz S5: the Market panel turns a stopped lane into the repair that fixes 
     true,
     "goods on the shelf can still be bought after the lane behind them died",
   );
-  assert.match(shelf([line("cut")], 240).tooltip, /yolu onarın/, "and the badge carries the same remedy");
+  assert.match(shelf([line("cut")], 240).tooltip, /selection\.supply\.cut\b/, "and the badge carries the same remedy");
 });
 
 check("Faz S5: a trade site is a static world object, so its art rides the Level's fog mask", () => {
@@ -59889,11 +60218,11 @@ check("Faz S6: the trade site panel answers whose it is, what is in it, and what
   // §7 Faz S6's three questions, in the order a player asks them.
   const held = panel();
   assert.equal(held.title, "Nehir Limanı");
-  assert.equal(chip(held, "holder")?.value, "Sizin", "whose it is");
-  assert.match(held.lines.join(" | "), /Tampon: 96 \/ 120/, "what is in it");
-  assert.match(held.lines.join(" | "), /Yolda: 2 \/ 4 eşek/, "and what is moving");
+  assert.equal(chip(held, "holder")?.value, "selection.trade_site.holder.self", "whose it is");
+  assert.match(held.lines.join(" | "), /selection\.trade_site\.buffer capacity=120 held=96/, "what is in it");
+  assert.match(held.lines.join(" | "), /selection\.trade_site\.caravans_on_road onRoad=2 total=4/, "and what is moving");
   // The authored facts a site carries whatever its state: which resource, how fast.
-  assert.match(held.lines.join(" | "), /Yiyecek arz noktası · 60\/dk/);
+  assert.match(held.lines.join(" | "), /selection\.trade_site\.production rate=60 resource=common\.resource\.food\.name/);
 
   // KARAR 3-A in the shape of the panel: a site is never built, repaired,
   // demolished or crewed, so it offers **nothing**. The hint has to carry that,
@@ -59901,15 +60230,14 @@ check("Faz S6: the trade site panel answers whose it is, what is in it, and what
   // the rule — and the one decision it does involve is made somewhere else, with
   // the road tool.
   assert.deepEqual(held.actions, [], "a trade site is inspected, never commanded");
-  assert.match(held.hint, /inşa edilmez, yıkılmaz, işçi istemez/);
-  assert.match(held.hint, /yol/, "and it says where the decision actually is");
+  assert.match(held.hint, /^selection\.trade_site\.hint\b/);
   assert.equal(held.health, null, "a site cannot be hurt, so it carries no health bar");
 
   // Four states, four different sentences — the S5 reading surfacing on the
   // panel that names the thing itself. Each names its own remedy.
-  assert.match(panel({ state: "cut" }).summary, /Yolu onarın/);
-  assert.match(panel({ state: "unclaimed", holder: null }).summary, /ilk yolu çeken/);
-  assert.match(panel({ state: "rival", holder: "rival" }).summary, /kendi yolunuzu çekin/);
+  assert.match(panel({ state: "cut" }).summary, /^selection\.trade_site\.state\.cut\b/);
+  assert.match(panel({ state: "unclaimed", holder: null }).summary, /^selection\.trade_site\.state\.unclaimed\b/);
+  assert.match(panel({ state: "rival", holder: "rival" }).summary, /^selection\.trade_site\.state\.rival\b/);
   assert.notEqual(panel({ state: "cut" }).summary, panel({ state: "rival", holder: "rival" }).summary);
 
   // The fog line, one step in from the pick proxy. Standing on explored ground is
@@ -59918,21 +60246,21 @@ check("Faz S6: the trade site panel answers whose it is, what is in it, and what
   // run it. Null rather than zero, for the reason the Market's stock record is
   // keyed rather than defaulted: "I cannot see in" must not render as "it is empty".
   const rival = panel({ holder: "rival", state: "rival", buffered: null, caravansOnRoad: null });
-  assert.equal(chip(rival, "holder")?.value, "Rakipte");
+  assert.equal(chip(rival, "holder")?.value, "selection.trade_site.holder.rival");
   assert.equal(chip(rival, "holder")?.tone, "bad");
-  assert.doesNotMatch(rival.lines.join(" | "), /Tampon: \d+ \//, "a rival's buffer is not readable");
-  assert.doesNotMatch(rival.lines.join(" | "), /Yolda:/, "nor is its fleet");
-  assert.match(rival.lines.join(" | "), /yalnızca sahibine görünür/, "and the panel says so rather than showing 0");
+  assert.doesNotMatch(rival.lines.join(" | "), /selection\.trade_site\.buffer /, "a rival's buffer is not readable");
+  assert.doesNotMatch(rival.lines.join(" | "), /selection\.trade_site\.caravans_on_road/, "nor is its fleet");
+  assert.match(rival.lines.join(" | "), /selection\.trade_site\.buffer_hidden\b/, "and the panel says so rather than showing 0");
   assert.equal(chip(rival, "buffer-full"), undefined, "and no badge reports the inside of it either");
   // Unheld reads as its own thing, not as the enemy's.
-  assert.equal(chip(panel({ holder: null, state: "unclaimed" }), "holder")?.value, "Sahipsiz");
+  assert.equal(chip(panel({ holder: null, state: "unclaimed" }), "holder")?.value, "selection.trade_site.holder.none");
   assert.equal(chip(panel({ holder: null, state: "unclaimed" }), "holder")?.tone, "neutral");
 
   // A full buffer is the throughput signal (plan §3.8): the fleet cannot keep up,
   // and production has stopped. Both remedies are named because both are real.
   const stalled = panel({ buffered: 120 });
   assert.equal(chip(stalled, "buffer-full")?.tone, "warn");
-  assert.match(chip(stalled, "buffer-full")?.tooltip ?? "", /Filoyu büyütün ya da Pazarı yaklaştırın/);
+  assert.match(chip(stalled, "buffer-full")?.tooltip ?? "", /^selection\.trade_site\.buffer_full\.tooltip\b/);
   assert.equal(chip(panel({ buffered: 119 }), "buffer-full"), undefined, "a buffer under its cap is not a warning");
 
   // The portrait answers "which of the three is this?", which is the question a
@@ -60319,21 +60647,21 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   // Both rates and the index now travel with the card that acts on them rather
   // than in a prose row above it, but the pairing itself is the invariant: a
   // price without its index cannot answer "sell now or wait?".
-  assert.match(action(healthy, "trade-buy:wood").hint ?? "", /Odun endeksi ×1\.20/);
-  assert.match(action(healthy, "trade-buy:wood").hint ?? "", /Alım fiyatı: 138 Altın/);
-  assert.match(action(healthy, "trade-sell:wood").hint ?? "", /Satım fiyatı: 102 Altın/);
-  assert.match(action(healthy, "trade-sell:stone").hint ?? "", /Taş endeksi ×0\.30/);
-  assert.match(healthy.lines.join(" | "), /Lot: 100 birim · komisyon %15/);
+  assert.match(action(healthy, "trade-buy:wood").hint ?? "", /index=1\.2 .*resource=common\.resource\.wood\.name/);
+  assert.match(action(healthy, "trade-buy:wood").hint ?? "", /^selection\.market\.buy_hint gold=common\.resource\.gold\.name index=1\.2 price=138/);
+  assert.match(action(healthy, "trade-sell:wood").hint ?? "", /^selection\.market\.sell_hint gold=common\.resource\.gold\.name index=1\.2 price=102/);
+  assert.match(action(healthy, "trade-sell:stone").hint ?? "", /index=0\.3 .*resource=common\.resource\.stone\.name/);
+  assert.match(healthy.lines.join(" | "), /selection\.market\.lot_line commission=0\.15 lot=100/);
 
   // Two buttons per tradable resource, signed against the player's gold so the
   // directions cannot be confused at a glance — plus the whole-building demolish
   // verb every non-centre structure now carries, appended last.
   assert.equal(healthy.actions.length, 5);
   assert.equal(healthy.actions.at(-1)!.id, "demolish", "razing the Market sits last, after its trade verbs");
-  assert.equal(action(healthy, "trade-buy:wood").label, "100 Odun Al");
-  assert.equal(action(healthy, "trade-buy:wood").cost, "-138 Altın");
-  assert.equal(action(healthy, "trade-sell:wood").label, "100 Odun Sat");
-  assert.equal(action(healthy, "trade-sell:wood").cost, "+102 Altın");
+  assert.equal(action(healthy, "trade-buy:wood").label, "selection.market.buy_action lot=100 resource=common.resource.wood.name");
+  assert.equal(action(healthy, "trade-buy:wood").cost, "selection.market.buy_cost gold=common.resource.gold.name price=138");
+  assert.equal(action(healthy, "trade-sell:wood").label, "selection.market.sell_action lot=100 resource=common.resource.wood.name");
+  assert.equal(action(healthy, "trade-sell:wood").cost, "selection.market.sell_cost gold=common.resource.gold.name price=102");
   assert.equal(action(healthy, "trade-buy:wood").reason, null, "a legal action carries no excuse");
   // Affordability is deliberately not a panel gate (the click answers it), for
   // the same reason the age button leaves it: stock moves every tick.
@@ -60343,14 +60671,14 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   const severed = marketPanel({ connected: false });
   assert.match(
     severed.chips?.find((entry) => entry.id === "logistics")?.tooltip ?? "",
-    /Kontrol Dışı — bu Pazar ticaret yapamaz/,
+    /^selection\.market\.disconnected\.tooltip\b/,
   );
   assert.equal(action(severed, "trade-sell:wood").enabled, false);
-  assert.match(action(severed, "trade-sell:wood").reason ?? "", /Kontrol Dışı/);
-  assert.match(severed.tooltip ?? "", /alanı geri alın/);
+  assert.match(action(severed, "trade-sell:wood").reason ?? "", /^selection\.market\.refused\.disconnected\b/);
+  assert.match(severed.tooltip ?? "", /^selection\.market\.tooltip\.disconnected\b/);
   // The commission has to be explained somewhere, or losing money on an instant
   // round trip reads as a bug rather than the rule that stops infinite gold.
-  assert.match(healthy.tooltip ?? "", /komisyon/i);
+  assert.match(healthy.tooltip ?? "", /^selection\.market\.tooltip\b/);
 
   // Faz S1: with nothing stocked the panel is bit for bit the old one — no stock
   // badge, no dark button. This is the assertion that would catch the supply rule
@@ -60377,11 +60705,11 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   // a lot can be bought is a yes/no the player scans, which is a chip's job.
   const shelf = (content: SelectionPanelContent, resourceId: string): SelectionChip =>
     content.chips?.find((entry) => entry.id === `stock:${resourceId}`) ?? assert.fail(`no ${resourceId} shelf`);
-  assert.equal(shelf(empty, "wood").value, "Odun 0/100", "the shelf is on the panel");
+  assert.equal(shelf(empty, "wood").value, "selection.market.stock_chip held=0 lot=100 resource=common.resource.wood.name", "the shelf is on the panel");
   assert.equal(shelf(empty, "wood").tone, "bad");
-  assert.match(shelf(empty, "wood").tooltip, /0\/100/, "and it names how short it is");
+  assert.match(shelf(empty, "wood").tooltip, /^selection\.market\.stock\.short .*held=0 lot=100/, "and it names how short it is");
   assert.equal(action(empty, "trade-buy:wood").enabled, false, "an empty shelf darkens its own buy button");
-  assert.match(action(empty, "trade-buy:wood").reason ?? "", /Pazarda stok yok: 0\/100/);
+  assert.match(action(empty, "trade-buy:wood").reason ?? "", /^selection\.market\.refused\.out_of_stock advice=.*held=0 lot=100/);
   // KARAR 7-A: selling is never gated by stock, and the ungated resource is
   // untouched — one dark button must not darken the row it sits in.
   assert.equal(action(empty, "trade-sell:wood").enabled, true, "selling wood needs no market stock");
@@ -60389,7 +60717,7 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
 
   const partial = marketPanel({ trade: stockedTrade(99) });
   assert.equal(action(partial, "trade-buy:wood").enabled, false, "part of a lot is not a lot");
-  assert.match(action(partial, "trade-buy:wood").reason ?? "", /99\/100/, "and the panel names how short it is");
+  assert.match(action(partial, "trade-buy:wood").reason ?? "", /held=99 lot=100/, "and the panel names how short it is");
   const full = marketPanel({ trade: stockedTrade(100) });
   assert.equal(action(full, "trade-buy:wood").enabled, true, "one full lot opens the button");
   assert.equal(action(full, "trade-buy:wood").reason, null);
@@ -60401,9 +60729,9 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   // "Odun 240" leaves the player doing the division that decides whether to
   // press, and doing it again after every purchase.
   const stocked = marketPanel({ trade: stockedTrade(240) });
-  assert.equal(shelf(stocked, "wood").value, "Odun 240/100", "a full shelf still names the lot");
-  assert.match(shelf(stocked, "wood").tooltip, /2 lot/, "and how many are in it");
-  assert.match(shelf(stocked, "wood").tooltip, /2 × 100/, "spelled out against the lot size");
+  assert.equal(shelf(stocked, "wood").value, "selection.market.stock_chip held=240 lot=100 resource=common.resource.wood.name", "a full shelf still names the lot");
+  assert.match(shelf(stocked, "wood").tooltip, /lots=2/, "and how many are in it");
+  assert.match(shelf(stocked, "wood").tooltip, /lot=100 lots=2/, "spelled out against the lot size");
   // Derived from the lot size rather than pinned, so retuning `lotSize` cannot
   // make the badge disagree with the button beside it.
   const lotSize = shippedBuildingBalance()["market"]?.market?.lotSize
@@ -60411,8 +60739,11 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   const shipped = marketPanel({
     trade: { lotSize, commission: 0.15, prices: [], stock: { wood: lotSize * 3 } },
   });
-  assert.equal(shelf(shipped, "wood").value, `Odun ${lotSize * 3}/${lotSize}`);
-  assert.match(shelf(shipped, "wood").tooltip, /3 lot/);
+  assert.equal(
+    shelf(shipped, "wood").value,
+    `selection.market.stock_chip held=${lotSize * 3} lot=${lotSize} resource=common.resource.wood.name`,
+  );
+  assert.match(shelf(shipped, "wood").tooltip, /lots=3/);
 });
 
 check("§69: the AI stops deciding once the match is over", () => {

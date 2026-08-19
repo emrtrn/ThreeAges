@@ -4,7 +4,11 @@
   "common.resource.stone.name": "Stone",
   "common.resource.gold.name": "Gold",
   "common.cost.free": "Free",
+  "common.cost.entry": "{amount} {resource}",
   "common.age.settlement.name": "Settlement",
   "common.age.town.name": "Town",
-  "common.worker.count": "{count, plural, one {# worker} other {# workers}}"
+  "common.worker.count": "{count, plural, one {# worker} other {# workers}}",
+  "common.tier.name": "{age} Lv{level}",
+  "common.tier.unknown": "the required tier",
+  "common.building.military": "a military building"
 }

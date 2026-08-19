@@ -19,6 +19,7 @@
  * level reset, KR-03) before the player owns one to click, which no building's
  * own panel can do.
  */
+import { t } from "../../localization/LocalizationService";
 import type { BuildingBalance, StartingResources } from "../../data/gameDataTypes";
 import { buildingCostForAge } from "../economy/buildingCost";
 import { buildingUnlocked, type ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
@@ -60,12 +61,13 @@ import {
  * where a market stands anyway.
  */
 interface BuildGroup {
-  readonly title: string;
+  /** Localization key; resolved at render time, never at module load. */
+  readonly titleKey: string;
   readonly buildingIds: readonly string[];
 }
 
 interface BuildCategory {
-  readonly title: string;
+  readonly titleKey: string;
   /** Flat categories. Mutually exclusive with {@link BuildCategory.groups}. */
   readonly buildingIds?: readonly string[];
   /** Sub-headed categories: the ids live in the groups, in display order. */
@@ -75,19 +77,19 @@ interface BuildCategory {
 
 const BUILD_CATEGORIES: readonly BuildCategory[] = [
   {
-    title: "Ekonomi",
+    titleKey: "building.category.economy",
     groups: [
-      { title: "Gıda", buildingIds: ["farm", "windmill", "hunting_camp", "pasture"] },
-      { title: "Ham Madde", buildingIds: ["lumber_camp", "quarry", "gold_mine"] },
+      { titleKey: "building.group.food", buildingIds: ["farm", "windmill", "hunting_camp", "pasture"] },
+      { titleKey: "building.group.raw_materials", buildingIds: ["lumber_camp", "quarry", "gold_mine"] },
     ],
   },
-  { title: "Lojistik", buildingIds: ["depot", "outpost"], includesRoad: true },
+  { titleKey: "building.category.logistics", buildingIds: ["depot", "outpost"], includesRoad: true },
   // The Tapınak files under "Yerleşim" rather than "Askerî": it trains nothing
   // and fires nothing — what it does is make a place worth standing in, which is
   // the same claim the House makes about ground the player has taken, and the
   // same one the Pazar makes.
-  { title: "Yerleşim", buildingIds: ["house", "temple", "market"] },
-  { title: "Askerî", buildingIds: ["barracks", "archery_range"] },
+  { titleKey: "building.category.settlement", buildingIds: ["house", "temple", "market"] },
+  { titleKey: "building.category.military", buildingIds: ["barracks", "archery_range"] },
 ];
 
 /**
@@ -96,7 +98,7 @@ const BUILD_CATEGORIES: readonly BuildCategory[] = [
  * A flat category is the degenerate case: one untitled group.
  */
 function categoryGroups(category: BuildCategory): readonly BuildGroup[] {
-  return category.groups ?? [{ title: "", buildingIds: category.buildingIds ?? [] }];
+  return category.groups ?? [{ titleKey: "", buildingIds: category.buildingIds ?? [] }];
 }
 
 /**
@@ -108,19 +110,41 @@ function categoryGroups(category: BuildCategory): readonly BuildGroup[] {
  * arbitrary. The age names are the two the data ships; a fork relabelling them
  * changes `ages.json`, which is the same string this reads through its caller.
  */
-export function buildingUnlockRequirement(stats: {
-  readonly requiredAge?: BuildingBalance[string]["requiredAge"] | undefined;
-  readonly requiredSettlementLevel?: number | undefined;
-}): string {
-  const ageLabel = stats.requiredAge === "town" ? "Kasaba" : "Yerleşim";
+/**
+ * The refusal a placement reason resolves to — Plan §17.3 wants a *reason*, not
+ * one "you cannot build here", and this table is what keeps the nine apart.
+ * Keyed by the gameplay id, which never translates (§3.4).
+ */
+const PLACEMENT_ERROR_KEY: Readonly<Record<string, string>> = {
+  "outside-map": "placement.error.outside_map",
+  "outside-control": "placement.error.outside_control",
+  "insufficient-resources": "placement.error.insufficient_resources",
+  "missing-forest": "placement.error.missing_forest",
+  "missing-game": "placement.error.missing_game",
+  "missing-livestock": "placement.error.missing_livestock",
+  "missing-adjacent-building": "placement.error.missing_adjacent_building",
+  "enemy-occupied": "placement.error.enemy_occupied",
+  "missing-resource-node": "placement.error.missing_resource_node",
+};
+
+export function buildingUnlockRequirement(
+  stats: {
+    readonly requiredAge?: BuildingBalance[string]["requiredAge"] | undefined;
+    readonly requiredSettlementLevel?: number | undefined;
+  },
+  /** Naming the building makes it a whole sentence rather than a fragment a
+   *  caller has to glue its own subject onto (Plan §10). */
+  building?: string,
+): string {
+  const age = t(`common.age.${stats.requiredAge === "town" ? "town" : "settlement"}.name`);
   const level = stats.requiredSettlementLevel ?? 1;
-  // "Lv2 ile" rather than "Lv2'de": the locative harmonises with the level
-  // number, so `'de` is right for Lv2 (ikide) and wrong for Lv3 (üçte → `'te`).
-  // No building requires Lv3 today, which is exactly why the bug would have
-  // arrived with a tuning pass rather than with a code change.
-  return level > 1
-    ? `${ageLabel} Lv${level} ile açılır.`
-    : `${ageLabel} Çağında açılır.`;
+  // Turkish says "Lv2 ile", never "Lv2'de": the locative harmonises with the
+  // level *number*, so one suffix cannot be right for every tier. The
+  // translation carries the whole sentence, and the number stays a parameter.
+  const suffix = level > 1 ? "tier" : "age";
+  return building === undefined
+    ? t(`building.unlock.${suffix}`, { age, level })
+    : t(`building.locked.${suffix}`, { building, age, level });
 }
 
 export class RtsBuildPalette {
@@ -149,10 +173,15 @@ export class RtsBuildPalette {
   private readonly actionMessage = document.createElement("p");
   private readonly tabs = new Map<string, HTMLButtonElement>();
   private readonly categoryPanels = new Map<string, HTMLElement>();
-  private activeCategory = "Ekonomi";
+  /** Category identity is a localisation key, never its current display text. */
+  private activeCategory = "building.category.economy";
   /** The initial category settles instantly; only player-driven changes resize. */
   private categoryAnimationReady = false;
   private categoryAnimationToken = 0;
+  /** The palette waits long enough to avoid collapsing during a passing mouse move. */
+  private static readonly COMPACT_DELAY_MS = 900;
+  private compactTimer: number | undefined;
+  private pointerIsInside = false;
   /**
    * Placement is *modal*: one pick arms the cursor until a right-click or a
    * different pick disarms it, and the road tool stays armed across a whole
@@ -178,9 +207,9 @@ export class RtsBuildPalette {
     private readonly onChooseRoadErase: () => void = () => {},
   ) {
     this.root.className = "rts-build-palette ui-interactive";
-    this.root.setAttribute("aria-label", "Yapı yerleştirme");
+    this.root.setAttribute("aria-label", t("building.palette.aria"));
     const title = document.createElement("strong");
-    title.textContent = "Yapı Kur";
+    title.textContent = t("building.palette.title");
     this.root.appendChild(title);
     // Anything the categories do not name still has to reach the player: a new
     // building added to the data must not vanish from the palette because nobody
@@ -191,7 +220,7 @@ export class RtsBuildPalette {
     const uncategorised = Object.keys(buildings)
       .filter((id) => id !== "command_center" && !categorised.has(id));
     const categories: readonly BuildCategory[] = uncategorised.length > 0
-      ? [...BUILD_CATEGORIES, { title: "Diğer", buildingIds: uncategorised }]
+      ? [...BUILD_CATEGORIES, { titleKey: "building.category.other", buildingIds: uncategorised }]
       : BUILD_CATEGORIES;
     const tabRow = document.createElement("div");
     tabRow.className = "rts-build-tabs";
@@ -210,17 +239,20 @@ export class RtsBuildPalette {
       const tab = document.createElement("button");
       tab.type = "button";
       tab.className = "rts-build-tab";
-      tab.textContent = category.title;
-      tab.addEventListener("click", () => this.selectCategory(category.title));
-      this.tabs.set(category.title, tab);
+      // Text from the key, identity *as* the key: the tab map and the panel
+      // attribute must not change meaning when the language does.
+      tab.textContent = t(category.titleKey);
+      tab.dataset.rtsText = category.titleKey;
+      tab.addEventListener("click", () => this.selectCategory(category.titleKey));
+      this.tabs.set(category.titleKey, tab);
       tabRow.appendChild(tab);
       const panel = document.createElement("div");
       panel.className = "rts-build-choices rts-build-category-panel";
-      panel.dataset.rtsBuildCategory = category.title;
+      panel.dataset.rtsBuildCategory = category.titleKey;
       // Sub-headed categories nest one grid per group; flat ones keep the cards
       // as the panel's own children, so the card rules address them the same way
       // either side of the split.
-      const grouped = groups.some((group) => group.title !== "");
+      const grouped = groups.some((group) => group.titleKey !== "");
       panel.classList.toggle("is-grouped", grouped);
       let lastGrid = panel;
       for (const group of groups) {
@@ -230,7 +262,8 @@ export class RtsBuildPalette {
           section.className = "rts-build-group";
           const heading = document.createElement("p");
           heading.className = "rts-build-group-title";
-          heading.textContent = group.title;
+          heading.textContent = t(group.titleKey);
+          heading.dataset.rtsText = group.titleKey;
           const cards = document.createElement("div");
           cards.className = "rts-build-group-choices";
           section.append(heading, cards);
@@ -247,7 +280,7 @@ export class RtsBuildPalette {
         // across a stone or gold deposit locked that deposit out of the match.
         lastGrid.appendChild(this.createRoadChoice("erase"));
       }
-      this.categoryPanels.set(category.title, panel);
+      this.categoryPanels.set(category.titleKey, panel);
       grid.appendChild(panel);
     }
     this.actionMessage.className = "rts-build-action-message";
@@ -258,6 +291,10 @@ export class RtsBuildPalette {
     this.roadHint.hidden = true;
     this.root.appendChild(this.roadHint);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
+    this.root.addEventListener("pointerenter", this.onPointerEnter);
+    this.root.addEventListener("pointerleave", this.onPointerLeave);
+    this.root.addEventListener("focusin", this.onFocusIn);
+    this.root.addEventListener("focusout", this.onFocusOut);
     this.setState({ activeBuildingId: null, result: null });
     this.setTierState({ age: "settlement", level: 1 });
     this.selectCategory(this.activeCategory);
@@ -271,7 +308,7 @@ export class RtsBuildPalette {
     button.dataset.rtsBuilding = id;
     // Keep the action's accessible name concise while the visual label shows
     // the explicit resource cost needed for faster purchase decisions.
-    button.setAttribute("aria-label", stats.label);
+    button.setAttribute("aria-label", t(stats.nameKey));
     if (stats.icon) {
       const icon = document.createElement("img");
       icon.className = "rts-build-choice-icon";
@@ -282,7 +319,7 @@ export class RtsBuildPalette {
     }
     const label = document.createElement("span");
     label.className = "rts-build-choice-label";
-    label.textContent = stats.label;
+    label.textContent = t(stats.nameKey);
     const cost = document.createElement("span");
     cost.className = "rts-build-choice-cost";
     cost.textContent = formatResourceCost(stats.cost);
@@ -308,7 +345,7 @@ export class RtsBuildPalette {
     button.type = "button";
     button.className = "rts-build-choice";
     button.dataset.rtsBuilding = mode === "build" ? "road" : "road-erase";
-    const text = mode === "build" ? "Yol" : "Yol Sil";
+    const text = t(`building.road.${mode === "build" ? "build" : "erase"}.name`);
     button.setAttribute("aria-label", text);
     const icon = document.createElement("img");
     icon.className = "rts-build-choice-icon";
@@ -320,7 +357,7 @@ export class RtsBuildPalette {
     label.textContent = text;
     const cost = document.createElement("span");
     cost.className = "rts-build-choice-cost";
-    cost.textContent = mode === "build" ? "Odun / hücre" : "İade yok";
+    cost.textContent = t(`building.road.${mode === "build" ? "build" : "erase"}.cost`);
     button.append(icon, label, cost);
     button.addEventListener("click", mode === "build" ? this.onChooseRoad : this.onChooseRoadErase);
     this.roadButtons.set(mode, button);
@@ -331,39 +368,27 @@ export class RtsBuildPalette {
     this.roadHint.hidden = true;
     this.armedBuildingId = state.activeBuildingId;
     this.syncArmedButtons();
+    this.syncPlacementMode();
     if (!state.activeBuildingId) {
-      this.status.textContent = "Bir yapı seçin.";
+      this.status.textContent = t("placement.prompt.select_building");
       return;
     }
     if (!state.result) {
-      this.status.textContent = state.activeBuildingId === "outpost"
-        ? "Karakolu kontrol alanının hemen dışındaki nötr bir konuma yerleştirin."
-        : "Haritada konum seçin.";
+      this.status.textContent = t(state.activeBuildingId === "outpost"
+        ? "placement.prompt.outpost"
+        : "placement.prompt.pick_location");
       return;
     }
     if (state.result.valid) {
-      this.status.textContent = "Geçerli konum — yerleştirmek için tıklayın.";
+      this.status.textContent = t("placement.valid");
       return;
     }
-    this.status.textContent = state.result.reason === "outside-map"
-      ? "Geçersiz konum: harita sınırı dışında."
-      : state.result.reason === "outside-control"
-        ? "Geçersiz konum: bu alanın kontrolü sizde değil."
-      : state.result.reason === "insufficient-resources"
-        ? "Kaynak yetersiz: inşaat maliyeti ayrılmadı."
-        : state.result.reason === "missing-forest"
-          ? "Oduncu Kampı için yakında kesilebilir ağaç gerekir."
-        : state.result.reason === "missing-game"
-          ? "Avcı Kulübesi için yakında av hayvanı gerekir."
-        : state.result.reason === "missing-livestock"
-          ? "Ağıl için yakında evcilleştirilebilir hayvan gerekir."
-          : state.result.reason === "missing-adjacent-building"
-            ? "Değirmen, tamamlanmış dost bir Tarlaya bitişik kurulmalı."
-          : state.result.reason === "enemy-occupied"
-          ? "Geçersiz konum: alanda düşman birlikleri var."
-        : state.result.reason === "missing-resource-node"
-          ? "Geçersiz konum: Taş Ocağı veya Altın Madeni uygun kaynak düğümünü örtmeli."
-        : "Geçersiz konum: engel veya yapı ile çakışıyor.";
+    // A null reason (and any reason the table does not name) reads as the
+    // generic overlap: the fallback is a sentence, never a blank status line.
+    const reason = state.result.reason;
+    this.status.textContent = t(
+      (reason === null ? undefined : PLACEMENT_ERROR_KEY[reason]) ?? "placement.error.blocked",
+    );
   }
 
   /**
@@ -402,8 +427,9 @@ export class RtsBuildPalette {
   setRoadState(state: RoadPlacementState): void {
     this.armedRoadMode = state.active ? state.mode : null;
     this.syncArmedButtons();
+    this.syncPlacementMode();
     if (!state.active) {
-      this.status.textContent = "Bir yapı seçin.";
+      this.status.textContent = t("placement.prompt.select_building");
       this.roadHint.hidden = true;
       return;
     }
@@ -411,24 +437,25 @@ export class RtsBuildPalette {
     if (state.mode === "erase") {
       // The split warning is the §44 "bağlantı etkisi": it is the one erase whose
       // cost is not the tile itself, so it has to be readable before the click.
-      this.status.textContent = "Yol siliniyor";
-      this.roadHint.textContent = !state.target
-        ? "Bir yol karosuna tıklayın · Sağ tık: çık"
+      this.status.textContent = t("road.status.erasing");
+      this.roadHint.textContent = t(!state.target
+        ? "road.hint.pick_tile"
         : state.target.splits
-          ? "Uyarı: bu karo ağı ikiye böler · Tıkla: sil · İade yok"
-          : "Tıkla: sil · İade yok";
+          ? "road.hint.splits"
+          : "road.hint.erase");
       return;
     }
-    this.status.textContent = state.start ? "Yol çiziliyor" : "Yol çizimi";
+    this.status.textContent = t(state.start ? "road.status.drawing" : "road.status.draw_mode");
     this.roadHint.textContent = state.plan
-      ? `Sol tık: yolu kur · ${state.plan.newCells.length} hücre · ${formatResourceCost(state.plan.cost)}`
+      ? t("road.hint.plan", {
+          cells: state.plan.newCells.length,
+          cost: formatResourceCost(state.plan.cost),
+        })
       : state.reason === "invalid-route"
-        ? "Geçersiz rota · başka kare seç"
+        ? t("road.hint.invalid_route")
         : state.reason === "insufficient-resources"
-          ? "Kaynak yetersiz · rota çizilemedi"
-          : state.start
-            ? "Ucu seçin · Sol tık: yolu kur"
-            : "Sol tık: başlangıç seç · Sağ tık: çık";
+          ? t("road.hint.insufficient_resources")
+          : t(state.start ? "road.hint.pick_end" : "road.hint.pick_start");
   }
 
   /**
@@ -474,7 +501,7 @@ export class RtsBuildPalette {
       ? entry.lockedReason
       : entry.affordable
         ? ""
-        : `Kaynak yetersiz: ${formatResourceCost(entry.price)} gerekir.`;
+        : t("building.cost.insufficient", { cost: formatResourceCost(entry.price) });
   }
 
   /**
@@ -505,6 +532,7 @@ export class RtsBuildPalette {
     this.roadButtons.get("erase")?.classList.remove("is-mission-hint");
     if (target === null) return;
     this.root.hidden = false;
+    this.expand();
     for (const [category, panel] of this.categoryPanels) {
       if (panel.querySelector(`[data-rts-building="${CSS.escape(target)}"]`)) {
         this.selectCategory(category);
@@ -520,13 +548,69 @@ export class RtsBuildPalette {
 
   toggleVisible(): void {
     this.root.hidden = !this.root.hidden;
+    if (!this.root.hidden) this.expand();
   }
 
   selectCategoryByIndex(index: number): void {
     const title = [...this.tabs.keys()][index];
     if (!title) return;
     this.root.hidden = false;
+    this.expand();
     this.selectCategory(title);
+  }
+
+  /** Pointer and keyboard entry both make the current category available at once. */
+  private readonly onPointerEnter = (): void => {
+    this.pointerIsInside = true;
+    this.expand();
+  };
+
+  private readonly onPointerLeave = (): void => {
+    this.pointerIsInside = false;
+    // A mouse click leaves focus on the tab/card that received it. That focus
+    // must not override the player's subsequent move back to the map.
+    this.scheduleCompact(true);
+  };
+
+  private readonly onFocusIn = (): void => {
+    this.expand();
+  };
+
+  private readonly onFocusOut = (): void => {
+    window.setTimeout(() => {
+      if (!this.root.contains(document.activeElement)) this.scheduleCompact();
+    }, 0);
+  };
+
+  private expand(): void {
+    this.clearCompactTimer();
+    this.root.classList.remove("is-compact");
+  }
+
+  private scheduleCompact(afterPointerLeave = false): void {
+    if (
+      !this.canAutoCompact()
+      || this.pointerIsInside
+      || (!afterPointerLeave && this.root.contains(document.activeElement))
+    ) return;
+    this.clearCompactTimer();
+    this.compactTimer = window.setTimeout(() => {
+      this.compactTimer = undefined;
+      if (!this.pointerIsInside && (afterPointerLeave || !this.root.contains(document.activeElement))) {
+        this.root.classList.add("is-compact");
+      }
+    }, RtsBuildPalette.COMPACT_DELAY_MS);
+  }
+
+  /** A touch-first device has no reliable hover affordance, so it stays expanded. */
+  private canAutoCompact(): boolean {
+    return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  }
+
+  private clearCompactTimer(): void {
+    if (this.compactTimer === undefined) return;
+    window.clearTimeout(this.compactTimer);
+    this.compactTimer = undefined;
   }
 
   /**
@@ -546,6 +630,11 @@ export class RtsBuildPalette {
       button.classList.toggle("is-armed", armed);
       button.setAttribute("aria-pressed", String(armed));
     }
+  }
+
+  /** Keep the active placement mode legible even while its choices are tucked away. */
+  private syncPlacementMode(): void {
+    this.root.classList.toggle("has-placement-mode", this.armedBuildingId !== null || this.armedRoadMode !== null);
   }
 
   private selectCategory(title: string): void {
@@ -582,6 +671,11 @@ export class RtsBuildPalette {
   }
 
   dispose(): void {
+    this.clearCompactTimer();
+    this.root.removeEventListener("pointerenter", this.onPointerEnter);
+    this.root.removeEventListener("pointerleave", this.onPointerLeave);
+    this.root.removeEventListener("focusin", this.onFocusIn);
+    this.root.removeEventListener("focusout", this.onFocusOut);
     this.root.remove();
   }
 }

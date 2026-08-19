@@ -41,14 +41,20 @@ export type GuardProductionResult = UnitProductionResult;
  */
 export interface CancelledUnitOrder {
   readonly unitId: string;
-  readonly label: string;
+  /**
+   * Localization key, not text — the simulation names the unit, the UI says it.
+   * A production system that carried a finished sentence would hold the language
+   * it was queued in, and a mid-match switch would leave it there.
+   */
+  readonly nameKey: string;
 }
 
 export interface UnitProductionEvent {
   readonly type: "completed" | "exit-blocked";
   readonly structure: PlacedStructure;
   readonly unitId: string;
-  readonly label: string;
+  /** Localization key — see {@link CancelledUnitOrder.nameKey}. */
+  readonly unitNameKey: string;
 }
 
 interface UnitOrder {
@@ -76,12 +82,13 @@ export interface BarracksQueueSnapshot {
   readonly queued: number;
   /** Per-Barracks limit from the owner's age (5 / 10 / 20). */
   readonly capacity: number;
-  readonly trainingLabel: string | null;
+  /** Localization key of the unit leaving next — see {@link CancelledUnitOrder.nameKey}. */
+  readonly trainingNameKey: string | null;
   readonly trainingRemainingSeconds: number | null;
   /** Total duration of the unit currently leaving this building. */
   readonly trainingDurationSeconds: number | null;
-  /** Order labels behind the one in progress, in the order they will train. */
-  readonly pendingLabels: readonly string[];
+  /** Order name keys behind the one in progress, in the order they will train. */
+  readonly pendingNameKeys: readonly string[];
 }
 
 export const GUARD_QUEUE_CAPACITY_BY_AGE_LEVEL = [5, 10, 20] as const;
@@ -223,7 +230,7 @@ export class BarracksProductionSystem {
     if (!queue || !order) return null;
     this.refundOrder(queue.structure.owner, order);
     if (queue.orders.length === 0) this.queues.delete(structure.id);
-    return { unitId: order.unitId, label: order.stats.label };
+    return { unitId: order.unitId, nameKey: order.stats.nameKey };
   }
 
   /**
@@ -276,10 +283,10 @@ export class BarracksProductionSystem {
       structureId: structure.id,
       queued: orders.length,
       capacity: this.capacityForStructure(structure),
-      trainingLabel: training?.stats.label ?? null,
+      trainingNameKey: training?.stats.nameKey ?? null,
       trainingRemainingSeconds: training?.remainingSeconds ?? null,
       trainingDurationSeconds: training?.stats.trainingSeconds ?? null,
-      pendingLabels: pending.map((order) => order.stats.label),
+      pendingNameKeys: pending.map((order) => order.stats.nameKey),
     };
   }
 
@@ -309,7 +316,7 @@ export class BarracksProductionSystem {
       if (order.remainingSeconds > 0) continue;
       const exit = this.findSafeExit(queue.structure);
       if (!exit) {
-        events.push({ type: "exit-blocked", structure: queue.structure, unitId: order.unitId, label: order.stats.label });
+        events.push({ type: "exit-blocked", structure: queue.structure, unitId: order.unitId, unitNameKey: order.stats.nameKey });
         continue;
       }
       const unit = this.units.spawn(queue.structure.owner, exit.x, exit.z, order.stats);
@@ -324,7 +331,7 @@ export class BarracksProductionSystem {
       population.commit(order.population);
       queue.orders.shift();
       if (queue.orders.length === 0) this.queues.delete(id);
-      events.push({ type: "completed", structure: queue.structure, unitId: order.unitId, label: order.stats.label });
+      events.push({ type: "completed", structure: queue.structure, unitId: order.unitId, unitNameKey: order.stats.nameKey });
     }
     return events;
   }

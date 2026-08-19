@@ -2704,7 +2704,6 @@
       "name": "Strategic west_pass",
       "variableOverrides": {
         "pointId": "west_pass",
-        "label": "Batı Geçidi",
         "captureRadius": 10
       }
     },
@@ -2718,7 +2717,6 @@
       "name": "Strategic east_pass",
       "variableOverrides": {
         "pointId": "east_pass",
-        "label": "Doğu Geçidi",
         "captureRadius": 10
       }
     },

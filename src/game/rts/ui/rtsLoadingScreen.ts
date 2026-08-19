@@ -11,6 +11,7 @@
  * decision about what the bar means, and this file only renders the snapshot it
  * is handed.
  */
+import { t } from "../../localization/LocalizationService";
 import type { RtsLoadProgressSnapshot } from "../loading/rtsLoadProgress";
 
 /**
@@ -49,7 +50,7 @@ export class RtsLoadingScreen {
 
     const title = document.createElement("p");
     title.className = "rts-loading-title";
-    title.textContent = "Yükleniyor";
+    title.textContent = t("menu.loading.title");
 
     this.bar.className = "rts-loading-bar";
     this.bar.setAttribute("role", "progressbar");
@@ -77,13 +78,13 @@ export class RtsLoadingScreen {
     if (snapshot.determinate) {
       this.fill.style.width = `${percent}%`;
       this.bar.setAttribute("aria-valuenow", String(percent));
-      this.status.textContent = `%${percent}`;
+      this.status.textContent = t("menu.loading.percent", { ratio: snapshot.fraction });
     } else {
       // No width at all rather than a zero-width bar: the CSS animation owns the
       // fill in this mode, and an inline width would fight it.
       this.fill.style.removeProperty("width");
       this.bar.removeAttribute("aria-valuenow");
-      this.status.textContent = "Hazırlanıyor…";
+      this.status.textContent = t("menu.loading.preparing");
     }
   }
 

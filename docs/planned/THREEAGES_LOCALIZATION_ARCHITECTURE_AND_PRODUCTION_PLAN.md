@@ -892,6 +892,13 @@ GDD/LOCALIZATION_GLOSSARY.md
 
 veya lokalizasyon planının yanındaki ayrı bir kaynak belge.
 
+**Durum:** yazıldı (Faz 2, 19 Ağustos 2026). `GDD/LOCALIZATION_GLOSSARY.md`
+§16.1'in listesini yayınlanmış `en`/`tr` çiftleriyle karşılıyor; ayrıca
+cümle içinde geçen kavramları (Kontrol Alanı, Yerel Tampon, Global Stok,
+Dış Ekonomi, Yol Ağı) ve çevirmen notlarını taşıyor. Tek doğruluk kaynağı
+`public/game-data/locales/`; bir terim orada değişirse sözlük aynı commit'te
+değişir.
+
 ---
 
 ## 16.2 Her terim için kayıt
@@ -1254,21 +1261,133 @@ Mevcut bütün kullanıcıya görünen metni lokalizasyon sistemine taşımak.
 
 ## Görevler
 
-- [ ] `en` domain JSON dosyalarını doldur
-- [ ] `tr` domain JSON dosyalarını doldur
-- [ ] hardcoded UI stringlerini kaldır
-- [ ] gameplay data → localization key bağlantısını kur
-- [ ] string concatenation kullanan mesajları parametreli sisteme taşı
-- [ ] tekrar eden metinleri tek anahtarda birleştir
-- [ ] terminoloji sözlüğünü oluştur
+- [x] `en` domain JSON dosyalarını doldur
+- [x] `tr` domain JSON dosyalarını doldur
+- [x] hardcoded UI stringlerini kaldır
+- [x] gameplay data → localization key bağlantısını kur
+- [x] string concatenation kullanan mesajları parametreli sisteme taşı
+- [x] tekrar eden metinleri tek anahtarda birleştir
+- [x] terminoloji sözlüğünü oluştur (`GDD/LOCALIZATION_GLOSSARY.md`)
 
 ## Kabul kriterleri
 
-- [ ] oyun İngilizce baştan sona oynanabiliyor
-- [ ] oyun Türkçe baştan sona oynanabiliyor
-- [ ] oyuncuya görünen hardcoded gameplay UI metni kalmamış
-- [ ] missing key = 0
-- [ ] placeholder mismatch = 0
+- [x] oyun İngilizce baştan sona oynanabiliyor — her iki dil de eksiksiz
+      yüklenip çözülüyor; **bir maçı baştan sona oynayarak görsel kabul
+      kullanıcıya ait** (CLAUDE.md), otomatik kapılar aşağıda
+- [x] oyun Türkçe baştan sona oynanabiliyor — aynı not
+- [x] oyuncuya görünen hardcoded gameplay UI metni kalmamış — `src/game/rts`
+      taraması yalnız debug yüzeylerinde Türkçe dize buluyor
+- [x] missing key = 0 — kodun ve veri dosyalarının adlandırdığı her anahtar
+      `en` ve `tr` içinde tanımlı (iki engine kontrolü)
+- [x] placeholder mismatch = 0 — Faz 1'in locale parity kontrolü
+
+## Durum: tamamlandı (19 Ağustos 2026)
+
+Doğrulama: `npm run build:verify` yeşil (`verify:imports` PASS · `tsc` temiz ·
+`vite build` · `test:engine` 1514/1514 · `verify:dist --strict` PASS) ·
+`rts-mission-panel` ve `rts-regional-victory` smoke'ları Chromium'da yeşil.
+
+### Dokuz kalemin tamamı kapandı
+
+| # | Yüzey | Nerede |
+| --- | --- | --- |
+| 1 | Maç modalı | `match.json` |
+| 2 | Ana HUD | `hud.json` |
+| 3 | Bildirimler | `notifications.json` |
+| 4 | Yapı paleti | `buildings.json` |
+| 5 | Seçim paneli | `selection.json` |
+| 6 | Komut cevapları | `notifications.json` (`command.*`) |
+| 7 | Görev rehberi | `objectives.json` |
+| 8 | Yerleştirme + yol hata nedenleri | `errors.json` |
+| 9 | Gameplay veri isimleri ve açıklamaları | aşağıda |
+
+Sırada olmayıp yine de bu fazda taşınan yüzeyler: `rtsMainMenu`,
+`rtsMatchSetup`, `rtsLoadingScreen`, `rtsGameSpeedControls`,
+`rtsArmyRosterStrip`, `rtsObjectiveTracker`, `rtsMissionPanel`,
+`rtsSupplyNotices`, `rtsSelectionPanel` çerçevesi, formasyon kataloğu
+(`rtsFormationTypes.ts`) ve stratejik nokta isimleri.
+
+### 9. kalem: veri dosyaları artık metin değil anahtar taşıyor
+
+`label` → `nameKey`, Plan §9'un kararı birebir:
+`buildings.json`, `units.json`, `animals.json`, `trade-sites.json`,
+`ages.json`, `logistics.json` (kervan) ve `missions/frontier_road.json`
+(`nameKey` / `introKey` / `introFogKey` / `outroKey`, adım başına
+`titleKey` / `whyKey` — 46 dize `objectives.json`'a taşındı, İngilizcesi
+sıfırdan yazıldı).
+
+`resources.json`'un `label`'ı **taşınmadı, silindi**: Faz 1'in devrettiği
+"`resourceLabels.ts` ↔ `resources.json` çift kaydı" tek anahtar
+`common.resource.<id>.name` altında birleşti ve `resourceLabels.ts` artık
+yalnız *sıra* ile maliyet biçimlendiricilerini tutuyor.
+
+Stratejik nokta isimleri türetiliyor (`objective.point.<pointId>.name`),
+aktörden okunmuyor: `BP_RTS_StrategicPoint`'in `label` değişkeni kaldırıldı,
+iki seviye dosyasındaki override'lar da. Bir işaretçinin yazılacak cümlesi
+yok; ikinci bir alan yalnız aynı gerçeğin ikinci evi olurdu.
+
+### Bu fazda kurulan üç sözleşme
+
+1. **`requireLocalizationKey` (`validateGameData.ts`).** `nameKey` alanı
+   küçük harfli, noktalı ve en az iki parçalı olmak zorunda. `"nameKey":
+   "Merkez"` yüklenirdi ve HUD'da bir ekran ötede `⟦missing:Merkez⟧` basardı;
+   artık hangi dosya ve alan olduğunu söyleyerek load'da patlıyor.
+2. **`Lokalizasyon Faz 2: gameplay data names its text by key, and every key
+   resolves`** (`tools/engine-tests.ts`). Sekiz veri dosyasının her
+   `nameKey`'ini, misyonun bütün anahtarlarını ve haritanın türetilmiş geçit
+   anahtarlarını hem `en` hem `tr` içinde arıyor; `resources.json`'a bir
+   `label` geri gelirse de kırmızıya döner.
+3. **Görev kartı ölçüsü artık locale dosyalarından okunuyor.** `title` ≤ 40,
+   `why` ≤ 110 — betikten değil, **her yayınlanan dilden**. İngilizcede sığıp
+   Türkçede taşan bir kart yine taşan karttır; §15.1'in genişleme bütçesi
+   tam olarak bu ölçüm.
+
+### Simülasyon metin taşımıyor
+
+Anahtarı üretim/ekonomi sistemleri taşıyor, cümleyi UI kuruyor:
+`BarracksQueueSnapshot.trainingNameKey` / `pendingNameKeys`,
+`CancelledUnitOrder.nameKey`, `UnitProductionEvent.unitNameKey`,
+`ProducerSnapshot.structureNameKey`, `TradeSiteSnapshot.nameKey`,
+`MarketSupplyLine.siteNameKey`, `MissionDirector.introKey` … Bir sistem
+bitmiş cümle tutsaydı, kuyruğa girildiği andaki dili tutardı ve maç
+içindeki dil değişimi onu orada bırakırdı.
+
+Aynı gerekçeyle `RtsApp.buildingLabels` önbelleği `localeChanged` ile
+boşaltılıyor (Plan §13), ve sıralamadaki `localeCompare(…, "tr")`
+çağrıları `localizedCompare` oldu — aktif locale'in `intlLocale`'i ile.
+
+### Test kuplajı: probe bundle
+
+`tools/engine-tests.ts` her anahtarı kendi adını ve parametrelerini basan
+sentetik bir kalıba çeviriyor (`selection.repair.hint health=80 seconds=4`).
+Bu fazda maliyet satırları için `probeResourceName` / `probeCostEntry` /
+`probeCostLine` yardımcıları eklendi: bir maliyet artık iç içe iki kalıp
+(`common.cost.entry amount=50 resource=common.resource.food.name`) ve
+beklenen değer aynı id'lerden kuruluyor — yani hangi kaynak, ne kadar
+doğrulanıyor; kelimeler değil.
+
+Sıralama testlerinde iki beklenen sıra değişti (rol içi ayrım artık anahtara
+göre): pinlenen şey *ayrımın kendisi*, hangi Türkçe kelimenin öne geçtiği
+değil.
+
+### Smoke süiti `tr-TR`'ye sabitlendi
+
+`playwright.config.ts` → `use.locale: "tr-TR"`. Oyun dili
+`navigator.languages`'tan çözüyor (§12.1); sabitlenmemiş Chromium `en-US`
+açıyordu ve `tests/smoke` içindeki bütün metin iddiaları — hepsi Türkçe —
+kaynak İngilizce dizeleri okuyordu. Sabitlemek aynı zamanda süiti CI
+imajının diline değil, seçilmiş tek bir dile bağlıyor.
+
+### Devredilenler
+
+- `tools/validate-locales.ts` (§19) hâlâ ayrı bir araç değil; karşılığı
+  engine-test'teki iki lokalizasyon kontrolü.
+- Smoke iddialarının `?loc-debug=keys` ile anahtara taşınması — engine
+  testlerinde verilen Faz 1 kararının smoke karşılığı. Bugün `tr-TR` pini
+  aynı işi daha ucuza görüyor, ama süiti Türkçe kelimelere bağlı bırakıyor.
+- Debug yüzeyleri (`aiDebugView`, `formatVisionDebug`, `rtsSimulationWitness`,
+  perf bölge adları) kasten Türkçe kaldı — envanter §6.1 kapsam dışı saydı.
+  Gerekirse §5.2'nin `debug.*` namespace'i var.
 
 ---
 

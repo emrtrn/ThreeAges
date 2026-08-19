@@ -49,7 +49,8 @@ export interface EconomyBuildingSnapshot {
   readonly structureId: number;
   readonly buildingId: string;
   readonly owner: UnitOwner;
-  readonly structureLabel: string;
+  /** Localization key for the building's name; the UI resolves it. */
+  readonly structureNameKey: string;
   readonly resourceId: string;
   readonly assignedWorkers: number;
   readonly workingWorkers: number;
@@ -249,7 +250,7 @@ export class EconomyProductionSystem {
           structureId: producer.structure.id,
           buildingId: producer.structure.stats.id,
           owner: producer.structure.owner,
-          structureLabel: producer.structure.stats.label,
+          structureNameKey: producer.structure.stats.nameKey,
           resourceId: economy.resourceId,
           assignedWorkers: producer.assignments.size,
           workingWorkers,

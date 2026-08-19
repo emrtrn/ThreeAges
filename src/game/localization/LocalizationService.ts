@@ -335,6 +335,46 @@ export function getActiveLocalization(): LocalizationService | null {
  * missing marker and warns once, rather than throwing: a stray early call must
  * not be able to take the game down.
  */
+/**
+ * Join a list in the active language — inventory §7.5.
+ *
+ * `["wood", "stone", "gold"].join(", ")` writes English punctuation into every
+ * language and drops the conjunction English itself wants. Falls back to a plain
+ * join only when no service is installed, which is a test, never a match.
+ */
+export function localizedList(
+  items: readonly string[],
+  type: "conjunction" | "disjunction" = "conjunction",
+): string {
+  return activeService?.formatList(items, type) ?? items.join(", ");
+}
+
+/**
+ * Compare two already-translated strings for sorting — inventory §7.5.
+ *
+ * `left.localeCompare(right, "tr")` sorts every language by Turkish collation,
+ * which puts "Ö" after "O" for a German player who expects it beside it. The
+ * active locale's `intlLocale` is the one the text was written in, so it is the
+ * one that orders it. Falls back to the environment default only when no
+ * service is installed, which is a test, never a match.
+ */
+export function localizedCompare(left: string, right: string): number {
+  const locale = activeService?.getDescriptor().intlLocale;
+  return left.localeCompare(right, locale);
+}
+
+/**
+ * Subscribe to locale changes through the ambient service — Plan §13.
+ *
+ * The counterpart to {@link t} for UI that builds its labels once: text read at
+ * render time follows the language on its own, but a panel constructed at boot
+ * has to be told. Returns a no-op unsubscribe when no service is installed, so
+ * a component can always call it unconditionally.
+ */
+export function onLocaleChanged(listener: LocaleChangedListener): () => void {
+  return activeService?.onLocaleChanged(listener) ?? (() => {});
+}
+
 export function t(key: string, params: TranslationParams = {}): string {
   if (activeService === null) {
     if (!warnedAboutMissingService) {

@@ -22,6 +22,7 @@
  * asks is `main.ts`.
  */
 import type { AiProfile } from "../../data/gameDataTypes";
+import { t } from "../../localization/LocalizationService";
 import type { MissionModeChoice } from "../tutorial/missionModeChoice";
 import type { FogOfWarChoice } from "../vision/fogOfWarChoice";
 import type { VictoryConditionChoice } from "./victoryConditionChoice";
@@ -38,8 +39,13 @@ import type { VictoryConditionChoice } from "./victoryConditionChoice";
  */
 interface SetupOption<T extends string> {
   readonly choice: T;
-  readonly label: string;
-  readonly hint: string;
+  /**
+   * Localization keys, not sentences — Plan §9. These tables are module-level
+   * constants evaluated at import time, so holding text here would freeze the
+   * menu in whichever language happened to be active at boot.
+   */
+  readonly labelKey: string;
+  readonly hintKey: string;
 }
 
 /**
@@ -52,13 +58,13 @@ interface SetupOption<T extends string> {
 const VICTORY_CONDITION_ROWS: readonly SetupOption<VictoryConditionChoice>[] = [
   {
     choice: "military",
-    label: "Askerî",
-    hint: "Maç yalnızca düşman merkezi yıkıldığında biter.",
+    labelKey: "match.setup.victory.military.label",
+    hintKey: "match.setup.victory.military.hint",
   },
   {
     choice: "military_regional",
-    label: "Askerî + Bölgesel",
-    hint: "Askerî zafer geçerliliğini korur. Ek olarak iki stratejik geçidi belirli bir süre boyunca birlikte elinde tutan taraf kazanır. Geçitler oraya birlik göndererek değil, yola bağlı bir karakolun kontrol alanıyla alınır.",
+    labelKey: "match.setup.victory.military_regional.label",
+    hintKey: "match.setup.victory.military_regional.hint",
   },
 ];
 
@@ -69,7 +75,7 @@ const VICTORY_CONDITION_ROWS: readonly SetupOption<VictoryConditionChoice>[] = [
  * sentence that makes the two answers actually differ.
  */
 interface ModeOption extends SetupOption<MissionModeChoice> {
-  readonly blurb: string;
+  readonly blurbKey: string;
 }
 
 /**
@@ -87,15 +93,15 @@ interface ModeOption extends SetupOption<MissionModeChoice> {
 const MISSION_MODE_ROWS: readonly ModeOption[] = [
   {
     choice: "story",
-    label: "Hikâye turu",
-    blurb: "Sırayla verilen görevlerle öğren.",
-    hint: "Normal bir maç, sırayla verilen görevlerle. Yol, depo ve kontrol alanı kurallarını oynayarak öğrenirsin; zincir bittiğinde maç serbest devam eder. Harita savaş sisi altında açılır: keşfetmek turun ilk dersi.",
+    labelKey: "match.setup.mode.story.label",
+    blurbKey: "match.setup.mode.story.blurb",
+    hintKey: "match.setup.mode.story.hint",
   },
   {
     choice: "free",
-    label: "Serbest maç",
-    blurb: "Görev yok; kuralları kendin kur.",
-    hint: "Görev yok. Bu oyunun yol/depo lojistiği ve Merkez'den yükseltme düzeni türün alışıldık kurallarından farklı; hepsini kendin keşfedersin.",
+    labelKey: "match.setup.mode.free.label",
+    blurbKey: "match.setup.mode.free.blurb",
+    hintKey: "match.setup.mode.free.hint",
   },
 ];
 
@@ -116,13 +122,13 @@ const MISSION_MODE_ROWS: readonly ModeOption[] = [
 const FOG_OF_WAR_ROWS: readonly [SetupOption<FogOfWarChoice>, SetupOption<FogOfWarChoice>] = [
   {
     choice: "on",
-    label: "Açık",
-    hint: "Harita keşfedilene kadar karanlık. Görmediğin düşman birlikleri gizlenir, keşfettiğin binalar hafızada kalır. Düşman da aynı sisin altında oynar — senin birliklerini ancak gördüğünde bilir.",
+    labelKey: "match.setup.fog.on.label",
+    hintKey: "match.setup.fog.on.hint",
   },
   {
     choice: "off",
-    label: "Kapalı",
-    hint: "Tüm harita ve her iki tarafın birlikleri baştan görünür. Keşif ve baskın avantajı ortadan kalkar; doğrudan ekonomi ve ordu yarışına dönersin.",
+    labelKey: "match.setup.fog.off.label",
+    hintKey: "match.setup.fog.off.hint",
   },
 ];
 
@@ -138,18 +144,18 @@ const FOG_OF_WAR_ROWS: readonly [SetupOption<FogOfWarChoice>, SetupOption<FogOfW
 const AI_PROFILE_ROWS: readonly SetupOption<AiProfile>[] = [
   {
     choice: "easy",
-    label: "Kolay",
-    hint: "Rakip geç tepki verir ve hiçbir ekonomi avantajı almaz. Kuralları öğrenmek, bir açılışı denemek için.",
+    labelKey: "match.setup.difficulty.easy.label",
+    hintKey: "match.setup.difficulty.easy.hint",
   },
   {
     choice: "normal",
-    label: "Normal",
-    hint: "Adil temel: bonussuz ekonomi, ölçülü tepki süresi. Dengenin ayarlandığı rakip budur.",
+    labelKey: "match.setup.difficulty.normal.label",
+    hintKey: "match.setup.difficulty.normal.hint",
   },
   {
     choice: "hard",
-    label: "Zor",
-    hint: "Rakip neredeyse anında tepki verir ve küçük bir ekonomi avantajı alır. Hile değil, tempo: gördüğünü senin gördüğün kadar görür.",
+    labelKey: "match.setup.difficulty.hard.label",
+    hintKey: "match.setup.difficulty.hard.hint",
   },
 ];
 
@@ -211,7 +217,7 @@ export class RtsMatchSetup {
     const group = document.createElement("fieldset");
     group.className = "rts-match-setup-group";
     const legend = document.createElement("legend");
-    legend.textContent = "Maç türü";
+    legend.textContent = t("match.setup.legend");
     group.appendChild(legend);
 
     // The mode comes first: it decides what kind of match this is, and everything
@@ -228,15 +234,15 @@ export class RtsMatchSetup {
     // a word or two wide, so giving the two dropdowns half the card each left
     // them stretched over empty space while the switch sat alone underneath —
     // three columns is both tighter and one rule per column.
-    this.victorySelect = buildSetupSelect("rtsVictoryCondition", "Zafer", VICTORY_CONDITION_ROWS, (choice) => {
+    this.victorySelect = buildSetupSelect("rtsVictoryCondition", t("match.setup.victory.caption"), VICTORY_CONDITION_ROWS, (choice) => {
       this.victoryCondition = choice;
       syncSetupSelect(this.victorySelect, choice);
     });
-    this.aiProfileSelect = buildSetupSelect("rtsAiProfile", "Zorluk", AI_PROFILE_ROWS, (choice) => {
+    this.aiProfileSelect = buildSetupSelect("rtsAiProfile", t("match.setup.difficulty.caption"), AI_PROFILE_ROWS, (choice) => {
       this.aiProfile = choice;
       syncSetupSelect(this.aiProfileSelect, choice);
     });
-    this.fogToggle = buildSetupToggle("rtsFogOfWar", "Savaş sisi", FOG_OF_WAR_ROWS, (choice) => {
+    this.fogToggle = buildSetupToggle("rtsFogOfWar", t("match.setup.fog.caption"), FOG_OF_WAR_ROWS, (choice) => {
       this.fogOfWar = choice;
       syncSetupToggle(this.fogToggle, choice);
     });
@@ -275,7 +281,7 @@ export class RtsMatchSetup {
   private buildModeCard(row: ModeOption): HTMLLabelElement {
     const card = document.createElement("label");
     card.className = "rts-match-mode-card";
-    card.title = `${row.label} — ${row.hint}`;
+    card.title = t("match.setup.option_tooltip", { label: t(row.labelKey), hint: t(row.hintKey) });
     const input = document.createElement("input");
     input.type = "radio";
     input.name = "rts-mission-mode";
@@ -287,10 +293,10 @@ export class RtsMatchSetup {
     });
     const label = document.createElement("span");
     label.className = "rts-match-mode-card-label";
-    label.textContent = row.label;
+    label.textContent = t(row.labelKey);
     const blurb = document.createElement("span");
     blurb.className = "rts-match-mode-card-blurb";
-    blurb.textContent = row.blurb;
+    blurb.textContent = t(row.blurbKey);
     card.append(input, label, blurb);
     return card;
   }
@@ -345,10 +351,10 @@ function buildSetupSelect<T extends string>(
   for (const row of options) {
     const option = document.createElement("option");
     option.value = row.choice;
-    option.textContent = row.label;
+    option.textContent = t(row.labelKey);
     // Not every browser shows a tooltip inside an open dropdown, which is why the
     // field's own title is the one that has to stay correct.
-    option.title = row.hint;
+    option.title = t(row.hintKey);
     select.appendChild(option);
   }
   select.addEventListener("change", () => {
@@ -363,7 +369,13 @@ function buildSetupSelect<T extends string>(
 function syncSetupSelect<T extends string>(target: SetupSelect<T>, choice: T): void {
   target.select.value = choice;
   const option = target.options.find((row) => row.choice === choice);
-  target.field.title = option ? `${target.caption}: ${option.label} — ${option.hint}` : target.caption;
+  target.field.title = option
+    ? t("match.setup.field_tooltip", {
+        caption: target.caption,
+        label: t(option.labelKey),
+        hint: t(option.hintKey),
+      })
+    : target.caption;
 }
 
 /** A captioned switch over a two-answer choice, plus what its tooltip needs. */
@@ -423,6 +435,10 @@ function syncSetupToggle(target: SetupToggle, choice: FogOfWarChoice): void {
   const [on, off] = target.options;
   const option = choice === on.choice ? on : off;
   target.input.checked = choice === on.choice;
-  target.state.textContent = option.label;
-  target.field.title = `${target.caption}: ${option.label} — ${option.hint}`;
+  target.state.textContent = t(option.labelKey);
+  target.field.title = t("match.setup.field_tooltip", {
+    caption: target.caption,
+    label: t(option.labelKey),
+    hint: t(option.hintKey),
+  });
 }

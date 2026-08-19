@@ -155,8 +155,14 @@ export interface UnitBalanceStats {
    * "units of this kind" must key on this, not on the role.
    */
   readonly id: string;
-  /** Player-facing name; the HUD never invents a label for a unit id. */
-  readonly label: string;
+  /**
+   * Localization key for the player-facing name — Localization Plan §9.
+   *
+   * The name itself lives in `locales/<code>/units.json`; balance data carries
+   * the *reference* so a unit is named once, in every language, rather than
+   * once in Turkish here.
+   */
+  readonly nameKey: string;
   /**
    * Optional public UI asset, resolved from the game-data file rather than
    * chosen by a panel.  Placeholder art may be replaced without changing UI
@@ -330,7 +336,8 @@ export type UiAssetPath = `/assets/ui/icons/${string}.${"svg" | "png"}`;
 export interface BuildingBalanceStats {
   /** Stable data id, copied from the key in `balance/buildings.json`. */
   readonly id: string;
-  readonly label: string;
+  /** Localization key for the player-facing name (Plan §9); see {@link UnitBalanceStats.nameKey}. */
+  readonly nameKey: string;
   /** Compact tile/icon artwork used by build and selection UI. */
   readonly icon?: UiAssetPath;
   /** World-space footprint dimensions; both are multiples of the placement grid. */
@@ -642,8 +649,14 @@ export interface ResourceTreeBalance {
  * "might be missing" at the call sites that narrow them.
  */
 export interface ResourceBalanceStats {
+  /**
+   * Stable data id, and — via `common.resource.<id>.name` — the only thing this
+   * table needs in order to be named. Localization Plan Faz 1 §"Faz 2'ye
+   * devredilenler" called the old `label` here a second registration of a name
+   * `resourceLabels.ts` already held; it is gone rather than moved, so the four
+   * resource names have exactly one source.
+   */
   readonly id: string;
-  readonly label: string;
   /** Deposit resources only; absent on a tree resource. */
   readonly safeNode?: ResourceNodeBalance;
   /** Deposit resources only; absent on a tree resource. */
@@ -756,7 +769,8 @@ export interface AnimalRestBalance {
 export interface AnimalBalanceStats {
   /** Stable data id, copied from the key in `balance/animals.json`. */
   readonly id: string;
-  readonly label: string;
+  /** Localization key for the player-facing name (Plan §9); see {@link UnitBalanceStats.nameKey}. */
+  readonly nameKey: string;
   /** Food one carcass yields before it is picked clean. */
   readonly meatCapacity: number;
   readonly maxHealth: number;
@@ -883,7 +897,8 @@ export interface CommandCenterAgeBalance {
 /** The opening age. Its centre begins at Lv1; two upgrades reach Lv2 and Lv3. */
 export interface SettlementAgeBalance {
   readonly id: "settlement";
-  readonly label: string;
+  /** Localization key for the age's player-facing name (Plan §9). */
+  readonly nameKey: string;
   readonly commandCenter: CommandCenterAgeBalance;
   /** Centre level upgrades within Settlement: Lv1→2, then Lv2→3 ("cost only"). */
   readonly levelUpgrades: readonly CenterLevelUpgradeBalance[];
@@ -895,7 +910,8 @@ export interface SettlementAgeBalance {
  */
 export interface TownAgeBalance {
   readonly id: "town";
-  readonly label: string;
+  /** Localization key for the age's player-facing name (Plan §9). */
+  readonly nameKey: string;
   /** Atomically reserved when the Settlement Lv3 → Town transition begins. */
   readonly cost: StartingResources;
   readonly upgradeSeconds: number;
@@ -1419,7 +1435,8 @@ export interface RoadAutoConnect {
  * art common.
  */
 export interface CaravanBalance {
-  readonly label: string;
+  /** Localization key for the player-facing name (Plan §9). */
+  readonly nameKey: string;
   /** Road speed, in world units/s. Deliberately unhurried: a caravan *is* the delay. */
   readonly moveSpeed: number;
   /**
@@ -1459,8 +1476,8 @@ export interface CaravanBalance {
  * this one table.
  */
 export interface TradeSiteBalanceStats {
-  /** Shown wherever the site is named in the UI. */
-  readonly label: string;
+  /** Localization key resolved wherever the site is named in the UI (Plan §9). */
+  readonly nameKey: string;
   /** Selection-panel artwork, same constrained path as a building's or unit's. */
   readonly icon?: UiAssetPath;
   /** Which resource this site supplies; must have a market price to be buyable. */

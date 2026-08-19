@@ -1,1 +1,8 @@
-{}
+{
+  "menu.title": "Frontier Kingdoms",
+  "menu.tagline": "Build your economy, link your road, and raze the enemy centre.",
+  "menu.start_match": "Start Match",
+  "menu.loading.title": "Loading",
+  "menu.loading.percent": "{ratio, number, percent}",
+  "menu.loading.preparing": "Preparing…"
+}

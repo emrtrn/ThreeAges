@@ -18,6 +18,7 @@
  * Presentation only. It decides nothing about the match; `RtsApp` owns the
  * transitions and tells this what to show.
  */
+import { onLocaleChanged, t } from "../../localization/LocalizationService";
 import { DEFAULT_RTS_CAMERA_SETTINGS, type RtsCameraSettings } from "../camera/rtsCameraConfig";
 import { formatMatchDuration } from "./rtsMatchClock";
 import type { RtsMatchEndReason, RtsMatchOutcome } from "./rtsMatchState";
@@ -28,7 +29,7 @@ export type RtsGraphicsQuality = "low" | "medium" | "high";
 const GRAPHICS_QUALITY_LEVELS: readonly RtsGraphicsQuality[] = ["low", "medium", "high"];
 
 function graphicsQualityLabel(quality: RtsGraphicsQuality): string {
-  return quality === "low" ? "Düşük" : quality === "medium" ? "Orta" : "Yüksek";
+  return t(`match.settings.graphics.quality.${quality}`);
 }
 
 function graphicsQualityLevel(quality: RtsGraphicsQuality): number {
@@ -74,50 +75,50 @@ export interface RtsMatchOverlayHandlers {
  */
 interface SettingRow {
   readonly key: keyof RtsCameraSettings;
-  readonly label: string;
-  readonly hint: string;
-  readonly valueLabel: (value: number) => string;
+  /** Localization key root; the label, hint and value words hang off it. */
+  readonly textKey: string;
+  /** Which of the three value words this position on the slider reads as. */
+  readonly valueWord: (value: number) => string;
 }
 
+// Keys, not text: this table is built when the module loads, which is before a
+// locale is chosen and before a language change can be heard. Every string on
+// the card is resolved at render time instead (Plan §13).
 const CAMERA_SETTING_ROWS: readonly SettingRow[] = [
   {
     key: "panSpeed",
-    label: "Kamera hızı",
-    hint: "WASD ile kaydırma hızı.",
-    valueLabel: (value) => value < 0.35 ? "Yavaş" : value > 0.65 ? "Hızlı" : "Normal",
+    textKey: "match.settings.camera.pan_speed",
+    valueWord: (value) => (value < 0.35 ? "slow" : value > 0.65 ? "fast" : "normal"),
   },
   {
     key: "smoothing",
-    label: "Yakınlaştırma yumuşaklığı",
-    hint: "Yakınlaştırma hedefe ne kadar yumuşak ulaşır.",
-    valueLabel: (value) => value < 0.35 ? "Anlık" : value > 0.65 ? "Yumuşak" : "Dengeli",
+    textKey: "match.settings.camera.smoothing",
+    valueWord: (value) => (value < 0.35 ? "instant" : value > 0.65 ? "smooth" : "balanced"),
   },
 ];
 
-interface ResultText {
-  readonly title: string;
-  readonly detail: string;
+/** The word under a camera slider, in the active language. */
+function settingValueLabel(row: SettingRow, value: number): string {
+  return t(`${row.textKey}.value.${row.valueWord(value)}`);
 }
 
 /**
  * §51 wants a victory *and* a defeat screen, and defeat has two causes. A
  * resigned match whose centre is still standing must not be told it was razed.
+ *
+ * Each outcome/reason pair owns its own detail key. A shared "the centre fell"
+ * line with the side as a parameter would be shorter and wrong: the sentence
+ * that reports your own defeat is not the sentence that reports the enemy's,
+ * and in most languages it is not even the same construction.
  */
-const RESULT_TEXT: Readonly<Record<Exclude<RtsMatchOutcome, "active">, Readonly<Record<RtsMatchEndReason, ResultText>>>> = {
-  victory: {
-    "center-destroyed": { title: "Zafer", detail: "Düşman merkezi yıkıldı." },
-    // Reachable only if a future rule lets the AI resign; saying "the enemy
-    // centre fell" when it did not is the failure this branch exists to avoid.
-    surrendered: { title: "Zafer", detail: "Düşman teslim oldu." },
-    // §58: names the condition, because a match that ended with both centres
-    // standing otherwise reads as an unexplained stop.
-    "regional-control": { title: "Zafer", detail: "Stratejik geçitleri elinde tuttun." },
-  },
-  defeat: {
-    "center-destroyed": { title: "Yenilgi", detail: "Merkeziniz yıkıldı." },
-    surrendered: { title: "Yenilgi", detail: "Teslim oldunuz." },
-    "regional-control": { title: "Yenilgi", detail: "Düşman stratejik geçitleri elinde tuttu." },
-  },
+const RESULT_DETAIL_KEY: Readonly<Record<RtsMatchEndReason, string>> = {
+  "center-destroyed": "center_destroyed",
+  // Reachable only if a future rule lets the AI resign; saying "the enemy
+  // centre fell" when it did not is the failure this mapping exists to avoid.
+  surrendered: "surrendered",
+  // §58: names the condition, because a match that ended with both centres
+  // standing otherwise reads as an unexplained stop.
+  "regional-control": "regional_control",
 };
 
 /** Colours the card. A loss must not be announced in the victory gold. */
@@ -141,6 +142,21 @@ export class RtsMatchOverlay {
   private readonly settings = document.createElement("div");
   private cameraSettings: RtsCameraSettings = DEFAULT_RTS_CAMERA_SETTINGS;
   private graphicsSettings: RtsGraphicsSettings | null;
+  /**
+   * What the card is showing right now, so a language change can rebuild it —
+   * Plan §13. The modal is one of the few surfaces that can be *open* while the
+   * player changes the language, and a half-translated card is worse than none.
+   */
+  private openCard:
+    | { readonly kind: "pause"; readonly missionRunning: boolean }
+    | {
+        readonly kind: "result";
+        readonly outcome: Exclude<RtsMatchOutcome, "active">;
+        readonly reason: RtsMatchEndReason;
+        readonly durationSeconds: number;
+      }
+    | null = null;
+  private readonly stopLocaleWatch: () => void;
 
   constructor(private readonly handlers: RtsMatchOverlayHandlers) {
     this.graphicsSettings = handlers.graphicsSettings ?? null;
@@ -157,6 +173,45 @@ export class RtsMatchOverlay {
     this.card.append(this.title, this.detail, this.duration, this.actions, this.settings);
     this.root.appendChild(this.card);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
+    this.stopLocaleWatch = onLocaleChanged(() => this.applyLocale());
+  }
+
+  /**
+   * Re-resolve every string the card owns.
+   *
+   * The settings panel is built once and then only mutated, so its labels are
+   * marked with the key they came from (`data-rts-text`) instead of being
+   * written and forgotten — that mark is what makes a language change a
+   * one-pass refresh rather than a rebuild.
+   */
+  private applyStaticText(): void {
+    for (const element of Array.from(this.settings.querySelectorAll<HTMLElement>("[data-rts-text]"))) {
+      const key = element.dataset.rtsText;
+      if (key) element.textContent = t(key);
+    }
+    for (const element of Array.from(this.settings.querySelectorAll<HTMLElement>("[data-rts-title-text]"))) {
+      const key = element.dataset.rtsTitleText;
+      if (key) element.title = t(key);
+    }
+    for (const row of CAMERA_SETTING_ROWS) {
+      const output = this.settings.querySelector<HTMLOutputElement>(`[data-rts-setting-value="${row.key}"]`);
+      if (output) output.textContent = settingValueLabel(row, this.cameraSettings[row.key]);
+    }
+    if (this.graphicsSettings) {
+      const label = graphicsQualityLabel(this.graphicsSettings.quality);
+      const value = this.settings.querySelector<HTMLOutputElement>("[data-rts-graphics-quality-value]");
+      if (value) value.textContent = label;
+      this.settings.querySelector("[data-rts-graphics-quality]")?.setAttribute("aria-valuetext", label);
+    }
+  }
+
+  /** Language changed: re-text the panel, and re-render the card if it is open. */
+  private applyLocale(): void {
+    this.applyStaticText();
+    const card = this.openCard;
+    if (!card || !this.root.classList.contains("is-visible")) return;
+    if (card.kind === "pause") this.showPause(card.missionRunning);
+    else this.showResult(card.outcome, card.reason, card.durationSeconds);
   }
 
   /**
@@ -170,11 +225,11 @@ export class RtsMatchOverlay {
     const header = document.createElement("div");
     header.className = "rts-match-settings-header";
     const heading = document.createElement("strong");
-    heading.textContent = "Ayarlar";
+    heading.dataset.rtsText = "match.settings.title";
     const reset = document.createElement("button");
     reset.type = "button";
     reset.className = "rts-match-settings-reset";
-    reset.textContent = "Varsayılan";
+    reset.dataset.rtsText = "match.settings.reset";
     reset.addEventListener("click", () => {
       this.applyCameraSettings(DEFAULT_RTS_CAMERA_SETTINGS);
       this.applyGraphicsSettings({ quality: "medium", adaptiveEnabled: true });
@@ -184,16 +239,16 @@ export class RtsMatchOverlay {
     for (const row of CAMERA_SETTING_ROWS) {
       const wrapper = document.createElement("label");
       wrapper.className = "rts-match-setting";
-      wrapper.title = row.hint;
+      wrapper.dataset.rtsTitleText = `${row.textKey}.hint`;
       const label = document.createElement("span");
       label.className = "rts-match-setting-label";
-      label.textContent = row.label;
+      label.dataset.rtsText = `${row.textKey}.label`;
       const control = document.createElement("span");
       control.className = "rts-match-setting-control";
       const value = document.createElement("output");
       value.className = "rts-match-setting-value";
       value.dataset.rtsSettingValue = row.key;
-      value.textContent = row.valueLabel(this.cameraSettings[row.key]);
+      value.textContent = settingValueLabel(row, this.cameraSettings[row.key]);
       const slider = document.createElement("input");
       slider.type = "range";
       slider.min = "0";
@@ -211,6 +266,7 @@ export class RtsMatchOverlay {
       this.settings.appendChild(wrapper);
     }
     this.buildGraphicsSettings();
+    this.applyStaticText();
   }
 
   /** Builds only when the host owns real graphics settings; no inert controls. */
@@ -218,10 +274,10 @@ export class RtsMatchOverlay {
     if (!this.graphicsSettings || !this.handlers.onGraphicsQuality || !this.handlers.onGraphicsAdaptive) return;
     const quality = document.createElement("label");
     quality.className = "rts-match-setting";
-    quality.title = "Görsel kalite; oyunun kural ve hızını değiştirmez.";
+    quality.dataset.rtsTitleText = "match.settings.graphics.quality.hint";
     const label = document.createElement("span");
     label.className = "rts-match-setting-label";
-    label.textContent = "Grafik kalitesi";
+    label.dataset.rtsText = "match.settings.graphics.quality.label";
     const control = document.createElement("span");
     control.className = "rts-match-setting-control";
     const value = document.createElement("output");
@@ -246,10 +302,10 @@ export class RtsMatchOverlay {
 
     const adaptive = document.createElement("label");
     adaptive.className = "rts-match-setting";
-    adaptive.title = "Uzun süren performans baskısında kaliteyi geçici olarak azaltır.";
+    adaptive.dataset.rtsTitleText = "match.settings.graphics.adaptive.hint";
     const adaptiveLabel = document.createElement("span");
     adaptiveLabel.className = "rts-match-setting-label";
-    adaptiveLabel.textContent = "Otomatik optimizasyon";
+    adaptiveLabel.dataset.rtsText = "match.settings.graphics.adaptive.label";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.dataset.rtsGraphicsAdaptive = "";
@@ -275,7 +331,7 @@ export class RtsMatchOverlay {
       const slider = this.settings.querySelector<HTMLInputElement>(`[data-rts-setting="${row.key}"]`);
       if (slider) slider.value = String(value);
       const output = this.settings.querySelector<HTMLOutputElement>(`[data-rts-setting-value="${row.key}"]`);
-      if (output) output.textContent = row.valueLabel(value);
+      if (output) output.textContent = settingValueLabel(row, value);
     }
     this.handlers.onCameraSettings(this.cameraSettings);
   }
@@ -302,30 +358,31 @@ export class RtsMatchOverlay {
    *   would be a button that does nothing.
    */
   showPause(missionRunning = false): void {
-    this.render("Duraklatıldı", "Maç durduruldu.", [
+    this.openCard = { kind: "pause", missionRunning };
+    this.render(t("match.pause.title"), t("match.pause.detail"), [
       // Enter/Escape still resume through the match input handler, but opening
       // pause must not paint this as an already selected button. Gold belongs to
       // the button the player is actively hovering or tabbing to.
-      { label: "Devam Et", action: this.handlers.onResume, primary: false, key: "resume" },
+      { label: t("match.action.resume"), action: this.handlers.onResume, primary: false, key: "resume" },
       // The escape hatch lives here rather than on the mission card: that card is
       // read-only by design (it must never swallow a click meant for the map),
       // and the pause menu is already the surface a player opens to stop and
       // change how they are playing. Unconfirmed, unlike surrender — leaving the
       // tur costs nothing that cannot be had back by restarting.
       ...(missionRunning && this.handlers.onAbandonMission
-        ? [{ label: "Serbest oyuna çevir", action: this.handlers.onAbandonMission, key: "abandon-mission" }]
+        ? [{ label: t("match.action.abandon_mission"), action: this.handlers.onAbandonMission, key: "abandon-mission" }]
         : []),
-      { label: "Yeniden Başlat", action: this.handlers.onRestart, key: "restart" },
+      { label: t("match.action.restart"), action: this.handlers.onRestart, key: "restart" },
       // Between restart and surrender because that is what it is: another way to
       // stop playing *this* match, weightier than starting it over and lighter
       // than resigning it. Unconfirmed for the same reason restart is — it costs
       // the match, not the record.
       ...(this.handlers.onExitToMenu
-        ? [{ label: "Ana Menü", action: this.handlers.onExitToMenu, key: "exit-to-menu" }]
+        ? [{ label: t("match.action.exit_to_menu"), action: this.handlers.onExitToMenu, key: "exit-to-menu" }]
         : []),
       this.surrenderArmed
-        ? { label: "Teslim olmayı onayla", action: this.handlers.onSurrender, key: "surrender", danger: true }
-        : { label: "Teslim Ol", action: this.armSurrender, key: "surrender" },
+        ? { label: t("match.action.surrender_confirm"), action: this.handlers.onSurrender, key: "surrender", danger: true }
+        : { label: t("match.action.surrender"), action: this.armSurrender, key: "surrender" },
     ], "neutral", true);
   }
 
@@ -341,18 +398,18 @@ export class RtsMatchOverlay {
     reason: RtsMatchEndReason,
     durationSeconds: number,
   ): void {
-    const text = RESULT_TEXT[outcome][reason];
+    this.openCard = { kind: "result", outcome, reason, durationSeconds };
     this.render(
-      text.title,
-      text.detail,
+      t(`match.result.${outcome}.title`),
+      t(`match.result.${outcome}.${RESULT_DETAIL_KEY[reason]}`),
       [
-        { label: "Yeniden Başlat", action: this.handlers.onRestart, primary: true, key: "restart" },
+        { label: t("match.action.restart"), action: this.handlers.onRestart, primary: true, key: "restart" },
         // A decided match cannot be paused (`togglePause` refuses once the match
         // is over), so without this the result card is the one screen with no way
         // back to the menu — the player would have to reload the page to leave a
         // match they just finished.
         ...(this.handlers.onExitToMenu
-          ? [{ label: "Ana Menü", action: this.handlers.onExitToMenu, key: "exit-to-menu" }]
+          ? [{ label: t("match.action.exit_to_menu"), action: this.handlers.onExitToMenu, key: "exit-to-menu" }]
           : []),
       ],
       outcome,
@@ -367,12 +424,17 @@ export class RtsMatchOverlay {
   }
 
   dispose(): void {
+    this.stopLocaleWatch();
     this.root.remove();
   }
 
   private readonly armSurrender = (): void => {
     this.surrenderArmed = true;
-    this.showPause();
+    // Re-open the card it was armed from. Without the remembered flag this
+    // second render dropped "Serbest oyuna çevir" for a player who armed
+    // surrender during a live story chain, because `showPause` defaults to no
+    // mission and the card had no memory of one.
+    this.showPause(this.openCard?.kind === "pause" ? this.openCard.missionRunning : false);
   };
 
   private render(
@@ -391,7 +453,12 @@ export class RtsMatchOverlay {
     // *how* the match ended, this says how long it took, and a reader comparing
     // fifteen matches (§53.3) should find the number in the same place each time.
     this.duration.hidden = durationSeconds === null;
-    this.duration.textContent = durationSeconds === null ? "" : `Süre: ${formatMatchDuration(durationSeconds)}`;
+    this.duration.textContent =
+      durationSeconds === null
+        ? ""
+        // §11.3: the clock itself stays locale-independent (`12:45`); only the
+        // sentence around it is translated.
+        : t("match.result.duration", { time: formatMatchDuration(durationSeconds) });
     this.actions.replaceChildren(...buttons.map((button) => {
       const element = document.createElement("button");
       element.type = "button";

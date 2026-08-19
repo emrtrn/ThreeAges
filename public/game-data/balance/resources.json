@@ -1,12 +1,10 @@
 {
   "wood": {
-    "label": "Odun",
     "tree": {
       "capacity": 120
     }
   },
   "stone": {
-    "label": "Taş",
     "safeNode": {
       "capacity": 1200,
       "perWorkerPerMinute": 20
@@ -17,7 +15,6 @@
     }
   },
   "gold": {
-    "label": "Altın",
     "safeNode": {
       "capacity": 300,
       "perWorkerPerMinute": 6

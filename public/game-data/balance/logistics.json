@@ -1,6 +1,6 @@
 {
   "caravan": {
-    "label": "Yük Eşeği",
+    "nameKey": "unit.caravan.name",
     "moveSpeed": 1.76,
     "walkClipSpeed": 1.4,
     "maxHealth": 45,

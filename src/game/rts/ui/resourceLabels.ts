@@ -1,17 +1,20 @@
 /**
  * Shared resource presentation — Vertical Slice Plan v0.2 §51 (Faz 9).
  *
- * The player-facing name and display order of the four resources, in one place.
- * Faz 9 needed a fourth copy of this map (the HUD bar) next to the three already
- * in the build palette, which is the point at which a copy becomes a defect: the
- * HUD and the cost line could disagree about what "stone" is called.
+ * The display order of the four resources, and the cost lines built from them.
+ * Faz 9 needed a fourth copy of the name map (the HUD bar) next to the three
+ * already in the build palette, which is the point at which a copy becomes a
+ * defect: the HUD and the cost line could disagree about what "stone" is called.
  *
- * These are not balance values, so plan §14 does not force them into JSON — and
- * they cannot simply move there today: `resources.json` describes *deposits*, so
- * it only carries stone and gold. Food and wood are produced by buildings and
- * have no entry to hold a label. Giving all four a data-owned label is a
- * loader/validator change, and belongs with the balance data, not with the HUD.
+ * Localization Faz 2 finished that consolidation the other way round. The names
+ * no longer live here at all — they are `common.resource.<id>.name`, and
+ * `resources.json` no longer carries the second Turkish copy it used to (that
+ * duplication is the one the Localization Plan's Faz 1 handover names). What is
+ * left here is the *order*, which is presentation and not text, plus the two
+ * cost formatters, which are here so the sentence a player reads and the
+ * affordability check behind it cannot drift apart.
  */
+import { t } from "../../localization/LocalizationService";
 
 /**
  * Display order, cheapest commitment first. The HUD reads left to right in the
@@ -20,16 +23,16 @@
  */
 export const RESOURCE_ORDER: readonly string[] = ["food", "wood", "stone", "gold"];
 
-const RESOURCE_LABELS: Readonly<Record<string, string>> = {
-  food: "Yiyecek",
-  wood: "Odun",
-  stone: "Taş",
-  gold: "Altın",
-};
-
-/** Falls back to the raw id so an unknown resource is visible, not invisible. */
+/**
+ * The player-facing name of one resource, in the active language.
+ *
+ * Falls back to the raw id so an unknown resource is visible, not invisible —
+ * and so a data-driven resource nobody has written a name for yet reads as
+ * `"amber"` rather than as a missing-key marker in the middle of a cost line.
+ */
 export function resourceLabel(resourceId: string): string {
-  return RESOURCE_LABELS[resourceId] ?? resourceId;
+  if (!RESOURCE_ORDER.includes(resourceId)) return resourceId;
+  return t(`common.resource.${resourceId}.name`);
 }
 
 /** Stocks accumulate as floats, but the player-facing inventory never overstates them. */
@@ -40,11 +43,11 @@ export function formatInventoryAmount(amount: number): number {
 /** Costs in the order {@link RESOURCE_ORDER} defines, skipping what is free. */
 export function formatResourceCost(cost: Readonly<Record<string, number>>): string {
   const entries = Object.entries(cost).filter(([, amount]) => amount > 0);
-  if (entries.length === 0) return "Ücretsiz";
+  if (entries.length === 0) return t("common.cost.free");
   return entries
     .sort(([left], [right]) => resourceRank(left) - resourceRank(right))
-    .map(([resourceId, amount]) => `${amount} ${resourceLabel(resourceId)}`)
-    .join(" · ");
+    .map(([resourceId, amount]) => costEntry(amount, resourceId))
+    .join(COST_SEPARATOR);
 }
 
 /**
@@ -90,8 +93,24 @@ export function formatCostShortfall(
     .filter(([, short]) => short > 0)
     .sort(([left], [right]) => resourceRank(left) - resourceRank(right));
   if (missing.length === 0) return null;
-  return missing.map(([resourceId, short]) => `${short} ${resourceLabel(resourceId)}`).join(" · ");
+  return missing.map(([resourceId, short]) => costEntry(short, resourceId)).join(COST_SEPARATOR);
 }
+
+/**
+ * "120 Taş" / "120 Stone" — one amount and one resource, ordered by the language
+ * rather than by this file. Plan §10: a cost line is a sentence too, and
+ * `${amount} ${name}` is the concatenation that language rules out.
+ */
+function costEntry(amount: number, resourceId: string): string {
+  return t("common.cost.entry", { amount, resource: resourceLabel(resourceId) });
+}
+
+/**
+ * Punctuation, not text: the same middot separates every list the RTS UI prints,
+ * and a translator changing it in one place and not the others is a worse
+ * outcome than not offering the choice.
+ */
+const COST_SEPARATOR = " · ";
 
 function resourceRank(resourceId: string): number {
   const index = RESOURCE_ORDER.indexOf(resourceId);

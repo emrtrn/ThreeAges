@@ -3194,6 +3194,12 @@ body {
   box-shadow: var(--ta-panel-shadow);
 }
 
+/* The panel sets `display`, which beats the browser's own `[hidden]` rule, so
+   the B toggle has to be honoured here or it flips a property nothing reads. */
+.rts-build-palette[hidden] {
+  display: none;
+}
+
 /* Category contents have different natural heights. The TypeScript palette
    measures those endpoints and supplies an inline height only during a switch. */
 .rts-build-palette.is-category-resizing {
@@ -3286,8 +3292,26 @@ body {
    reaches it, and it scrolls the cards rather than clipping the frame. */
 .rts-build-grid {
   min-height: 0;
+  max-height: calc(100vh - 150px);
   margin-top: 5px;
   overflow-y: auto;
+  opacity: 1;
+  transition: max-height 160ms ease, margin-top 160ms ease, opacity 120ms ease;
+}
+
+/* The palette remains discoverable as a titled row of category tabs, but stops
+   covering the map until the player returns to it. The current mode's status
+   stays visible: a compact panel must not hide an armed placement cursor. */
+.rts-build-palette.is-compact .rts-build-grid,
+.rts-build-palette.is-compact .rts-build-action-message,
+.rts-build-palette.is-compact:not(.has-placement-mode) .rts-build-status,
+.rts-build-palette.is-compact:not(.has-placement-mode) .rts-build-road-hint {
+  min-height: 0;
+  max-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .rts-build-category-panel {
@@ -3593,17 +3617,25 @@ body {
 
 .rts-build-status {
   min-height: 1.35em;
+  max-height: 1.35em;
   margin-top: 3px;
   color: var(--ta-ink);
   font-size: 12px;
+  overflow: hidden;
+  opacity: 1;
+  transition: min-height 160ms ease, max-height 160ms ease, margin-top 160ms ease, opacity 120ms ease;
 }
 
 .rts-build-road-hint {
   min-height: 1.35em;
+  max-height: 3.9em;
   margin: 1px 0 0;
   color: var(--ta-ink-muted);
   font-size: 11px;
   line-height: 1.3;
+  overflow: hidden;
+  opacity: 1;
+  transition: min-height 160ms ease, max-height 160ms ease, margin-top 160ms ease, opacity 120ms ease;
 }
 
 .rts-build-road-hint[hidden] {
@@ -3615,12 +3647,25 @@ body {
    the elements. */
 
 .rts-build-action-message {
-  min-height: 1.35em;
+  min-height: 0;
+  max-height: 2.6em;
   margin-top: 5px;
   color: var(--ta-gold);
   font-size: 11px;
   line-height: 1.3;
   font-weight: 700;
+  overflow: hidden;
+  opacity: 1;
+  transition: min-height 160ms ease, max-height 160ms ease, margin-top 160ms ease, opacity 120ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rts-build-grid,
+  .rts-build-status,
+  .rts-build-road-hint,
+  .rts-build-action-message {
+    transition-duration: 0ms;
+  }
 }
 
 /*

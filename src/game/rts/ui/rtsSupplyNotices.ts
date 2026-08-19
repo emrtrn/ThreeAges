@@ -28,12 +28,14 @@
  */
 import type { MarketSupplyState } from "../economy/marketSupplySystem";
 import type { RtsNotificationRequest } from "./rtsNotifications";
+import { t } from "../../localization/LocalizationService";
 import { resourceLabel } from "./resourceLabels";
 
 /** The site facts a notice is written from — a subset of `MarketSupplySnapshot`. */
 export interface SupplyNoticeSite {
   readonly siteId: string;
-  readonly label: string;
+  /** Localization key for the site's name; resolved here, where the line is written. */
+  readonly nameKey: string;
   readonly resourceId: string;
 }
 
@@ -73,6 +75,7 @@ export function supplyNotice(
   everSupplied: boolean,
 ): SupplyNotice {
   const resource = resourceLabel(site.resourceId);
+  const name = t(site.nameKey);
   if (state === "supplying") {
     if (previous === "supplying") return NOTHING;
     return {
@@ -81,10 +84,10 @@ export function supplyNotice(
         kind: "supply-linked",
         subject: site.siteId,
         text: previous === "rival"
-          ? `${site.label} ele geçirildi: ${resource} arzı artık sizin.`
+          ? t("notification.supply.captured", { site: name, resource })
           : previous === "cut"
-            ? `${site.label} yeniden bağlandı: ${resource} arzı sürüyor.`
-            : `${site.label} bağlandı: ${resource} Pazar'a akmaya başladı.`,
+            ? t("notification.supply.reconnected", { site: name, resource })
+            : t("notification.supply.linked", { site: name, resource }),
       },
     };
   }
@@ -96,7 +99,7 @@ export function supplyNotice(
       post: {
         kind: "supply-lost",
         subject: site.siteId,
-        text: `${site.label} rakibin eline geçti: ${resource} arzınız kesildi.`,
+        text: t("notification.supply.lost", { site: name, resource }),
       },
     };
   }
@@ -105,7 +108,7 @@ export function supplyNotice(
     post: {
       kind: "supply-cut",
       subject: site.siteId,
-      text: `${site.label} yolu kesildi: ${resource} stoğu artık dolmuyor.`,
+      text: t("notification.supply.cut", { site: name, resource }),
     },
   };
 }

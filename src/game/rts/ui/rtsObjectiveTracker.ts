@@ -18,20 +18,22 @@
  *
  * Presentation only. It decides nothing; `RtsApp` hands it the state.
  */
+import { t } from "../../localization/LocalizationService";
 import { formatMatchDuration } from "../match/rtsMatchClock";
 import type { RegionalVictoryProgress } from "../objectives/regionalVictorySystem";
 import type { StrategicPointStatus } from "../objectives/strategicPointSystem";
 import type { UnitOwner } from "../units/unit";
 
-const OWNER_LABEL: Readonly<Record<UnitOwner, string>> = {
-  player: "Sen",
-  enemy: "Düşman",
+/** Key suffixes, resolved at render time so a language switch reaches them. */
+const OWNER_KEY: Readonly<Record<UnitOwner, string>> = {
+  player: "objective.owner.player",
+  enemy: "objective.owner.enemy",
 };
 
-const HOLDER_LABEL: Readonly<Record<UnitOwner | "neutral", string>> = {
-  player: "senin",
-  enemy: "düşmanda",
-  neutral: "boş",
+const HOLDER_KEY: Readonly<Record<UnitOwner | "neutral", string>> = {
+  player: "objective.holder.player",
+  enemy: "objective.holder.enemy",
+  neutral: "objective.holder.neutral",
 };
 
 /**
@@ -49,7 +51,7 @@ const HOLDER_LABEL: Readonly<Record<UnitOwner | "neutral", string>> = {
  * which is a real and useful move — so a hint there would argue against a correct
  * action. And a point already held needs no instructions.
  */
-const UNHELD_POINT_HINT = "Yola bağlı karakol gerekir.";
+const UNHELD_POINT_HINT_KEY = "objective.point.unheld_hint";
 
 export interface RtsObjectiveTrackerState {
   readonly points: readonly StrategicPointStatus[];
@@ -67,18 +69,25 @@ export class RtsObjectiveTracker {
   constructor() {
     this.root.className = "rts-objective-tracker";
     this.root.dataset.rtsObjectives = "";
-    this.root.setAttribute("aria-label", "Görevler");
+    this.root.setAttribute("aria-label", t("objective.panel.aria"));
     this.toggle.type = "button";
     this.toggle.className = "rts-objective-toggle ui-interactive";
     this.toggle.setAttribute("aria-expanded", "true");
     this.toggle.setAttribute("aria-controls", "rts-objective-content");
-    this.toggle.innerHTML = "<span>Görevler</span><span aria-hidden=\"true\">⌃</span>";
+    // `textContent` per element rather than one `innerHTML`: translated text is
+    // data, and a language that happens to contain "<" must not become markup.
+    const toggleLabel = document.createElement("span");
+    toggleLabel.textContent = t("objective.panel.title");
+    const toggleIcon = document.createElement("span");
+    toggleIcon.setAttribute("aria-hidden", "true");
+    toggleIcon.textContent = "⌃";
+    this.toggle.append(toggleLabel, toggleIcon);
     this.toggle.addEventListener("click", () => {
       this.collapsed = !this.collapsed;
       this.syncCollapsedState();
     });
     const heading = document.createElement("strong");
-    heading.textContent = "Bölgesel Zafer";
+    heading.textContent = t("objective.regional_victory.title");
     this.content.id = "rts-objective-content";
     this.content.className = "rts-objective-content";
     this.pointList.className = "rts-objective-points";
@@ -123,12 +132,12 @@ export class RtsObjectiveTracker {
       row.dataset.holder = status.holder;
       row.dataset.contested = String(status.contested);
       const name = document.createElement("span");
-      name.textContent = status.point.name;
+      name.textContent = t(status.point.nameKey);
       const state = document.createElement("span");
       // "çekişmeli" replaces the holder rather than sitting beside it: while a
       // point is contested nobody is banking time on it, so reporting it as
       // still held would misdescribe what the counter is doing.
-      state.textContent = status.contested ? "çekişmeli" : HOLDER_LABEL[status.holder];
+      state.textContent = t(status.contested ? "objective.holder.contested" : HOLDER_KEY[status.holder]);
       row.append(name, state);
       // Its own line under the pair rather than a longer status word: the
       // name/holder columns are what a player scans every few seconds, and the
@@ -138,7 +147,7 @@ export class RtsObjectiveTracker {
         const hint = document.createElement("span");
         hint.className = "rts-objective-point-hint";
         hint.dataset.rtsObjectiveHint = "";
-        hint.textContent = UNHELD_POINT_HINT;
+        hint.textContent = t(UNHELD_POINT_HINT_KEY);
         row.appendChild(hint);
       }
       return row;
@@ -154,7 +163,11 @@ export class RtsObjectiveTracker {
 
       const label = document.createElement("span");
       label.className = "rts-objective-bar-label";
-      label.textContent = `${OWNER_LABEL[entry.owner]} ${entry.secured}/${entry.total}`;
+      label.textContent = t("objective.progress.label", {
+        owner: t(OWNER_KEY[entry.owner]),
+        secured: entry.secured,
+        total: entry.total,
+      });
 
       const track = document.createElement("div");
       track.className = "rts-objective-bar-track";

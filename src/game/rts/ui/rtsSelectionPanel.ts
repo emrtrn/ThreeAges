@@ -23,6 +23,7 @@ import {
   type SelectionUnitCard,
   type WorkerAssignmentTarget,
 } from "./rtsSelectionView";
+import { t } from "../../localization/LocalizationService";
 import { isRtsFormationId, type RtsFormationId } from "../units/formations/rtsFormationTypes";
 
 export class RtsSelectionPanel {
@@ -76,7 +77,7 @@ export class RtsSelectionPanel {
     // title, summary, hints, padding — lets the click through to the map, the
     // same rule the notification feed states for itself.
     this.root.className = "rts-selection-panel";
-    this.root.setAttribute("aria-label", "Seçim");
+    this.root.setAttribute("aria-label", t("selection.panel.aria"));
     this.portrait.className = "rts-selection-portrait";
     this.portraitImage.className = "rts-selection-portrait-image";
     this.portraitImage.alt = "";
@@ -248,7 +249,10 @@ export class RtsSelectionPanel {
       const percent = Math.round(ratio * 100);
       this.healthFill.style.width = `${percent}%`;
       this.health.dataset.rtsHealthTone = ratio >= 0.6 ? "healthy" : ratio >= 0.3 ? "warning" : "critical";
-      this.health.title = `Can: ${Math.ceil(health.current)}/${Math.ceil(health.max)}`;
+      this.health.title = t("selection.panel.health_tooltip", {
+        current: Math.ceil(health.current),
+        max: Math.ceil(health.max),
+      });
     } else delete this.health.dataset.rtsHealthTone;
     // Reuse the paragraphs rather than replaceChildren: the line count is stable
     // for a given selection, so the common re-render is a text swap.
@@ -276,7 +280,7 @@ export class RtsSelectionPanel {
     this.slots.replaceChildren(...slots.map((slot) => {
       const entry = document.createElement("span");
       entry.className = "rts-selection-slot";
-      entry.title = `${slot.count} ${slot.label}`;
+      entry.title = t("selection.panel.slot_tooltip", { count: slot.count, unit: slot.label });
       if (slot.icon) {
         const icon = document.createElement("img");
         icon.src = slot.icon;
@@ -313,7 +317,7 @@ export class RtsSelectionPanel {
     this.cards.replaceChildren(...cards.map((card) => {
       const entry = document.createElement("div");
       entry.className = "rts-selection-card";
-      entry.title = `${card.count} ${card.label}`;
+      entry.title = t("selection.panel.slot_tooltip", { count: card.count, unit: card.label });
 
       const count = document.createElement("span");
       count.className = "rts-selection-card-count";
@@ -398,7 +402,7 @@ export class RtsSelectionPanel {
     if (targets.length === 0) {
       const empty = document.createElement("p");
       empty.className = "rts-selection-worker-assignment-empty";
-      empty.textContent = "Uygun iş noktası yok · Oto ile otomatik atamayı aç";
+      empty.textContent = t("selection.worker_assignment.none");
       this.workerAssignments.replaceChildren(empty);
       return;
     }
@@ -408,7 +412,7 @@ export class RtsSelectionPanel {
       card.className = "rts-selection-worker-assignment";
       card.dataset.rtsAction = target.actionId;
       const openSlots = target.workerCapacity - target.assignedWorkers;
-      card.title = `${target.label}: ${openSlots} işçi yeri boş. Seçili işçileri ata.`;
+      card.title = t("selection.worker_assignment.tooltip", { building: target.label, slots: openSlots });
       card.setAttribute("aria-label", card.title);
       if (target.icon) {
         const image = document.createElement("img");

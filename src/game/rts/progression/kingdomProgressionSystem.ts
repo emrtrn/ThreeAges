@@ -32,6 +32,16 @@ import type { HealthComponent } from "../units/health";
 import type { UnitOwner } from "../units/unit";
 
 /**
+ * Centre level a kingdom must reach before the Town transition opens.
+ *
+ * Named and exported because the refusal message *quotes* it. The sentence used
+ * to spell "Lv3" out, which made the rule and the text two facts free to drift
+ * apart — and made the number untranslatable into a fork that ladders
+ * differently.
+ */
+export const TOWN_REQUIRED_SETTLEMENT_LEVEL = 3;
+
+/**
  * What the progression sweep needs from a structure to give it a tier's stats —
  * deliberately narrower than `PlacedStructure`. The Command Centre is spawned
  * rather than built yet shares the same tier ladder, so the contract is stated
@@ -232,7 +242,7 @@ export class KingdomProgressionSystem {
     if (!this.centers.get(owner)) return "no-command-center";
     // The centre-level gate comes first, mirroring how the panel reads: the town
     // action only appears once the kingdom has reached Settlement Lv3.
-    if (state.level < 3) return "settlement-level";
+    if (state.level < TOWN_REQUIRED_SETTLEMENT_LEVEL) return "settlement-level";
     if (this.missingBuildings(owner).length > 0) return "missing-requirements";
     const reservation = this.kingdoms.get(owner).wallet.reserve(this.balance.town.cost);
     if (!reservation) return "insufficient-resources";

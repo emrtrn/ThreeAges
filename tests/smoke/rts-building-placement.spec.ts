@@ -72,9 +72,12 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   // stone income has to be *visible* to read as the reason the Town age stalls.
   for (const resourceId of ["food", "wood", "stone", "gold"]) {
     await expect(page.locator(`[data-rts-resource="${resourceId}"]`)).toBeVisible();
+    // Turkish writes the decimal with a comma. The rate used to go through
+    // `toFixed(1)`, which always wrote a dot; it now goes through
+    // `Intl.NumberFormat` for the active locale (inventory §7.7).
     await expect(
       page.locator(`[data-rts-resource="${resourceId}"] .rts-hud-resource-income`),
-    ).toHaveText("+0.0/dk");
+    ).toHaveText("+0,0/dk");
   }
   await expect(page.locator(".rts-debug-sim")).toContainText("kaynak hareketleri:");
   await expect(page.locator(".rts-debug-sim")).toContainText("yollar: 0 düğüm · 0 kenar · 0 ağ");
@@ -341,6 +344,29 @@ test("RTS Phase 9 build tools: categories, the affordability lock, and settings 
   await expect(page.getByRole("button", { name: "Varsayılan", exact: true })).toBeVisible();
 
   expect(errors).toEqual([]);
+});
+
+test("RTS build palette compacts after a mouse departure and restores the active category on return", async ({ page }) => {
+  await openMatch(page, "/?rts&debug");
+  const palette = page.locator(".rts-build-palette");
+  const canvas = page.locator("#game-canvas");
+
+  await palette.hover();
+  await expect(palette).not.toHaveClass(/is-compact/);
+  await canvas.hover({ position: { x: 640, y: 260 } });
+  await page.waitForTimeout(450);
+  await palette.hover();
+  await page.waitForTimeout(550);
+  await expect(palette).not.toHaveClass(/is-compact/);
+
+  await canvas.hover({ position: { x: 640, y: 260 } });
+  await page.waitForTimeout(1_000);
+  await expect(palette).toHaveClass(/is-compact/);
+  await expect(palette.locator(".rts-build-grid")).toHaveCSS("opacity", "0");
+
+  await palette.hover();
+  await expect(palette).not.toHaveClass(/is-compact/);
+  await expect(page.getByRole("button", { name: "Tarla", exact: true })).toBeVisible();
 });
 
 test("RTS Phase 9 the Barracks panel gates the Archer and the Ram behind a tier-2 Barracks", async ({ page }) => {

@@ -12,6 +12,7 @@
  * `RtsApp` hands the result down. Its only pointer input is the disclosure
  * button; it never changes mission or simulation state.
  */
+import { t } from "../../localization/LocalizationService";
 import type { MissionDirectorState } from "../tutorial/missionDirector";
 
 export class RtsMissionPanel {
@@ -42,7 +43,7 @@ export class RtsMissionPanel {
   constructor(private readonly onShow?: () => void) {
     this.root.className = "rts-mission-panel";
     this.root.dataset.rtsMission = "";
-    this.root.setAttribute("aria-label", "Görev");
+    this.root.setAttribute("aria-label", t("mission.panel.aria"));
     // A step change is an instruction the player has to notice without staring
     // at the panel, so it is announced. `polite` rather than `assertive`: it must
     // wait its turn behind anything urgent the match is saying.
@@ -80,7 +81,7 @@ export class RtsMissionPanel {
     this.show.type = "button";
     this.show.className = "rts-mission-show ui-interactive";
     this.show.dataset.rtsMissionShow = "";
-    this.show.textContent = "Göster";
+    this.show.textContent = t("mission.panel.show");
     this.show.hidden = true;
     this.show.addEventListener("click", () => this.onShow?.());
     this.content.append(this.why);
@@ -109,9 +110,12 @@ export class RtsMissionPanel {
     const signature = `${state.index}/${state.total}:${state.step.id}`;
     if (signature === this.signature) return;
     this.signature = signature;
-    this.toggleLabel.textContent = `Görev ${state.index + 1}/${state.total}`;
-    this.title.textContent = state.step.title;
-    this.why.textContent = state.step.why;
+    this.toggleLabel.textContent = t("mission.panel.step_counter", {
+      index: state.index + 1,
+      total: state.total,
+    });
+    this.title.textContent = t(state.step.titleKey);
+    this.why.textContent = t(state.step.whyKey);
     this.syncCollapsedState();
   }
 
@@ -143,7 +147,11 @@ export class RtsMissionPanel {
     this.toggle.setAttribute("aria-expanded", String(!this.collapsed));
     this.toggle.setAttribute(
       "aria-label",
-      `${this.collapsed ? "Görev ayrıntılarını aç" : "Görev ayrıntılarını kapat"}${this.title.textContent ? `: ${this.title.textContent}` : ""}`,
+      this.title.textContent
+        ? t(this.collapsed ? "mission.panel.expand.aria_titled" : "mission.panel.collapse.aria_titled", {
+            step: this.title.textContent,
+          })
+        : t(this.collapsed ? "mission.panel.expand.aria" : "mission.panel.collapse.aria"),
     );
     this.toggleIcon.textContent = this.collapsed ? "⌄" : "⌃";
   }

@@ -36,7 +36,8 @@ export interface RtsTradeSiteDefinition {
 }
 
 export interface TradeSiteSnapshot extends RtsTradeSiteDefinition {
-  readonly label: string;
+  /** Localization key for the site's name; the UI resolves it, this system does not. */
+  readonly nameKey: string;
   readonly resourceId: string;
   /** Goods standing at the site, waiting for a caravan that arrives in Faz S3. */
   readonly buffered: number;
@@ -179,7 +180,7 @@ export class TradeSiteSystem {
     return [...this.sites.values()]
       .map(({ definition, stats, buffered }): TradeSiteSnapshot => ({
         ...definition,
-        label: stats.label,
+        nameKey: stats.nameKey,
         resourceId: stats.resourceId,
         buffered,
         bufferCapacity: stats.bufferCapacity,

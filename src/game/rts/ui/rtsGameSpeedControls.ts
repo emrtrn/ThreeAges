@@ -1,3 +1,4 @@
+import { t } from "../../localization/LocalizationService";
 import {
   RTS_SIMULATION_SPEEDS,
   type RtsSimulationSpeed,
@@ -38,10 +39,10 @@ export class RtsGameSpeedControls {
     this.root.className = "rts-game-speed ui-interactive";
     const mode = options.mode ?? "player";
     this.root.dataset.rtsSpeedMode = mode;
-    this.root.setAttribute("aria-label", mode === "debug" ? "Geliştirici oyun hızı" : "Oyun hızı");
+    this.root.setAttribute("aria-label", t(mode === "debug" ? "hud.speed.aria.debug" : "hud.speed.aria"));
     const label = document.createElement("span");
     label.className = "rts-game-speed-label";
-    label.textContent = mode === "debug" ? "Hız (Geliştirici)" : "Hız";
+    label.textContent = t(mode === "debug" ? "hud.speed.label.debug" : "hud.speed.label");
     const choices = document.createElement("div");
     choices.className = "rts-game-speed-choices";
     for (const speed of options.speeds ?? RTS_SIMULATION_SPEEDS) {

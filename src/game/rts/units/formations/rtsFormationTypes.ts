@@ -16,9 +16,14 @@ export type RtsFormationId =
 
 export interface RtsFormationDefinition {
   readonly id: RtsFormationId;
-  readonly label: string;
+  /**
+   * Localization keys, not sentences (Plan §9). This catalogue is a module-level
+   * constant read at import time; text here would be frozen in whichever
+   * language the bundle happened to boot in.
+   */
+  readonly labelKey: string;
   readonly minUnits: number;
-  readonly description: string;
+  readonly descriptionKey: string;
   /** Small local x/y dot coordinates; the selection UI owns their rendering. */
   readonly iconDots: readonly (readonly [number, number])[];
 }
@@ -32,12 +37,12 @@ export const DEFAULT_RTS_FORMATION: RtsFormationId = "line";
  * source without making the Phase 1 panel depend on movement code.
  */
 export const RTS_FORMATION_DEFINITIONS: readonly RtsFormationDefinition[] = [
-  { id: "line", label: "Hat", minUnits: 2, description: "Geniş bir cephe oluşturur.", iconDots: [[12, 50], [28, 50], [44, 50], [60, 50], [76, 50], [92, 50]] },
-  { id: "column", label: "Kol", minUnits: 2, description: "Dar ve derin bir düzen oluşturur.", iconDots: [[38, 15], [62, 15], [38, 42], [62, 42], [38, 69], [62, 69], [38, 96], [62, 96]] },
-  { id: "wedge", label: "Kama", minUnits: 3, description: "Merkezi öne çıkaran hücum düzeni.", iconDots: [[50, 12], [34, 38], [66, 38], [18, 68], [50, 68], [82, 68]] },
-  { id: "crescent", label: "Hilal", minUnits: 6, description: "Kanatları öne çıkaran geniş düzen.", iconDots: [[16, 16], [84, 16], [26, 40], [74, 40], [38, 64], [62, 64], [50, 82]] },
-  { id: "square", label: "Kare", minUnits: 8, description: "Kırılgan birlikleri merkezde korur.", iconDots: [[18, 18], [50, 18], [82, 18], [18, 50], [82, 50], [18, 82], [50, 82], [82, 82]] },
-  { id: "loose", label: "Dağınık", minUnits: 2, description: "Birimler arasındaki mesafeyi artırır.", iconDots: [[18, 20], [73, 12], [48, 43], [88, 58], [14, 76], [62, 88]] },
+  { id: "line", labelKey: "selection.formation.line.name", minUnits: 2, descriptionKey: "selection.formation.line.description", iconDots: [[12, 50], [28, 50], [44, 50], [60, 50], [76, 50], [92, 50]] },
+  { id: "column", labelKey: "selection.formation.column.name", minUnits: 2, descriptionKey: "selection.formation.column.description", iconDots: [[38, 15], [62, 15], [38, 42], [62, 42], [38, 69], [62, 69], [38, 96], [62, 96]] },
+  { id: "wedge", labelKey: "selection.formation.wedge.name", minUnits: 3, descriptionKey: "selection.formation.wedge.description", iconDots: [[50, 12], [34, 38], [66, 38], [18, 68], [50, 68], [82, 68]] },
+  { id: "crescent", labelKey: "selection.formation.crescent.name", minUnits: 6, descriptionKey: "selection.formation.crescent.description", iconDots: [[16, 16], [84, 16], [26, 40], [74, 40], [38, 64], [62, 64], [50, 82]] },
+  { id: "square", labelKey: "selection.formation.square.name", minUnits: 8, descriptionKey: "selection.formation.square.description", iconDots: [[18, 18], [50, 18], [82, 18], [18, 50], [82, 50], [18, 82], [50, 82], [82, 82]] },
+  { id: "loose", labelKey: "selection.formation.loose.name", minUnits: 2, descriptionKey: "selection.formation.loose.description", iconDots: [[18, 20], [73, 12], [48, 43], [88, 58], [14, 76], [62, 88]] },
 ];
 
 export function isRtsFormationId(value: string): value is RtsFormationId {

@@ -81,21 +81,25 @@ export class MissionDirector {
     }
   }
 
-  get label(): string {
-    return this.script.label;
+  /**
+   * Localization keys, not sentences — the director is simulation, and the
+   * feed that posts these is the layer that speaks the player's language.
+   */
+  get nameKey(): string {
+    return this.script.nameKey;
   }
 
-  get intro(): string {
-    return this.script.intro;
+  get introKey(): string {
+    return this.script.introKey;
   }
 
-  /** The fog line, or `null` when the chain has none written. */
-  get introFog(): string | null {
-    return this.script.introFog ?? null;
+  /** The fog line's key, or `null` when the chain has none written. */
+  get introFogKey(): string | null {
+    return this.script.introFogKey ?? null;
   }
 
-  get outro(): string {
-    return this.script.outro;
+  get outroKey(): string {
+    return this.script.outroKey;
   }
 
   /**

@@ -66,7 +66,8 @@ export type MarketSupplyStatus =
 export interface MarketSupplySnapshot {
   readonly siteId: string;
   readonly siteType: string;
-  readonly label: string;
+  /** Localization key for the site's name — see {@link TradeSiteSnapshot.nameKey}. */
+  readonly nameKey: string;
   readonly resourceId: string;
   /** Where the site stands — what the fog test in {@link marketSupplyLines} asks about. */
   readonly x: number;
@@ -117,7 +118,8 @@ export interface MarketSupplyLine {
   readonly state: MarketSupplyLineState;
   /** The site the sentence is about; null only when `absent`. */
   readonly siteId: string | null;
-  readonly siteLabel: string | null;
+  /** Localization key for that site's name; null only when `absent`. */
+  readonly siteNameKey: string | null;
 }
 
 /**
@@ -191,7 +193,7 @@ export function marketSupplyLines(
   } = {},
 ): readonly MarketSupplyLine[] {
   return resourceIds.map((resourceId) => {
-    let best: MarketSupplyLine = { resourceId, state: "absent", siteId: null, siteLabel: null };
+    let best: MarketSupplyLine = { resourceId, state: "absent", siteId: null, siteNameKey: null };
     for (const site of snapshots) {
       if (site.resourceId !== resourceId) continue;
       const state = siteSupplyState(
@@ -201,7 +203,7 @@ export function marketSupplyLines(
         options.isExplored?.(site.x, site.z) ?? true,
       );
       if (SUPPLY_LINE_RANK[state] >= SUPPLY_LINE_RANK[best.state]) continue;
-      best = { resourceId, state, siteId: site.siteId, siteLabel: site.label };
+      best = { resourceId, state, siteId: site.siteId, siteNameKey: site.nameKey };
     }
     return best;
   });
@@ -237,7 +239,7 @@ export class MarketSupplySystem implements CaravanLaneProvider {
       const base = {
         siteId: site.id,
         siteType: site.siteType,
-        label: site.label,
+        nameKey: site.nameKey,
         resourceId: site.resourceId,
         x: site.x,
         z: site.z,

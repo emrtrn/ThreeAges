@@ -1,6 +1,6 @@
 {
   "guard_placeholder": {
-    "label": "Muhafız",
+    "nameKey": "unit.guard.name",
     "icon": "/assets/ui/icons/unit-guard.png",
     "role": "guard",
     "armorClass": "heavy",
@@ -31,7 +31,7 @@
     "structureAttackVfx": "firebrand"
   },
   "archer_placeholder": {
-    "label": "Okçu",
+    "nameKey": "unit.archer.name",
     "icon": "/assets/ui/icons/unit-archer.png",
     "role": "archer",
     "armorClass": "light",
@@ -61,7 +61,7 @@
     "populationCost": 1
   },
   "siege_placeholder": {
-    "label": "Topçu",
+    "nameKey": "unit.siege.name",
     "icon": "/assets/ui/icons/unit-siege.png",
     "role": "siege",
     "armorClass": "heavy",
@@ -98,7 +98,7 @@
     "impactEffect": "rts-fx-explosion"
   },
   "worker_placeholder": {
-    "label": "İşçi",
+    "nameKey": "unit.worker.name",
     "icon": "/assets/ui/icons/unit-worker.png",
     "role": "worker",
     "armorClass": "light",

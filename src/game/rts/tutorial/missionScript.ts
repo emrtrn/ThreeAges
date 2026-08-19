@@ -21,8 +21,8 @@ import type { UnitStance } from "../units/unit";
 /**
  * One step of the chain.
  *
- * `title` states the goal as an instruction ("Tarlayı depoya bağla"); `why` is
- * the single sentence that actually teaches. The split matters: the game's own
+ * `titleKey` states the goal as an instruction ("Tarlayı depoya bağla"); `whyKey`
+ * is the single sentence that actually teaches. The split matters: the game's own
  * panels already state every *rule* (`rtsSelectionView.ts` spells out each
  * logistics status in full), so what a first-time player is missing is not the
  * rule text but the reason to go looking for it. `why` is that reason, and it
@@ -30,8 +30,13 @@ import type { UnitStance } from "../units/unit";
  */
 export interface MissionStep {
   readonly id: string;
-  readonly title: string;
-  readonly why: string;
+  /**
+   * Localization keys, not sentences — Localization Plan §9. The mission file
+   * names `objectives.json` entries (`mission.<script>.step.<id>.title` and
+   * `.why`); the text of a tutorial is content to translate like any other.
+   */
+  readonly titleKey: string;
+  readonly whyKey: string;
   readonly goal: MissionGoal;
   /**
    * Keep this step cleared once it has cleared, even if its goal stops holding.
@@ -322,22 +327,23 @@ export type MissionGoal =
 
 export interface MissionScript {
   readonly id: string;
-  readonly label: string;
+  /** Localization key for the chain's name — see {@link MissionStep.titleKey}. */
+  readonly nameKey: string;
   /** Shown once when the chain opens; the story frame, not an instruction. */
-  readonly intro: string;
+  readonly introKey: string;
   /**
    * A second opening line, shown only when the match is being played with fog of
    * war on — Faz 4.
    *
-   * Optional and separate from {@link intro} rather than folded into it, because
+   * Optional and separate from {@link introKey} rather than folded into it, because
    * fog is the player's choice on the menu and the tur may not overrule it: a
    * chain that explained scouting in every match would be teaching a rule half
    * its players are not playing under, and one that never explained it leaves
    * the other half wondering why the valley is dark. The condition is the one
    * flag the caller already holds; nothing here reads it.
    */
-  readonly introFog?: string;
+  readonly introFogKey?: string;
   /** Shown when the last step clears and the director detaches. */
-  readonly outro: string;
+  readonly outroKey: string;
   readonly steps: readonly MissionStep[];
 }

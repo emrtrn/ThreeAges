@@ -198,10 +198,9 @@ export function adaptRtsLevel(
       tradeSites.push({ id, siteType, ...point });
     } else if (def.name === "BP_RTS_StrategicPoint") {
       const id = requireText(values, "pointId", "StrategicPoint");
-      const name = requireText(values, "label", `StrategicPoint ${id}`);
       const captureRadius = requirePositiveNumber(values, "captureRadius", `StrategicPoint ${id}`);
       if (strategicPoints.some((strategicPoint) => strategicPoint.id === id)) throw new RtsLevelError(`duplicate strategic point ${id}`);
-      strategicPoints.push({ id, name, captureRadius, ...point });
+      strategicPoints.push({ id, nameKey: `objective.point.${id}.name`, captureRadius, ...point });
     } else if (def.name === "BP_RTS_NavigationBlocker") {
       const width = requirePositiveNumber(values, "width", "NavigationBlocker");
       const depth = requirePositiveNumber(values, "depth", "NavigationBlocker");

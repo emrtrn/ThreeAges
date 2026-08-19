@@ -1,14 +1,14 @@
 {
   "id": "frontier_road",
-  "label": "Sınır Yolu",
-  "intro": "Kral seni terk edilmiş bir sınır vadisine gönderdi. Merkez ilk deposun: çevresindeki bedava yola değen her yapı hazineye çalışır. Sağ tık: birlik gönder · WASD: haritayı gez.",
-  "introFog": "Vadinin çoğu sis altında: yalnız birliklerinin ve yapılarının gördüğü yer açık kalır. Rakibin ne yaptığını görmek için keşfe birlik gönder.",
-  "outro": "Rakip lordun ileri karakolu düştü. Vadi artık senin. Serbest maçta bölgesel zaferi seçersen stratejik geçitler ikinci bir kazanma yolu olur: geçit birlikle değil, yola bağlı karakolun kontrol alanıyla tutulur.",
+  "nameKey": "mission.frontier_road.name",
+  "introKey": "mission.frontier_road.intro",
+  "introFogKey": "mission.frontier_road.intro_fog",
+  "outroKey": "mission.frontier_road.outro",
   "steps": [
     {
       "id": "wood_flowing",
-      "title": "Oduncu Kampı Kur",
-      "why": "Merkez ilk deposun; yoluna değen yapının hasadı hazineye akar.",
+      "titleKey": "mission.frontier_road.step.wood_flowing.title",
+      "whyKey": "mission.frontier_road.step.wood_flowing.why",
       "goal": {
         "kind": "producer-linked",
         "resourceId": "wood",
@@ -23,8 +23,8 @@
     },
     {
       "id": "food_flowing",
-      "title": "Avcı Kulübesi Kur",
-      "why": "İlk yiyecek avdan gelir: kulübeyi geyiklerin yanına kur, o da yola değsin. Tarla Merkez Lv2'de açılır.",
+      "titleKey": "mission.frontier_road.step.food_flowing.title",
+      "whyKey": "mission.frontier_road.step.food_flowing.why",
       "goal": {
         "kind": "producer-linked",
         "resourceId": "food",
@@ -43,8 +43,8 @@
     },
     {
       "id": "first_depot",
-      "title": "Depo Kur",
-      "why": "Merkezin deposu dolunca teslimat durur; Depo kapasiteyi büyütür.",
+      "titleKey": "mission.frontier_road.step.first_depot.title",
+      "whyKey": "mission.frontier_road.step.first_depot.why",
       "goal": {
         "kind": "structure-built",
         "buildingId": "depot",
@@ -59,8 +59,8 @@
     },
     {
       "id": "market",
-      "title": "Pazar Kur",
-      "why": "Pazar 20 odun; elindeki fazlayı ihtiyacın olana çevirir.",
+      "titleKey": "mission.frontier_road.step.market.title",
+      "whyKey": "mission.frontier_road.step.market.why",
       "goal": {
         "kind": "structure-built",
         "buildingId": "market",
@@ -75,8 +75,8 @@
     },
     {
       "id": "supply_wood",
-      "title": "Kereste Kampına Yol Çek",
-      "why": "Pazar yalnızca birinin taşıdığını satar: raf, yola bağladığın arz noktasından gelen kervanla dolar.",
+      "titleKey": "mission.frontier_road.step.supply_wood.title",
+      "whyKey": "mission.frontier_road.step.supply_wood.why",
       "goal": {
         "kind": "trade-site-supplying",
         "resourceId": "wood",
@@ -94,8 +94,8 @@
     },
     {
       "id": "buy_wood",
-      "title": "Pazar'dan 50 Odun Al",
-      "why": "Pazar'ı seç: yiyecek sat, altınla odun al. Raf ancak kervanın getirdiği kadar doludur.",
+      "titleKey": "mission.frontier_road.step.buy_wood.title",
+      "whyKey": "mission.frontier_road.step.buy_wood.why",
       "goal": {
         "kind": "market-bought",
         "resourceId": "wood",
@@ -111,8 +111,8 @@
     },
     {
       "id": "center_lv2",
-      "title": "Merkezi 2. Seviyeye Çıkar",
-      "why": "Yükseltme Merkez'den yapılır ve bütün yapılarına aynı anda işler.",
+      "titleKey": "mission.frontier_road.step.center_lv2.title",
+      "whyKey": "mission.frontier_road.step.center_lv2.why",
       "goal": {
         "kind": "tier-reached",
         "age": "settlement",
@@ -128,8 +128,8 @@
     },
     {
       "id": "houses",
-      "title": "Ev Kur",
-      "why": "Nüfus tavanında ne işçi ne asker üretebilirsin; tavanı Ev yükseltir.",
+      "titleKey": "mission.frontier_road.step.houses.title",
+      "whyKey": "mission.frontier_road.step.houses.why",
       "goal": {
         "kind": "population-headroom",
         "count": 5
@@ -143,8 +143,8 @@
     },
     {
       "id": "train_workers",
-      "title": "Dört İşçi Üret",
-      "why": "Üretim yapıları boştaki işçileri kendi tutar; işçin yoksa yapı boş durur.",
+      "titleKey": "mission.frontier_road.step.train_workers.title",
+      "whyKey": "mission.frontier_road.step.train_workers.why",
       "goal": {
         "kind": "unit-trained",
         "role": "worker",
@@ -160,8 +160,8 @@
     },
     {
       "id": "second_lumber_camp",
-      "title": "İkinci Oduncu Kampı Kur",
-      "why": "Çağ geçişinin odun faturası tek kampın çıkarabileceğinden büyük; farkı ikinci kamp kapatır.",
+      "titleKey": "mission.frontier_road.step.second_lumber_camp.title",
+      "whyKey": "mission.frontier_road.step.second_lumber_camp.why",
       "goal": {
         "kind": "producer-linked",
         "resourceId": "wood",
@@ -176,8 +176,8 @@
     },
     {
       "id": "second_farm",
-      "title": "Tarla Kur",
-      "why": "Merkez 2. seviyeye çıktı: Tarla artık açık. Av eninde sonunda biter, tarla bitmez.",
+      "titleKey": "mission.frontier_road.step.second_farm.title",
+      "whyKey": "mission.frontier_road.step.second_farm.why",
       "goal": {
         "kind": "producer-linked",
         "resourceId": "food",
@@ -192,8 +192,8 @@
     },
     {
       "id": "outpost",
-      "title": "Karakol Kur",
-      "why": "Kontrol alanını karakol büyütür; yola bağlıysa daha da geniş.",
+      "titleKey": "mission.frontier_road.step.outpost.title",
+      "whyKey": "mission.frontier_road.step.outpost.why",
       "goal": {
         "kind": "outpost-connected",
         "count": 1
@@ -207,8 +207,8 @@
     },
     {
       "id": "quarry",
-      "title": "Taş Ocağı Kur",
-      "why": "Ocak taş yatağının üstüne kurulur; yolu Merkez ağına ulaşmalı.",
+      "titleKey": "mission.frontier_road.step.quarry.title",
+      "whyKey": "mission.frontier_road.step.quarry.why",
       "goal": {
         "kind": "producer-linked",
         "resourceId": "stone",
@@ -227,8 +227,8 @@
     },
     {
       "id": "gold_mine",
-      "title": "Altın Madeni Kur",
-      "why": "Altın en yavaş kaynak: hem Pazar'ın hem çağ geçişinin parası.",
+      "titleKey": "mission.frontier_road.step.gold_mine.title",
+      "whyKey": "mission.frontier_road.step.gold_mine.why",
       "goal": {
         "kind": "producer-linked",
         "resourceId": "gold",
@@ -247,8 +247,8 @@
     },
     {
       "id": "barracks",
-      "title": "Kışla Kur",
-      "why": "Rakip lord da bu vadiyi istiyor; ekonomin büyüdükçe hedef oluyorsun.",
+      "titleKey": "mission.frontier_road.step.barracks.title",
+      "whyKey": "mission.frontier_road.step.barracks.why",
       "goal": {
         "kind": "structure-built",
         "buildingId": "barracks",
@@ -263,8 +263,8 @@
     },
     {
       "id": "guards",
-      "title": "Üç Muhafız Eğit",
-      "why": "Düşman deponun üstünde durursa, binayı yıkmadan hattını keser.",
+      "titleKey": "mission.frontier_road.step.guards.title",
+      "whyKey": "mission.frontier_road.step.guards.why",
       "goal": {
         "kind": "unit-trained",
         "role": "guard",
@@ -280,8 +280,8 @@
     },
     {
       "id": "hold_stance",
-      "title": "Muhafızları Pozisyonu Koru Duruşuna Al",
-      "why": "Serbest duruşta birlik gördüğünü kovalar ve hattını açık bırakır; koruma duruşunda yerinden oynamaz.",
+      "titleKey": "mission.frontier_road.step.hold_stance.title",
+      "whyKey": "mission.frontier_road.step.hold_stance.why",
       "latch": true,
       "goal": {
         "kind": "units-in-stance",
@@ -298,8 +298,8 @@
     },
     {
       "id": "town",
-      "title": "Kasaba Çağına Geç",
-      "why": "Kasaba yeni yapı ve birlikleri açar; geçiş sırasında zayıf düşersin.",
+      "titleKey": "mission.frontier_road.step.town.title",
+      "whyKey": "mission.frontier_road.step.town.why",
       "goal": {
         "kind": "tier-reached",
         "age": "town",
@@ -315,8 +315,8 @@
     },
     {
       "id": "archery_range",
-      "title": "Okçuluk Alanı Kur",
-      "why": "Kasaba'nın açtığı ilk askerî yapı: okçu menzilden vurur, muhafız yaklaşmak zorundadır.",
+      "titleKey": "mission.frontier_road.step.archery_range.title",
+      "whyKey": "mission.frontier_road.step.archery_range.why",
       "latch": true,
       "goal": {
         "kind": "structure-built",
@@ -332,8 +332,8 @@
     },
     {
       "id": "defend",
-      "title": "Üç Düşman Birliğini Düşür",
-      "why": "Rakip lord vadiyi geri istiyor; ordunu kullanmadığın sürece yalnızca hedefsin.",
+      "titleKey": "mission.frontier_road.step.defend.title",
+      "whyKey": "mission.frontier_road.step.defend.why",
       "goal": {
         "kind": "enemy-units-defeated",
         "count": 3
@@ -341,8 +341,8 @@
     },
     {
       "id": "raze",
-      "title": "Rakibin Karakolunu Yık",
-      "why": "Karakol düşünce rakip kontrol alanını ve üretim verimini kaybeder.",
+      "titleKey": "mission.frontier_road.step.raze.title",
+      "whyKey": "mission.frontier_road.step.raze.why",
       "goal": {
         "kind": "enemy-structure-razed",
         "buildingId": "outpost",

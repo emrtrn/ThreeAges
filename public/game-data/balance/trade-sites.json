@@ -1,6 +1,6 @@
 {
   "river_port": {
-    "label": "Nehir Limanı",
+    "nameKey": "building.trade_site.river_port.name",
     "icon": "/assets/ui/icons/trade-site-river-port.png",
     "resourceId": "food",
     "perMinute": 60,
@@ -13,7 +13,7 @@
     }
   },
   "timber_camp": {
-    "label": "Bağımsız Oduncu Kampı",
+    "nameKey": "building.trade_site.timber_camp.name",
     "icon": "/assets/ui/icons/trade-site-timber-camp.png",
     "resourceId": "wood",
     "perMinute": 80,
@@ -26,7 +26,7 @@
     }
   },
   "stone_pit": {
-    "label": "Taş Sahası",
+    "nameKey": "building.trade_site.stone_pit.name",
     "icon": "/assets/ui/icons/trade-site-stone-pit.png",
     "resourceId": "stone",
     "perMinute": 40,

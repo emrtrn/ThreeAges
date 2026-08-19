@@ -13,6 +13,7 @@
  * headlessly at any rate (§80 determinism).
  */
 import type { AiBalance, AiProfile, BuildingBalance, UnitRoleId } from "../../data/gameDataTypes";
+import { t } from "../../localization/LocalizationService";
 import type { BarracksProductionSystem } from "../structures/barracksProductionSystem";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { StructureConstructionService } from "../structures/structureConstructionService";
@@ -491,7 +492,7 @@ export class AiController {
       this.log.record({
         at: blackboard.now,
         kind: "emergency",
-        reason: `${producer.structureLabel} kaynağını kaybetti, alternatif yer aranıyor`,
+        reason: `${t(producer.structureNameKey)} kaynağını kaybetti, alternatif yer aranıyor`,
       });
     }
     for (const structureId of this.depletedProducerIds) {

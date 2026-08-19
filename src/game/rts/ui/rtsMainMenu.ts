@@ -21,6 +21,7 @@
  * suite, which finds the start button through them (plan §9). Reskinning the menu
  * separately would have cost a CSS copy and eight spec rewrites to look identical.
  */
+import { t } from "../../localization/LocalizationService";
 import { RtsMatchSetup, type RtsMatchSetupValues } from "../match/rtsMatchSetup";
 
 /**
@@ -57,13 +58,13 @@ export class RtsMainMenu {
     this.card.tabIndex = -1;
 
     const title = document.createElement("h1");
-    title.textContent = "Sınır Krallıkları";
+    title.textContent = t("menu.title");
     const detail = document.createElement("p");
-    detail.textContent = "Ekonomini kur, yolunu bağla ve düşman merkezini yık.";
+    detail.textContent = t("menu.tagline");
 
     this.actions.className = "rts-match-actions";
     this.startButton.type = "button";
-    this.startButton.textContent = "Maçı Başlat";
+    this.startButton.textContent = t("menu.start_match");
     this.startButton.dataset.rtsMatchAction = "start";
     this.startButton.dataset.primary = "true";
     this.actions.appendChild(this.startButton);

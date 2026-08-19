@@ -1,1 +1,8 @@
-{}
+{
+  "menu.title": "Sınır Krallıkları",
+  "menu.tagline": "Ekonomini kur, yolunu bağla ve düşman merkezini yık.",
+  "menu.start_match": "Maçı Başlat",
+  "menu.loading.title": "Yükleniyor",
+  "menu.loading.percent": "{ratio, number, percent}",
+  "menu.loading.preparing": "Hazırlanıyor…"
+}

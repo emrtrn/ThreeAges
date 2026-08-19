@@ -15,6 +15,13 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:5173",
     trace: "retain-on-failure",
+    // Pinned, not inherited — Localization Faz 2. The game resolves its language
+    // from `navigator.languages` (Plan §12.1), so an unpinned Chromium boots the
+    // suite in en-US and every text assertion in `tests/smoke` — all of which is
+    // written in Turkish — reads the English source strings instead. Pinning it
+    // also means the suite tests one language deliberately rather than whichever
+    // one the CI image happens to be configured for.
+    locale: "tr-TR",
   },
   webServer: {
     command: "npm run dev:local",
