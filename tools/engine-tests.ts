@@ -56946,6 +56946,15 @@ check("Lokalizasyon Faz 1: plural branches come from Intl, not from count === 1"
   assert.equal(formatMessage("{count} işçi", "tr", { count: 3 }), "3 işçi");
 });
 
+check("Lokalizasyon Faz 5: shipped Russian plural data selects Cyrillic categories", () => {
+  const russian = (JSON.parse(
+    readFileSync("public/game-data/locales/ru/common.json", "utf8"),
+  ) as Record<string, string>)["common.worker.count"]!;
+  assert.equal(formatMessage(russian, "ru", { count: 1 }), "1 рабочий");
+  assert.equal(formatMessage(russian, "ru", { count: 2 }), "2 рабочих");
+  assert.equal(formatMessage(russian, "ru", { count: 5 }), "5 рабочих");
+});
+
 check("Lokalizasyon Faz 1: the formatter is locale-aware and fails loudly on bad patterns", () => {
   // §11.2 / inventory §7.7: grouping, decimal separator and percent *position*
   // are formatting decisions, not translations. Asserting the separators, not
@@ -57016,6 +57025,7 @@ check("Lokalizasyon Faz 1: the registry decides locale matching, and refuses to 
   assert.equal(matchBrowserLocale(["fr-CA", "en-GB"]), "fr", "a regional French preference reaches French");
   assert.equal(matchBrowserLocale(["es"]), "es-ES", "a bare Spanish preference reaches Spanish (Spain)");
   assert.equal(matchBrowserLocale(["pt"]), "pt-BR", "a bare Portuguese preference reaches Brazilian Portuguese");
+  assert.equal(matchBrowserLocale(["ru-RU"]), "ru", "a regional Russian preference reaches Russian");
   assert.equal(matchBrowserLocale(["xx"]), null, "an unknown tag matches nothing");
   const all = { enabledOnly: false };
   assert.equal(matchBrowserLocale(["de-AT"], all), "de");
@@ -57044,6 +57054,7 @@ check("Lokalizasyon Faz 1: the registry decides locale matching, and refuses to 
   assert.equal(resolveInitialLocale({ browserLanguages: ["fr-FR"] }), "fr");
   assert.equal(resolveInitialLocale({ browserLanguages: ["es-ES"] }), "es-ES");
   assert.equal(resolveInitialLocale({ browserLanguages: ["pt-BR"] }), "pt-BR");
+  assert.equal(resolveInitialLocale({ browserLanguages: ["ru-RU"] }), "ru");
   assert.equal(
     resolveInitialLocale({ forcedLocale: PSEUDO_LOCALE, savedLocale: "tr", browserLanguages: browser }),
     PSEUDO_LOCALE,

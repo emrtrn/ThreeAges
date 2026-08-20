@@ -104,7 +104,7 @@ const REGISTRY: readonly LocaleDescriptor[] = [
     tier: "tier1",
     fontGroup: "latin-cyrillic",
     direction: "ltr",
-    enabled: false,
+    enabled: true,
     browserTags: ["ru"],
     intlLocale: "ru",
   },

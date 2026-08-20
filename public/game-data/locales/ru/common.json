@@ -1,0 +1,16 @@
+{
+  "common.resource.food.name": "Еда",
+  "common.resource.wood.name": "Дерево",
+  "common.resource.stone.name": "Камень",
+  "common.resource.gold.name": "Золото",
+  "common.cost.free": "Бесплатно",
+  "common.cost.entry": "{amount} {resource}",
+  "common.age.settlement.name": "Поселение",
+  "common.age.town.name": "Город",
+  "common.worker.count": "{count, plural, one {# рабочий} few {# рабочих} many {# рабочих} other {# рабочего}}",
+  "common.tier.name": "{age} Lv{level}",
+  "common.tier.unknown": "требуемый уровень",
+  "common.building.military": "военное здание",
+  "common.language.label": "Язык",
+  "common.language.hint": "Сразу меняет язык; игра это помнит."
+}

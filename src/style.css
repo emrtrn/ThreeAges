@@ -57,6 +57,14 @@
   --ta-progress-track: url("/assets/ui/skin/progress_track_9s.png");
 }
 
+/* Localization Plan Faz 5: Cinzel's shipped subset is a Latin display face.
+   Russian must not depend on an accidental per-glyph fallback, so its registry
+   font group switches the whole RTS overlay to a readable Cyrillic stack. */
+:root[data-locale-font-group="latin-cyrillic"] {
+  --ta-font-display: Georgia, "Times New Roman", serif;
+  --ta-font-body: Georgia, "Times New Roman", serif;
+}
+
 html,
 body {
   width: 100%;

@@ -1753,16 +1753,19 @@ Cyrillic ve daha karmaşık çoğul kurallarını doğrulamak.
 
 ## Özel kontroller
 
-- [ ] Cyrillic glyph kapsamı
-- [ ] Russian plural categories
-- [ ] uzun metin UI testi
-- [ ] uppercase/lowercase davranışı
-- [ ] font weight okunabilirliği
-- [ ] sayı formatı
+- [x] Cyrillic glyph kapsamı — `latin-cyrillic` font group runtime'da document root'a uygulanır.
+- [x] Russian plural categories — gerçek paket `one` / `few` / `many` / `other` dallarını kullanır.
+- [x] uzun metin UI testi — 1366×768 Chromium smoke menu → match → settings turunda yatay taşma bulmadı.
+- [x] uppercase/lowercase davranışı — locale metni CSS tarafından dönüştürülmez.
+- [x] font weight okunabilirliği — Chromium screenshot incelemesinde Cyrillic etiketler okunaklı, kırpılmamış ve tutarlı.
+- [x] sayı formatı — `Intl` `ru` üzerinden formatlanır.
 
 ## Kabul kriteri
 
 Rusça, İngilizce fallback'e görünür şekilde düşmeden tam maç boyunca kullanılabilmelidir.
+
+
+**Durum (20 Ağustos 2026):** Rusça (`ru`) teknik olarak tamamlandı ve seçilebilir. On domainin tamamı kaynak anahtar/placeholder eşliğiyle yüklü; `common.worker.count` gerçek Rusça `one` / `few` / `many` / `other` dallarını kullanır. Chromium smoke, menüde ve maç içi ayarlarda canlı Türkçe ↔ Rusça geçişini, font grubunu, 1366×768 viewport-fit'i ve console hatasız akışı doğruladı. Bu, kullanıcı görsel kabulünden ayrı otomatik/görüntü kanıtıdır. Tam maç başlangıç → sonuç ekranı görsel turu için kullanıcı kabulü henüz kaydedilmemiştir.
 
 ---
 

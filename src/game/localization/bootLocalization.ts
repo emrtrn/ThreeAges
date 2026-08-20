@@ -52,6 +52,21 @@ function browserLanguages(): readonly string[] {
 }
 
 /**
+ * Reflect the active locale on the document root. CSS owns the actual font
+ * stack, while the registry remains the single source of truth for script
+ * coverage and direction. This makes `LocaleDescriptor.fontGroup` a runtime
+ * contract instead of unused metadata.
+ */
+function applyLocaleDocumentAttributes(service: LocalizationService): void {
+  const descriptor = service.getDescriptor();
+  const root = document.documentElement;
+  root.lang = descriptor.intlLocale;
+  root.dir = descriptor.direction;
+  root.dataset.locale = descriptor.code;
+  root.dataset.localeFontGroup = descriptor.fontGroup;
+}
+
+/**
  * Build the service, resolve the boot locale and load its bundle.
  *
  * Never throws: a locale file that 404s is reported and leaves the fallback
@@ -71,6 +86,8 @@ export async function bootLocalization(): Promise<LocalizationService> {
   });
   const locale = await service.initialize();
   setActiveLocalization(service);
+  applyLocaleDocumentAttributes(service);
+  service.onLocaleChanged(() => applyLocaleDocumentAttributes(service));
   log.info(`localization ready (${locale})`);
   if (import.meta.env.DEV) {
     (window as unknown as { __forgeLocalization?: unknown }).__forgeLocalization = service;

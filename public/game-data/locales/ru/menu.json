@@ -1,0 +1,9 @@
+{
+  "menu.title": "Пограничные королевства",
+  "menu.tagline": "Постройте свою экономику, свяжите свои дороги и сравняйте с землей вражеский центр.",
+  "menu.start_match": "Начать матч",
+  "menu.loading.title": "Загрузка",
+  "menu.loading.percent": "{ratio, number, percent}",
+  "menu.loading.preparing": "Подготовка…"
+}
+
