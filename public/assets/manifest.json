@@ -25475,10 +25475,10 @@
     },
     {
       "id": "cannon-ball",
-      "name": "Cannon Ball",
+      "name": "cannon_ball",
       "assetType": "staticMesh",
       "category": "Birimler",
-      "path": "assets/ThreeAges/Birimler/cannon_ball.glb",
+      "path": "assets/ThreeAges/Characters/Siege/cannon_ball.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -25498,10 +25498,10 @@
     },
     {
       "id": "cannon-barrel",
-      "name": "Cannon Barrel",
+      "name": "cannon_barrel",
       "assetType": "staticMesh",
       "category": "Birimler",
-      "path": "assets/ThreeAges/Birimler/cannon_barrel.glb",
+      "path": "assets/ThreeAges/Characters/Siege/cannon_barrel.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -25521,10 +25521,10 @@
     },
     {
       "id": "cannon-chassis",
-      "name": "Cannon Chassis",
+      "name": "cannon_chassis",
       "assetType": "staticMesh",
       "category": "Birimler",
-      "path": "assets/ThreeAges/Birimler/cannon_chassis.glb",
+      "path": "assets/ThreeAges/Characters/Siege/cannon_chassis.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -25544,10 +25544,10 @@
     },
     {
       "id": "cannon-wheel-front",
-      "name": "Cannon Wheel Front",
+      "name": "cannon_wheel_front",
       "assetType": "staticMesh",
       "category": "Birimler",
-      "path": "assets/ThreeAges/Birimler/cannon_wheel_front.glb",
+      "path": "assets/ThreeAges/Characters/Siege/cannon_wheel_front.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -25567,10 +25567,10 @@
     },
     {
       "id": "cannon-wheel-rear",
-      "name": "Cannon Wheel Rear",
+      "name": "cannon_wheel_rear",
       "assetType": "staticMesh",
       "category": "Birimler",
-      "path": "assets/ThreeAges/Birimler/cannon_wheel_rear.glb",
+      "path": "assets/ThreeAges/Characters/Siege/cannon_wheel_rear.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -29465,6 +29465,190 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 434
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "driftwood-log",
+      "name": "Driftwood Log",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/ThreeAges/Environment/driftwood_log.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5175804
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "reeds-cluster-a",
+      "name": "Reeds Cluster A",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/ThreeAges/Environment/reeds_cluster_a.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5608412
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "reeds-cluster-b",
+      "name": "Reeds Cluster B",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/ThreeAges/Environment/reeds_cluster_b.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5366004
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "river-rock-cluster-a",
+      "name": "River Rock Cluster A",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/ThreeAges/Environment/river_rock_cluster_a.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4802652
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "river-rock-cluster-b",
+      "name": "River Rock Cluster B",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/ThreeAges/Environment/river_rock_cluster_b.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5661544
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "river-rock-cluster-c",
+      "name": "River Rock Cluster C",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/ThreeAges/Environment/river_rock_cluster_c.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4327336
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "small-river-stones-patch",
+      "name": "Small River Stones Patch",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/ThreeAges/Environment/small_river_stones_patch.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 7232720
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wooden-mooring-posts",
+      "name": "Wooden Mooring Posts",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/ThreeAges/Environment/wooden_mooring_posts.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6752264
       },
       "license": "Unknown"
     }

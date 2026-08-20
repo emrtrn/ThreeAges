@@ -1531,6 +1531,38 @@
           "scale": 3
         }
       ]
+    },
+    {
+      "assetId": "reeds-cluster-b",
+      "placements": []
+    },
+    {
+      "assetId": "river-rock-cluster-a",
+      "placements": []
+    },
+    {
+      "assetId": "driftwood-log",
+      "placements": []
+    },
+    {
+      "assetId": "reeds-cluster-a",
+      "placements": []
+    },
+    {
+      "assetId": "river-rock-cluster-b",
+      "placements": []
+    },
+    {
+      "assetId": "river-rock-cluster-c",
+      "placements": []
+    },
+    {
+      "assetId": "small-river-stones-patch",
+      "placements": []
+    },
+    {
+      "assetId": "wooden-mooring-posts",
+      "placements": []
     }
   ],
   "characters": [],
