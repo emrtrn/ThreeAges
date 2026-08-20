@@ -1,0 +1,16 @@
+{
+  "common.resource.food.name": "Comida",
+  "common.resource.wood.name": "Madeira",
+  "common.resource.stone.name": "Pedra",
+  "common.resource.gold.name": "Ouro",
+  "common.cost.free": "Grátis",
+  "common.cost.entry": "{amount} {resource}",
+  "common.age.settlement.name": "Assentamento",
+  "common.age.town.name": "Vila",
+  "common.worker.count": "{count, plural, one {# trabalhador} other {# trabalhadores}}",
+  "common.tier.name": "{age} Nv{level}",
+  "common.tier.unknown": "o nível exigido",
+  "common.building.military": "um edifício militar",
+  "common.language.label": "Idioma",
+  "common.language.hint": "Muda o idioma imediatamente; o jogo se lembra da escolha."
+}

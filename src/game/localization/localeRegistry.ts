@@ -91,7 +91,7 @@ const REGISTRY: readonly LocaleDescriptor[] = [
     tier: "tier1",
     fontGroup: "latin",
     direction: "ltr",
-    enabled: false,
+    enabled: true,
     // `pt-PT` is intentionally absent — Plan §12.1's worked example.
     browserTags: ["pt", "pt-BR"],
     intlLocale: "pt-BR",
