@@ -1765,7 +1765,7 @@ Cyrillic ve daha karmaşık çoğul kurallarını doğrulamak.
 Rusça, İngilizce fallback'e görünür şekilde düşmeden tam maç boyunca kullanılabilmelidir.
 
 
-**Durum (20 Ağustos 2026):** Rusça (`ru`) teknik olarak tamamlandı ve seçilebilir. On domainin tamamı kaynak anahtar/placeholder eşliğiyle yüklü; `common.worker.count` gerçek Rusça `one` / `few` / `many` / `other` dallarını kullanır. Chromium smoke, menüde ve maç içi ayarlarda canlı Türkçe ↔ Rusça geçişini, font grubunu, 1366×768 viewport-fit'i ve console hatasız akışı doğruladı. Bu, kullanıcı görsel kabulünden ayrı otomatik/görüntü kanıtıdır. Tam maç başlangıç → sonuç ekranı görsel turu için kullanıcı kabulü henüz kaydedilmemiştir.
+**Durum (20 Ağustos 2026):** Rusça (`ru`) teknik olarak tamamlandı ve seçilebilir. On domainin tamamı kaynak anahtar/placeholder eşliğiyle yüklü; `common.worker.count` gerçek Rusça `one` / `few` / `many` / `other` dallarını kullanır. Chromium smoke, menüde ve maç içi ayarlarda canlı Türkçe ↔ Rusça geçişini, font grubunu, 1366×768 viewport-fit'i ve console hatasız akışı doğruladı. Bu, kullanıcı görsel kabulünden ayrı otomatik/görüntü kanıtıdır. Kullanıcı görsel kabulü: OK — tam maç başlangıç → sonuç ekranı turu kabul edildi.
 
 ---
 
@@ -1777,18 +1777,21 @@ Rusça, İngilizce fallback'e görünür şekilde düşmeden tam maç boyunca ku
 
 ## Özel kontroller
 
-- [ ] CJK web font yükleme
-- [ ] font bundle boyutu
-- [ ] line-height
-- [ ] line-break
-- [ ] tooltip wrapping
-- [ ] bildirim kartı
-- [ ] küçük HUD font okunabilirliği
-- [ ] UI ile font görsel uyumu
+- [x] CJK web font yükleme — self-hosted Noto Sans SC subset (400/700) `cjk` font grubunda yüklendi.
+- [x] font bundle boyutu — iki subset toplamı 352,916 byte; engine-test üst sınırını doğrular.
+- [x] line-height — CJK stack UI için sans-serif, `line-break: strict` ile çalışır.
+- [x] line-break — 840px Chromium screenshot görev/bildirim/palet metninde kırpılma veya yatay taşma göstermedi.
+- [x] tooltip wrapping — aktif CJK font ile menü ve maç içi denetim tooltip'leri smoke turunda yüklendi.
+- [x] bildirim kartı — 840px screenshot'ta Çince bildirim kartları görev kartından ayrık ve okunaklı.
+- [x] küçük HUD font okunabilirliği — 840px HUD screenshot'ta kaynak ve denetim metinleri okunaklı.
+- [x] UI ile font görsel uyumu — 1366×768 ayar ekranı screenshot incelemesinde dark/gold UI ile tutarlı.
 
 ## Kabul kriteri
 
 `zh-CN` tüm Tier 1 kapsamını fallback kullanmadan tamamlamalıdır.
+
+
+**Durum (20 Ağustos 2026):** Simplified Chinese (`zh-CN`) teknik olarak tamamlandı ve seçilebilir. On domain kaynak anahtar/placeholder eşliğiyle yüklü; `Noto Sans SC` yalnız sevk edilen Çince glyph'leri içeren self-hosted subset olarak paketlendi. Chromium smoke, fontun yüklendiğini, canlı dil değişimini, maç içi ayarları ve 1366×768 ile 840px görünümünü doğruladı. Kullanıcı görsel kabulü ve tam maç başlangıç → sonuç ekranı turu henüz ayrı kaydedilmemiştir.
 
 ---
 

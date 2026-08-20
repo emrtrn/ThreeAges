@@ -908,25 +908,57 @@
     },
     {
       "assetId": "mountain",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -81.9,
+            -1.63,
+            20.76
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            100,
+            0
+          ],
+          "scale": 5
+        },
+        {
+          "position": [
+            -81.9,
+            -1.63,
+            -21.68
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            100,
+            0
+          ],
+          "scale": 5
+        },
+        {
+          "position": [
+            -81.9,
+            -1.63,
+            -58.89
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            100,
+            0
+          ],
+          "scale": 5
+        }
+      ]
     },
     {
       "assetId": "mountain4k",
       "placements": [
-        {
-          "position": [
-            -82.74,
-            2.41,
-            38.17
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            37.5,
-            0
-          ],
-          "scale": 1
-        },
         {
           "position": [
             -81.88,
@@ -1151,36 +1183,6 @@
             0
           ],
           "scale": 2
-        },
-        {
-          "position": [
-            -106.97,
-            -1.62,
-            -36.01
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -110,
-            0
-          ],
-          "scale": 2
-        },
-        {
-          "position": [
-            -94.95,
-            -4.48,
-            3.22
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -65.5,
-            0
-          ],
-          "scale": 1.5
         }
       ]
     },
@@ -1352,7 +1354,7 @@
         {
           "position": [
             -28,
-            0.11,
+            -0.05,
             6
           ],
           "scaleLocked": true,
@@ -1367,7 +1369,7 @@
         {
           "position": [
             28,
-            0,
+            -0.09,
             -6
           ],
           "scaleLocked": true,

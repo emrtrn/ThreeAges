@@ -146,7 +146,9 @@ import {
   rtsUnitOwnerActorRefIsAuthored,
   validateRtsContentCatalog,
   rtsBuildingDamagePresentation,
+  RTS_DAMAGE_AGED_SLOTS,
   RTS_DAMAGE_SLOTS,
+  RTS_DAMAGE_SLOT_AGES,
   type RtsActorRef,
 } from "../src/game/rts/content/rtsContentCatalog";
 import {
@@ -30111,13 +30113,30 @@ check("the damage tables pick effects from the manifest, list-wise", () => {
   const catalog = getGameEditorCatalog();
   const tables = (catalog.dataTables ?? []).filter((table) => table.id.startsWith("rts-damage-"));
   assert.ok(tables.length >= 1, "the damage tables are registered in the editor catalog");
+  // One picker per slot, except an aged slot which asks once per age — the
+  // settlement/town split the author sees when they open Moloz.
+  const expectedPickers =
+    RTS_DAMAGE_SLOTS.length - RTS_DAMAGE_AGED_SLOTS.length
+    + RTS_DAMAGE_AGED_SLOTS.length * RTS_DAMAGE_SLOT_AGES.length;
   for (const table of tables) {
-    const effectFields = (table.fields ?? []).filter((field) => field.path.endsWith(".effects"));
+    const effectFields = (table.fields ?? []).filter((field) => field.assetOptions === "effect");
     assert.equal(
       effectFields.length,
-      RTS_DAMAGE_SLOTS.length,
-      `${table.id} names an effects field for every damage slot`,
+      expectedPickers,
+      `${table.id} names an effect picker for every damage slot, and one per age where the slot is aged`,
     );
+    for (const slot of RTS_DAMAGE_AGED_SLOTS) {
+      for (const age of RTS_DAMAGE_SLOT_AGES) {
+        assert.ok(
+          effectFields.some((field) => field.path.endsWith(`${slot}.ages.${age}`)),
+          `${table.id} offers ${slot} an effect for the ${age} age`,
+        );
+      }
+      assert.ok(
+        !effectFields.some((field) => field.path.endsWith(`${slot}.effects`)),
+        `${table.id} does not also offer ${slot} one age-blind list, which nothing would read`,
+      );
+    }
     for (const field of effectFields) {
       assert.equal(field.assetOptions, "effect", `${table.id}:${field.path} picks effect assets`);
       assert.ok(!field.path.includes("[]"), `${table.id}:${field.path} names the array, not its indices`);
@@ -30143,8 +30162,11 @@ check("the damage tables pick effects from the manifest, list-wise", () => {
   );
   assert.deepEqual(
     leaves.filter((leaf) => leaf.type === "stringList").map((leaf) => leaf.path),
-    RTS_DAMAGE_SLOTS.map((slot) => `${slot}.effects`),
-    "every slot's effects render as one list, in slot order",
+    RTS_DAMAGE_SLOTS.flatMap((slot) =>
+      (RTS_DAMAGE_AGED_SLOTS as readonly string[]).includes(slot)
+        ? RTS_DAMAGE_SLOT_AGES.map((age) => `${slot}.ages.${age}`)
+        : [`${slot}.effects`]),
+    "every slot's effects render as one list, in slot order, and an aged slot as one per age",
   );
   for (const leaf of leaves.filter((entry) => entry.type === "stringList")) {
     const array = (leaf.container as Record<string, unknown>)[leaf.key as string];
@@ -37142,9 +37164,12 @@ function minimalDamageSection(): unknown {
         lightSmoke: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 1 },
         heavySmoke: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 1 },
         ruinSmoke: { effects: [], anchor: { mode: "ground", offset: [0, 0, 0] }, intervalSeconds: 1 },
-        impactDebris: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] }, minIntervalSeconds: 0.5 },
+        debris: {
+          ages: { settlement: [], town: [] },
+          anchor: { mode: "roof", offset: [0, 0, 0] },
+          minIntervalSeconds: 0.5,
+        },
         collapseDust: { effects: [], anchor: { mode: "ground", offset: [0, 0, 0] } },
-        collapseDebris: { effects: [], anchor: { mode: "roof", offset: [0, 0, 0] } },
       },
     },
     materials: {},
@@ -37178,9 +37203,12 @@ function damageCatalogFixture(overrides: {
           lightSmoke: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 1, 0] }, intervalSeconds: 2 },
           heavySmoke: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 0, 0] }, intervalSeconds: 1 },
           ruinSmoke: { effects: [], anchor: { mode: "ground", offset: [0, 0, 0] }, intervalSeconds: 1 },
-          impactDebris: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 0, 0] }, minIntervalSeconds: 3 },
+          debris: {
+            ages: { settlement: ["fx.a"], town: ["fx.tile"] },
+            anchor: { mode: "roof", offset: [0, 0, 0] },
+            minIntervalSeconds: 3,
+          },
           collapseDust: { effects: ["fx.a"], anchor: { mode: "ground", offset: [0, 0, 0] } },
-          collapseDebris: { effects: ["fx.a"], anchor: { mode: "roof", offset: [0, 0, 0] } },
         },
       },
       materials: overrides.materials ?? {},
@@ -37200,7 +37228,9 @@ check("RTS damage table resolves defaults → material class → building, field
   const catalog = validateRtsContentCatalog(
     damageCatalogFixture({
       materials: {
-        stone: { slots: { impactDebris: { effects: ["fx.stone"] } } },
+        // A class that pins one material in both ages — the shipped quarry /
+        // gold mine case, which is what a material class is for.
+        stone: { slots: { debris: { ages: { settlement: ["fx.stone"], town: ["fx.stone"] } } } },
       },
       buildings: { house: { levels }, barracks: { levels }, outpost: { levels } },
       damageBuildings: {
@@ -37214,7 +37244,8 @@ check("RTS damage table resolves defaults → material class → building, field
           ruinSeconds: 4,
           // A partial deformation: the fields it names win, the rest inherit.
           collapseDeformation: { squash: 0.6 },
-          slots: { impactDebris: { effects: ["fx.tile"], anchor: { offset: [0, 4, 0] } } },
+          // One age named, the other inherited from the class it opted into.
+          slots: { debris: { ages: { town: ["fx.roof"] }, anchor: { offset: [0, 4, 0] } } },
         },
       },
     }),
@@ -37223,18 +37254,41 @@ check("RTS damage table resolves defaults → material class → building, field
 
   const plain = rtsBuildingDamagePresentation(catalog, "house");
   assert.equal(plain.collapseStyle, "topple", "an unauthored building is the default, not a gap");
-  assert.deepEqual(plain.slots.impactDebris.effects, ["fx.a"]);
+  assert.deepEqual(plain.slots.debris.effects, ["fx.a"]);
   assert.equal(plain.ruinSeconds, 12, "and inherits the default ruin lifetime");
   assert.deepEqual(plain.collapseDeformation, { squash: 0.3, splay: 0.1, buckle: 0.05 });
 
+  // The whole point of the aged slot: one building, two materials, chosen by the
+  // owner's age rather than by anything the building itself says.
+  assert.deepEqual(
+    rtsBuildingDamagePresentation(catalog, "house", "town").slots.debris.effects,
+    ["fx.tile"],
+    "ageing up changes which debris the same building sheds",
+  );
+  assert.deepEqual(
+    rtsBuildingDamagePresentation(catalog, "house", "town").slots.collapseDust.effects,
+    plain.slots.collapseDust.effects,
+    "and leaves a slot that is not age-keyed alone",
+  );
+
   const classed = rtsBuildingDamagePresentation(catalog, "barracks");
-  assert.deepEqual(classed.slots.impactDebris.effects, ["fx.stone"], "the material class replaces the effects");
-  assert.equal(classed.slots.impactDebris.anchor.mode, "roof", "and inherits every field it does not name");
-  assert.equal(classed.slots.impactDebris.minIntervalSeconds, 3);
+  assert.deepEqual(classed.slots.debris.effects, ["fx.stone"], "the material class replaces the effects");
+  assert.deepEqual(
+    rtsBuildingDamagePresentation(catalog, "barracks", "town").slots.debris.effects,
+    ["fx.stone"],
+    "and a class that names both ages is how a building opts out of ageing at all",
+  );
+  assert.equal(classed.slots.debris.anchor.mode, "roof", "and inherits every field it does not name");
+  assert.equal(classed.slots.debris.minIntervalSeconds, 3);
   assert.deepEqual(classed.slots.lightSmoke.effects, ["fx.a"], "a slot the class ignores stays at the default");
 
-  const own = rtsBuildingDamagePresentation(catalog, "outpost");
-  assert.deepEqual(own.slots.impactDebris.effects, ["fx.tile"], "the building's own layer outranks its class");
+  const own = rtsBuildingDamagePresentation(catalog, "outpost", "town");
+  assert.deepEqual(own.slots.debris.effects, ["fx.roof"], "the building's own layer outranks its class");
+  assert.deepEqual(
+    rtsBuildingDamagePresentation(catalog, "outpost").slots.debris.effects,
+    ["fx.stone"],
+    "an override that names one age leaves the other on the class it inherited",
+  );
   assert.equal(own.collapseStyle, "inPlace");
   assert.equal(own.ruinSeconds, 4, "a building may outlive or undercut the default ruin window");
   assert.deepEqual(
@@ -37242,15 +37296,17 @@ check("RTS damage table resolves defaults → material class → building, field
     { squash: 0.6, splay: 0.1, buckle: 0.05 },
     "a deformation override merges field by field rather than replacing the whole shape",
   );
-  assert.deepEqual(own.slots.impactDebris.anchor.offset, [0, 4, 0], "the offset override applies");
-  assert.equal(own.slots.impactDebris.anchor.mode, "roof", "and does not drag the mode along with it");
+  assert.deepEqual(own.slots.debris.anchor.offset, [0, 4, 0], "the offset override applies");
+  assert.equal(own.slots.debris.anchor.mode, "roof", "and does not drag the mode along with it");
 
-  // Totality: the resolver must answer for every playable building, so nothing
-  // downstream needs a null branch at collapse time.
+  // Totality: the resolver must answer for every playable building at every age,
+  // so nothing downstream needs a null branch at collapse time.
   for (const buildingId of Object.keys(buildingBalance)) {
-    const resolved = rtsBuildingDamagePresentation(catalog, buildingId);
-    for (const slot of RTS_DAMAGE_SLOTS) {
-      assert.ok(resolved.slots[slot], `${buildingId}.${slot} resolves`);
+    for (const age of RTS_DAMAGE_SLOT_AGES) {
+      const resolved = rtsBuildingDamagePresentation(catalog, buildingId, age);
+      for (const slot of RTS_DAMAGE_SLOTS) {
+        assert.ok(resolved.slots[slot], `${buildingId}.${slot} resolves at ${age}`);
+      }
     }
   }
 });
@@ -37273,13 +37329,27 @@ check("RTS damage table refuses data the runtime would have to guess about", () 
   refuses((d) => { d.damage.defaults.slots.heavySmoke.intervalSeconds = 0; }, "a zero interval would spawn per frame");
   refuses((d) => { d.damage.defaults.slots.heavySmoke.anchor.mode = "sky"; }, "anchor mode is a closed set");
   refuses((d) => { d.damage.defaults.slots.heavySmoke.anchor.offset = [0, 999, 0]; }, "an offset has bounds");
-  refuses((d) => { d.damage.defaults.slots.impactDebris.effects = ["fx.a", "fx.a"]; }, "a duplicate would bias the rotation");
-  refuses((d) => { d.damage.defaults.slots.impactDebris.effects = ["../evil.json"]; }, "effects are manifest ids, not paths");
+  refuses((d) => { d.damage.defaults.slots.debris.ages.town = ["fx.a", "fx.a"]; }, "a duplicate would bias the rotation");
+  refuses((d) => { d.damage.defaults.slots.debris.ages.town = ["../evil.json"]; }, "effects are manifest ids, not paths");
+  // An aged slot and a plain one each have exactly one place the effect is
+  // named. Allowing both would leave an author editing the field the resolver
+  // never reads, and seeing nothing change in the game.
+  refuses((d) => { delete d.damage.defaults.slots.debris.ages.town; }, "defaults must cover every age of an aged slot");
+  refuses((d) => { d.damage.defaults.slots.debris.effects = ["fx.a"]; }, "an aged slot is not authored with one flat list");
+  refuses((d) => { d.damage.defaults.slots.collapseDust.ages = { settlement: [], town: [] }; }, "a slot that is not age-keyed has no ages");
+  refuses((d) => { d.damage.defaults.slots.debris.ages.bronze = []; }, "an age outside the progression is a typo");
+  refuses(
+    (d) => {
+      d.buildings = { house: { levels } };
+      d.damage.buildings = { house: { slots: { debris: { effects: ["fx.a"] } } } };
+    },
+    "and an override cannot introduce the shape its slot does not have either",
+  );
   refuses((d) => { d.damage.defaults.collapseStyle = "explode"; }, "collapse style is a closed set");
   // The three slot kinds each carry exactly their own timing field, so a slot
   // authored with the wrong one is named rather than silently ignored.
-  refuses((d) => { delete d.damage.defaults.slots.impactDebris.minIntervalSeconds; }, "an impact slot needs its floor");
-  refuses((d) => { d.damage.defaults.slots.impactDebris.intervalSeconds = 2; }, "an impact slot does not repeat");
+  refuses((d) => { delete d.damage.defaults.slots.debris.minIntervalSeconds; }, "an impact slot needs its floor");
+  refuses((d) => { d.damage.defaults.slots.debris.intervalSeconds = 2; }, "an impact slot does not repeat");
   refuses((d) => { d.damage.defaults.slots.heavySmoke.minIntervalSeconds = 2; }, "a repeating slot has no impact floor");
   refuses((d) => { d.damage.defaults.slots.collapseDust.minIntervalSeconds = 2; }, "a one-shot slot has neither");
   // Ruin lifetime and deformation are authored numbers with a physical meaning;
@@ -37352,6 +37422,31 @@ check("RTS shipped damage table names only real effects and preserves today's co
       `${buildingId} is a ground-hugging worksite`,
     );
   }
+
+  // Debris follows the *model*, not the calendar. A building that keeps its
+  // settlement art into the Town age (the lumber camp, the hunting camp, the
+  // pasture) would otherwise shed roof tiles off a timber hut the moment its
+  // owner aged up. Derived from the art table rather than a hand-written list,
+  // so a building that later gets its own Town model needs no edit here — and
+  // one that quietly loses it cannot slip through.
+  let aged = 0;
+  for (const buildingId of buildingIds) {
+    // A Town-only building has no settlement art to keep: its Settlement-age
+    // resolution is a branch the game never takes, so it is not evidence either
+    // way and pinning it would freeze a value nothing reads.
+    if (buildingBalance[buildingId]?.requiredAge === "town") continue;
+    const settlement = rtsBuildingDamagePresentation(catalog, buildingId, "settlement").slots.debris.effects;
+    const town = rtsBuildingDamagePresentation(catalog, buildingId, "town").slots.debris.effects;
+    const sameArt =
+      rtsBuildingActorRefLadder(catalog, buildingId, "completed", "settlement").join("|") ===
+      rtsBuildingActorRefLadder(catalog, buildingId, "completed", "town").join("|");
+    if (sameArt) {
+      assert.deepEqual(town, settlement, `${buildingId} keeps one model, so it keeps one debris`);
+    } else if (town.join("|") !== settlement.join("|")) {
+      aged += 1;
+    }
+  }
+  assert.ok(aged > 0, "and at least one re-modelled building actually sheds different debris once it is a town");
   // Deliberately *not* asserted here: that some building still resolves to
   // `topple`. Which style a building takes — including the table-wide default —
   // is an authoring decision the damage table exists to make changeable, and a
@@ -56953,6 +57048,19 @@ check("Lokalizasyon Faz 5: shipped Russian plural data selects Cyrillic categori
   assert.equal(formatMessage(russian, "ru", { count: 1 }), "1 рабочий");
   assert.equal(formatMessage(russian, "ru", { count: 2 }), "2 рабочих");
   assert.equal(formatMessage(russian, "ru", { count: 5 }), "5 рабочих");
+});
+
+check("Lokalizasyon Faz 6: Simplified Chinese ships bounded CJK fonts and count text", () => {
+  const chinese = (JSON.parse(
+    readFileSync("public/game-data/locales/zh-CN/common.json", "utf8"),
+  ) as Record<string, string>)["common.worker.count"]!;
+  assert.equal(formatMessage(chinese, "zh-CN", { count: 2 }), "2 名工人");
+  assert.equal(localeDescriptor("zh-CN")?.enabled, true, "Faz 6 ships Simplified Chinese to the picker");
+  assert.equal(matchBrowserLocale(["zh-CN"]), "zh-CN", "a Simplified Chinese browser reaches zh-CN");
+  for (const weight of ["400", "700"]) {
+    const bytes = readFileSync(`public/assets/ui/fonts/NotoSansSC-cjk-${weight}.ttf`).byteLength;
+    assert.ok(bytes > 100_000 && bytes < 250_000, `CJK ${weight} font remains a bounded subset (${bytes} bytes)`);
+  }
 });
 
 check("Lokalizasyon Faz 1: the formatter is locale-aware and fails loudly on bad patterns", () => {

@@ -116,7 +116,7 @@ const REGISTRY: readonly LocaleDescriptor[] = [
     tier: "tier1",
     fontGroup: "cjk",
     direction: "ltr",
-    enabled: false,
+    enabled: true,
     // Simplified script tags only — Plan §12.2 refuses zh-TW → zh-CN.
     browserTags: ["zh", "zh-CN", "zh-Hans"],
     intlLocale: "zh-CN",

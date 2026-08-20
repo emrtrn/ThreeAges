@@ -151,18 +151,41 @@ export type RtsDamageAnchorMode = (typeof RTS_DAMAGE_ANCHOR_MODES)[number];
  *   here: masonry comes off when something hits it, not on a timer.
  * - **One-shot** slots fire exactly once, at collapse.
  *
+ * `debris` is one slot authored once and fired at both moments — rotated on a
+ * blow, burst at the collapse. The two were separate slots until they were
+ * always given the same effect anyway: what the wreckage is made of is a
+ * property of the building, not of the moment it comes off.
+ *
  * Splitting dust from debris is what lets the two sit at different anchors —
  * dust on the ground, masonry off the roof.
  */
 export const RTS_DAMAGE_REPEATING_SLOTS = ["lightSmoke", "heavySmoke", "ruinSmoke"] as const;
-export const RTS_DAMAGE_IMPACT_SLOTS = ["impactDebris"] as const;
-export const RTS_DAMAGE_ONE_SHOT_SLOTS = ["collapseDust", "collapseDebris"] as const;
+export const RTS_DAMAGE_IMPACT_SLOTS = ["debris"] as const;
+export const RTS_DAMAGE_ONE_SHOT_SLOTS = ["collapseDust"] as const;
 export const RTS_DAMAGE_SLOTS = [
   ...RTS_DAMAGE_REPEATING_SLOTS,
   ...RTS_DAMAGE_IMPACT_SLOTS,
   ...RTS_DAMAGE_ONE_SHOT_SLOTS,
 ] as const;
 export type RtsDamageSlotName = (typeof RTS_DAMAGE_SLOTS)[number];
+
+/**
+ * Slots whose effects are chosen by the *owner's age* rather than authored once.
+ *
+ * Only debris is one: a settlement is timber and a town is tile, so the same
+ * building sheds a different material after it ages up, while smoke and dust
+ * look the same in both. An aged slot authors `ages` instead of `effects` — not
+ * as well as — so there is exactly one place the answer comes from.
+ *
+ * Buildings that keep their settlement model into the Town age (the lumber camp,
+ * the hunting camp, the pasture) and the ones that are masonry in both (the
+ * quarry, the gold mine) are not exceptions to this rule; they are per-building
+ * overrides on top of it, authored as material classes in `damage.materials`.
+ */
+export const RTS_DAMAGE_AGED_SLOTS = ["debris"] as const;
+
+/** The ages an aged slot keys its effects by, in progression order. */
+export const RTS_DAMAGE_SLOT_AGES: readonly SettlementAge[] = ["settlement", "town"];
 
 /** Largest authored spawn offset, in world units, in any axis. */
 const MAX_ANCHOR_OFFSET = 50;
@@ -199,8 +222,18 @@ export interface RtsDamageAnchor {
  * means they cannot drift out of sync the way three parallel maps would.
  */
 export interface RtsDamageSlot {
-  /** Played in rotation, keyed off the structure id. Empty disables the slot. */
-  readonly effects: readonly string[];
+  /**
+   * Played in rotation, keyed off the structure id. Empty disables the slot.
+   * Present on every slot *except* {@link RTS_DAMAGE_AGED_SLOTS}, which say the
+   * same thing per age in {@link RtsDamageSlot.ages}.
+   */
+  readonly effects?: readonly string[];
+  /**
+   * Present exactly on {@link RTS_DAMAGE_AGED_SLOTS}: the effect list each age
+   * plays, in place of a single {@link RtsDamageSlot.effects}. Every age is
+   * authored, so ageing up can never leave a slot with nothing to play.
+   */
+  readonly ages?: Readonly<Record<SettlementAge, readonly string[]>>;
   readonly anchor: RtsDamageAnchor;
   /** Present exactly on {@link RTS_DAMAGE_REPEATING_SLOTS}. */
   readonly intervalSeconds?: number;
@@ -209,6 +242,20 @@ export interface RtsDamageSlot {
    * bursts may be played at. A floor, not a period — nothing fires without an
    * impact to fire it.
    */
+  readonly minIntervalSeconds?: number;
+}
+
+/**
+ * A slot with its age already chosen: what playback consumes.
+ *
+ * Splitting this from {@link RtsDamageSlot} is what keeps `effects` a plain
+ * required list at the point it is played, instead of every call site having to
+ * ask again which age this building is in.
+ */
+export interface RtsResolvedDamageSlot {
+  readonly effects: readonly string[];
+  readonly anchor: RtsDamageAnchor;
+  readonly intervalSeconds?: number;
   readonly minIntervalSeconds?: number;
 }
 
@@ -226,8 +273,8 @@ export interface RtsDamageDeformation {
   readonly buckle: number;
 }
 
-/** A building's fully resolved presentation: no optional fields, no lookups left. */
-export interface RtsDamagePresentation {
+/** The complete authored form, used only by `damage.defaults`: ages not yet picked. */
+export interface RtsDamagePresentationDef {
   readonly collapseStyle: RtsCollapseStyle;
   /** How long the husk stays as visible scenery after the fall finishes. */
   readonly ruinSeconds: number;
@@ -243,9 +290,19 @@ export interface RtsDamagePresentation {
   readonly slots: Readonly<Record<RtsDamageSlotName, RtsDamageSlot>>;
 }
 
+/**
+ * A building's fully resolved presentation at one age: no optional fields, no
+ * lookups left.
+ */
+export interface RtsDamagePresentation extends Omit<RtsDamagePresentationDef, "slots"> {
+  readonly slots: Readonly<Record<RtsDamageSlotName, RtsResolvedDamageSlot>>;
+}
+
 /** Field-level override of a {@link RtsDamageSlot}; anything absent is inherited. */
 export interface RtsDamageSlotOverride {
   readonly effects?: readonly string[];
+  /** Aged slots only, and one age may be overridden without naming the other. */
+  readonly ages?: Readonly<Partial<Record<SettlementAge, readonly string[]>>>;
   readonly anchor?: { readonly mode?: RtsDamageAnchorMode; readonly offset?: readonly [number, number, number] };
   readonly intervalSeconds?: number;
   readonly minIntervalSeconds?: number;
@@ -276,7 +333,7 @@ export interface RtsBuildingDamageOverride extends RtsDamageOverride {
  */
 export interface RtsDamageSection {
   /** The only complete entry; every other layer is a partial laid over it. */
-  readonly defaults: RtsDamagePresentation;
+  readonly defaults: RtsDamagePresentationDef;
   readonly materials: Readonly<Record<string, RtsDamageMaterialClass>>;
   readonly buildings: Readonly<Record<string, RtsBuildingDamageOverride>>;
 }
@@ -430,6 +487,10 @@ function isImpactSlot(slot: RtsDamageSlotName): boolean {
   return (RTS_DAMAGE_IMPACT_SLOTS as readonly string[]).includes(slot);
 }
 
+function isAgedSlot(slot: RtsDamageSlotName): boolean {
+  return (RTS_DAMAGE_AGED_SLOTS as readonly string[]).includes(slot);
+}
+
 function applyDeformationOverride(
   base: RtsDamageDeformation,
   override: Partial<RtsDamageDeformation> | undefined,
@@ -442,10 +503,25 @@ function applyDeformationOverride(
   };
 }
 
+/** Per-age replacement: an override may name one age and inherit the other. */
+function applySlotAgesOverride(
+  base: Readonly<Record<SettlementAge, readonly string[]>>,
+  override: Readonly<Partial<Record<SettlementAge, readonly string[]>>> | undefined,
+): Readonly<Record<SettlementAge, readonly string[]>> {
+  if (!override) return base;
+  const merged = {} as Record<SettlementAge, readonly string[]>;
+  for (const age of RTS_DAMAGE_SLOT_AGES) merged[age] = override[age] ?? base[age];
+  return merged;
+}
+
 function applySlotOverride(base: RtsDamageSlot, override: RtsDamageSlotOverride | undefined): RtsDamageSlot {
   if (!override) return base;
   return {
-    effects: override.effects ?? base.effects,
+    // Whichever of the two the base authored stays the one that answers: the
+    // validator refuses `effects` on an aged slot and `ages` on any other, so an
+    // override can never introduce the shape its slot does not have.
+    ...(base.effects === undefined ? {} : { effects: override.effects ?? base.effects }),
+    ...(base.ages === undefined ? {} : { ages: applySlotAgesOverride(base.ages, override.ages) }),
     anchor: {
       mode: override.anchor?.mode ?? base.anchor.mode,
       offset: override.anchor?.offset ?? base.anchor.offset,
@@ -459,7 +535,10 @@ function applySlotOverride(base: RtsDamageSlot, override: RtsDamageSlotOverride 
   };
 }
 
-function applyDamageOverride(base: RtsDamagePresentation, override: RtsDamageOverride | undefined): RtsDamagePresentation {
+function applyDamageOverride(
+  base: RtsDamagePresentationDef,
+  override: RtsDamageOverride | undefined,
+): RtsDamagePresentationDef {
   if (!override) return base;
   const slots = {} as Record<RtsDamageSlotName, RtsDamageSlot>;
   for (const slot of RTS_DAMAGE_SLOTS) {
@@ -475,23 +554,47 @@ function applyDamageOverride(base: RtsDamagePresentation, override: RtsDamageOve
 }
 
 /**
+ * Collapse the per-age lists down to the one age this building is actually in.
+ *
+ * An aged slot always has both ages authored (the validator requires it), so the
+ * lookup is total; a non-aged slot hands its single list straight through.
+ */
+function resolveSlotAge(slot: RtsDamageSlot, age: SettlementAge): RtsResolvedDamageSlot {
+  return {
+    effects: slot.ages?.[age] ?? slot.effects ?? [],
+    anchor: slot.anchor,
+    ...(slot.intervalSeconds === undefined ? {} : { intervalSeconds: slot.intervalSeconds }),
+    ...(slot.minIntervalSeconds === undefined ? {} : { minIntervalSeconds: slot.minIntervalSeconds }),
+  };
+}
+
+/**
  * Resolve one building's damage presentation through the authored chain:
  * `defaults` → its material class → its own overrides, each layer replacing only
- * the fields it names.
+ * the fields it names, and then the owner's age picking each aged slot's list.
  *
  * Total by construction — every building resolves, because `defaults` is the one
  * complete entry and the validator refuses a material name that does not exist.
  * A building with nothing authored is therefore not a gap; it is the default
  * presentation, which is what keeps a 12-building × 2-age × 3-level table from
  * having to be filled in by hand.
+ *
+ * `age` is the *owner's* age, not the building's model age, and the two can
+ * disagree: a lumber camp keeps its settlement art into the Town age. That is
+ * why the buildings which never get a stone-age model carry a material class
+ * pinning both ages to timber rather than relying on this lookup.
  */
 export function rtsBuildingDamagePresentation(
   catalog: RtsContentCatalog,
   buildingId: string,
+  age: SettlementAge = "settlement",
 ): RtsDamagePresentation {
   const authored = catalog.damage.buildings[buildingId];
   const material = authored?.material === undefined ? undefined : catalog.damage.materials[authored.material];
-  return applyDamageOverride(applyDamageOverride(catalog.damage.defaults, material), authored);
+  const merged = applyDamageOverride(applyDamageOverride(catalog.damage.defaults, material), authored);
+  const slots = {} as Record<RtsDamageSlotName, RtsResolvedDamageSlot>;
+  for (const slot of RTS_DAMAGE_SLOTS) slots[slot] = resolveSlotAge(merged.slots[slot], age);
+  return { ...merged, slots };
 }
 
 /** Thrown when catalog JSON is malformed or names a balance id that does not exist. */
@@ -824,15 +927,66 @@ function validateIntervalSeconds(value: unknown, where: string): number {
   return seconds;
 }
 
+/**
+ * The per-age effect lists of an aged slot.
+ *
+ * `complete` is what separates `damage.defaults` (both ages required, so a slot
+ * can never resolve to nothing after an age-up) from an override layer, where
+ * naming one age and inheriting the other is the point.
+ */
+function validateSlotAges(
+  value: unknown,
+  where: string,
+  complete: boolean,
+): Record<SettlementAge, readonly string[]> {
+  const raw = asObject(value, where);
+  requireExactKeys(raw, RTS_DAMAGE_SLOT_AGES, where);
+  const ages = {} as Record<SettlementAge, readonly string[]>;
+  for (const age of RTS_DAMAGE_SLOT_AGES) {
+    if (raw[age] === undefined) {
+      if (complete) throw new RtsContentCatalogError(`${where}.${age}: required`);
+      continue;
+    }
+    ages[age] = validateSlotEffects(raw[age], `${where}.${age}`);
+  }
+  return ages;
+}
+
+/**
+ * Refuse the shape this slot does not have, in both directions.
+ *
+ * Allowing both would leave two places to answer "which effect", and an author
+ * editing the one the resolver does not read would see no change in the game.
+ */
+function requireSlotEffectShape(
+  raw: Readonly<Record<string, unknown>>,
+  slot: RtsDamageSlotName,
+  where: string,
+): void {
+  if (isAgedSlot(slot)) {
+    if (raw["effects"] !== undefined) {
+      throw new RtsContentCatalogError(
+        `${where}.effects: "${slot}" is authored per age; use ages.${RTS_DAMAGE_SLOT_AGES.join(" / ages.")}`,
+      );
+    }
+    return;
+  }
+  if (raw["ages"] !== undefined) {
+    throw new RtsContentCatalogError(`${where}.ages: "${slot}" looks the same in every age; use effects`);
+  }
+}
+
 /** The complete form, used only by `damage.defaults`. */
 function validateDamageSlot(value: unknown, slot: RtsDamageSlotName, where: string): RtsDamageSlot {
   const raw = asObject(value, where);
-  requireExactKeys(raw, ["effects", "anchor", "intervalSeconds", "minIntervalSeconds"], where);
+  requireExactKeys(raw, ["effects", "ages", "anchor", "intervalSeconds", "minIntervalSeconds"], where);
   const anchorWhere = `${where}.anchor`;
   const anchor = asObject(raw["anchor"], anchorWhere);
   requireExactKeys(anchor, ["mode", "offset"], anchorWhere);
   const repeating = isRepeatingSlot(slot);
   const impact = isImpactSlot(slot);
+  const aged = isAgedSlot(slot);
+  requireSlotEffectShape(raw, slot, where);
   if (repeating && raw["intervalSeconds"] === undefined) {
     throw new RtsContentCatalogError(`${where}.intervalSeconds: required for repeating slot "${slot}"`);
   }
@@ -848,7 +1002,9 @@ function validateDamageSlot(value: unknown, slot: RtsDamageSlotName, where: stri
     );
   }
   return {
-    effects: validateSlotEffects(raw["effects"], `${where}.effects`),
+    ...(aged
+      ? { ages: validateSlotAges(raw["ages"], `${where}.ages`, true) }
+      : { effects: validateSlotEffects(raw["effects"], `${where}.effects`) }),
     anchor: {
       mode: validateAnchorMode(anchor["mode"], `${anchorWhere}.mode`),
       offset: validateAnchorOffset(anchor["offset"], `${anchorWhere}.offset`),
@@ -863,7 +1019,8 @@ function validateDamageSlot(value: unknown, slot: RtsDamageSlotName, where: stri
 /** The partial form, used by material classes and per-building overrides. */
 function validateDamageSlotOverride(value: unknown, slot: RtsDamageSlotName, where: string): RtsDamageSlotOverride {
   const raw = asObject(value, where);
-  requireExactKeys(raw, ["effects", "anchor", "intervalSeconds", "minIntervalSeconds"], where);
+  requireExactKeys(raw, ["effects", "ages", "anchor", "intervalSeconds", "minIntervalSeconds"], where);
+  requireSlotEffectShape(raw, slot, where);
   if (!isRepeatingSlot(slot) && raw["intervalSeconds"] !== undefined) {
     throw new RtsContentCatalogError(`${where}.intervalSeconds: "${slot}" does not repeat, so it has no interval`);
   }
@@ -886,6 +1043,7 @@ function validateDamageSlotOverride(value: unknown, slot: RtsDamageSlotName, whe
   }
   return {
     ...(raw["effects"] === undefined ? {} : { effects: validateSlotEffects(raw["effects"], `${where}.effects`) }),
+    ...(raw["ages"] === undefined ? {} : { ages: validateSlotAges(raw["ages"], `${where}.ages`, false) }),
     ...(anchor === undefined ? {} : { anchor }),
     ...(raw["intervalSeconds"] === undefined
       ? {}

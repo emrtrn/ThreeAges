@@ -1,13 +1,13 @@
 {
   "schema": 3,
   "type": "particleEffect",
-  "name": "RTS Debris Stone",
+  "name": "RTS Debris Tile",
   "category": "RTS Damage",
   "tags": [
     "rts",
     "damage",
     "debris",
-    "stone",
+    "tile",
     "collapse"
   ],
   "system": {

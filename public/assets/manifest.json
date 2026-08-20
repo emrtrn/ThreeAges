@@ -21927,8 +21927,8 @@
       "license": "Unknown"
     },
     {
-      "id": "rts-fx-debris-stone",
-      "name": "FX_RTS_Debris_Tile",
+      "id": "rts-fx-debris-tile",
+      "name": "RTS Debris Tile",
       "assetType": "effect",
       "category": "RTS Damage",
       "path": "assets/ThreeAges/Effects/FX_RTS_Debris_Tile.effect.json",
@@ -21936,7 +21936,7 @@
         "rts",
         "damage",
         "debris",
-        "stone",
+        "tile",
         "collapse"
       ],
       "placeable": false,
@@ -29348,8 +29348,8 @@
       "license": "Unknown"
     },
     {
-      "id": "rts-fx-debris-stone-copy",
-      "name": "FX_RTS_Debris_Stone",
+      "id": "rts-fx-debris-stone",
+      "name": "RTS Debris Stone",
       "assetType": "effect",
       "category": "RTS Damage",
       "path": "assets/ThreeAges/Effects/FX_RTS_Debris_Stone.effect.json",
@@ -29487,7 +29487,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 5175804
+        "bytes": 168940
       },
       "license": "Unknown"
     },
@@ -29510,7 +29510,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 5608412
+        "bytes": 165972
       },
       "license": "Unknown"
     },
@@ -29533,7 +29533,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 5366004
+        "bytes": 138276
       },
       "license": "Unknown"
     },
@@ -29556,7 +29556,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 4802652
+        "bytes": 109032
       },
       "license": "Unknown"
     },
@@ -29579,7 +29579,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 5661544
+        "bytes": 164340
       },
       "license": "Unknown"
     },
@@ -29602,7 +29602,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 4327336
+        "bytes": 113884
       },
       "license": "Unknown"
     },
@@ -29625,7 +29625,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 7232720
+        "bytes": 154772
       },
       "license": "Unknown"
     },
@@ -29648,7 +29648,30 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6752264
+        "bytes": 180296
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "mountain",
+      "name": "Mountain",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/ThreeAges/Environment/mountain.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5051896
       },
       "license": "Unknown"
     }

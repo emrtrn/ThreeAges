@@ -22,6 +22,22 @@
   font-display: swap;
 }
 
+/* Simplified Chinese glyphs used by the shipped zh-CN package. Self-hosted
+   subsets avoid a runtime CDN dependency while keeping the CJK payload bounded. */
+@font-face {
+  font-family: "Noto Sans SC Subset";
+  src: url("/assets/ui/fonts/NotoSansSC-cjk-400.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Noto Sans SC Subset";
+  src: url("/assets/ui/fonts/NotoSansSC-cjk-700.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
 :root {
   /*
    * Height of the Faz 9 HUD strip. Lives here rather than on .rts-hud-bar
@@ -63,6 +79,16 @@
 :root[data-locale-font-group="latin-cyrillic"] {
   --ta-font-display: Georgia, "Times New Roman", serif;
   --ta-font-body: Georgia, "Times New Roman", serif;
+}
+
+:root[data-locale-font-group="cjk"] {
+  --ta-font-display: "Noto Sans SC Subset", "Microsoft YaHei", sans-serif;
+  --ta-font-body: "Noto Sans SC Subset", "Microsoft YaHei", sans-serif;
+}
+
+:root[data-locale-font-group="cjk"] #ui-overlay {
+  line-break: strict;
+  word-break: normal;
 }
 
 html,

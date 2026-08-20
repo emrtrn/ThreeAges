@@ -1,0 +1,9 @@
+{
+  "menu.title": "边疆王国",
+  "menu.tagline": "建设你的经济，连接你的道路，夷平敌人的中心。",
+  "menu.start_match": "开始比赛",
+  "menu.loading.title": "加载",
+  "menu.loading.percent": "{ratio, number, percent}",
+  "menu.loading.preparing": "准备..."
+}
+

@@ -405,10 +405,15 @@
           },
           "intervalSeconds": 10
         },
-        "impactDebris": {
-          "effects": [
-            "rts-fx-debris-wood"
-          ],
+        "debris": {
+          "ages": {
+            "settlement": [
+              "rts-fx-debris-wood"
+            ],
+            "town": [
+              "rts-fx-debris-tile"
+            ]
+          },
           "anchor": {
             "mode": "roof",
             "offset": [
@@ -431,48 +436,35 @@
               0
             ]
           }
-        },
-        "collapseDebris": {
-          "effects": [
-            "rts-fx-debris-wood"
-          ],
-          "anchor": {
-            "mode": "roof",
-            "offset": [
-              0,
-              1,
-              0
-            ]
-          }
         }
       }
     },
     "materials": {
       "stone": {
         "slots": {
-          "collapseDebris": {
-            "effects": [
-              "rts-fx-debris-stone"
-            ]
-          },
-          "impactDebris": {
-            "effects": [
-              "rts-fx-debris-stone"
-            ]
+          "debris": {
+            "ages": {
+              "settlement": [
+                "rts-fx-debris-stone"
+              ],
+              "town": [
+                "rts-fx-debris-stone"
+              ]
+            }
           }
         }
       },
       "wood": {
         "slots": {
-          "collapseDebris": {
-            "effects": [
-              "rts-fx-debris-wood"
-            ]
-          },
-          "impactDebris": {
-            "effects": [
-              "rts-fx-debris-wood"
-            ]
+          "debris": {
+            "ages": {
+              "settlement": [
+                "rts-fx-debris-wood"
+              ],
+              "town": [
+                "rts-fx-debris-wood"
+              ]
+            }
           }
         }
       }
@@ -494,6 +486,7 @@
         }
       },
       "lumber_camp": {
+        "material": "wood",
         "collapseStyle": "inPlace",
         "slots": {
           "ruinSmoke": {
@@ -509,6 +502,7 @@
         }
       },
       "quarry": {
+        "material": "stone",
         "collapseStyle": "inPlace",
         "slots": {
           "ruinSmoke": {
@@ -524,6 +518,7 @@
         }
       },
       "gold_mine": {
+        "material": "stone",
         "collapseStyle": "inPlace",
         "slots": {
           "ruinSmoke": {
@@ -537,6 +532,12 @@
           "splay": 0.26,
           "buckle": 0.04
         }
+      },
+      "hunting_camp": {
+        "material": "wood"
+      },
+      "pasture": {
+        "material": "wood"
       }
     }
   }

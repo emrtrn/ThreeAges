@@ -188,9 +188,10 @@ import {
 } from "./structures/placedStructureSystem";
 import {
   RTS_DAMAGE_SLOTS,
+  RTS_DAMAGE_SLOT_AGES,
   rtsBuildingDamagePresentation,
   type RtsDamagePresentation,
-  type RtsDamageSlot,
+  type RtsResolvedDamageSlot,
   type RtsDamageSlotName,
 } from "./content/rtsContentCatalog";
 
@@ -493,7 +494,7 @@ type RtsCommandSubject = "production" | "trade" | "structure" | "orders" | "work
  * Only smoke belongs on a timer: a burning building keeps burning whether or not
  * anything is hitting it. Debris used to sit here too, which meant a wounded
  * building shed masonry forever while standing untouched in the middle of the
- * map — it now fires from `impactDebris`, on the blow. Every timing, effect and
+ * map — it now fires from `debris`, on the blow. Every timing, effect and
  * spawn point behind these names is authored in `rts-content.json`; nothing
  * about the damage presentation is written here.
  */
@@ -3685,10 +3686,15 @@ export class RtsApp {
     }
     const catalog = this.options.contentCatalog;
     if (catalog) {
+      // Both ages, because debris changes material on an age-up: warming only
+      // today's age would put the first town-age impact back on the IO wait this
+      // pass exists to remove.
       for (const buildingId of Object.keys(this.options.buildingBalance)) {
-        const presentation = rtsBuildingDamagePresentation(catalog, buildingId);
-        for (const slot of RTS_DAMAGE_SLOTS) {
-          for (const effectId of presentation.slots[slot].effects) effectIds.add(effectId);
+        for (const age of RTS_DAMAGE_SLOT_AGES) {
+          const presentation = rtsBuildingDamagePresentation(catalog, buildingId, age);
+          for (const slot of RTS_DAMAGE_SLOTS) {
+            for (const effectId of presentation.slots[slot].effects) effectIds.add(effectId);
+          }
         }
       }
     }
@@ -3786,11 +3792,17 @@ export class RtsApp {
   /** The authored damage presentation for this building, or null with no catalog. */
   private structureDamagePresentation(structure: PlacedStructure): RtsDamagePresentation | null {
     const catalog = this.options.contentCatalog;
-    return catalog ? rtsBuildingDamagePresentation(catalog, structure.stats.id) : null;
+    // The owner's age, not the building's: debris is timber in a settlement and
+    // tile in a town, and a building that never got a Town model still belongs
+    // to a Town-age kingdom. The buildings where that would read wrong pin both
+    // ages through their material class instead.
+    return catalog
+      ? rtsBuildingDamagePresentation(catalog, structure.stats.id, this.ageOf(structure.owner))
+      : null;
   }
 
   /** Fires a repeating slot's single rotated effect; one-shot slots use `playSlotBurst`. */
-  private playSlotRotation(structure: PlacedStructure, slot: RtsDamageSlot, rotationKey: number): void {
+  private playSlotRotation(structure: PlacedStructure, slot: RtsResolvedDamageSlot, rotationKey: number): void {
     if (slot.effects.length === 0) return;
     // Keyed by structure rather than by trigger, so one building's debris stays
     // the same debris for its whole life instead of flickering between presets.
@@ -3799,7 +3811,7 @@ export class RtsApp {
   }
 
   /** A one-shot slot is a composed burst: every effect it names fires together. */
-  private playSlotBurst(structure: PlacedStructure, slot: RtsDamageSlot): void {
+  private playSlotBurst(structure: PlacedStructure, slot: RtsResolvedDamageSlot): void {
     const position = this.slotPosition(structure, slot);
     for (const effectId of slot.effects) this.playWorldEffect(effectId, position);
   }
@@ -3827,7 +3839,7 @@ export class RtsApp {
   private onStructureImpact(structure: PlacedStructure): void {
     const presentation = this.structureDamagePresentation(structure);
     if (!presentation) return;
-    const slot = presentation.slots.impactDebris;
+    const slot = presentation.slots.debris;
     if (slot.effects.length === 0) return;
     const last = this.structureImpactAt.get(structure.id);
     const floor = slot.minIntervalSeconds ?? 0;
@@ -3842,7 +3854,7 @@ export class RtsApp {
     const presentation = this.structureDamagePresentation(structure);
     if (!presentation) return;
     this.playSlotBurst(structure, presentation.slots.collapseDust);
-    this.playSlotBurst(structure, presentation.slots.collapseDebris);
+    this.playSlotBurst(structure, presentation.slots.debris);
     // The husk outlives the record, so its trailing smoke has to be captured now:
     // nothing can resolve this id back to a building on a later frame.
     const ruinSmoke = presentation.slots.ruinSmoke;
@@ -3954,7 +3966,7 @@ export class RtsApp {
    * one table entry stays right for a 2x2 house and a 6x6 depot; the offset on
    * top of it is the author's own nudge.
    */
-  private slotPosition(structure: PlacedStructure, slot: RtsDamageSlot): [number, number, number] {
+  private slotPosition(structure: PlacedStructure, slot: RtsResolvedDamageSlot): [number, number, number] {
     const roofHeight = Math.max(
       1.2,
       Math.min(4, Math.max(structure.stats.footprint.width, structure.stats.footprint.depth) * 0.42),

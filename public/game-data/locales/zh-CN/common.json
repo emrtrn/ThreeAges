@@ -1,0 +1,16 @@
+{
+  "common.resource.food.name": "食物",
+  "common.resource.wood.name": "木材",
+  "common.resource.stone.name": "石头",
+  "common.resource.gold.name": "金",
+  "common.cost.free": "免费",
+  "common.cost.entry": "{amount} {resource}",
+  "common.age.settlement.name": "定居点",
+  "common.age.town.name": "城镇",
+  "common.worker.count": "{count} 名工人",
+  "common.tier.name": "{age} Lv{level}",
+  "common.tier.unknown": "所需等级",
+  "common.building.military": "一座军事建筑",
+  "common.language.label": "语言",
+  "common.language.hint": "立即更改语言；游戏会记住它。"
+}

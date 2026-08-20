@@ -26,12 +26,15 @@ import {
   validateUnitBalance,
 } from "@/game/data/validateGameData";
 import {
+  RTS_DAMAGE_AGED_SLOTS,
   RTS_DAMAGE_ANCHOR_MODES,
   RTS_DAMAGE_IMPACT_SLOTS,
   RTS_DAMAGE_REPEATING_SLOTS,
   RTS_DAMAGE_SLOTS,
+  RTS_DAMAGE_SLOT_AGES,
   validateRtsContentDamageSection,
 } from "@/game/rts/content/rtsContentCatalog";
+import type { SettlementAge } from "@/game/data/gameDataTypes";
 
 /**
  * Wrap a runtime game-data validator as the editor's `validate` contract:
@@ -63,9 +66,14 @@ const DAMAGE_SLOT_LABELS: Readonly<Record<string, string>> = {
   lightSmoke: "Hafif hasar dumanı",
   heavySmoke: "Ağır hasar dumanı",
   ruinSmoke: "Enkaz dumanı",
-  impactDebris: "Darbe molozu",
+  debris: "Moloz",
   collapseDust: "Çöküş tozu",
-  collapseDebris: "Çöküş molozu",
+};
+
+/** Aged slots ask their effect once per age; these name the two rows. */
+const DAMAGE_AGE_LABELS: Readonly<Record<SettlementAge, string>> = {
+  settlement: "Yerleşim çağı efekti",
+  town: "Kasaba çağı efekti",
 };
 
 /** The slot's own name when the game grows one before a label is written for it. */
@@ -101,19 +109,32 @@ function damageSlotFields(prefix: string): readonly {
   return RTS_DAMAGE_SLOTS.flatMap((slot) => {
     const repeating = (RTS_DAMAGE_REPEATING_SLOTS as readonly string[]).includes(slot);
     const impact = (RTS_DAMAGE_IMPACT_SLOTS as readonly string[]).includes(slot);
+    const aged = (RTS_DAMAGE_AGED_SLOTS as readonly string[]).includes(slot);
     const rotated = repeating || impact;
+    // The whole array is one picker list, not a field per index: the effect is
+    // chosen from the manifest's own effect assets, and a slot the file left
+    // empty can be filled without hand-editing JSON.
+    const effectHint = rotated
+      ? "Content Drawer efekt varlığı. Birden fazla seçilirse yapı kimliğine göre biri kullanılır — bir bina ömrü boyunca aynı efekti oynatır."
+      : "Content Drawer efekt varlığı. Tek atışlık slot: buradaki efektlerin hepsi aynı anda çalışır.";
     return [
-      {
-        // The whole array is one picker list, not a field per index: the effect
-        // is chosen from the manifest's own effect assets, and a slot the file
-        // left empty can be filled without hand-editing JSON.
-        path: `${prefix}${slot}.effects`,
-        label: "Efekt",
-        assetOptions: "effect",
-        hint: rotated
-          ? "Content Drawer efekt varlığı. Birden fazla seçilirse yapı kimliğine göre biri kullanılır — bir bina ömrü boyunca aynı efekti oynatır."
-          : "Content Drawer efekt varlığı. Tek atışlık slot: buradaki efektlerin hepsi aynı anda çalışır.",
-      },
+      // An aged slot asks once per age instead of once: the same building sheds
+      // timber as a settlement and tile as a town, so there is no single answer
+      // to give here. The buildings that keep one material in both ages say so
+      // in the Malzeme Sınıfları table, not by collapsing these two rows.
+      ...(aged
+        ? RTS_DAMAGE_SLOT_AGES.map((age) => ({
+          path: `${prefix}${slot}.ages.${age}`,
+          label: DAMAGE_AGE_LABELS[age],
+          assetOptions: "effect",
+          hint: `${effectHint} Yalnızca sahibi ${age === "town" ? "Kasaba" : "Yerleşim"} çağındayken oynatılır.`,
+        }))
+        : [{
+          path: `${prefix}${slot}.effects`,
+          label: "Efekt",
+          assetOptions: "effect",
+          hint: effectHint,
+        }]),
       {
         path: `${prefix}${slot}.anchor.mode`,
         label: "Konum",

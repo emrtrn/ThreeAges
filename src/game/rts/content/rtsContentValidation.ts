@@ -18,6 +18,7 @@ import { readRtsActorCargoSways, readRtsActorCargoVisuals } from "./rtsCargoVisu
 import { readRtsActorGunRecoils, readRtsActorMuzzle } from "./rtsGunMotion";
 import {
   RTS_DAMAGE_SLOTS,
+  RTS_DAMAGE_SLOT_AGES,
   rtsBuildingActorRef,
   rtsBuildingDamagePresentation,
   rtsUnitActorRef,
@@ -261,17 +262,27 @@ export function rtsDamageEffectGaps(
     }
   };
   for (const slot of RTS_DAMAGE_SLOTS) {
-    check("defaults", slot, catalog.damage.defaults.slots[slot].effects);
+    const authored = catalog.damage.defaults.slots[slot];
+    check("defaults", slot, authored.effects ?? []);
+    for (const age of RTS_DAMAGE_SLOT_AGES) check(`defaults@${age}`, slot, authored.ages?.[age] ?? []);
   }
   for (const [name, material] of Object.entries(catalog.damage.materials)) {
     for (const slot of RTS_DAMAGE_SLOTS) {
-      check(`materials.${name}`, slot, material.slots?.[slot]?.effects ?? []);
+      const authored = material.slots?.[slot];
+      check(`materials.${name}`, slot, authored?.effects ?? []);
+      for (const age of RTS_DAMAGE_SLOT_AGES) {
+        check(`materials.${name}@${age}`, slot, authored?.ages?.[age] ?? []);
+      }
     }
   }
+  // Both ages, because an aged slot resolves to a different effect after an
+  // age-up and a gap that only opens then is the one nobody would notice.
   for (const buildingId of buildingIds) {
-    const presentation = rtsBuildingDamagePresentation(catalog, buildingId);
-    for (const slot of RTS_DAMAGE_SLOTS) {
-      check(`buildings.${buildingId}`, slot, presentation.slots[slot].effects);
+    for (const age of RTS_DAMAGE_SLOT_AGES) {
+      const presentation = rtsBuildingDamagePresentation(catalog, buildingId, age);
+      for (const slot of RTS_DAMAGE_SLOTS) {
+        check(`buildings.${buildingId}@${age}`, slot, presentation.slots[slot].effects);
+      }
     }
   }
   return [...new Set(gaps)];
