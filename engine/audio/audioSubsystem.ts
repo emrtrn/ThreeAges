@@ -19,6 +19,14 @@ import {
 export const AUDIO_SUBSYSTEM_ID = "audio";
 export type AudioBackend = "none" | "web-audio";
 
+/**
+ * How many recent plays {@link AudioSubsystem.playedRequests} keeps.
+ *
+ * Comfortably above what any single test asserts, and far above the "last 10
+ * audio events" a debug panel shows, so trimming is invisible to both readers.
+ */
+export const PLAYED_HISTORY_LIMIT = 128;
+
 export type AudioVec3 = readonly [number, number, number];
 
 export interface AudioPlayOptions {
@@ -407,6 +415,14 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     return handle;
   }
 
+  /**
+   * The most recent plays, oldest first, capped at {@link PLAYED_HISTORY_LIMIT}.
+   *
+   * Inspection only — tests assert what a scene played, and the debug overlay
+   * shows the last few events. Bounded because an RTS match fires thousands of
+   * one-shots over twenty minutes and an unbounded log of them is a leak that
+   * grows with playtime and shows up as nothing but rising memory.
+   */
   playedRequests(): readonly AudioPlayRequest[] {
     return this.played;
   }
@@ -420,6 +436,9 @@ export class AudioSubsystem implements Subsystem, AudioBus {
         continue;
       }
       this.played.push(request);
+      if (this.played.length > PLAYED_HISTORY_LIMIT) {
+        this.played.splice(0, this.played.length - PLAYED_HISTORY_LIMIT);
+      }
       if (this.backend === "web-audio") {
         // A failed clip (bad node param, decode error, etc.) must never throw out
         // of the per-frame update and kill the engine loop.

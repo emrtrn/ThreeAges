@@ -753,6 +753,18 @@ import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/aud
 import { evaluateSoundCue, validateSoundCueGraph } from "../engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "../engine/audio/soundCueTypes";
 import {
+  AudioEventDirector,
+  audioEventClipIds,
+  jitterPitch,
+  normalizeAudioEventTable,
+} from "../engine/audio/audioEventTable";
+import type { AudioEventTable } from "../engine/audio/audioEventTable";
+import {
+  RTS_NOTIFICATION_AUDIO_EVENTS,
+  RTS_NOTIFY_AUDIO_EVENTS,
+  rtsAudioEventIds,
+} from "../src/game/rts/audio/rtsAudioEvents";
+import {
   estimateSubtitleDurationSeconds,
   resolveDialogueLine,
   validateDialogueLine,
@@ -792,6 +804,7 @@ import type { ConversationAsset } from "../engine/dialogue/conversationTypes";
 import {
   AUDIO_BUS_IDS,
   MENU_DUCK_MIX,
+  NOTIFICATION_DUCK_MIX,
   createDefaultBusVolumes,
   effectiveBusGain,
   isAudioBusId,
@@ -3864,6 +3877,194 @@ check("audio subsystem records a spatial play's position; listener pose is safe 
   ]);
 });
 
+// --- Audio event table (audio plan Faz 0) ------------------------------------
+//
+// The table under `public/game-data/audio/` is tuning data in exactly the way
+// the balance tables are: mix levels, cooldowns and distances get retuned by
+// ear. So these checks pin the table's *shape* and the agreement between the
+// code's event names and the table's entries — never a magnitude. Scaling every
+// number in `events.json` must leave this suite green.
+
+const readAudioEventTable = (): AudioEventTable =>
+  normalizeAudioEventTable(
+    JSON.parse(readFileSync("public/game-data/audio/events.json", "utf8")) as unknown,
+  );
+
+/** A stub handle: enough of the interface for the director's bookkeeping. */
+const fakeAudioHandle = (): { handle: AudioPlaybackHandleStub; finish: () => void } => {
+  const stub: AudioPlaybackHandleStub = {
+    clipId: "stub",
+    stopped: false,
+    volume: 1,
+    pitch: 1,
+    stop() {
+      stub.stopped = true;
+    },
+    setVolume() {},
+    setPitch() {},
+  };
+  return { handle: stub, finish: () => stub.stop() };
+};
+
+interface AudioPlaybackHandleStub {
+  clipId: string;
+  stopped: boolean;
+  volume: number;
+  pitch: number;
+  stop(fadeSeconds?: number): void;
+  setVolume(value: number, fadeSeconds?: number): void;
+  setPitch(value: number): void;
+}
+
+check("audio event table normalizer defaults every field and refuses a broken entry", () => {
+  const table = normalizeAudioEventTable({
+    schema: 1,
+    events: { "ui.click": { clips: ["snd-click"] } },
+  });
+  const click = table.events["ui.click"]!;
+  // An entry that names only clips is legal and gets an unremarkable one-shot.
+  assert.deepEqual([...click.clips], ["snd-click"]);
+  assert.equal(click.spatial, false);
+  assert.equal(click.loop, false);
+  assert.ok(click.maxInstances >= 1);
+  assert.ok(click.maxDistance > click.refDistance);
+
+  assert.throws(
+    () => normalizeAudioEventTable({ schema: 1, events: { "ui.click": { clips: [] } } }),
+    /clips must be a non-empty array/,
+  );
+  assert.throws(
+    () => normalizeAudioEventTable({ schema: 1, events: { "ui.click": { clips: ["a"], bus: "reverb" } } }),
+    /is not a valid audio bus id/,
+  );
+  // An inverted attenuation pair silences the panner, which in-game reads as
+  // "never wired" rather than "too quiet" — refused at load instead.
+  assert.throws(
+    () => normalizeAudioEventTable({
+      schema: 1,
+      events: { "ui.click": { clips: ["a"], refDistance: 40, maxDistance: 10 } },
+    }),
+    /must be greater than refDistance/,
+  );
+  // Event ids are a namespace two files have to agree on; a stray capital or
+  // space would make the disagreement invisible.
+  assert.throws(
+    () => normalizeAudioEventTable({ schema: 1, events: { "UI Click": { clips: ["a"] } } }),
+    /dotted snake_case/,
+  );
+});
+
+check("audio event director enforces cooldown, per-event cap and global budget", () => {
+  const table = normalizeAudioEventTable({
+    schema: 1,
+    events: {
+      "combat.hit": { clips: ["a", "b"], cooldownMs: 100, maxInstances: 2, spatial: true, maxDistance: 40 },
+    },
+  });
+  const handles: AudioPlaybackHandleStub[] = [];
+  const director = new AudioEventDirector(table, {
+    random: () => 0,
+    maxConcurrent: 3,
+    play: () => {
+      const { handle } = fakeAudioHandle();
+      handles.push(handle);
+      return handle;
+    },
+  });
+
+  assert.equal(director.trigger("combat.hit", 0), "played");
+  // Same event inside its cooldown: refused without touching the budget.
+  assert.equal(director.trigger("combat.hit", 0.05), "cooldown");
+  assert.equal(director.trigger("combat.hit", 0.2), "played");
+  // Two are already sounding, and the entry allows two.
+  assert.equal(director.trigger("combat.hit", 0.4), "event-full");
+  assert.equal(director.activeCount(), 2);
+
+  // The distance cull is the cheapest guard and comes before everything else.
+  assert.equal(director.trigger("combat.hit", 5, { distance: 1000 }), "too-far");
+  // An id the table does not answer is reported, never thrown.
+  const unknown: string[] = [];
+  const strict = new AudioEventDirector(table, {
+    play: () => fakeAudioHandle().handle,
+    onUnknownEvent: (id) => unknown.push(id),
+  });
+  assert.equal(strict.trigger("combat.nope", 0), "unknown-event");
+  assert.equal(strict.trigger("combat.nope", 1), "unknown-event");
+  // Once per id: a mistyped name in a per-frame path must not flood the log.
+  assert.deepEqual(unknown, ["combat.nope"]);
+
+  // A finished clip frees its slot — but only once the director is advanced,
+  // which is what keeps the accounting frame-based rather than guessed.
+  for (const handle of handles) handle.stop();
+  assert.equal(director.activeCount(), 2);
+  director.advance();
+  assert.equal(director.activeCount(), 0);
+  assert.equal(director.trigger("combat.hit", 10), "played");
+});
+
+check("audio event pitch jitter stays inside its authored band", () => {
+  assert.equal(jitterPitch(0, () => 0.5), 1);
+  // The extremes of the generator map to the extremes of the band, and a pitch
+  // of zero or below would stop the source dead — so the floor matters.
+  assert.ok(Math.abs(jitterPitch(0.05, () => 0) - 0.95) < 1e-9);
+  assert.ok(Math.abs(jitterPitch(0.05, () => 1) - 1.05) < 1e-9);
+  for (const r of [0, 0.25, 0.5, 0.75, 1]) {
+    const pitch = jitterPitch(0.5, () => r);
+    assert.ok(pitch > 0, `pitch ${pitch} must stay positive`);
+  }
+});
+
+check("RTS audio events: every triggered name is answered by the shipped table", () => {
+  const table = readAudioEventTable();
+  for (const eventId of rtsAudioEventIds()) {
+    assert.ok(
+      table.events[eventId] !== undefined,
+      `audio event "${eventId}" is triggered in code but absent from game-data/audio/events.json`,
+    );
+  }
+  // And the other way: an entry nothing triggers is a sound nobody will ever
+  // hear, which is worth catching while it is still cheap to delete.
+  const triggered = new Set(rtsAudioEventIds());
+  for (const eventId of Object.keys(table.events)) {
+    assert.ok(triggered.has(eventId), `audio event "${eventId}" is in the table but never triggered`);
+  }
+});
+
+check("RTS audio events: every audio-only notify marker actually has a sound", () => {
+  // `RTS_NOTIFY_AUDIO_ONLY` is the set of markers authored on the units' clips
+  // that are deliberately *not* drawn — they exist for this consumer and no
+  // other. One of them without an audio event is a marker on an animation with
+  // nothing left reading it at all, which nothing else can report.
+  for (const name of RTS_NOTIFY_AUDIO_ONLY) {
+    assert.ok(
+      RTS_NOTIFY_AUDIO_EVENTS[name] !== undefined,
+      `notify "${name}" is authored for audio only but maps to no audio event`,
+    );
+  }
+  // Severity is the notification feed's own vocabulary; a tier without a sound
+  // would silently drop a whole class of notice.
+  for (const severity of ["info", "warning", "alert"] as const) {
+    assert.ok(RTS_NOTIFICATION_AUDIO_EVENTS[severity], `notification severity ${severity} needs a sound`);
+  }
+});
+
+check("RTS audio events: every clip the table names is a manifested sound asset", () => {
+  // The table names manifest ids, never paths — so an id the project does not
+  // ship resolves to nothing and plays silence. This is the check that turns
+  // that silence into a build failure.
+  const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
+    assets?: Array<{ id?: unknown; assetType?: unknown }>;
+  };
+  const soundIds = new Set(
+    (manifest.assets ?? [])
+      .filter((asset) => asset.assetType === "sound" && typeof asset.id === "string")
+      .map((asset) => asset.id as string),
+  );
+  for (const clipId of audioEventClipIds(readAudioEventTable())) {
+    assert.ok(soundIds.has(clipId), `audio clip "${clipId}" is not a manifested sound asset`);
+  }
+});
+
 // --- Sound Cue evaluator (pure, headless) -------------------------------------
 //
 // A deterministic [0,1) generator: returns the queued values in order, then 0.
@@ -4733,13 +4934,12 @@ check("begin-conversation behavior emits start-conversation from its param", () 
 // --- Audio Bus Lite (pure mix model) ------------------------------------------
 
 check("createDefaultBusVolumes seeds every bus at unity", () => {
-  assert.deepEqual(createDefaultBusVolumes(), {
-    master: 1,
-    music: 1,
-    sfx: 1,
-    ui: 1,
-    ambience: 1,
-  });
+  // Derived from the bus list rather than re-listing it: the contract is "every
+  // bus starts at unity", and a literal table would go red for adding a bus —
+  // a change that is correct — instead of for the default drifting.
+  const volumes = createDefaultBusVolumes();
+  assert.deepEqual(Object.keys(volumes).sort(), [...AUDIO_BUS_IDS].sort());
+  for (const id of AUDIO_BUS_IDS) assert.equal(volumes[id], 1, `${id} must default to unity`);
 });
 
 check("normalizeBusVolume clamps to non-negative, defaults junk to 1", () => {
@@ -4774,11 +4974,23 @@ check("isAudioBusId guards the bus id union", () => {
   assert.equal(isAudioBusId(3), false);
 });
 
-check("MENU_DUCK_MIX ducks music/ambience/sfx but leaves ui and master", () => {
+check("MENU_DUCK_MIX ducks the world but leaves ui, notifications and master", () => {
   const ducked = mergeMixSnapshot(createDefaultBusVolumes(), MENU_DUCK_MIX);
-  assert.ok(ducked.music < 1 && ducked.ambience < 1 && ducked.sfx < 1);
+  assert.ok(ducked.music < 1 && ducked.ambience < 1 && ducked.sfx < 1 && ducked.voice < 1);
   assert.equal(ducked.ui, 1);
+  // An alert raised while the game is paused still has to reach the player.
+  assert.equal(ducked.notifications, 1);
   assert.equal(ducked.master, 1);
+});
+
+check("NOTIFICATION_DUCK_MIX steps the mix back without touching notifications", () => {
+  const ducked = mergeMixSnapshot(createDefaultBusVolumes(), NOTIFICATION_DUCK_MIX);
+  assert.ok(ducked.music < 1 && ducked.ambience < 1 && ducked.sfx < 1);
+  assert.equal(ducked.notifications, 1);
+  // Gentler than the pause duck: this one plays *under* a live match, and the
+  // design warns against an audible side-chain pump.
+  const paused = mergeMixSnapshot(createDefaultBusVolumes(), MENU_DUCK_MIX);
+  assert.ok(ducked.music > paused.music, "a notice must duck less than a pause does");
 });
 
 // --- Audio Bus Lite (subsystem, headless) -------------------------------------
@@ -57442,6 +57654,12 @@ check("Lokalizasyon Faz 2: every localization key the game names exists in en an
     // The localization module itself names keys in its own doc comments and
     // fixtures; debug surfaces are out of scope (inventory §6.1).
     if (file.includes("/localization/") || file.includes("/debug/")) continue;
+    // Audio event ids share a syntax with locale keys — lower-case, dotted — and
+    // one of their namespaces (`unit.`) is also a locale namespace, so the
+    // scanner reads `unit.footstep` as a missing translation. They are not
+    // translated and never reach the player as text; that ids resolve is checked
+    // against `game-data/audio/events.json` instead, by the audio table checks.
+    if (file.includes("/rts/audio/")) continue;
     const source = readFileSync(file, "utf8");
     for (const match of source.matchAll(keyLiteral)) {
       if (!named.has(match[1]!)) named.set(match[1]!, file);

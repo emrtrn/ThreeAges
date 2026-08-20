@@ -3,11 +3,72 @@
 > **Türkçe ad:** Üç Çağ: Sınır Krallıkları  
 > **İngilizce ad:** Three Ages: Kingdoms of the Frontier  
 > **Belge türü:** Ses tasarımı, SFX, müzik, voice-over ve üretim planı  
-> **Sürüm:** v1.0  
-> **Tarih:** 9 Ağustos 2026  
+> **Sürüm:** v1.1  
+> **Tarih:** 9 Ağustos 2026 (v1.0) — 20 Ağustos 2026 (v1.1: kod envanteri, faz tablosu, şema kararları)  
 > **Hedef araçlar:** Adobe Firefly (SFX), Gemini Music / müzik üretimi, ses düzenleme aracı (Audacity veya eşdeğeri)  
 > **Hedef platform:** Masaüstü web tarayıcısı  
 > **Ana kullanım:** Oyunun tüm ses varlıklarını ortak bir üretim standardıyla planlamak, üretmek, oyuna entegre etmek ve test etmek
+
+---
+
+## 0. Yürütme izi
+
+Bu belgenin §1–§78'i **ne üretileceğini** anlatır ve v1.0'dan beri değişmedi. Bu
+bölüm **hangi sırayla yapılacağını** ve nerede kalındığını taşır; belge ancak
+bununla yürütülebilir bir plan olur.
+
+### Durum işaretleri
+
+| İşaret | Anlam |
+|---|---|
+| ✅ | Tamamlandı ve doğrulandı |
+| 🔨 | Devam ediyor |
+| ⏳ | Sıradaki |
+| ⬜ | Başlanmadı |
+| ⛔ | Kapsam dışı bırakıldı |
+
+### Fazlar
+
+| Faz | Konu | Durum | Kabul kapısı |
+|---|---|---|---|
+| **Faz 0** | Kararlar + runtime iskeleti (bus, event tablosu şeması, director, RtsApp mount) | ✅ | `tsc` yeşil, event tablosu sözleşme testleri yeşil, maçta listener pozu güncelleniyor |
+| **Faz 1** | Placeholder seslerle uçtan uca hat (starter-content klipleri, notify + notification kancaları) | 🔨 | Maçta ses duyuluyor; cooldown, instance limiti ve mesafe kesmesi çalışıyor |
+| **Faz 2** | Package 1 üretimi (Firefly 12 SFX → Settlement müziği → Guard VO), §70/§71/§72 sırasıyla | ⬜ | Gate B (§45, §46) |
+| **Faz 3** | Stil kilidi (§47) + üretim kaydı (§63) | ⬜ | 7 stil-kilidi maddesi onaylandı |
+| **Faz 4** | Müzik durum makinesi + crossfade (§28, §35) | ⬜ | Durum geçişleri maçta duyuluyor, sinyal kaynağı tanımlı |
+| **Faz 5** | Paket 2–4 (UI/notification/ekonomi → yapı/lojistik → birim/savaş) | ⬜ | Gate C (§67) |
+| **Faz 6** | Paket 5 (ambience + müzik) | ⬜ | Gate C |
+| **Faz 7** | Paket 6 polish + mix + erişilebilirlik slider'ları (§62) | ⬜ | Gate D |
+| **Faz 8** | Full-match audio QA (§68) + performans bütçesi doğrulaması (§61) | ⬜ | Gate D |
+
+### Faz 0 neden Package 1'den önce gelir
+
+§77 "önce temsilî paket üret, oyunda test et" diyor ve bu doğru. Ancak
+"oyunda test et" adımı, oyunda **çalar hiçbir şey yokken** yapılamaz: bu planın
+yazıldığı gün RTS maçında tek bir ses yoktu (§79). Bu yüzden sıra bir yerde
+tersine çevrildi:
+
+> Önce **hat** kurulur (placeholder seslerle), sonra **ses** üretilir.
+
+Placeholder olarak proje zaten `assets/starter-content/Sounds/` altında
+manifest'e kayıtlı 20 klip taşıyor (`starter-snd-ui-click`,
+`starter-snd-footstep-stone`, `starter-snd-impact-light`,
+`starter-snd-explosion-01`, `starter-snd-collapse-01`, …). Bunlar oyunun ses
+kimliği değildir ve hiçbiri sevk edilmeyecektir; görevleri tek şey: mix
+hiyerarşisi (§9), tekrar kontrolü (§11), spatial attenuation (§10) ve bütçe
+(§61) **tek bir Firefly üretimi yapılmadan önce** gerçek maçta doğrulansın.
+
+Kazanç şu: Faz 2'de üretilen her varlık, üretildiği gün oyunda dinlenebilir. §46'nın
+test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
+
+### Progress Log
+
+| Tarih | Ne yapıldı |
+|---|---|
+| 2026-08-09 | v1.0 — Audio Bible, envanterler, prompt sistemleri, paketler ve kabul kapıları yazıldı. |
+| 2026-08-20 | Kod envanteri çıkarıldı (§79). Boşluğun ses varlıklarında değil **entegrasyon hattında** olduğu görüldü: engine'de bus, spatial subsystem ve SoundCue editörü hazır, RtsApp'te tek satır audio yok. |
+| 2026-08-20 | v1.1 — §58 şeması runtime'a bağlandı, §59 bus kararı verildi, SoundCue/event tablosu iş bölümü (§80) yazıldı, dosya adı harf durumu ve lokalizasyon bağı eklendi, faz tablosu açıldı. |
+| 2026-08-20 | Faz 0 uygulandı: `voice` + `notifications` bus'ları eklendi, `engine/audio/audioEventTable.ts` (şema + director) yazıldı, `public/game-data/audio/events.json` açıldı, RtsApp'e `AudioSubsystem` mount edildi (listener pozu + autoplay kilidi + notify/notification kancaları). |
 
 ---
 
@@ -296,6 +357,25 @@ stg_victory_01.ogg
 | `vo_` | Voice-over |
 | `mus_` | Müzik |
 | `stg_` | Stinger |
+
+### Küçük harf bir stil tercihi değil, bir dağıtım şartıdır
+
+Dosya adlarının küçük harf olması yukarıda estetik bir kural gibi duruyor; bu
+projede değil. Windows dosya sistemi harf durumuna duyarsız, git index'i duyarlı
+ve dağıtım hedefi Linux. Bunun sonucu daha önce bu depoda yaşandı: diskteki
+dosya adını düzeltmek yetmedi, `git ls-files` ile `ls` ayrıştı ve varlık Linux
+checkout'unda 404 verdi.
+
+Mevcut placeholder içeriğin `.OGG` uzantısı büyük harflidir
+(`Collapse01.OGG`) — **bu, izlenecek örnek değildir.** Üretilecek her yeni ses:
+
+- dosya adı ve uzantı tamamen küçük harf,
+- `snake_case`,
+- ve depoya girdikten sonra `git ls-files public/assets/audio` çıktısı diskteki
+  adla birebir aynı.
+
+Bir dosyanın adı yalnızca yeniden adlandırılarak düzeltilemez; git index'inden
+de düşürülmesi gerekir.
 
 ---
 
@@ -1956,28 +2036,63 @@ Ambiyans ve müzik:
 
 ---
 
-# 58. Audio event veri modeli önerisi
+# 58. Audio event veri modeli — kesinleşmiş şema
 
 Ses dosyaları doğrudan gameplay koduna dağınık şekilde sabitlenmemelidir.
 
-Önerilen yapı:
+v1.0 bu bölümü bir öneriyle bırakmış ve "kesin şema mevcut runtime audio
+mimarisi incelendikten sonra uyarlanmalıdır" demişti. §79'daki envanter o
+incelemedir; aşağısı borcun ödenmiş hâlidir.
+
+**Konum:** `public/game-data/audio/events.json`
+**Şema kaynağı:** `engine/audio/audioEventTable.ts` (`normalizeAudioEventTable`)
+**Runtime:** `AudioEventDirector` (aynı dosya) → `AudioSubsystem.playOneShot`
 
 ```json
 {
-  "event": "combat.guard.sword_hit",
-  "variants": [
-    "sfx_combat_guard_sword_hit_01.ogg",
-    "sfx_combat_guard_sword_hit_02.ogg",
-    "sfx_combat_guard_sword_hit_03.ogg"
-  ],
-  "volume": 0.75,
-  "pitchVariation": 0.03,
-  "maxInstances": 5,
-  "cooldownMs": 70,
-  "spatial": true,
-  "maxDistance": 25
+  "schema": 1,
+  "events": {
+    "combat.sword_swing": {
+      "clips": ["starter-snd-impact-light"],
+      "bus": "sfx",
+      "volume": 0.55,
+      "pitchVariation": 0.05,
+      "cooldownMs": 60,
+      "maxInstances": 4,
+      "spatial": true,
+      "refDistance": 8,
+      "maxDistance": 55,
+      "rolloff": 1.1
+    }
+  }
 }
 ```
+
+### Alan adları neden `AudioPlayOptions` ile aynı
+
+`volume`, `pitch`, `bus`, `spatial`, `refDistance`, `maxDistance`, `rolloff`,
+`loop` — hepsi engine'in `AudioPlayOptions` arayüzünde **zaten** var ve spatial
+panner'a birebir bağlanıyor. Yeni bir isim uydurmak (§10'un "yakın / orta / uzak"
+kategorileri için ayrı bir enum gibi) tabloyu okunur yapmaz, sadece araya bir
+çeviri katmanı koyar. Tablo runtime'ın dilinde yazılır; §10'un kategorileri
+tablodaki `maxDistance` **değerleriyle** ifade edilir.
+
+İki alan tabloya özgüdür, çünkü tek bir çalmanın değil **olayın** özelliğidir:
+
+| Alan | Anlam |
+|---|---|
+| `clips` | Varyant listesi — manifest **sound asset id**'leri (dosya adı değil, §80) |
+| `pitchVariation` | ±oran; her çalmada `pitch` bu aralıkta rastgelelenir (§12) |
+| `cooldownMs` | Aynı olayın iki çalması arasındaki en kısa süre (§11) |
+| `maxInstances` | Aynı olaydan aynı anda kaç örnek duyulabilir (§11, §61) |
+
+### `clips` neden dosya adı değil manifest id'si
+
+VFX tarafında yerleşmiş kural: *bir varlık asla keyfî bir yol veya URL
+adlandıramaz*; id yalnızca proje o varlığı sevk ettiğinde çözülür. Ses için de
+aynısı geçerli olmalı — aksi hâlde `events.json` üzerinden public kökün
+herhangi bir dosyasına işaret edilebilir ve eksik bir dosya sessiz bir 404'e
+dönüşür. Manifest id'si çözülemediğinde olay **çalınmaz ve raporlanır**.
 
 ### Amaç
 
@@ -1987,22 +2102,56 @@ Ses dosyaları doğrudan gameplay koduna dağınık şekilde sabitlenmemelidir.
 - merkezi mix
 - kod içine dosya adı gömmemek
 
-Kesin şema mevcut runtime audio mimarisi incelendikten sonra uyarlanmalıdır.
+### Tablo `public/game-data/` altındadır — ve testler bunu bozmamalıdır
+
+`events.json` bir **tuning** dosyasıdır, tıpkı `balance/units.json` gibi: mix
+seviyeleri, cooldown'lar ve mesafeler kulakla ayarlanacaktır. Bu yüzden
+`tools/engine-tests.ts` bu tabloda **sözleşmeyi** pinler, **değeri** değil:
+
+- ✅ her olayın en az bir `clips` girdisi var
+- ✅ her `clips` girdisi manifest'te `assetType: "sound"` olarak mevcut
+- ✅ kodun adıyla çağırdığı her olay tabloda var (ve tersi: tabloda yetim olay yok)
+- ✅ `maxInstances ≥ 1`, `cooldownMs ≥ 0`, `maxDistance > refDistance`
+- ❌ "`combat.sword_swing` sesi 0.55'tir" — bu bir sonraki mix pasında kırmızıya döner
 
 ---
 
-# 59. Önerilen audio bus yapısı
+# 59. Audio bus yapısı — karar
+
+v1.0 yedi bus önermişti. Engine'de beş vardı (`master`, `music`, `sfx`, `ui`,
+`ambience`). Karar: **`voice` ve `notifications` eklendi; `Combat` ve `World`
+eklenmedi.**
 
 ```text
-Master
-├── Music
-├── UI
-├── Voice
-├── Notifications
-├── Combat
-├── World
-└── Ambience
+master
+├── music
+├── ui
+├── voice          ← eklendi
+├── notifications  ← eklendi
+├── sfx            (Combat + World burada)
+└── ambience
 ```
+
+Gerekçe basit ve §9'un ducking kuralından çıkıyor: bir bus ancak **başka bir
+şeyden bağımsız kısılması gerekiyorsa** vardır.
+
+- `voice` ve `notifications` ayrı, çünkü §9 tam olarak bunları ayrı kısmayı
+  istiyor ("kritik notification sırasında müzik hafif düşer", "voice line
+  sırasında yakın savaş SFX çok hafif düşer") ve §62 bunlara ayrı slider
+  vaat ediyor.
+- `combat` ve `world` ayrı **değil**, çünkü ikisini birbirine göre kısan tek bir
+  kural yok. `sfx` altında kalmaları hiçbir şeyi kaybettirmiyor; ayrılmaları ise
+  SoundCue şemasını, kaydedici allowlist'i ve editör açılır menüsünü kullanılmayan
+  iki seçenekle şişirirdi. İhtiyaç doğduğunda eklemek tek satırlık bir iştir.
+
+### Bus eklemenin dokunduğu yerler
+
+Bir bus id'si eklemek üç dosyayı birden ilgilendirir; biri unutulursa kaydedici
+sessizce alanı düşürür (CLAUDE.md'nin allowlist tuzağı):
+
+1. `engine/audio/audioBus.ts` → `AUDIO_BUS_IDS`
+2. `tools/saveValidator.ts` → `SOUND_CUE_BUS_IDS`
+3. `src/editor/SoundCueEditor.ts` → bus seçicisi (listeden türetiliyorsa kendiliğinden gelir)
 
 ### Faydası
 
@@ -2087,6 +2236,29 @@ audio + notification card + visual state
 ```
 
 birlikte kullanılmalıdır.
+
+## 62.1 Lokalizasyon ile bağ
+
+Bu kuralın bu projede ikinci ve daha sert bir gerekçesi var: **voice-over
+İngilizce kalıyor** (§37), oyun ise lokalize edildi. Rusça oynayan bir oyuncu
+Guard'ın "Under attack!" replikini anlamak zorunda bırakılamaz.
+
+Bu yüzden ses ve lokalizasyon şu şekilde ayrışır:
+
+| Kanal | Dil | Kural |
+|---|---|---|
+| VO replikleri (§38–§40) | Yalnızca İngilizce | **Karakter taşır, bilgi taşımaz.** Bir repliğin anlaşılmaması hiçbir oyun bilgisini kaybettirmemeli. |
+| Notification kartları | Lokalize | Bilginin taşındığı yer burasıdır (`RtsNotificationCenter` + locale tabloları). |
+| Görsel durum | Dilsiz | Kesik yol, kırmızı çerçeve, sayaç. |
+| Stinger / alarm SFX (§24) | Dilsiz | Aciliyeti taşır, içeriği değil. |
+
+Pratik sonuç: "Karakol saldırı altında" olayının **sesi** oyuncuyu haritaya
+baktırır; **ne olduğunu** lokalize notification kartı söyler. Ses kanalına
+lokalize edilmemiş bilgi koymak, oyunu İngilizce bilmeyen oyuncu için sessizce
+zorlaştırır ve bunu hiçbir test yakalamaz.
+
+VO'nun ileride lokalize edilmesi kapsam dışıdır (§2) — ama bu tabloya uyulduğu
+sürece **gerekmez de**, ki bu tablonun asıl faydası budur.
 
 ---
 
@@ -2248,13 +2420,16 @@ no obvious imitation of existing game music
 
 # 69. İlk uygulanacak görev listesi
 
-## Ön hazırlık
+## Ön hazırlık — Faz 0 (tamamlandı, 2026-08-20)
 
-- [ ] Audio klasör yapısını oluştur
-- [ ] Runtime audio event sistemini gözden geçir
-- [ ] Master/runtime formatını kesinleştir
-- [ ] Bus yapısını belirle
-- [ ] Audio asset loader kurallarını belirle
+- [x] Runtime audio event sistemini gözden geçir → §79
+- [x] Bus yapısını belirle → §59 (`voice` + `notifications` eklendi)
+- [x] Audio event şemasını kesinleştir → §58, `engine/audio/audioEventTable.ts`
+- [x] Audio asset loader kurallarını belirle → manifest `sound` id'leri, §58
+- [x] SoundCue / olay tablosu iş bölümü → §80
+- [x] `RtsApp`'e audio mount (listener pozu, autoplay kilidi, notify + notification kancaları)
+- [ ] Audio klasör yapısını oluştur (§7) — ilk gerçek varlıkla birlikte, Faz 2
+- [ ] Master/runtime formatını kesinleştir (§8) — tarayıcı testiyle, Faz 2
 
 ## Package 1 Firefly
 
@@ -2466,6 +2641,137 @@ En güvenli yöntem:
 7. Settlement music
 
 Bu yedi öğe onaylandığında projenin ses kimliğinin büyük bölümü tanımlanmış olur.
+
+## 77.1 Bir düzeltme: hat sesten önce gelir
+
+Yukarıdaki karar doğru ama uygulanabilir olması için bir ön koşulu var. "Gerçek
+oyunda test et" adımı, oyunda çalar hiçbir şey yokken yapılamaz — ve §79'un
+gösterdiği gibi RTS maçında hiçbir ses yoktu.
+
+Bu yüzden §76'nın zinciri başında bir halka daha taşır:
+
+```text
+Audio Bible
+→ Audio inventory
+→ Runtime hattı (Faz 0–1, placeholder seslerle)   ← eklendi
+→ Package 1
+→ In-game test
+→ Style lock
+→ ...
+```
+
+Placeholder aşaması ses üretimi **değildir** ve ses kimliğine dair hiçbir karar
+vermez. Yalnızca şunları Firefly'a tek prompt gitmeden doğrular: mix hiyerarşisi
+(§9), tekrar kontrolü (§11), spatial attenuation (§10), instance bütçesi (§61)
+ve olay eşlemesi (§58). Faz 2'de üretilen ilk gerçek klip, hazır bir hattın
+üstüne düşer.
+
+---
+
+# 79. Kod envanteri — 20 Ağustos 2026
+
+Bu bölüm planın yazıldığı gün yoktu ve v1.1'de eklendi. Sebebi: plan boyunca
+"mevcut runtime audio mimarisi" defalarca anılıyor ama hiçbir yerde ne olduğu
+yazmıyor. Envanter çıkarılınca boşluğun beklenen yerde olmadığı görüldü.
+
+## 79.1 Engine'de hazır olan
+
+| Ne | Nerede | Plan karşılığı |
+|---|---|---|
+| Web Audio backend, buffer cache, one-shot + handle'lı çalma, fade | `engine/audio/audioSubsystem.ts` | §8.2, §9 |
+| Spatial `PannerNode` (HRTF, inverse distance, `refDistance`/`maxDistance`/`rolloff`) | aynı dosya | §10 |
+| `setListenerPose()` — kamera dinleyici pozu | aynı dosya | §10.1 |
+| `resumeContext()` — tarayıcı autoplay kilidi | aynı dosya | — |
+| Bus grafiği + mix snapshot + hazır menü duck'ı | `engine/audio/audioBus.ts` | §59, §9 |
+| SoundCue grafiği: random / modulator / loop / delay / mixer | `engine/audio/soundCueTypes.ts`, `soundCueEvaluator.ts` | §4.5, §12 |
+| SoundCue **editörü** (görsel graf, 650+ satır) | `src/editor/SoundCueEditor.ts` | §4.5 |
+| `assetType: "sound"` / `"soundCue"` manifest desteği | `engine/assets/manifest.ts` | §7 |
+| `/__save-soundcue` + kaydedici allowlist | `tools/saveValidator.ts` | — |
+| 20 adet manifest'li placeholder klip | `public/assets/starter-content/Sounds/` | Faz 1 |
+
+Yani §12'nin pitch/gain varyasyonu ve §4.5'in varyant sistemi **authoring
+seviyesinde zaten çözülmüş**; üretilecek varyantlar için bir editör hazır
+bekliyor.
+
+## 79.2 Boşluk: RTS maçında ses yok
+
+`AudioSubsystem` yalnızca Forge sahne yolunda (`SceneApp`, `RuntimeSceneApp`)
+mount ediliyordu. Oyunun kendisi olan `RtsApp` ayrı bir render yoludur ve
+ortak altyapıyı kendiliğinden almaz — bu ayrışma daha önce ortam
+singleton'larında (sis, skylight) yaşandı ve aynısı ses için de geçerliydi:
+`RtsApp.ts`'in 7241 satırında tek bir audio referansı yoktu.
+
+Bu, planın gerçek boşluğunun **ses varlıkları değil entegrasyon hattı** olduğu
+anlamına gelir. Faz 0 tam olarak bunu kapatır.
+
+## 79.3 Zaten bizi bekleyen kancalar
+
+Bunlar yeniden yazılmamalıdır; §58'in olay tablosu bunların **üstüne** oturur.
+
+**1. Animasyon notify akışı** — `src/game/rts/content/rtsNotifyEffects.ts`
+
+`RTS_NOTIFY_AUDIO_ONLY` sabiti şu isimleri taşıyor: `footstep`, `chop-impact`,
+`dig-impact`, `sword-swing`, `arrow-release`. Bunlar birim kliplerinde authored,
+`*.skeleton.json` sidecar'larına yazılmış, engine testinde pinlenmiş ve
+kaynak dosyanın kendi yorumunda **açıkça bu plana** devredilmiş:
+
+> "A name with no entry here is not an error and not a gap: it is a marker the
+> asset authors for a consumer that does not exist yet. The audio plan is the
+> one this is waiting for."
+
+Savaş SFX'inin (§23) büyük kısmı buradan akar ve `RtsApp.playUnitNotify` tek
+çağrı noktasıdır.
+
+**2. Notification merkezi** — `src/game/rts/ui/rtsNotifications.ts`
+
+`RtsNotificationCenter` zaten dedup, cooldown, severity ve "kaç kez raise
+edildi" sayımını yapıyor. §11'in notification cooldown tablosu pratikte
+**kurulu**: ses yalnızca `post()` sonucu `"posted"` olduğunda çalmalı;
+`"refreshed"` (koşul hâlâ sürüyor) ve `"suppressed"` (cooldown yuttu) sessiz
+kalmalı. Bu, §11'in "aynı uyarı spam olmasın" şartını sıfır yeni kodla verir.
+
+**3. VFX bütçe deseni** — `RtsNotifyEffectBudget`
+
+Mesafe kesmesi + isim başına global rate cap + paylaşılan instance bütçesi.
+§61'in ses bütçesi için birebir şablon; `AudioEventDirector` bilinçli olarak
+aynı biçimde yazıldı (istek → bağlayıcı veya null, çalmayı çağıran yapar).
+
+## 79.4 Faz 4 için tanımlanması gereken
+
+Müzik durum makinesinin (§28, §35) bir **sinyal kaynağı** yok.
+`src/game/rts/ui/rtsAttackWatch.ts` Tension/Battle için en yakın aday, ancak
+kendi yorumunda "combat'ın damage-event bus'ı yok, bu yüzden sağlık örnekleniyor"
+diyor. §35'in "battle trigger" tanımı bu sinyale bağlanmalı; Faz 4'e girmeden
+önce yazılması, Faz 4 içinde keşfedilmesinden ucuzdur.
+
+---
+
+# 80. SoundCue ile olay tablosu arasındaki iş bölümü
+
+Projede iki ayrı mekanizma var ve ikisi de "aynı sesin varyantını seç, pitch'ini
+oynat" yapabiliyor. Hangisinin ne zaman kullanılacağı yazılmazsa ikisi de
+yarım kullanılır.
+
+| | **SoundCue** (`*.soundcue.json`) | **Olay tablosu** (`events.json`) |
+|---|---|---|
+| Sorusu | "Bu ses **neye benziyor**?" | "Bu ses **ne zaman ve kaç kere** duyulur?" |
+| Sahibi | Ses tasarımcısı, görsel editörde | Tasarım/denge, JSON'da |
+| Kapsamı | Tek bir sesin iç yapısı | Oyunun tüm ses bütçesi |
+| Yapar | Varyant seçimi, katmanlama, gecikme, modülasyon, loop | Cooldown, instance limiti, mesafe kesmesi, bus yönlendirme, mix seviyesi |
+| Yapmaz | Tekrar kontrolü, bütçe — bir cue kendini kaç kez çaldığını bilmez | Katmanlama — tablo tek bir klip çalar |
+
+### Kural
+
+> Bir sesin **içi** SoundCue'nun, **sıklığı** olay tablosunundur.
+
+Pratikte: basit bir olay (UI click, üç varyant) doğrudan tabloda `clips` listesi
+olarak yaşar — bunun için grafik açmak israftır. Katmanlı bir olay (top ateşi =
+namlu patlaması + gövde gümbürtüsü + gecikmeli yankı) bir SoundCue olur ve tablo
+o cue'yu tek bir id olarak adlandırır.
+
+Tablonun `clips` alanı bu yüzden ileride hem `sound` hem `soundCue` id'si kabul
+edecek şekilde genişletilebilir; Faz 0 yalnızca `sound` çözer, çünkü katmanlı
+tek bir ses henüz üretilmedi.
 
 ---
 

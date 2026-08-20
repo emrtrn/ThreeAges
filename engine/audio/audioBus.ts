@@ -4,7 +4,7 @@
  * A bus is just a named gain stage. The runtime topology (built lazily in
  * `audioSubsystem.ts` once a Web Audio context exists) is:
  *
- *   destination ← master ← { music, sfx, ui, ambience }
+ *   destination ← master ← { music, sfx, ui, ambience, voice, notifications }
  *
  * Every play routes its gain into one bus; non-master buses feed `master`, so a
  * play's effective level is `playGain × busVolume × masterVolume`. A *mix
@@ -16,7 +16,29 @@
  * audio runtime.
  */
 
-export const AUDIO_BUS_IDS = ["master", "music", "sfx", "ui", "ambience"] as const;
+/**
+ * The mix buses, in routing order under `master`.
+ *
+ * A bus exists when something has to be turned down *independently of everything
+ * else* — that is the only thing a gain stage buys, and an unused one is not
+ * free: every id here widens the `*.soundcue.json` schema, the save validator's
+ * allowlist, and the cue editor's bus picker.
+ *
+ * `voice` and `notifications` are separate from `sfx` because the duck rules
+ * name them: a critical notice pulls music down, a spoken line pulls nearby
+ * combat down, and the accessibility pass promises a slider for each. Combat and
+ * world SFX are *not* separate — nothing ducks one against the other, so they
+ * share `sfx` until something does.
+ */
+export const AUDIO_BUS_IDS = [
+  "master",
+  "music",
+  "sfx",
+  "ui",
+  "ambience",
+  "voice",
+  "notifications",
+] as const;
 export type AudioBusId = (typeof AUDIO_BUS_IDS)[number];
 
 /** Plays with no explicit bus route straight to `master`. */
@@ -70,12 +92,29 @@ export function mergeMixSnapshot(volumes: BusVolumes, snapshot: BusMixSnapshot):
 
 /**
  * Example duck for a paused/menu state: pull music + ambience well down and trim
- * sfx, but leave `ui` (and `master`) at full so menu clicks stay crisp. Apply on
- * pause, restore with {@link createDefaultBusVolumes} (or a stored snapshot) on
- * resume.
+ * sfx and voice, but leave `ui` and `notifications` (and `master`) at full so
+ * menu clicks stay crisp and an alert raised while paused still reaches the
+ * player. Apply on pause, restore with {@link createDefaultBusVolumes} (or a
+ * stored snapshot) on resume.
  */
 export const MENU_DUCK_MIX: BusMixSnapshot = {
   music: 0.25,
   ambience: 0.3,
   sfx: 0.5,
+  voice: 0.5,
+};
+
+/**
+ * Duck applied while a critical notice sounds: music and ambience step back so
+ * the alert reads, combat is trimmed a little, and `notifications` itself is
+ * untouched. Short — restore as soon as the notice's clip is done.
+ *
+ * Deliberately gentle. The design rule this serves warns against an audible
+ * side-chain pump; the goal is that the alert *wins*, not that the mix visibly
+ * breathes around it.
+ */
+export const NOTIFICATION_DUCK_MIX: BusMixSnapshot = {
+  music: 0.6,
+  ambience: 0.7,
+  sfx: 0.8,
 };

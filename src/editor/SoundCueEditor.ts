@@ -19,6 +19,7 @@ import type {
   SoundCueNode,
   SoundCueNodeKind,
 } from "@engine/audio/soundCueTypes";
+import { SOUND_CUE_BUS_IDS } from "@engine/audio/soundCueTypes";
 import { evaluateSoundCue, validateSoundCueGraph } from "@engine/audio/soundCueEvaluator";
 import { loadSoundCueAsset, saveSoundCueAsset } from "@/editor/soundCueStore";
 import { projectFileUrl } from "@/project/ProjectSystem";
@@ -79,7 +80,9 @@ const ADDABLE_KINDS: SoundCueNodeKind[] = [
   "delay",
 ];
 
-const BUS_IDS = ["master", "music", "sfx", "ui", "ambience"] as const;
+// Derived, not re-listed: a bus added to the engine has to appear in this picker
+// or an author simply cannot route a cue to it.
+const BUS_IDS = SOUND_CUE_BUS_IDS;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 

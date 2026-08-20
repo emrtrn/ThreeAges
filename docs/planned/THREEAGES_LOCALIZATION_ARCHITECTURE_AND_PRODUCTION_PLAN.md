@@ -1817,8 +1817,8 @@ fr
 - [x] bütün Tier 1 locale dosyaları parse oluyor — `npm run test:locales` sekiz release locale'inin 10 domain JSON dosyasını, düz `key -> string` şemasını ve boş değerleri denetler.
 - [x] missing key = 0 — aynı gate, her release locale'ini English kaynak bundle ile tam anahtar eşliğine zorlar.
 - [x] placeholder mismatch = 0 — aynı gate, oyun formatter'ının ICU placeholder çıkarımıyla kaynak/çeviri parametrelerini karşılaştırır.
-- [ ] unsupported glyph = 0
-- [ ] kritik UI overflow = 0
+- [x] unsupported glyph = 0 — `test:locales`, sevk edilen tüm `zh-CN` Han karakterlerini Noto Sans SC 400/700 font cmap'lerinde doğrular; Chromium smoke da CJK ve Cyrillic font gruplarını canlı UI üzerinde doğruladı.
+- [x] kritik UI overflow = 0 — fr, de, es-ES, pt-BR, ru ve zh-CN Chromium smoke'ları menü + maç ayarlarında yatay taşmayı denetledi; zh-CN ayrıca 840px görev/yapı paleti sınırlarını ölçtü.
 - [x] locale switch testi geçiyor — filtreli engine denetimi, registry eşliğini ve çalışma anında dil değişimi ile key-bazlı fallback davranışını doğruladı.
 - [x] saved locale preference testi geçiyor — filtreli engine denetimi, kullanıcı ayarlarındaki locale değerinin round-trip saklanmasını ve başlangıç çözümünde uygulanmasını doğruladı.
 - [ ] full match başlangıç → sonuç ekranı testi tamam
@@ -1863,6 +1863,11 @@ Yeni özellik
 Yeni bir özellik İngilizce ve Türkçe localization key'leri olmadan tamamlanmış kabul edilmemelidir.
 
 Tier 1 dillerin güncellenmesi feature release stratejisine göre aynı PR içinde veya kontrollü lokalizasyon batch'i olarak yapılabilir.
+
+**Uygulama kaydı (20 Ağustos 2026):** Yeni feature akışı,
+`GDD/LOCALIZATION_MAINTENANCE.md` içinde tanımlıdır; kanıt kayıtları
+`GDD/LOCALIZATION_CHANGELOG.md` içinde tutulur. Otomatik doğrulama, UI/full-match
+ve kullanıcı kabulü birbirinin yerine geçmez.
 
 ---
 
@@ -2071,8 +2076,8 @@ Lokalizasyon süreci yeni gameplay kapsamı icat etmemelidir.
 
 # 30. Definition of Done — Lokalizasyon sistemi
 
-Lokalizasyon altyapısı tamamlanmış sayılmak için (durum: 19 Ağustos 2026,
-Faz 0–2 + §27 sonrası):
+Lokalizasyon altyapısı tamamlanmış sayılmak için (durum: 20 Ağustos 2026,
+Faz 0–9 bakım sözleşmesi sonrası):
 
 - [x] bütün oyuncu metinleri localization key üzerinden geliyor
 - [x] English teknik source/fallback olarak çalışıyor
@@ -2084,28 +2089,33 @@ Faz 0–2 + §27 sonrası):
 - [x] parametreli mesaj sistemi bulunuyor
 - [x] plural sistem locale-aware
 - [x] number formatting locale-aware
-- [ ] font registry locale-aware
+- [x] font registry locale-aware — aktif `LocaleDescriptor.fontGroup`, document
+  root'a uygulanır; CSS Russian için Cyrillic stack'ine, `zh-CN` için Noto Sans
+  SC CJK stack'ine geçer.
 - [x] pseudo-localization bulunuyor
-- [ ] locale validator bulunuyor
+- [x] locale validator bulunuyor — bağımsız `npm run test:locales` aracı
+  JSON/şema, Tier 1 tamlığı, key/placeholder eşliği ve `zh-CN` Han glyph
+  kapsamını doğrular.
 - [x] CI/build localization gate bulunuyor
 - [x] terminoloji sözlüğü bulunuyor
-- [ ] yeni feature localization prosedürü tanımlı
+- [x] yeni feature localization prosedürü tanımlı — Faz 9 sözleşmesi
+  `GDD/LOCALIZATION_MAINTENANCE.md` içinde source/tr anahtarları, glossary,
+  Tier 1 batch, validator, UI QA, kabul statüsü ve changelog kanıt adımlarını
+  zorunlu kılar.
 
-Açık kalan dördünün neden açık olduğu:
+Kapanan bakım maddelerinin kanıtı:
 
-- **font registry locale-aware** — `LocaleDescriptor.fontGroup` tanımlı ama
-  hiçbir yerde *okunmuyor*: `latin` / `cyrillic` / `cjk` ayrımı bugün yalnız bir
-  kayıt. Gerçek işi Faz 5 (Russian) ve Faz 6 (Simplified Chinese) getirecek —
-  §14 zaten oraya bağlı, çünkü yüklenecek font olmadan gruplamanın karşılığı yok.
-- **locale validator** — §19'un `tools/validate-locales.ts`'i hâlâ ayrı bir araç
-  değil. Karşılığı `tools/engine-tests.ts` içindeki iki kontrol (klasör/anahtar/
-  placeholder eşliği + veri dosyalarının `nameKey`'leri); yaptığı işi yapıyor,
-  ama tek başına çalıştırılabilir bir çevirmen aracı değil.
-- **CI/build gate** işaretli, çünkü o iki kontrol `build:verify` ve CI'nın
-  koştuğu süitin içinde — eksik anahtar `main`'e giremiyor.
-- **yeni feature prosedürü** — bu belge fazları tanımlıyor, "yeni bir yapı/birim
-  eklerken lokalizasyon adımları şunlar" diyen bir bölümü yok. Faz 9'un (sürekli
-  bakım) yazacağı şey.
+- **font registry locale-aware** — `bootLocalization` aktif descriptor'un
+  `fontGroup` değerini document root'a yazar; CSS CJK ve Cyrillic stack'lerini
+  bu sözleşmeden seçer.
+- **locale validator** — `tools/validate-locales.ts`, bağımsız
+  `npm run test:locales` komutuyla çalışır ve üretim `npm run build` kapısının
+  ilk adımıdır.
+- **CI/build gate** — validator başarısızsa build ve dolayısıyla `build:verify`
+  başarısız olur; eksik locale anahtarı üretim çıktısına ulaşamaz.
+- **yeni feature prosedürü** — Faz 9 sözleşmesi
+  `GDD/LOCALIZATION_MAINTENANCE.md` içinde yeni bir yapı/birim eklenirken
+  gereken localization, glossary, QA ve kanıt kayıt adımlarını tanımlar.
 - **"bütün oyuncu metinleri"** işaretli ama kapsam §6.1'in çizdiği yerde:
   debug yüzeyleri (`aiDebugView`, `formatVisionDebug`, `rtsSimulationWitness`,
   perf bölge adları) kasten Türkçe. Ayrıca §27 turu Faz 2'nin taramasından kaçan

@@ -3376,7 +3376,18 @@ export function validateAssetUvwDef(value: unknown): Record<string, unknown> {
 
 // ─── Sound Cue asset validation ────────────────────────────────────────────
 
-const SOUND_CUE_BUS_IDS = new Set(["master", "music", "sfx", "ui", "ambience"]);
+// Mirrors AUDIO_BUS_IDS in engine/audio/audioBus.ts. A bus added there and not
+// here is silently dropped from a saved cue's `output.bus` — the cue keeps
+// playing, just on `master`, which is the kind of failure nobody reports.
+const SOUND_CUE_BUS_IDS = new Set([
+  "master",
+  "music",
+  "sfx",
+  "ui",
+  "ambience",
+  "voice",
+  "notifications",
+]);
 const SOUND_CUE_NODE_KINDS = new Set(["output", "source", "mixer", "random", "modulator", "loop", "delay"]);
 
 function validateSoundCueNode(value: unknown, idx: number): Record<string, unknown> {

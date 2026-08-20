@@ -193,11 +193,42 @@ interface KeyHistory {
   mutedUntil: number;
 }
 
+/** What a listener is told when a notice is genuinely raised. */
+export interface RtsNotificationPosted {
+  readonly kind: RtsNotificationKind;
+  readonly severity: RtsNotificationSeverity;
+  readonly subject?: string;
+  /** How many separate times this problem has been raised; 1 is the first. */
+  readonly raises: number;
+}
+
+export interface RtsNotificationCenterOptions {
+  /**
+   * Called for a `posted` result only — never for a refresh or a suppression.
+   *
+   * This is the audio pass's hook (audio plan Faz 1), and the distinction is
+   * exactly what makes it safe: the conditions behind these notices are polled,
+   * so a naive "play a sound when a notice is on screen" would fire sixty times
+   * a second for one unroaded farm. Only a genuine raise is a new thing to tell
+   * the player, and only a new thing deserves a sound.
+   *
+   * A listener that throws must not cost the player the notice, so it is called
+   * after the entry is committed and its failure is swallowed by the caller's
+   * own boundary — keep it cheap and side-effect-light.
+   */
+  readonly onPosted?: (event: RtsNotificationPosted) => void;
+}
+
 export class RtsNotificationCenter {
   private readonly entries: NotificationEntry[] = [];
   private readonly history = new Map<string, KeyHistory>();
   private now = 0;
   private nextId = 1;
+  private readonly onPosted?: (event: RtsNotificationPosted) => void;
+
+  constructor(options: RtsNotificationCenterOptions = {}) {
+    if (options.onPosted) this.onPosted = options.onPosted;
+  }
 
   /**
    * @returns `posted` for a newly raised notice, `refreshed` when it extended a
@@ -229,6 +260,12 @@ export class RtsNotificationCenter {
     // Drop from the front: the oldest notice is the one the player has had the
     // most time to read.
     if (this.entries.length > MAX_ACTIVE_NOTIFICATIONS) this.entries.shift();
+    this.onPosted?.({
+      kind: request.kind,
+      severity: rule.severity,
+      ...(request.subject !== undefined ? { subject: request.subject } : {}),
+      raises,
+    });
     return "posted";
   }
 

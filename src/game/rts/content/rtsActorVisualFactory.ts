@@ -21,6 +21,7 @@ import {
   RtsActorPresentationError,
   parseRtsEffectManifestPaths,
   parseRtsTextureManifestPaths,
+  parseRtsSoundManifestPaths,
   parseRtsMeshManifest,
   rtsContentCatalogRefs,
   validateRtsPresentationActor,
@@ -114,6 +115,8 @@ export class RtsActorVisualFactory {
   private readonly manifestEffects = new Map<string, string>();
   /** Texture asset id → path, for the sprite art an effect's renderer names. */
   private readonly manifestTextures = new Map<string, string>();
+  /** Sound asset id -> public-root-relative path, for the audio event table. */
+  private readonly manifestSounds = new Map<string, string>();
   /**
    * Tinted material variants, keyed by source material and tint.
    *
@@ -178,6 +181,11 @@ export class RtsActorVisualFactory {
   /** Same, for the sprite texture an effect's renderer names. */
   textureAssetPath(textureId: string): string | null {
     return this.manifestTextures.get(textureId) ?? null;
+  }
+
+  /** Public-root-relative path of a manifested sound asset, or null. */
+  soundAssetPath(soundId: string): string | null {
+    return this.manifestSounds.get(soundId) ?? null;
   }
 
   /** Same, for a static mesh — the debris models an effect's renderer names. */
@@ -259,6 +267,11 @@ export class RtsActorVisualFactory {
     // without it, and the match has no other chance to resolve the id.
     for (const [id, path] of parseRtsTextureManifestPaths(manifestJson)) {
       this.manifestTextures.set(id, path);
+    }
+    // And the clips, off the same read: the audio event table names sound ids
+    // and the match has no other chance to resolve one.
+    for (const [id, path] of parseRtsSoundManifestPaths(manifestJson)) {
+      this.manifestSounds.set(id, path);
     }
 
     const refs = rtsContentCatalogRefs(this.catalog);

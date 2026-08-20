@@ -10,6 +10,8 @@
  * directly against readFileSync content instead of going through here.
  */
 import { logger } from "../core/logger";
+import { normalizeAudioEventTable } from "@engine/audio/audioEventTable";
+import type { AudioEventTable } from "@engine/audio/audioEventTable";
 import {
   validateAiBalance,
   validateAiLayoutBalance,
@@ -177,4 +179,20 @@ export async function loadMissionScript(
   const script = validateMissionScript(await fetchJson(url), id, knownBuildingIds);
   log.debug(`loaded mission "${script.id}" (${script.steps.length} steps)`);
   return script;
+}
+
+/**
+ * Load and validate `public/game-data/audio/events.json` — the audio plan's
+ * event table (Faz 0).
+ *
+ * Shape is checked by the engine's own normalizer rather than a validator
+ * written here, for the reason the effect assets follow: the parser the runtime
+ * uses is the single source of what a field means, so a table that loads is a
+ * table the director can act on.
+ */
+export async function loadAudioEventTable(): Promise<AudioEventTable> {
+  const url = `${GAME_DATA_ROOT}/audio/events.json`;
+  const table = normalizeAudioEventTable(await fetchJson(url));
+  log.debug(`loaded audio events (${Object.keys(table.events).length} events)`);
+  return table;
 }

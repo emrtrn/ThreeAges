@@ -224,6 +224,19 @@ export function parseRtsTextureManifestPaths(value: unknown): Map<string, string
   return parseRtsManifestPaths(value, "texture");
 }
 
+/**
+ * Same, for the clips the audio event table names.
+ *
+ * `public/game-data/audio/events.json` names manifest **sound ids**, never file
+ * paths, and this is where one is resolved. The rule is the effects' rule and
+ * exists for the same reason: an id resolves when the project ships that asset
+ * and never otherwise, so a tuning file can never reach an arbitrary URL under
+ * the public root. An id nothing answers plays no sound and is reported once.
+ */
+export function parseRtsSoundManifestPaths(value: unknown): Map<string, string> {
+  return parseRtsManifestPaths(value, "sound");
+}
+
 function parseRtsManifestPaths(value: unknown, assetType: string): Map<string, string> {
   const paths = new Map<string, string>();
   const assets = (value as { assets?: unknown } | null)?.assets;

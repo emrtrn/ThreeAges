@@ -30,6 +30,8 @@ import {
 import { createSceneRenderer, readRenderMemory, readRenderStats } from "@engine/render-three/renderer";
 import { advanceForgeMaterialAnimations } from "@engine/render-three/materials";
 import { VfxSubsystem } from "@engine/render-three/vfxSubsystem";
+import { AudioSubsystem } from "@engine/audio/audioSubsystem";
+import { AudioEventDirector, EMPTY_AUDIO_EVENT_TABLE } from "@engine/audio/audioEventTable";
 import { FrameMetricsMonitor } from "@engine/perf/frameMetrics";
 import { AdaptiveQualityController } from "@engine/perf/adaptiveQuality";
 import { classifyBottleneck } from "@engine/perf/bottleneckClassifier";
@@ -76,6 +78,8 @@ import {
   type RtsActorLoadReport,
 } from "./content/rtsActorVisualFactory";
 import { RTS_THROW_RELEASE_NOTIFY, RtsNotifyEffectBudget, rtsNotifyEffectIds } from "./content/rtsNotifyEffects";
+import { RTS_NOTIFICATION_AUDIO_EVENTS, rtsNotifyAudioEvent } from "./audio/rtsAudioEvents";
+import { loadAudioEventTable } from "../data/gameDataLoader";
 import { RTS_ANIMATION_DISTANCE_SETTINGS } from "./content/rtsUnitPresentation";
 import { AiController } from "./ai/aiController";
 import { SettlementAiSiteProvider } from "./ai/aiSiteProvider";
@@ -840,6 +844,54 @@ export class RtsApp {
   /** Monotonic real-seconds reading the notify rate cap measures against. */
   private unitNotifyClock = 0;
   /**
+   * The match's audio output — audio plan Faz 0.
+   *
+   * The RTS is a separate render path from the Forge scene apps and does not
+   * inherit their subsystems, which is why this is mounted here rather than
+   * being inherited: until this existed, a match played in silence.
+   *
+   * Clip ids resolve through the manifest, never through a path in the tuning
+   * file — the same rule the effect assets follow. An id the project does not
+   * ship plays nothing, which the director reports once.
+   */
+  private readonly audioSubsystem = new AudioSubsystem({
+    backend: "web-audio",
+    resolveClipUrl: (clipId) => {
+      const path = this.actorVisuals?.soundAssetPath(clipId);
+      return path ? projectFileUrl(path) : null;
+    },
+  });
+  /**
+   * What may be heard, how often, and how many at once.
+   *
+   * Starts on an empty table and swaps the real one in when the async load
+   * lands: a match that boots before its audio table is a match that is briefly
+   * silent, which is strictly better than a match that waits for a sound file
+   * before it will start.
+   */
+  private readonly audioEvents = new AudioEventDirector(EMPTY_AUDIO_EVENT_TABLE, {
+    play: (clipId, options) => this.audioSubsystem.play(clipId, options),
+    onUnknownEvent: (eventId) => {
+      // Once per id, and a warning rather than a throw: a missing sound must
+      // never be able to stop a match, but a name the table does not answer is
+      // always a wiring mistake and never a design choice.
+      this.log.warn(`audio event "${eventId}" has no entry in game-data/audio/events.json`);
+    },
+  });
+  /**
+   * Monotonic real-seconds reading the audio cooldowns measure against.
+   *
+   * Real, not simulation: a cooldown is about what the player's ear can take, so
+   * it must mean the same number of wall-clock seconds at 1x and at 8x.
+   */
+  private audioClock = 0;
+  /** Frame counter handed to the audio subsystem's update context. */
+  private audioFrame = 0;
+  /** Removes the one-shot gesture listener that unlocks the audio context. */
+  private detachAudioUnlock: (() => void) | null = null;
+  /** Reused vector for the listener's forward axis; allocating one per frame is waste. */
+  private readonly scratchAudioForward = new Vector3();
+  /**
    * Stones fired but not yet released by the throwing arm, keyed by unit id.
    *
    * Presentation-only bookkeeping: every entry describes damage that has already
@@ -1139,7 +1191,22 @@ export class RtsApp {
    */
   private rosterTourTypeId: string | null = null;
   private rosterTourIndex = 0;
-  private readonly notifications = new RtsNotificationCenter();
+  /**
+   * Player-facing notices, and the audio pass's cleanest hook.
+   *
+   * The sound rides `onPosted` rather than the rendered feed because the centre
+   * already answers the hard question: these conditions are polled, and only a
+   * genuine *raise* reaches this callback — a still-true problem refreshes its
+   * notice silently. That is the design's "no notification spam" rule, satisfied
+   * by a system that existed before the audio plan did.
+   */
+  private readonly notifications = new RtsNotificationCenter({
+    onPosted: (event) => {
+      // Global, not spatial: a border under attack has a place on the map, but
+      // the alarm is addressed to the player, not to the camera's position.
+      this.audioEvents.trigger(RTS_NOTIFICATION_AUDIO_EVENTS[event.severity], this.audioClock);
+    },
+  });
   private readonly notificationFeed = new RtsNotificationFeed();
   /**
    * Last-seen logistics status per player producer, so {@link syncNotifications}
@@ -2192,6 +2259,8 @@ export class RtsApp {
     this.running = true;
     this.input.attach();
     this.pointer.attach();
+    this.attachAudioUnlock();
+    void this.loadAudioEvents();
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
     this.resize();
     this.lastTime = performance.now();
@@ -2205,6 +2274,72 @@ export class RtsApp {
     // boot itself. Starting it here instead would run the AI's opening seconds
     // behind an opaque curtain, on a field the player has not been shown yet.
     this.beginMatchWhenBooted();
+  }
+
+  /**
+   * Unlock the audio context on the player's first gesture.
+   *
+   * Browsers start an `AudioContext` suspended and will not resume it except
+   * inside a user gesture, so without this the first fifty sounds of a match are
+   * silently discarded and the audio "does not work" for no visible reason. One
+   * shot on either a pointer or a key press, then the listener removes itself:
+   * once resumed, a context stays resumed.
+   *
+   * On `window` in the capture phase rather than on the canvas, because the
+   * first thing a player touches is as likely to be a HUD button as the map.
+   */
+  private attachAudioUnlock(): void {
+    if (this.detachAudioUnlock) return;
+    const unlock = (): void => {
+      this.audioSubsystem.resumeContext();
+      this.detachAudioUnlock?.();
+    };
+    window.addEventListener("pointerdown", unlock, { capture: true });
+    window.addEventListener("keydown", unlock, { capture: true });
+    this.detachAudioUnlock = () => {
+      window.removeEventListener("pointerdown", unlock, { capture: true });
+      window.removeEventListener("keydown", unlock, { capture: true });
+      this.detachAudioUnlock = null;
+    };
+  }
+
+  /**
+   * Fetch the audio event table and hand it to the director.
+   *
+   * Deliberately not awaited by the boot: a match must never wait on its mix,
+   * and a table that fails to load costs the player sound, not the game. The
+   * failure is logged with its own message so "there is no audio" is always
+   * traceable to either a bad table or an unresolved clip id, never to silence
+   * with no explanation.
+   */
+  private async loadAudioEvents(): Promise<void> {
+    try {
+      const table = await loadAudioEventTable();
+      this.audioEvents.setTable(table);
+    } catch (error) {
+      this.log.warn(
+        `audio event table did not load; the match will be silent: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Point the spatial-audio listener at the camera, once per rendered frame.
+   *
+   * The RTS camera is the player's ears as well as their eyes: an attenuation
+   * curve measured from anywhere else would make a fight at the edge of the view
+   * as loud as one under the cursor. Forward is derived from the camera rather
+   * than assumed, so the pan follows an orbit.
+   */
+  private updateAudioListener(): void {
+    const camera = this.cameraController.camera;
+    const forward = camera.getWorldDirection(this.scratchAudioForward);
+    this.audioSubsystem.setListenerPose(
+      [camera.position.x, camera.position.y, camera.position.z],
+      [forward.x, forward.y, forward.z],
+    );
   }
 
   /**
@@ -2262,6 +2397,12 @@ export class RtsApp {
     this.gearDebris.dispose();
     this.structureDamageVfx.dispose();
     this.unitNotifyVfx.dispose();
+    this.detachAudioUnlock?.();
+    // Director first: it holds handles the subsystem is about to tear the
+    // context out from under, and stopping a play through a closed context is
+    // the one order that throws.
+    this.audioEvents.reset();
+    this.audioSubsystem.dispose();
     this.hudBar.dispose();
     this.notificationFeed.dispose();
     this.gameSpeedControls.dispose();
@@ -2575,6 +2716,15 @@ export class RtsApp {
     // Straight after the camera, because below full coverage the shadow box
     // follows its ground focus — a frame late and the shadows lag the pan.
     this.refitShadowCameras();
+    // And straight after it for the same reason the shadow box is: the listener
+    // is the camera, and a pose a frame behind pans every sound in the wrong
+    // direction while the player is moving.
+    this.audioClock += dt;
+    this.updateAudioListener();
+    // Frees the per-event caps and the global budget for clips that have
+    // finished. Before this frame's triggers, so a sound that ended is not still
+    // holding a slot against the one about to be asked for.
+    this.audioEvents.advance();
     this.perfCaptureSteps = 0;
     if (this.match.active && this.flow.running) {
       const simulationMark = this.perfMark();
@@ -2721,6 +2871,16 @@ export class RtsApp {
     const qualityMark = this.perfMark();
     this.tickAdaptiveQuality(dt);
     this.perfMeasure("kalite denetimi", qualityMark);
+    // Last in the presentation block, after everything that could have triggered
+    // a sound this frame: the subsystem queues plays and dispatches them here,
+    // so anything raised later would sit an extra frame before it was heard.
+    const audioMark = this.perfMark();
+    this.audioSubsystem.update({
+      deltaSeconds: dt,
+      elapsedSeconds: this.audioClock,
+      frame: ++this.audioFrame,
+    });
+    this.perfMeasure("ses", audioMark);
     this.perfMeasure("sunum", presentationMark);
     // Authored Post Process (bloom/SMAA) composits the frame when present; otherwise
     // draw straight through the renderer.
@@ -3724,11 +3884,19 @@ export class RtsApp {
     // become a throw that never left the hand.
     if (name === RTS_THROW_RELEASE_NOTIFY) this.releasePendingThrow(unit);
     const position = unit.position;
-    const binding = this.unitNotifyBudget.request(
-      name,
-      this.unitNotifyClock,
-      this.cameraController.camera.position.distanceTo(position),
-    );
+    const cameraDistance = this.cameraController.camera.position.distanceTo(position);
+    // Sound and particles ride the same marker but answer to separate budgets,
+    // and neither gates the other: `sword-swing` has no burst at all and must
+    // still be heard, while a footstep's dust was dropped for being invisible at
+    // this camera distance without the footfall becoming inaudible with it.
+    const audioEvent = rtsNotifyAudioEvent(name);
+    if (audioEvent !== null) {
+      this.audioEvents.trigger(audioEvent, this.audioClock, {
+        position: [position.x, position.y, position.z],
+        distance: cameraDistance,
+      });
+    }
+    const binding = this.unitNotifyBudget.request(name, this.unitNotifyClock, cameraDistance);
     if (!binding) return;
     this.unitNotifyVfx.play(binding.effectId, {
       position: [position.x, position.y + binding.heightOffset, position.z],
