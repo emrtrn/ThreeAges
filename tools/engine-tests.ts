@@ -57014,6 +57014,7 @@ check("Lokalizasyon Faz 1: the registry decides locale matching, and refuses to 
   // deliberate registry entry; the refusals are the point of the check.
   assert.equal(matchBrowserLocale(["tr-TR"]), "tr", "a region variant reaches its language");
   assert.equal(matchBrowserLocale(["fr-CA", "en-GB"]), "fr", "a regional French preference reaches French");
+  assert.equal(matchBrowserLocale(["es"]), "es-ES", "a bare Spanish preference reaches Spanish (Spain)");
   assert.equal(matchBrowserLocale(["xx"]), null, "an unknown tag matches nothing");
   const all = { enabledOnly: false };
   assert.equal(matchBrowserLocale(["de-AT"], all), "de");
@@ -57040,6 +57041,7 @@ check("Lokalizasyon Faz 1: the registry decides locale matching, and refuses to 
   assert.equal(resolveInitialLocale({ savedLocale: "en", browserLanguages: browser }), "en");
   assert.equal(resolveInitialLocale({ browserLanguages: browser }), "tr");
   assert.equal(resolveInitialLocale({ browserLanguages: ["fr-FR"] }), "fr");
+  assert.equal(resolveInitialLocale({ browserLanguages: ["es-ES"] }), "es-ES");
   assert.equal(
     resolveInitialLocale({ forcedLocale: PSEUDO_LOCALE, savedLocale: "tr", browserLanguages: browser }),
     PSEUDO_LOCALE,

@@ -1711,8 +1711,15 @@ kayıttır.
 Fransızca (`fr`) tamamlandı ve seçilebilir. On domainin tamamı kaynak
 anahtar/placeholder eşliğiyle doğrulandı (624/624); `localeRegistry.ts`
 içindeki `fr` `enabled: true` oldu. Chromium smoke, menüdeki `Français`
-seçimini ve maç içi ayarlar seçicisini doğruluyor; kullanıcı görsel kabulü ve
-full-match smoke ayrı kapılar olarak açıktır.
+seçimini ve maç içi ayarlar seçicisini doğruluyor. **Kullanıcı görsel kabulü:
+OK**; full-match smoke ayrı bir otomasyon kapısı olarak açıktır.
+
+İspanyolca — İspanya (`es-ES`) tamamlandı ve seçilebilir. On domainin tamamı
+kaynak anahtar/placeholder eşliğiyle doğrulandı (624/624); `localeRegistry.ts`
+içindeki `es-ES` `enabled: true` oldu. Chromium smoke, menüdeki
+`Español (España)` seçimini, İspanyolca maç başlangıcını ve maç içi ayarlar
+seçicisini doğruluyor. Kullanıcı görsel kabulü ile full-match smoke, teknik
+otomasyon kanıtından ayrı açık kapılardır.
 
 ## Her dil için checklist
 

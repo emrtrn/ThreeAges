@@ -78,7 +78,7 @@ const REGISTRY: readonly LocaleDescriptor[] = [
     tier: "tier1",
     fontGroup: "latin",
     direction: "ltr",
-    enabled: false,
+    enabled: true,
     // Claims bare `es` only until es-419 ships; Plan §4.4 lists es-419 as Tier 2.
     browserTags: ["es"],
     intlLocale: "es-ES",
