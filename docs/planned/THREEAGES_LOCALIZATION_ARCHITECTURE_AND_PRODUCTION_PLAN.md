@@ -1704,7 +1704,15 @@ domainin tamamı (`common`, `menu`, `buildings`, `units`, `match`, `hud`,
 anahtar/placeholder eşliğiyle yüklendi; `localeRegistry.ts` içindeki `de`
 `enabled: true` oldu. `build:verify` yeşil (1517 engine check) ve Chromium
 smoke, menüdeki `Deutsch` seçimini, Türkçe ↔ Almanca canlı değişimi ve maç içi
-ayarlar seçicisini doğruluyor.
+ayarlar seçicisini doğruluyor. **Kullanıcı görsel kabulü: OK** — seçim paneli
+ve bildirim akışı dahil ana UI turu kabul edildi; bu, otomatik kanıttan ayrı
+kayıttır.
+
+Fransızca (`fr`) tamamlandı ve seçilebilir. On domainin tamamı kaynak
+anahtar/placeholder eşliğiyle doğrulandı (624/624); `localeRegistry.ts`
+içindeki `fr` `enabled: true` oldu. Chromium smoke, menüdeki `Français`
+seçimini ve maç içi ayarlar seçicisini doğruluyor; kullanıcı görsel kabulü ve
+full-match smoke ayrı kapılar olarak açıktır.
 
 ## Her dil için checklist
 
@@ -1716,8 +1724,8 @@ ayarlar seçicisini doğruluyor.
 - [x] font glyph testi
 - [x] HUD testi
 - [x] build palette testi
-- [ ] selection panel testi
-- [ ] notifications testi
+- [x] selection panel testi — kullanıcı görsel kabulü
+- [x] notifications testi — kullanıcı görsel kabulü
 - [x] match modal testi
 - [ ] full-match smoke testi
 

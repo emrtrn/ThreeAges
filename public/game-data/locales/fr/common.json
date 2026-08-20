@@ -1,0 +1,16 @@
+{
+  "common.resource.food.name": "Nourriture",
+  "common.resource.wood.name": "Bois",
+  "common.resource.stone.name": "Pierre",
+  "common.resource.gold.name": "Or",
+  "common.cost.free": "Gratuit",
+  "common.cost.entry": "{amount} {resource}",
+  "common.age.settlement.name": "Colonie",
+  "common.age.town.name": "Ville",
+  "common.worker.count": "{count, plural, one {# ouvrier} other {# ouvriers}}",
+  "common.tier.name": "{age} niveau {level}",
+  "common.tier.unknown": "le niveau requis",
+  "common.building.military": "un bâtiment militaire",
+  "common.language.label": "Langue",
+  "common.language.hint": "Change la langue immédiatement ; le jeu mémorise votre choix."
+}

@@ -1,0 +1,8 @@
+{
+  "menu.title": "Royaumes des frontières",
+  "menu.tagline": "Développez votre économie, reliez vos routes et détruisez le Centre ennemi.",
+  "menu.start_match": "Démarrer la partie",
+  "menu.loading.title": "Chargement",
+  "menu.loading.percent": "{ratio, number, percent}",
+  "menu.loading.preparing": "Préparation…"
+}
