@@ -3366,26 +3366,6 @@ body {
   display: none;
 }
 
-/* Category contents have different natural heights. The TypeScript palette
-   measures those endpoints and supplies an inline height only during a switch. */
-.rts-build-palette.is-category-resizing {
-  overflow: hidden;
-  transition: height 140ms ease;
-}
-
-/* The panel is deliberately between two measured heights here. Let its frame
-   reveal the incoming category instead of flashing the grid's emergency scroll
-   box before the height transition reaches its destination. */
-.rts-build-palette.is-category-resizing .rts-build-grid {
-  overflow-y: hidden;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rts-build-palette.is-category-resizing {
-    transition-duration: 0ms;
-  }
-}
-
 /*
  * The shared RTS frame is one full panel image rather than a pre-cut sprite
  * sheet.  Its ornaments occupy the first/last ~150 source pixels, so that is
@@ -3411,6 +3391,9 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   margin-top: 8px;
+  /* The tab row is the palette's stable footer. Cards expand upward from it,
+     so the four category targets do not jump when the palette opens. */
+  order: 5;
 }
 
 .rts-build-tab {
@@ -3459,10 +3442,25 @@ body {
 .rts-build-grid {
   min-height: 0;
   max-height: calc(100vh - 150px);
-  margin-top: 5px;
+  margin: 5px 0 8px;
   overflow-y: auto;
   opacity: 1;
-  transition: max-height 160ms ease, margin-top 160ms ease, opacity 120ms ease;
+  /* Keep the card area above the category footer. Because the whole
+     palette is bottom-anchored, growing this first flex item only reaches up. */
+  order: 1;
+  transition: max-height 160ms ease, margin 160ms ease, opacity 120ms ease;
+}
+
+.rts-build-action-message {
+  order: 2;
+}
+
+.rts-build-status {
+  order: 3;
+}
+
+.rts-build-road-hint {
+  order: 4;
 }
 
 /* The palette remains discoverable as a titled row of category tabs, but stops
@@ -3474,7 +3472,7 @@ body {
 .rts-build-palette.is-compact:not(.has-placement-mode) .rts-build-road-hint {
   min-height: 0;
   max-height: 0;
-  margin-top: 0;
+  margin: 0;
   overflow: hidden;
   opacity: 0;
   pointer-events: none;

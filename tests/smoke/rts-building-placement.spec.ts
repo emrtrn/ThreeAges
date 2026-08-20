@@ -359,9 +359,24 @@ test("RTS build palette compacts after a mouse departure and restores the active
   await openMatch(page, "/?rts&debug");
   const palette = page.locator(".rts-build-palette");
   const canvas = page.locator("#game-canvas");
+  const categoryTabs = palette.locator(".rts-build-tabs");
 
   await palette.hover();
   await expect(palette).not.toHaveClass(/is-compact/);
+  await expect(palette.locator("strong")).toHaveCount(0);
+  const economyPaletteBox = await palette.boundingBox();
+  const expandedTabBox = await categoryTabs.boundingBox();
+  const expandedCardBox = await palette.locator('[data-rts-building="farm"]').boundingBox();
+  if (!economyPaletteBox || !expandedTabBox || !expandedCardBox) throw new Error("build palette layout is missing");
+  expect(expandedCardBox.y + expandedCardBox.height).toBeLessThan(expandedTabBox.y);
+  await page.getByRole("button", { name: "Lojistik", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Yol", exact: true })).toBeVisible();
+  const logisticsPaletteBox = await palette.boundingBox();
+  const logisticsTabBox = await categoryTabs.boundingBox();
+  if (!logisticsPaletteBox || !logisticsTabBox) throw new Error("logistics palette layout is missing");
+  expect(logisticsPaletteBox.height).toBeLessThan(economyPaletteBox.height);
+  expect(Math.abs(expandedTabBox.y - logisticsTabBox.y)).toBeLessThan(1);
+  await page.getByRole("button", { name: "Ekonomi", exact: true }).click();
   await canvas.hover({ position: { x: 640, y: 260 } });
   await page.waitForTimeout(450);
   await palette.hover();
@@ -372,6 +387,9 @@ test("RTS build palette compacts after a mouse departure and restores the active
   await page.waitForTimeout(1_000);
   await expect(palette).toHaveClass(/is-compact/);
   await expect(palette.locator(".rts-build-grid")).toHaveCSS("opacity", "0");
+  const compactTabBox = await categoryTabs.boundingBox();
+  if (!compactTabBox) throw new Error("build palette category tabs are missing");
+  expect(Math.abs(expandedTabBox.y - compactTabBox.y)).toBeLessThan(1);
 
   await palette.hover();
   await expect(palette).not.toHaveClass(/is-compact/);

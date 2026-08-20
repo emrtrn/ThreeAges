@@ -29674,6 +29674,29 @@
         "bytes": 5051896
       },
       "license": "Unknown"
+    },
+    {
+      "id": "mountain-2",
+      "name": "Mountain 2",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/ThreeAges/Environment/mountain_2.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1515588
+      },
+      "license": "Unknown"
     }
   ]
 }

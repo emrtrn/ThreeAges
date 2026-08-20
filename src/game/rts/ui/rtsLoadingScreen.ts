@@ -25,9 +25,13 @@ const LOADING_ART_URL = "/assets/ui/loading-background.jpg";
 
 export class RtsLoadingScreen {
   private readonly root = document.createElement("div");
+  private readonly title = document.createElement("p");
   private readonly bar = document.createElement("div");
   private readonly fill = document.createElement("span");
   private readonly status = document.createElement("p");
+  // What `retranslate` re-renders from. Kept so a language arriving late repaints
+  // the text without also resetting the bar to zero.
+  private lastSnapshot: RtsLoadProgressSnapshot = { fraction: 0, determinate: false, complete: false };
   private hideTimer = 0;
   private hidden = false;
 
@@ -48,9 +52,8 @@ export class RtsLoadingScreen {
     const panel = document.createElement("div");
     panel.className = "rts-loading-panel";
 
-    const title = document.createElement("p");
-    title.className = "rts-loading-title";
-    title.textContent = t("menu.loading.title");
+    this.title.className = "rts-loading-title";
+    this.title.textContent = t("menu.loading.title");
 
     this.bar.className = "rts-loading-bar";
     this.bar.setAttribute("role", "progressbar");
@@ -62,7 +65,7 @@ export class RtsLoadingScreen {
     this.status.className = "rts-loading-status";
     this.status.dataset.rtsLoadingStatus = "";
 
-    panel.append(title, this.bar, this.status);
+    panel.append(this.title, this.bar, this.status);
     this.root.append(art, panel);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     // Rendered indeterminate from the first paint: at construction no loader has
@@ -73,6 +76,7 @@ export class RtsLoadingScreen {
 
   setProgress(snapshot: RtsLoadProgressSnapshot): void {
     if (this.hidden) return;
+    this.lastSnapshot = snapshot;
     const percent = Math.round(snapshot.fraction * 100);
     this.bar.dataset.rtsLoadingMode = snapshot.determinate ? "determinate" : "indeterminate";
     if (snapshot.determinate) {
@@ -86,6 +90,24 @@ export class RtsLoadingScreen {
       this.bar.removeAttribute("aria-valuenow");
       this.status.textContent = t("menu.loading.preparing");
     }
+  }
+
+  /**
+   * Re-render the text once the localization service exists.
+   *
+   * The first curtain goes up before boot's first `await` on purpose, which is
+   * necessarily before `bootLocalization()` has installed a service — so every
+   * `t()` in the constructor answers with the missing marker instead of the
+   * translation. The status line repairs itself on the next `setProgress`, but
+   * the title is written once and never read again, so the marker would stay on
+   * screen for the whole first curtain. Boot calls this the moment text is
+   * resolvable; it is also the correct hook for a language change, since it
+   * repaints from the last snapshot rather than resetting the bar.
+   */
+  retranslate(): void {
+    if (this.hidden) return;
+    this.title.textContent = t("menu.loading.title");
+    this.setProgress(this.lastSnapshot);
   }
 
   /**

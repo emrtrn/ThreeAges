@@ -1814,16 +1814,16 @@ fr
 
 ## Release checklist
 
-- [ ] bütün Tier 1 locale dosyaları parse oluyor
-- [ ] missing key = 0
-- [ ] placeholder mismatch = 0
+- [x] bütün Tier 1 locale dosyaları parse oluyor — `npm run test:locales` sekiz release locale'inin 10 domain JSON dosyasını, düz `key -> string` şemasını ve boş değerleri denetler.
+- [x] missing key = 0 — aynı gate, her release locale'ini English kaynak bundle ile tam anahtar eşliğine zorlar.
+- [x] placeholder mismatch = 0 — aynı gate, oyun formatter'ının ICU placeholder çıkarımıyla kaynak/çeviri parametrelerini karşılaştırır.
 - [ ] unsupported glyph = 0
 - [ ] kritik UI overflow = 0
-- [ ] locale switch testi geçiyor
-- [ ] saved locale preference testi geçiyor
+- [x] locale switch testi geçiyor — filtreli engine denetimi, registry eşliğini ve çalışma anında dil değişimi ile key-bazlı fallback davranışını doğruladı.
+- [x] saved locale preference testi geçiyor — filtreli engine denetimi, kullanıcı ayarlarındaki locale değerinin round-trip saklanmasını ve başlangıç çözümünde uygulanmasını doğruladı.
 - [ ] full match başlangıç → sonuç ekranı testi tamam
 - [ ] victory/defeat ekranları test edildi
-- [ ] locale validator CI/build gate'e bağlı
+- [x] locale validator CI/build gate'e bağlı — üretim `npm run build` adımı `test:locales` ile başlar; dolayısıyla `build:verify` ve CI aynı kapıdan geçer.
 
 ---
 

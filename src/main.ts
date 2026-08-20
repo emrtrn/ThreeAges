@@ -262,6 +262,11 @@ async function main(): Promise<void> {
 
   const { preset, levelAssetsEnabled, prosperityDebugEnabled, regionalVictoryEnabled, fogOfWarEnabled } =
     await bootFoundation();
+  // The curtain above was built before `bootLocalization()` could install a
+  // service, so its title read `⟦missing:menu.loading.title⟧` (the bare key in a
+  // build). Raising it early is the right call — repainting it here is what pays
+  // for it. Every later curtain is constructed after this point and needs nothing.
+  bootCurtain?.retranslate();
 
   const scriptMessageTraceLimit = import.meta.env.DEV && params.has("debug") ? 20 : 0;
 
