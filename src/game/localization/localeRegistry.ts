@@ -54,7 +54,7 @@ const REGISTRY: readonly LocaleDescriptor[] = [
     tier: "tier1",
     fontGroup: "latin",
     direction: "ltr",
-    enabled: false,
+    enabled: true,
     browserTags: ["de"],
     intlLocale: "de",
   },

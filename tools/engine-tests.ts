@@ -57047,8 +57047,8 @@ check("Lokalizasyon Faz 1: the registry decides locale matching, and refuses to 
   );
   assert.equal(
     resolveInitialLocale({ savedLocale: "de", browserLanguages: browser }),
-    "tr",
-    "a saved locale that is not shipped yet is ignored, not loaded",
+    "de",
+    "a saved locale that is now shipped is restored ahead of the browser preference",
   );
 });
 

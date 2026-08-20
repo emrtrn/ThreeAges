@@ -1698,23 +1698,27 @@ bulunmamalıdır.
 
 Latin alfabeli genişleme dillerini eklemek ve üretim hattını doğrulamak.
 
-**İlerleme (19 Ağustos 2026):** Almanca (`de`) üretimi başladı. `common`,
-`menu`, `buildings` ve `units` domainleri çevrildi ve kaynak anahtar/placeholder
-eşliği doğrulandı. Dil, kalan domainler tamamlanmadan seçilebilir yapılmayacak.
+**Durum (20 Ağustos 2026):** Almanca (`de`) tamamlandı ve seçilebilir. On
+domainin tamamı (`common`, `menu`, `buildings`, `units`, `match`, `hud`,
+`errors`, `notifications`, `objectives`, `selection`) İngilizce kaynak
+anahtar/placeholder eşliğiyle yüklendi; `localeRegistry.ts` içindeki `de`
+`enabled: true` oldu. `build:verify` yeşil (1517 engine check) ve Chromium
+smoke, menüdeki `Deutsch` seçimini, Türkçe ↔ Almanca canlı değişimi ve maç içi
+ayarlar seçicisini doğruluyor.
 
 ## Her dil için checklist
 
-- [ ] locale registry kaydı
-- [ ] çeviri dosyaları
-- [ ] glossary kontrolü
-- [ ] placeholder validator
-- [ ] number formatting
-- [ ] font glyph testi
-- [ ] HUD testi
-- [ ] build palette testi
+- [x] locale registry kaydı
+- [x] çeviri dosyaları
+- [x] glossary kontrolü
+- [x] placeholder validator
+- [x] number formatting
+- [x] font glyph testi
+- [x] HUD testi
+- [x] build palette testi
 - [ ] selection panel testi
 - [ ] notifications testi
-- [ ] match modal testi
+- [x] match modal testi
 - [ ] full-match smoke testi
 
 ---
