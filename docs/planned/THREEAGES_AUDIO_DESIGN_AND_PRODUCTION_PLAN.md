@@ -17,6 +17,23 @@ Bu belgenin §1–§78'i **ne üretileceğini** anlatır ve v1.0'dan beri deği�
 bölüm **hangi sırayla yapılacağını** ve nerede kalındığını taşır; belge ancak
 bununla yürütülebilir bir plan olur.
 
+### Bu belgede ne nerede
+
+Belge uzun ve iki farklı işi taşıyor: **ne üretileceği** (§1–§78, v1.0'dan beri
+sabit) ve **nerede kalındığı** (§0 + §79–§81). İkincisini ararken bakılacak beş
+yer:
+
+| Aradığınız | Bölüm |
+|---|---|
+| **Fazlar ve hangisindeyiz** | §0 → *Fazlar* tablosu, hemen aşağıda |
+| **Ne yapıldı, hangi gün** | §0 → *Progress Log* |
+| **Sırada ne var, madde madde** | §69 — kutulu görev listesi |
+| **Hangi ses hâlâ yer tutucu** | §81.1 — olay olay sayım, kalan işin canlı listesi |
+| **Kalite kapıları** | §67 (Gate A–D), §45/§46 (Paket 1 kabulü) |
+
+§69 "yapılacaklar", §81.1 "kalanlar" — ikisi kesişir ama aynı şey değildir:
+§69 üretim adımlarını sayar, §81.1 oyunda o an yanlış ses çalan olayları.
+
 ### Durum işaretleri
 
 | İşaret | Anlam |
@@ -133,6 +150,13 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-20 | **§62'nin ses seviyesi ayarları geldi** (Faz 7'nin ilk parçası). Duraklat kartında dört slider: Ana ses, Müzik, Efektler, Ortam. Model `yetkili × oyuncu` çarpımı (§59.1); sekiz dile çevrildi. `voice`, `ui` ve `notifications` bilinçli olarak slider almadı. Yol boyunca kapatılan boşluk: RtsApp kullanıcı ayarlarını grafik için okuyup kaydediyor ama `audio.busVolumes` bloğunu tamamen görmezden geliyordu. |
 | 2026-08-20 | **Slider'lar kulakla ve gözle onaylandı** — §62'ye uygulanan durum yazıldı (§62.0). Faz 7 açıldı. |
 | 2026-08-20 | **§5.11'in üç stinger'ı bağlandı**: çağ atlama (yalnız çağ geçişi, çağ içi seviye atlama değil), zafer, yenilgi. `music` bus'ında — gerekçesi §5.11'de, ve gerekçe §62'nin "kritik bilgi yalnız sesle verilmez" kuralına dayanıyor. Kalan iki madde kapatıldı: büyük alarm zaten `notify.alert`, maç başlangıcı Faz 4'e. Üçü de placeholder klip çalıyor. |
+| 2026-08-20 | Zafer stinger'ı da duyulmuyordu; gerekçem ("sessizliğe çalıyor, fazlasına gerek yok") yarı yanlıştı. Yenilgi üç saniyelik bir vanaydı ve duyuldu, zafer 0.16 saniyelik bir bipti ve duyulmadı: **süre de okunabilirliğin parçası**, kazanç kadar. İkisi 0.63'e, zaferin klibi uzun olanla değişti. Yol boyunca bir hata: açıklama notu `events` bloğunun içine yazıldı — olay id'leri `_` ile başlayamaz, tablo yüklenirken patlıyordu ve oyunda tek ses kalmazdı; test yakaladı. |
+| 2026-08-20 | **Editöre "Veri → Ses Olayları" tablosu eklendi.** Yeni endpoint, yeni validator, yeni şema yok: `/__save-gamedata` zaten `game-data/**.json` kapsıyordu ve jenerik Data Table editörü `assetOptions` ile varlık seçicisini zaten biliyordu — iş, `editorCatalog.ts`'e bir tanım kaydetmekten ibaret kaldı. Kaydetme runtime'ın kendi normalizer'ıyla doğrulanıyor. Yeni test: `clips` bir `sound` seçicisi olmak zorunda, ve şemanın her alanının editör metadata'sı olmak zorunda (yoksa şemaya eklenen alan formda etiketsiz ham bir kutu olarak belirir). |
+| 2026-08-20 | `npm run audio:manifest` yazıldı (`tools/sync-audio-manifest.mjs`): üretilen klipleri klasörden okuyup manifest kaydını üretiyor. Ayrı bir klip tablosu **bilinçli olarak** yapılmadı — §6/§7 zaten o tablo, araya bir üçüncüsü girseydi senkron tutulacak fazladan bir yer olurdu. Betik ayrıca §6'nın harf durumu kuralını, id çakışmasını, dosyası silinmiş kaydı ve `events.json`'ın karşılıksız kliplerini kolluyor. Mevcut dokuz kayıt üzerinde dosyayı bayt bayt aynı üretmesi, hiçbir şeyi bozmadığının kanıtı. |
+| 2026-08-20 | §69'un kontrol listesi gerçeğe getirildi: Faz 0/1'de yapılan yedi madde hâlâ boş kutuydu (UI click, yapı yerleştirme/tamamlanma, cooldown, instance limiti, spatial attenuation, event mapping, varyant seçimi). Yanlış bir kontrol listesi listesizlikten kötü. §0'a "bu belgede ne nerede" tabelası eklendi — faz tablosu belgenin en başındaydı ve tam bu yüzden bulunamıyordu. |
+| 2026-08-20 | Çağ atlama stinger'ı **kulakla doğrulandı**. Teşhis yöntemi kayda değer: iki tur "yine denesenize"den sonra soru tahminle değil, olayın klibi geçici olarak duyulmaması imkânsız bir sese (çöküş, etkin 0.63) alınarak kapatıldı — çaldı, yani kanca baştan beri doğruydu ve mesele duyulabilirlikti. Kalıcı yer tutucu 0.54'e ayarlandı (0.17 duyulmuyor, 0.63 duyuluyor; arası). Ayrıca `playStinger` artık sonucunu logluyor: bir stinger maçta en fazla üç kez, oyuncunun baktığı anda çalar — reddi her zaman arızadır ve aksi halde "kod çalıştı, oyun sessiz" ayrımı hiçbir yerde görünmez. |
+| 2026-08-20 | Çağ atlama stinger'ı duyulmuyordu — kanca doğruydu, mix değildi. Aynı anda basılan bildirim kartının bipi `notifications` bus'ında tam kazançta (0.40), stinger ise en sessiz bus'ta 0.17'de: maskeleniyordu. Zafer/yenilgi duyuluyordu çünkü onlar sessizliğe çalıyor. `volume` "kanalı için yüksek" demek, ve en sessiz kanalda bir bildirimi aşmak 1'den fazlasına mal oluyor: 2.2 (etkin 0.40). Placeholder da ayırt edilebilir bir klibe alındı. |
+| 2026-08-20 | **Çöküş klipleri `structure.collapse`'a geri verildi.** Kullanıcı maç açılışında kaynağı belirsiz bir çöküş sesi duydu: `notify.alert` bir çöküş sample'ı çalıyordu (Faz 0'dan beri) ve alarm bildirimi mesafesiz olduğu için haritada bakılacak yeri yoktu. `notify.alert` → `starter-snd-door-open`, `stinger.defeat` → `starter-snd-steam-01`. Kural §81.1'e yazıldı: yer tutucu yanlış ses olabilir, başka bir olayın doğru sesi olamaz. |
 | 2026-08-20 | Placeholder sayımı olay olay çıkarıldı (§81) ve §0'ın "beş kanal" ifadesi düzeltildi: yedi. Sayılmadıkları için gözden kaçan ikisi birimin iş sesleri ve alarm bildirimiydi. Sayarken bir üretim tuzağı da göründü: envanterler rolleri ayırıyor, olay tablosu ayırmıyor — rol başına ses üretmek bugün çalmayacak bir kütüphane demek (§81.2). Yeni sözleşme testi: bir olay üretilmiş ile placeholder klibi karıştıramaz. |
 
 ---
@@ -411,6 +435,22 @@ değil.** İkisi de aynı olay akışından geliyor ve ikisi de bir bildirim kar
 basıyor; fanfarı ikisine birden vermek, kilometre taşı sesini kilometre taşı
 olmayana harcamak olurdu. Sonuç kulakla da okunuyor: seviye atlama bir bip, çağ
 atlama bir bip + fanfar.
+
+**Bir ölçüm, ileride "neden bu sayı bu kadar büyük" diye sorulduğunda.** `music`
+bus'ı 0.18'de ve bir *yatak* için yazıldı; üstünde çalan tek seferlik bir ses,
+işini yapabilmek için yatağın kat kat üstünde olmak zorunda. Çağ atlama
+stinger'ı bunun uç örneği: kendi bildirim kartıyla aynı karede çalıyor ve kart
+`notifications` bus'ında tam kazançta. Kulakla ölçüldü — etkin 0.17'de hiç
+duyulmuyor, 0.63'te kaçırılması imkânsız — ve 0.54'e (volume 3) yerleşti. Bu,
+hiyerarşiyle kavga değil: `volume` zaten "kanalı için yüksek" demek, ve bir
+yatak ile bir fanfar aynı kanalda aynı işi yapmıyor.
+
+Zafer ve yenilgi bir süre 1'de (etkin 0.18) bırakıldı, gerekçe "onlar sessizliğe
+çalıyor, fazlasına gerek yok" idi. **Yarısı doğruydu.** Yenilgi üç saniyelik bir
+vanaydı ve duyuldu; zafer 0.16 saniyelik bir bipti ve duyulmadı. Sessizliğe
+çalmak, ses oyuncu başını kaldırmadan bitiyorsa hiçbir şey kazandırmıyor —
+kazanç kadar **süre** de okunabilirliğin parçası. İkisi de 0.63'e alındı ve
+klipleri uzunlukça olanlarla değiştirildi.
 
 **3. Zafer/yenilgi stinger'ı koşulla değil ekranla birlikte çalar.** Maçın
 bitmesi ile oyuncuya söylenmesi aynı kare değil; ses söylenmeye aittir. Altta
@@ -2615,30 +2655,38 @@ no obvious imitation of existing game music
 - [x] Audio asset loader kurallarını belirle → manifest `sound` id'leri, §58
 - [x] SoundCue / olay tablosu iş bölümü → §80
 - [x] `RtsApp`'e audio mount (listener pozu, autoplay kilidi, notify + notification kancaları)
-- [ ] Audio klasör yapısını oluştur (§7) — ilk gerçek varlıkla birlikte, Faz 2
-- [ ] Master/runtime formatını kesinleştir (§8) — tarayıcı testiyle, Faz 2
+- [x] Audio klasör yapısını oluştur (§7) — `public/assets/audio/sfx/{ui,notifications,buildings}/` açıldı
+- [x] Master/runtime formatını kesinleştir (§8) — `.ogg`, tarayıcıda çalıyor
 
 ## Package 1 Firefly
 
-- [ ] UI click
-- [ ] UI confirm
-- [ ] UI error
-- [ ] Building place
-- [ ] Construction hammer
-- [ ] Building complete
+*Kutular 20 Ağustos 2026'da gerçek duruma göre düzeltildi; §81.1 ile aynı gerçeği
+sayar.*
+
+- [x] UI click — `sfx-ui-click-01`
+- [x] UI error — `sfx-ui-error-01`
+- [x] Building place — `sfx-building-place-01`
+- [x] Building complete — `sfx-building-complete-01`
+- [x] UI confirm — demo setinde `sfx-ui-toggle-01` / `sfx-ui-back-01` olarak geldi
+      (seçim ve geri alma); ayrı bir "confirm" üretilmedi, ihtiyaç da görünmedi
+- [ ] Cannon fire — **sıradaki** (§22.1 promptu hazır)
+- [ ] Cannon stone impact — **sıradaki** (§22.2 promptu hazır)
 - [ ] Sword swing
 - [ ] Sword hit
 - [ ] Bow release
 - [ ] Arrow impact
-- [ ] Cannon fire
-- [ ] Cannon stone impact
-- [ ] Logistics disconnected
-- [ ] Logistics restored
+- [ ] Construction hammer — bugün karşılığı olan bir olay yok; inşaat sesi
+      `unit.chop_impact`/`unit.dig_impact` üzerinden geliyor. Üretmeden önce
+      olayın açılması gerekir (kod işi).
 - [ ] Frontier ambience
+- [x] Logistics disconnected / restored — **kendi sesleri yok ve olmayacak.**
+      Bildirim tier'ı taşıyor: kesinti `notify.alert`, dönüş `notify.info`
+      (§24'ün üç seviyesi). §77'nin stil-kilidi maddesi bu kanalla karşılanıyor.
 
 ## Package 1 Gemini
 
-- [ ] Settlement music
+- [ ] Settlement music — §31 promptu hazır; §71'in kuralı: bu kabul edilmeden
+      diğer parçalar (zafer, yenilgi, çağ atlama stinger'ları dahil) üretilmez
 
 ## Package 1 Voice
 
@@ -2648,13 +2696,16 @@ no obvious imitation of existing game music
 
 ## Entegrasyon
 
-- [ ] Audio event mapping
-- [ ] Random variant
-- [ ] Cooldown
-- [ ] Max instances
-- [ ] Spatial attenuation
-- [ ] Music crossfade
-- [ ] Package 1 test map
+Bu bloğun tamamı Faz 0/1'de yapıldı; kalan tek madde Faz 4'ün işi.
+
+- [x] Audio event mapping — `rtsAudioEvents.ts` + `events.json`, testle bağlı
+- [x] Random variant — director tetik başına klip seçiyor
+- [x] Cooldown
+- [x] Max instances
+- [x] Spatial attenuation — mesafe kesmesi ve sis kapısı dahil
+- [ ] Music crossfade — Faz 4 (§28, §35); geçilecek ikinci parça üretilmeden
+      iskeleti kurmak boşa
+- [ ] Package 1 test map — §46'nın test senaryosu, Gate B ile birlikte
 
 ---
 
@@ -2985,16 +3036,19 @@ yapıldı: **26 olayın 16'sı** hâlâ Forge şablon içeriği çalıyor.
 | 8 | `siege.wreck_blast` | `starter-snd-explosion-01/02` | `sfx/combat/sfx_artillery_destroyed_NN.ogg` | 3 | §22 `SFX-ART-009` |
 | 9 | `structure.impact` | `starter-snd-impact-light` | `sfx/combat/sfx_structure_impact_stone_NN.ogg` | 4 | §22.2 (prompt hazır) |
 | 10 | `structure.collapse` | `starter-snd-collapse-01/02` | `sfx/combat/sfx_structure_collapse_NN.ogg` | 3 | §23 `SFX-CMB-009/010` |
-| 11 | `notify.alert` | `starter-snd-collapse-01` | `sfx/notifications/sfx_notify_alert_01.ogg` | 1 | §24 (Alarm: düşük ve geniş) |
+| 11 | `notify.alert` | `starter-snd-door-open` | `sfx/notifications/sfx_notify_alert_01.ogg` | 1 | §24 (Alarm: düşük ve geniş) |
 | 12 | `world.ambience` | `starter-snd-birds-01` | `ambience/amb_world_frontier_day_01.ogg` | 1 loop | §25 (içerik listesi hazır) |
 | 13 | `music.settlement` | `starter-snd-music-01` | `music/gameplay/mus_gameplay_settlement_01.ogg` | 1 loop | §31 (prompt hazır) |
-| 14 | `stinger.age_up` | `starter-snd-ui-confirm` | `stingers/stg_age_up_01.ogg` | 1 | §71 (8. sıra) |
-| 15 | `stinger.victory` | `starter-snd-ui-confirm` | `stingers/stg_victory_01.ogg` | 1 | §71 (6. sıra) |
-| 16 | `stinger.defeat` | `starter-snd-collapse-02` | `stingers/stg_defeat_01.ogg` | 1 | §71 (7. sıra) |
+| 14 | `stinger.age_up` | `starter-snd-fire-sparks-01` | `stingers/stg_age_up_01.ogg` | 1 | §71 (8. sıra) |
+| 15 | `stinger.victory` | `starter-snd-smoke-01` | `stingers/stg_victory_01.ogg` | 1 | §71 (6. sıra) |
+| 16 | `stinger.defeat` | `starter-snd-steam-01` | `stingers/stg_defeat_01.ogg` | 1 | §71 (7. sıra) |
 
-Zafer ile çağ atlama bugün **aynı** placeholder klibi paylaşıyor (14 ve 15),
-çünkü şablon içeriğindeki yükselen olumlu tek klip o. İkisi §71'in 6. ve 8.
-parçaları üretildiği gün ayrılır.
+**Placeholder seçerken bir kural** — kulakla bulundu, ucuz değil: *bir yer tutucu,
+o klibi zaten sahiplenen bir kanaldan ödünç alınmaz.* Alarm bildirimi bir süre
+çöküş sample'ı çaldı; sonuç, bir şey ters gittiğinde — maçın ilk poll'unda
+lojistik henüz bağlanmamışken dahi — oyunun "bina yıkılıyor" demesiydi, üstelik
+haritada gösterilecek bir yer olmadan. Yer tutucu yanlış ses olabilir; **başka
+bir olayın doğru sesi** olamaz. Çöküş klipleri artık yalnız `structure.collapse`'ın.
 
 Yol: hepsi `public/assets/audio/` altında, klasörler §7'den, adlandırma §6'dan.
 Manifest id'si dosya adının tire'lisidir — `sfx_artillery_fire_01.ogg` →
@@ -3040,11 +3094,55 @@ değil. Faz 5'te birim/savaş paketi açılırken alınır; o gün üretilecek o
 Üç adım, ve üçü de kod değil:
 
 1. Dosya `public/assets/audio/<§7 klasörü>/` altına konur (küçük harf, §6).
-2. `public/assets/manifest.json`'a `assetType: "sound"` bir varlık olarak
-   eklenir.
-3. `events.json`'da o olayın `clips` dizisi yeni id'lerle değiştirilir.
+2. `npm run audio:manifest` çalıştırılır — manifest'i klasörden üretir.
+3. Editörde **Veri → Ses Olayları** açılır, olayın klibi dropdown'dan seçilir.
+   (Ya da `events.json` elle düzenlenir; tablo aynı dosyayı yazar.)
 
 `tsc` çalıştırmak gerekmez; `RtsApp.ts` açılmaz. Faz 0/1'in tüm amacı buydu.
+
+**2. adımda neden ayrı bir tablo yok.** Manifest kaydı klip başına ~30 satır ve
+bunun yalnızca dördü değişiyor; biri de (`bytes`) insanın bilemeyeceği bir sayı.
+Yani bu bir kopyalama işi ve betiğe ait. Akla gelen ilk çözüm "aralara bir klip
+tablosu koyalım" oluyor; koymamanın sebebi şu: **§6 ve §7 zaten o tablodur.**
+Dosya adı id'yi taşıyor (`sfx_artillery_fire_01.ogg` → `sfx-artillery-fire-01`),
+klasör kategoriyi taşıyor, manifest sonucu taşıyor. Araya el yazımı bir tablo
+girseydi, senkron tutulacak üçüncü bir yer olurdu ve davet ettiği hata sessiz
+cinsten: adı değişmiş bir dosyayı gösteren satır, ya da hiçbir satırın anmadığı
+bir dosya.
+
+Betiğin **türetmediği** tek şey insanın yazdığı alanlar: mevcut bir kaydın
+`name` ve `license` alanları korunur ("UI Click" ve "Notification Info"
+editöryel; bir başlık büyütücü onları "Ui Click" ve "Notify Info" yapardı).
+Geri kalan alanlar her koşuda yeniden yazılır, yani betiği iki kez çalıştırmak
+hiçbir şeyi değiştirmez — mevcut dokuz kayıt üzerinde birebir aynı dosyayı
+üretmesi de bunun kanıtı.
+
+Aynı koşu dört şeyi de kolluyor, çünkü hepsi bu adımda olur ve hiçbiri kendini
+belli etmez:
+
+- **Büyük harfli dosya adı** — §6'nın en sert kuralı. Windows harf durumuna
+  duyarsız, git index'i duyarlı, dağıtım hedefi Linux; bu depo daha önce tam
+  bu yüzden Linux checkout'unda 404 veren bir varlık sevk etti.
+- **İki dosyanın aynı id'ye düşmesi.**
+- **Dosyası silinmiş manifest kaydı** — çalma anında 404 verir, ve kulakta
+  "olay hiç bağlanmamış" gibi duyulur.
+- **`events.json`'ın adlandırdığı ama hiçbir varlığın karşılamadığı klip.**
+
+Üretilmiş ama henüz hiçbir olayın çalmadığı klip *hata değil* — teslimatın
+normal sırası budur — sadece not olarak yazılır. `--check` bayrağı yazmadan
+kontrol eder, ileride bir CI kapısına bağlanmak isterse diye.
+
+**Editör tablosu (Veri → Ses Olayları).** Olay başına bir satır: klip seçici,
+bus, seviye, cooldown, aynı anda en fazla, mesafe alanları. Yeni bir yazma yolu
+açmadı — `/__save-gamedata` zaten `game-data/**.json` kapsıyor ve kaydetme,
+runtime'ın kendi `normalizeAudioEventTable`'ı ile doğrulanıyor, yani formun
+kaydedebildiği hiçbir tablo maçta yüklenmeyi reddedemez.
+
+`clips` alanının seçici olması işin asıl sebebi: alan manifest ses id'si
+istiyor, ve elle yazılan yanlış bir id hiçbir şeye çözülüp **sessizlik** çalıyor
+— hiç bağlanmamış bir olaydan ayırt edilemez. Dropdown, projenin gerçekten sevk
+ettiği seslerden seçtiriyor. Content Drawer'dan import edilen ses manifest'e
+kaydolduğu için listede kendiliğinden çıkar.
 
 Doğrulama: `npm run test:engine -- --filter "RTS audio"`. Üç kontrol bu adımları
 kolluyor — tablonun adlandırdığı her klibin gerçekten manifest'te bir `sound`

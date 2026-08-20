@@ -2455,7 +2455,17 @@ export class RtsApp {
    * route them to different buses (it does: `ui` against `music`).
    */
   private playStinger(eventId: string): void {
-    this.audioEvents.trigger(eventId, this.audioClock);
+    const result = this.audioEvents.trigger(eventId, this.audioClock);
+    // Reported, unlike every other sound in this file, and the asymmetry is the
+    // point. A footstep that the director refuses is the system working; a
+    // stinger fires at most three times a match, at a moment the player is
+    // watching, so a refusal is always a fault — and it is otherwise invisible
+    // in the worst way: the code ran, the game is silent, and nothing says
+    // whether the trigger never happened, was culled, or played into a muted
+    // bus. This line is what separates those three, which took a round of
+    // guessing to learn.
+    if (result === "played") this.log.info(`Stinger played: ${eventId}`);
+    else this.log.warn(`Stinger "${eventId}" refused: ${result}`);
   }
 
   /**
@@ -7082,12 +7092,6 @@ export class RtsApp {
 
   private syncEconomyUi(): void {
     this.logisticsOccupation.sync();
-    const logistics = this.productionLogistics.snapshots()
-      .filter((producer) => producer.owner === PLAYER_OWNER);
-    // The per-producer detail left with the palette's id list (§51): those facts
-    // now reach the player by clicking the building. What the bar still needs is
-    // the kingdom-wide question — is *anything* severed right now.
-    this.hudBar.setLogisticsStatuses(logistics.map((producer) => producer.status));
   }
 
   /**

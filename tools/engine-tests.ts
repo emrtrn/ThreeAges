@@ -30385,6 +30385,37 @@ check("GAME_EDITOR_CATALOG satisfies the editor catalog contract once injected",
   }
 });
 
+check("the audio event table is editable from the editor, clips as an asset picker", () => {
+  const catalog = getGameEditorCatalog();
+  const table = catalog.dataTables?.find((t) => t.id === "audio-events")
+    ?? assert.fail("audio-events is not registered in the editor catalog");
+
+  // `clips` names manifest sound ids. Typed by hand, a wrong one resolves to
+  // nothing and the event plays silence — indistinguishable from an event that
+  // was never wired, which is the failure this whole panel exists to remove.
+  const clips = (table.fields ?? []).find((field) => field.path === "clips");
+  assert.equal(clips?.assetOptions, "sound", "clips must render as a picker over the project's sounds");
+
+  // Every field the loader defines needs metadata, or a schema addition lands in
+  // the form as a raw key with no label, no bounds and no explanation — which is
+  // how a table with an editor drifts away from the table it edits.
+  const shipped = normalizeAudioEventTable(
+    JSON.parse(readFileSync("public/game-data/audio/events.json", "utf8")) as unknown,
+  );
+  const anyEvent = Object.values(shipped.events)[0] ?? assert.fail("the shipped table has no events");
+  const labelled = new Set((table.fields ?? []).map((field) => field.path));
+  for (const key of Object.keys(anyEvent)) {
+    assert.ok(labelled.has(key), `audio event field "${key}" has no editor metadata`);
+  }
+
+  // And the validator is the runtime's, not a lookalike: a bus the engine does
+  // not know must be refused at Save rather than written and found at boot.
+  const broken = JSON.parse(JSON.stringify(shipped)) as { events: Record<string, { bus: string }> };
+  const firstId = Object.keys(broken.events)[0]!;
+  broken.events[firstId]!.bus = "not-a-bus";
+  assert.equal(typeof table.validate(broken), "string", "an unknown bus is refused with a message");
+});
+
 check("the Data Table form groups repeated blocks and never splinters a scalar array", () => {
   // The defect this pins: grouping used to key off any numeric path segment, so
   // an `offset: [x, y, z]` triple rendered as three anonymous "Seviye" blocks and

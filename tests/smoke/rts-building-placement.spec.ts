@@ -83,7 +83,7 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await expect(page.locator(".rts-debug-sim")).toContainText("yollar: 0 düğüm · 0 kenar · 0 ağ");
   await expect(page.locator(".rts-debug-sim")).toContainText("depolar: 0");
   await expect(page.locator(".rts-debug-sim")).toContainText("üretim bağlantıları: 0");
-  await expect(page.locator(".rts-hud-warning")).toBeHidden();
+  await expect(page.locator(".rts-hud-warning")).toHaveCount(0);
   // Nothing has happened yet, so the feed must be silent rather than empty-boxed.
   await expect(page.locator(".rts-notification-feed")).toBeHidden();
 

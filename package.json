@@ -12,6 +12,7 @@
     "editor:lan": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "build": "npm run test:locales && tsc --noEmit && vite build",
     "check:assets": "node tools/run-asset-manifest-health.mjs",
+    "audio:manifest": "node tools/sync-audio-manifest.mjs",
     "inventory:threeages-materials": "node tools/run-threeages-material-inventory.mjs",
     "texture:threeages": "python tools/threeages-texture-pipeline.py",
     "optimize:glb": "node tools/optimize-building-glb.mjs",

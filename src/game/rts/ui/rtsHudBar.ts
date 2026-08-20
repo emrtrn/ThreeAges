@@ -17,24 +17,8 @@ import { onLocaleChanged, t } from "../../localization/LocalizationService";
 import { commandKeyLabel } from "../input/rtsInput";
 import type { AgeBalance } from "../../data/gameDataTypes";
 import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
-import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
 import { RESOURCE_ORDER, formatInventoryAmount, resourceLabel } from "./resourceLabels";
 import { resourceIconSrc } from "./rtsUiIcons";
-
-/**
- * The §51 warning key, per failure the logistics system resolved.
- *
- * The gameplay ids stay as they are (Plan §3.4) and only the *key* is derived
- * from them, so a status can be renamed in one place without touching six
- * translations.
- */
-const LOGISTICS_WARNING_KEY: Readonly<Record<Exclude<ProducerLogisticsStatus, "linked">, string>> = {
-  "outside-control": "hud.warning.outside_control",
-  "unlinked-road": "hud.warning.unlinked_road",
-  "unlinked-depot": "hud.warning.unlinked_depot",
-  "unlinked-main-network": "hud.warning.unlinked_main_network",
-  "depot-occupied": "hud.warning.depot_occupied",
-};
 
 /**
  * The key a hint names, read from the binding table rather than written into the
@@ -63,7 +47,6 @@ export class RtsHudBar {
   private readonly idleWorkers = document.createElement("span");
   private readonly age = document.createElement("span");
   private readonly duration = document.createElement("span");
-  private readonly warning = document.createElement("p");
   private readonly selectIdleWorkers = document.createElement("button");
   private readonly workerAutomation = document.createElement("button");
   private readonly status = document.createElement("div");
@@ -117,19 +100,6 @@ export class RtsHudBar {
       this.resourceCells.set(resourceId, { label, amount, income });
     }
     this.root.appendChild(resources);
-
-    // The warning sits *between* the resources and the status, in the bar's one
-    // row. An earlier build gave it a full-width row of its own, which turned
-    // the strip into two rows the moment a road was cut — and the numbers that
-    // explain the cut reflowed underneath themselves exactly when the player
-    // needed to read them.
-    this.warning.className = "rts-hud-warning";
-    // Polite, not assertive: a contested road can resolve itself, and an
-    // assertive live region would interrupt a screen reader mid-sentence for a
-    // warning that may already be gone.
-    this.warning.setAttribute("aria-live", "polite");
-    this.warning.hidden = true;
-    this.root.appendChild(this.warning);
 
     const status = this.status;
     status.className = "rts-hud-status";
@@ -293,27 +263,6 @@ export class RtsHudBar {
    */
   mountStatusControl(control: { mount(parent: HTMLElement): void }): void {
     control.mount(this.status);
-  }
-
-  /**
-   * Show the first unhealthy producer's reason. One line, not a list: the
-   * warning's job is to point at the map, and the selected producer's panel
-   * carries the per-building detail.
-   */
-  setLogisticsStatuses(statuses: readonly ProducerLogisticsStatus[]): void {
-    const status = statuses.find((candidate) => candidate !== "linked");
-    if (!status) {
-      if (!this.warning.hidden) this.warning.hidden = true;
-      return;
-    }
-    const text = t(LOGISTICS_WARNING_KEY[status]);
-    if (this.warning.textContent !== text) {
-      this.warning.textContent = text;
-      // The strip keeps the warning on one line; the tooltip is the escape hatch
-      // if a narrow viewport ever ellipsises it.
-      this.warning.title = text;
-    }
-    this.warning.hidden = false;
   }
 
   dispose(): void {

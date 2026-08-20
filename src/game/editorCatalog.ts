@@ -35,6 +35,8 @@ import {
   validateRtsContentDamageSection,
 } from "@/game/rts/content/rtsContentCatalog";
 import type { SettlementAge } from "@/game/data/gameDataTypes";
+import { AUDIO_BUS_IDS } from "@engine/audio/audioBus";
+import { normalizeAudioEventTable } from "@engine/audio/audioEventTable";
 
 /**
  * Wrap a runtime game-data validator as the editor's `validate` contract:
@@ -43,6 +45,58 @@ import type { SettlementAge } from "@/game/data/gameDataTypes";
  * the game would reject at boot, using the exact same rules the runtime loads
  * with — without the editor ever importing `@/game`.
  */
+/**
+ * Audio event fields — audio plan §58's schema, one row per event.
+ *
+ * `clips` is the reason this table exists. It is a list of *manifest sound ids*,
+ * and typing one by hand is the mistake with no feedback: a mistyped id resolves
+ * to nothing and the event plays silence, which is indistinguishable from an
+ * event that was never wired. Marked `assetOptions: "sound"`, it becomes a
+ * picker over what the project actually ships — and an array path renders as an
+ * add/remove list, which is also the only way to fill the variation set of an
+ * event whose list is empty.
+ *
+ * The rest are the repeat-control and attenuation numbers. Their bounds mirror
+ * `normalizeAudioEventTable`'s exactly, so the form refuses what the loader
+ * would refuse rather than letting Save carry the message.
+ */
+const AUDIO_EVENT_FIELDS = [
+  {
+    path: "clips",
+    label: "Klipler",
+    assetOptions: "sound",
+    hint: "Manifest ses id'leri. Birden fazlaysa tetik başına biri seçilir.",
+  },
+  {
+    path: "bus",
+    label: "Mix bus",
+    enum: AUDIO_BUS_IDS,
+    hint: "Ses seviyesi slider'ları ve ducking bus üzerinden işler.",
+  },
+  {
+    path: "volume",
+    label: "Seviye",
+    min: 0,
+    max: 10,
+    step: 0.05,
+    hint: "Kanalı için yüksek. 1'in üstü, sessiz bir bus'ta bir bildirimi aşması gereken tek seferlik sesler için normaldir.",
+  },
+  { path: "pitchVariation", label: "Pitch sapması (±oran)", min: 0, max: 0.5, step: 0.01 },
+  { path: "cooldownMs", label: "Cooldown (ms)", min: 0, max: 600000, step: 10 },
+  { path: "maxInstances", label: "Aynı anda en fazla", min: 1, max: 64, step: 1 },
+  { path: "spatial", label: "Dünyada konumlu" },
+  { path: "loop", label: "Döngü (yatak)" },
+  { path: "refDistance", label: "Zayıflamanın başladığı mesafe", min: 0, step: 1 },
+  {
+    path: "maxDistance",
+    label: "Duyulma menzili",
+    min: 0,
+    step: 1,
+    hint: "Bunun ötesindeki kaynak hiç çalınmaz — hem zayıflama parametresi hem kesme.",
+  },
+  { path: "rolloff", label: "Zayıflama eğrisi", min: 0, max: 10, step: 0.1 },
+];
+
 const asTableValidator =
   (fn: (raw: unknown) => unknown) =>
   (raw: unknown): string | null => {
@@ -876,6 +930,20 @@ export const GAME_EDITOR_CATALOG = {
       ],
       groups: [DAMAGE_SLOT_GROUP("slots")],
       validate: asTableValidator(validateRtsContentDamageSection),
+    },
+    {
+      id: "audio-events",
+      label: "Ses Olayları",
+      path: "game-data/audio/events.json",
+      // The file carries the bus mix and two comment blocks alongside the table;
+      // `section` points the editor at the depth whose keys are the rows an
+      // author thinks in, so those never appear as editable entries.
+      section: "events",
+      fields: AUDIO_EVENT_FIELDS,
+      // The runtime's own normalizer, so the form cannot save a table the match
+      // would refuse to load — and Save merges the section back before this runs,
+      // which is what keeps the bus block intact.
+      validate: asTableValidator(normalizeAudioEventTable),
     },
     {
       id: "units",

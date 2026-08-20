@@ -1711,31 +1711,6 @@ body {
   font-weight: 700;
 }
 
-/*
- * The §51 critical connection warning, in the bar's free middle. It shrinks
- * before it wraps: the strip publishes a fixed height, so a warning that grew
- * the bar would push the panels that offset against it out of alignment.
- */
-.rts-hud-warning {
-  flex: 0 1 auto;
-  min-width: 0;
-  margin-left: auto;
-  padding: 4px 8px;
-  overflow: hidden;
-  color: #fff1cf;
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  background: var(--ta-danger-bg);
-  border: 1px solid var(--ta-alert);
-  border-radius: 4px;
-}
-
-.rts-hud-warning[hidden] {
-  display: none;
-}
-
 /* Keep the one-row HUD usable below desktop widths without letting it spill off
    the canvas.  The resource columns stay equal in each mode, so live values
    still cannot move neighbouring controls. */
@@ -1925,14 +1900,6 @@ body {
   .rts-hud-utility-controls {
     order: 3;
     margin-left: auto;
-  }
-
-  .rts-hud-warning {
-    position: absolute;
-    z-index: 1;
-    top: 8px;
-    right: max(18px, env(safe-area-inset-right));
-    left: max(18px, env(safe-area-inset-left));
   }
 
   /* At this breakpoint the mission card still owns the top-right corner.
