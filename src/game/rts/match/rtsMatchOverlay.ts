@@ -47,6 +47,9 @@ export interface RtsMatchOverlayHandlers {
   readonly onRestart: () => void;
   /** §51 "Minimal ayarlar": camera feel, changed live behind the pause card. */
   readonly onCameraSettings: (settings: RtsCameraSettings) => void;
+  /** Present only when the host actually owns a mix; absent builds no sliders. */
+  readonly audioSettings?: RtsAudioSettings;
+  readonly onAudioSettings?: (settings: RtsAudioSettings) => void;
   /** Current RTS graphics state, persisted and applied by the runtime. */
   readonly graphicsSettings?: RtsGraphicsSettings;
   /** Changes the player's base profile (adaptive reductions never overwrite it). */
@@ -64,14 +67,18 @@ export interface RtsMatchOverlayHandlers {
 }
 
 /**
- * §51 lists four settings; two of them are built here and two are deliberately
+ * §51 lists four settings; three of them are built here and one is deliberately
  * absent.
  *
- * "Ana ses seviyesi" and "Ekran sallantısı" have nothing to control: the RTS
- * plays no audio and has no screen shake — both arrive with Faz 12's "VFX ve
- * Ses" (§67). A slider wired to a system that does not exist is a control the
- * player drags while nothing happens, which is worse than an absent one and is
- * exactly the "yarım sistem" §13 forbids. They land when their systems do.
+ * "Ana ses seviyesi" arrived with the audio pass and is built below — along with
+ * the per-channel sliders the accessibility section asks for. "Ekran sallantısı"
+ * still has nothing to control: the RTS has no screen shake. A slider wired to a
+ * system that does not exist is a control the player drags while nothing
+ * happens, which is worse than an absent one and is exactly the "yarım sistem"
+ * §13 forbids. It lands when its system does.
+ *
+ * The same rule shapes which audio channels get a slider: `voice` has one bus
+ * and no content, so it is not offered until a line has been recorded.
  */
 interface SettingRow {
   readonly key: keyof RtsCameraSettings;
@@ -100,6 +107,55 @@ const CAMERA_SETTING_ROWS: readonly SettingRow[] = [
 /** The word under a camera slider, in the active language. */
 function settingValueLabel(row: SettingRow, value: number): string {
   return t(`${row.textKey}.value.${row.valueWord(value)}`);
+}
+
+/**
+ * The player's volume trims, as multipliers on the authored mix.
+ *
+ * Multipliers rather than absolute gains on purpose: the mix hierarchy is
+ * authored in the audio event table, and a slider that replaced a bus's gain
+ * outright would let a player flatten that ordering by accident. Here `1` means
+ * "as the game intends" and `0` means silent, whatever the authored balance is
+ * underneath — so retuning the mix later does not move anybody's saved setting.
+ */
+export interface RtsAudioSettings {
+  readonly master: number;
+  readonly music: number;
+  readonly sfx: number;
+  readonly ambience: number;
+}
+
+export const DEFAULT_RTS_AUDIO_SETTINGS: RtsAudioSettings = {
+  master: 1,
+  music: 1,
+  sfx: 1,
+  ambience: 1,
+};
+
+interface AudioSettingRow {
+  readonly key: keyof RtsAudioSettings;
+  readonly textKey: string;
+}
+
+/**
+ * Four channels, each of which is a bus that carries live sound today.
+ *
+ * `notifications` and `ui` deliberately have no slider: they are the game
+ * answering the player, and the accessibility rule that critical information
+ * must never be audio-only cuts both ways — a player who has silenced their
+ * alerts is a player the design cannot reach. `master` still covers them, which
+ * is the honest way to turn everything off.
+ */
+const AUDIO_SETTING_ROWS: readonly AudioSettingRow[] = [
+  { key: "master", textKey: "match.settings.audio.master" },
+  { key: "music", textKey: "match.settings.audio.music" },
+  { key: "sfx", textKey: "match.settings.audio.sfx" },
+  { key: "ambience", textKey: "match.settings.audio.ambience" },
+];
+
+/** The percentage under a volume slider, formatted for the active language. */
+function audioValueLabel(value: number): string {
+  return t("match.settings.audio.value", { value });
 }
 
 /**
@@ -135,6 +191,7 @@ export class RtsMatchOverlay {
   private readonly settings = document.createElement("div");
   private cameraSettings: RtsCameraSettings = DEFAULT_RTS_CAMERA_SETTINGS;
   private graphicsSettings: RtsGraphicsSettings | null;
+  private audioSettings: RtsAudioSettings | null;
   /**
    * What the card is showing right now, so a language change can rebuild it —
    * Plan §13. The modal is one of the few surfaces that can be *open* while the
@@ -159,6 +216,7 @@ export class RtsMatchOverlay {
 
   constructor(private readonly handlers: RtsMatchOverlayHandlers) {
     this.graphicsSettings = handlers.graphicsSettings ?? null;
+    this.audioSettings = handlers.audioSettings ?? null;
     this.root.className = "rts-match-overlay ui-interactive";
     this.card.className = "rts-match-card";
     this.card.setAttribute("role", "status");
@@ -196,6 +254,9 @@ export class RtsMatchOverlay {
       const output = this.settings.querySelector<HTMLOutputElement>(`[data-rts-setting-value="${row.key}"]`);
       if (output) output.textContent = settingValueLabel(row, this.cameraSettings[row.key]);
     }
+    // The percentages too: a locale change moves the separator and the sign's
+    // position, so they are re-formatted rather than left as they were rendered.
+    this.refreshAudioValues();
     if (this.graphicsSettings) {
       const label = graphicsQualityLabel(this.graphicsSettings.quality);
       const value = this.settings.querySelector<HTMLOutputElement>("[data-rts-graphics-quality-value]");
@@ -257,8 +318,61 @@ export class RtsMatchOverlay {
       wrapper.append(label, control);
       this.settings.appendChild(wrapper);
     }
+    this.buildAudioSettings();
     this.buildGraphicsSettings();
     this.applyStaticText();
+  }
+
+  /** Builds only when the host owns a real mix; no inert sliders. */
+  private buildAudioSettings(): void {
+    const settings = this.audioSettings;
+    const onChange = this.handlers.onAudioSettings;
+    if (!settings || !onChange) return;
+    for (const row of AUDIO_SETTING_ROWS) {
+      const wrapper = document.createElement("label");
+      wrapper.className = "rts-match-setting";
+      wrapper.dataset.rtsTitleText = `${row.textKey}.hint`;
+      const label = document.createElement("span");
+      label.className = "rts-match-setting-label";
+      label.dataset.rtsText = `${row.textKey}.label`;
+      const control = document.createElement("span");
+      control.className = "rts-match-setting-control";
+      const value = document.createElement("output");
+      value.className = "rts-match-setting-value";
+      value.dataset.rtsAudioValue = row.key;
+      value.textContent = audioValueLabel(settings[row.key]);
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = "0";
+      slider.max = "1";
+      slider.step = "0.05";
+      slider.value = String(settings[row.key]);
+      slider.dataset.rtsAudio = row.key;
+      // `input`, not `change`: a volume is judged by ear while the thumb moves,
+      // and the match is still audible behind the card.
+      slider.addEventListener("input", () => {
+        this.applyAudioSettings({ ...this.audioSettings!, [row.key]: Number(slider.value) });
+      });
+      control.append(value, slider);
+      wrapper.append(label, control);
+      this.settings.appendChild(wrapper);
+    }
+  }
+
+  /** Store, echo the percentage, and hand the new mix to the host. */
+  private applyAudioSettings(next: RtsAudioSettings): void {
+    this.audioSettings = next;
+    this.refreshAudioValues();
+    this.handlers.onAudioSettings?.(next);
+  }
+
+  private refreshAudioValues(): void {
+    const settings = this.audioSettings;
+    if (!settings) return;
+    for (const row of AUDIO_SETTING_ROWS) {
+      const output = this.settings.querySelector<HTMLElement>(`[data-rts-audio-value="${row.key}"]`);
+      if (output) output.textContent = audioValueLabel(settings[row.key]);
+    }
   }
 
   /** Builds only when the host owns real graphics settings; no inert controls. */

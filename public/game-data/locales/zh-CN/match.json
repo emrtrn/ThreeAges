@@ -57,6 +57,14 @@
   "match.setup.difficulty.normal.label": "正常",
   "match.setup.difficulty.normal.hint": "公平基线：没有经济奖励，有衡量的反应时间。这是平衡性所针对的对手。",
   "match.setup.difficulty.hard.label": "难的",
-  "match.setup.difficulty.hard.hint": "对手几乎立即做出反应并获得了较小的经济优势。不是作弊，而是节奏：它看到的和你看到的一样多。"
+  "match.setup.difficulty.hard.hint": "对手几乎立即做出反应并获得了较小的经济优势。不是作弊，而是节奏：它看到的和你看到的一样多。",
+  "match.settings.audio.master.label": "主音量",
+  "match.settings.audio.master.hint": "游戏中的所有声音。",
+  "match.settings.audio.music.label": "音乐",
+  "match.settings.audio.music.hint": "对局背景音乐。",
+  "match.settings.audio.sfx.label": "音效",
+  "match.settings.audio.sfx.hint": "战斗、劳作与环境。",
+  "match.settings.audio.ambience.label": "环境音",
+  "match.settings.audio.ambience.hint": "地图的背景声底。",
+  "match.settings.audio.value": "{value, number, percent}"
 }
-

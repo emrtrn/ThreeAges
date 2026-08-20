@@ -57,6 +57,14 @@
   "match.setup.difficulty.normal.label": "Нормальный",
   "match.setup.difficulty.normal.hint": "Справедливый базовый уровень: отсутствие бонусов экономики, умеренное время реакции. Это противник, против которого настроен баланс.",
   "match.setup.difficulty.hard.label": "Жесткий",
-  "match.setup.difficulty.hard.hint": "Противник реагирует почти мгновенно и получает небольшое экономическое преимущество. Не читерство, а темп: он видит ровно столько же, сколько и вы."
+  "match.setup.difficulty.hard.hint": "Противник реагирует почти мгновенно и получает небольшое экономическое преимущество. Не читерство, а темп: он видит ровно столько же, сколько и вы.",
+  "match.settings.audio.master.label": "Общая громкость",
+  "match.settings.audio.master.hint": "Все звуки в игре.",
+  "match.settings.audio.music.label": "Музыка",
+  "match.settings.audio.music.hint": "Музыка во время матча.",
+  "match.settings.audio.sfx.label": "Эффекты",
+  "match.settings.audio.sfx.hint": "Бой, работа и мир вокруг.",
+  "match.settings.audio.ambience.label": "Атмосфера",
+  "match.settings.audio.ambience.hint": "Фоновое звучание карты.",
+  "match.settings.audio.value": "{value, number, percent}"
 }
-

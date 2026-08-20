@@ -32,6 +32,7 @@ import { advanceForgeMaterialAnimations } from "@engine/render-three/materials";
 import { VfxSubsystem } from "@engine/render-three/vfxSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { AudioEventDirector, EMPTY_AUDIO_EVENT_TABLE } from "@engine/audio/audioEventTable";
+import { AUDIO_BUS_IDS, type BusMixSnapshot } from "@engine/audio/audioBus";
 import { FrameMetricsMonitor } from "@engine/perf/frameMetrics";
 import { AdaptiveQualityController } from "@engine/perf/adaptiveQuality";
 import { classifyBottleneck } from "@engine/perf/bottleneckClassifier";
@@ -78,7 +79,7 @@ import {
   type RtsActorLoadReport,
 } from "./content/rtsActorVisualFactory";
 import { RTS_THROW_RELEASE_NOTIFY, RtsNotifyEffectBudget, rtsNotifyEffectIds } from "./content/rtsNotifyEffects";
-import { RTS_NOTIFICATION_AUDIO_EVENTS, rtsNotifyAudioEvent } from "./audio/rtsAudioEvents";
+import { RTS_AUDIO, RTS_NOTIFICATION_AUDIO_EVENTS, rtsNotifyAudioEvent } from "./audio/rtsAudioEvents";
 import { loadAudioEventTable } from "../data/gameDataLoader";
 import { RTS_ANIMATION_DISTANCE_SETTINGS } from "./content/rtsUnitPresentation";
 import { AiController } from "./ai/aiController";
@@ -170,7 +171,7 @@ import { updateStructureDestruction } from "./structures/structureDestruction";
 import { RtsMatchState } from "./match/rtsMatchState";
 import { RtsMatchFlow } from "./match/rtsMatchFlow";
 import { RtsMatchClock, formatMatchDuration } from "./match/rtsMatchClock";
-import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
+import { RtsMatchOverlay, DEFAULT_RTS_AUDIO_SETTINGS, type RtsAudioSettings } from "./match/rtsMatchOverlay";
 import type { RtsGraphicsQuality } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 import type { RtsPerfCost } from "./debug/formatRtsPerfDebug";
@@ -889,8 +890,21 @@ export class RtsApp {
   private audioFrame = 0;
   /** Removes the one-shot gesture listener that unlocks the audio context. */
   private detachAudioUnlock: (() => void) | null = null;
+  /**
+   * The mix the audio event table authored, before the player's trims.
+   *
+   * Kept because the two are multiplied rather than one replacing the other: a
+   * slider says "70% of whatever the game intends", so the intent has to survive
+   * somewhere for the multiplication to have a left-hand side. Empty until the
+   * table loads, which is the same as "every bus at unity".
+   */
+  private authoredBusMix: BusMixSnapshot = {};
+  /** The player's volume trims, restored from their saved settings. */
+  private audioSettings: RtsAudioSettings = DEFAULT_RTS_AUDIO_SETTINGS;
   /** Reused vector for the listener's forward axis; allocating one per frame is waste. */
   private readonly scratchAudioForward = new Vector3();
+  /** Reused vector for measuring a building's distance to the listener. */
+  private readonly scratchStructureAudio = new Vector3();
   /**
    * Stones fired but not yet released by the throwing arm, keyed by unit id.
    *
@@ -1438,6 +1452,9 @@ export class RtsApp {
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
     this.userSettingsStore = createRtsUserSettingsStore();
     this.userSettings = this.userSettingsStore?.read() ?? defaultUserSettings();
+    // Before the overlay is built, which reads these to seed its sliders, and
+    // before the event table lands, which re-applies the mix on top.
+    this.restoreAudioSettings();
     this.qualitySettings = resolveQualitySettings(
       this.userSettings.graphics.selectedQualityLevel,
       this.userSettings.graphics.customSettings,
@@ -2025,25 +2042,32 @@ export class RtsApp {
           // first Town-gated building and the Tarla only the first level-gated
           // one, and the next would have been refused under its neighbour's name.
           this.buildPalette.setActionMessage(() => buildingUnlockRequirement(stats, t(stats.nameKey)));
+          this.playUiAudio(RTS_AUDIO.uiError);
           return;
         }
-        if (!this.beginMissionGatedPlacement(id)) return;
+        if (!this.beginMissionGatedPlacement(id)) {
+          this.playUiAudio(RTS_AUDIO.uiError);
+          return;
+        }
         this.roadPlacement.cancel();
         this.syncRoadUi();
         this.placement.begin(id);
         this.syncPlacementUi();
+        this.playUiAudio(RTS_AUDIO.uiClick);
       },
       () => {
         this.placement.cancel();
         this.roadPlacement.begin();
         this.syncPlacementUi();
         this.syncRoadUi();
+        this.playUiAudio(RTS_AUDIO.uiClick);
       },
       () => {
         this.placement.cancel();
         this.roadPlacement.beginErase();
         this.syncPlacementUi();
         this.syncRoadUi();
+        this.playUiAudio(RTS_AUDIO.uiClick);
       },
     );
     this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => this.setSimulationSpeed(speed), {
@@ -2064,6 +2088,8 @@ export class RtsApp {
       },
       onGraphicsQuality: (quality) => this.setGraphicsQuality(quality),
       onGraphicsAdaptive: (enabled) => this.setGraphicsAdaptive(enabled),
+      audioSettings: this.audioSettings,
+      onAudioSettings: (settings) => this.setAudioSettings(settings),
       onAbandonMission: () => this.abandonMission(),
       // Built only when the host offered a menu to go back to (§ "Ana Menü").
       ...(this.options.onExitToMenu ? { onExitToMenu: this.exitToMenu } : {}),
@@ -2128,11 +2154,13 @@ export class RtsApp {
           this.confirmMissionGatedPlacement(x, y);
         } else {
           this.selection.onSelectClick(x, y, additive);
+          this.playSelectionAudio();
         }
       },
       onSelectDoubleClick: (x, y, additive) => {
         if (!this.rallyPointPending && !this.roadPlacement.isActive && !this.placement.isActive) {
           this.selection.onSelectDoubleClick(x, y, additive);
+          this.playSelectionAudio();
         }
       },
       onSelectDrag: (rect) => {
@@ -2149,6 +2177,7 @@ export class RtsApp {
           this.confirmMissionGatedPlacement(rect.x1, rect.y1);
         } else {
           this.selection.onSelectCommit(rect, additive);
+          this.playSelectionAudio();
         }
       },
       onSelectCancel: () => {
@@ -2166,19 +2195,28 @@ export class RtsApp {
         if (this.rallyPointPending) {
           this.rallyPointPending = false;
           this.buildPalette.setActionMessage(() => t("placement.rally.cancelled"));
+          this.playUiAudio(RTS_AUDIO.uiCancel);
           return;
         }
         if (this.roadPlacement.isActive) {
           this.roadPlacement.cancel();
           this.syncRoadUi();
+          this.playUiAudio(RTS_AUDIO.uiCancel);
           return;
         }
         if (this.placement.isActive) {
           this.placement.cancel();
           this.syncPlacementUi();
+          this.playUiAudio(RTS_AUDIO.uiCancel);
           return;
         }
+        // Only when there is something to command. A right-click on empty
+        // ground with nothing selected does nothing, and answering it would
+        // teach the player that the click did something.
+        const commanding = this.selection.selected().length > 0
+          || this.selection.selectedStructure() !== null;
         this.commands.issueAt(x, y);
+        if (commanding) this.playUiAudio(RTS_AUDIO.uiCommand);
       },
       // A right *drag* is the camera, not a command — the pointer only reports
       // it past its drag threshold, and suppresses the command click that would
@@ -2201,6 +2239,10 @@ export class RtsApp {
     this.structures.setCompletedVisualHandler((structure) => {
       this.progression.applyToStructure(structure);
       this.applyStructureVisual(structure, true);
+      // "The job is done" — one of the seven sounds the style lock is built on.
+      // Player-owned only: an enemy finishing a barracks is their news, not the
+      // player's, and hearing it would leak progress the fog is hiding anyway.
+      if (structure.owner === PLAYER_OWNER) this.playStructureAudio(structure, RTS_AUDIO.buildingComplete);
     });
     this.structures.setDamagePresentationHandler({
       onDamageStageChanged: (structure, _previous, next) => this.onStructureDamageStageChanged(structure, next),
@@ -2316,6 +2358,17 @@ export class RtsApp {
     try {
       const table = await loadAudioEventTable();
       this.audioEvents.setTable(table);
+      // The mix before anything plays through it. Applied here rather than at
+      // construction because it is data: a fork that reorders its priorities
+      // edits the table, not this file.
+      this.authoredBusMix = table.buses;
+      this.applyAudioMix();
+      // The beds are armed at match start, and on a cold cache that can happen
+      // before this fetch lands — in which case the trigger found an empty table
+      // and the match would have run to its end in silence. Re-arming here is
+      // free when they are already playing: they allow one instance, so the
+      // second call is a refusal rather than a second copy.
+      if (this.flow.running) this.startAudioBeds();
     } catch (error) {
       this.log.warn(
         `audio event table did not load; the match will be silent: ${
@@ -2323,6 +2376,135 @@ export class RtsApp {
         }`,
       );
     }
+  }
+
+  /**
+   * Push the authored mix and the player's trims onto the live buses.
+   *
+   * `authored × player` per bus, so the two never fight: retuning the table
+   * moves everybody's mix without touching a saved setting, and a player's 70%
+   * stays 70% of whatever the game currently intends. Buses with no slider
+   * (`ui`, `notifications`, `voice`) still get their authored level — they are
+   * only exempt from being *trimmed*, not from being mixed.
+   */
+  private applyAudioMix(): void {
+    const snapshot: BusMixSnapshot = {};
+    for (const bus of AUDIO_BUS_IDS) {
+      const authored = this.authoredBusMix[bus] ?? 1;
+      const trim = bus in this.audioSettings
+        ? this.audioSettings[bus as keyof RtsAudioSettings]
+        : 1;
+      snapshot[bus] = authored * trim;
+    }
+    this.audioSubsystem.applyMixSnapshot(snapshot);
+  }
+
+  /** Store the player's volume trims, apply them, and remember them for next time. */
+  private setAudioSettings(settings: RtsAudioSettings): void {
+    this.audioSettings = settings;
+    this.applyAudioMix();
+    // Saved as bus volumes because that is what the shared settings store holds;
+    // the value is the player's trim, which is exactly what should survive a
+    // re-tuned mix.
+    this.userSettings = {
+      ...this.userSettings,
+      audio: { busVolumes: { ...settings } },
+    };
+    this.userSettingsStore?.setAudioBusVolumes({ ...settings });
+  }
+
+  /**
+   * Restore the player's saved volume trims.
+   *
+   * Read once at construction, before the table lands: the mix is applied again
+   * when it does, and doing it in this order means a player who muted the music
+   * last session never hears a frame of it at full level.
+   */
+  private restoreAudioSettings(): void {
+    const stored = this.userSettings.audio.busVolumes;
+    const restored: Record<string, number> = { ...DEFAULT_RTS_AUDIO_SETTINGS };
+    for (const key of Object.keys(DEFAULT_RTS_AUDIO_SETTINGS)) {
+      const value = stored[key as keyof typeof stored];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        restored[key] = Math.min(1, Math.max(0, value));
+      }
+    }
+    this.audioSettings = restored as unknown as RtsAudioSettings;
+    this.applyAudioMix();
+  }
+
+  /**
+   * Fire one interface sound.
+   *
+   * Never spatial and never distance-culled: this is the direct answer to
+   * something the player just clicked, and the mix priority puts a command's own
+   * feedback above a distant fight. A UI sound that faded with the camera would
+   * be answering the map instead of the player.
+   */
+  private playUiAudio(eventId: string): void {
+    this.audioEvents.trigger(eventId, this.audioClock);
+  }
+
+  /**
+   * Play one of §5.11's stingers — global, unattenuated, unpositioned.
+   *
+   * Mechanically identical to {@link playUiAudio}, and separate on purpose: a
+   * stinger is not the answer to a click, it is the game announcing a change of
+   * state. Naming it at the call site is what keeps that distinction visible
+   * when the two are read next to each other, and the event table is free to
+   * route them to different buses (it does: `ui` against `music`).
+   */
+  private playStinger(eventId: string): void {
+    this.audioEvents.trigger(eventId, this.audioClock);
+  }
+
+  /**
+   * Answer a selection click, but only when something was actually picked.
+   *
+   * Clicking empty ground is how a player *clears* a selection, and a click
+   * sound there would report a pick that did not happen. The design's long
+   * re-selection cooldown does the rest of the work: dragging a box over the
+   * same squad twice is one player checking what they have, not two actions.
+   */
+  private playSelectionAudio(): void {
+    const picked = this.selection.selected().length > 0
+      || this.selection.selectedStructure() !== null;
+    if (picked) this.playUiAudio(RTS_AUDIO.uiSelect);
+  }
+
+  /**
+   * Whether a sound happening at this spot may be heard — the audio half of fog
+   * of war.
+   *
+   * Not a nicety. Presentation keeps ticking for units the fog binder has set
+   * invisible, so their animation notifies keep arriving; without this gate an
+   * unseen enemy column is *audible* while it crosses the dark, which is a
+   * scouting tool the player was never given. The drawn effects are hidden by
+   * the binder; sound has no binder, so it asks here.
+   *
+   * No vision system (fog disabled by the match rules) means everything is
+   * audible, which is the same thing "no fog" already means for sight.
+   */
+  private worldAudioAudible(x: number, z: number): boolean {
+    return this.vision ? this.vision.isVisible(PLAYER_OWNER, x, z) : true;
+  }
+
+  /**
+   * Start the two sounds that do not stop: the world's ambience and the music
+   * bed.
+   *
+   * Both are declared `maxInstances: 1` and loop, so calling this twice is a
+   * no-op the director refuses rather than a second copy playing over the first
+   * — which is what makes it safe on a restart path that may or may not have
+   * torn them down.
+   *
+   * The music is one loop, not a state machine: the states the design describes
+   * need a battle-intensity signal that does not exist yet, and a bed that plays
+   * is worth more today than a crossfade with nothing to cross to.
+   */
+  private startAudioBeds(): void {
+    this.audioEvents.trigger(RTS_AUDIO.worldAmbience, this.audioClock);
+    this.audioEvents.trigger(RTS_AUDIO.musicSettlement, this.audioClock);
   }
 
   /**
@@ -3734,9 +3916,17 @@ export class RtsApp {
     if (buildingId !== null && !this.beginMissionGatedPlacement(buildingId)) {
       this.placement.cancel();
       this.syncPlacementUi();
+      this.playUiAudio(RTS_AUDIO.uiError);
       return;
     }
     this.placement.confirmAt(x, y);
+    // A site was created exactly when the tool disarms itself: `confirmAt` only
+    // clears the active building on a purchase that went through, and leaves it
+    // armed on an invalid spot or an unaffordable price. So this reads success
+    // off the state machine rather than re-deriving the affordability rules.
+    if (buildingId !== null && this.placement.state().activeBuildingId === null) {
+      this.playUiAudio(RTS_AUDIO.buildingPlace);
+    }
     this.syncPlacementUi();
   }
 
@@ -3890,7 +4080,7 @@ export class RtsApp {
     // still be heard, while a footstep's dust was dropped for being invisible at
     // this camera distance without the footfall becoming inaudible with it.
     const audioEvent = rtsNotifyAudioEvent(name);
-    if (audioEvent !== null) {
+    if (audioEvent !== null && this.worldAudioAudible(position.x, position.z)) {
       this.audioEvents.trigger(audioEvent, this.audioClock, {
         position: [position.x, position.y, position.z],
         distance: cameraDistance,
@@ -4005,6 +4195,11 @@ export class RtsApp {
    * cannot read as individual impacts anyway.
    */
   private onStructureImpact(structure: PlacedStructure): void {
+    // Before the presentation lookup, not after: whether a building sheds debris
+    // is an art decision per building, and a building with no authored debris
+    // slot must still be *heard* taking the hit. The two budgets are separate
+    // and neither gates the other.
+    this.playStructureAudio(structure, RTS_AUDIO.structureImpact);
     const presentation = this.structureDamagePresentation(structure);
     if (!presentation) return;
     const slot = presentation.slots.debris;
@@ -4016,8 +4211,28 @@ export class RtsApp {
     this.playSlotRotation(structure, slot, structure.id);
   }
 
+  /**
+   * Fire one world audio event at a building's footprint.
+   *
+   * Buildings do not move and are not animated, so unlike the units they have no
+   * notify stream to ride; this is their equivalent. Height is the ground rather
+   * than the roof: the attenuation curves here span tens of units and a couple
+   * of metres of elevation buys nothing but a reason to look up a bounding box.
+   */
+  private playStructureAudio(structure: PlacedStructure, eventId: string): void {
+    if (!this.worldAudioAudible(structure.x, structure.z)) return;
+    const y = this.groundSurface.heightAt(structure.x, structure.z);
+    this.audioEvents.trigger(eventId, this.audioClock, {
+      position: [structure.x, y, structure.z],
+      distance: this.cameraController.camera.position.distanceTo(
+        this.scratchStructureAudio.set(structure.x, y, structure.z),
+      ),
+    });
+  }
+
   /** A collapse has already left gameplay; this is presentation only. */
   private onStructureCollapse(structure: PlacedStructure): void {
+    this.playStructureAudio(structure, RTS_AUDIO.structureCollapse);
     for (const slot of RTS_DAMAGE_SLOTS) this.structureSlotElapsed.delete(slotTimerKey(structure.id, slot));
     const presentation = this.structureDamagePresentation(structure);
     if (!presentation) return;
@@ -4488,6 +4703,12 @@ export class RtsApp {
               })
             : t("notification.tier.completed", { tier: tierLabel }),
         });
+        // §5.11's age-up stinger, and only for the age transition. The card
+        // above already sounds — an in-age level-up is *its* blip and nothing
+        // more, so the fanfare stays reserved for the one transition the whole
+        // match is built around. Not gated on the fog: this is the player's own
+        // kingdom changing, not something happening out on the map.
+        if (event.kind === "town") this.playStinger(RTS_AUDIO.stingerAgeUp);
       }
       // A completed upgrade already has its own `age-upgraded` notice above; only
       // the cancellation needs saying here, and it is not the player's doing.
@@ -4733,6 +4954,17 @@ export class RtsApp {
       // art marks no muzzle keeps the old behaviour whole: its own position, and
       // the projectile system's default launch height.
       const muzzle = shot.attacker.muzzleWorldPosition(this.scratchMuzzle);
+      // The one combat sound with no animation notify behind it: a gun's report
+      // belongs to the moment the shot leaves, and the shell's own flight is
+      // already timed from here. Played off the muzzle for the same reason the
+      // ball is spawned there — the bang should come from where the smoke is.
+      const report = muzzle ?? shot.attacker.position;
+      if (this.worldAudioAudible(report.x, report.z)) {
+        this.audioEvents.trigger(RTS_AUDIO.cannonFire, this.audioClock, {
+          position: [report.x, report.y, report.z],
+          distance: this.cameraController.camera.position.distanceTo(report),
+        });
+      }
       return this.cannonballs.spawn(
         muzzle ?? shot.attacker.position,
         combatImpactPoint(shot.attacker.position, shot.target),
@@ -5704,6 +5936,7 @@ export class RtsApp {
   private readonly beginMatch = (): void => {
     if (!this.flow.begin()) return;
     this.matchOverlay.hide();
+    this.startAudioBeds();
     this.log.info("RTS match started");
   };
 
@@ -5739,19 +5972,26 @@ export class RtsApp {
     if (this.placement.state().activeBuildingId !== null) {
       this.placement.cancel();
       this.syncPlacementUi();
+      this.playUiAudio(RTS_AUDIO.uiCancel);
       return;
     }
     if (this.roadPlacement.state().active) {
       this.roadPlacement.cancel();
       this.syncRoadUi();
+      this.playUiAudio(RTS_AUDIO.uiCancel);
       return;
     }
     if (this.rallyPointPending) {
       this.rallyPointPending = false;
       this.buildPalette.setActionMessage(() => t("placement.rally.cancelled"));
+      this.playUiAudio(RTS_AUDIO.uiCancel);
       return;
     }
     if (!this.flow.togglePause()) return;
+    // Both directions get the same sound: it is one toggle, and hearing the
+    // menu answer is what tells the player the key landed at all — the pause
+    // card appearing is easy to miss when the eye is somewhere else on the map.
+    this.playUiAudio(RTS_AUDIO.uiCancel);
     if (this.flow.phase === "paused") this.matchOverlay.showPause(this.missionRunning());
     else this.matchOverlay.hide();
   };
@@ -5760,6 +6000,12 @@ export class RtsApp {
     const outcome = this.match.outcome;
     const reason = this.match.reason;
     if (outcome === "active" || reason === null) return;
+    // §5.11's two closing stingers, fired with the screen rather than with the
+    // condition: this is the moment the player is told, and the sound belongs to
+    // the telling. The simulation has already stopped, so the ambience and music
+    // beds keep running underneath — ducking them under the result is Faz 4's
+    // job, once there is a crossfade to duck with.
+    this.playStinger(outcome === "victory" ? RTS_AUDIO.stingerVictory : RTS_AUDIO.stingerDefeat);
     // §53: the result screen is where the duration is actually read — it is the
     // one moment the match has a final length to report.
     this.matchOverlay.showResult(outcome, reason, this.clock.seconds);
@@ -5825,6 +6071,12 @@ export class RtsApp {
     // would mute a real notice in the first seconds of the next game, and a
     // stale health baseline would read the fresh centre as already damaged.
     this.notifications.reset();
+    // Everything the last match had in the air, plus its cooldowns: a restart
+    // must not open with an event still muted by a fight that no longer
+    // happened. The beds go with it and are started again immediately, because
+    // nothing else on this path calls `beginMatch`.
+    this.audioEvents.reset();
+    this.startAudioBeds();
     this.notificationFeed.setNotifications([]);
     this.previousLogisticsStatus.clear();
     // ...and the supply watch with it (Faz S5). Carrying `everSuppliedSites`
@@ -6420,6 +6672,10 @@ export class RtsApp {
     }
     this.cancelConstructionArmed = null;
     if (!this.structureConstruction.cancel(PLAYER_OWNER, structure)) return;
+    // After the cancel succeeds, not on the confirmation prompt: the first press
+    // asks a question and the notification answers it, the second one withdraws
+    // a foundation. Only the second is a thing that happened.
+    this.playUiAudio(RTS_AUDIO.buildingCancel);
     this.selection.reconcileStructures(this.structures.all());
     this.announce("structure", t("command.structure.construction_cancelled", { building: t(structure.stats.nameKey) }));
   }

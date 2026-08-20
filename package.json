@@ -28,7 +28,8 @@
     "test:engine:slow": "node tools/run-engine-tests.mjs --slow",
     "build:verify": "npm run verify:imports && npm run build && npm run test:engine:slow && npm run verify:dist -- --strict",
     "preview": "vite preview",
-    "preview:local": "vite preview --host 127.0.0.1 --port 4173 --strictPort"
+    "preview:local": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "build:cjk-subset": "node tools/build-cjk-subset.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.3",

@@ -57,5 +57,14 @@
   "match.setup.difficulty.normal.label": "Normal",
   "match.setup.difficulty.normal.hint": "Die faire Grundlage: kein Wirtschaftsbonus, eine gemessene Reaktionszeit. Gegen diesen Gegner ist die Balance abgestimmt.",
   "match.setup.difficulty.hard.label": "Schwer",
-  "match.setup.difficulty.hard.hint": "Der Gegner reagiert fast sofort und erhält einen kleinen Wirtschaftsvorteil. Kein Schummeln, sondern Tempo: Er sieht genau so viel wie du."
+  "match.setup.difficulty.hard.hint": "Der Gegner reagiert fast sofort und erhält einen kleinen Wirtschaftsvorteil. Kein Schummeln, sondern Tempo: Er sieht genau so viel wie du.",
+  "match.settings.audio.master.label": "Gesamtlautstärke",
+  "match.settings.audio.master.hint": "Alle Klänge im Spiel.",
+  "match.settings.audio.music.label": "Musik",
+  "match.settings.audio.music.hint": "Die Musik hinter dem Match.",
+  "match.settings.audio.sfx.label": "Effekte",
+  "match.settings.audio.sfx.hint": "Kampf, Arbeit und Welt.",
+  "match.settings.audio.ambience.label": "Atmosphäre",
+  "match.settings.audio.ambience.hint": "Die Hintergrundkulisse der Karte.",
+  "match.settings.audio.value": "{value, number, percent}"
 }

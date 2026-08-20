@@ -3952,6 +3952,21 @@ check("audio event table normalizer defaults every field and refuses a broken en
     () => normalizeAudioEventTable({ schema: 1, events: { "UI Click": { clips: ["a"] } } }),
     /dotted snake_case/,
   );
+
+  // The bus mix is optional; absent means every bus at unity.
+  assert.deepEqual(table.buses, {});
+  const mixed = normalizeAudioEventTable({
+    schema: 1,
+    buses: { music: 0.3 },
+    events: { "ui.click": { clips: ["snd-click"] } },
+  });
+  assert.deepEqual(mixed.buses, { music: 0.3 });
+  // A misspelled bus would otherwise stay at unity with nothing to say why the
+  // mix is wrong — the exact failure this block exists to make loud.
+  assert.throws(
+    () => normalizeAudioEventTable({ schema: 1, buses: { musick: 0.3 }, events: {} }),
+    /is not a valid audio bus id/,
+  );
 });
 
 check("audio event director enforces cooldown, per-event cap and global budget", () => {
@@ -4045,6 +4060,123 @@ check("RTS audio events: every audio-only notify marker actually has a sound", (
   // would silently drop a whole class of notice.
   for (const severity of ["info", "warning", "alert"] as const) {
     assert.ok(RTS_NOTIFICATION_AUDIO_EVENTS[severity], `notification severity ${severity} needs a sound`);
+  }
+});
+
+check("RTS audio events: beds are single and every channel routes to its own bus", () => {
+  const table = readAudioEventTable();
+  for (const [eventId, definition] of Object.entries(table.events)) {
+    if (definition.loop) {
+      // A looping bed with room for two stacks a second copy over the first the
+      // next time anything re-arms it — a restart, a re-entered match — and the
+      // result is a drone nothing can turn off, because nothing knows there are
+      // two. The cap is what makes "start the beds" safe to call twice.
+      assert.equal(definition.maxInstances, 1, `looping event "${eventId}" must allow only one instance`);
+    }
+    // Bus routing carries the volume sliders and the duck rules, so which bus a
+    // namespace lands on is a contract rather than a mix taste. The levels
+    // inside each bus stay free to move.
+    if (eventId.startsWith("notify.")) {
+      assert.equal(definition.bus, "notifications", `${eventId} must route to the notifications bus`);
+    }
+    if (eventId.startsWith("ui.")) {
+      assert.equal(definition.bus, "ui", `${eventId} must route to the ui bus`);
+      // An interface sound answers the player, not the map: attenuating a click
+      // by camera distance would make the game's reply to a click quieter than
+      // a fight the player is not looking at.
+      assert.equal(definition.spatial, false, `${eventId} must not be spatial`);
+    }
+    if (eventId.startsWith("stinger.")) {
+      // §5.11's stingers are music, and the Music slider is the player's word on
+      // whether they hear them. Routing one to `notifications` to "make sure it
+      // lands" would take that word back — and is only ever tempting because the
+      // moment matters, which is exactly when the rule has to hold.
+      assert.equal(definition.bus, "music", `${eventId} must route to the music bus`);
+      // A fanfare is addressed to the player, not to a spot on the map, and it
+      // ends: a looping stinger is a stuck horn nothing turns off.
+      assert.equal(definition.spatial, false, `${eventId} must not be spatial`);
+      assert.equal(definition.loop, false, `${eventId} must not loop`);
+    }
+  }
+});
+
+check("RTS audio events: no event mixes produced clips with placeholder ones", () => {
+  // The table is being emptied of Forge starter content one channel at a time
+  // (plan Faz 2), so for a while both kinds of clip id live here — `sfx-*` for
+  // what has been produced, `starter-snd-*` for what has not. What must not
+  // happen is a *variation set* that straddles the line: the director picks one
+  // clip per trigger at random, so a half-swapped set plays the real sword three
+  // times and a stock thud on the fourth, which reads as a bug in the mix rather
+  // than as unfinished production. This is deliberately not a count — the census
+  // shrinks to zero as Faz 2 lands, and a test that pinned it would go red on
+  // every delivery.
+  const isPlaceholder = (clipId: string): boolean => clipId.startsWith("starter-snd-");
+  for (const [eventId, definition] of Object.entries(readAudioEventTable().events)) {
+    const placeholders = definition.clips.filter(isPlaceholder).length;
+    assert.ok(
+      placeholders === 0 || placeholders === definition.clips.length,
+      `audio event "${eventId}" mixes produced and placeholder clips: ${definition.clips.join(", ")}`,
+    );
+  }
+});
+
+check("RTS audio events: the shipped bus mix keeps the design's priority order", () => {
+  const { buses } = readAudioEventTable();
+  const gain = (id: keyof typeof buses): number => buses[id] ?? 1;
+  // Relationships, not levels: every one of these numbers is expected to move,
+  // and none of these orderings is. The rule they encode is the design's mix
+  // priority — what the player did outranks what the map is doing, and the
+  // score sits under all of it.
+  assert.ok(gain("music") <= gain("ambience"), "music must not sit above ambience");
+  assert.ok(gain("ambience") < gain("sfx"), "ambience must sit under the world's own sounds");
+  assert.ok(gain("sfx") <= gain("ui"), "a distant fight must not read over the player's own command");
+  assert.ok(gain("ui") <= gain("notifications"), "nothing may read over a critical notice");
+  // A bed that has to be louder than a one-shot to be heard at all is a sign the
+  // hierarchy is being fought rather than expressed; this is the guard rail.
+  assert.ok(gain("music") < gain("notifications"), "music must never mask an alert");
+});
+
+check("RTS audio settings: a player trim scales the authored mix without replacing it", () => {
+  // The contract behind the volume sliders: `authored × trim`. Multiplication,
+  // not replacement, is what lets the mix be retuned later without moving
+  // anybody's saved setting — and what stops a slider from flattening the
+  // priority order the table authored.
+  const authored = readAudioEventTable().buses;
+  const trims = { master: 1, music: 0.5, sfx: 1, ambience: 0 };
+  const effective = (bus: keyof typeof authored & keyof typeof trims): number =>
+    (authored[bus] ?? 1) * trims[bus];
+
+  // Halving the music halves it against whatever it was authored at.
+  assert.equal(effective("music"), (authored.music ?? 1) * 0.5);
+  // Zero is silent whatever the authored level is — the one value a player
+  // expects to be absolute.
+  assert.equal(effective("ambience"), 0);
+  // And a trim of 1 leaves the authored mix exactly as the designer set it, so
+  // a fresh profile hears the game as intended.
+  assert.equal(effective("sfx"), authored.sfx ?? 1);
+  // The ordering survives any trim that is applied uniformly, which is the
+  // property that makes "master" safe.
+  const uniform = 0.4;
+  assert.ok((authored.music ?? 1) * uniform <= (authored.sfx ?? 1) * uniform);
+});
+
+check("RTS audio settings: the volume panel's keys resolve in every shipped locale", () => {
+  // A slider whose label falls back to English is a control the player cannot
+  // read; unlike most strings these sit in a fixed-width row with no context.
+  const rows = ["master", "music", "sfx", "ambience"];
+  for (const entry of selectableLocales()) {
+    const bundle = readShippedLocale(entry.code);
+    for (const row of rows) {
+      for (const field of ["label", "hint"]) {
+        const key = `match.settings.audio.${row}.${field}`;
+        assert.ok(bundle.has(key), `${entry.code} is missing ${key}`);
+      }
+    }
+    const value = bundle.get("match.settings.audio.value");
+    assert.ok(value, `${entry.code} is missing match.settings.audio.value`);
+    // The percentage is formatted by Intl, so the pattern must keep the number
+    // placeholder; a locale that "translated" it to a literal would print text.
+    assert.match(value!, /\{value,\s*number,\s*percent\}/u, `${entry.code} lost the percent placeholder`);
   }
 });
 

@@ -32,13 +32,48 @@ bununla yürütülebilir bir plan olur.
 | Faz | Konu | Durum | Kabul kapısı |
 |---|---|---|---|
 | **Faz 0** | Kararlar + runtime iskeleti (bus, event tablosu şeması, director, RtsApp mount) | ✅ | `tsc` yeşil, event tablosu sözleşme testleri yeşil, maçta listener pozu güncelleniyor |
-| **Faz 1** | Placeholder seslerle uçtan uca hat (starter-content klipleri, notify + notification kancaları) | 🔨 | Maçta ses duyuluyor; cooldown, instance limiti ve mesafe kesmesi çalışıyor |
-| **Faz 2** | Package 1 üretimi (Firefly 12 SFX → Settlement müziği → Guard VO), §70/§71/§72 sırasıyla | ⬜ | Gate B (§45, §46) |
+| **Faz 1** | Uçtan uca hat: kancalar, mix hiyerarşisi, ilk gerçek UI/yapı sesleri | ✅ | Maçta ses duyuluyor, menü sesleri arka planın üstünde okunuyor; cooldown, instance limiti, mesafe kesmesi ve sis kapısı çalışıyor |
+
+**§77'nin yedi stil-kilidi maddesi ve bağlandıkları yer.** Hepsinin artık bir
+tetikleyicisi var; Faz 2'de üretilen varlık `events.json`'da klip id'sini
+değiştirmekten ibaret olacak:
+
+| Stil-kilidi maddesi | Olay | Tetikleyici |
+|---|---|---|
+| Sword hit | `combat.sword_swing`, `combat.body_impact` | animasyon notify |
+| Bow release | `combat.arrow_release` | animasyon notify |
+| Cannon fire | `siege.cannon_fire` | `launchShot`, namludan |
+| Logistics disconnected | `notify.warning` | bildirim severity'si |
+| UI click | `ui.click`, `ui.error` | build palette |
+| Building complete | `building.complete`, `building.place` | inşaat tamamlanma + yerleştirme onayı |
+| Settlement music | `music.settlement` | maç başlangıcı, tek loop |
+
+Bunların yanında §23'ün yapı hasarı (`structure.impact`, `structure.collapse`)
+ve §25'in ambiyans yatağı (`world.ambience`) bağlandı.
+
+**Sis kapısı.** Faz 1'de fark edilen ve ilk sürümde eksik olan şey: sunum, sis
+binder'ının görünmez yaptığı birimler için de tik atmaya devam ediyor, yani
+notify'ları gelmeye devam ediyor. Kapı olmadan görülmeyen bir düşman kolu
+**duyuluyordu** — oyuncuya verilmemiş bir keşif aracı. Çizilen efektleri binder
+saklıyor; sesin binder'ı yok, bu yüzden `worldAudioAudible(x, z)` üzerinden
+kendisi soruyor. Her dünya sesi bu kapıdan geçer; UI sesleri geçmez (oyuncunun
+kendi komutunun cevabı haritaya değil oyuncuya aittir).
+
+**Ne bağlanmadı.** Birim seçimi/komut sesleri (§19–§22 VO ile birlikte gelecek)
+ve pazar/ekonomi sesleri (§16). Bunlar Paket 2–4'ün işi.
+
+§5.11'in üç stinger'ı (çağ atlama, zafer, yenilgi) 20 Ağustos'ta bağlandı ve
+artık placeholder klip üzerinde çalıyor — ayrıntısı §5.11'de. Kalan iki madde
+bilinçli olarak açık: **büyük alarm** zaten `notify.alert` olarak var (ayrı bir
+stinger'a gerek yok, aynı işi yapar), **maç başlangıcı** ise perde kalkışıyla
+çakıştığı için Faz 4'ün müzik durum makinesine bırakıldı — orada zaten bir
+"maça giriş" geçişi tanımlanacak.
+| **Faz 2** | Package 1 üretimi (Firefly 12 SFX → Settlement müziği → Guard VO), §70/§71/§72 sırasıyla | 🔨 | Gate B (§45, §46) |
 | **Faz 3** | Stil kilidi (§47) + üretim kaydı (§63) | ⬜ | 7 stil-kilidi maddesi onaylandı |
 | **Faz 4** | Müzik durum makinesi + crossfade (§28, §35) | ⬜ | Durum geçişleri maçta duyuluyor, sinyal kaynağı tanımlı |
 | **Faz 5** | Paket 2–4 (UI/notification/ekonomi → yapı/lojistik → birim/savaş) | ⬜ | Gate C (§67) |
 | **Faz 6** | Paket 5 (ambience + müzik) | ⬜ | Gate C |
-| **Faz 7** | Paket 6 polish + mix + erişilebilirlik slider'ları (§62) | ⬜ | Gate D |
+| **Faz 7** | Paket 6 polish + mix + erişilebilirlik slider'ları (§62) | 🔨 | Gate D |
 | **Faz 8** | Full-match audio QA (§68) + performans bütçesi doğrulaması (§61) | ⬜ | Gate D |
 
 ### Faz 0 neden Package 1'den önce gelir
@@ -58,6 +93,26 @@ kimliği değildir ve hiçbiri sevk edilmeyecektir; görevleri tek şey: mix
 hiyerarşisi (§9), tekrar kontrolü (§11), spatial attenuation (§10) ve bütçe
 (§61) **tek bir Firefly üretimi yapılmadan önce** gerçek maçta doğrulansın.
 
+**Hangi kanal placeholder, hangisi değil.** Faz 1 boyunca bu ayrıldı ve
+`events.json`'da klip id'sinin önekinden okunur:
+
+| Önek | Ne | Kanallar |
+|---|---|---|
+| `sfx-*` | Gerçek demo ses, `public/assets/audio/` altında, §6/§7 standardında | UI, info/warning bildirimleri, yapı yerleştirme/tamamlanma/iptal |
+| `starter-snd-*` | Forge şablon içeriği, yer tutucu | Aşağıdaki §81 sayımındaki her şey |
+
+Faz 2'nin işi ikinci sütunu boşaltmaktır ve bu, kod değişikliği değil klip id'si
+değişikliğidir.
+
+**Bir düzeltme (20 Ağustos).** Bu tablo bir süre "beş kanal placeholder" dedi;
+tabloyu olay olay sayınca daha fazlası çıktı. Unutulan ikisi, tam da
+sayılmadıkları için unutulacak olanlar: **birimin iş sesleri** (adım, balta,
+kazma — savaş değiller, o yüzden "savaş" satırına girmemişlerdi) ve **alarm
+bildirimi** (`notify.alert`, bir çöküş sample'ı; bildirimler "gerçek" sütununda
+yazdığı için sorgulanmamıştı). Aynı gün bağlanan üç stinger de doğduğu anda bu
+sütuna yazıldı. Sayım artık §81'de olay olay duruyor — 26 olayın 16'sı — ve
+orayı boşaltmak Faz 2'nin tanımıdır.
+
 Kazanç şu: Faz 2'de üretilen her varlık, üretildiği gün oyunda dinlenebilir. §46'nın
 test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 
@@ -68,7 +123,17 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-09 | v1.0 — Audio Bible, envanterler, prompt sistemleri, paketler ve kabul kapıları yazıldı. |
 | 2026-08-20 | Kod envanteri çıkarıldı (§79). Boşluğun ses varlıklarında değil **entegrasyon hattında** olduğu görüldü: engine'de bus, spatial subsystem ve SoundCue editörü hazır, RtsApp'te tek satır audio yok. |
 | 2026-08-20 | v1.1 — §58 şeması runtime'a bağlandı, §59 bus kararı verildi, SoundCue/event tablosu iş bölümü (§80) yazıldı, dosya adı harf durumu ve lokalizasyon bağı eklendi, faz tablosu açıldı. |
-| 2026-08-20 | Faz 0 uygulandı: `voice` + `notifications` bus'ları eklendi, `engine/audio/audioEventTable.ts` (şema + director) yazıldı, `public/game-data/audio/events.json` açıldı, RtsApp'e `AudioSubsystem` mount edildi (listener pozu + autoplay kilidi + notify/notification kancaları). |
+| 2026-08-20 | Faz 0 uygulandı: `voice` + `notifications` bus'ları eklendi, `engine/audio/audioEventTable.ts` (şema + director) yazıldı, `public/game-data/audio/events.json` açıldı, RtsApp'e `AudioSubsystem` mount edildi (listener pozu + autoplay kilidi + notify/notification kancaları). Yol boyunca iki gerçek hata düzeldi: `playedRequests()` sınırsız büyüyordu, ve varsayılan bus tablosu testi bus listesini yeniden yazıyordu (ikisi de artık türetiliyor). `build:verify` yeşil (1526 check). |
+| 2026-08-20 | **Hat kulakla doğrulandı** — maçta adım, darbe, savurma, ok, patlama ve bildirim sesleri duyuluyor; mesafe/pan ve tekrar kontrolü çalışıyor. Faz 0 kapandı. |
+| 2026-08-20 | Faz 1 kancaları tamamlandı: UI click/error, yapı yerleştirme + tamamlanma, yapı hasarı + çöküş, top ateşleme anı, ambiyans ve müzik yatağı. §77'nin yedi maddesinin tamamı artık tetikleniyor. Yol boyunca bir hata yakalandı: **dünya seslerinin sis kapısı yoktu** — görülmeyen düşman duyuluyordu; `worldAudioAudible` eklendi. |
+| 2026-08-20 | İlk mix dinlemesi: arka plan yatağı menü seslerini bastırıyordu. Tabloya `buses` bloğu eklendi (§58) ve §9'un öncelik sırası ilişki olarak teste bağlandı. Ayrıca bir yarış kapatıldı: tablo maç başlamadan yüklenmezse yataklar hiç başlamıyordu — soğuk cache'te maç sessiz geçecekti. |
+| 2026-08-20 | **İlk gerçek sesler girdi.** Kullanıcının verdiği demo SFX seti `public/assets/audio/` altına §7'nin klasör yapısı ve §6'nın adlandırma standardıyla alındı, manifest'e dokuz `sound` varlığı olarak kaydedildi. UI, bildirim ve yapı kanalları artık placeholder değil. Savaş, ambiyans ve müzik hâlâ starter-content — o kanallar için üretilmiş ses yok. |
+| 2026-08-20 | **Faz 1 kapandı** — mix kulakla doğrulandı, menü sesleri arka planın üstünde okunuyor. |
+| 2026-08-20 | Paket 2'nin UI yarısı, yeni varlık üretmeden: `ui.select` (§11'in 260 ms yeniden-seçim cooldown'u ile), `ui.command`, `ui.cancel`, `building.cancel`. Manifest'te bekleyen üç demo klip (`ui/toggle`, `ui/back`, `build_cancel`) kullanıldı. Birim/yapı seçimi, komut verme, mod iptali, duraklat ve inşaat geri çekme artık duyuluyor. |
+| 2026-08-20 | **§62'nin ses seviyesi ayarları geldi** (Faz 7'nin ilk parçası). Duraklat kartında dört slider: Ana ses, Müzik, Efektler, Ortam. Model `yetkili × oyuncu` çarpımı (§59.1); sekiz dile çevrildi. `voice`, `ui` ve `notifications` bilinçli olarak slider almadı. Yol boyunca kapatılan boşluk: RtsApp kullanıcı ayarlarını grafik için okuyup kaydediyor ama `audio.busVolumes` bloğunu tamamen görmezden geliyordu. |
+| 2026-08-20 | **Slider'lar kulakla ve gözle onaylandı** — §62'ye uygulanan durum yazıldı (§62.0). Faz 7 açıldı. |
+| 2026-08-20 | **§5.11'in üç stinger'ı bağlandı**: çağ atlama (yalnız çağ geçişi, çağ içi seviye atlama değil), zafer, yenilgi. `music` bus'ında — gerekçesi §5.11'de, ve gerekçe §62'nin "kritik bilgi yalnız sesle verilmez" kuralına dayanıyor. Kalan iki madde kapatıldı: büyük alarm zaten `notify.alert`, maç başlangıcı Faz 4'e. Üçü de placeholder klip çalıyor. |
+| 2026-08-20 | Placeholder sayımı olay olay çıkarıldı (§81) ve §0'ın "beş kanal" ifadesi düzeltildi: yedi. Sayılmadıkları için gözden kaçan ikisi birimin iş sesleri ve alarm bildirimiydi. Sayarken bir üretim tuzağı da göründü: envanterler rolleri ayırıyor, olay tablosu ayırmıyor — rol başına ses üretmek bugün çalmayacak bir kütüphane demek (§81.2). Yeni sözleşme testi: bir olay üretilmiş ile placeholder klibi karıştıramaz. |
 
 ---
 
@@ -318,6 +383,39 @@ Kısa tek seferlik müzikal geçişler:
 - çağ atlama
 - büyük alarm
 - maç başlangıcı
+
+**Durum (20 Ağustos 2026): üçü bağlandı, ikisi bilinçli olarak bağlanmadı.**
+
+| Stinger | Olay | Tetikleyici | Durum |
+|---|---|---|---|
+| Çağ atlama | `stinger.age_up` | `KingdomProgressionSystem` tamamlanma olayı, yalnız `kind === "town"` | ✅ placeholder klip |
+| Zafer | `stinger.victory` | `showMatchResult`, `outcome === "victory"` | ✅ placeholder klip |
+| Yenilgi | `stinger.defeat` | `showMatchResult`, `outcome === "defeat"` | ✅ placeholder klip |
+| Büyük alarm | — | `notify.alert` bunu zaten yapıyor (§24) | ⛔ ayrı ses gereksiz |
+| Maç başlangıcı | — | Perde kalkışı; Faz 4'ün "maça giriş" geçişi | ⏳ Faz 4 |
+
+Üç karar bu satırların altında duruyor ve üçü de yeniden tartışılacak cinsten,
+o yüzden gerekçesiyle yazılıdır.
+
+**1. Stinger'lar `music` bus'ındadır, `notifications` değil.** İşlevleri
+duyurmak, yani sınıf olarak bildirime yakınlar; ama bir stinger *müziktir* —
+§71 onları skorla aynı enstrüman setinden üretiyor — ve Müzik slider'ını kısan
+oyuncu ne istediğini söylemiştir. Bunu göze alabilmemizin tek sebebi §62'nin
+kuralının burada da tutması: bu üç anın hiçbiri yalnızca sesle taşınmıyor. Çağ
+atlama bildirim kartını basıyor, sonuç ekranı sahanın üstünde duruyor. Sessizlik
+oyuncuya süslemeden başka bir şeye mal olmuyor. Tersi doğru olsaydı — bilgi
+yalnız stinger'da olsaydı — bus kararı da tersine dönerdi.
+
+**2. Çağ atlama stinger'ı yalnız çağ geçişinde çalar, çağ içi seviye atlamada
+değil.** İkisi de aynı olay akışından geliyor ve ikisi de bir bildirim kartı
+basıyor; fanfarı ikisine birden vermek, kilometre taşı sesini kilometre taşı
+olmayana harcamak olurdu. Sonuç kulakla da okunuyor: seviye atlama bir bip, çağ
+atlama bir bip + fanfar.
+
+**3. Zafer/yenilgi stinger'ı koşulla değil ekranla birlikte çalar.** Maçın
+bitmesi ile oyuncuya söylenmesi aynı kare değil; ses söylenmeye aittir. Altta
+ambiyans ve müzik yatakları çalmaya devam ediyor — sonuç ekranının altında
+yatağı kısmak (ducking) Faz 4'ün işi, çünkü kısılacak bir crossfade henüz yok.
 
 ---
 
@@ -2068,6 +2166,56 @@ incelemedir; aşağısı borcun ödenmiş hâlidir.
 }
 ```
 
+### Mix hiyerarşisi olayda değil bus'ta
+
+Tablonun ikinci bloğu `buses` — §9'un öncelik sırasının tek yazıldığı yer:
+
+```json
+"buses": {
+  "notifications": 1,
+  "ui": 0.9,
+  "voice": 0.9,
+  "sfx": 0.8,
+  "ambience": 0.22,
+  "music": 0.18
+}
+```
+
+Bu blok Faz 1'de, ilk dinlemede eksikliği anlaşıldığı için eklendi: arka plan
+yatağı menü seslerini bastırıyordu. Yanlış çözüm her olayın `volume`'ünü tek tek
+kısmaktı; doğrusu bu. Sebebi §59'un bus'lara verdiği görevin ta kendisi:
+
+> Sürekli çalan bir yatakla anlık bir klik'i **elle** karşılaştırmak, hiyerarşiyi
+> hiçbir yerde bir arada görülemeyen sayıların ortalaması hâline getirir.
+
+`buses` bloğuyla bir olayın `volume`'ü artık "**kendi kanalı için** yüksek"
+demektir — bir yazarın gerçekten yargılayabileceği tek şey budur. Kanalların
+birbirine göre yeri ise tek tabloda durur.
+
+Testler burada da **ilişkiyi** pinler, seviyeyi değil: `music ≤ ambience < sfx ≤
+ui ≤ notifications`. Her sayı değişebilir, sıra değişemez.
+
+### 58.1 Oyuncunun slider'ı bu tabloyu değiştirmez, çarpar
+
+§62'nin ses seviyesi ayarları duraklat kartında dört slider olarak yaşıyor: Ana
+ses, Müzik, Efektler, Ortam. Model:
+
+```text
+etkin bus gain = yetkili mix (events.json) × oyuncu çarpanı (0…1)
+```
+
+Değiştirmek değil **çarpmak** kasıtlı. Slider bir bus'ın kazancını doğrudan
+yazsaydı, oyuncu farkında olmadan yukarıdaki öncelik sırasını düzleştirebilirdi;
+ayrıca mix'in her yeniden ayarlanışı herkesin kayıtlı ayarını kaydırırdı.
+Çarpımla `1` = "oyunun istediği gibi", `0` = sessiz — altındaki denge ne olursa
+olsun.
+
+Slider almayan üç bus var ve bu da bir karar: `voice` (içerik yok, §13'ün
+yasakladığı "yarım sistem"), `ui` ve `notifications` (oyunun oyuncuya cevabı;
+§62'nin "kritik bilgi yalnızca sesle verilmez" kuralı iki yönlü çalışır —
+alarmlarını kısmış bir oyuncu tasarımın ulaşamadığı oyuncudur). Ana ses hepsini
+kapsar, ki her şeyi susturmanın dürüst yolu odur.
+
 ### Alan adları neden `AudioPlayOptions` ile aynı
 
 `volume`, `pitch`, `bus`, `spatial`, `refDistance`, `maxDistance`, `rolloff`,
@@ -2224,6 +2372,45 @@ düşünülebilir.
 - mute voice
 - high-contrast audio cues
 - text equivalents for critical audio
+
+## 62.0 Uygulandı — 20 Ağustos 2026 (Faz 7'nin ilk parçası)
+
+Duraklat kartında dört slider var, kamera ayarlarının altında, sekiz dile
+çevrilmiş durumda:
+
+| Slider | Bus | Neden bu dördü |
+|---|---|---|
+| Ana ses | `master` | Her şeyin üstünde; slider'ı olmayan kanalları da bu kapatır |
+| Müzik | `music` | Yatak + §5.11 stinger'ları |
+| Efektler | `sfx` | Dünyanın kendi sesleri |
+| Ortam | `ambience` | Ambiyans yatağı |
+
+**Model: `etkin bus kazancı = yetkili mix (events.json) × oyuncu çarpanı`**
+(§58.1). Değiştirme değil çarpma, ve fark ilk bakışta göründüğünden büyük:
+
+- Slider `1`'de oyuncu oyunu **tasarlandığı gibi** duyar; `0` yetkili seviye ne
+  olursa olsun sessizdir. Oyuncunun mutlak beklediği tek değer budur.
+- Mix daha sonra yeniden ayarlandığında **kimsenin kayıtlı ayarı yerinden
+  oynamaz** — çarpan korunur, altındaki sayı değişir.
+- Bir slider §9'un öncelik sırasını **düzleştiremez**: her kanal kendi yetkili
+  seviyesinden ölçeklenir, bir kanalın seviyesini diğerinin üstüne yazamaz.
+
+**Slider almayan üç kanal ve sebebi:**
+
+- `ui` ve `notifications` — bunlar oyunun oyuncuya *cevabı*. Kritik bilginin
+  yalnız sesle verilmemesi kuralı iki yönlü işler: uyarılarını susturmuş bir
+  oyuncu, tasarımın ulaşamadığı bir oyuncudur. Her şeyi kapatmanın dürüst yolu
+  `master`'dır ve o zaten bunları da kapatır.
+- `voice` — tek bir replik kaydedilmedi. Var olmayan bir sistemin slider'ı,
+  oyuncunun sürüklediği ve hiçbir şey olmayan bir kontroldür.
+
+Ayarlar `userSettingsStore`'daki `audio.busVolumes` altında, slot'lardan bağımsız
+olarak saklanıyor. Yol boyunca kapanan boşluk buydu: RtsApp bu dosyayı grafik
+tercihleri için okuyup yazıyor, ama `audio.busVolumes` bloğunu tamamen görmezden
+geliyordu — yazılan ses ayarı bir sonraki açılışta okunmuyordu.
+
+**Kabul:** görsel ve işitsel olarak kullanıcı tarafından onaylandı (20 Ağustos
+2026).
 
 ### Kural
 
@@ -2772,6 +2959,102 @@ o cue'yu tek bir id olarak adlandırır.
 Tablonun `clips` alanı bu yüzden ileride hem `sound` hem `soundCue` id'si kabul
 edecek şekilde genişletilebilir; Faz 0 yalnızca `sound` çözer, çünkü katmanlı
 tek bir ses henüz üretilmedi.
+
+---
+
+# 81. Faz 2 çalışma sayfası — placeholder üzerinde duran kanallar
+
+§0 "yer tutucu sütununu boşalt" diyor; bu bölüm o sütunu **olay olay** sayar ve
+her satıra üretilecek dosyanın adını yazar. Amaç, Firefly'a oturulduğunda "ne
+üreteceğim" sorusunun sorulmaması.
+
+Sayım 20 Ağustos 2026'daki `public/game-data/audio/events.json` üzerinden
+yapıldı: **26 olayın 16'sı** hâlâ Forge şablon içeriği çalıyor.
+
+## 81.1 Sayım
+
+| # | Olay | Şu an çalan | Üretilecek dosya | Varyant | Prompt kaynağı |
+|---|---|---|---|---:|---|
+| 1 | `unit.footstep` | `starter-snd-footstep-stone` | `sfx/units/sfx_unit_footstep_dirt_NN.ogg` | 4 | §19 `SFX-WRK-001` |
+| 2 | `unit.chop_impact` | `starter-snd-impact-light` | `sfx/units/sfx_unit_axe_chop_NN.ogg` | 3 | §19 `SFX-WRK-003` |
+| 3 | `unit.dig_impact` | `starter-snd-impact-light` | `sfx/units/sfx_unit_pickaxe_stone_NN.ogg` | 3 | §19 `SFX-WRK-004` |
+| 4 | `combat.sword_swing` | `starter-snd-light-01/02` | `sfx/combat/sfx_combat_sword_swing_NN.ogg` | 3 | §20 `SFX-GRD-003` |
+| 5 | `combat.arrow_release` | `starter-snd-ui-click` | `sfx/combat/sfx_combat_bow_release_NN.ogg` | 3 | §21 `SFX-ARC-003` |
+| 6 | `combat.body_impact` | `starter-snd-impact-light` | `sfx/combat/sfx_combat_body_impact_NN.ogg` | 4 | §20 `SFX-GRD-004/005` |
+| 7 | `siege.cannon_fire` | `starter-snd-explosion-02` | `sfx/combat/sfx_artillery_fire_NN.ogg` | 3 | §22.1 (prompt hazır) |
+| 8 | `siege.wreck_blast` | `starter-snd-explosion-01/02` | `sfx/combat/sfx_artillery_destroyed_NN.ogg` | 3 | §22 `SFX-ART-009` |
+| 9 | `structure.impact` | `starter-snd-impact-light` | `sfx/combat/sfx_structure_impact_stone_NN.ogg` | 4 | §22.2 (prompt hazır) |
+| 10 | `structure.collapse` | `starter-snd-collapse-01/02` | `sfx/combat/sfx_structure_collapse_NN.ogg` | 3 | §23 `SFX-CMB-009/010` |
+| 11 | `notify.alert` | `starter-snd-collapse-01` | `sfx/notifications/sfx_notify_alert_01.ogg` | 1 | §24 (Alarm: düşük ve geniş) |
+| 12 | `world.ambience` | `starter-snd-birds-01` | `ambience/amb_world_frontier_day_01.ogg` | 1 loop | §25 (içerik listesi hazır) |
+| 13 | `music.settlement` | `starter-snd-music-01` | `music/gameplay/mus_gameplay_settlement_01.ogg` | 1 loop | §31 (prompt hazır) |
+| 14 | `stinger.age_up` | `starter-snd-ui-confirm` | `stingers/stg_age_up_01.ogg` | 1 | §71 (8. sıra) |
+| 15 | `stinger.victory` | `starter-snd-ui-confirm` | `stingers/stg_victory_01.ogg` | 1 | §71 (6. sıra) |
+| 16 | `stinger.defeat` | `starter-snd-collapse-02` | `stingers/stg_defeat_01.ogg` | 1 | §71 (7. sıra) |
+
+Zafer ile çağ atlama bugün **aynı** placeholder klibi paylaşıyor (14 ve 15),
+çünkü şablon içeriğindeki yükselen olumlu tek klip o. İkisi §71'in 6. ve 8.
+parçaları üretildiği gün ayrılır.
+
+Yol: hepsi `public/assets/audio/` altında, klasörler §7'den, adlandırma §6'dan.
+Manifest id'si dosya adının tire'lisidir — `sfx_artillery_fire_01.ogg` →
+`sfx-artillery-fire-01` — mevcut dokuz varlık zaten bu kuralda.
+
+## 81.2 Sayarken çıkan bir şey: tablo, envanterlerden daha kaba
+
+§19–§23 rolleri ayırıyor — Worker'ın toprak adımı, Guard'ın ağır adımı,
+Archer'ın hafif adımı; kılıcın zırha vuruşu ile ete vuruşu; ahşap yapı ile taş
+yapı. Çalışan koddaki olay tablosu bunları ayırmıyor: **herkes** için tek bir
+`unit.footstep`, her darbe için tek bir `combat.body_impact`, her yapı için tek
+bir `structure.impact` var. Kanca animasyon notify'ından geliyor ve notify rolü
+taşımıyor.
+
+Bunun üretim için pratik sonucu şudur ve önce yazılmazsa boşa üretim olur:
+
+> Faz 2'de **rol başına değil, olay başına** üretilir. Tabloda tek satır olan
+> şeye üç set ses üretmek, ikisinin hiç çalmayacağı bir kütüphane demektir.
+
+Ayrımın kendisi kötü bir fikir değil — Guard'ın adımı Archer'ınkinden ağır
+olmalı, bu doğru. Ama bu bir **kod kararıdır** (notify'ın rolü taşıması ya da
+olay id'sinin role göre seçilmesi), ses üretimi kararı değil, ve sırası Faz 2
+değil. Faz 5'te birim/savaş paketi açılırken alınır; o gün üretilecek olan da
+"aynı sesin rol varyantı" olur, sıfırdan bir set değil.
+
+## 81.3 Üretim sırası
+
+§70'in on iki maddesi hâlâ doğru sıra; yukarıdaki sayımla kesiştirilince Faz 2
+şöyle ilerler:
+
+1. **Top ateşi + yapıya top impact** (7, 9) — promptları §22.1/§22.2'de hazır,
+   ve oyunun en ağır iki sesi. Ağırlık dili burada kilitlenir.
+2. **Kılıç savurma + darbe + yay** (4, 5, 6) — savaşın okunabilirliği.
+3. **Ambiyans** (12) — tek seamless loop; §56'nın loop checklist'i geçilmeden
+   kabul edilmez.
+4. **Settlement müziği** (13) — §71'in kuralı: bu kabul edilmeden diğer parçalar
+   üretilmez, çünkü stil referansı odur.
+5. **Üç stinger** (14–16) — Settlement'ın enstrüman setinden, onun ardından.
+6. **Birim iş sesleri + alarm + çöküş** (1, 2, 3, 8, 10, 11) — geri kalanı.
+
+## 81.4 Bir varlık geldiğinde ne değişir
+
+Üç adım, ve üçü de kod değil:
+
+1. Dosya `public/assets/audio/<§7 klasörü>/` altına konur (küçük harf, §6).
+2. `public/assets/manifest.json`'a `assetType: "sound"` bir varlık olarak
+   eklenir.
+3. `events.json`'da o olayın `clips` dizisi yeni id'lerle değiştirilir.
+
+`tsc` çalıştırmak gerekmez; `RtsApp.ts` açılmaz. Faz 0/1'in tüm amacı buydu.
+
+Doğrulama: `npm run test:engine -- --filter "RTS audio"`. Üç kontrol bu adımları
+kolluyor — tablonun adlandırdığı her klibin gerçekten manifest'te bir `sound`
+varlığı olması, her kanalın kendi bus'ına gitmesi, ve bir olayın **üretilmiş ile
+placeholder klibi karıştırmaması**. Sonuncusu tam da bu geçiş dönemi için var:
+tablo klibi tetikleme başına rastgele seçtiği için yarı-değiştirilmiş bir varyant
+seti üç kere gerçek kılıcı, dördüncüde stok gümbürtüyü çalar — ki bu kulakta
+"üretim yarım" değil "mix bozuk" diye okunur. Sayımın kendisi teste bağlanmadı:
+o sayı Faz 2 ilerledikçe sıfıra iner, ve onu pinleyen bir test her teslimatta
+kırmızıya düşerdi.
 
 ---
 

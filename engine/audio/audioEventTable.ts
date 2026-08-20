@@ -28,9 +28,12 @@
  */
 
 import {
+  AUDIO_BUS_IDS,
   DEFAULT_AUDIO_BUS,
   isAudioBusId,
+  normalizeBusVolume,
   type AudioBusId,
+  type BusMixSnapshot,
 } from "./audioBus";
 import type { AudioPlaybackHandle, AudioPlayOptions, AudioVec3 } from "./audioSubsystem";
 
@@ -85,6 +88,19 @@ export interface AudioEventDefinition {
 /** The parsed `events.json`. */
 export interface AudioEventTable {
   readonly schema: typeof AUDIO_EVENT_TABLE_SCHEMA;
+  /**
+   * Starting gain per mix bus — the game's priority order, stated once.
+   *
+   * This is the layer the design's mix hierarchy belongs on. Without it the
+   * hierarchy has to be re-expressed in every event's `volume`, which means a
+   * continuous bed and a one-shot click are compared by hand, over and over,
+   * and the ordering exists only as an average of the numbers nobody can see at
+   * the same time. On the bus it is one table: an event's `volume` then means
+   * "loud *for its channel*", which is the only thing an author can judge.
+   *
+   * Buses absent here keep unity gain.
+   */
+  readonly buses: BusMixSnapshot;
   readonly events: Readonly<Record<string, AudioEventDefinition>>;
 }
 
@@ -109,6 +125,7 @@ const DEFAULTS = {
 /** An empty table — the shape the runtime falls back to when loading fails. */
 export const EMPTY_AUDIO_EVENT_TABLE: AudioEventTable = {
   schema: AUDIO_EVENT_TABLE_SCHEMA,
+  buses: {},
   events: {},
 };
 
@@ -201,6 +218,27 @@ export function normalizeAudioEventTable(value: unknown): AudioEventTable {
   if (input.schema !== AUDIO_EVENT_TABLE_SCHEMA) {
     throw new Error(`Audio event table schema must be ${AUDIO_EVENT_TABLE_SCHEMA}`);
   }
+  const buses: BusMixSnapshot = {};
+  if (input.buses !== undefined) {
+    if (!input.buses || typeof input.buses !== "object" || Array.isArray(input.buses)) {
+      throw new Error("Audio event table `buses` must be an object");
+    }
+    const busesRaw = input.buses as Record<string, unknown>;
+    for (const key of Object.keys(busesRaw)) {
+      // Named rather than ignored: a typo here is silent by nature — the bus
+      // keeps unity gain and the mix is simply wrong, with nothing to say why.
+      if (!isAudioBusId(key)) throw new Error(`buses."${key}" is not a valid audio bus id`);
+    }
+    for (const id of AUDIO_BUS_IDS) {
+      const raw = busesRaw[id];
+      if (raw === undefined) continue;
+      if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0 || raw > 4) {
+        throw new Error(`buses.${id} must be a number within [0, 4]`);
+      }
+      buses[id] = normalizeBusVolume(raw);
+    }
+  }
+
   const eventsRaw = input.events;
   if (!eventsRaw || typeof eventsRaw !== "object" || Array.isArray(eventsRaw)) {
     throw new Error("Audio event table `events` must be an object");
@@ -214,7 +252,7 @@ export function normalizeAudioEventTable(value: unknown): AudioEventTable {
     }
     events[eventId] = normalizeAudioEventDefinition(definition, `events.${eventId}`);
   }
-  return { schema: AUDIO_EVENT_TABLE_SCHEMA, events };
+  return { schema: AUDIO_EVENT_TABLE_SCHEMA, buses, events };
 }
 
 /** Every clip id any event names — for warming, and for coverage checks. */

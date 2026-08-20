@@ -57,5 +57,14 @@
   "match.setup.difficulty.normal.label": "Normal",
   "match.setup.difficulty.normal.hint": "Adil temel: bonussuz ekonomi, ölçülü tepki süresi. Dengenin ayarlandığı rakip budur.",
   "match.setup.difficulty.hard.label": "Zor",
-  "match.setup.difficulty.hard.hint": "Rakip neredeyse anında tepki verir ve küçük bir ekonomi avantajı alır. Hile değil, tempo: gördüğünü senin gördüğün kadar görür."
+  "match.setup.difficulty.hard.hint": "Rakip neredeyse anında tepki verir ve küçük bir ekonomi avantajı alır. Hile değil, tempo: gördüğünü senin gördüğün kadar görür.",
+  "match.settings.audio.master.label": "Ana ses",
+  "match.settings.audio.master.hint": "Oyundaki bütün sesler.",
+  "match.settings.audio.music.label": "Müzik",
+  "match.settings.audio.music.hint": "Maçın arka planındaki parça.",
+  "match.settings.audio.sfx.label": "Efektler",
+  "match.settings.audio.sfx.hint": "Savaş, iş ve dünya sesleri.",
+  "match.settings.audio.ambience.label": "Ortam",
+  "match.settings.audio.ambience.hint": "Haritanın arka plan dokusu.",
+  "match.settings.audio.value": "{value, number, percent}"
 }

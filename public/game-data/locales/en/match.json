@@ -57,5 +57,14 @@
   "match.setup.difficulty.normal.label": "Normal",
   "match.setup.difficulty.normal.hint": "The fair baseline: no economy bonus, a measured reaction time. This is the opponent the balance is tuned against.",
   "match.setup.difficulty.hard.label": "Hard",
-  "match.setup.difficulty.hard.hint": "The opponent reacts almost instantly and takes a small economy advantage. Not cheating but tempo: it sees exactly as much as you do."
+  "match.setup.difficulty.hard.hint": "The opponent reacts almost instantly and takes a small economy advantage. Not cheating but tempo: it sees exactly as much as you do.",
+  "match.settings.audio.master.label": "Master volume",
+  "match.settings.audio.master.hint": "Every sound in the game.",
+  "match.settings.audio.music.label": "Music",
+  "match.settings.audio.music.hint": "The score behind the match.",
+  "match.settings.audio.sfx.label": "Effects",
+  "match.settings.audio.sfx.hint": "Combat, work and the world.",
+  "match.settings.audio.ambience.label": "Ambience",
+  "match.settings.audio.ambience.hint": "The map's background bed.",
+  "match.settings.audio.value": "{value, number, percent}"
 }

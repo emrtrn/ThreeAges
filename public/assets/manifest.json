@@ -29697,6 +29697,294 @@
         "bytes": 1515588
       },
       "license": "Unknown"
+    },
+    {
+      "id": "sfx-ui-click-01",
+      "name": "UI Click",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/ui/sfx_ui_click_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ui"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 5177
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local demo audio; audio plan Faz 1"
+    },
+    {
+      "id": "sfx-ui-back-01",
+      "name": "UI Back",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/ui/sfx_ui_back_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ui"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6356
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local demo audio; audio plan Faz 1"
+    },
+    {
+      "id": "sfx-ui-toggle-01",
+      "name": "UI Toggle",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/ui/sfx_ui_toggle_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ui"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 5919
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local demo audio; audio plan Faz 1"
+    },
+    {
+      "id": "sfx-ui-error-01",
+      "name": "UI Error",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/ui/sfx_ui_error_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ui"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 8383
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local demo audio; audio plan Faz 1"
+    },
+    {
+      "id": "sfx-notify-info-01",
+      "name": "Notification Info",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/notifications/sfx_notify_info_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "notifications"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 9639
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local demo audio; audio plan Faz 1"
+    },
+    {
+      "id": "sfx-notify-warning-01",
+      "name": "Notification Warning",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/notifications/sfx_notify_warning_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "notifications"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 10408
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local demo audio; audio plan Faz 1"
+    },
+    {
+      "id": "sfx-building-place-01",
+      "name": "Building Place",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_place_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 9922
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local demo audio; audio plan Faz 1"
+    },
+    {
+      "id": "sfx-building-complete-01",
+      "name": "Building Complete",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_complete_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 16264
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local demo audio; audio plan Faz 1"
+    },
+    {
+      "id": "sfx-building-cancel-01",
+      "name": "Building Cancel",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_cancel_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 9958
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local demo audio; audio plan Faz 1"
     }
   ]
 }
