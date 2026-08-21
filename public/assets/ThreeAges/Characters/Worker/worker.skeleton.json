@@ -146,16 +146,6 @@
       "name": "chop-impact",
       "clip": "TreeChopping_Loop",
       "time": 0.3
-    },
-    {
-      "name": "dig-impact",
-      "clip": "Farming_dig_and_plant_seeds",
-      "time": 1.433
-    },
-    {
-      "name": "dig-impact",
-      "clip": "Farming_dig_and_plant_seeds",
-      "time": 2.933
     }
   ],
   "montages": [

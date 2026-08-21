@@ -29985,6 +29985,422 @@
         "packVersion": "0.1"
       },
       "license": "Project-local demo audio; audio plan Faz 1"
+    },
+    {
+      "id": "sfx-building-build-loop-01",
+      "name": "Building Build Loop",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_build_loop_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 80436
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-footstep-dirt-02",
+      "name": "Sfx Unit Footstep Dirt 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_dirt_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 17541
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
+    },
+    {
+      "id": "sfx-unit-footstep-dirt-04",
+      "name": "Sfx Unit Footstep Dirt 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_dirt_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 16887
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
+    },
+    {
+      "id": "sfx-unit-footstep-dirt-01",
+      "name": "Sfx Unit Footstep Dirt 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_dirt_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 17709
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
+    },
+    {
+      "id": "sfx-unit-footstep-dirt-03",
+      "name": "Sfx Unit Footstep Dirt 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_dirt_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 17296
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
+    },
+    {
+      "id": "sfx-unit-axe-chop-01",
+      "name": "Sfx Unit Axe Chop 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_axe_chop_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 18604
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
+    },
+    {
+      "id": "sfx-unit-axe-chop-02",
+      "name": "Sfx Unit Axe Chop 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_axe_chop_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 16457
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
+    },
+    {
+      "id": "sfx-unit-axe-chop-03",
+      "name": "Sfx Unit Axe Chop 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_axe_chop_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 18314
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
+    },
+    {
+      "id": "sfx-unit-axe-chop-04",
+      "name": "Sfx Unit Axe Chop 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_axe_chop_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 18693
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
+    },
+    {
+      "id": "sfx-unit-pickaxe-stone-01",
+      "name": "Sfx Unit Pickaxe Stone 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_pickaxe_stone_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 22598
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
+    },
+    {
+      "id": "sfx-unit-pickaxe-stone-02",
+      "name": "Sfx Unit Pickaxe Stone 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_pickaxe_stone_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 20168
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
+    },
+    {
+      "id": "sfx-unit-pickaxe-stone-03",
+      "name": "Sfx Unit Pickaxe Stone 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_pickaxe_stone_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 21635
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
+    },
+    {
+      "id": "sfx-unit-pickaxe-stone-04",
+      "name": "Sfx Unit Pickaxe Stone 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_pickaxe_stone_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 20414
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      }
     }
   ]
 }

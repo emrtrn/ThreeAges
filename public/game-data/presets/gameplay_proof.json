@@ -11,10 +11,10 @@
     "gold": 200
   },
   "startingUnits": {
-    "guard": 3,
+    "guard": 0,
     "worker": 8,
-    "siege": 2,
-    "archer": 2
+    "siege": 0,
+    "archer": 0
   },
   "enemyStartingResources": {
     "food": 500,
@@ -23,10 +23,10 @@
     "gold": 200
   },
   "enemyStartingUnits": {
-    "guard": 3,
+    "guard": 0,
     "worker": 8,
-    "archer": 2,
-    "siege": 2
+    "archer": 0,
+    "siege": 0
   },
   "gameSpeed": 1,
   "mapState": "two_flanks_blockout",

@@ -409,6 +409,29 @@ export class WorkerConstructionSystem {
     return this.assignmentCount(structure);
   }
 
+  /**
+   * Builders standing at this site and working, as opposed to still walking to
+   * it — the distinction {@link assignedWorkers} deliberately does not make.
+   *
+   * The panel above wants "how many workers is this foundation costing me",
+   * which is every assignment. The build-loop audio wants the narrower thing:
+   * whether hammering is actually happening here right now. A site whose crew is
+   * still crossing the map is staffed and silent, and it is `update`'s
+   * `activeBuilders` census — the same `"building"` state that advances the
+   * progress bar — that separates the two.
+   */
+  activeBuilders(structure: PlacedStructure): number {
+    // Walked rather than filtered, unlike its neighbours here: those answer a
+    // panel that opens on a click, this one is asked every rendered frame, and
+    // the copy of the assignment map they each make would be a per-frame
+    // allocation for a number.
+    let count = 0;
+    for (const assignment of this.assignments.values()) {
+      if (assignment.structure === structure && assignment.state === "building") count += 1;
+    }
+    return count;
+  }
+
   /** Remaining distinct approach positions on an unfinished foundation. */
   availableWorkerSlots(structure: PlacedStructure): number {
     return structure.construction.complete

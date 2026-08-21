@@ -14,43 +14,44 @@
   },
   "events": {
     "unit.footstep": {
-      "clips": ["starter-snd-footstep-stone"],
+      "clips": [
+        "sfx-unit-footstep-dirt-01",
+        "sfx-unit-footstep-dirt-02",
+        "sfx-unit-footstep-dirt-03",
+        "sfx-unit-footstep-dirt-04"
+      ],
       "bus": "sfx",
-      "volume": 0.28,
+      "volume": 0.1,
       "pitchVariation": 0.08,
       "cooldownMs": 45,
-      "maxInstances": 6,
+      "maxInstances": 4,
       "spatial": true,
-      "refDistance": 6,
-      "maxDistance": 38,
-      "rolloff": 1.4
+      "refDistance": 30,
+      "maxDistance": 90,
+      "rolloff": 10
     },
     "unit.chop_impact": {
-      "clips": ["starter-snd-impact-light"],
+      "clips": [
+        "sfx-unit-axe-chop-01",
+        "sfx-unit-axe-chop-02",
+        "sfx-unit-axe-chop-03",
+        "sfx-unit-axe-chop-04"
+      ],
       "bus": "sfx",
-      "volume": 0.45,
+      "volume": 0.1,
       "pitchVariation": 0.06,
       "cooldownMs": 70,
       "maxInstances": 4,
       "spatial": true,
-      "refDistance": 8,
-      "maxDistance": 50,
-      "rolloff": 1.2
-    },
-    "unit.dig_impact": {
-      "clips": ["starter-snd-impact-light"],
-      "bus": "sfx",
-      "volume": 0.38,
-      "pitchVariation": 0.06,
-      "cooldownMs": 70,
-      "maxInstances": 4,
-      "spatial": true,
-      "refDistance": 8,
-      "maxDistance": 50,
-      "rolloff": 1.2
+      "refDistance": 30,
+      "maxDistance": 90,
+      "rolloff": 10
     },
     "combat.sword_swing": {
-      "clips": ["starter-snd-light-01", "starter-snd-light-02"],
+      "clips": [
+        "starter-snd-light-01",
+        "starter-snd-light-02"
+      ],
       "bus": "sfx",
       "volume": 0.4,
       "pitchVariation": 0.05,
@@ -62,7 +63,9 @@
       "rolloff": 1.1
     },
     "combat.arrow_release": {
-      "clips": ["starter-snd-ui-click"],
+      "clips": [
+        "starter-snd-ui-click"
+      ],
       "bus": "sfx",
       "volume": 0.35,
       "pitchVariation": 0.04,
@@ -74,7 +77,9 @@
       "rolloff": 1.1
     },
     "combat.body_impact": {
-      "clips": ["starter-snd-impact-light"],
+      "clips": [
+        "starter-snd-impact-light"
+      ],
       "bus": "sfx",
       "volume": 0.5,
       "pitchVariation": 0.05,
@@ -86,7 +91,10 @@
       "rolloff": 1.1
     },
     "siege.wreck_blast": {
-      "clips": ["starter-snd-explosion-01", "starter-snd-explosion-02"],
+      "clips": [
+        "starter-snd-explosion-01",
+        "starter-snd-explosion-02"
+      ],
       "bus": "sfx",
       "volume": 0.7,
       "pitchVariation": 0.03,
@@ -98,7 +106,9 @@
       "rolloff": 0.7
     },
     "siege.cannon_fire": {
-      "clips": ["starter-snd-explosion-02"],
+      "clips": [
+        "starter-snd-explosion-02"
+      ],
       "bus": "sfx",
       "volume": 0.55,
       "pitchVariation": 0.04,
@@ -110,7 +120,9 @@
       "rolloff": 0.8
     },
     "structure.impact": {
-      "clips": ["starter-snd-impact-light"],
+      "clips": [
+        "starter-snd-impact-light"
+      ],
       "bus": "sfx",
       "volume": 0.45,
       "pitchVariation": 0.07,
@@ -122,7 +134,10 @@
       "rolloff": 1
     },
     "structure.collapse": {
-      "clips": ["starter-snd-collapse-01", "starter-snd-collapse-02"],
+      "clips": [
+        "starter-snd-collapse-01",
+        "starter-snd-collapse-02"
+      ],
       "bus": "sfx",
       "volume": 0.7,
       "pitchVariation": 0.04,
@@ -134,7 +149,9 @@
       "rolloff": 0.8
     },
     "building.complete": {
-      "clips": ["sfx-building-complete-01"],
+      "clips": [
+        "sfx-building-complete-01"
+      ],
       "bus": "sfx",
       "volume": 0.5,
       "cooldownMs": 200,
@@ -145,21 +162,42 @@
       "rolloff": 0.9
     },
     "building.place": {
-      "clips": ["sfx-building-place-01"],
+      "clips": [
+        "sfx-building-place-01"
+      ],
       "bus": "ui",
       "volume": 0.45,
       "cooldownMs": 120,
       "maxInstances": 2
     },
+    "building.build_loop": {
+      "_note": "The only spatial loop in the table, and the only event whose start and stop are decided by a tick rather than by a moment. `maxInstances: 1` is not a mix budget here - the director's `stop()` is keyed by event id, so one instance is what makes the loop stoppable at all when the site it belongs to finishes. Quieter than `building.complete` on purpose: it plays continuously under everything else, and the completion has to land over it. The cooldown is churn protection for the hand-off between two sites, not a repeat rule.",
+      "clips": [
+        "sfx-building-build-loop-01"
+      ],
+      "bus": "sfx",
+      "volume": 0.32,
+      "loop": true,
+      "cooldownMs": 400,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 12,
+      "maxDistance": 80,
+      "rolloff": 1
+    },
     "building.cancel": {
-      "clips": ["sfx-building-cancel-01"],
+      "clips": [
+        "sfx-building-cancel-01"
+      ],
       "bus": "ui",
       "volume": 0.42,
       "cooldownMs": 150,
       "maxInstances": 2
     },
     "ui.click": {
-      "clips": ["sfx-ui-click-01"],
+      "clips": [
+        "sfx-ui-click-01"
+      ],
       "bus": "ui",
       "volume": 0.35,
       "pitchVariation": 0.03,
@@ -167,7 +205,9 @@
       "maxInstances": 3
     },
     "ui.select": {
-      "clips": ["sfx-ui-toggle-01"],
+      "clips": [
+        "sfx-ui-toggle-01"
+      ],
       "bus": "ui",
       "volume": 0.3,
       "pitchVariation": 0.03,
@@ -175,7 +215,9 @@
       "maxInstances": 2
     },
     "ui.command": {
-      "clips": ["sfx-ui-click-01"],
+      "clips": [
+        "sfx-ui-click-01"
+      ],
       "bus": "ui",
       "volume": 0.32,
       "pitchVariation": 0.04,
@@ -183,42 +225,54 @@
       "maxInstances": 3
     },
     "ui.cancel": {
-      "clips": ["sfx-ui-back-01"],
+      "clips": [
+        "sfx-ui-back-01"
+      ],
       "bus": "ui",
       "volume": 0.32,
       "cooldownMs": 120,
       "maxInstances": 2
     },
     "ui.error": {
-      "clips": ["sfx-ui-error-01"],
+      "clips": [
+        "sfx-ui-error-01"
+      ],
       "bus": "ui",
       "volume": 0.4,
       "cooldownMs": 200,
       "maxInstances": 2
     },
     "world.ambience": {
-      "clips": ["starter-snd-birds-01"],
+      "clips": [
+        "starter-snd-birds-01"
+      ],
       "bus": "ambience",
       "volume": 0.45,
       "loop": true,
       "maxInstances": 1
     },
     "music.settlement": {
-      "clips": ["starter-snd-music-01"],
+      "clips": [
+        "starter-snd-music-01"
+      ],
       "bus": "music",
       "volume": 0.5,
       "loop": true,
       "maxInstances": 1
     },
     "notify.info": {
-      "clips": ["sfx-notify-info-01"],
+      "clips": [
+        "sfx-notify-info-01"
+      ],
       "bus": "notifications",
       "volume": 0.4,
       "cooldownMs": 250,
       "maxInstances": 2
     },
     "notify.warning": {
-      "clips": ["sfx-notify-warning-01"],
+      "clips": [
+        "sfx-notify-warning-01"
+      ],
       "bus": "notifications",
       "volume": 0.5,
       "cooldownMs": 400,
@@ -226,7 +280,9 @@
     },
     "notify.alert": {
       "_note": "Not a collapse sample. The collapse clips belong to structure.collapse alone - an alarm that borrowed one made the game sound like a building was falling whenever anything went wrong, including on the first poll of a fresh match. Placeholder until sfx_notify_alert_01.",
-      "clips": ["starter-snd-door-open"],
+      "clips": [
+        "starter-snd-door-open"
+      ],
       "bus": "notifications",
       "volume": 0.6,
       "cooldownMs": 600,
@@ -234,21 +290,27 @@
     },
     "stinger.age_up": {
       "_note": "Three times the volume of the other two stingers, measured rather than guessed. This one plays in the same frame as its own notification card, whose blip sits on the notifications bus at full gain; victory and defeat play into silence. At 0.17 effective it was inaudible, at 0.63 it was unmistakable, so it sits between. Nothing about the bus is being fought here: `volume` means loud-for-its-channel, the music bus is authored for a bed, and a one-shot that has to clear a notice on the priority bus is simply a different job than the bed is.",
-      "clips": ["starter-snd-fire-sparks-01"],
+      "clips": [
+        "starter-snd-fire-sparks-01"
+      ],
       "bus": "music",
       "volume": 3,
       "cooldownMs": 1500,
       "maxInstances": 1
     },
     "stinger.victory": {
-      "clips": ["starter-snd-smoke-01"],
+      "clips": [
+        "starter-snd-smoke-01"
+      ],
       "bus": "music",
       "volume": 3.5,
       "cooldownMs": 2000,
       "maxInstances": 1
     },
     "stinger.defeat": {
-      "clips": ["starter-snd-steam-01"],
+      "clips": [
+        "starter-snd-steam-01"
+      ],
       "bus": "music",
       "volume": 3.5,
       "cooldownMs": 2000,

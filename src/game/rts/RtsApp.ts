@@ -444,6 +444,16 @@ const SCENE_BACKGROUND = "#20262b";
  * carries in the Settlement age and the gun it is handed on reaching Town fire
  * from the same parapet, and two numbers here would read as two towers.
  */
+/**
+ * How long the construction bed takes to fade out when its site is finished,
+ * razed or abandoned.
+ *
+ * Short enough to be part of the same moment as the building completing, long
+ * enough that the loop does not click off mid-cycle. A one-shot would not need
+ * this; a continuous sound cut on a frame boundary is audible as a fault.
+ */
+const BUILD_LOOP_FADE_SECONDS = 0.35;
+
 const TOWER_MUZZLE_HEIGHT = 3.2;
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
 const PLACEHOLDER_WORKER_ID = "worker_placeholder";
@@ -2594,6 +2604,7 @@ export class RtsApp {
     // context out from under, and stopping a play through a closed context is
     // the one order that throws.
     this.audioEvents.reset();
+    this.buildLoopSite = null;
     this.audioSubsystem.dispose();
     this.hudBar.dispose();
     this.notificationFeed.dispose();
@@ -2928,6 +2939,10 @@ export class RtsApp {
       }
       this.perfMeasure("simülasyon", simulationMark);
     }
+    // After the simulation, not inside it: the loop is started and stopped once
+    // per *rendered* frame, so the speed picker cannot make the bed restart four
+    // times as often as it does at normal speed.
+    this.updateBuildLoopAudio();
     if (this.debugWitness) {
       // Measured like everything else, because on this route it is a real cost:
       // the hidden readout rebuilds a line per unit per frame, and a panel that
@@ -4229,6 +4244,104 @@ export class RtsApp {
    * than the roof: the attenuation curves here span tens of units and a couple
    * of metres of elevation buys nothing but a reason to look up a bounding box.
    */
+  /**
+   * The one foundation whose hammering is currently being heard, or null.
+   *
+   * A reference rather than an id because every test this makes — is it still
+   * standing, still unfinished, still crewed — is asked of the structure itself,
+   * and `structures.all()` is the list that says whether it still exists at all.
+   * Cleared wherever the director is reset, since the handle it is tracking dies
+   * with it.
+   */
+  private buildLoopSite: PlacedStructure | null = null;
+
+  /**
+   * Start, move or stop the construction bed — the audio half of "something is
+   * being built over there".
+   *
+   * One loop for the whole map, at one site, and that is the design rather than
+   * a shortcut. A hammer per foundation would be four copies of one clip beating
+   * out of phase during any normal build-up, which is a wash rather than four
+   * readable sites; and the director's `stop()` is keyed by event id, so a
+   * second instance would be one nothing could turn off individually anyway.
+   *
+   * The site is held until it stops qualifying — finished, razed, or abandoned
+   * by its crew — and only then is a new one chosen. That hysteresis is what
+   * keeps the bed from hopping between two equidistant sites every frame as the
+   * camera drifts; without it the "nearest site" rule alone would restart the
+   * clip continuously. Proximity only decides which site inherits the bed once
+   * it is genuinely free.
+   *
+   * Note the gate on the crew, not on the foundation: a site whose builders are
+   * still walking to it is silent, so the sound starts when the work does rather
+   * than when the order is given — the placement chirp already covers that
+   * moment.
+   */
+  private updateBuildLoopAudio(): void {
+    const site = this.buildLoopAudioSite();
+    // The overwhelmingly common case, both when a build is running and when none
+    // is: nothing changed, so the loop is left exactly as it is. Re-triggering a
+    // playing bed is what turns a loop into a stutter.
+    if (site === this.buildLoopSite) return;
+    // A fade rather than a cut: this is a continuous sound, and a hard stop on
+    // the frame a building finishes reads as a dropout under the completion
+    // chime that plays in the same breath.
+    this.audioEvents.stop(RTS_AUDIO.buildingBuildLoop, BUILD_LOOP_FADE_SECONDS);
+    this.buildLoopSite = null;
+    if (!site) return;
+    const y = this.groundSurface.heightAt(site.x, site.z);
+    const result = this.audioEvents.trigger(RTS_AUDIO.buildingBuildLoop, this.audioClock, {
+      position: [site.x, y, site.z],
+      distance: this.cameraController.camera.position.distanceTo(
+        this.scratchStructureAudio.set(site.x, y, site.z),
+      ),
+    });
+    // Claimed only once the loop is actually sounding. A trigger the director
+    // refused — the hand-off cooldown, or a site outside the event's range —
+    // leaves the site unclaimed, so the next frame simply asks again; recording
+    // it here instead would leave a bed that is tracked but silent, and nothing
+    // would ever retry it.
+    if (result === "played") this.buildLoopSite = site;
+  }
+
+  /** The site the construction bed belongs to this frame, incumbent first. */
+  private buildLoopAudioSite(): PlacedStructure | null {
+    // A paused match is not a quiet one: the hammering would carry on over a
+    // frozen field. The beds proper (ambience, music) deliberately do keep
+    // playing — they describe the place, not the work.
+    if (!this.match.active || !this.flow.running) return null;
+    const current = this.buildLoopSite;
+    if (current && this.structures.all().includes(current) && this.isBuildLoopSite(current)) {
+      return current;
+    }
+    let nearest: PlacedStructure | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    const camera = this.cameraController.camera.position;
+    for (const structure of this.structures.all()) {
+      if (!this.isBuildLoopSite(structure)) continue;
+      const distance = camera.distanceTo(
+        this.scratchStructureAudio.set(structure.x, structure.groundY, structure.z),
+      );
+      if (distance >= nearestDistance) continue;
+      nearestDistance = distance;
+      nearest = structure;
+    }
+    return nearest;
+  }
+
+  /**
+   * Whether this building is somewhere the player could hear work happening.
+   *
+   * Ordered cheapest-first because it runs over every structure on the map on
+   * any frame without an incumbent site: the owner and completion tests throw
+   * away all but a handful of foundations before the crew census is asked for.
+   */
+  private isBuildLoopSite(structure: PlacedStructure): boolean {
+    if (structure.owner !== PLAYER_OWNER || structure.construction.complete) return false;
+    if (!this.worldAudioAudible(structure.x, structure.z)) return false;
+    return this.workerConstruction.activeBuilders(structure) > 0;
+  }
+
   private playStructureAudio(structure: PlacedStructure, eventId: string): void {
     if (!this.worldAudioAudible(structure.x, structure.z)) return;
     const y = this.groundSurface.heightAt(structure.x, structure.z);
@@ -6086,6 +6199,11 @@ export class RtsApp {
     // happened. The beds go with it and are started again immediately, because
     // nothing else on this path calls `beginMatch`.
     this.audioEvents.reset();
+    // The construction bed is not restarted here the way the two permanent beds are: it
+    // has no site yet, and the next frame's tick will find one if the new match
+    // has one. What must not survive the reset is the *claim* — a site from the
+    // last match would suppress the first build of this one.
+    this.buildLoopSite = null;
     this.startAudioBeds();
     this.notificationFeed.setNotifications([]);
     this.previousLogisticsStatus.clear();

@@ -32,12 +32,11 @@ import type { RtsNotificationSeverity } from "../ui/rtsNotifications";
  * for the renderer alone.
  */
 export const RTS_NOTIFY_AUDIO_EVENTS: Readonly<Record<string, string>> = {
-  // The five that were authored for audio and nothing else — see
+  // The four that were authored for audio and nothing else — see
   // `RTS_NOTIFY_AUDIO_ONLY`. Every one of them must appear here, or it is a
   // marker on a clip that no longer has any consumer at all.
   footstep: "unit.footstep",
   "chop-impact": "unit.chop_impact",
-  "dig-impact": "unit.dig_impact",
   "sword-swing": "combat.sword_swing",
   "arrow-release": "combat.arrow_release",
   // Drawn *and* heard: a blow landing is the readable half of a fight, and a gun
@@ -110,6 +109,23 @@ export const RTS_AUDIO = {
   buildingPlace: "building.place",
   /** A foundation withdrawn — the opposite of `buildingPlace`, and it should sound it. */
   buildingCancel: "building.cancel",
+  /**
+   * The hammering at a foundation actually being worked — §17's construction
+   * loop, and the third of the three sounds that make a build read by ear
+   * (placed, being built, done).
+   *
+   * A loop rather than a per-blow one-shot, and that is a decision about the
+   * asset rather than about the code: the workers have no hammer clip, so there
+   * is no notify to hang an impact on (see `workerConstructionSystem`'s note on
+   * why the builder stands in his idle). A bed at the site says "work is
+   * happening here" without claiming a swing that nothing is animating.
+   *
+   * Exactly one plays at a time, over the single site described in
+   * `RtsApp.updateBuildLoopAudio`. Four foundations do not make four hammers:
+   * they are the same sound at four places, and layering them only turns a
+   * readable rhythm into a wash.
+   */
+  buildingBuildLoop: "building.build_loop",
   // World: buildings have no animation notifies, so these are their equivalent.
   buildingComplete: "building.complete",
   structureImpact: "structure.impact",

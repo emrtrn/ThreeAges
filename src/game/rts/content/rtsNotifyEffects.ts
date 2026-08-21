@@ -67,12 +67,20 @@ export interface RtsNotifyEffectBinding {
  * - `sword-swing`, `arrow-release` and `throw-release`'s neighbours never had
  *   one: a grounded medieval swing has no particle to it, and inventing a glow
  *   to prove the line works would be art nobody asked for.
- * - `footstep`, `dig-impact` and `chop-impact` *were* drawn and were removed on
- *   2026-08-18, on the user's call after looking at the running match. At the
- *   RTS camera's working distance the dust (8 sprites, half opacity, dust-beige
- *   on dirt) could not be made out at all, and the axe debris was not worth the
- *   channel it cost. A burst nobody can see is not a subtle effect, it is a
- *   frame cost with no reader — so the binding went and the marker stayed.
+ * - `footstep` and `chop-impact` *were* drawn and were removed on 2026-08-18, on
+ *   the user's call after looking at the running match. At the RTS camera's
+ *   working distance the dust (8 sprites, half opacity, dust-beige on dirt)
+ *   could not be made out at all, and the axe debris was not worth the channel
+ *   it cost. A burst nobody can see is not a subtle effect, it is a frame cost
+ *   with no reader — so the binding went and the marker stayed.
+ *
+ * `dig-impact` used to be here too and is gone entirely: it was authored on
+ * `Farming_dig_and_plant_seeds` alone, so the only place the pickaxe-on-stone
+ * clip ever played was the farm, next to seeding and harvesting. The quarry and
+ * the gold mine — the two buildings a player expects that sound from — never
+ * reached it: `mining` claims no clip of its own and rides the shared kneel,
+ * which marks nothing. Removed 2026-08-21 on the user's call rather than moved,
+ * because the Worker rig has no pickaxe swing to move it to.
  *
  * Membership here is asserted, not just documented: it is what separates "this
  * name is waiting for audio" from "somebody mistyped a name", which is the one
@@ -81,7 +89,6 @@ export interface RtsNotifyEffectBinding {
 export const RTS_NOTIFY_AUDIO_ONLY: ReadonlySet<string> = new Set([
   "footstep",
   "chop-impact",
-  "dig-impact",
   "sword-swing",
   "arrow-release",
 ]);

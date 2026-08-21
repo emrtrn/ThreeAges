@@ -153,6 +153,7 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-20 | Zafer stinger'ı da duyulmuyordu; gerekçem ("sessizliğe çalıyor, fazlasına gerek yok") yarı yanlıştı. Yenilgi üç saniyelik bir vanaydı ve duyuldu, zafer 0.16 saniyelik bir bipti ve duyulmadı: **süre de okunabilirliğin parçası**, kazanç kadar. İkisi 0.63'e, zaferin klibi uzun olanla değişti. Yol boyunca bir hata: açıklama notu `events` bloğunun içine yazıldı — olay id'leri `_` ile başlayamaz, tablo yüklenirken patlıyordu ve oyunda tek ses kalmazdı; test yakaladı. |
 | 2026-08-20 | **Editöre "Veri → Ses Olayları" tablosu eklendi.** Yeni endpoint, yeni validator, yeni şema yok: `/__save-gamedata` zaten `game-data/**.json` kapsıyordu ve jenerik Data Table editörü `assetOptions` ile varlık seçicisini zaten biliyordu — iş, `editorCatalog.ts`'e bir tanım kaydetmekten ibaret kaldı. Kaydetme runtime'ın kendi normalizer'ıyla doğrulanıyor. Yeni test: `clips` bir `sound` seçicisi olmak zorunda, ve şemanın her alanının editör metadata'sı olmak zorunda (yoksa şemaya eklenen alan formda etiketsiz ham bir kutu olarak belirir). |
 | 2026-08-20 | `npm run audio:manifest` yazıldı (`tools/sync-audio-manifest.mjs`): üretilen klipleri klasörden okuyup manifest kaydını üretiyor. Ayrı bir klip tablosu **bilinçli olarak** yapılmadı — §6/§7 zaten o tablo, araya bir üçüncüsü girseydi senkron tutulacak fazladan bir yer olurdu. Betik ayrıca §6'nın harf durumu kuralını, id çakışmasını, dosyası silinmiş kaydı ve `events.json`'ın karşılıksız kliplerini kolluyor. Mevcut dokuz kayıt üzerinde dosyayı bayt bayt aynı üretmesi, hiçbir şeyi bozmadığının kanıtı. |
+| 2026-08-21 | **İnşaat sesi açıldı** (§17'nin `SFX-BLD-003/004` maddesi, kod tarafı). `building.build_loop`: yapı kurulurken şantiyede çalan konumlu bir döngü. Üç karar yazıldı: (1) döngü, tek tek çekiç darbeleri değil — İşçi paketinde çekiç klibi yok, yani darbeyi asacak bir notify de yok; (2) haritada aynı anda **tek** döngü çalar, ekibi işbaşında olan en yakın şantiyede — dört temel dört çekiç değil bir bulamaç olurdu, üstelik director'ın `stop()`'u olay id'siyle çalıştığı için ikinci bir kopya zaten tek tek durdurulamazdı; (3) kapı ekipte, temelde değil — yolda olan işçi sessiz, ses işle birlikte başlıyor. Şantiye biterse/yıkılırsa döngü 0.35 s'de kısılıyor, bitiş sesi onun üstüne biniyor. Yol boyunca kapatılan boşluk: klip editörden `build-loop` id'siyle içeri alınmıştı — §6'ya uymayan bir ad, ve `audio:manifest`'in dosyadan türettiği id ile ayrışıyordu. Dosya `sfx_building_build_loop_01.ogg` olarak yeniden adlandırıldı, eski kayıt düşürüldü. |
 | 2026-08-20 | §69'un kontrol listesi gerçeğe getirildi: Faz 0/1'de yapılan yedi madde hâlâ boş kutuydu (UI click, yapı yerleştirme/tamamlanma, cooldown, instance limiti, spatial attenuation, event mapping, varyant seçimi). Yanlış bir kontrol listesi listesizlikten kötü. §0'a "bu belgede ne nerede" tabelası eklendi — faz tablosu belgenin en başındaydı ve tam bu yüzden bulunamıyordu. |
 | 2026-08-20 | Çağ atlama stinger'ı **kulakla doğrulandı**. Teşhis yöntemi kayda değer: iki tur "yine denesenize"den sonra soru tahminle değil, olayın klibi geçici olarak duyulmaması imkânsız bir sese (çöküş, etkin 0.63) alınarak kapatıldı — çaldı, yani kanca baştan beri doğruydu ve mesele duyulabilirlikti. Kalıcı yer tutucu 0.54'e ayarlandı (0.17 duyulmuyor, 0.63 duyuluyor; arası). Ayrıca `playStinger` artık sonucunu logluyor: bir stinger maçta en fazla üç kez, oyuncunun baktığı anda çalar — reddi her zaman arızadır ve aksi halde "kod çalıştı, oyun sessiz" ayrımı hiçbir yerde görünmez. |
 | 2026-08-20 | Çağ atlama stinger'ı duyulmuyordu — kanca doğruydu, mix değildi. Aynı anda basılan bildirim kartının bipi `notifications` bus'ında tam kazançta (0.40), stinger ise en sessiz bus'ta 0.17'de: maskeleniyordu. Zafer/yenilgi duyuluyordu çünkü onlar sessizliğe çalıyor. `volume` "kanalı için yüksek" demek, ve en sessiz kanalda bir bildirimi aşmak 1'den fazlasına mal oluyor: 2.2 (etkin 0.40). Placeholder da ayırt edilebilir bir klibe alındı. |
@@ -1005,7 +1006,7 @@ No digital beep, no casino reward sound, no choir, no music.
 | `SFX-WRK-001` | Worker footsteps dirt |
 | `SFX-WRK-002` | Worker hammer |
 | `SFX-WRK-003` | Worker axe chop |
-| `SFX-WRK-004` | Worker pickaxe stone |
+| ~~`SFX-WRK-004`~~ | ~~Worker pickaxe stone~~ — iptal 2026-08-21, bkz. §81.1 |
 | `SFX-WRK-005` | Worker construction generic |
 | `SFX-WRK-006` | Worker death |
 
@@ -2015,7 +2016,7 @@ Paket 1 kabul edildiğinde aşağıdakiler sabitlenmelidir.
 - [ ] footsteps
 - [ ] hammer
 - [ ] axe
-- [ ] pickaxe
+- ~~pickaxe~~ (iptal 2026-08-21, bkz. §81.1)
 - [ ] death
 - [ ] voice
 
@@ -2675,9 +2676,11 @@ sayar.*
 - [ ] Sword hit
 - [ ] Bow release
 - [ ] Arrow impact
-- [ ] Construction hammer — bugün karşılığı olan bir olay yok; inşaat sesi
-      `unit.chop_impact`/`unit.dig_impact` üzerinden geliyor. Üretmeden önce
-      olayın açılması gerekir (kod işi).
+- [x] Construction hammer — olay açıldı: `building.build_loop`
+      (`sfx-building-build-loop-01`). Tek tek darbe değil, şantiyede çalan
+      konumlu bir döngü; gerekçesi ve tek-döngü kuralı `RTS_AUDIO`'nun kendi
+      notunda. §17'nin `SFX-BLD-005` (construction wood movement) maddesi hâlâ
+      açık ve bu döngüye ikinci bir katman olarak eklenebilir.
 - [ ] Frontier ambience
 - [x] Logistics disconnected / restored — **kendi sesleri yok ve olmayacak.**
       Bildirim tier'ı taşıyor: kesinti `notify.alert`, dönüş `notify.info`
@@ -3028,7 +3031,7 @@ yapıldı: **26 olayın 16'sı** hâlâ Forge şablon içeriği çalıyor.
 |---|---|---|---|---:|---|
 | 1 | `unit.footstep` | `starter-snd-footstep-stone` | `sfx/units/sfx_unit_footstep_dirt_NN.ogg` | 4 | §19 `SFX-WRK-001` |
 | 2 | `unit.chop_impact` | `starter-snd-impact-light` | `sfx/units/sfx_unit_axe_chop_NN.ogg` | 3 | §19 `SFX-WRK-003` |
-| 3 | `unit.dig_impact` | `starter-snd-impact-light` | `sfx/units/sfx_unit_pickaxe_stone_NN.ogg` | 3 | §19 `SFX-WRK-004` |
+| 3 | ~~`unit.dig_impact`~~ | — | ~~`sfx/units/sfx_unit_pickaxe_stone_NN.ogg`~~ | 0 | **iptal — aşağıdaki nota bakın** |
 | 4 | `combat.sword_swing` | `starter-snd-light-01/02` | `sfx/combat/sfx_combat_sword_swing_NN.ogg` | 3 | §20 `SFX-GRD-003` |
 | 5 | `combat.arrow_release` | `starter-snd-ui-click` | `sfx/combat/sfx_combat_bow_release_NN.ogg` | 3 | §21 `SFX-ARC-003` |
 | 6 | `combat.body_impact` | `starter-snd-impact-light` | `sfx/combat/sfx_combat_body_impact_NN.ogg` | 4 | §20 `SFX-GRD-004/005` |
@@ -3042,6 +3045,20 @@ yapıldı: **26 olayın 16'sı** hâlâ Forge şablon içeriği çalıyor.
 | 14 | `stinger.age_up` | `starter-snd-fire-sparks-01` | `stingers/stg_age_up_01.ogg` | 1 | §71 (8. sıra) |
 | 15 | `stinger.victory` | `starter-snd-smoke-01` | `stingers/stg_victory_01.ogg` | 1 | §71 (6. sıra) |
 | 16 | `stinger.defeat` | `starter-snd-steam-01` | `stingers/stg_defeat_01.ogg` | 1 | §71 (7. sıra) |
+
+**3. sıra neden iptal edildi** (2026-08-21, kullanıcının kararı). `unit.dig_impact`
+kazma-taşa sesiydi ve taş ocağı ile altın madeninden beklenmişti. Tetikleyicisi
+ise Worker'ın `dig-impact` notify'ıydı ve o notify tek bir klipte authored'dı:
+`Farming_dig_and_plant_seeds`. Yani sesin çalabildiği tek yer **tarlaydı** —
+tohumlama ve hasat animasyonlarının yanında, kazma sesi. Ocak ve maden ise hiç
+ulaşmıyordu: `mining` aktivitesi kendi klibini iddia etmez, paylaşılan
+`Fixing_Kneeling` diz çökmesine biner ve o klip hiçbir temas işaretlemez.
+
+Taşınmadı, silindi. Worker rig'inde 51 klip var ve hiçbiri kazma sallamıyor;
+sesi doğru binaya taşımak için önce animasyon lazım. Klipler
+(`sfx_unit_pickaxe_stone_01–04.ogg`) diskte duruyor ve manifest'te kayıtlı —
+`audio:manifest` bunları "shipped but no event plays it yet" diye raporlar. Bir
+mining/pickaxe animasyonu geldiği gün olay geri açılır ve klipler yerinde olur.
 
 **Placeholder seçerken bir kural** — kulakla bulundu, ucuz değil: *bir yer tutucu,
 o klibi zaten sahiplenen bir kanaldan ödünç alınmaz.* Alarm bildirimi bir süre

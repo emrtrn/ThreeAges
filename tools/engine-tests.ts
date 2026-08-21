@@ -760,6 +760,7 @@ import {
 } from "../engine/audio/audioEventTable";
 import type { AudioEventTable } from "../engine/audio/audioEventTable";
 import {
+  RTS_AUDIO,
   RTS_NOTIFICATION_AUDIO_EVENTS,
   RTS_NOTIFY_AUDIO_EVENTS,
   rtsAudioEventIds,
@@ -4085,6 +4086,17 @@ check("RTS audio events: beds are single and every channel routes to its own bus
       // by camera distance would make the game's reply to a click quieter than
       // a fight the player is not looking at.
       assert.equal(definition.spatial, false, `${eventId} must not be spatial`);
+    }
+    if (eventId === RTS_AUDIO.buildingBuildLoop) {
+      // The construction bed is the one event that is both continuous and
+      // placed, and it needs both halves. Without `loop` it is a single pass
+      // that ends while the foundation is still going up, and the tick that owns
+      // it never re-triggers because it believes the site is already sounding.
+      // Without `spatial` a build on the far side of the map hammers at full
+      // volume in the player's ear, which is the same leak the fog gate exists
+      // to close.
+      assert.equal(definition.loop, true, `${eventId} must loop`);
+      assert.equal(definition.spatial, true, `${eventId} must be positioned at its site`);
     }
     if (eventId.startsWith("stinger.")) {
       // §5.11's stingers are music, and the Music slider is the player's word on
@@ -40530,8 +40542,14 @@ check("Worker Faz 6: her isaret gercek bir klibin icinde ve ait oldugu rolde dur
   for (const clip of impacts) assert.ok(flinches.includes(clip), `body-impact marked on non-flinch clip ${clip}`);
 
   assert.deepEqual(clipsFor("chop-impact"), [worker.animationSet.workChopping], "the axe bite belongs to the lumber loop");
-  const cultivation = [worker.animationSet.workCultivation, ...(worker.animationVariants.workCultivation ?? [])];
-  for (const clip of clipsFor("dig-impact")) assert.ok(cultivation.includes(clip), `dig-impact marked on non-farming clip ${clip}`);
+  // The farm marks nothing. `dig-impact` was authored here and only here, which
+  // made the pickaxe-on-stone clip a *farm* sound played next to seeding and
+  // harvesting, while the quarry and the gold mine it was written for stayed
+  // silent — `mining` claims no clip and rides the shared kneel. Removed
+  // 2026-08-21 rather than moved: the rig has no pickaxe swing to move it to.
+  // Asserted, not just deleted, because re-marking the farming loop is exactly
+  // how the misleading sound comes back.
+  assert.equal(clipsFor("dig-impact").length, 0, "the farming loop marks no tool contact");
   assert.deepEqual(clipsFor("throw-release"), [worker.animationSet.attack], "the release belongs to the throw");
 
   // Every authored name is accounted for by exactly one of three things: an
@@ -40548,11 +40566,11 @@ check("Worker Faz 6: her isaret gercek bir klibin icinde ve ait oldugu rolde dur
       `"${notify.name}" is authored but nothing draws, reads or is waiting on it`,
     );
   }
-  // The Worker's three job/gait contacts are on the audio roster rather than
+  // The Worker's two surviving job/gait contacts are on the audio roster rather than
   // drawn (removed 2026-08-18: invisible at the RTS camera's distance). The
   // measured markers must survive that removal, because remeasuring them is the
   // expensive half and the audio pass still needs them.
-  for (const name of ["footstep", "chop-impact", "dig-impact"]) {
+  for (const name of ["footstep", "chop-impact"]) {
     assert.ok(clipsFor(name).length > 0, `${name} is still authored for the audio pass`);
     assert.equal(RTS_NOTIFY_EFFECTS[name], undefined, `${name} draws nothing`);
     assert.ok(RTS_NOTIFY_AUDIO_ONLY.has(name), `${name} is on the audio roster rather than silently orphaned`);
@@ -40621,14 +40639,6 @@ check("Worker Faz 6: temas isaretleri, klibin kendi olculen temas penceresinin i
     `${chopClip}: the axe bite at ${chop.time}s is not at the bottom of the swing`,
   );
 
-  // Spade strokes: the hand down at the soil rather than up between passes.
-  const digClip = worker.animationSet.workCultivation!;
-  for (const notify of worker.notifies.filter((entry) => entry.name === "dig-impact")) {
-    assert.ok(
-      travelAt(digClip, "RightHand", notify.time) < 0.25,
-      `${digClip}: the dig at ${notify.time}s fires with the hand away from the ground`,
-    );
-  }
 
   // A flinch marker fires when the blow reads as landed, which is on the way into
   // the recoil rather than at its extreme: the burst belongs to the impact, not
