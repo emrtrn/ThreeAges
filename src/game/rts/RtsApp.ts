@@ -32,6 +32,11 @@ import { advanceForgeMaterialAnimations } from "@engine/render-three/materials";
 import { VfxSubsystem } from "@engine/render-three/vfxSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { AudioEventDirector, EMPTY_AUDIO_EVENT_TABLE } from "@engine/audio/audioEventTable";
+import {
+  DEFAULT_MUSIC_PLAYLIST_SETTINGS,
+  MusicDirector,
+  type MusicPlaylistSettings,
+} from "@engine/audio/musicDirector";
 import { AUDIO_BUS_IDS, type BusMixSnapshot } from "@engine/audio/audioBus";
 import { FrameMetricsMonitor } from "@engine/perf/frameMetrics";
 import { AdaptiveQualityController } from "@engine/perf/adaptiveQuality";
@@ -151,6 +156,7 @@ import { ProjectileSystem } from "./combat/projectileSystem";
 import { ThrownRockSystem } from "./combat/thrownRockSystem";
 import { FirebrandSystem } from "./combat/firebrandSystem";
 import { CannonballSystem } from "./combat/cannonballSystem";
+import { CannonImpactScorches } from "./combat/cannonImpactScorches";
 import { PendingImpactQueue } from "./combat/pendingImpacts";
 import { StructureDefenseSystem } from "./combat/structureDefenseSystem";
 import { SupportAuraSystem } from "./structures/supportAuraSystem";
@@ -160,7 +166,7 @@ import { MarqueeOverlay } from "./selection/marqueeOverlay";
 import { SelectionSystem } from "./selection/selectionSystem";
 import { updateSelectionRingPulse } from "./selection/selectionRing";
 import { CommandMarkerSystem } from "./commands/commandMarker";
-import { CommandSystem } from "./commands/commandSystem";
+import { CommandSystem, type RtsCommandResult } from "./commands/commandSystem";
 import { CommandCenterSystem } from "./structures/commandCenterSystem";
 import { COMMAND_CENTER_MAX_HEALTH, CommandCenter } from "./structures/commandCenter";
 import {
@@ -909,6 +915,17 @@ export class RtsApp {
    * table loads, which is the same as "every bus at unity".
    */
   private authoredBusMix: BusMixSnapshot = {};
+  /**
+   * The gameplay music playlist, once the table that describes it has landed.
+   *
+   * Null until then, and built rather than constructed with the app, because
+   * everything it needs — which tracks, at what level, how long the seam is —
+   * is authored data. A director made before the fetch would be a playlist of
+   * nothing that believed it was running.
+   */
+  private musicDirector: MusicDirector | null = null;
+  /** The music bed's transition timing, from the table. */
+  private musicSettings: MusicPlaylistSettings = DEFAULT_MUSIC_PLAYLIST_SETTINGS;
   /** The player's volume trims, restored from their saved settings. */
   private audioSettings: RtsAudioSettings = DEFAULT_RTS_AUDIO_SETTINGS;
   /** Reused vector for the listener's forward axis; allocating one per frame is waste. */
@@ -1187,6 +1204,8 @@ export class RtsApp {
   private readonly thrownRocks = new ThrownRockSystem();
   private readonly firebrands = new FirebrandSystem();
   private readonly cannonballs = new CannonballSystem();
+  /** Soft ground scars reported by landed artillery shells; presentation only. */
+  private readonly cannonScorches = new CannonImpactScorches();
   /** Where the firing gun's barrel tip is; reused per shot, never held past `spawn`. */
   private readonly scratchMuzzle = new Vector3();
   /** Artillery damage waiting on the ball that is carrying it (see §21 wiring below). */
@@ -2225,8 +2244,9 @@ export class RtsApp {
         // teach the player that the click did something.
         const commanding = this.selection.selected().length > 0
           || this.selection.selectedStructure() !== null;
-        this.commands.issueAt(x, y);
+        const issued = this.commands.issueAt(x, y);
         if (commanding) this.playUiAudio(RTS_AUDIO.uiCommand);
+        this.playGuardOrderAudio(issued);
       },
       // A right *drag* is the camera, not a command — the pointer only reports
       // it past its drag threshold, and suppresses the command click that would
@@ -2372,6 +2392,7 @@ export class RtsApp {
       // construction because it is data: a fork that reorders its priorities
       // edits the table, not this file.
       this.authoredBusMix = table.buses;
+      this.musicSettings = table.music;
       this.applyAudioMix();
       // The beds are armed at match start, and on a cold cache that can happen
       // before this fetch lands — in which case the trigger found an empty table
@@ -2490,6 +2511,33 @@ export class RtsApp {
     const picked = this.selection.selected().length > 0
       || this.selection.selectedStructure() !== null;
     if (picked) this.playUiAudio(RTS_AUDIO.uiSelect);
+    if (this.selectionHasGuard()) this.playUiAudio(RTS_AUDIO.guardSelect);
+  }
+
+  /** Whether the player currently has at least one Guard picked. */
+  private selectionHasGuard(): boolean {
+    return this.selection.selected().some((unit) => unit.role === "guard" && !unit.dying);
+  }
+
+  /**
+   * The squad's own answer to an order the player just gave.
+   *
+   * Only two of the six outcomes speak. A worker task and a structure's attack
+   * order are not the Guard's to acknowledge; `"none"` is a click that issued
+   * nothing, and confirming it by voice would teach the player that it worked.
+   * A retreat is deliberately silent too - the move line is an advance ("on our
+   * way"), and hearing it while pulling out of a fight would report the
+   * opposite of what is happening. It gets its own line when one is recorded.
+   *
+   * Fired once per order rather than once per unit: the event table caps this
+   * at one instance, but a caller that triggered per guard would still be
+   * asking the director to refuse nine of them every time, and the cap would
+   * then be doing the design's job instead of stating it.
+   */
+  private playGuardOrderAudio(result: RtsCommandResult): void {
+    if (result !== "attack" && result !== "move") return;
+    if (!this.selectionHasGuard()) return;
+    this.playUiAudio(result === "attack" ? RTS_AUDIO.guardAttack : RTS_AUDIO.guardMove);
   }
 
   /**
@@ -2513,18 +2561,55 @@ export class RtsApp {
    * Start the two sounds that do not stop: the world's ambience and the music
    * bed.
    *
-   * Both are declared `maxInstances: 1` and loop, so calling this twice is a
-   * no-op the director refuses rather than a second copy playing over the first
-   * — which is what makes it safe on a restart path that may or may not have
-   * torn them down.
+   * Calling this twice is a no-op rather than a second copy playing over the
+   * first — which is what makes it safe on a restart path that may or may not
+   * have torn them down. The ambience gets that from `maxInstances: 1`, which
+   * the event director refuses past; the music gets it from the playlist
+   * director's own idempotent `start`.
    *
-   * The music is one loop, not a state machine: the states the design describes
-   * need a battle-intensity signal that does not exist yet, and a bed that plays
-   * is worth more today than a crossfade with nothing to cross to.
+   * The music is still not a state machine: the states the design describes need
+   * a battle-intensity signal that does not exist yet. What it is now is a
+   * playlist — the four settlement tracks in a shuffled order, fading into one
+   * another — which is the half of the design that did not need that signal.
    */
   private startAudioBeds(): void {
     this.audioEvents.trigger(RTS_AUDIO.worldAmbience, this.audioClock);
-    this.audioEvents.trigger(RTS_AUDIO.musicSettlement, this.audioClock);
+    this.startMusicBed();
+  }
+
+  /**
+   * Build the music playlist on first use, then start it.
+   *
+   * Both halves are late-bound to the table, and for the same reason the beds
+   * are re-armed after the fetch: whichever of "the match began" and "the audio
+   * table landed" happens second is the one that can actually start the music.
+   * Before that, `definition` answers null and this is a no-op that
+   * `loadAudioEvents` will repeat.
+   *
+   * The playlist plays through the subsystem directly rather than through the
+   * event director, which is the one place this bed differs from every other
+   * sound in the game. A crossfade needs the handle, and `trigger` keeps its
+   * own; the mix the event authored (`bus`, `volume`) is read from the same
+   * table entry regardless, so tuning still happens in `events.json` and not
+   * here.
+   */
+  private startMusicBed(): void {
+    if (this.musicDirector?.active) return;
+    const definition = this.audioEvents.definition(RTS_AUDIO.musicSettlement);
+    if (!definition) return;
+    if (!this.musicDirector) {
+      const { bus, volume } = definition;
+      this.musicDirector = new MusicDirector({
+        clips: definition.clips,
+        volume,
+        play: (clipId, gain) => this.audioSubsystem.play(clipId, { bus, volume: gain }),
+        // What the subsystem measured at decode, not what anybody wrote down: a
+        // track re-exported a bar longer moves its own hand-over.
+        durationOf: (clipId) => this.audioSubsystem.clipDurationSeconds(clipId),
+        settings: this.musicSettings,
+      });
+    }
+    this.musicDirector.start(this.audioClock);
   }
 
   /**
@@ -2595,6 +2680,7 @@ export class RtsApp {
     this.thrownRocks.dispose();
     this.firebrands.dispose();
     this.cannonballs.dispose();
+    this.cannonScorches.dispose();
     this.unitShadows.dispose();
     this.gearDebris.dispose();
     this.structureDamageVfx.dispose();
@@ -2604,6 +2690,10 @@ export class RtsApp {
     // context out from under, and stopping a play through a closed context is
     // the one order that throws.
     this.audioEvents.reset();
+    // Same order, same reason: the playlist holds two handles of its own, and
+    // they have to be released before the context they live in closes.
+    this.musicDirector?.stop();
+    this.musicDirector = null;
     this.buildLoopSite = null;
     this.audioSubsystem.dispose();
     this.hudBar.dispose();
@@ -2806,11 +2896,15 @@ export class RtsApp {
     this.scene.add(this.thrownRocks.root);
     this.scene.add(this.firebrands.root);
     this.scene.add(this.cannonballs.root);
+    this.scene.add(this.cannonScorches.root);
+    this.cannonScorches.setGroundSampler((x, z) => this.groundSurface.heightAt(x, z));
+    this.cannonScorches.setVisibilityTest(this.playerVisibilityTest() ?? null);
     // The shell's blast is an authored effect, not something the cannonball
     // system draws: it reports the landing, this plays whatever the gun's
     // `impactEffect` names. Wired here rather than at construction because the
     // VFX subsystem is what resolves the id, and it is the scene's to own.
     this.cannonballs.setImpactHandler((effectId, position) => {
+      this.cannonScorches.add(position);
       if (effectId) this.playWorldEffect(effectId, [position.x, position.y, position.z]);
     });
     this.scene.add(this.commandMarkers.root);
@@ -2928,6 +3022,11 @@ export class RtsApp {
     // finished. Before this frame's triggers, so a sound that ended is not still
     // holding a slot against the one about to be asked for.
     this.audioEvents.advance();
+    // The playlist rides the same real-seconds clock, and outside the paused
+    // gate on purpose: like the ambience, the bed describes the place rather
+    // than the work, and freezing a crossfade half-way would leave two tracks
+    // stuck at half volume over a still field.
+    this.musicDirector?.advance(this.audioClock);
     this.perfCaptureSteps = 0;
     if (this.match.active && this.flow.running) {
       const simulationMark = this.perfMark();
@@ -3002,6 +3101,7 @@ export class RtsApp {
     // how long it then lies there is measured in simulation seconds. The system
     // splits the two; see `UnitGearDebris.advance`.
     this.gearDebris.advance(dt, this.simulationSpeed);
+    this.cannonScorches.update(dt, this.simulationSpeed);
     this.updateStructureDamageVfx(dt);
     this.updateWorldProgressOverlay();
     this.perfMeasure("yapı görselleri", worldArtMark);
@@ -3254,7 +3354,13 @@ export class RtsApp {
       },
       {
         id: "mermiler/efektler",
-        apply: hide([this.projectiles.root, this.thrownRocks.root, this.firebrands.root, this.cannonballs.root]),
+        apply: hide([
+          this.projectiles.root,
+          this.thrownRocks.root,
+          this.firebrands.root,
+          this.cannonballs.root,
+          this.cannonScorches.root,
+        ]),
       },
       {
         id: "dünya arayüzü",
@@ -4925,7 +5031,16 @@ export class RtsApp {
       if (event.owner !== PLAYER_OWNER) continue;
       if (event.type === "completed") {
         this.tallyTrainedUnit("worker");
-        this.announce("production", t("command.production.worker_ready"));
+        // Only the *last* worker of a batch is announced. A five-deep queue used
+        // to post five lines that said nothing the player did not already know —
+        // they ordered five workers and five arrived. The line that carries
+        // information is the one saying the centre has gone idle, because that
+        // is the moment there is a decision to make: queue more, or not. The
+        // queue is already deleted when its last order spawns, so an empty count
+        // here means "this was the last one".
+        if (this.workerProduction.queuedCount(PLAYER_OWNER) === 0) {
+          this.announce("production", t("command.production.worker_ready"));
+        }
       } else this.announce("production", t("command.production.worker_blocked"), "refused");
     }
     for (const event of this.barracksProduction.update(dt)) {
@@ -4938,10 +5053,16 @@ export class RtsApp {
         // a possessive ("Okçuluk Alanı'ndan"), and wrong for one that does not
         // ("Kışla'dan"). Kışla trains the Guard and the Siege gun, so two of the
         // three trainable units said it wrong.
-        this.announce("production", t("command.production.unit_ready", {
-          building: t(event.structure.stats.nameKey),
-          unit: t(event.unitNameKey),
-        }));
+        // Same rule as the worker queue above: one line per *emptied* queue, not
+        // per unit. Scoped to this building's own queue rather than the
+        // kingdom-wide count, so a Barracks finishing its batch still reports
+        // while the Archery Range keeps training.
+        if (this.barracksProduction.queueSnapshot(event.structure).queued === 0) {
+          this.announce("production", t("command.production.unit_ready", {
+            building: t(event.structure.stats.nameKey),
+            unit: t(event.unitNameKey),
+          }));
+        }
       } else {
         this.announce("production", t("command.production.unit_blocked", {
           unit: t(event.unitNameKey),
@@ -6126,8 +6247,9 @@ export class RtsApp {
     // §5.11's two closing stingers, fired with the screen rather than with the
     // condition: this is the moment the player is told, and the sound belongs to
     // the telling. The simulation has already stopped, so the ambience and music
-    // beds keep running underneath — ducking them under the result is Faz 4's
-    // job, once there is a crossfade to duck with.
+    // beds keep running underneath. Ducking them under the result is still open,
+    // but no longer blocked: `musicDirector` owns the bed's handles now, so the
+    // fade it would need is one call rather than a missing capability.
     this.playStinger(outcome === "victory" ? RTS_AUDIO.stingerVictory : RTS_AUDIO.stingerDefeat);
     // §53: the result screen is where the duration is actually read — it is the
     // one moment the match has a final length to report.
@@ -6166,6 +6288,7 @@ export class RtsApp {
     this.thrownRocks.clear();
     this.firebrands.clear();
     this.cannonballs.clear();
+    this.cannonScorches.clear();
     // The last match's dead left their kit on ground the new match is about to
     // reuse. It outlives bodies on purpose, but not the game they died in.
     this.gearDebris.clear();
@@ -7574,7 +7697,12 @@ export class RtsApp {
       }),
       disconnected: t("command.train.disconnected", { building: buildingLabel }),
     };
-    this.announce("production", message[result], result === "queued" ? "done" : "refused");
+    // A successful order says nothing the panel is not already showing (the
+    // queue bar under the building, its {queued}/{capacity} counter), so it is
+    // silent: pressing Üret five times used to cost five notifications. A
+    // refusal still speaks, because nothing else on screen explains why the
+    // press did nothing.
+    if (result !== "queued") this.announce("production", message[result], "refused");
     this.syncPlacementUi();
   }
 
@@ -7672,7 +7800,9 @@ export class RtsApp {
         age: t(this.options.ageBalance.town.nameKey),
       }),
     };
-    this.announce("production", message[result], result === "queued" ? "done" : "refused");
+    // Silent on success for the same reason as {@link queueUnit}: the centre's
+    // own queue bar is the confirmation.
+    if (result !== "queued") this.announce("production", message[result], "refused");
     this.syncPlacementUi();
   }
 

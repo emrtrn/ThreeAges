@@ -78,10 +78,19 @@ function idFor(fileName) {
   return fileName.replace(/\.[^.]+$/u, "").replace(/_/gu, "-");
 }
 
-/** A first-guess display name; overwritten by the author's on any existing entry. */
+/**
+ * A first-guess display name; overwritten by the author's on any existing entry.
+ *
+ * The §6 variant number is *kept*, and that is the whole point rather than an
+ * oversight in the title-caser. This name is what the editor's clip picker shows,
+ * and a multi-variant sound is exactly the case that picker exists for: four
+ * options all reading "Combat Sword Swing" cannot be told apart, so binding
+ * variant 3 to an event is guesswork. Dropping the number was tried and shipped
+ * that way (2026-08-21) — the swing clips landed as four identical rows.
+ */
 function nameFor(fileName) {
   const stem = fileName.replace(/\.[^.]+$/u, "");
-  const parts = stem.split("_").filter((part) => !/^\d+$/u.test(part));
+  const parts = stem.split("_");
   const words = [];
   for (const part of parts) {
     if (NAME_WORDS.has(part)) {

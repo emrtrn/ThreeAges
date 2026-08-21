@@ -158,6 +158,7 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-20 | Çağ atlama stinger'ı **kulakla doğrulandı**. Teşhis yöntemi kayda değer: iki tur "yine denesenize"den sonra soru tahminle değil, olayın klibi geçici olarak duyulmaması imkânsız bir sese (çöküş, etkin 0.63) alınarak kapatıldı — çaldı, yani kanca baştan beri doğruydu ve mesele duyulabilirlikti. Kalıcı yer tutucu 0.54'e ayarlandı (0.17 duyulmuyor, 0.63 duyuluyor; arası). Ayrıca `playStinger` artık sonucunu logluyor: bir stinger maçta en fazla üç kez, oyuncunun baktığı anda çalar — reddi her zaman arızadır ve aksi halde "kod çalıştı, oyun sessiz" ayrımı hiçbir yerde görünmez. |
 | 2026-08-20 | Çağ atlama stinger'ı duyulmuyordu — kanca doğruydu, mix değildi. Aynı anda basılan bildirim kartının bipi `notifications` bus'ında tam kazançta (0.40), stinger ise en sessiz bus'ta 0.17'de: maskeleniyordu. Zafer/yenilgi duyuluyordu çünkü onlar sessizliğe çalıyor. `volume` "kanalı için yüksek" demek, ve en sessiz kanalda bir bildirimi aşmak 1'den fazlasına mal oluyor: 2.2 (etkin 0.40). Placeholder da ayırt edilebilir bir klibe alındı. |
 | 2026-08-20 | **Çöküş klipleri `structure.collapse`'a geri verildi.** Kullanıcı maç açılışında kaynağı belirsiz bir çöküş sesi duydu: `notify.alert` bir çöküş sample'ı çalıyordu (Faz 0'dan beri) ve alarm bildirimi mesafesiz olduğu için haritada bakılacak yeri yoktu. `notify.alert` → `starter-snd-door-open`, `stinger.defeat` → `starter-snd-steam-01`. Kural §81.1'e yazıldı: yer tutucu yanlış ses olabilir, başka bir olayın doğru sesi olamaz. |
+| 2026-08-21 | **Müzik artık çalma listesi: dört settlement parçası, birbirine geçerek.** §35'in geçiş sistemi uygulandı. Uygulamadan önce iki yanlış varsayım düzeldi: (1) tabloda üç klip vardı ama `loop: true` + `maxInstances: 1` demek director'ın **bir** klip seçip maç boyunca onu döndürmesi demekti — karışık çalma hiç yoktu, dördüncü klip manifest'te olduğu hâlde seçilemiyordu bile; (2) SoundCue editörü bu iş için yanlış araç — crossfade node'u yok (V2 notu), ve RTS hattı zaten cue okumuyor (`evaluateSoundCue` yalnız `RuntimeSceneApp` + DialogueEditor'de). Yeni `engine/audio/musicDirector.ts`: shuffle bag (arka arkaya aynı parça yok, tur sınırında da yok) + equal-power crossfade. `AudioEventDirector`'dan ayrı, çünkü onun işi bir tetiğin **çalıp çalmayacağına** karar vermek (cooldown, cap, mesafe, bütçe) ve `trigger()` handle'ı kendinde tutuyor — bir fade ise tam olarak handle'a ihtiyaç duyar. Fade primitifi hazırdı (`handle.setVolume(v, fade)`), eksik olan sahiplenmeydi. Geçiş anı klibin **ölçülen** süresinden: `AudioSubsystem` decode'da `buffer.duration` kaydediyor (`clipDurationSeconds`), böylece fade müziğin sonuna oturuyor ve üretilmiş parça kendi loop dikişine hiç ulaşmıyor — `loop` bu yüzden `false`. Ayarlar `events.json`'ın yeni `music` bloğunda: `gapSeconds: 0` gerçek crossfade, pozitif değer §35'in "fade out → pencere → fade in" modeli; `segmentSeconds` yalnız süresi henüz bilinmeyen klip için yedek. Equal-power, lineer değil: ilişkisiz iki parça lineer geçişte orta noktada ~3 dB düşer ve her geçiş çukur yapar. Yedi yeni sözleşme testi — hiçbiri süre pinlemiyor, örtüşmeyi/güç korunumunu/çalma sırasını pinliyor. `build:verify` yeşil (1539 check). |
 | 2026-08-20 | Placeholder sayımı olay olay çıkarıldı (§81) ve §0'ın "beş kanal" ifadesi düzeltildi: yedi. Sayılmadıkları için gözden kaçan ikisi birimin iş sesleri ve alarm bildirimiydi. Sayarken bir üretim tuzağı da göründü: envanterler rolleri ayırıyor, olay tablosu ayırmıyor — rol başına ses üretmek bugün çalmayacak bir kütüphane demek (§81.2). Yeni sözleşme testi: bir olay üretilmiş ile placeholder klibi karıştıramaz. |
 
 ---
@@ -1475,6 +1476,31 @@ No vocals, no choir, no oversized taiko drums, no superhero brass, no cinematic 
 ---
 
 # 35. Müzik geçiş sistemi
+
+## 35.0 Uygulanan durum (2026-08-21)
+
+Aşağıdaki geçiş modeli `engine/audio/musicDirector.ts` olarak uygulandı ve
+`music.settlement`'ın dört parçası üzerinde çalışıyor. Uygulama iki noktada
+buradaki öneriyi genişletti:
+
+- **Boşluk bir ayar oldu, sabit değil.** `events.json` → `music.gapSeconds`.
+  Sıfırda iki parça örtüşür (gerçek crossfade), pozitifte aşağıdaki
+  fade-out → pencere → fade-in modeli olur. İkisi aynı hareketin farklı
+  örtüşmesi, ve hangisinin istendiği müzik hakkında bir karar.
+- **Geçiş anı sayaçtan değil, parçanın kendi süresinden.** Klip decode
+  edildiğinde süresi ölçülüp saklanıyor, fade müziğin sonuna oturuyor.
+  `segmentSeconds` yalnızca süresi henüz bilinmeyen klip için yedek.
+
+Fade eğrisi lineer değil **equal-power** (sin/cos): ilişkisiz iki parça lineer
+geçişte orta noktada yaklaşık 3 dB düşer, yani her geçiş duyulur bir çukur
+yapar. Parça sırası shuffle bag — dört parça bitmeden hiçbiri tekrar etmez,
+tur sınırında da aynı parça arka arkaya gelmez.
+
+Durum bazlı geçiş (settlement → tension → battle) hâlâ açık: onun için gereken
+savaş yoğunluğu sinyali yok. Direktör onu taşıyacak biçimde — "sıradaki parçayı
+torbadan çek" yerine "durumdan çek" — ama o sinyal ayrı bir iş.
+
+---
 
 İlk sürümde tam adaptive stem sistemi önerilmez.
 

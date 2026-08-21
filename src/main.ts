@@ -58,6 +58,22 @@ import { RtsLoadingScreen } from "@/game/rts/ui/rtsLoadingScreen";
 import { resolveRtsLevelRef } from "@/game/rts/world/rtsLevelRef";
 import type { GamePreset } from "@/game/data/gameDataTypes";
 
+/**
+ * Sağ tık bastırma istisnası için: bu `type` değerleri metin taşımaz, yani
+ * tarayıcı menüsünün orada sunacağı bir şey yok.
+ */
+const NON_TEXT_INPUT_TYPES = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "file",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit",
+]);
+
 function requireElement<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
   if (!el) throw new Error(`Missing required element: #${id}`);
@@ -274,6 +290,22 @@ async function main(): Promise<void> {
   // character runtime + editor stay the default until the RTS is promoted. Its
   // own lightweight runtime — never mixes with the character SceneApp above.
   if (rtsRoute) {
+    // Sağ tık oyunun komut tuşu: haritada `RtsPointer` tarayıcı menüsünü zaten
+    // yutuyor, ama HUD/panel/menü DOM'u canvas'ın dışında kaldığı için orada bir
+    // sağ tık Chrome'un kendi menüsünü açıyordu — bir birliğe komut verirken
+    // imleç build paletinin üstünden geçmişse yeter. Belge seviyesinde
+    // bastırmak rotanın tamamını (menü + maç) kapsar; editör rotası buraya
+    // hiç girmediği için kendi bağlam menüleri etkilenmez.
+    document.addEventListener("contextmenu", (event) => {
+      // Metin girişi olan bir hedefte kopyala/yapıştır menüsü hâlâ işe yarar;
+      // şu an oyun UI'ında böyle bir alan yok, ama biri eklendiğinde bu gate
+      // onu sessizce bozmamalı.
+      const target = event.target;
+      if (target instanceof HTMLElement && target.isContentEditable) return;
+      if (target instanceof HTMLTextAreaElement) return;
+      if (target instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(target.type)) return;
+      event.preventDefault();
+    });
     const setupStorage = matchSetupStorage();
     const requestedMatchSeed = Number(params.get("seed"));
     // `let`, because the route can come back here: "Ana Menü" ends a match and

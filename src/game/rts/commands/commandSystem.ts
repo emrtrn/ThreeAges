@@ -32,6 +32,26 @@ export type WorkerStructureCommand = (workers: readonly Unit[], structure: Place
 /** RtsApp owns stationary-defense validation and player feedback. */
 export type StructureAttackCommand = (structure: PlacedStructure, target: CombatTarget) => boolean;
 
+/**
+ * What a contextual right-click turned out to be.
+ *
+ * Reported rather than inferred. The same button issues every one of these, and
+ * which one it became is decided here, from a raycast the caller does not have;
+ * a caller that wanted to answer a move differently from an attack would
+ * otherwise have to repeat that raycast and could then disagree with the order
+ * actually issued. `"none"` covers the clicks that changed nothing - empty
+ * ground with nothing selected, a point off the terrain, a retreat with nobody
+ * who can retreat - and is what keeps a caller from confirming an order that
+ * was never given.
+ */
+export type RtsCommandResult =
+  | "attack"
+  | "structure-attack"
+  | "worker-task"
+  | "move"
+  | "retreat"
+  | "none";
+
 interface PendingGroundOrder {
   readonly unit: Unit;
   readonly path: readonly Vector3[];
@@ -89,11 +109,10 @@ export class CommandSystem {
   }
 
   /** Issue the contextual move-or-attack order at a screen position. */
-  issueAt(x: number, y: number): void {
+  issueAt(x: number, y: number): RtsCommandResult {
     if (this.retreatArmed) {
       this.retreatArmed = false;
-      this.issueRetreatAt(x, y);
-      return;
+      return this.issueRetreatAt(x, y) ? "retreat" : "none";
     }
     const selected = this.selection.selected();
     const target = this.raycastTarget(x, y);
@@ -102,8 +121,9 @@ export class CommandSystem {
       if (selectedStructure && target && target.owner !== selectedStructure.owner
         && this.onStructureAttackCommand?.(selectedStructure, target)) {
         this.markers.spawn(target.position, "#ff7468");
+        return "structure-attack";
       }
-      return;
+      return "none";
     }
 
     if (target && target.owner !== selected[0]?.owner) {
@@ -112,7 +132,7 @@ export class CommandSystem {
       this.clearWorkerTasks(selected);
       for (const unit of selected) issueAttackOrder(unit, target, this.navigation);
       this.markers.spawn(target.position, "#ff7468");
-      return;
+      return "attack";
     }
 
     const structure = this.raycastStructure(x, y);
@@ -122,11 +142,11 @@ export class CommandSystem {
       this.cancelPendingGroundOrders(workers);
       this.releaseDestinationReservations(workers);
       this.markers.spawn(structure.position, "#7ce08a");
-      return;
+      return "worker-task";
     }
 
     const point = this.groundPoint(x, y);
-    if (!point) return;
+    if (!point) return "none";
 
     this.cancelPendingGroundOrders(selected);
     this.releaseDestinationReservations(selected);
@@ -163,6 +183,7 @@ export class CommandSystem {
     // preserves immediate feedback for a one-unit order.
     this.update(0);
     this.markers.spawn(point);
+    return "move";
   }
 
   /** Release queued group movement in a short, deterministic cadence. */
@@ -248,11 +269,11 @@ export class CommandSystem {
   }
 
   /** Issue the armed reverse move; anything without a reverse gait keeps its orders. */
-  private issueRetreatAt(x: number, y: number): void {
+  private issueRetreatAt(x: number, y: number): boolean {
     const selected = this.selection.selected().filter(canPlayerRetreat);
-    if (selected.length === 0) return;
+    if (selected.length === 0) return false;
     const point = this.groundPoint(x, y);
-    if (!point) return;
+    if (!point) return false;
 
     this.cancelPendingGroundOrders(selected);
     this.releaseDestinationReservations(selected);
@@ -287,6 +308,7 @@ export class CommandSystem {
     }
     this.update(0);
     this.markers.spawn(point, "#79c8ff");
+    return true;
   }
 
   /** Raycast a screen point against units or command centres before ground. */

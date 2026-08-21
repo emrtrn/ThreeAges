@@ -1,9 +1,15 @@
 {
   "schema": 1,
-  "_comment": "Faz 1/2 mix. Two kinds of clip here. `sfx-*` ids are real demo audio under assets/audio/ - the interface, the info/warning notices and the building channel. `starter-snd-*` ids are Forge starter content standing in for everything else, which has not been produced yet: a cannon firing is an explosion sample, a collapse is a stock crash, an age-up fanfare is a UI beep. One rule holds across them: a placeholder is never borrowed from a channel that already owns it - the collapse clips are structure.collapse's and nothing else's, or the game reports a falling building for every alarm. What is real throughout is the wiring - buses, cooldowns, instance caps, distances. Retune by ear; tests pin the shape, never these numbers.",
+  "_comment": "Every clip named here is produced audio under assets/audio/; no Forge starter content stands in for anything any more. notify.alert was the last to change hands, and the rule that governed the placeholder era is worth keeping now that it is over: a sound is never borrowed from a channel that already owns it, or the game reports a falling building for every alarm. What was real throughout is the wiring - buses, cooldowns, instance caps, distances. Retune by ear; tests pin the shape, never these numbers.",
   "_buses": "The mix hierarchy, stated once. Order follows the design's priority list: the player's own command reads over a distant fight, and music sits at the bottom. An event's own `volume` is loud-for-its-channel; how channels compare is decided here.",
   "_stingers": "One-shot musical announcements (stinger.*). On the music bus by choice, not by category: they are written with the score, and a player who muted the music has asked not to hear them. That is affordable because none of these moments is audio-only - the age-up posts a card, the result screen covers the field. Loud for their channel, since the bus sits under everything and a stinger has to clear the bed it plays over. No pitch jitter: a wandering fanfare reads as a broken tape.",
   "_results": "The two result stingers were authored at 1 on the theory that they play into silence and need no more. Half of that was right: defeat is a three-second vent and was heard, victory was a 0.16-second beep and was not. Playing into silence buys nothing if the sound is over before the player looks up. Both carry the age-up's weight now, on clips with some length to them.",
+  "_music": "How the gameplay bed moves between the tracks of `music.settlement`. `gapSeconds: 0` makes it a true crossfade - the outgoing track falls as the incoming one rises, on an equal-power curve so the seam does not dip. Raise it and you get the design's other model instead: fade out, a window of nothing, fade in. `segmentSeconds` is only the fallback for a track whose length is not known yet; once a clip has decoded, the fade is scheduled from its own duration so it lands on the end of the music rather than on a count. All three are retuned by ear.",
+  "music": {
+    "crossfadeSeconds": 6,
+    "gapSeconds": 0,
+    "segmentSeconds": 105
+  },
   "buses": {
     "notifications": 1,
     "ui": 0.9,
@@ -21,13 +27,13 @@
         "sfx-unit-footstep-dirt-04"
       ],
       "bus": "sfx",
-      "volume": 0.1,
+      "volume": 0.05,
       "pitchVariation": 0.08,
       "cooldownMs": 45,
       "maxInstances": 4,
       "spatial": true,
       "refDistance": 30,
-      "maxDistance": 90,
+      "maxDistance": 60,
       "rolloff": 10
     },
     "unit.chop_impact": {
@@ -44,129 +50,150 @@
       "maxInstances": 4,
       "spatial": true,
       "refDistance": 30,
-      "maxDistance": 90,
+      "maxDistance": 60,
       "rolloff": 10
     },
     "combat.sword_swing": {
       "clips": [
-        "starter-snd-light-01",
-        "starter-snd-light-02"
+        "sfx-combat-sword-swing-01",
+        "sfx-combat-sword-swing-02",
+        "sfx-combat-sword-swing-03",
+        "sfx-combat-sword-swing-04"
       ],
       "bus": "sfx",
-      "volume": 0.4,
+      "volume": 0.1,
       "pitchVariation": 0.05,
       "cooldownMs": 55,
       "maxInstances": 5,
       "spatial": true,
-      "refDistance": 8,
-      "maxDistance": 55,
-      "rolloff": 1.1
+      "refDistance": 30,
+      "maxDistance": 60,
+      "rolloff": 10
     },
     "combat.arrow_release": {
       "clips": [
-        "starter-snd-ui-click"
+        "sfx-combat-bow-release-01",
+        "sfx-combat-bow-release-02",
+        "sfx-combat-bow-release-03",
+        "sfx-combat-bow-release-04"
       ],
       "bus": "sfx",
-      "volume": 0.35,
+      "volume": 0.05,
       "pitchVariation": 0.04,
       "cooldownMs": 50,
       "maxInstances": 5,
       "spatial": true,
-      "refDistance": 8,
-      "maxDistance": 55,
-      "rolloff": 1.1
+      "refDistance": 30,
+      "maxDistance": 60,
+      "rolloff": 10
     },
     "combat.body_impact": {
       "clips": [
-        "starter-snd-impact-light"
+        "sfx-combat-body-impact-01",
+        "sfx-combat-body-impact-02",
+        "sfx-combat-body-impact-03",
+        "sfx-combat-body-impact-04"
       ],
       "bus": "sfx",
-      "volume": 0.5,
+      "volume": 0.1,
       "pitchVariation": 0.05,
       "cooldownMs": 40,
       "maxInstances": 6,
       "spatial": true,
-      "refDistance": 8,
+      "refDistance": 30,
       "maxDistance": 60,
-      "rolloff": 1.1
+      "rolloff": 10
     },
     "siege.wreck_blast": {
       "clips": [
-        "starter-snd-explosion-01",
-        "starter-snd-explosion-02"
+        "sfx-artillery-destroyed-01",
+        "sfx-artillery-destroyed-02",
+        "sfx-artillery-destroyed-03",
+        "sfx-artillery-destroyed-04"
       ],
       "bus": "sfx",
-      "volume": 0.7,
+      "volume": 0.5,
       "pitchVariation": 0.03,
       "cooldownMs": 120,
       "maxInstances": 3,
       "spatial": true,
-      "refDistance": 20,
-      "maxDistance": 140,
-      "rolloff": 0.7
+      "refDistance": 30,
+      "maxDistance": 120,
+      "rolloff": 5
     },
     "siege.cannon_fire": {
       "clips": [
-        "starter-snd-explosion-02"
+        "sfx-artillery-fire-01",
+        "sfx-artillery-fire-02",
+        "sfx-artillery-fire-03",
+        "sfx-artillery-fire-04",
+        "sfx-artillery-fire-05"
       ],
       "bus": "sfx",
-      "volume": 0.55,
+      "volume": 0.5,
       "pitchVariation": 0.04,
       "cooldownMs": 90,
       "maxInstances": 3,
       "spatial": true,
-      "refDistance": 18,
+      "refDistance": 30,
       "maxDistance": 120,
-      "rolloff": 0.8
+      "rolloff": 5
     },
     "structure.impact": {
       "clips": [
-        "starter-snd-impact-light"
+        "sfx-structure-impact-stone-01",
+        "sfx-structure-impact-stone-02",
+        "sfx-structure-impact-stone-03",
+        "sfx-structure-impact-stone-04"
       ],
       "bus": "sfx",
-      "volume": 0.45,
+      "volume": 0.4,
       "pitchVariation": 0.07,
       "cooldownMs": 110,
       "maxInstances": 4,
       "spatial": true,
-      "refDistance": 10,
-      "maxDistance": 70,
-      "rolloff": 1
+      "refDistance": 30,
+      "maxDistance": 90,
+      "rolloff": 5
     },
     "structure.collapse": {
       "clips": [
-        "starter-snd-collapse-01",
-        "starter-snd-collapse-02"
+        "sfx-structure-collapse-01",
+        "sfx-structure-collapse-02",
+        "sfx-structure-collapse-03",
+        "sfx-structure-collapse-04",
+        "sfx-structure-collapse-05",
+        "sfx-structure-collapse-06"
       ],
       "bus": "sfx",
-      "volume": 0.7,
+      "volume": 0.6,
       "pitchVariation": 0.04,
       "cooldownMs": 150,
       "maxInstances": 3,
       "spatial": true,
-      "refDistance": 16,
-      "maxDistance": 110,
-      "rolloff": 0.8
+      "refDistance": 30,
+      "maxDistance": 90,
+      "rolloff": 5
     },
     "building.complete": {
       "clips": [
         "sfx-building-complete-01"
       ],
       "bus": "sfx",
-      "volume": 0.5,
+      "volume": 0.4,
       "cooldownMs": 200,
       "maxInstances": 2,
       "spatial": true,
-      "refDistance": 14,
+      "refDistance": 30,
       "maxDistance": 90,
-      "rolloff": 0.9
+      "rolloff": 10
     },
     "building.place": {
       "clips": [
         "sfx-building-place-01"
       ],
       "bus": "ui",
-      "volume": 0.45,
+      "volume": 0.4,
       "cooldownMs": 120,
       "maxInstances": 2
     },
@@ -176,21 +203,21 @@
         "sfx-building-build-loop-01"
       ],
       "bus": "sfx",
-      "volume": 0.32,
+      "volume": 0.2,
       "loop": true,
       "cooldownMs": 400,
       "maxInstances": 1,
       "spatial": true,
-      "refDistance": 12,
-      "maxDistance": 80,
-      "rolloff": 1
+      "refDistance": 30,
+      "maxDistance": 60,
+      "rolloff": 10
     },
     "building.cancel": {
       "clips": [
         "sfx-building-cancel-01"
       ],
       "bus": "ui",
-      "volume": 0.42,
+      "volume": 0.4,
       "cooldownMs": 150,
       "maxInstances": 2
     },
@@ -242,23 +269,61 @@
       "cooldownMs": 200,
       "maxInstances": 2
     },
+    "voice.guard_select": {
+      "_note": "Guard barks, and the note covers all three. Non-spatial on purpose, unlike every other unit sound in this table: these answer the player's own click, so they belong beside ui.select and ui.command rather than beside the footsteps of the unit that speaks. A bark that attenuated would be a confirmation the player sometimes did not get, which is the one thing a confirmation may not be. No pitch jitter - a wandering voice reads as a broken tape, the same reason the stingers have none. maxInstances is 1 across all three: ten selected guards are one order and one answer, not ten men shouting over each other, and the cooldown then keeps a re-issued order from stuttering. Selection has a single clip so far, so its cooldown carries more weight than the others' - it is the only one where a repeat is literally the same take.",
+      "clips": [
+        "vo-guard-selection-01"
+      ],
+      "bus": "voice",
+      "volume": 0.7,
+      "cooldownMs": 400,
+      "maxInstances": 1
+    },
+    "voice.guard_move": {
+      "clips": [
+        "vo-guard-move-01",
+        "vo-guard-move-02",
+        "vo-guard-move-03",
+        "vo-guard-move-04"
+      ],
+      "bus": "voice",
+      "volume": 0.7,
+      "cooldownMs": 350,
+      "maxInstances": 1
+    },
+    "voice.guard_attack": {
+      "clips": [
+        "vo-guard-attack-01",
+        "vo-guard-attack-02",
+        "vo-guard-attack-03",
+        "vo-guard-attack-04"
+      ],
+      "bus": "voice",
+      "volume": 0.75,
+      "cooldownMs": 350,
+      "maxInstances": 1
+    },
     "world.ambience": {
       "clips": [
-        "starter-snd-birds-01"
+        "amb-world-frontier-day-01"
       ],
       "bus": "ambience",
-      "volume": 0.45,
+      "volume": 0.4,
       "loop": true,
       "maxInstances": 1
     },
     "music.settlement": {
+      "_note": "A playlist, not a bed: the MusicDirector owns these clips and fades from one to the next, so `clips` is the running order's source rather than a variation set to pick one from. `loop` is false on purpose - a generated track looped would eventually reach its own seam, and the director hands over before the tail instead. `maxInstances` says 2 because a crossfade is two tracks audible at once; nothing enforces it here, since the director plays these itself rather than through the event director, but a number that contradicts what is heard is worse than no number.",
       "clips": [
-        "starter-snd-music-01"
+        "mus-gameplay-settlement-01",
+        "mus-gameplay-settlement-02",
+        "mus-gameplay-settlement-03",
+        "mus-gameplay-settlement-04"
       ],
       "bus": "music",
       "volume": 0.5,
-      "loop": true,
-      "maxInstances": 1
+      "loop": false,
+      "maxInstances": 2
     },
     "notify.info": {
       "clips": [
@@ -279,9 +344,10 @@
       "maxInstances": 2
     },
     "notify.alert": {
-      "_note": "Not a collapse sample. The collapse clips belong to structure.collapse alone - an alarm that borrowed one made the game sound like a building was falling whenever anything went wrong, including on the first poll of a fresh match. Placeholder until sfx_notify_alert_01.",
+      "_note": "The clips this event waited for. Its Faz 1 placeholder was a door-open sample, chosen because the rule that governed every placeholder here mattered more than the sound: never borrow from a channel that already owns it. An earlier draft had reached for a collapse clip, and the game then reported a falling building whenever anything went wrong - including on the first poll of a fresh match. Two variants now, because the alarm tier repeats: a besieged centre raises this more than once, and one clip twice in a row reads as a stuck loop rather than a second warning.",
       "clips": [
-        "starter-snd-door-open"
+        "sfx-notify-alert-01",
+        "sfx-notify-alert-02"
       ],
       "bus": "notifications",
       "volume": 0.6,
@@ -291,7 +357,7 @@
     "stinger.age_up": {
       "_note": "Three times the volume of the other two stingers, measured rather than guessed. This one plays in the same frame as its own notification card, whose blip sits on the notifications bus at full gain; victory and defeat play into silence. At 0.17 effective it was inaudible, at 0.63 it was unmistakable, so it sits between. Nothing about the bus is being fought here: `volume` means loud-for-its-channel, the music bus is authored for a bed, and a one-shot that has to clear a notice on the priority bus is simply a different job than the bed is.",
       "clips": [
-        "starter-snd-fire-sparks-01"
+        "stg-age-up-02"
       ],
       "bus": "music",
       "volume": 3,
@@ -300,19 +366,19 @@
     },
     "stinger.victory": {
       "clips": [
-        "starter-snd-smoke-01"
+        "stg-victory-01"
       ],
       "bus": "music",
-      "volume": 3.5,
+      "volume": 3,
       "cooldownMs": 2000,
       "maxInstances": 1
     },
     "stinger.defeat": {
       "clips": [
-        "starter-snd-steam-01"
+        "stg-defeat-01"
       ],
       "bus": "music",
-      "volume": 3.5,
+      "volume": 3,
       "cooldownMs": 2000,
       "maxInstances": 1
     }

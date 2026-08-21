@@ -36,6 +36,10 @@ import {
   type BusMixSnapshot,
 } from "./audioBus";
 import type { AudioPlaybackHandle, AudioPlayOptions, AudioVec3 } from "./audioSubsystem";
+import {
+  DEFAULT_MUSIC_PLAYLIST_SETTINGS,
+  type MusicPlaylistSettings,
+} from "./musicDirector";
 
 /** Table schema version; bumped when a field's meaning changes, not when one is added. */
 export const AUDIO_EVENT_TABLE_SCHEMA = 1;
@@ -102,6 +106,16 @@ export interface AudioEventTable {
    */
   readonly buses: BusMixSnapshot;
   readonly events: Readonly<Record<string, AudioEventDefinition>>;
+  /**
+   * How the music bed moves between the tracks of its playlist.
+   *
+   * Here rather than on the music event, because it is not a property of a
+   * sound: `crossfadeSeconds` describes the *seam* between two plays, and an
+   * event definition has no seams — it describes one play. The playlist itself
+   * is still an ordinary event (`clips`, `bus`, `volume`), read by whoever owns
+   * the bed; this block is only the timing that joins its entries.
+   */
+  readonly music: MusicPlaylistSettings;
 }
 
 /**
@@ -127,6 +141,7 @@ export const EMPTY_AUDIO_EVENT_TABLE: AudioEventTable = {
   schema: AUDIO_EVENT_TABLE_SCHEMA,
   buses: {},
   events: {},
+  music: DEFAULT_MUSIC_PLAYLIST_SETTINGS,
 };
 
 function readNumber(
@@ -209,6 +224,54 @@ export function normalizeAudioEventDefinition(value: unknown, where: string): Au
   };
 }
 
+/**
+ * Parses the optional `music` block — the bed's transition timing.
+ *
+ * Absent is legal and common: a project with one music track has no seam to
+ * describe, and the defaults then hold a track for its own length and fade for
+ * six seconds. Out-of-range is refused rather than clamped, because every one of
+ * these numbers is silent when wrong — a negative gap and a zero crossfade both
+ * produce "the music changed abruptly", with nothing to say why.
+ */
+export function normalizeMusicPlaylistSettings(
+  value: unknown,
+  where = "music",
+): MusicPlaylistSettings {
+  if (value === undefined) return DEFAULT_MUSIC_PLAYLIST_SETTINGS;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${where} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  const crossfadeSeconds = readNumber(
+    input,
+    "crossfadeSeconds",
+    where,
+    DEFAULT_MUSIC_PLAYLIST_SETTINGS.crossfadeSeconds,
+    0,
+    60,
+  );
+  const gapSeconds = readNumber(
+    input,
+    "gapSeconds",
+    where,
+    DEFAULT_MUSIC_PLAYLIST_SETTINGS.gapSeconds,
+    0,
+    120,
+  );
+  // Floored well above a fade rather than at zero: the fallback is a hold, and a
+  // hold shorter than the transition it ends with is a bed that is never not
+  // transitioning.
+  const segmentSeconds = readNumber(
+    input,
+    "segmentSeconds",
+    where,
+    DEFAULT_MUSIC_PLAYLIST_SETTINGS.segmentSeconds,
+    5,
+    3600,
+  );
+  return { crossfadeSeconds, gapSeconds, segmentSeconds };
+}
+
 /** Parses a whole `events.json`. The single source of the table's field shape. */
 export function normalizeAudioEventTable(value: unknown): AudioEventTable {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -252,7 +315,12 @@ export function normalizeAudioEventTable(value: unknown): AudioEventTable {
     }
     events[eventId] = normalizeAudioEventDefinition(definition, `events.${eventId}`);
   }
-  return { schema: AUDIO_EVENT_TABLE_SCHEMA, buses, events };
+  return {
+    schema: AUDIO_EVENT_TABLE_SCHEMA,
+    buses,
+    events,
+    music: normalizeMusicPlaylistSettings(input.music),
+  };
 }
 
 /** Every clip id any event names — for warming, and for coverage checks. */

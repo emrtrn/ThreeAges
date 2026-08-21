@@ -498,6 +498,7 @@ import { retaliateAgainstAttack, updateUnitEngagement } from "../src/game/rts/co
 import { resolveDamage } from "../src/game/rts/combat/damageResolution";
 import { ProjectileSystem } from "../src/game/rts/combat/projectileSystem";
 import { CannonballSystem } from "../src/game/rts/combat/cannonballSystem";
+import { CANNON_SCORCH_SECONDS, CannonImpactScorches } from "../src/game/rts/combat/cannonImpactScorches";
 import { PendingImpactQueue } from "../src/game/rts/combat/pendingImpacts";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
 import { SupportAuraSystem } from "../src/game/rts/structures/supportAuraSystem";
@@ -757,7 +758,14 @@ import {
   audioEventClipIds,
   jitterPitch,
   normalizeAudioEventTable,
+  normalizeMusicPlaylistSettings,
 } from "../engine/audio/audioEventTable";
+import {
+  DEFAULT_MUSIC_PLAYLIST_SETTINGS,
+  MusicDirector,
+  crossfadeGains,
+} from "../engine/audio/musicDirector";
+import type { MusicPlaylistSettings } from "../engine/audio/musicDirector";
 import type { AudioEventTable } from "../engine/audio/audioEventTable";
 import {
   RTS_AUDIO,
@@ -4028,6 +4036,274 @@ check("audio event pitch jitter stays inside its authored band", () => {
     const pitch = jitterPitch(0.5, () => r);
     assert.ok(pitch > 0, `pitch ${pitch} must stay positive`);
   }
+});
+
+// --- Music bed (playlist + crossfade) ----------------------------------------
+//
+// Same rule as the table above: the timings are tuning and nothing here pins
+// one. What is pinned is the shape of a transition — that two tracks overlap,
+// that the overlap holds its power, that the running order never repeats a
+// track back-to-back — all of which stay true at any crossfade length.
+
+/** A handle stub that remembers the gain the director wrote, for the fade checks. */
+interface MusicHandleStub extends AudioPlaybackHandleStub {
+  gain: number;
+  stopFades: number[];
+}
+
+const fakeMusicHandle = (clipId: string): MusicHandleStub => {
+  const stub: MusicHandleStub = {
+    clipId,
+    stopped: false,
+    volume: 1,
+    pitch: 1,
+    gain: 1,
+    stopFades: [],
+    stop(fadeSeconds = 0) {
+      stub.stopped = true;
+      stub.stopFades.push(fadeSeconds);
+    },
+    setVolume(value: number) {
+      stub.gain = value;
+    },
+    setPitch() {},
+  };
+  return stub;
+};
+
+/** Deterministic generator: a shuffle test that flakes teaches nothing. */
+const seededRandom = (seed: number): (() => number) => {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+};
+
+interface MusicRig {
+  readonly director: MusicDirector;
+  readonly played: MusicHandleStub[];
+  /** Advances the director to `toSeconds` in fixed steps, as a frame loop would. */
+  readonly runTo: (toSeconds: number) => void;
+}
+
+const musicRig = (options: {
+  clips: readonly string[];
+  volume: number;
+  settings: MusicPlaylistSettings;
+  durations?: Record<string, number>;
+  random?: () => number;
+}): MusicRig => {
+  const played: MusicHandleStub[] = [];
+  const director = new MusicDirector({
+    clips: options.clips,
+    volume: options.volume,
+    settings: options.settings,
+    random: options.random ?? seededRandom(7),
+    durationOf: (clipId) => options.durations?.[clipId] ?? null,
+    play: (clipId, gain) => {
+      const handle = fakeMusicHandle(clipId);
+      handle.gain = gain;
+      played.push(handle);
+      return handle;
+    },
+  });
+  let clock = 0;
+  const step = 1 / 60;
+  director.start(clock);
+  return {
+    director,
+    played,
+    runTo: (toSeconds) => {
+      while (clock < toSeconds - 1e-9) {
+        clock = Math.min(toSeconds, clock + step);
+        director.advance(clock);
+      }
+    },
+  };
+};
+
+check("music crossfade holds its power across the seam", () => {
+  // The reason this is not a linear fade: two tracks that share no waveform sum
+  // by power, so a linear pair is ~3 dB down at the midpoint and every
+  // transition audibly dips. Sine and cosine keep the squares summing to one.
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+    const { incoming, outgoing } = crossfadeGains(t);
+    assert.ok(
+      Math.abs(incoming * incoming + outgoing * outgoing - 1) < 1e-9,
+      `crossfade at ${t} loses power`,
+    );
+  }
+  // The ends are the whole point of a fade: silence to full, full to silence.
+  assert.ok(Math.abs(crossfadeGains(0).incoming) < 1e-9);
+  assert.ok(Math.abs(crossfadeGains(1).outgoing) < 1e-9);
+  // Out of range is clamped, not extrapolated — a negative gain inverts a track.
+  assert.ok(Math.abs(crossfadeGains(-5).incoming) < 1e-9);
+  assert.ok(Math.abs(crossfadeGains(9).outgoing) < 1e-9);
+});
+
+check("music director overlaps two tracks and lands the incoming one at full level", () => {
+  const settings: MusicPlaylistSettings = {
+    crossfadeSeconds: 4,
+    gapSeconds: 0,
+    segmentSeconds: 100,
+  };
+  const volume = 0.5;
+  const rig = musicRig({
+    clips: ["one", "two"],
+    volume,
+    settings,
+    durations: { one: 20, two: 20 },
+  });
+
+  // One track, rising from silence: the bed fades in rather than snapping on.
+  assert.equal(rig.played.length, 1);
+  assert.equal(rig.played[0]!.gain, 0);
+  rig.runTo(settings.crossfadeSeconds + 1);
+  assert.ok(Math.abs(rig.played[0]!.gain - volume) < 1e-9, "the first track must reach full level");
+
+  // Derived from the same numbers the director is given, so this holds at any
+  // tuning: the fade begins a crossfade before the track's own end.
+  const handoverAt = 20 - settings.crossfadeSeconds;
+  rig.runTo(handoverAt - 0.5);
+  assert.equal(rig.played.length, 1, "nothing may start before the hand-over");
+
+  rig.runTo(handoverAt + settings.crossfadeSeconds / 2);
+  assert.equal(rig.played.length, 2, "the next track must already be under way");
+  assert.ok(rig.director.crossfading, "both tracks must be audible across the seam");
+  const [outgoing, incoming] = rig.played as [MusicHandleStub, MusicHandleStub];
+  assert.ok(!outgoing.stopped, "the outgoing track must fade, not cut");
+  // Mid-fade the pair still sums to the bed's authored level. Relationship, not
+  // magnitude: change `volume` and this follows it.
+  const power = Math.sqrt(outgoing.gain ** 2 + incoming.gain ** 2);
+  assert.ok(Math.abs(power - volume) < 0.02, `crossfade midpoint power ${power} left ${volume}`);
+
+  rig.runTo(handoverAt + settings.crossfadeSeconds + 1);
+  assert.ok(outgoing.stopped, "the outgoing track must be released once its fade is spent");
+  assert.ok(Math.abs(incoming.gain - volume) < 1e-9, "the incoming track must reach full level");
+  assert.ok(!rig.director.crossfading);
+  assert.equal(rig.director.nowPlaying(), incoming.clipId);
+});
+
+check("music director hands over from the measured duration, not the fallback", () => {
+  // The fallback exists only for a clip that has not decoded yet. A director
+  // that kept using it would fade in the middle of a track and, worse, let a
+  // long one run past its own end into silence.
+  const settings: MusicPlaylistSettings = {
+    crossfadeSeconds: 3,
+    gapSeconds: 0,
+    segmentSeconds: 100,
+  };
+  const measured = musicRig({
+    clips: ["a", "b"],
+    volume: 1,
+    settings,
+    durations: { a: 30, b: 30 },
+  });
+  measured.runTo(30 - settings.crossfadeSeconds + 0.5);
+  assert.equal(measured.played.length, 2, "a 30s track must hand over well before 100s");
+
+  // With no duration to read — a clip still loading, or no audio device at all —
+  // the hold falls back to the authored segment instead of running forever.
+  const unmeasured = musicRig({ clips: ["a", "b"], volume: 1, settings });
+  unmeasured.runTo(settings.segmentSeconds - settings.crossfadeSeconds - 1);
+  assert.equal(unmeasured.played.length, 1, "the fallback must not hand over early");
+  unmeasured.runTo(settings.segmentSeconds - settings.crossfadeSeconds + 1);
+  assert.equal(unmeasured.played.length, 2, "the fallback must still hand over");
+});
+
+check("music director's gap setting separates the tracks instead of overlapping them", () => {
+  // The design offers both transitions — a true crossfade and a fade-out /
+  // window / fade-in. One number picks between them, so a project that wants
+  // the second must actually get silence in the middle rather than a slower
+  // overlap.
+  const settings: MusicPlaylistSettings = {
+    crossfadeSeconds: 2,
+    gapSeconds: 3,
+    segmentSeconds: 100,
+  };
+  const rig = musicRig({
+    clips: ["a", "b"],
+    volume: 1,
+    settings,
+    durations: { a: 12, b: 12 },
+  });
+  let everOverlapped = false;
+  const originalAdvance = rig.runTo;
+  for (let mark = 0; mark <= 20; mark += 0.25) {
+    originalAdvance(mark);
+    if (rig.director.crossfading) everOverlapped = true;
+  }
+  assert.ok(!everOverlapped, "a gapped transition must never have two tracks audible");
+  assert.equal(rig.played.length, 2, "the next track must still start after the gap");
+  assert.ok(rig.played[0]!.stopped, "the first track must be released");
+});
+
+check("music director's shuffle bag plays every track before repeating one", () => {
+  // Independent random picks repeat: over four tracks one transition in four
+  // replays the piece that just ended, which reads as the music having stopped
+  // changing. The bag also has to refuse the seam between passes, where a plain
+  // shuffle is free to put the outgoing track at the head of the next round.
+  const clips = ["a", "b", "c", "d"];
+  const settings: MusicPlaylistSettings = {
+    crossfadeSeconds: 1,
+    gapSeconds: 0,
+    segmentSeconds: 10,
+  };
+  for (const seed of [1, 2, 3, 17, 4242]) {
+    const rig = musicRig({ clips, volume: 1, settings, random: seededRandom(seed) });
+    rig.runTo(settings.segmentSeconds * 12);
+    const order = rig.played.map((handle) => handle.clipId);
+    assert.ok(order.length >= 8, `seed ${seed} produced too few tracks to judge`);
+    for (let i = 1; i < order.length; i += 1) {
+      assert.notEqual(order[i], order[i - 1], `seed ${seed} repeated "${order[i]}" back-to-back`);
+    }
+    // Each completed pass is a permutation of the playlist: nothing is starved.
+    for (let start = 0; start + clips.length <= order.length; start += clips.length) {
+      const pass = new Set(order.slice(start, start + clips.length));
+      assert.equal(pass.size, clips.length, `seed ${seed} pass at ${start} was not a full round`);
+    }
+  }
+});
+
+check("music playlist settings default, and a nonsensical one is refused", () => {
+  // Absent is legal: a project with one track has no seam to describe.
+  assert.deepEqual(normalizeMusicPlaylistSettings(undefined), DEFAULT_MUSIC_PLAYLIST_SETTINGS);
+  const parsed = normalizeMusicPlaylistSettings({ crossfadeSeconds: 2, gapSeconds: 1 });
+  assert.equal(parsed.crossfadeSeconds, 2);
+  assert.equal(parsed.gapSeconds, 1);
+  assert.equal(parsed.segmentSeconds, DEFAULT_MUSIC_PLAYLIST_SETTINGS.segmentSeconds);
+  // Every one of these is silent when wrong — the music simply changes oddly,
+  // with nothing to say why — so they are refused at the file rather than
+  // clamped into something the author did not write.
+  assert.throws(() => normalizeMusicPlaylistSettings({ crossfadeSeconds: -1 }));
+  assert.throws(() => normalizeMusicPlaylistSettings({ gapSeconds: "later" }));
+  assert.throws(() => normalizeMusicPlaylistSettings({ segmentSeconds: 0 }));
+  assert.throws(() => normalizeMusicPlaylistSettings([]));
+});
+
+check("RTS audio: the shipped music playlist has something to shuffle and does not loop", () => {
+  const table = readAudioEventTable();
+  const playlist = table.events[RTS_AUDIO.musicSettlement];
+  assert.ok(playlist, "the gameplay music event must exist");
+  // Two is the least that makes a playlist a playlist. Not a count — tracks get
+  // added, and a test that pinned four would go red on the fifth delivery.
+  assert.ok(
+    playlist.clips.length >= 2,
+    `the music playlist needs at least two tracks to cross between (has ${playlist.clips.length})`,
+  );
+  // The director hands over before a track's tail, so the clip must be free to
+  // end. Looping would put its own seam — which generated music rarely hides —
+  // in front of the player on any track long enough to come round.
+  assert.equal(playlist.loop, false, "the music playlist is faded between, not looped");
+  assert.equal(playlist.bus, "music", "the playlist must ride the bus its slider controls");
+  // A crossfade is two tracks at once. The event director does not play these,
+  // so nothing enforces the cap — but a table that said 1 would describe a bed
+  // that cannot do what the game actually does.
+  assert.ok(
+    playlist.maxInstances >= 2,
+    "the playlist entry must admit the two tracks a crossfade overlaps",
+  );
 });
 
 check("RTS audio events: every triggered name is answered by the shipped table", () => {
@@ -31221,7 +31497,10 @@ check("RTS contextual right-click assigns an enemy attack target", () => {
     new CommandMarkerSystem(),
   );
 
-  commands.issueAt(50, 50);
+  // The returned kind is a contract, not a convenience: the Guard's spoken
+  // acknowledgement is chosen from it, and a click that reported "move" while
+  // issuing an attack would answer an assault with "on our way".
+  assert.equal(commands.issueAt(50, 50), "attack", "a click on an enemy reports the attack it issued");
 
   assert.equal(player.attackTarget, enemy);
   assert.equal(player.targeted, false);
@@ -31252,7 +31531,7 @@ check("RTS player ground orders outrank defensive retaliation", () => {
     new CommandMarkerSystem(),
   );
 
-  commands.issueAt(50, 50);
+  assert.equal(commands.issueAt(50, 50), "move", "the same button on open ground reports a move");
   assert.equal(guard.hasPlayerMoveOrder, true, "a ground right-click records a player-priority route");
   const attacker = units.spawn("enemy", 4.5, 4, RTS_TEST_UNIT_STATS);
   assert.equal(retaliateAgainstAttack(guard, attacker, new RtsNavigation()), false);
@@ -49912,6 +50191,37 @@ check("a shell reports its authored burst once, where and when it lands", () => 
   for (let i = 0; i < 240; i += 1) cannonballs.update(1 / 60);
   assert.equal(landings.length, 2, "a cleared shell never reports a landing");
   cannonballs.dispose();
+});
+
+check("a landed shell leaves a soft ground scorch that respects terrain, fog, and match lifetime", () => {
+  const scorches = new CannonImpactScorches();
+  let visible = true;
+  scorches.setGroundSampler(() => 3.5);
+  scorches.setVisibilityTest(() => visible);
+  scorches.add(new Vector3(12, 99, -6));
+  assert.equal(scorches.count, 1, "one landed ball leaves one retained scorch");
+
+  const mesh = scorches.root.children[0];
+  assert.ok(mesh instanceof InstancedMesh, "scorches stay one instanced ground layer, not one draw per shell");
+  assert.equal(mesh.count, 1, "the visible landing writes one instance");
+  const matrix = new Matrix4();
+  mesh.getMatrixAt(0, matrix);
+  assert.ok(
+    Math.abs(new Vector3().setFromMatrixPosition(matrix).y - 3.525) < 1e-6,
+    "the mark rests just above sampled terrain instead of at the target's torso height",
+  );
+
+  visible = false;
+  scorches.update(1 / 60);
+  assert.equal(mesh.count, 0, "a ground mark in current fog does not reveal an unscouted impact");
+  visible = true;
+  scorches.update(1 / 60);
+  assert.equal(mesh.count, 1, "a retained mark returns when the player scouts it again");
+
+  scorches.update(CANNON_SCORCH_SECONDS);
+  assert.equal(scorches.count, 0, "shell history clears itself after its bounded aftermath window");
+  assert.equal(mesh.count, 0, "an expired scorch no longer occupies the instance layer");
+  scorches.dispose();
 });
 
 check("RTS grid navigation routes a unit around a static blocker", () => {

@@ -226,7 +226,7 @@ function createAssetCard(options: ContentPanelOptions, item: BrowserAssetItem): 
   // is readable from wherever the pointer happens to rest - and, when the card
   // carries the amber issue dot, says what the warning is without having to hit
   // the 9px dot itself.
-  card.title = contentCardTooltip(item.label, issues);
+  card.title = contentCardTooltip(item.label, issues, contentFileName(item.path));
   card.innerHTML = `
       ${
         issues.length > 0
@@ -510,13 +510,34 @@ function formatContentTypeLabel(value: string): string {
 }
 
 /**
- * Native-tooltip text for a Content Browser card: the untruncated name, then one
- * line per issue behind the amber dot. Cards live inside a scrolling grid, so
- * the CSS `[data-tip]` bubble would be clipped by the list's overflow - `title`
- * is the one hint that escapes it.
+ * Native-tooltip text for a Content Browser card: the untruncated name, the file
+ * behind it when the two differ, then one line per issue behind the amber dot.
+ * Cards live inside a scrolling grid, so the CSS `[data-tip]` bubble would be
+ * clipped by the list's overflow - `title` is the one hint that escapes it.
+ *
+ * The file line is there because the card's `<strong>` shows the asset's authored
+ * *display name*, which is deliberately allowed to differ from the file behind
+ * it: `sfx_ui_click_01.ogg` is labelled "UI Click" on purpose, and the audio
+ * manifest sync refuses to flatten that back to "Ui Click". The cost of that
+ * choice is that a card and a file can drift apart with nothing on screen saying
+ * so - a file renamed outside the editor keeps its old label, and the browser
+ * looks unchanged when it is not. One line closes that, and only when it has
+ * something to say: a label that already *is* the file name prints nothing
+ * extra, which covers every unregistered loose file and every asset renamed
+ * through the editor (`/__content-rename` rewrites `name` to the new stem).
  */
-function contentCardTooltip(label: string, issues: readonly BrowserAssetIssue[] = []): string {
-  return [label, ...issues.map((issue) => `⚠ ${issue.label}`)].join("\n");
+function contentCardTooltip(
+  label: string,
+  issues: readonly BrowserAssetIssue[] = [],
+  fileName?: string,
+): string {
+  const file = fileName && fileName !== label ? [fileName] : [];
+  return [label, ...file, ...issues.map((issue) => `⚠ ${issue.label}`)].join("\n");
+}
+
+/** The file name at the end of a public-root-relative asset path. */
+function contentFileName(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
 }
 
 function formatContentTypeBadge(value: BrowserAssetItem["type"]): string {

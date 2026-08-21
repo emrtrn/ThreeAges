@@ -258,6 +258,15 @@ export class AudioSubsystem implements Subsystem, AudioBus {
   private played: AudioPlayRequest[] = [];
   /** Decoded audio buffers keyed by URL; promise-cached so each file loads once. */
   private readonly buffers = new Map<string, Promise<AudioBuffer | null>>();
+  /**
+   * Decoded length in seconds, keyed by clip id, recorded as each buffer lands.
+   *
+   * Written from the decode rather than authored beside the file, so it cannot
+   * disagree with the audio: a track re-exported a bar longer needs no edit
+   * anywhere. Only what has actually been played is in here, which is why the
+   * one consumer ({@link musicDirector}) polls instead of asking up front.
+   */
+  private readonly clipDurations = new Map<string, number>();
   /** Latest listener pose (camera), applied to the context once it exists. */
   private listenerPosition: AudioVec3 | null = null;
   private listenerForward: AudioVec3 = [0, 0, -1];
@@ -427,6 +436,19 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     return this.played;
   }
 
+  /**
+   * A clip's decoded length in seconds, or null if it has not been decoded here.
+   *
+   * Null is the ordinary answer for a clip that has never played, for the first
+   * moment after one starts (the fetch and decode are in flight), for a
+   * synthesized tone, and always on the headless backend. A caller that needs a
+   * length before then needs its own fallback — this reports what is known, not
+   * what is authored.
+   */
+  clipDurationSeconds(clipId: string): number | null {
+    return this.clipDurations.get(clipId) ?? null;
+  }
+
   update(_context: EngineUpdateContext): void {
     const requests = this.pending;
     this.pending = [];
@@ -459,6 +481,7 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     this.active.clear();
     this.played = [];
     this.buffers.clear();
+    this.clipDurations.clear();
     this.busNodes = null;
     void this.context?.close();
     this.context = null;
@@ -504,6 +527,10 @@ export class AudioSubsystem implements Subsystem, AudioBus {
     handle: RuntimeAudioPlaybackHandle,
   ): Promise<void> {
     const buffer = await this.loadBuffer(context, url);
+    // Recorded before the early return: a play that was cancelled while its file
+    // was in flight still decoded the buffer, and the length it learned is just
+    // as true as the one a completed play learns.
+    if (buffer) this.clipDurations.set(request.clipId, buffer.duration);
     if (!buffer || handle.stopped) {
       if (!buffer) handle.stop();
       return;

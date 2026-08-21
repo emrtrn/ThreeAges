@@ -153,6 +153,24 @@ export const RTS_AUDIO = {
    * already has its info notice, and giving both the same fanfare would spend
    * the milestone sound on the thing that is not the milestone.
    */
+  /**
+   * Guard barks — the unit answering the player rather than the interface
+   * answering the click.
+   *
+   * Fired alongside `uiSelect` / `uiCommand`, not instead of them: the click
+   * sound is the interface confirming it heard, the bark is the squad
+   * confirming it will go, and a player who selects a worker still needs the
+   * first. Only the Guard has lines, so a selection without one is silent here
+   * and nothing has to stand in for the others.
+   *
+   * Move and attack are separate events for the same reason the design keeps
+   * `uiCommand` apart from `uiClick`: "we are moving" and "we are engaging"
+   * are the two things a player most needs to tell apart without looking, and
+   * they are the two orders that land on the same button.
+   */
+  guardSelect: "voice.guard_select",
+  guardMove: "voice.guard_move",
+  guardAttack: "voice.guard_attack",
   stingerAgeUp: "stinger.age_up",
   stingerVictory: "stinger.victory",
   stingerDefeat: "stinger.defeat",
