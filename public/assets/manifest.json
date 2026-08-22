@@ -24247,29 +24247,6 @@
       "license": "Unknown"
     },
     {
-      "id": "mountain4k",
-      "name": "Mountain4K",
-      "assetType": "staticMesh",
-      "category": "Landscape",
-      "path": "assets/ThreeAges/Props/Mountain4K.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Landscape",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 34186024
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "threeages-tex-wood-dark-bc",
       "name": "T_TA_Wood_Dark_BC",
       "assetType": "texture",

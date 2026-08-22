@@ -174,6 +174,7 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-22 | **Sekme değişiminde müzik boşluğu düzeltildi.** Kullanıcı bildirdi: başka sekmeye geçince oyun duruyor, müzik devam ediyor, dönünce devir gelmiyor. Kök sebep, yatağın iki yarısının iki ayrı saatte koşması — parça ses aygıtının zamanında, devir zamanlaması ise kare başına biriken `audioClock`'ta. Gizli sekmede kareler durup müzik durmayınca parça tükeniyor, zamanlama hâlâ ortasında sanıyor. Çözüm: `MusicDirector.setPaused` iki yarıyı birden askıya alıyor ve her zamanlanmış anı, hiçbir şeyin çalmadığı süre kadar ileri kaydırıyor — böylece host'un saatinin o sırada işleyip işlemediği önemsizleşiyor (gizli sekme: kaydırma sıfır; duraklatılmış maç: gerçek). Sekme gizlenince ayrıca `AudioContext.suspend()` çağrılıyor, çünkü bir media element askıya alınmış context'in içinden de kendi konumunu ilerletir. Duraklatma geçişlere kanca takarak değil durumdan uzlaştırılıyor: duraklatmanın birden fazla girişi var ve birini atlamak aynı ayrışmayı geri getirirdi. Bu, kodda yazılı bir kararı tersine çeviriyor — müzik daha önce bilerek duraklatma kapısının dışındaydı. |
 | 2026-08-22 | **Faz 4 kapandı: müzik durum makinesi** (§35.2). §79.4'ün "Faz 4'e girmeden önce yazılmalı" dediği sinyal kaynağı kuruldu — görünür düşman + aktif çatışma + merkeze tehdit, üçü de sis kapısından geçerek (perde arkasındaki ordu için gerilen müzik, verilmemiş bir keşif aracı olurdu). Hasar oranı bilinçle dışarıda: `rtsAttackWatch` yalnız yapıları örnekliyor. Yükseliş anında, düşüş `calmSeconds` sonra ve yarıda kesilen düşüş pencereyi baştan başlatıyor — savaş dikenli, örneği birebir izleyen bir durum tek çarpışmada birkaç kez crossfade yapardı. Eşikler `events.json` → `music.states`; motorda değil oyunda ayrıştırılıyor, çünkü "kaç düşman görünüyor" bu oyuna ait bir soru. `setPlaylist` devri beklemeden başlatıyor: bunsuz battle müziği settlement parçası ne zaman biterse o zaman gelirdi, ki bu makinenin hiç çalışmamasından ayırt edilemez. Menü müziği kendi küçük yığınında (`rtsMenuMusic.ts`) — menü `RtsApp`'ten önce çalışıyor; soğuk açılışta otomatik oynatma politikası reddeder ve ilk harekette yeniden denenir. `build:verify` yeşil (1550 check). |
 | 2026-08-22 | **Faz 5 açıldı ve kalanı gerçeğe getirildi (§82).** §48–§50'nin kutuları v1.0'dan kalmaydı ve Faz 0–4'ün yaptıklarını saymıyordu. Kalan iş üç kovaya ayrıldı — kanca / varlık / **önce animasyon** — ve üçüncüsü sayılmasa görülmeyecek olan: tüm skeleton sidecar'larında yalnız altı notify adı authored (`footstep`, `body-impact`, `sword-swing`, `arrow-release`, `throw-release`, `chop-impact`), yani §50'nin istediği yay germe / kalkan / çekiç / topçu geri tepmesi için asılacak işaret yok. Bunlar ses üretim işi değil klip işi, ve kazmanın §81.1'de iptal edilme sebebiyle aynı. Yol boyunca bir de ücretsiz kanal göründü: `throw-release` authored ama hiçbir sese bağlı değil. |
+| 2026-08-22 | **Yapı sesleri hasar sunum tablosuna taşınıyor — tasarım onaylandı (§82.5).** Kullanıcının önerisi ve §82.4'ün yapı yarısını yerinden ediyor: varyantı `damage.buildings.<id>.material` string'inden okumak hem çağ körüydü hem 15 binanın 10'unda authored değildi; `debris` slot'u ikisini de çözüyor çünkü `defaults` her binayı kapsıyor ve zaten çağ başına ayrık. Slot bir **olay id'si** adlandırır (klip değil — mix, cooldown ve mesafe olay tablosunundur), alan tek: `sound`, string ya da çağ haritası. Çıplak string iki çağı birden ezdiği için üç katmanlı override istisna tablosunu bedavaya veriyor. Kayda değer gerekçe kullanıcıdan geldi: kasaba efekti kiremit ama kasaba **sesi taş** — efektin malzemesini nereden çıktığı seçiyor (debris anchor'ı `roof`, parçalar çatıdan dökülüyor), sesin malzemesini binanın neden yapıldığı. Sesi efekt id'sinden türetseydik bu ayrım ifade edilemezdi; `sound`'un authored olmasının en iyi gerekçesi bu. Ateş sesi ayrı bir cins: `heavySmoke` saniyede bir yeniden doğan bir spawn, sesi aynı ritimde tetiklemek kekemelik olurdu — bir yatak, ve `building.build_loop`'un tek-döngü kuralıyla. `structureMaterialVariant` retire olacak. |
 | 2026-08-22 | **§81.2'nin ertelediği ayrım kararı verildi (§82.4).** Kullanıcı sordu: Guard/Archer/Worker için ayrı ses üretmeden önce olay ayrımı kodda yapılmalı, yoksa üretilen varyantların bir kısmı hiç çalmaz. Doğru soru, ve cevap eksen üzerine çıktı. Önce sorunun **küçük** olduğu görüldü: `sword-swing` yalnız Guard rig'inde, `arrow-release` yalnız Archer'da, `chop-impact`/`throw-release` yalnız Worker'da authored — yani zaten rol başına ayrıklar. Gerçekten paylaşılan üç olay var. Eksen **rol değil `armorClass`** seçildi: zaten authored (guard/siege heavy, archer/worker light), kulağın duyduğu eksen o (bir darbe vuranın rolüne değil vurulanın zırhına benzer — §20 bunu zaten `SFX-GRD-004`/`005` ile söylüyor), ve dört değil iki set demek. İki işaret zıt özneyi okuyor: adım yapanın, darbe üzerine indiğinin. Yapılar kendi ekseninde (malzeme). `resolveRtsAudioVariant` varyantı yalnız tablo cevaplıyorsa seçiyor — müzik durum makinesiyle aynı geri düşüş şekli — ki üretim sınıf sınıf inebilsin. Bugün varyant sevk edilmedi, yani duyulacak değişiklik yok; ayrım kasten klipten önce indi. Yeni üretim 3 set / 12 klip (rol ekseninde 9 set olurdu). İki açık uç yazıldı: 15 binanın 10'u malzeme beyan etmiyor (doldurmanın **görsel** yan etkisi var, moloz ailesini de seçiyor), ve ayrım tekrar kontrolünü ikiye böldüğü için varyantlar indiğinde `cooldownMs`/`maxInstances` yeniden ayarlanmalı. |
 | 2026-08-22 | **`unit.death` bağlandı** (§82.2) — Faz 5'in ilk maddesi. Kanca `updateUnitDeaths`'in `onDefeated`'ı: yenilgi karesinde bir kez, iki taraf için de, sis kapısından geçerek. Üç rol için tek olay (§81.2'nin kararı). Zamanlama bilinçle klibe bırakıldı: kanca ölüm animasyonunun başladığı karede çalar, gövdenin indiği anda değil, ve düşüşü işaretlemek her ölüm klibine bir notify yazmayı gerektirirdi — kazmanın tuzağı. Bugün yer tutucu çalıyor (`starter-snd-impact-light`), üretim promptu §82.2'de. Sözleşme testi magnitude pinlemiyor, tekrar kontrolünün **var olduğunu** pinliyor: bir ölüm doğası gereği toplu gelir ve `cooldownMs`'i mix geçişinde 0'a düşürmek hata olarak sessiz, ses olarak duvardır. |
 | 2026-08-22 | Yol boyunca bir tutarsızlık: `stg_age_up_02.ogg` diskten silinip içeriği `stg_age_up_01.ogg` üzerine yazılmıştı (bayt bayt aynı — yani bir yeniden adlandırma, ve §81.1'in "sevk edilmiş ama çalınmayan" tek varlığını temizliyor), ama manifest hâlâ `stg-age-up-02` kaydını taşıyordu. `audio:manifest` bunu yakalıyor ama **düzeltmiyor** — dosyası olmayan kaydı bildirip yazmayı reddediyor, ki silmenin kasıtlı olduğunu bilemez. Kayıt elle düşürüldü. |
@@ -3580,6 +3581,32 @@ Geldiğinde §81.4'ün üç adımı: dosyaları klasöre koy → `npm run audio:
 editörde **Veri → Ses Olayları → UNITS → unit.death** klipleri seç. `RtsApp.ts`
 açılmaz.
 
+## 82.3 Sırada, kovalarına göre
+
+**A (kanca):**
+
+- [x] `unit.death`
+- [x] Paylaşılan olayların varyant ayrımı (§82.4) — kod indi, klip bekliyor
+- [ ] Yapı sesleri hasar tablosundan (§82.5) — tasarım onaylandı, uygulama sırada
+- [ ] Seçim paneli butonları — `runSelectionAction` on dört aksiyon taşıyor ve
+      hiçbiri `playUiAudio` çağırmıyor: eğitim, çağ atlama, merkez seviye atlama,
+      yıkım, tamir, rally, üç iptal, işçi atama, pazar al/sat. Bugünkü tek
+      cevapları bildirim tier'ı (`command` → info, `command-refused` → warning),
+      yani basılan buton ile ekonomik bir uyarı aynı sesi çıkarıyor.
+- [ ] Yol döşeme / silme (§18 `SFX-LOG-001`/`009`) — `roadPlacement.confirmAt` sessiz
+- [ ] `throw-release` işaretine bir ses
+
+**B (varlık):** pazar al/sat + stok dolu (§16), yıkım onayı ve tamir (§17),
+yapı seviye atlama / çağ atlama başlangıcı (§17 `BLD-007`/`008`), depo bağlandı
+ve bölge genişledi (§18 `LOG-003`/`008`), ahşap yapıya top isabeti (§22),
+bildirimlerin tür bazlı sesleri (bugün 20+ tür üç tier'a düşüyor).
+
+**C (önce animasyon):** yay germe, kalkan hareketi/bloğu, çekiç, topçu
+tekerlek/gövde/geri tepme, ok uçuşu.
+
+**Ayrıca:** Worker ve Archer VO (§38/§40) — metinler hazır, Guard profili (§47.0)
+referans, kanca `playSelectionAudio` içinde bugün yalnız Guard'ı soruyor.
+
 ## 82.4 Paylaşılan olayların ayrımı — karar (22 Ağustos 2026)
 
 §81.2 bu soruyu açık bırakmıştı ve doğru soruydu: tabloda tek satır olan şeye rol
@@ -3653,27 +3680,121 @@ Rol ekseninde bu 9 set olurdu.
   başınadır, yani `combat.body_impact_light` + `_heavy` toplamda iki kat örneğe
   izin verir. Varyantlar sevk edildiğinde bu sayılar yeniden ayarlanmalı.
 
-## 82.3 Sırada, kovalarına göre
+## 82.5 Yapı sesleri hasar tablosundan sürülür — tasarım (22 Ağustos 2026)
 
-**A (kanca):**
+Kullanıcının önerisi, ve §82.4'ün yapı yarısını **yerinden ediyor**. Kayıt için
+önce o: §82.4 `structure.impact` varyantını `damage.buildings.<id>.material`
+string'inden okuyordu, ve o kaynağın iki zayıflığı vardı — **çağ körü** (bir ev
+yerleşimde ahşap, kasabada taş dökülür; tek bir malzeme adı bunu söyleyemez) ve
+**15 binanın 10'unda authored değil**. `debris` slot'u ikisini de çözüyor:
+`defaults` üzerinden her binayı kapsıyor ve zaten çağ başına ayrık. Ses için
+doğru kaynak malzeme alanı değil, **o çağda gerçekten dökülen şey**.
 
-- [x] `unit.death`
-- [x] Paylaşılan olayların varyant ayrımı (§82.4) — kod indi, klip bekliyor
-- [ ] Seçim paneli butonları — `runSelectionAction` on dört aksiyon taşıyor ve
-      hiçbiri `playUiAudio` çağırmıyor: eğitim, çağ atlama, merkez seviye atlama,
-      yıkım, tamir, rally, üç iptal, işçi atama, pazar al/sat. Bugünkü tek
-      cevapları bildirim tier'ı (`command` → info, `command-refused` → warning),
-      yani basılan buton ile ekonomik bir uyarı aynı sesi çıkarıyor.
-- [ ] Yol döşeme / silme (§18 `SFX-LOG-001`/`009`) — `roadPlacement.confirmAt` sessiz
-- [ ] `throw-release` işaretine bir ses
+### Slot bir olay id'si adlandırır, klip değil
 
-**B (varlık):** pazar al/sat + stok dolu (§16), yıkım onayı ve tamir (§17),
-yapı seviye atlama / çağ atlama başlangıcı (§17 `BLD-007`/`008`), depo bağlandı
-ve bölge genişledi (§18 `LOG-003`/`008`), ahşap yapıya top isabeti (§22),
-bildirimlerin tür bazlı sesleri (bugün 20+ tür üç tier'a düşüyor).
+`effects` bir efekt varlığı id'si adlandırıyor ve efektin içini efekt varlığı
+biliyor. Ses de öyle: slot bir **olay id'si** adlandırır, o sesin neye benzediğini
+`events.json` bilmeye devam eder. Damage tablosuna klip id'si yazmak §58/§80'in
+sınırını delerdi — mix hiyerarşisi, cooldown, mesafe kesmesi ve instance bütçesi
+olay tablosunundur, ve bir klip id'si onların hiçbirini taşımaz.
 
-**C (önce animasyon):** yay germe, kalkan hareketi/bloğu, çekiç, topçu
-tekerlek/gövde/geri tepme, ok uçuşu.
+### Tek alan: `sound`, string ya da çağ haritası
 
-**Ayrıca:** Worker ve Archer VO (§38/§40) — metinler hazır, Guard profili (§47.0)
-referans, kanca `playSelectionAudio` içinde bugün yalnız Guard'ı soruyor.
+```jsonc
+// damage.defaults.slots
+"debris":       { "sound": { "settlement": "structure.impact_wood",
+                             "town":       "structure.impact_stone" } },
+"collapseDust": { "sound": { "settlement": "structure.collapse_wood",
+                             "town":       "structure.collapse_stone" } },
+"heavySmoke":   { "sound": "structure.fire_loop" },
+"lightSmoke":   { },   // sessiz
+"ruinSmoke":    { }    // sessiz
+```
+
+**Üç katmanlı override bedavaya geliyor** ve tarif edilen istisna tablosunu
+birebir veriyor — yeni mekanizma yok:
+
+```jsonc
+"materials": {
+  "stone": { "slots": { "debris":       { "sound": "structure.impact_stone" },
+                        "collapseDust": { "sound": "structure.collapse_stone" } } },
+  "wood":  { "slots": { "debris":       { "sound": "structure.impact_wood" },
+                        "collapseDust": { "sound": "structure.collapse_wood" } } }
+}
+```
+
+Çıplak bir string burada **iki çağı birden** ezer. Sonuç:
+
+| Bina | Yerleşim | Kasaba | Nereden |
+|---|---|---|---|
+| Ev, depo, kışla, tapınak… | ahşap | taş | `defaults` |
+| Oduncu kampı, avcı kulübesi, ağıl | ahşap | ahşap | `material: "wood"` |
+| Taş ocağı, altın madeni | taş | taş | `material: "stone"` |
+
+`sound`'un string **veya** harita olması kayma riskini yapısal olarak kaldırıyor:
+`ages` ile anahtar anahtar eşleşmesi gereken paralel bir harita olsaydı, üçüncü
+bir çağ eklendiği gün biri sessiz kalırdı. Ayrıca `collapseDust` gibi `effects`'i
+çağa bağlı **olmayan** bir slot bile sesini çağa bağlayabiliyor — ki tam olarak
+istenen budur.
+
+### Ses ile efekt neden ayrışıyor — ve bu neden doğru
+
+Kasaba çağı debris efekti `rts-fx-debris-tile` (kiremit), ama kasaba çağı **sesi
+taş**. Bu bir tutarsızlık değil, kararın kendisi ve ayrı bir alan olmasının en
+iyi gerekçesi:
+
+> Efektin malzemesini **nereden çıktığı** seçiyor — debris anchor'ı `roof`, yani
+> parçalar çatıdan dökülüyor ve çatı kiremit. Sesin malzemesini ise binanın
+> **neden yapıldığı** seçiyor, ve yapılar yoğunlukla taş.
+
+Sesi efekt id'sinden türetseydik (`rts-fx-debris-tile` → "kiremit sesi") bu ayrım
+ifade edilemezdi ve her bina yanlış duyulurdu. `sound`'un authored olmasının
+sebebi budur.
+
+### Ateş sesi bir yatak, bir patlama değil
+
+`heavySmoke` bir **tekrar eden spawn** (`intervalSeconds: 1`): efekt her saniye
+yeniden doğuyor. Sesi aynı ritimde tetiklemek saniyede bir yeniden başlayan bir
+çıtırtı, yani kekemelik olurdu. Ateş bir yataktır: ağır hasar kademesine girince
+başlar, tamir ya da yıkım ile 0.35 s'de kısılır.
+
+Ve `building.build_loop`'un kuralı burada da geçerli, aynı gerekçeyle:
+**haritada tek ateş çalar, en yakın yanan binada.** Dört yanan ev dört ateş
+değil bir bulamaçtır, üstelik direktörün `stop()`'u olay id'siyle çalıştığı için
+ikinci kopya tek tek durdurulamaz. `updateBuildLoopAudio` birebir kopyalanacak
+şekil.
+
+### Uygulama kapsamı
+
+| Yer | Ne |
+|---|---|
+| `rtsContentCatalog.ts` | `RtsDamageSlot.sound` (string ya da çağ haritası), `RtsResolvedDamageSlot.sound` (tek string ya da null), normalizasyon + override katmanı |
+| `validateRtsContentDamageSection` | `sound` doğrulaması; `/__save-gamedata` bu yoldan geçiyor |
+| `RtsApp` | `onStructureImpact` ve çöküş slot'un sesini çalar; `updateFireLoopAudio` (build loop'un ikizi) |
+| `editorCatalog.ts` | `sound` için alan metadata'sı — hasar tablolarının formunda etiketli görünsün |
+| `events.json` | `structure.impact_wood`, `structure.collapse_wood`, `structure.fire_loop` (yeni); `impact_stone`/`collapse_stone` mevcut kliplerle |
+| `engine-tests.ts` | Damage tablosunun adlandırdığı her olay id'si, olay tablosunda karşılık bulmalı |
+
+**Retire olan:** `structureMaterialVariant` ve `RTS_AUDIO_SPLIT`'in
+`structure.impact` satırı. Aynı sorunun zayıf cevabıydı ve iki kaynak doğruluk
+bırakmak en kötüsü olurdu — yapılarda olay id'si artık **türetilmiyor**,
+authored. Birimlerin zırh varyantı (§82.4: `unit.footstep`, `combat.body_impact`,
+`unit.death`) aynen kalır: onların hasar tablosu yok, ve orada türetme doğru
+cevap.
+
+**Bir pürüz:** `sound` union tipi ve Data Table formu path tabanlı, yani authored
+olana göre bir kutu ya da iki kutu gösterecek. Uygulanırken bakılacak tek yer.
+
+### Üretim
+
+| Olay | Durum |
+|---|---|
+| `structure.impact_stone` | mevcut `sfx_structure_impact_stone_01…04` |
+| `structure.impact_wood` | **yeni, 4 varyant** |
+| `structure.collapse_stone` | mevcut `sfx_structure_collapse_01…06` buraya taşınır |
+| `structure.collapse_wood` | **yeni, 3-4 varyant** — sonraya bırakılabilir, o zamana kadar taş sesine işaret eder |
+| `structure.fire_loop` | **yeni, 1 seamless loop** (§56'nın loop checklist'i) |
+
+Minimum kazanç iki set: **ahşap isabet + ateş döngüsü.** Gerisi bağlama authored
+olduğu için kod değil veri değişikliğiyle gelir.
+
