@@ -225,11 +225,10 @@ export const RTS_AUDIO = {
  * would ship a library whose larger half never plays — which is the trap §81.2
  * wrote down and left open.
  *
- * The axis chosen is **not** role. It is `armorClass` for people and the damage
- * table's material class for buildings, and the reasons are three:
+ * The axis chosen is **not** role. It is `armorClass`, and the reasons are three:
  *
- * 1. **Both are already authored.** `guard`/`siege` are `heavy`, `archer`/`worker`
- *    are `light`, and buildings name `wood` or `stone`. No new data.
+ * 1. **It is already authored.** `guard`/`siege` are `heavy`, `archer`/`worker`
+ *    are `light`. No new data.
  * 2. **It is the axis the ear actually hears.** What a blow sounds like is
  *    decided by what it landed *on*, not by who swung — §20 says exactly this
  *    with `SFX-GRD-004` "sword hit armor" beside `SFX-GRD-005` "sword hit flesh".
@@ -240,18 +239,25 @@ export const RTS_AUDIO = {
  * The events that look shared and are not: `sword-swing` is authored on the Guard
  * rig alone, `arrow-release` on the Archer's, `chop-impact` and `throw-release` on
  * the Worker's. Those are already one role each and need no split.
+ *
+ * **Buildings are deliberately not here** (§82.5). They looked like the same
+ * problem and are not: a house is timber in a settlement and masonry in a town,
+ * so a variant derived from one authored material name is age-blind, and ten of
+ * the fifteen buildings never authored one. Their sound is named outright by the
+ * damage presentation table (`damage.…slots.<slot>.sound`), which is already per
+ * age and already covers every building through `defaults` — so there is nothing
+ * left here to derive, and leaving a second answer beside the authored one would
+ * be the worst of the three options.
  */
-export type RtsAudioVariant = "light" | "heavy" | "wood" | "stone";
+export type RtsAudioVariant = "light" | "heavy";
 
 const ARMOR_VARIANTS = ["light", "heavy"] as const satisfies readonly RtsAudioVariant[];
-const MATERIAL_VARIANTS = ["wood", "stone"] as const satisfies readonly RtsAudioVariant[];
 
 /** Which shared events may carry a variant, and which variants each admits. */
 export const RTS_AUDIO_SPLIT: Readonly<Record<string, readonly RtsAudioVariant[]>> = {
   [RTS_NOTIFY_AUDIO_EVENTS.footstep!]: ARMOR_VARIANTS,
   [RTS_NOTIFY_AUDIO_EVENTS["body-impact"]!]: ARMOR_VARIANTS,
   [RTS_AUDIO.unitDeath]: ARMOR_VARIANTS,
-  [RTS_AUDIO.structureImpact]: MATERIAL_VARIANTS,
 };
 
 /** `combat.body_impact` + `heavy` → `combat.body_impact_heavy`. */

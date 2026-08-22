@@ -381,6 +381,7 @@
           "effects": [
             "rts-fx-fire-loop"
           ],
+          "sound": "structure.fire_loop",
           "anchor": {
             "mode": "ground",
             "offset": [
@@ -414,6 +415,10 @@
               "rts-fx-debris-tile"
             ]
           },
+          "sound": {
+            "settlement": "structure.impact_wood",
+            "town": "structure.impact_stone"
+          },
           "anchor": {
             "mode": "roof",
             "offset": [
@@ -428,6 +433,10 @@
           "effects": [
             "rts-fx-collapse-dust"
           ],
+          "sound": {
+            "settlement": "structure.collapse_wood",
+            "town": "structure.collapse_stone"
+          },
           "anchor": {
             "mode": "ground",
             "offset": [
@@ -450,7 +459,11 @@
               "town": [
                 "rts-fx-debris-stone"
               ]
-            }
+            },
+            "sound": "structure.impact_stone"
+          },
+          "collapseDust": {
+            "sound": "structure.collapse_stone"
           }
         }
       },
@@ -464,7 +477,11 @@
               "town": [
                 "rts-fx-debris-wood"
               ]
-            }
+            },
+            "sound": "structure.impact_wood"
+          },
+          "collapseDust": {
+            "sound": "structure.collapse_wood"
           }
         }
       }

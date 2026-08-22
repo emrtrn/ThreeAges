@@ -461,14 +461,14 @@ const SCENE_BACKGROUND = "#20262b";
  * from the same parapet, and two numbers here would read as two towers.
  */
 /**
- * How long the construction bed takes to fade out when its site is finished,
- * razed or abandoned.
+ * How long a world bed takes to fade out when the thing it describes stops — a
+ * construction site finished, razed or abandoned, a fire put out or collapsed.
  *
  * Short enough to be part of the same moment as the building completing, long
  * enough that the loop does not click off mid-cycle. A one-shot would not need
  * this; a continuous sound cut on a frame boundary is audible as a fault.
  */
-const BUILD_LOOP_FADE_SECONDS = 0.35;
+const WORLD_BED_FADE_SECONDS = 0.35;
 
 const TOWER_MUZZLE_HEIGHT = 3.2;
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
@@ -2812,6 +2812,8 @@ export class RtsApp {
     this.musicStates.reset();
     this.musicStateLoaded = null;
     this.buildLoopSite = null;
+    this.fireLoopSite = null;
+    this.fireLoopEvent = null;
     this.audioSubsystem.dispose();
     this.hudBar.dispose();
     this.notificationFeed.dispose();
@@ -3163,6 +3165,7 @@ export class RtsApp {
     // per *rendered* frame, so the speed picker cannot make the bed restart four
     // times as often as it does at normal speed.
     this.updateBuildLoopAudio();
+    this.updateFireLoopAudio();
     if (this.debugWitness) {
       // Measured like everything else, because on this route it is a real cost:
       // the hidden readout rebuilds a line per unit per frame, and a panel that
@@ -4469,16 +4472,13 @@ export class RtsApp {
    * cannot read as individual impacts anyway.
    */
   private onStructureImpact(structure: PlacedStructure): void {
-    // Before the presentation lookup, not after: whether a building sheds debris
-    // is an art decision per building, and a building with no authored debris
-    // slot must still be *heard* taking the hit. The two budgets are separate
-    // and neither gates the other.
-    this.playStructureAudio(
-      structure,
-      RTS_AUDIO.structureImpact,
-      this.structureMaterialVariant(structure),
-    );
     const presentation = this.structureDamagePresentation(structure);
+    // Sounded before the effect budget is consulted, not after: whether a
+    // building sheds debris is an art decision per building, and one with no
+    // authored debris effect must still be *heard* taking the hit. The two
+    // budgets are separate and neither gates the other — which is also why the
+    // impact throttle below governs only the particles.
+    this.playStructureAudio(structure, presentation?.slots.debris.sound ?? RTS_AUDIO.structureImpact);
     if (!presentation) return;
     const slot = presentation.slots.debris;
     if (slot.effects.length === 0) return;
@@ -4539,7 +4539,7 @@ export class RtsApp {
     // A fade rather than a cut: this is a continuous sound, and a hard stop on
     // the frame a building finishes reads as a dropout under the completion
     // chime that plays in the same breath.
-    this.audioEvents.stop(RTS_AUDIO.buildingBuildLoop, BUILD_LOOP_FADE_SECONDS);
+    this.audioEvents.stop(RTS_AUDIO.buildingBuildLoop, WORLD_BED_FADE_SECONDS);
     this.buildLoopSite = null;
     if (!site) return;
     const y = this.groundSurface.heightAt(site.x, site.z);
@@ -4555,6 +4555,104 @@ export class RtsApp {
     // it here instead would leave a bed that is tracked but silent, and nothing
     // would ever retry it.
     if (result === "played") this.buildLoopSite = site;
+  }
+
+  /**
+   * The building the fire bed is currently sounding over, and the event it is
+   * sounding as.
+   *
+   * The event id is held beside the site rather than looked up again, because
+   * the director's `stop()` is keyed by id and the id is *authored per building*
+   * (§82.5): a bed started over a timber house and stopped after the catalog
+   * resolved a different event for whatever burns next would never stop at all.
+   * What was started is what gets stopped.
+   */
+  private fireLoopSite: PlacedStructure | null = null;
+  private fireLoopEvent: string | null = null;
+
+  /**
+   * Start, move or stop the fire bed — the audio half of "something over there
+   * is burning".
+   *
+   * A bed rather than a trigger, and that is the whole reason this is not one
+   * more line in {@link updateStructureDamageVfx}. The fire *effect* is a
+   * repeating spawn (`heavySmoke`, an interval measured in seconds); a sound
+   * retriggered on that rhythm is a crackle that restarts once a second, which
+   * reads as a fault rather than as a fire. It starts when the building enters
+   * the heavy stage and is released — repaired, collapsed, or the match ended —
+   * with the same short fade the construction bed uses.
+   *
+   * One fire on the map, at the nearest burning building, for the reasons
+   * {@link updateBuildLoopAudio} spells out: four burning houses are a wash
+   * rather than four readable fires, and the second instance of an event is one
+   * nothing could stop individually.
+   *
+   * Unlike the construction bed this is *not* the player's alone. Hammering at
+   * an enemy foundation is something the player has no business hearing; an
+   * enemy building on fire inside the fog gate is the spectacle the fight just
+   * produced.
+   */
+  private updateFireLoopAudio(): void {
+    const site = this.fireLoopAudioSite();
+    const event = site ? this.structureDamagePresentation(site)?.slots.heavySmoke.sound ?? null : null;
+    // Nothing changed on the overwhelmingly common frame — including the frame
+    // an ageing kingdom re-resolves the *same* site to the same event.
+    if (site === this.fireLoopSite && event === this.fireLoopEvent) return;
+    if (this.fireLoopEvent) this.audioEvents.stop(this.fireLoopEvent, WORLD_BED_FADE_SECONDS);
+    this.fireLoopSite = null;
+    this.fireLoopEvent = null;
+    // A burning building whose slot names no sound is silent rather than falling
+    // back to a shared fire: there is no shared fire event, and inventing one
+    // here would put a second answer beside the authored table.
+    if (!site || !event) return;
+    const y = this.groundSurface.heightAt(site.x, site.z);
+    const result = this.audioEvents.trigger(event, this.audioClock, {
+      position: [site.x, y, site.z],
+      distance: this.cameraController.camera.position.distanceTo(
+        this.scratchStructureAudio.set(site.x, y, site.z),
+      ),
+    });
+    // Claimed only once it is actually sounding, exactly as the build bed is: a
+    // refused trigger leaves the site unclaimed so the next frame asks again,
+    // instead of recording a bed that is tracked but silent.
+    if (result === "played") {
+      this.fireLoopSite = site;
+      this.fireLoopEvent = event;
+    }
+  }
+
+  /** The burning building the fire bed belongs to this frame, incumbent first. */
+  private fireLoopAudioSite(): PlacedStructure | null {
+    if (!this.match.active || !this.flow.running) return null;
+    const current = this.fireLoopSite;
+    if (current && this.structures.all().includes(current) && this.isFireLoopSite(current)) return current;
+    let nearest: PlacedStructure | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    const camera = this.cameraController.camera.position;
+    for (const structure of this.structures.all()) {
+      if (!this.isFireLoopSite(structure)) continue;
+      const distance = camera.distanceTo(
+        this.scratchStructureAudio.set(structure.x, structure.groundY, structure.z),
+      );
+      if (distance >= nearestDistance) continue;
+      nearestDistance = distance;
+      nearest = structure;
+    }
+    return nearest;
+  }
+
+  /**
+   * Whether this building is burning somewhere the player could hear it.
+   *
+   * The same stage test the heavy-damage effects use, so what is heard and what
+   * is seen can never disagree about which buildings are on fire. Ordered
+   * cheapest-first for the same reason as its twin: it runs over every structure
+   * on any frame without an incumbent.
+   */
+  private isFireLoopSite(structure: PlacedStructure): boolean {
+    if (!structure.construction.complete) return false;
+    if (structureDamageStage(structure.health.ratio) !== "heavy") return false;
+    return this.worldAudioAudible(structure.x, structure.z);
   }
 
   /** The site the construction bed belongs to this frame, incumbent first. */
@@ -4625,21 +4723,6 @@ export class RtsApp {
   }
 
   /**
-   * The variant a building's impacts belong to — its authored damage material.
-   *
-   * Read straight off the damage table rather than through
-   * {@link structureDamagePresentation}, because that merges the material's
-   * *effects* into the result and drops the name. A building that declares no
-   * material has no variant and keeps the shared sound; filling that field in is
-   * a data decision with a visual consequence (it also picks the debris family),
-   * so nothing here assumes one.
-   */
-  private structureMaterialVariant(structure: PlacedStructure): RtsAudioVariant | null {
-    const material = this.options.contentCatalog?.damage.buildings[structure.stats.id]?.material;
-    return material === "wood" || material === "stone" ? material : null;
-  }
-
-  /**
    * A world sound at a unit, fog-gated like every other.
    *
    * The twin of {@link playStructureAudio} for the things that move. Kept apart
@@ -4673,7 +4756,11 @@ export class RtsApp {
 
   /** A collapse has already left gameplay; this is presentation only. */
   private onStructureCollapse(structure: PlacedStructure): void {
-    this.playStructureAudio(structure, RTS_AUDIO.structureCollapse);
+    const collapsePresentation = this.structureDamagePresentation(structure);
+    this.playStructureAudio(
+      structure,
+      collapsePresentation?.slots.collapseDust.sound ?? RTS_AUDIO.structureCollapse,
+    );
     for (const slot of RTS_DAMAGE_SLOTS) this.structureSlotElapsed.delete(slotTimerKey(structure.id, slot));
     const presentation = this.structureDamagePresentation(structure);
     if (!presentation) return;
@@ -6543,6 +6630,8 @@ export class RtsApp {
     // has one. What must not survive the reset is the *claim* — a site from the
     // last match would suppress the first build of this one.
     this.buildLoopSite = null;
+    this.fireLoopSite = null;
+    this.fireLoopEvent = null;
     this.startAudioBeds();
     this.notificationFeed.setNotifications([]);
     this.previousLogisticsStatus.clear();

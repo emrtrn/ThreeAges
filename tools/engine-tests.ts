@@ -3912,6 +3912,35 @@ const readAudioEventTable = (): AudioEventTable =>
     JSON.parse(readFileSync("public/game-data/audio/events.json", "utf8")) as unknown,
   );
 
+/**
+ * Every audio event id the shipped damage presentation table names (§82.5).
+ *
+ * These are triggered as surely as the ones in `RTS_AUDIO`, just from data
+ * rather than from a constant — which is the point of moving them there. Kept
+ * beside {@link readAudioEventTable} because the orphan half of the round trip
+ * needs both files open: without this, every event a building names would read
+ * as an entry nothing fires.
+ */
+function shippedDamageSoundEventIds(): string[] {
+  const catalog = shippedRtsContentCatalog();
+  const ids = new Set<string>();
+  const collect = (section: { readonly slots?: Readonly<Record<string, { readonly sound?: unknown }>> }): void => {
+    for (const slot of Object.values(section.slots ?? {})) {
+      const sound = slot.sound;
+      if (typeof sound === "string") ids.add(sound);
+      else if (sound && typeof sound === "object") {
+        for (const perAge of Object.values(sound as Record<string, unknown>)) {
+          if (typeof perAge === "string") ids.add(perAge);
+        }
+      }
+    }
+  };
+  collect(catalog.damage.defaults);
+  for (const material of Object.values(catalog.damage.materials)) collect(material);
+  for (const building of Object.values(catalog.damage.buildings)) collect(building);
+  return [...ids];
+}
+
 /** A stub handle: enough of the interface for the director's bookkeeping. */
 const fakeAudioHandle = (): { handle: AudioPlaybackHandleStub; finish: () => void } => {
   const stub: AudioPlaybackHandleStub = {
@@ -4611,6 +4640,10 @@ check("RTS audio events: every triggered name is answered by the shipped table",
     // the table answers it, so it can never be *required* — but a table that
     // ships one is not carrying an orphan either.
     ...rtsAudioVariantEventIds(),
+    // ...and the ones the damage table names rather than code (§82.5). Fired as
+    // surely as the rest, just from data, so an entry a building names is not an
+    // orphan — and one nothing names still is.
+    ...shippedDamageSoundEventIds(),
   ]);
   for (const eventId of Object.keys(table.events)) {
     assert.ok(triggered.has(eventId), `audio event "${eventId}" is in the table but never triggered`);
@@ -4683,6 +4716,31 @@ check("RTS audio events: beds are single and every channel routes to its own bus
   }
 });
 
+check("RTS audio events: a burning building's sound is a bed, not a per-spawn crackle", () => {
+  // §82.5's other half. The fire *effect* is a repeating spawn — `heavySmoke`
+  // respawns on an interval measured in seconds — and triggering the sound on
+  // that same rhythm would be a crackle that restarts once a second, which reads
+  // as a fault rather than as a fire. So the slot's sound is a bed: started when
+  // the building enters the heavy stage, faded out when it is repaired or falls.
+  // Both halves of that are properties of the *event*, so both are pinned here.
+  const catalog = shippedRtsContentCatalog();
+  const table = readAudioEventTable();
+  const fireEvents = new Set(
+    RTS_DAMAGE_SLOT_AGES.map((age) => rtsBuildingDamagePresentation(catalog, "house", age).slots.heavySmoke.sound)
+      .filter((eventId): eventId is string => eventId !== null),
+  );
+  assert.ok(fireEvents.size > 0, "a heavily damaged building has a fire bed");
+  for (const eventId of fireEvents) {
+    const definition = table.events[eventId] ?? assert.fail(`${eventId} is not in the shipped table`);
+    assert.equal(definition.loop, true, `${eventId} must loop, or the fire falls silent while still burning`);
+    // `maxInstances: 1` is checked for every loop above; here it also carries the
+    // one-fire-per-map rule, since the director's `stop()` is keyed by event id
+    // and a second copy would be one nothing could turn off individually.
+    assert.equal(definition.maxInstances, 1, `${eventId} is the map's single fire`);
+    assert.equal(definition.spatial, true, `${eventId} burns at a place, not in the player's ear`);
+  }
+});
+
 check("RTS audio events: only long beds stream, and every bed does", () => {
   const table = readAudioEventTable();
   // Streaming is not a mix taste, it is which playback path a clip takes, and
@@ -4710,16 +4768,21 @@ check("RTS audio events: only long beds stream, and every bed does", () => {
   }
 });
 
-check("RTS audio variants: a shared sound splits by armour and material, falling back", () => {
+check("RTS audio variants: a shared sound splits by armour, falling back", () => {
   // §81.2 left this open and §82.4 closed it: the table is coarser than the
   // inventories, so a set produced per *role* would ship a library whose larger
-  // half never plays. The axis is the one already authored — `armorClass` for
-  // people, the damage table's material for buildings — and it is the one the
-  // ear hears, because what a blow sounds like is decided by what it landed on.
+  // half never plays. The axis is the one already authored — `armorClass` — and
+  // it is the one the ear hears, because what a blow sounds like is decided by
+  // what it landed on.
   const shared = Object.keys(RTS_AUDIO_SPLIT);
   assert.ok(shared.includes("combat.body_impact"), "the blow that every rig shares splits");
   assert.ok(shared.includes("unit.footstep"), "the footfall that every rig shares splits");
-  assert.ok(shared.includes("structure.impact"), "the hit every building shares splits");
+  // Buildings were here and were taken out again (§82.5). A variant derived from
+  // one authored material name is age-blind — a house is timber in a settlement
+  // and masonry in a town — and ten of the fifteen buildings never authored one.
+  // Their sound is named outright by the damage table now, so a split left here
+  // would be a second answer beside the authored one.
+  assert.equal(RTS_AUDIO_SPLIT["structure.impact"], undefined, "buildings are named, not derived");
   // And the ones that look shared and are not: each of these markers is authored
   // on exactly one rig, so it is already a single role and must not be split.
   for (const soloEvent of ["combat.sword_swing", "combat.arrow_release", "unit.chop_impact"]) {
@@ -4748,14 +4811,14 @@ check("RTS audio variants: a shared sound splits by armour and material, falling
   // than to an id no table will ever answer: crossing the two axes would be
   // silent, which is the one failure mode this whole file exists to prevent.
   assert.equal(
-    resolveRtsAudioVariant("combat.body_impact", "wood", answersAll),
-    "combat.body_impact",
-    "a material variant on a body impact is refused, not invented",
+    resolveRtsAudioVariant("unit.footstep", "heavy", answersNone),
+    "unit.footstep",
+    "a declared variant with no clips yet is the shared sound, not silence",
   );
   assert.equal(
     resolveRtsAudioVariant("structure.impact", "heavy", answersAll),
     "structure.impact",
-    "an armour variant on a building is refused, not invented",
+    "an event outside the split table keeps its shared sound",
   );
 
   // Every id the split can name must be a legal event id, or the table could not
@@ -38476,6 +38539,117 @@ check("RTS damage table resolves defaults → material class → building, field
   }
 });
 
+check("RTS damage slots name a sound per age, and it is not the effect's material", () => {
+  // §82.5. The sound is authored beside the effect rather than derived from it,
+  // and these assertions are why: the two answer different questions. What comes
+  // off a town house is *tile* (the debris anchor is the roof), while what a
+  // town house sounds like is *stone* (that is what it is built of). Derive one
+  // from the other and every masonry building in a Town reads wrong.
+  const buildingBalance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const context = { unitBalance: {}, buildingBalance, animalBalance: {} };
+  const levels = { "1": "assets/A.actor.json" };
+  const doc = damageCatalogFixture({
+    materials: {
+      // A bare string: one line pinning both ages, which is what makes the
+      // exception table free rather than a row per age per building.
+      timber: { slots: { debris: { sound: "a.wood" } } },
+      // A map naming one age: the other stays whatever it inherited.
+      halfPinned: { slots: { debris: { sound: { town: "a.tile" } } } },
+    },
+    buildings: { house: { levels }, barracks: { levels }, outpost: { levels } },
+    damageBuildings: { barracks: { material: "timber" }, outpost: { material: "halfPinned" } },
+  }) as any;
+  doc.damage.defaults.slots.debris.sound = { settlement: "a.wood", town: "a.stone" };
+  doc.damage.defaults.slots.collapseDust.sound = "a.collapse";
+  doc.damage.defaults.slots.heavySmoke.sound = "a.fire";
+  const catalog = validateRtsContentCatalog(doc, context);
+
+  const at = (buildingId: string, age: SettlementAge) =>
+    rtsBuildingDamagePresentation(catalog, buildingId, age).slots;
+
+  // The default covers every building, which is the whole reason the sound moved
+  // here from the material field: ten of the fifteen never authored a material.
+  assert.equal(at("house", "settlement").debris.sound, "a.wood");
+  assert.equal(at("house", "town").debris.sound, "a.stone", "the same building sounds different after ageing up");
+  // ...and the effect did *not* follow the sound's material. This is the split.
+  assert.deepEqual(at("house", "town").debris.effects, ["fx.tile"]);
+
+  assert.equal(at("barracks", "settlement").debris.sound, "a.wood");
+  assert.equal(at("barracks", "town").debris.sound, "a.wood", "a bare string overrides every age at once");
+  assert.equal(at("outpost", "settlement").debris.sound, "a.wood", "a map names one age and inherits the other");
+  assert.equal(at("outpost", "town").debris.sound, "a.tile");
+
+  // A slot that is not age-keyed can still sound per age, and one that is need
+  // not: the two shapes are independent on purpose.
+  assert.equal(at("house", "settlement").collapseDust.sound, "a.collapse");
+  assert.equal(at("house", "town").collapseDust.sound, "a.collapse");
+  assert.equal(at("house", "town").heavySmoke.sound, "a.fire", "the fire bed is one event, not one per age");
+
+  // Silence is an answer, not a gap — and it resolves to null rather than to
+  // some shared fallback, so nothing downstream has to guess.
+  assert.equal(at("house", "town").lightSmoke.sound, null);
+  assert.equal(at("house", "town").ruinSmoke.sound, null);
+});
+
+check("RTS shipped damage table sounds every hit through the event table", () => {
+  const catalog = shippedRtsContentCatalog();
+  const table = readAudioEventTable();
+  const buildingBalance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const buildingIds = Object.keys(buildingBalance);
+  assert.ok(buildingIds.length > 0, "the shipped building list is not empty");
+
+  const named = new Set<string>();
+  for (const buildingId of buildingIds) {
+    for (const age of RTS_DAMAGE_SLOT_AGES) {
+      const slots = rtsBuildingDamagePresentation(catalog, buildingId, age).slots;
+      // Every building takes hits and every building can fall, so these two are
+      // contracts rather than art decisions: a building that resolves to no
+      // sound is one the player watches come down in silence.
+      for (const slot of ["debris", "collapseDust"] as const) {
+        const sound = slots[slot].sound;
+        assert.ok(sound, `${buildingId}.${slot} has no sound at ${age}`);
+        named.add(sound!);
+      }
+      const fire = slots.heavySmoke.sound;
+      if (fire) named.add(fire);
+    }
+  }
+
+  // The reason the slot names an *event* and not a clip: mix bus, cooldown,
+  // distance falloff and instance budget all live in the event table, and an id
+  // it does not answer is a moment that plays nothing at all.
+  for (const eventId of named) {
+    assert.ok(table.events[eventId], `damage table names "${eventId}", which the audio table does not answer`);
+  }
+
+  // §82.5's exception table, as relationships rather than as literal ids so a
+  // rename or a re-mix stays green: a building with no material class follows
+  // its owner's age, and one that pins a class sounds the same in both.
+  const soundsOf = (buildingId: string, age: SettlementAge) =>
+    rtsBuildingDamagePresentation(catalog, buildingId, age).slots.debris.sound;
+  const pinned = buildingIds.filter((id) => catalog.damage.buildings[id]?.material !== undefined);
+  const unpinned = buildingIds.filter((id) => catalog.damage.buildings[id]?.material === undefined);
+  assert.ok(pinned.length > 0 && unpinned.length > 0, "both halves of the exception table are populated");
+  for (const buildingId of pinned) {
+    assert.equal(
+      soundsOf(buildingId, "settlement"),
+      soundsOf(buildingId, "town"),
+      `${buildingId} pins a material class, so ageing up must not change what it sounds like`,
+    );
+  }
+  for (const buildingId of unpinned) {
+    assert.notEqual(
+      soundsOf(buildingId, "settlement"),
+      soundsOf(buildingId, "town"),
+      `${buildingId} authors no material, so its sound follows the age its owner is in`,
+    );
+  }
+});
+
 check("RTS damage table refuses data the runtime would have to guess about", () => {
   const buildingBalance = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -38528,6 +38702,21 @@ check("RTS damage table refuses data the runtime would have to guess about", () 
   refuses((d) => { d.damage.defaults.collapseDeformation.splay = -0.2; }, "a negative splay is an inside-out building");
   refuses((d) => { d.damage.defaults.collapseDeformation.lean = 1; }, "an unknown deformation field is a typo");
   refuses((d) => { d.damage.defaults.slots.heavySmoke.wobble = 1; }, "an unknown field is a typo, not an extension");
+  // §82.5's `sound`: an event id, on a slot the runtime actually plays. Both
+  // halves are refused rather than ignored, because an authored field nothing
+  // reads is the failure that costs an afternoon to explain.
+  refuses((d) => { d.damage.defaults.slots.debris.sound = "sfx-structure-impact-stone-01"; }, "a clip id is not an event id");
+  refuses((d) => { d.damage.defaults.slots.debris.sound = ""; }, "an empty sound is a typo, not silence — omit the field");
+  refuses((d) => { d.damage.defaults.slots.debris.sound = { bronze: "structure.impact_stone" }; }, "an age outside the progression is a typo here too");
+  refuses((d) => { d.damage.defaults.slots.lightSmoke.sound = "structure.impact_stone"; }, "a slot nothing plays cannot name a sound");
+  refuses((d) => { d.damage.defaults.slots.ruinSmoke.sound = "structure.impact_stone"; }, "and neither can the husk's trailing smoke");
+  refuses(
+    (d) => {
+      d.buildings = { house: { levels } };
+      d.damage.buildings = { house: { slots: { lightSmoke: { sound: "structure.impact_stone" } } } };
+    },
+    "and an override cannot smuggle one onto a silent slot either",
+  );
   refuses(
     (d) => {
       d.buildings = { house: { levels } };

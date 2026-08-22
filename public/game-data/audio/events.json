@@ -195,6 +195,97 @@
       "maxDistance": 90,
       "rolloff": 5
     },
+    "structure.impact_stone": {
+      "_note": "Named by the damage presentation table (§82.5), not derived: `damage...slots.debris.sound` picks it per building and per age. Same set as `structure.impact`, which stays as the fallback a project with no content catalog still hears; when the two mixes need to differ, this is the one buildings actually play.",
+      "clips": [
+        "sfx-structure-impact-stone-01",
+        "sfx-structure-impact-stone-02",
+        "sfx-structure-impact-stone-03",
+        "sfx-structure-impact-stone-04"
+      ],
+      "bus": "sfx",
+      "volume": 0.4,
+      "pitchVariation": 0.07,
+      "cooldownMs": 110,
+      "maxInstances": 4,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 90,
+      "rolloff": 5
+    },
+    "structure.impact_wood": {
+      "_note": "AWAITING PRODUCTION - four timber-impact variants (§82.5's Uretim table). Until they land it points at the masonry set, which is the same fallback `structure.collapse_wood` takes: the event exists so the damage table can name it, and the produced set starts playing the moment these clip ids change. Mixed a shade under the stone set - timber gives way rather than cracking.",
+      "clips": [
+        "sfx-structure-impact-stone-01",
+        "sfx-structure-impact-stone-02",
+        "sfx-structure-impact-stone-03",
+        "sfx-structure-impact-stone-04"
+      ],
+      "bus": "sfx",
+      "volume": 0.34,
+      "pitchVariation": 0.07,
+      "cooldownMs": 110,
+      "maxInstances": 4,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 90,
+      "rolloff": 5
+    },
+    "structure.collapse_stone": {
+      "_note": "The existing collapse set, now named by `damage...slots.collapseDust.sound`. `structure.collapse` stays beside it as the catalog-less fallback.",
+      "clips": [
+        "sfx-structure-collapse-01",
+        "sfx-structure-collapse-02",
+        "sfx-structure-collapse-03",
+        "sfx-structure-collapse-04",
+        "sfx-structure-collapse-05",
+        "sfx-structure-collapse-06"
+      ],
+      "bus": "sfx",
+      "volume": 0.6,
+      "pitchVariation": 0.04,
+      "cooldownMs": 150,
+      "maxInstances": 3,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 90,
+      "rolloff": 5
+    },
+    "structure.collapse_wood": {
+      "_note": "AWAITING PRODUCTION - three or four timber-collapse variants. Points at the masonry set meanwhile, exactly as §82.5 prescribes.",
+      "clips": [
+        "sfx-structure-collapse-01",
+        "sfx-structure-collapse-02",
+        "sfx-structure-collapse-03",
+        "sfx-structure-collapse-04",
+        "sfx-structure-collapse-05",
+        "sfx-structure-collapse-06"
+      ],
+      "bus": "sfx",
+      "volume": 0.55,
+      "pitchVariation": 0.05,
+      "cooldownMs": 150,
+      "maxInstances": 3,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 90,
+      "rolloff": 5
+    },
+    "structure.fire_loop": {
+      "_note": "AWAITING PRODUCTION - one seamless fire loop (§56's loop checklist); `starter-snd-fire-01` stands in and is not seam-checked, so a cycle may tick until the produced clip replaces it. The second spatial loop in the table, and `maxInstances: 1` is what makes it stoppable at all - the director's `stop()` is keyed by event id. Carries further than the construction bed and sits under it in level: a fire is a place on the map, not an event being announced.",
+      "clips": [
+        "starter-snd-fire-01"
+      ],
+      "bus": "sfx",
+      "volume": 0.22,
+      "loop": true,
+      "cooldownMs": 400,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 80,
+      "rolloff": 8
+    },
     "building.complete": {
       "clips": [
         "sfx-building-complete-01"

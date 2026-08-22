@@ -31,6 +31,7 @@ import {
   RTS_DAMAGE_IMPACT_SLOTS,
   RTS_DAMAGE_REPEATING_SLOTS,
   RTS_DAMAGE_SLOTS,
+  RTS_DAMAGE_SOUND_SLOTS,
   RTS_DAMAGE_SLOT_AGES,
   validateRtsContentDamageSection,
 } from "@/game/rts/content/rtsContentCatalog";
@@ -290,6 +291,15 @@ const DAMAGE_MATERIAL_FIELD = {
   hint: "Devralınacak malzeme sınıfının adı (Malzeme Sınıfları tablosundaki bir başlık). Boş bırakılırsa yalnızca varsayılanlar ve buradaki alanlar geçerlidir.",
 };
 
+/**
+ * Shared by all three sound rows: the one thing an author has to know is that
+ * this names an *event*, not a clip. What it sounds like, how loud, how often and
+ * how far it carries all stay in the Ses Olayları table — writing a clip id here
+ * would silently lose every one of them.
+ */
+const SOUND_FIELD_HINT =
+  "Ses Olayları tablosundaki bir olay adı (ör. structure.impact_stone) — klip adı değil. Boş bırakılırsa bu slot sessizdir.";
+
 function damageSlotFields(prefix: string): readonly {
   path: string;
   label: string;
@@ -308,6 +318,7 @@ function damageSlotFields(prefix: string): readonly {
     const repeating = (RTS_DAMAGE_REPEATING_SLOTS as readonly string[]).includes(slot);
     const impact = (RTS_DAMAGE_IMPACT_SLOTS as readonly string[]).includes(slot);
     const aged = (RTS_DAMAGE_AGED_SLOTS as readonly string[]).includes(slot);
+    const sounded = (RTS_DAMAGE_SOUND_SLOTS as readonly string[]).includes(slot);
     const rotated = repeating || impact;
     // The whole array is one picker list, not a field per index: the effect is
     // chosen from the manifest's own effect assets, and a slot the file left
@@ -333,6 +344,25 @@ function damageSlotFields(prefix: string): readonly {
           assetOptions: "effect",
           hint: effectHint,
         }]),
+      // Three paths for one field, because `sound` is a union: a bare string
+      // (both ages at once, which is how a material class pins one sound) or a
+      // per-age map. The form renders from what the file actually holds, so
+      // whichever shape was authored is the one that gets a labelled box and the
+      // other two paths simply never match — no mode switch, no lost value.
+      ...(sounded
+        ? [
+          {
+            path: `${prefix}${slot}.sound`,
+            label: "Ses olayı",
+            hint: `${SOUND_FIELD_HINT} Çağdan bağımsız tek bir olay adı; iki çağ için ayrı ses isteniyorsa bu alan yerine ${DAMAGE_AGE_LABELS.settlement} / ${DAMAGE_AGE_LABELS.town} satırları yazılır.`,
+          },
+          ...RTS_DAMAGE_SLOT_AGES.map((age) => ({
+            path: `${prefix}${slot}.sound.${age}`,
+            label: `Ses olayı — ${DAMAGE_AGE_LABELS[age]}`,
+            hint: `${SOUND_FIELD_HINT} Yalnızca sahibi ${DAMAGE_AGE_LABELS[age]} çağındayken çalınır.`,
+          })),
+        ]
+        : []),
       {
         path: `${prefix}${slot}.anchor.mode`,
         label: "Konum",

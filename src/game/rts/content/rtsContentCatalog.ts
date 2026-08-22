@@ -187,6 +187,33 @@ export const RTS_DAMAGE_AGED_SLOTS = ["debris"] as const;
 /** The ages an aged slot keys its effects by, in progression order. */
 export const RTS_DAMAGE_SLOT_AGES: readonly SettlementAge[] = ["settlement", "town"];
 
+/**
+ * The slots whose `sound` the runtime actually plays, and how (§82.5).
+ *
+ * `debris` is the blow, `collapseDust` the fall, `heavySmoke` the fire bed. The
+ * other two repeat on a timer measured in seconds — a sound retriggered at that
+ * rhythm is a stutter, not a bed — so naming one there would author a field
+ * nothing plays. Refused in the validator rather than ignored, because a silent
+ * authored sound is exactly the kind of edit whose "no change in the game" takes
+ * an afternoon to explain.
+ */
+export const RTS_DAMAGE_SOUND_SLOTS = ["debris", "collapseDust", "heavySmoke"] as const;
+
+/**
+ * The audio *event id* a slot names — never a clip id.
+ *
+ * The same boundary `effects` keeps: the damage table says which moment sounds,
+ * and `events.json` keeps knowing what it sounds like. Mix bus, cooldown,
+ * distance falloff and instance budget belong to the event table, and a clip id
+ * written here would carry none of them.
+ *
+ * A bare string sounds the same in every age; a map answers per age, and the
+ * ages it does not name are silent. The union is what makes the exception table
+ * free: a material class that pins one sound overrides both ages with one
+ * string, without having to know how many ages the project has.
+ */
+export type RtsDamageSlotSound = string | Readonly<Partial<Record<SettlementAge, string>>>;
+
 /** Largest authored spawn offset, in world units, in any axis. */
 const MAX_ANCHOR_OFFSET = 50;
 /** Bounds on a repeat interval: a zero would spawn per frame, an hour is a typo. */
@@ -234,6 +261,19 @@ export interface RtsDamageSlot {
    * authored, so ageing up can never leave a slot with nothing to play.
    */
   readonly ages?: Readonly<Record<SettlementAge, readonly string[]>>;
+  /**
+   * The audio event this moment fires, on {@link RTS_DAMAGE_SOUND_SLOTS} only.
+   *
+   * Absent is silent, and a legitimate authoring choice — unlike `effects` this
+   * has no per-age completeness rule, because a slot with nothing to play is a
+   * slot that makes no sound rather than a gap in the table.
+   *
+   * Authored rather than derived from the effect, and that difference is the
+   * point: a town house sheds *tile* (the debris comes off the roof) while it
+   * sounds like *stone* (that is what the building is made of). Deriving one
+   * from the other would make every masonry building in a Town read wrong.
+   */
+  readonly sound?: RtsDamageSlotSound;
   readonly anchor: RtsDamageAnchor;
   /** Present exactly on {@link RTS_DAMAGE_REPEATING_SLOTS}. */
   readonly intervalSeconds?: number;
@@ -254,6 +294,8 @@ export interface RtsDamageSlot {
  */
 export interface RtsResolvedDamageSlot {
   readonly effects: readonly string[];
+  /** The event id to fire at this age, or null when this slot is silent. */
+  readonly sound: string | null;
   readonly anchor: RtsDamageAnchor;
   readonly intervalSeconds?: number;
   readonly minIntervalSeconds?: number;
@@ -303,6 +345,12 @@ export interface RtsDamageSlotOverride {
   readonly effects?: readonly string[];
   /** Aged slots only, and one age may be overridden without naming the other. */
   readonly ages?: Readonly<Partial<Record<SettlementAge, readonly string[]>>>;
+  /**
+   * A bare string here deliberately overrides *every* age at once, which is what
+   * makes `materials.stone` a two-line entry instead of one row per age; a map
+   * overrides age by age and inherits the rest.
+   */
+  readonly sound?: RtsDamageSlotSound;
   readonly anchor?: { readonly mode?: RtsDamageAnchorMode; readonly offset?: readonly [number, number, number] };
   readonly intervalSeconds?: number;
   readonly minIntervalSeconds?: number;
@@ -514,6 +562,30 @@ function applySlotAgesOverride(
   return merged;
 }
 
+/**
+ * Lay one layer's `sound` over another's, at whichever shape each was authored.
+ *
+ * A bare string on either side collapses the ages: as a *base* it is the answer
+ * every age inherits, and as an *override* it replaces all of them — which is
+ * what lets `materials.stone` pin a building's sound in both ages with one line.
+ * Two maps merge key by key, so an override may name one age and leave the other
+ * as it was.
+ */
+function applySlotSoundOverride(
+  base: RtsDamageSlotSound | undefined,
+  override: RtsDamageSlotSound | undefined,
+): RtsDamageSlotSound | undefined {
+  if (override === undefined) return base;
+  if (typeof override === "string" || base === undefined) return override;
+  const merged: Partial<Record<SettlementAge, string>> = {};
+  for (const age of RTS_DAMAGE_SLOT_AGES) {
+    const inherited = typeof base === "string" ? base : base[age];
+    const sound = override[age] ?? inherited;
+    if (sound !== undefined) merged[age] = sound;
+  }
+  return merged;
+}
+
 function applySlotOverride(base: RtsDamageSlot, override: RtsDamageSlotOverride | undefined): RtsDamageSlot {
   if (!override) return base;
   return {
@@ -522,6 +594,13 @@ function applySlotOverride(base: RtsDamageSlot, override: RtsDamageSlotOverride 
     // override can never introduce the shape its slot does not have.
     ...(base.effects === undefined ? {} : { effects: override.effects ?? base.effects }),
     ...(base.ages === undefined ? {} : { ages: applySlotAgesOverride(base.ages, override.ages) }),
+    ...(() => {
+      // Not gated on the base having authored one, unlike `effects`/`ages`: a
+      // silent default is the common case, and a material class naming a sound
+      // for it is the whole exception table.
+      const sound = applySlotSoundOverride(base.sound, override.sound);
+      return sound === undefined ? {} : { sound };
+    })(),
     anchor: {
       mode: override.anchor?.mode ?? base.anchor.mode,
       offset: override.anchor?.offset ?? base.anchor.offset,
@@ -562,10 +641,17 @@ function applyDamageOverride(
 function resolveSlotAge(slot: RtsDamageSlot, age: SettlementAge): RtsResolvedDamageSlot {
   return {
     effects: slot.ages?.[age] ?? slot.effects ?? [],
+    sound: resolveSlotSound(slot.sound, age),
     anchor: slot.anchor,
     ...(slot.intervalSeconds === undefined ? {} : { intervalSeconds: slot.intervalSeconds }),
     ...(slot.minIntervalSeconds === undefined ? {} : { minIntervalSeconds: slot.minIntervalSeconds }),
   };
+}
+
+/** The event id a slot sounds at one age: the bare string, that age's, or none. */
+function resolveSlotSound(sound: RtsDamageSlotSound | undefined, age: SettlementAge): string | null {
+  if (sound === undefined) return null;
+  return typeof sound === "string" ? sound : sound[age] ?? null;
 }
 
 /**
@@ -976,10 +1062,49 @@ function requireSlotEffectShape(
   }
 }
 
+/** `structure.impact_wood`, `building.build_loop` — a dotted audio event id. */
+const AUDIO_EVENT_ID_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/;
+
+function validateSoundEventId(value: unknown, where: string): string {
+  if (typeof value !== "string" || !AUDIO_EVENT_ID_PATTERN.test(value)) {
+    throw new RtsContentCatalogError(`${where}: must be an audio event id, e.g. "structure.impact_stone"`);
+  }
+  return value;
+}
+
+/**
+ * A slot's `sound`, in either shape, on a slot allowed to have one.
+ *
+ * The event id is checked for *form* only — that it looks like a table key
+ * rather than a clip id or a path. Whether `events.json` answers it is not
+ * asked here on purpose: this validator is the editor's save gate for one
+ * section of one document, and making it load the audio table would tie a
+ * damage edit to a file it has nothing else to do with. The cross-check that
+ * every named event exists lives in `test:engine`, where both files are open.
+ */
+function validateSlotSound(value: unknown, slot: RtsDamageSlotName, where: string): RtsDamageSlotSound {
+  if (!(RTS_DAMAGE_SOUND_SLOTS as readonly string[]).includes(slot)) {
+    throw new RtsContentCatalogError(
+      `${where}: "${slot}" has no sound; only ${RTS_DAMAGE_SOUND_SLOTS.join(", ")} are played`,
+    );
+  }
+  if (typeof value === "string") return validateSoundEventId(value, where);
+  const raw = asObject(value, where);
+  requireExactKeys(raw, RTS_DAMAGE_SLOT_AGES, where);
+  const ages: Partial<Record<SettlementAge, string>> = {};
+  for (const age of RTS_DAMAGE_SLOT_AGES) {
+    // An age left out is silent rather than missing: unlike an effect list,
+    // there is nothing a sound has to fall back to.
+    if (raw[age] === undefined) continue;
+    ages[age] = validateSoundEventId(raw[age], `${where}.${age}`);
+  }
+  return ages;
+}
+
 /** The complete form, used only by `damage.defaults`. */
 function validateDamageSlot(value: unknown, slot: RtsDamageSlotName, where: string): RtsDamageSlot {
   const raw = asObject(value, where);
-  requireExactKeys(raw, ["effects", "ages", "anchor", "intervalSeconds", "minIntervalSeconds"], where);
+  requireExactKeys(raw, ["effects", "ages", "sound", "anchor", "intervalSeconds", "minIntervalSeconds"], where);
   const anchorWhere = `${where}.anchor`;
   const anchor = asObject(raw["anchor"], anchorWhere);
   requireExactKeys(anchor, ["mode", "offset"], anchorWhere);
@@ -1005,6 +1130,7 @@ function validateDamageSlot(value: unknown, slot: RtsDamageSlotName, where: stri
     ...(aged
       ? { ages: validateSlotAges(raw["ages"], `${where}.ages`, true) }
       : { effects: validateSlotEffects(raw["effects"], `${where}.effects`) }),
+    ...(raw["sound"] === undefined ? {} : { sound: validateSlotSound(raw["sound"], slot, `${where}.sound`) }),
     anchor: {
       mode: validateAnchorMode(anchor["mode"], `${anchorWhere}.mode`),
       offset: validateAnchorOffset(anchor["offset"], `${anchorWhere}.offset`),
@@ -1019,7 +1145,7 @@ function validateDamageSlot(value: unknown, slot: RtsDamageSlotName, where: stri
 /** The partial form, used by material classes and per-building overrides. */
 function validateDamageSlotOverride(value: unknown, slot: RtsDamageSlotName, where: string): RtsDamageSlotOverride {
   const raw = asObject(value, where);
-  requireExactKeys(raw, ["effects", "ages", "anchor", "intervalSeconds", "minIntervalSeconds"], where);
+  requireExactKeys(raw, ["effects", "ages", "sound", "anchor", "intervalSeconds", "minIntervalSeconds"], where);
   requireSlotEffectShape(raw, slot, where);
   if (!isRepeatingSlot(slot) && raw["intervalSeconds"] !== undefined) {
     throw new RtsContentCatalogError(`${where}.intervalSeconds: "${slot}" does not repeat, so it has no interval`);
@@ -1044,6 +1170,7 @@ function validateDamageSlotOverride(value: unknown, slot: RtsDamageSlotName, whe
   return {
     ...(raw["effects"] === undefined ? {} : { effects: validateSlotEffects(raw["effects"], `${where}.effects`) }),
     ...(raw["ages"] === undefined ? {} : { ages: validateSlotAges(raw["ages"], `${where}.ages`, false) }),
+    ...(raw["sound"] === undefined ? {} : { sound: validateSlotSound(raw["sound"], slot, `${where}.sound`) }),
     ...(anchor === undefined ? {} : { anchor }),
     ...(raw["intervalSeconds"] === undefined
       ? {}
