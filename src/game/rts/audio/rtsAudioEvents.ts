@@ -15,6 +15,7 @@
  */
 
 import type { RtsNotificationSeverity } from "../ui/rtsNotifications";
+import type { RtsMusicState } from "./rtsMusicState";
 
 /**
  * Sounds triggered by an animation notify.
@@ -135,7 +136,23 @@ export const RTS_AUDIO = {
   cannonFire: "siege.cannon_fire",
   // The two that never stop.
   worldAmbience: "world.ambience",
+  /**
+   * The four gameplay music states (§28), one playlist each.
+   *
+   * Not triggered like the sounds around them: `MusicDirector` owns these clips
+   * and fades between the lists, so what the table entry provides is the running
+   * order and the level rather than a play. They are named here anyway, and by
+   * the same reasoning as everything else in this map — the set of moments the
+   * game can sound at is a contract, and an id no table entry answers is a
+   * playlist that silently resolves to nothing.
+   *
+   * MENU is absent on purpose: it belongs to the shell rather than to a match,
+   * and RESULT is §5.11's two stingers below.
+   */
   musicSettlement: "music.settlement",
+  musicExpansion: "music.expansion",
+  musicTension: "music.tension",
+  musicBattle: "music.battle",
   /**
    * The three stingers (§5.11): a match-state change announced musically rather
    * than reported.
@@ -177,6 +194,29 @@ export const RTS_AUDIO = {
 } as const;
 
 /** Every audio event id this game triggers by name. The table must answer all of them. */
+/**
+ * The menu's playlist (§28.1) — a table entry no *match* ever triggers.
+ *
+ * Kept here with the rest so this file remains the single answer to "which
+ * moments have a sound", but deliberately outside {@link RTS_AUDIO} and
+ * {@link rtsAudioEventIds}: those are what `RtsApp` can fire, and the menu runs
+ * before `RtsApp` exists. `rtsMenuMusic.ts` is the owner.
+ */
+export const RTS_MENU_MUSIC_EVENT = "music.menu";
+
+/**
+ * §28's four gameplay states mapped to the table entry that holds each playlist.
+ *
+ * Keyed by the state name so the state machine can stay ignorant of event ids
+ * and this file stays the one place a moment is bound to a sound.
+ */
+export const RTS_MUSIC_STATE_EVENTS = {
+  settlement: RTS_AUDIO.musicSettlement,
+  expansion: RTS_AUDIO.musicExpansion,
+  tension: RTS_AUDIO.musicTension,
+  battle: RTS_AUDIO.musicBattle,
+} as const satisfies Readonly<Record<RtsMusicState, string>>;
+
 export function rtsAudioEventIds(): string[] {
   return [
     ...new Set([

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { waitForRtsBoot } from "./rtsBoot";
+import { startRtsMatch } from "./rtsBoot";
 
 /**
  * The editor -> runtime round trip: this project pins Play to its RTS preset.
@@ -19,7 +19,7 @@ async function openEditor(page: import("@playwright/test").Page): Promise<void> 
   await expect(page.locator("[data-project-name]")).not.toHaveText("loading level", { timeout: 30_000 });
 }
 
-test("Play preserves the configured RTS route when the project pins its gameplay map", async ({ page, context }) => {
+test("Play opens the menu, carrying the level being edited into the match", async ({ page, context }) => {
   await openEditor(page);
 
   const [runtime] = await Promise.all([
@@ -27,7 +27,14 @@ test("Play preserves the configured RTS route when the project pins its gameplay
     page.getByTestId("editor-play").click(),
   ]);
   await runtime.waitForLoadState("domcontentloaded");
-  expect(new URL(runtime.url()).searchParams.get("level")).toBeNull();
+  // The map rides in the address; the match settings do not. Play answers "which
+  // map", and the menu is where the author answers "which match" — conflating
+  // the two is what used to drop them into whatever the last session left.
+  expect(new URL(runtime.url()).searchParams.get("level")).toBe(
+    "assets/ThreeAges/Levels/RTS_GameplayProof.level.json",
+  );
+  expect(new URL(runtime.url()).searchParams.get("mode")).toBeNull();
+  await startRtsMatch(runtime);
   await expect(runtime.locator("#game-canvas")).toHaveAttribute(
     "data-rts-level-ref",
     "assets/ThreeAges/Levels/RTS_GameplayProof.level.json",
@@ -45,11 +52,10 @@ test("a level the RTS cannot play falls back to the blockout map with a stated r
   // The starter character scene has no Kingdom Start markers. Naming it is a
   // normal authoring mistake (or a mid-edit state), so it must degrade rather
   // than leave the player looking at nothing.
-  // `?level=` pins the match, so this route skips the menu entirely (plan KARAR 4)
-  // and boots straight through the curtain into a playable match — there is no
-  // "Maçı Başlat" to press, only a load to wait out.
+  // A level alone no longer skips the menu — it names a map, not a match — so the
+  // match has to be started before it can be asked which level it resolved.
   await page.goto("/?rts&debug&level=assets/starter-content/Levels/Playground.level.json");
-  await waitForRtsBoot(page);
+  await startRtsMatch(page);
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "invalid");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-error", /.+/);
   // Still playable, and the debug block names the file and the reason.
@@ -59,7 +65,7 @@ test("a level the RTS cannot play falls back to the blockout map with a stated r
   // A malformed path is refused the same way — named and explained — rather than
   // quietly playing another map or throwing the route away.
   await page.goto("/?rts&debug&level=/etc/passwd.level.json");
-  await waitForRtsBoot(page);
+  await startRtsMatch(page);
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "invalid");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-ref", "/etc/passwd.level.json");
 

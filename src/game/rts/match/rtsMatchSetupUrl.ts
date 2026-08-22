@@ -38,11 +38,19 @@ export const MATCH_SETUP_PARAMS = {
  * `mode` is the marker rather than "all four present", so a hand-typed
  * `?rts&mode=free` works and a link is not invalidated by a parameter added
  * later — anything missing simply falls back through the same resolution a cold
- * boot uses. `level` is KARAR 4: the editor's Play button hands over a map to
- * try, and an author trying a map does not pass through a menu.
+ * boot uses.
+ *
+ * **`level` used to count too, and no longer does.** The two parameters answer
+ * different questions: `level` says *which map*, the menu asks *which match* —
+ * mode, victory condition, fog, difficulty. Treating the first as an answer to
+ * the second meant the editor's Play button dropped an author into whatever
+ * settings the last session happened to leave behind, with no way to choose
+ * short of editing the address. Play now lands on the menu, and `level` rides
+ * through it: the author picks a match and plays it on the map they were
+ * editing. A link that wants to skip the menu still can — it says `mode`.
  */
 export function urlPinsMatchSetup(params: URLSearchParams): boolean {
-  return params.has(MATCH_SETUP_PARAMS.mode) || params.has("level");
+  return params.has(MATCH_SETUP_PARAMS.mode);
 }
 
 /**
@@ -130,11 +138,9 @@ export function matchSetupSearch(
  * match started from the menu is a new match, not a re-run of that one.
  *
  * Everything else the route understands (`?rts`, `?debug`, `?preset=`, `?flags=`,
- * `?mission=`) survives — `?level=` included, and that one is deliberate even
- * though it also pins: an author who arrived from the editor's Play button is
- * still trying that map, so the URL keeps saying so and the next match they start
- * is still that map. A refresh takes them straight back into it, which is KARAR 4
- * doing its job; the in-page button is how they reach the menu.
+ * `?mission=`, `?level=`) survives. `?level=` in particular: an author who
+ * arrived from the editor's Play button is still trying that map, so the URL
+ * keeps saying so and the next match they start from the menu is still that map.
  */
 export function menuSearch(params: URLSearchParams): string {
   const next = new URLSearchParams(params);

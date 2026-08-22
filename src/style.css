@@ -47,6 +47,14 @@
   --rts-hud-bar-height: 72px;
 
   /*
+   * Cursor tokens. The RTS route swaps them for the authored Three Ages
+   * cursors below; everywhere else they resolve to the OS shapes, so the same
+   * `cursor: var(--ta-cursor-*)` declaration is correct on every route.
+   */
+  --ta-cursor-default: default;
+  --ta-cursor-pointer: pointer;
+
+  /*
    * ThreeAges medieval theme tokens (docs/planned/THREEAGES_UI_RESTYLING_PLAN.md,
    * Faz A). Every RTS panel reads these instead of literal colors, so the skin
    * changes in one place. Buttons: --ta-btn-* is the primary (gold) action,
@@ -115,10 +123,19 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* The map gets its own compact Three Ages pointer; overlay controls continue
-   to use the standard hand cursor, which remains the clearer click cue. */
-#game-canvas[data-rts-cursor="default"] {
-  cursor: url("/assets/ui/cursors/cursor_default.png") 2 2, default;
+/*
+ * The authored cursors belong to the whole RTS route, not just the map.
+ * Hanging them on the canvas left every HTML surface above it — the main menu,
+ * the setup panels, the HUD — on the OS arrow, because the canvas is not the
+ * hit element there and `cursor` resolves on whatever the pointer lands on.
+ * `body.rts-route` (set in main.ts) keeps the editor and the character route on
+ * their normal cursors; the tokens make every `cursor:` site below route-aware
+ * without repeating the URLs.
+ */
+body.rts-route {
+  --ta-cursor-default: url("/assets/ui/cursors/cursor_default.png") 2 2, default;
+  --ta-cursor-pointer: url("/assets/ui/cursors/cursor_pointer.png") 3 2, pointer;
+  cursor: var(--ta-cursor-default);
 }
 
 /* Clickable RTS menus share the map cursor's materials, but use the familiar
@@ -127,8 +144,10 @@ body {
 .ui-interactive .rts-match-mode-card,
 .ui-interactive .rts-match-setup-toggle,
 .ui-interactive select:not(:disabled),
+.ui-interactive input[type="checkbox"]:not(:disabled),
+.ui-interactive input[type="range"]:not(:disabled),
 .ui-interactive input[type="radio"]:not(:disabled) {
-  cursor: url("/assets/ui/cursors/cursor_pointer.png") 3 2, pointer;
+  cursor: var(--ta-cursor-pointer);
 }
 
 /* In editor mode the canvas is a first-class work surface rather than a
@@ -526,7 +545,7 @@ body {
   height: 18px;
   margin: 0;
   opacity: 0;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
 }
 
 .rts-match-checkbox-mark {
@@ -577,7 +596,7 @@ body {
   appearance: none;
   background: transparent;
   accent-color: var(--ta-gold);
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
 }
 
 .rts-match-setting input[type="range"]::-webkit-slider-runnable-track {
@@ -672,7 +691,7 @@ body {
   border: 1px solid rgb(226 185 92 / 25%);
   border-radius: 6px;
   background: rgb(17 11 6 / 45%);
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
@@ -776,7 +795,7 @@ body {
   font-size: 12px;
   letter-spacing: normal;
   text-transform: none;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background: rgb(17 11 6 / 55%);
   border: 1px solid rgb(226 185 92 / 35%);
   border-radius: 4px;
@@ -811,7 +830,7 @@ body {
   gap: 10px;
   /* Unlike the dropdown fields, the whole row is the control: clicking the
      caption flips the switch, so it must not advertise itself as a tooltip. */
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
 }
 
 /* The checkbox stays the control — it is what a click on the label toggles and
@@ -901,7 +920,7 @@ body {
   color: var(--ta-ink);
   font: inherit;
   font-weight: 700;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background: var(--ta-btn2-bg);
   border: 1px solid transparent;
   border-image-source: url("/assets/ui/skin/button_secondary_9s.png");
@@ -1013,7 +1032,7 @@ body {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background:
     linear-gradient(45deg, transparent 50%, #f0c55d 50%) calc(100% - 14px) 52% / 6px 6px no-repeat,
     linear-gradient(135deg, #f0c55d 50%, transparent 50%) calc(100% - 9px) 52% / 6px 6px no-repeat,
@@ -1302,7 +1321,7 @@ body {
   font: inherit;
   font-size: 12px;
   font-weight: 700;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background: var(--ta-btn2-bg);
   border: 0;
   border-right: 1px solid var(--ta-border-strong);
@@ -1569,7 +1588,7 @@ body {
   font: inherit;
   font-size: 11px;
   background: rgb(56 42 26 / 85%);
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
 }
 
 .rts-hud-worker-action:not(:disabled):is(:hover, :focus-visible) {
@@ -1580,7 +1599,7 @@ body {
 }
 
 .rts-hud-worker-action:disabled {
-  cursor: default;
+  cursor: var(--ta-cursor-default);
   opacity: 0.45;
 }
 
@@ -1622,7 +1641,7 @@ body {
   font: inherit;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background: rgb(56 42 26 / 85%);
   border: 1px solid var(--ta-border);
   border-radius: 4px;
@@ -1693,7 +1712,7 @@ body {
   color: var(--ta-ink);
   font: 700 18px/1 Georgia, serif;
   letter-spacing: 0.04em;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background: var(--ta-btn2-bg);
   border: 1px solid var(--ta-border-strong);
   border-radius: 3px;
@@ -2042,7 +2061,7 @@ body {
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background: var(--ta-surface-raised);
   border: 1px solid transparent;
   border-image-source: url("/assets/ui/skin/title_strip_9s.png");
@@ -2115,7 +2134,7 @@ body {
   font: 700 11px/1.2 Cinzel, Georgia, serif;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background: var(--ta-surface-raised);
   border: 1px solid rgb(226 185 92 / 45%);
   border-radius: 2px;
@@ -2175,7 +2194,7 @@ body {
   color: var(--ta-ink);
   font: 700 12px/1.2 Cinzel, Georgia, serif;
   text-align: left;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background: var(--ta-surface-raised);
   border: 1px solid transparent;
   border-image-source: url("/assets/ui/skin/title_strip_9s.png");
@@ -2668,7 +2687,7 @@ body {
   background: rgb(23 16 10 / 78%);
   border: 1px solid rgb(194 157 92 / 45%);
   border-radius: 3px;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
 }
 
 .rts-selection-worker-assignment:is(:hover, :focus-visible) {
@@ -2762,7 +2781,7 @@ body {
   background: rgb(23 16 10 / 72%);
   border: 1px solid rgb(194 157 92 / 45%);
   border-radius: 3px;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
 }
 
 .rts-selection-formation-option:not(:disabled):is(:hover, :focus-visible),
@@ -2773,7 +2792,7 @@ body {
 }
 
 .rts-selection-formation-option:disabled {
-  cursor: default;
+  cursor: var(--ta-cursor-default);
   opacity: 42%;
 }
 
@@ -3153,7 +3172,7 @@ body {
   font-size: 10px;
   font-weight: 800;
   line-height: 1;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background: rgb(28 17 11 / 85%);
   border: 1px solid rgb(120 84 40 / 70%);
   border-radius: 2px;
@@ -3171,7 +3190,7 @@ body {
 
 .rts-selection-progress-cancel:disabled {
   opacity: 45%;
-  cursor: default;
+  cursor: var(--ta-cursor-default);
 }
 
 .rts-selection-progress-track {
@@ -3227,7 +3246,7 @@ body {
   font-size: 11px;
   font-weight: 800;
   text-align: center;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background: var(--ta-btn2-bg);
   border: 1px solid transparent;
   border-image-source: url("/assets/ui/skin/button_secondary_9s.png");
@@ -3259,7 +3278,7 @@ body {
 }
 
 .rts-selection-action:disabled {
-  cursor: default;
+  cursor: var(--ta-cursor-default);
   filter: saturate(0.7);
 }
 
@@ -3374,7 +3393,7 @@ body {
   font: 800 11px/1 var(--ta-font-display);
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
   background: var(--ta-btn2-bg);
   border: 1px solid transparent;
@@ -3510,7 +3529,7 @@ body {
   font-size: 10px;
   font-weight: 700;
   aspect-ratio: 1;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   background: rgb(38 27 16 / 90%);
   border: 1px solid var(--ta-border);
   border-radius: 4px;
@@ -3747,7 +3766,7 @@ body {
 
 .rts-build-choices button:disabled {
   opacity: 0.48;
-  cursor: default;
+  cursor: var(--ta-cursor-default);
 }
 
 .rts-build-choices button:disabled .rts-build-choice-icon {
@@ -4016,7 +4035,7 @@ body {
 .forge-ui-button {
   appearance: none;
   border: none;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   padding: 10px 18px;
   border-radius: var(--forge-ui-radius);
   background: var(--forge-ui-accent);
@@ -4144,7 +4163,7 @@ body {
 .forge-conversation-choice {
   appearance: none;
   text-align: left;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
   padding: 9px 12px;
   border: 1px solid rgba(245, 247, 251, 0.18);
   border-radius: 7px;
@@ -4243,7 +4262,7 @@ body {
   background: var(--forge-ui-accent, #4f8cff);
   color: #fff;
   font: 600 14px/1 system-ui, sans-serif;
-  cursor: pointer;
+  cursor: var(--ta-cursor-pointer);
 }
 .forge-loading-retry:hover {
   filter: brightness(1.08);

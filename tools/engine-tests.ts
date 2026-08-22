@@ -1506,6 +1506,7 @@ import {
 } from "../engine/ui/uiWorldWidget";
 import { getGameEditorCatalog, setGameEditorCatalog } from "../src/editor/gameEditorRegistry";
 import {
+  bucketEntriesByCategory,
   collectLeaves,
   groupTitle,
   leafLabel,
@@ -1513,6 +1514,14 @@ import {
   templatePath,
 } from "../src/editor/dataTableLayout";
 import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
+import {
+  DEFAULT_RTS_MUSIC_STATE_SETTINGS,
+  RTS_MUSIC_STATES,
+  RtsMusicStateMachine,
+  normalizeRtsMusicStateSettings,
+  resolveMusicState,
+} from "../src/game/rts/audio/rtsMusicState";
+import { RTS_MENU_MUSIC_EVENT, RTS_MUSIC_STATE_EVENTS } from "../src/game/rts/audio/rtsAudioEvents";
 import { RTS_LOAD_TRACK_WEIGHTS, RtsLoadTracker } from "../src/game/rts/loading/rtsLoadProgress";
 import {
   matchSetupSearch,
@@ -3923,6 +3932,7 @@ interface AudioPlaybackHandleStub {
   stop(fadeSeconds?: number): void;
   setVolume(value: number, fadeSeconds?: number): void;
   setPitch(value: number): void;
+  setPaused(paused: boolean): void;
 }
 
 check("audio event table normalizer defaults every field and refuses a broken entry", () => {
@@ -4049,6 +4059,7 @@ check("audio event pitch jitter stays inside its authored band", () => {
 interface MusicHandleStub extends AudioPlaybackHandleStub {
   gain: number;
   stopFades: number[];
+  paused: boolean;
 }
 
 const fakeMusicHandle = (clipId: string): MusicHandleStub => {
@@ -4059,6 +4070,7 @@ const fakeMusicHandle = (clipId: string): MusicHandleStub => {
     pitch: 1,
     gain: 1,
     stopFades: [],
+    paused: false,
     stop(fadeSeconds = 0) {
       stub.stopped = true;
       stub.stopFades.push(fadeSeconds);
@@ -4067,6 +4079,9 @@ const fakeMusicHandle = (clipId: string): MusicHandleStub => {
       stub.gain = value;
     },
     setPitch() {},
+    setPaused(paused: boolean) {
+      stub.paused = paused;
+    },
   };
   return stub;
 };
@@ -4085,6 +4100,8 @@ interface MusicRig {
   readonly played: MusicHandleStub[];
   /** Advances the director to `toSeconds` in fixed steps, as a frame loop would. */
   readonly runTo: (toSeconds: number) => void;
+  /** Holds or releases the bed at the rig's current clock reading. */
+  readonly hold: (paused: boolean) => void;
 }
 
 const musicRig = (options: {
@@ -4120,6 +4137,7 @@ const musicRig = (options: {
         director.advance(clock);
       }
     },
+    hold: (paused: boolean) => director.setPaused(paused, clock),
   };
 };
 
@@ -4239,6 +4257,249 @@ check("music director's gap setting separates the tracks instead of overlapping 
   assert.ok(rig.played[0]!.stopped, "the first track must be released");
 });
 
+check("music state: seeing an enemy is tension, fighting one is battle", () => {
+  // §35's explicit warning is the first assertion here: "a single enemy coming
+  // into view must not start battle music". Seeing and fighting are different
+  // facts and the design gives them different states, so a rule that collapsed
+  // them would be wrong in the way that is hardest to notice — the music would
+  // still change, just always to the same thing.
+  const settings = {
+    tensionVisibleEnemies: 1,
+    battleActiveFights: 2,
+    threatRadius: 28,
+    calmSeconds: 14,
+  };
+  const calm = { visibleEnemies: 0, activeFights: 0, threatDistance: null, age: "settlement" } as const;
+  assert.equal(resolveMusicState(calm, settings), "settlement");
+  // The peacetime pair is the age, not a threat.
+  assert.equal(resolveMusicState({ ...calm, age: "town" }, settings), "expansion");
+  assert.equal(
+    resolveMusicState({ ...calm, visibleEnemies: 1, threatDistance: 200 }, settings),
+    "tension",
+    "one enemy in sight is tension",
+  );
+  assert.equal(
+    resolveMusicState({ ...calm, visibleEnemies: 4, activeFights: 2, threatDistance: 200 }, settings),
+    "battle",
+  );
+  // A seen enemy already at the centre is a battle before a blow lands: the
+  // siege column walking into the square is the moment worth telling.
+  assert.equal(
+    resolveMusicState({ ...calm, visibleEnemies: 1, activeFights: 0, threatDistance: 10 }, settings),
+    "battle",
+    "an enemy inside the threat radius is a battle on its own",
+  );
+  // And the threat radius only counts against a *seen* enemy — with none in
+  // sight there is no distance to measure and the match is calm.
+  assert.equal(resolveMusicState({ ...calm, threatDistance: null }, settings), "settlement");
+});
+
+check("music state rises at once and falls only after the calm window", () => {
+  // Combat is spiky: a fight ends for two seconds while the next pair closes. A
+  // state that followed the sample exactly would flap several times per
+  // skirmish, crossfading each way, which is the failure this asymmetry exists
+  // to prevent. Rising is immediate because being late to a battle is worse
+  // than being early to calm.
+  const settings = {
+    tensionVisibleEnemies: 1,
+    battleActiveFights: 2,
+    threatRadius: 5,
+    calmSeconds: 10,
+  };
+  const machine = new RtsMusicStateMachine(settings);
+  const calm = { visibleEnemies: 0, activeFights: 0, threatDistance: null, age: "settlement" } as const;
+  const fight = { visibleEnemies: 3, activeFights: 3, threatDistance: 100, age: "settlement" } as const;
+
+  assert.equal(machine.update(calm, 0), "settlement");
+  assert.equal(machine.update(fight, 1), "battle", "a rise lands on the frame it is seen");
+
+  assert.equal(machine.update(calm, 2), "battle", "and does not drop on the next quiet frame");
+  assert.equal(machine.update(calm, 11), "battle", "the calm window has not elapsed yet");
+  assert.equal(machine.update(calm, 12.1), "settlement", "it drops once the window passes");
+
+  // A drop interrupted by another flare starts its wait over, so a skirmish that
+  // keeps reigniting never reaches calm at all.
+  machine.update(fight, 20);
+  machine.update(calm, 25);
+  machine.update(fight, 29);
+  assert.equal(machine.update(calm, 34), "battle", "the interrupted fall restarted its window");
+  // The window restarted at 34, so calm arrives at 44 and not before.
+  assert.equal(machine.update(calm, 43.9), "battle");
+  assert.equal(machine.update(calm, 44.1), "settlement");
+});
+
+check("every music state names a playlist the project actually ships", () => {
+  const table = readAudioEventTable();
+  for (const state of RTS_MUSIC_STATES) {
+    const eventId = RTS_MUSIC_STATE_EVENTS[state];
+    const definition = table.events[eventId];
+    // A state whose event is missing is silent in a way nothing reports: the
+    // host keeps the previous playlist, so the match simply never changes music
+    // and there is nothing to see in a log.
+    assert.ok(definition, `music state "${state}" has no "${eventId}" entry in events.json`);
+    assert.ok(definition!.clips.length > 0, `music state "${state}" has an empty playlist`);
+    assert.equal(definition!.bus, "music", `"${eventId}" must route to the music bus`);
+    // The director hands over before a track's tail; a looping entry would also
+    // never reach the hand-over, so the two settings contradict each other.
+    assert.equal(definition!.loop, false, `"${eventId}" must not loop — the director hands over`);
+  }
+});
+
+check("music state thresholds parse, default, and refuse nonsense", () => {
+  const parsed = normalizeRtsMusicStateSettings({
+    tensionVisibleEnemies: 2,
+    battleActiveFights: 5,
+    threatRadius: 40,
+    calmSeconds: 8,
+  });
+  assert.equal(parsed.tensionVisibleEnemies, 2);
+  assert.equal(parsed.battleActiveFights, 5);
+  assert.equal(parsed.threatRadius, 40);
+  assert.equal(parsed.calmSeconds, 8);
+
+  // Absent is legal: a fork with one music track has no states to tune.
+  assert.deepEqual(normalizeRtsMusicStateSettings(undefined), DEFAULT_RTS_MUSIC_STATE_SETTINGS);
+  // A partial block keeps the defaults for what it leaves out.
+  assert.equal(
+    normalizeRtsMusicStateSettings({ calmSeconds: 3 }).tensionVisibleEnemies,
+    DEFAULT_RTS_MUSIC_STATE_SETTINGS.tensionVisibleEnemies,
+  );
+  // Zero visible enemies would make every peacetime match tense — easy to type,
+  // impossible to hear as a bug rather than as a bad mix.
+  assert.throws(() => normalizeRtsMusicStateSettings({ tensionVisibleEnemies: 0 }));
+  assert.throws(() => normalizeRtsMusicStateSettings({ calmSeconds: "soon" }));
+});
+
+check("a music state change crossfades at once rather than waiting out the track", () => {
+  // The audible point of the state machine. Without the queued switch, battle
+  // music would arrive whenever the settlement track happened to end — up to a
+  // full track after the battle started, which is indistinguishable from the
+  // state machine not working.
+  const rig = musicRig({
+    clips: ["calm-a", "calm-b"],
+    volume: 1,
+    settings: { crossfadeSeconds: 4, gapSeconds: 0, segmentSeconds: 100 },
+    durations: { "calm-a": 120, "calm-b": 120, "war-a": 120, "war-b": 120 },
+  });
+  rig.runTo(20);
+  assert.equal(rig.played.length, 1);
+  const calmTrack = rig.played[0]!;
+
+  rig.director.setPlaylist(["war-a", "war-b"], 1, 20);
+  rig.runTo(20.1);
+  assert.equal(rig.played.length, 2, "the switch hands over without waiting for the track");
+  const warTrack = rig.played[1]!;
+  assert.ok(warTrack.clipId.startsWith("war-"), "the incoming track comes from the new playlist");
+  // Still a crossfade, not a cut: both are audible through the overlap.
+  assert.ok(calmTrack.gain > 0, "the outgoing track is still sounding");
+  rig.runTo(24.1);
+  assert.equal(calmTrack.stopped, true, "and is released when the fade is spent");
+
+  // Repeating the same playlist is a no-op — the host reconciles every frame.
+  rig.director.setPlaylist(["war-a", "war-b"], 1, 25);
+  rig.runTo(30);
+  assert.equal(rig.played.length, 2, "re-setting the running playlist must not restart it");
+});
+
+check("a held music bed neither plays nor ages", () => {
+  // The bug: the track plays on the audio device's clock, the hand-over is
+  // scheduled on the host's per-frame clock, and a hidden tab stops one but not
+  // the other. The track ran out while the schedule stood still, and the player
+  // came back to silence until the schedule caught up.
+  const rig = musicRig({
+    clips: ["a", "b"],
+    volume: 1,
+    settings: { crossfadeSeconds: 4, gapSeconds: 0, segmentSeconds: 100 },
+    durations: { a: 60, b: 60 },
+  });
+  rig.runTo(20);
+  const first = rig.played[0]!;
+  assert.equal(rig.played.length, 1);
+  assert.equal(first.paused, false);
+
+  rig.hold(true);
+  assert.equal(first.paused, true, "holding the bed must stop the track sounding");
+  // Past the hand-over the schedule would have reached (60 - 4 = 56s) had it
+  // kept running. Nothing may start: a bed nobody is hearing must not advance.
+  rig.runTo(80);
+  assert.equal(rig.played.length, 1, "a held bed must not hand over");
+  assert.equal(rig.director.nowPlaying(), first.clipId, "the same track is still the one held");
+
+  rig.hold(false);
+  assert.equal(first.paused, false, "releasing the bed resumes the same track");
+  // And the schedule resumes where it left off rather than firing at once: the
+  // 60 seconds it was held move the hand-over by 60 seconds, so the track still
+  // gets the 36 it had left.
+  rig.runTo(90);
+  assert.equal(rig.played.length, 1, "the hand-over must not fire off the held time");
+  rig.runTo(116.1);
+  assert.equal(rig.played.length, 2, "the hand-over lands a full track-length later");
+});
+
+check("every owner of a music bed holds it when the tab goes away", () => {
+  // A source-level check because the failure is a *missing* wiring, and a
+  // missing call is exactly what a unit test of the module cannot see. It was
+  // also made twice: once in the match, and then again in the menu's own stack,
+  // which is what an unhooked owner costs — the track plays on unheard, runs
+  // out, and the schedule that would have handed over is left standing where
+  // the frame loop stopped. The player returns to music that has gone quiet
+  // for good.
+  //
+  // The rule for a third owner: if you construct a MusicDirector, you hold it
+  // on visibilitychange and suspend the context beside it. Both halves matter —
+  // a media element keeps advancing its own position through a suspended
+  // context, so suspending alone does not stop the track running out.
+  const owners = ["src/game/rts/RtsApp.ts", "src/game/rts/audio/rtsMenuMusic.ts"];
+  for (const file of owners) {
+    const source = readFileSync(file, "utf8");
+    assert.ok(
+      source.includes("new MusicDirector("),
+      `${file} no longer constructs a MusicDirector — update this check's list`,
+    );
+    assert.ok(
+      source.includes("visibilitychange"),
+      `${file} owns a music bed but never listens for visibilitychange`,
+    );
+    assert.ok(
+      source.includes("setPaused("),
+      `${file} owns a music bed but never holds it — the track runs out unheard`,
+    );
+    assert.ok(
+      source.includes("suspendContext()"),
+      `${file} owns a music bed but never suspends its audio context`,
+    );
+  }
+});
+
+check("a bed held across a stopped frame loop resumes without a gap", () => {
+  // The hidden-tab shape, which is the one the player reported. The host's clock
+  // is accumulated per rendered frame, so it freezes along with the frame loop:
+  // no time passes from the director's point of view while the tab is away. The
+  // track must therefore come back with exactly the time it had left — the hold
+  // must neither age it (the bug: the audio device ran on and the track ended)
+  // nor push its hand-over back (which holding would do if the shift were
+  // computed off wall-clock instead of off the clock the schedule runs on).
+  const rig = musicRig({
+    clips: ["a", "b"],
+    volume: 1,
+    settings: { crossfadeSeconds: 4, gapSeconds: 0, segmentSeconds: 100 },
+    durations: { a: 60, b: 60 },
+  });
+  rig.runTo(10);
+  const first = rig.played[0]!;
+  rig.hold(true);
+  assert.equal(first.paused, true);
+  // The tab is away: no frames, so nothing advances the director at all.
+  rig.hold(false);
+  assert.equal(first.paused, false);
+
+  assert.equal(rig.played.length, 1, "returning must not have started anything");
+  rig.runTo(55.9);
+  assert.equal(rig.played.length, 1, "the track keeps the time it had left");
+  rig.runTo(56.1);
+  assert.equal(rig.played.length, 2, "and hands over on its original schedule");
+});
+
 check("music director's shuffle bag plays every track before repeating one", () => {
   // Independent random picks repeat: over four tracks one transition in four
   // replays the piece that just ended, which reads as the music having stopped
@@ -4316,7 +4577,10 @@ check("RTS audio events: every triggered name is answered by the shipped table",
   }
   // And the other way: an entry nothing triggers is a sound nobody will ever
   // hear, which is worth catching while it is still cheap to delete.
-  const triggered = new Set(rtsAudioEventIds());
+  // Plus the one entry a match never triggers: the menu plays its own playlist
+  // from outside `RtsApp`, so it is owned rather than fired. Named explicitly so
+  // the check still fails for an entry that is genuinely orphaned.
+  const triggered = new Set([...rtsAudioEventIds(), RTS_MENU_MUSIC_EVENT]);
   for (const eventId of Object.keys(table.events)) {
     assert.ok(triggered.has(eventId), `audio event "${eventId}" is in the table but never triggered`);
   }
@@ -4384,6 +4648,33 @@ check("RTS audio events: beds are single and every channel routes to its own bus
       // ends: a looping stinger is a stuck horn nothing turns off.
       assert.equal(definition.spatial, false, `${eventId} must not be spatial`);
       assert.equal(definition.loop, false, `${eventId} must not loop`);
+    }
+  }
+});
+
+check("RTS audio events: only long beds stream, and every bed does", () => {
+  const table = readAudioEventTable();
+  // Streaming is not a mix taste, it is which playback path a clip takes, and
+  // the two paths have opposite failure modes. A decoded clip is sample-exact
+  // and costs its whole length in RAM for the life of the tab (a two-minute
+  // stereo track is about 44 MiB, and the cache never evicts). A stream costs
+  // almost nothing and starts when the element is ready rather than on a
+  // scheduled sample. So the rule is about duration, not about volume: the beds
+  // measured in minutes stream, and everything a player can hear *land* does
+  // not. Flipping this on a sword hit in the editor is the mistake worth
+  // refusing — the sound would still play, just late enough to miss its frame,
+  // which reads as a broken animation rather than as an audio setting.
+  for (const [eventId, definition] of Object.entries(table.events)) {
+    const isBed = definition.bus === "music" || definition.bus === "ambience";
+    const isStinger = eventId.startsWith("stinger.");
+    if (isBed && !isStinger) {
+      assert.equal(definition.stream, true, `bed "${eventId}" must stream rather than decode`);
+    } else {
+      assert.equal(
+        definition.stream,
+        false,
+        `"${eventId}" is a one-shot and must not stream — a stream cannot be scheduled`,
+      );
     }
   }
 });
@@ -30671,6 +30962,59 @@ check("GAME_EDITOR_CATALOG satisfies the editor catalog contract once injected",
       `${table.id} section "${table.section}" is an editable object`,
     );
   }
+});
+
+check("data table categories bucket every entry exactly once", () => {
+  // The two properties the renderer depends on and cannot check for itself.
+  // Losing a row is the failure worth naming: the obvious implementation
+  // (filter per category) drops anything unmatched, and the symptom is an
+  // author adding an event and finding the editor simply does not show it.
+  const categories = [
+    { id: "a", label: "A", prefixes: ["a."] },
+    { id: "b", label: "B", prefixes: ["b.", "bb."] },
+    { id: "empty", label: "EMPTY", prefixes: ["nothing."] },
+  ];
+  const ids = ["a.one", "b.two", "bb.three", "z.stray", "a.four"];
+  const buckets = bucketEntriesByCategory(ids, categories);
+
+  const flattened = buckets.flatMap((bucket) => [...bucket.entryIds]);
+  assert.deepEqual([...flattened].sort(), [...ids].sort(), "every entry must survive bucketing exactly once");
+  assert.deepEqual(
+    buckets.map((bucket) => bucket.label),
+    ["A", "B", "EMPTY", "SINIFLANDIRILMAMIŞ"],
+    "declared order is kept and the catch-all trails it",
+  );
+  // Document order inside a bucket, not prefix order: the file's order is the
+  // one the author edited and the one a diff shows.
+  assert.deepEqual(buckets[0]!.entryIds, ["a.one", "a.four"]);
+  assert.deepEqual(buckets[3]!.entryIds, ["z.stray"]);
+  assert.equal(buckets[2]!.entryIds.length, 0, "a category with no rows still renders");
+
+  // No catch-all heading at all when everything is claimed — an empty "other"
+  // is a heading that says nothing.
+  const clean = bucketEntriesByCategory(["a.one"], categories);
+  assert.equal(clean.length, 3, "the catch-all appears only when it has rows");
+});
+
+check("every shipped audio event lands in one of the editor's channel headings", () => {
+  const table = readAudioEventTable();
+  const def = GAME_EDITOR_CATALOG.dataTables.find((entry) => entry.id === "audio-events");
+  assert.ok(def, "the audio event table must still be registered for the editor");
+  const categories = def!.entryCategories;
+  assert.ok(categories && categories.length > 0, "the audio table must declare channel headings");
+
+  const buckets = bucketEntriesByCategory(Object.keys(table.events), categories!);
+  const stray = buckets.find((bucket) => bucket.isOther);
+  // Not a rendering concern — the catch-all keeps a stray visible either way.
+  // This is about the *new namespace*: an event id whose prefix nobody claimed
+  // is almost always a channel that was invented in passing, and the moment to
+  // decide where it belongs is now rather than the first time somebody hunts
+  // for it under a heading that does not exist.
+  assert.equal(
+    stray,
+    undefined,
+    `audio events fall outside every declared channel: ${stray?.entryIds.join(", ") ?? ""}`,
+  );
 });
 
 check("the audio event table is editable from the editor, clips as an asset picker", () => {
@@ -62324,18 +62668,34 @@ check("Faz 4: the tur is played under fog whatever the free-match rows hold", ()
 });
 
 /**
- * KARAR 4's edge, kept explicit because it looks like a bug otherwise: `?level=`
- * pins too, and `menuSearch` deliberately keeps it. An author who came from the
- * editor's Play button is still trying that map, so the URL keeps saying so and
- * the match they start next is still that map — the in-page button is how they
- * reach the menu, not the address bar.
+ * The two parameters answer different questions, and the check exists because
+ * they were once conflated: `level` says *which map*, the menu asks *which
+ * match*. So `menuSearch` keeps the level — an author who came from the
+ * editor's Play button is still trying that map — while the setup goes, and a
+ * URL carrying only a level lands on the menu rather than skipping it.
  */
 check("leaving a match keeps the level the editor handed over", () => {
   const params = new URLSearchParams("?rts&level=Levels/RTS_CoreMatch&mode=story&seed=7");
   const menuParams = new URLSearchParams(menuSearch(params));
   assert.equal(menuParams.get("level"), "Levels/RTS_CoreMatch");
   assert.equal(menuParams.get("mode"), null, "the setup still goes");
-  assert.equal(urlPinsMatchSetup(menuParams), true, "?level= is still a pin, by design");
+  assert.equal(
+    urlPinsMatchSetup(menuParams),
+    false,
+    "a level alone must not skip the menu — it names a map, not a match",
+  );
+
+  // And the round trip: a match started from that menu is still on that map.
+  const played = new URLSearchParams(
+    matchSetupSearch(menuParams, {
+      missionMode: "free",
+      victoryCondition: "military",
+      fogOfWar: "on",
+      aiProfile: "balanced",
+    }, 11),
+  );
+  assert.equal(played.get("level"), "Levels/RTS_CoreMatch", "the map rides through the menu");
+  assert.equal(urlPinsMatchSetup(played), true, "and the played URL does pin");
 });
 
 if (testFilters.length === 0 && slowSkipped > 0) {

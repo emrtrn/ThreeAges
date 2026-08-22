@@ -88,8 +88,14 @@ export interface MusicDirectorOptions {
 interface MusicTrack {
   readonly clipId: string;
   readonly handle: AudioPlaybackHandle;
-  /** Clock reading at `play()` — the origin for both the fade-in and the hold. */
-  readonly startedAt: number;
+  /**
+   * Clock reading at `play()` — the origin for both the fade-in and the hold.
+   *
+   * Mutable because a pause moves it: the track holds its position while the
+   * bed is stopped, so its origin has to move forward by however long that was
+   * or the hand-over would fire against time the music never played.
+   */
+  startedAt: number;
   /** Set once the fade-in has reached the authored level, so it stops writing. */
   atFullVolume: boolean;
 }
@@ -97,8 +103,9 @@ interface MusicTrack {
 /** The track on its way out, still audible under the one coming in. */
 interface MusicFadeOut {
   readonly handle: AudioPlaybackHandle;
-  readonly startedAt: number;
-  readonly endsAt: number;
+  /** Both move on a pause, for the same reason {@link MusicTrack.startedAt} does. */
+  startedAt: number;
+  endsAt: number;
 }
 
 /**
@@ -138,11 +145,70 @@ export class MusicDirector {
   private fadingOut: MusicFadeOut | null = null;
   /** When the next track begins; non-null only inside a transition's gap. */
   private pendingStartAt: number | null = null;
+  /** Clock reading at which the bed was held, or null while it is running. */
+  private pausedAt: number | null = null;
+  /** The live playlist. Starts as the authored one; {@link setPlaylist} replaces it. */
+  private clips: readonly string[];
+  /** The live level, likewise — each state may sit at its own gain. */
+  private volume: number;
+  /**
+   * A playlist change waiting for a voice to free up.
+   *
+   * A switch wants to be heard now — the point of battle music is that it starts
+   * when the battle does — but the bed is two voices and a transition already
+   * under way is using both. Queued rather than forced, so the worst case is one
+   * crossfade of lateness instead of a third track over the top.
+   */
+  private switchRequested = false;
 
   constructor(options: MusicDirectorOptions) {
     this.options = options;
     this.random = options.random ?? Math.random;
     this.settings = options.settings ?? DEFAULT_MUSIC_PLAYLIST_SETTINGS;
+    this.clips = options.clips;
+    this.volume = options.volume;
+  }
+
+  /**
+   * Swaps the playlist, crossfading out of whatever is sounding into the new one.
+   *
+   * This is the "pull from the state, not from the bag" half of §28: the bag
+   * still decides *which* track, the caller decides *which bag*. A repeat of the
+   * playlist already running is a no-op rather than a restart — the host
+   * reconciles state every frame, so this is called sixty times a second with
+   * the same list and must cost nothing when nothing changed.
+   */
+  setPlaylist(clips: readonly string[], volume: number, clockSeconds: number): void {
+    const unchanged =
+      clips.length === this.clips.length && clips.every((clip, i) => clip === this.clips[i]);
+    if (unchanged) {
+      // The level can still move under a steady playlist (a slider, a retune).
+      this.applyVolume(volume);
+      return;
+    }
+    this.clips = clips;
+    this.applyVolume(volume);
+    // Drop what was queued from the old list; the next pick comes from the new.
+    this.bag = [];
+    this.lastPlayed = null;
+    if (!this.running || clips.length === 0) return;
+    this.switchRequested = true;
+    // Nothing is sounding (a playlist that resolved no clips, a bed between
+    // tracks): start straight away rather than waiting for a hand-over that has
+    // nothing to hand over from.
+    if (!this.current && this.pendingStartAt === null && this.pausedAt === null) {
+      this.switchRequested = false;
+      this.beginTrack(clockSeconds);
+    }
+  }
+
+  /** Re-points the live gains at a new authored level without restarting anything. */
+  private applyVolume(volume: number): void {
+    if (volume === this.volume) return;
+    this.volume = volume;
+    // Only a track that has finished rising is at the authored level; one still
+    // fading is mid-curve and `stepFadeIn` will carry it to the new value.
+    if (this.current?.atFullVolume) this.current.handle.setVolume(volume);
   }
 
   /** True between `start()` and `stop()`, whether or not a clip resolved. */
@@ -163,7 +229,7 @@ export class MusicDirector {
   /** Begins the playlist. A no-op if it is already running. */
   start(clockSeconds: number): void {
     if (this.running) return;
-    if (this.options.clips.length === 0) return;
+    if (this.clips.length === 0) return;
     this.running = true;
     this.beginTrack(clockSeconds);
   }
@@ -172,8 +238,53 @@ export class MusicDirector {
    * Advances the fades and schedules the next track. Call once per rendered
    * frame with the host's real-seconds clock.
    */
-  advance(clockSeconds: number): void {
+  /** True while the bed is held by {@link setPaused}. */
+  get paused(): boolean {
+    return this.pausedAt !== null;
+  }
+
+  /**
+   * Holds the bed where it stands, or lets it go on.
+   *
+   * The bug this exists for: the track and the schedule that hands it over run
+   * on two different clocks. The music plays on the audio device's own time,
+   * which does not care whether anything is being drawn; the schedule advances
+   * on a clock the host accumulates per rendered frame. Leave the tab and the
+   * frames stop while the music does not, so a track can run out entirely
+   * against a schedule that believes it is halfway through — and the hand-over
+   * then arrives that much late, as a gap the player hears on returning.
+   *
+   * Holding both halves is what keeps them honest. The handles stop advancing
+   * because the elements are paused; the schedule stops because every scheduled
+   * moment is shifted forward by exactly the span that passed while nothing was
+   * playing. Whether the host's clock ran during that span therefore does not
+   * matter — a hidden tab (where it froze too, and the shift is zero) and a
+   * paused match (where it kept going) both come out right.
+   */
+  setPaused(paused: boolean, clockSeconds: number): void {
     if (!this.running) return;
+    if (paused) {
+      if (this.pausedAt !== null) return;
+      this.pausedAt = clockSeconds;
+      this.current?.handle.setPaused(true);
+      this.fadingOut?.handle.setPaused(true);
+      return;
+    }
+    if (this.pausedAt === null) return;
+    const held = Math.max(0, clockSeconds - this.pausedAt);
+    this.pausedAt = null;
+    if (this.current) this.current.startedAt += held;
+    if (this.fadingOut) {
+      this.fadingOut.startedAt += held;
+      this.fadingOut.endsAt += held;
+    }
+    if (this.pendingStartAt !== null) this.pendingStartAt += held;
+    this.current?.handle.setPaused(false);
+    this.fadingOut?.handle.setPaused(false);
+  }
+
+  advance(clockSeconds: number): void {
+    if (!this.running || this.pausedAt !== null) return;
     // Order matters. The outgoing track is stepped first, so a fade that
     // completes this frame frees its slot before anything reads it; the
     // hand-over is decided before the pending start is served, so a gapless
@@ -191,6 +302,7 @@ export class MusicDirector {
     this.current = null;
     this.fadingOut = null;
     this.pendingStartAt = null;
+    this.pausedAt = null;
     this.running = false;
   }
 
@@ -207,7 +319,7 @@ export class MusicDirector {
       this.fadingOut = null;
       return;
     }
-    fade.handle.setVolume(this.options.volume * crossfadeGains(progress).outgoing);
+    fade.handle.setVolume(this.volume * crossfadeGains(progress).outgoing);
   }
 
   /** Rides the incoming track up, then leaves its gain alone. */
@@ -217,11 +329,11 @@ export class MusicDirector {
     const fade = this.settings.crossfadeSeconds;
     const progress = fade > 0 ? (clockSeconds - track.startedAt) / fade : 1;
     if (progress >= 1) {
-      track.handle.setVolume(this.options.volume);
+      track.handle.setVolume(this.volume);
       track.atFullVolume = true;
       return;
     }
-    track.handle.setVolume(this.options.volume * crossfadeGains(progress).incoming);
+    track.handle.setVolume(this.volume * crossfadeGains(progress).incoming);
   }
 
   /**
@@ -251,7 +363,12 @@ export class MusicDirector {
     const track = this.current;
     // Never while one is already under way: the bed is two voices, not three.
     if (!track || this.fadingOut || this.pendingStartAt !== null) return;
-    if (clockSeconds < this.handoverAt(track)) return;
+    // A queued playlist switch hands over at the first free moment instead of
+    // waiting out the track. This is the state machine's whole audible effect:
+    // without it, battle music would arrive whenever the settlement track
+    // happened to end, which is up to two minutes after the battle.
+    if (this.switchRequested) this.switchRequested = false;
+    else if (clockSeconds < this.handoverAt(track)) return;
     this.fadingOut = {
       handle: track.handle,
       startedAt: clockSeconds,
@@ -300,7 +417,7 @@ export class MusicDirector {
   }
 
   private refillBag(): void {
-    const next = [...this.options.clips];
+    const next = [...this.clips];
     for (let i = next.length - 1; i > 0; i -= 1) {
       const j = Math.floor(this.random() * (i + 1));
       const a = next[i]!;

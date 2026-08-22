@@ -30275,134 +30275,6 @@
       "name": "Unit Axe Chop 04"
     },
     {
-      "id": "sfx-unit-pickaxe-stone-01",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/units/sfx_unit_pickaxe_stone_01.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "units"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 22598
-      },
-      "license": "Unknown",
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "name": "Unit Pickaxe Stone 01"
-    },
-    {
-      "id": "sfx-unit-pickaxe-stone-02",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/units/sfx_unit_pickaxe_stone_02.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "units"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 20168
-      },
-      "license": "Unknown",
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "name": "Unit Pickaxe Stone 02"
-    },
-    {
-      "id": "sfx-unit-pickaxe-stone-03",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/units/sfx_unit_pickaxe_stone_03.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "units"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 21635
-      },
-      "license": "Unknown",
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "name": "Unit Pickaxe Stone 03"
-    },
-    {
-      "id": "sfx-unit-pickaxe-stone-04",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/units/sfx_unit_pickaxe_stone_04.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "units"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 20414
-      },
-      "license": "Unknown",
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "name": "Unit Pickaxe Stone 04"
-    },
-    {
       "id": "sfx-combat-sword-swing-01",
       "assetType": "sound",
       "category": "threeages-audio",
@@ -32026,6 +31898,518 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 25045
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-battle-01",
+      "name": "Music Gameplay Battle 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_battle_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6067740
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-battle-02",
+      "name": "Music Gameplay Battle 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_battle_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6195780
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-battle-03",
+      "name": "Music Gameplay Battle 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_battle_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6191207
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-battle-04",
+      "name": "Music Gameplay Battle 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_battle_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6195958
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-expansion-01",
+      "name": "Music Gameplay Expansion 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_expansion_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 5999854
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-expansion-02",
+      "name": "Music Gameplay Expansion 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_expansion_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6106182
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-expansion-03",
+      "name": "Music Gameplay Expansion 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_expansion_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6087509
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-expansion-04",
+      "name": "Music Gameplay Expansion 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_expansion_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6189404
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-tension-01",
+      "name": "Music Gameplay Tension 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_tension_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6028338
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-tension-02",
+      "name": "Music Gameplay Tension 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_tension_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6128421
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-tension-03",
+      "name": "Music Gameplay Tension 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_tension_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6062696
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-gameplay-tension-04",
+      "name": "Music Gameplay Tension 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/gameplay/mus_gameplay_tension_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "gameplay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6109103
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-menu-frontier-01",
+      "name": "Music Menu Frontier 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/menu/mus_menu_frontier_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "menu"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 5976189
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-menu-frontier-02",
+      "name": "Music Menu Frontier 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/menu/mus_menu_frontier_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "menu"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 5902960
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-menu-frontier-03",
+      "name": "Music Menu Frontier 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/menu/mus_menu_frontier_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "menu"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6321193
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "mus-menu-frontier-04",
+      "name": "Music Menu Frontier 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/music/menu/mus_menu_frontier_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "menu"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6184936
       },
       "source": {
         "origin": "project",

@@ -20,6 +20,7 @@ import type {
 } from "@/editor/gameEditorRegistry";
 import { loadDataTable, loadDataTableDefaults, saveDataTable } from "@/editor/dataTableStore";
 import {
+  bucketEntriesByCategory,
   collectLeaves,
   groupTitle,
   isPlainObject,
@@ -27,6 +28,7 @@ import {
   leafType,
   partitionLeaves,
   templatePath,
+  type EntryCategoryBucket,
   type Leaf,
   type LeafGroup,
 } from "@/editor/dataTableLayout";
@@ -167,9 +169,51 @@ export class DataTableEditor {
 
   private renderEntries(): void {
     this.bodyEl.replaceChildren();
-    for (const entryId of Object.keys(this.doc)) {
-      this.bodyEl.append(this.buildEntrySection(entryId));
+    const categories = this.options.def.entryCategories;
+    if (!categories || categories.length === 0) {
+      for (const entryId of Object.keys(this.doc)) {
+        this.bodyEl.append(this.buildEntrySection(entryId));
+      }
+      return;
     }
+    for (const bucket of bucketEntriesByCategory(Object.keys(this.doc), categories)) {
+      this.bodyEl.append(this.buildCategorySection(bucket));
+    }
+  }
+
+  /**
+   * One collapsible heading holding a category's entries.
+   *
+   * Shut by default, which is the whole point: a categorised table opens as one
+   * line per channel instead of a wall of expanded forms. The entries inside
+   * keep their own `open` default, so opening a heading shows its rows ready to
+   * edit rather than a second row of things to click.
+   */
+  private buildCategorySection(bucket: EntryCategoryBucket): HTMLDetailsElement {
+    const section = document.createElement("details");
+    section.className = "dte-category";
+    if (bucket.isOther) section.classList.add("dte-category-other");
+    section.dataset.categoryId = bucket.id;
+
+    const summary = document.createElement("summary");
+    summary.className = "dte-category-title";
+    const heading = document.createElement("span");
+    heading.textContent = bucket.label;
+    const count = document.createElement("span");
+    count.className = "dte-category-count";
+    count.textContent = String(bucket.entryIds.length);
+    summary.append(heading, count);
+    section.append(summary);
+
+    if (bucket.entryIds.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "dte-category-empty";
+      empty.textContent = bucket.emptyHint ?? "Bu kanalda henüz olay yok.";
+      section.append(empty);
+      return section;
+    }
+    for (const entryId of bucket.entryIds) section.append(this.buildEntrySection(entryId));
+    return section;
   }
 
   /** One collapsible section for a single entry: title, reset button, field grid. */
@@ -614,6 +658,16 @@ function ensureStyles(): void {
 .dte-close{padding:5px 10px;line-height:1;}
 .dte-save:hover,.dte-close:hover{filter:brightness(1.15);}
 .dte-body{flex:1;overflow:auto;padding:10px 12px;}
+.dte-category{border:1px solid #333a46;border-radius:6px;margin-bottom:6px;background:#1b1f26;}
+.dte-category[open]{background:#1e222a;padding-bottom:6px;}
+.dte-category-title{cursor:pointer;padding:9px 12px;font-weight:700;font-size:12px;letter-spacing:.08em;color:#c6cdda;user-select:none;list-style:none;display:flex;align-items:center;gap:8px;}
+.dte-category-title::-webkit-details-marker{display:none;}
+.dte-category-title::before{content:"▸";color:#7f8aa0;font-size:10px;letter-spacing:0;}
+.dte-category[open]>.dte-category-title::before{content:"▾";}
+.dte-category-count{margin-left:auto;flex:0 0 auto;min-width:20px;text-align:center;background:#2c313b;border:1px solid #3a4650;border-radius:9px;padding:1px 7px;font-size:11px;font-weight:600;letter-spacing:0;color:#aeb6c4;}
+.dte-category-empty{margin:0 12px 8px;color:#7f8aa0;font-size:12px;font-style:italic;}
+.dte-category-other>.dte-category-title{color:#ffce7a;}
+.dte-category>.dte-entry{margin:6px 10px;}
 .dte-entry{border:1px solid #2e333d;border-radius:6px;margin-bottom:8px;background:#22262e;}
 .dte-entry-title{cursor:pointer;padding:8px 12px;font-weight:600;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .dte-reset{flex:0 0 auto;border:1px solid #3a4650;background:#2c313b;color:#cdd4df;border-radius:5px;cursor:pointer;padding:3px 10px;font:inherit;font-size:12px;font-weight:500;}

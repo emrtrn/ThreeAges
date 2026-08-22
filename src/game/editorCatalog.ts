@@ -60,6 +60,46 @@ import { normalizeAudioEventTable } from "@engine/audio/audioEventTable";
  * `normalizeAudioEventTable`'s exactly, so the form refuses what the loader
  * would refuse rather than letting Save carry the message.
  */
+/**
+ * Audio event headings — the eleven channels of audio plan §5, in its order.
+ *
+ * The table's rows are a flat namespace and there are twenty-nine of them, so a
+ * peer list means scrolling past music to reach a UI click. Membership is by id
+ * prefix, which is free: the ids already carry the channel.
+ *
+ * Two of these headings are deliberately empty and stay listed. ECONOMY is §16,
+ * which has no events yet; LOGISTICS is a channel the design chose *not* to give
+ * its own sounds — the notification tiers carry it (§69), and a heading that
+ * says so is the cheapest place to record a decision an author would otherwise
+ * re-litigate. COMBAT gathers three prefixes because the table is coarser than
+ * the inventories are (§81.2): siege and structure damage are combat sounds
+ * without being combat *events*.
+ */
+const AUDIO_EVENT_CATEGORIES = [
+  { id: "ui", label: "UI", prefixes: ["ui."] },
+  { id: "notifications", label: "NOTIFICATIONS", prefixes: ["notify."] },
+  {
+    id: "economy",
+    label: "ECONOMY",
+    prefixes: ["economy.", "market."],
+    emptyHint: "Pazar/ekonomi sesleri (plan §16) henüz bağlanmadı — Paket 2-4'ün işi.",
+  },
+  { id: "building", label: "BUILDING", prefixes: ["building."] },
+  {
+    id: "logistics",
+    label: "LOGISTICS",
+    prefixes: ["logistics."],
+    emptyHint:
+      "Kendi sesi yok ve olmayacak: kesinti notify.alert, dönüş notify.info olarak duyulur (plan §69).",
+  },
+  { id: "units", label: "UNITS", prefixes: ["unit."] },
+  { id: "combat", label: "COMBAT", prefixes: ["combat.", "siege.", "structure."] },
+  { id: "world-ambience", label: "WORLD_AMBIENCE", prefixes: ["world."] },
+  { id: "music", label: "MUSIC", prefixes: ["music."] },
+  { id: "voice", label: "VOICE", prefixes: ["voice."] },
+  { id: "stingers", label: "STINGERS", prefixes: ["stinger."] },
+];
+
 const AUDIO_EVENT_FIELDS = [
   {
     path: "clips",
@@ -86,6 +126,11 @@ const AUDIO_EVENT_FIELDS = [
   { path: "maxInstances", label: "Aynı anda en fazla", min: 1, max: 64, step: 1 },
   { path: "spatial", label: "Dünyada konumlu" },
   { path: "loop", label: "Döngü (yatak)" },
+  {
+    path: "stream",
+    label: "Stream (uzun yatak)",
+    hint: "Yalnız müzik ve ambiyans için. Kapalıyken klip belleğe tamamen açılır — iki dakikalık stereo bir parça ~44 MiB tutar ve sekme kapanana kadar durur. Tek seferlik seslerde açmayın: stream, zamanlanmış bir örneğe değil hazır olduğu ana başlar.",
+  },
   { path: "refDistance", label: "Zayıflamanın başladığı mesafe", min: 0, step: 1 },
   {
     path: "maxDistance",
@@ -940,6 +985,7 @@ export const GAME_EDITOR_CATALOG = {
       // author thinks in, so those never appear as editable entries.
       section: "events",
       fields: AUDIO_EVENT_FIELDS,
+      entryCategories: AUDIO_EVENT_CATEGORIES,
       // The runtime's own normalizer, so the form cannot save a table the match
       // would refuse to load — and Save merges the section back before this runs,
       // which is what keeps the bus block intact.

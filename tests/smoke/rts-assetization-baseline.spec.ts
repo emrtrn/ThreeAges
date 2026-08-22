@@ -86,11 +86,10 @@ test("Play the level you edit: ?level= opens that map, whatever the preset names
   const coreMatch = "assets/ThreeAges/Levels/RTS_CoreMatch.level.json";
   // `gameplay_proof` names RTS_GameplayProof, so if the preset were still winning
   // this would open the wrong map — the failure the parameter exists to prevent.
-  // `?level=` is also the menu's skip condition (plan KARAR 4, `urlPinsMatchSetup`):
-  // an author handed a map to try is not asked which match they want, so this route
-  // boots straight into the match and there is no button to press.
+  // A level names a map, not a match, so this route still opens on the menu and
+  // the match has to be started before it can be asked which level it resolved.
   await page.goto(`/?rts&debug&preset=gameplay_proof&level=${coreMatch}`);
-  await waitForRtsBoot(page);
+  await startRtsMatch(page);
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-ref", coreMatch);
 

@@ -122,6 +122,43 @@ export interface EditorDataTableGroupMeta {
 }
 
 /**
+ * A heading that gathers a table's entries into one collapsible block.
+ *
+ * For the tables whose rows are a flat namespace rather than a short list: the
+ * audio event table ships twenty-nine events, and rendering them as twenty-nine
+ * peer sections means the author scrolls a wall to find `ui.click`. Categories
+ * put one line per channel on screen instead, and the channel an author is not
+ * working on stays shut.
+ *
+ * Membership is by entry-id prefix because that is what the id already encodes
+ * (`combat.sword_swing` is a combat sound and says so). Nothing is hidden by
+ * failing to match: an entry no category claims still renders, under a trailing
+ * "other" heading — a table where a new row could silently vanish would be worse
+ * than a flat one.
+ */
+export interface EditorDataTableCategoryMeta {
+  /** Stable id, used for the DOM hook and for tests. */
+  readonly id: string;
+  /** Heading text, e.g. `COMBAT`. */
+  readonly label: string;
+  /**
+   * Entry-id prefixes this category claims, e.g. `["combat.", "siege."]`.
+   *
+   * First match wins in declaration order, so a broader prefix declared later
+   * cannot steal a narrower one's rows.
+   */
+  readonly prefixes: readonly string[];
+  /**
+   * Shown in place of the entry list when the category has no rows.
+   *
+   * A category with nothing in it is worth rendering rather than dropping: it
+   * says the channel is planned and empty, which is a fact about the project an
+   * author otherwise has to go and read the design doc to learn.
+   */
+  readonly emptyHint?: string;
+}
+
+/**
  * A game-data file the editor's Data Table editor can open and save. The editor
  * stays generic: it renders each top-level entry as a per-field form by walking
  * the JSON's scalar leaves, and it enforces correctness by calling
@@ -165,6 +202,11 @@ export interface EditorDataTableDef {
    * {@link EditorDataTableGroupMeta}.
    */
   readonly groups?: readonly EditorDataTableGroupMeta[];
+  /**
+   * Optional headings that gather the top-level entries into collapsible blocks.
+   * Absent means the flat list every other table renders.
+   */
+  readonly entryCategories?: readonly EditorDataTableCategoryMeta[];
   /**
    * Authoritative validation. Returns `null` when the parsed document is valid,
    * otherwise a field-level message. Wraps the same validator the runtime loads

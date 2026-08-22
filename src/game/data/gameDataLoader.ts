@@ -11,6 +11,10 @@
  */
 import { logger } from "../core/logger";
 import { normalizeAudioEventTable } from "@engine/audio/audioEventTable";
+import {
+  normalizeRtsMusicStateSettings,
+  type RtsMusicStateSettings,
+} from "@/game/rts/audio/rtsMusicState";
 import type { AudioEventTable } from "@engine/audio/audioEventTable";
 import {
   validateAiBalance,
@@ -191,8 +195,34 @@ export async function loadMissionScript(
  * table the director can act on.
  */
 export async function loadAudioEventTable(): Promise<AudioEventTable> {
+  return (await loadAudioEventTableWithStates()).table;
+}
+
+/**
+ * The audio table plus this game's music-state thresholds, from one fetch.
+ *
+ * Two normalizers over one document, and the split is the layer boundary: the
+ * engine's covers everything any project's audio table has (clips, buses,
+ * transition timing), while `music.states` asks about visible enemies and a
+ * town centre, which only an RTS has. The engine passes that block through
+ * untouched and this reads it, so neither has to know about the other.
+ */
+export async function loadAudioEventTableWithStates(): Promise<{
+  readonly table: AudioEventTable;
+  readonly musicStates: RtsMusicStateSettings;
+}> {
   const url = `${GAME_DATA_ROOT}/audio/events.json`;
-  const table = normalizeAudioEventTable(await fetchJson(url));
+  const raw = await fetchJson(url);
+  const table = normalizeAudioEventTable(raw);
+  const musicBlock =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>).music
+      : undefined;
+  const statesBlock =
+    musicBlock && typeof musicBlock === "object" && !Array.isArray(musicBlock)
+      ? (musicBlock as Record<string, unknown>).states
+      : undefined;
+  const musicStates = normalizeRtsMusicStateSettings(statesBlock);
   log.debug(`loaded audio events (${Object.keys(table.events).length} events)`);
-  return table;
+  return { table, musicStates };
 }

@@ -20,19 +20,21 @@ bununla yürütülebilir bir plan olur.
 ### Bu belgede ne nerede
 
 Belge uzun ve iki farklı işi taşıyor: **ne üretileceği** (§1–§78, v1.0'dan beri
-sabit) ve **nerede kalındığı** (§0 + §79–§81). İkincisini ararken bakılacak beş
-yer:
+sabit) ve **nerede kalındığı** (§0 + §47.0 + §79–§81). İkincisini ararken
+bakılacak altı yer:
 
 | Aradığınız | Bölüm |
 |---|---|
 | **Fazlar ve hangisindeyiz** | §0 → *Fazlar* tablosu, hemen aşağıda |
 | **Ne yapıldı, hangi gün** | §0 → *Progress Log* |
 | **Sırada ne var, madde madde** | §69 — kutulu görev listesi |
-| **Hangi ses hâlâ yer tutucu** | §81.1 — olay olay sayım, kalan işin canlı listesi |
+| **Hangi ses hangi dosyayla karşılandı** | §81.1 — olay olay üretim kaydı (22 Ağu 2026'da boşaldı) |
+| **Ses stili neye kilitlendi** | §47.0 — kalem kalem, referans varlık id'siyle |
 | **Kalite kapıları** | §67 (Gate A–D), §45/§46 (Paket 1 kabulü) |
 
 §69 "yapılacaklar", §81.1 "kalanlar" — ikisi kesişir ama aynı şey değildir:
-§69 üretim adımlarını sayar, §81.1 oyunda o an yanlış ses çalan olayları.
+§69 üretim adımlarını sayar, §81.1 oyunda o an yanlış ses çalan olayları. Paket 1
+bittiği için §81.1'in listesi bugün boş; sayfa üretim kaydı olarak duruyor.
 
 ### Durum işaretleri
 
@@ -76,8 +78,10 @@ saklıyor; sesin binder'ı yok, bu yüzden `worldAudioAudible(x, z)` üzerinden
 kendisi soruyor. Her dünya sesi bu kapıdan geçer; UI sesleri geçmez (oyuncunun
 kendi komutunun cevabı haritaya değil oyuncuya aittir).
 
-**Ne bağlanmadı.** Birim seçimi/komut sesleri (§19–§22 VO ile birlikte gelecek)
-ve pazar/ekonomi sesleri (§16). Bunlar Paket 2–4'ün işi.
+**Ne bağlanmadı.** Pazar/ekonomi sesleri (§16) — Paket 2–4'ün işi. Birim
+seçimi/komut sesleri bu satırda bir süre duruyordu ama 21 Ağustos'ta Guard VO'su
+ile birlikte bağlandı: `voice.guard_select`, `voice.guard_move`,
+`voice.guard_attack`. Worker ve Archer aynı profilden gelecek (§47.0).
 
 §5.11'in üç stinger'ı (çağ atlama, zafer, yenilgi) 20 Ağustos'ta bağlandı ve
 artık placeholder klip üzerinde çalıyor — ayrıntısı §5.11'de. Kalan iki madde
@@ -85,9 +89,9 @@ bilinçli olarak açık: **büyük alarm** zaten `notify.alert` olarak var (ayr�
 stinger'a gerek yok, aynı işi yapar), **maç başlangıcı** ise perde kalkışıyla
 çakıştığı için Faz 4'ün müzik durum makinesine bırakıldı — orada zaten bir
 "maça giriş" geçişi tanımlanacak.
-| **Faz 2** | Package 1 üretimi (Firefly 12 SFX → Settlement müziği → Guard VO), §70/§71/§72 sırasıyla | 🔨 | Gate B (§45, §46) |
-| **Faz 3** | Stil kilidi (§47) + üretim kaydı (§63) | ⬜ | 7 stil-kilidi maddesi onaylandı |
-| **Faz 4** | Müzik durum makinesi + crossfade (§28, §35) | ⬜ | Durum geçişleri maçta duyuluyor, sinyal kaynağı tanımlı |
+| **Faz 2** | Package 1 üretimi (Firefly 12 SFX → Settlement müziği → Guard VO), §70/§71/§72 sırasıyla | ✅ | Gate B (§45, §46) — 22 Ağustos 2026'de geçildi |
+| **Faz 3** | Stil kilidi (§47) + üretim kaydı (§63) | ✅ | 7 stil-kilidi maddesi onaylandı — §47.0 |
+| **Faz 4** | Müzik durum makinesi + crossfade (§28, §35) | ✅ | Durum geçişleri maçta duyuluyor, sinyal kaynağı tanımlı — §35.2 |
 | **Faz 5** | Paket 2–4 (UI/notification/ekonomi → yapı/lojistik → birim/savaş) | ⬜ | Gate C (§67) |
 | **Faz 6** | Paket 5 (ambience + müzik) | ⬜ | Gate C |
 | **Faz 7** | Paket 6 polish + mix + erişilebilirlik slider'ları (§62) | 🔨 | Gate D |
@@ -116,10 +120,11 @@ hiyerarşisi (§9), tekrar kontrolü (§11), spatial attenuation (§10) ve büt�
 | Önek | Ne | Kanallar |
 |---|---|---|
 | `sfx-*` | Gerçek demo ses, `public/assets/audio/` altında, §6/§7 standardında | UI, info/warning bildirimleri, yapı yerleştirme/tamamlanma/iptal |
-| `starter-snd-*` | Forge şablon içeriği, yer tutucu | Aşağıdaki §81 sayımındaki her şey |
+| `starter-snd-*` | Forge şablon içeriği, yer tutucu | ~~Aşağıdaki §81 sayımındaki her şey~~ — **hiçbiri, 21 Ağustos 2026'dan beri** |
 
-Faz 2'nin işi ikinci sütunu boşaltmaktır ve bu, kod değişikliği değil klip id'si
-değişikliğidir.
+Faz 2'nin işi ikinci sütunu boşaltmaktı ve boşaldı: bugün `events.json`'daki 29
+olayın tamamı üretilmiş varlık çalıyor. Beklendiği gibi kod değişikliği değil,
+klip id'si değişikliğiydi.
 
 **Bir düzeltme (20 Ağustos).** Bu tablo bir süre "beş kanal placeholder" dedi;
 tabloyu olay olay sayınca daha fazlası çıktı. Unutulan ikisi, tam da
@@ -160,6 +165,14 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-20 | **Çöküş klipleri `structure.collapse`'a geri verildi.** Kullanıcı maç açılışında kaynağı belirsiz bir çöküş sesi duydu: `notify.alert` bir çöküş sample'ı çalıyordu (Faz 0'dan beri) ve alarm bildirimi mesafesiz olduğu için haritada bakılacak yeri yoktu. `notify.alert` → `starter-snd-door-open`, `stinger.defeat` → `starter-snd-steam-01`. Kural §81.1'e yazıldı: yer tutucu yanlış ses olabilir, başka bir olayın doğru sesi olamaz. |
 | 2026-08-21 | **Müzik artık çalma listesi: dört settlement parçası, birbirine geçerek.** §35'in geçiş sistemi uygulandı. Uygulamadan önce iki yanlış varsayım düzeldi: (1) tabloda üç klip vardı ama `loop: true` + `maxInstances: 1` demek director'ın **bir** klip seçip maç boyunca onu döndürmesi demekti — karışık çalma hiç yoktu, dördüncü klip manifest'te olduğu hâlde seçilemiyordu bile; (2) SoundCue editörü bu iş için yanlış araç — crossfade node'u yok (V2 notu), ve RTS hattı zaten cue okumuyor (`evaluateSoundCue` yalnız `RuntimeSceneApp` + DialogueEditor'de). Yeni `engine/audio/musicDirector.ts`: shuffle bag (arka arkaya aynı parça yok, tur sınırında da yok) + equal-power crossfade. `AudioEventDirector`'dan ayrı, çünkü onun işi bir tetiğin **çalıp çalmayacağına** karar vermek (cooldown, cap, mesafe, bütçe) ve `trigger()` handle'ı kendinde tutuyor — bir fade ise tam olarak handle'a ihtiyaç duyar. Fade primitifi hazırdı (`handle.setVolume(v, fade)`), eksik olan sahiplenmeydi. Geçiş anı klibin **ölçülen** süresinden: `AudioSubsystem` decode'da `buffer.duration` kaydediyor (`clipDurationSeconds`), böylece fade müziğin sonuna oturuyor ve üretilmiş parça kendi loop dikişine hiç ulaşmıyor — `loop` bu yüzden `false`. Ayarlar `events.json`'ın yeni `music` bloğunda: `gapSeconds: 0` gerçek crossfade, pozitif değer §35'in "fade out → pencere → fade in" modeli; `segmentSeconds` yalnız süresi henüz bilinmeyen klip için yedek. Equal-power, lineer değil: ilişkisiz iki parça lineer geçişte orta noktada ~3 dB düşer ve her geçiş çukur yapar. Yedi yeni sözleşme testi — hiçbiri süre pinlemiyor, örtüşmeyi/güç korunumunu/çalma sırasını pinliyor. `build:verify` yeşil (1539 check). |
 | 2026-08-20 | Placeholder sayımı olay olay çıkarıldı (§81) ve §0'ın "beş kanal" ifadesi düzeltildi: yedi. Sayılmadıkları için gözden kaçan ikisi birimin iş sesleri ve alarm bildirimiydi. Sayarken bir üretim tuzağı da göründü: envanterler rolleri ayırıyor, olay tablosu ayırmıyor — rol başına ses üretmek bugün çalmayacak bir kütüphane demek (§81.2). Yeni sözleşme testi: bir olay üretilmiş ile placeholder klibi karıştıramaz. |
+| 2026-08-21 | **Paket 1'in tamamı üretildi ve girdi.** §81.1'in on altı satırı boşaldı: top ateşi (×5), yapıya top impact (×4), kılıç savurma (×4), gövde darbesi (×4), yay (×4), topçu enkazı (×4), yapı çöküşü (×6), adım (×4), balta (×4), alarm (×2), ambiyans (170 s tek loop), dört settlement parçası ve üç stinger. Guard VO'su da geldi (seçim ×1, hareket ×4, saldırı ×4). `events.json` artık 29 olay taşıyor ve **hiçbiri `starter-snd-*` çalmıyor** — Faz 2'nin tanımı buydu. §81.4'ün üç adımı (dosyayı koy → `audio:manifest` → editörden seç) tam olarak beklendiği gibi işledi: hiçbiri için `RtsApp.ts` açılmadı. |
+| 2026-08-22 | **Gate B geçildi.** §46'nın dokuz sorusu ve Gate B'nin yedi onay maddesi, birçok kez oynanmış maçlar üzerinden kullanıcı tarafından cevaplandı: dokuz sorunun sekizi temiz, yedi onayın hepsi onay. Ardından §47'nin on iki kalemi kilitlendi (§47.0) — tension/battle parçaları ve Paket 2–5 artık bu referansa uyar. §63'ün üretim kaydı için ayrı dosya açılmadı: kayıt tutulacak tek şey hangi varlığın referans olduğu ve o zaten §47.0'ın tablosunda manifest id'siyle duruyor. Faz 2 ve Faz 3 kapandı. |
+| 2026-08-22 | **Tek olumsuz cevap: "crossfade hissedemedim, sanki normal bitip yenisi başlıyor."** Teşhis ölçümle kapatıldı ve kod aklandı — direktör headless koşturulunca 114.03 s'de ikinci parçayı sokup 120.02 s'de birincisini susturuyor, yani 6 saniyelik örtüşme gerçekten var; hat da temiz (bed olay direktörünü baypas ediyor, `maxInstances` reddetmiyor). Sebep zamanlamada: klipler tam 120.00 s ve `handoverAt = uzunluk − crossfade` örtüşmeyi **her zaman son 6 saniyeye** koyuyor. Ogg sayfa profili o saniyelerin sessiz olmadığını gösteriyor, ama üretilmiş bir parça orada kendi kapanışını çalıyor ve gelen parça kendi girişini — iki parçanın en zayıf yerleri üst üste geliyor. §35.0 loop dikişinden kaçınmayı doğru kurmuştu; kaçınılan yerin aynı zamanda parçanın finali olduğu düşünülmemişti. İki yol §35.1'de: önce yalnız tuning (`crossfadeSeconds` 6 → 16-20, örtüşme kendiliğinden erkene kayar), yetmezse bir kuyruk kırpması. |
+| 2026-08-22 | **Yatakların bellek yolu değişti: müzik artık stream ediliyor** (§61.1). Müzik 4 parçadan 20'ye çıkınca ölçüldü ve bir eşiğin geçildiği görüldü: `decodeAudioData` her parçayı ham örneklere açıyor, önbellek yalnız `dispose()`'da temizleniyor, yani iki dakikalık stereo bir parça ~44 MiB'ı sekme kapanana kadar tutuyor — çalmasa bile. Yirmi parçada ~880 MiB. §61'in "streaming stratejisi test edilmeli" satırı test edilmemişti. `AudioPlayOptions.stream` eklendi, `music` ve `ambience` yatakları ona geçti. Sözleşme testi: yataklar stream eder, başka hiçbir olay edemez — çünkü bir stream zamanlanmış bir örneğe değil hazır olduğu ana başlar, ki bu kılıç darbesi için yanlış takas. Yol boyunca: `tools/` type-check dışında olduğu için `AudioPlaybackHandle`'a eklenen üye testlerdeki stub'da sessizce eksik kaldı; `tsc` bir şey demedi, çalıştırılsa atacaktı. |
+| 2026-08-22 | Editörün Ses Olayları tablosu kategorilendi: 29 düz bölüm yerine §5'in **11 kanal başlığı**, her biri kapalı ve sayaçlı. ECONOMY ile LOGISTICS boş olduğu hâlde listede duruyor — ikisi de bir karar taşıyor (biri "henüz bağlanmadı", diğeri "kendi sesi olmayacak") ve alınmış bir kararın, tekrar sorulacağı yerde yazılı olması en ucuz yer. Sınıflandırılmamış bir olay kaybolmuyor, sonda sarı bir başlık altında görünüyor: akla ilk gelen uygulama (kategori başına filtrele) eşleşmeyeni sessizce yutardı. Katman `EditorDataTableDef.entryCategories` olarak genel eklendi. |
+| 2026-08-22 | **Sekme değişiminde müzik boşluğu düzeltildi.** Kullanıcı bildirdi: başka sekmeye geçince oyun duruyor, müzik devam ediyor, dönünce devir gelmiyor. Kök sebep, yatağın iki yarısının iki ayrı saatte koşması — parça ses aygıtının zamanında, devir zamanlaması ise kare başına biriken `audioClock`'ta. Gizli sekmede kareler durup müzik durmayınca parça tükeniyor, zamanlama hâlâ ortasında sanıyor. Çözüm: `MusicDirector.setPaused` iki yarıyı birden askıya alıyor ve her zamanlanmış anı, hiçbir şeyin çalmadığı süre kadar ileri kaydırıyor — böylece host'un saatinin o sırada işleyip işlemediği önemsizleşiyor (gizli sekme: kaydırma sıfır; duraklatılmış maç: gerçek). Sekme gizlenince ayrıca `AudioContext.suspend()` çağrılıyor, çünkü bir media element askıya alınmış context'in içinden de kendi konumunu ilerletir. Duraklatma geçişlere kanca takarak değil durumdan uzlaştırılıyor: duraklatmanın birden fazla girişi var ve birini atlamak aynı ayrışmayı geri getirirdi. Bu, kodda yazılı bir kararı tersine çeviriyor — müzik daha önce bilerek duraklatma kapısının dışındaydı. |
+| 2026-08-22 | **Faz 4 kapandı: müzik durum makinesi** (§35.2). §79.4'ün "Faz 4'e girmeden önce yazılmalı" dediği sinyal kaynağı kuruldu — görünür düşman + aktif çatışma + merkeze tehdit, üçü de sis kapısından geçerek (perde arkasındaki ordu için gerilen müzik, verilmemiş bir keşif aracı olurdu). Hasar oranı bilinçle dışarıda: `rtsAttackWatch` yalnız yapıları örnekliyor. Yükseliş anında, düşüş `calmSeconds` sonra ve yarıda kesilen düşüş pencereyi baştan başlatıyor — savaş dikenli, örneği birebir izleyen bir durum tek çarpışmada birkaç kez crossfade yapardı. Eşikler `events.json` → `music.states`; motorda değil oyunda ayrıştırılıyor, çünkü "kaç düşman görünüyor" bu oyuna ait bir soru. `setPlaylist` devri beklemeden başlatıyor: bunsuz battle müziği settlement parçası ne zaman biterse o zaman gelirdi, ki bu makinenin hiç çalışmamasından ayırt edilemez. Menü müziği kendi küçük yığınında (`rtsMenuMusic.ts`) — menü `RtsApp`'ten önce çalışıyor; soğuk açılışta otomatik oynatma politikası reddeder ve ilk harekette yeniden denenir. `build:verify` yeşil (1550 check). |
+| 2026-08-22 | Menü müziği aynı sekme hatasını taşıyordu ve kullanıcı yakaladı: menüdeyken başka sekmeye geçince ses devam ediyor, parça bitince yenisine geçmiyordu. Sebep birebir aynı — menünün kendi kare döngüsü de `requestAnimationFrame`, gizli sekmede duruyor, ses aygıtı durmuyor. Aynı tutma uygulandı. Asıl ders hatanın kendisi değil **iki kez yapılmış olması**: bir müzik yatağı sahiplenen her yığının onu `visibilitychange`'de tutması ve context'i askıya alması gerekiyor, ve eksik bir çağrı tam olarak modülün kendi testinin göremeyeceği şey. Kaynak düzeyinde bir kontrol eklendi — `MusicDirector` kuran her dosya bu üç kancayı taşımak zorunda — ki üçüncü sahip eklendiğinde build söylesin. |
 
 ---
 
@@ -1321,14 +1334,24 @@ Battle müziği “boss battle” kadar yoğun olmamalıdır.
 
 | ID | Dosya | Hedef |
 |---|---|---|
-| `MUS-001` | `mus_menu_frontier_01.ogg` | Menü |
-| `MUS-002` | `mus_gameplay_settlement_01.ogg` | Sakin ekonomi |
-| `MUS-003` | `mus_gameplay_expansion_01.ogg` | Genişleme |
-| `MUS-004` | `mus_gameplay_tension_01.ogg` | Tehdit |
-| `MUS-005` | `mus_gameplay_battle_01.ogg` | Savaş |
-| `STG-001` | `stg_age_up_01.ogg` | Çağ |
-| `STG-002` | `stg_victory_01.ogg` | Zafer |
-| `STG-003` | `stg_defeat_01.ogg` | Yenilgi |
+| `MUS-001` | `mus_menu_frontier_NN.ogg` ✅ ×4 | Menü |
+| `MUS-002` | `mus_gameplay_settlement_NN.ogg` ✅ ×4 | Sakin ekonomi |
+| `MUS-003` | `mus_gameplay_expansion_NN.ogg` ✅ ×4 | Genişleme |
+| `MUS-004` | `mus_gameplay_tension_NN.ogg` ✅ ×4 | Tehdit |
+| `MUS-005` | `mus_gameplay_battle_NN.ogg` ✅ ×4 | Savaş |
+| `STG-001` | `stg_age_up_02.ogg` ✅ | Çağ |
+| `STG-002` | `stg_victory_01.ogg` ✅ | Zafer |
+| `STG-003` | `stg_defeat_01.ogg` ✅ | Yenilgi |
+
+**Sevk edilen: 20 parça + 3 stinger (22 Ağustos 2026).** Plan durum başına tek
+parça diyordu; her biri **dört** oldu — tekrar yorgunluğu için, ve çalma listesi
+zaten shuffle bag olduğu için bedava. Hepsi 120.00 s / 48 kHz stereo, yani
+`crossfadeSeconds` bir kez ayarlanıp hepsinde tutuyor. Üretim Firefly'ın alan
+tabanlı arayüzüyle yapıldı (§30-§34'ün metin promptları Gemini formatında
+kaldı; alanlara çevrimi 22 Ağustos oturumundadır).
+
+`stg_age_up_01.ogg` sevk edildi ama artık hiçbir olay çalmıyor — çağ atlama
+`-02`'ye geçti. `audio:manifest` bunu her koşuda rapor eder.
 
 ---
 
@@ -1499,6 +1522,122 @@ tur sınırında da aynı parça arka arkaya gelmez.
 Durum bazlı geçiş (settlement → tension → battle) hâlâ açık: onun için gereken
 savaş yoğunluğu sinyali yok. Direktör onu taşıyacak biçimde — "sıradaki parçayı
 torbadan çek" yerine "durumdan çek" — ama o sinyal ayrı bir iş.
+
+## 35.1 Geçiş duyulmuyor — Gate B'nin tek revizyon maddesi (22 Ağustos 2026)
+
+Kullanıcının §46 dinlemesindeki tek olumsuz cevap: *"crossfade hissedemedim,
+sanki normal bitip yenisi başlıyor."* Teşhis, tahmin yerine ölçümle kapatıldı ve
+sonuç **koda değil zamanlamaya** çıktı.
+
+**Kod doğru çalışıyor.** Direktör gerçek ayarlarla (`crossfadeSeconds: 6`,
+`gapSeconds: 0`) ve gerçek klip süresiyle headless koşturuldu: 114.03 s'de ikinci
+parça giriyor, 120.02 s'de birincisi susuyor — tam 6 saniyelik, equal-power bir
+örtüşme. Hat da temiz: bed olay direktörünü baypas edip `audioSubsystem.play`'e
+gidiyor, yani `maxInstances` ikinciyi reddetmiyor; saat gerçek saniye.
+
+**Ölçülen asıl sebep: fade parçanın *bitişine* oturuyor.** Dört settlement
+parçasının süresi tam **120.00 s** (48 kHz stereo, Ogg granule'den ölçüldü) ve
+`handoverAt = uzunluk − crossfade` olduğu için örtüşme her zaman **son 6
+saniyeye** düşer. Kodlanmış sayfa boyutu profili, o son 6 saniyenin sessiz
+olmadığını gösteriyor (114-118 s hâlâ parça ortasının %85-100'ü, yalnız son
+1 saniye %60-77'ye iniyor) — yani kırpılan bir şey yok. Ama üretilmiş bir parça
+o saniyelerde **kendi kapanışını** çalıyor: çözülen bir kadans, seyrelen bir
+doku. Gelen parça da aynı anda **kendi girişini** çalıyor. İki parçanın en zayıf
+yerleri üst üste geliyor, ve kulak bunu "biri bitti, öteki başladı" diye okuyor.
+Örtüşme matematiksel olarak var, müzikal olarak yok.
+
+Bunu §35.0'ın kararı davet etti: *"fade müziğin sonuna oturuyor, böylece
+üretilmiş parça kendi loop dikişine hiç ulaşmıyor."* Dikişten kaçınmak doğruydu;
+kaçınılan yerin parçanın kapanışı olduğu düşünülmemişti. Loop olarak üretilmemiş
+bir parçada "dikiş" ile "final" aynı yerdedir.
+
+### İki yol, sırasıyla denenecek
+
+1. **Yalnız tuning.** `crossfadeSeconds`'ı büyüt (6 → 16-20). Örtüşme otomatik
+   olarak erkene kayar (`120 − 20 = 100. saniye`), gelen parça giden parçanın
+   kapanışı sürerken çoktan kurulmuş olur. Kod değişikliği sıfır, `events.json`
+   → `music.crossfadeSeconds`, editörden **Veri → Ses Olayları**'yla da
+   düzenlenebilir. Kulakla doğrulanacak.
+2. **Kod, birincisi yetmezse.** Fade'in parçanın *sonundan önce* bitmesini
+   sağlayan bir kuyruk kırpması (`tailTrimSeconds`): şu an fade nereye konursa
+   konsun hep `uzunluk` anında biter, yani kapanış her seferinde çalınır.
+   Kırpma, kapanışı tamamen atlatır. Ayarın kendisi tuning, ama `handoverAt`
+   onu bilmiyor — orası bir satırlık bir ekleme.
+
+Gate B bu madde yüzünden bloke edilmedi: §47'de kilitlenen şey parçaların
+**stili**, ve stil onaylandı. Bu bir geçiş zamanlaması sorunu.
+
+## 35.2 Durum makinesi uygulandı (22 Ağustos 2026)
+
+§28'in altı durumundan **dördü** maça ait ve artık çalışıyor; MENU kabuğun,
+RESULT ise §5.11'in iki stinger'ı. Yirmi parça (5 durum × 4) sevk edildi ve
+hepsi bir olaya bağlı.
+
+### Sinyal — §79.4'ün kapattığı boşluk
+
+§35'in birleşik skoru üç girdiyle kuruldu (kullanıcının seçimi; **hasar oranı
+bilinçli olarak dışarıda** — `rtsAttackWatch` yalnız yapıları örnekliyor ve
+birimlere genişletmek ayrı bir iş):
+
+| Girdi | Ne sayıyor |
+|---|---|
+| Görünür düşman | Sis kapısından geçen düşman birimleri — işçiler hariç |
+| Aktif çatışma | O an hedef tutan birimler, iki taraftan da |
+| Merkeze tehdit | Görülen en yakın düşmanın oyuncu merkezine uzaklığı |
+
+**Sis kapısı burada da geçerli** ve gerekçesi Faz 1'dekiyle aynı: perde arkasındaki
+bir ordu için gerilen müzik, oyuncuya verilmemiş bir keşif aracı olurdu. Düşman
+işçisi sayılmıyor — görüş alanına giren bir toplayıcı saldırı değil.
+
+### Kurallar
+
+```text
+battle    aktif çatışma >= 2  YA DA  görülen düşman merkeze <= 28 birim
+tension   görünür düşman >= 1
+expansion (barış) çağ = town
+settlement (barış) çağ = settlement
+```
+
+§28.3'ün expansion'ı bir tehdit değil bir **aşama** — o yüzden çağdan geliyor,
+savaş sinyalinden değil. Merkeze tehdit maddesi darbe beklemiyor: kasaba
+meydanına yürüyen kuşatma kolu, ilk vuruş inmeden battle'dır.
+
+### Çırpınmayı önleyen asimetri
+
+Makine örneğin bir saf fonksiyon değil, çünkü savaş dikenli: bir çatışma iki
+saniyeliğine biter, sonraki çift kapanırken yeniden başlar. Örneği birebir
+izleyen bir durum, tek bir çarpışmada battle ile settlement arasında birkaç kez
+gidip gelir ve her seferinde crossfade yapardı. Bu yüzden:
+
+> **Yükseliş anında, düşüş `calmSeconds` sonra.** Yarıda kesilen bir düşüş
+> penceresini baştan başlatır — yani sürekli parlayan bir çarpışma hiç sakine
+> ulaşmaz. Savaşa geç kalmak, sakine erken varmaktan kötüdür.
+
+Eşikler `events.json` → `music.states`, dördü de kulakla ayarlanır. Motor değil
+**oyun** tarafında ayrıştırılıyor (`rtsMusicState.ts`): "kaç düşman görünüyor"
+ve "merkez nerede" bu oyuna ait sorular, ve bunları bilen bir motor şablon
+olmaktan çıkardı. Motor yanındaki geçiş zamanlamasını okumaya devam ediyor —
+o her çalma listesi için doğru.
+
+### Geçiş anı
+
+Durum değişince `MusicDirector.setPlaylist` devri **beklemeden** başlatıyor.
+Bunsuz battle müziği, settlement parçası ne zaman biterse o zaman gelirdi — iki
+dakikaya kadar geç, ki bu durum makinesinin hiç çalışmamasından ayırt edilemez.
+Zaten süren bir geçiş varsa sıraya alınıyor: yatak iki ses, üç değil.
+
+### Menü müziği (§28.1)
+
+Kendi küçük yığınında (`rtsMenuMusic.ts`), çünkü menü `RtsApp`'ten **önce**
+çalışıyor — subsystem, mix ve kare döngüsü henüz yok. Yeniden yazılan bir şey
+yok: aynı `AudioSubsystem`, aynı `MusicDirector`, aynı tablo girdisi, yalnız
+sahibi farklı. Maç başlarken 0.6 s'de kısılıp context'i bırakıyor.
+
+**Soğuk açılışta duyulmaması beklenir ve bu bir hata değildir:** tarayıcı,
+etkileşim görmemiş bir sayfayı seslendirmez ve menü ilk ekrandır. İlk harekette
+yeniden deneniyor — maçtan dönüşte etkileşim çoktan olmuştur, ilk ziyarette ise
+genellikle kurulum satırları okunurken olur. Menüden hiç durmadan geçen bir
+oyuncu sessizlik duyar.
 
 ---
 
@@ -1889,45 +2028,52 @@ Ses üretiminde aşağıdaki olaylar mutlaka güçlü geri bildirim almalıdır.
 
 Paket 1 ses yönünü kilitlemek için minimum ancak temsil edici olmalıdır.
 
+**Tamamlandı — 22 Ağustos 2026.** Kutular üretilmiş varlıklara göre işaretlendi.
+İki maddede varyant sayısı planlanandan farklı çıktı ve ikisi de bilinçli:
+*Construction hammer* tek tek darbe değil tek bir konumlu döngü oldu
+(`building.build_loop`, gerekçesi §69'da), *Logistics disconnected/restored* ise
+kendi sesini hiç almadı — bildirim tier'ı taşıyor (`notify.alert` / `notify.info`).
+*Arrow impact* ayrı üretilmedi; tabloda ayrı bir olay yok (§81.2).
+
 ## UI
 
-- [ ] UI click ×3
-- [ ] UI confirm ×2
-- [ ] UI error ×2
+- [x] UI click ×3
+- [x] UI confirm ×2
+- [x] UI error ×2
 
 ## Building
 
-- [ ] Building placement ×2
-- [ ] Construction hammer ×3
-- [ ] Building complete ×2
+- [x] Building placement ×2
+- [x] Construction hammer ×3
+- [x] Building complete ×2
 
 ## Combat
 
-- [ ] Sword swing ×3
-- [ ] Sword hit ×4
-- [ ] Bow release ×3
-- [ ] Arrow impact ×3
-- [ ] Cannon fire ×3
-- [ ] Cannon stone impact ×3
+- [x] Sword swing ×3
+- [x] Sword hit ×4
+- [x] Bow release ×3
+- [x] Arrow impact ×3
+- [x] Cannon fire ×3
+- [x] Cannon stone impact ×3
 
 ## Logistics
 
-- [ ] Logistics disconnected ×2
-- [ ] Logistics restored ×2
+- [x] Logistics disconnected ×2
+- [x] Logistics restored ×2
 
 ## Ambience
 
-- [ ] Frontier day ambience ×1 seamless loop
+- [x] Frontier day ambience ×1 seamless loop
 
 ## Music
 
-- [ ] Settlement gameplay track ×1
+- [x] Settlement gameplay track ×1
 
 ## Voice
 
-- [ ] Guard selection ×3
-- [ ] Guard move ×3
-- [ ] Guard attack ×2
+- [x] Guard selection ×3
+- [x] Guard move ×3
+- [x] Guard attack ×2
 
 ### Paket 1 kabul amacı
 
@@ -1981,6 +2127,36 @@ Tek bir test maçı hazırlanmalıdır.
 ---
 
 # 47. Stil kilitleme
+
+## 47.0 Kilitlendi — 22 Ağustos 2026
+
+Paket 1 Gate B'yi geçti (§67) ve aşağıdaki kalemler kullanıcı tarafından
+kilitlendi. **Kilit ne demektir:** bundan sonra üretilecek her ses — tension ve
+battle parçaları, Paket 2–5'in tamamı, Worker ve Archer VO'su — bu referansa
+uyar. Bir kalemi değiştirmek artık bir tuning değil, kilidi açma kararıdır ve
+üretilmiş kütüphaneyi geriye dönük etkiler.
+
+| Kalem | Kilitlenen | Referans varlık |
+|---|---|---|
+| UI click karakteri | Kısa, tok, tonal olmayan; tekrar tekrar basıldığında yormuyor | `sfx-ui-click-01` |
+| Wood/metal oranı | Mevcut yapı + savaş dengesi | `sfx-building-*`, `sfx-combat-sword-swing-*` |
+| Cannon low-frequency miktarı | Mevcut bas seviyesi — oyunun en ağır sesi, ama baskın değil | `sfx-artillery-fire-01…05` |
+| Sword impact şiddeti | Mevcut sertlik | `sfx-combat-body-impact-01…04` |
+| Arrow transient karakteri | Mevcut transient | `sfx-combat-bow-release-01…04` |
+| Notification tonal dili | info/warning/alert üçlüsü birbirinden okunuyor | `sfx-notify-{info,warning,alert}` |
+| Ambience yoğunluğu | Arka planda kalıyor, dikişi duyulmuyor | `amb-world-frontier-day-01`, bus 0.22 |
+| Müzik enstrüman ailesi | Settlement setinin enstrümanları | `mus-gameplay-settlement-01…04` |
+| Music loudness | Olay 0.5 × `music` bus 0.18 | §58 tablosu |
+| Voice profili | Guard'ın tonu; Worker ve Archer bunun üstüne kurulur | `vo-guard-*` |
+| Voice compression | Mevcut; kılıç darbesinin üstünden ayrışıyor (§46 s.2) | `vo-guard-attack-01…04` |
+| Global reverb miktarı | Mevcut mesafe/attenuation eğrisi | §10 |
+
+Bu kilidin dayandığı gözlem §46'nın dokuz sorusudur; cevapları ve Gate B'nin
+yedi onayı 22 Ağustos 2026 tarihli oturumda alındı. §63'ün üretim kaydı bu
+tablodur: ayrı bir dosya açılmadı, çünkü kayıt tutulacak tek şey **hangi varlığın
+referans olduğu** ve o zaten manifest id'siyle burada duruyor.
+
+---
 
 Paket 1 kabul edildiğinde aşağıdakiler sabitlenmelidir.
 
@@ -2421,6 +2597,33 @@ voice: 1–3
 
 Kesin değerler browser testleriyle belirlenmelidir.
 
+## 61.1 "Streaming stratejisi test edilmeli" — test edildi (22 Ağustos 2026)
+
+Yukarıdaki dört maddenin sonuncusu uzun süre tek satır olarak durdu. Müzik 4
+parçadan 20'ye çıkınca ölçüldü ve bir eşiğin geçildiği görüldü:
+
+| | 4 parça | 20 parça |
+|---|---|---|
+| Disk | 24 MB | **118 MB** (tüm `public/assets`'in %31'i) |
+| Açılmış hâli (RAM) | ~176 MiB | **~880 MiB** |
+
+Sebep, müziğin tek atışlık bir SFX gibi işlenmesiydi: `decodeAudioData` dosyayı
+ham örneklere açıyor ve önbellek yalnız `dispose()`'da temizleniyordu. İki
+dakikalık stereo bir parçanın açılmış hâli
+**120 s × 48 kHz × 2 kanal × 4 bayt ≈ 44 MiB**, ve sekme kapanana kadar orada
+duruyor — çalmasa bile.
+
+Çözüm standart ve uygulandı: **yataklar media element üzerinden stream ediliyor**
+(`AudioPlayOptions.stream`, `events.json`'da olay başına açılıyor). Bellekte 44
+MiB yerine küçük bir tampon kalıyor. İkinci kazanç ölçülmedi ama kulakla
+doğrulandı: bir parça artık ilk çalışında 5.8 MB indirme + decode beklemiyor, ve
+o bekleme tam da crossfade'in ortasına düşüyordu.
+
+Kısa sesler decoded yolda kalır ve kalmalıdır — bir stream zamanlanmış bir
+örneğe değil hazır olduğu ana başlar, ki bu bir kılıç darbesi için yanlış takas.
+Sözleşme testi bunu tutuyor: `music`/`ambience` bus'ındaki yataklar stream eder,
+başka hiçbir olay edemez.
+
 ---
 
 # 62. Ses erişilebilirliği
@@ -2624,15 +2827,19 @@ no obvious imitation of existing game music
 - [ ] Müzik yönü onaylandı
 - [ ] Voice yaklaşımı onaylandı
 
-## Gate B — Package 1
+## Gate B — Package 1 ✅ (22 Ağustos 2026)
 
-- [ ] UI dili onaylandı
-- [ ] Combat yoğunluğu onaylandı
-- [ ] Cannon sesi onaylandı
-- [ ] Logistics uyarısı onaylandı
-- [ ] Ambience onaylandı
-- [ ] Settlement music onaylandı
-- [ ] Guard voice onaylandı
+Yedi maddenin tamamı, §46'nın test senaryosu birçok kez oynandıktan sonra
+kullanıcı tarafından onaylandı. Tek revizyon maddesi ses varlıklarında değil
+geçiş zamanlamasındaydı — §35.1.
+
+- [x] UI dili onaylandı
+- [x] Combat yoğunluğu onaylandı
+- [x] Cannon sesi onaylandı
+- [x] Logistics uyarısı onaylandı — ayrı bir savaş alarmı olmaması da onaylandı
+- [x] Ambience onaylandı
+- [x] Settlement music onaylandı
+- [x] Guard voice onaylandı
 
 ## Gate C — Core Audio
 
@@ -2696,32 +2903,36 @@ sayar.*
 - [x] Building complete — `sfx-building-complete-01`
 - [x] UI confirm — demo setinde `sfx-ui-toggle-01` / `sfx-ui-back-01` olarak geldi
       (seçim ve geri alma); ayrı bir "confirm" üretilmedi, ihtiyaç da görünmedi
-- [ ] Cannon fire — **sıradaki** (§22.1 promptu hazır)
-- [ ] Cannon stone impact — **sıradaki** (§22.2 promptu hazır)
-- [ ] Sword swing
-- [ ] Sword hit
-- [ ] Bow release
-- [ ] Arrow impact
+- [x] Cannon fire — `sfx-artillery-fire-01…05`
+- [x] Cannon stone impact — `sfx-structure-impact-stone-01…04`
+- [x] Sword swing — `sfx-combat-sword-swing-01…04`
+- [x] Sword hit — `sfx-combat-body-impact-01…04`
+- [x] Bow release — `sfx-combat-bow-release-01…04`
+- [x] Arrow impact — ayrı üretilmedi: tabloda ayrı bir olay yok, isabet
+      `combat.body_impact`'e düşüyor (§81.2'nin "olay başına üret" kuralı)
 - [x] Construction hammer — olay açıldı: `building.build_loop`
       (`sfx-building-build-loop-01`). Tek tek darbe değil, şantiyede çalan
       konumlu bir döngü; gerekçesi ve tek-döngü kuralı `RTS_AUDIO`'nun kendi
       notunda. §17'nin `SFX-BLD-005` (construction wood movement) maddesi hâlâ
       açık ve bu döngüye ikinci bir katman olarak eklenebilir.
-- [ ] Frontier ambience
+- [x] Frontier ambience — `amb-world-frontier-day-01` (170 s tek loop)
 - [x] Logistics disconnected / restored — **kendi sesleri yok ve olmayacak.**
       Bildirim tier'ı taşıyor: kesinti `notify.alert`, dönüş `notify.info`
       (§24'ün üç seviyesi). §77'nin stil-kilidi maddesi bu kanalla karşılanıyor.
 
 ## Package 1 Gemini
 
-- [ ] Settlement music — §31 promptu hazır; §71'in kuralı: bu kabul edilmeden
-      diğer parçalar (zafer, yenilgi, çağ atlama stinger'ları dahil) üretilmez
+- [x] Settlement music — dört parça, `mus-gameplay-settlement-01…04`, her biri
+      120.00 s. §71'in kuralı karşılandı: kabul edildi (Gate B), yani tension ve
+      battle parçalarının önü artık açık
+- [x] Üç stinger — `stg-age-up-02`, `stg-victory-01`, `stg-defeat-01`
+      (`stg-age-up-01` shipped ama artık bir olay onu çalmıyor)
 
 ## Package 1 Voice
 
-- [ ] Guard selection
-- [ ] Guard move
-- [ ] Guard attack
+- [x] Guard selection — `vo-guard-selection-01`
+- [x] Guard move — `vo-guard-move-01…04`
+- [x] Guard attack — `vo-guard-attack-01…04`
 
 ## Entegrasyon
 
@@ -2732,9 +2943,9 @@ Bu bloğun tamamı Faz 0/1'de yapıldı; kalan tek madde Faz 4'ün işi.
 - [x] Cooldown
 - [x] Max instances
 - [x] Spatial attenuation — mesafe kesmesi ve sis kapısı dahil
-- [ ] Music crossfade — Faz 4 (§28, §35); geçilecek ikinci parça üretilmeden
-      iskeleti kurmak boşa
-- [ ] Package 1 test map — §46'nın test senaryosu, Gate B ile birlikte
+- [x] Music crossfade — `engine/audio/musicDirector.ts`, shuffle bag +
+      equal-power geçiş. Zamanlaması hâlâ ayarlanacak: §35.1
+- [x] Package 1 test map — §46 senaryosu birçok kez oynandı; Gate B geçildi
 
 ---
 
@@ -3048,10 +3259,16 @@ tek bir ses henüz üretilmedi.
 her satıra üretilecek dosyanın adını yazar. Amaç, Firefly'a oturulduğunda "ne
 üreteceğim" sorusunun sorulmaması.
 
-Sayım 20 Ağustos 2026'daki `public/game-data/audio/events.json` üzerinden
-yapıldı: **26 olayın 16'sı** hâlâ Forge şablon içeriği çalıyor.
+**Bu sayfa 22 Ağustos 2026'da kapandı: sütun boşaldı.** Aşağıdaki tablo artık
+kalan işin listesi değil, **üretim kaydıdır** — hangi olayın hangi dosyayla
+karşılandığının kaydı. Bugünkü `events.json`'da **29 olay var ve hiçbiri
+`starter-snd-*` çalmıyor**; `npm run audio:manifest` 69 dosya / 69 kayıt
+raporluyor. Faz 2'nin tanımı buydu.
 
-## 81.1 Sayım
+Sayım ilk olarak 20 Ağustos 2026'da yapılmıştı: 26 olayın 16'sı Forge şablon
+içeriği çalıyordu.
+
+## 81.1 Sayım — kapandı
 
 | # | Olay | Şu an çalan | Üretilecek dosya | Varyant | Prompt kaynağı |
 |---|---|---|---|---:|---|
@@ -3081,10 +3298,15 @@ ulaşmıyordu: `mining` aktivitesi kendi klibini iddia etmez, paylaşılan
 `Fixing_Kneeling` diz çökmesine biner ve o klip hiçbir temas işaretlemez.
 
 Taşınmadı, silindi. Worker rig'inde 51 klip var ve hiçbiri kazma sallamıyor;
-sesi doğru binaya taşımak için önce animasyon lazım. Klipler
-(`sfx_unit_pickaxe_stone_01–04.ogg`) diskte duruyor ve manifest'te kayıtlı —
-`audio:manifest` bunları "shipped but no event plays it yet" diye raporlar. Bir
-mining/pickaxe animasyonu geldiği gün olay geri açılır ve klipler yerinde olur.
+sesi doğru binaya taşımak için önce animasyon lazım.
+
+**Klipler de gitti (22 Ağustos'ta fark edildi).** Bu paragraf bir süre
+"`sfx_unit_pickaxe_stone_01–04.ogg` diskte duruyor ve manifest'te kayıtlı" dedi;
+durum bu değil — dört dosya da silinmiş ve manifest'ten düşmüş
+(`audio:manifest` 69 dosya / 69 kayıt raporluyor, karşılıksız kayıt yok). Bir
+mining/pickaxe animasyonu geldiği gün olay geri açılabilir ama klipler **yeniden
+üretilecek**. Bugün aynı raporda "shipped but no event plays it yet" diyen tek
+varlık `stg-age-up-01` — çağ atlama stinger'ı `-02`'ye geçtiğinde geride kaldı.
 
 **Placeholder seçerken bir kural** — kulakla bulundu, ucuz değil: *bir yer tutucu,
 o klibi zaten sahiplenen bir kanaldan ödünç alınmaz.* Alarm bildirimi bir süre

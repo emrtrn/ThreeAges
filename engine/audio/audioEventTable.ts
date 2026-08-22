@@ -75,6 +75,17 @@ export interface AudioEventDefinition {
   readonly spatial: boolean;
   /** Loops until stopped — ambience beds and fire loops. */
   readonly loop: boolean;
+  /**
+   * Stream the clip instead of decoding it into memory.
+   *
+   * For beds only — music and ambience, the sounds measured in minutes. A
+   * decoded two-minute stereo track costs about 44 MiB of RAM for the life of
+   * the tab, and the cache never evicts, so a playlist of twenty is most of a
+   * gigabyte. A one-shot should never set this: a stream starts when the
+   * element is ready rather than on a scheduled sample, which is the wrong
+   * trade for a sword hit and the right one for a track nobody can hear start.
+   */
+  readonly stream: boolean;
   /** Distance at which attenuation begins (spatial only). */
   readonly refDistance: number;
   /**
@@ -131,6 +142,7 @@ const DEFAULTS = {
   maxInstances: 4,
   spatial: false,
   loop: false,
+  stream: false,
   refDistance: 8,
   maxDistance: 60,
   rolloff: 1,
@@ -218,6 +230,7 @@ export function normalizeAudioEventDefinition(value: unknown, where: string): Au
     maxInstances: Math.round(readNumber(input, "maxInstances", where, DEFAULTS.maxInstances, 1, 64)),
     spatial: readBoolean(input, "spatial", where, DEFAULTS.spatial),
     loop: readBoolean(input, "loop", where, DEFAULTS.loop),
+    stream: readBoolean(input, "stream", where, DEFAULTS.stream),
     refDistance,
     maxDistance,
     rolloff: readNumber(input, "rolloff", where, DEFAULTS.rolloff, 0, 10),
@@ -528,6 +541,7 @@ export class AudioEventDirector {
       bus: definition.bus,
       pitch: jitterPitch(definition.pitchVariation, this.random),
       ...(definition.loop ? { loop: true } : {}),
+      ...(definition.stream ? { stream: true } : {}),
     };
     if (!definition.spatial || !context.position) return options;
     return {

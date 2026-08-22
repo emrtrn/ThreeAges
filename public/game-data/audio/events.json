@@ -6,9 +6,15 @@
   "_results": "The two result stingers were authored at 1 on the theory that they play into silence and need no more. Half of that was right: defeat is a three-second vent and was heard, victory was a 0.16-second beep and was not. Playing into silence buys nothing if the sound is over before the player looks up. Both carry the age-up's weight now, on clips with some length to them.",
   "_music": "How the gameplay bed moves between the tracks of `music.settlement`. `gapSeconds: 0` makes it a true crossfade - the outgoing track falls as the incoming one rises, on an equal-power curve so the seam does not dip. Raise it and you get the design's other model instead: fade out, a window of nothing, fade in. `segmentSeconds` is only the fallback for a track whose length is not known yet; once a clip has decoded, the fade is scheduled from its own duration so it lands on the end of the music rather than on a count. All three are retuned by ear.",
   "music": {
-    "crossfadeSeconds": 6,
+    "crossfadeSeconds": 18,
     "gapSeconds": 0,
-    "segmentSeconds": 105
+    "segmentSeconds": 105,
+    "states": {
+      "tensionVisibleEnemies": 1,
+      "battleActiveFights": 2,
+      "threatRadius": 28,
+      "calmSeconds": 14
+    }
   },
   "buses": {
     "notifications": 1,
@@ -308,9 +314,24 @@
         "amb-world-frontier-day-01"
       ],
       "bus": "ambience",
-      "volume": 0.4,
+      "volume": 1,
       "loop": true,
-      "maxInstances": 1
+      "maxInstances": 1,
+      "stream": true
+    },
+    "music.menu": {
+      "_note": "Plan §28.1: the main menu. Played by its own small stack (rtsMenuMusic.ts) because the menu runs before RtsApp exists - same subsystem, same director, same entry shape, just a different owner. Not in RTS_AUDIO: nothing in a match triggers it.",
+      "clips": [
+        "mus-menu-frontier-01",
+        "mus-menu-frontier-02",
+        "mus-menu-frontier-03",
+        "mus-menu-frontier-04"
+      ],
+      "bus": "music",
+      "volume": 0.5,
+      "loop": false,
+      "maxInstances": 2,
+      "stream": true
     },
     "music.settlement": {
       "_note": "A playlist, not a bed: the MusicDirector owns these clips and fades from one to the next, so `clips` is the running order's source rather than a variation set to pick one from. `loop` is false on purpose - a generated track looped would eventually reach its own seam, and the director hands over before the tail instead. `maxInstances` says 2 because a crossfade is two tracks audible at once; nothing enforces it here, since the director plays these itself rather than through the event director, but a number that contradicts what is heard is worse than no number.",
@@ -323,7 +344,50 @@
       "bus": "music",
       "volume": 0.5,
       "loop": false,
-      "maxInstances": 2
+      "maxInstances": 2,
+      "stream": true
+    },
+    "music.expansion": {
+      "_note": "Plan §28.3: outer economy, outposts, roads - the kingdom reaching past its own walls. Chosen by the player's age rather than by a threat, so it is the peacetime pair with settlement rather than a step towards battle.",
+      "clips": [
+        "mus-gameplay-expansion-01",
+        "mus-gameplay-expansion-02",
+        "mus-gameplay-expansion-03",
+        "mus-gameplay-expansion-04"
+      ],
+      "bus": "music",
+      "volume": 0.5,
+      "loop": false,
+      "maxInstances": 2,
+      "stream": true
+    },
+    "music.tension": {
+      "_note": "Plan §28.4: enemies in sight, nothing struck yet. The buffer state §35 asks for, and the reason a single enemy coming into view does not start battle music.",
+      "clips": [
+        "mus-gameplay-tension-01",
+        "mus-gameplay-tension-02",
+        "mus-gameplay-tension-03",
+        "mus-gameplay-tension-04"
+      ],
+      "bus": "music",
+      "volume": 0.5,
+      "loop": false,
+      "maxInstances": 2,
+      "stream": true
+    },
+    "music.battle": {
+      "_note": "Plan §28.5: a fight under way, or a seen enemy already at the centre. Deliberately not 'boss battle' intensity - this game's fight is 25-40 soldiers, and the mix has to leave room for sword, arrow and cannon.",
+      "clips": [
+        "mus-gameplay-battle-01",
+        "mus-gameplay-battle-02",
+        "mus-gameplay-battle-03",
+        "mus-gameplay-battle-04"
+      ],
+      "bus": "music",
+      "volume": 0.5,
+      "loop": false,
+      "maxInstances": 2,
+      "stream": true
     },
     "notify.info": {
       "clips": [
@@ -350,7 +414,7 @@
         "sfx-notify-alert-02"
       ],
       "bus": "notifications",
-      "volume": 0.6,
+      "volume": 0.4,
       "cooldownMs": 600,
       "maxInstances": 2
     },
@@ -382,5 +446,6 @@
       "cooldownMs": 2000,
       "maxInstances": 1
     }
-  }
+  },
+  "_musicStates": "How the match picks which of the four playlists is playing (plan §28/§35). `tensionVisibleEnemies` is enemies the player can actually see through the fog - §35's rule is that seeing one is tension, not battle. `battleActiveFights` counts units of either side holding an attack target. `threatRadius` makes a *seen* enemy that close to the player's centre a battle on its own, before a blow lands, so a siege column walking into the square is not scored as calm. `calmSeconds` is how long a raised state holds after its cause is gone - combat is spiky, and without it the music would flap several times per skirmish. All four are retuned by ear."
 }

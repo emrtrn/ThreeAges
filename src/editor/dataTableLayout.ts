@@ -205,3 +205,70 @@ function lastSegment(path: string): string {
   const segments = path.split(".");
   return segments[segments.length - 1] || path;
 }
+
+/** One rendered heading: a category (or the trailing catch-all) and its rows. */
+export interface EntryCategoryBucket {
+  readonly id: string;
+  readonly label: string;
+  readonly entryIds: readonly string[];
+  /** Shown instead of rows when `entryIds` is empty. */
+  readonly emptyHint?: string;
+  /** True for the trailing bucket that holds entries no category claimed. */
+  readonly isOther: boolean;
+}
+
+/** Heading id for entries no declared category matches. */
+export const OTHER_ENTRY_CATEGORY_ID = "__other";
+
+/**
+ * Buckets a table's entry ids under its declared categories, in declaration
+ * order, with anything unmatched gathered into a trailing "other" heading.
+ *
+ * Two properties this guarantees, and both are the reason it is a pure function
+ * with its own test rather than a loop inside the renderer:
+ *
+ * - **Nothing is lost.** Every id in equals exactly one id out. A category
+ *   scheme that silently swallowed a row would turn "I added an event and the
+ *   editor does not show it" into a mystery, and the obvious way to write this
+ *   (filter per category, render the results) has exactly that bug.
+ * - **Nothing is duplicated.** First match wins, so overlapping prefixes are a
+ *   precedence question rather than a row appearing twice.
+ *
+ * Entry order within a bucket follows the document, not the prefix list: the
+ * file's own order is the one an author edited and diffs against.
+ */
+export function bucketEntriesByCategory(
+  entryIds: readonly string[],
+  categories: readonly { id: string; label: string; prefixes: readonly string[]; emptyHint?: string }[],
+): EntryCategoryBucket[] {
+  const claimed = new Map<string, string[]>();
+  for (const category of categories) claimed.set(category.id, []);
+  const other: string[] = [];
+
+  for (const entryId of entryIds) {
+    const owner = categories.find((category) =>
+      category.prefixes.some((prefix) => entryId.startsWith(prefix)),
+    );
+    if (owner) claimed.get(owner.id)!.push(entryId);
+    else other.push(entryId);
+  }
+
+  const buckets: EntryCategoryBucket[] = categories.map((category) => ({
+    id: category.id,
+    label: category.label,
+    entryIds: claimed.get(category.id)!,
+    ...(category.emptyHint === undefined ? {} : { emptyHint: category.emptyHint }),
+    isOther: false,
+  }));
+  // Only when it has something in it: an empty catch-all is a heading that
+  // says nothing, while a populated one is a prompt to go and categorise.
+  if (other.length > 0) {
+    buckets.push({
+      id: OTHER_ENTRY_CATEGORY_ID,
+      label: "SINIFLANDIRILMAMIŞ",
+      entryIds: other,
+      isOther: true,
+    });
+  }
+  return buckets;
+}

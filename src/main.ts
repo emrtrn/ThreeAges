@@ -268,6 +268,12 @@ async function main(): Promise<void> {
   const canvas = requireElement<HTMLCanvasElement>("game-canvas");
   const editorEnabled = params.has("editor");
   const rtsRoute = !editorEnabled && params.has("rts");
+  // Rotanın imleç işareti. Three Ages imleçleri yalnız haritaya değil, üstündeki
+  // HTML katmanına da ait: ana menüde imleç canvas'a değil menü DOM'una isabet
+  // ettiği için orada Windows oku görünüyordu. Sınıf gövdede olduğu için menü,
+  // maç ve maç sonu ekranı aynı imleci paylaşır; editör rotası buraya hiç
+  // girmediğinden kendi imleçlerini korur.
+  if (rtsRoute) document.body.classList.add("rts-route");
   // Plan acceptance criterion 1: the RTS route must never show a bare black
   // canvas. The curtain goes up here, *before the first await* — `bootFoundation`
   // fetches a preset, and everything after it fetches more, so any later mount
@@ -357,10 +363,16 @@ async function main(): Promise<void> {
     for (;;) {
       if (showMenu) {
         const { RtsMainMenu } = await import("@/game/rts/ui/rtsMainMenu");
+        const { RtsMenuMusic } = await import("@/game/rts/audio/rtsMenuMusic");
         // Seeded with the *last* setup rather than the URL's: on a return trip the
         // menu should open on the match that was just played, not on the one the
         // tab happened to be opened with.
         const menu = new RtsMainMenu(setup);
+        // §28.1's playlist, started beside the menu rather than awaited before
+        // it: the player must never wait on music to see the screen, and a load
+        // that fails answers null and leaves a silent menu that works.
+        const menuMusicPromise = RtsMenuMusic.start();
+        menuMusicPromise.catch(() => {});
         // The menu is what the player is looking at now, so the curtain that was
         // covering the boot has nothing left to cover. Removed rather than faded:
         // the menu is already painted over it, so a fade would only be a layer
@@ -380,6 +392,9 @@ async function main(): Promise<void> {
           preload.catch(() => {});
         }
         setup = await menu.choose();
+        // The answer is in; the menu's audio context has to go before the match
+        // builds its own. Fades out under the curtain raised a few lines below.
+        (await menuMusicPromise)?.dispose();
         // §78.1's storage survives, but nothing reloads any more (plan §2.3): these
         // exist so a *new tab* opens on the match you last set up, not so the boot
         // can read back its own choice one navigation later.

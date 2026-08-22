@@ -84,8 +84,16 @@ import {
   type RtsActorLoadReport,
 } from "./content/rtsActorVisualFactory";
 import { RTS_THROW_RELEASE_NOTIFY, RtsNotifyEffectBudget, rtsNotifyEffectIds } from "./content/rtsNotifyEffects";
-import { RTS_AUDIO, RTS_NOTIFICATION_AUDIO_EVENTS, rtsNotifyAudioEvent } from "./audio/rtsAudioEvents";
-import { loadAudioEventTable } from "../data/gameDataLoader";
+import { RTS_AUDIO, RTS_NOTIFICATION_AUDIO_EVENTS, rtsNotifyAudioEvent,
+  RTS_MUSIC_STATE_EVENTS,
+} from "./audio/rtsAudioEvents";
+import { loadAudioEventTableWithStates } from "../data/gameDataLoader";
+import {
+  DEFAULT_RTS_MUSIC_STATE_SETTINGS,
+  RtsMusicStateMachine,
+  type RtsMusicSignal,
+  type RtsMusicState,
+} from "./audio/rtsMusicState";
 import { RTS_ANIMATION_DISTANCE_SETTINGS } from "./content/rtsUnitPresentation";
 import { AiController } from "./ai/aiController";
 import { SettlementAiSiteProvider } from "./ai/aiSiteProvider";
@@ -926,6 +934,10 @@ export class RtsApp {
   private musicDirector: MusicDirector | null = null;
   /** The music bed's transition timing, from the table. */
   private musicSettings: MusicPlaylistSettings = DEFAULT_MUSIC_PLAYLIST_SETTINGS;
+  /** §28's four gameplay states, and the hysteresis that keeps them from flapping. */
+  private musicStates = new RtsMusicStateMachine(DEFAULT_RTS_MUSIC_STATE_SETTINGS);
+  /** The state whose playlist is loaded, so a steady state costs no work. */
+  private musicStateLoaded: RtsMusicState | null = null;
   /** The player's volume trims, restored from their saved settings. */
   private audioSettings: RtsAudioSettings = DEFAULT_RTS_AUDIO_SETTINGS;
   /** Reused vector for the listener's forward axis; allocating one per frame is waste. */
@@ -1316,11 +1328,41 @@ export class RtsApp {
   private frameHandle = 0;
   private lastTime = 0;
   private readonly handleVisibilityChange = (): void => {
-    if (document.visibilityState !== "visible") return;
+    if (document.visibilityState !== "visible") {
+      // A hidden tab stops the frame loop but not the audio device, and the two
+      // halves of the music bed hang off different ones: the track plays on the
+      // device, the schedule that hands it over advances per rendered frame.
+      // Left alone the track runs out while the schedule stands still, and the
+      // player comes back to silence until the clock catches up. Both are held
+      // here — the context for everything that is only *heard*, the bed's own
+      // handles because a media element goes on advancing through a suspended
+      // context.
+      this.syncAudioBedsPaused();
+      this.audioSubsystem.suspendContext();
+      return;
+    }
+    this.audioSubsystem.resumeContext();
+    this.syncAudioBedsPaused();
     this.frameMetrics.reset();
     this.adaptiveTickAccumulator = 0;
     this.lastTime = performance.now();
   };
+
+  /**
+   * Holds or releases the music bed to match the two things that should silence
+   * it: a tab the player has left, and a paused match.
+   *
+   * Reconciled from the state rather than hooked onto each transition, and
+   * called every frame as well as on the visibility change. Pause has more than
+   * one entrance — a key, the menu button, a result screen — and a hook missed
+   * on one of them leaves the bed playing over a stopped match, which is
+   * precisely the desync this fixes. `setPaused` is idempotent, so repeating it
+   * sixty times a second costs a comparison.
+   */
+  private syncAudioBedsPaused(): void {
+    const held = document.visibilityState !== "visible" || this.flow.phase === "paused";
+    this.musicDirector?.setPaused(held, this.audioClock);
+  }
   private running = false;
   private disposed = false;
   private simulationSpeed: RtsSimulationSpeed = 1;
@@ -1462,9 +1504,6 @@ export class RtsApp {
     this.canvas.dataset.rtsLevelRef = this.options.levelRef ?? "";
     this.canvas.dataset.rtsLevelError = this.options.levelLoadError ?? "";
     this.canvas.dataset.rtsMatchSeed = String(this.options.matchSeed);
-    // The cursor belongs to the RTS map surface only. HTML controls retain
-    // their familiar browser pointer so their click affordance stays explicit.
-    this.canvas.dataset.rtsCursor = "default";
     // Faz E: does the Level carry a static world to mount? Known synchronously so
     // buildScene / loadMapArt can gate the legacy ridge before the async load.
     this.authoredWorldIntended = this.options.levelLayout
@@ -2386,8 +2425,9 @@ export class RtsApp {
    */
   private async loadAudioEvents(): Promise<void> {
     try {
-      const table = await loadAudioEventTable();
+      const { table, musicStates } = await loadAudioEventTableWithStates();
       this.audioEvents.setTable(table);
+      this.musicStates = new RtsMusicStateMachine(musicStates);
       // The mix before anything plays through it. Applied here rather than at
       // construction because it is data: a fork that reorders its priorities
       // edits the table, not this file.
@@ -2578,6 +2618,64 @@ export class RtsApp {
   }
 
   /**
+   * Samples the match, resolves §28's state, and hands the director its playlist.
+   *
+   * Called every frame and cheap when nothing moved: the state machine returns
+   * the same name and the swap is skipped entirely. Only a *changed* state
+   * touches the bed, and the crossfade it starts is the one the player hears.
+   */
+  private updateMusicState(): void {
+    const director = this.musicDirector;
+    if (!director || !this.match.active) return;
+    const state = this.musicStates.update(this.sampleMusicSignal(), this.audioClock);
+    if (state === this.musicStateLoaded) return;
+    const definition = this.audioEvents.definition(RTS_MUSIC_STATE_EVENTS[state]);
+    // A state whose playlist the project does not ship keeps the one already
+    // playing. Silence would be the worse answer: a fork that produced only a
+    // settlement track should hear settlement music through a battle rather
+    // than nothing through one.
+    if (!definition || definition.clips.length === 0) return;
+    this.musicStateLoaded = state;
+    director.setPlaylist(definition.clips, definition.volume, this.audioClock);
+  }
+
+  /**
+   * One reading of the match for the music state machine.
+   *
+   * The enemy counts are gated on what the player can *see*, by the same rule
+   * the world sounds follow (`worldAudioAudible`): music that tensed up for an
+   * army behind the fog would be a scouting tool the player was never given.
+   * Workers are not counted as a threat — an enemy gatherer wandering into view
+   * is not an attack, and letting one start tension music would make the score
+   * jumpy in exactly the places the map is quietest.
+   */
+  private sampleMusicSignal(): RtsMusicSignal {
+    const centre = this.centers.get(PLAYER_OWNER)?.position ?? null;
+    let visibleEnemies = 0;
+    let activeFights = 0;
+    let threatDistance: number | null = null;
+    for (const unit of this.units.all()) {
+      if (unit.dying || unit.health.depleted) continue;
+      // Counted once per participant holding a target, on either side: an
+      // ambush the player has not answered yet still sounds like one.
+      if (unit.attackTarget !== null) activeFights += 1;
+      if (unit.owner === PLAYER_OWNER || unit.role === "worker") continue;
+      const { x, z } = unit.position;
+      if (!this.worldAudioAudible(x, z)) continue;
+      visibleEnemies += 1;
+      if (!centre) continue;
+      const distance = Math.hypot(x - centre.x, z - centre.z);
+      if (threatDistance === null || distance < threatDistance) threatDistance = distance;
+    }
+    return {
+      visibleEnemies,
+      activeFights,
+      threatDistance,
+      age: this.progression.tierFor(PLAYER_OWNER).age,
+    };
+  }
+
+  /**
    * Build the music playlist on first use, then start it.
    *
    * Both halves are late-bound to the table, and for the same reason the beds
@@ -2595,14 +2693,24 @@ export class RtsApp {
    */
   private startMusicBed(): void {
     if (this.musicDirector?.active) return;
-    const definition = this.audioEvents.definition(RTS_AUDIO.musicSettlement);
+    // The opening state, not settlement by name: a match resumed into the town
+    // age should come up on expansion music rather than crossfading off
+    // settlement a second later. Combat cannot be under way before the first
+    // frame, so this only ever chooses between the two peacetime lists.
+    const openingState = this.musicStates.current;
+    const definition = this.audioEvents.definition(RTS_MUSIC_STATE_EVENTS[openingState]);
     if (!definition) return;
+    this.musicStateLoaded = openingState;
     if (!this.musicDirector) {
       const { bus, volume } = definition;
       this.musicDirector = new MusicDirector({
         clips: definition.clips,
         volume,
-        play: (clipId, gain) => this.audioSubsystem.play(clipId, { bus, volume: gain }),
+        // Streamed, like every bed: see `AudioPlayOptions.stream`. A playlist is
+        // the case that makes the decoded path untenable — each two-minute track
+        // it touches would stay in memory for the rest of the session.
+        play: (clipId, gain) =>
+          this.audioSubsystem.play(clipId, { bus, volume: gain, stream: true }),
         // What the subsystem measured at decode, not what anybody wrote down: a
         // track re-exported a bar longer moves its own hand-over.
         durationOf: (clipId) => this.audioSubsystem.clipDurationSeconds(clipId),
@@ -2644,7 +2752,6 @@ export class RtsApp {
     this.disposed = true;
     this.stopLocaleWatch();
     this.running = false;
-    delete this.canvas.dataset.rtsCursor;
     // The canvas outlives this app — "Ana Menü" hands it straight to the menu —
     // so the boot witnesses go with the match they described. Left behind, they
     // would sit on the menu claiming a loaded world and an Actor pack that were
@@ -2694,6 +2801,11 @@ export class RtsApp {
     // they have to be released before the context they live in closes.
     this.musicDirector?.stop();
     this.musicDirector = null;
+    // The state has to go back with the bed it drove: a restart that kept
+    // "battle" would open the next match on battle music over an empty field,
+    // and — worse — `musicStateLoaded` would agree, so nothing would correct it.
+    this.musicStates.reset();
+    this.musicStateLoaded = null;
     this.buildLoopSite = null;
     this.audioSubsystem.dispose();
     this.hudBar.dispose();
@@ -3022,10 +3134,14 @@ export class RtsApp {
     // finished. Before this frame's triggers, so a sound that ended is not still
     // holding a slot against the one about to be asked for.
     this.audioEvents.advance();
-    // The playlist rides the same real-seconds clock, and outside the paused
-    // gate on purpose: like the ambience, the bed describes the place rather
-    // than the work, and freezing a crossfade half-way would leave two tracks
-    // stuck at half volume over a still field.
+    // The playlist rides the same real-seconds clock. It *was* outside the
+    // paused gate, on the theory that the bed describes the place rather than
+    // the work — but a bed that plays over a stopped match also runs its
+    // schedule against a match that is not running, and the player asked for
+    // the simpler reading: pause stops the music too. Held rather than stopped,
+    // so the track resumes where it was instead of restarting the playlist.
+    this.syncAudioBedsPaused();
+    this.updateMusicState();
     this.musicDirector?.advance(this.audioClock);
     this.perfCaptureSteps = 0;
     if (this.match.active && this.flow.running) {
