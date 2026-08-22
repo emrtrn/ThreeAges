@@ -85,12 +85,14 @@ import {
 } from "./content/rtsActorVisualFactory";
 import { RTS_THROW_RELEASE_NOTIFY, RtsNotifyEffectBudget, rtsNotifyEffectIds } from "./content/rtsNotifyEffects";
 import { RTS_AUDIO, RTS_NOTIFICATION_AUDIO_EVENTS, rtsNotifyAudioEvent,
-  RTS_MUSIC_STATE_EVENTS,
+  RTS_MUSIC_STATE_EVENTS, RTS_NOTIFY_AUDIO_EVENTS, resolveRtsAudioVariant,
+  type RtsAudioVariant,
 } from "./audio/rtsAudioEvents";
 import { loadAudioEventTableWithStates } from "../data/gameDataLoader";
 import {
   DEFAULT_RTS_MUSIC_STATE_SETTINGS,
   RtsMusicStateMachine,
+  countsAsActiveFight,
   type RtsMusicSignal,
   type RtsMusicState,
 } from "./audio/rtsMusicState";
@@ -2607,10 +2609,8 @@ export class RtsApp {
    * the event director refuses past; the music gets it from the playlist
    * director's own idempotent `start`.
    *
-   * The music is still not a state machine: the states the design describes need
-   * a battle-intensity signal that does not exist yet. What it is now is a
-   * playlist — the four settlement tracks in a shuffled order, fading into one
-   * another — which is the half of the design that did not need that signal.
+   * What starts here is the opening playlist only; which playlist plays after
+   * that is {@link updateMusicState}'s, once the match has a signal to read.
    */
   private startAudioBeds(): void {
     this.audioEvents.trigger(RTS_AUDIO.worldAmbience, this.audioClock);
@@ -2642,12 +2642,16 @@ export class RtsApp {
   /**
    * One reading of the match for the music state machine.
    *
-   * The enemy counts are gated on what the player can *see*, by the same rule
-   * the world sounds follow (`worldAudioAudible`): music that tensed up for an
-   * army behind the fog would be a scouting tool the player was never given.
+   * Every count is gated on what the player can *see*, by the same rule the
+   * world sounds follow (`worldAudioAudible`): music that tensed up for an army
+   * behind the fog would be a scouting tool the player was never given.
    * Workers are not counted as a threat — an enemy gatherer wandering into view
    * is not an attack, and letting one start tension music would make the score
    * jumpy in exactly the places the map is quietest.
+   *
+   * What each unit contributes to the fight count is {@link countsAsActiveFight}'s
+   * rule, and it is written there rather than here because it is the half of
+   * this sample that got it wrong first: a hunt is not a battle.
    */
   private sampleMusicSignal(): RtsMusicSignal {
     const centre = this.centers.get(PLAYER_OWNER)?.position ?? null;
@@ -2656,12 +2660,13 @@ export class RtsApp {
     let threatDistance: number | null = null;
     for (const unit of this.units.all()) {
       if (unit.dying || unit.health.depleted) continue;
+      const { x, z } = unit.position;
+      const audible = this.worldAudioAudible(x, z);
       // Counted once per participant holding a target, on either side: an
       // ambush the player has not answered yet still sounds like one.
-      if (unit.attackTarget !== null) activeFights += 1;
+      if (countsAsActiveFight(unit.attackTarget?.owner ?? null, audible)) activeFights += 1;
       if (unit.owner === PLAYER_OWNER || unit.role === "worker") continue;
-      const { x, z } = unit.position;
-      if (!this.worldAudioAudible(x, z)) continue;
+      if (!audible) continue;
       visibleEnemies += 1;
       if (!centre) continue;
       const distance = Math.hypot(x - centre.x, z - centre.z);
@@ -4314,6 +4319,28 @@ export class RtsApp {
    * missed footstep, and a retry closure per footfall would cost more than the
    * burst it is chasing.
    */
+  /**
+   * Which side of the split a notify-driven sound belongs to (§82.4).
+   *
+   * The two shared markers pick opposite subjects, and that asymmetry is the
+   * whole point rather than an inconsistency: a footfall is the sound of the
+   * unit *doing* it, so it reads its own armour, while a blow is the sound of
+   * what it landed *on*, so it reads the target's. Splitting the impact by the
+   * attacker instead would have produced three sets along an axis the ear never
+   * hears.
+   *
+   * Every other marker is already one role by construction (`sword-swing` lives
+   * on the Guard rig alone, `arrow-release` on the Archer's) and has nothing to
+   * choose.
+   */
+  private notifyVariant(unit: Unit, audioEvent: string): RtsAudioVariant | null {
+    if (audioEvent === RTS_NOTIFY_AUDIO_EVENTS.footstep) return this.armorVariant(unit);
+    if (audioEvent === RTS_NOTIFY_AUDIO_EVENTS["body-impact"]) {
+      return this.armorVariant(unit.attackTarget);
+    }
+    return null;
+  }
+
   private playUnitNotify(unit: Unit, name: string): void {
     // The one notify with a consumer other than a puff of particles: it releases
     // a stone whose damage `unitCombat` already applied (see `launchShot`).
@@ -4328,7 +4355,7 @@ export class RtsApp {
     // this camera distance without the footfall becoming inaudible with it.
     const audioEvent = rtsNotifyAudioEvent(name);
     if (audioEvent !== null && this.worldAudioAudible(position.x, position.z)) {
-      this.audioEvents.trigger(audioEvent, this.audioClock, {
+      this.audioEvents.trigger(this.variantEvent(audioEvent, this.notifyVariant(unit, audioEvent)), this.audioClock, {
         position: [position.x, position.y, position.z],
         distance: cameraDistance,
       });
@@ -4446,7 +4473,11 @@ export class RtsApp {
     // is an art decision per building, and a building with no authored debris
     // slot must still be *heard* taking the hit. The two budgets are separate
     // and neither gates the other.
-    this.playStructureAudio(structure, RTS_AUDIO.structureImpact);
+    this.playStructureAudio(
+      structure,
+      RTS_AUDIO.structureImpact,
+      this.structureMaterialVariant(structure),
+    );
     const presentation = this.structureDamagePresentation(structure);
     if (!presentation) return;
     const slot = presentation.slots.debris;
@@ -4564,10 +4595,75 @@ export class RtsApp {
     return this.workerConstruction.activeBuilders(structure) > 0;
   }
 
-  private playStructureAudio(structure: PlacedStructure, eventId: string): void {
+  /**
+   * The event id to fire for a shared world sound: its variant when the project
+   * ships one, the shared sound when it does not (§82.4).
+   *
+   * The table is asked rather than a list being kept here, which is what lets a
+   * produced set start playing the moment `events.json` names it — no code
+   * change, exactly like every other delivery in §81.4.
+   */
+  private variantEvent(baseEventId: string, variant: RtsAudioVariant | null): string {
+    return resolveRtsAudioVariant(
+      baseEventId,
+      variant,
+      (eventId) => this.audioEvents.definition(eventId) !== null,
+    );
+  }
+
+  /**
+   * The armour class a combat target belongs to, as a sound variant.
+   *
+   * `structure` is deliberately not a variant: a blow that landed on a building
+   * is a building sound, and answering it with a body impact heavy or light
+   * would be picking the wrong side of the split. It falls back to the shared
+   * clip, which is what plays there today.
+   */
+  private armorVariant(target: CombatTarget | null | undefined): RtsAudioVariant | null {
+    const armorClass = target?.armorClass;
+    return armorClass === "light" || armorClass === "heavy" ? armorClass : null;
+  }
+
+  /**
+   * The variant a building's impacts belong to — its authored damage material.
+   *
+   * Read straight off the damage table rather than through
+   * {@link structureDamagePresentation}, because that merges the material's
+   * *effects* into the result and drops the name. A building that declares no
+   * material has no variant and keeps the shared sound; filling that field in is
+   * a data decision with a visual consequence (it also picks the debris family),
+   * so nothing here assumes one.
+   */
+  private structureMaterialVariant(structure: PlacedStructure): RtsAudioVariant | null {
+    const material = this.options.contentCatalog?.damage.buildings[structure.stats.id]?.material;
+    return material === "wood" || material === "stone" ? material : null;
+  }
+
+  /**
+   * A world sound at a unit, fog-gated like every other.
+   *
+   * The twin of {@link playStructureAudio} for the things that move. Kept apart
+   * from {@link playUnitNotify} because that one is the animation stream's
+   * consumer and carries an effect budget with it; this is for the moments the
+   * simulation reports directly, which have no marker on any clip.
+   */
+  private playUnitAudio(unit: Unit, eventId: string, variant: RtsAudioVariant | null = null): void {
+    const position = unit.position;
+    if (!this.worldAudioAudible(position.x, position.z)) return;
+    this.audioEvents.trigger(this.variantEvent(eventId, variant), this.audioClock, {
+      position: [position.x, position.y, position.z],
+      distance: this.cameraController.camera.position.distanceTo(position),
+    });
+  }
+
+  private playStructureAudio(
+    structure: PlacedStructure,
+    eventId: string,
+    variant: RtsAudioVariant | null = null,
+  ): void {
     if (!this.worldAudioAudible(structure.x, structure.z)) return;
     const y = this.groundSurface.heightAt(structure.x, structure.z);
-    this.audioEvents.trigger(eventId, this.audioClock, {
+    this.audioEvents.trigger(this.variantEvent(eventId, variant), this.audioClock, {
       position: [structure.x, y, structure.z],
       distance: this.cameraController.camera.position.distanceTo(
         this.scratchStructureAudio.set(structure.x, y, structure.z),
@@ -5262,6 +5358,10 @@ export class RtsApp {
       this.simulationSpeed,
       (unit) => this.dropUnitGear(unit),
       (unit) => {
+        // Both sides, before the mission's owner test below: a loss is a loss to
+        // hear, and which kingdom took it is the mission tally's question, not
+        // the mix's. The fog gate inside decides whether it is heard at all.
+        this.playUnitAudio(unit, RTS_AUDIO.unitDeath, this.armorVariant(unit));
         // Owner-agnostic in the call, owner-checked here: the mode speaks for the
         // player, so only the other side's losses are a mission fact.
         if (unit.owner === PLAYER_OWNER) return;

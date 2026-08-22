@@ -31513,38 +31513,6 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 77198
-      },
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "license": "Project-local audio; audio plan Faz 2"
-    },
-    {
-      "id": "stg-age-up-02",
-      "name": "Stinger Age Up 02",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/stingers/stg_age_up_02.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "stingers"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
         "bytes": 71724
       },
       "source": {

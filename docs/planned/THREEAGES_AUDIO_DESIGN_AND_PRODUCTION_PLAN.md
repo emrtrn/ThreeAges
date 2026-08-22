@@ -29,6 +29,7 @@ bakılacak altı yer:
 | **Ne yapıldı, hangi gün** | §0 → *Progress Log* |
 | **Sırada ne var, madde madde** | §69 — kutulu görev listesi |
 | **Hangi ses hangi dosyayla karşılandı** | §81.1 — olay olay üretim kaydı (22 Ağu 2026'da boşaldı) |
+| **Faz 5'te gerçekten ne kaldı** | §82 — üç kovaya ayrılmış; §48–§50'nin kutuları bayat |
 | **Ses stili neye kilitlendi** | §47.0 — kalem kalem, referans varlık id'siyle |
 | **Kalite kapıları** | §67 (Gate A–D), §45/§46 (Paket 1 kabulü) |
 
@@ -92,7 +93,7 @@ stinger'a gerek yok, aynı işi yapar), **maç başlangıcı** ise perde kalkı�
 | **Faz 2** | Package 1 üretimi (Firefly 12 SFX → Settlement müziği → Guard VO), §70/§71/§72 sırasıyla | ✅ | Gate B (§45, §46) — 22 Ağustos 2026'de geçildi |
 | **Faz 3** | Stil kilidi (§47) + üretim kaydı (§63) | ✅ | 7 stil-kilidi maddesi onaylandı — §47.0 |
 | **Faz 4** | Müzik durum makinesi + crossfade (§28, §35) | ✅ | Durum geçişleri maçta duyuluyor, sinyal kaynağı tanımlı — §35.2 |
-| **Faz 5** | Paket 2–4 (UI/notification/ekonomi → yapı/lojistik → birim/savaş) | ⬜ | Gate C (§67) |
+| **Faz 5** | Paket 2–4 (UI/notification/ekonomi → yapı/lojistik → birim/savaş) | 🔨 | Gate C (§67) — çalışma sayfası §82 |
 | **Faz 6** | Paket 5 (ambience + müzik) | ⬜ | Gate C |
 | **Faz 7** | Paket 6 polish + mix + erişilebilirlik slider'ları (§62) | 🔨 | Gate D |
 | **Faz 8** | Full-match audio QA (§68) + performans bütçesi doğrulaması (§61) | ⬜ | Gate D |
@@ -172,6 +173,12 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-22 | Editörün Ses Olayları tablosu kategorilendi: 29 düz bölüm yerine §5'in **11 kanal başlığı**, her biri kapalı ve sayaçlı. ECONOMY ile LOGISTICS boş olduğu hâlde listede duruyor — ikisi de bir karar taşıyor (biri "henüz bağlanmadı", diğeri "kendi sesi olmayacak") ve alınmış bir kararın, tekrar sorulacağı yerde yazılı olması en ucuz yer. Sınıflandırılmamış bir olay kaybolmuyor, sonda sarı bir başlık altında görünüyor: akla ilk gelen uygulama (kategori başına filtrele) eşleşmeyeni sessizce yutardı. Katman `EditorDataTableDef.entryCategories` olarak genel eklendi. |
 | 2026-08-22 | **Sekme değişiminde müzik boşluğu düzeltildi.** Kullanıcı bildirdi: başka sekmeye geçince oyun duruyor, müzik devam ediyor, dönünce devir gelmiyor. Kök sebep, yatağın iki yarısının iki ayrı saatte koşması — parça ses aygıtının zamanında, devir zamanlaması ise kare başına biriken `audioClock`'ta. Gizli sekmede kareler durup müzik durmayınca parça tükeniyor, zamanlama hâlâ ortasında sanıyor. Çözüm: `MusicDirector.setPaused` iki yarıyı birden askıya alıyor ve her zamanlanmış anı, hiçbir şeyin çalmadığı süre kadar ileri kaydırıyor — böylece host'un saatinin o sırada işleyip işlemediği önemsizleşiyor (gizli sekme: kaydırma sıfır; duraklatılmış maç: gerçek). Sekme gizlenince ayrıca `AudioContext.suspend()` çağrılıyor, çünkü bir media element askıya alınmış context'in içinden de kendi konumunu ilerletir. Duraklatma geçişlere kanca takarak değil durumdan uzlaştırılıyor: duraklatmanın birden fazla girişi var ve birini atlamak aynı ayrışmayı geri getirirdi. Bu, kodda yazılı bir kararı tersine çeviriyor — müzik daha önce bilerek duraklatma kapısının dışındaydı. |
 | 2026-08-22 | **Faz 4 kapandı: müzik durum makinesi** (§35.2). §79.4'ün "Faz 4'e girmeden önce yazılmalı" dediği sinyal kaynağı kuruldu — görünür düşman + aktif çatışma + merkeze tehdit, üçü de sis kapısından geçerek (perde arkasındaki ordu için gerilen müzik, verilmemiş bir keşif aracı olurdu). Hasar oranı bilinçle dışarıda: `rtsAttackWatch` yalnız yapıları örnekliyor. Yükseliş anında, düşüş `calmSeconds` sonra ve yarıda kesilen düşüş pencereyi baştan başlatıyor — savaş dikenli, örneği birebir izleyen bir durum tek çarpışmada birkaç kez crossfade yapardı. Eşikler `events.json` → `music.states`; motorda değil oyunda ayrıştırılıyor, çünkü "kaç düşman görünüyor" bu oyuna ait bir soru. `setPlaylist` devri beklemeden başlatıyor: bunsuz battle müziği settlement parçası ne zaman biterse o zaman gelirdi, ki bu makinenin hiç çalışmamasından ayırt edilemez. Menü müziği kendi küçük yığınında (`rtsMenuMusic.ts`) — menü `RtsApp`'ten önce çalışıyor; soğuk açılışta otomatik oynatma politikası reddeder ve ilk harekette yeniden denenir. `build:verify` yeşil (1550 check). |
+| 2026-08-22 | **Faz 5 açıldı ve kalanı gerçeğe getirildi (§82).** §48–§50'nin kutuları v1.0'dan kalmaydı ve Faz 0–4'ün yaptıklarını saymıyordu. Kalan iş üç kovaya ayrıldı — kanca / varlık / **önce animasyon** — ve üçüncüsü sayılmasa görülmeyecek olan: tüm skeleton sidecar'larında yalnız altı notify adı authored (`footstep`, `body-impact`, `sword-swing`, `arrow-release`, `throw-release`, `chop-impact`), yani §50'nin istediği yay germe / kalkan / çekiç / topçu geri tepmesi için asılacak işaret yok. Bunlar ses üretim işi değil klip işi, ve kazmanın §81.1'de iptal edilme sebebiyle aynı. Yol boyunca bir de ücretsiz kanal göründü: `throw-release` authored ama hiçbir sese bağlı değil. |
+| 2026-08-22 | **§81.2'nin ertelediği ayrım kararı verildi (§82.4).** Kullanıcı sordu: Guard/Archer/Worker için ayrı ses üretmeden önce olay ayrımı kodda yapılmalı, yoksa üretilen varyantların bir kısmı hiç çalmaz. Doğru soru, ve cevap eksen üzerine çıktı. Önce sorunun **küçük** olduğu görüldü: `sword-swing` yalnız Guard rig'inde, `arrow-release` yalnız Archer'da, `chop-impact`/`throw-release` yalnız Worker'da authored — yani zaten rol başına ayrıklar. Gerçekten paylaşılan üç olay var. Eksen **rol değil `armorClass`** seçildi: zaten authored (guard/siege heavy, archer/worker light), kulağın duyduğu eksen o (bir darbe vuranın rolüne değil vurulanın zırhına benzer — §20 bunu zaten `SFX-GRD-004`/`005` ile söylüyor), ve dört değil iki set demek. İki işaret zıt özneyi okuyor: adım yapanın, darbe üzerine indiğinin. Yapılar kendi ekseninde (malzeme). `resolveRtsAudioVariant` varyantı yalnız tablo cevaplıyorsa seçiyor — müzik durum makinesiyle aynı geri düşüş şekli — ki üretim sınıf sınıf inebilsin. Bugün varyant sevk edilmedi, yani duyulacak değişiklik yok; ayrım kasten klipten önce indi. Yeni üretim 3 set / 12 klip (rol ekseninde 9 set olurdu). İki açık uç yazıldı: 15 binanın 10'u malzeme beyan etmiyor (doldurmanın **görsel** yan etkisi var, moloz ailesini de seçiyor), ve ayrım tekrar kontrolünü ikiye böldüğü için varyantlar indiğinde `cooldownMs`/`maxInstances` yeniden ayarlanmalı. |
+| 2026-08-22 | **`unit.death` bağlandı** (§82.2) — Faz 5'in ilk maddesi. Kanca `updateUnitDeaths`'in `onDefeated`'ı: yenilgi karesinde bir kez, iki taraf için de, sis kapısından geçerek. Üç rol için tek olay (§81.2'nin kararı). Zamanlama bilinçle klibe bırakıldı: kanca ölüm animasyonunun başladığı karede çalar, gövdenin indiği anda değil, ve düşüşü işaretlemek her ölüm klibine bir notify yazmayı gerektirirdi — kazmanın tuzağı. Bugün yer tutucu çalıyor (`starter-snd-impact-light`), üretim promptu §82.2'de. Sözleşme testi magnitude pinlemiyor, tekrar kontrolünün **var olduğunu** pinliyor: bir ölüm doğası gereği toplu gelir ve `cooldownMs`'i mix geçişinde 0'a düşürmek hata olarak sessiz, ses olarak duvardır. |
+| 2026-08-22 | Yol boyunca bir tutarsızlık: `stg_age_up_02.ogg` diskten silinip içeriği `stg_age_up_01.ogg` üzerine yazılmıştı (bayt bayt aynı — yani bir yeniden adlandırma, ve §81.1'in "sevk edilmiş ama çalınmayan" tek varlığını temizliyor), ama manifest hâlâ `stg-age-up-02` kaydını taşıyordu. `audio:manifest` bunu yakalıyor ama **düzeltmiyor** — dosyası olmayan kaydı bildirip yazmayı reddediyor, ki silmenin kasıtlı olduğunu bilemez. Kayıt elle düşürüldü. |
+| 2026-08-22 | **Müzik geçiş ayarları editöre açıldı** (§80.1). §35.1 "editörden düzenlenebilir" diyordu ve yanlıştı: Ses Olayları tablosu `section: "events"` ile açılıyor, `music` bloğu formda hiç yoktu. Ayrı bir tablo — aynı dosya, başka derinlik — çünkü ikisinin satırı farklı: olay id'si tekrar eder, `crossfadeSeconds` etmez; bir dikişin özelliği asılacak bir olay satırı bulamaz. Kaydetme iki yarıyı da doğruluyor (motor `music.states`'i dokunmadan geçirir, doğrulaması oyundadır), çünkü iki tablo da tüm dosyayı yazar. Yol boyunca bir hata: skaler girdili bir tabloda "Varsayılana dön" değeri boş nesneye çeviriyordu — `{...structuredClone(18)}` `{}` verir; olay tablosunda görünmemişti çünkü orada her girdi bir nesne, `roads.json` de aynı şekilde etkileniyordu. |
+| 2026-08-22 | **İlk dakikada savaş müziği düzeltildi** (§35.2). Kullanıcı bildirdi, ve tahmini ("kurtlar mı tehdit sayılıyor") doğruydu — ama kurtlar `visibleEnemies`'e hiç girmiyordu; giriş **aktif çatışma** sütunundandı. Sahipli toprağa giren bir yırtıcı gerçek bir savaş hedefidir ve yakındaki muhafızlar onu otomatik hedefler: tek kurda cevap veren iki muhafız `battleActiveFights: 2` eşiğini karşılıyordu. İkinci delik aynı sütunda sis kapısının hiç olmamasıydı — haritanın öbür ucundaki, görülmemiş bir AI çarpışması oyuncunun müziğini sürüyordu; sinyalin öteki iki girdisi baştan beri o kapıdan geçiyordu. Ders: bir sinyalin girdileri aynı kuralı paylaşmalı, yoksa yarısı diğer yarısının reddettiği şeyi kabul eder. Kural tek yerde (`countsAsActiveFight`) ve testte. |
 | 2026-08-22 | Menü müziği aynı sekme hatasını taşıyordu ve kullanıcı yakaladı: menüdeyken başka sekmeye geçince ses devam ediyor, parça bitince yenisine geçmiyordu. Sebep birebir aynı — menünün kendi kare döngüsü de `requestAnimationFrame`, gizli sekmede duruyor, ses aygıtı durmuyor. Aynı tutma uygulandı. Asıl ders hatanın kendisi değil **iki kez yapılmış olması**: bir müzik yatağı sahiplenen her yığının onu `visibilitychange`'de tutması ve context'i askıya alması gerekiyor, ve eksik bir çağrı tam olarak modülün kendi testinin göremeyeceği şey. Kaynak düzeyinde bir kontrol eklendi — `MusicDirector` kuran her dosya bu üç kancayı taşımak zorunda — ki üçüncü sahip eklendiğinde build söylesin. |
 
 ---
@@ -1555,9 +1562,15 @@ bir parçada "dikiş" ile "final" aynı yerdedir.
 
 1. **Yalnız tuning.** `crossfadeSeconds`'ı büyüt (6 → 16-20). Örtüşme otomatik
    olarak erkene kayar (`120 − 20 = 100. saniye`), gelen parça giden parçanın
-   kapanışı sürerken çoktan kurulmuş olur. Kod değişikliği sıfır, `events.json`
-   → `music.crossfadeSeconds`, editörden **Veri → Ses Olayları**'yla da
-   düzenlenebilir. Kulakla doğrulanacak.
+   kapanışı sürerken çoktan kurulmuş olur. Kod değişikliği sıfır: `events.json`
+   → `music.crossfadeSeconds`. **Uygulandı, 18 saniye** (22 Ağustos) — kulakla
+   doğrulanması bekliyor.
+
+   Bu satır bir süre "editörden **Veri → Ses Olayları**'yla da düzenlenebilir"
+   dedi ve bu **yanlıştı**: o tablo `section: "events"` ile açılıyor, yani
+   yalnızca olay satırlarını gösteriyor; `music` bloğu formda hiç yoktu. Doğrusu
+   22 Ağustos'ta yapıldı — ayrı bir tablo, aynı dosyanın başka bir derinliği:
+   **Veri → Ses — Müzik Geçişleri** (§80.1).
 2. **Kod, birincisi yetmezse.** Fade'in parçanın *sonundan önce* bitmesini
    sağlayan bir kuyruk kırpması (`tailTrimSeconds`): şu an fade nereye konursa
    konsun hep `uzunluk` anında biter, yani kapanış her seferinde çalınır.
@@ -1588,6 +1601,30 @@ birimlere genişletmek ayrı bir iş):
 **Sis kapısı burada da geçerli** ve gerekçesi Faz 1'dekiyle aynı: perde arkasındaki
 bir ordu için gerilen müzik, oyuncuya verilmemiş bir keşif aracı olurdu. Düşman
 işçisi sayılmıyor — görüş alanına giren bir toplayıcı saldırı değil.
+
+### İlk dakikada savaş müziği — düzeltildi (22 Ağustos 2026)
+
+Kullanıcının raporu: *"oyuna girer girmez ilk dakika bitmeden battle müziğine
+geçiş oluyor, acaba kurtlar mı tehdit olarak görülüyor?"* Evet — ama sanıldığı
+yerden değil. Kurtlar `visibleEnemies`'e hiç girmiyor (hayvan bir `Unit` değil,
+`WildlifeAnimal`); giriş **aktif çatışma** sütunundandı ve sayım iki delik
+taşıyordu:
+
+1. **Av, savaş sayılıyordu.** Sahipli toprağa giren bir yırtıcı `predators.hostile()`
+   ile gerçek bir savaş hedefi olur, yakındaki muhafızlar onu otomatik olarak
+   hedefler (V3'ün territory kuralı) — yani **tek bir kurda cevap veren iki
+   muhafız**, `battleActiveFights: 2` eşiğini karşılıyordu. Sinyalin öteki yarısı
+   "wildlife is not an enemy" derken bu yarısı diyordu ki bir kurt temizliği
+   savaştır. Artık `attackTarget.owner === "wild"` sayılmıyor.
+2. **Sis kapısı bu sütunda yoktu.** `visibleEnemies` ve `threatDistance`
+   görülebilirlikten geçiyordu, `activeFights` geçmiyordu: haritanın öbür
+   ucundaki, hiç görülmemiş bir AI çarpışması (ya da AI'nın kendi kurt derdi)
+   oyuncunun müziğini sürüyordu. Aynı gerekçe, aynı kapı.
+
+Kapının kayıp gibi görünüp kayıp olmadığı nokta: oyuncunun kendi birimleri her
+zaman kendi görüşünün içindedir, yani **pusuya düşürülen** birim kurbanın
+tarafından sayılmaya devam eder — pusucu görünmezken bile. Kural artık
+`countsAsActiveFight` olarak tek yerde yazılı ve sözleşme testiyle bağlı.
 
 ### Kurallar
 
@@ -3251,6 +3288,37 @@ Tablonun `clips` alanı bu yüzden ileride hem `sound` hem `soundCue` id'si kabu
 edecek şekilde genişletilebilir; Faz 0 yalnızca `sound` çözer, çünkü katmanlı
 tek bir ses henüz üretilmedi.
 
+## 80.1 Editörde iki ses tablosu, tek dosya
+
+`events.json` iki farklı şey taşıyor ve ikisinin **satırı** aynı değil:
+
+| Tablo | Bölüm | Satırı |
+|---|---|---|
+| **Ses Olayları** | `events` | Olay id'si — otuz küsur satır, §5'in 11 kanal başlığı altında |
+| **Ses — Müzik Geçişleri** | `music` | Adlandırılmış ayar — birer tane, tekrar etmez |
+
+Ayrı tablo olmasının sebebi budur. `crossfadeSeconds` bir sesin özelliği değil,
+**iki çalma arasındaki dikişin** özelliği; asılacağı bir olay satırı yok, ve
+`section: "events"` ile açılan form onu göremiyordu. §35.1'in tuning yolu tam
+olarak bu yüzden "dosyayı elle aç" demekti.
+
+Formda dört giriş var: geçiş süresi, parçalar arası boşluk, süresi bilinmeyen
+klip için yedek tutma, ve durum makinesinin dört eşiği (`states`). Sınırlar
+runtime'ın kendi ayrıştırıcılarından birebir kopyalandı — form ikinci bir görüş
+bildirmiyor, yalnızca reddedilecek değere yanlışlıkla ulaşmayı zorlaştırıyor.
+
+**Kaydetme iki yarıyı da doğruluyor.** Dosyanın `music.states` bloğu motorun
+değil oyunun (§35.2: "kaç düşman görünüyor" bu oyuna ait bir soru) ve motor
+normalizer'ı onu dokunmadan geçiriyor. İki tablo da tüm dosyayı yazdığı için
+ikisinin de doğrulaması aynı bileşik doğrulama: crossfade ayarlayan biri, maçın
+açılışta reddedeceği bir eşiği kaydeden kişi olamaz.
+
+Yol boyunca bir hata da düzeldi: skaler girdisi olan bir tabloda **"Varsayılana
+dön"** düğmesi değeri boş nesneye çeviriyordu (`{...structuredClone(18)}` → `{}`).
+Olay tablosunda hiç görünmemişti çünkü orada her girdi bir nesne; müzik
+tablosunun dört girdisinin üçü çıplak sayı. `roads.json` de aynı şekilde
+etkileniyordu.
+
 ---
 
 # 81. Faz 2 çalışma sayfası — placeholder üzerinde duran kanallar
@@ -3338,6 +3406,11 @@ olmalı, bu doğru. Ama bu bir **kod kararıdır** (notify'ın rolü taşıması
 olay id'sinin role göre seçilmesi), ses üretimi kararı değil, ve sırası Faz 2
 değil. Faz 5'te birim/savaş paketi açılırken alınır; o gün üretilecek olan da
 "aynı sesin rol varyantı" olur, sıfırdan bir set değil.
+
+> **Karar 22 Ağustos 2026'da verildi ve rol çıkmadı: §82.4.** Eksen `armorClass`
+> (light/heavy) ve yapılarda malzeme (wood/stone) — ikisi de zaten authored, ve
+> ikisi de kulağın duyduğu eksen. Yukarıdaki "aynı sesin rol varyantı" ifadesi
+> bu yüzden düzeltilmiş sayılır: varyant role göre değil, **zırha** göre.
 
 ## 81.3 Üretim sırası
 
@@ -3435,3 +3508,172 @@ Bu plan hazırlanırken oyunun güncel proje bağlamındaki şu kararlar esas al
 - tam ses paketi hâlen tamamlanmamış üretim alanıdır.
 
 Bu nedenle ses planı yeni oyun sistemi icat etmek yerine mevcut oynanış olaylarını daha okunabilir ve karakterli hale getirmeye odaklanır.
+
+---
+
+# 82. Faz 5 çalışma sayfası
+
+§48–§50'nin kutuları v1.0'dan kalma ve Faz 0–4'ün yaptıklarını saymıyor. Bu
+bölüm Faz 5'in **gerçek** kalanını taşır; §81 Faz 2 için neyse bu da Faz 5 için
+odur.
+
+## 82.1 Üç kova
+
+Kalan iş üç farklı cinsten ve karıştırılırsa sıra yanlış kurulur:
+
+| Kova | Ne gerektirir | Örnek |
+|---|---|---|
+| **A. Kanca** | Yalnız kod; ses ya var ya yer tutucuyla açılır | Seçim paneli butonları, birim ölümü, yol döşeme |
+| **B. Varlık** | Firefly üretimi; kanca da yeni | Pazar al/sat, yıkım, seviye atlama, bildirimlerin tür bazlı sesleri |
+| **C. Önce animasyon** | Klipte `notify` yok — ses işi değil, klip işi | Yay germe, kalkan bloğu, çekiç, topçu geri tepmesi |
+
+**C bir duvar ve önce görülmesi gerekiyor.** Tüm `*.skeleton.json` sidecar'larında
+yalnız altı notify adı authored: `footstep`, `body-impact`, `sword-swing`,
+`arrow-release`, `throw-release`, `chop-impact`. §50'nin istediklerinin çoğunun
+asılacağı işaret yok — kazmanın §81.1'de iptal edilme sebebiyle birebir aynı
+durum. Bunlar için ses üretmek, çalmayacak bir kütüphane demektir.
+
+Bu arada `throw-release` **authored ama hiçbir sese bağlı değil** — klipte
+duruyor, `RTS_NOTIFY_AUDIO_EVENTS`'te karşılığı yok. Ücretsiz bir kanal.
+
+## 82.2 Bağlandı — `unit.death` (22 Ağustos 2026)
+
+§19/§20/§21'in `SFX-WRK-006` / `SFX-GRD-007` / `SFX-ARC-007` maddeleri, **tek
+olay** olarak. Üç değil bir, çünkü §81.2 bunu zaten karara bağlamıştı: tablo
+envanterlerden kaba ve rol başına set üretmek yarısı hiç çalmayan bir kütüphane
+demek. Rol ayrımı bir **kod** kararıdır (olay id'si role göre seçilsin, ya da
+işaret rolü taşısın) ve adımın rol ayrımıyla aynı geçişe aittir.
+
+**Kanca:** `updateUnitDeaths`'in `onDefeated`'ı — birim yenildiği karede bir kez
+çağrılan, tam da bu iş için ayrılmış nokta (cesedin kaldırılması otuz saniye
+sonrası, ayrı bir kanca). İki taraf da duyulur; sis kapısı hangi ölümün
+duyulacağına karar verir.
+
+**Zamanlama kliptedir, kodda değil.** Kanca ölüm animasyonunun *başladığı* karede
+çalar, gövdenin yere indiği anda değil. Düşüşü işaretlemek her ölüm klibine bir
+notify yazmayı gerektirir — §81.1'in yazdığı tuzak. Bu yüzden klip vuruşu kendi
+taşır: önce sendeleme ve teçhizat hışırtısı, sonra ağırlığın oturması.
+
+**Bugün yer tutucu çalıyor** (`starter-snd-impact-light`) ve bu bilinçli:
+§0'ın Faz 0 doktrini — önce hat, sonra ses. Yer tutucunun `combat.body_impact`
+ile karışabilir olması tam olarak Gate C'den önce değiştirilmesinin sebebi.
+`events.json` boş `clips` dizisini bilerek reddediyor, yani olayın var olması
+için bir klip şart.
+
+### Üretim promptu — `SFX-UNIT-DEATH`
+
+Dört varyant, `sfx/units/sfx_unit_death_NN.ogg`:
+
+```text
+Create a short grounded medieval RTS unit death sound heard from a mid-distance strategy camera.
+
+A body going down: a brief cloth and leather rustle with light metal kit shifting, then the weight settling into dirt with a dull low thud.
+
+Duration around 0.6 to 1.0 seconds, with the impact landing about 0.3 seconds in rather than at the very start.
+
+Physical and restrained. It must read as a person falling, not as a weapon landing a hit — the killing blow already has its own sound.
+
+No voice, no scream, no gore squelch, no music, no cinematic impact boom, no reverb tail.
+```
+
+Geldiğinde §81.4'ün üç adımı: dosyaları klasöre koy → `npm run audio:manifest` →
+editörde **Veri → Ses Olayları → UNITS → unit.death** klipleri seç. `RtsApp.ts`
+açılmaz.
+
+## 82.4 Paylaşılan olayların ayrımı — karar (22 Ağustos 2026)
+
+§81.2 bu soruyu açık bırakmıştı ve doğru soruydu: tabloda tek satır olan şeye rol
+başına ses üretmek, yarısı hiç çalmayacak bir kütüphane demek. Kullanıcı Faz 5'e
+girerken sordu, ve karar **eksen üzerine** verildi.
+
+### Sorun sanıldığından küçük
+
+Üç olay gerçekten paylaşılıyor: `unit.footstep` (dört rig), `combat.body_impact`
+(üç rig), `structure.impact` (her yapı). Geri kalanlar **zaten rol başına ayrık**,
+çünkü işaret tek bir rig'de authored:
+
+| İşaret | Nerede authored | Sonuç |
+|---|---|---|
+| `sword-swing` | yalnız Guard | zaten bir Guard sesi |
+| `arrow-release` | yalnız Archer | zaten bir Archer sesi |
+| `chop-impact`, `throw-release` | yalnız Worker | zaten bir Worker sesi |
+| `footstep` | Worker 6, Guard 8, Archer 8, Siege 4 | **paylaşılıyor** |
+| `body-impact` | Guard 3, Siege 1, Worker 2 | **paylaşılıyor** |
+
+### Eksen rol değil, zırh sınıfı
+
+`armorClass` dengede zaten authored — `guard`/`siege` = `heavy`,
+`archer`/`worker` = `light`, yapılar = `structure`. Üç gerekçe:
+
+1. **Zaten var.** Yeni veri authoring'i sıfır.
+2. **Kulağın duyduğu eksen bu.** Bir darbede duyulan şey vuranın rolü değil,
+   vurulanın zırhıdır — §20 bunu zaten söylüyor: `SFX-GRD-004` "sword hit armor"
+   ile `SFX-GRD-005` "sword hit flesh" yan yana. Rolle ayırmak (Guard vurdu /
+   Siege vurdu) üç seti **yanlış eksende** üretmek olurdu.
+3. **Dört değil iki set.** §19'un Worker'ı ile §21'in Archer'ı ikisi de light;
+   tasarımın aralarında adlandırdığı fark gövde değil zemin ("dirt").
+
+Aynı eksen üç olayı birden çözüyor: `unit.footstep` (yürüyenin zırhı),
+`combat.body_impact` (**hedefin** zırhı), `unit.death` (ölenin zırhı).
+
+**İki işaret zıt özneyi okuyor ve bu tutarsızlık değil, kararın kendisi:** bir
+adım *yapanın* sesidir, bir darbe *üzerine indiği şeyin*.
+
+`structure.impact` kendi ekseninde: hasar tablosunun malzeme sınıfı (§23'ün
+`CMB-006` ahşap / `CMB-007` taş).
+
+### Geri düşüş — ayrımın klipten önce inebilmesinin sebebi
+
+`resolveRtsAudioVariant` varyantı yalnız **tablo cevaplıyorsa** seçer, yoksa
+paylaşılan sese düşer. Müzik durum makinesiyle aynı şekil ("projenin sevk
+etmediği bir durum, çalanı korur"), ve iki şey sağlıyor: üretim sınıf sınıf
+gelebilir (ağır set hafif setten aylar önce inebilir, arada sessiz kare yok), ve
+tek set üreten bir fork bu mekanizmayı hiç bilmek zorunda kalmaz.
+
+**Bugün hiçbir varyant sevk edilmedi, yani duyulacak değişiklik yok.** Kod
+ayrımı kasten üretimden önce indi — sorunun aslı buydu: klip üretilmeden ayrım
+yoksa, üretilen kliplerin bir kısmı hiç çalmaz.
+
+### Maliyet
+
+Bugün 3 paylaşılan set (12 klip). Ayrımdan sonra 6 set, ama mevcut kliplerin bir
+kısmı bir tarafı zaten karşılıyor (`sfx_structure_impact_stone_*` zaten taş).
+Yeni üretim **3 set / 12 klip**: ağır adım, zırhlı darbe, ahşap yapı isabeti.
+Rol ekseninde bu 9 set olurdu.
+
+### İki açık uç
+
+- **`structure.impact` için veri eksik.** 15 binanın yalnız 5'i malzeme beyan
+  ediyor (`lumber_camp`/`hunting_camp`/`pasture` ahşap, `quarry`/`gold_mine`
+  taş). Kalanlar paylaşılan sese düşer. Alanı doldurmak ucuz ama **görsel yan
+  etkisi var**: malzeme sınıfı aynı zamanda moloz efekt ailesini seçiyor. Yani
+  bu bir ses işi değil, bilinçli bir içerik kararı — o yüzden kendiliğinden
+  doldurulmadı.
+- **Ayrım, tekrar kontrolünü ikiye böler.** `cooldownMs` ve `maxInstances` olay
+  başınadır, yani `combat.body_impact_light` + `_heavy` toplamda iki kat örneğe
+  izin verir. Varyantlar sevk edildiğinde bu sayılar yeniden ayarlanmalı.
+
+## 82.3 Sırada, kovalarına göre
+
+**A (kanca):**
+
+- [x] `unit.death`
+- [x] Paylaşılan olayların varyant ayrımı (§82.4) — kod indi, klip bekliyor
+- [ ] Seçim paneli butonları — `runSelectionAction` on dört aksiyon taşıyor ve
+      hiçbiri `playUiAudio` çağırmıyor: eğitim, çağ atlama, merkez seviye atlama,
+      yıkım, tamir, rally, üç iptal, işçi atama, pazar al/sat. Bugünkü tek
+      cevapları bildirim tier'ı (`command` → info, `command-refused` → warning),
+      yani basılan buton ile ekonomik bir uyarı aynı sesi çıkarıyor.
+- [ ] Yol döşeme / silme (§18 `SFX-LOG-001`/`009`) — `roadPlacement.confirmAt` sessiz
+- [ ] `throw-release` işaretine bir ses
+
+**B (varlık):** pazar al/sat + stok dolu (§16), yıkım onayı ve tamir (§17),
+yapı seviye atlama / çağ atlama başlangıcı (§17 `BLD-007`/`008`), depo bağlandı
+ve bölge genişledi (§18 `LOG-003`/`008`), ahşap yapıya top isabeti (§22),
+bildirimlerin tür bazlı sesleri (bugün 20+ tür üç tier'a düşüyor).
+
+**C (önce animasyon):** yay germe, kalkan hareketi/bloğu, çekiç, topçu
+tekerlek/gövde/geri tepme, ok uçuşu.
+
+**Ayrıca:** Worker ve Archer VO (§38/§40) — metinler hazır, Guard profili (§47.0)
+referans, kanca `playSelectionAudio` içinde bugün yalnız Guard'ı soruyor.

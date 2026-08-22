@@ -354,10 +354,15 @@ export class DataTableEditor {
         return;
       }
       const projectDefaults = this.options.def.resetEntryDefaults?.[entryId];
-      this.doc[entryId] = {
-        ...structuredClone(defaultEntry),
-        ...(projectDefaults === undefined ? {} : structuredClone(projectDefaults)),
-      };
+      // Spread only what can be spread. A flat config's entry is a bare number
+      // (`crossfadeSeconds: 18`) and object-spreading one yields `{}` — a reset
+      // that silently replaced the value with an empty object, which the save
+      // then refused with a message about the wrong thing entirely.
+      const restored = structuredClone(defaultEntry);
+      this.doc[entryId] =
+        isPlainObject(restored) && projectDefaults !== undefined
+          ? { ...restored, ...structuredClone(projectDefaults) }
+          : restored;
       this.applyDerivedFields(entryId);
       this.replaceEntrySection(entryId);
       this.markDirty();

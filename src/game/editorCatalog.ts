@@ -37,6 +37,7 @@ import {
 import type { SettlementAge } from "@/game/data/gameDataTypes";
 import { AUDIO_BUS_IDS } from "@engine/audio/audioBus";
 import { normalizeAudioEventTable } from "@engine/audio/audioEventTable";
+import { normalizeRtsMusicStateSettings } from "@/game/rts/audio/rtsMusicState";
 
 /**
  * Wrap a runtime game-data validator as the editor's `validate` contract:
@@ -141,6 +142,104 @@ const AUDIO_EVENT_FIELDS = [
   },
   { path: "rolloff", label: "Zayıflama eğrisi", min: 0, max: 10, step: 0.1 },
 ];
+
+/**
+ * The `music` block beside the event table in the same file: how the bed moves
+ * between tracks, and the thresholds §28's state machine reads.
+ *
+ * A second table rather than more fields on the first, because the two blocks
+ * have different *rows*. An event is keyed by its id and there are thirty of
+ * them; these are named settings that exist exactly once. `section` points each
+ * table at its own depth and Save merges that depth back into the whole
+ * document, so editing one never rewrites the other.
+ *
+ * Paths are relative to an entry, which for a scalar setting is the setting
+ * itself (`crossfadeSeconds`) and for the states block is the key inside it
+ * (`calmSeconds`) — the same rule every other table's field metadata follows.
+ *
+ * Bounds mirror the two normalizers exactly. They are not a second opinion: a
+ * value outside them is refused at Save by the runtime's own parser, and the
+ * form's job is to make that refusal impossible to reach by accident.
+ */
+const AUDIO_MUSIC_FIELDS = [
+  {
+    path: "crossfadeSeconds",
+    label: "Geçiş süresi (sn)",
+    min: 0,
+    max: 60,
+    step: 0.5,
+    hint: "İki parçanın üst üste bindiği süre. Geçiş her zaman parçanın sonuna oturur, yani bu sayı büyüdükçe örtüşme parçanın ortasına doğru kayar — küçük bir değer iki parçanın en zayıf yerlerini (birinin kapanışı, ötekinin girişi) çakıştırır ve geçiş duyulmaz.",
+  },
+  {
+    path: "gapSeconds",
+    label: "Parçalar arası boşluk (sn)",
+    min: 0,
+    max: 120,
+    step: 0.5,
+    hint: "0 = gerçek crossfade. Pozitif değer, kısılan parça ile başlayan parça arasına sessiz bir pencere koyar.",
+  },
+  {
+    path: "segmentSeconds",
+    label: "Süre bilinmiyorsa tutma (sn)",
+    min: 5,
+    max: 3600,
+    step: 5,
+    hint: "Yalnız süresi henüz ölçülmemiş klip için yedek: klip çözüldüğünde gerçek uzunluğu kullanılır.",
+  },
+  {
+    path: "tensionVisibleEnemies",
+    label: "Gerilim — görünen düşman",
+    min: 1,
+    max: 64,
+    step: 1,
+    hint: "Sisin ardındaki ordu sayılmaz; düşman işçisi de sayılmaz.",
+  },
+  {
+    path: "battleActiveFights",
+    label: "Savaş — süren çatışma",
+    min: 1,
+    max: 64,
+    step: 1,
+    hint: "Hedef tutan birim başına bir, iki taraftan da. Hayvana saldıran birim sayılmaz — av ya da kurt temizliği savaş değildir.",
+  },
+  {
+    path: "threatRadius",
+    label: "Savaş — merkeze tehdit mesafesi",
+    min: 0,
+    max: 500,
+    step: 1,
+    hint: "Görülen bir düşman merkeze bu kadar yaklaşırsa, ilk darbe inmeden savaş sayılır.",
+  },
+  {
+    path: "calmSeconds",
+    label: "Sakinleşme gecikmesi (sn)",
+    min: 0,
+    max: 300,
+    step: 1,
+    hint: "Yükseliş anında olur, düşüş bu kadar sessizlik ister. Yarıda kesilen bir düşüş pencereyi baştan başlatır.",
+  },
+];
+
+/**
+ * Validates the whole `events.json`, both halves.
+ *
+ * The engine normalizer owns the events, the buses and the transition timing;
+ * `music.states` is the game's and it passes through the engine untouched (an
+ * engine that knew what "visible enemies" means would stop being a template).
+ * Composing them here is what keeps a threshold the match would refuse at boot
+ * from being written by the form that authors it — and both audio tables share
+ * this, because both save the same document.
+ */
+function validateAudioEventsDocument(raw: unknown): unknown {
+  const table = normalizeAudioEventTable(raw);
+  const music = isRecord(raw) ? raw.music : undefined;
+  normalizeRtsMusicStateSettings(isRecord(music) ? music.states : undefined);
+  return table;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 const asTableValidator =
   (fn: (raw: unknown) => unknown) =>
@@ -989,7 +1088,18 @@ export const GAME_EDITOR_CATALOG = {
       // The runtime's own normalizer, so the form cannot save a table the match
       // would refuse to load — and Save merges the section back before this runs,
       // which is what keeps the bus block intact.
-      validate: asTableValidator(normalizeAudioEventTable),
+      validate: asTableValidator(validateAudioEventsDocument),
+    },
+    {
+      id: "audio-music",
+      label: "Ses — Müzik Geçişleri",
+      // Same file as the event table, a different depth of it. The music bed's
+      // timing is not a property of any one sound — `crossfadeSeconds` describes
+      // the *seam* between two plays — so it has never had a row to live on.
+      path: "game-data/audio/events.json",
+      section: "music",
+      fields: AUDIO_MUSIC_FIELDS,
+      validate: asTableValidator(validateAudioEventsDocument),
     },
     {
       id: "units",

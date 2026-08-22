@@ -772,6 +772,9 @@ import {
   RTS_NOTIFICATION_AUDIO_EVENTS,
   RTS_NOTIFY_AUDIO_EVENTS,
   rtsAudioEventIds,
+  rtsAudioVariantEventIds,
+  resolveRtsAudioVariant,
+  RTS_AUDIO_SPLIT,
 } from "../src/game/rts/audio/rtsAudioEvents";
 import {
   estimateSubtitleDurationSeconds,
@@ -1518,6 +1521,7 @@ import {
   DEFAULT_RTS_MUSIC_STATE_SETTINGS,
   RTS_MUSIC_STATES,
   RtsMusicStateMachine,
+  countsAsActiveFight,
   normalizeRtsMusicStateSettings,
   resolveMusicState,
 } from "../src/game/rts/audio/rtsMusicState";
@@ -4294,6 +4298,26 @@ check("music state: seeing an enemy is tension, fighting one is battle", () => {
   assert.equal(resolveMusicState({ ...calm, threatDistance: null }, settings), "settlement");
 });
 
+check("a hunt is not a battle, and neither is a fight behind the fog", () => {
+  // Both halves come from one report: battle music inside the first minute of a
+  // match nobody had fought yet. The fight count was every unit holding an
+  // attack target, and two things fell through it.
+  //
+  // Wolves are real combat targets — a trespassing predator is offered to
+  // acquisition like any hostile — so two Guards answering one wolf that walked
+  // onto owned ground read as two fights, which is the battle threshold. The
+  // signal's other half already excludes wildlife by name; this is the two
+  // halves agreeing.
+  assert.equal(countsAsActiveFight("wild", true), false, "a hunt is not a battle");
+  assert.equal(countsAsActiveFight("ai", true), true, "a fight between kingdoms counts");
+  assert.equal(countsAsActiveFight(null, true), false, "a unit holding no target is not fighting");
+  // And the fog gate every other world sound passes. Without it the AI's own
+  // skirmish on the far side of the map — with a wolf, or with anything — drove
+  // the player's music, which is a scouting tool they were never given.
+  assert.equal(countsAsActiveFight("ai", false), false, "an unseen fight is not heard");
+  assert.equal(countsAsActiveFight("wild", false), false);
+});
+
 check("music state rises at once and falls only after the calm window", () => {
   // Combat is spiky: a fight ends for two seconds while the next pair closes. A
   // state that followed the sample exactly would flap several times per
@@ -4580,7 +4604,14 @@ check("RTS audio events: every triggered name is answered by the shipped table",
   // Plus the one entry a match never triggers: the menu plays its own playlist
   // from outside `RtsApp`, so it is owned rather than fired. Named explicitly so
   // the check still fails for an entry that is genuinely orphaned.
-  const triggered = new Set([...rtsAudioEventIds(), RTS_MENU_MUSIC_EVENT]);
+  const triggered = new Set([
+    ...rtsAudioEventIds(),
+    RTS_MENU_MUSIC_EVENT,
+    // Plus the optional halves of §82.4's split. A variant is fired only when
+    // the table answers it, so it can never be *required* — but a table that
+    // ships one is not carrying an orphan either.
+    ...rtsAudioVariantEventIds(),
+  ]);
   for (const eventId of Object.keys(table.events)) {
     assert.ok(triggered.has(eventId), `audio event "${eventId}" is in the table but never triggered`);
   }
@@ -4677,6 +4708,77 @@ check("RTS audio events: only long beds stream, and every bed does", () => {
       );
     }
   }
+});
+
+check("RTS audio variants: a shared sound splits by armour and material, falling back", () => {
+  // §81.2 left this open and §82.4 closed it: the table is coarser than the
+  // inventories, so a set produced per *role* would ship a library whose larger
+  // half never plays. The axis is the one already authored — `armorClass` for
+  // people, the damage table's material for buildings — and it is the one the
+  // ear hears, because what a blow sounds like is decided by what it landed on.
+  const shared = Object.keys(RTS_AUDIO_SPLIT);
+  assert.ok(shared.includes("combat.body_impact"), "the blow that every rig shares splits");
+  assert.ok(shared.includes("unit.footstep"), "the footfall that every rig shares splits");
+  assert.ok(shared.includes("structure.impact"), "the hit every building shares splits");
+  // And the ones that look shared and are not: each of these markers is authored
+  // on exactly one rig, so it is already a single role and must not be split.
+  for (const soloEvent of ["combat.sword_swing", "combat.arrow_release", "unit.chop_impact"]) {
+    assert.equal(RTS_AUDIO_SPLIT[soloEvent], undefined, `${soloEvent} is already one role`);
+  }
+
+  const answersAll = (): boolean => true;
+  const answersNone = (): boolean => false;
+
+  // The variant when the project ships one...
+  assert.equal(
+    resolveRtsAudioVariant("combat.body_impact", "heavy", answersAll),
+    "combat.body_impact_heavy",
+  );
+  // ...and the shared sound when it does not. This fallback is what lets the
+  // split land *before* any clip exists, and lets production arrive one class at
+  // a time instead of all at once.
+  assert.equal(
+    resolveRtsAudioVariant("combat.body_impact", "heavy", answersNone),
+    "combat.body_impact",
+  );
+  // No variant at all — a blow that landed on a building, a unit whose class is
+  // neither — is the shared sound without asking the table anything.
+  assert.equal(resolveRtsAudioVariant("combat.body_impact", null, answersAll), "combat.body_impact");
+  // A variant this event does not declare resolves to the shared sound rather
+  // than to an id no table will ever answer: crossing the two axes would be
+  // silent, which is the one failure mode this whole file exists to prevent.
+  assert.equal(
+    resolveRtsAudioVariant("combat.body_impact", "wood", answersAll),
+    "combat.body_impact",
+    "a material variant on a body impact is refused, not invented",
+  );
+  assert.equal(
+    resolveRtsAudioVariant("structure.impact", "heavy", answersAll),
+    "structure.impact",
+    "an armour variant on a building is refused, not invented",
+  );
+
+  // Every id the split can name must be a legal event id, or the table could not
+  // carry it even once the clips exist.
+  for (const eventId of rtsAudioVariantEventIds()) {
+    assert.match(eventId, /^[a-z0-9]+(?:[._][a-z0-9]+)*$/u, `${eventId} is not a legal event id`);
+  }
+});
+
+check("RTS audio events: a unit death is a world sound that declares repeat control", () => {
+  // A death is the one combat event that arrives in bursts *by nature*: a rout
+  // empties a squad inside two seconds, and ten simultaneous full-gain falls are
+  // a wall rather than a rout. §11 asks for repeat control on exactly this shape
+  // of sound, so the presence of it is a contract even though every number in it
+  // is tuning — a `cooldownMs` typed to 0 during a mix pass is silent as a bug
+  // and loud as a sound.
+  const death = readAudioEventTable().events[RTS_AUDIO.unitDeath]
+    ?? assert.fail(`${RTS_AUDIO.unitDeath} is not in the shipped table`);
+  assert.ok(death.cooldownMs > 0, "a death declares a cooldown");
+  assert.ok(death.maxInstances >= 1 && death.maxInstances < 64, "a death declares an instance cap");
+  // And it happens at a place on the map, not in the player's ear: a loss you
+  // cannot locate is a loss you cannot answer.
+  assert.equal(death.spatial, true, "a death is heard where the body is");
 });
 
 check("RTS audio events: no event mixes produced clips with placeholder ones", () => {
@@ -31046,6 +31148,59 @@ check("the audio event table is editable from the editor, clips as an asset pick
   const firstId = Object.keys(broken.events)[0]!;
   broken.events[firstId]!.bus = "not-a-bus";
   assert.equal(typeof table.validate(broken), "string", "an unknown bus is refused with a message");
+});
+
+check("the music bed's timing and thresholds are editable from the editor", () => {
+  const catalog = getGameEditorCatalog();
+  const table = catalog.dataTables?.find((t) => t.id === "audio-music")
+    ?? assert.fail("audio-music is not registered in the editor catalog");
+  const events = catalog.dataTables?.find((t) => t.id === "audio-events")
+    ?? assert.fail("audio-events is not registered in the editor catalog");
+
+  // Two tables over one file, each pointed at its own depth. Same path is the
+  // point, not an accident: the transition timing is not a property of any one
+  // sound, so it has no row on the event table and needs a section of its own.
+  assert.equal(table.path, events.path, "both audio tables edit the same document");
+  assert.equal(table.section, "music");
+  assert.equal(events.section, "events");
+
+  const raw = JSON.parse(
+    readFileSync("public/game-data/audio/events.json", "utf8"),
+  ) as Record<string, unknown>;
+  const music = raw.music as Record<string, unknown>;
+  assert.ok(music && typeof music === "object", "the shipped table carries a music block");
+
+  // Every setting the file ships needs metadata, or a new knob lands in the form
+  // as a raw key with no label and no bounds — the same drift the event table's
+  // check guards, asked of the block beside it.
+  const labelled = new Set((table.fields ?? []).map((field) => field.path));
+  for (const [key, value] of Object.entries(music)) {
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      // `states` renders as one entry whose leaves are keyed inside it.
+      for (const inner of Object.keys(value as Record<string, unknown>)) {
+        assert.ok(labelled.has(inner), `music.${key}.${inner} has no editor metadata`);
+      }
+    } else {
+      assert.ok(labelled.has(key), `music.${key} has no editor metadata`);
+    }
+  }
+
+  // Both tables write the whole document, so both must refuse either half of it:
+  // an author tuning a crossfade must not be the one who saves a threshold the
+  // match refuses at boot, and the engine normalizer alone never sees `states`.
+  for (const [name, def] of [["audio-music", table], ["audio-events", events]] as const) {
+    assert.equal(def.validate(raw), null, `${name} accepts the shipped file`);
+    assert.equal(
+      typeof def.validate({ ...raw, music: { ...music, crossfadeSeconds: 900 } }),
+      "string",
+      `${name} refuses an out-of-range crossfade`,
+    );
+    assert.equal(
+      typeof def.validate({ ...raw, music: { ...music, states: { tensionVisibleEnemies: 0 } } }),
+      "string",
+      `${name} refuses a threshold the match would reject`,
+    );
+  }
 });
 
 check("the Data Table form groups repeated blocks and never splinters a scalar array", () => {

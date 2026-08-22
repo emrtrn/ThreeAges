@@ -127,6 +127,28 @@ export const RTS_AUDIO = {
    * readable rhythm into a wash.
    */
   buildingBuildLoop: "building.build_loop",
+  /**
+   * A unit going down — §19/§20/§21's `SFX-WRK-006` / `SFX-GRD-007` /
+   * `SFX-ARC-007`, as one event rather than three.
+   *
+   * One event because that is what §81.2 settled: the table is coarser than the
+   * inventories on purpose, and producing a set per role means a library whose
+   * larger half never plays. A role split is a *code* decision (the id chosen by
+   * role, or the marker carrying it) and it belongs to the same Faz 5 pass that
+   * splits the footstep.
+   *
+   * Fired on the frame the unit is defeated, not when the corpse is cleared
+   * thirty seconds later — `updateUnitDeaths` keeps those two apart precisely so
+   * a consumer can pick. That frame is the start of the death animation rather
+   * than the moment the body lands, so the *clip* carries the beat: a stagger
+   * and kit rustle first, the weight settling after. Timing a fall would need a
+   * notify authored on every death clip, which is the trap §81.1 wrote down when
+   * the pickaxe was cancelled.
+   *
+   * Both sides die audibly. The fog gate is what keeps that honest — a loss
+   * behind the curtain stays behind it.
+   */
+  unitDeath: "unit.death",
   // World: buildings have no animation notifies, so these are their equivalent.
   buildingComplete: "building.complete",
   structureImpact: "structure.impact",
@@ -192,6 +214,92 @@ export const RTS_AUDIO = {
   stingerVictory: "stinger.victory",
   stingerDefeat: "stinger.defeat",
 } as const;
+
+/**
+ * The axis a shared world sound splits on — §81.2's deferred decision, taken
+ * 2026-08-22 (§82.4).
+ *
+ * The problem it answers: the event table is coarser than §19–§23's inventories.
+ * One `unit.footstep` for four rigs, one `combat.body_impact` for every blow, one
+ * `structure.impact` for every building. Producing a set per *role* against that
+ * would ship a library whose larger half never plays — which is the trap §81.2
+ * wrote down and left open.
+ *
+ * The axis chosen is **not** role. It is `armorClass` for people and the damage
+ * table's material class for buildings, and the reasons are three:
+ *
+ * 1. **Both are already authored.** `guard`/`siege` are `heavy`, `archer`/`worker`
+ *    are `light`, and buildings name `wood` or `stone`. No new data.
+ * 2. **It is the axis the ear actually hears.** What a blow sounds like is
+ *    decided by what it landed *on*, not by who swung — §20 says exactly this
+ *    with `SFX-GRD-004` "sword hit armor" beside `SFX-GRD-005` "sword hit flesh".
+ *    A role split would have produced three sets along the wrong axis.
+ * 3. **Two sets instead of four.** §19's Worker and §21's Archer are both light;
+ *    what the design names between them is the ground ("dirt"), not the body.
+ *
+ * The events that look shared and are not: `sword-swing` is authored on the Guard
+ * rig alone, `arrow-release` on the Archer's, `chop-impact` and `throw-release` on
+ * the Worker's. Those are already one role each and need no split.
+ */
+export type RtsAudioVariant = "light" | "heavy" | "wood" | "stone";
+
+const ARMOR_VARIANTS = ["light", "heavy"] as const satisfies readonly RtsAudioVariant[];
+const MATERIAL_VARIANTS = ["wood", "stone"] as const satisfies readonly RtsAudioVariant[];
+
+/** Which shared events may carry a variant, and which variants each admits. */
+export const RTS_AUDIO_SPLIT: Readonly<Record<string, readonly RtsAudioVariant[]>> = {
+  [RTS_NOTIFY_AUDIO_EVENTS.footstep!]: ARMOR_VARIANTS,
+  [RTS_NOTIFY_AUDIO_EVENTS["body-impact"]!]: ARMOR_VARIANTS,
+  [RTS_AUDIO.unitDeath]: ARMOR_VARIANTS,
+  [RTS_AUDIO.structureImpact]: MATERIAL_VARIANTS,
+};
+
+/** `combat.body_impact` + `heavy` → `combat.body_impact_heavy`. */
+export function rtsAudioVariantEvent(baseEventId: string, variant: RtsAudioVariant): string {
+  return `${baseEventId}_${variant}`;
+}
+
+/**
+ * The event to actually fire: the variant when the project ships one, the shared
+ * sound when it does not.
+ *
+ * The fallback is what makes the split safe to land *before* the clips exist,
+ * and it is deliberately the same shape as the music state machine's ("a state
+ * whose playlist the project does not ship keeps the one already playing"). Two
+ * things follow from it that are worth being explicit about:
+ *
+ * - Production can arrive one class at a time. The heavy footstep set can ship
+ *   months before the light one without a silent frame in between.
+ * - A fork that produces one set per event never has to know this exists.
+ *
+ * Pure, with the table's answer passed in, so `test:engine` drives both branches
+ * without a scene — and so this module keeps knowing nothing about the runtime.
+ */
+export function resolveRtsAudioVariant(
+  baseEventId: string,
+  variant: RtsAudioVariant | null,
+  answers: (eventId: string) => boolean,
+): string {
+  if (variant === null) return baseEventId;
+  // A variant nobody declared for this event is a caller bug, not a fallback
+  // case: it would resolve to an id no table will ever answer and go silent.
+  if (!RTS_AUDIO_SPLIT[baseEventId]?.includes(variant)) return baseEventId;
+  const variantId = rtsAudioVariantEvent(baseEventId, variant);
+  return answers(variantId) ? variantId : baseEventId;
+}
+
+/**
+ * Every variant id the table is *allowed* to carry.
+ *
+ * Kept apart from {@link rtsAudioEventIds}: that set is what the table **must**
+ * answer, and a variant is optional by construction. This is what stops an
+ * added `combat.body_impact_heavy` from reading as an entry nothing triggers.
+ */
+export function rtsAudioVariantEventIds(): string[] {
+  return Object.entries(RTS_AUDIO_SPLIT).flatMap(([baseId, variants]) =>
+    variants.map((variant) => rtsAudioVariantEvent(baseId, variant)),
+  );
+}
 
 /** Every audio event id this game triggers by name. The table must answer all of them. */
 /**

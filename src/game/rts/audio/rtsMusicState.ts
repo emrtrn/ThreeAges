@@ -16,6 +16,7 @@
  */
 
 import type { SettlementAge } from "@/game/data/gameDataTypes";
+import type { CombatTargetOwner } from "@/game/rts/combat/combatTarget";
 
 /** The four states a running match moves between, weakest first. */
 export const RTS_MUSIC_STATES = ["settlement", "expansion", "tension", "battle"] as const;
@@ -121,6 +122,32 @@ export function normalizeRtsMusicStateSettings(value: unknown): RtsMusicStateSet
     threatRadius: read("threatRadius", 0, 500),
     calmSeconds: read("calmSeconds", 0, 300),
   };
+}
+
+/**
+ * Whether one unit's current attack belongs in {@link RtsMusicSignal.activeFights}.
+ *
+ * Two conditions, and both were learned from the same complaint — battle music
+ * inside the first minute of a match nobody had fought yet:
+ *
+ * 1. **The target is a kingdom, not an animal.** A hunt and a wolf cull are
+ *    combat-shaped — a Guard holds an attack target, arrows fly, something dies
+ *    — but wildlife is not an enemy, which {@link RtsMusicSignal.visibleEnemies}
+ *    already says in its own half of the signal. Counting a wolf here made the
+ *    two halves disagree, and two Guards answering one wolf that wandered onto
+ *    owned ground was a battle by the numbers.
+ * 2. **The player can see it.** Every other world sound passes the fog gate, and
+ *    the reason is the same here as there: music that tensed for a fight behind
+ *    the curtain would hand the player a scouting tool they were never given.
+ *    The gate is not the loss it sounds like — the player's own units are always
+ *    inside their own vision, so an ambush being sprung on them still counts
+ *    from the victim's side even while the ambusher is invisible.
+ */
+export function countsAsActiveFight(
+  targetOwner: CombatTargetOwner | null,
+  audible: boolean,
+): boolean {
+  return targetOwner !== null && targetOwner !== "wild" && audible;
 }
 
 /**

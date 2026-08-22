@@ -59,6 +59,20 @@
       "maxDistance": 60,
       "rolloff": 10
     },
+    "unit.death": {
+      "clips": [
+        "starter-snd-impact-light"
+      ],
+      "bus": "sfx",
+      "volume": 0.35,
+      "pitchVariation": 0.06,
+      "cooldownMs": 120,
+      "maxInstances": 3,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 70,
+      "rolloff": 8
+    },
     "combat.sword_swing": {
       "clips": [
         "sfx-combat-sword-swing-01",
@@ -421,7 +435,7 @@
     "stinger.age_up": {
       "_note": "Three times the volume of the other two stingers, measured rather than guessed. This one plays in the same frame as its own notification card, whose blip sits on the notifications bus at full gain; victory and defeat play into silence. At 0.17 effective it was inaudible, at 0.63 it was unmistakable, so it sits between. Nothing about the bus is being fought here: `volume` means loud-for-its-channel, the music bus is authored for a bed, and a one-shot that has to clear a notice on the priority bus is simply a different job than the bed is.",
       "clips": [
-        "stg-age-up-02"
+        "stg-age-up-01"
       ],
       "bus": "music",
       "volume": 3,
