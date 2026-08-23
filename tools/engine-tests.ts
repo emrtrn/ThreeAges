@@ -8382,6 +8382,15 @@ check("EditorSceneController duplicates and deletes layout objects through host 
     ],
     characters: [{ assetId: "npc", position: [1, 0, 0], groupId: "g1" }],
     lights: [{ id: "lamp", type: "point", position: [0, 2, 0], groupId: "g1" }],
+    blockingVolumes: [
+      {
+        id: "blocking-volume-1",
+        name: "Bridge Deck",
+        position: [2, 1, 3],
+        size: [8, 0.4, 2],
+        navigationRole: "walkable",
+      },
+    ],
   };
   const allSelections = (): Selection[] => [
     ...layout.instances.flatMap((instance) =>
@@ -8393,6 +8402,7 @@ check("EditorSceneController duplicates and deletes layout objects through host 
     ),
     ...layout.characters.map((_character, index) => ({ kind: "character" as const, index })),
     ...(layout.lights ?? []).map((_light, index) => ({ kind: "light" as const, index })),
+    ...(layout.blockingVolumes ?? []).map((_volume, index) => ({ kind: "blockingVolume" as const, index })),
   ];
   const mutableTransform = (selection: Selection): HeadlessTransform | null => {
     if (selection.kind === "instance") {
@@ -8403,6 +8413,7 @@ check("EditorSceneController duplicates and deletes layout objects through host 
       );
     }
     if (selection.kind === "character") return layout.characters[selection.index] ?? null;
+    if (selection.kind === "blockingVolume") return layout.blockingVolumes?.[selection.index] ?? null;
     return layout.lights?.[selection.index] ?? null;
   };
   const controller = new EditorSceneController({
@@ -8434,6 +8445,10 @@ check("EditorSceneController duplicates and deletes layout objects through host 
       layout.lights ??= [];
       layout.lights.splice(index, 0, { ...actor });
     },
+    insertBlockingVolume: (index, volume) => {
+      layout.blockingVolumes ??= [];
+      layout.blockingVolumes.splice(index, 0, { ...volume, position: [...volume.position] });
+    },
     onStatus: () => {},
     removeCharacterPlacement: (index) => layout.characters.splice(index, 1)[0] ?? null,
     removeInstancePlacement: (assetId, placementIndex) => {
@@ -8441,6 +8456,7 @@ check("EditorSceneController duplicates and deletes layout objects through host 
       return instance?.placements.splice(placementIndex, 1)[0] ?? null;
     },
     removeLightActor: (index) => layout.lights?.splice(index, 1)[0] ?? null,
+    removeBlockingVolume: (index) => layout.blockingVolumes?.splice(index, 1)[0] ?? null,
     updateGizmo: () => {},
     updateSelectionBox: () => {},
   });
@@ -8450,14 +8466,28 @@ check("EditorSceneController duplicates and deletes layout objects through host 
   assert.equal(layout.instances[0]?.placements.length, 2);
   assert.equal(layout.characters.length, 2);
   assert.equal(layout.lights?.length, 2);
+  assert.equal(layout.blockingVolumes?.length, 2);
+  assert.notEqual(layout.blockingVolumes?.[1]?.id, "blocking-volume-1");
+  assert.equal(layout.blockingVolumes?.[1]?.name, "Bridge Deck 2");
+  assert.deepEqual(layout.blockingVolumes?.[1]?.size, [8, 0.4, 2]);
+  assert.equal(layout.blockingVolumes?.[1]?.navigationRole, "walkable");
   assert.equal(layout.instances[0]?.placements[1]?.groupId, undefined);
   assert.equal(layout.instances[0]?.placements[1]?.nodeId, "n1");
   controller.undo();
   assert.equal(layout.instances[0]?.placements.length, 1);
   assert.equal(layout.characters.length, 1);
   assert.equal(layout.lights?.length, 1);
+  assert.equal(layout.blockingVolumes?.length, 1);
 
-  controller.selectMany(allSelections(), allSelections()[0] ?? null);
+  controller.select({ kind: "blockingVolume", index: 0 });
+  const dragCopy = controller.duplicateSelectionForDrag({ kind: "blockingVolume", index: 0 });
+  assert.deepEqual(dragCopy, { kind: "blockingVolume", index: 1 });
+  assert.equal(layout.blockingVolumes?.length, 2, "Alt-drag copy path duplicates blocking volumes");
+  controller.undo();
+  assert.equal(layout.blockingVolumes?.length, 1);
+
+  const deletableSelections = allSelections().filter((selection) => selection.kind !== "blockingVolume");
+  controller.selectMany(deletableSelections, deletableSelections[0] ?? null);
   controller.deleteSelected();
   assert.equal(layout.instances[0]?.placements.length, 0);
   assert.equal(layout.characters.length, 0);

@@ -1523,6 +1523,457 @@
         2
       ],
       "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-3",
+      "position": [
+        -9.14,
+        0.18,
+        -0.44
+      ],
+      "name": "Blocking Volume 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-12",
+      "position": [
+        -8.25,
+        0.29,
+        -1
+      ],
+      "name": "Blocking Volume 3 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-4",
+      "position": [
+        -7.53,
+        0.37,
+        -1.45
+      ],
+      "name": "Blocking Volume 3 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-13",
+      "position": [
+        -6.93,
+        0.51,
+        -1.82
+      ],
+      "name": "Blocking Volume 3 2 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-5",
+      "position": [
+        -6.13,
+        0.84,
+        -2.32
+      ],
+      "name": "Blocking Volume 3 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-14",
+      "position": [
+        -5.51,
+        1.09,
+        -2.71
+      ],
+      "name": "Blocking Volume 3 2 2 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-6",
+      "position": [
+        -4.69,
+        1.36,
+        -3.22
+      ],
+      "name": "Blocking Volume 3 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-7",
+      "position": [
+        -3.33,
+        1.52,
+        -4.07
+      ],
+      "name": "Blocking Volume 3 2 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        2,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-8",
+      "position": [
+        -1.53,
+        1.37,
+        -5.19
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-9",
+      "position": [
+        -1.02,
+        1.18,
+        -5.51
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-15",
+      "position": [
+        -0.52,
+        0.95,
+        -5.82
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-16",
+      "position": [
+        -0.07,
+        0.75,
+        -6.1
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2 3 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-17",
+      "position": [
+        0.38,
+        0.57,
+        -6.39
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2 3 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-10",
+      "position": [
+        0.91,
+        0.38,
+        -6.71
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-11",
+      "position": [
+        2.61,
+        0.16,
+        -7.76
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-18",
+      "position": [
+        3.75,
+        1,
+        -3.78
+      ],
+      "name": "Blocking Volume 4",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "blocking-volume-20",
+      "position": [
+        -6.14,
+        1,
+        2.39
+      ],
+      "name": "Blocking Volume 4 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "blocking-volume-19",
+      "position": [
+        -0.43,
+        1,
+        -10.68
+      ],
+      "name": "Blocking Volume 4 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "blocking-volume-21",
+      "position": [
+        -10.35,
+        1,
+        -4.5
+      ],
+      "name": "Blocking Volume 4 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        1
+      ]
     }
   ],
   "splines": [

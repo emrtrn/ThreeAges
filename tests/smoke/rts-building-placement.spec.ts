@@ -363,6 +363,7 @@ test("RTS build palette compacts after a mouse departure and restores the active
   const canvas = page.locator("#game-canvas");
   const categoryTabs = palette.locator(".rts-build-tabs");
 
+  await expect(palette).toHaveClass(/is-compact/);
   await palette.hover();
   await expect(palette).not.toHaveClass(/is-compact/);
   await expect(palette.locator("strong")).toHaveCount(0);

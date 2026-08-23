@@ -323,6 +323,11 @@ export class RtsBuildPalette {
     this.setState({ activeBuildingId: null, result: null });
     this.setTierState({ age: "settlement", level: 1 });
     this.selectCategory(this.activeCategory);
+    // The palette has no initial pointer-leave event to start its delayed
+    // collapse. Start in the same minimal state a desktop player sees after
+    // leaving it, then let pointer/focus entry expand it on demand. Touch-first
+    // devices retain the full palette because they have no hover affordance.
+    if (this.canAutoCompact()) this.root.classList.add("is-compact");
   }
 
   /** One build card, registered with the affordability/lock passes that drive it. */

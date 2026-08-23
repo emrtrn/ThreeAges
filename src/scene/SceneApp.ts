@@ -1455,7 +1455,9 @@ export class SceneApp {
       hasSelection: (selection) => this.hasSelection(selection),
       createLightId: (type) => this.createLightId(type),
       insertActorPlacement: (index, actor) => this.insertActorPlacement(index, actor),
+      insertBlockingVolume: (index, volume) => this.insertBlockingVolume(index, volume),
       removeActorPlacement: (index) => this.removeActorPlacement(index),
+      removeBlockingVolume: (index) => this.removeBlockingVolumeAt(index),
       insertCharacterPlacement: (index, placement) => this.insertCharacterPlacement(index, placement),
       insertInstancePlacement: (assetId, placementIndex, placement) =>
         this.insertInstancePlacement(assetId, placementIndex, placement),

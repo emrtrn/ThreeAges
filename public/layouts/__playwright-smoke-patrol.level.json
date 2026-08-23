@@ -481,9 +481,9 @@
         },
         {
           "position": [
-            -67.62,
-            1.23,
-            54.72
+            -67.84,
+            0.39,
+            54.47
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
@@ -581,7 +581,7 @@
         {
           "position": [
             -69.28,
-            5.27,
+            2.12,
             57.85
           ],
           "scaleLocked": true,
@@ -739,7 +739,7 @@
         {
           "position": [
             -65.09,
-            2.06,
+            -0.6,
             57.92
           ],
           "scaleLocked": true,
@@ -908,7 +908,68 @@
     },
     {
       "assetId": "mountain",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -81.9,
+            -1.63,
+            20.76
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            100,
+            0
+          ],
+          "scale": 5
+        },
+        {
+          "position": [
+            -78.64,
+            -2.72,
+            61.23
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            100,
+            0
+          ],
+          "scale": 5
+        },
+        {
+          "position": [
+            -81.17,
+            -1.63,
+            -21.68
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            268.5,
+            0
+          ],
+          "scale": 5
+        },
+        {
+          "position": [
+            -81.9,
+            -1.63,
+            -58.89
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            100,
+            0
+          ],
+          "scale": 5
+        }
+      ]
     },
     {
       "assetId": "naturemega-dead-tree-1",
@@ -1078,7 +1139,7 @@
         {
           "position": [
             -28,
-            0.11,
+            -0.05,
             6
           ],
           "scaleLocked": true,
@@ -1093,7 +1154,7 @@
         {
           "position": [
             28,
-            0,
+            -0.09,
             -6
           ],
           "scaleLocked": true,
@@ -1257,6 +1318,88 @@
           "scale": 3
         }
       ]
+    },
+    {
+      "assetId": "reeds-cluster-b",
+      "placements": []
+    },
+    {
+      "assetId": "river-rock-cluster-a",
+      "placements": []
+    },
+    {
+      "assetId": "driftwood-log",
+      "placements": []
+    },
+    {
+      "assetId": "reeds-cluster-a",
+      "placements": []
+    },
+    {
+      "assetId": "river-rock-cluster-b",
+      "placements": []
+    },
+    {
+      "assetId": "river-rock-cluster-c",
+      "placements": []
+    },
+    {
+      "assetId": "small-river-stones-patch",
+      "placements": []
+    },
+    {
+      "assetId": "wooden-mooring-posts",
+      "placements": []
+    },
+    {
+      "assetId": "mountain-2",
+      "placements": [
+        {
+          "position": [
+            -46.29,
+            0.31,
+            74.31
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            202,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -5.49,
+            0.31,
+            74.31
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            202,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            39.85,
+            0.31,
+            74.31
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            202,
+            0
+          ],
+          "scale": 2
+        }
+      ]
     }
   ],
   "characters": [],
@@ -1333,7 +1476,509 @@
   ],
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
-  "blockingVolumes": [],
+  "blockingVolumes": [
+    {
+      "id": "blocking-volume-1",
+      "position": [
+        -45.91,
+        -0.88,
+        -31.33
+      ],
+      "name": "Blocking Volume",
+      "rotation": [
+        0,
+        -40.5,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        5
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-2",
+      "position": [
+        40.54,
+        -0.86,
+        33.85
+      ],
+      "name": "Blocking Volume 2",
+      "rotation": [
+        0,
+        -23.5,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        5
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-3",
+      "position": [
+        -9.14,
+        0.18,
+        -0.44
+      ],
+      "name": "Blocking Volume 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-12",
+      "position": [
+        -8.25,
+        0.29,
+        -1
+      ],
+      "name": "Blocking Volume 3 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-4",
+      "position": [
+        -7.53,
+        0.37,
+        -1.45
+      ],
+      "name": "Blocking Volume 3 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-13",
+      "position": [
+        -6.93,
+        0.51,
+        -1.82
+      ],
+      "name": "Blocking Volume 3 2 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-5",
+      "position": [
+        -6.13,
+        0.84,
+        -2.32
+      ],
+      "name": "Blocking Volume 3 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-14",
+      "position": [
+        -5.51,
+        1.09,
+        -2.71
+      ],
+      "name": "Blocking Volume 3 2 2 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-6",
+      "position": [
+        -4.69,
+        1.36,
+        -3.22
+      ],
+      "name": "Blocking Volume 3 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-7",
+      "position": [
+        -3.33,
+        1.52,
+        -4.07
+      ],
+      "name": "Blocking Volume 3 2 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        2,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-8",
+      "position": [
+        -1.53,
+        1.37,
+        -5.19
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-9",
+      "position": [
+        -1.02,
+        1.18,
+        -5.51
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-15",
+      "position": [
+        -0.52,
+        0.95,
+        -5.82
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-16",
+      "position": [
+        -0.07,
+        0.75,
+        -6.1
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2 3 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-17",
+      "position": [
+        0.38,
+        0.57,
+        -6.39
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2 3 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-10",
+      "position": [
+        0.91,
+        0.38,
+        -6.71
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-11",
+      "position": [
+        2.61,
+        0.16,
+        -7.76
+      ],
+      "name": "Blocking Volume 3 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        1,
+        0.25,
+        2
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-18",
+      "position": [
+        3.75,
+        1,
+        -3.78
+      ],
+      "name": "Blocking Volume 4",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "blocking-volume-20",
+      "position": [
+        -6.14,
+        1,
+        2.39
+      ],
+      "name": "Blocking Volume 4 3",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "blocking-volume-19",
+      "position": [
+        -0.43,
+        1,
+        -10.68
+      ],
+      "name": "Blocking Volume 4 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "blocking-volume-21",
+      "position": [
+        -10.35,
+        1,
+        -4.5
+      ],
+      "name": "Blocking Volume 4 2 2",
+      "rotation": [
+        0,
+        32,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        1
+      ]
+    }
+  ],
   "splines": [
     {
       "id": "enemy-base-route",

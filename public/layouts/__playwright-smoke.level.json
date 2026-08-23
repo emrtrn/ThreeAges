@@ -547,9 +547,9 @@
         },
         {
           "position": [
-            -67.62,
-            1.23,
-            54.72
+            -67.84,
+            0.39,
+            54.47
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
@@ -647,7 +647,7 @@
         {
           "position": [
             -69.28,
-            5.27,
+            2.12,
             57.85
           ],
           "scaleLocked": true,
@@ -805,7 +805,7 @@
         {
           "position": [
             -65.09,
-            2.06,
+            -0.6,
             57.92
           ],
           "scaleLocked": true,
@@ -974,7 +974,68 @@
     },
     {
       "assetId": "mountain",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -81.9,
+            -1.63,
+            20.76
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            100,
+            0
+          ],
+          "scale": 5
+        },
+        {
+          "position": [
+            -78.64,
+            -2.72,
+            61.23
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            100,
+            0
+          ],
+          "scale": 5
+        },
+        {
+          "position": [
+            -81.17,
+            -1.63,
+            -21.68
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            268.5,
+            0
+          ],
+          "scale": 5
+        },
+        {
+          "position": [
+            -81.9,
+            -1.63,
+            -58.89
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            100,
+            0
+          ],
+          "scale": 5
+        }
+      ]
     },
     {
       "assetId": "naturemega-dead-tree-1",
@@ -1144,7 +1205,7 @@
         {
           "position": [
             -28,
-            0.11,
+            -0.05,
             6
           ],
           "scaleLocked": true,
@@ -1159,7 +1220,7 @@
         {
           "position": [
             28,
-            0,
+            -0.09,
             -6
           ],
           "scaleLocked": true,
@@ -1321,6 +1382,88 @@
             0
           ],
           "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "reeds-cluster-b",
+      "placements": []
+    },
+    {
+      "assetId": "river-rock-cluster-a",
+      "placements": []
+    },
+    {
+      "assetId": "driftwood-log",
+      "placements": []
+    },
+    {
+      "assetId": "reeds-cluster-a",
+      "placements": []
+    },
+    {
+      "assetId": "river-rock-cluster-b",
+      "placements": []
+    },
+    {
+      "assetId": "river-rock-cluster-c",
+      "placements": []
+    },
+    {
+      "assetId": "small-river-stones-patch",
+      "placements": []
+    },
+    {
+      "assetId": "wooden-mooring-posts",
+      "placements": []
+    },
+    {
+      "assetId": "mountain-2",
+      "placements": [
+        {
+          "position": [
+            -46.29,
+            0.31,
+            74.31
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            202,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -5.49,
+            0.31,
+            74.31
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            202,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            39.85,
+            0.31,
+            74.31
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            202,
+            0
+          ],
+          "scale": 2
         }
       ]
     },

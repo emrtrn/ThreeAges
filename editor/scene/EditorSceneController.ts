@@ -4,6 +4,7 @@ import { uniqueEditorId } from "@editor/core/ids";
 import {
   cloneActorInstance,
   cloneBehavior,
+  cloneBlockingVolume,
   cloneCharacter,
   cloneLightActor,
   cloneMetadataValue,
@@ -34,6 +35,7 @@ import {
   parseSelectionId,
   selectionsEqual,
   type ActorSelection,
+  type BlockingVolumeSelection,
   type CharacterSelection,
   type InstanceSelection,
   type LightSelection,
@@ -42,6 +44,7 @@ import {
 } from "@editor/core/selection";
 import { SelectionStore } from "@editor/core/selectionStore";
 import { uniqueActorName } from "@engine/scene/lights";
+import { uniqueBlockingVolumeId, uniqueBlockingVolumeName } from "@engine/scene/blockingVolume";
 import {
   cloneSplineActor,
   uniqueSplineActorId,
@@ -51,6 +54,7 @@ import type {
   LayoutActorInstance,
   LayoutAudio,
   LayoutBehavior,
+  LayoutBlockingVolume,
   LayoutCharacter,
   LayoutInteraction,
   LayoutLightActor,
@@ -238,12 +242,14 @@ export interface EditorSceneControllerHost {
   hasSelection: (selection: Selection) => boolean;
   createLightId: (type: LayoutLightActor["type"]) => string;
   insertActorPlacement: (index: number, actor: LayoutActorInstance) => void;
+  insertBlockingVolume?: (index: number, volume: LayoutBlockingVolume) => void;
   insertCharacterPlacement: (index: number, placement: LayoutCharacter) => void;
   insertInstancePlacement: (assetId: string, placementIndex: number, placement: LayoutPlacement) => void;
   insertLightActor: (index: number, actor: LayoutLightActor) => void;
   insertSplineActor: (index: number, actor: LayoutSplineActor) => void;
   onStatus: (message: string, tone?: StatusTone) => void;
   removeActorPlacement: (index: number) => LayoutActorInstance | null;
+  removeBlockingVolume?: (index: number) => LayoutBlockingVolume | null;
   removeCharacterPlacement: (index: number) => LayoutCharacter | null;
   removeInstancePlacement: (assetId: string, placementIndex: number) => LayoutPlacement | null;
   removeLightActor: (index: number) => LayoutLightActor | null;
@@ -1329,6 +1335,22 @@ export class EditorSceneController {
     return snapshot;
   }
 
+  /**
+   * Blocking-volume ids participate in the saved Level contract, so a duplicate
+   * must get a fresh id and visible label while retaining its brush settings.
+   */
+  private cloneBlockingVolumeForDuplicate(
+    volume: LayoutBlockingVolume,
+    existing: LayoutBlockingVolume[],
+  ): LayoutBlockingVolume {
+    const snapshot = cloneBlockingVolume(volume);
+    snapshot.id = uniqueBlockingVolumeId(existing);
+    snapshot.name = uniqueBlockingVolumeName(volume.name ?? volume.id, existing);
+    delete snapshot.groupId;
+    delete snapshot.nodeId;
+    return snapshot;
+  }
+
   private duplicateSelection(selection: Selection): Selection | null {
     const layout = this.host.getMutableLayout();
     if (!layout) return null;
@@ -1439,12 +1461,31 @@ export class EditorSceneController {
       return duplicateSelection;
     }
 
-    // Blocking / AI navigation volumes and target points have no duplicate path
-    // yet; without this guard they would fall through to the character branch
-    // below and clone whatever character happens to sit at the same index.
+    if (selection.kind === "blockingVolume") {
+      const volume = layout.blockingVolumes?.[selection.index];
+      if (!volume || !this.host.insertBlockingVolume || !this.host.removeBlockingVolume) return null;
+      const snapshot = this.cloneBlockingVolumeForDuplicate(volume, layout.blockingVolumes ?? []);
+      const duplicateIndex = selection.index + 1;
+      const duplicateSelection: Selection = { kind: "blockingVolume", index: duplicateIndex };
+      this.executeCommand({
+        label: `Duplicate ${volume.name ?? volume.id}`,
+        redo: () => {
+          this.host.insertBlockingVolume?.(duplicateIndex, snapshot);
+          this.select(duplicateSelection);
+        },
+        undo: () => {
+          this.host.removeBlockingVolume?.(duplicateIndex);
+          this.select(selection);
+        },
+      });
+      return duplicateSelection;
+    }
+
+    // AI navigation volumes and target points have no duplicate path yet; without
+    // this guard they would fall through to the character branch below and clone
+    // whatever character happens to sit at the same index.
     if (
       selection.kind === "post" ||
-      selection.kind === "blockingVolume" ||
       selection.kind === "aiNavigationVolume" ||
       selection.kind === "targetPoint"
     ) {
@@ -1486,6 +1527,7 @@ export class EditorSceneController {
         | LayoutCharacter
         | LayoutLightActor
         | LayoutActorInstance
+        | LayoutBlockingVolume
         | LayoutSplineActor;
     }> = [];
 
@@ -1583,6 +1625,24 @@ export class EditorSceneController {
       });
     });
 
+    const blockingVolumeSelections = selections
+      .filter((selection): selection is BlockingVolumeSelection => selection.kind === "blockingVolume")
+      .sort((left, right) => left.index - right.index);
+    const blockingVolumePool = [...(layout.blockingVolumes ?? [])];
+    if (this.host.insertBlockingVolume && this.host.removeBlockingVolume) {
+      blockingVolumeSelections.forEach((selection, offset) => {
+        const volume = layout.blockingVolumes?.[selection.index];
+        if (!volume) return;
+        const snapshot = this.cloneBlockingVolumeForDuplicate(volume, blockingVolumePool);
+        blockingVolumePool.push(snapshot);
+        inserts.push({
+          source: cloneSelection(selection),
+          selection: { kind: "blockingVolume", index: selection.index + offset + 1 },
+          snapshot,
+        });
+      });
+    }
+
     if (inserts.length === 0) return null;
 
     const duplicateSelections = inserts.map((entry) => cloneSelection(entry.selection));
@@ -1616,6 +1676,11 @@ export class EditorSceneController {
             this.host.insertLightActor(entry.selection.index, entry.snapshot as LayoutLightActor);
           } else if (entry.selection.kind === "spline") {
             this.host.insertSplineActor(entry.selection.index, entry.snapshot as LayoutSplineActor);
+          } else if (entry.selection.kind === "blockingVolume") {
+            this.host.insertBlockingVolume?.(
+              entry.selection.index,
+              entry.snapshot as LayoutBlockingVolume,
+            );
           }
         }
         this.selectMany(
@@ -1635,6 +1700,8 @@ export class EditorSceneController {
             this.host.removeLightActor(entry.selection.index);
           } else if (entry.selection.kind === "spline") {
             this.host.removeSplineActor(entry.selection.index);
+          } else if (entry.selection.kind === "blockingVolume") {
+            this.host.removeBlockingVolume?.(entry.selection.index);
           }
         }
         this.selectMany(previousSelections, previousActive);
