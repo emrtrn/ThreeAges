@@ -178,6 +178,7 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-22 | **§82.5 uygulandı: yapı sesleri artık hasar tablosundan sürülüyor.** `RtsDamageSlot.sound` indi (string ya da çağ haritası), üç katmanlı override'ı bedavaya aldı, ve `structureMaterialVariant` ile `RTS_AUDIO_SPLIT`'in `structure.impact` satırı retire oldu — yapılarda olay id'si artık türetilmiyor. Uygulanırken üç şey netleşti. Birincisi: `sound` yalnızca çalınan üç slot'a (`debris`, `collapseDust`, `heavySmoke`) yazılabiliyor, çünkü `lightSmoke`/`ruinSmoke` saniyelerle ölçülen aralıklarla yeniden doğuyor ve oraya yazılan bir ses hiç çalmayan bir alan olurdu — validator reddediyor, sessizce yok saymıyor. İkincisi: olay tablosunun "tetiklenmeyen kayıt" testi hasar tablosunu okumayı öğrendi; yoksa veriden tetiklenen her yeni olay öksüz görünürdü. Üçüncüsü, formun pürüzü kendiliğinden çözüldü: form authored veriden render ettiği için `sound`, `sound.settlement` ve `sound.town` yollarının üçüne birden etiket vermek yetiyor — hangisi yazılmışsa o kutu çıkıyor, mod anahtarı gerekmiyor. Üretim tarafı iki klip seti bekliyor: ahşap isabet ve dikişsiz ateş döngüsü. Olaylar bugün var ve çalıyor — ahşap setler taşı işaret ediyor, ateş `starter-snd-fire-01` üzerinde duruyor — yani kalan iş kod değil, klip. |
 | 2026-08-22 | **§81.2'nin ertelediği ayrım kararı verildi (§82.4).** Kullanıcı sordu: Guard/Archer/Worker için ayrı ses üretmeden önce olay ayrımı kodda yapılmalı, yoksa üretilen varyantların bir kısmı hiç çalmaz. Doğru soru, ve cevap eksen üzerine çıktı. Önce sorunun **küçük** olduğu görüldü: `sword-swing` yalnız Guard rig'inde, `arrow-release` yalnız Archer'da, `chop-impact`/`throw-release` yalnız Worker'da authored — yani zaten rol başına ayrıklar. Gerçekten paylaşılan üç olay var. Eksen **rol değil `armorClass`** seçildi: zaten authored (guard/siege heavy, archer/worker light), kulağın duyduğu eksen o (bir darbe vuranın rolüne değil vurulanın zırhına benzer — §20 bunu zaten `SFX-GRD-004`/`005` ile söylüyor), ve dört değil iki set demek. İki işaret zıt özneyi okuyor: adım yapanın, darbe üzerine indiğinin. Yapılar kendi ekseninde (malzeme). `resolveRtsAudioVariant` varyantı yalnız tablo cevaplıyorsa seçiyor — müzik durum makinesiyle aynı geri düşüş şekli — ki üretim sınıf sınıf inebilsin. Bugün varyant sevk edilmedi, yani duyulacak değişiklik yok; ayrım kasten klipten önce indi. Yeni üretim 3 set / 12 klip (rol ekseninde 9 set olurdu). İki açık uç yazıldı: 15 binanın 10'u malzeme beyan etmiyor (doldurmanın **görsel** yan etkisi var, moloz ailesini de seçiyor), ve ayrım tekrar kontrolünü ikiye böldüğü için varyantlar indiğinde `cooldownMs`/`maxInstances` yeniden ayarlanmalı. |
 | 2026-08-22 | **`unit.death` bağlandı** (§82.2) — Faz 5'in ilk maddesi. Kanca `updateUnitDeaths`'in `onDefeated`'ı: yenilgi karesinde bir kez, iki taraf için de, sis kapısından geçerek. Üç rol için tek olay (§81.2'nin kararı). Zamanlama bilinçle klibe bırakıldı: kanca ölüm animasyonunun başladığı karede çalar, gövdenin indiği anda değil, ve düşüşü işaretlemek her ölüm klibine bir notify yazmayı gerektirirdi — kazmanın tuzağı. Bugün yer tutucu çalıyor (`starter-snd-impact-light`), üretim promptu §82.2'de. Sözleşme testi magnitude pinlemiyor, tekrar kontrolünün **var olduğunu** pinliyor: bir ölüm doğası gereği toplu gelir ve `cooldownMs`'i mix geçişinde 0'a düşürmek hata olarak sessiz, ses olarak duvardır. |
+| 2026-08-22 | **Paket 2 indi: UI, bildirimler ve ekonomi** (§82.6). 38 klip, 27 olay. §82.3'ün "seçim paneli butonları" maddesi on dört kanca yazılmadan kapandı: hepsi zaten `announce` ile bildirim atıyordu, ses bildirimin **türüne** bağlandı (`command` → `ui.confirm`, `command-refused` → `ui.error`), ve kendi cevabı olan çağıran için `RtsNotificationRequest.sound` eklendi. Üç tier kaldırılmadı, altına kondu — klibi olmayan tür hâlâ tier'ını duyuyor, ve harita `Partial` olduğu için klibi olmayan bir türü yazmak imkânsız. Üretim sesleri tick'te değil **geçişte**: üretici `producing`'e girdiği karede, yapının konumunda (§16'nın tek sert kuralı). Hover tek delege dinleyicide, çünkü paneller yeniden kuruluyor ve buton başına dinleyici sonradan eklenen paneli sessiz bırakırdı. İki klip eksik geldi (çağ atlama / düşman çağ atlama), kancaları yazılmadı — tablonun cevaplayamayacağı olay üretmemek için. |
 | 2026-08-22 | Yol boyunca bir tutarsızlık: `stg_age_up_02.ogg` diskten silinip içeriği `stg_age_up_01.ogg` üzerine yazılmıştı (bayt bayt aynı — yani bir yeniden adlandırma, ve §81.1'in "sevk edilmiş ama çalınmayan" tek varlığını temizliyor), ama manifest hâlâ `stg-age-up-02` kaydını taşıyordu. `audio:manifest` bunu yakalıyor ama **düzeltmiyor** — dosyası olmayan kaydı bildirip yazmayı reddediyor, ki silmenin kasıtlı olduğunu bilemez. Kayıt elle düşürüldü. |
 | 2026-08-22 | **Müzik geçiş ayarları editöre açıldı** (§80.1). §35.1 "editörden düzenlenebilir" diyordu ve yanlıştı: Ses Olayları tablosu `section: "events"` ile açılıyor, `music` bloğu formda hiç yoktu. Ayrı bir tablo — aynı dosya, başka derinlik — çünkü ikisinin satırı farklı: olay id'si tekrar eder, `crossfadeSeconds` etmez; bir dikişin özelliği asılacak bir olay satırı bulamaz. Kaydetme iki yarıyı da doğruluyor (motor `music.states`'i dokunmadan geçirir, doğrulaması oyundadır), çünkü iki tablo da tüm dosyayı yazar. Yol boyunca bir hata: skaler girdili bir tabloda "Varsayılana dön" değeri boş nesneye çeviriyordu — `{...structuredClone(18)}` `{}` verir; olay tablosunda görünmemişti çünkü orada her girdi bir nesne, `roads.json` de aynı şekilde etkileniyordu. |
 | 2026-08-22 | **İlk dakikada savaş müziği düzeltildi** (§35.2). Kullanıcı bildirdi, ve tahmini ("kurtlar mı tehdit sayılıyor") doğruydu — ama kurtlar `visibleEnemies`'e hiç girmiyordu; giriş **aktif çatışma** sütunundandı. Sahipli toprağa giren bir yırtıcı gerçek bir savaş hedefidir ve yakındaki muhafızlar onu otomatik hedefler: tek kurda cevap veren iki muhafız `battleActiveFights: 2` eşiğini karşılıyordu. İkinci delik aynı sütunda sis kapısının hiç olmamasıydı — haritanın öbür ucundaki, görülmemiş bir AI çarpışması oyuncunun müziğini sürüyordu; sinyalin öteki iki girdisi baştan beri o kapıdan geçiyordu. Ders: bir sinyalin girdileri aynı kuralı paylaşmalı, yoksa yarısı diğer yarısının reddettiği şeyi kabul eder. Kural tek yerde (`countsAsActiveFight`) ve testte. |
@@ -2216,20 +2217,30 @@ Paket 1 kabul edildiğinde aşağıdakiler sabitlenmelidir.
 
 # 48. Paket 2 — UI, notifications ve ekonomi
 
-- [ ] Tüm UI ailesi
-- [ ] Population full
-- [ ] Resource depleted
-- [ ] Logistics disconnected
-- [ ] Logistics restored
-- [ ] Outpost attack
-- [ ] Center attack
-- [ ] Age-up
-- [ ] Enemy age-up
-- [ ] Regional victory warning
-- [ ] Market buy
-- [ ] Market sell
-- [ ] Stock full
-- [ ] Basic production interactions
+Varlıklar 22 Ağustos 2026'da üretildi ve girdi; kancaları aynı gün bağlandı
+(§82.6). Kalan iki kutunun sebebi tek: klip yok.
+
+- [x] Tüm UI ailesi — click, confirm, error, hover, panel aç/kapa, birim seç,
+      yapı seç, saldırı/hareket komutu, rally, duraklat, devam
+- [x] Population full
+- [x] Resource depleted
+- [x] Logistics disconnected — madde "ayrı asset üretmeyeceğiz" diyordu,
+      üretildi; artık `notify.alert`'e düşmüyor, kendi klibi var
+- [x] Logistics restored — aynı şekilde, `notify.info`'dan ayrıldı
+- [x] Outpost attack
+- [x] Center attack
+- [ ] Age-up — **klip üretilmedi.** `sfx_notify_age_up_01.ogg` teslim listesinde
+      vardı ama klasöre düşmedi; bildirim tier'ına (info) düşüyor ve üstünde
+      `stinger.age_up` zaten çalıyor
+- [ ] Enemy age-up — aynı sebep (`sfx_notify_enemy_age_up_01.ogg`); tier'ı
+      (warning) duyuluyor
+- [x] Regional victory warning
+- [x] Market buy
+- [x] Market sell
+- [x] Stock full — iki tetikleyici: deponun tavana vurduğu kare, ve yeri olmayan
+      bir alımın reddi
+- [x] Basic production interactions — iş başlangıcı (yalnız emirle) + kaynak başına
+      üretim sesi, üreticinin *üretmeye geçtiği* karede
 
 ---
 
@@ -3591,18 +3602,19 @@ açılmaz.
 - [x] Yapı sesleri hasar tablosundan (§82.5) — kod indi; ahşap isabet ve ateş
       döngüsü klipleri bekliyor (olaylar var, taş sete ve `starter-snd-fire-01`'e
       işaret ediyor)
-- [ ] Seçim paneli butonları — `runSelectionAction` on dört aksiyon taşıyor ve
-      hiçbiri `playUiAudio` çağırmıyor: eğitim, çağ atlama, merkez seviye atlama,
-      yıkım, tamir, rally, üç iptal, işçi atama, pazar al/sat. Bugünkü tek
-      cevapları bildirim tier'ı (`command` → info, `command-refused` → warning),
-      yani basılan buton ile ekonomik bir uyarı aynı sesi çıkarıyor.
+- [x] Seçim paneli butonları (§82.6) — on dört aksiyonun hiçbirine dokunulmadan
+      çözüldü: `command` → `ui.confirm`, `command-refused` → `ui.error`,
+      bildirim **türü** haritası üzerinden. Rally ve pazar al/sat kendi seslerini
+      ayrıca adıyla veriyor.
 - [ ] Yol döşeme / silme (§18 `SFX-LOG-001`/`009`) — `roadPlacement.confirmAt` sessiz
 - [ ] `throw-release` işaretine bir ses
 
-**B (varlık):** pazar al/sat + stok dolu (§16), yıkım onayı ve tamir (§17),
+**B (varlık):** ~~pazar al/sat + stok dolu (§16)~~ (üretildi, §82.6), yıkım onayı ve tamir (§17),
 yapı seviye atlama / çağ atlama başlangıcı (§17 `BLD-007`/`008`), depo bağlandı
 ve bölge genişledi (§18 `LOG-003`/`008`), ahşap yapıya top isabeti (§22),
-bildirimlerin tür bazlı sesleri (bugün 20+ tür üç tier'a düşüyor).
+bildirimlerin tür bazlı sesleri — §82.6'dan sonra **yedisi** kendi sesine sahip
+(nüfus, kaynak, lojistik kesik/geri, karakol, merkez, bölgesel zafer); kalan
+türler hâlâ üç tier'a düşüyor ve çağ atlama ikilisinin klibi henüz yok.
 
 **C (önce animasyon):** yay germe, kalkan hareketi/bloğu, çekiç, topçu
 tekerlek/gövde/geri tepme, ok uçuşu.
@@ -3806,3 +3818,103 @@ değişimi, olay değil. Yani §81.4'ün üç adımı geçerli: dosyaları klas�
 Minimum kazanç iki set: **ahşap isabet + ateş döngüsü.** Gerisi bağlama authored
 olduğu için kod değil veri değişikliğiyle gelir.
 
+
+## 82.6 Paket 2 indi — UI, bildirimler ve ekonomi (22 Ağustos 2026)
+
+Kullanıcı §48'in listesini üretti ve `public/assets/audio/` köküne bıraktı;
+§81.4'ün üç adımı işletildi (klasör → `npm run audio:manifest` → olay tablosu),
+ve kanca tarafında §82.3'ün A kovasındaki "seçim paneli butonları" maddesi
+kapandı. **38 yeni klip, 27 yeni olay.**
+
+### Kararların üçü kayda değer
+
+**1. On dört buton, on dört kanca değil.** §82.3 doğru teşhisi koymuştu —
+`runSelectionAction`'ın hiçbir aksiyonu `playUiAudio` çağırmıyordu — ama çözümü
+her aksiyona bir çağrı eklemek olsaydı, sonraki aksiyon yine sessiz doğardı.
+Hepsi zaten `announce` üzerinden bir bildirim **atıyor**, o yüzden ses bildirimin
+*türüne* bağlandı: `command` → `ui.confirm`, `command-refused` → `ui.error`
+(`RTS_NOTIFICATION_KIND_AUDIO_EVENTS`). Bildirim merkezi zaten tekrarları
+eliyor, yani bedava gelen şey yalnız kapsam değil, spam koruması da.
+
+Kendi cevabı olan çağıran için `RtsNotificationRequest.sound` var: pazar alımı
+tezgâhın sesiyle cevaplıyor, genel bir onayla değil. Merkez bu alanı **çözmüyor**,
+yalnız taşıyor — olay id'si hâlâ tek dosyada (`rtsAudioEvents.ts`), bildirim
+modülü saf durum olarak kalıyor.
+
+**2. Tier haritası kaldırılmadı, altına konuldu.** `notify.info/warning/alert`
+hâlâ kendi klibi olmayan her türü cevaplıyor. Yeni harita **kısmi** (`Partial`)
+ve bu bilinçli: 20+ bildirim türü var, 7'sinin klibi üretildi, ve klibi olmayan
+bir türü haritaya yazmak tablonun cevaplayamayacağı bir olay üretirdi. Çağ atlama
+ikilisi tam olarak bu yüzden dışarıda (§48).
+
+**3. Üretim sesi tetikleyicisi geçişte, tick'te değil.** §16'nın tek sert kuralı
+"saniyede birçok kez kaynak artışı için ses üretilmemelidir" idi. Kaynak *varışı*
+her tick çalışır; onun yerine ses üreticinin `producing`'e **geçtiği** karede
+çalıyor (`previousProductionStatus`, `syncNotifications` içinde, `logistics-cut`
+ile birebir aynı taban çizgisi deseni). Maç başına birkaç düzine kez, ve yapının
+konumunda — uzaktaki bir tarlanın açılışı kısık duyuluyor, bu da bilgi.
+
+Aynı desen `economy.stock_full` için de: depo tavana **vurduğunda** bir kez,
+tavanda kaldığı sürece değil. İkinci tetikleyicisi pazar reddi ("yeri yok"), ve
+tablonun en uzun cooldown'u (2 s) bu yüzden — bir depo kaybında dört kaynak
+saniyeler içinde dolabiliyor.
+
+### Hover iki kez düzeltildi — kullanıcı dinlemesi (22 Ağustos 2026)
+
+İlk sürüm üç varyanttı ve seviyesi 0.12'ydi. Kullanıcı ikisini de reddetti, ve
+ikisi de bu dokümanın kendi kurallarının yanlış yere uygulanmasıydı.
+
+**1. Varyant ekseni yanlıştı.** Tablodaki her tekrarlanan ses için doğru olan
+kural — tek klip takılı loop gibi okunur — hover'da tersine dönüyor. Oyuncu
+yapı kartları sırasında saniyede altı buton geçiyor, ve her geçişte değişen bir
+ses *çeşitlilik* değil **altı farklı kontrol** diye duyuluyor: kulak değişen sesi
+işaretçinin altındaki şey hakkında yeni bilgi sayıyor. Diğer her yerde tekrar
+saniyelere yayılıyor ve orada tek klip kırık geliyor.
+
+Doğru eksen kullanıcının kendi önerisiydi: **ne olduğuna göre ayır, kaçıncı kez
+olduğuna göre değil.** `ui.hover` (kontroller) + `ui.hover_card` (resimli kart —
+bugün yapı ve yol küçük görselleri), her biri tek klip, jitter yok. Hedefin
+`<img>` taşıyıp taşımadığına bakılıyor, sınıf listesine değil, yani sonradan
+eklenen bir kart kendiliğinden kart oluyor. Üçüncü klip (`hover_03`) yedek
+duruyor.
+
+**2. Seviye sessizliğin sebebiydi.** "Tablonun en kısığı ve öyle kalmalı" diye
+yazmıştım; sessizliğe karşı doğru, maça karşı yanlış. İlk temel atıldığı anda
+`building.build_loop` sürekli çalmaya başlıyor, altında adımlar ve çekiç var, ve
+0.108 efektif seviyedeki 0.2 saniyelik bir tık orada yok. 0.22'ye çıktı —
+`ui.click`'in (0.35) hâlâ belirgin şekilde altında, çünkü hover kendisinden
+sonra gelecek basmanın önüne geçmemeli.
+
+Elenen iki hipotez kayda değer, çünkü ikisi de makuldü: propagasyonu durduran
+kod yok (RTS UI'ında tek bir `stopPropagation` bile yok) ve klipler kısa
+(granule ölçümü: 0.2 s), yani "olay dolu kalıyor" da değildi. `maxInstances`
+yine de 2'den 3'e çıkarıldı: 80 ms'de bir tetiklenen 0.2 s'lik klip hızlı bir
+taramada ikisini birden ayakta tutuyor ve üçüncü geçiş reddediliyordu — kesikli
+bir sessizlik, bütçe gibi değil bozuk buton gibi okunur.
+
+### Hover: bir dinleyici, her buton
+
+`ui.hover` HUD host'una (`#ui-overlay`) delege edildi, kontrol başına değil.
+Sebep yazım tasarrufu değil: paneller seçim değiştikçe yeniden kuruluyor, yani
+buton başına dinleyici her kurulumda yeniden bağlanmak zorunda kalır ve sonradan
+eklenen bir panel sessiz doğar. Host'ta bağlıyken bir kontrol, HUD içinde
+`<button>` olmakla sesi kazanıyor.
+
+`pointerover` (delege edilebilen tek biçim) + `relatedTarget` kontrolü: olay bir
+butonun kendi çocukları arasında da tetikleniyor, kontrol olmasa etiket + ikon
+taşıyan bir buton tek geçişte iki kez tıklardı.
+
+### İki klip eksik, dört dosya taşındı
+
+`sfx_notify_age_up_01.ogg` ve `sfx_notify_enemy_age_up_01.ogg` listedeydi ama
+klasöre düşmedi. Kanca hazır: klipler geldiğinde tek yapılacak
+`RTS_NOTIFICATION_KIND_AUDIO_EVENTS`'e iki satır ve tabloya iki giriş.
+
+Kökte adı zaten üretilmiş bir klibe ait olan iki dosya vardı
+(`sfx_notify_alert_01`, `sfx_notify_info_01`) ve §48'in listesinde ikisi de yoktu.
+Üzerine yazmak yerine **varyant** olarak girdiler (`alert_03`, `info_02`) — 21
+Ağustos'ta üretilmiş bir klibi teslim listesinde adı geçmeyen bir dosya için
+silmek geri alınamaz, varyant eklemek ise `notify.alert`'in kendi notunun zaten
+istediği şey. `sfx_ui_click_01` ve `sfx_ui_error_01` ise listede **adıyla**
+geçiyordu, yani yeni üretim eskisinin yerini alsın diye gelmişti; onlar üzerine
+yazıldı.

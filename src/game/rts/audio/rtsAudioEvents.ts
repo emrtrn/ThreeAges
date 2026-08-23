@@ -14,7 +14,7 @@
  * silently never plays.
  */
 
-import type { RtsNotificationSeverity } from "../ui/rtsNotifications";
+import type { RtsNotificationKind, RtsNotificationSeverity } from "../ui/rtsNotifications";
 import type { RtsMusicState } from "./rtsMusicState";
 
 /**
@@ -73,6 +73,62 @@ export const RTS_NOTIFICATION_AUDIO_EVENTS: Readonly<
 };
 
 /**
+ * The notices that answer with their own sound instead of their tier's — audio
+ * plan §48 (Paket 2), landed 2026-08-22.
+ *
+ * The three tiers above stay the floor: a kind absent from this map still
+ * sounds, as its severity. What this adds is the handful of notices §14/§16
+ * produced clips for, and the reason to give them one is the failure §82.3
+ * wrote down — every selection-panel button answered through the tier map, so
+ * a pressed button and a depleted quarry made the same noise.
+ *
+ * Two of them are not notifications in spirit at all. `command` and
+ * `command-refused` are the direct answer to a click the player just made (a
+ * trade, a train order, a demolish), and the interface's own confirm and error
+ * are what a click is owed — which is also why they route to the `ui` bus
+ * rather than to `notifications`. Reaching them through this map rather than
+ * through fourteen call sites in `runSelectionAction` is the whole point: the
+ * notification centre already de-duplicates, and every action already posts.
+ *
+ * **`age-upgraded` and `enemy-age-upgraded` are deliberately absent.** §48 lists
+ * a clip for each and neither has been produced yet, so they keep falling to
+ * info/warning; the age transition also has `stinger.age_up` over it, which is
+ * the louder half of that moment. Adding the two ids here before the clips
+ * exist would make an event no table can answer.
+ */
+export const RTS_NOTIFICATION_KIND_AUDIO_EVENTS: Readonly<
+  Partial<Record<RtsNotificationKind, string>>
+> = {
+  "population-full": "notify.population_full",
+  "resource-depleted": "notify.resource_depleted",
+  "outpost-under-attack": "notify.outpost_attack",
+  "center-under-attack": "notify.center_attack",
+  "regional-victory-warning": "notify.regional_victory_warning",
+  // §48 items 16/17 said the tiers would carry these two and no asset would be
+  // produced. Both were produced anyway, so they get the pair of ids they were
+  // named for — the cut is still an alert and the restore still info, they just
+  // no longer share a clip with every other alarm and every other good news.
+  "logistics-cut": "notify.logistics_cut",
+  "logistics-restored": "notify.logistics_restored",
+  command: "ui.confirm",
+  "command-refused": "ui.error",
+};
+
+/**
+ * The sound a posted notice makes: its own when it has one, its tier's
+ * otherwise.
+ *
+ * A caller may override both — see `RtsNotificationRequest.sound`, which is how
+ * a Market trade answers with the till rather than with a generic confirm.
+ */
+export function rtsNotificationAudioEvent(
+  kind: RtsNotificationKind,
+  severity: RtsNotificationSeverity,
+): string {
+  return RTS_NOTIFICATION_KIND_AUDIO_EVENTS[kind] ?? RTS_NOTIFICATION_AUDIO_EVENTS[severity];
+}
+
+/**
  * The events fired from a specific place in `RtsApp` rather than from a stream.
  *
  * Named constants rather than string literals at the call sites, for two
@@ -93,6 +149,54 @@ export const RTS_AUDIO = {
   uiClick: "ui.click",
   uiError: "ui.error",
   /**
+   * An action *succeeded* — §14's `SFX-UI-002`, and the other half of `uiError`.
+   *
+   * Not a second click sound: `uiClick` says the button was pressed, this says
+   * the thing behind it happened. Almost every one of them arrives through the
+   * notification map (`command` → here, `command-refused` → `uiError`), because
+   * the fourteen actions on the selection panel all already answer by posting a
+   * notice and none of them called an audio hook — §82.3's open item, and the
+   * reason a demolish and a full granary used to sound identical.
+   */
+  uiConfirm: "ui.confirm",
+  /**
+   * A pointer crossing an interface control.
+   *
+   * Fired from one delegated listener on the HUD host rather than from each
+   * control, so a panel built later inherits it without knowing it exists. It
+   * stays under `uiClick`: a hover must not read as the press it precedes, or a
+   * mouse crossing the screen becomes an instrument.
+   *
+   * **Split by what is under the pointer, never by repetition.** `uiHoverCard`
+   * is the same sound for a different kind of target, and the pair replaced
+   * three random variants on one event. That is the opposite of the rule the
+   * rest of this table follows, and hover is the case that inverts it: a player
+   * sweeping a row of build cards crosses six buttons in a second, and a sound
+   * that changes each time is heard as six different controls rather than as
+   * variety. Everywhere else a repeat is spread over seconds and one clip is
+   * what sounds broken.
+   */
+  uiHover: "ui.hover",
+  /**
+   * The same crossing over a picture card rather than a control — the build
+   * palette's building and road thumbnails.
+   *
+   * Chosen by the target carrying an image rather than by a class list, so a
+   * card added later is a card without this file being told. Two events instead
+   * of one because the change the player should hear is "I have moved from the
+   * interface into the cards", not "I have moved again".
+   */
+  uiHoverCard: "ui.hover_card",
+  /**
+   * A panel opening and closing — §14's `SFX-UI-005`/`006`.
+   *
+   * The pause card and the mission panel's fold, not the selection panel: that
+   * one appears as a *consequence* of a pick, and it already has the pick's own
+   * sound over it. A panel sound there would double every selection.
+   */
+  uiPanelOpen: "ui.panel_open",
+  uiPanelClose: "ui.panel_close",
+  /**
    * Something was picked. Separate from a plain click because the design gives
    * a repeated selection its own, much longer cooldown: clicking a button twice
    * is two actions, re-clicking the same squad is one player checking what they
@@ -100,11 +204,54 @@ export const RTS_AUDIO = {
    */
   uiSelect: "ui.select",
   /**
+   * What was actually picked — §14's `SFX-UI-007`/`008`, and the first split of
+   * `uiSelect` rather than a replacement for it.
+   *
+   * `uiSelect` stays as the answer for a pick that is neither (or both, in a
+   * mixed drag), on the same fallback shape §82.4 gave the armour split: the
+   * game keeps a sound for the case the project did not produce a clip for.
+   * The two are worth telling apart because they are the two things a player
+   * clicks between all match long, and a squad answering like a building is the
+   * one confusion the interface can remove for free.
+   */
+  uiSelectUnit: "ui.select_unit",
+  uiSelectBuilding: "ui.select_building",
+  /**
    * An order was accepted — the audio twin of the command marker dropped on the
    * ground. Its own event rather than a second click, because a marching order
    * and a menu press are the two sounds most worth telling apart by ear.
    */
   uiCommand: "ui.command",
+  /**
+   * The order's own kind — §14's `SFX-UI-009`/`010`.
+   *
+   * Same relationship to `uiCommand` that the two selects have to `uiSelect`:
+   * these are fired when the command system says what it issued, and the shared
+   * sound answers the orders it does not name (a worker task, a structure's
+   * attack, a retreat). The design's reason for the split is stated in
+   * `guardMove`/`guardAttack` below and holds here too — "we are moving" and
+   * "we are engaging" land on the same button and must not land on the same
+   * sound.
+   */
+  uiCommandAttack: "ui.command_attack",
+  uiCommandMove: "ui.command_move",
+  /**
+   * The rally flag being armed — §14's `SFX-UI-011`.
+   *
+   * The arming, not the placing: pressing Rally puts the game in a mode, and the
+   * click that then drops the flag is an ordinary command. A player who arms it
+   * and right-clicks away hears `uiCancel`, which is already wired.
+   */
+  uiRallyPoint: "ui.rally_point",
+  /**
+   * §14's `SFX-UI-012`/`013`. One toggle, two sounds, and that asymmetry is the
+   * point: `uiCancel` used to answer both directions, so the sound said the key
+   * had landed without saying which way it went — readable only by looking at
+   * the card that just appeared, which is the thing the sound exists to make
+   * unnecessary.
+   */
+  uiPause: "ui.pause",
+  uiResume: "ui.resume",
   /** Backing out: a placement abandoned, a mode escaped, the pause menu closing. */
   uiCancel: "ui.cancel",
   buildingPlace: "building.place",
@@ -156,6 +303,27 @@ export const RTS_AUDIO = {
   // The gun's report. The only combat sound with no notify behind it — the
   // shell's flight is timed from the shot, not from a marker on a clip.
   cannonFire: "siege.cannon_fire",
+  /**
+   * §16's economy set. Three different kinds of moment, and they route to three
+   * different buses on purpose rather than by namespace:
+   *
+   * - a Market trade answers a button, so it rides `ui` beside the confirm it
+   *   replaces;
+   * - a full store is the game telling the player something is being wasted, so
+   *   it rides `notifications`;
+   * - work starting and a producer coming online happen *at a place on the map*,
+   *   so they are spatial and ride `sfx` with the rest of the world.
+   *
+   * What §16 warns against is the fourth kind, and none of these is it: "saniyede
+   * birçok kez kaynak artışı için ses üretilmemelidir". Nothing here fires on a
+   * resource tick. The production sounds fire on a producer's *transition* into
+   * producing — a building coming online, which happens a few dozen times a
+   * match — and never again while it keeps producing.
+   */
+  economyMarketBuy: "economy.market_buy",
+  economyMarketSell: "economy.market_sell",
+  economyStockFull: "economy.stock_full",
+  economyWorkStart: "economy.work_start",
   // The two that never stop.
   worldAmbience: "world.ambience",
   /**
@@ -331,11 +499,38 @@ export const RTS_MUSIC_STATE_EVENTS = {
   battle: RTS_AUDIO.musicBattle,
 } as const satisfies Readonly<Record<RtsMusicState, string>>;
 
+/**
+ * One production sound per resource — §16's `SFX-ECO-003`…`006`.
+ *
+ * Keyed by the balance table's resource id rather than named as four constants,
+ * because the caller has a `resourceId` in hand and nothing else: a producer
+ * reports what it makes, and the sound follows from that. A resource with no
+ * entry is silent, which is what a fork that adds a fifth resource should get
+ * until it produces a clip for it.
+ *
+ * Fired on the frame a producer starts producing, not on the resource arriving:
+ * §16 is explicit that a per-tick income sound is the wrong shape, and a
+ * building coming online is the state change worth hearing.
+ */
+export const RTS_RESOURCE_PRODUCTION_AUDIO_EVENTS: Readonly<Record<string, string>> = {
+  food: "economy.food_production",
+  wood: "economy.wood_production",
+  stone: "economy.stone_production",
+  gold: "economy.gold_production",
+};
+
+/** The production sound for one resource, or null when the project ships none. */
+export function rtsResourceProductionAudioEvent(resourceId: string): string | null {
+  return RTS_RESOURCE_PRODUCTION_AUDIO_EVENTS[resourceId] ?? null;
+}
+
 export function rtsAudioEventIds(): string[] {
   return [
     ...new Set([
       ...Object.values(RTS_NOTIFY_AUDIO_EVENTS),
       ...Object.values(RTS_NOTIFICATION_AUDIO_EVENTS),
+      ...Object.values(RTS_NOTIFICATION_KIND_AUDIO_EVENTS),
+      ...Object.values(RTS_RESOURCE_PRODUCTION_AUDIO_EVENTS),
       ...Object.values(RTS_AUDIO),
     ]),
   ];

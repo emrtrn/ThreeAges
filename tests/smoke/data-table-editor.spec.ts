@@ -129,3 +129,51 @@ test("Veri menu lists every registered balance table", async ({ page }) => {
   await menu.locator('[data-datatable-id="roads"]').click();
   await expect(editor.locator(".dte-field", { hasText: "Hücre boyutu (birim)" }).locator("input")).toBeVisible();
 });
+
+test("Yapı hasarı Moloz çağ başına VFX ve SFX açılır menülerini eşler", async ({ page }) => {
+  await page.setViewportSize({ width: 1680, height: 900 });
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+
+  const menu = page.locator("[data-datatables-popover]");
+  await page.locator("[data-datatables-button]").hover();
+  await menu.locator('[data-datatable-id="rts-damage-defaults"]').click();
+
+  const editor = page.locator(".dte-overlay");
+  const slots = editor.locator('.dte-entry[data-entry-id="slots"]');
+  const debris = slots.locator('.dte-group[data-group-key="debris"]');
+  await debris.locator(".dte-group-title").click();
+
+  // Moloz çağla değişir; bu nedenle çağ başına VFX/SFX ikilisi yan yana
+  // okunacak sırada kalmalıdır. Konum ve zaman ayarları bu dörtlünün ardındadır.
+  const leadingLabels = await debris.locator(".dte-field-label").evaluateAll((labels) =>
+    labels.slice(0, 4).map((label) => label.textContent),
+  );
+  expect(leadingLabels).toEqual([
+    "Yerleşim Çağı VFX",
+    "Yerleşim Çağı SFX",
+    "Kasaba Çağı VFX",
+    "Kasaba Çağı SFX",
+  ]);
+
+  const settlementSfx = debris.locator(".dte-field", { hasText: "Yerleşim Çağı SFX" }).locator("select");
+  const townSfx = debris.locator(".dte-field", { hasText: "Kasaba Çağı SFX" }).locator("select");
+  await expect(settlementSfx).toHaveValue("structure.impact_wood");
+  await expect(townSfx).toHaveValue("structure.impact_stone");
+  await expect(settlementSfx.locator('option[value="structure.impact_stone"]')).toHaveCount(1);
+  await expect(townSfx.locator('option[value="structure.impact_wood"]')).toHaveCount(1);
+  await settlementSfx.selectOption("structure.impact_stone");
+  await expect(settlementSfx).toHaveValue("structure.impact_stone");
+  await settlementSfx.selectOption("structure.impact_wood");
+  await expect(settlementSfx).toHaveValue("structure.impact_wood");
+
+  // Çağdan bağımsız slotlar da tek VFX + tek SFX dropdown düzenini korur.
+  const heavySmoke = slots.locator('.dte-group[data-group-key="heavySmoke"]');
+  await heavySmoke.locator(".dte-group-title").click();
+  const heavyLabels = await heavySmoke.locator(".dte-field-label").evaluateAll((labels) =>
+    labels.slice(0, 2).map((label) => label.textContent),
+  );
+  expect(heavyLabels).toEqual(["VFX", "SFX"]);
+  await expect(heavySmoke.locator(".dte-field", { hasText: "SFX" }).locator("select"))
+    .toHaveValue("structure.fire_loop");
+});

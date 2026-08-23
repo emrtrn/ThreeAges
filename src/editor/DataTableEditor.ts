@@ -17,6 +17,7 @@ import type {
   EditorDataTableDef,
   EditorDataTableFieldMeta,
   EditorDataTableGroupMeta,
+  EditorDataTableOptionSource,
 } from "@/editor/gameEditorRegistry";
 import { loadDataTable, loadDataTableDefaults, saveDataTable } from "@/editor/dataTableStore";
 import {
@@ -82,6 +83,8 @@ export class DataTableEditor {
   private readonly blockParents = new Set<string>();
   /** Template paths edited as a whole list (an asset-id array), not per index. */
   private readonly listPaths = new Set<string>();
+  /** Project-data ids loaded for fields such as an RTS audio-event picker. */
+  private readonly referenceOptions = new Map<string, readonly string[]>();
   /** Committed (git HEAD) document, lazily fetched the first time an entry is reset. */
   private defaults: Record<string, unknown> | null = null;
   private disposed = false;
@@ -146,7 +149,11 @@ export class DataTableEditor {
 
   private async load(): Promise<void> {
     try {
-      const raw = await loadDataTable(this.options.path);
+      const optionSources = this.options.def.optionSources ?? [];
+      const [raw, ...optionDocs] = await Promise.all([
+        loadDataTable(this.options.path),
+        ...optionSources.map((source) => loadDataTable(source.path)),
+      ]);
       if (!isPlainObject(raw)) {
         this.setStatus("Bu dosya girdi kimliğine göre bir nesne değil; düzenlenemez.", "error");
         return;
@@ -156,6 +163,13 @@ export class DataTableEditor {
         this.setStatus(`Bu dosyada "${this.options.def.section}" bölümü yok; düzenlenemez.`, "error");
         return;
       }
+      optionSources.forEach((source, index) => {
+        const options = optionSectionOf(optionDocs[index], source);
+        if (!options) {
+          throw new Error(`Seçim kaynağı "${source.id}" için "${source.section ?? "(kök)"}" bölümü yok`);
+        }
+        this.referenceOptions.set(source.id, Object.keys(options).sort((a, b) => a.localeCompare(b, "tr")));
+      });
       this.fullDoc = raw;
       this.doc = entryRoot;
       for (const entryId of Object.keys(this.doc)) this.applyDerivedFields(entryId);
@@ -267,7 +281,7 @@ export class DataTableEditor {
     } else {
       const grid = document.createElement("div");
       grid.className = "dte-grid";
-      for (const leaf of leaves) grid.append(this.renderLeaf(leaf, entryId));
+      for (const leaf of this.orderedLeaves(leaves)) grid.append(this.renderLeaf(leaf, entryId));
       section.append(grid);
     }
     return section;
@@ -289,9 +303,22 @@ export class DataTableEditor {
 
     const grid = document.createElement("div");
     grid.className = "dte-grid";
-    for (const leaf of group.leaves) grid.append(this.renderLeaf(leaf, entryId));
+    for (const leaf of this.orderedLeaves(group.leaves)) grid.append(this.renderLeaf(leaf, entryId));
     details.append(grid);
     return details;
+  }
+
+  /** Explicit form order wins where a game needs paired fields, then JSON order. */
+  private orderedLeaves(leaves: readonly Leaf[]): readonly Leaf[] {
+    return leaves
+      .map((leaf, index) => ({ leaf, index, order: this.metaFor(leaf.path)?.order }))
+      .sort((left, right) => {
+        if (left.order === undefined && right.order === undefined) return left.index - right.index;
+        if (left.order === undefined) return 1;
+        if (right.order === undefined) return -1;
+        return left.order - right.order || left.index - right.index;
+      })
+      .map(({ leaf }) => leaf);
   }
 
   /**
@@ -426,6 +453,8 @@ export class DataTableEditor {
       // A lone asset id (not a list): the same picker, with the current value
       // preserved as an option so an id no asset answers survives a stray edit.
       input = this.buildAssetSelect(meta.assetOptions, typeof current === "string" ? current : "", []);
+    } else if (leaf.type === "string" && meta?.referenceOptions) {
+      input = this.buildReferenceSelect(meta.referenceOptions, typeof current === "string" ? current : "");
     } else {
       input = document.createElement("input");
       input.type = leaf.type === "number" ? "number" : "text";
@@ -487,6 +516,18 @@ export class DataTableEditor {
       if (asset.id !== current && taken.has(asset.id)) continue;
       select.append(buildOption(asset.id, asset.name, asset.id === current));
     }
+    return select;
+  }
+
+  /** A dropdown over entry ids from a read-only project-data table. */
+  private buildReferenceSelect(source: string, current: string): HTMLSelectElement {
+    const select = document.createElement("select");
+    const options = this.referenceOptions.get(source) ?? [];
+    select.append(buildOption("", "— seçilmedi —", current === ""));
+    if (current && !options.includes(current)) {
+      select.append(buildOption(current, `⚠ ${current} (bilinmeyen kayıt)`, true));
+    }
+    for (const option of options) select.append(buildOption(option, option, option === current));
     return select;
   }
 
@@ -635,6 +676,21 @@ function buildOption(value: string, label: string, selected: boolean): HTMLOptio
   option.textContent = label;
   option.selected = selected;
   return option;
+}
+
+/** Resolves a table's root or named object section for a reference picker. */
+function optionSectionOf(
+  raw: unknown,
+  source: EditorDataTableOptionSource,
+): Record<string, unknown> | null {
+  if (!isPlainObject(raw)) return null;
+  if (source.section === undefined) return raw;
+  let cursor: unknown = raw;
+  for (const key of source.section.split(".")) {
+    if (!isPlainObject(cursor)) return null;
+    cursor = cursor[key];
+  }
+  return isPlainObject(cursor) ? cursor : null;
 }
 
 function describeError(error: unknown): string {

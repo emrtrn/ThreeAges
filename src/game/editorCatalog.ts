@@ -271,8 +271,8 @@ const DAMAGE_SLOT_LABELS: Readonly<Record<string, string>> = {
 
 /** Aged slots ask their effect once per age; these name the two rows. */
 const DAMAGE_AGE_LABELS: Readonly<Record<SettlementAge, string>> = {
-  settlement: "Yerleşim çağı efekti",
-  town: "Kasaba çağı efekti",
+  settlement: "Yerleşim Çağı",
+  town: "Kasaba Çağı",
 };
 
 /** The slot's own name when the game grows one before a label is written for it. */
@@ -306,6 +306,8 @@ function damageSlotFields(prefix: string): readonly {
   hint?: string;
   enum?: readonly string[];
   assetOptions?: string;
+  referenceOptions?: string;
+  order?: number;
   itemLabels?: readonly string[];
   min?: number;
   max?: number;
@@ -334,14 +336,16 @@ function damageSlotFields(prefix: string): readonly {
       ...(aged
         ? RTS_DAMAGE_SLOT_AGES.map((age) => ({
           path: `${prefix}${slot}.ages.${age}`,
-          label: DAMAGE_AGE_LABELS[age],
+          label: `${DAMAGE_AGE_LABELS[age]} VFX`,
           assetOptions: "effect",
+          order: age === "settlement" ? 10 : 30,
           hint: `${effectHint} Yalnızca sahibi ${age === "town" ? "Kasaba" : "Yerleşim"} çağındayken oynatılır.`,
         }))
         : [{
           path: `${prefix}${slot}.effects`,
-          label: "Efekt",
+          label: "VFX",
           assetOptions: "effect",
+          order: 10,
           hint: effectHint,
         }]),
       // Three paths for one field, because `sound` is a union: a bare string
@@ -353,12 +357,16 @@ function damageSlotFields(prefix: string): readonly {
         ? [
           {
             path: `${prefix}${slot}.sound`,
-            label: "Ses olayı",
+            label: "SFX",
+            referenceOptions: "audio-events",
+            order: 20,
             hint: `${SOUND_FIELD_HINT} Çağdan bağımsız tek bir olay adı; iki çağ için ayrı ses isteniyorsa bu alan yerine ${DAMAGE_AGE_LABELS.settlement} / ${DAMAGE_AGE_LABELS.town} satırları yazılır.`,
           },
           ...RTS_DAMAGE_SLOT_AGES.map((age) => ({
             path: `${prefix}${slot}.sound.${age}`,
-            label: `Ses olayı — ${DAMAGE_AGE_LABELS[age]}`,
+            label: `${DAMAGE_AGE_LABELS[age]} SFX`,
+            referenceOptions: "audio-events",
+            order: age === "settlement" ? 20 : aged ? 40 : 30,
             hint: `${SOUND_FIELD_HINT} Yalnızca sahibi ${DAMAGE_AGE_LABELS[age]} çağındayken çalınır.`,
           })),
         ]
@@ -366,12 +374,14 @@ function damageSlotFields(prefix: string): readonly {
       {
         path: `${prefix}${slot}.anchor.mode`,
         label: "Konum",
+        order: 50,
         enum: RTS_DAMAGE_ANCHOR_MODES,
         hint: "Efektin doğduğu referans yükseklik. Ayak izinden türetilir, bu yüzden küçük ve büyük binalarda aynı girdi doğru kalır.",
       },
       {
         path: `${prefix}${slot}.anchor.offset.[]`,
         label: "Kayma",
+        order: 60,
         itemLabels: ["X", "Y", "Z"],
         min: -50,
         max: 50,
@@ -382,6 +392,7 @@ function damageSlotFields(prefix: string): readonly {
         ? [{
           path: `${prefix}${slot}.intervalSeconds`,
           label: "Aralık (sn)",
+          order: 70,
           min: 0.05,
           max: 60,
           step: 0.05,
@@ -392,6 +403,7 @@ function damageSlotFields(prefix: string): readonly {
         ? [{
           path: `${prefix}${slot}.minIntervalSeconds`,
           label: "En kısa aralık (sn)",
+          order: 70,
           min: 0.05,
           max: 60,
           step: 0.05,
@@ -460,6 +472,13 @@ const DAMAGE_SLOT_GROUP = (path: string) => ({
   label: "Sunum slotu",
   keyLabels: Object.fromEntries(RTS_DAMAGE_SLOTS.map((slot) => [slot, damageSlotLabel(slot)])),
 });
+
+/** Damage-slot SFX choices are the editable event ids, never raw sound clips. */
+const DAMAGE_AUDIO_EVENT_OPTIONS = [{
+  id: "audio-events",
+  path: "game-data/audio/events.json",
+  section: "events",
+}] as const;
 
 // Friendly Turkish labels + gentle min/max/step for the Data Table editor. These
 // are presentation only — the authoritative range check stays in the validators
@@ -1073,6 +1092,7 @@ export const GAME_EDITOR_CATALOG = {
       path: "game-data/content/rts-content.json",
       section: "damage.defaults",
       fields: [DAMAGE_COLLAPSE_STYLE_FIELD, ...DAMAGE_TUNING_FIELDS, ...damageSlotFields("")],
+      optionSources: DAMAGE_AUDIO_EVENT_OPTIONS,
       // The `slots` entry's own keys are the slots, so the entry root is what
       // groups here; the material/building tables reach them under `slots`.
       groups: [DAMAGE_SLOT_GROUP("")],
@@ -1088,6 +1108,7 @@ export const GAME_EDITOR_CATALOG = {
         ...DAMAGE_OVERRIDE_TUNING_FIELDS,
         ...damageSlotFields("slots."),
       ],
+      optionSources: DAMAGE_AUDIO_EVENT_OPTIONS,
       groups: [DAMAGE_SLOT_GROUP("slots")],
       validate: asTableValidator(validateRtsContentDamageSection),
     },
@@ -1102,6 +1123,7 @@ export const GAME_EDITOR_CATALOG = {
         ...DAMAGE_OVERRIDE_TUNING_FIELDS,
         ...damageSlotFields("slots."),
       ],
+      optionSources: DAMAGE_AUDIO_EVENT_OPTIONS,
       groups: [DAMAGE_SLOT_GROUP("slots")],
       validate: asTableValidator(validateRtsContentDamageSection),
     },

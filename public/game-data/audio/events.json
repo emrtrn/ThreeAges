@@ -372,8 +372,10 @@
       "maxInstances": 2
     },
     "ui.error": {
+      "_note": "Two variants as of Paket 2, and the second earns its place more here than anywhere else in the UI family: a refusal is the sound a player hears in bursts - clicking a greyed action twice, pressing on through an unaffordable row - and one clip repeating reads as a stuck button rather than a second no.",
       "clips": [
-        "sfx-ui-error-01"
+        "sfx-ui-error-01",
+        "sfx-ui-error-02"
       ],
       "bus": "ui",
       "volume": 0.4,
@@ -496,7 +498,8 @@
     },
     "notify.info": {
       "clips": [
-        "sfx-notify-info-01"
+        "sfx-notify-info-01",
+        "sfx-notify-info-02"
       ],
       "bus": "notifications",
       "volume": 0.4,
@@ -516,7 +519,8 @@
       "_note": "The clips this event waited for. Its Faz 1 placeholder was a door-open sample, chosen because the rule that governed every placeholder here mattered more than the sound: never borrow from a channel that already owns it. An earlier draft had reached for a collapse clip, and the game then reported a falling building whenever anything went wrong - including on the first poll of a fresh match. Two variants now, because the alarm tier repeats: a besieged centre raises this more than once, and one clip twice in a row reads as a stuck loop rather than a second warning.",
       "clips": [
         "sfx-notify-alert-01",
-        "sfx-notify-alert-02"
+        "sfx-notify-alert-02",
+        "sfx-notify-alert-03"
       ],
       "bus": "notifications",
       "volume": 0.4,
@@ -550,6 +554,306 @@
       "volume": 3,
       "cooldownMs": 2000,
       "maxInstances": 1
+    },
+    "ui.confirm": {
+      "_note": "The busiest new event in the table, because it is what every selection-panel action now answers with (`command` -> here, through the notification kind map). Three variants and a shade of jitter for exactly that reason: a player queueing five soldiers hears this five times in a row. Level sits just under `ui.click` - the click already said the button went down, and this only has to say it worked.",
+      "clips": [
+        "sfx-ui-confirm-01",
+        "sfx-ui-confirm-02",
+        "sfx-ui-confirm-03"
+      ],
+      "bus": "ui",
+      "volume": 0.36,
+      "pitchVariation": 0.02,
+      "cooldownMs": 140,
+      "maxInstances": 2
+    },
+    "ui.hover": {
+      "_note": "One clip, no jitter, and that is the correction rather than the original design. Three variants shipped first, on the reasoning that applies to every other repeated sound in this table - and hover is the one place it is wrong. A player sweeping a row of build cards crosses six buttons in a second, so the variants do not read as variety, they read as six different controls; the ear takes a changing sound as new information about the thing under the pointer. Everywhere else a repeat is spread over seconds and a single clip is what sounds broken. So the axis the sound varies on is *what kind of control it is*, not *which time it is* - see `ui.hover_card`.\n\nLevel is the other correction. This was authored at 0.12 as 'the quietest entry in the table and it should stay that way', which was true against silence and false against a match: the moment a foundation goes up, `building.build_loop` runs continuously under footsteps and hammering, and a 0.2-second tick at 0.108 effective simply is not there any more. Still well under `ui.click` at 0.35 - a hover must stay subordinate to the press it precedes - but now above the bed.",
+      "clips": [
+        "sfx-ui-hover-01"
+      ],
+      "bus": "ui",
+      "volume": 0.22,
+      "cooldownMs": 80,
+      "maxInstances": 3
+    },
+    "ui.panel_open": {
+      "clips": [
+        "sfx-ui-panel-open-01",
+        "sfx-ui-panel-open-02",
+        "sfx-ui-panel-open-03"
+      ],
+      "bus": "ui",
+      "volume": 0.28,
+      "pitchVariation": 0.02,
+      "cooldownMs": 180,
+      "maxInstances": 2
+    },
+    "ui.panel_close": {
+      "_note": "Paired with `ui.panel_open` and mixed level with it. A close quieter than its own open would say the panel had gone away less than it had arrived, and the pause card is the one panel a player closes without looking at it.",
+      "clips": [
+        "sfx-ui-panel-close-01",
+        "sfx-ui-panel-close-02",
+        "sfx-ui-panel-close-03"
+      ],
+      "bus": "ui",
+      "volume": 0.28,
+      "pitchVariation": 0.02,
+      "cooldownMs": 180,
+      "maxInstances": 2
+    },
+    "ui.select_unit": {
+      "_note": "The long re-selection cooldown, inherited from `ui.select` and worth as much here: dragging a box over the same squad twice is one player checking what they have. One clip so far, which makes that cooldown carry more than the building pair's does - it is the only one of the two where a repeat is literally the same take.",
+      "clips": [
+        "sfx-ui-select-unit-01"
+      ],
+      "bus": "ui",
+      "volume": 0.3,
+      "pitchVariation": 0.03,
+      "cooldownMs": 260,
+      "maxInstances": 2
+    },
+    "ui.select_building": {
+      "clips": [
+        "sfx-ui-select-building-01",
+        "sfx-ui-select-building-02"
+      ],
+      "bus": "ui",
+      "volume": 0.3,
+      "pitchVariation": 0.03,
+      "cooldownMs": 260,
+      "maxInstances": 2
+    },
+    "ui.command_attack": {
+      "_note": "Louder than the move order by a hair, and that is the whole distinction the split exists for: these two land on the same button, and 'we are engaging' has to read over a fight that has already started.",
+      "clips": [
+        "sfx-ui-command-attack-01"
+      ],
+      "bus": "ui",
+      "volume": 0.34,
+      "pitchVariation": 0.03,
+      "cooldownMs": 110,
+      "maxInstances": 3
+    },
+    "ui.command_move": {
+      "clips": [
+        "sfx-ui-command-move-01"
+      ],
+      "bus": "ui",
+      "volume": 0.3,
+      "pitchVariation": 0.04,
+      "cooldownMs": 110,
+      "maxInstances": 3
+    },
+    "ui.rally_point": {
+      "_note": "The flag being armed, not dropped - the click that places it is an ordinary command and sounds like one. Rare enough to need no pitch jitter; a player sets a rally point a handful of times a match.",
+      "clips": [
+        "sfx-ui-rally-point-01"
+      ],
+      "bus": "ui",
+      "volume": 0.34,
+      "cooldownMs": 220,
+      "maxInstances": 2
+    },
+    "ui.pause": {
+      "_note": "One instance, no jitter, and the two directions kept apart. This pair replaced a shared `ui.cancel` on both halves of the toggle, which told the player the key had landed without telling them which way it went.",
+      "clips": [
+        "sfx-ui-pause-01"
+      ],
+      "bus": "ui",
+      "volume": 0.4,
+      "cooldownMs": 250,
+      "maxInstances": 1
+    },
+    "ui.resume": {
+      "clips": [
+        "sfx-ui-resume-01"
+      ],
+      "bus": "ui",
+      "volume": 0.4,
+      "cooldownMs": 250,
+      "maxInstances": 1
+    },
+    "notify.population_full": {
+      "_note": "The kind-specific half of the notification sound (Paket 2). These do not replace the three tiers - `notify.info`/`warning`/`alert` still answer every kind with no clip of its own - they replace the tier for the handful production covered. Cooldowns run long here on purpose: a tier sound is shared and so naturally spaced, where a kind-specific one only ever plays for its own condition.",
+      "clips": [
+        "sfx-notify-population-full-01"
+      ],
+      "bus": "notifications",
+      "volume": 0.42,
+      "cooldownMs": 900,
+      "maxInstances": 2
+    },
+    "notify.resource_depleted": {
+      "clips": [
+        "sfx-notify-resource-depleted-01"
+      ],
+      "bus": "notifications",
+      "volume": 0.42,
+      "cooldownMs": 900,
+      "maxInstances": 2
+    },
+    "notify.outpost_attack": {
+      "_note": "Under the centre alarm by design. Both are an attack the player has to answer, but only one of them can lose the match, and the pair has to say which is which without the player reading the line.",
+      "clips": [
+        "sfx-notify-outpost-attack-01"
+      ],
+      "bus": "notifications",
+      "volume": 0.5,
+      "cooldownMs": 700,
+      "maxInstances": 2
+    },
+    "notify.center_attack": {
+      "clips": [
+        "sfx-notify-center-attack-01"
+      ],
+      "bus": "notifications",
+      "volume": 0.6,
+      "cooldownMs": 700,
+      "maxInstances": 2
+    },
+    "notify.regional_victory_warning": {
+      "_note": "The longest cooldown of the notification set, matching the notice's own: this one describes a countdown rather than an event, so it re-raises while the clock runs, and a short cooldown would turn three minutes of tension into a metronome.",
+      "clips": [
+        "sfx-notify-regional-victory-warning-01"
+      ],
+      "bus": "notifications",
+      "volume": 0.55,
+      "cooldownMs": 1500,
+      "maxInstances": 1
+    },
+    "notify.logistics_cut": {
+      "_note": "The plan's items 16/17 said these two would ride `notify.alert` and `notify.info` and that no asset would be produced for them. Both were produced anyway, so they get the pair they were named for - the cut is still an alert and the restore still good news, they just no longer sound like every other alarm and every other piece of good news. The restore is the quieter of the two: a problem going away does not need to interrupt what the player is doing about it.",
+      "clips": [
+        "sfx-logistics-disconnected-01"
+      ],
+      "bus": "notifications",
+      "volume": 0.45,
+      "cooldownMs": 700,
+      "maxInstances": 2
+    },
+    "notify.logistics_restored": {
+      "clips": [
+        "sfx-logistics-restored-01"
+      ],
+      "bus": "notifications",
+      "volume": 0.35,
+      "cooldownMs": 500,
+      "maxInstances": 2
+    },
+    "economy.market_buy": {
+      "_note": "The economy set routes to three different buses, deliberately rather than untidily - see the note on `RTS_AUDIO.economyMarketBuy`. A trade answers a button, so it rides `ui` in place of the `ui.confirm` it overrides; a full store is the game telling the player something is being wasted, so it rides `notifications`; work starting happens at a place on the map, so it is spatial and rides `sfx`. Buy and sell are mixed level: a player scanning prices flips between them, and a louder half would read as the better deal.",
+      "clips": [
+        "sfx-economy-market-buy-01"
+      ],
+      "bus": "ui",
+      "volume": 0.42,
+      "pitchVariation": 0.02,
+      "cooldownMs": 180,
+      "maxInstances": 2
+    },
+    "economy.market_sell": {
+      "clips": [
+        "sfx-economy-market-sell-01"
+      ],
+      "bus": "ui",
+      "volume": 0.42,
+      "pitchVariation": 0.02,
+      "cooldownMs": 180,
+      "maxInstances": 2
+    },
+    "economy.stock_full": {
+      "_note": "The longest cooldown in the table, because this is the one sound with two triggers: the poll that catches a store crossing its cap, and the Market refusing a buy that had nowhere to land. Four resources can fill within seconds of each other when a depot is lost, and four chimes would report a catastrophe rather than a full granary.",
+      "clips": [
+        "sfx-economy-stock-full-01"
+      ],
+      "bus": "notifications",
+      "volume": 0.4,
+      "cooldownMs": 2000,
+      "maxInstances": 1
+    },
+    "economy.work_start": {
+      "_note": "Only the ordered assignment reaches this - the automatic assigner puts workers on jobs continuously in the background, and sounding that would be the forbidden per-tick income sound under a different name.",
+      "clips": [
+        "sfx-economy-work-start-01"
+      ],
+      "bus": "sfx",
+      "volume": 0.3,
+      "pitchVariation": 0.05,
+      "cooldownMs": 220,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 80,
+      "rolloff": 8
+    },
+    "economy.food_production": {
+      "_note": "The production set, one per resource, fired when a producer *starts* producing rather than when the resource arrives. That is the design's one hard economy rule ('saniyede birkac kez kaynak artisi icin ses uretilmemelidir') honoured in the trigger rather than in the mix: a transfer runs every tick, a building coming online happens a few dozen times a match. Quieter than `economy.work_start`, which is a player's own order answered, where this is the world reporting on itself. Spatial, because it is a fact about a place: a farm coming online across the map should be readable as faint rather than as absent.",
+      "clips": [
+        "sfx-economy-food-production-01"
+      ],
+      "bus": "sfx",
+      "volume": 0.26,
+      "pitchVariation": 0.05,
+      "cooldownMs": 320,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 80,
+      "rolloff": 8
+    },
+    "economy.wood_production": {
+      "clips": [
+        "sfx-economy-wood-production-01"
+      ],
+      "bus": "sfx",
+      "volume": 0.26,
+      "pitchVariation": 0.05,
+      "cooldownMs": 320,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 80,
+      "rolloff": 8
+    },
+    "economy.stone_production": {
+      "clips": [
+        "sfx-economy-stone-production-01"
+      ],
+      "bus": "sfx",
+      "volume": 0.26,
+      "pitchVariation": 0.05,
+      "cooldownMs": 320,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 80,
+      "rolloff": 8
+    },
+    "economy.gold_production": {
+      "clips": [
+        "sfx-economy-gold-production-01"
+      ],
+      "bus": "sfx",
+      "volume": 0.26,
+      "pitchVariation": 0.05,
+      "cooldownMs": 320,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 80,
+      "rolloff": 8
+    },
+    "ui.hover_card": {
+      "_note": "The other half of the hover split: a picture card rather than a control - the build palette's building and road thumbnails today. Its own clip, so crossing from the HUD into the palette is audibly a change of *kind*, while crossing from one building card to the next is not a change at all. Mixed level with `ui.hover`: neither is more important than the other, they are different places.",
+      "clips": [
+        "sfx-ui-hover-02"
+      ],
+      "bus": "ui",
+      "volume": 0.22,
+      "cooldownMs": 80,
+      "maxInstances": 3
     }
   },
   "_musicStates": "How the match picks which of the four playlists is playing (plan §28/§35). `tensionVisibleEnemies` is enemies the player can actually see through the fog - §35's rule is that seeing one is tension, not battle. `battleActiveFights` counts units of either side holding an attack target. `threatRadius` makes a *seen* enemy that close to the player's centre a battle on its own, before a blow lands, so a siege column walking into the square is not scored as calm. `calmSeconds` is how long a raised state holds after its cause is gone - combat is spiky, and without it the music would flap several times per skirmish. All four are retuned by ear."

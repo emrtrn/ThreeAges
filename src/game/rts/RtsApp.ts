@@ -84,8 +84,9 @@ import {
   type RtsActorLoadReport,
 } from "./content/rtsActorVisualFactory";
 import { RTS_THROW_RELEASE_NOTIFY, RtsNotifyEffectBudget, rtsNotifyEffectIds } from "./content/rtsNotifyEffects";
-import { RTS_AUDIO, RTS_NOTIFICATION_AUDIO_EVENTS, rtsNotifyAudioEvent,
+import { RTS_AUDIO, rtsNotifyAudioEvent, rtsNotificationAudioEvent,
   RTS_MUSIC_STATE_EVENTS, RTS_NOTIFY_AUDIO_EVENTS, resolveRtsAudioVariant,
+  rtsResourceProductionAudioEvent,
   type RtsAudioVariant,
 } from "./audio/rtsAudioEvents";
 import { loadAudioEventTableWithStates } from "../data/gameDataLoader";
@@ -256,7 +257,9 @@ import {
 } from "./ui/rtsSelectionView";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
-import { EconomyProductionSystem, producerHasSource } from "./economy/economyProductionSystem";
+import { EconomyProductionSystem, producerHasSource,
+  type EconomyProductionStatus,
+} from "./economy/economyProductionSystem";
 import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTradeSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { TradeSiteSystem } from "./economy/tradeSiteSystem";
@@ -284,7 +287,7 @@ import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { type ProducerLogisticsStatus, ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
-import { ResourceCapacitySystem } from "./economy/resourceCapacitySystem";
+import { ResourceCapacitySystem, STOCK_RESOURCE_IDS } from "./economy/resourceCapacitySystem";
 import { roadLinkCellFor } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { StructureRepairSystem } from "./structures/structureRepairSystem";
@@ -916,6 +919,7 @@ export class RtsApp {
   private audioFrame = 0;
   /** Removes the one-shot gesture listener that unlocks the audio context. */
   private detachAudioUnlock: (() => void) | null = null;
+  private detachUiHoverAudio: (() => void) | null = null;
   /**
    * The mix the audio event table authored, before the player's trims.
    *
@@ -1261,7 +1265,10 @@ export class RtsApp {
     onPosted: (event) => {
       // Global, not spatial: a border under attack has a place on the map, but
       // the alarm is addressed to the player, not to the camera's position.
-      this.audioEvents.trigger(RTS_NOTIFICATION_AUDIO_EVENTS[event.severity], this.audioClock);
+      this.audioEvents.trigger(
+        event.sound ?? rtsNotificationAudioEvent(event.kind, event.severity),
+        this.audioClock,
+      );
     },
   });
   private readonly notificationFeed = new RtsNotificationFeed();
@@ -1273,6 +1280,29 @@ export class RtsApp {
    * status.
    */
   private readonly previousLogisticsStatus = new Map<number, ProducerLogisticsStatus>();
+  /**
+   * Last-seen production status per player producer, so §16's per-resource
+   * production sound can fire on the *transition* into producing rather than
+   * while it lasts.
+   *
+   * The same shape as {@link previousLogisticsStatus} and for the same reason:
+   * these snapshots are polled, so without a baseline "this building is
+   * producing" is true on every frame it is true, and §16's one hard rule is
+   * that a resource must not make a sound many times a second. Pruned with the
+   * producers, so a reused structure id can never read a dead building's state
+   * and skip the transition it should have announced.
+   */
+  private readonly previousProductionStatus = new Map<number, EconomyProductionStatus>();
+  /**
+   * Which player resources were at their storage cap on the last poll — §16's
+   * `SFX-ECO-009`.
+   *
+   * A set rather than a map because "full" is the only state worth remembering:
+   * the sound belongs to the crossing, and a store that stays full is a standing
+   * condition the HUD's `amount/limit` readout already carries. Without this the
+   * chime would ride the poll.
+   */
+  private readonly fullStockResources = new Set<string>();
   /**
    * The trade-site twin of {@link previousLogisticsStatus} — supply plan Faz S5.
    * Same job, per site id rather than per structure id: the cut is polled, the
@@ -1666,9 +1696,12 @@ export class RtsApp {
       this.missions = new MissionDirector(this.options.missionScript);
       // "Göster" recentres rather than flying: the camera is the player's, and a
       // scripted sweep would take it away from them for as long as it lasted.
-      this.missionPanel = new RtsMissionPanel(() => {
-        if (this.missionMarker) this.cameraController.setFocus(this.missionMarker.x, this.missionMarker.z);
-      });
+      this.missionPanel = new RtsMissionPanel(
+        () => {
+          if (this.missionMarker) this.cameraController.setFocus(this.missionMarker.x, this.missionMarker.z);
+        },
+        (collapsed) => this.playUiAudio(collapsed ? RTS_AUDIO.uiPanelClose : RTS_AUDIO.uiPanelOpen),
+      );
       this.missionHint = new MissionHintView();
     } else {
       this.missions = null;
@@ -2286,7 +2319,7 @@ export class RtsApp {
         const commanding = this.selection.selected().length > 0
           || this.selection.selectedStructure() !== null;
         const issued = this.commands.issueAt(x, y);
-        if (commanding) this.playUiAudio(RTS_AUDIO.uiCommand);
+        if (commanding) this.playUiAudio(this.commandAudioEvent(issued));
         this.playGuardOrderAudio(issued);
       },
       // A right *drag* is the camera, not a command — the pointer only reports
@@ -2373,6 +2406,7 @@ export class RtsApp {
     this.input.attach();
     this.pointer.attach();
     this.attachAudioUnlock();
+    this.attachUiHoverAudio();
     void this.loadAudioEvents();
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
     this.resize();
@@ -2406,6 +2440,7 @@ export class RtsApp {
     const unlock = (): void => {
       this.audioSubsystem.resumeContext();
       this.detachAudioUnlock?.();
+    this.detachUiHoverAudio?.();
     };
     window.addEventListener("pointerdown", unlock, { capture: true });
     window.addEventListener("keydown", unlock, { capture: true });
@@ -2413,6 +2448,48 @@ export class RtsApp {
       window.removeEventListener("pointerdown", unlock, { capture: true });
       window.removeEventListener("keydown", unlock, { capture: true });
       this.detachAudioUnlock = null;
+    };
+  }
+
+  /**
+   * §14's hover, from one listener instead of from every control.
+   *
+   * Delegated on the overlay host that every HUD component already mounts into,
+   * for a reason beyond saving the typing: the panels are rebuilt as the
+   * selection changes, so a per-button listener would have to be re-attached on
+   * every rebuild and a panel added later would simply be silent. Bound on the
+   * host, a control gets the sound by being a `<button>` inside the HUD.
+   *
+   * `pointerover` rather than `pointerenter` because only a bubbling event can
+   * be delegated at all, and `relatedTarget` is what keeps it honest: the event
+   * also fires when the pointer moves between a button's own children, and
+   * without the check a button with a label and an icon in it would tick twice
+   * on one crossing. Disabled buttons are skipped — a hover that answers a
+   * control that cannot be pressed is a promise the click then breaks.
+   *
+   * Which of the two hover sounds it is depends on what the button *is*, never
+   * on how many times it has fired — see {@link RTS_AUDIO.uiHoverCard}. A button
+   * carrying a picture is a card; everything else is a control. Asking the
+   * markup rather than a class list is what lets a card added later be a card
+   * without this method being told about it.
+   */
+  private attachUiHoverAudio(): void {
+    if (this.detachUiHoverAudio) return;
+    const host = document.getElementById("ui-overlay") ?? document.body;
+    const onOver = (event: PointerEvent): void => {
+      const target = event.target instanceof Element ? event.target.closest("button") : null;
+      if (!target || target.disabled) return;
+      // Still inside the same button: a move between its label and its icon is
+      // not a new hover.
+      const from = event.relatedTarget instanceof Node ? event.relatedTarget : null;
+      if (from && target.contains(from)) return;
+      const card = target.querySelector("img") !== null;
+      this.playUiAudio(card ? RTS_AUDIO.uiHoverCard : RTS_AUDIO.uiHover);
+    };
+    host.addEventListener("pointerover", onOver);
+    this.detachUiHoverAudio = () => {
+      host.removeEventListener("pointerover", onOver);
+      this.detachUiHoverAudio = null;
     };
   }
 
@@ -2550,10 +2627,32 @@ export class RtsApp {
    * same squad twice is one player checking what they have, not two actions.
    */
   private playSelectionAudio(): void {
-    const picked = this.selection.selected().length > 0
-      || this.selection.selectedStructure() !== null;
-    if (picked) this.playUiAudio(RTS_AUDIO.uiSelect);
+    const units = this.selection.selected().length > 0;
+    const structure = this.selection.selectedStructure() !== null;
+    // §14 gives a squad and a building their own answers. `uiSelect` is not
+    // retired by that: it stays the sound for a pick that is neither purely one
+    // nor the other, which is the same fallback shape §82.4 gave the armour
+    // split — the game never goes silent because a project shipped one clip.
+    if (units && !structure) this.playUiAudio(RTS_AUDIO.uiSelectUnit);
+    else if (structure && !units) this.playUiAudio(RTS_AUDIO.uiSelectBuilding);
+    else if (units || structure) this.playUiAudio(RTS_AUDIO.uiSelect);
     if (this.selectionHasGuard()) this.playUiAudio(RTS_AUDIO.guardSelect);
+  }
+
+  /**
+   * Which of §14's three command sounds an issued order gets.
+   *
+   * Only the two the design names are split out. A worker task, a structure's
+   * own attack order and a retreat keep the shared sound, for the reason
+   * {@link playGuardOrderAudio} gives about the retreat: the two orders that
+   * land on the same button are move and attack, and those are the two a player
+   * must be able to tell apart without looking. Naming the others would be
+   * producing clips for distinctions nobody has to make in a hurry.
+   */
+  private commandAudioEvent(result: RtsCommandResult): string {
+    if (result === "attack") return RTS_AUDIO.uiCommandAttack;
+    if (result === "move") return RTS_AUDIO.uiCommandMove;
+    return RTS_AUDIO.uiCommand;
   }
 
   /** Whether the player currently has at least one Guard picked. */
@@ -6489,8 +6588,30 @@ export class RtsApp {
 
   private readonly resumeMatch = (): void => {
     if (!this.flow.resume()) return;
-    this.matchOverlay.hide();
+    // The card's own "Devam" button reaches here rather than through
+    // `togglePause`, so it needs the same pair of sounds — a resume that was
+    // silent when clicked and audible when keyed would read as a broken button.
+    this.playUiAudio(RTS_AUDIO.uiResume);
+    this.hidePauseCard();
   };
+
+  /**
+   * The pause card, with §14's panel sounds over it.
+   *
+   * Both halves go through here rather than calling the overlay directly, so
+   * "a panel opened" is stated once instead of at each of the overlay's callers.
+   * The result screen deliberately does not use it: that is a match ending, and
+   * it already has a stinger.
+   */
+  private showPauseCard(): void {
+    this.matchOverlay.showPause(this.missionRunning());
+    this.playUiAudio(RTS_AUDIO.uiPanelOpen);
+  }
+
+  private hidePauseCard(): void {
+    this.matchOverlay.hide();
+    this.playUiAudio(RTS_AUDIO.uiPanelClose);
+  }
 
   /**
    * "Ana Menü": hand the route back to the host, which disposes this app and
@@ -6535,12 +6656,14 @@ export class RtsApp {
       return;
     }
     if (!this.flow.togglePause()) return;
-    // Both directions get the same sound: it is one toggle, and hearing the
-    // menu answer is what tells the player the key landed at all — the pause
-    // card appearing is easy to miss when the eye is somewhere else on the map.
-    this.playUiAudio(RTS_AUDIO.uiCancel);
-    if (this.flow.phase === "paused") this.matchOverlay.showPause(this.missionRunning());
-    else this.matchOverlay.hide();
+    // §14 gives the two directions their own clips, which is what the earlier
+    // shared `uiCancel` could not do: hearing the key land told the player it
+    // landed without telling them which way it went, readable only by looking at
+    // the card — the thing the sound exists to spare them.
+    const paused = this.flow.phase === "paused";
+    this.playUiAudio(paused ? RTS_AUDIO.uiPause : RTS_AUDIO.uiResume);
+    if (paused) this.showPauseCard();
+    else this.hidePauseCard();
   };
 
   private showMatchResult(): void {
@@ -7265,6 +7388,9 @@ export class RtsApp {
       this.roadPlacement.cancel();
       this.rallyPointPending = true;
       this.buildPalette.setActionMessage(() => t("placement.rally.pick"));
+      // The flag being *armed*, not placed: what follows is an ordinary command
+      // click, and backing out of the mode already answers with `uiCancel`.
+      this.playUiAudio(RTS_AUDIO.uiRallyPoint);
       return;
     }
     if (id === RESCUE_ACTION) {
@@ -7663,7 +7789,23 @@ export class RtsApp {
       });
     }
 
+    this.syncStockFullAudio();
+
+    const livingProduction = new Set<number>();
     for (const producer of this.economyProduction?.snapshots(PLAYER_OWNER) ?? []) {
+      livingProduction.add(producer.structureId);
+      const previousStatus = this.previousProductionStatus.get(producer.structureId);
+      this.previousProductionStatus.set(producer.structureId, producer.status);
+      // §16's `SFX-ECO-003`…`006`: a producer coming online, heard at the
+      // building. Not the resource arriving — a transfer runs every tick, and a
+      // sound on it is the one thing §16 forbids outright. `previousStatus`
+      // being undefined is a producer seen for the first time (a building just
+      // completed, or a match just restored), and that is a genuine start.
+      if (producer.status === "producing" && previousStatus !== "producing") {
+        const sound = rtsResourceProductionAudioEvent(producer.resourceId);
+        const structure = this.structures.all().find((candidate) => candidate.id === producer.structureId);
+        if (sound && structure) this.playStructureAudio(structure, sound);
+      }
       // Renewable producers report null, and a live deposit is not news.
       if (producer.sourceRemaining === null || producer.sourceRemaining > 0) continue;
       this.notifications.post({
@@ -7677,6 +7819,10 @@ export class RtsApp {
           building: t(producer.structureNameKey),
         }),
       });
+    }
+
+    for (const structureId of [...this.previousProductionStatus.keys()]) {
+      if (!livingProduction.has(structureId)) this.previousProductionStatus.delete(structureId);
     }
 
     const livingProducers = new Set<number>();
@@ -7932,6 +8078,11 @@ export class RtsApp {
     for (const worker of workers) this.workerConstruction.release(worker);
     const result = this.economyProduction.assignWorkers(structure, workers);
     if (result.assignedWorkers > 0) {
+      // §16's `SFX-ECO-001`, and only on the *ordered* assignment. The automatic
+      // assigner puts workers on jobs continuously in the background, and giving
+      // that a sound would be the per-tick income sound §16 rules out wearing a
+      // different name. This is the player pointing at a building.
+      this.playStructureAudio(structure, RTS_AUDIO.economyWorkStart);
       this.announce("workers", t("command.workers.assigned_to_structure", { count: result.assignedWorkers, building: t(structure.stats.nameKey) }));
     } else {
       this.announce("workers", t("command.workers.no_slot"), "refused");
@@ -8081,7 +8232,15 @@ export class RtsApp {
       "insufficient-resources": t("command.trade.insufficient_resources", { lot, resource: label }),
       "storage-full": t("command.trade.storage_full"),
     };
-    this.announce("trade", message[result], result === "traded" ? "done" : "refused");
+    // §16's `SFX-ECO-007`/`008`/`009`. The three outcomes worth telling apart by
+    // ear are the two directions of a trade and the one refusal that is not the
+    // player's fault — a full store means the goods were there and there was
+    // nowhere to put them, which is a different problem from being short of
+    // gold. Every other refusal keeps the interface's plain error.
+    const sound = result === "traded"
+      ? (direction === "buy" ? RTS_AUDIO.economyMarketBuy : RTS_AUDIO.economyMarketSell)
+      : result === "storage-full" ? RTS_AUDIO.economyStockFull : undefined;
+    this.announce("trade", message[result], result === "traded" ? "done" : "refused", sound);
     this.syncPlacementUi();
   }
 
@@ -8210,9 +8369,61 @@ export class RtsApp {
    * slots full and evicting a "Merkez saldırı altında". A success also retires a
    * live refusal from the same family: the player has just proved it stale.
    */
-  private announce(subject: RtsCommandSubject, text: string, tone: "done" | "refused" = "done"): void {
+  /**
+   * Answer a command the player just gave: a line in the feed, and the sound
+   * that goes with it.
+   *
+   * The sound is not chosen here. `command` and `command-refused` map to the
+   * interface's confirm and error in `RTS_NOTIFICATION_KIND_AUDIO_EVENTS`, which
+   * is what finally gave §82.3's fourteen selection-panel actions a voice
+   * without fourteen call sites. `sound` is the exception for a caller whose
+   * outcome is more specific than "it worked" — a Market buy against a Market
+   * sell against a store that is already full.
+   */
+  private announce(
+    subject: RtsCommandSubject,
+    text: string,
+    tone: "done" | "refused" = "done",
+    sound?: string,
+  ): void {
     if (tone === "done") this.notifications.dismiss({ kind: "command-refused", subject });
-    this.notifications.post({ kind: tone === "refused" ? "command-refused" : "command", subject, text });
+    this.notifications.post({
+      kind: tone === "refused" ? "command-refused" : "command",
+      subject,
+      text,
+      ...(sound !== undefined ? { sound } : {}),
+    });
+  }
+
+  /**
+   * §16's `SFX-ECO-009`: a store filling up.
+   *
+   * Global rather than placed, and a sound rather than a notice, on purpose. It
+   * is not a *problem* the way a cut road is — nothing has stopped and there is
+   * nothing on the map to look at — but income is now being thrown away, and the
+   * player is usually looking somewhere else when it starts. The HUD's
+   * `amount/limit` cell is the readable half; this is what makes them glance at
+   * it. §62 holds: nothing here is carried by sound alone.
+   *
+   * Only the crossing sounds. A store that stays full is a standing condition,
+   * and one that drops back below the cap re-arms — which is what makes the
+   * chime mean "again" the second time rather than "still".
+   */
+  private syncStockFullAudio(): void {
+    const wallet = this.playerKingdom.wallet.snapshot();
+    const capacity = this.resourceCapacity.capacityFor(PLAYER_OWNER);
+    for (const resourceId of STOCK_RESOURCE_IDS) {
+      const limit = capacity[resourceId] ?? 0;
+      // A resource with no cap declared is uncapped, not full at zero.
+      const full = limit > 0 && (wallet[resourceId] ?? 0) >= limit;
+      if (!full) {
+        this.fullStockResources.delete(resourceId);
+        continue;
+      }
+      if (this.fullStockResources.has(resourceId)) continue;
+      this.fullStockResources.add(resourceId);
+      this.playUiAudio(RTS_AUDIO.economyStockFull);
+    }
   }
 
   private syncAgeUi(): void {

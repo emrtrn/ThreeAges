@@ -172,6 +172,18 @@ export interface RtsNotificationRequest {
    */
   readonly subject?: string;
   readonly text: string;
+  /**
+   * An audio event id that answers this notice instead of the one its kind or
+   * severity would pick.
+   *
+   * For the case where one kind covers several different answers: every Market
+   * outcome posts as `command` or `command-refused`, and a buy, a sell and a
+   * full store are three different sounds inside those two kinds. The centre
+   * never resolves it — it only carries it out to `onPosted`, so the mapping
+   * from moment to sound stays in one file (`rtsAudioEvents.ts`) and this module
+   * stays pure state with no opinion about audio.
+   */
+  readonly sound?: string;
 }
 
 /** Why a post did not reach the player; returned so tests can assert intent. */
@@ -198,6 +210,8 @@ export interface RtsNotificationPosted {
   readonly kind: RtsNotificationKind;
   readonly severity: RtsNotificationSeverity;
   readonly subject?: string;
+  /** The poster's own sound, when it named one — see `RtsNotificationRequest.sound`. */
+  readonly sound?: string;
   /** How many separate times this problem has been raised; 1 is the first. */
   readonly raises: number;
 }
@@ -264,6 +278,7 @@ export class RtsNotificationCenter {
       kind: request.kind,
       severity: rule.severity,
       ...(request.subject !== undefined ? { subject: request.subject } : {}),
+      ...(request.sound !== undefined ? { sound: request.sound } : {}),
       raises,
     });
     return "posted";

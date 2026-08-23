@@ -40,8 +40,14 @@ export class RtsMissionPanel {
    * @param onShow move the camera to the step's marker. Optional: a host that
    *   passes nothing simply never shows the button, which is the right shape for
    *   a card that must survive being wired into a smaller runtime.
+   * @param onFold the fold changed, `true` when the card is now collapsed. Also
+   *   optional, and for the same reason: the panel decides when it folds, the
+   *   host decides whether that is worth a sound (§14's open/close pair).
    */
-  constructor(private readonly onShow?: () => void) {
+  constructor(
+    private readonly onShow?: () => void,
+    private readonly onFold?: (collapsed: boolean) => void,
+  ) {
     this.root.className = "rts-mission-panel";
     this.root.dataset.rtsMission = "";
     markStaticAria(this.root, "mission.panel.aria");
@@ -57,6 +63,7 @@ export class RtsMissionPanel {
     this.toggle.addEventListener("click", () => {
       this.collapsed = !this.collapsed;
       this.syncCollapsedState();
+      this.onFold?.(this.collapsed);
     });
     this.content.id = "rts-mission-content";
     this.content.className = "rts-mission-content";

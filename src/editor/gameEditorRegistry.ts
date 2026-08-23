@@ -83,6 +83,17 @@ export interface EditorDataTableFieldMeta {
    * flagged rather than silently dropped.
    */
   readonly assetOptions?: string;
+  /**
+   * Named values loaded from one of the table definition's `optionSources`.
+   * Unlike `assetOptions`, these are project-data ids (for example audio events),
+   * not files in the asset manifest.
+   */
+  readonly referenceOptions?: string;
+  /**
+   * Optional display order inside a form group. Fields without an order retain
+   * their authored JSON order after the ordered fields.
+   */
+  readonly order?: number;
   /** Renders the input disabled — for structural/identity fields the validator
    *  would reject edits to anyway (tier level indices, entry ids). */
   readonly readonly?: boolean | ((container: Readonly<Record<string | number, unknown>>) => boolean);
@@ -158,6 +169,16 @@ export interface EditorDataTableCategoryMeta {
   readonly emptyHint?: string;
 }
 
+/** A secondary JSON table whose entry ids are offered by a reference picker. */
+export interface EditorDataTableOptionSource {
+  /** Stable name referenced by `EditorDataTableFieldMeta.referenceOptions`. */
+  readonly id: string;
+  /** Public-root-relative JSON path. */
+  readonly path: string;
+  /** Optional dotted object path containing the selectable entry ids. */
+  readonly section?: string;
+}
+
 /**
  * A game-data file the editor's Data Table editor can open and save. The editor
  * stays generic: it renders each top-level entry as a per-field form by walking
@@ -187,6 +208,11 @@ export interface EditorDataTableDef {
   readonly section?: string;
   /** Optional per-leaf presentation hints; keyed by dotted path. */
   readonly fields?: readonly EditorDataTableFieldMeta[];
+  /**
+   * Secondary data tables used only to populate reference pickers. They are
+   * read-only here; saving this table never writes them.
+   */
+  readonly optionSources?: readonly EditorDataTableOptionSource[];
   /**
    * Project-owned values merged into one entry after its committed git default
    * is restored. This keeps defaults for fields introduced after the current
