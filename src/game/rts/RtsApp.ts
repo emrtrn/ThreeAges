@@ -6922,22 +6922,13 @@ export class RtsApp {
     this.hidePauseCard();
   };
 
-  /**
-   * The pause card, with §14's panel sounds over it.
-   *
-   * Both halves go through here rather than calling the overlay directly, so
-   * "a panel opened" is stated once instead of at each of the overlay's callers.
-   * The result screen deliberately does not use it: that is a match ending, and
-   * it already has a stinger.
-   */
+  /** Pause card rendering; its callers own the pause/resume action audio. */
   private showPauseCard(): void {
     this.matchOverlay.showPause(this.missionRunning());
-    this.playUiAudio(RTS_AUDIO.uiPanelOpen);
   }
 
   private hidePauseCard(): void {
     this.matchOverlay.hide();
-    this.playUiAudio(RTS_AUDIO.uiPanelClose);
   }
 
   /**

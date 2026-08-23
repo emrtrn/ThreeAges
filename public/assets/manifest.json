@@ -37002,6 +37002,38 @@
         "packVersion": "0.1"
       },
       "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-ui-hover-card-01",
+      "name": "UI Hover Card 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/ui/sfx_ui_hover_card_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ui"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 9440
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
     }
   ]
 }

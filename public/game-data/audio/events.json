@@ -380,10 +380,12 @@
     "structure.collapse_stone": {
       "_note": "The existing collapse set, now named by `damage...slots.collapseDust.sound`. `structure.collapse` stays beside it as the catalog-less fallback.",
       "clips": [
-        "sfx-structure-collapse-wood-01",
-        "sfx-structure-collapse-wood-02",
-        "sfx-structure-collapse-wood-03",
-        "sfx-structure-collapse-wood-04"
+        "sfx-structure-collapse-stone-01",
+        "sfx-structure-collapse-stone-02",
+        "sfx-structure-collapse-stone-03",
+        "sfx-structure-collapse-stone-04",
+        "sfx-structure-collapse-stone-05",
+        "sfx-structure-collapse-stone-06"
       ],
       "bus": "sfx",
       "volume": 0.6,
@@ -845,20 +847,16 @@
     "ui.hover": {
       "_note": "One clip, no jitter, and that is a correction rather than the original design. Three variants shipped first, on the reasoning that applies to every other repeated sound in this table - and hover is the one place it is wrong. A player sweeping a row of build cards crosses six buttons in a second, so the variants do not read as variety, they read as six different controls; the ear takes a changing sound as new information about the thing under the pointer. Everywhere else a repeat is spread over seconds and a single clip is what sounds broken. So the axis the sound varies on is *what kind of control it is*, not *which time it is* - see `ui.hover_card`.\n\nThe level stayed at 0.12, and the round trip is worth recording. It was raised to 0.22 on the theory that hover was being masked by the construction bed, because a player reported it going silent after building - and that diagnosis was wrong. The cause was a listener being torn down on the first pointerdown (a mis-landed patch), and the level had nothing to do with it. Put back, because the only evidence anyone has about this number is that 0.12 was audible and nobody complained it was quiet. It is the softest entry in the table on purpose: a hover must not read as the press it precedes.",
       "clips": [
-        "sfx-ui-hover-01",
-        "sfx-ui-hover-02",
-        "sfx-ui-hover-03"
+        "sfx-ui-hover-01"
       ],
       "bus": "ui",
-      "volume": 0.12,
+      "volume": 0.3,
       "cooldownMs": 80,
       "maxInstances": 3
     },
     "ui.panel_open": {
       "clips": [
-        "sfx-ui-panel-open-01",
-        "sfx-ui-panel-open-02",
-        "sfx-ui-panel-open-03"
+        "sfx-ui-panel-open-01"
       ],
       "bus": "ui",
       "volume": 0.28,
@@ -869,9 +867,7 @@
     "ui.panel_close": {
       "_note": "Paired with `ui.panel_open` and mixed level with it. A close quieter than its own open would say the panel had gone away less than it had arrived, and the pause card is the one panel a player closes without looking at it.",
       "clips": [
-        "sfx-ui-panel-close-01",
-        "sfx-ui-panel-close-02",
-        "sfx-ui-panel-close-03"
+        "sfx-ui-panel-close-01"
       ],
       "bus": "ui",
       "volume": 0.28,
@@ -1122,12 +1118,12 @@
       "rolloff": 8
     },
     "ui.hover_card": {
-      "_note": "The other half of the hover split: a picture card rather than a control - the build palette's building and road thumbnails today. Its own clip, so crossing from the HUD into the palette is audibly a change of *kind*, while crossing from one building card to the next is not a change at all. Mixed level with `ui.hover`: neither is more important than the other, they are different places.",
+      "_note": "The other half of the hover split: a picture card rather than a control - the build palette's building and road thumbnails today. Its own clip, so crossing from the HUD into the palette is audibly a change of *kind*, while crossing from one building card to the next is not a change at all.\n\nPurpose-built as of 23 Agustos 2026. It borrowed `sfx-ui-hover-02` until then, and that borrowing was the weak half of the split: the three hover clips were variants of one prompt, so the card sound differed from the control sound the way one take differs from another - which the ear reads as the sound jittering, not as a change of place. The axis has to be *material*, not pitch or level: a control ticks, a card is softer and has a little more body. `sfx-ui-hover-02` and `-03` stay in the manifest as unplayed alternates.",
       "clips": [
-        "sfx-ui-hover-02"
+        "sfx-ui-hover-card-01"
       ],
       "bus": "ui",
-      "volume": 0.12,
+      "volume": 0.3,
       "cooldownMs": 80,
       "maxInstances": 3
     },

@@ -30,6 +30,8 @@ bakılacak altı yer:
 | **Sırada ne var, madde madde** | §69 — kutulu görev listesi |
 | **Hangi ses hangi dosyayla karşılandı** | §81.1 — olay olay üretim kaydı (22 Ağu 2026'da boşaldı) |
 | **Faz 5'te gerçekten ne kaldı** | §82 — üç kovaya ayrılmış; §48–§50'nin kutuları bayat |
+| **Neyin üretilmeyeceği** | §82.11 — kapsam dışı bırakılan kalemler ve gerekçeleri |
+| **Bölgesel ambiyans üretim listesi** | §82.13 |
 | **Ses stili neye kilitlendi** | §47.0 — kalem kalem, referans varlık id'siyle |
 | **Kalite kapıları** | §67 (Gate A–D), §45/§46 (Paket 1 kabulü) |
 
@@ -189,6 +191,7 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-23 | **Rig, bir işaretin ne demek olduğunu değiştirebilir (§82.8).** §82.4'ün zırh ayrımı bir hatayı ortaya çıkardı: `siege_placeholder` `heavy`, yani ağır adım seti indiği gün **top arabası çizme sesi çalmaya başladı** — Siege rig'indeki dört `footstep` işareti tekerlek teması, ve tekerlekli bir top ne yürür ne çizme giyer. Ayrımdan önce de yanlıştı, ama paylaşılan toprak sesinin altında duyulmuyordu. Düzeltme üçüncü bir zırh sınıfı **değil**: `armorClass` "üzerine inen darbe ne kadar acıtır" sorusunu cevaplıyor ve `siege` orada Guard'la dürüstçe aynı sınıfta; farklı olan sesi çıkaran mekanizma, ve o rig'in özelliği. Zırhı genişletmek bir savaş sayısına animasyon sorusu cevaplatırdı. İkinci tablo geldi (`RTS_ROLE_NOTIFY_AUDIO`, rig → işaret → ses) ve iki tür geçersiz kılma taşıyor, çünkü bir rig iki farklı şekilde katılmayabilir: `instead` yerine geçiyor (işaret burada tekerlek demek, adım *ayrıca* çalmamalı), `alongside` üstüne biniyor (gövde gıcırtısının kendi işareti yok, temas işaretlerine biniyor ve kendi `cooldownMs`'i ile seyreliyor). Tek klip ailesi bunu yapamazdı — temas başına bir hız ile birkaç saniyede bir hız aynı sette duramaz; bir işaretin iki olay beslemesinin gerekçesi katman değil **iki ritim**. Geri düşüş §82.4'ünkiyle birebir aynı şekilde, yani kod kliplerden önce indi: bugün top arabası hâlâ ağır adım çalıyor, yanlış ama duyulur. `alongside` bu düşüşü taşımıyor ve taşımamalı — eklemeli bir sesin düşeceği yer yok — ve çözücünün gıcırtıyı asla yerine geçen olarak döndürmediği testte pinlendi, çünkü ikisini karıştırmak gıcırtı indiği gün tekerleği susturur. |
 | 2026-08-23 | **Paket 4 indi: 28 klip, 8 olay (§82.9).** Beşi saf veriydi — kod §82.4/§82.8'den beri bekliyordu — üçü kanca istedi. **Birim kanalında artık starter içeriği yok:** `unit.death` 22 Ağustos'tan beri `starter-snd-impact-light` üzerinde duruyordu ve Faz 5'in son yer tutucusuydu. Üç tavan §82.4'ün açık ucu gereği yeniden ayarlandı (`unit.death` 3→2, `combat.body_impact` 6→4), çünkü her ayrım olay başına tavanı ikiye katlıyor. Kanca isteyen üçünde asıl karar uçuş seslerinin **nereye çakılacağıydı**: bir uçuş sesi fiziksel olarak mermiyle hareket eder ve `AudioPlaybackHandle` çalarken taşınamıyor, yani iki uçtan biri seçilmek zorunda. Varış ucu seçildi — kalkış zaten kendi yerinde cevaplanıyor (`combat.arrow_release`, `siege.cannon_fire`) ve aynı noktaya ikinci bir ses koymak onu birincinin altına gömerdi; varış ucunda ise başka hiçbir şeyin yapmadığı işi yapıyor: *buraya bir şey inecek*, oyuncunun bakması gereken yerde ve inmeden önce. Gülle bunu bütün uçuş süresi kadar önden söylüyor. `siege.shell_impact` hasar sesine eklemeli, iki katman: duvarın çatlağı malzemenin verdiği ses, bu onu veren patlama. Yol boyunca iki küçük şey: yetim-olay testi rig geçersiz kılmalarını tanımıyordu (§82.8 id'leri eklendi), ve `rolloff`'un [0,10] sınırı ilk yazdığım 11'i reddetti — doğrulayıcı çalışıyor. |
 | 2026-08-23 | **Maçtan iki rapor, iki farklı cins hata (§82.10).** *Gülle ıslığı hiç duyulmuyordu* ve şüphe mesafe kapısındaydı; ölçüm başka yeri gösterdi: rapor ile ıslık **aynı karede** başlıyor, rapor 1.00 sn ve 0.5, ıslık 1.00 sn ve 0.22, üstelik ıslık iniş noktasında yani kameradan daha uzakta. Islık bütün uzunluğu boyunca bangın altında. Zamanlama düzeltmesi yok — uçuş 0.45–1.05 sn ve klip 1.00 sn, yani mermi klipten kısa ve var olmayan bir boşluğa geciktirilemez (0.3 sn erteleme onu bu sefer isabet patlamasının altına sokar). Cevap mikste: 0.22 → 0.4, refDistance 30 → 45, rolloff 7 → 4. Gerçekten ayrışmış bir ıslık üretim işi, tablo işi değil. *Dönüşte gıcırtı yoktu* ve bu işaret modelinin kendi kör noktasıydı: yerinde dönüşte temas işareti yok, tekerlekler bir yere gitmiyor. İkinci tetikleyici eklendi ama **eşik paylaşıldı** — mürettebatın strafe'i zaten `turnRateDegPerSecond * 0.25`'i okuyordu, `siegeTurnGateDegPerSecond` dışa açıldı ve gıcırtı aynı fonksiyonu okuyor; iki ayrı sayı olsaydı biri kayar, top ya sessizce döner ya dururken gıcırdardı. Yaw hızı yeniden ölçülmüyor, sunumun ölçtüğü okunuyor — ikinci bir ölçüm sıfır okurdu, çünkü ilk örnekleyici işaretini çoktan ilerletmiş oluyor. |
+| 2026-08-23 | **Dört kapsam kararı ve iki üretim listesi (§82.11–§82.13).** Kullanıcı kalan listeyi okudu: stinger klasörü doğru çıktı — yanlış olan §29'un bayat satırıydı, ve düzeltildiği yazıldı (aynı olguyu iki yerde tutan belge, biri güncellenince *yanlış varlık* raporu üretiyor). Düşman çağ atlaması ayrı klip almayacak: tek `notify.age_up` iki türü de çalacak, çünkü oyuncununkini ayıran şey zaten `stinger.age_up` ve `pitchVariation` sabit kaydırma değil rastgele aralık — aynı sesi verecek iki satır borç olurdu. Tamir kapsam dışı (yapılar kendiliğinden iyileşiyor, kanca asılacak an yok). Yay germe / kalkan / topçu geri tepmesi üretilmeyecek, ve bununla **C kovası tamamen kapandı** — üçü de ikinci katmandı, üç anın da bugün sesi var. Kalan tek serbest işaret `throw-release` ayrıntılandırıldı (§82.12): tüketicisi zaten var ve o ses değil, yani Worker atış ucunda sesi olmayan tek birim. Bölgesel ambiyans listesi haritadan çıkarıldı (§82.13): yedi yer, mono 30–45 sn — harita geneli yatak 170 sn/stereo/10 MB olduğu için aynı ölçü yedi kez 70 MB demekti. |
 
 ---
 
@@ -1355,7 +1358,7 @@ Battle müziği “boss battle” kadar yoğun olmamalıdır.
 | `MUS-003` | `mus_gameplay_expansion_NN.ogg` ✅ ×4 | Genişleme |
 | `MUS-004` | `mus_gameplay_tension_NN.ogg` ✅ ×4 | Tehdit |
 | `MUS-005` | `mus_gameplay_battle_NN.ogg` ✅ ×4 | Savaş |
-| `STG-001` | `stg_age_up_02.ogg` ✅ | Çağ |
+| `STG-001` | `stg_age_up_01.ogg` ✅ | Çağ |
 | `STG-002` | `stg_victory_01.ogg` ✅ | Zafer |
 | `STG-003` | `stg_defeat_01.ogg` ✅ | Yenilgi |
 
@@ -1366,8 +1369,14 @@ zaten shuffle bag olduğu için bedava. Hepsi 120.00 s / 48 kHz stereo, yani
 tabanlı arayüzüyle yapıldı (§30-§34'ün metin promptları Gemini formatında
 kaldı; alanlara çevrimi 22 Ağustos oturumundadır).
 
-`stg_age_up_01.ogg` sevk edildi ama artık hiçbir olay çalmıyor — çağ atlama
-`-02`'ye geçti. `audio:manifest` bunu her koşuda rapor eder.
+**Bir düzeltme (23 Ağustos 2026).** Bu paragraf bir süre "`stg_age_up_01.ogg`
+sevk edildi ama artık hiçbir olay çalmıyor, çağ atlama `-02`'ye geçti" dedi ve
+**tersi doğru**: `-02` aynı gün `-01`'in üzerine yeniden adlandırıldı (§0'ın
+22 Ağustos kaydı), manifest kaydı elle düşürüldü, ve diskte bugün yalnız
+`stg_age_up_01.ogg` var — `stinger.age_up`'ın çaldığı dosya odur. Stinger
+klasöründe üç dosya var, üçü de bağlı, yetim yok. Boşta duran bir ad
+*düzeltilmesi gereken bir varlık* sanıldığı için silinmedi, düzeltildiği
+yazıldı.
 
 ---
 
@@ -2238,8 +2247,9 @@ Varlıklar 22 Ağustos 2026'da üretildi ve girdi; kancaları aynı gün bağlan
 - [ ] Age-up — **klip üretilmedi.** `sfx_notify_age_up_01.ogg` teslim listesinde
       vardı ama klasöre düşmedi; bildirim tier'ına (info) düşüyor ve üstünde
       `stinger.age_up` zaten çalıyor
-- [ ] Enemy age-up — aynı sebep (`sfx_notify_enemy_age_up_01.ogg`); tier'ı
-      (warning) duyuluyor
+- [x] ~~Enemy age-up~~ — **ayrı klip üretilmeyecek** (karar 23 Ağustos 2026,
+      §82.11). Tek klip iki bildirim türünü de karşılar; ayıran şey klip değil,
+      oyuncununkine eşlik eden `stinger.age_up`
 - [x] Regional victory warning
 - [x] Market buy
 - [x] Market sell
@@ -2282,7 +2292,7 @@ Varlıklar 22 Ağustos 2026'da üretildi ve girdi; kancaları aynı gün bağlan
 
 - [ ] footsteps
 - [ ] sword
-- [ ] shield
+- ~~shield~~ ⛔ üretilmeyecek (§82.11)
 - [ ] impacts
 - [ ] death
 - [ ] voice
@@ -2290,7 +2300,7 @@ Varlıklar 22 Ağustos 2026'da üretildi ve girdi; kancaları aynı gün bağlan
 ## Archer
 
 - [ ] footsteps
-- [ ] draw
+- ~~draw~~ ⛔ üretilmeyecek (§82.11)
 - [ ] release
 - [ ] arrow flight
 - [ ] impacts
@@ -2302,7 +2312,7 @@ Varlıklar 22 Ağustos 2026'da üretildi ve girdi; kancaları aynı gün bağlan
 - [ ] wheel
 - [ ] carriage
 - [ ] fire
-- [ ] recoil
+- ~~recoil~~ ⛔ üretilmeyecek (§82.11)
 - [ ] cannonball
 - [ ] stone hit
 - [ ] wood hit
@@ -2320,10 +2330,9 @@ Varlıklar 22 Ağustos 2026'da üretildi ve girdi; kancaları aynı gün bağlan
 - [ ] Age-up stinger
 - [ ] Victory
 - [ ] Defeat
-- [ ] World base ambience
-- [ ] River zone
-- [ ] Forest zone
-- [ ] Settlement zone
+- [x] World base ambience — `amb_world_frontier_day_01`
+- [ ] Bölgesel ambiyans ×7 — liste, şartname ve promptlar §82.13'te
+      (orman, nehir, yerleşim, pazar, taş ocağı, altın madeni, tarla)
 
 ---
 
@@ -3631,20 +3640,29 @@ açılmaz.
 - [x] Yapı/lojistik kancalarının geri kalanı (§82.7): geçersiz yerleştirme,
       yıkım onayı, seviye/çağ atlama başlangıcı, depo ve karakol bağlandı,
       bölge genişledi, ve şantiyenin çekiç/kereste katmanı.
-- [ ] `throw-release` işaretine bir ses
+- [ ] `throw-release` işaretine bir ses — §82.12, tek klip ailesi
 
 **B (varlık):** ~~pazar al/sat + stok dolu (§16)~~ (üretildi, §82.6),
 ~~yıkım onayı (§17)~~ ve ~~yapı seviye atlama / çağ atlama başlangıcı
 (§17 `BLD-007`/`008`)~~ ve ~~depo bağlandı ve bölge genişledi
-(§18 `LOG-003`/`008`)~~ (üretildi, §82.7); tamir (§17), ahşap yapıya top isabeti
-(§22), bildirimlerin tür bazlı sesleri — §82.6'dan sonra **yedisi** kendi sesine
-sahip (nüfus, kaynak, lojistik kesik/geri, karakol, merkez, bölgesel zafer);
-kalan türler hâlâ üç tier'a düşüyor ve çağ atlama ikilisinin klibi henüz yok.
+(§18 `LOG-003`/`008`)~~ (üretildi, §82.7); ~~tamir~~ (§82.11: yapı kendiliğinden
+iyileşiyor, tamir diye bir oyuncu eylemi yok — kapsam dışı), ~~ahşap yapıya top
+isabeti (§22)~~ (`structure.impact_wood` ×4 indi), bildirimlerin tür bazlı
+sesleri — §82.6'dan sonra **yedisi** kendi sesine sahip (nüfus, kaynak, lojistik
+kesik/geri, karakol, merkez, bölgesel zafer); kalan türler hâlâ üç tier'a
+düşüyor ve çağ atlama klibi henüz yok (artık **tek** klip, §82.11).
 
-**C (önce animasyon):** yay germe, kalkan hareketi/bloğu, ~~çekiç~~ (§82.7 bunu
-kovadan çıkardı: klipler geldi ve kanca notify beklemiyor — kadans zamanlayıcının,
-ve **rastgele**, çünkü eşit aralık makine gibi duyulur), topçu
-tekerlek/gövde/geri tepme, ok uçuşu.
+**C (önce animasyon): kova kapatıldı — 23 Ağustos 2026.** İçindekilerin hepsi ya
+başka bir yoldan indi ya da kapsam dışı bırakıldı, ve kova bir bekleme listesi
+olarak durmaya devam etseydi her denetimde yeniden sayılırdı:
+
+- ~~çekiç~~ — §82.7 çıkardı: klipler geldi, kadans zamanlayıcının ve rastgele.
+- ~~topçu tekerlek/gövde~~ — §82.8/§82.9: rig'in `footstep` işaretleri tekerlek
+  diye okundu, gıcırtı üstüne bindi, klipler indi.
+- ~~ok uçuşu~~ — §82.9: varış ucuna çakıldı, işaret gerektirmedi.
+- **⛔ Yay germe, kalkan hareketi/bloğu, topçu geri tepmesi** — üretilmeyecek
+  (karar 23 Ağustos 2026, §82.11). Üçü de authored bir işaret bekliyordu; işaret
+  yazmak animasyon işi, ve o iş bu üç ses için yapılmayacak.
 
 **Ayrıca:** Worker ve Archer VO (§38/§40) — metinler hazır, Guard profili (§47.0)
 referans, kanca `playSelectionAudio` içinde bugün yalnız Guard'ı soruyor.
@@ -4206,3 +4224,210 @@ ilerletmiş oluyor.
 Kendi zamanlayıcısı yok: gıcırtıları aralayan şey olayın `cooldownMs`'i, yuvarlanan
 işaretlerde olduğu gibi. Tekerleğin de tetiklendiği bir karede ikisinden biri
 reddediliyor, ve hangisi olduğu önemli değil — ses zaten aynı ses.
+
+## 82.11 Dört kapsam kararı (23 Ağustos 2026)
+
+Kullanıcı §82.10 sonrası kalan listeyi okudu ve dördünü kapattı. Üçü kapsam
+daraltması, biri bir yanlış anlamanın düzeltilmesi — ve dördü de listeyi
+*kısalttığı* için yazılıyor: kapatılmayan bir madde her denetimde yeniden
+sayılır, ve "neden hâlâ burada" sorusu üçüncü kez sorulduğunda cevabı kimse
+hatırlamaz.
+
+### 1. Stinger klasörü doğru; yanlış olan dokümandı
+
+Soru "`stingers/` içindeki dosyalar yanlış mı adlandırılmış" idi ve soruyu
+doğuran şey §29'un bayat bir satırıydı: `stg_age_up_02.ogg`'nin çaldığını ve
+`-01`'in yetim kaldığını yazıyordu. Diskte üç dosya var — `stg_age_up_01`,
+`stg_victory_01`, `stg_defeat_01` — üçü de manifestte, üçü de bir olayın
+adlandırdığı dosya; yetim yok, yanlış ad yok. Yeniden adlandırma zaten 22
+Ağustos'ta yapılmıştı (§0'ın kaydı); güncellenmemiş olan §29'du ve şimdi
+düzeltildi.
+
+**Buradan çıkan şey dosyalarla ilgili değil.** Aynı olguyu iki yerde tutan bir
+belgede biri düzeltildiğinde diğeri *yanlış varlık* raporu üretiyor — ve o rapor
+bir oturum başlatıyor. §29 gibi envanter tabloları artık üretim kaydı değil;
+hangi dosyanın çaldığının tek doğru kaynağı `events.json` ile manifesttir.
+
+### 2. Düşman çağ atlaması ayrı klip almayacak
+
+`sfx_notify_age_up_01.ogg` ve `sfx_notify_enemy_age_up_01.ogg` iki ayrı teslim
+kalemiydi. **Tek klip üretilecek**, iki bildirim türü de onu çalacak.
+
+Gerekçe kolaylık değil, okunabilirlik: iki haber de aynı cinsten ("bir krallık
+çağ atladı"), ve oyuncununkini ayıran şey zaten var — `stinger.age_up` müzik
+bus'ında, yalnız oyuncunun kendi atlamasında. Yani bildirim klibi *olayı*
+söylüyor, stinger *kimin olduğunu*. İki ayrı klip aynı ayrımı ikinci kez, ve daha
+zayıf bir kanalda yapmaya çalışırdı.
+
+Tablo bunu iki olayla değil **tek olayla** taşıyacak (`notify.age_up`), çünkü
+şema bir olayı klibinden ayırıyor ama iki olayın aynı klibi çalması onları
+duyulur biçimde ayırmıyor: `pitchVariation` rastgele bir aralık, sabit bir
+kaydırma değil. Aynı sesi verecek iki satır, ileride "bunlar neden ayrı" diye
+sorulacak bir borç olurdu.
+
+**İnecek şey, klip geldiğinde:** `events.json`'a bir `notify.age_up` girdisi ve
+`RTS_NOTIFICATION_KIND_AUDIO_EVENTS`'e iki satır (`age-upgraded` ve
+`enemy-age-upgraded`, ikisi de aynı olayı adlandırıyor). Tablo boş `clips`
+dizisini reddettiği için sıra tersine çevrilemez — klip önce iner.
+
+### 3. Tamir sesi kapsam dışı
+
+§82.3'ün B kovasında "tamir (§17)" duruyordu. Oyunda tamir diye bir oyuncu eylemi
+yok: yapılar kendiliğinden iyileşiyor. Ses üretmek şöyle dursun, kanca asılacak
+bir an bile yok — ve kendiliğinden ilerleyen bir onarıma ses koymak §16'nın
+kaynak tick'i için verdiği kararla aynı sebeple yanlış olurdu.
+
+### 4. Yay germe, kalkan hareketi/bloğu, topçu geri tepmesi üretilmeyecek
+
+C kovasının kalan üç maddesi. Hepsi authored bir animasyon işareti bekliyordu ve
+o işaretleri yazmak animasyon işi; o iş bu üç ses için yapılmayacak. Kova böylece
+tamamen kapandı (§82.3).
+
+Kaybedilen şey kayda değer ve küçük: üçü de **ikinci bir katman** olurdu, birinci
+katmanı olmayan bir an değil. Yay germe `combat.arrow_release`'in hemen öncesi,
+kalkan bloğu `combat.body_impact`'in üstü, geri tepme `siege.cannon_fire`'ın
+kuyruğu. Üç anın da bugün bir sesi var; olmayacak olan detay.
+
+## 82.12 `throw-release` — kalan tek serbest işaret (detay)
+
+§82.1 bunu "ücretsiz bir kanal" diye geçmişti. C kovası kapandığına göre
+kapatılabilir tek işaret-tabanlı madde bu; ayrıntısı burada.
+
+### İşaret nerede ve ne zaman atıyor
+
+`public/assets/ThreeAges/Characters/Worker/worker.skeleton.json`, tek bir
+`notify`: `OverhandThrow` klibinde **t = 0.41 s**. Aynı adla bir de soket
+authored (`RightHand`) — kolun tam uzandığı, taşın eli terk ettiği an.
+
+### Bu işaretin **zaten** bir tüketicisi var, ve o ses değil
+
+Diğer beş işaretten ayıran şey bu. `playUnitNotify` içinde, efekt bütçesinden
+**önce** çalışan bir satır var:
+
+```ts
+if (name === RTS_THROW_RELEASE_NOTIFY) this.releasePendingThrow(unit);
+```
+
+Sebep `launchShot`'ta yazılı: Worker'ın menzilli saldırısında taş, atışın
+çözüldüğü karede değil kolun uzandığı karede havalanıyor — yoksa el hâlâ başın
+arkasındayken taş yola çıkmış oluyordu. Yani işaret bugün *fiziksel olarak* doğru
+anı zaten işaretliyor ve o an oyunda doğrulanmış durumda. Sese eklenmesi yeni bir
+zamanlama sorusu açmıyor; §82.2'nin ölüm klibinde uğraştığı "vuruş kliptedir"
+problemi burada yok.
+
+### Bugün duyulan ve duyulmayan
+
+| Uç | Bugün |
+|---|---|
+| Atışın kendisi (kol, taşın eli terk etmesi) | **sessiz** |
+| Uçuş | sessiz — ve kalması doğru: menzil 6 birim, ve §82.9 uçuş sesini varış ucuna çakmıştı; 6 birimde varış ucu zaten atış ucudur |
+| İsabet | duyuluyor — hedefin `React_*` klibindeki `body-impact` → `combat.body_impact` |
+
+Yani Worker, **atış ucunda sesi olmayan tek birim**: Guard'ın savurması
+`combat.sword_swing`, Archer'ın bırakışı `combat.arrow_release`, topçunun atışı
+`siege.cannon_fire`. Worker kendini savunurken (menzil 6, hasar 5, 2 sn cooldown)
+sessizce taş atıyor. Aynı rig'in yakın dövüşü (`Punch_Jab`) da sessiz, ama onun
+işareti hiç yok — kapatılabilir olan bu.
+
+### Ne üretilecek
+
+`SFX-WRK-007` — `sfx/units/sfx_worker_throw_NN.ogg`, **üç varyant**.
+
+```text
+Create a short medieval RTS sound of a labourer hurling a rock in self-defence, heard from a mid-distance strategy camera.
+
+A brief cloth and leather effort as the arm comes over, then the stone leaving the hand with a light gritty release and a short air movement that fades immediately.
+
+Duration around 0.35 to 0.5 seconds.
+
+Improvised and physical - a working man throwing a stone, not a trained soldier swinging a weapon. Lighter and drier than a sword swing.
+
+No voice, no grunt, no whistle, no impact at the end, no music, no reverb tail.
+```
+
+**Neden klibin sonunda isabet yok:** isabeti hedefin kendi işareti veriyor ve 6
+birimlik menzilde ikisi neredeyse aynı anda çalıyor — klibe gömülmüş bir vuruş o
+an çift darbe olarak duyulur.
+
+**Neden efor sesi yok:** §37'nin Worker VO'su zaten var ve bu kanal onun değil.
+Üstelik işaret 2 saniyede bir tekrarlıyor; içindeki insan sesi üçüncü atışta aynı
+adamın aynı nefesi olur.
+
+### İnecek şey — kod değişikliği yok denecek kadar az
+
+`events.json`'a bir `combat.throw_release` girdisi (`combat.sword_swing`'in
+komşusu, aynı bus ve mesafe ailesi) ve `RTS_NOTIFY_AUDIO_EVENTS`'e tek satır:
+
+```ts
+"throw-release": "combat.throw_release",
+```
+
+Varyant ayrımı gerekmez: işaret yalnız Worker rig'inde authored (§82.4'ün tablosu
+bunu zaten söylüyor), yani `armorClass` ekseni burada boş bir ayrım olurdu.
+
+## 82.13 Bölgesel ambiyans — üretim listesi (§26 / §51)
+
+§26 bunu "ikinci faz" diye bırakmıştı ve listesi haritadan değil genel bir RTS
+tahmininden geliyordu. Aşağısı **bu haritada gerçekten olan yerlerin** listesi:
+her satırın karşılığı `rts-content.json`'da bir bina ya da
+`balance/trade-sites.json`'da bir ticaret sahası.
+
+### Ortak şartname
+
+| Alan | Değer | Sebep |
+|---|---|---|
+| Önek / klasör | `amb_zone_*.ogg` → `public/assets/audio/ambience/` | §6, §7 |
+| Kanal | **mono** | Konumlu çalacaklar; Web Audio'da pan yalnız mono kaynakta doğru (§8.3) |
+| Örnekleme | 48 kHz | Sevk edilen her varlıkla aynı |
+| Süre | **30–45 sn**, dikişsiz loop | `amb_world_frontier_day_01` 170 sn / stereo / 10 MB — o bir *harita geneli* yatak ve tek tane. Yedi konumlu yatak aynı boyda olursa 70 MB'lık bir ses bütçesi demek (§61). Mono 40 sn ≈ 0.6 MB. |
+| Seviye | Yatak, olay değil | `world.ambience`'ın altında oturmalı; yaklaşınca *fark edilmeli*, dinlenmemeli |
+| Varyant | **1** | Hepsi loop; §82.7'nin kuralı — bir yatak tek klip, bir olay havuz |
+
+§25'in kaçınılacaklar listesi hepsi için geçerli: belirgin 5–10 saniyelik tekrar
+yok, her loop'ta aynı büyük olay yok, tonal drone yok, sürekli insan konuşması
+yok.
+
+### Liste
+
+| # | Dosya | Yer (oyundaki karşılığı) | İçerik |
+|---|---|---|---|
+| 1 | `amb_zone_forest_01.ogg` | Ağaç kümeleri, `lumber_camp`, `timber_camp` ticaret sahası | Yaprak hışırtısı, seyrek dal, orman kuşları (yakın değil), hafif gövde gıcırtısı |
+| 2 | `amb_zone_river_01.ogg` | Nehir ve `river_port` ticaret sahası | Yumuşak akan su, kıyı çakılında hafif hareket, seyrek su kuşu |
+| 3 | `amb_zone_settlement_01.ogg` | `command_center` + `house` kümesi | Uzak çalışma, seyrek çekiç, tahta/kapı, çok uzak insan uğultusu (kelime yok) |
+| 4 | `amb_zone_market_01.ogg` | `market` | Çok düşük insan uğultusu, hafif tahta sandık ve terazi, seyrek madeni para |
+| 5 | `amb_zone_quarry_01.ogg` | `quarry`, `stone_pit` ticaret sahası | Seyrek metal-taş vuruş, moloz kayması, taş tozu hissi |
+| 6 | `amb_zone_goldmine_01.ogg` | `gold_mine` | Kapalı/oyuk akustik, seyrek kazma, uzak damla |
+| 7 | `amb_zone_farmland_01.ogg` | `farm`, `windmill`, `pasture` | Rüzgârda ekin, uzak hayvan (seyrek), değirmen ahşabının yavaş gıcırtısı |
+
+**§26'nın köprü satırı listeye alınmadı:** bu haritada köprü varlığı yok — kodda
+geçen "bridge" yalnız yol grafiğinin terimi. Bir köprü authored edildiği gün
+eklenir.
+
+### Kanca henüz yok — ve klipler önce inebilir
+
+Bugün konuma göre ambiyans çalan bir sistem yok; `world.ambience` tek, harita
+geneli, ve `RtsApp` onu bir kez başlatıyor. Yani bu yedi klip §82.1'in tanımıyla
+**B kovası**: varlık *ve* kanca. Sıra yine ters kurulabilir ve kurulmalı — klipler
+manifestte dururken kanca yazmak, kancayı duyarak ayarlamak demek. Kancanın şekli
+belli: `structure.fire_loop` zaten konumlu, `loop: true`, `maxInstances: 1` bir
+yatak ve olay id'siyle durdurulabiliyor; bölge yatağı aynı desen, tetikleyicisi
+kamera mesafesi.
+
+### Prompt şablonu
+
+Her satır için §13.2'nin loop şablonuna şu çekirdek geçirilir:
+
+```text
+Create a seamless looping ambience bed for one location in a grounded medieval frontier real-time strategy game, heard as the camera moves near that place.
+
+Location: <yukarıdaki satırın "Yer" sütunu>.
+Content: <"İçerik" sütunu>.
+
+Duration around 40 seconds, seamless loop, mono.
+
+It must sit under a map-wide outdoor ambience and under gameplay sound effects: noticeable when the camera arrives, never the thing the player is listening to.
+
+Keep every element sparse and irregular so no single element repeats on an audible cycle.
+
+No music, no tonal drone, no melody, no close continuous birdsong, no intelligible speech, no cinematic swell, no reverb tail at the loop point.
+```
