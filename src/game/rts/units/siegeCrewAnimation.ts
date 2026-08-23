@@ -181,6 +181,19 @@ export const SIEGE_CREW_NONE: SiegeCrewState = {
 const STRAFE_YAW_FRACTION = 0.25;
 
 /**
+ * How fast the gun has to be swinging before the turn counts as a turn.
+ *
+ * Exported so the crew's strafe and anything else that answers a turn read the
+ * same threshold off the same number. The carriage's creak is the second
+ * caller: it has no marker of its own during a turn-in-place — the wheels are
+ * not travelling, so no contact mark fires — and a groan that disagreed with
+ * the pose would be the visual and the sound reporting different events.
+ */
+export function siegeTurnGateDegPerSecond(turnRateDegPerSecond: number): number {
+  return turnRateDegPerSecond * STRAFE_YAW_FRACTION;
+}
+
+/**
  * How long the push's wind-up and wind-down run, in seconds.
  *
  * The wind-up comes from the authored montage section, the wind-down from the
@@ -256,7 +269,7 @@ function advanceLocomotion(
       : { locomotion: "idle", locomotionRemainingSeconds: 0 };
   }
 
-  const turnGate = input.turnRateDegPerSecond * STRAFE_YAW_FRACTION;
+  const turnGate = siegeTurnGateDegPerSecond(input.turnRateDegPerSecond);
   if (turnGate > 0 && Math.abs(input.yawRateDegPerSecond) > turnGate) {
     // K-06, and it is inverted on purpose: the crew shoves the trail *left* to
     // swing the muzzle *right*. It reads backwards from the code and correctly on

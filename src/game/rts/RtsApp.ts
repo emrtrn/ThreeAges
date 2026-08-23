@@ -84,10 +84,11 @@ import {
   type RtsActorLoadReport,
 } from "./content/rtsActorVisualFactory";
 import { RTS_THROW_RELEASE_NOTIFY, RtsNotifyEffectBudget, rtsNotifyEffectIds } from "./content/rtsNotifyEffects";
+import { siegeTurnGateDegPerSecond } from "./units/siegeCrewAnimation";
 import { RTS_AUDIO, rtsNotifyAudioEvent, rtsNotificationAudioEvent,
   RTS_MUSIC_STATE_EVENTS, RTS_NOTIFY_AUDIO_EVENTS, resolveRtsAudioVariant,
   rtsResourceProductionAudioEvent,
-  rtsRoleNotifyAudio, resolveRtsRoleNotifyEvent,
+  rtsRoleNotifyAudio, resolveRtsRoleNotifyEvent, RTS_SIEGE_CARRIAGE_CREAK,
   type RtsAudioVariant,
 } from "./audio/rtsAudioEvents";
 import { loadAudioEventTableWithStates } from "../data/gameDataLoader";
@@ -3399,6 +3400,7 @@ export class RtsApp {
       this.cameraController.camera.quaternion,
       this.cameraController.camera.position,
     );
+    this.updateSiegeTurnAudio();
     this.perfMeasure("birim sunumu", unitViewMark);
     // Rendered delta, like the units': a grazing animal should look the same at
     // any game speed. Distance throttling is left to the presentation itself.
@@ -4735,6 +4737,44 @@ export class RtsApp {
    * than when the order is given — the placement chirp already covers that
    * moment.
    */
+  /**
+   * The carriage groaning while the gun swings on the spot.
+   *
+   * The gap this closes was reported from a match and is real: the creak rides
+   * the Siege rig's contact marks (§82.8), and a turn-in-place fires none — the
+   * wheels are not travelling anywhere. So the gun visibly heaved around over a
+   * second or so in silence, which reads as the animation and the sound
+   * disagreeing about whether anything happened.
+   *
+   * The threshold is the crew strafe's own (`siegeTurnGateDegPerSecond`) rather
+   * than a number chosen here, so the groan and the pose answer the same signal:
+   * if the crew is shown shoving the trail around, the carriage is heard, and
+   * neither can drift from the other. The rate itself is the one the
+   * presentation already measured this frame; measuring it again here would
+   * read zero, since that sampler has already moved its own mark.
+   *
+   * No timer of its own: the event's `cooldownMs` is what spaces the groans,
+   * exactly as it does on the rolling marks. That is also why this may fire on
+   * a frame the wheels also fired — one of the two is refused, and which one
+   * does not matter, because it is the same sound either way.
+   *
+   * Runs after the presentation pass and skips entirely when the project ships
+   * no creak, so a fork without artillery audio pays nothing for it.
+   */
+  private updateSiegeTurnAudio(): void {
+    if (!this.audioTableAnswers(RTS_SIEGE_CARRIAGE_CREAK)) return;
+    for (const unit of this.units.all()) {
+      // Cheapest test first: this walks every unit on the map every frame, and
+      // all but the guns leave on this line.
+      if (unit.role !== "siege" || unit.dying) continue;
+      // Optional in balance data, and a gun that never authored a turn rate has
+      // no threshold to cross — the crew strafe sits out for the same reason.
+      const gate = siegeTurnGateDegPerSecond(unit.stats.turnRateDegPerSecond ?? 0);
+      if (gate <= 0 || Math.abs(unit.yawRateDegPerSecond) <= gate) continue;
+      this.playUnitAudio(unit, RTS_SIEGE_CARRIAGE_CREAK);
+    }
+  }
+
   private updateBuildLoopAudio(): void {
     const site = this.buildLoopAudioSite();
     // The overwhelmingly common case, both when a build is running and when none

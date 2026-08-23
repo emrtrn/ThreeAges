@@ -188,6 +188,7 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-23 | **`unit.footstep_heavy` sevk edildi — §82.4'ün ayrımı ilk kez gerçekten duyuluyor.** Dört klip girdi, olay tabloya eklendi, kodda tek satır değişmedi: `RTS_AUDIO_SPLIT` bu varyantı zaten bekliyordu ve `resolveRtsAudioVariant` tablo cevap verdiği an ona geçiyor — §81.4'ün "klip inince kod değişmez" sözü sınandı ve tuttu. Yeni olayın **her sayısı light'ınkiyle aynı**, bilerek: kablolama tek olay dört rig'e hizmet ederken ayarlanmıştı ve doğruydu, o yüzden bir işçinin adımıyla bir muhafızınki arasında farklı olması gereken tek şey kayıt. İkisini burada da ayırmak, oyuncunun duyduğu her değişikliğin kaynağını belirsiz bırakırdı. Tek istisna zorunluydu: `maxInstances` olay başına, yani ayrım tek başına haritanın eşzamanlı adım tavanını 4'ten 8'e çıkarıyordu — §82.4'ün yazdığı açık uç. İkisi de 3'e çekildi (toplam 6, authored tavana yakın, ve iki sınıftan biri yürürken hâlâ iki adamdan fazlası duyuluyor). Kalan iki paylaşılan olay: `combat.body_impact_*` ve `unit.death_*`. |
 | 2026-08-23 | **Rig, bir işaretin ne demek olduğunu değiştirebilir (§82.8).** §82.4'ün zırh ayrımı bir hatayı ortaya çıkardı: `siege_placeholder` `heavy`, yani ağır adım seti indiği gün **top arabası çizme sesi çalmaya başladı** — Siege rig'indeki dört `footstep` işareti tekerlek teması, ve tekerlekli bir top ne yürür ne çizme giyer. Ayrımdan önce de yanlıştı, ama paylaşılan toprak sesinin altında duyulmuyordu. Düzeltme üçüncü bir zırh sınıfı **değil**: `armorClass` "üzerine inen darbe ne kadar acıtır" sorusunu cevaplıyor ve `siege` orada Guard'la dürüstçe aynı sınıfta; farklı olan sesi çıkaran mekanizma, ve o rig'in özelliği. Zırhı genişletmek bir savaş sayısına animasyon sorusu cevaplatırdı. İkinci tablo geldi (`RTS_ROLE_NOTIFY_AUDIO`, rig → işaret → ses) ve iki tür geçersiz kılma taşıyor, çünkü bir rig iki farklı şekilde katılmayabilir: `instead` yerine geçiyor (işaret burada tekerlek demek, adım *ayrıca* çalmamalı), `alongside` üstüne biniyor (gövde gıcırtısının kendi işareti yok, temas işaretlerine biniyor ve kendi `cooldownMs`'i ile seyreliyor). Tek klip ailesi bunu yapamazdı — temas başına bir hız ile birkaç saniyede bir hız aynı sette duramaz; bir işaretin iki olay beslemesinin gerekçesi katman değil **iki ritim**. Geri düşüş §82.4'ünkiyle birebir aynı şekilde, yani kod kliplerden önce indi: bugün top arabası hâlâ ağır adım çalıyor, yanlış ama duyulur. `alongside` bu düşüşü taşımıyor ve taşımamalı — eklemeli bir sesin düşeceği yer yok — ve çözücünün gıcırtıyı asla yerine geçen olarak döndürmediği testte pinlendi, çünkü ikisini karıştırmak gıcırtı indiği gün tekerleği susturur. |
 | 2026-08-23 | **Paket 4 indi: 28 klip, 8 olay (§82.9).** Beşi saf veriydi — kod §82.4/§82.8'den beri bekliyordu — üçü kanca istedi. **Birim kanalında artık starter içeriği yok:** `unit.death` 22 Ağustos'tan beri `starter-snd-impact-light` üzerinde duruyordu ve Faz 5'in son yer tutucusuydu. Üç tavan §82.4'ün açık ucu gereği yeniden ayarlandı (`unit.death` 3→2, `combat.body_impact` 6→4), çünkü her ayrım olay başına tavanı ikiye katlıyor. Kanca isteyen üçünde asıl karar uçuş seslerinin **nereye çakılacağıydı**: bir uçuş sesi fiziksel olarak mermiyle hareket eder ve `AudioPlaybackHandle` çalarken taşınamıyor, yani iki uçtan biri seçilmek zorunda. Varış ucu seçildi — kalkış zaten kendi yerinde cevaplanıyor (`combat.arrow_release`, `siege.cannon_fire`) ve aynı noktaya ikinci bir ses koymak onu birincinin altına gömerdi; varış ucunda ise başka hiçbir şeyin yapmadığı işi yapıyor: *buraya bir şey inecek*, oyuncunun bakması gereken yerde ve inmeden önce. Gülle bunu bütün uçuş süresi kadar önden söylüyor. `siege.shell_impact` hasar sesine eklemeli, iki katman: duvarın çatlağı malzemenin verdiği ses, bu onu veren patlama. Yol boyunca iki küçük şey: yetim-olay testi rig geçersiz kılmalarını tanımıyordu (§82.8 id'leri eklendi), ve `rolloff`'un [0,10] sınırı ilk yazdığım 11'i reddetti — doğrulayıcı çalışıyor. |
+| 2026-08-23 | **Maçtan iki rapor, iki farklı cins hata (§82.10).** *Gülle ıslığı hiç duyulmuyordu* ve şüphe mesafe kapısındaydı; ölçüm başka yeri gösterdi: rapor ile ıslık **aynı karede** başlıyor, rapor 1.00 sn ve 0.5, ıslık 1.00 sn ve 0.22, üstelik ıslık iniş noktasında yani kameradan daha uzakta. Islık bütün uzunluğu boyunca bangın altında. Zamanlama düzeltmesi yok — uçuş 0.45–1.05 sn ve klip 1.00 sn, yani mermi klipten kısa ve var olmayan bir boşluğa geciktirilemez (0.3 sn erteleme onu bu sefer isabet patlamasının altına sokar). Cevap mikste: 0.22 → 0.4, refDistance 30 → 45, rolloff 7 → 4. Gerçekten ayrışmış bir ıslık üretim işi, tablo işi değil. *Dönüşte gıcırtı yoktu* ve bu işaret modelinin kendi kör noktasıydı: yerinde dönüşte temas işareti yok, tekerlekler bir yere gitmiyor. İkinci tetikleyici eklendi ama **eşik paylaşıldı** — mürettebatın strafe'i zaten `turnRateDegPerSecond * 0.25`'i okuyordu, `siegeTurnGateDegPerSecond` dışa açıldı ve gıcırtı aynı fonksiyonu okuyor; iki ayrı sayı olsaydı biri kayar, top ya sessizce döner ya dururken gıcırdardı. Yaw hızı yeniden ölçülmüyor, sunumun ölçtüğü okunuyor — ikinci bir ölçüm sıfır okurdu, çünkü ilk örnekleyici işaretini çoktan ilerletmiş oluyor. |
 
 ---
 
@@ -4154,3 +4155,54 @@ vurulduğunu söyleyen malzeme çatlağı.
 
 Klipler yere göre adlandırılmış (`sfx_artillery_ground_impact_*`) ama olay
 mermiye göre: aynı olay duvarda da çalıyor.
+
+## 82.10 Maçtan gelen iki rapor — ıslık ve dönüş (23 Ağustos 2026)
+
+Kullanıcı §82.9'u oynadı ve iki şey bildirdi. İkisi de gerçekti, ve ikisi de
+farklı cinsten hata.
+
+### 1. Gülle ıslığı hiç duyulmuyor — ve sebebi tahmin değil ölçüm
+
+Okun uçuşu kısık olmasına rağmen duyuluyordu, gülleninki hiç. Şüphe önce mesafe
+kapısındaydı; ölçüm başka yeri gösterdi:
+
+| | süre | volume |
+|---|---|---|
+| `siege.cannon_fire` | 1.00 s | 0.5 |
+| `siege.cannonball_flight` | 1.00 s | 0.22 |
+| uçuş süresi | 0.45–1.05 s (`distance / 19`, kırpılmış) | — |
+
+Rapor ıslıkla **aynı karede** başlıyor, tam bir saniye sürüyor, iki kat gürültülü,
+ve kameraya daha yakın (ıslık iniş noktasında). Yani ıslık bütün uzunluğu boyunca
+bangın altında kalıyor.
+
+**Zamanlama düzeltmesi yok.** Uçuşu klipten kısa olan bir mermi, var olmayan bir
+boşluğa geciktirilemez — 0.3 sn ertelemek ıslığı bu sefer isabet patlamasının
+altına sokardı. O yüzden cevap mikste: `volume` 0.22 → 0.4, `refDistance`
+30 → 45, `rolloff` 7 → 4. Düz rolloff onu uzak uçta ayakta tutan şey, o yüzden
+fazla gelirse çekilecek olan `volume`.
+
+Gerçekten ayrışmış bir ıslık istiyorsak bu bir **üretim** değişikliği: ya daha
+kısa ve vurgulu bir ıslık, ya daha kısa bir rapor. Tablo bunu çözemez.
+
+### 2. Dönüşte gıcırtı yok — işaret modelinin kendi kör noktası
+
+§82.8 gıcırtıyı temas işaretlerine bindirmişti, ve yerinde dönüşte hiç temas
+işareti yok: tekerlekler bir yere gitmiyor. Top gözle görülür şekilde bir saniye
+boyunca sessizce dönüyordu — görüntüyle sesin olayın olup olmadığı konusunda
+anlaşamaması.
+
+Kanca ikinci bir tetikleyici aldı, ama **eşik paylaşılıyor**: mürettebatın strafe
+animasyonu zaten `turnRateDegPerSecond * 0.25`'i geçince oynuyor, ve gıcırtı artık
+aynı fonksiyonu okuyor (`siegeTurnGateDegPerSecond`, dışa açıldı). İki ayrı sayı
+olsaydı sonunda biri kayardı: ya top sessizce dönerdi ya da dururken gıcırdardı.
+Testte pinlenen de bu — büyüklük değil, eşiğin dönüş hızının **içinde** olduğu ve
+pozun hâlâ tam o sayıyı cevapladığı.
+
+Yaw hızı yeniden ölçülmüyor; sunumun bu kare zaten ölçtüğü değer okunuyor. İkinci
+bir ölçüm sıfır okurdu, çünkü ilk örnekleyici karşılaştırdığı işareti çoktan
+ilerletmiş oluyor.
+
+Kendi zamanlayıcısı yok: gıcırtıları aralayan şey olayın `cooldownMs`'i, yuvarlanan
+işaretlerde olduğu gibi. Tekerleğin de tetiklendiği bir karede ikisinden biri
+reddediliyor, ve hangisi olduğu önemli değil — ses zaten aynı ses.

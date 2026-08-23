@@ -181,6 +181,11 @@ export class DataTableEditor {
     }
   }
 
+  /** True when the def buckets entries under collapsible channel headings. */
+  private get isCategorised(): boolean {
+    return (this.options.def.entryCategories?.length ?? 0) > 0;
+  }
+
   private renderEntries(): void {
     this.bodyEl.replaceChildren();
     const categories = this.options.def.entryCategories;
@@ -200,8 +205,8 @@ export class DataTableEditor {
    *
    * Shut by default, which is the whole point: a categorised table opens as one
    * line per channel instead of a wall of expanded forms. The entries inside
-   * keep their own `open` default, so opening a heading shows its rows ready to
-   * edit rather than a second row of things to click.
+   * start shut too (see {@link buildEntrySection}), so opening a heading lists
+   * its rows rather than unrolling every form in the channel at once.
    */
   private buildCategorySection(bucket: EntryCategoryBucket): HTMLDetailsElement {
     const section = document.createElement("details");
@@ -236,7 +241,11 @@ export class DataTableEditor {
     const section = document.createElement("details");
     section.className = "dte-entry";
     section.dataset.entryId = entryId;
-    section.open = true;
+    // A categorised table (the audio events one) nests entries under channel
+    // headings, so both levels start shut: the table opens as a list of
+    // channels, not as every form in the file. A flat table has nothing above
+    // the entry, so shutting these there would open to titles and no content.
+    section.open = !this.isCategorised;
 
     const summary = document.createElement("summary");
     summary.className = "dte-entry-title";

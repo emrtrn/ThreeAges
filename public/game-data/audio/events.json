@@ -235,23 +235,22 @@
       "rolloff": 5
     },
     "siege.cannonball_flight": {
-      "_note": "The incoming whistle, at the point the ball is going to land. Fired on the frame the shot leaves, so it leads the arrival by the shell's whole flight time - which is the point: it says *something is about to land here* while the player can still look. Carries further than the arrow's whizz and is louder for its channel, because a shell overhead is the loudest warning in the game short of the gun itself. Pinned to the landing rather than travelling with the ball for the engine reason the arrow's note gives.",
+      "_note": "The incoming whistle, at the point the ball is going to land. Fired on the frame the shot leaves, so it leads the arrival by the shell's flight time. It was inaudible on the first pass and the reason was measured rather than guessed: the report is a full second long at volume 0.5 and starts on the same frame, the flight lasts 0.45-1.05s (distance/19, clamped), and this clip is 1.0s - so the whistle plays its entire length underneath the bang, further from the camera than the bang is. There is no scheduling fix available for that: a shell whose flight is shorter than the clip cannot be delayed into a gap that does not exist. So the answer is the mix. It is loud for its channel and its rolloff is flat, which is what lets it survive a gun firing at the top of the same second; refDistance is wide on purpose, because a warning that fades before the player can act on it is not a warning. If it ever reads as louder than the gun that fired it, `volume` is the number to pull - not `rolloff`, which is what is holding it up at the far end. A genuinely separated whistle would need a shorter, punchier clip or a shorter report, and that is a production change rather than a table one.",
       "clips": [
         "sfx-artillery-cannonball-flight-01",
         "sfx-artillery-cannonball-flight-02",
         "sfx-artillery-cannonball-flight-03",
-        "sfx-artillery-cannonball-flight-04",
-        "sfx-artillery-cannonball-flight-05"
+        "sfx-artillery-cannonball-flight-04"
       ],
       "bus": "sfx",
-      "volume": 0.22,
+      "volume": 0.5,
       "pitchVariation": 0.05,
       "cooldownMs": 110,
       "maxInstances": 3,
       "spatial": true,
-      "refDistance": 30,
-      "maxDistance": 100,
-      "rolloff": 7
+      "refDistance": 45,
+      "maxDistance": 110,
+      "rolloff": 4
     },
     "siege.shell_impact": {
       "_note": "The blast where the ball arrives - earth, dust and debris. Additive to whatever the blow itself plays: a wall's `structure.impact_stone` is the masonry giving way, this is the shell that did it, and they are two layers of one moment rather than two answers to it. If the pair reads as one muddy thud in a match, this is the half to pull down - the material crack is what tells the player *what* was hit. Named for the shell rather than for the ground the clips were produced against, because the same event fires on a wall.",

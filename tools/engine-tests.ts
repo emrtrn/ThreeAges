@@ -235,6 +235,7 @@ import {
   SIEGE_CREW_PUSH_ENTER_SECTION,
   SIEGE_CREW_PUSH_INSTANT,
   SIEGE_CREW_PUSH_MONTAGE_NAME,
+  siegeTurnGateDegPerSecond,
   type SiegeCrewDurations,
   type SiegeCrewInput,
   type SiegeCrewPushSections,
@@ -39869,6 +39870,32 @@ check("Siege crew Faz 1: locomotion reads the gun's measured travel and turn, ne
   // Turning while rolling is a manoeuvre, not a side-step: push wins.
   const rollingTurn = runSiegeCrew(SIEGE_CREW_NONE, siegeCrewInput({ planarSpeed: 3.8, yawRateDegPerSecond: -60 }), 2);
   assert.equal(rollingTurn.locomotion, "pushLoop", "a gun that turns while it rolls is still being pushed");
+
+  // The deadband is exported now, because the carriage's creak has to answer the
+  // same turn the crew answers: a turn-in-place fires no contact mark, so the
+  // groan is triggered off this threshold instead, and two separate numbers
+  // would eventually let the gun heave in silence or groan while standing still.
+  // Pinned as a relationship, not a magnitude — a gate is somewhere strictly
+  // inside the rate it gates — so retuning the fraction stays green.
+  const authoredTurnRate = 70;
+  const gate = siegeTurnGateDegPerSecond(authoredTurnRate);
+  assert.ok(
+    gate > 0 && gate < authoredTurnRate,
+    "the deadband sits part-way into the authored turn rate",
+  );
+  assert.equal(siegeTurnGateDegPerSecond(0), 0, "a gun with no authored turn rate has no deadband");
+  // And the pose still answers that exact number, which is what stops the
+  // extracted gate from drifting away from the branch it came out of.
+  assert.equal(
+    runSiegeCrew(SIEGE_CREW_NONE, siegeCrewInput({ yawRateDegPerSecond: gate * 0.9 }), 0.2).locomotion,
+    "idle",
+    "inside the shared gate the crew stands still",
+  );
+  assert.equal(
+    runSiegeCrew(SIEGE_CREW_NONE, siegeCrewInput({ yawRateDegPerSecond: gate * 1.1 }), 0.2).locomotion,
+    "strafeRight",
+    "outside it the crew side-steps, and the creak is triggered on the same crossing",
+  );
 });
 
 check("Siege crew Faz 1: an unauthored push montage degrades to the plain gait", () => {

@@ -396,6 +396,8 @@ export class Unit {
   private readonly lastPresentationPosition = new Vector3();
   /** Which way it faced at that frame; see `measureYawRate`. Presentation-local memory. */
   private lastPresentationYaw = 0;
+  /** Cache of the last measured yaw rate — see {@link yawRateDegPerSecond}. */
+  private lastYawRate = 0;
   /** Reused local motion sample; presentation measurement allocates nothing per frame. */
   private readonly presentationLocalVelocity = new Vector3();
   private fallbackBody: Mesh | null = null;
@@ -776,7 +778,21 @@ export class Unit {
     if (deltaSeconds <= 0) return 0;
     let delta = yaw - previous;
     delta -= Math.PI * 2 * Math.floor((delta + Math.PI) / (Math.PI * 2));
-    return delta * (180 / Math.PI) / deltaSeconds;
+    this.lastYawRate = delta * (180 / Math.PI) / deltaSeconds;
+    return this.lastYawRate;
+  }
+
+  /**
+   * The last rate {@link measureYawRate} observed, in degrees/s.
+   *
+   * Kept so a consumer outside the presentation can answer "is this thing
+   * turning right now" without measuring the yaw a second time — a second
+   * sampler would read a delta of zero, because the first one already moved the
+   * mark it measures against. Presentation-derived and presentation-only, like
+   * the value it caches; nothing in movement, combat or death may read it.
+   */
+  get yawRateDegPerSecond(): number {
+    return this.lastYawRate;
   }
 
   /**
