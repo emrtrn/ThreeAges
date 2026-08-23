@@ -991,11 +991,86 @@ body.rts-route {
  * matter what the artist put behind it. */
 .rts-main-menu .rts-main-menu-card {
   position: relative;
-  width: min(560px, calc(100vw - 32px));
+  width: min(660px, calc(100vw - 32px));
+  padding: 52px 56px 34px;
   background:
-    linear-gradient(180deg, rgb(13 10 6 / 82%) 0%, rgb(13 10 6 / 92%) 100%),
+    radial-gradient(ellipse at 50% 0%, rgb(111 79 32 / 19%) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 100%, rgb(0 0 0 / 28%) 0%, transparent 56%),
+    linear-gradient(135deg, rgb(35 27 17 / 98%) 0%, rgb(15 12 8 / 98%) 48%, rgb(35 26 16 / 98%) 100%),
     var(--ta-surface-raised);
-  box-shadow: 0 24px 64px rgb(0 0 0 / 55%);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 221 135 / 12%),
+    0 30px 80px rgb(0 0 0 / 68%);
+}
+
+/* A fine inner rule gives the existing nine-slice frame the double-trim depth
+ * of a carved menu plaque without changing the pause/result card skin. */
+.rts-main-menu .rts-main-menu-card::before {
+  position: absolute;
+  inset: 12px;
+  pointer-events: none;
+  border: 1px solid rgb(229 183 83 / 24%);
+  content: "";
+}
+
+.rts-main-menu-heading {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  margin: -32px 0 20px;
+  text-align: center;
+}
+
+/* A CSS crest keeps this layer crisp at every resolution and avoids another
+ * generated asset to maintain alongside the authored background painting. */
+.rts-main-menu-crest {
+  display: grid;
+  position: relative;
+  width: 54px;
+  height: 46px;
+  margin-bottom: 9px;
+  place-items: center;
+  clip-path: polygon(50% 0%, 92% 15%, 84% 72%, 50% 100%, 16% 72%, 8% 15%);
+  background: linear-gradient(135deg, #f4cf71 0%, #9a651f 47%, #f1c667 100%);
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 85%));
+}
+
+.rts-main-menu-crest::before {
+  position: absolute;
+  inset: 3px;
+  clip-path: inherit;
+  background: linear-gradient(135deg, #362310, #161007 65%);
+  content: "";
+}
+
+.rts-main-menu-crest-mark {
+  position: relative;
+  width: 17px;
+  height: 22px;
+  border: 1px solid rgb(240 195 91 / 86%);
+  border-radius: 9px 9px 3px 3px;
+  box-shadow: 0 0 0 3px rgb(115 75 24 / 35%);
+}
+
+.rts-main-menu-crest-mark::before,
+.rts-main-menu-crest-mark::after {
+  position: absolute;
+  top: 8px;
+  width: 7px;
+  height: 1px;
+  background: #e9bd5b;
+  content: "";
+}
+
+.rts-main-menu-crest-mark::before {
+  left: 4px;
+  transform: rotate(45deg);
+}
+
+.rts-main-menu-crest-mark::after {
+  right: 4px;
+  transform: rotate(-45deg);
 }
 
 /*
@@ -1007,6 +1082,8 @@ body.rts-route {
  * is borrowed from `.rts-match-setup-field select` above rather than restated.
  */
 .rts-main-menu-footer {
+  position: relative;
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
   margin-top: 14px;
@@ -1071,10 +1148,292 @@ body.rts-route {
 }
 
 .rts-main-menu .rts-main-menu-card h1 {
+  position: relative;
+  margin: 0;
   font-family: var(--ta-font-display);
-  font-size: 30px;
-  letter-spacing: 0.06em;
-  text-shadow: 0 2px 8px rgb(0 0 0 / 70%);
+  font-size: clamp(30px, 4vw, 43px);
+  font-variant: small-caps;
+  letter-spacing: 0.075em;
+  text-shadow:
+    0 2px 1px #211305,
+    0 0 18px rgb(224 170 61 / 20%);
+}
+
+.rts-main-menu .rts-main-menu-card h1::after {
+  display: block;
+  width: min(300px, 70%);
+  height: 1px;
+  margin: 13px auto 0;
+  background: linear-gradient(90deg, transparent, rgb(226 185 92 / 68%) 17%, var(--ta-gold) 50%, rgb(226 185 92 / 68%) 83%, transparent);
+  box-shadow: 0 0 7px rgb(226 185 92 / 24%);
+  content: "";
+}
+
+.rts-main-menu .rts-main-menu-card .rts-main-menu-heading p {
+  max-width: 460px;
+  margin: 11px 0 0;
+  color: #ebd9a9;
+  font-size: 14px;
+  line-height: 1.4;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 90%);
+}
+
+/* The main menu owns a more deliberate reading order than the compact shared
+ * setup component: title, mode cards, then the three free-match rules in a
+ * two-row composition that mirrors the reference's settings block. */
+.rts-main-menu .rts-match-setup {
+  position: relative;
+  z-index: 1;
+  margin-top: 0;
+  padding-top: 16px;
+  border-top-color: rgb(226 185 92 / 32%);
+}
+
+.rts-main-menu .rts-match-setup-group legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  color: #e8c16a;
+  font-family: var(--ta-font-display);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+}
+
+.rts-main-menu .rts-match-setup-group legend::before,
+.rts-main-menu .rts-match-setup-group legend::after {
+  width: 44px;
+  height: 1px;
+  margin: 0 12px;
+  background: linear-gradient(90deg, transparent, rgb(226 185 92 / 72%));
+  content: "";
+}
+
+.rts-main-menu .rts-match-setup-group legend::after {
+  transform: scaleX(-1);
+}
+
+.rts-main-menu .rts-match-mode-cards {
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.rts-main-menu .rts-match-mode-card {
+  min-height: 118px;
+  justify-content: center;
+  gap: 7px;
+  padding: 18px 20px;
+  border-color: rgb(226 185 92 / 32%);
+  background:
+    radial-gradient(ellipse at 50% 100%, rgb(180 118 25 / 9%), transparent 70%),
+    rgb(13 10 6 / 57%);
+  text-align: center;
+}
+
+.rts-main-menu .rts-match-mode-card::before {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  margin: 0 auto 2px;
+  place-items: center;
+  color: #b88937;
+  font-family: Georgia, serif;
+  font-size: 22px;
+  line-height: 1;
+  content: "\2726";
+}
+
+.rts-main-menu .rts-match-mode-card:nth-child(1)::before {
+  content: "\2727";
+}
+
+.rts-main-menu .rts-match-mode-card[data-selected="true"] {
+  border-color: #e8b94d;
+  background:
+    radial-gradient(ellipse at 50% 100%, rgb(226 166 49 / 20%), transparent 72%),
+    linear-gradient(180deg, rgb(88 58 20 / 30%), rgb(19 13 7 / 72%));
+  box-shadow:
+    inset 0 0 0 1px rgb(255 226 135 / 30%),
+    0 0 16px rgb(221 165 49 / 12%);
+}
+
+.rts-main-menu .rts-match-mode-card-label {
+  font-family: var(--ta-font-display);
+  font-size: 18px;
+  letter-spacing: 0.035em;
+}
+
+.rts-main-menu .rts-match-mode-card-blurb {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.rts-main-menu .rts-match-setup-free {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin-top: 18px;
+  padding-top: 15px;
+  border-top: 1px solid rgb(226 185 92 / 22%);
+}
+
+.rts-main-menu .rts-match-setup-free > .rts-match-setup-field:last-child {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px solid rgb(226 185 92 / 20%);
+  background: rgb(9 7 4 / 38%);
+}
+
+.rts-main-menu .rts-match-setup-free > .rts-match-setup-field select {
+  min-height: 34px;
+  padding: 6px 9px;
+  background: linear-gradient(180deg, rgb(59 42 20 / 90%), rgb(22 15 8 / 95%));
+  border-color: rgb(226 185 92 / 45%);
+}
+
+.rts-main-menu .rts-match-toggle-row {
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.rts-main-menu .rts-match-actions {
+  position: relative;
+  z-index: 1;
+  margin-top: 23px;
+}
+
+.rts-main-menu .rts-match-actions [data-primary="true"] {
+  min-width: min(100%, 300px);
+  padding: 14px 30px;
+  color: #2b1806;
+  font-family: var(--ta-font-display);
+  font-size: 24px;
+  letter-spacing: 0.055em;
+  background: var(--ta-btn-bg);
+  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  text-shadow:
+    0 1px 0 rgb(255 237 176 / 72%),
+    0 -1px 1px rgb(66 39 8 / 34%);
+  box-shadow: 0 4px 11px rgb(0 0 0 / 42%);
+}
+
+.rts-main-menu .rts-match-actions [data-primary="true"]:hover {
+  filter: brightness(1.12) saturate(1.08);
+}
+
+@media (max-width: 600px) {
+  .rts-main-menu .rts-main-menu-card {
+    width: min(100% - 20px, 660px);
+    padding: 36px 28px 20px;
+  }
+
+  .rts-main-menu-heading {
+    margin-top: -25px;
+    margin-bottom: 12px;
+  }
+
+  .rts-main-menu-crest {
+    width: 43px;
+    height: 37px;
+    margin-bottom: 5px;
+  }
+
+  .rts-main-menu .rts-main-menu-card h1 {
+    font-size: 28px;
+  }
+
+  .rts-main-menu .rts-main-menu-card h1::after {
+    margin-top: 9px;
+  }
+
+  .rts-main-menu .rts-main-menu-card .rts-main-menu-heading p {
+    margin-top: 8px;
+    font-size: 13px;
+  }
+
+  .rts-main-menu .rts-match-mode-cards,
+  .rts-main-menu .rts-match-setup-free {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rts-main-menu .rts-match-mode-cards {
+    gap: 12px;
+    margin-top: 11px;
+  }
+
+  .rts-main-menu .rts-match-mode-card {
+    min-height: 94px;
+    padding: 11px 14px;
+  }
+
+  .rts-main-menu .rts-match-mode-card::before {
+    width: 24px;
+    height: 20px;
+    margin-bottom: 0;
+    font-size: 17px;
+  }
+
+  .rts-main-menu .rts-match-setup-free {
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+
+  .rts-main-menu .rts-match-setup-free > .rts-match-setup-field:last-child {
+    grid-column: auto;
+    padding: 7px 10px;
+  }
+
+  .rts-main-menu .rts-match-actions {
+    margin-top: 14px;
+  }
+
+  .rts-main-menu .rts-match-actions [data-primary="true"] {
+    padding: 10px 24px;
+    font-size: 20px;
+  }
+
+  .rts-main-menu-footer {
+    margin-top: 10px;
+    padding-top: 9px;
+  }
+}
+
+@media (max-height: 800px) and (min-width: 601px) {
+  .rts-main-menu .rts-main-menu-card {
+    padding-top: 40px;
+    padding-bottom: 24px;
+  }
+
+  .rts-main-menu-heading {
+    margin-top: -24px;
+    margin-bottom: 13px;
+  }
+
+  .rts-main-menu-crest {
+    width: 43px;
+    height: 37px;
+    margin-bottom: 5px;
+  }
+
+  .rts-main-menu .rts-match-mode-card {
+    min-height: 96px;
+    padding: 12px 16px;
+  }
+
+  .rts-main-menu .rts-match-mode-card::before {
+    display: none;
+  }
+
+  .rts-main-menu .rts-match-actions {
+    margin-top: 16px;
+  }
+
+  .rts-main-menu .rts-match-actions [data-primary="true"] {
+    padding: 10px 26px;
+    font-size: 20px;
+  }
 }
 
 /* Performance readout + speed picker, intentionally only with ?rts&debug. */

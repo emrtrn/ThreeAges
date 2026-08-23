@@ -224,6 +224,15 @@ export class RtsBuildPalette {
     private readonly onChoose: (id: string) => void,
     private readonly onChooseRoad: () => void = () => {},
     private readonly onChooseRoadErase: () => void = () => {},
+    /**
+     * A category was picked *by the player* — tab click or hotkey — so the click
+     * gets an answer like every other palette press.
+     *
+     * Separate from {@link selectCategory} on purpose: the palette also switches
+     * category on its own when the story chain points at a building in a hidden
+     * panel, and a sound there would be the game clicking at itself.
+     */
+    private readonly onPickCategory: () => void = () => {},
   ) {
     this.root.className = "rts-build-palette ui-interactive";
     markStaticAria(this.root, "building.palette.aria");
@@ -257,7 +266,10 @@ export class RtsBuildPalette {
       // Text from the key, identity *as* the key: the tab map and the panel
       // attribute must not change meaning when the language does.
       markStaticText(tab, category.titleKey);
-      tab.addEventListener("click", () => this.selectCategory(category.titleKey));
+      tab.addEventListener("click", () => {
+        this.selectCategory(category.titleKey);
+        this.onPickCategory();
+      });
       this.tabs.set(category.titleKey, tab);
       tabRow.appendChild(tab);
       const panel = document.createElement("div");
@@ -594,6 +606,7 @@ export class RtsBuildPalette {
     this.root.hidden = false;
     this.expand();
     this.selectCategory(title);
+    this.onPickCategory();
   }
 
   /** Pointer and keyboard entry both make the current category available at once. */

@@ -97,6 +97,15 @@ export class TerritoryControlSystem {
    */
   version = 0;
   private readonly ownership = new Map<string, TerritoryOwner>();
+  /**
+   * Owned cells per kingdom, counted while {@link refresh} walks the grid.
+   *
+   * Kept as a running total rather than derived on demand: the only consumer
+   * asks once per frame and the grid is ~5k cells, so re-counting would put a
+   * full scan on every frame to answer a question the refresh already passed
+   * through. Reset with the grid, so it can never describe a stale ownership.
+   */
+  private readonly cellCounts: Record<UnitOwner, number> = { player: 0, enemy: 0 };
   private readonly materials: Record<UnitOwner, MeshBasicMaterial>;
   private readonly meshes: Record<UnitOwner, Mesh<BufferGeometry, MeshBasicMaterial>>;
   /** Rendered ground height at a world X/Z; flat-field fallback keeps Y at zero. */
@@ -135,6 +144,8 @@ export class TerritoryControlSystem {
   refresh(): void {
     this.version += 1;
     this.ownership.clear();
+    this.cellCounts.player = 0;
+    this.cellCounts.enemy = 0;
     const extent = this.options.worldHalfExtent;
     const step = this.options.cellSize;
     const half = (step - 0.08) / 2;
@@ -152,11 +163,24 @@ export class TerritoryControlSystem {
         const owner = this.resolveOwner(x, z, sources);
         this.ownership.set(this.key(x, z), owner);
         if (owner === "neutral") continue;
+        this.cellCounts[owner] += 1;
         this.pushCell(corners[owner], x, z, half);
       }
     }
     this.uploadOverlay("player", corners.player);
     this.uploadOverlay("enemy", corners.enemy);
+  }
+
+  /**
+   * How many grid cells this kingdom currently controls.
+   *
+   * A count, not an area: the cell size is the system's own and a caller that
+   * needed square metres would be re-deriving it. What this exists for is
+   * comparison against the same number a moment ago — "did the border move" —
+   * and for that the unit cancels.
+   */
+  controlledCellCount(owner: UnitOwner): number {
+    return this.cellCounts[owner];
   }
 
   /** Returns the stored owner of the placement cell containing this point. */

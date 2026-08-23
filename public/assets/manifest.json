@@ -29890,7 +29890,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 9922
+        "bytes": 18439
       },
       "source": {
         "origin": "project",
@@ -29922,7 +29922,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 16264
+        "bytes": 31997
       },
       "source": {
         "origin": "project",
@@ -29994,134 +29994,6 @@
         "packVersion": "0.1"
       },
       "license": "Project-local audio; audio plan Faz 2"
-    },
-    {
-      "id": "sfx-unit-footstep-dirt-02",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/units/sfx_unit_footstep_dirt_02.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "units"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 17541
-      },
-      "license": "Unknown",
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "name": "Unit Footstep Dirt 02"
-    },
-    {
-      "id": "sfx-unit-footstep-dirt-04",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/units/sfx_unit_footstep_dirt_04.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "units"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 16887
-      },
-      "license": "Unknown",
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "name": "Unit Footstep Dirt 04"
-    },
-    {
-      "id": "sfx-unit-footstep-dirt-01",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/units/sfx_unit_footstep_dirt_01.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "units"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 17709
-      },
-      "license": "Unknown",
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "name": "Unit Footstep Dirt 01"
-    },
-    {
-      "id": "sfx-unit-footstep-dirt-03",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/units/sfx_unit_footstep_dirt_03.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "units"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 17296
-      },
-      "license": "Unknown",
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "name": "Unit Footstep Dirt 03"
     },
     {
       "id": "sfx-unit-axe-chop-01",
@@ -30499,134 +30371,6 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 18521
-      },
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "license": "Project-local audio; audio plan Faz 2"
-    },
-    {
-      "id": "sfx-combat-body-impact-01",
-      "name": "Combat Body Impact 01",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_01.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "combat"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 16705
-      },
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "license": "Project-local audio; audio plan Faz 2"
-    },
-    {
-      "id": "sfx-combat-body-impact-02",
-      "name": "Combat Body Impact 02",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_02.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "combat"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 16137
-      },
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "license": "Project-local audio; audio plan Faz 2"
-    },
-    {
-      "id": "sfx-combat-body-impact-03",
-      "name": "Combat Body Impact 03",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_03.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "combat"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 17751
-      },
-      "source": {
-        "origin": "project",
-        "pack": "Three Ages Audio",
-        "packVersion": "0.1"
-      },
-      "license": "Project-local audio; audio plan Faz 2"
-    },
-    {
-      "id": "sfx-combat-body-impact-04",
-      "name": "Combat Body Impact 04",
-      "assetType": "sound",
-      "category": "threeages-audio",
-      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_04.ogg",
-      "tags": [
-        "threeages",
-        "sound",
-        "combat"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "threeages-audio",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 16715
       },
       "source": {
         "origin": "project",
@@ -33571,6 +33315,1958 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 13060
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-complete-02",
+      "name": "Building Complete 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_complete_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 27074
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-complete-03",
+      "name": "Building Complete 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_complete_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 27642
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-complete-04",
+      "name": "Building Complete 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_complete_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 28129
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-construction-hammer-01",
+      "name": "Building Construction Hammer 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_construction_hammer_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 10831
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-construction-hammer-02",
+      "name": "Building Construction Hammer 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_construction_hammer_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 11365
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-construction-hammer-03",
+      "name": "Building Construction Hammer 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_construction_hammer_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 11448
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-construction-hammer-04",
+      "name": "Building Construction Hammer 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_construction_hammer_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 11247
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-construction-wood-01",
+      "name": "Building Construction Wood 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_construction_wood_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 27295
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-construction-wood-02",
+      "name": "Building Construction Wood 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_construction_wood_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 36988
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-construction-wood-03",
+      "name": "Building Construction Wood 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_construction_wood_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 35491
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-construction-wood-04",
+      "name": "Building Construction Wood 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_construction_wood_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 37187
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-demolish-01",
+      "name": "Building Demolish 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_demolish_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 35703
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-demolish-02",
+      "name": "Building Demolish 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_demolish_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 32834
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-invalid-place-01",
+      "name": "Building Invalid Place 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_invalid_place_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 11861
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-building-upgrade-01",
+      "name": "Building Upgrade 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/buildings/sfx_building_upgrade_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "buildings"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 29249
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-logistics-depot-connected-01",
+      "name": "Logistics Depot Connected 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_logistics_depot_connected_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 30652
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-logistics-outpost-connected-01",
+      "name": "Logistics Outpost Connected 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_logistics_outpost_connected_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 33440
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-logistics-road-erase-01",
+      "name": "Logistics Road Erase 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_logistics_road_erase_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 39452
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-logistics-road-place-01",
+      "name": "Logistics Road Place 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_logistics_road_place_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 17035
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-logistics-road-place-02",
+      "name": "Logistics Road Place 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_logistics_road_place_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 13592
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-logistics-territory-expanded-01",
+      "name": "Logistics Territory Expanded 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_logistics_territory_expanded_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 33741
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-footstep-light-01",
+      "name": "Unit Footstep Light 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_light_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 17709
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-footstep-light-02",
+      "name": "Unit Footstep Light 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_light_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 17541
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-footstep-light-03",
+      "name": "Unit Footstep Light 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_light_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 17296
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-footstep-light-04",
+      "name": "Unit Footstep Light 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_light_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 16887
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-footstep-heavy-01",
+      "name": "Unit Footstep Heavy 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_heavy_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 20846
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-footstep-heavy-02",
+      "name": "Unit Footstep Heavy 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_heavy_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 20704
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-footstep-heavy-03",
+      "name": "Unit Footstep Heavy 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_heavy_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 21008
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-footstep-heavy-04",
+      "name": "Unit Footstep Heavy 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_footstep_heavy_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 19925
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-combat-body-impact-light-01",
+      "name": "Combat Body Impact Light 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_light_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 16705
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-combat-body-impact-light-02",
+      "name": "Combat Body Impact Light 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_light_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 16137
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-combat-body-impact-light-03",
+      "name": "Combat Body Impact Light 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_light_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 17751
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-combat-body-impact-light-04",
+      "name": "Combat Body Impact Light 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_light_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 16715
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-cannonball-flight-01",
+      "name": "Artillery Cannonball Flight 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_cannonball_flight_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 30184
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-cannonball-flight-02",
+      "name": "Artillery Cannonball Flight 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_cannonball_flight_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 29380
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-cannonball-flight-03",
+      "name": "Artillery Cannonball Flight 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_cannonball_flight_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 30479
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-cannonball-flight-04",
+      "name": "Artillery Cannonball Flight 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_cannonball_flight_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 26027
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-cannonball-flight-05",
+      "name": "Artillery Cannonball Flight 05",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_cannonball_flight_05.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 29743
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-carriage-01",
+      "name": "Artillery Carriage 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_carriage_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 35484
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-carriage-02",
+      "name": "Artillery Carriage 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_carriage_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 35779
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-carriage-03",
+      "name": "Artillery Carriage 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_carriage_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 33767
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-ground-impact-01",
+      "name": "Artillery Ground Impact 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_ground_impact_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 36746
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-ground-impact-02",
+      "name": "Artillery Ground Impact 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_ground_impact_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 29564
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-ground-impact-03",
+      "name": "Artillery Ground Impact 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_ground_impact_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 28754
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-ground-impact-04",
+      "name": "Artillery Ground Impact 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_ground_impact_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 36843
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-wheel-01",
+      "name": "Artillery Wheel 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_wheel_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 33885
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-wheel-02",
+      "name": "Artillery Wheel 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_wheel_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 33487
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-artillery-wheel-03",
+      "name": "Artillery Wheel 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_artillery_wheel_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 36234
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-combat-arrow-flight-01",
+      "name": "Combat Arrow Flight 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_combat_arrow_flight_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 57444
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-combat-arrow-flight-02",
+      "name": "Combat Arrow Flight 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_combat_arrow_flight_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 32820
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-combat-arrow-flight-03",
+      "name": "Combat Arrow Flight 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_combat_arrow_flight_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 34547
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-combat-body-impact-heavy-01",
+      "name": "Combat Body Impact Heavy 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_heavy_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 30142
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-combat-body-impact-heavy-02",
+      "name": "Combat Body Impact Heavy 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_heavy_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 23765
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-combat-body-impact-heavy-03",
+      "name": "Combat Body Impact Heavy 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_heavy_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 24145
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-combat-body-impact-heavy-04",
+      "name": "Combat Body Impact Heavy 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/combat/sfx_combat_body_impact_heavy_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "combat"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 22483
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-death-heavy-01",
+      "name": "Unit Death Heavy 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_death_heavy_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 31912
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-death-heavy-02",
+      "name": "Unit Death Heavy 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_death_heavy_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 30949
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-death-heavy-03",
+      "name": "Unit Death Heavy 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_death_heavy_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 35307
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-death-light-01",
+      "name": "Unit Death Light 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_death_light_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 27232
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-death-light-02",
+      "name": "Unit Death Light 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_death_light_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 31245
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-death-light-03",
+      "name": "Unit Death Light 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_death_light_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 26025
       },
       "source": {
         "origin": "project",

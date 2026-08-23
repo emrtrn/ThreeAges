@@ -26,17 +26,36 @@
   },
   "events": {
     "unit.footstep": {
+      "_note": "The light half of §82.4's armour split, and deliberately still named as the base event rather than as `unit.footstep_light`. The split resolves a variant only when the table answers it and falls back to this entry otherwise, so light units reach these clips through the fallback and a second entry holding the same four files would be a permanent duplicate. What the clips were called until now was `dirt`, which promised a *ground* axis the code cannot express - `resolveRtsAudioVariant` carries one dimension, and that dimension is armour. Heavy ships beside this as `unit.footstep_heavy`; when it does, `cooldownMs` and `maxInstances` are per event and the two together admit twice the instances this one used to cap, so retune both by ear.",
       "clips": [
-        "sfx-unit-footstep-dirt-01",
-        "sfx-unit-footstep-dirt-02",
-        "sfx-unit-footstep-dirt-03",
-        "sfx-unit-footstep-dirt-04"
+        "sfx-unit-footstep-light-01",
+        "sfx-unit-footstep-light-02",
+        "sfx-unit-footstep-light-03",
+        "sfx-unit-footstep-light-04"
       ],
       "bus": "sfx",
       "volume": 0.05,
       "pitchVariation": 0.08,
       "cooldownMs": 45,
-      "maxInstances": 4,
+      "maxInstances": 3,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 60,
+      "rolloff": 10
+    },
+    "unit.footstep_heavy": {
+      "_note": "Guard and Siege - §82.4's other half, shipped 2026-08-23. Every number below is the light entry's, on purpose: the wiring was tuned when one event served all four rigs and it was right, so the only thing that should differ between a worker's step and a guard's is the recording. Making them differ here too would mean any change the player hears could be either, and there would be no way to tell which. So retune by ear from a match, not from this file, and change one side at a time. The exception is `maxInstances`, which had to move: it is per event, so the split alone would have taken the map's footstep ceiling from 4 concurrent to 8. Both sides sit at 3 now - six together, nearer the ceiling that was actually authored, and still enough for a marching group of either class to read as more than two men.",
+      "clips": [
+        "sfx-unit-footstep-heavy-01",
+        "sfx-unit-footstep-heavy-02",
+        "sfx-unit-footstep-heavy-03",
+        "sfx-unit-footstep-heavy-04"
+      ],
+      "bus": "sfx",
+      "volume": 0.05,
+      "pitchVariation": 0.08,
+      "cooldownMs": 45,
+      "maxInstances": 3,
       "spatial": true,
       "refDistance": 30,
       "maxDistance": 60,
@@ -60,14 +79,34 @@
       "rolloff": 10
     },
     "unit.death": {
+      "_note": "The light half of the death split, and the base event for the same reason `unit.footstep` and `combat.body_impact` are: the fallback sends light units here, so a separate `unit.death_light` holding these same three files would be a permanent duplicate. This entry retires the last placeholder in the unit channel - it stood on `starter-snd-impact-light` from the day the hook landed (§82.2) until the clips arrived. It fires on the frame the unit is defeated, which is the *start* of the death animation rather than the moment the body lands, so the clip carries that beat itself: stagger and kit first, the weight settling after. `maxInstances` came down from 3 to 2 when the heavy set shipped, because the cap is per event and a wiped squad would otherwise get six voices where three were tuned.",
       "clips": [
-        "starter-snd-impact-light"
+        "sfx-unit-death-light-01",
+        "sfx-unit-death-light-02",
+        "sfx-unit-death-light-03"
       ],
       "bus": "sfx",
       "volume": 0.35,
       "pitchVariation": 0.06,
       "cooldownMs": 120,
-      "maxInstances": 3,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 70,
+      "rolloff": 8
+    },
+    "unit.death_heavy": {
+      "_note": "A guard or a gun crew going down. Every number is the light entry's on purpose - the wiring was tuned while one event served all three roles and it was right, so the only thing that should differ between the two is the recording. The subject here is the unit that *died*, not whatever killed it: a death reads its own armour, like a footstep and unlike a blow.",
+      "clips": [
+        "sfx-unit-death-heavy-01",
+        "sfx-unit-death-heavy-02",
+        "sfx-unit-death-heavy-03"
+      ],
+      "bus": "sfx",
+      "volume": 0.35,
+      "pitchVariation": 0.06,
+      "cooldownMs": 120,
+      "maxInstances": 2,
       "spatial": true,
       "refDistance": 30,
       "maxDistance": 70,
@@ -107,18 +146,54 @@
       "maxDistance": 60,
       "rolloff": 10
     },
-    "combat.body_impact": {
+    "combat.arrow_flight": {
+      "_note": "The whizz, played at the *target* rather than at the bow. The loose is already answered where it happens - `combat.arrow_release` fires off the Archer's own marker - so a second sound at the same point would mostly be masked by the first. At the far end it does work nothing else does. The reason it is pinned to an end at all rather than travelling: `AudioPlaybackHandle` cannot be moved once it is playing, so a flight sound has to pick one. Quieter than the release and shorter-ranged: an arrow passing is a small sound, and hearing every volley on the map cross the field would be a hiss under the whole battle. A tower's twin shot plays one of these, not two.",
       "clips": [
-        "sfx-combat-body-impact-01",
-        "sfx-combat-body-impact-02",
-        "sfx-combat-body-impact-03",
-        "sfx-combat-body-impact-04"
+        "sfx-combat-arrow-flight-01",
+        "sfx-combat-arrow-flight-02",
+        "sfx-combat-arrow-flight-03"
+      ],
+      "bus": "sfx",
+      "volume": 0.04,
+      "pitchVariation": 0.07,
+      "cooldownMs": 70,
+      "maxInstances": 4,
+      "spatial": true,
+      "refDistance": 22,
+      "maxDistance": 48,
+      "rolloff": 10
+    },
+    "combat.body_impact": {
+      "_note": "The light half of §82.4's armour split - a blow landing on a worker or an archer - and named as the base event for the same reason `unit.footstep` is: the split falls back here when the table answers no variant, so a separate `combat.body_impact_light` holding these same four files would be a permanent duplicate. These clips were produced before the split existed and were always the flesh-and-gambeson half; §82.4's own cost estimate assumed as much when it counted the new work as \"heavy blow\" rather than as two sets. Remember which subject this event reads: a footstep is the sound of whoever *takes* it, a blow the sound of whatever it *lands on* - so the variant here comes from the target's armour, not the attacker's. `maxInstances` is still 6, the number tuned while this was the only impact event; when `combat.body_impact_heavy` ships, the cap is per event and the two together would admit twelve, so both sides come down then - the same retune the footsteps already had.",
+      "clips": [
+        "sfx-combat-body-impact-light-01",
+        "sfx-combat-body-impact-light-02",
+        "sfx-combat-body-impact-light-03",
+        "sfx-combat-body-impact-light-04"
       ],
       "bus": "sfx",
       "volume": 0.1,
       "pitchVariation": 0.05,
       "cooldownMs": 40,
-      "maxInstances": 6,
+      "maxInstances": 4,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 60,
+      "rolloff": 10
+    },
+    "combat.body_impact_heavy": {
+      "_note": "A blow landing on mail and plate - a guard or a gun crew being hit. Wired identically to the light entry so the difference the player hears is the recording and nothing else. Remember the subject: this one reads the *target's* armour, not the attacker's, which is why an archer shooting a guard plays heavy while a guard cutting down a worker plays light. Both caps came down from 6 to 4 when this shipped, since the cap is per event and a melee line would otherwise get twelve voices where six were tuned.",
+      "clips": [
+        "sfx-combat-body-impact-heavy-01",
+        "sfx-combat-body-impact-heavy-02",
+        "sfx-combat-body-impact-heavy-03",
+        "sfx-combat-body-impact-heavy-04"
+      ],
+      "bus": "sfx",
+      "volume": 0.1,
+      "pitchVariation": 0.05,
+      "cooldownMs": 40,
+      "maxInstances": 4,
       "spatial": true,
       "refDistance": 30,
       "maxDistance": 60,
@@ -158,6 +233,77 @@
       "refDistance": 30,
       "maxDistance": 120,
       "rolloff": 5
+    },
+    "siege.cannonball_flight": {
+      "_note": "The incoming whistle, at the point the ball is going to land. Fired on the frame the shot leaves, so it leads the arrival by the shell's whole flight time - which is the point: it says *something is about to land here* while the player can still look. Carries further than the arrow's whizz and is louder for its channel, because a shell overhead is the loudest warning in the game short of the gun itself. Pinned to the landing rather than travelling with the ball for the engine reason the arrow's note gives.",
+      "clips": [
+        "sfx-artillery-cannonball-flight-01",
+        "sfx-artillery-cannonball-flight-02",
+        "sfx-artillery-cannonball-flight-03",
+        "sfx-artillery-cannonball-flight-04",
+        "sfx-artillery-cannonball-flight-05"
+      ],
+      "bus": "sfx",
+      "volume": 0.22,
+      "pitchVariation": 0.05,
+      "cooldownMs": 110,
+      "maxInstances": 3,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 100,
+      "rolloff": 7
+    },
+    "siege.shell_impact": {
+      "_note": "The blast where the ball arrives - earth, dust and debris. Additive to whatever the blow itself plays: a wall's `structure.impact_stone` is the masonry giving way, this is the shell that did it, and they are two layers of one moment rather than two answers to it. If the pair reads as one muddy thud in a match, this is the half to pull down - the material crack is what tells the player *what* was hit. Named for the shell rather than for the ground the clips were produced against, because the same event fires on a wall.",
+      "clips": [
+        "sfx-artillery-ground-impact-01",
+        "sfx-artillery-ground-impact-02",
+        "sfx-artillery-ground-impact-03",
+        "sfx-artillery-ground-impact-04"
+      ],
+      "bus": "sfx",
+      "volume": 0.3,
+      "pitchVariation": 0.05,
+      "cooldownMs": 90,
+      "maxInstances": 3,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 110,
+      "rolloff": 6
+    },
+    "siege.wheel_roll": {
+      "_note": "§82.8 - what the Siege rig's four `footstep` marks actually are. It replaces the shared footstep for this rig rather than layering over it: the gun does not walk, so hearing both would be a carriage with boots. Wired close to the footstep it stands in for, because it plays at the same rate off the same marks; a little louder because a wheel under a gun is heavier than a man. `cooldownMs` stays short - the marks are roughly a quarter-second apart at walking pace and a longer guard would swallow every other contact, which is the one thing that turns a roll back into a limp.",
+      "clips": [
+        "sfx-artillery-wheel-01",
+        "sfx-artillery-wheel-02",
+        "sfx-artillery-wheel-03"
+      ],
+      "bus": "sfx",
+      "volume": 0.09,
+      "pitchVariation": 0.07,
+      "cooldownMs": 45,
+      "maxInstances": 3,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 70,
+      "rolloff": 9
+    },
+    "siege.carriage_creak": {
+      "_note": "The gun's body groaning as it rolls. It has no marker of its own, so it rides the same contact marks as the wheel and is thinned by this cooldown alone - that is the whole mechanism, and why the two are separate events rather than one clip family: a contact rate and a once-every-few-seconds rate cannot live in one set. A long `cooldownMs` here is not a repeat guard, it is the sound's actual rhythm, so it is the first number to retune if the creak reads as chatter. Additive, so it is simply silent for any rig that does not name it - unlike the wheel, there is nothing for it to fall back to.",
+      "clips": [
+        "sfx-artillery-carriage-01",
+        "sfx-artillery-carriage-02",
+        "sfx-artillery-carriage-03"
+      ],
+      "bus": "sfx",
+      "volume": 0.07,
+      "pitchVariation": 0.09,
+      "cooldownMs": 1400,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 25,
+      "maxDistance": 60,
+      "rolloff": 9
     },
     "structure.impact": {
       "clips": [
@@ -287,6 +433,7 @@
       "rolloff": 8
     },
     "building.complete": {
+      "_note": "Four clips were produced and only one is bound, which is the deliberate exception to this table's variant rule. `sfx-building-complete-02`..`-04` ship in the manifest as *alternatives*, not as a pool: a completion is the kingdom's single signature chime, and hearing four different ones is heard as four different things having happened rather than as variety. Swap the id here to audition another; do not list them all. (`building.construction_hammer` below is the opposite case and does list them all - a crew's blows are supposed to differ.)",
       "clips": [
         "sfx-building-complete-01"
       ],
@@ -331,6 +478,135 @@
       "volume": 0.4,
       "cooldownMs": 150,
       "maxInstances": 2
+    },
+    "building.construction_hammer": {
+      "_note": "The crew's blows over the bed - four variants, drawn at random, which is what the bed alone could never be. Reaches exactly as far as `building.build_loop` (refDistance/maxDistance/rolloff copied from it) so the blows and the wash they sit on fade together instead of the detail outliving the bed. `maxInstances: 2` lets one strike ring under the next without letting a whole workshop stack up; the cadence itself is the scheduler's, not this cooldown's, which is only a floor.",
+      "clips": [
+        "sfx-building-construction-hammer-01",
+        "sfx-building-construction-hammer-02",
+        "sfx-building-construction-hammer-03",
+        "sfx-building-construction-hammer-04"
+      ],
+      "bus": "sfx",
+      "volume": 0.26,
+      "pitchVariation": 0.08,
+      "cooldownMs": 200,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 60,
+      "rolloff": 10
+    },
+    "building.construction_wood": {
+      "_note": "Timber being moved rather than struck - the slower half of the same site, and the reason it is a second event instead of four more clips on the one above: the scheduler picks between the two, so the ratio of blows to hauling is authorable. One instance, because two overlapping hauls read as a collapse.",
+      "clips": [
+        "sfx-building-construction-wood-01",
+        "sfx-building-construction-wood-02",
+        "sfx-building-construction-wood-03",
+        "sfx-building-construction-wood-04"
+      ],
+      "bus": "sfx",
+      "volume": 0.24,
+      "pitchVariation": 0.06,
+      "cooldownMs": 400,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 60,
+      "rolloff": 10
+    },
+    "building.invalid_place": {
+      "_note": "\"Not here\" - deliberately not `ui.error`, which says \"not this\". Louder than the placement chirp it replaces: a refusal the player misses is a click they believe worked.",
+      "clips": [
+        "sfx-building-invalid-place-01"
+      ],
+      "bus": "ui",
+      "volume": 0.42,
+      "cooldownMs": 200,
+      "maxInstances": 1
+    },
+    "building.demolish": {
+      "_note": "The confirmed second press, arriving through the notification's `sound` override. On the `ui` bus with the rest of the build palette's replies rather than at the building: what the player needs to hear is that the order was taken - the razing itself already sounds where it stands, from the damage table.",
+      "clips": [
+        "sfx-building-demolish-01",
+        "sfx-building-demolish-02"
+      ],
+      "bus": "ui",
+      "volume": 0.45,
+      "pitchVariation": 0.04,
+      "cooldownMs": 200,
+      "maxInstances": 2
+    },
+    "building.upgrade": {
+      "_note": "An upgrade beginning - level-up and age-up share it, because from the player's side they are one moment (the centre has started spending on getting bigger). Not the finish: `stinger.age_up` owns that end.",
+      "clips": [
+        "sfx-building-upgrade-01"
+      ],
+      "bus": "ui",
+      "volume": 0.45,
+      "cooldownMs": 300,
+      "maxInstances": 1
+    },
+    "logistics.road_place": {
+      "_note": "Two variants because paving is the one logistics action a player repeats inside a few seconds - a single clip there is what sounds broken. On the `ui` bus and unattenuated: a route is drawn while the camera is on it, and fading the reply over the length of a long road would make its far end quieter than its near end.",
+      "clips": [
+        "sfx-logistics-road-place-01",
+        "sfx-logistics-road-place-02"
+      ],
+      "bus": "ui",
+      "volume": 0.35,
+      "pitchVariation": 0.06,
+      "cooldownMs": 120,
+      "maxInstances": 2
+    },
+    "logistics.road_erase": {
+      "_note": "Unpaving stays armed after a confirm - the erase tool is a brush, not a single route - so this cooldown is doing real work: it is what keeps a dragged rub-out from becoming a rattle.",
+      "clips": [
+        "sfx-logistics-road-erase-01"
+      ],
+      "bus": "ui",
+      "volume": 0.32,
+      "pitchVariation": 0.05,
+      "cooldownMs": 180,
+      "maxInstances": 2
+    },
+    "logistics.depot_connected": {
+      "_note": "The link coming up, not the depot finishing - `building.complete` already covers that, and this fires on a road reaching the site or a border moving under it. Spatial, because where the network closed is half of what the news is.",
+      "clips": [
+        "sfx-logistics-depot-connected-01"
+      ],
+      "bus": "sfx",
+      "volume": 0.4,
+      "cooldownMs": 500,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 90,
+      "rolloff": 10
+    },
+    "logistics.outpost_connected": {
+      "_note": "The same transition for an outpost, and it earns its own sound: this is the frame its control radius jumps from `controlRadius` to `connectedControlRadius`, which is the difference between a claim and a region that can be built in.",
+      "clips": [
+        "sfx-logistics-outpost-connected-01"
+      ],
+      "bus": "sfx",
+      "volume": 0.42,
+      "cooldownMs": 500,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 30,
+      "maxDistance": 90,
+      "rolloff": 10
+    },
+    "logistics.territory_expanded": {
+      "_note": "The border moving outward. Not spatial and deliberately so - an expansion is an area, and an area has no point to sound from. The long cooldown is the shape of the event rather than a mix taste: territory grows in bursts (an outpost finishing, then its road arriving), and this is meant to report the burst once.",
+      "clips": [
+        "sfx-logistics-territory-expanded-01"
+      ],
+      "bus": "sfx",
+      "volume": 0.35,
+      "cooldownMs": 3000,
+      "maxInstances": 1
     },
     "ui.click": {
       "clips": [

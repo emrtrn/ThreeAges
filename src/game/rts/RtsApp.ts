@@ -87,6 +87,7 @@ import { RTS_THROW_RELEASE_NOTIFY, RtsNotifyEffectBudget, rtsNotifyEffectIds } f
 import { RTS_AUDIO, rtsNotifyAudioEvent, rtsNotificationAudioEvent,
   RTS_MUSIC_STATE_EVENTS, RTS_NOTIFY_AUDIO_EVENTS, resolveRtsAudioVariant,
   rtsResourceProductionAudioEvent,
+  rtsRoleNotifyAudio, resolveRtsRoleNotifyEvent,
   type RtsAudioVariant,
 } from "./audio/rtsAudioEvents";
 import { loadAudioEventTableWithStates } from "../data/gameDataLoader";
@@ -472,6 +473,28 @@ const SCENE_BACKGROUND = "#20262b";
  * this; a continuous sound cut on a frame boundary is audible as a fault.
  */
 const WORLD_BED_FADE_SECONDS = 0.35;
+/** Shared empty list, so a rig with no layered sounds allocates nothing per notify. */
+const EMPTY_AUDIO_LAYERS: readonly string[] = [];
+
+/**
+ * The band a construction blow's gap is drawn from, in real seconds.
+ *
+ * A band rather than a number because an even beat is the one thing a crew never
+ * sounds like — see {@link RtsApp.updateConstructionWorkAudio}. The floor is set
+ * above the hammer clip's own length so two blows do not overlap into a roll;
+ * the ceiling is what keeps a site from reading as abandoned between them.
+ *
+ * Authored timing, not a contract: retune it by ear.
+ */
+const CONSTRUCTION_WORK_GAP_SECONDS: readonly [number, number] = [0.55, 1.35];
+
+/**
+ * How often the drawn sound is a hammer rather than timber being moved.
+ *
+ * Striking is most of what a site is; hauling punctuates it. Tuning, like the
+ * band above.
+ */
+const CONSTRUCTION_HAMMER_SHARE = 0.7;
 
 const TOWER_MUZZLE_HEIGHT = 3.2;
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
@@ -1280,6 +1303,29 @@ export class RtsApp {
    * status.
    */
   private readonly previousLogisticsStatus = new Map<number, ProducerLogisticsStatus>();
+  /**
+   * Last-seen road link per player depot and outpost, so §18's "connected"
+   * sounds fire on the transition rather than on every frame the link holds.
+   *
+   * Same shape and same pruning rule as {@link previousLogisticsStatus}: a
+   * vanished building is dropped so a later structure reusing its id does not
+   * inherit "was cut" and chime the moment it appears.
+   */
+  private readonly previousRoadLink = new Map<number, boolean>();
+  /**
+   * The most ground the player has ever held, in territory cells.
+   *
+   * A high-water mark rather than the current count, which is what makes
+   * `logistics.territory_expanded` mean an expansion instead of a border
+   * wobbling back and forth over the same field.
+   */
+  private widestTerritory = 0;
+  /**
+   * Road revision × territory revision at the last link poll — the staleness key
+   * that keeps {@link syncLogisticsLinkAudio} from running a network walk per
+   * building per tick. See its note for why that matters here specifically.
+   */
+  private roadLinkAudioKey = "";
   /**
    * Last-seen production status per player producer, so §16's per-resource
    * production sound can fire on the *transition* into producing rather than
@@ -2172,6 +2218,7 @@ export class RtsApp {
         this.syncRoadUi();
         this.playUiAudio(RTS_AUDIO.uiClick);
       },
+      () => this.playUiAudio(RTS_AUDIO.uiClick),
     );
     this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => this.setSimulationSpeed(speed), {
       speeds: [1, 2],
@@ -2250,9 +2297,7 @@ export class RtsApp {
         if (this.rallyPointPending) {
           this.commitRallyPoint(x, y);
         } else if (this.roadPlacement.isActive) {
-          this.roadPlacement.confirmAt(x, y);
-          this.syncPlacementUi();
-          this.syncRoadUi();
+          this.confirmRoadPlacement(x, y);
         } else if (this.placement.isActive) {
           this.confirmMissionGatedPlacement(x, y);
         } else {
@@ -2273,9 +2318,7 @@ export class RtsApp {
         if (this.rallyPointPending) {
           this.commitRallyPoint(rect.x1, rect.y1);
         } else if (this.roadPlacement.isActive) {
-          this.roadPlacement.confirmAt(rect.x1, rect.y1);
-          this.syncPlacementUi();
-          this.syncRoadUi();
+          this.confirmRoadPlacement(rect.x1, rect.y1);
         } else if (this.placement.isActive) {
           this.confirmMissionGatedPlacement(rect.x1, rect.y1);
         } else {
@@ -2911,6 +2954,7 @@ export class RtsApp {
     this.musicStates.reset();
     this.musicStateLoaded = null;
     this.buildLoopSite = null;
+    this.constructionWorkAt = null;
     this.fireLoopSite = null;
     this.fireLoopEvent = null;
     this.audioSubsystem.dispose();
@@ -3124,6 +3168,11 @@ export class RtsApp {
     this.cannonballs.setImpactHandler((effectId, position) => {
       this.cannonScorches.add(position);
       if (effectId) this.playWorldEffect(effectId, [position.x, position.y, position.z]);
+      // Additive to whatever the blow itself plays a frame later: the wall's
+      // crack is the material giving way, this is the blast that did it. The
+      // shell arriving is also the one part of a bombardment that happens away
+      // from the gun, so it is the only chance the far end has to be heard.
+      this.playPointAudio(RTS_AUDIO.shellImpact, position);
     });
     this.scene.add(this.commandMarkers.root);
   }
@@ -3264,6 +3313,7 @@ export class RtsApp {
     // per *rendered* frame, so the speed picker cannot make the bed restart four
     // times as often as it does at normal speed.
     this.updateBuildLoopAudio();
+    this.updateConstructionWorkAudio();
     this.updateFireLoopAudio();
     if (this.debugWitness) {
       // Measured like everything else, because on this route it is a real cost:
@@ -4280,8 +4330,41 @@ export class RtsApp {
     // off the state machine rather than re-deriving the affordability rules.
     if (buildingId !== null && this.placement.state().activeBuildingId === null) {
       this.playUiAudio(RTS_AUDIO.buildingPlace);
+    } else if (buildingId !== null) {
+      // Still armed after a confirm: the ground turned the click down (§17's
+      // `SFX-BLD-002`). Read off the same state machine as the success above, so
+      // the two can never both be true, and kept apart from `uiError` — the
+      // refusal upstream is about the *building*, this one is about the *spot*,
+      // and the player fixes them differently.
+      this.playUiAudio(RTS_AUDIO.buildingInvalidPlace);
     }
     this.syncPlacementUi();
+  }
+
+  /**
+   * Commit the road tool's click, and say so — §18's `SFX-LOG-001`/`009`, the
+   * open item §82.3 left in the hook bucket.
+   *
+   * Success is read off the graph's own revision rather than off the returned
+   * state, and that is the point: the tool's state machine reports the *mode* it
+   * is now in, not whether ground changed. Both halves of a route drawing leave
+   * it "armed then disarmed", and an erase click over bare ground looks exactly
+   * like one over a tile. `RoadGraph.version` moves only when committed topology
+   * does, so it answers the one question a sound cares about.
+   *
+   * Which sound follows from the mode, not from the direction of the change:
+   * build mode only ever adds and erase mode only ever removes, so there is no
+   * case where the two could disagree.
+   */
+  private confirmRoadPlacement(screenX: number, screenY: number): void {
+    const before = this.roads.version;
+    const mode = this.roadPlacement.state().mode;
+    this.roadPlacement.confirmAt(screenX, screenY);
+    if (this.roads.version !== before) {
+      this.playUiAudio(mode === "erase" ? RTS_AUDIO.logisticsRoadErase : RTS_AUDIO.logisticsRoadPlace);
+    }
+    this.syncPlacementUi();
+    this.syncRoadUi();
   }
 
   private beginMissionGatedPlacement(buildingId: string): boolean {
@@ -4455,12 +4538,35 @@ export class RtsApp {
     // and neither gates the other: `sword-swing` has no burst at all and must
     // still be heard, while a footstep's dust was dropped for being invisible at
     // this camera distance without the footfall becoming inaudible with it.
-    const audioEvent = rtsNotifyAudioEvent(name);
-    if (audioEvent !== null && this.worldAudioAudible(position.x, position.z)) {
-      this.audioEvents.trigger(this.variantEvent(audioEvent, this.notifyVariant(unit, audioEvent)), this.audioClock, {
-        position: [position.x, position.y, position.z],
-        distance: cameraDistance,
-      });
+    // Which rig authored the marker can change what it means: the Siege rig's
+    // four `footstep` marks are wheel contacts, not boots (see
+    // `RTS_ROLE_NOTIFY_AUDIO`). Null for every other rig and every other marker,
+    // which is why it is a lookup rather than a list — this runs per footfall.
+    const roleAudio = rtsRoleNotifyAudio(name, unit.role);
+    const audioEvent = resolveRtsRoleNotifyEvent(
+      rtsNotifyAudioEvent(name),
+      roleAudio,
+      this.audioTableAnswers,
+    );
+    if (this.worldAudioAudible(position.x, position.z)) {
+      if (audioEvent !== null) {
+        this.audioEvents.trigger(this.variantEvent(audioEvent, this.notifyVariant(unit, audioEvent)), this.audioClock, {
+          position: [position.x, position.y, position.z],
+          distance: cameraDistance,
+        });
+      }
+      // Layers ride the same mark and are additive, so a missing one is simply
+      // silent — no fallback to reach for, unlike the replacement above. Asked
+      // of the table first rather than fired and refused, because an unanswered
+      // trigger is reported as an unknown event and this one is expected to be
+      // unanswered until its clips ship.
+      for (const layer of roleAudio?.alongside ?? EMPTY_AUDIO_LAYERS) {
+        if (!this.audioTableAnswers(layer)) continue;
+        this.audioEvents.trigger(layer, this.audioClock, {
+          position: [position.x, position.y, position.z],
+          distance: cameraDistance,
+        });
+      }
     }
     const binding = this.unitNotifyBudget.request(name, this.unitNotifyClock, cameraDistance);
     if (!binding) return;
@@ -4657,6 +4763,73 @@ export class RtsApp {
   }
 
   /**
+   * The next moment a blow lands at the construction site, on {@link audioClock}.
+   *
+   * `null` whenever no site owns the bed, so the schedule is re-drawn from
+   * scratch when one does — a site inheriting a timer that expired while the map
+   * was quiet would open with an immediate strike, which is the one cadence a
+   * crew never has.
+   */
+  private constructionWorkAt: number | null = null;
+
+  /**
+   * Hammer blows and timber over the construction bed — §17's `SFX-BLD-003`,
+   * `004` and `005`, which only became possible when the clips landed.
+   *
+   * The bed's own note explains why it was ever alone: with no hammer clip there
+   * was nothing to play *per blow*, so a wash stood in for work. It stays under
+   * these rather than being replaced, because it is doing a different job (the
+   * site is a continuous place) and it is mixed to sit there — if the two ever
+   * fight, the fix is `building.build_loop.volume` in the table, which is tuning
+   * and is meant to move.
+   *
+   * Three decisions worth keeping:
+   *
+   * 1. **The cadence is drawn, not counted.** There is still no notify to hang a
+   *    blow on (the builder stands in his idle), so nothing in the world knows
+   *    when a hammer falls. A fixed interval would supply that answer wrongly —
+   *    an even beat reads as a machine. A random gap inside a band reads as
+   *    people working, which is what is actually true.
+   * 2. **Two events, not one pool of eight.** Striking and hauling are different
+   *    actions, and drawing between the events rather than between the clips is
+   *    what makes their ratio something the table can state.
+   * 3. **It follows the bed's site.** Whatever single foundation owns the bed
+   *    owns the blows, for the reason {@link updateBuildLoopAudio} gives: four
+   *    sites layered are a wash, not four readable builds.
+   */
+  private updateConstructionWorkAudio(): void {
+    const site = this.buildLoopSite;
+    if (!site) {
+      this.constructionWorkAt = null;
+      return;
+    }
+    if (this.constructionWorkAt === null) {
+      this.constructionWorkAt = this.audioClock + this.nextConstructionWorkGap();
+      return;
+    }
+    if (this.audioClock < this.constructionWorkAt) return;
+    this.constructionWorkAt = this.audioClock + this.nextConstructionWorkGap();
+    // Hammering is the majority of what a site sounds like; a haul is the
+    // punctuation between runs of it.
+    const event = Math.random() < CONSTRUCTION_HAMMER_SHARE
+      ? RTS_AUDIO.buildingConstructionHammer
+      : RTS_AUDIO.buildingConstructionWood;
+    const y = this.groundSurface.heightAt(site.x, site.z);
+    this.audioEvents.trigger(event, this.audioClock, {
+      position: [site.x, y, site.z],
+      distance: this.cameraController.camera.position.distanceTo(
+        this.scratchStructureAudio.set(site.x, y, site.z),
+      ),
+    });
+  }
+
+  /** Seconds until the next blow — uniform inside the authored band. */
+  private nextConstructionWorkGap(): number {
+    const [minimum, maximum] = CONSTRUCTION_WORK_GAP_SECONDS;
+    return minimum + Math.random() * (maximum - minimum);
+  }
+
+  /**
    * The building the fire bed is currently sounding over, and the event it is
    * sounding as.
    *
@@ -4801,12 +4974,19 @@ export class RtsApp {
    * change, exactly like every other delivery in §81.4.
    */
   private variantEvent(baseEventId: string, variant: RtsAudioVariant | null): string {
-    return resolveRtsAudioVariant(
-      baseEventId,
-      variant,
-      (eventId) => this.audioEvents.definition(eventId) !== null,
-    );
+    return resolveRtsAudioVariant(baseEventId, variant, this.audioTableAnswers);
   }
+
+  /**
+   * Whether the loaded event table answers an id at all.
+   *
+   * Bound once as a field rather than written as a closure at each call site,
+   * because both fallbacks that use it — the armour split and the rig override —
+   * run on the notify stream, and a fresh arrow function per footfall is an
+   * allocation the frame does not need to make to ask a map a question.
+   */
+  private readonly audioTableAnswers = (eventId: string): boolean =>
+    this.audioEvents.definition(eventId) !== null;
 
   /**
    * The armour class a combat target belongs to, as a sound variant.
@@ -4835,6 +5015,24 @@ export class RtsApp {
     this.audioEvents.trigger(this.variantEvent(eventId, variant), this.audioClock, {
       position: [position.x, position.y, position.z],
       distance: this.cameraController.camera.position.distanceTo(position),
+    });
+  }
+
+  /**
+   * A world sound at a bare point, fog-gated like every other.
+   *
+   * The third of the trio beside {@link playUnitAudio} and
+   * {@link playStructureAudio}, for the moments that belong to neither: a shell
+   * arriving somewhere, a shot passing through air. Those have a position and
+   * nothing else — no unit to read an armour class off, no building to sample a
+   * ground height under — so this one takes the point as given and asks the
+   * table nothing but the id.
+   */
+  private playPointAudio(eventId: string, point: Vector3): void {
+    if (!this.worldAudioAudible(point.x, point.z)) return;
+    this.audioEvents.trigger(eventId, this.audioClock, {
+      position: [point.x, point.y, point.z],
+      distance: this.cameraController.camera.position.distanceTo(point),
     });
   }
 
@@ -5516,15 +5714,20 @@ export class RtsApp {
       // where it lands, and — through the flight time returned here — a blow
       // that waits for both.
       if (shot.defense.attackVfx === "cannonball") {
+        const landing = combatImpactPoint(shot.attacker.position, shot.target);
+        this.playPointAudio(RTS_AUDIO.cannonballFlight, landing);
         return this.cannonballs.spawn(
           shot.attacker.position,
-          combatImpactPoint(shot.attacker.position, shot.target),
+          landing,
           shot.defense.impactEffect ?? null,
           TOWER_MUZZLE_HEIGHT,
         );
       }
       // A completed Karakol is two Archer attacks at once. Offset the two
       // tracers very slightly so the volley reads as two arrows rather than one.
+      // The flight sound is not offset with them: two arrows loosed together are
+      // one whizz, and the event's own cooldown would refuse the second anyway.
+      this.playPointAudio(RTS_AUDIO.arrowFlight, shot.target.position);
       this.projectiles.spawn(
         shot.attacker.owner,
         shot.attacker.position,
@@ -5611,9 +5814,14 @@ export class RtsApp {
           distance: this.cameraController.camera.position.distanceTo(report),
         });
       }
+      const landing = combatImpactPoint(shot.attacker.position, shot.target);
+      // The incoming whistle, at the far end rather than at the muzzle — the
+      // report above already owns the muzzle and would mask it there, while
+      // here it warns the player where to look a moment before the ball lands.
+      this.playPointAudio(RTS_AUDIO.cannonballFlight, landing);
       return this.cannonballs.spawn(
         muzzle ?? shot.attacker.position,
-        combatImpactPoint(shot.attacker.position, shot.target),
+        landing,
         // The blast belongs to the gun, not to what it hit: the same shell is
         // the same explosion on a wall and on a soldier.
         shot.attacker.stats.impactEffect ?? null,
@@ -5644,6 +5852,10 @@ export class RtsApp {
       // The Archer's release point rides its rendered right-hand socket. The
       // resulting arrow is still presentation over an already-real combat shot.
       const muzzle = shot.attacker.muzzleWorldPosition(this.scratchMuzzle);
+      // At the target, not the bow: `combat.arrow_release` already answers the
+      // loose off the Archer's own marker, and an arrow is only audible in
+      // flight to whatever it is coming at.
+      this.playPointAudio(RTS_AUDIO.arrowFlight, shot.target.position);
       this.projectiles.spawn(
         shot.attacker.owner,
         muzzle ?? shot.attacker.position,
@@ -6753,11 +6965,20 @@ export class RtsApp {
     // has one. What must not survive the reset is the *claim* — a site from the
     // last match would suppress the first build of this one.
     this.buildLoopSite = null;
+    this.constructionWorkAt = null;
     this.fireLoopSite = null;
     this.fireLoopEvent = null;
     this.startAudioBeds();
     this.notificationFeed.setNotifications([]);
     this.previousLogisticsStatus.clear();
+    // The §18 link watch goes with it, and the key that gates it: carrying a
+    // "was linked" over would open the next match either chiming for a road the
+    // player has not laid or, worse, silently swallowing the first one they do.
+    // `widestTerritory` back to zero is what makes the new match's opening
+    // border read as a first measurement rather than as a conquest.
+    this.previousRoadLink.clear();
+    this.roadLinkAudioKey = "";
+    this.widestTerritory = 0;
     // ...and the supply watch with it (Faz S5). Carrying `everSuppliedSites`
     // over would open the next match advising the player to *repair* a road they
     // have not built yet, on a site the new game has handed back to nobody.
@@ -7266,7 +7487,14 @@ export class RtsApp {
     }
     this.demolishArmed = null;
     structure.health.damage(structure.health.max);
-    this.announce("structure", t("command.structure.demolished", { building: t(structure.stats.nameKey) }));
+    // §17's `SFX-BLD-010`, and only on this press: the arming one above answers
+    // with the feed's refusal tone because it is a question, not an order taken.
+    this.announce(
+      "structure",
+      t("command.structure.demolished", { building: t(structure.stats.nameKey) }),
+      "done",
+      RTS_AUDIO.buildingDemolish,
+    );
   }
 
   /**
@@ -7861,8 +8089,96 @@ export class RtsApp {
       if (!livingProducers.has(structureId)) this.previousLogisticsStatus.delete(structureId);
     }
 
+    this.syncLogisticsLinkAudio();
     this.syncSupplyNotifications();
     this.syncUnderAttackNotifications();
+  }
+
+  /**
+   * §18's `SFX-LOG-003`, `007` and `008`: a store joining the network, a border
+   * post joining it, and the border itself moving out.
+   *
+   * Polled beside the cut/restored notices above rather than hooked to a
+   * construction callback, and for the same reason those are: none of these is
+   * caused by a single act. A depot links because a road reached it, or because
+   * a border shifted under the route, or because the tile that broke the chain
+   * was repaved — and a building that was already linked when it finished is not
+   * news. Only the transition into linked is.
+   *
+   * The two link sounds are read through {@link outpostConnectedToMainRoad},
+   * which is the same call the territory system makes to decide an outpost's
+   * radius, so a sound and the control area that appears on screen can never
+   * disagree about whether the road got there.
+   */
+  private syncLogisticsLinkAudio(): void {
+    let linkAnnounced = false;
+    const living = new Set<number>();
+    // What a link answer depends on, as one key. `outpostConnectedToMainRoad` is
+    // a network traversal *and this runs on every simulation tick* — at 8x, many
+    // times a rendered frame — so asking it unconditionally would put a BFS per
+    // depot and per outpost into the hot path. That is not a hypothetical: a
+    // per-cell version of the same walk inside the territory refresh is what used
+    // to stall road building for whole seconds. A link can only change when
+    // committed road topology does or when ownership moves under it, and those
+    // are exactly the two counters below.
+    const linkKey = `${this.roads.version}:${this.territory.version}`;
+    const stale = linkKey !== this.roadLinkAudioKey;
+    this.roadLinkAudioKey = linkKey;
+    for (const structure of this.structures.all()) {
+      if (structure.owner !== PLAYER_OWNER || !structure.construction.complete) continue;
+      // A building whose link means nothing is not asked about at all.
+      const territory = Boolean(structure.stats.territory);
+      // Read off the structure rather than off its balance row, and generic
+      // rather than `stats.id === "depot"`: a fork whose store is called
+      // something else still gets the sound, and progression has already
+      // applied the tier's capacity by the time a building is complete.
+      const depot = structure.storageCapacity !== null;
+      if (!territory && !depot) continue;
+      living.add(structure.id);
+      // Nothing the answer depends on has moved, and this building already has
+      // an answer on file. A building *without* one is still asked even on an
+      // unchanged network — it has only just been completed, and skipping it
+      // here would leave it unregistered until the next topology change, which
+      // is the frame its link coming up would then be swallowed as a first sight.
+      if (!stale && this.previousRoadLink.has(structure.id)) continue;
+      const linked = this.outpostConnectedToMainRoad(structure);
+      const previous = this.previousRoadLink.get(structure.id);
+      this.previousRoadLink.set(structure.id, linked);
+      // `undefined` is a building seen for the first time — completed this
+      // frame, or a match restored. Silent, because `building.complete` has just
+      // spoken for it and a restore has no news in it at all.
+      if (previous !== true && previous !== undefined && linked) {
+        this.playStructureAudio(
+          structure,
+          territory ? RTS_AUDIO.logisticsOutpostConnected : RTS_AUDIO.logisticsDepotConnected,
+        );
+        linkAnnounced = true;
+      }
+    }
+    for (const structureId of [...this.previousRoadLink.keys()]) {
+      if (!living.has(structureId)) this.previousRoadLink.delete(structureId);
+    }
+
+    // §18's `SFX-LOG-008`. A high-water mark rather than a delta, so ground lost
+    // to a raid and retaken does not announce itself as an expansion the second
+    // time — what the sound means is "the map is further yours than it has ever
+    // been", which is the only version of it worth a chime.
+    const cells = this.territory.controlledCellCount(PLAYER_OWNER);
+    if (cells > this.widestTerritory) {
+      const first = this.widestTerritory === 0;
+      this.widestTerritory = cells;
+      // Suppressed in two cases, both of them "this is not news". A link sound
+      // this frame already reported the cause — an outpost reaching the network
+      // is exactly what widens its radius, and hearing both is one event told
+      // twice. And the opening measurement is not growth: the starting centre's
+      // own ground arrives as a jump from zero.
+      // Triggered directly rather than through `playUiAudio`: it is unpositioned
+      // for the same reason a stinger is — an area has no point to sound from —
+      // but it is not the answer to a click, and it rides `sfx` rather than `ui`.
+      if (!first && !linkAnnounced) {
+        this.audioEvents.trigger(RTS_AUDIO.logisticsTerritoryExpanded, this.audioClock);
+      }
+    }
   }
 
   /**
@@ -8313,7 +8629,14 @@ export class RtsApp {
           })
         : t("command.progression.town.insufficient", { age: townLabel, cost: formatResourceCost(cost) }),
     };
-    this.announce("progression", message[result], result === "started" ? "done" : "refused");
+    this.announce(
+      "progression",
+      message[result],
+      result === "started" ? "done" : "refused",
+      // §17's `SFX-BLD-008`. Only the start carries it; a refusal keeps the
+      // generic error the notification kind already maps to.
+      result === "started" ? RTS_AUDIO.buildingUpgrade : undefined,
+    );
     this.syncAgeUi();
   }
 
@@ -8346,7 +8669,15 @@ export class RtsApp {
           })
         : t("command.progression.level.insufficient", { tier: targetLabel }),
     };
-    this.announce("progression", message[result], result === "started" ? "done" : "refused");
+    this.announce(
+      "progression",
+      message[result],
+      result === "started" ? "done" : "refused",
+      // §17's `SFX-BLD-007`, the same sound as the age-up above: from the
+      // player's side both are "the centre has started getting bigger", and the
+      // bar that appears is what says which.
+      result === "started" ? RTS_AUDIO.buildingUpgrade : undefined,
+    );
     this.syncAgeUi();
   }
 

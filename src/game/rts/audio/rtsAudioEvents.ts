@@ -14,6 +14,7 @@
  * silently never plays.
  */
 
+import type { UnitRoleId } from "../../data/gameDataTypes";
 import type { RtsNotificationKind, RtsNotificationSeverity } from "../ui/rtsNotifications";
 import type { RtsMusicState } from "./rtsMusicState";
 
@@ -49,6 +50,118 @@ export const RTS_NOTIFY_AUDIO_EVENTS: Readonly<Record<string, string>> = {
 /** The audio event a notify fires, or null when the marker is silent by design. */
 export function rtsNotifyAudioEvent(notifyName: string): string | null {
   return RTS_NOTIFY_AUDIO_EVENTS[notifyName] ?? null;
+}
+
+/**
+ * What one rig's copy of a shared marker sounds like, when the shared answer is
+ * wrong for it.
+ *
+ * `RTS_NOTIFY_AUDIO_EVENTS` maps a marker name to one sound for the whole game,
+ * which is right for every marker that means the same thing wherever it was
+ * authored. `footstep` on the Siege rig is the case where that stops being true,
+ * and §82.4's armour split is what exposed it: `siege` is `heavy`, so the gun
+ * carriage began playing the boots produced for the Guard. A wheeled gun neither
+ * walks nor wears boots, and the four marks on its rig are wheel contacts.
+ *
+ * The axis here is deliberately **not** a third armour class. Armour answers
+ * "how much does a blow landing on this hurt", which `siege` shares with the
+ * Guard honestly; what differs is the *mechanism* that made the sound, and that
+ * is a property of the rig, not of the unit's toughness. Widening `armorClass`
+ * to carry it would have made a combat number answer an animation question, and
+ * `combat.body_impact_heavy` would then have needed a siege set it does not want.
+ *
+ * Two kinds of override, because a rig can disagree with the shared sound in two
+ * different ways:
+ *
+ * - `instead` **replaces** it. The wheel is what the marker means here, so the
+ *   footstep must not also play.
+ * - `alongside` **adds** to it. The carriage groans as the gun rolls, and no
+ *   marker of its own exists for that; it rides the contact marks and thins
+ *   itself through its own `cooldownMs`, which is what keeps a body sound from
+ *   firing four times per gait cycle. One marker feeding two rates is the reason
+ *   these are two events rather than one clip family carrying both layers — a
+ *   single set cannot hold a per-contact rate and a per-few-seconds rate at once.
+ */
+export interface RtsRoleNotifyAudio {
+  /** Played *instead of* the shared sound — falls back to it until clips ship. */
+  readonly instead?: string;
+  /** Played *in addition*, and simply silent until the table answers. */
+  readonly alongside?: readonly string[];
+}
+
+/** §16's artillery, whose rig means something different by `footstep`. */
+export const RTS_SIEGE_WHEEL_ROLL = "siege.wheel_roll";
+export const RTS_SIEGE_CARRIAGE_CREAK = "siege.carriage_creak";
+
+/** Which rig disagrees with the shared sound of which marker. */
+export const RTS_ROLE_NOTIFY_AUDIO: Readonly<
+  Partial<Record<UnitRoleId, Readonly<Record<string, RtsRoleNotifyAudio>>>>
+> = {
+  siege: {
+    footstep: { instead: RTS_SIEGE_WHEEL_ROLL, alongside: [RTS_SIEGE_CARRIAGE_CREAK] },
+  },
+};
+
+/**
+ * The override for this rig's copy of a marker, or null when it has none.
+ *
+ * Kept as a lookup returning null rather than as a resolver returning a list,
+ * because this runs on every footfall of every visible unit and the answer is
+ * null for all four markers of three of the four rigs. A list would allocate on
+ * the hot path to say "nothing special here".
+ */
+export function rtsRoleNotifyAudio(
+  notifyName: string,
+  role: UnitRoleId | null,
+): RtsRoleNotifyAudio | null {
+  if (role === null) return null;
+  return RTS_ROLE_NOTIFY_AUDIO[role]?.[notifyName] ?? null;
+}
+
+/**
+ * The event a marker actually fires for one rig: the rig's own sound when the
+ * project ships it, the shared sound when it does not.
+ *
+ * The same fallback shape as {@link resolveRtsAudioVariant}, and for the same
+ * reason — it lets the override land *before* the clips exist. Until a wheel
+ * roll is produced, a siege engine keeps playing the heavy footstep it plays
+ * today, which is wrong but audible; silence would be worse, and waiting for the
+ * clips would mean the code and the clips have to land in the same commit.
+ *
+ * Pure, with the table's answer passed in, so `test:engine` drives both branches
+ * without a scene.
+ */
+export function resolveRtsRoleNotifyEvent(
+  sharedEventId: string | null,
+  override: RtsRoleNotifyAudio | null,
+  answers: (eventId: string) => boolean,
+): string | null {
+  const instead = override?.instead;
+  if (instead !== undefined && answers(instead)) return instead;
+  return sharedEventId;
+}
+
+/**
+ * Every event id a rig override is *allowed* to name.
+ *
+ * The twin of {@link rtsAudioVariantEventIds}, and kept out of
+ * {@link rtsAudioEventIds} for the same reason: an override is optional by
+ * construction, so requiring the table to answer it would make the code
+ * unlandable until the clips exist. What this list is for is the other
+ * direction — an id here that is not a legal event id, or a table entry named
+ * here that nothing triggers.
+ */
+export function rtsRoleNotifyEventIds(): string[] {
+  return [
+    ...new Set(
+      Object.values(RTS_ROLE_NOTIFY_AUDIO).flatMap((markers) =>
+        Object.values(markers).flatMap((audio) => [
+          ...(audio.instead === undefined ? [] : [audio.instead]),
+          ...(audio.alongside ?? []),
+        ]),
+      ),
+    ),
+  ];
 }
 
 /**
@@ -275,6 +388,117 @@ export const RTS_AUDIO = {
    */
   buildingBuildLoop: "building.build_loop",
   /**
+   * The crew's own blows, layered *over* {@link buildingBuildLoop} rather than
+   * replacing it — §17's `SFX-BLD-003`/`004` (hammer) and `SFX-BLD-005` (timber
+   * being moved), which only became possible when the clips landed.
+   *
+   * The bed alone was always a compromise, and its note says why: with no hammer
+   * clip there was no blow to play, so a continuous wash stood in for work. These
+   * are that blow. They still hang on no animation notify — the builder is in his
+   * idle pose (`workerConstructionSystem`) — so the cadence is the scheduler's in
+   * {@link RtsApp.updateConstructionWorkAudio}, drawn at random rather than
+   * metronomic: a fixed interval reads as a machine, and a site is a crew.
+   *
+   * Two events rather than one set of eight, because they are two different
+   * actions and the ear separates them: a hammer strikes, timber is carried and
+   * dropped. Mixing them as one pool would make the ratio unauthorable.
+   *
+   * They follow the bed's single-site rule (see {@link buildingBuildLoop}): the
+   * blows land at the one site that owns the bed, so four foundations are four
+   * places on the map and still one readable rhythm.
+   */
+  buildingConstructionHammer: "building.construction_hammer",
+  buildingConstructionWood: "building.construction_wood",
+  /**
+   * A placement the ground refused — §17's `SFX-BLD-002`, and the missing half
+   * of {@link buildingPlace}.
+   *
+   * Its own event rather than `uiError`, because the two refusals are not the
+   * same kind of "no": a greyed-out button says the kingdom cannot afford this,
+   * a refused click says *not here*. The player answers them with different
+   * actions, so they must not answer with the same sound.
+   *
+   * Fired only for a confirm that reached the ground and was turned down — the
+   * mission gate's refusal upstream keeps `uiError`, since that one is about the
+   * building rather than the spot.
+   */
+  buildingInvalidPlace: "building.invalid_place",
+  /**
+   * A building taken down by its owner — §17's `SFX-BLD-010`, the *confirmed*
+   * press rather than the arming one.
+   *
+   * Demolish is a two-press command: the first arms and answers with the feed's
+   * refusal tone, the second commits. Only the second is this. It rides the
+   * notification's `sound` override rather than a call of its own, which is what
+   * §82.6 built that field for — the caller whose outcome is more specific than
+   * "it worked".
+   *
+   * Not `structureCollapse`: the building's own collapse still plays where it
+   * stands, from the damage table, because razing it is what a full-health
+   * `damage()` does. This is the order being taken, over the top of it.
+   */
+  buildingDemolish: "building.demolish",
+  /**
+   * An upgrade *starting* — §17's `SFX-BLD-007`/`008`, level-up and age-up as one
+   * sound.
+   *
+   * One event for both because they are the same moment from the player's side:
+   * the centre has begun spending time and money on getting bigger. What tells
+   * them apart is the progress bar that appears, and §62 holds — nothing here is
+   * carried by sound alone.
+   *
+   * The start, not the finish: an age-up completing already has `stingerAgeUp`,
+   * and a level-up completing has its notice. Putting a sound on both ends of a
+   * bar would spend the milestone twice.
+   */
+  buildingUpgrade: "building.upgrade",
+  /**
+   * A route paved, and a tile unpaved — §18's `SFX-LOG-001` and `SFX-LOG-009`.
+   *
+   * These answer a click, so they ride the `ui` bus with the placement chirp
+   * rather than sounding at the tiles: a road is drawn while the camera is
+   * looking at it, and attenuating the reply by distance would only make the
+   * far end of a long route quieter than the near end of it.
+   *
+   * Erase stays armed after a confirm (the tool is a brush, unlike route
+   * drawing), so its cooldown is what keeps a dragged rub-out from becoming a
+   * machine-gun. The road event's variants exist for the same reason: paving is
+   * the one logistics action a player repeats within seconds.
+   */
+  logisticsRoadPlace: "logistics.road_place",
+  logisticsRoadErase: "logistics.road_erase",
+  /**
+   * A store or a border joining the network — §18's `SFX-LOG-003` and
+   * `SFX-LOG-007`.
+   *
+   * The *link* coming up, not the building finishing: `buildingComplete` already
+   * covers the latter, and these two fire on a transition that has nothing to do
+   * with construction — a road reaching the site, or a border shifting so the
+   * route home is legal again. An outpost's link is worth its own sound because
+   * it is the moment its control radius jumps to `connectedControlRadius`, which
+   * is the difference between a claim and a usable region.
+   *
+   * Spatial, at the building: unlike the road tools these are the map telling
+   * the player something, and where it happened is half of what it says.
+   */
+  logisticsDepotConnected: "logistics.depot_connected",
+  logisticsOutpostConnected: "logistics.outpost_connected",
+  /**
+   * The player's border moving outward — §18's `SFX-LOG-008`.
+   *
+   * Measured off the territory grid's own cell count rather than off the thing
+   * that caused it, because the causes are several (an outpost completing, a
+   * road reaching one, a rival's outpost falling) and the player only cares that
+   * the map is now theirs. A high-water mark, so ground lost and retaken does
+   * not re-announce itself.
+   *
+   * Global rather than placed: an expansion is an area, and an area has no point
+   * to sound from. Suppressed on any frame a connection sound above already
+   * fired — those two moments cause this one, and hearing both is one event
+   * reported twice.
+   */
+  logisticsTerritoryExpanded: "logistics.territory_expanded",
+  /**
    * A unit going down — §19/§20/§21's `SFX-WRK-006` / `SFX-GRD-007` /
    * `SFX-ARC-007`, as one event rather than three.
    *
@@ -303,6 +527,37 @@ export const RTS_AUDIO = {
   // The gun's report. The only combat sound with no notify behind it — the
   // shell's flight is timed from the shot, not from a marker on a clip.
   cannonFire: "siege.cannon_fire",
+  /**
+   * What a shot sounds like *between* the weapon and what it hit.
+   *
+   * Both of these play at the **arrival** end rather than at the muzzle, and
+   * that is a decision rather than a convenience. The departure is already
+   * covered where it happens — `combat.arrow_release` off the Archer's marker,
+   * `siege.cannon_fire` off the gun — and a second sound stacked on the same
+   * point would mostly be masked by the first, loudest one. At the far end it
+   * does work nothing else does: it says *something is about to land here*, at
+   * the place the player needs to be looking, slightly before it does.
+   *
+   * The engine is why this is a choice at all. A flight sound physically travels
+   * with the projectile, and `AudioPlaybackHandle` cannot be moved once it is
+   * playing — it carries `stop`/`setVolume`/`setPitch` and no position. So a
+   * travelling sound has to be pinned to one end or the other, and of the two
+   * ends only one is not already occupied.
+   */
+  arrowFlight: "combat.arrow_flight",
+  cannonballFlight: "siege.cannonball_flight",
+  /**
+   * The shell arriving — earth, dust and debris thrown up where it lands.
+   *
+   * Named for the shell rather than for the ground the clips were produced
+   * against, because a gun in this game is aimed at a wall as often as at the
+   * dirt in front of one and the event fires wherever the ball actually
+   * arrives. It is deliberately *additive* to the damage sound: the wall's
+   * `structure.impact_*` crack is the material giving way, this is the blast
+   * that did it, and the two are different layers of one moment rather than two
+   * answers to it.
+   */
+  shellImpact: "siege.shell_impact",
   /**
    * §16's economy set. Three different kinds of moment, and they route to three
    * different buses on purpose rather than by namespace:

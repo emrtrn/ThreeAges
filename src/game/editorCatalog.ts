@@ -69,31 +69,23 @@ import { normalizeRtsMusicStateSettings } from "@/game/rts/audio/rtsMusicState";
  * peer list means scrolling past music to reach a UI click. Membership is by id
  * prefix, which is free: the ids already carry the channel.
  *
- * Two of these headings are deliberately empty and stay listed. ECONOMY is §16,
- * which has no events yet; LOGISTICS is a channel the design chose *not* to give
- * its own sounds — the notification tiers carry it (§69), and a heading that
- * says so is the cheapest place to record a decision an author would otherwise
- * re-litigate. COMBAT gathers three prefixes because the table is coarser than
+ * Both headings that were once deliberately empty have since filled, and the
+ * note is kept rather than deleted because what it records is a decision being
+ * reversed by production. ECONOMY was §16 with no events; Paket 2 gave it eight.
+ * LOGISTICS was the stronger claim — a channel the design chose *not* to give
+ * its own sounds, on the grounds that the notification tiers carried it (§69) —
+ * and Faz 5's buildings-and-logistics delivery overturned it: a road being paved,
+ * a depot joining the network and a border moving out are three things a tier
+ * cannot say. COMBAT gathers three prefixes because the table is coarser than
  * the inventories are (§81.2): siege and structure damage are combat sounds
  * without being combat *events*.
  */
 const AUDIO_EVENT_CATEGORIES = [
   { id: "ui", label: "UI", prefixes: ["ui."] },
   { id: "notifications", label: "NOTIFICATIONS", prefixes: ["notify."] },
-  {
-    id: "economy",
-    label: "ECONOMY",
-    prefixes: ["economy.", "market."],
-    emptyHint: "Pazar/ekonomi sesleri (plan §16) henüz bağlanmadı — Paket 2-4'ün işi.",
-  },
+  { id: "economy", label: "ECONOMY", prefixes: ["economy.", "market."] },
   { id: "building", label: "BUILDING", prefixes: ["building."] },
-  {
-    id: "logistics",
-    label: "LOGISTICS",
-    prefixes: ["logistics."],
-    emptyHint:
-      "Kendi sesi yok ve olmayacak: kesinti notify.alert, dönüş notify.info olarak duyulur (plan §69).",
-  },
+  { id: "logistics", label: "LOGISTICS", prefixes: ["logistics."] },
   { id: "units", label: "UNITS", prefixes: ["unit."] },
   { id: "combat", label: "COMBAT", prefixes: ["combat.", "siege.", "structure."] },
   { id: "world-ambience", label: "WORLD_AMBIENCE", prefixes: ["world."] },

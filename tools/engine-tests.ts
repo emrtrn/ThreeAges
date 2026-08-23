@@ -775,6 +775,12 @@ import {
   rtsAudioVariantEventIds,
   resolveRtsAudioVariant,
   RTS_AUDIO_SPLIT,
+  RTS_ROLE_NOTIFY_AUDIO,
+  RTS_SIEGE_CARRIAGE_CREAK,
+  RTS_SIEGE_WHEEL_ROLL,
+  resolveRtsRoleNotifyEvent,
+  rtsRoleNotifyAudio,
+  rtsRoleNotifyEventIds,
 } from "../src/game/rts/audio/rtsAudioEvents";
 import {
   estimateSubtitleDurationSeconds,
@@ -4644,6 +4650,11 @@ check("RTS audio events: every triggered name is answered by the shipped table",
     // surely as the rest, just from data, so an entry a building names is not an
     // orphan — and one nothing names still is.
     ...shippedDamageSoundEventIds(),
+    // ...and the ones a rig names instead of, or beside, a shared marker
+    // (§82.8). Optional for the same reason a variant is: the override falls
+    // back to the shared sound until the table answers it, so requiring these
+    // would make the code unlandable before the clips exist.
+    ...rtsRoleNotifyEventIds(),
   ]);
   for (const eventId of Object.keys(table.events)) {
     assert.ok(triggered.has(eventId), `audio event "${eventId}" is in the table but never triggered`);
@@ -4741,6 +4752,45 @@ check("RTS audio events: a burning building's sound is a bed, not a per-spawn cr
   }
 });
 
+check("RTS audio events: a completion is one signature, a work site is a pool", () => {
+  // Faz 5's buildings delivery shipped four completion clips and four hammers,
+  // and they are meant to be used in opposite ways — which is a decision, not a
+  // count, so it is worth pinning.
+  //
+  // A completion is the kingdom's single signature chime. Four of them playing at
+  // random are heard as four *different things* having happened, not as variety,
+  // so the other three ship as alternatives an author auditions by swapping the
+  // id — never as a pool. A construction site is the exact inverse: a crew whose
+  // every blow sounds identical is the thing that reads as broken.
+  //
+  // Neither side pins *which* clip or *how many*: the counts are "one" and "more
+  // than one", so re-auditioning a completion or producing a fifth hammer stays
+  // green.
+  const table = readAudioEventTable();
+  const completion = table.events[RTS_AUDIO.buildingComplete]
+    ?? assert.fail("the table must answer building.complete");
+  assert.equal(
+    completion.clips.length,
+    1,
+    "building.complete names exactly one clip: the produced alternatives are options, not a pool",
+  );
+  for (const eventId of [RTS_AUDIO.buildingConstructionHammer, RTS_AUDIO.buildingConstructionWood]) {
+    const definition = table.events[eventId] ?? assert.fail(`${eventId} is not in the shipped table`);
+    assert.ok(
+      definition.clips.length > 1,
+      `${eventId} needs more than one clip — a site repeats itself every second or so`,
+    );
+    // And they must reach no further than the bed they layer over, or the detail
+    // outlives the wash it belongs to.
+    const bed = table.events[RTS_AUDIO.buildingBuildLoop] ?? assert.fail("the construction bed is missing");
+    assert.equal(definition.spatial, true, `${eventId} lands at the site, not in the player's ear`);
+    assert.ok(
+      definition.maxDistance <= bed.maxDistance,
+      `${eventId} must not carry further than the bed it layers over`,
+    );
+  }
+});
+
 check("RTS audio events: only long beds stream, and every bed does", () => {
   const table = readAudioEventTable();
   // Streaming is not a mix taste, it is which playback path a clip takes, and
@@ -4825,6 +4875,89 @@ check("RTS audio variants: a shared sound splits by armour, falling back", () =>
   // carry it even once the clips exist.
   for (const eventId of rtsAudioVariantEventIds()) {
     assert.match(eventId, /^[a-z0-9]+(?:[._][a-z0-9]+)*$/u, `${eventId} is not a legal event id`);
+  }
+});
+
+check("RTS audio events: the Siege rig's footstep marks are wheels, and fall back until they are", () => {
+  const answersAll = (): boolean => true;
+  const answersNone = (): boolean => false;
+  const shared = RTS_NOTIFY_AUDIO_EVENTS.footstep!;
+
+  // The axis is the *rig*, not a third armour class. `siege` is `heavy` and
+  // honestly so — that is how much a blow landing on it hurts — but what made
+  // the sound is a wheel, and armour cannot say that. Only the rig that
+  // disagrees carries an override.
+  const siegeFootstep = rtsRoleNotifyAudio("footstep", "siege");
+  assert.ok(siegeFootstep, "the Siege rig overrides its footstep marks");
+  for (const role of ["guard", "archer", "worker"] as const) {
+    assert.equal(
+      rtsRoleNotifyAudio("footstep", role),
+      null,
+      `${role} keeps the shared footstep`,
+    );
+  }
+  // And no rig overrides a marker it is the only author of: those are already
+  // one sound each, so an override there would be a second answer beside it.
+  for (const marker of ["sword-swing", "arrow-release", "chop-impact"]) {
+    for (const role of ["guard", "archer", "siege", "worker"] as const) {
+      assert.equal(rtsRoleNotifyAudio(marker, role), null, `${marker} needs no rig override`);
+    }
+  }
+
+  // Shipped: the wheel replaces the footstep outright, because that is what the
+  // mark means on this rig and hearing both would be a gun that walks.
+  assert.equal(
+    resolveRtsRoleNotifyEvent(shared, siegeFootstep, answersAll),
+    RTS_SIEGE_WHEEL_ROLL,
+  );
+  // Not shipped yet: the shared footstep, not silence. This fallback is the
+  // whole reason the override could land before the clips — a siege engine that
+  // went quiet would be a worse bug than one that plays boots.
+  assert.equal(
+    resolveRtsRoleNotifyEvent(shared, siegeFootstep, answersNone),
+    shared,
+    "an unshipped rig sound is the shared one, not silence",
+  );
+  // A rig with no override is the shared sound whatever the table answers.
+  assert.equal(resolveRtsRoleNotifyEvent(shared, null, answersAll), shared);
+
+  // The creak is a *layer*, and the resolver must never hand it back as the
+  // replacement: it is additive, so it plays beside whichever of the two above
+  // won. Crossing the two would silence the wheel the moment the creak shipped.
+  for (const answers of [answersAll, answersNone]) {
+    assert.notEqual(
+      resolveRtsRoleNotifyEvent(shared, siegeFootstep, answers),
+      RTS_SIEGE_CARRIAGE_CREAK,
+      "a layered sound never replaces the marker's own",
+    );
+  }
+  assert.ok(
+    (siegeFootstep.alongside ?? []).includes(RTS_SIEGE_CARRIAGE_CREAK),
+    "the carriage creak rides the contact marks",
+  );
+
+  // Anything a rig override replaces must have a shared sound to fall back to,
+  // or the fallback resolves to null and the marker is silent until the clips
+  // land — which is the one failure this fallback exists to prevent.
+  for (const [role, markers] of Object.entries(RTS_ROLE_NOTIFY_AUDIO)) {
+    for (const [marker, audio] of Object.entries(markers!)) {
+      if (audio.instead === undefined) continue;
+      assert.ok(
+        RTS_NOTIFY_AUDIO_EVENTS[marker] !== undefined,
+        `${role}'s ${marker} override has no shared sound to fall back to`,
+      );
+    }
+  }
+
+  // Legal ids, and — like a variant — deliberately outside the set the table
+  // *must* answer. Requiring them would make the override unlandable until the
+  // clips exist, which is the coupling this whole shape exists to break.
+  const required = new Set(rtsAudioEventIds());
+  const overrides = rtsRoleNotifyEventIds();
+  assert.ok(overrides.length > 0, "the override roster is not empty");
+  for (const eventId of overrides) {
+    assert.match(eventId, /^[a-z0-9]+(?:[._][a-z0-9]+)*$/u, `${eventId} is not a legal event id`);
+    assert.ok(!required.has(eventId), `${eventId} is optional by construction`);
   }
 });
 

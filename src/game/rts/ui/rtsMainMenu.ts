@@ -72,6 +72,19 @@ export class RtsMainMenu {
     this.title.textContent = t("menu.title");
     this.detail.textContent = t("menu.tagline");
 
+    // The crest is intentionally decorative: the game title remains the screen's
+    // only heading, while this gives the menu a proper heraldic focal point
+    // without introducing a second, untranslated product name.
+    const heading = document.createElement("header");
+    heading.className = "rts-main-menu-heading";
+    const crest = document.createElement("span");
+    crest.className = "rts-main-menu-crest";
+    crest.setAttribute("aria-hidden", "true");
+    const crestMark = document.createElement("span");
+    crestMark.className = "rts-main-menu-crest-mark";
+    crest.appendChild(crestMark);
+    heading.append(crest, this.title, this.detail);
+
     this.actions.className = "rts-match-actions";
     this.startButton.type = "button";
     this.startButton.textContent = t("menu.start_match");
@@ -87,7 +100,7 @@ export class RtsMainMenu {
     footer.className = "rts-main-menu-footer";
     footer.appendChild(this.language.element);
 
-    this.card.append(this.title, this.detail, this.setup.element, this.actions, footer);
+    this.card.append(heading, this.setup.element, this.actions, footer);
     this.root.append(art, this.card);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     // The menu is the only screen that can change its own language *while it is

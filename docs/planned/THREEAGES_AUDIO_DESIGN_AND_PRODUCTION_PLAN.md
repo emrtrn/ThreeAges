@@ -178,11 +178,16 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-22 | **§82.5 uygulandı: yapı sesleri artık hasar tablosundan sürülüyor.** `RtsDamageSlot.sound` indi (string ya da çağ haritası), üç katmanlı override'ı bedavaya aldı, ve `structureMaterialVariant` ile `RTS_AUDIO_SPLIT`'in `structure.impact` satırı retire oldu — yapılarda olay id'si artık türetilmiyor. Uygulanırken üç şey netleşti. Birincisi: `sound` yalnızca çalınan üç slot'a (`debris`, `collapseDust`, `heavySmoke`) yazılabiliyor, çünkü `lightSmoke`/`ruinSmoke` saniyelerle ölçülen aralıklarla yeniden doğuyor ve oraya yazılan bir ses hiç çalmayan bir alan olurdu — validator reddediyor, sessizce yok saymıyor. İkincisi: olay tablosunun "tetiklenmeyen kayıt" testi hasar tablosunu okumayı öğrendi; yoksa veriden tetiklenen her yeni olay öksüz görünürdü. Üçüncüsü, formun pürüzü kendiliğinden çözüldü: form authored veriden render ettiği için `sound`, `sound.settlement` ve `sound.town` yollarının üçüne birden etiket vermek yetiyor — hangisi yazılmışsa o kutu çıkıyor, mod anahtarı gerekmiyor. Üretim tarafı iki klip seti bekliyor: ahşap isabet ve dikişsiz ateş döngüsü. Olaylar bugün var ve çalıyor — ahşap setler taşı işaret ediyor, ateş `starter-snd-fire-01` üzerinde duruyor — yani kalan iş kod değil, klip. |
 | 2026-08-22 | **§81.2'nin ertelediği ayrım kararı verildi (§82.4).** Kullanıcı sordu: Guard/Archer/Worker için ayrı ses üretmeden önce olay ayrımı kodda yapılmalı, yoksa üretilen varyantların bir kısmı hiç çalmaz. Doğru soru, ve cevap eksen üzerine çıktı. Önce sorunun **küçük** olduğu görüldü: `sword-swing` yalnız Guard rig'inde, `arrow-release` yalnız Archer'da, `chop-impact`/`throw-release` yalnız Worker'da authored — yani zaten rol başına ayrıklar. Gerçekten paylaşılan üç olay var. Eksen **rol değil `armorClass`** seçildi: zaten authored (guard/siege heavy, archer/worker light), kulağın duyduğu eksen o (bir darbe vuranın rolüne değil vurulanın zırhına benzer — §20 bunu zaten `SFX-GRD-004`/`005` ile söylüyor), ve dört değil iki set demek. İki işaret zıt özneyi okuyor: adım yapanın, darbe üzerine indiğinin. Yapılar kendi ekseninde (malzeme). `resolveRtsAudioVariant` varyantı yalnız tablo cevaplıyorsa seçiyor — müzik durum makinesiyle aynı geri düşüş şekli — ki üretim sınıf sınıf inebilsin. Bugün varyant sevk edilmedi, yani duyulacak değişiklik yok; ayrım kasten klipten önce indi. Yeni üretim 3 set / 12 klip (rol ekseninde 9 set olurdu). İki açık uç yazıldı: 15 binanın 10'u malzeme beyan etmiyor (doldurmanın **görsel** yan etkisi var, moloz ailesini de seçiyor), ve ayrım tekrar kontrolünü ikiye böldüğü için varyantlar indiğinde `cooldownMs`/`maxInstances` yeniden ayarlanmalı. |
 | 2026-08-22 | **`unit.death` bağlandı** (§82.2) — Faz 5'in ilk maddesi. Kanca `updateUnitDeaths`'in `onDefeated`'ı: yenilgi karesinde bir kez, iki taraf için de, sis kapısından geçerek. Üç rol için tek olay (§81.2'nin kararı). Zamanlama bilinçle klibe bırakıldı: kanca ölüm animasyonunun başladığı karede çalar, gövdenin indiği anda değil, ve düşüşü işaretlemek her ölüm klibine bir notify yazmayı gerektirirdi — kazmanın tuzağı. Bugün yer tutucu çalıyor (`starter-snd-impact-light`), üretim promptu §82.2'de. Sözleşme testi magnitude pinlemiyor, tekrar kontrolünün **var olduğunu** pinliyor: bir ölüm doğası gereği toplu gelir ve `cooldownMs`'i mix geçişinde 0'a düşürmek hata olarak sessiz, ses olarak duvardır. |
+| 2026-08-23 | **Paket 3 indi: yapılar ve lojistik** (§82.7). 21 klip, 10 olay, 7 kanca. Kullanıcının ayrıca söylediği iki kullanım zıt ve ikisi de sözleşme olarak sabitlendi: `building.complete` **tek** klip adlandırıyor (tamamlanma krallığın imza sesi; rastgele dört klip çeşitlilik değil "dört farklı şey oldu" diye duyulur, diğer üçü manifestte seçenek olarak duruyor), `building.construction_hammer` **dördünü de** (bir ekibin her darbesinin aynı olması bozuk gibi duyulan şeydir). Şantiye yatağı kaldı ve darbeler üstüne bindi — yatağın kendi notu neden yalnız olduğunu söylüyordu, çekiç klibi yoktu; kadans hâlâ notify beklemiyor, zamanlayıcının ve bantlı **rastgele**, çünkü eşit aralık makine gibi duyulur. Yalnız uygularken çıkan üçü: yolun başarısı aracın durumundan okunamıyor (durum modu söylüyor, zemini değil — `RoadGraph.version` okunuyor), bağlantı yoklaması her simülasyon tick'inde çalıştığı için kapıya alınmak zorundaydı (`roads.version:territory.version`; aynı desenin hücre başına hâli yol inşasını saniyelerce dondurmuştu), ve "bölge genişledi" bir yüksek-su işareti olmalı — üstelik aynı karede bir bağlantı sesi çaldıysa susuyor, yoksa tek olay iki kez anlatılıyor. `editorCatalog.ts`'in "lojistiğin kendi sesi yok ve olmayacak" kaydı bu teslimatla bozuldu; silinmedi, bozulduğu yazıldı. |
 | 2026-08-22 | **Paket 2 indi: UI, bildirimler ve ekonomi** (§82.6). 38 klip, 27 olay. §82.3'ün "seçim paneli butonları" maddesi on dört kanca yazılmadan kapandı: hepsi zaten `announce` ile bildirim atıyordu, ses bildirimin **türüne** bağlandı (`command` → `ui.confirm`, `command-refused` → `ui.error`), ve kendi cevabı olan çağıran için `RtsNotificationRequest.sound` eklendi. Üç tier kaldırılmadı, altına kondu — klibi olmayan tür hâlâ tier'ını duyuyor, ve harita `Partial` olduğu için klibi olmayan bir türü yazmak imkânsız. Üretim sesleri tick'te değil **geçişte**: üretici `producing`'e girdiği karede, yapının konumunda (§16'nın tek sert kuralı). Hover tek delege dinleyicide, çünkü paneller yeniden kuruluyor ve buton başına dinleyici sonradan eklenen paneli sessiz bırakırdı. İki klip eksik geldi (çağ atlama / düşman çağ atlama), kancaları yazılmadı — tablonun cevaplayamayacağı olay üretmemek için. |
 | 2026-08-22 | Yol boyunca bir tutarsızlık: `stg_age_up_02.ogg` diskten silinip içeriği `stg_age_up_01.ogg` üzerine yazılmıştı (bayt bayt aynı — yani bir yeniden adlandırma, ve §81.1'in "sevk edilmiş ama çalınmayan" tek varlığını temizliyor), ama manifest hâlâ `stg-age-up-02` kaydını taşıyordu. `audio:manifest` bunu yakalıyor ama **düzeltmiyor** — dosyası olmayan kaydı bildirip yazmayı reddediyor, ki silmenin kasıtlı olduğunu bilemez. Kayıt elle düşürüldü. |
 | 2026-08-22 | **Müzik geçiş ayarları editöre açıldı** (§80.1). §35.1 "editörden düzenlenebilir" diyordu ve yanlıştı: Ses Olayları tablosu `section: "events"` ile açılıyor, `music` bloğu formda hiç yoktu. Ayrı bir tablo — aynı dosya, başka derinlik — çünkü ikisinin satırı farklı: olay id'si tekrar eder, `crossfadeSeconds` etmez; bir dikişin özelliği asılacak bir olay satırı bulamaz. Kaydetme iki yarıyı da doğruluyor (motor `music.states`'i dokunmadan geçirir, doğrulaması oyundadır), çünkü iki tablo da tüm dosyayı yazar. Yol boyunca bir hata: skaler girdili bir tabloda "Varsayılana dön" değeri boş nesneye çeviriyordu — `{...structuredClone(18)}` `{}` verir; olay tablosunda görünmemişti çünkü orada her girdi bir nesne, `roads.json` de aynı şekilde etkileniyordu. |
 | 2026-08-22 | **İlk dakikada savaş müziği düzeltildi** (§35.2). Kullanıcı bildirdi, ve tahmini ("kurtlar mı tehdit sayılıyor") doğruydu — ama kurtlar `visibleEnemies`'e hiç girmiyordu; giriş **aktif çatışma** sütunundandı. Sahipli toprağa giren bir yırtıcı gerçek bir savaş hedefidir ve yakındaki muhafızlar onu otomatik hedefler: tek kurda cevap veren iki muhafız `battleActiveFights: 2` eşiğini karşılıyordu. İkinci delik aynı sütunda sis kapısının hiç olmamasıydı — haritanın öbür ucundaki, görülmemiş bir AI çarpışması oyuncunun müziğini sürüyordu; sinyalin öteki iki girdisi baştan beri o kapıdan geçiyordu. Ders: bir sinyalin girdileri aynı kuralı paylaşmalı, yoksa yarısı diğer yarısının reddettiği şeyi kabul eder. Kural tek yerde (`countsAsActiveFight`) ve testte. |
 | 2026-08-22 | Menü müziği aynı sekme hatasını taşıyordu ve kullanıcı yakaladı: menüdeyken başka sekmeye geçince ses devam ediyor, parça bitince yenisine geçmiyordu. Sebep birebir aynı — menünün kendi kare döngüsü de `requestAnimationFrame`, gizli sekmede duruyor, ses aygıtı durmuyor. Aynı tutma uygulandı. Asıl ders hatanın kendisi değil **iki kez yapılmış olması**: bir müzik yatağı sahiplenen her yığının onu `visibilitychange`'de tutması ve context'i askıya alması gerekiyor, ve eksik bir çağrı tam olarak modülün kendi testinin göremeyeceği şey. Kaynak düzeyinde bir kontrol eklendi — `MusicDirector` kuran her dosya bu üç kancayı taşımak zorunda — ki üçüncü sahip eklendiğinde build söylesin. |
+| 2026-08-23 | **`dirt` adı emekli oldu: mevcut adım seti §82.4'ün `light` yarısı ilan edildi.** Kullanıcı ağır adım setini üretmeye girerken sordu, ve soru doğru yerdeydi: dirt seti kalacak mı. Kalmadı — çünkü §82.4'ün gerekçesi zaten "§19'un Worker'ı ile §21'in Archer'ı ikisi de light; tasarımın aralarında adlandırdığı fark gövde değil zemin (dirt)" diyordu, yani mevcut dört klip light setin adı konmamış hâliydi. Light'ı ayrıca üretmek onları **ölü varlık** yapardı: her birimin `armorClass`'ı light ya da heavy, yani iki varyant da sevk edildiğinde base olay bir daha hiç tetiklenmez. Ama base silinemiyor da — `rtsAudioEventIds()` sözleşmesi `unit.footstep`'in tabloda cevaplanmasını zorunlu tutuyor ve `test:engine` bunu kontrol ediyor. Çözüm ikisini birden kapatıyor: dosyalar `sfx_unit_footstep_light_NN.ogg` oldu ve **base olay onlara işaret ediyor**; ayrı bir `unit.footstep_light` kaydı açılmadı, çünkü `resolveRtsAudioVariant` cevaplanmayan varyantı base'e düşürüyor ve aynı dört dosyayı tutan ikinci bir kayıt kalıcı bir kopya olurdu. Ad değişikliğinin kendi gerekçesi de var: `dirt` bir **zemin** ekseni vaat ediyor, kod ise tek boyut taşıyor ve o boyut zırh. Yollar çağa göre toprak→arnavut kaldırımı boyandığı için zemin ekseni ileride gerçekten istenebilir; o gün ikinci bir boyut demek, ve isim onu şimdiden vaat etmemeli. `unit.footstep_heavy` üretimde; indiğinde `cooldownMs`/`maxInstances` §82.4'ün açık ucu gereği ikiye bölünmüş olacak, kulakla yeniden ayarlanmalı. |
+| 2026-08-23 | **`unit.footstep_heavy` sevk edildi — §82.4'ün ayrımı ilk kez gerçekten duyuluyor.** Dört klip girdi, olay tabloya eklendi, kodda tek satır değişmedi: `RTS_AUDIO_SPLIT` bu varyantı zaten bekliyordu ve `resolveRtsAudioVariant` tablo cevap verdiği an ona geçiyor — §81.4'ün "klip inince kod değişmez" sözü sınandı ve tuttu. Yeni olayın **her sayısı light'ınkiyle aynı**, bilerek: kablolama tek olay dört rig'e hizmet ederken ayarlanmıştı ve doğruydu, o yüzden bir işçinin adımıyla bir muhafızınki arasında farklı olması gereken tek şey kayıt. İkisini burada da ayırmak, oyuncunun duyduğu her değişikliğin kaynağını belirsiz bırakırdı. Tek istisna zorunluydu: `maxInstances` olay başına, yani ayrım tek başına haritanın eşzamanlı adım tavanını 4'ten 8'e çıkarıyordu — §82.4'ün yazdığı açık uç. İkisi de 3'e çekildi (toplam 6, authored tavana yakın, ve iki sınıftan biri yürürken hâlâ iki adamdan fazlası duyuluyor). Kalan iki paylaşılan olay: `combat.body_impact_*` ve `unit.death_*`. |
+| 2026-08-23 | **Rig, bir işaretin ne demek olduğunu değiştirebilir (§82.8).** §82.4'ün zırh ayrımı bir hatayı ortaya çıkardı: `siege_placeholder` `heavy`, yani ağır adım seti indiği gün **top arabası çizme sesi çalmaya başladı** — Siege rig'indeki dört `footstep` işareti tekerlek teması, ve tekerlekli bir top ne yürür ne çizme giyer. Ayrımdan önce de yanlıştı, ama paylaşılan toprak sesinin altında duyulmuyordu. Düzeltme üçüncü bir zırh sınıfı **değil**: `armorClass` "üzerine inen darbe ne kadar acıtır" sorusunu cevaplıyor ve `siege` orada Guard'la dürüstçe aynı sınıfta; farklı olan sesi çıkaran mekanizma, ve o rig'in özelliği. Zırhı genişletmek bir savaş sayısına animasyon sorusu cevaplatırdı. İkinci tablo geldi (`RTS_ROLE_NOTIFY_AUDIO`, rig → işaret → ses) ve iki tür geçersiz kılma taşıyor, çünkü bir rig iki farklı şekilde katılmayabilir: `instead` yerine geçiyor (işaret burada tekerlek demek, adım *ayrıca* çalmamalı), `alongside` üstüne biniyor (gövde gıcırtısının kendi işareti yok, temas işaretlerine biniyor ve kendi `cooldownMs`'i ile seyreliyor). Tek klip ailesi bunu yapamazdı — temas başına bir hız ile birkaç saniyede bir hız aynı sette duramaz; bir işaretin iki olay beslemesinin gerekçesi katman değil **iki ritim**. Geri düşüş §82.4'ünkiyle birebir aynı şekilde, yani kod kliplerden önce indi: bugün top arabası hâlâ ağır adım çalıyor, yanlış ama duyulur. `alongside` bu düşüşü taşımıyor ve taşımamalı — eklemeli bir sesin düşeceği yer yok — ve çözücünün gıcırtıyı asla yerine geçen olarak döndürmediği testte pinlendi, çünkü ikisini karıştırmak gıcırtı indiği gün tekerleği susturur. |
+| 2026-08-23 | **Paket 4 indi: 28 klip, 8 olay (§82.9).** Beşi saf veriydi — kod §82.4/§82.8'den beri bekliyordu — üçü kanca istedi. **Birim kanalında artık starter içeriği yok:** `unit.death` 22 Ağustos'tan beri `starter-snd-impact-light` üzerinde duruyordu ve Faz 5'in son yer tutucusuydu. Üç tavan §82.4'ün açık ucu gereği yeniden ayarlandı (`unit.death` 3→2, `combat.body_impact` 6→4), çünkü her ayrım olay başına tavanı ikiye katlıyor. Kanca isteyen üçünde asıl karar uçuş seslerinin **nereye çakılacağıydı**: bir uçuş sesi fiziksel olarak mermiyle hareket eder ve `AudioPlaybackHandle` çalarken taşınamıyor, yani iki uçtan biri seçilmek zorunda. Varış ucu seçildi — kalkış zaten kendi yerinde cevaplanıyor (`combat.arrow_release`, `siege.cannon_fire`) ve aynı noktaya ikinci bir ses koymak onu birincinin altına gömerdi; varış ucunda ise başka hiçbir şeyin yapmadığı işi yapıyor: *buraya bir şey inecek*, oyuncunun bakması gereken yerde ve inmeden önce. Gülle bunu bütün uçuş süresi kadar önden söylüyor. `siege.shell_impact` hasar sesine eklemeli, iki katman: duvarın çatlağı malzemenin verdiği ses, bu onu veren patlama. Yol boyunca iki küçük şey: yetim-olay testi rig geçersiz kılmalarını tanımıyordu (§82.8 id'leri eklendi), ve `rolloff`'un [0,10] sınırı ilk yazdığım 11'i reddetti — doğrulayıcı çalışıyor. |
 
 ---
 
@@ -3353,7 +3358,7 @@ içeriği çalıyordu.
 
 | # | Olay | Şu an çalan | Üretilecek dosya | Varyant | Prompt kaynağı |
 |---|---|---|---|---:|---|
-| 1 | `unit.footstep` | `starter-snd-footstep-stone` | `sfx/units/sfx_unit_footstep_dirt_NN.ogg` | 4 | §19 `SFX-WRK-001` |
+| 1 | `unit.footstep` | `starter-snd-footstep-stone` | `sfx/units/sfx_unit_footstep_light_NN.ogg` | 4 | §19 `SFX-WRK-001` |
 | 2 | `unit.chop_impact` | `starter-snd-impact-light` | `sfx/units/sfx_unit_axe_chop_NN.ogg` | 3 | §19 `SFX-WRK-003` |
 | 3 | ~~`unit.dig_impact`~~ | — | ~~`sfx/units/sfx_unit_pickaxe_stone_NN.ogg`~~ | 0 | **iptal — aşağıdaki nota bakın** |
 | 4 | `combat.sword_swing` | `starter-snd-light-01/02` | `sfx/combat/sfx_combat_sword_swing_NN.ogg` | 3 | §20 `SFX-GRD-003` |
@@ -3598,7 +3603,20 @@ açılmaz.
 **A (kanca):**
 
 - [x] `unit.death`
-- [x] Paylaşılan olayların varyant ayrımı (§82.4) — kod indi, klip bekliyor
+- [x] Paylaşılan olayların varyant ayrımı (§82.4) — kod indi, klip bekliyor.
+      **23 Ağustos:** `light` yarısı adını aldı — `sfx_unit_footstep_dirt_NN`
+      → `sfx_unit_footstep_light_NN`, ve `unit.footstep` base'i onlara işaret
+      ediyor (ayrı `unit.footstep_light` kaydı yok, geri düşüş zaten light'ı
+      oraya yolluyor). `unit.footstep_heavy` de indi — adım olayı artık iki
+      sınıfa tam ayrık, ve `combat.body_impact` aynı şekilde `_light_`
+      kliplerine geçti. Kalan klip: `combat.body_impact_heavy`,
+      `unit.death_light`/`_heavy`.
+- [x] Siege rig'inin adım işaretleri tekerleğe bağlandı (§82.8) — kod indi,
+      klipler de indi (23 Ağustos), tekerlek ve gıcırtı çalıyor.
+- [x] Paket 4 indi: 28 klip, 8 olay (§82.9) — ölüm ikilisi, ağır gövde
+      darbesi, topçu tekerleği/gıcırtısı, ok ve gülle uçuşu, mermi isabeti.
+      `unit.death`'in yer tutucusu emekli oldu; birim kanalında starter
+      içeriği kalmadı.
 - [x] Yapı sesleri hasar tablosundan (§82.5) — kod indi; ahşap isabet ve ateş
       döngüsü klipleri bekliyor (olaylar var, taş sete ve `starter-snd-fire-01`'e
       işaret ediyor)
@@ -3606,17 +3624,25 @@ açılmaz.
       çözüldü: `command` → `ui.confirm`, `command-refused` → `ui.error`,
       bildirim **türü** haritası üzerinden. Rally ve pazar al/sat kendi seslerini
       ayrıca adıyla veriyor.
-- [ ] Yol döşeme / silme (§18 `SFX-LOG-001`/`009`) — `roadPlacement.confirmAt` sessiz
+- [x] Yol döşeme / silme (§18 `SFX-LOG-001`/`009`) — §82.7. Başarı yol grafiğinin
+      `version` sayacından okunuyor, aracın döndürdüğü durumdan değil: durum
+      hangi *modda* olduğunu söyler, zeminin değişip değişmediğini değil.
+- [x] Yapı/lojistik kancalarının geri kalanı (§82.7): geçersiz yerleştirme,
+      yıkım onayı, seviye/çağ atlama başlangıcı, depo ve karakol bağlandı,
+      bölge genişledi, ve şantiyenin çekiç/kereste katmanı.
 - [ ] `throw-release` işaretine bir ses
 
-**B (varlık):** ~~pazar al/sat + stok dolu (§16)~~ (üretildi, §82.6), yıkım onayı ve tamir (§17),
-yapı seviye atlama / çağ atlama başlangıcı (§17 `BLD-007`/`008`), depo bağlandı
-ve bölge genişledi (§18 `LOG-003`/`008`), ahşap yapıya top isabeti (§22),
-bildirimlerin tür bazlı sesleri — §82.6'dan sonra **yedisi** kendi sesine sahip
-(nüfus, kaynak, lojistik kesik/geri, karakol, merkez, bölgesel zafer); kalan
-türler hâlâ üç tier'a düşüyor ve çağ atlama ikilisinin klibi henüz yok.
+**B (varlık):** ~~pazar al/sat + stok dolu (§16)~~ (üretildi, §82.6),
+~~yıkım onayı (§17)~~ ve ~~yapı seviye atlama / çağ atlama başlangıcı
+(§17 `BLD-007`/`008`)~~ ve ~~depo bağlandı ve bölge genişledi
+(§18 `LOG-003`/`008`)~~ (üretildi, §82.7); tamir (§17), ahşap yapıya top isabeti
+(§22), bildirimlerin tür bazlı sesleri — §82.6'dan sonra **yedisi** kendi sesine
+sahip (nüfus, kaynak, lojistik kesik/geri, karakol, merkez, bölgesel zafer);
+kalan türler hâlâ üç tier'a düşüyor ve çağ atlama ikilisinin klibi henüz yok.
 
-**C (önce animasyon):** yay germe, kalkan hareketi/bloğu, çekiç, topçu
+**C (önce animasyon):** yay germe, kalkan hareketi/bloğu, ~~çekiç~~ (§82.7 bunu
+kovadan çıkardı: klipler geldi ve kanca notify beklemiyor — kadans zamanlayıcının,
+ve **rastgele**, çünkü eşit aralık makine gibi duyulur), topçu
 tekerlek/gövde/geri tepme, ok uçuşu.
 
 **Ayrıca:** Worker ve Archer VO (§38/§40) — metinler hazır, Guard profili (§47.0)
@@ -3945,3 +3971,186 @@ silmek geri alınamaz, varyant eklemek ise `notify.alert`'in kendi notunun zaten
 istediği şey. `sfx_ui_click_01` ve `sfx_ui_error_01` ise listede **adıyla**
 geçiyordu, yani yeni üretim eskisinin yerini alsın diye gelmişti; onlar üzerine
 yazıldı.
+
+
+## 82.7 Paket 3 indi: yapılar ve lojistik (23 Ağustos 2026)
+
+21 klip klasöre düştü, **10 yeni olay** ve **7 yeni kanca** açıldı; iki dosya
+(`sfx_building_complete_01`, `sfx_building_place_01`) 20 Ağustos'un demo setinin
+üzerine yazıldı, çünkü manifest id'si dosya adından türüyor ve yeni üretim
+listede **adıyla** geliyordu — §82.6'nın `sfx_ui_click_01` için verdiği kararın
+aynısı.
+
+### Bir olayın klip sayısı bir tasarım kararıdır
+
+Teslimatta dört tamamlanma klibi ve dört çekiç klibi vardı ve **zıt biçimde**
+kullanılıyorlar. Kullanıcı ikisini de ayrıca söyledi, ve ayırt eden şey sayı
+değil ne söyledikleri:
+
+- **`building.complete` tek klip adlandırır.** Tamamlanma krallığın imza sesi;
+  rastgele dört farklı klip *çeşitlilik* olarak değil, "dört farklı şey oldu"
+  olarak duyulur. Diğer üçü manifestte **seçenek** olarak duruyor — id'yi
+  değiştirip dinlersin, hepsini listelemezsin.
+- **`building.construction_hammer` dördünü de adlandırır.** Bir ekibin her
+  darbesinin aynı olması, bozuk gibi duyulan tam olarak şeydir.
+
+Bu ayrım `test:engine`'de bir sözleşme olarak sabitlendi ve sabitlenen şey
+kasten "bir" ile "birden fazla" — hangi klip ve kaç tane değil, ki yeniden
+dinleme ya da beşinci bir çekiç yeşil kalsın.
+
+### Şantiye: yatak kaldı, darbeler üstüne bindi
+
+`building.build_loop`'un kendi notu neden yalnız olduğunu söylüyordu: çekiç
+klibi yoktu, yani *darbe başına* çalacak bir şey yoktu ve sürekli bir bulamaç
+işin yerini tutuyordu. Şimdi darbe var. Yatak **altında kaldı** çünkü başka bir
+iş yapıyor (şantiye sürekli bir *yer*), ve ikisi çakışırsa çare tablodaki
+`building.build_loop.volume` — orası ayar, ve oynaması için var.
+
+Kadans bir zamanlayıcının ve **rastgele**: darbeyi asacak bir notify hâlâ yok
+(inşaatçı idle pozunda duruyor), ve sabit bir aralık o cevabı yanlış verirdi —
+eşit vuruş makine gibi duyulur, bantlı rastgele aralık ise insan gibi. Çekiç ve
+kereste tek havuz değil iki ayrı olay, ki oranları (`CONSTRUCTION_HAMMER_SHARE`)
+authored kalsın.
+
+### Lojistik başlığının kararı bozuldu
+
+`editorCatalog.ts`'teki LOGISTICS başlığı "kendi sesi yok ve olmayacak — tier'lar
+taşıyor (§69)" diye kayıtlıydı. Bu teslimat onu bozdu: bir yolun döşenmesi, bir
+deponun ağa katılması ve sınırın dışarı taşınması bir tier'ın söyleyebileceği üç
+şey değil. Not silinmedi, **bozulduğu yazıldı** — bir kararın tersine dönmesi
+kaydın kendisi.
+
+### Üç şey yalnız uygularken çıktı
+
+**1. Yolun başarısı aracın durumundan okunamıyor.** `RoadPlacementSystem` şu an
+hangi *modda* olduğunu döndürüyor, zeminin değişip değişmediğini değil: rota
+çizmenin iki tıklaması da "kuruldu sonra kuruldu değil" bırakıyor, ve boş zemine
+yapılan bir silme tıklaması dolu zemindekinin aynısı görünüyor. `RoadGraph.version`
+yalnız *commit edilmiş* topoloji değiştiğinde ilerliyor, yani sesin sorduğu tek
+soruyu cevaplayan sayaç o.
+
+**2. Bağlantı yoklaması kareye kaçamaz.** `outpostConnectedToMainRoad` bir ağ
+yürüyüşü, ve yoklama `syncNotifications` içinde — yani **her simülasyon tick'i**,
+8x'te kare başına defalarca. Koşulsuz sorsaydık depo ve karakol başına bir BFS
+sıcak yola girerdi; aynı desenin hücre başına hâli (`territory.refresh`) yol
+inşasını saniyelerce dondurmuştu. Yanıt yalnız yol topolojisi ya da mülkiyet
+oynadığında değişebilir, o yüzden kapı `roads.version:territory.version`.
+Bileşik anahtarın ikinci yarısı ihmal değil: sınır kaymasıyla rota yasal hale
+gelebiliyor, tek bir hücre döşenmeden.
+
+**3. "Bölge genişledi" bir yüksek-su işareti olmalı.** Delta olsaydı bir baskında
+kaybedilip geri alınan zemin ikinci kez genişleme diye duyulurdu. Ayrıca aynı
+karede bir bağlantı sesi çaldıysa susuyor — karakolun ağa katılması yarıçapını
+zaten genişleten şey, ve ikisini birden duymak tek olayı iki kez anlatmak olur.
+Açılış ölçümü de büyüme değil: merkezin kendi zemini sıfırdan bir sıçrama olarak
+geliyor.
+
+### Kalan
+
+`building.complete`'in üç alternatifi bilerek bağlı değil (yukarıdaki karar).
+Tamir (§17), ahşap yapıya top isabeti (§22) ve çağ atlama bildirim ikilisi hâlâ
+klip bekliyor.
+
+## 82.8 Rig, işaretin ne demek olduğunu değiştirebilir (23 Ağustos 2026)
+
+§82.4'ün zırh ayrımının **ortaya çıkardığı** bir hata, ve düzeltmesi ayrımın
+kendisiyle aynı şekle sahip.
+
+### Hata
+
+`siege_placeholder`'ın `armorClass`'ı `heavy`. Ağır adım seti indiği gün top
+arabası Guard için üretilmiş **çizme sesi** çalmaya başladı. Siege rig'inde dört
+`footstep` işareti authored ve bunlar tekerlek temasları — tekerlekli bir top ne
+yürür ne çizme giyer. Ayrım olmadan da yanlıştı (paylaşılan toprak sesini
+çalıyordu) ama duyulmuyordu; ağır sete geçince duyulur oldu.
+
+### Eksen zırh değil rig
+
+Üçüncü bir zırh sınıfı (`siege`) yanlış cevap olurdu. `armorClass` "üzerine inen
+darbe ne kadar acıtır" sorusunu cevaplıyor ve `siege` bu soruda Guard'la
+dürüstçe aynı sınıfta. Farklı olan **sesi çıkaran mekanizma**, ve o birimin
+dayanıklılığının değil rig'inin özelliği. Zırhı bunu taşıyacak kadar genişletmek
+bir savaş sayısına animasyon sorusu cevaplatmak olurdu, ve `combat.body_impact_heavy`
+o gün istemediği bir topçu seti isterdi.
+
+O yüzden ikinci bir tablo: `RTS_ROLE_NOTIFY_AUDIO`, rig → işaret → ses.
+
+### İki tür geçersiz kılma, çünkü bir rig iki farklı şekilde katılmayabilir
+
+- **`instead` yerine geçer.** İşaret bu rig'de tekerlek demek, o yüzden adım
+  *ayrıca* çalmamalı.
+- **`alongside` üstüne biner.** Top yuvarlanırken gövde gıcırdıyor ve bunun kendi
+  işareti yok; temas işaretlerine biniyor ve **kendi `cooldownMs`'i ile
+  seyreliyor**. Tek klip ailesi bunu yapamazdı: temas başına bir hız ile birkaç
+  saniyede bir hız aynı sette duramaz. Bir işaretin iki olay beslemesinin
+  gerekçesi bu — katman değil, **iki farklı ritim**.
+
+### Geri düşüş — yine klipten önce inebilmesi için
+
+`resolveRtsRoleNotifyEvent` §82.4'ünkiyle birebir aynı şekle sahip: rig'in kendi
+sesi yalnız **tablo cevaplıyorsa** seçilir, yoksa paylaşılan sese düşer. Bugün
+tekerlek klipleri yok, yani top arabası ağır adımı çalmaya devam ediyor —
+yanlış ama duyulur. Sessizlik daha kötü bir hata olurdu, ve klipleri beklemek
+kodla kliplerin aynı commit'te inmesini zorunlu kılardı.
+
+`alongside` bu geri düşüşü **taşımıyor** ve taşımamalı: eklemeli bir ses için
+düşülecek bir yer yok, cevaplanmayan katman yalnızca sessiz. Çözücü gıcırtıyı
+asla yerine geçen olarak döndürmüyor — testte pinlenmiş, çünkü ikisini
+karıştırmak gıcırtı indiği gün tekerleği susturur.
+
+### Kalan
+
+`siege.wheel_roll` (×3) ve `siege.carriage_creak` (×3) üretilecek. İkisi de
+`rtsAudioEventIds()` dışında, yani tablo onları cevaplamak **zorunda değil** —
+tıpkı bir varyant gibi, isteğe bağlı olarak inşa edilmiş.
+
+## 82.9 Paket 4 indi — ölüm, ağır darbe, topçu hattı (23 Ağustos 2026)
+
+28 klip, 8 olay. Beşi saf veriydi (kod zaten bekliyordu), üçü kanca istedi.
+
+### Kod dokunmadan inenler
+
+| Olay | Klip | Nasıl |
+|---|---|---|
+| `unit.death` | ölüm light ×3 | base, §82.4 geri düşüşü light'ı buraya yolluyor |
+| `unit.death_heavy` | ölüm heavy ×3 | varyant |
+| `combat.body_impact_heavy` | ×4 | varyant |
+| `siege.wheel_roll` | tekerlek ×3 | §82.8 `instead` |
+| `siege.carriage_creak` | gıcırtı ×3 | §82.8 `alongside` |
+
+**Birim kanalında artık starter içeriği yok.** `unit.death` 22 Ağustos'tan beri
+`starter-snd-impact-light` üzerinde duruyordu (§82.2, kanca kliplerden önce
+inmişti); Faz 5'in son yer tutucusu bu paketle emekli oldu.
+
+**Üç tavan yeniden ayarlandı**, §82.4'ün açık ucu gereği: `cooldownMs` ve
+`maxInstances` olay başına, yani her ayrım tavanı ikiye katlıyor. `unit.death`
+3 → 2 (toplam 4), `combat.body_impact` 6 → 4 (toplam 8). Adımlar bu ayarı
+`unit.footstep_heavy` indiğinde zaten almıştı.
+
+### Kanca isteyen üçü — ve uçuş sesinin nereye çakılacağı sorusu
+
+`combat.arrow_flight`, `siege.cannonball_flight`, `siege.shell_impact`. İlk
+ikisi aynı soruyu soruyor: bir uçuş sesi fiziksel olarak mermiyle birlikte
+**hareket eder**, ve `AudioPlaybackHandle` çalarken taşınamıyor
+(`stop`/`setVolume`/`setPitch` var, konum yok — bkz. 10 sn'lik loop tartışması).
+Yani uçuş sesi iki uçtan birine çakılmak zorunda.
+
+**Varış ucu seçildi.** Kalkış zaten kendi yerinde cevaplanıyor —
+`combat.arrow_release` Archer'ın işaretinden, `siege.cannon_fire` namludan — ve
+aynı noktaya ikinci bir ses koymak onu büyük ölçüde birincinin altına gömerdi.
+Varış ucunda ise başka hiçbir şeyin yapmadığı işi yapıyor: **buraya bir şey
+inecek**, hem de oyuncunun bakması gereken yerde ve inmeden az önce. Gülle için
+bu özellikle değerli, çünkü atış karesinde tetikleniyor ve merminin bütün uçuş
+süresi kadar önden gidiyor.
+
+Karakol'un ikiz oku tek uçuş sesi çalıyor: birlikte atılan iki ok tek bir vızıltı,
+ve olayın kendi cooldown'u ikinciyi zaten reddederdi.
+
+`siege.shell_impact` isabet karesinden geliyor (`setImpactHandler`, zaten oradaydı
+ve yalnız VFX + is çiziyordu). Hasar sesine **eklemeli**: duvarın
+`structure.impact_stone`'u malzemenin verdiği ses, bu onu veren patlama. Maçta
+ikisi tek bir çamurlu güm gibi okunursa kısılacak olan bu, çünkü *neyin*
+vurulduğunu söyleyen malzeme çatlağı.
+
+Klipler yere göre adlandırılmış (`sfx_artillery_ground_impact_*`) ama olay
+mermiye göre: aynı olay duvarda da çalıyor.
