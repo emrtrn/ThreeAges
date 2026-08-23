@@ -1473,7 +1473,58 @@
   ],
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
-  "blockingVolumes": [],
+  "blockingVolumes": [
+    {
+      "id": "blocking-volume-1",
+      "position": [
+        -45.91,
+        -0.88,
+        -31.33
+      ],
+      "name": "Blocking Volume",
+      "rotation": [
+        0,
+        -40.5,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        5
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    },
+    {
+      "id": "blocking-volume-2",
+      "position": [
+        40.54,
+        -0.86,
+        33.85
+      ],
+      "name": "Blocking Volume 2",
+      "rotation": [
+        0,
+        -23.5,
+        0
+      ],
+      "scale": [
+        2,
+        1,
+        5
+      ],
+      "size": [
+        2,
+        2,
+        2
+      ],
+      "navigationRole": "walkable"
+    }
+  ],
   "splines": [
     {
       "id": "enemy-base-route",

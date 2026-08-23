@@ -98,6 +98,8 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await roadCanvas.hover({ position: { x: 720, y: 420 } });
   await expect(page.locator(".rts-build-road-hint")).toContainText(/Sol tık: yolu kur · \d+ hücre · \d+ Odun/);
   await roadCanvas.click({ position: { x: 720, y: 420 } });
+  await expect(page.locator(".rts-build-status")).toHaveText("Yol çiziliyor");
+  await roadCanvas.click({ button: "right", position: { x: 720, y: 420 } });
   await expect(page.locator(".rts-build-status")).toBeHidden();
   await page.getByRole("button", { name: "Yerleşim", exact: true }).click();
 

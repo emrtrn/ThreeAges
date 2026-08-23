@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { startRtsMatch } from "./rtsBoot";
 
-test("road placement finishes its route on the second left-click", async ({ page }) => {
+test("road placement remains armed to chain routes until right-click", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
@@ -22,6 +22,13 @@ test("road placement finishes its route on the second left-click", async ({ page
   await canvas.hover({ position: { x: 720, y: 420 } });
   await expect(page.locator(".rts-build-road-hint")).toContainText(/Sol tık: yolu kur · \d+ hücre · \d+ Odun/);
   await canvas.click({ position: { x: 720, y: 420 } });
+  await expect(page.locator(".rts-build-status")).toHaveText("Yol çiziliyor");
+  await expect(page.locator(".rts-build-road-hint")).toHaveText("Ucu seçin · Sol tık: yolu kur");
+  await canvas.hover({ position: { x: 800, y: 420 } });
+  await expect(page.locator(".rts-build-road-hint")).toContainText(/Sol tık: yolu kur · \d+ hücre · \d+ Odun/);
+  await canvas.click({ position: { x: 800, y: 420 } });
+  await expect(page.locator(".rts-build-status")).toHaveText("Yol çiziliyor");
+  await canvas.click({ button: "right", position: { x: 800, y: 420 } });
   await expect(page.locator(".rts-build-road-hint")).toBeHidden();
   await expect(page.locator(".rts-build-status")).toBeHidden();
   expect(errors).toEqual([]);
