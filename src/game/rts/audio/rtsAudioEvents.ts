@@ -17,6 +17,7 @@
 import type { UnitRoleId } from "../../data/gameDataTypes";
 import type { RtsNotificationKind, RtsNotificationSeverity } from "../ui/rtsNotifications";
 import type { RtsMusicState } from "./rtsMusicState";
+import { RTS_ZONE_AMBIENCE } from "./rtsZoneAmbience";
 
 /**
  * Sounds triggered by an animation notify.
@@ -221,6 +222,27 @@ export const RTS_NOTIFICATION_KIND_AUDIO_EVENTS: Readonly<
   // produced. Both were produced anyway, so they get the pair of ids they were
   // named for — the cut is still an alert and the restore still info, they just
   // no longer share a clip with every other alarm and every other good news.
+  /**
+   * The two kinds that earn a sound of their own, and the rule they passed.
+   *
+   * A kind is only worth its own clip when all three hold: it **recurs** in a
+   * match (a once-per-match sound cannot be learned — you did not know it the
+   * first time and there is no second), the player may be **looking elsewhere**
+   * (the feed already prints the words), and it asks for a **different action**
+   * than its neighbours. Everything else takes its severity tier, which is what
+   * §24 said in the first place and what the other kinds here already do.
+   *
+   * `worker-under-attack` passes hardest: a wolf in unscouted ground is not
+   * drawn at all, so this line *is* the signal — without it a worker leaves the
+   * roster and nothing on screen ever said why.
+   */
+  "worker-under-attack": "notify.worker_attack",
+  /**
+   * A trade site's road going cold. Distinct from `logistics-cut` because the
+   * thing it stops is different — a buy button rather than a producer — and the
+   * repair is somewhere else on the map.
+   */
+  "supply-cut": "notify.supply_cut",
   "logistics-cut": "notify.logistics_cut",
   "logistics-restored": "notify.logistics_restored",
   command: "ui.confirm",
@@ -520,6 +542,77 @@ export const RTS_AUDIO = {
    * behind the curtain stays behind it.
    */
   unitDeath: "unit.death",
+  /**
+   * A unit leaving the queue and standing on the field — §44's Tier 2
+   * "Birim üretildi", and the one Tier 2 moment that had no sound at all.
+   *
+   * **Per unit, not per emptied queue.** The *notice* is deliberately one line
+   * per batch (five orders used to post five lines saying nothing the player did
+   * not already know), but a sound is not a line: it is the receipt for a thing
+   * the player paid for, and the second and third of a batch are as much a
+   * receipt as the first. The event's own `cooldownMs` is what keeps a fast
+   * queue from stacking, rather than a rule written here.
+   *
+   * Placed at the building rather than global, for the reason
+   * `building.complete` is: a kingdom with a Barracks and an Archery Range
+   * training at once has two answers, and where the sound comes from is the only
+   * thing that separates them.
+   *
+   * The player's own only. Both production paths already scope to
+   * {@link PLAYER_OWNER} before they get here, and the fog gate would not help:
+   * an enemy Barracks the player has scouted is *visible*, so an unscoped hook
+   * would narrate the AI's build order.
+   */
+  unitTrained: "unit.trained",
+  /**
+   * The hunt's decisive contact — one strike, and the animal is down.
+   *
+   * Not a combat sound and deliberately not routed through one: hunting never
+   * reaches `resolveCombatHit`, so no `body-impact` marker fires and nothing
+   * else in the match would have covered it. Placed at the carcass rather than
+   * the hunter, because a deer bolts before it drops.
+   */
+  wildlifeKill: "wildlife.kill",
+  /**
+   * Working a carcass: the repeated contact after the kill.
+   *
+   * The simulation reports this every tick a worker is on a body, so the cadence
+   * is the app's — drawn from a band, like the construction blow, because an
+   * even beat is the one thing a man with a knife never sounds like.
+   */
+  wildlifeButcher: "wildlife.butcher",
+  /**
+   * A wolf's bite landing on a person.
+   *
+   * The fog gate applies, and that is the division of labour with
+   * `notify.worker_attack` above: the bite is a *place* and only sounds if the
+   * player could see it, while the notice is the report that reaches him
+   * wherever it happened.
+   */
+  wildlifePredatorStrike: "wildlife.predator_strike",
+  /**
+   * A herd breaking — the frame an animal goes from calm to bolting.
+   *
+   * One sound for the herd rather than one per animal: twelve deer scattering is
+   * a single event to the ear, and the event's own cooldown is what makes it so.
+   */
+  wildlifeAlarm: "wildlife.alarm",
+  /**
+   * The donkey's hoof. No marker behind it — the caravan rig authors no notifies
+   * at all — so the app times these against travelled distance.
+   */
+  caravanHoofstep: "caravan.hoofstep",
+  /**
+   * A bray, and rare on purpose: the one sound here with no informational job.
+   * Its spacing is the event's `cooldownMs`, not the roll that offers it.
+   */
+  caravanDonkeyCall: "caravan.donkey_call",
+  /**
+   * Loaded panniers working against the girth — §82.8's `alongside` shape: it
+   * rides the step and thins itself with its own cooldown, because a creak every
+   * hoofbeat is a rattle and a creak every few seconds is a load.
+   */
+  caravanPannierCreak: "caravan.pannier_creak",
   // World: buildings have no animation notifies, so these are their equivalent.
   buildingComplete: "building.complete",
   structureImpact: "structure.impact",
@@ -927,6 +1020,10 @@ export function rtsAudioEventIds(): string[] {
       ...Object.values(RTS_NOTIFICATION_AUDIO_EVENTS),
       ...Object.values(RTS_NOTIFICATION_KIND_AUDIO_EVENTS),
       ...Object.values(RTS_RESOURCE_PRODUCTION_AUDIO_EVENTS),
+      // The zone beds (§82.13) live in their own module because what anchors
+      // them is map knowledge, not an audio moment — but they are fired by
+      // `RtsApp` like everything else here, so the table has to answer them.
+      ...Object.values(RTS_ZONE_AMBIENCE),
       ...Object.values(RTS_AUDIO),
     ]),
   ];

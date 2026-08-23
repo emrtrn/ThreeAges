@@ -92,6 +92,18 @@ import { RTS_AUDIO, rtsNotifyAudioEvent, rtsNotificationAudioEvent,
   resolveUnitVoice, RTS_UNIT_ALARM_VOICE_ORDER,
   type RtsAudioVariant, type RtsVoiceMoment,
 } from "./audio/rtsAudioEvents";
+import {
+  RTS_RIVER_AMBIENCE_ANCHOR_ID,
+  RTS_ZONE_AMBIENCE,
+  RTS_ZONE_AMBIENCE_ENTER_RADIUS,
+  RTS_ZONE_AMBIENCE_EXIT_RADIUS,
+  rtsBuildingAmbienceZone,
+  rtsNearestRiverPoint,
+  rtsStaticAmbienceAnchors,
+  type RtsAmbienceZoneAnchor,
+  type RtsRiverPath,
+} from "./audio/rtsZoneAmbience";
+import { resolveRtsRiverPaths } from "./world/rtsRiverPaths";
 import { loadAudioEventTableWithStates } from "../data/gameDataLoader";
 import {
   DEFAULT_RTS_MUSIC_STATE_SETTINGS,
@@ -496,6 +508,41 @@ const CONSTRUCTION_WORK_GAP_SECONDS: readonly [number, number] = [0.55, 1.35];
  * band above.
  */
 const CONSTRUCTION_HAMMER_SHARE = 0.7;
+
+/**
+ * The band a butchering stroke's gap is drawn from, in real seconds.
+ *
+ * Same shape and same reason as {@link CONSTRUCTION_WORK_GAP_SECONDS}: the
+ * simulation reports this contact every tick, and playing that straight is a
+ * buzz rather than a man working. Slower than the hammer band - a knife stroke
+ * is a longer motion than a blow, and this sound sits behind the camp rather
+ * than announcing it.
+ *
+ * Authored timing, not a contract: retune it by ear.
+ */
+const BUTCHER_WORK_GAP_SECONDS: readonly [number, number] = [0.7, 1.6];
+
+/**
+ * World units a donkey walks between hoofbeats.
+ *
+ * Distance rather than time, because the two say different things when the game
+ * speed changes: a donkey at 8x covers ground faster and should step faster, and
+ * a stopped one should not step at all - which a timer would get wrong in both
+ * directions. Jittered per animal so a convoy does not march in lockstep.
+ *
+ * Authored, like the bands above.
+ */
+const CARAVAN_STEP_DISTANCE: readonly [number, number] = [1.15, 1.55];
+
+/**
+ * How often a hoofbeat also offers a bray.
+ *
+ * Deliberately not the thing that spaces them - `caravan.donkey_call` carries a
+ * thirty-second cooldown and that is what the ear hears. This roll only decides
+ * *which* step gets to ask, so the calls do not arrive on a metronome once the
+ * cooldown expires.
+ */
+const CARAVAN_CALL_CHANCE = 0.03;
 
 const TOWER_MUZZLE_HEIGHT = 3.2;
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
@@ -974,6 +1021,7 @@ export class RtsApp {
   private readonly scratchAudioForward = new Vector3();
   /** Reused vector for measuring a building's distance to the listener. */
   private readonly scratchStructureAudio = new Vector3();
+  private readonly scratchZoneAmbience = new Vector3();
   /**
    * Stones fired but not yet released by the throwing arm, keyed by unit id.
    *
@@ -1571,6 +1619,9 @@ export class RtsApp {
     private readonly options: RtsAppOptions,
   ) {
     this.spatial = resolveRtsSpatialLayout(this.options.level);
+    // Resolved here rather than in a field initializer: those run before the
+    // constructor body, so `this.spatial` would still be undefined.
+    this.staticZoneAmbienceAnchors = rtsStaticAmbienceAnchors(this.spatial);
     this.groundSurface = new RtsDeckGroundSurface(FLAT_RTS_GROUND, this.spatial.walkableDecks);
     // Browser-visible witness of which spatial authority the match resolved:
     // the authored Level (Faz D opt-in) or the legacy rtsMapBlockout fallback.
@@ -1878,6 +1929,16 @@ export class RtsApp {
       (owner, x, z) => owner === AI_OWNER && this.ai.workerLocationUnsafe(x, z),
       (owner) => owner !== PLAYER_OWNER || this.automaticWorkerAssignmentEnabled,
     );
+    // The hunt's two contact stages. The strike is a one-shot and plays where it
+    // is reported; the butchering is per tick, so it only records the site and
+    // `updateButcherAudio` draws the cadence out of it.
+    this.economyProduction.setHuntContactHandler((contact) => {
+      if (contact.stage === "strike") {
+        this.playGroundAudio(RTS_AUDIO.wildlifeKill, contact.x, contact.z);
+        return;
+      }
+      this.butcherSite = { x: contact.x, z: contact.z };
+    });
     this.logisticsTransfers = new LogisticsTransferSystem(
       this.economyProduction,
       this.productionLogistics,
@@ -3380,7 +3441,10 @@ export class RtsApp {
     // times as often as it does at normal speed.
     this.updateBuildLoopAudio();
     this.updateConstructionWorkAudio();
+    this.updateButcherAudio();
+    this.updateCaravanAudio();
     this.updateFireLoopAudio();
+    this.updateZoneAmbienceAudio();
     if (this.debugWitness) {
       // Measured like everything else, because on this route it is a real cost:
       // the hidden readout rebuilds a line per unit per frame, and a panel that
@@ -4928,6 +4992,150 @@ export class RtsApp {
     });
   }
 
+  /**
+   * The carcass being worked this frame, or null when nobody is butchering.
+   *
+   * Written by the hunt handler and cleared by {@link updateButcherAudio} after
+   * it reads it, so a camp that stops working goes quiet on the next frame
+   * without anything having to report that it stopped.
+   *
+   * One site rather than a list, for {@link updateBuildLoopAudio}'s reason: three
+   * carcasses layered are a wash, not three readable camps. Last reporter of the
+   * frame wins, which is arbitrary and fine — they are the same sound.
+   */
+  private butcherSite: { readonly x: number; readonly z: number } | null = null;
+  private butcherWorkAt: number | null = null;
+
+  /**
+   * Draw the butchering cadence, the construction blow's twin.
+   *
+   * The simulation reports this contact every tick a worker is on a body; played
+   * straight that is a buzz, and played on a fixed interval it is a machine. So
+   * the gap comes out of a band, exactly as {@link updateConstructionWorkAudio}
+   * draws its own.
+   */
+  private updateButcherAudio(): void {
+    const site = this.butcherSite;
+    this.butcherSite = null;
+    if (!site) {
+      this.butcherWorkAt = null;
+      return;
+    }
+    if (this.butcherWorkAt === null) {
+      this.butcherWorkAt = this.audioClock + this.nextButcherWorkGap();
+      return;
+    }
+    if (this.audioClock < this.butcherWorkAt) return;
+    this.butcherWorkAt = this.audioClock + this.nextButcherWorkGap();
+    this.playGroundAudio(RTS_AUDIO.wildlifeButcher, site.x, site.z);
+  }
+
+  /** Seconds until the next stroke — uniform inside the authored band. */
+  private nextButcherWorkGap(): number {
+    const [minimum, maximum] = BUTCHER_WORK_GAP_SECONDS;
+    return minimum + Math.random() * (maximum - minimum);
+  }
+
+  /**
+   * Animals that were mid-bolt on the previous frame.
+   *
+   * The alarm wants the *transition* into a bolt, not the bolt: a herd already
+   * running is not news, and re-reporting it every frame would make the sound a
+   * drone. Ids rather than a count, because a herd can lose one animal and gain
+   * another in the same frame and a count would call that calm.
+   */
+  private readonly boltingAnimals = new Set<string>();
+
+  /**
+   * One alarm for a herd that breaks.
+   *
+   * Stops at the first newcomer of the frame rather than sounding each: twelve
+   * deer scattering is one event to the ear. The event's cooldown covers the
+   * frames after this one, and the fog gate inside {@link playGroundAudio}
+   * decides whether a break the player cannot see is heard at all.
+   */
+  private updateWildlifeAlarmAudio(): void {
+    let broke: { readonly x: number; readonly z: number } | null = null;
+    for (const animal of this.wildlife.all()) {
+      if (!animal.bolting) {
+        this.boltingAnimals.delete(animal.id);
+        continue;
+      }
+      if (this.boltingAnimals.has(animal.id)) continue;
+      this.boltingAnimals.add(animal.id);
+      broke ??= { x: animal.position.x, z: animal.position.z };
+    }
+    if (broke) this.playGroundAudio(RTS_AUDIO.wildlifeAlarm, broke.x, broke.z);
+  }
+
+  /**
+   * Each donkey's last seen position, plus how far it has walked since its last
+   * hoofbeat and how far it owes before the next.
+   *
+   * Keyed by caravan id and pruned against the live roster each frame — a
+   * caravan that arrives or is killed must not leave its debt behind for
+   * whatever id the pool hands out next.
+   */
+  private readonly caravanStepDebt = new Map<
+    string,
+    { x: number; z: number; walked: number; due: number }
+  >();
+
+  /**
+   * Hoofbeats, and what rides on them.
+   *
+   * Paced by *distance actually travelled* rather than by a timer, and measured
+   * from the positions themselves rather than from `speed × dt`. Both halves
+   * matter. Distance is what makes the speed picker come out right for free: at
+   * 8x a donkey covers ground faster and should step faster, and a loading one
+   * should not step at all. Measuring it off the position is what keeps this
+   * honest at any number of simulation steps per rendered frame — the value read
+   * is the movement that was drawn, not a second estimate of it that could
+   * disagree with the animation.
+   *
+   * Two things ride the beat, on §82.8's `alongside` shape: the pannier creak,
+   * thinned by its own long cooldown so it reads as a load rather than a rattle,
+   * and — rarely — a bray, which the cooldown spaces and this roll only offers.
+   */
+  private updateCaravanAudio(): void {
+    const live = this.caravans.all();
+    if (this.caravanStepDebt.size > live.length) {
+      const ids = new Set(live.map((caravan) => caravan.id));
+      for (const id of this.caravanStepDebt.keys()) {
+        if (!ids.has(id)) this.caravanStepDebt.delete(id);
+      }
+    }
+    for (const caravan of live) {
+      const { x, z } = caravan.position;
+      let debt = this.caravanStepDebt.get(caravan.id);
+      if (!debt) {
+        // Seeded part-way in, so a convoy leaving together does not step in
+        // unison for its whole first leg.
+        debt = { x, z, walked: Math.random() * this.nextCaravanStepDistance(), due: this.nextCaravanStepDistance() };
+        this.caravanStepDebt.set(caravan.id, debt);
+        continue;
+      }
+      const moved = Math.hypot(x - debt.x, z - debt.z);
+      debt.x = x;
+      debt.z = z;
+      if (caravan.dying) continue;
+      debt.walked += moved;
+      if (debt.walked < debt.due) continue;
+      debt.walked = 0;
+      debt.due = this.nextCaravanStepDistance();
+      this.playGroundAudio(RTS_AUDIO.caravanHoofstep, x, z);
+      // Only a laden animal creaks; the walk home is bare hooves.
+      if (caravan.phase === "outbound") this.playGroundAudio(RTS_AUDIO.caravanPannierCreak, x, z);
+      if (Math.random() < CARAVAN_CALL_CHANCE) this.playGroundAudio(RTS_AUDIO.caravanDonkeyCall, x, z);
+    }
+  }
+
+  /** World units until this donkey's next hoofbeat — uniform inside the band. */
+  private nextCaravanStepDistance(): number {
+    const [minimum, maximum] = CARAVAN_STEP_DISTANCE;
+    return minimum + Math.random() * (maximum - minimum);
+  }
+
   /** Seconds until the next blow — uniform inside the authored band. */
   private nextConstructionWorkGap(): number {
     const [minimum, maximum] = CONSTRUCTION_WORK_GAP_SECONDS;
@@ -4996,6 +5204,164 @@ export class RtsApp {
       this.fireLoopSite = site;
       this.fireLoopEvent = event;
     }
+  }
+
+  /**
+   * The zone anchors that do not move, resolved once from the map (§82.13).
+   *
+   * Groves and trade sites are map data, so re-deriving them per frame would be
+   * a per-frame walk over every tree on the field for an answer that cannot have
+   * changed.
+   */
+  private staticZoneAmbienceAnchors: readonly RtsAmbienceZoneAnchor[] = [];
+
+  /**
+   * The authored river centrelines, resolved when the Landscape mounts.
+   *
+   * Empty until then, and empty forever on a level with no water — which is the
+   * honest answer rather than a fallback, because a river bed with no river is a
+   * sound coming from nowhere.
+   */
+  private riverAmbiencePaths: readonly RtsRiverPath[] = [];
+
+  /** The place the zone bed is currently sounding over, and the event it is sounding as. */
+  private zoneAmbienceAnchor: RtsAmbienceZoneAnchor | null = null;
+  private zoneAmbienceEvent: string | null = null;
+
+  /**
+   * Start, move or stop the zone bed — the sound of *where the camera is*.
+   *
+   * `world.ambience` covers the whole map and never changes; this is the layer
+   * that answers "and what is here". It is the same bed machinery the fire and
+   * construction loops use — claim on `played`, stop by the id that was started,
+   * one instance — with two differences that are worth the words:
+   *
+   * **One bed for the whole map, not one per zone.** A camera between the town
+   * and the market would otherwise sound both, and two beds under a third
+   * (`world.ambience`) is a wash rather than two places. The nearest zone wins,
+   * which is also the one the player is looking at.
+   *
+   * **It keeps playing while the match is paused.** {@link updateBuildLoopAudio}
+   * spells out why hammering must not: work over a frozen field is a lie. A
+   * place is not work — the grove is still a grove — so this bed follows the
+   * ambience and the music instead.
+   */
+  private updateZoneAmbienceAudio(): void {
+    const anchor = this.zoneAmbienceAudioAnchor();
+    const event = anchor ? RTS_ZONE_AMBIENCE[anchor.kind] : null;
+    // The overwhelmingly common frame: the camera is still in the same place.
+    if (anchor === this.zoneAmbienceAnchor && event === this.zoneAmbienceEvent) return;
+    if (this.zoneAmbienceEvent) this.audioEvents.stop(this.zoneAmbienceEvent, WORLD_BED_FADE_SECONDS);
+    this.zoneAmbienceAnchor = null;
+    this.zoneAmbienceEvent = null;
+    if (!anchor || !event) return;
+    const y = this.groundSurface.heightAt(anchor.x, anchor.z);
+    const result = this.audioEvents.trigger(event, this.audioClock, {
+      position: [anchor.x, y, anchor.z],
+      distance: this.cameraController.camera.position.distanceTo(
+        this.scratchZoneAmbience.set(anchor.x, y, anchor.z),
+      ),
+    });
+    // Claimed only once it is actually sounding, exactly as the other two beds
+    // are. Moving between two groves stops one bed and starts the same event a
+    // frame or two later — `stop` frees the instance immediately but the event's
+    // own cooldown may refuse the first attempt, and an unclaimed anchor is what
+    // makes the next frame ask again.
+    if (result === "played") {
+      this.zoneAmbienceAnchor = anchor;
+      this.zoneAmbienceEvent = event;
+    }
+  }
+
+  /**
+   * The place the zone bed belongs to this frame.
+   *
+   * Distance is measured on the ground, from the camera's **focus** — the point
+   * it is looking at — rather than from the eye. The eye is 20–40 units up and
+   * back, so an eye-measured radius would fold the zoom level into the answer:
+   * the same spot would sit in one zone zoomed in and in another zoomed out.
+   *
+   * The rule, in order:
+   *
+   *  1. the nearest zone inside {@link RTS_ZONE_AMBIENCE_ENTER_RADIUS} wins —
+   *     arriving somewhere is answered at once;
+   *  2. except that the incumbent keeps the bed while it is still inside
+   *     {@link RTS_ZONE_AMBIENCE_EXIT_RADIUS} and nothing else is *clearly*
+   *     nearer, "clearly" being the gap between the two radii;
+   *  3. otherwise there is no bed — the ground between two places is not a
+   *     place, and `world.ambience` is still playing under all of this.
+   *
+   * Rule 2 is what a single radius cannot do. It covers both flapping cases with
+   * one number: a camera parked on a boundary (the incumbent holds through the
+   * gap) and a camera between two zones at nearly equal distance (the incumbent
+   * wins until the other is nearer by the whole margin). The first pass held the
+   * incumbent unconditionally, which looked the same on a small map as holding
+   * it forever.
+   *
+   * Everything here goes through the fog gate, like every other world sound: an
+   * unexplored grove that announced itself would be a scouting tool the player
+   * was never given.
+   */
+  private zoneAmbienceAudioAnchor(): RtsAmbienceZoneAnchor | null {
+    // Not gated on `flow.running`: see {@link updateZoneAmbienceAudio}.
+    if (!this.match.active) return null;
+    const focusX = this.cameraController.focusX;
+    const focusZ = this.cameraController.focusZ;
+    const incumbent = this.zoneAmbienceAnchor;
+    let nearest: RtsAmbienceZoneAnchor | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    let incumbentPresent = false;
+
+    const consider = (anchor: RtsAmbienceZoneAnchor, distance: number): void => {
+      if (!this.worldAudioAudible(anchor.x, anchor.z)) return;
+      if (incumbent && anchor.id === incumbent.id) incumbentPresent = true;
+      if (distance > RTS_ZONE_AMBIENCE_ENTER_RADIUS || distance >= nearestDistance) return;
+      nearestDistance = distance;
+      nearest = anchor;
+    };
+
+    for (const anchor of this.staticZoneAmbienceAnchors) {
+      consider(anchor, Math.hypot(anchor.x - focusX, anchor.z - focusZ));
+    }
+    // A building becomes a place once it is finished: a foundation is a building
+    // site, and the site already has its own bed.
+    for (const structure of this.structures.all()) {
+      if (!structure.construction.complete) continue;
+      const kind = rtsBuildingAmbienceZone(structure.stats.id);
+      if (!kind) continue;
+      consider(
+        { kind, id: `building:${structure.id}`, x: structure.x, z: structure.z },
+        Math.hypot(structure.x - focusX, structure.z - focusZ),
+      );
+    }
+    // The river is the one zone that is not a spot: its anchor is wherever the
+    // water runs closest to what the camera is looking at, so following it
+    // upstream keeps the sound alongside instead of leaving it behind. Every
+    // point on it shares one anchor id — a river is one place, however long — so
+    // moving along it re-seats the same bed rather than swapping to another.
+    const river = rtsNearestRiverPoint(this.riverAmbiencePaths, focusX, focusZ);
+    if (river) {
+      consider(
+        { kind: "river", id: RTS_RIVER_AMBIENCE_ANCHOR_ID, x: river.x, z: river.z },
+        river.distance,
+      );
+    }
+
+    if (incumbent && incumbentPresent) {
+      // Measured against the point the bed was actually *placed* at, not against
+      // wherever that zone is nearest now. `AudioPlaybackHandle` cannot be moved
+      // (§82.9), so a bed sounds from where it started — and the question this
+      // radius answers is whether that sound is still near enough to keep.
+      const held = Math.hypot(incumbent.x - focusX, incumbent.z - focusZ);
+      // The margin is the gap between the radii rather than a third constant:
+      // the same slack that lets a bed be left slowly is the slack that keeps it
+      // from being traded away to a neighbour a step nearer.
+      const margin = RTS_ZONE_AMBIENCE_EXIT_RADIUS - RTS_ZONE_AMBIENCE_ENTER_RADIUS;
+      // Returned as the object that was claimed, so identity still says "nothing
+      // changed" and the common frame stays a no-op.
+      if (held <= RTS_ZONE_AMBIENCE_EXIT_RADIUS && held <= nearestDistance + margin) return incumbent;
+    }
+    return nearest;
   }
 
   /** The burning building the fire bed belongs to this frame, incumbent first. */
@@ -5138,6 +5504,25 @@ export class RtsApp {
     this.audioEvents.trigger(eventId, this.audioClock, {
       position: [point.x, point.y, point.z],
       distance: this.cameraController.camera.position.distanceTo(point),
+    });
+  }
+
+  /**
+   * A world sound at a map coordinate, lifted onto the ground.
+   *
+   * {@link playPointAudio} wants a point that already has a height; the
+   * simulation mostly does not have one — an animal, a carcass and a hoof are
+   * all (x, z) with the terrain underneath. Sampling here keeps every caller
+   * from repeating that lookup and getting the fog gate right by accident.
+   */
+  private playGroundAudio(eventId: string, x: number, z: number): void {
+    if (!this.worldAudioAudible(x, z)) return;
+    const y = this.groundSurface.heightAt(x, z);
+    this.audioEvents.trigger(eventId, this.audioClock, {
+      position: [x, y, z],
+      distance: this.cameraController.camera.position.distanceTo(
+        this.scratchStructureAudio.set(x, y, z),
+      ),
     });
   }
 
@@ -5694,6 +6079,14 @@ export class RtsApp {
       // *picks* the fight: `updateUnitEngagement` skips workers outright, so this
       // is the one door into it and it only opens on a hit already taken.
       retaliateAgainstAttack(strike.victim, strike.predator, this.navigation);
+      // Placed at the victim: the bite is where the person is. The fog gate is
+      // what keeps this from narrating a mauling in the dark - `worker-under-attack`
+      // is the line that reports that one, and it is not a world sound.
+      this.playGroundAudio(
+        RTS_AUDIO.wildlifePredatorStrike,
+        strike.victim.position.x,
+        strike.victim.position.z,
+      );
       this.ai.reportPredatorStrike(strike);
     }
     // And the garrison answers it. Run every tick rather than only on a bite,
@@ -5706,6 +6099,9 @@ export class RtsApp {
     // standing over the animal after both of them have moved this frame. A bull
     // struck at the top of the tick would be hitting last frame's contact.
     this.wildlifeRetaliation.update(dt);
+    // After the herd's own tick, so a bolt that started this frame is seen this
+    // frame rather than one behind.
+    this.updateWildlifeAlarmAudio();
     this.perfMeasure("hayvanlar", wildlifeMark);
     const constructionMark = this.perfMark();
     this.workerConstruction.update(dt);
@@ -5742,6 +6138,12 @@ export class RtsApp {
       if (event.owner !== PLAYER_OWNER) continue;
       if (event.type === "completed") {
         this.tallyTrainedUnit("worker");
+        // The centre is where a worker comes out, and the worker queue's event
+        // carries only an owner - so the sound is placed by looking the owner's
+        // centre up rather than by handing the event a structure it has no
+        // other use for.
+        const centre = this.centers.all().find((candidate) => candidate.owner === PLAYER_OWNER);
+        if (centre) this.playPointAudio(RTS_AUDIO.unitTrained, centre.position);
         // Only the *last* worker of a batch is announced. A five-deep queue used
         // to post five lines that said nothing the player did not already know —
         // they ordered five workers and five arrived. The line that carries
@@ -5759,6 +6161,9 @@ export class RtsApp {
       if (event.type === "completed") {
         const role = this.options.unitBalance[event.unitId]?.role;
         if (role) this.tallyTrainedUnit(role);
+        // Per unit, unlike the notice below: the sound is the receipt for one
+        // order, and the event's own cooldown damps a deep queue.
+        this.playStructureAudio(event.structure, RTS_AUDIO.unitTrained);
         // "<yapı>: <birlik> hazır." rather than "<birlik> <yapı>'ndan çıktı.":
         // the ablative `-ndan` is only correct for a label that already ends in
         // a possessive ("Okçuluk Alanı'ndan"), and wrong for one that does not
@@ -6714,6 +7119,12 @@ export class RtsApp {
   private mountGroundSurface(handle: AuthoredWorldHandle): void {
     const terrain = handle.landscapes[0];
     if (!terrain) return;
+    // The river's ambience follows the trench the Landscape cut, so it can only
+    // be read once that Landscape is mounted — the same moment the ground
+    // surface itself becomes real.
+    if (this.options.levelLayout) {
+      this.riverAmbiencePaths = resolveRtsRiverPaths(this.options.levelLayout, handle.landscapes);
+    }
     this.groundSurface = new RtsDeckGroundSurface(
       new AuthoredRtsGroundSurface(terrain),
       this.spatial.walkableDecks,

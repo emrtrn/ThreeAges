@@ -271,6 +271,19 @@ export class WildlifeAnimal implements CombatTarget {
     return this.stats.predator ? "alert" : "grazing";
   }
 
+  /**
+   * Mid-bolt: running flat out from something that frightened it.
+   *
+   * Exposed for the alarm sound, which needs the *transition* into a bolt rather
+   * than the bolt itself — a herd scattering is one event, and a consumer that
+   * could only see `speed > 0` could not tell a panicked dash from grazing your
+   * way across a meadow. Read-only on purpose: what starts a bolt stays
+   * {@link wildlifeRoaming}'s decision.
+   */
+  get bolting(): boolean {
+    return this.roam.fleeSeconds > 0;
+  }
+
   /** True once it has been killed and picked clean; nothing is left to hunt here. */
   get spent(): boolean {
     return this.dead && this.remainingMeat <= 0;

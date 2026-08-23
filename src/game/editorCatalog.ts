@@ -85,8 +85,12 @@ const AUDIO_EVENT_CATEGORIES = [
   { id: "notifications", label: "NOTIFICATIONS", prefixes: ["notify."] },
   { id: "economy", label: "ECONOMY", prefixes: ["economy.", "market."] },
   { id: "building", label: "BUILDING", prefixes: ["building."] },
-  { id: "logistics", label: "LOGISTICS", prefixes: ["logistics."] },
+  // The caravan sits here rather than under UNITS: a donkey is not a unit, it is
+  // what a road is *for*, and an author looking for its hoofbeat looks where the
+  // depot connection is.
+  { id: "logistics", label: "LOGISTICS", prefixes: ["logistics.", "caravan."] },
   { id: "units", label: "UNITS", prefixes: ["unit."] },
+  { id: "wildlife", label: "WILDLIFE", prefixes: ["wildlife."] },
   { id: "combat", label: "COMBAT", prefixes: ["combat.", "siege.", "structure."] },
   { id: "world-ambience", label: "WORLD_AMBIENCE", prefixes: ["world."] },
   { id: "music", label: "MUSIC", prefixes: ["music."] },

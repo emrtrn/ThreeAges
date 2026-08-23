@@ -37034,6 +37034,966 @@
         "packVersion": "0.1"
       },
       "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-trained-01",
+      "name": "Unit Trained 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_trained_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 30526
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-unit-trained-02",
+      "name": "Unit Trained 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/units/sfx_unit_trained_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "units"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 33913
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "amb-zone-farmland-01",
+      "name": "Ambience Zone Farmland 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/ambience/amb_zone_farmland_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ambience"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 772860
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "amb-zone-goldmine-01",
+      "name": "Ambience Zone Goldmine 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/ambience/amb_zone_goldmine_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ambience"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 723162
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "amb-zone-market-01",
+      "name": "Ambience Zone Market 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/ambience/amb_zone_market_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ambience"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 657345
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "amb-zone-quarry-01",
+      "name": "Ambience Zone Quarry 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/ambience/amb_zone_quarry_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ambience"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 672297
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "amb-zone-river-01",
+      "name": "Ambience Zone River 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/ambience/amb_zone_river_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ambience"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 743721
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "amb-zone-settlement-01",
+      "name": "Ambience Zone Settlement 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/ambience/amb_zone_settlement_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ambience"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 682424
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-notify-supply-cut-01",
+      "name": "Notification Supply Cut 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/notifications/sfx_notify_supply_cut_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "notifications"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 37316
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-notify-worker-attack-01",
+      "name": "Notification Worker Attack 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/notifications/sfx_notify_worker_attack_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "notifications"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 24993
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-caravan-donkey-call-01",
+      "name": "Caravan Donkey Call 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_caravan_donkey_call_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 52139
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-caravan-donkey-call-02",
+      "name": "Caravan Donkey Call 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_caravan_donkey_call_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 58754
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-caravan-donkey-call-03",
+      "name": "Caravan Donkey Call 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_caravan_donkey_call_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 56604
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-caravan-hoofstep-01",
+      "name": "Caravan Hoofstep 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_caravan_hoofstep_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 24155
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-caravan-hoofstep-02",
+      "name": "Caravan Hoofstep 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_caravan_hoofstep_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 22702
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-caravan-hoofstep-03",
+      "name": "Caravan Hoofstep 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_caravan_hoofstep_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 23814
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-caravan-hoofstep-04",
+      "name": "Caravan Hoofstep 04",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_caravan_hoofstep_04.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 23134
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-caravan-pannier-creak-01",
+      "name": "Caravan Pannier Creak 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_caravan_pannier_creak_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 38386
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-caravan-pannier-creak-02",
+      "name": "Caravan Pannier Creak 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/logistics/sfx_caravan_pannier_creak_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "logistics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 40317
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-wildlife-alarm-01",
+      "name": "Wildlife Alarm 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/wildlife/sfx_wildlife_alarm_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "wildlife"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 28383
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-wildlife-alarm-02",
+      "name": "Wildlife Alarm 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/wildlife/sfx_wildlife_alarm_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "wildlife"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 28524
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-wildlife-butcher-01",
+      "name": "Wildlife Butcher 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/wildlife/sfx_wildlife_butcher_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "wildlife"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 22161
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-wildlife-butcher-02",
+      "name": "Wildlife Butcher 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/wildlife/sfx_wildlife_butcher_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "wildlife"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 32521
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-wildlife-butcher-03",
+      "name": "Wildlife Butcher 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/wildlife/sfx_wildlife_butcher_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "wildlife"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 28118
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-wildlife-kill-01",
+      "name": "Wildlife Kill 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/wildlife/sfx_wildlife_kill_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "wildlife"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 25646
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-wildlife-kill-02",
+      "name": "Wildlife Kill 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/wildlife/sfx_wildlife_kill_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "wildlife"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 30617
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-wildlife-kill-03",
+      "name": "Wildlife Kill 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/wildlife/sfx_wildlife_kill_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "wildlife"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 30586
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-wildlife-predator-strike-01",
+      "name": "Wildlife Predator Strike 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/wildlife/sfx_wildlife_predator_strike_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "wildlife"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 32876
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-wildlife-predator-strike-02",
+      "name": "Wildlife Predator Strike 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/wildlife/sfx_wildlife_predator_strike_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "wildlife"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 34157
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-wildlife-predator-strike-03",
+      "name": "Wildlife Predator Strike 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/wildlife/sfx_wildlife_predator_strike_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "wildlife"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 20859
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
     }
   ]
 }

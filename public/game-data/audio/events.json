@@ -69,7 +69,7 @@
         "sfx-unit-axe-chop-04"
       ],
       "bus": "sfx",
-      "volume": 0.1,
+      "volume": 0.02,
       "pitchVariation": 0.06,
       "cooldownMs": 70,
       "maxInstances": 4,
@@ -94,6 +94,22 @@
       "refDistance": 30,
       "maxDistance": 70,
       "rolloff": 8
+    },
+    "unit.trained": {
+      "_note": "A unit stepping out of the queue - §44's Tier 2 \"Birim üretildi\", which had no sound at all until now. Two variants, and the count is the argument: a match fires this dozens of times but the repeats are seconds apart, so the single-clip rule that `building.complete` follows (one signature, four alternates left unbound) would read as a stuck sample here, while the six-a-second hover rule that forbids variation does not apply either. Placed at the training building rather than global, so a Barracks and an Archery Range finishing at once stay two answers instead of one. Mixed under `building.complete` (0.4) and carrying less far: a completed building is a change to the map, a trained unit is a receipt for an order. `cooldownMs` is what damps a deep queue - the hook fires per unit, not per emptied queue, because the second and third of a batch are as much a receipt as the first.",
+      "clips": [
+        "sfx-unit-trained-01",
+        "sfx-unit-trained-02"
+      ],
+      "bus": "sfx",
+      "volume": 0.32,
+      "pitchVariation": 0.04,
+      "cooldownMs": 150,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 25,
+      "maxDistance": 70,
+      "rolloff": 9
     },
     "unit.death_heavy": {
       "_note": "A guard or a gun crew going down. Every number is the light entry's on purpose - the wiring was tuned while one event served all three roles and it was right, so the only thing that should differ between the two is the recording. The subject here is the unit that *died*, not whatever killed it: a death reads its own armour, like a footstep and unlike a blow.",
@@ -692,6 +708,146 @@
       "cooldownMs": 350,
       "maxInstances": 1
     },
+    "notify.worker_attack": {
+      "_note": "One of the two notification kinds that earned its own clip instead of its severity tier (the rule is on `RTS_NOTIFICATION_KIND_AUDIO_EVENTS`: recurs, off-screen, own action). This one passes hardest - a wolf in unscouted ground is never drawn, so this is the only thing that says a worker is being taken. Lighter and higher than `notify.outpost_attack`: a civilian who cannot answer, not a garrison under assault. Alert tier's level, because the tier is what it would otherwise have been.",
+      "clips": [
+        "sfx-notify-worker-attack-01"
+      ],
+      "bus": "notifications",
+      "volume": 0.62,
+      "cooldownMs": 1500,
+      "maxInstances": 1,
+      "spatial": false
+    },
+    "notify.supply_cut": {
+      "_note": "The second earner. Distinct from `notify.logistics_cut` because what it stops is different - a trade site's buy button rather than a producer's output - and the road to repair is elsewhere on the map. Mixed level with the logistics pair so neither reads as the more serious of the two; they are different subjects, not different severities.",
+      "clips": [
+        "sfx-notify-supply-cut-01"
+      ],
+      "bus": "notifications",
+      "volume": 0.62,
+      "cooldownMs": 1500,
+      "maxInstances": 1,
+      "spatial": false
+    },
+    "wildlife.kill": {
+      "_note": "The hunt's decisive contact. Hunting never reaches `resolveCombatHit`, so no `body-impact` marker fires and until now the whole act was silent. Placed at the carcass, not the hunter - a deer bolts before it drops, and the two are metres apart by then. Carries about as far as a unit death and sits just under it: a hunted animal is an economic event, not a casualty.",
+      "clips": [
+        "sfx-wildlife-kill-01",
+        "sfx-wildlife-kill-02",
+        "sfx-wildlife-kill-03"
+      ],
+      "bus": "sfx",
+      "volume": 0.34,
+      "pitchVariation": 0.06,
+      "cooldownMs": 140,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 25,
+      "maxDistance": 65,
+      "rolloff": 8
+    },
+    "wildlife.butcher": {
+      "_note": "Working the carcass, the repeated stage after the kill. Cadence is the app's, drawn from a band (`BUTCHER_WORK_GAP_SECONDS`) for the reason the construction blow is: an even beat is the one thing a man with a knife never sounds like. Quieter and shorter-range than the kill - this is background work at a camp, and the moment worth hearing across the map already happened. One site at a time, like the build bed: three carcasses layered are a wash.",
+      "clips": [
+        "sfx-wildlife-butcher-01",
+        "sfx-wildlife-butcher-02",
+        "sfx-wildlife-butcher-03"
+      ],
+      "bus": "sfx",
+      "volume": 0.26,
+      "pitchVariation": 0.08,
+      "cooldownMs": 200,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 18,
+      "maxDistance": 45,
+      "rolloff": 9
+    },
+    "wildlife.predator_strike": {
+      "_note": "A wolf's bite landing on a person. Passes the fog gate like every world sound, which is the division of labour with `notify.worker_attack`: the bite is a place and only sounds where the player can see, the notice is the report that reaches him wherever it happened. Both firing on a visible mauling is intended - one is the event, the other is the alarm.",
+      "clips": [
+        "sfx-wildlife-predator-strike-01",
+        "sfx-wildlife-predator-strike-02",
+        "sfx-wildlife-predator-strike-03"
+      ],
+      "bus": "sfx",
+      "volume": 0.1,
+      "pitchVariation": 0.07,
+      "cooldownMs": 220,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 22,
+      "maxDistance": 60,
+      "rolloff": 8
+    },
+    "wildlife.alarm": {
+      "_note": "A herd breaking - the frame an animal goes from calm to bolting. One sound for the herd rather than one per animal, and the cooldown is what enforces it: twelve deer scattering is a single event to the ear. Long by this table's standards (900 ms) for exactly that reason. Quiet: it is a texture that tells you something moved out there, not a warning.",
+      "clips": [
+        "sfx-wildlife-alarm-01",
+        "sfx-wildlife-alarm-02"
+      ],
+      "bus": "sfx",
+      "volume": 0.24,
+      "pitchVariation": 0.08,
+      "cooldownMs": 900,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 20,
+      "maxDistance": 55,
+      "rolloff": 9
+    },
+    "caravan.hoofstep": {
+      "_note": "The donkey's hoof, timed against travelled distance rather than a marker - the caravan rig authors no notifies at all. Four variants because the repeat is sub-second and a single clip at that rate is a stuck sample. `maxInstances` 3 lets a short convoy overlap without becoming a stampede; quiet and short-range, because a caravan is scenery the player should notice only when the camera is on it.",
+      "clips": [
+        "sfx-caravan-hoofstep-01",
+        "sfx-caravan-hoofstep-02",
+        "sfx-caravan-hoofstep-03",
+        "sfx-caravan-hoofstep-04"
+      ],
+      "bus": "sfx",
+      "volume": 0.2,
+      "pitchVariation": 0.09,
+      "cooldownMs": 70,
+      "maxInstances": 3,
+      "spatial": true,
+      "refDistance": 12,
+      "maxDistance": 38,
+      "rolloff": 10
+    },
+    "caravan.donkey_call": {
+      "_note": "A bray. The only sound in this table with no informational job - it is there so a road is not a silent conveyor - so it is rationed twice: a low roll offers it, and this cooldown is what actually spaces it. Thirty seconds is the floor, not the average.",
+      "clips": [
+        "sfx-caravan-donkey-call-01",
+        "sfx-caravan-donkey-call-02",
+        "sfx-caravan-donkey-call-03"
+      ],
+      "bus": "sfx",
+      "volume": 0.3,
+      "pitchVariation": 0.05,
+      "cooldownMs": 30000,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 20,
+      "maxDistance": 70,
+      "rolloff": 7
+    },
+    "caravan.pannier_creak": {
+      "_note": "Loaded panniers working against the girth. The `alongside` shape from the siege carriage (§82.8): it rides the hoofstep and thins itself with its own far longer cooldown, because a creak every step is a rattle and a creak every few seconds is a load. Only a laden donkey creaks - the app asks the phase, so the empty walk home is bare hooves.",
+      "clips": [
+        "sfx-caravan-pannier-creak-01",
+        "sfx-caravan-pannier-creak-02"
+      ],
+      "bus": "sfx",
+      "volume": 0.22,
+      "pitchVariation": 0.07,
+      "cooldownMs": 2600,
+      "maxInstances": 2,
+      "spatial": true,
+      "refDistance": 14,
+      "maxDistance": 40,
+      "rolloff": 10
+    },
     "world.ambience": {
       "clips": [
         "amb-world-frontier-day-01"
@@ -1286,6 +1442,97 @@
       "volume": 0.78,
       "cooldownMs": 9000,
       "maxInstances": 1
+    },
+    "world.zone_river": {
+      "_note": "Plan §82.13: a positional ambience bed for one place on the map. Spatial and looping, under world.ambience: noticeable when the camera arrives, never the thing the player listens to. `cooldownMs` is 0 on purpose - re-seating a bed stops it and starts the same event in the same frame, which is a crossfade with 0 and a gap with anything else; nothing else retriggers these, so there is no repeat for a cooldown to control. Streams like every other bed. One bed sounds at a time; RtsApp picks the zone and stops the previous event by id.",
+      "clips": [
+        "amb-zone-river-01"
+      ],
+      "bus": "ambience",
+      "volume": 0.3,
+      "loop": true,
+      "cooldownMs": 0,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 35,
+      "maxDistance": 95,
+      "rolloff": 5,
+      "stream": true
+    },
+    "world.zone_settlement": {
+      "clips": [
+        "amb-zone-settlement-01"
+      ],
+      "bus": "ambience",
+      "volume": 0.3,
+      "loop": true,
+      "cooldownMs": 0,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 35,
+      "maxDistance": 95,
+      "rolloff": 5,
+      "stream": true
+    },
+    "world.zone_market": {
+      "clips": [
+        "amb-zone-market-01"
+      ],
+      "bus": "ambience",
+      "volume": 0.3,
+      "loop": true,
+      "cooldownMs": 0,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 35,
+      "maxDistance": 95,
+      "rolloff": 5,
+      "stream": true
+    },
+    "world.zone_quarry": {
+      "clips": [
+        "amb-zone-quarry-01"
+      ],
+      "bus": "ambience",
+      "volume": 0.3,
+      "loop": true,
+      "cooldownMs": 0,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 35,
+      "maxDistance": 95,
+      "rolloff": 5,
+      "stream": true
+    },
+    "world.zone_goldmine": {
+      "clips": [
+        "amb-zone-goldmine-01"
+      ],
+      "bus": "ambience",
+      "volume": 0.3,
+      "loop": true,
+      "cooldownMs": 0,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 35,
+      "maxDistance": 95,
+      "rolloff": 5,
+      "stream": true
+    },
+    "world.zone_farmland": {
+      "clips": [
+        "amb-zone-farmland-01"
+      ],
+      "bus": "ambience",
+      "volume": 0.3,
+      "loop": true,
+      "cooldownMs": 0,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 35,
+      "maxDistance": 95,
+      "rolloff": 5,
+      "stream": true
     }
   },
   "_musicStates": "How the match picks which of the four playlists is playing (plan §28/§35). `tensionVisibleEnemies` is enemies the player can actually see through the fog - §35's rule is that seeing one is tension, not battle. `battleActiveFights` counts units of either side holding an attack target. `threatRadius` makes a *seen* enemy that close to the player's centre a battle on its own, before a blow lands, so a siege column walking into the square is not scored as calm. `calmSeconds` is how long a raised state holds after its cause is gone - combat is spiky, and without it the music would flap several times per skirmish. All four are retuned by ear."

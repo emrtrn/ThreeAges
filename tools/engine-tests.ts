@@ -786,6 +786,16 @@ import {
   RTS_UNIT_ALARM_VOICE_ORDER,
   resolveUnitVoice,
 } from "../src/game/rts/audio/rtsAudioEvents";
+import { DEFAULT_RTS_CAMERA_CONFIG } from "../src/game/rts/camera/rtsCameraConfig";
+import {
+  RTS_ZONE_AMBIENCE,
+  RTS_ZONE_AMBIENCE_BUILDINGS,
+  RTS_ZONE_AMBIENCE_ENTER_RADIUS,
+  RTS_ZONE_AMBIENCE_EXIT_RADIUS,
+  RTS_ZONE_AMBIENCE_TRADE_SITES,
+  rtsNearestRiverPoint,
+} from "../src/game/rts/audio/rtsZoneAmbience";
+import { resolveRtsRiverPaths } from "../src/game/rts/world/rtsRiverPaths";
 import {
   estimateSubtitleDurationSeconds,
   resolveDialogueLine,
@@ -4870,6 +4880,126 @@ check("RTS audio events: only long beds stream, and every bed does", () => {
         `"${eventId}" is a one-shot and must not stream — a stream cannot be scheduled`,
       );
     }
+  }
+});
+
+check("RTS zone ambience: a place bed is a single spatial loop", () => {
+  // §82.13. The world bed says "outdoors on the frontier" and never changes; these
+  // say *where the camera is standing*. What is pinned here is the shape that makes
+  // them beds rather than events — not the levels, which are there to be retuned.
+  const table = readAudioEventTable();
+  for (const [kind, eventId] of Object.entries(RTS_ZONE_AMBIENCE)) {
+    const definition = table.events[eventId] ?? assert.fail(`${eventId} is not in the shipped table`);
+    assert.equal(definition.bus, "ambience", `${kind} belongs on the ambience bus`);
+    assert.equal(definition.loop, true, `${kind} is a bed, not a trigger`);
+    assert.equal(definition.spatial, true, `${kind} is a place, so it has a position`);
+    assert.equal(
+      definition.maxInstances,
+      1,
+      `${kind} must be single: a second copy is one nothing could stop on its own`,
+    );
+    // Re-seating a bed stops it and starts the same event in the same frame, so
+    // any cooldown at all turns a crossfade into a gap. Nothing else retriggers
+    // these — there is no repeat here for a cooldown to be controlling.
+    assert.equal(definition.cooldownMs, 0, `${kind} re-seats itself, so a cooldown only cuts a hole in it`);
+  }
+  // Levels are deliberately not pinned, not even as "under the world bed". Mixing
+  // these against `world.ambience` is done by ear and the first listening pass
+  // muted the world bed outright to hear them — a test that read that as a
+  // regression would have been teaching the wrong lesson on its first day.
+});
+
+check("RTS zone ambience: the bed lets go later than it takes hold, and inside its own range", () => {
+  // Two radii rather than one, and the gap is the whole point: a camera parked on
+  // a single boundary starts and stops the bed on alternating frames. The numbers
+  // are tuning — the ordering is the contract.
+  assert.ok(
+    RTS_ZONE_AMBIENCE_EXIT_RADIUS > RTS_ZONE_AMBIENCE_ENTER_RADIUS,
+    "a bed must be held further out than it was acquired, or it flaps on the boundary",
+  );
+  // And the code must never hold a bed the table has already refused to sound:
+  // past `maxDistance` the director answers "too-far" and the anchor would be
+  // claimed while silent. The two are measured from different points on purpose —
+  // the radii from the camera's ground focus, the table's cut-off from the eye —
+  // so the comparison has to add the furthest the eye can be from that focus,
+  // which is the camera's own zoom ceiling.
+  const table = readAudioEventTable();
+  const reach = RTS_ZONE_AMBIENCE_EXIT_RADIUS + DEFAULT_RTS_CAMERA_CONFIG.maxDistance;
+  for (const [kind, eventId] of Object.entries(RTS_ZONE_AMBIENCE)) {
+    const definition = table.events[eventId] ?? assert.fail(`${eventId} is not in the shipped table`);
+    assert.ok(
+      reach <= definition.maxDistance,
+      `${kind} can be held at ${reach} units from the ear, past the ${definition.maxDistance} its table entry answers to`,
+    );
+  }
+});
+
+check("RTS zone ambience: every anchor source names a zone the table can sound", () => {
+  // Two tables name zones — buildings and trade sites — and a kind named by
+  // either with no event behind it is a place that goes silent without anything
+  // reporting it. There is deliberately no `forest` among them (§82.15).
+  const kinds = new Set(Object.keys(RTS_ZONE_AMBIENCE));
+  assert.ok(!kinds.has("forest"), "the forest bed was removed, not renamed");
+  for (const [buildingId, kind] of Object.entries(RTS_ZONE_AMBIENCE_BUILDINGS)) {
+    assert.ok(kinds.has(kind), `building ${buildingId} names zone "${kind}", which has no bed`);
+  }
+  for (const [siteType, kind] of Object.entries(RTS_ZONE_AMBIENCE_TRADE_SITES)) {
+    assert.ok(kinds.has(kind), `trade site ${siteType} names zone "${kind}", which has no bed`);
+  }
+});
+
+check("RTS zone ambience: the river anchors along its line, not at a vertex", () => {
+  // The bug this refuses: snapping to the nearest authored *point* puts the water
+  // in one spot on a feature that crosses the whole map. The shipped river is six
+  // points across ~190 units, so a camera sitting on the bank halfway down a
+  // segment would hear the river from tens of units away — or not at all.
+  const path = [
+    { x: 0, z: 0 },
+    { x: 100, z: 0 },
+  ];
+  const midway = rtsNearestRiverPoint([path], 50, 8)
+    ?? assert.fail("a two-point river must answer somewhere");
+  assert.equal(midway.x, 50, "the anchor slides along the segment to meet the camera");
+  assert.equal(midway.z, 0, "and stays on the water");
+  assert.equal(midway.distance, 8, "the distance is to the line, not to an end point");
+  // Past the end it clamps rather than running off down the tangent.
+  const beyond = rtsNearestRiverPoint([path], 140, 0) ?? assert.fail("still answers past the end");
+  assert.equal(beyond.x, 100, "the river stops where it was authored to stop");
+  assert.equal(beyond.distance, 40, "and reports the honest distance to that end");
+  // No river is no answer, rather than the origin. A bed anchored at (0,0)
+  // because a level authored no water is a sound coming from nowhere.
+  assert.equal(rtsNearestRiverPoint([], 10, 10), null, "no water, no anchor");
+});
+
+check("RTS zone ambience: the shipped level's river resolves to a line across the map", () => {
+  // The path is authored in two halves that have to agree: a `riverWaters` entry
+  // in the Level names a spline, and the Landscape sidecar carries that spline as
+  // the trench it cut. Either half renamed on its own leaves the river silent,
+  // and silent is exactly what nothing else would report.
+  const layout = JSON.parse(
+    readFileSync("public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json", "utf8"),
+  ) as Parameters<typeof resolveRtsRiverPaths>[0];
+  const landscapes = (layout.landscapes ?? []).map((entry) => ({
+    data: JSON.parse(readFileSync(`public/${entry.dataRef}`, "utf8")),
+    position: entry.position ?? [0, 0, 0],
+  })) as unknown as Parameters<typeof resolveRtsRiverPaths>[1];
+  const paths = resolveRtsRiverPaths(layout, landscapes);
+  assert.equal(paths.length, 1, "the gameplay level authors exactly one river");
+  const path = paths[0]!;
+  assert.ok(path.length >= 2, "a river needs at least a segment");
+  let length = 0;
+  for (let i = 0; i + 1 < path.length; i += 1) {
+    length += Math.hypot(path[i + 1]!.x - path[i]!.x, path[i + 1]!.z - path[i]!.z);
+  }
+  // Crosses the field rather than sitting in a corner: the map's own diagonal is
+  // the scale to read this against, and the river is authored along it.
+  assert.ok(length > 100, `the river runs ${length.toFixed(0)} units, which is not a crossing`);
+  // And it is monotonic enough to be a line rather than a folded point list —
+  // the failure an editor's mid-river point insertion would cause if the walk
+  // read the point array in authored order instead of following the segments.
+  for (let i = 0; i + 1 < path.length; i += 1) {
+    const step = Math.hypot(path[i + 1]!.x - path[i]!.x, path[i + 1]!.z - path[i]!.z);
+    assert.ok(step < length * 0.75, "one segment carrying most of the river means the order folded");
   }
 });
 

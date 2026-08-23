@@ -191,7 +191,10 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-23 | **Rig, bir işaretin ne demek olduğunu değiştirebilir (§82.8).** §82.4'ün zırh ayrımı bir hatayı ortaya çıkardı: `siege_placeholder` `heavy`, yani ağır adım seti indiği gün **top arabası çizme sesi çalmaya başladı** — Siege rig'indeki dört `footstep` işareti tekerlek teması, ve tekerlekli bir top ne yürür ne çizme giyer. Ayrımdan önce de yanlıştı, ama paylaşılan toprak sesinin altında duyulmuyordu. Düzeltme üçüncü bir zırh sınıfı **değil**: `armorClass` "üzerine inen darbe ne kadar acıtır" sorusunu cevaplıyor ve `siege` orada Guard'la dürüstçe aynı sınıfta; farklı olan sesi çıkaran mekanizma, ve o rig'in özelliği. Zırhı genişletmek bir savaş sayısına animasyon sorusu cevaplatırdı. İkinci tablo geldi (`RTS_ROLE_NOTIFY_AUDIO`, rig → işaret → ses) ve iki tür geçersiz kılma taşıyor, çünkü bir rig iki farklı şekilde katılmayabilir: `instead` yerine geçiyor (işaret burada tekerlek demek, adım *ayrıca* çalmamalı), `alongside` üstüne biniyor (gövde gıcırtısının kendi işareti yok, temas işaretlerine biniyor ve kendi `cooldownMs`'i ile seyreliyor). Tek klip ailesi bunu yapamazdı — temas başına bir hız ile birkaç saniyede bir hız aynı sette duramaz; bir işaretin iki olay beslemesinin gerekçesi katman değil **iki ritim**. Geri düşüş §82.4'ünkiyle birebir aynı şekilde, yani kod kliplerden önce indi: bugün top arabası hâlâ ağır adım çalıyor, yanlış ama duyulur. `alongside` bu düşüşü taşımıyor ve taşımamalı — eklemeli bir sesin düşeceği yer yok — ve çözücünün gıcırtıyı asla yerine geçen olarak döndürmediği testte pinlendi, çünkü ikisini karıştırmak gıcırtı indiği gün tekerleği susturur. |
 | 2026-08-23 | **Paket 4 indi: 28 klip, 8 olay (§82.9).** Beşi saf veriydi — kod §82.4/§82.8'den beri bekliyordu — üçü kanca istedi. **Birim kanalında artık starter içeriği yok:** `unit.death` 22 Ağustos'tan beri `starter-snd-impact-light` üzerinde duruyordu ve Faz 5'in son yer tutucusuydu. Üç tavan §82.4'ün açık ucu gereği yeniden ayarlandı (`unit.death` 3→2, `combat.body_impact` 6→4), çünkü her ayrım olay başına tavanı ikiye katlıyor. Kanca isteyen üçünde asıl karar uçuş seslerinin **nereye çakılacağıydı**: bir uçuş sesi fiziksel olarak mermiyle hareket eder ve `AudioPlaybackHandle` çalarken taşınamıyor, yani iki uçtan biri seçilmek zorunda. Varış ucu seçildi — kalkış zaten kendi yerinde cevaplanıyor (`combat.arrow_release`, `siege.cannon_fire`) ve aynı noktaya ikinci bir ses koymak onu birincinin altına gömerdi; varış ucunda ise başka hiçbir şeyin yapmadığı işi yapıyor: *buraya bir şey inecek*, oyuncunun bakması gereken yerde ve inmeden önce. Gülle bunu bütün uçuş süresi kadar önden söylüyor. `siege.shell_impact` hasar sesine eklemeli, iki katman: duvarın çatlağı malzemenin verdiği ses, bu onu veren patlama. Yol boyunca iki küçük şey: yetim-olay testi rig geçersiz kılmalarını tanımıyordu (§82.8 id'leri eklendi), ve `rolloff`'un [0,10] sınırı ilk yazdığım 11'i reddetti — doğrulayıcı çalışıyor. |
 | 2026-08-23 | **Maçtan iki rapor, iki farklı cins hata (§82.10).** *Gülle ıslığı hiç duyulmuyordu* ve şüphe mesafe kapısındaydı; ölçüm başka yeri gösterdi: rapor ile ıslık **aynı karede** başlıyor, rapor 1.00 sn ve 0.5, ıslık 1.00 sn ve 0.22, üstelik ıslık iniş noktasında yani kameradan daha uzakta. Islık bütün uzunluğu boyunca bangın altında. Zamanlama düzeltmesi yok — uçuş 0.45–1.05 sn ve klip 1.00 sn, yani mermi klipten kısa ve var olmayan bir boşluğa geciktirilemez (0.3 sn erteleme onu bu sefer isabet patlamasının altına sokar). Cevap mikste: 0.22 → 0.4, refDistance 30 → 45, rolloff 7 → 4. Gerçekten ayrışmış bir ıslık üretim işi, tablo işi değil. *Dönüşte gıcırtı yoktu* ve bu işaret modelinin kendi kör noktasıydı: yerinde dönüşte temas işareti yok, tekerlekler bir yere gitmiyor. İkinci tetikleyici eklendi ama **eşik paylaşıldı** — mürettebatın strafe'i zaten `turnRateDegPerSecond * 0.25`'i okuyordu, `siegeTurnGateDegPerSecond` dışa açıldı ve gıcırtı aynı fonksiyonu okuyor; iki ayrı sayı olsaydı biri kayar, top ya sessizce döner ya dururken gıcırdardı. Yaw hızı yeniden ölçülmüyor, sunumun ölçtüğü okunuyor — ikinci bir ölçüm sıfır okurdu, çünkü ilk örnekleyici işaretini çoktan ilerletmiş oluyor. |
-| 2026-08-23 | **Dört kapsam kararı ve iki üretim listesi (§82.11–§82.13).** Kullanıcı kalan listeyi okudu: stinger klasörü doğru çıktı — yanlış olan §29'un bayat satırıydı, ve düzeltildiği yazıldı (aynı olguyu iki yerde tutan belge, biri güncellenince *yanlış varlık* raporu üretiyor). Düşman çağ atlaması ayrı klip almayacak: tek `notify.age_up` iki türü de çalacak, çünkü oyuncununkini ayıran şey zaten `stinger.age_up` ve `pitchVariation` sabit kaydırma değil rastgele aralık — aynı sesi verecek iki satır borç olurdu. Tamir kapsam dışı (yapılar kendiliğinden iyileşiyor, kanca asılacak an yok). Yay germe / kalkan / topçu geri tepmesi üretilmeyecek, ve bununla **C kovası tamamen kapandı** — üçü de ikinci katmandı, üç anın da bugün sesi var. Kalan tek serbest işaret `throw-release` ayrıntılandırıldı (§82.12): tüketicisi zaten var ve o ses değil, yani Worker atış ucunda sesi olmayan tek birim. Bölgesel ambiyans listesi haritadan çıkarıldı (§82.13): yedi yer, mono 30–45 sn — harita geneli yatak 170 sn/stereo/10 MB olduğu için aynı ölçü yedi kez 70 MB demekti. |
+| 2026-08-23 | **Beş kapsam kararı ve iki üretim listesi (§82.11–§82.13).** Kullanıcı kalan listeyi okudu: stinger klasörü doğru çıktı — yanlış olan §29'un bayat satırıydı, ve düzeltildiği yazıldı (aynı olguyu iki yerde tutan belge, biri güncellenince *yanlış varlık* raporu üretiyor). Düşman çağ atlaması ayrı klip almayacak: tek `notify.age_up` iki türü de çalacak, çünkü oyuncununkini ayıran şey zaten `stinger.age_up` ve `pitchVariation` sabit kaydırma değil rastgele aralık — aynı sesi verecek iki satır borç olurdu. Tamir kapsam dışı (yapılar kendiliğinden iyileşiyor, kanca asılacak an yok). Yay germe / kalkan / topçu geri tepmesi üretilmeyecek, ve bununla **C kovası tamamen kapandı** — üçü de ikinci katmandı, üç anın da bugün sesi var. Kalan tek serbest işaret `throw-release` ayrıntılandırıldı ve aynı oturumda **kapsam dışı** bırakıldı (§82.12) — gerekçe kalkan bloğununkiyle aynı: `combat.body_impact` isabeti zaten veriyor. İşaretin kendisi duruyor, çünkü ses kancası değil: taşı elden bırakan tüketici o. Bölgesel ambiyans listesi haritadan çıkarıldı (§82.13): yedi yer, mono 30–45 sn — harita geneli yatak 170 sn/stereo/10 MB olduğu için aynı ölçü yedi kez 70 MB demekti. |
+| 2026-08-23 | **Bölgesel ambiyans indi — 7 klip, 7 olay, kanca (§82.13).** Kullanıcı yedi yatağı üretti (mono/48 kHz/26.00 sn, toplam 4.8 MB) ve aynı gün bağlandı. Olaylar `world.zone_*` adlandı, `ambience.zone_*` değil: editör kataloğu id önekine göre gruplanıyor ve bunlar `world.ambience` ile aynı §5.8 kanalı — yeni bir önek COMBAT'ınkinin yanına ikinci bir istisna olurdu. Yatak `structure.fire_loop`'un desenini alıyor (played dönmeden sahiplenme yok, durdurma başlatılan id ile, tek instance) ve üç karar bunun üstüne bindi: **aynı anda tek yatak** (iki yatak iki yer değil bir bulamaç), **iki yarıçap** 45 giriş / 62 çıkış (tek yarıçapla sınırda park etmiş kamera yatağı bir kare açıp bir kare kapatır — §35'in müzik asimetrisiyle aynı sebep), ve **duraklatınca susmuyor** (çekiç yalan olur, koru koru olmaya devam eder). Korunun çapası ağırlık merkezi: en yakın gövde olsaydı kesilen her ağaç yatağı yana yürütürdü. `stream: true` mevcut sözleşmeye uyularak seçildi — decode 26 sn'de ~5 MB/klip demekti; element yolunun loop dikişi duyulursa sözleşme kanıtla gözden geçirilecek, tek girdi istisna yapılmayacak. Dört sözleşme testi indi, hepsi ilişki pinliyor. |
+| 2026-08-23 | **Bölge yatakları yere göre çalmıyordu — üç hata (§82.14).** Kullanıcı ortamı temizleyip dinledi ve "kameranın yerine göre değil sırayla çalıyor" dedi; rapor doğruydu ve tek hata değildi. **(1)** Mesafe kameranın gözünden ölçülüyordu: göz 20–40 birim yukarıda ve geride, yani her bölge mesafesinde zoom seviyesi vardı ve aynı noktada zoom yapmak bölge değiştirebiliyordu — ölçüm `focusX`/`focusZ`'ye, zemine ve düzlemsele taşındı (yan kazanç: kare başına statik çapa başına bir `heightAt` gitti). **(2)** Yarıçaplar tahminle seçilmişti; ölçüm bitirdi — haritanın korularının en yakın komşusu 27.5 birim, oyuncunun başlangıcı kendi korusuna 16.1 birim, ve ilk 45/62 yarıçapı komşuların birkaçını birden yutuyordu, yani yatak bir yere *varınca* değil öncekinden yeterince *uzaklaşınca* değişiyordu. Şimdi 18/25, ve çıkış yarıçapının en dar çapa aralığının altında kalması pinlendi — pinlendiği gün işe yaradı, ilk düzeltmenin seçtiği 30'u reddetti. **(3)** Devralan bölge koşulsuz tutuluyordu; küçük haritada bu "sonsuza kadar tut" demek. Kural sıraya bağlandı: giriş yarıçapındaki en yakın kazanır, devralan yalnız kimse bir marj kadar yakın değilken korur, marj da üçüncü bir sabit değil iki yarıçapın farkı. Ayrıca bir kontrol geri alındı: "bölge yatağı dünya yatağının altında olmalı" seviyeyi pinliyordu ve kullanıcının ilk dinleme oturumu (dünya yatağı 0, bölgeler 1) onu regresyon diye raporladı. |
+| 2026-08-23 | **Koru kaldırıldı, nehir kendi çizgisine bağlandı (§82.15).** İkinci dinleme oturumu: kullanıcı beş yatağı onayladı, koruyu reddetti, nehre daha iyi bir çapa önerdi. **Koru** varlığıyla ve mekanizmasıyla gitti — harita geneli ambiyans zaten orman taşıyor, ve bu projenin koruları vahşi orman değil dikilmiş kümeler, yani yatak orada olmayan bir şeyi anlatıyordu; yedi yatak altıya indi ve §82.14'ün "en dar çapa aralığı" testi dayanağını kaybetti (koruların 27.5 birimini okuyordu). **Nehir** landscape spline'ından okunuyor artık: yol iki yerde yarım authored — Level'ın `riverWaters`'ı hangi spline'ın nehir olduğunu söylüyor, çizgiyi Landscape sidecar'ı veriyor — ve `resolveRtsRiverPaths` ikisini Landscape mount olduğu anda birleştiriyor. Çapa artık kameranın baktığı noktaya en yakın *nehir üstü* nokta (merkezde 1.0 birim, oyuncu üssünde 51.7, yani üste yatak yok). Üç şey uygularken çıktı: köşeye snap değil **segment izdüşümü** (6 nokta ~190 birim, en yakın köşe kıyıdan onlarca birim uzak olabilir); `points` bir küme, sıra `segments` zincirinde — authored sırada okumak bugün doğru ama nehrin ortasına editörde nokta eklendiği gün nehri kendi üstüne katlardı; ve tek çapa id'siyle kayan bir nokta, ki bu devralan mesafesinin **yatağın konduğu noktadan** ölçülmesini gerektirdi (handle taşınamıyor, §82.9). `cooldownMs` altı yatakta da 0'a indi: yeniden oturma aynı olayı aynı karede durdurup başlatmak, yani 0 ile crossfade, başka her değerle delik. Latent bir hata kapsam dışı bırakıldı: `rtsLevelAdapter`'ın rota çözümü spline dönüşünü yok sayıyor — bugün ısırmıyor (rotaların hepsi dönüşsüz) ama aynı okumayı yapan ilk nehir denemesi çizgiyi haritanın dışına koydu. |
 
 ---
 
@@ -3562,7 +3565,10 @@ asılacağı işaret yok — kazmanın §81.1'de iptal edilme sebebiyle birebir 
 durum. Bunlar için ses üretmek, çalmayacak bir kütüphane demektir.
 
 Bu arada `throw-release` **authored ama hiçbir sese bağlı değil** — klipte
-duruyor, `RTS_NOTIFY_AUDIO_EVENTS`'te karşılığı yok. Ücretsiz bir kanal.
+duruyor, `RTS_NOTIFY_AUDIO_EVENTS`'te karşılığı yok. Bir süre "ücretsiz bir
+kanal" diye duruyordu; 23 Ağustos'ta **kapsam dışı** bırakıldı (§82.11 madde 5),
+ve ses kancası olmadan da bir tüketicisi olduğu için sessiz kalması bir kayıp
+değil. İşaretin kendisine dokunulmuyor.
 
 ## 82.2 Bağlandı — `unit.death` (22 Ağustos 2026)
 
@@ -3640,7 +3646,8 @@ açılmaz.
 - [x] Yapı/lojistik kancalarının geri kalanı (§82.7): geçersiz yerleştirme,
       yıkım onayı, seviye/çağ atlama başlangıcı, depo ve karakol bağlandı,
       bölge genişledi, ve şantiyenin çekiç/kereste katmanı.
-- [ ] `throw-release` işaretine bir ses — §82.12, tek klip ailesi
+- [x] ~~`throw-release` işaretine bir ses~~ — ⛔ üretilmeyecek
+      (karar 23 Ağustos 2026, §82.11 madde 5): isabet zaten duyuluyor
 
 **B (varlık):** ~~pazar al/sat + stok dolu (§16)~~ (üretildi, §82.6),
 ~~yıkım onayı (§17)~~ ve ~~yapı seviye atlama / çağ atlama başlangıcı
@@ -4225,10 +4232,10 @@ Kendi zamanlayıcısı yok: gıcırtıları aralayan şey olayın `cooldownMs`'i
 işaretlerde olduğu gibi. Tekerleğin de tetiklendiği bir karede ikisinden biri
 reddediliyor, ve hangisi olduğu önemli değil — ses zaten aynı ses.
 
-## 82.11 Dört kapsam kararı (23 Ağustos 2026)
+## 82.11 Beş kapsam kararı (23 Ağustos 2026)
 
-Kullanıcı §82.10 sonrası kalan listeyi okudu ve dördünü kapattı. Üçü kapsam
-daraltması, biri bir yanlış anlamanın düzeltilmesi — ve dördü de listeyi
+Kullanıcı §82.10 sonrası kalan listeyi okudu ve beşini kapattı. Dördü kapsam
+daraltması, biri bir yanlış anlamanın düzeltilmesi — ve beşi de listeyi
 *kısalttığı* için yazılıyor: kapatılmayan bir madde her denetimde yeniden
 sayılır, ve "neden hâlâ burada" sorusu üçüncü kez sorulduğunda cevabı kimse
 hatırlamaz.
@@ -4288,82 +4295,42 @@ katmanı olmayan bir an değil. Yay germe `combat.arrow_release`'in hemen önces
 kalkan bloğu `combat.body_impact`'in üstü, geri tepme `siege.cannon_fire`'ın
 kuyruğu. Üç anın da bugün bir sesi var; olmayacak olan detay.
 
-## 82.12 `throw-release` — kalan tek serbest işaret (detay)
+### 5. Worker'ın taş atışı da üretilmeyecek
 
-§82.1 bunu "ücretsiz bir kanal" diye geçmişti. C kovası kapandığına göre
-kapatılabilir tek işaret-tabanlı madde bu; ayrıntısı burada.
+Aynı oturumda `throw-release` ayrıntılandırıldı, promptu yazıldı, ve sonra
+kapsam dışı bırakıldı — gerekçe 4. maddeninkiyle birebir aynı şekle sahip:
+`combat.body_impact` isabeti zaten veriyor, yani eksik olan **ikinci bir
+katman**. Bir tur içinde hem yazılıp hem kapatılması, listenin dördüncü maddeyle
+gerçekten daraldığının ölçüsü. Ayrıntısı §82.12'de; işaretin kendisi duruyor,
+çünkü ses kancası değil.
 
-### İşaret nerede ve ne zaman atıyor
+## 82.12 `throw-release` — kapsam dışı (23 Ağustos 2026)
 
-`public/assets/ThreeAges/Characters/Worker/worker.skeleton.json`, tek bir
-`notify`: `OverhandThrow` klibinde **t = 0.41 s**. Aynı adla bir de soket
-authored (`RightHand`) — kolun tam uzandığı, taşın eli terk ettiği an.
+Bir tur boyunca üretim listesinde durdu, ayrıntılı promptu yazıldı, ve
+**üretilmeyecek.** Kullanıcının kararı tek cümleydi ve doğru cümleydi: isabet
+zaten yeterli.
 
-### Bu işaretin **zaten** bir tüketicisi var, ve o ses değil
+Kaydın burada durma sebebi bu bölümün silinmemiş olması: `throw-release`
+tüm sidecar'lardaki tek "authored ama hiçbir sese bağlı değil" işaret, ve bu
+onu her denetimde *kapatılabilir bir boşluk* gibi gösteriyor. İki kere
+sayılmaması için bir kere yazılıyor.
 
-Diğer beş işaretten ayıran şey bu. `playUnitNotify` içinde, efekt bütçesinden
-**önce** çalışan bir satır var:
+**Neden kayıp değil.** Worker'ın taşı, ses için üç uçtan yalnız birini sessiz
+bırakıyor:
 
-```ts
-if (name === RTS_THROW_RELEASE_NOTIFY) this.releasePendingThrow(unit);
-```
-
-Sebep `launchShot`'ta yazılı: Worker'ın menzilli saldırısında taş, atışın
-çözüldüğü karede değil kolun uzandığı karede havalanıyor — yoksa el hâlâ başın
-arkasındayken taş yola çıkmış oluyordu. Yani işaret bugün *fiziksel olarak* doğru
-anı zaten işaretliyor ve o an oyunda doğrulanmış durumda. Sese eklenmesi yeni bir
-zamanlama sorusu açmıyor; §82.2'nin ölüm klibinde uğraştığı "vuruş kliptedir"
-problemi burada yok.
-
-### Bugün duyulan ve duyulmayan
-
-| Uç | Bugün |
+| Uç | Durum |
 |---|---|
-| Atışın kendisi (kol, taşın eli terk etmesi) | **sessiz** |
-| Uçuş | sessiz — ve kalması doğru: menzil 6 birim, ve §82.9 uçuş sesini varış ucuna çakmıştı; 6 birimde varış ucu zaten atış ucudur |
-| İsabet | duyuluyor — hedefin `React_*` klibindeki `body-impact` → `combat.body_impact` |
+| Atışın kendisi | sessiz — ⛔ kapsam dışı |
+| Uçuş | sessiz, ve kalması doğru: menzil 6 birim, ve §82.9 uçuş sesini varış ucuna çakmıştı; 6 birimde varış ucu zaten atış ucudur |
+| İsabet | **duyuluyor** — hedefin `React_*` klibindeki `body-impact` → `combat.body_impact` |
 
-Yani Worker, **atış ucunda sesi olmayan tek birim**: Guard'ın savurması
-`combat.sword_swing`, Archer'ın bırakışı `combat.arrow_release`, topçunun atışı
-`siege.cannon_fire`. Worker kendini savunurken (menzil 6, hasar 5, 2 sn cooldown)
-sessizce taş atıyor. Aynı rig'in yakın dövüşü (`Punch_Jab`) da sessiz, ama onun
-işareti hiç yok — kapatılabilir olan bu.
+Yani atışın *sonucu* okunuyor; eksik olan yalnız atanın kendi hareketi, ve bu
+kamera mesafesinde bir Worker'ın kolu zaten okunmuyor.
 
-### Ne üretilecek
-
-`SFX-WRK-007` — `sfx/units/sfx_worker_throw_NN.ogg`, **üç varyant**.
-
-```text
-Create a short medieval RTS sound of a labourer hurling a rock in self-defence, heard from a mid-distance strategy camera.
-
-A brief cloth and leather effort as the arm comes over, then the stone leaving the hand with a light gritty release and a short air movement that fades immediately.
-
-Duration around 0.35 to 0.5 seconds.
-
-Improvised and physical - a working man throwing a stone, not a trained soldier swinging a weapon. Lighter and drier than a sword swing.
-
-No voice, no grunt, no whistle, no impact at the end, no music, no reverb tail.
-```
-
-**Neden klibin sonunda isabet yok:** isabeti hedefin kendi işareti veriyor ve 6
-birimlik menzilde ikisi neredeyse aynı anda çalıyor — klibe gömülmüş bir vuruş o
-an çift darbe olarak duyulur.
-
-**Neden efor sesi yok:** §37'nin Worker VO'su zaten var ve bu kanal onun değil.
-Üstelik işaret 2 saniyede bir tekrarlıyor; içindeki insan sesi üçüncü atışta aynı
-adamın aynı nefesi olur.
-
-### İnecek şey — kod değişikliği yok denecek kadar az
-
-`events.json`'a bir `combat.throw_release` girdisi (`combat.sword_swing`'in
-komşusu, aynı bus ve mesafe ailesi) ve `RTS_NOTIFY_AUDIO_EVENTS`'e tek satır:
-
-```ts
-"throw-release": "combat.throw_release",
-```
-
-Varyant ayrımı gerekmez: işaret yalnız Worker rig'inde authored (§82.4'ün tablosu
-bunu zaten söylüyor), yani `armorClass` ekseni burada boş bir ayrım olurdu.
+**İşarete dokunulmuyor.** `RTS_THROW_RELEASE_NOTIFY` bir ses kancası değil:
+`playUnitNotify` onu efekt bütçesinden önce tüketip taşı elden bırakıyor
+(`releasePendingThrow`). Kapsam dışı olan yalnız ses; işaret silinirse taş kolun
+uzanmasını beklemeden havalanır.
 
 ## 82.13 Bölgesel ambiyans — üretim listesi (§26 / §51)
 
@@ -4389,9 +4356,14 @@ yok.
 
 ### Liste
 
+> **§82.15 bu listeden bir satır düşürdü.** Orman yatağı üretildi, denendi ve
+> geri alındı — harita geneli ambiyans zaten orman taşıyor ve bu haritanın
+> koruları vahşi orman değil. Satır silinmedi; *üretilip reddedildiği* yazıldı,
+> çünkü bir sonraki denetimde "orman neden yok" sorusunun cevabı burada aranır.
+
 | # | Dosya | Yer (oyundaki karşılığı) | İçerik |
 |---|---|---|---|
-| 1 | `amb_zone_forest_01.ogg` | Ağaç kümeleri, `lumber_camp`, `timber_camp` ticaret sahası | Yaprak hışırtısı, seyrek dal, orman kuşları (yakın değil), hafif gövde gıcırtısı |
+| 1 | ~~`amb_zone_forest_01.ogg`~~ ⛔ | ~~Ağaç kümeleri, `lumber_camp`, `timber_camp`~~ | **Kaldırıldı, §82.15** |
 | 2 | `amb_zone_river_01.ogg` | Nehir ve `river_port` ticaret sahası | Yumuşak akan su, kıyı çakılında hafif hareket, seyrek su kuşu |
 | 3 | `amb_zone_settlement_01.ogg` | `command_center` + `house` kümesi | Uzak çalışma, seyrek çekiç, tahta/kapı, çok uzak insan uğultusu (kelime yok) |
 | 4 | `amb_zone_market_01.ogg` | `market` | Çok düşük insan uğultusu, hafif tahta sandık ve terazi, seyrek madeni para |
@@ -4403,15 +4375,62 @@ yok.
 geçen "bridge" yalnız yol grafiğinin terimi. Bir köprü authored edildiği gün
 eklenir.
 
-### Kanca henüz yok — ve klipler önce inebilir
+### İndi — 23 Ağustos 2026
 
-Bugün konuma göre ambiyans çalan bir sistem yok; `world.ambience` tek, harita
-geneli, ve `RtsApp` onu bir kez başlatıyor. Yani bu yedi klip §82.1'in tanımıyla
-**B kovası**: varlık *ve* kanca. Sıra yine ters kurulabilir ve kurulmalı — klipler
-manifestte dururken kanca yazmak, kancayı duyarak ayarlamak demek. Kancanın şekli
-belli: `structure.fire_loop` zaten konumlu, `loop: true`, `maxInstances: 1` bir
-yatak ve olay id'siyle durdurulabiliyor; bölge yatağı aynı desen, tetikleyicisi
-kamera mesafesi.
+Yedi klip de üretildi ve kanca aynı gün yazıldı. Sevk edilen ölçüler: **mono,
+48 kHz, 26.00 sn**, ~700 KB each (toplam 4.8 MB). Süre şartnamenin 30–45 sn
+bandının biraz altında; sonucu loop noktasının daha sık gelmesi, ve bu ancak
+maçta duyularak yargılanır.
+
+Kanca `src/game/rts/audio/rtsZoneAmbience.ts` (saf tablo + çapa çözümü) ile
+`RtsApp.updateZoneAmbienceAudio` (yatağı başlatan/durduran) arasında bölündü —
+`structure.fire_loop`'un deseni: `played` dönmeden çapa sahiplenilmiyor,
+durdurma **başlatılan id** ile yapılıyor, tek instance.
+
+Karara bağlanan altı şey:
+
+- **Olay adları `world.zone_*`**, `ambience.zone_*` değil. Editör kataloğu
+  tabloyu id önekine göre grupluyor ve bunlar §5.8 — `world.ambience` ile aynı
+  kanal. Yeni bir önek, COMBAT'ınkinin yanına ikinci bir istisna koymak olurdu.
+- **Aynı anda tek yatak.** Kasabayla pazarın arasındaki bir kamera ikisini birden
+  çalardı, ve üçüncü bir yatağın (`world.ambience`) altındaki iki yatak iki yer
+  değil bir bulamaçtır. En yakın bölge kazanıyor — zaten oyuncunun baktığı yer o.
+- **İki yarıçap, biri diğerinden geniş** (45 giriş / 62 çıkış). Tek yarıçapla
+  sınırda park etmiş bir kamera yatağı bir kare açıp bir kare kapatır, ve bir
+  bölgenin kenarı tam da oyuncunun durup baktığı yerdir. §35'in müzik durum
+  makinesi aynı asimetriyi aynı sebeple taşıyor.
+- **Maç duraklatılınca susmuyor.** `updateBuildLoopAudio`'nun çekiç için verdiği
+  gerekçe burada tersine dönüyor: donmuş bir tarlanın üstündeki çekiç yalan,
+  ama koru duraklatınca koru olmaktan çıkmıyor. Yatak ambiyansı ve müziği
+  izliyor, işi değil.
+- ~~**Korunun çapası ağaçlarının ağırlık merkezi**~~ — koruyla birlikte gitti
+  (§82.15). Gerekçesi nehirde yaşıyor: bir yeri en yakın *parçasına* bağlamak,
+  o parça değiştikçe yürüyen bir yatak demek.
+- **`stream: true`**, mevcut sözleşmeye uyarak. `test:engine` "ambience ya da
+  music kanalındaki her yatak stream eder, ve yalnız oyuncunun *indiğini*
+  duyduğu ses decode edilir" diye tutuyor; 26 sn'lik bir klip decode edilse
+  ~5 MB RAM (yedisi 35 MB) demekti. Karşı taraf da gerçek: element yolunda loop
+  dikişi duyulabilir. Bu bir **dinleme** sorusu — dikiş maçta duyuluyorsa
+  sözleşme kanıtla gözden geçirilir, tek girdiyi istisna yapmakla değil.
+
+**Çapalar** — hepsi maçın zaten sahip olduğu şeyler, elle yerleştirilmiş ses
+işaretleri değil (bir işaret, ilkiyle senkron tutulacak ikinci bir harita olurdu):
+
+| Zone | Çapa |
+|---|---|
+| ~~forest~~ | ⛔ kaldırıldı (§82.15) |
+| river | landscape'in nehir spline'ı üzerindeki en yakın nokta (§82.15; ilk sürüm `river_port` idi) |
+| quarry | `stone_pit` + dikilmiş `quarry` |
+| goldmine | dikilmiş `gold_mine` |
+| settlement | dikilmiş `command_center` (`house` değil — bir ev kasaba değildir) |
+| market | dikilmiş `market` |
+| farmland | dikilmiş `farm` / `windmill` / `pasture` |
+
+`lumber_camp` bilerek yoktu (koruya dikiliyor, korunun çapasının yanında
+dururdu) ve §82.15 koruyu kaldırınca `timber_camp` de listeden düştü.
+
+Sözleşme testleri `--filter "zone ambience"` altında; bugünkü hâli §82.15'in
+sonunda. Büyüklükler değil ilişkiler pinlendi — ayarlar oynayabilsin.
 
 ### Prompt şablonu
 
@@ -4431,3 +4450,158 @@ Keep every element sparse and irregular so no single element repeats on an audib
 
 No music, no tonal drone, no melody, no close continuous birdsong, no intelligible speech, no cinematic swell, no reverb tail at the loop point.
 ```
+
+## 82.14 Maçtan gelen rapor — "yere göre değil, sırayla çalıyor" (23 Ağustos 2026)
+
+Kullanıcı §82.13'ü dinlemek için ortamı temizledi (diğer kanalları kapattı,
+`world.ambience`'ı 0'a çekti, bölge yataklarını 1'e aldı) ve şunu bildirdi:
+yataklar kameranın bulunduğu yere göre değil, **sırayla** çalıyor gibi.
+
+Rapor doğruydu ve tek bir hata değildi. Üçü de aynı yöne itiyordu, o yüzden
+kulakta tek bir arıza gibi duyuluyordu.
+
+### 1. Mesafe gözden ölçülüyordu, kameranın baktığı yerden değil
+
+`camera.position` yerde değil: pitch 55° ile 20–40 birim yukarıda ve geride
+(`rtsCameraConfig`). Yani her bölge mesafesine zoom seviyesi ekleniyordu — aynı
+noktada durup **zoom yapmak** bölge seçimini değiştirebiliyordu. Oyuncunun
+"buradayım" derken kastettiği şey kameranın baktığı nokta, ve controller onu
+zaten `focusX`/`focusZ` olarak veriyor.
+
+Ölçüm artık zeminde ve odaktan; `Math.hypot` ile düzlemsel. Yan kazanç: statik
+çapa başına kare başına bir `groundSurface.heightAt` çağrısı gitti — yükseklik
+yalnız seçilen çapa için, tetiklerken bir kez örnekleniyor.
+
+### 2. Yarıçaplar haritaya göre değil, tahminle seçilmişti
+
+Ölçüm bunu tek satırda bitirdi. Sevk edilen blockout haritasının koruları:
+
+| | |
+|---|---|
+| Koru sayısı | 6 |
+| En yakın komşu | **27.5** birim |
+| Oyuncunun başlangıcı → kendi korusu | **16.1** birim |
+
+İlk yarıçaplar 45 giriş / 62 çıkış'tı. 62, bu haritada bir bölgenin *yarısını*
+değil, komşularının birkaçını birden yutuyor: bir kez kasabayı alan yatak, kamera
+haritanın öbür ucuna gidene kadar bırakmıyor. Dışarıdan bakınca bu tam olarak
+"yere göre değil sırayla çalıyor" gibi duyuluyor — çünkü yatak *bir yere
+varınca* değil, **öncekinden yeterince uzaklaşınca** değişiyor.
+
+Şimdi 18 giriş / 25 çıkış, ve çıkış yarıçapı haritanın en dar çapa aralığının
+altında tutuluyor. Bu bir test olarak pinlendi ve pinlendiği gün işe yaradı: ilk
+düzeltme 30 seçmişti, test onu 27.5'e karşı reddetti.
+
+### 3. Devralan bölge koşulsuz tutuluyordu
+
+Birinci sürümün kuralı "incumbent hâlâ çıkış yarıçapındaysa onu döndür" idi.
+Küçük bir haritada bu, "sonsuza kadar tut" ile aynı şey. Kural sıraya bağlandı:
+
+1. **Giriş yarıçapındaki en yakın bölge kazanır** — bir yere varmak anında
+   cevaplanır;
+2. *ancak* devralan, çıkış yarıçapı içindeyken ve başkası **belirgin biçimde**
+   daha yakın değilken yatağı korur;
+3. yoksa yatak yok — iki yerin arası bir yer değildir, ve altta `world.ambience`
+   zaten çalıyor.
+
+"Belirgin" üçüncü bir sabit değil, **iki yarıçapın arasındaki boşluk**. Aynı
+gevşeklik iki farklı çırpınmayı birden kapatıyor: sınırda park etmiş kamera
+(devralan boşluğu köprüler) ve iki bölgeye neredeyse eşit uzaklıkta duran kamera
+(devralan, öteki tam bir marj kadar yakın olana dek kazanır). §82.10'un gıcırtı
+eşiğiyle aynı ders: iki sayı yerine bir sayı ve ondan **türetilen** bir marj.
+
+### Testin öğrendiği
+
+Bir kontrol de bu turda geri alındı: bölge yatağının seviyesi `world.ambience`'ın
+**altında** olmalı diye yazılmıştı. Kullanıcının ilk dinleme oturumu tam tersini
+yaptı — dünya yatağını sıfırlayıp bölge yataklarını 1'e aldı — ve o kontrol bunu
+regresyon diye rapor etti. Seviye ayardır; pinlenen şey artık yalnız şekil (tek,
+konumlu, loop) ve **ilişkiler** (çıkış > giriş, erişim ≤ `maxDistance`, çıkış ≤
+en dar çapa aralığı).
+
+## 82.15 Koru kaldırıldı, nehir kendi çizgisine bağlandı (23 Ağustos 2026)
+
+İkinci dinleme oturumu. Kullanıcı altı yatağın beşini onayladı, birini reddetti
+ve birine daha iyi bir çapa önerdi. İkisi de aynı cinsten karar: **yatak, orada
+olan şeyi anlatmalı.**
+
+### Koru yatağı geri alındı — varlık ve mekanizma birlikte
+
+Gerekçe iki parçaydı ve ikincisi asıl olan: **(1)** harita geneli ambiyans zaten
+orman taşıyor, yani yatak ikinci bir kat oluyordu; **(2)** bu projenin koruları
+vahşi orman değil, dikilmiş ağaç kümeleri — üzerlerine vahşi doğa sermek orada
+olmayan bir şeyi anlatıyordu.
+
+Kaldırılan: `amb_zone_forest_01.ogg`, manifest kaydı, `world.zone_forest` olayı,
+`forest` bölge türü, koru ağırlık merkezi hesabı, ve `timber_camp` ticaret
+sahasının eşlemesi. Bu §82.13'ün yedi yatağını **altıya** indiriyor.
+
+Not, ses değil **çapa mekanizması** da gittiği için yazılıyor: koru merkezi
+`rtsStaticAmbienceAnchors`'ın tek dinamik hesabıydı ve onunla birlikte
+§82.14'ün "en dar çapa aralığı" testi de dayanağını kaybetti (o test koruların
+27.5 birimlik aralığını okuyordu). Yarıçaplar 18/25'te kaldı — ölçüm hâlâ
+geçerli, ölçtüğü şey artık listede yok.
+
+### Nehir bir nokta değil, bir çizgi
+
+Kullanıcının gözlemi doğruydu ve veriye kadar takip edildi: nehir landscape
+üzerinde bir spline'a oturtulmuş bir çukur, ve o spline runtime'da okunabiliyor.
+
+Yol **iki yerde yarım** authored ve ikisi de tek başına yeterli değil:
+
+| Nerede | Ne taşıyor |
+|---|---|
+| Level'ın `riverWaters[0]` | su yüzeyi (opaklık, köpük, yansıma) + `splineRef`, `landscapeRef` |
+| Landscape sidecar'ın `splines[]` | asıl çizgi — terrain'e kazınan oluk, 6 nokta |
+
+Yani `riverWaters` **hangi** spline'ın nehir olduğunu söylüyor (yol değil, çit
+değil), çizgiyi Landscape veriyor. Çözüm ikisini birleştiriyor:
+`resolveRtsRiverPaths` (`src/game/rts/world/rtsRiverPaths.ts`), Landscape mount
+olduğu anda — yani zemin yüzeyinin gerçek olduğu aynı anda — bir kez.
+
+Çözülen çizgi haritayı çaprazlıyor:
+
+```text
+(-67.7,-67.1) → (-46.3,-31.4) → (-13.6,-18.5) → (12.5,20.4) → (48.3,38.4) → (66.8,66.5)
+```
+
+**Çapa artık kameranın baktığı noktaya en yakın *nehir üstü* nokta.** Ölçülen
+örnekler: harita merkezinde (0,0) nehir 1.0 birim ötede, (12,20)'de 0.2, oyuncu
+üssünde (-38,38) ise 51.7 — yani üste yatak yok, ve olmaması doğru.
+
+Üç şey uygularken çıktı:
+
+**1. Nokta değil, doğru parçası üzerine izdüşüm.** Nehir 6 noktayla ~190 birim
+gidiyor, yani en yakın *köşe* kıyıda oturan bir kameradan onlarca birim uzakta
+olabilir. Snap yerine segment izdüşümü; testte iki uçtan da pinlendi (ortada
+kayar, uçta kırpılır).
+
+**2. Nokta listesi sıralı değil, segmentler sıralı.** `points` bir küme, gerçek
+sıra `segments`'in `startPointId`/`endPointId` zincirinde. Listeyi authored
+sırada okumak bugün doğru sonuç veriyor ama editörde nehrin ortasına bir nokta
+eklendiği gün — o nokta listeye *sona* eklendiği için — nehir kendi üstüne
+katlanırdı. Zincir yürünüyor, ve yürüyüş noktaların hepsini tüketmezse authored
+sıraya düşülüyor.
+
+**3. Tek çapa id'si, kayan bir nokta.** Nehir boyunca ilerlerken yatak yeniden
+oturuyor ama aynı olay: `RTS_RIVER_AMBIENCE_ANCHOR_ID` her nokta için aynı —
+bir nehir, ne kadar uzun olursa olsun, bir yer. Bu da devralan-mesafesi
+kuralında bir düzeltme gerektirdi: mesafe artık **yatağın konduğu noktadan**
+ölçülüyor, o bölgenin şu an en yakın olduğu noktadan değil. `AudioPlaybackHandle`
+taşınamıyor (§82.9), yani yatak başladığı yerden çalıyor — ve yarıçapın
+cevapladığı soru tam olarak "o ses hâlâ tutulacak kadar yakın mı".
+
+**`cooldownMs` 0'a indi** (altı yatağın hepsinde). Yeniden oturma, aynı olayı
+aynı karede durdurup başlatmak demek: `stop()` instance'ı hemen serbest
+bırakıyor, yani 0 ile bu bir crossfade, herhangi bir başka değerle bir delik.
+Bu olayları başka hiçbir şey tetiklemiyor — kontrol edilecek bir tekrar yok.
+
+### Bir latent hata, kapsam dışı bırakıldı
+
+`rtsLevelAdapter`'ın rota çözümü spline actor'ünün **dönüşünü yok sayıyor**
+(`spline.position[i] + p.position[i]`). Sevk edilen rotaların hepsi
+position `[0,0,0]` ve rotation yok, o yüzden bugün ısırmıyor — ama nehir
+spline'ı `rotation: [0,-61,0]` taşıyor ve aynı okumayı yapan ilk deneme onu
+haritanın dışına koydu. Nehir kendi yolunu Landscape sidecar'ından okuyor
+(orası yerel koordinat + terrain konumu), yani bu düzeltmeye ihtiyaç duymadı.
+Rota çözümüne dokunulmadı: orası AI navigasyonu, ve bu oturumun konusu değildi.

@@ -166,8 +166,38 @@ export interface ManualEconomyAssignmentResult {
   readonly rejectedWorkers: number;
 }
 
+/**
+ * The hunt's two contact stages, in the order they happen.
+ *
+ * One decisive `strike` drops the animal, then the same assignment `butcher`s
+ * the carcass for as long as there is meat on it — the split the worker's own
+ * animation already makes (`noteHuntStrike` against the kneeling work montage),
+ * surfaced so a sound can make it too. Repeat control belongs to the listener:
+ * `butcher` is reported every tick a worker is working a body, which is a
+ * rhythm nothing should play straight.
+ */
+export type HuntContactStage = "strike" | "butcher";
+
+/** One contact, placed at the animal. */
+export interface HuntContact {
+  readonly stage: HuntContactStage;
+  readonly x: number;
+  readonly z: number;
+}
+
 export class EconomyProductionSystem {
   private readonly producers = new Map<number, ProducerRecord>();
+  /**
+   * Where a hunt's two contact stages are announced, or null while nothing
+   * listens.
+   *
+   * A handler rather than a returned list, unlike the production events this
+   * system already surfaces: those are *decisions* the caller acts on, while
+   * these are moments a presentation may or may not care about. Nothing in the
+   * simulation changes if nobody is listening, and the hunt must not start
+   * allocating an array per tick to say so.
+   */
+  private huntContact: ((contact: HuntContact) => void) | null = null;
   private readonly assignmentByWorker = new Map<number, ProducerRecord>();
   /**
    * Every finite source in play. A released worker is offered to all of them
@@ -688,8 +718,14 @@ export class EconomyProductionSystem {
         // montage. Trees and deposits remain the ordinary in-place work branch.
         if (producer.structure.stats.id === "hunting_camp" && harvested.activity === "strike") {
           assignment.worker.noteHuntStrike();
+          this.reportHuntContact("strike", source, assignment.sourceId);
         } else {
           assignment.worker.setWorking(harvested.working);
+          // Only a hunting camp butchers; a lumberjack's `gather` is a tree, and
+          // the axe already has its own marker on the clip.
+          if (producer.structure.stats.id === "hunting_camp" && harvested.activity === "gather") {
+            this.reportHuntContact("butcher", source, assignment.sourceId);
+          }
         }
         assignment.cargoAmount += harvested.amount;
         // A full load, or a source that just ran out under the tool: either way
@@ -898,6 +934,35 @@ export class EconomyProductionSystem {
    * The source-building identity is owned here, where the actual assignment is
    * made. The renderer never guesses it from an arbitrary nearby mesh.
    */
+  /**
+   * Announce one contact, at the carcass rather than at the hunter.
+   *
+   * The animal is the thing that made the sound, and the two are not the same
+   * point: a deer bolts before it drops, so the hunter is wherever he stopped
+   * and the body is where it fell. A source that cannot place the id says
+   * nothing, which is the honest answer for a carcass already cleared.
+   */
+  private reportHuntContact(
+    stage: HuntContactStage,
+    source: ResourceSource,
+    sourceId: string | null,
+  ): void {
+    if (!this.huntContact || sourceId === null) return;
+    const at = source.positionOf(sourceId);
+    if (!at) return;
+    this.huntContact({ stage, x: at.x, z: at.z });
+  }
+
+  /**
+   * Listen for the hunt's contact stages — see {@link HuntContact}.
+   *
+   * Set by the app that owns presentation; the simulation runs identically
+   * without one.
+   */
+  setHuntContactHandler(handler: ((contact: HuntContact) => void) | null): void {
+    this.huntContact = handler;
+  }
+
   private activityForStructure(structure: PlacedStructure): WorkerActivity {
     switch (structure.stats.id) {
       case "farm": return "cultivation";
