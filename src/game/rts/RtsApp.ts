@@ -2440,7 +2440,6 @@ export class RtsApp {
     const unlock = (): void => {
       this.audioSubsystem.resumeContext();
       this.detachAudioUnlock?.();
-    this.detachUiHoverAudio?.();
     };
     window.addEventListener("pointerdown", unlock, { capture: true });
     window.addEventListener("keydown", unlock, { capture: true });
@@ -2897,6 +2896,7 @@ export class RtsApp {
     this.structureDamageVfx.dispose();
     this.unitNotifyVfx.dispose();
     this.detachAudioUnlock?.();
+    this.detachUiHoverAudio?.();
     // Director first: it holds handles the subsystem is about to tear the
     // context out from under, and stopping a play through a closed context is
     // the one order that throws.

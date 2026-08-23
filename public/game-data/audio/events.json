@@ -569,12 +569,12 @@
       "maxInstances": 2
     },
     "ui.hover": {
-      "_note": "One clip, no jitter, and that is the correction rather than the original design. Three variants shipped first, on the reasoning that applies to every other repeated sound in this table - and hover is the one place it is wrong. A player sweeping a row of build cards crosses six buttons in a second, so the variants do not read as variety, they read as six different controls; the ear takes a changing sound as new information about the thing under the pointer. Everywhere else a repeat is spread over seconds and a single clip is what sounds broken. So the axis the sound varies on is *what kind of control it is*, not *which time it is* - see `ui.hover_card`.\n\nLevel is the other correction. This was authored at 0.12 as 'the quietest entry in the table and it should stay that way', which was true against silence and false against a match: the moment a foundation goes up, `building.build_loop` runs continuously under footsteps and hammering, and a 0.2-second tick at 0.108 effective simply is not there any more. Still well under `ui.click` at 0.35 - a hover must stay subordinate to the press it precedes - but now above the bed.",
+      "_note": "One clip, no jitter, and that is a correction rather than the original design. Three variants shipped first, on the reasoning that applies to every other repeated sound in this table - and hover is the one place it is wrong. A player sweeping a row of build cards crosses six buttons in a second, so the variants do not read as variety, they read as six different controls; the ear takes a changing sound as new information about the thing under the pointer. Everywhere else a repeat is spread over seconds and a single clip is what sounds broken. So the axis the sound varies on is *what kind of control it is*, not *which time it is* - see `ui.hover_card`.\n\nThe level stayed at 0.12, and the round trip is worth recording. It was raised to 0.22 on the theory that hover was being masked by the construction bed, because a player reported it going silent after building - and that diagnosis was wrong. The cause was a listener being torn down on the first pointerdown (a mis-landed patch), and the level had nothing to do with it. Put back, because the only evidence anyone has about this number is that 0.12 was audible and nobody complained it was quiet. It is the softest entry in the table on purpose: a hover must not read as the press it precedes.",
       "clips": [
         "sfx-ui-hover-01"
       ],
       "bus": "ui",
-      "volume": 0.22,
+      "volume": 0.12,
       "cooldownMs": 80,
       "maxInstances": 3
     },
@@ -851,7 +851,7 @@
         "sfx-ui-hover-02"
       ],
       "bus": "ui",
-      "volume": 0.22,
+      "volume": 0.12,
       "cooldownMs": 80,
       "maxInstances": 3
     }

@@ -3878,19 +3878,46 @@ bugün yapı ve yol küçük görselleri), her biri tek klip, jitter yok. Hedefi
 eklenen bir kart kendiliğinden kart oluyor. Üçüncü klip (`hover_03`) yedek
 duruyor.
 
-**2. Seviye sessizliğin sebebiydi.** "Tablonun en kısığı ve öyle kalmalı" diye
-yazmıştım; sessizliğe karşı doğru, maça karşı yanlış. İlk temel atıldığı anda
-`building.build_loop` sürekli çalmaya başlıyor, altında adımlar ve çekiç var, ve
-0.108 efektif seviyedeki 0.2 saniyelik bir tık orada yok. 0.22'ye çıktı —
-`ui.click`'in (0.35) hâlâ belirgin şekilde altında, çünkü hover kendisinden
-sonra gelecek basmanın önüne geçmemeli.
+**2. Sessizliğin sebebi ses değil, sökülen dinleyiciydi — ve teşhis iki kez
+yanlış kondu.** Kayda değer olan hata değil, hatayı bulduran şey.
 
-Elenen iki hipotez kayda değer, çünkü ikisi de makuldü: propagasyonu durduran
-kod yok (RTS UI'ında tek bir `stopPropagation` bile yok) ve klipler kısa
-(granule ölçümü: 0.2 s), yani "olay dolu kalıyor" da değildi. `maxInstances`
-yine de 2'den 3'e çıkarıldı: 80 ms'de bir tetiklenen 0.2 s'lik klip hızlı bir
-taramada ikisini birden ayakta tutuyor ve üçüncü geçiş reddediliyordu — kesikli
-bir sessizlik, bütçe gibi değil bozuk buton gibi okunur.
+Kanca `dispose()`'a eklenecekken, yamanın substring eşleşmesi ilk denk gelen
+satıra düştü ve `detachUiHoverAudio?.()` **ses kilidini açan closure'ın içine**
+girdi:
+
+```ts
+const unlock = (): void => {
+  this.audioSubsystem.resumeContext();
+  this.detachAudioUnlock?.();
+  this.detachUiHoverAudio?.();   // ← ilk pointerdown'da hover dinleyicisi gidiyor
+};
+```
+
+Yani hover, maçın **ilk tıklamasına kadar** çalışıyor ve sonra tamamen ölüyordu.
+`tsc` memnun (kod geçerli), hiçbir test DOM dinleyici ömrünü kapsamıyor, ve
+davranış "bir süre çalışıp kesilen ses" olduğu için mix problemine benziyordu.
+
+İlk iki teşhisim — klip uzunluğu, sonra seviye — kullanıcının "ilk yapıyı
+kurduktan sonra" ifadesinden türetilmişti ve ikisi de makuldü: propagasyonu
+durduran kod yok, klipler kısa (granule ölçümü: 0.2 s). Ama ikisi de tahmindi.
+Sorunu çözen üçüncü rapordu: **"herhangi bir simgeye ya da sekme düğmesine
+tıkladıktan sonra kesiliyor."** Yapı kurmakla ilgisi yoktu, tıklamayla vardı — ve
+"her tıklama" bir mix problemi olamaz, bir yaşam döngüsü problemidir.
+
+Buradan çıkan iki kural:
+
+- **Bir sesin "bir süre sonra kesilmesi" mix hipotezini davet ediyor ve genelde
+  kanca hipotezi doğru oluyor.** Kesilme *neyin ardından* olduğu sorulmadan
+  seviye ayarlamak, çalışan bir sayıyı boşuna değiştirmek demek.
+- **Substring `replace` ile yama, satır yerine metin eşleştiriyor.** `dispose()`
+  içindeki dört boşluklu satır, bir closure içindeki altı boşluklu satırın alt
+  dizesi — ve `replace(old, new, 1)` ilk denk geleni alıyor.
+
+Seviye 0.12'ye **geri alındı**: 0.22'ye çıkarılmasının tek gerekçesi yanlış çıkan
+teşhisti, ve bu sayı hakkındaki tek gerçek veri 0.12'nin duyulduğu ve kimsenin
+kısık bulmadığı. `maxInstances` 2'den 3'te kaldı; o gerekçe teşhisten bağımsızdı
+ve ayakta: 80 ms'de tetiklenen 0.2 s'lik klip hızlı bir taramada ikisini birden
+ayakta tutuyor ve üçüncü geçiş reddediliyor.
 
 ### Hover: bir dinleyici, her buton
 
