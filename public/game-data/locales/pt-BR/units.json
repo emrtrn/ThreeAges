@@ -9,7 +9,6 @@
   "unit.job.idle": "ocioso",
   "unit.job.moving": "movendo-se",
   "unit.job.building": "construindo",
-  "unit.job.repairing": "reparando",
   "unit.job.producing": "produzindo",
   "unit.job.unreachable": "inalcançável",
   "unit.order.idle": "Aguardando",

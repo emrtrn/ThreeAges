@@ -26,6 +26,7 @@ import type { DepotNodeStatus } from "../economy/depotLogisticsSystem";
 import type { CaravanSnapshot } from "../logistics/caravanSystem";
 import type { BarracksQueueSnapshot } from "../structures/barracksProductionSystem";
 import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
+import type { StructureRepairState } from "../structures/structureRepairSystem";
 import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
 import type { MarketSupplyLine, MarketSupplyState } from "../economy/marketSupplySystem";
@@ -75,7 +76,7 @@ export interface SelectionAction {
 }
 
 /** What a selected worker is doing; the union of the two systems that own workers. */
-export type WorkerJob = "idle" | "moving" | "building" | "repairing" | "producing" | "unreachable";
+export type WorkerJob = "idle" | "moving" | "building" | "producing" | "unreachable";
 
 export interface SelectedUnitView {
   readonly id: number;
@@ -284,28 +285,30 @@ export type StructureDetailView =
   | CenterDetailView;
 
 /**
- * The repair verb's whole state for one building — what it would cost, whether
- * it is already running, and the stock that decides if the player can pay.
+ * One damaged building's automatic repair, as the panel reports it.
+ *
+ * A readout rather than a verb: repair is no longer ordered, so there is no
+ * button here and nothing for the player to press wrong. What is left is the
+ * one thing they cannot see from the health bar — *why* a hurt building is or
+ * is not getting better right now.
  *
  * Held beside `detail` rather than inside it because repair is a property of
  * *being damaged*, not of being a Farm or a Barracks: every completed building
- * offers it under the same rule, and putting it in each detail kind would be the
+ * repairs under the same rule, and putting it in each detail kind would be the
  * same block written eight times.
  */
 export interface StructureRepairView {
-  /** Hit points missing right now; the button is absent when this is zero. */
+  /** Hit points missing right now; the chip is absent when this is zero. */
   readonly missingHealth: number;
-  /** Price of putting it back, already rounded to whole resources. */
+  /** What the rest of the repair will cost, already rounded to whole resources. */
   readonly cost: Readonly<Record<string, number>>;
-  /** Worker-seconds of work; a second builder halves the wall-clock time. */
-  readonly workerSeconds: number;
-  /** True while a paid repair job is open on this building. */
-  readonly active: boolean;
-  /** 0..1 of the running job's paid-for work; 0 when nothing is running. */
-  readonly progress: number;
-  /** Workers sent to it, walking or already hammering. */
-  readonly workers: number;
-  /** The owner's live stock, so a refusal can name what it is short of. */
+  /** Seconds the rest of the repair takes once it is running. */
+  readonly seconds: number;
+  /** Counting down, healing, or stopped for want of resources. */
+  readonly state: StructureRepairState;
+  /** Seconds left before it starts; zero unless `state` is "waiting". */
+  readonly secondsUntilStart: number;
+  /** The owner's live stock, so a stall can name what it is short of. */
   readonly stock: Readonly<Record<string, number>>;
 }
 
@@ -538,13 +541,6 @@ export const RESCUE_ACTION = "rescue";
 /** The centre's in-age level-up (Lv1→2 / Lv2→3); the Town step uses {@link AGE_UP_ACTION}. */
 export const CENTER_LEVEL_UP_ACTION = "center-level-up";
 export const DEMOLISH_ACTION = "demolish";
-/**
- * Send workers to repair a damaged building. Offered only while there is damage
- * to undo, and it toggles: pressing it again while a crew is at work calls the
- * order off. Unlike demolish it needs no confirm step — the mistake it can cause
- * is a refundable payment, not a lost building.
- */
-export const REPAIR_ACTION = "repair";
 export const CANCEL_CONSTRUCTION_ACTION = "cancel-construction";
 /**
  * Take the newest order back off a queue — the counterpart to
@@ -592,7 +588,6 @@ const WORKER_JOB_KEY: Record<WorkerJob, string> = {
   idle: "unit.job.idle",
   moving: "unit.job.moving",
   building: "unit.job.building",
-  repairing: "unit.job.repairing",
   producing: "unit.job.producing",
   unreachable: "unit.job.unreachable",
 };
@@ -996,13 +991,11 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
   // Demolish sits last on every building panel. The centre reaches here wrapped
   // as a structure (`detail.kind === "center"`), so it is excluded on the detail:
   // razing your own centre is the defeat condition, a thing you lose, not order.
-  // Repair sits before demolish: they are the two ends of the same decision
-  // ("this building is hurt — save it or clear it"), and the constructive answer
-  // should be the one under the player's cursor first.
-  const repair = repairAction(structure);
+  // Repair used to sit just before it as the constructive half of the same
+  // decision; a damaged building now answers that half by itself, and all that
+  // is left of the verb here is the chip below saying so.
   const actions = [
     ...base.actions,
-    ...(repair ? [repair] : []),
     ...(structure.detail.kind === "center" ? [] : [demolishAction(structure)]),
   ];
   return {
@@ -1042,76 +1035,54 @@ function cancelConstructionAction(structure: SelectedStructureView): SelectionAc
 }
 
 /**
- * "Tamir Et", or nothing at all.
+ * The automatic repair as a chip — the whole of what the panel says about damage.
  *
- * Nothing is the right answer for an intact building: a permanently visible
- * repair button on a full-health base is a row of dead controls, and the verb
- * only becomes meaningful the moment there is damage to undo — the same moment
- * the world health bar appears over it.
+ * A chip rather than a body line for the reason repair applies to every building
+ * kind: as a line it landed in whichever body grid the selected building had,
+ * and on a producer — the one panel already over budget — it was the eighth line
+ * of a six-slot grid. The strip has room for it on all of them.
  *
- * While a crew is at work the button turns into its own undo. The refusal it can
- * carry is a price, never a rule: repair is legal on any damaged building the
- * player owns, so the only thing that can stop it is an empty stockpile, and the
- * button says exactly how empty.
- */
-function repairAction(structure: SelectedStructureView): SelectionAction | null {
-  const repair = structure.repair ?? null;
-  if (!repair) return null;
-  if (repair.active) {
-    return {
-      id: REPAIR_ACTION,
-      label: t("selection.repair.stop.action"),
-      cost: null,
-      enabled: true,
-      active: true,
-      reason: null,
-      hint: t(repair.progress > 0
-        ? "selection.repair.stop.hint_started"
-        : "selection.repair.stop.hint_pending"),
-    };
-  }
-  if (repair.missingHealth <= 0) return null;
-  const cost = formatResourceCost(repair.cost);
-  const shortfall = formatCostShortfall(repair.cost, repair.stock);
-  return {
-    id: REPAIR_ACTION,
-    label: t("selection.repair.action"),
-    cost,
-    enabled: shortfall === null,
-    reason: shortfall === null ? null : t("selection.repair.insufficient", { shortfall }),
-    // Quoted as one worker's time, because that is the number the player can
-    // check against the crew they are about to send: two workers halve it.
-    hint: t("selection.repair.hint", {
-      health: Math.ceil(repair.missingHealth),
-      seconds: Math.ceil(repair.workerSeconds),
-    }),
-  };
-}
-
-/**
- * The running repair as a chip, so the panel says it even without the button.
- *
- * A chip rather than the body line it used to be for the reason repair is
- * offered on every building kind: as a line it landed in whichever body grid
- * the selected building had, and on a producer — the one panel that was already
- * over budget — it was the eighth line. The strip has room for it on all of them.
+ * Absent on an intact building, exactly as the old button was. The three states
+ * it can show are the three answers to "why is this building still hurt": the
+ * fight was too recent, it is healing now, or the stockpile cannot pay for the
+ * next hit point — and only the last is something the player can act on, which
+ * is why it is the only one that reads as bad.
  */
 function repairChips(structure: SelectedStructureView): SelectionChip[] {
   const repair = structure.repair ?? null;
-  if (!repair?.active) return [];
+  if (!repair || repair.missingHealth <= 0) return [];
+  const cost = formatResourceCost(repair.cost);
+  if (repair.state === "waiting") {
+    const seconds = Math.ceil(repair.secondsUntilStart);
+    return [{
+      id: "repair",
+      icon: CHIP_ICON.repair,
+      value: t("selection.repair.chip.countdown", { seconds }),
+      tone: "neutral",
+      tooltip: t("selection.repair.chip.waiting", { seconds, cost }),
+    }];
+  }
+  const shortfall = formatCostShortfall(repair.cost, repair.stock);
+  const stalled = repair.state === "stalled";
+  // How whole the building is, not how far the repair has run: with no order to
+  // measure against, "80%" can only honestly mean the building itself — and that
+  // is the number climbing in front of the player while it heals.
+  const progress = structure.maxHealth > 0 ? structure.health / structure.maxHealth : 0;
   return [{
     id: "repair",
     icon: CHIP_ICON.repair,
     // The percent sign sits in front in Turkish and behind in English; `Intl`
     // owns that, not the sentence (inventory §7.7).
-    value: t("selection.repair.chip", { progress: repair.progress }),
-    tone: repair.workers === 0 ? "warn" : "good",
-    tooltip: repair.workers === 0
-      ? t("selection.repair.chip.waiting", { progress: repair.progress })
-      : t("selection.repair.chip.working", {
-          progress: repair.progress,
-          workers: repair.workers,
-        }),
+    value: t("selection.repair.chip", { progress }),
+    tone: stalled ? "bad" : "good",
+    tooltip: stalled
+      // The shortfall can be null even here: the stall is measured against the
+      // *next* whole unit of a resource the panel's rounded quote may already
+      // show as affordable. The generic sentence is the honest fallback.
+      ? shortfall === null
+        ? t("selection.repair.chip.stalled_generic", { cost })
+        : t("selection.repair.chip.stalled", { shortfall })
+      : t("selection.repair.chip.working", { seconds: Math.ceil(repair.seconds), cost }),
   }];
 }
 
@@ -2061,7 +2032,7 @@ function jobBreakdown(units: readonly SelectedUnitView[]): string {
   }
   // Fixed order, not insertion order: the same selection must read the same way
   // twice, and a breakdown that reshuffles as workers change job is unreadable.
-  const order: readonly WorkerJob[] = ["idle", "moving", "building", "repairing", "producing", "unreachable"];
+  const order: readonly WorkerJob[] = ["idle", "moving", "building", "producing", "unreachable"];
   return order
     .filter((job) => (counts.get(job) ?? 0) > 0)
     .map((job) => t("selection.units.job_count", {

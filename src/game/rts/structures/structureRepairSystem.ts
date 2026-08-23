@@ -1,29 +1,41 @@
 /**
- * Worker repair of damaged buildings — the counterpart of construction.
+ * Automatic repair of damaged buildings — the settlement's own answer to a raid.
  *
- * A building that survives an assault keeps its damage forever: nothing in the
- * game heals a structure. That made every raid permanent and left the player
- * with a base of half-dead buildings and no verb to answer with. Repair is that
- * verb, and it is deliberately priced off the thing it undoes: putting a
- * building back costs and takes **half** of what putting it up did, scaled to
- * how much of it is actually missing (see {@link REPAIR_FRACTION_OF_BUILD}).
+ * A building that survives an assault used to keep its damage forever unless the
+ * player selected it and pressed "Tamir Et". That button was never a decision:
+ * the answer to "shall I fix this?" is always yes, so after a raid it was eight
+ * selections and eight clicks to say yes eight times. Worse, the AI never
+ * pressed it at all — nothing in `ai/` ever opened a repair order — so the verb
+ * was the player's alone.
  *
- * This module owns only the *economics* — the quote, the payment, and how much
- * health a worker-second buys. The worker logistics (who walks where, how many
- * may crowd one site) stay in {@link WorkerConstructionSystem}, which already
- * solves exactly that problem for foundations and drives this through
- * {@link StructureRepairSystem.advance}. Keeping them apart is what lets a
- * repairing worker count as busy everywhere a building worker does, without a
- * third system for the economy and the AI to cross-check against.
+ * So repair is a property of a building rather than an order given to one. A
+ * damaged building waits {@link REPAIR_COOLDOWN_SECONDS} out of combat and then
+ * heals itself, paying the kingdom's stockpile as it goes. Every kingdom's
+ * buildings do it under the same rule, which is what makes it symmetric.
+ *
+ * Two rules carry the design:
+ *
+ * - **The cooldown is measured from the last blow, not from the first.** Every
+ *   hit re-arms it, so a building under siege never heals while the siege is
+ *   happening — the timer is "out of combat", and a wall that regenerated
+ *   between two cannon shots would make the cannon unusable.
+ * - **The bill is paid as the health lands, never up front.** Nobody clicked, so
+ *   nobody agreed to a quoted price; taking the whole sum at once would empty a
+ *   stockpile for a number the player never saw. Paying per hit point makes an
+ *   empty stockpile *pause* the repair instead of cancelling it, and a building
+ *   hit again mid-repair simply costs more as it goes.
+ *
+ * The price rule itself is unchanged: restoring a building costs
+ * {@link REPAIR_FRACTION_OF_BUILD} of raising it, scaled to the health that is
+ * actually missing, and takes that fraction of its construction time.
  */
 import type { StartingResources } from "../../data/gameDataTypes";
 import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
 import { baseBuildingCost, type BuildingCostResolver } from "../economy/buildingCost";
-import type { ResourceReservation } from "../economy/resourceWallet";
 import type { PlacedStructure } from "./placedStructureSystem";
 
 /**
- * Repair is half of a build, in both currencies the player spends: resources and
+ * Repair is half of a build, in both currencies the kingdom spends: resources and
  * time. One constant for both, because the two halves are the same design rule —
  * "restoring is cheaper than raising" — and letting them drift apart would make
  * the rule unstatable to the player.
@@ -39,57 +51,17 @@ import type { PlacedStructure } from "./placedStructureSystem";
  */
 export const REPAIR_FRACTION_OF_BUILD = 0.5;
 
-/** Why a repair order was refused. Each maps to one player-facing sentence. */
-export type RepairRefusal =
-  | "not-repairable"
-  | "undamaged"
-  | "already-repairing"
-  | "insufficient-resources";
-
-export type RepairOrderResult = "started" | RepairRefusal;
-
-/** What a full repair would cost and take, quoted before anything is spent. */
-export interface StructureRepairQuote {
-  /** Hit points this repair would put back. */
-  readonly missingHealth: number;
-  /** Whole-resource price, so the panel never quotes "2.5 Odun". */
-  readonly cost: StartingResources;
-  /** Worker-seconds of work; four builders finish it four times as fast. */
-  readonly workerSeconds: number;
-}
-
-/** A running repair, for the selection panel. */
-export interface StructureRepairSnapshot {
-  readonly structureId: number;
-  readonly restoredHealth: number;
-  readonly healthToRestore: number;
-  /** 0..1 of the paid-for work delivered so far. */
-  readonly progress: number;
-}
-
-/** What {@link StructureRepairSystem.advance} tells the worker system to do next. */
-export type RepairTick = "repairing" | "done";
-
-interface RepairJob {
-  /** Held on the job, not read off the structure: a razed building is gone by the
-   * time its job is settled, and the refund still has to reach the right wallet. */
-  readonly owner: PlacedStructure["owner"];
-  readonly reservation: ResourceReservation;
-  readonly healthToRestore: number;
-  /** Constant hit points per worker-second; see {@link healthPerWorkerSecond}. */
-  readonly healthPerWorkerSecond: number;
-  restoredHealth: number;
-}
-
 /**
- * Hit points one worker restores per second on this building.
+ * How long a building must go unhit before it starts repairing itself.
  *
- * Derived rather than authored: a full repair must take exactly
- * `constructionSeconds * REPAIR_FRACTION_OF_BUILD` worker-seconds, so the rate
- * is the whole building divided by that. It does not depend on how damaged the
- * building is — a scratch and a wreck repair at the same speed, they just have
- * different amounts to cover.
+ * Long enough that it reads as "the fight here is over" rather than as combat
+ * regeneration, short enough that the player is not left staring at a wrecked
+ * base wondering whether the mechanic exists. Re-armed by every blow that lands
+ * (see {@link StructureRepairSystem.update}), so its real job is separating a
+ * lull in an assault from the end of one.
  */
+export const REPAIR_COOLDOWN_SECONDS = 15;
+
 /**
  * Largest health shortfall a finished repair treats as float rounding rather than
  * as damage. Health is authored in whole points, so anything at this scale cannot
@@ -97,19 +69,74 @@ interface RepairJob {
  */
 const REPAIR_ROUNDING_EPSILON = 1e-6;
 
-export function healthPerWorkerSecond(structure: PlacedStructure): number {
+/** What a damaged building is doing about its damage right now. */
+export type StructureRepairState =
+  /** Hit too recently: the out-of-combat cooldown has not run out yet. */
+  | "waiting"
+  /** Healing, and the stockpile is covering it. */
+  | "repairing"
+  /** Ready and willing, but the kingdom cannot pay for the next hit point. */
+  | "stalled";
+
+/** What finishing this building's repair would still cost and take. */
+export interface StructureRepairQuote {
+  /** Hit points still missing. */
+  readonly missingHealth: number;
+  /** Whole-resource price, so the panel never quotes "2.5 Odun". */
+  readonly cost: StartingResources;
+  /** Seconds of repair left at this building's own rate. */
+  readonly seconds: number;
+}
+
+/** A damaged building's live repair state, for the selection panel. */
+export interface StructureRepairSnapshot {
+  readonly structureId: number;
+  readonly state: StructureRepairState;
+  /** Seconds left on the cooldown; zero unless `state` is "waiting". */
+  readonly secondsUntilStart: number;
+}
+
+/**
+ * One building's standing repair account.
+ *
+ * `credit` is the reason this is an account rather than a timer. Resources come
+ * in whole units and a tick of repair costs a fraction of one, so the kingdom
+ * buys a whole unit and spends it down over the following ticks. Without it,
+ * either every frame would round its own purchase up — charging a hundred times
+ * the true price — or the repair would be free until it happened to cross a
+ * whole number.
+ */
+interface RepairAccount {
+  /** Last seen `health.impactCount`; a change means a fresh blow has landed. */
+  lastImpactCount: number;
+  secondsSinceDamage: number;
+  /** Resource units paid for and not yet consumed by delivered health. */
+  readonly credit: Map<string, number>;
+  state: StructureRepairState;
+}
+
+/**
+ * Hit points this building restores per second while its repair is running.
+ *
+ * Derived rather than authored: a full repair must take exactly
+ * `constructionSeconds * REPAIR_FRACTION_OF_BUILD`, so the rate is the whole
+ * building divided by that. It does not depend on how damaged the building is —
+ * a scratch and a wreck heal at the same speed, they just have different amounts
+ * to cover.
+ */
+export function repairHealthPerSecond(structure: PlacedStructure): number {
   const seconds = structure.stats.constructionSeconds * REPAIR_FRACTION_OF_BUILD;
   return seconds > 0 ? structure.health.max / seconds : structure.health.max;
 }
 
-/** True for a standing, damaged building — the only thing a repair can target. */
+/** True for a standing, finished building — the only thing that repairs itself. */
 export function isRepairable(structure: PlacedStructure): boolean {
   return structure.construction.complete && !structure.health.depleted;
 }
 
 /**
- * Price and duration of putting this building back to full, right now. Null when
- * there is nothing to repair, so a caller cannot quote a free, instant job.
+ * Price and duration of putting this building back to full, from right now. Null
+ * when there is nothing to repair, so a caller cannot quote a free, instant job.
  */
 export function quoteStructureRepair(
   structure: PlacedStructure,
@@ -139,12 +166,12 @@ export function quoteStructureRepair(
   return {
     missingHealth,
     cost,
-    workerSeconds: missingHealth / healthPerWorkerSecond(structure),
+    seconds: missingHealth / repairHealthPerSecond(structure),
   };
 }
 
 export class StructureRepairSystem {
-  private readonly jobs = new Map<number, RepairJob>();
+  private readonly accounts = new Map<number, RepairAccount>();
 
   constructor(
     private readonly kingdoms: KingdomRegistry,
@@ -158,117 +185,182 @@ export class StructureRepairSystem {
   }
 
   /**
-   * Pay for a repair and open the job. The whole price is taken up front, for the
-   * damage standing at this moment: the player agrees to a quoted number rather
-   * than watching a trickle they cannot predict, and a building hit *again*
-   * mid-repair does not silently raise the bill — the rest is a second order.
-   */
-  begin(structure: PlacedStructure): RepairOrderResult {
-    if (!isRepairable(structure)) return "not-repairable";
-    if (this.jobs.has(structure.id)) return "already-repairing";
-    const quote = this.quote(structure);
-    if (!quote) return "undamaged";
-    const reservation = this.kingdoms.get(structure.owner).wallet.reserve(quote.cost);
-    if (!reservation) return "insufficient-resources";
-    this.jobs.set(structure.id, {
-      owner: structure.owner,
-      reservation,
-      healthToRestore: quote.missingHealth,
-      healthPerWorkerSecond: healthPerWorkerSecond(structure),
-      restoredHealth: 0,
-    });
-    return "started";
-  }
-
-  /**
-   * Apply one tick of `workerCount` builders' work. Returns "done" when the job
-   * is finished or was never open, which is the worker system's cue to release
-   * its crew — the same signal a completed foundation gives it.
-   */
-  advance(structure: PlacedStructure, deltaSeconds: number, workerCount: number): RepairTick {
-    const job = this.jobs.get(structure.id);
-    if (!job) return "done";
-    if (!(deltaSeconds > 0) || !(workerCount > 0)) return "repairing";
-    const remaining = job.healthToRestore - job.restoredHealth;
-    const healed = structure.health.heal(
-      Math.min(remaining, job.healthPerWorkerSecond * deltaSeconds * workerCount),
-    ).applied;
-    job.restoredHealth += healed;
-    // Full health ends the job even with paid work left over — there is nothing
-    // more to restore, and the alternative is a crew kneeling at an intact
-    // building. The unspent remainder is committed: the health was delivered.
-    if (job.restoredHealth < job.healthToRestore && structure.health.ratio < 1) return "repairing";
-    // Absorb the rounding residue, and only that. Summing the per-tick slices back
-    // up undershoots full health by a few parts in 1e13, and the shortfall is
-    // permanent: the bar never fills and the building keeps offering a repair for
-    // damage no player can see. The epsilon is what keeps this from being a
-    // giveaway — a building that took *real* damage mid-repair is left short by
-    // that damage, because the order was only ever paid for the earlier wound.
-    const residue = structure.health.max - structure.health.current;
-    if (residue > 0 && residue < REPAIR_ROUNDING_EPSILON) structure.health.heal(residue);
-    this.settle(structure.id, job);
-    return "done";
-  }
-
-  /**
-   * Stop a job the player called off, or one whose building has left the field.
+   * Tick every building's repair.
    *
-   * Refunded in full only while no hit point has been delivered — an order the
-   * worker never reached is an order the kingdom never received. Past that the
-   * payment is committed: the building is carrying the health it bought, and a
-   * proportional refund would make "repair to 99%, cancel" the cheapest repair
-   * in the game.
-   */
-  cancel(structure: PlacedStructure): boolean {
-    const job = this.jobs.get(structure.id);
-    if (!job) return false;
-    this.settle(structure.id, job);
-    return true;
-  }
-
-  isRepairing(structure: PlacedStructure): boolean {
-    return this.jobs.has(structure.id);
-  }
-
-  snapshot(structure: PlacedStructure): StructureRepairSnapshot | null {
-    const job = this.jobs.get(structure.id);
-    if (!job) return null;
-    return {
-      structureId: structure.id,
-      restoredHealth: job.restoredHealth,
-      healthToRestore: job.healthToRestore,
-      progress: job.healthToRestore > 0 ? Math.min(1, job.restoredHealth / job.healthToRestore) : 1,
-    };
-  }
-
-  /**
-   * Settle jobs whose building has been razed or cancelled since the last tick.
-   *
-   * Driven from the live list rather than a destruction hook, for the reason
+   * Driven from the live list rather than from damage hooks, for the reason
    * `structureDestruction` gives: every other system already reconciles against
    * `structures.all()`, and one observer cannot miss a removal path the way a
-   * set of call sites can. An unpaid job is refunded here exactly as a
-   * player-cancelled one is.
+   * set of call sites can. Fresh damage is spotted the same way — by watching
+   * `health.impactCount`, the one counter every damage source in the match
+   * already passes through, rather than by asking five of them to report in.
    */
-  update(structures: readonly PlacedStructure[]): void {
-    if (this.jobs.size === 0) return;
-    const live = new Set(structures.filter((structure) => !structure.health.depleted).map((structure) => structure.id));
-    for (const [id, job] of [...this.jobs]) {
-      if (live.has(id)) continue;
-      this.settle(id, job);
+  update(structures: readonly PlacedStructure[], deltaSeconds: number): void {
+    const live = new Set<number>();
+    for (const structure of structures) {
+      if (structure.health.depleted) continue;
+      live.add(structure.id);
+      this.advance(structure, deltaSeconds);
+    }
+    // A razed or demolished building takes its account with it. Nothing is owed
+    // either way: the kingdom only ever paid for health already delivered.
+    //
+    // Every live building was just given an account, so the two sets can only
+    // differ by accounts with no building left. Comparing the sizes first keeps
+    // the common frame — nothing destroyed — down to one integer test.
+    if (this.accounts.size === live.size) return;
+    for (const id of this.accounts.keys()) {
+      if (!live.has(id)) this.accounts.delete(id);
     }
   }
 
-  /** Drop every job without refunding: the match's wallets are being reset too. */
-  reset(): void {
-    this.jobs.clear();
+  /** True while this building is actively healing itself. */
+  isRepairing(structure: PlacedStructure): boolean {
+    return this.accounts.get(structure.id)?.state === "repairing";
   }
 
-  /** Close a job's books against the wallet that opened it. */
-  private settle(id: number, job: RepairJob): void {
-    this.jobs.delete(id);
-    const wallet = this.kingdoms.get(job.owner).wallet;
-    if (job.restoredHealth <= 0) wallet.refund(job.reservation);
-    else wallet.commit(job.reservation);
+  /** The panel's view of one building's repair; null when it has no damage. */
+  snapshot(structure: PlacedStructure): StructureRepairSnapshot | null {
+    const account = this.accounts.get(structure.id);
+    if (!account || !isRepairable(structure)) return null;
+    if (structure.health.max - structure.health.current <= REPAIR_ROUNDING_EPSILON) return null;
+    return {
+      structureId: structure.id,
+      state: account.state,
+      secondsUntilStart: account.state === "waiting"
+        ? Math.max(0, REPAIR_COOLDOWN_SECONDS - account.secondsSinceDamage)
+        : 0,
+    };
+  }
+
+  /** Drop every account: the match's buildings and wallets are being reset too. */
+  reset(): void {
+    this.accounts.clear();
+  }
+
+  private advance(structure: PlacedStructure, deltaSeconds: number): void {
+    const account = this.accountFor(structure);
+    if (structure.health.impactCount !== account.lastImpactCount) {
+      account.lastImpactCount = structure.health.impactCount;
+      account.secondsSinceDamage = 0;
+    }
+    const elapsed = Math.max(0, deltaSeconds);
+    const waited = account.secondsSinceDamage;
+    // Clamped rather than left to run: nothing above the cooldown means anything,
+    // and an unbounded accumulator on a building that stands for an hour is a
+    // number growing for no reader.
+    account.secondsSinceDamage = Math.min(REPAIR_COOLDOWN_SECONDS, waited + elapsed);
+    if (!isRepairable(structure)) {
+      account.state = "waiting";
+      account.credit.clear();
+      return;
+    }
+    const missing = structure.health.max - structure.health.current;
+    if (missing <= REPAIR_ROUNDING_EPSILON) {
+      // Absorb the rounding residue, and only that. Summing the per-tick slices
+      // back up undershoots full health by a few parts in 1e13, and the shortfall
+      // is permanent: the bar never fills and the building reports damage no
+      // player can see. Sub-unit credit left over is forfeited here — it is a
+      // fraction of one resource, and carrying it on a whole building would be
+      // bookkeeping nobody can spend.
+      if (missing > 0) structure.health.heal(missing);
+      account.state = "waiting";
+      account.credit.clear();
+      return;
+    }
+    // Only the part of this tick that falls *after* the cooldown does any work.
+    // The frame the countdown runs out on is mostly still cooldown, and treating
+    // all of it as repair would hand the building the wait as free health — at a
+    // 60 Hz tick that is invisible, but a paused game resuming with one long
+    // delta would heal a wreck in a single step.
+    const working = waited >= REPAIR_COOLDOWN_SECONDS ? elapsed : waited + elapsed - REPAIR_COOLDOWN_SECONDS;
+    if (!(working > 0)) {
+      account.state = "waiting";
+      return;
+    }
+    this.deliverPaidHealth(structure, account, Math.min(missing, repairHealthPerSecond(structure) * working));
+  }
+
+  /**
+   * Buy this tick's hit points and apply them, healing only as far as the
+   * stockpile reaches.
+   *
+   * Purchases are whole units bought against {@link RepairAccount.credit}, so
+   * over a long repair the kingdom pays the quoted bill plus at most the
+   * rounding of one unit per resource — the same rounding
+   * {@link quoteStructureRepair} shows.
+   */
+  private deliverPaidHealth(structure: PlacedStructure, account: RepairAccount, wanted: number): void {
+    const price = this.pricePerHealth(structure);
+    let health = wanted;
+    let stalled = false;
+    const purchase: Record<string, number> = {};
+    for (const [resourceId, perHealth] of price) {
+      const shortfall = perHealth * health - (account.credit.get(resourceId) ?? 0);
+      if (shortfall > 0) purchase[resourceId] = Math.ceil(shortfall);
+    }
+    if (Object.keys(purchase).length > 0) {
+      const wallet = this.kingdoms.get(structure.owner).wallet;
+      const reservation = wallet.reserve(purchase);
+      if (reservation) {
+        // Reserved and committed in the same breath: there is no order to cancel,
+        // so there is nothing this payment could ever be refunded against.
+        wallet.commit(reservation);
+        for (const [resourceId, amount] of Object.entries(purchase)) {
+          account.credit.set(resourceId, (account.credit.get(resourceId) ?? 0) + amount);
+        }
+      } else {
+        // Broke. Deliver only what earlier purchases already cover, which is
+        // usually nothing — the repair pauses here and resumes on its own the
+        // moment the stockpile can pay again.
+        stalled = true;
+        for (const [resourceId, perHealth] of price) {
+          health = Math.min(health, (account.credit.get(resourceId) ?? 0) / perHealth);
+        }
+      }
+    }
+    if (!(health > 0)) {
+      account.state = stalled ? "stalled" : "waiting";
+      return;
+    }
+    const healed = structure.health.heal(health).applied;
+    for (const [resourceId, perHealth] of price) {
+      account.credit.set(resourceId, Math.max(0, (account.credit.get(resourceId) ?? 0) - perHealth * healed));
+    }
+    account.state = stalled ? "stalled" : "repairing";
+  }
+
+  /**
+   * What one hit point of this building costs, per resource, right now.
+   *
+   * Computed from the live maximum and the owner's live building price, so an
+   * age change or a durability upgrade is priced from the tick it lands rather
+   * than from whatever held when the damage was taken. Reached only by a
+   * building that is actually healing this tick, so the per-frame cost of an
+   * undamaged base stays a map lookup and two additions.
+   */
+  private pricePerHealth(structure: PlacedStructure): Map<string, number> {
+    const price = new Map<string, number>();
+    if (structure.health.max <= 0) return price;
+    for (const [resourceId, amount] of Object.entries(this.costFor(structure.owner, structure.stats))) {
+      if (amount > 0) price.set(resourceId, (amount * REPAIR_FRACTION_OF_BUILD) / structure.health.max);
+    }
+    return price;
+  }
+
+  private accountFor(structure: PlacedStructure): RepairAccount {
+    const existing = this.accounts.get(structure.id);
+    if (existing) return existing;
+    const account: RepairAccount = {
+      lastImpactCount: structure.health.impactCount,
+      // Starts ready rather than waiting: a building first seen already damaged
+      // was not hit on this tick — it was authored that way, or the system was
+      // reset under it — and holding it for a cooldown it never earned would
+      // read as the mechanic being broken.
+      secondsSinceDamage: REPAIR_COOLDOWN_SECONDS,
+      credit: new Map(),
+      state: "waiting",
+    };
+    this.accounts.set(structure.id, account);
+    return account;
   }
 }

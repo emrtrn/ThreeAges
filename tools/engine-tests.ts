@@ -408,7 +408,6 @@ import {
   describeSelection,
   AGE_UP_ACTION,
   CENTER_LEVEL_UP_ACTION,
-  REPAIR_ACTION,
   RESCUE_ACTION,
   TRADE_BUY_ACTION_PREFIX,
   TRAIN_ACTION_PREFIX,
@@ -428,9 +427,10 @@ import {
 } from "../src/game/rts/ui/rtsSelectionView";
 import { DEFAULT_RTS_FORMATION, RTS_FORMATION_DEFINITIONS } from "../src/game/rts/units/formations/rtsFormationTypes";
 import {
+  REPAIR_COOLDOWN_SECONDS,
   REPAIR_FRACTION_OF_BUILD,
   StructureRepairSystem,
-  healthPerWorkerSecond,
+  repairHealthPerSecond,
   quoteStructureRepair,
 } from "../src/game/rts/structures/structureRepairSystem";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
@@ -782,6 +782,9 @@ import {
   resolveRtsRoleNotifyEvent,
   rtsRoleNotifyAudio,
   rtsRoleNotifyEventIds,
+  RTS_UNIT_VOICE_LINES,
+  RTS_UNIT_ALARM_VOICE_ORDER,
+  resolveUnitVoice,
 } from "../src/game/rts/audio/rtsAudioEvents";
 import {
   estimateSubtitleDurationSeconds,
@@ -4753,6 +4756,54 @@ check("RTS audio events: a burning building's sound is a bed, not a per-spawn cr
   }
 });
 
+check("RTS unit voice: one speaker per moment, falling through to whoever owns the line", () => {
+  // §38-§40's barks resolve through one ordered table, and the two rules that
+  // make it correct are the ones a future role would break by accident.
+  const table = readAudioEventTable();
+  for (const lines of RTS_UNIT_VOICE_LINES) {
+    for (const [moment, eventId] of Object.entries(lines)) {
+      if (moment === "role") continue;
+      assert.ok(
+        table.events[eventId],
+        `${lines.role}.${moment} names ${eventId}, which the shipped table does not answer`,
+      );
+    }
+  }
+
+  const picked = (...roles: string[]) => (role: string) => roles.includes(role);
+
+  // One voice: the senior class answers for a mixed pick, and the others stay
+  // quiet. Not "both play at a lower volume" - `maxInstances` is per event and
+  // could never enforce this.
+  assert.equal(resolveUnitVoice("select", picked("guard", "archer", "worker")), RTS_AUDIO.guardSelect);
+  assert.equal(resolveUnitVoice("select", picked("archer", "worker")), RTS_AUDIO.archerSelect);
+  assert.equal(resolveUnitVoice("select", picked("worker")), RTS_AUDIO.workerSelect);
+
+  // Fall-through: an outcome the senior class has no line for belongs to
+  // whoever does. A guard escorting a crew must not silence the crew's "I'll
+  // see to it" when the right-click lands on a tree.
+  assert.equal(resolveUnitVoice("work", picked("guard", "worker")), RTS_AUDIO.workerWork);
+  assert.equal(resolveUnitVoice("invalid", picked("guard", "worker")), RTS_AUDIO.workerInvalid);
+  // ...and it must not invent one where nobody has a line.
+  assert.equal(resolveUnitVoice("work", picked("guard", "archer")), null);
+  assert.equal(resolveUnitVoice("stop", picked("archer")), null);
+  assert.equal(resolveUnitVoice("select", picked("siege")), null);
+
+  // The alarm reads the same table backwards: a raid that wounds a mixed force
+  // should surface the voice that is *news*, and a worker cannot answer back.
+  assert.equal(
+    resolveUnitVoice("underAttack", picked("guard", "worker"), RTS_UNIT_ALARM_VOICE_ORDER),
+    RTS_AUDIO.workerUnderAttack,
+  );
+  assert.equal(
+    resolveUnitVoice("underAttack", picked("guard", "archer"), RTS_UNIT_ALARM_VOICE_ORDER),
+    RTS_AUDIO.archerUnderAttack,
+  );
+  // Which is the opposite of what the command order would have picked - the
+  // line that proves the two orders are genuinely distinct rather than a copy.
+  assert.equal(resolveUnitVoice("underAttack", picked("guard", "worker")), RTS_AUDIO.guardUnderAttack);
+});
+
 check("RTS audio events: a completion is one signature, a work site is a pool", () => {
   // Faz 5's buildings delivery shipped four completion clips and four hammers,
   // and they are meant to be used in opposite ways — which is a decision, not a
@@ -4766,7 +4817,10 @@ check("RTS audio events: a completion is one signature, a work site is a pool", 
   //
   // Neither side pins *which* clip or *how many*: the counts are "one" and "more
   // than one", so re-auditioning a completion or producing a fifth hammer stays
-  // green.
+  // green. That is exactly what happened on 2026-08-23 — all four were bound for
+  // a session so they could be heard against each other, the author picked
+  // `-03`, and the table went back to one clip. The audition is the workflow
+  // this assertion is built for, not a violation of it.
   const table = readAudioEventTable();
   const completion = table.events[RTS_AUDIO.buildingComplete]
     ?? assert.fail("the table must answer building.complete");
@@ -52753,7 +52807,7 @@ check("Yapı tamiri: fiyat ve süre, inşaatın yarısının hasar oranıyla öl
   // numbers rather than to the rule it exists to state.
   assertClose(quote.missingHealth, missing, "the quote is for exactly the health that is missing");
   assertClose(
-    quote.workerSeconds,
+    quote.seconds,
     house.constructionSeconds * REPAIR_FRACTION_OF_BUILD * missingRatio,
     "repairing 40% of a house takes 40% of half its build time",
   );
@@ -52770,7 +52824,7 @@ check("Yapı tamiri: fiyat ve süre, inşaatın yarısının hasar oranıyla öl
   const wreck = damagedRtsHouse(0.99);
   const wreckQuote = quoteStructureRepair(wreck.site) ?? assert.fail("a wreck must quote a repair");
   assert.ok(
-    wreckQuote.workerSeconds < house.constructionSeconds,
+    wreckQuote.seconds < house.constructionSeconds,
     "a full repair is strictly faster than raising the building again",
   );
   for (const [resourceId, amount] of Object.entries(house.cost)) {
@@ -52793,8 +52847,8 @@ check("Yapı tamiri: fiyat ve süre, inşaatın yarısının hasar oranıyla öl
   fresh.clear();
 });
 
-check("Yapı tamiri: peşin ödenir, işçi-saniye başına yarım inşaat hızıyla iyileşir", () => {
-  const { structures, site, house } = damagedRtsHouse(0.4);
+check("Yapı tamiri: hasardan sonraki bekleme dolunca kendiliğinden başlar, her yeni darbe sayacı sıfırlar", () => {
+  const { structures, site } = damagedRtsHouse(0);
   const units = new UnitSystem();
   const kingdoms = new KingdomRegistry(
     ["player"],
@@ -52804,109 +52858,151 @@ check("Yapı tamiri: peşin ödenir, işçi-saniye başına yarım inşaat hız�
     20,
   );
   const repair = new StructureRepairSystem(kingdoms);
-  const construction = new WorkerConstructionSystem(
-    units,
-    structures,
-    new RtsNavigation(),
-    () => false,
-    () => undefined,
-    () => false,
-    () => false,
-    (structure, deltaSeconds, workerCount) => repair.advance(structure, deltaSeconds, workerCount),
-  );
-  // Spawned on the +x footprint edge, so it is already inside build range of the
-  // approach point it will be given and settles on the first update.
-  const worker = units.spawn("player", house.footprint.width / 2 + 0.875, 0, RTS_TEST_WORKER_STATS);
   const wallet = kingdoms.get("player").wallet;
-  const stockBefore = wallet.snapshot();
-  const quote = repair.quote(site) ?? assert.fail("the fixture must be repairable");
+  const tick = (seconds: number): void => repair.update(structures.all(), seconds);
 
-  assert.equal(repair.begin(site), "started");
-  for (const [resourceId, amount] of Object.entries(quote.cost)) {
-    assert.equal(
-      wallet.amount(resourceId),
-      (stockBefore[resourceId] ?? 0) - amount,
-      `${resourceId}: the whole quoted price is taken when the order is placed`,
+  // An intact building has nothing to report and nothing to pay for.
+  tick(1);
+  assert.equal(repair.snapshot(site), null, "an undamaged building carries no repair state");
+
+  const stockBefore = wallet.snapshot();
+  site.health.damage(site.health.max * 0.4);
+  const damaged = site.health.current;
+  const quote = repair.quote(site) ?? assert.fail("a damaged building must quote a repair");
+
+  // The whole point of the cooldown: a building hit moments ago is still in a
+  // fight, and healing there would make a siege unwinnable.
+  tick(REPAIR_COOLDOWN_SECONDS - 1);
+  assert.equal(site.health.current, damaged, "a building hit a second ago does not heal");
+  assert.equal(repair.snapshot(site)?.state, "waiting");
+  assert.deepEqual(wallet.snapshot(), stockBefore, "and the wait is not charged for");
+
+  // Out-of-combat, not "some time after the first hit": a second blow puts the
+  // whole countdown back, so a sustained assault never repairs through itself.
+  site.health.damage(1);
+  tick(0);
+  assertClose(
+    repair.snapshot(site)?.secondsUntilStart ?? -1,
+    REPAIR_COOLDOWN_SECONDS,
+    "a fresh blow restarts the countdown from the top",
+  );
+  tick(REPAIR_COOLDOWN_SECONDS);
+  assert.equal(site.health.current, damaged - 1, "the tick the countdown ends on is still all cooldown");
+
+  // Past it, the building heals at its own authored rate and pays as it goes.
+  const beforeSecond = site.health.current;
+  tick(1);
+  assertClose(
+    site.health.current - beforeSecond,
+    repairHealthPerSecond(site),
+    "one second past the cooldown restores one second of the building's repair rate",
+  );
+  assert.equal(repair.snapshot(site)?.state, "repairing");
+  assert.equal(repair.isRepairing(site), true);
+  assert.notDeepEqual(wallet.snapshot(), stockBefore, "and the stockpile is paying for it");
+
+  // Run it out. The clock is the quote's: nothing about being automatic makes a
+  // repair faster or slower than the price list says.
+  let seconds = 1;
+  for (let frame = 0; frame < 60 * 600 && site.health.current < site.health.max; frame += 1) {
+    tick(1 / 60);
+    seconds += 1 / 60;
+  }
+  assert.equal(site.health.current, site.health.max, "the repair runs itself to full health");
+  assert.ok(
+    Math.abs(seconds - quote.seconds) < 0.5,
+    `the repair takes the quoted time (${seconds} vs ${quote.seconds})`,
+  );
+  assert.equal(repair.snapshot(site), null, "and a whole building is back to reporting nothing");
+  assert.equal(repair.isRepairing(site), false);
+
+  // The bill: what was actually taken matches the quote, up to the rounding of
+  // one unit per resource that buying whole resources per tick can add.
+  const after = wallet.snapshot();
+  for (const [resourceId, amount] of Object.entries(stockBefore)) {
+    const spent = amount - (after[resourceId] ?? 0);
+    const quoted = quote.cost[resourceId] ?? 0;
+    assert.ok(
+      spent >= quoted - 1 && spent <= quoted + 1,
+      `${resourceId}: the drip payment adds up to the quoted bill (${spent} vs ${quoted})`,
     );
   }
-
-  assert.deepEqual(construction.assignRepairWorkers(site, [worker]), {
-    assignedWorkers: 1,
-    rejectedWorkers: 0,
-    reason: null,
-  });
-  construction.update(0);
-  assert.equal(construction.stateFor(worker), "repairing", "a settled repairer is not reported as a builder");
-
-  const healthBefore = site.health.current;
-  construction.update(1);
-  assertClose(
-    site.health.current - healthBefore,
-    healthPerWorkerSecond(site),
-    "one worker-second restores the building's whole durability divided by its repair time",
-  );
-
-  for (let frame = 0; frame < 600 && repair.isRepairing(site); frame += 1) construction.update(1 / 60);
-  assert.equal(site.health.current, site.health.max, "the paid repair runs to full health");
-  assert.equal(repair.isRepairing(site), false, "and then closes its job");
-  // The crew goes home exactly as a finished foundation's does: a worker still
-  // kneeling at an intact building is the visible form of a leaked assignment.
-  assert.equal(construction.stateFor(worker), "idle");
-  assert.equal(construction.assignedRepairWorkers(site), 0);
+  // And it is a payment, not a rounding leak: every resource the house is priced
+  // in actually moved.
+  for (const resourceId of Object.keys(quote.cost)) {
+    assert.ok(
+      (after[resourceId] ?? 0) < (stockBefore[resourceId] ?? 0),
+      `${resourceId}: the repair was paid for out of the stockpile`,
+    );
+  }
 
   structures.clear();
   units.clear();
 });
 
-check("Yapı tamiri: iş başlamadan iptal tam iade eder, başladıktan sonra etmez", () => {
-  const untouched = damagedRtsHouse(0.5);
+check("Yapı tamiri: kasa boşsa durur, kaynak gelince kaldığı yerden sürer", () => {
+  const { structures, site } = damagedRtsHouse(0.5);
   const units = new UnitSystem();
-  const kingdoms = new KingdomRegistry(
-    ["player"],
-    units,
-    untouched.structures,
-    { food: 500, wood: 500, stone: 500, gold: 500 },
-    20,
-  );
+  // Deliberately destitute: the house is priced in wood, and there is none.
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 200 }, 20);
   const repair = new StructureRepairSystem(kingdoms);
   const wallet = kingdoms.get("player").wallet;
-  const before = wallet.snapshot();
+  const tick = (seconds: number): void => repair.update(structures.all(), seconds);
+  const quote = repair.quote(site) ?? assert.fail("the fixture must be repairable");
+  assert.ok(Object.keys(quote.cost).length > 0, "the fixture house must cost something to repair");
 
-  // Called off before a hammer landed: the kingdom never received the order.
-  assert.equal(repair.begin(untouched.site), "started");
-  assert.notDeepEqual(wallet.snapshot(), before, "the order was actually paid for");
-  assert.equal(repair.cancel(untouched.site), true);
-  assert.deepEqual(wallet.snapshot(), before, "an unstarted repair is refunded in full");
+  // A building first seen already damaged is not being hit right now, so it does
+  // not owe a cooldown it never earned — it goes straight to trying to pay.
+  const wrecked = site.health.current;
+  tick(1);
+  assert.equal(repair.snapshot(site)?.state, "stalled", "a repair nobody can pay for stops, it does not cancel");
+  assert.equal(site.health.current, wrecked, "and delivers no free health while it is stopped");
+  assert.equal(repair.isRepairing(site), false);
 
-  // Once health has been delivered the payment stands, or "repair, then cancel"
-  // would be the cheapest repair in the game.
-  assert.equal(repair.begin(untouched.site), "started");
-  const paid = wallet.snapshot();
-  assert.equal(repair.advance(untouched.site, 0.25, 1), "repairing");
-  assert.ok(untouched.site.health.current > untouched.site.health.max * 0.5, "work actually landed");
-  assert.equal(repair.cancel(untouched.site), true);
-  assert.deepEqual(wallet.snapshot(), paid, "a part-finished repair keeps what it bought");
+  // Nothing about the stall is terminal: the moment the stockpile can pay, the
+  // same repair carries on. There is no order to re-place, because there was
+  // never an order.
+  for (const [resourceId, amount] of Object.entries(quote.cost)) wallet.credit(resourceId, amount + 1);
+  tick(1);
+  assert.equal(repair.snapshot(site)?.state, "repairing", "a funded stall resumes on its own");
+  assert.ok(site.health.current > wrecked, "and starts delivering health again");
 
-  // A razed building settles its own books from the live list, so a job cannot
-  // outlive the thing it was repairing.
+  structures.clear();
+  units.clear();
+});
+
+check("Yapı tamiri: yıkılan yapı hesabını da götürür, sıfırlama her şeyi kapatır", () => {
   const razed = damagedRtsHouse(0.5);
-  const razedKingdoms = new KingdomRegistry(["player"], units, razed.structures, { food: 500, wood: 500 }, 20);
-  const razedRepair = new StructureRepairSystem(razedKingdoms);
-  const razedWallet = razedKingdoms.get("player").wallet;
-  const razedBefore = razedWallet.snapshot();
-  assert.equal(razedRepair.begin(razed.site), "started");
+  const units = new UnitSystem();
+  const kingdoms = new KingdomRegistry(["player"], units, razed.structures, { food: 500, wood: 500 }, 20);
+  const repair = new StructureRepairSystem(kingdoms);
+  const wallet = kingdoms.get("player").wallet;
+  const tick = (seconds: number): void => repair.update(razed.structures.all(), seconds);
+
+  tick(1);
+  assert.equal(repair.isRepairing(razed.site), true, "the fixture must actually be repairing");
+  const spentSoFar = wallet.snapshot();
+
+  // A building that falls mid-repair settles nothing, because there is nothing
+  // outstanding to settle: the kingdom only ever paid for health already
+  // delivered, and no reservation is left open behind it.
   razed.site.health.damage(razed.site.health.max);
   assert.deepEqual(updateStructureDestruction(razed.structures), [razed.site]);
-  razedRepair.update(razed.structures.all());
-  assert.equal(razedRepair.isRepairing(razed.site), false, "the job does not outlive its building");
-  assert.deepEqual(razedWallet.snapshot(), razedBefore, "and its untouched payment comes back");
+  tick(1);
+  assert.equal(repair.isRepairing(razed.site), false, "a repair does not outlive its building");
+  assert.equal(repair.snapshot(razed.site), null);
+  assert.deepEqual(wallet.snapshot(), spentSoFar, "and a razed building's last tick charges nothing");
 
-  untouched.structures.clear();
+  // The match restart path: every account goes, and a building the system has
+  // forgotten starts over rather than resuming mid-payment.
+  repair.reset();
+  assert.equal(repair.snapshot(razed.site), null);
+
   razed.structures.clear();
   units.clear();
 });
 
-check("Yapı tamiri: buton yalnız hasar varken çıkar, çalışırken kendi iptaline döner", () => {
+check("Yapı tamiri: panelde buton yok; çip bekliyor / tamir ediyor / kaynak yok ayrımını taşıyor", () => {
   const panel = (repair: SelectedStructureView["repair"], health: number): SelectionPanelContent =>
     describeSelection({
       kind: "structure",
@@ -52920,59 +53016,89 @@ check("Yapı tamiri: buton yalnız hasar varken çıkar, çalışırken kendi ip
         detail: { kind: "passive", populationCapacity: 5 },
       },
     });
-  const action = (content: SelectionPanelContent): SelectionAction | undefined =>
-    content.actions.find((candidate) => candidate.id === REPAIR_ACTION);
+  const repairChip = (content: SelectionPanelContent): SelectionChip | undefined =>
+    content.chips?.find((candidate) => candidate.id === "repair");
 
-  // An intact building offers no repair: a permanently visible button on a
-  // healthy base is a dead control, not an affordance.
-  assert.equal(action(panel(null, 200)), undefined);
-  assert.equal(action(panel({
-    missingHealth: 0, cost: {}, workerSeconds: 0, active: false, progress: 0, workers: 0, stock: { wood: 100 },
+  // The verb is gone from the deck entirely. A damaged building is not a
+  // decision any more, so the panel must not offer one — not disabled, not
+  // greyed, absent.
+  const damaged = panel({
+    missingHealth: 80,
+    cost: { wood: 8 },
+    seconds: 4,
+    state: "waiting",
+    secondsUntilStart: 12,
+    stock: { wood: 100 },
+  }, 120);
+  assert.equal(
+    damaged.actions.find((candidate) => candidate.id === "repair"),
+    undefined,
+    "a damaged building carries no repair button",
+  );
+
+  // Waiting reads as a countdown, and as nothing to worry about: the player
+  // cannot make it go faster, so it is not a warning.
+  const waiting = repairChip(damaged) ?? assert.fail("a damaged building must report its repair");
+  assert.equal(waiting.tone, "neutral");
+  assert.match(waiting.value, /^selection\.repair\.chip\.countdown\b/);
+  assert.match(waiting.value, /seconds=12/);
+  assert.match(waiting.tooltip, /^selection\.repair\.chip\.waiting\b/);
+  assert.match(waiting.tooltip, /seconds=12/);
+
+  // Running: the number climbing in front of the player is the building's own
+  // health, because with no order behind it there is no other honest percentage.
+  const running = repairChip(panel({
+    missingHealth: 40,
+    cost: { wood: 4 },
+    seconds: 2,
+    state: "repairing",
+    secondsUntilStart: 0,
+    stock: { wood: 100 },
+  }, 160)) ?? assert.fail("a running repair must show a chip");
+  assert.equal(running.tone, "good");
+  assert.equal(running.value, "selection.repair.chip progress=0.8");
+  assert.match(running.tooltip, /^selection\.repair\.chip\.working\b/);
+  assert.match(running.tooltip, /seconds=2/);
+
+  // The one state the player can act on is the one that reads as bad, and it
+  // names what the stockpile is short of — the same contract the old button's
+  // refusal lived under.
+  const stalled = repairChip(panel({
+    missingHealth: 40,
+    cost: { wood: 4 },
+    seconds: 2,
+    state: "stalled",
+    secondsUntilStart: 0,
+    stock: { wood: 1 },
+  }, 160)) ?? assert.fail("a stalled repair must show a chip");
+  assert.equal(stalled.tone, "bad");
+  assert.match(stalled.tooltip, /^selection\.repair\.chip\.stalled\b/);
+  assert.ok(stalled.tooltip.includes(probeCostEntry(3, "wood")), "the stall names the shortfall");
+
+  // A stall the rounded quote cannot explain still has to say something: the
+  // per-tick purchase is for the *next* whole unit, which a quote already shown
+  // as affordable does not cover.
+  const generic = repairChip(panel({
+    missingHealth: 40,
+    cost: { wood: 4 },
+    seconds: 2,
+    state: "stalled",
+    secondsUntilStart: 0,
+    stock: { wood: 100 },
+  }, 160)) ?? assert.fail("a stalled repair must show a chip");
+  assert.match(generic.tooltip, /^selection\.repair\.chip\.stalled_generic\b/);
+
+  // An intact building says nothing at all, exactly as the old button showed
+  // nothing: a permanent readout on a healthy base is a dead control.
+  assert.equal(repairChip(panel(null, 200)), undefined);
+  assert.equal(repairChip(panel({
+    missingHealth: 0,
+    cost: {},
+    seconds: 0,
+    state: "waiting",
+    secondsUntilStart: 0,
+    stock: { wood: 100 },
   }, 200)), undefined);
-
-  const affordable = action(panel({
-    missingHealth: 80, cost: { wood: 8 }, workerSeconds: 4, active: false, progress: 0, workers: 0, stock: { wood: 100 },
-  }, 120)) ?? assert.fail("a damaged building must offer a repair");
-  assert.equal(affordable.enabled, true);
-  assert.equal(affordable.reason, null, "a legal action carries no excuse");
-  assert.equal(affordable.cost, probeCostEntry(8, "wood"));
-  assert.match(affordable.hint ?? "", /^selection\.repair\.hint\b/);
-  assert.match(affordable.hint ?? "", /health=80/);
-  assert.match(affordable.hint ?? "", /seconds=4/);
-
-  // A price the wallet cannot meet is named, not merely refused — the same
-  // contract every other costed button in the panel lives under.
-  const broke = action(panel({
-    missingHealth: 80, cost: { wood: 8 }, workerSeconds: 4, active: false, progress: 0, workers: 0, stock: { wood: 3 },
-  }, 120)) ?? assert.fail("an unaffordable repair is still offered, and refused with a number");
-  assert.equal(broke.enabled, false);
-  assert.ok((broke.reason ?? "").includes(probeCostEntry(5, "wood")), "the refusal names the shortfall");
-
-  const running = panel({
-    missingHealth: 40, cost: { wood: 4 }, workerSeconds: 2, active: true, progress: 0.5, workers: 2, stock: { wood: 100 },
-  }, 160);
-  const stop = action(running) ?? assert.fail("a running repair must be cancellable");
-  assert.equal(stop.label, "selection.repair.stop.action");
-  assert.equal(stop.enabled, true);
-  assert.equal(stop.active, true);
-  // A running repair is a badge, not a body line: repair is offered on every
-  // building kind, so as a line it landed in whichever body grid the selection
-  // had — and on a producer that was the eighth line of a six-slot grid.
-  const repairChip = (content: SelectionPanelContent): SelectionChip =>
-    content.chips?.find((candidate) => candidate.id === "repair") ?? assert.fail("no repair chip");
-  assert.equal(repairChip(running).value, "selection.repair.chip progress=0.5");
-  assert.match(repairChip(running).tooltip, /^selection\.repair\.chip\.working\b/);
-  assert.match(repairChip(running).tooltip, /workers=2/);
-  assert.equal(repairChip(running).tone, "good");
-
-  // Ordered but not yet staffed reads differently: the player has paid and is
-  // waiting on a worker, which is a thing they can go and fix.
-  const waiting = panel({
-    missingHealth: 40, cost: { wood: 4 }, workerSeconds: 2, active: true, progress: 0, workers: 0, stock: { wood: 100 },
-  }, 160);
-  assert.match(repairChip(waiting).tooltip, /^selection\.repair\.chip\.waiting\b/);
-  assert.equal(repairChip(waiting).tone, "warn", "paid for and unstaffed is a thing the player can go and fix");
-  assert.match(action(waiting)?.hint ?? "", /^selection\.repair\.stop\.hint_pending\b/);
 });
 
 check("RTS a player foundation staffs itself to capacity, and preempts only one gatherer", () => {
@@ -53141,7 +53267,6 @@ check("RTS construction automation can be disabled for manual staffing", () => {
     units,
     structures,
     new RtsNavigation(),
-    undefined,
     undefined,
     undefined,
     undefined,

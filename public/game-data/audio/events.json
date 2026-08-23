@@ -240,7 +240,8 @@
         "sfx-artillery-cannonball-flight-01",
         "sfx-artillery-cannonball-flight-02",
         "sfx-artillery-cannonball-flight-03",
-        "sfx-artillery-cannonball-flight-04"
+        "sfx-artillery-cannonball-flight-04",
+        "sfx-artillery-cannonball-flight-05"
       ],
       "bus": "sfx",
       "volume": 0.5,
@@ -323,12 +324,12 @@
     },
     "structure.collapse": {
       "clips": [
-        "sfx-structure-collapse-01",
-        "sfx-structure-collapse-02",
-        "sfx-structure-collapse-03",
-        "sfx-structure-collapse-04",
-        "sfx-structure-collapse-05",
-        "sfx-structure-collapse-06"
+        "sfx-structure-collapse-stone-01",
+        "sfx-structure-collapse-stone-02",
+        "sfx-structure-collapse-stone-03",
+        "sfx-structure-collapse-stone-04",
+        "sfx-structure-collapse-stone-05",
+        "sfx-structure-collapse-stone-06"
       ],
       "bus": "sfx",
       "volume": 0.6,
@@ -359,12 +360,12 @@
       "rolloff": 5
     },
     "structure.impact_wood": {
-      "_note": "AWAITING PRODUCTION - four timber-impact variants (§82.5's Uretim table). Until they land it points at the masonry set, which is the same fallback `structure.collapse_wood` takes: the event exists so the damage table can name it, and the produced set starts playing the moment these clip ids change. Mixed a shade under the stone set - timber gives way rather than cracking.",
+      "_note": "Four timber-impact variants, landed 23 Ağustos 2026 - §82.5's Uretim table is closed on this row. Named by the damage presentation table (`damage...slots.debris.sound`) per building and per age, the same way `structure.impact_stone` is; the masonry fallback it stood on until the clips arrived is gone. Mixed a shade under the stone set - timber gives way rather than cracking.",
       "clips": [
-        "sfx-structure-impact-stone-01",
-        "sfx-structure-impact-stone-02",
-        "sfx-structure-impact-stone-03",
-        "sfx-structure-impact-stone-04"
+        "sfx-structure-impact-wood-01",
+        "sfx-structure-impact-wood-02",
+        "sfx-structure-impact-wood-03",
+        "sfx-structure-impact-wood-04"
       ],
       "bus": "sfx",
       "volume": 0.34,
@@ -379,12 +380,10 @@
     "structure.collapse_stone": {
       "_note": "The existing collapse set, now named by `damage...slots.collapseDust.sound`. `structure.collapse` stays beside it as the catalog-less fallback.",
       "clips": [
-        "sfx-structure-collapse-01",
-        "sfx-structure-collapse-02",
-        "sfx-structure-collapse-03",
-        "sfx-structure-collapse-04",
-        "sfx-structure-collapse-05",
-        "sfx-structure-collapse-06"
+        "sfx-structure-collapse-wood-01",
+        "sfx-structure-collapse-wood-02",
+        "sfx-structure-collapse-wood-03",
+        "sfx-structure-collapse-wood-04"
       ],
       "bus": "sfx",
       "volume": 0.6,
@@ -397,14 +396,12 @@
       "rolloff": 5
     },
     "structure.collapse_wood": {
-      "_note": "AWAITING PRODUCTION - three or four timber-collapse variants. Points at the masonry set meanwhile, exactly as §82.5 prescribes.",
+      "_note": "Four timber-collapse variants, landed 23 Ağustos 2026 - the masonry set it borrowed under §82.5 is gone. Named by `damage...slots.collapseDust.sound`, beside `structure.collapse_stone`. Mixed under the stone collapse and with a wider pitch spread: a timber frame comes down less uniformly than a wall.",
       "clips": [
-        "sfx-structure-collapse-01",
-        "sfx-structure-collapse-02",
-        "sfx-structure-collapse-03",
-        "sfx-structure-collapse-04",
-        "sfx-structure-collapse-05",
-        "sfx-structure-collapse-06"
+        "sfx-structure-collapse-wood-01",
+        "sfx-structure-collapse-wood-02",
+        "sfx-structure-collapse-wood-03",
+        "sfx-structure-collapse-wood-04"
       ],
       "bus": "sfx",
       "volume": 0.55,
@@ -417,9 +414,9 @@
       "rolloff": 5
     },
     "structure.fire_loop": {
-      "_note": "AWAITING PRODUCTION - one seamless fire loop (§56's loop checklist); `starter-snd-fire-01` stands in and is not seam-checked, so a cycle may tick until the produced clip replaces it. The second spatial loop in the table, and `maxInstances: 1` is what makes it stoppable at all - the director's `stop()` is keyed by event id. Carries further than the construction bed and sits under it in level: a fire is a place on the map, not an event being announced.",
+      "_note": "Sourced rather than produced (23 Ağustos 2026): the clip is Forge starter content's `Fire01` (6.2 s, mono 44.1 kHz), *copied* into this project's audio tree under its own §6 name instead of being played from `starter-snd-fire-01` where it sits. Copying is the point - a `starter-snd-` id means 'deliberately still a placeholder', so leaving the table pointed there would close the channel while every audit kept reading it as open, and would tie a shipping ThreeAges sound to the template's swappable starter pack. The starter file stays where it is; `SoundCue_Fire` still uses it. `Fire_Sparks01` was NOT layered in: this table's `clips` is a random-variant list, not a layer stack (see §80 - a layered sound belongs in a SoundCue, which the table cannot yet name), and with `maxInstances: 1` on a persistent loop a two-entry list would just pick one at random per fire. If a sparks layer is wanted, mix it into a single file offline and replace this id. Seam is unverified against §56's loop checklist and 6.2 s sits inside §25's audible-repeat window - forgivable here because this is a local, temporary sound (volume 0.22, maxDistance 80, ducked out over 0.35 s by repair or demolition) rather than a map-wide bed, but it is the thing to listen for. The second spatial loop in the table, and `maxInstances: 1` is what makes it stoppable at all - the director's `stop()` is keyed by event id. Carries further than the construction bed and sits under it in level: a fire is a place on the map, not an event being announced.",
       "clips": [
-        "starter-snd-fire-01"
+        "sfx-structure-fire-loop-01"
       ],
       "bus": "sfx",
       "volume": 0.22,
@@ -432,9 +429,9 @@
       "rolloff": 8
     },
     "building.complete": {
-      "_note": "Four clips were produced and only one is bound, which is the deliberate exception to this table's variant rule. `sfx-building-complete-02`..`-04` ship in the manifest as *alternatives*, not as a pool: a completion is the kingdom's single signature chime, and hearing four different ones is heard as four different things having happened rather than as variety. Swap the id here to audition another; do not list them all. (`building.construction_hammer` below is the opposite case and does list them all - a crew's blows are supposed to differ.)",
+      "_note": "One clip, and the other three ship in the manifest as *alternatives* rather than as a pool. A completion is the kingdom's single signature chime; four playing at random are heard as four different things having happened, not as variety. All four were bound briefly on 23 Agustos 2026 so they could be heard against each other in a running match - that audition is what the alternatives are for - and the author picked -03. Swap the id here to audition again; do not list them all. (building.construction_hammer below is the opposite case and does list them all - a crew's blows are supposed to differ.)",
       "clips": [
-        "sfx-building-complete-01"
+        "sfx-building-complete-03"
       ],
       "bus": "sfx",
       "volume": 0.4,
@@ -658,9 +655,11 @@
       "maxInstances": 2
     },
     "voice.guard_select": {
-      "_note": "Guard barks, and the note covers all three. Non-spatial on purpose, unlike every other unit sound in this table: these answer the player's own click, so they belong beside ui.select and ui.command rather than beside the footsteps of the unit that speaks. A bark that attenuated would be a confirmation the player sometimes did not get, which is the one thing a confirmation may not be. No pitch jitter - a wandering voice reads as a broken tape, the same reason the stingers have none. maxInstances is 1 across all three: ten selected guards are one order and one answer, not ten men shouting over each other, and the cooldown then keeps a re-issued order from stuttering. Selection has a single clip so far, so its cooldown carries more weight than the others' - it is the only one where a repeat is literally the same take.",
+      "_note": "Guard barks, and the note covers the set. Non-spatial on purpose, unlike every other unit sound in this table: the first five answer the player's own click, so they belong beside ui.select and ui.command rather than beside the footsteps of the unit that speaks. A bark that attenuated would be a confirmation the player sometimes did not get, which is the one thing a confirmation may not be. No pitch jitter - a wandering voice reads as a broken tape, the same reason the stingers have none. maxInstances is 1 across every bark: ten selected guards are one order and one answer, not ten men shouting over each other, and the cooldown then keeps a re-issued order from stuttering. Selection reached three clips on 23 Agustos 2026; the note that its cooldown had to carry the weight of a single take is retired with it.",
       "clips": [
-        "vo-guard-selection-01"
+        "vo-guard-selection-01",
+        "vo-guard-selection-02",
+        "vo-guard-selection-03"
       ],
       "bus": "voice",
       "volume": 0.7,
@@ -846,7 +845,9 @@
     "ui.hover": {
       "_note": "One clip, no jitter, and that is a correction rather than the original design. Three variants shipped first, on the reasoning that applies to every other repeated sound in this table - and hover is the one place it is wrong. A player sweeping a row of build cards crosses six buttons in a second, so the variants do not read as variety, they read as six different controls; the ear takes a changing sound as new information about the thing under the pointer. Everywhere else a repeat is spread over seconds and a single clip is what sounds broken. So the axis the sound varies on is *what kind of control it is*, not *which time it is* - see `ui.hover_card`.\n\nThe level stayed at 0.12, and the round trip is worth recording. It was raised to 0.22 on the theory that hover was being masked by the construction bed, because a player reported it going silent after building - and that diagnosis was wrong. The cause was a listener being torn down on the first pointerdown (a mis-landed patch), and the level had nothing to do with it. Put back, because the only evidence anyone has about this number is that 0.12 was audible and nobody complained it was quiet. It is the softest entry in the table on purpose: a hover must not read as the press it precedes.",
       "clips": [
-        "sfx-ui-hover-01"
+        "sfx-ui-hover-01",
+        "sfx-ui-hover-02",
+        "sfx-ui-hover-03"
       ],
       "bus": "ui",
       "volume": 0.12,
@@ -1129,6 +1130,166 @@
       "volume": 0.12,
       "cooldownMs": 80,
       "maxInstances": 3
+    },
+    "voice.guard_hold": {
+      "_note": "The answer to the hold stance (H), which until now issued in silence. Kept apart from voice.guard_stop even though both end movement, because they are different promises: hold says 'we stay here and do not chase', stop says 'whatever we were doing, we are not doing it'. A player who cannot hear which one took is a player who has to re-read the stance to be sure. Cooldown a shade longer than the order barks: a stance is re-issued far less often than a move, so a repeat inside 400 ms is a double-press rather than a new intent.",
+      "clips": [
+        "vo-guard-hold-01",
+        "vo-guard-hold-02",
+        "vo-guard-hold-03"
+      ],
+      "bus": "voice",
+      "volume": 0.7,
+      "cooldownMs": 400,
+      "maxInstances": 1
+    },
+    "voice.guard_stop": {
+      "_note": "The answer to a stop order (X). See voice.guard_hold for why the two are separate events rather than one 'we are not moving' line.",
+      "clips": [
+        "vo-guard-stop-01",
+        "vo-guard-stop-02",
+        "vo-guard-stop-03"
+      ],
+      "bus": "voice",
+      "volume": 0.7,
+      "cooldownMs": 400,
+      "maxInstances": 1
+    },
+    "voice.guard_under_attack": {
+      "_note": "The one bark the player did not ask for, and the numbers say so. Louder than the order lines because it competes with a fight rather than with an empty field, and on a cooldown three times longer than anything else on this bus: it fires off the same damage watch that posts the worker notice, so a sustained melee would otherwise re-trigger it every time a guard takes a hit. Nine seconds means one report per engagement, which is what the line says ('we are taking losses'), not one per wound. Non-spatial with the rest of the barks even though nobody clicked: this is the player's own squad reporting, so it is not gated by fog the way an enemy's footsteps are - the notification feed already tells the player their units are being hit regardless of what they can see.",
+      "clips": [
+        "vo-guard-under-attack-01",
+        "vo-guard-under-attack-02",
+        "vo-guard-under-attack-03"
+      ],
+      "bus": "voice",
+      "volume": 0.8,
+      "cooldownMs": 9000,
+      "maxInstances": 1
+    },
+    "voice.worker_select": {
+      "_note": "Worker barks - the note covers the set, and everything the guard note says about the shape holds here: non-spatial (they answer the player's own click), no pitch jitter, maxInstances 1 so a picked crew is one answer rather than five men talking. Mixed a touch under the Guard: a labourer answering is not a squad answering, and when both are picked the Guard speaks and this stays quiet (see RtsApp.playSelectionAudio).",
+      "clips": [
+        "vo-worker-select-01",
+        "vo-worker-select-02",
+        "vo-worker-select-03"
+      ],
+      "bus": "voice",
+      "volume": 0.65,
+      "cooldownMs": 400,
+      "maxInstances": 1
+    },
+    "voice.worker_move": {
+      "_note": "A plain move order. Separate from voice.worker_work for the reason the design keeps every acknowledgement separate: 'on my way' and 'I'll see to it' are different promises, and the second one means a job was actually picked up.",
+      "clips": [
+        "vo-worker-move-01",
+        "vo-worker-move-02",
+        "vo-worker-move-03",
+        "vo-worker-move-04"
+      ],
+      "bus": "voice",
+      "volume": 0.65,
+      "cooldownMs": 350,
+      "maxInstances": 1
+    },
+    "voice.worker_work": {
+      "_note": "The order landed on a job - a resource node, a construction site, a repair. Fired off the command system's 'worker-task' result, so it says the task was accepted rather than that the worker has arrived.",
+      "clips": [
+        "vo-worker-work-01",
+        "vo-worker-work-02",
+        "vo-worker-work-03",
+        "vo-worker-work-04"
+      ],
+      "bus": "voice",
+      "volume": 0.65,
+      "cooldownMs": 350,
+      "maxInstances": 1
+    },
+    "voice.worker_invalid": {
+      "_note": "§38's 'Invalid / cannot'. The only bark on this bus fired by something NOT happening: the player right-clicked with a crew selected and the command system issued nothing. Longer cooldown than the others because the failing click is the one a player repeats - three refusals in a second is one player insisting, not three refusals.",
+      "clips": [
+        "vo-worker-invalid-01",
+        "vo-worker-invalid-02",
+        "vo-worker-invalid-03"
+      ],
+      "bus": "voice",
+      "volume": 0.65,
+      "cooldownMs": 500,
+      "maxInstances": 1
+    },
+    "voice.worker_under_attack": {
+      "_note": "Rides the same damage watch that posts the worker notification, and carries the same nine-second cooldown as the Guard's for the same reason: one report per raid, not one per wound. Louder than the worker's order lines - this is the one a player must hear from across the map - but under the Guard's, because it is a call for help rather than a squad holding a line.",
+      "clips": [
+        "vo-worker-under-attack-01",
+        "vo-worker-under-attack-02",
+        "vo-worker-under-attack-03"
+      ],
+      "bus": "voice",
+      "volume": 0.75,
+      "cooldownMs": 9000,
+      "maxInstances": 1
+    },
+    "voice.archer_select": {
+      "_note": "Archer barks - the note covers the set, and the shape is the Guard's: non-spatial (they answer the player's own click), no pitch jitter, maxInstances 1 so a picked line of bowmen is one answer. Between the Guard and the Worker in level, which is where the role sits: a soldier, but not the one holding the line. §40 records no stop line, so an Archer-only selection is silent on X while the Guard answers - that is the author's call, not a missing hook, and producing three vo_archer_stop_NN clips is all it would take to close.",
+      "clips": [
+        "vo-archer-select-01",
+        "vo-archer-select-02",
+        "vo-archer-select-03"
+      ],
+      "bus": "voice",
+      "volume": 0.68,
+      "cooldownMs": 400,
+      "maxInstances": 1
+    },
+    "voice.archer_move": {
+      "_note": "§40's Move lines are about *position* ('we'll find a position', 'taking ground') rather than about marching, which is the difference between this and the Guard's - and the reason a retreat still stays silent here: pulling back is not taking ground.",
+      "clips": [
+        "vo-archer-move-01",
+        "vo-archer-move-02",
+        "vo-archer-move-03",
+        "vo-archer-move-04"
+      ],
+      "bus": "voice",
+      "volume": 0.68,
+      "cooldownMs": 350,
+      "maxInstances": 1
+    },
+    "voice.archer_attack": {
+      "_note": "An ordered volley. Louder than the Archer's other lines for the reason the Guard's attack line is: it competes with the fight it starts.",
+      "clips": [
+        "vo-archer-attack-01",
+        "vo-archer-attack-02",
+        "vo-archer-attack-03",
+        "vo-archer-attack-04"
+      ],
+      "bus": "voice",
+      "volume": 0.72,
+      "cooldownMs": 350,
+      "maxInstances": 1
+    },
+    "voice.archer_hold": {
+      "_note": "The hold stance (H). Archers take stances like Guards - issueStance skips only workers - so this hangs on the same hook, and the Guard has first claim when both are picked.",
+      "clips": [
+        "vo-archer-hold-01",
+        "vo-archer-hold-02",
+        "vo-archer-hold-03"
+      ],
+      "bus": "voice",
+      "volume": 0.68,
+      "cooldownMs": 400,
+      "maxInstances": 1
+    },
+    "voice.archer_under_attack": {
+      "_note": "§40's lines here are the panic of a unit caught at the wrong range ('they're too close', 'we're exposed'), which is exactly the state the damage watch reports: an archer losing health is usually an archer that has been reached. Same nine-second cooldown as the other two - one report per engagement.",
+      "clips": [
+        "vo-archer-under-attack-01",
+        "vo-archer-under-attack-02",
+        "vo-archer-under-attack-03"
+      ],
+      "bus": "voice",
+      "volume": 0.78,
+      "cooldownMs": 9000,
+      "maxInstances": 1
     }
   },
   "_musicStates": "How the match picks which of the four playlists is playing (plan §28/§35). `tensionVisibleEnemies` is enemies the player can actually see through the fog - §35's rule is that seeing one is tension, not battle. `battleActiveFights` counts units of either side holding an attack target. `threatRadius` makes a *seen* enemy that close to the player's centre a battle on its own, before a blow lands, so a siege column walking into the square is not scored as calm. `calmSeconds` is how long a raised state holds after its cause is gone - combat is spiky, and without it the music would flap several times per skirmish. All four are retuned by ear."

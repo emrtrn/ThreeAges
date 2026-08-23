@@ -9,7 +9,6 @@
   "unit.job.idle": "boşta",
   "unit.job.moving": "yolda",
   "unit.job.building": "inşaatta",
-  "unit.job.repairing": "tamirde",
   "unit.job.producing": "üretimde",
   "unit.job.unreachable": "erişemiyor",
   "unit.order.idle": "Bekliyor",

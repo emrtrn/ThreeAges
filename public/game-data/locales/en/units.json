@@ -9,7 +9,6 @@
   "unit.job.idle": "idle",
   "unit.job.moving": "moving",
   "unit.job.building": "building",
-  "unit.job.repairing": "repairing",
   "unit.job.producing": "producing",
   "unit.job.unreachable": "unreachable",
   "unit.order.idle": "Waiting",

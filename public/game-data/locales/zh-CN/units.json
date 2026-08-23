@@ -9,7 +9,6 @@
   "unit.job.idle": "闲置",
   "unit.job.moving": "移动",
   "unit.job.building": "建筑",
-  "unit.job.repairing": "修复",
   "unit.job.producing": "生产",
   "unit.job.unreachable": "无法到达",
   "unit.order.idle": "等待",

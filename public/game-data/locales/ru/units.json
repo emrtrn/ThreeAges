@@ -9,7 +9,6 @@
   "unit.job.idle": "праздный",
   "unit.job.moving": "перемещение",
   "unit.job.building": "здание",
-  "unit.job.repairing": "ремонт",
   "unit.job.producing": "производство",
   "unit.job.unreachable": "недостижимый",
   "unit.order.idle": "Ожидание",

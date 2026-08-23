@@ -89,7 +89,8 @@ import { RTS_AUDIO, rtsNotifyAudioEvent, rtsNotificationAudioEvent,
   RTS_MUSIC_STATE_EVENTS, RTS_NOTIFY_AUDIO_EVENTS, resolveRtsAudioVariant,
   rtsResourceProductionAudioEvent,
   rtsRoleNotifyAudio, resolveRtsRoleNotifyEvent, RTS_SIEGE_CARRIAGE_CREAK,
-  type RtsAudioVariant,
+  resolveUnitVoice, RTS_UNIT_ALARM_VOICE_ORDER,
+  type RtsAudioVariant, type RtsVoiceMoment,
 } from "./audio/rtsAudioEvents";
 import { loadAudioEventTableWithStates } from "../data/gameDataLoader";
 import {
@@ -241,7 +242,6 @@ import {
   CANCEL_WORKER_ACTION,
   DEMOLISH_ACTION,
   RALLY_ACTION,
-  REPAIR_ACTION,
   RESCUE_ACTION,
   TRADE_BUY_ACTION_PREFIX,
   TRADE_SELL_ACTION_PREFIX,
@@ -292,7 +292,7 @@ import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
 import { ResourceCapacitySystem, STOCK_RESOURCE_IDS } from "./economy/resourceCapacitySystem";
 import { roadLinkCellFor } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
-import { StructureRepairSystem } from "./structures/structureRepairSystem";
+import { REPAIR_COOLDOWN_SECONDS, StructureRepairSystem } from "./structures/structureRepairSystem";
 import { buildingCostForAge, type BuildingCostResolver } from "./economy/buildingCost";
 import type { HealthComponent } from "./units/health";
 import type { UnitOwner } from "./units/unit";
@@ -1859,7 +1859,6 @@ export class RtsApp {
       // more builders per foundation was busywork the player always did anyway.
       // The AI's build/economy managers stay on the tuned single-builder rule.
       (structure) => structure.owner === PLAYER_OWNER,
-      (structure, deltaSeconds, workerCount) => this.structureRepair.advance(structure, deltaSeconds, workerCount),
       (owner) => owner !== PLAYER_OWNER || this.automaticWorkerAssignmentEnabled,
     );
     this.economyProduction = new EconomyProductionSystem(
@@ -2364,7 +2363,7 @@ export class RtsApp {
           || this.selection.selectedStructure() !== null;
         const issued = this.commands.issueAt(x, y);
         if (commanding) this.playUiAudio(this.commandAudioEvent(issued));
-        this.playGuardOrderAudio(issued);
+        this.playUnitOrderVoice(issued, commanding);
       },
       // A right *drag* is the camera, not a command — the pointer only reports
       // it past its drag threshold, and suppresses the command click that would
@@ -2679,7 +2678,21 @@ export class RtsApp {
     if (units && !structure) this.playUiAudio(RTS_AUDIO.uiSelectUnit);
     else if (structure && !units) this.playUiAudio(RTS_AUDIO.uiSelectBuilding);
     else if (units || structure) this.playUiAudio(RTS_AUDIO.uiSelect);
-    if (this.selectionHasGuard()) this.playUiAudio(RTS_AUDIO.guardSelect);
+    this.playUnitVoice("select");
+  }
+
+  /**
+   * The picked units' own answer to a moment — §38–§40's barks.
+   *
+   * Everything about who speaks lives in `RTS_UNIT_VOICE_LINES`; this only
+   * supplies "who is selected" and plays the answer. Adding a class, or the
+   * Archer's missing stop line, is then a table edit rather than another branch
+   * in this file — which is the whole reason the three ad-hoc chains that used
+   * to live here were collapsed.
+   */
+  private playUnitVoice(moment: RtsVoiceMoment): void {
+    const eventId = resolveUnitVoice(moment, (role) => this.selectionHasRole(role));
+    if (eventId) this.playUiAudio(eventId);
   }
 
   /**
@@ -2687,7 +2700,7 @@ export class RtsApp {
    *
    * Only the two the design names are split out. A worker task, a structure's
    * own attack order and a retreat keep the shared sound, for the reason
-   * {@link playGuardOrderAudio} gives about the retreat: the two orders that
+   * {@link playUnitOrderVoice} gives about the retreat: the two orders that
    * land on the same button are move and attack, and those are the two a player
    * must be able to tell apart without looking. Naming the others would be
    * producing clips for distinctions nobody has to make in a hurry.
@@ -2698,30 +2711,82 @@ export class RtsApp {
     return RTS_AUDIO.uiCommand;
   }
 
-  /** Whether the player currently has at least one Guard picked. */
-  private selectionHasGuard(): boolean {
-    return this.selection.selected().some((unit) => unit.role === "guard" && !unit.dying);
+  /** Whether the player currently has at least one living unit of a role picked. */
+  private selectionHasRole(role: string): boolean {
+    return this.selection.selected().some((unit) => unit.role === role && !unit.dying);
   }
 
   /**
-   * The squad's own answer to an order the player just gave.
+   * The picked units' answer to an order the player just gave.
    *
-   * Only two of the six outcomes speak. A worker task and a structure's attack
-   * order are not the Guard's to acknowledge; `"none"` is a click that issued
-   * nothing, and confirming it by voice would teach the player that it worked.
-   * A retreat is deliberately silent too - the move line is an advance ("on our
-   * way"), and hearing it while pulling out of a fight would report the
-   * opposite of what is happening. It gets its own line when one is recorded.
+   * Which outcomes speak is the table's business now; what this decides is the
+   * mapping from a command result to a *moment*. Three of the six are silent
+   * and each for its own reason: a structure's attack order is not a unit's to
+   * acknowledge, and a retreat is deliberately quiet because every move line in
+   * §38–§40 is an advance ("on our way", "taking ground") — hearing one while
+   * pulling out of a fight would report the opposite of what is happening.
    *
-   * Fired once per order rather than once per unit: the event table caps this
-   * at one instance, but a caller that triggered per guard would still be
-   * asking the director to refuse nine of them every time, and the cap would
-   * then be doing the design's job instead of stating it.
+   * `"none"` is the interesting one, and the only place in this file where
+   * *nothing happening* is the thing being reported. It earns a line because
+   * the alternative — answering with the ordinary command sound — teaches the
+   * player the click worked. `commanding` must be passed in rather than
+   * re-read: a right-click on empty ground with an empty selection also returns
+   * `"none"`, and that one stays silent.
+   *
+   * Fired once per order rather than once per unit. The table caps these at one
+   * instance, but a caller that triggered per unit would still ask the director
+   * to refuse nine of them every time, and the cap would then be doing the
+   * design's job instead of stating it.
    */
-  private playGuardOrderAudio(result: RtsCommandResult): void {
-    if (result !== "attack" && result !== "move") return;
-    if (!this.selectionHasGuard()) return;
-    this.playUiAudio(result === "attack" ? RTS_AUDIO.guardAttack : RTS_AUDIO.guardMove);
+  private playUnitOrderVoice(result: RtsCommandResult, commanding: boolean): void {
+    if (result === "attack") this.playUnitVoice("attack");
+    else if (result === "move") this.playUnitVoice("move");
+    else if (result === "worker-task") this.playUnitVoice("work");
+    else if (result === "none" && commanding) this.playUnitVoice("invalid");
+  }
+
+  /**
+   * The answer to a stance order (hold, stop).
+   *
+   * Split from {@link playUnitOrderVoice} because these arrive by a different
+   * road: a ground order reports what it issued and can be gated on that, while
+   * `issueStance` and `issueStop` return nothing. The selection is the only
+   * evidence available, which is also the honest test — the stance applies to
+   * whoever is picked, so a role in the selection is exactly the condition
+   * under which that role was actually ordered.
+   *
+   * `issueStance` skips workers and the table gives them no stance line, so a
+   * worker-only selection is silent here twice over.
+   */
+  private playUnitStanceVoice(moment: "hold" | "stop"): void {
+    this.playUnitVoice(moment);
+  }
+
+  /**
+   * A unit's own report that it is being hit — the one bark nobody clicked for.
+   *
+   * Fired from the damage watch rather than from a hit, and that is what makes
+   * it a report instead of a wound counter: `observe` names the units whose
+   * health fell since the last look, so one sustained melee produces one bark
+   * (the table's nine-second cooldown does the rest) rather than one per blow.
+   *
+   * Resolved against {@link RTS_UNIT_ALARM_VOICE_ORDER}, which reads the voice
+   * table backwards: a raid that catches a mixed force wounds every class at
+   * once, and here the *most helpless* voice should win the frame rather than
+   * the most senior.
+   *
+   * Not gated by {@link worldAudioAudible}, unlike every world sound. The fog
+   * gate exists so the enemy cannot be *heard* through the dark; this is the
+   * player's own unit speaking, and the notification feed already reports the
+   * player's units taking damage wherever they are.
+   */
+  private playUnitAlarmVoice(wounded: ReadonlySet<string>): void {
+    const eventId = resolveUnitVoice(
+      "underAttack",
+      (role) => wounded.has(role),
+      RTS_UNIT_ALARM_VOICE_ORDER,
+    );
+    if (eventId) this.playUiAudio(eventId);
   }
 
   /**
@@ -5412,8 +5477,17 @@ export class RtsApp {
     if (this.input.consumeCommand("buildCategory2")) this.buildPalette.selectCategoryByIndex(1);
     if (this.input.consumeCommand("buildCategory3")) this.buildPalette.selectCategoryByIndex(2);
     if (this.input.consumeCommand("buildCategory4")) this.buildPalette.selectCategoryByIndex(3);
-    if (this.input.consumeStopRequest()) this.commands.issueStop();
-    if (this.input.consumeCommand("hold")) this.commands.issueStance("hold");
+    if (this.input.consumeStopRequest()) {
+      this.commands.issueStop();
+      this.playUnitStanceVoice("stop");
+    }
+    if (this.input.consumeCommand("hold")) {
+      this.commands.issueStance("hold");
+      this.playUnitStanceVoice("hold");
+    }
+    // Aggressive is deliberately silent: §39 records a line for holding and one
+    // for stopping, and nothing for going back to the default stance. Returning
+    // to normal is the absence of an order, not one more of them.
     if (this.input.consumeCommand("aggressive")) this.commands.issueStance("aggressive");
     if (this.input.consumeCommand("retreat")) this.commands.armRetreat();
     if (this.input.consumeCommand("selectIdleWorkers")) this.selectIdleWorkers();
@@ -5636,9 +5710,10 @@ export class RtsApp {
     const constructionMark = this.perfMark();
     this.workerConstruction.update(dt);
     this.buildingVisuals.update(this.structures.all(), dt);
-    // Settle repair jobs whose building was razed or demolished since the last
-    // tick; an untouched job is refunded here exactly as a cancelled one is.
-    this.structureRepair.update(this.structures.all());
+    // Damaged buildings heal themselves once the fighting around them stops,
+    // charging their owner's stockpile per hit point as they go — the AI's
+    // buildings under exactly the same rule as the player's.
+    this.structureRepair.update(this.structures.all(), dt);
     this.perfMeasure("inşaat", constructionMark);
     const productionMark = this.perfMark();
     this.economyProduction?.update(dt);
@@ -7454,27 +7529,26 @@ export class RtsApp {
   }
 
   /**
-   * The repair verb's state for the §51 panel, or null when there is nothing to
-   * offer: an enemy building, an unfinished foundation, or one at full health
-   * with no crew already on it.
+   * The automatic repair's state for the §51 panel, or null when there is
+   * nothing to report: an enemy building, an unfinished foundation, or one at
+   * full health.
    *
-   * The running case is checked before the damage case on purpose — a crew that
-   * has just finished the last hit point is still worth showing until the job
-   * closes, and the panel needs the "Tamiri Durdur" button to stay put rather
-   * than vanish under the cursor mid-repair.
+   * A readout, not a verb — there is no button behind it any more. It exists so
+   * a player watching a damaged building can tell the three cases apart: still
+   * counting down, healing, or stopped because the stockpile is empty. Without
+   * it the third case is a building that simply never gets better.
    */
   private structureRepairView(structure: PlacedStructure): StructureRepairView | null {
     if (structure.owner !== PLAYER_OWNER || !structure.construction.complete) return null;
-    const job = this.structureRepair.snapshot(structure);
     const quote = this.structureRepair.quote(structure);
-    if (!job && !quote) return null;
+    if (!quote) return null;
+    const snapshot = this.structureRepair.snapshot(structure);
     return {
-      missingHealth: quote?.missingHealth ?? 0,
-      cost: quote?.cost ?? {},
-      workerSeconds: quote?.workerSeconds ?? 0,
-      active: job !== null,
-      progress: job?.progress ?? 0,
-      workers: this.workerConstruction.assignedRepairWorkers(structure),
+      missingHealth: quote.missingHealth,
+      cost: quote.cost,
+      seconds: quote.seconds,
+      state: snapshot?.state ?? "waiting",
+      secondsUntilStart: snapshot?.secondsUntilStart ?? REPAIR_COOLDOWN_SECONDS,
       stock: this.kingdoms.get(PLAYER_OWNER).wallet.snapshot(),
     };
   }
@@ -7537,77 +7611,6 @@ export class RtsApp {
     );
   }
 
-  /**
-   * Order — or call off — the repair of the selected building (the "Tamir Et"
-   * button, and the same path a right-click with workers takes).
-   *
-   * Payment happens first and staffing second, then the order is *undone* if no
-   * worker could be sent. The other order — find a worker, then charge — would
-   * leave a crew walking toward a job the kingdom turned out not to be able to
-   * afford, and the player watching workers abandon a building for no stated
-   * reason. Refunding an unstarted job is exactly what `cancel` already does.
-   */
-  private repairSelectedStructure(workers: readonly Unit[] = []): void {
-    const structure = this.selection.selectedStructure();
-    if (!structure || structure.owner !== PLAYER_OWNER) return;
-    this.orderStructureRepair(structure, workers);
-  }
-
-  /** Shared by the panel button and the contextual worker order. */
-  private orderStructureRepair(structure: PlacedStructure, workers: readonly Unit[]): boolean {
-    if (structure.owner !== PLAYER_OWNER) return false;
-    if (this.structureRepair.isRepairing(structure)) {
-      // Adding workers to a running repair is not a cancel: the player pointing
-      // more hands at a job they already ordered means "faster", and only the
-      // button — which carries no crew — can mean "stop".
-      if (workers.length > 0) {
-        if (!this.staffStructureRepair(structure, workers)) {
-          this.announce("structure", t("command.structure.repair_crew_full"), "refused");
-        }
-        return true;
-      }
-      this.workerConstruction.cancelRepair(structure);
-      this.structureRepair.cancel(structure);
-      this.announce("structure", t("command.structure.repair_stopped", { building: t(structure.stats.nameKey) }), "refused");
-      return true;
-    }
-    const quote = this.structureRepair.quote(structure);
-    const result = this.structureRepair.begin(structure);
-    if (result !== "started") {
-      const building = t(structure.stats.nameKey);
-      const message: Record<typeof result, string> = {
-        "not-repairable": t("command.structure.repair.not_repairable"),
-        undamaged: t("command.structure.repair.undamaged", { building }),
-        "already-repairing": t("command.structure.repair.already_repairing", { building }),
-        "insufficient-resources": quote
-          ? t("command.structure.repair.insufficient_resources_cost", {
-              building,
-              cost: formatResourceCost(quote.cost),
-            })
-          : t("command.structure.repair.insufficient_resources", { building }),
-      };
-      this.announce("structure", message[result], "refused");
-      return true;
-    }
-    if (this.staffStructureRepair(structure, workers)) return true;
-    // Nobody could be sent, so the order never happened: unwind it in full.
-    this.structureRepair.cancel(structure);
-    this.announce("structure", t("command.structure.repair_no_worker"), "refused");
-    return true;
-  }
-
-  /** Send the given workers — or the nearest free ones — to an open repair job. */
-  private staffStructureRepair(structure: PlacedStructure, workers: readonly Unit[]): boolean {
-    const assigned = workers.length > 0
-      ? this.workerConstruction.assignRepairWorkers(structure, workers).assignedWorkers
-      : this.workerConstruction.assignNearestForRepair(structure).assigned
-        ? this.workerConstruction.assignedRepairWorkers(structure)
-        : 0;
-    if (assigned === 0) return false;
-    this.announce("structure", t("command.structure.repair_staffed", { count: assigned, building: t(structure.stats.nameKey) }));
-    return true;
-  }
-
   /** Cancel exactly the selected foundation; a finished building must use demolition instead. */
   private cancelSelectedConstruction(): void {
     const structure = this.selection.selectedStructure();
@@ -7667,10 +7670,6 @@ export class RtsApp {
     }
     if (id === DEMOLISH_ACTION) {
       this.demolishSelectedStructure();
-      return;
-    }
-    if (id === REPAIR_ACTION) {
-      this.repairSelectedStructure();
       return;
     }
     if (id === CANCEL_CONSTRUCTION_ACTION) {
@@ -8337,13 +8336,20 @@ export class RtsApp {
     const center = this.centers.get(PLAYER_OWNER);
     const outposts = this.structures.ownedBy(PLAYER_OWNER)
       .filter((structure) => structure.stats.territory !== undefined);
-    const workers = this.units.unitsOf(PLAYER_OWNER).filter((unit) => unit.role === "worker");
+    // Every unit the player owns rides the watch, but only the worker's wound
+    // becomes a notification — §24 gives the player's fighting units no line,
+    // and it is right not to: a worker being hit is news because he cannot
+    // answer, while a guard being hit is usually the fight the player is
+    // already looking at. What the fighters were missing was their own voice,
+    // not another card in the feed.
+    const playerUnits = this.units.unitsOf(PLAYER_OWNER);
     const damaged = this.attackWatch.observe([
       ...(center ? [{ id: "center", health: center.health.current }] : []),
       ...outposts.map((outpost) => ({ id: `outpost:${outpost.id}`, health: outpost.health.current })),
-      ...workers.map((worker) => ({ id: `worker:${worker.id}`, health: worker.health.current })),
+      ...playerUnits.map((unit) => ({ id: `unit:${unit.role}:${unit.id}`, health: unit.health.current })),
     ]);
     let woundedWorkers = 0;
+    const woundedRoles = new Set<string>();
     for (const id of damaged) {
       if (id === "center") {
         this.notifications.post({
@@ -8352,8 +8358,13 @@ export class RtsApp {
         });
         continue;
       }
-      if (id.startsWith("worker:")) {
-        woundedWorkers += 1;
+      // Must precede the outpost branch below, which is this loop's `else`: an
+      // id nothing claims would post a "your outpost is under attack" card every
+      // time a soldier was scratched.
+      if (id.startsWith("unit:")) {
+        const role = id.slice("unit:".length, id.lastIndexOf(":"));
+        woundedRoles.add(role);
+        if (role === "worker") woundedWorkers += 1;
         continue;
       }
       this.notifications.post({
@@ -8378,6 +8389,10 @@ export class RtsApp {
         text: t("notification.under_attack.workers", { count: woundedWorkers }),
       });
     }
+    // One bark however many units were hit, and whatever mix of classes: the
+    // squad is reporting a fight, and a count is not something a voice line can
+    // carry anyway.
+    this.playUnitAlarmVoice(woundedRoles);
   }
 
   private assignWorkerToConstruction(structure: PlacedStructure): void {
@@ -8418,17 +8433,9 @@ export class RtsApp {
       }
       return true;
     }
-    // A damaged building the worker has nothing else to do at is a repair order.
-    // The two gestures cannot both be the right-click, so the tie is broken by
-    // what the worker could otherwise be there for: a Farm or a Camp keeps
-    // meaning "go and gather" even while damaged (its repair is one click away on
-    // the panel), and a House, a Barracks or a wall — where gathering is not a
-    // thing — means the only work there is. A repair already running always wins:
-    // pointing more workers at it is the player reinforcing their own order.
-    if (this.structureRepair.isRepairing(structure)
-      || (structure.health.ratio < 1 && !structure.stats.economy)) {
-      return this.orderStructureRepair(structure, workers);
-    }
+    // Damage is no longer one of the things a right-click can answer: a hurt
+    // building repairs itself, so pointing workers at a House or a wall has
+    // nothing left to mean and falls through to the plain move order.
     if (!structure.stats.economy || !this.economyProduction) return false;
     // A direct gathering order transfers workers out of construction first.
     for (const worker of workers) this.workerConstruction.release(worker);

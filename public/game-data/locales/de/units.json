@@ -9,7 +9,6 @@
   "unit.job.idle": "untätig",
   "unit.job.moving": "in Bewegung",
   "unit.job.building": "baut",
-  "unit.job.repairing": "repariert",
   "unit.job.producing": "produziert",
   "unit.job.unreachable": "nicht erreichbar",
   "unit.order.idle": "Wartet",

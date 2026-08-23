@@ -633,6 +633,48 @@ export const RTS_AUDIO = {
   guardSelect: "voice.guard_select",
   guardMove: "voice.guard_move",
   guardAttack: "voice.guard_attack",
+  /**
+   * The two stance orders §39 names, kept apart for the same reason move and
+   * attack are: both end movement, but hold promises "we stay here and do not
+   * chase" while stop promises "whatever we were doing, we are not doing it".
+   * Collapsing them into one line would leave the player re-reading the stance
+   * to find out which order actually took.
+   */
+  guardHold: "voice.guard_hold",
+  guardStop: "voice.guard_stop",
+  /**
+   * The one bark nobody clicked for. Driven off the same damage watch that
+   * posts the worker notice rather than off a hit, so it reports an engagement
+   * and not a wound; the long cooldown in the table is what enforces that.
+   */
+  guardUnderAttack: "voice.guard_under_attack",
+  /**
+   * §38's Worker lines. Same five moments the Guard has, minus the two stances
+   * (a worker takes neither) and plus the one the Guard has no use for: a
+   * refused order. `workerWork` is the acknowledgement that a *job* was picked
+   * up, which is the distinction §38 draws between "on my way" and "I'll see
+   * to it" — the second says the click found something to do.
+   *
+   * When a selection holds both classes only one speaks; see
+   * `RtsApp.playSelectionAudio` for which and why.
+   */
+  workerSelect: "voice.worker_select",
+  workerMove: "voice.worker_move",
+  workerWork: "voice.worker_work",
+  workerInvalid: "voice.worker_invalid",
+  workerUnderAttack: "voice.worker_under_attack",
+  /**
+   * §40's Archer lines. Four of the Guard's five moments, and deliberately not
+   * the fifth: the design records no stop line for the Archer, so an
+   * Archer-only selection answers `H` and stays silent on `X`. That is an
+   * authoring gap the table can close on its own the day three clips exist —
+   * nothing here has to change for it.
+   */
+  archerSelect: "voice.archer_select",
+  archerMove: "voice.archer_move",
+  archerAttack: "voice.archer_attack",
+  archerHold: "voice.archer_hold",
+  archerUnderAttack: "voice.archer_under_attack",
   stingerAgeUp: "stinger.age_up",
   stingerVictory: "stinger.victory",
   stingerDefeat: "stinger.defeat",
@@ -739,6 +781,105 @@ export function rtsAudioVariantEventIds(): string[] {
  * {@link rtsAudioEventIds}: those are what `RtsApp` can fire, and the menu runs
  * before `RtsApp` exists. `rtsMenuMusic.ts` is the owner.
  */
+/** The moments §38–§40 give a unit a line for. */
+export type RtsVoiceMoment =
+  | "select"
+  | "move"
+  | "attack"
+  | "work"
+  | "invalid"
+  | "hold"
+  | "stop"
+  | "underAttack";
+
+/** One role's bark set. A moment the design records no line for is simply absent. */
+export type RtsUnitVoiceLines = Readonly<{ role: string }> &
+  Readonly<Partial<Record<RtsVoiceMoment, string>>>;
+
+/**
+ * §38–§40's three bark sets, and the order in which they speak.
+ *
+ * **One voice per event.** A box drawn over a mixed group is still one pick and
+ * an order given to it is still one order, so two classes answering would be two
+ * men talking over each other — `maxInstances` cannot prevent that, because it
+ * is per event and these are separate events. The list is therefore ordered, and
+ * the first *selected* role that owns a line for the moment gets it.
+ *
+ * Falling through on a missing line rather than going silent is the other half
+ * of the rule, and it is what makes a mixed selection read correctly: the Guard
+ * outranks the Worker, but a right-click that lands on a tree produces a
+ * `worker-task`, which the Guard has no line for — and that outcome names whose
+ * order it was. So the crew answers it, and the Guard stays quiet without
+ * anything having to know that a worker was involved.
+ *
+ * Ordered guard → archer → worker: military first, and within it the class that
+ * holds the line rather than the one that shoots over it.
+ */
+export const RTS_UNIT_VOICE_LINES = [
+  {
+    role: "guard",
+    select: RTS_AUDIO.guardSelect,
+    move: RTS_AUDIO.guardMove,
+    attack: RTS_AUDIO.guardAttack,
+    hold: RTS_AUDIO.guardHold,
+    stop: RTS_AUDIO.guardStop,
+    underAttack: RTS_AUDIO.guardUnderAttack,
+  },
+  {
+    role: "archer",
+    select: RTS_AUDIO.archerSelect,
+    move: RTS_AUDIO.archerMove,
+    attack: RTS_AUDIO.archerAttack,
+    hold: RTS_AUDIO.archerHold,
+    underAttack: RTS_AUDIO.archerUnderAttack,
+    // No `stop`: §40 records no line for it. An Archer-only selection answers H
+    // and stays silent on X, which is authoring rather than a gap in the code -
+    // three clips and one field close it.
+  },
+  {
+    role: "worker",
+    select: RTS_AUDIO.workerSelect,
+    move: RTS_AUDIO.workerMove,
+    work: RTS_AUDIO.workerWork,
+    invalid: RTS_AUDIO.workerInvalid,
+    underAttack: RTS_AUDIO.workerUnderAttack,
+    // No `attack`, `hold` or `stop`: a worker takes no stance (`issueStance`
+    // skips the role outright) and gives no battle cry.
+  },
+] as const satisfies readonly RtsUnitVoiceLines[];
+
+/**
+ * Which line answers a moment, given who is present — or null for silence.
+ *
+ * `present` is asked per role rather than handed a list, so the caller keeps
+ * deciding what "present" means: picked, for an order; wounded this frame, for
+ * the alarm. Pure, so `test:engine` drives every combination without a match.
+ */
+export function resolveUnitVoice(
+  moment: RtsVoiceMoment,
+  present: (role: string) => boolean,
+  order: readonly RtsUnitVoiceLines[] = RTS_UNIT_VOICE_LINES,
+): string | null {
+  for (const lines of order) {
+    if (!present(lines.role)) continue;
+    const eventId = lines[moment];
+    if (eventId !== undefined) return eventId;
+  }
+  return null;
+}
+
+/**
+ * The same table read backwards, for the one moment nobody clicked.
+ *
+ * A raid that catches a mixed force wounds every class at once, and the
+ * one-voice rule applies there too — but the priority inverts, because what
+ * makes a report *news* inverts. A guard losing health is usually the fight the
+ * player is already watching; a worker losing health is a man who cannot answer
+ * and is not on screen. So the most helpless voice wins the frame.
+ */
+export const RTS_UNIT_ALARM_VOICE_ORDER: readonly RtsUnitVoiceLines[] =
+  [...RTS_UNIT_VOICE_LINES].reverse();
+
 export const RTS_MENU_MUSIC_EVENT = "music.menu";
 
 /**
