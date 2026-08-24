@@ -204,15 +204,31 @@ export const RTS_NOTIFICATION_AUDIO_EVENTS: Readonly<
  * through fourteen call sites in `runSelectionAction` is the whole point: the
  * notification centre already de-duplicates, and every action already posts.
  *
- * **`age-upgraded` and `enemy-age-upgraded` are deliberately absent.** §48 lists
- * a clip for each and neither has been produced yet, so they keep falling to
- * info/warning; the age transition also has `stinger.age_up` over it, which is
- * the louder half of that moment. Adding the two ids here before the clips
- * exist would make an event no table can answer.
+ * **`age-upgraded` and `enemy-age-upgraded` name the same event**, which is
+ * §82.11's decision rather than a shortcut: both are news of the same kind ("a
+ * kingdom has advanced"), and what tells the player's own transition from the
+ * enemy's is already louder than a second clip could be — `stinger.age_up`
+ * plays over the player's and never over the enemy's. So the notice reports the
+ * event and the stinger says whose. Two ids sharing one clip would not have
+ * separated them audibly either: `pitchVariation` is a random band, not a fixed
+ * shift, so the "different" one would only be the same sound written twice.
  */
 export const RTS_NOTIFICATION_KIND_AUDIO_EVENTS: Readonly<
   Partial<Record<RtsNotificationKind, string>>
 > = {
+  /**
+   * The enemy's transition, which is the only thing this kind is ever posted
+   * for — so the kind is a safe place to hang the sound.
+   *
+   * The player's own is **not** here, and that asymmetry is not an oversight:
+   * `age-upgraded` is posted for an in-age *level-up* as well as for the age
+   * transition (`updateProgression` writes both through one kind), so a sound
+   * hung on the kind would ring the age bell every time the town gained a
+   * level — several times a match, for news the design calls "its blip and
+   * nothing more". The transition names the sound at the post instead, through
+   * `RtsNotificationRequest.sound`, which exists for exactly this split.
+   */
+  "enemy-age-upgraded": "notify.age_up",
   "population-full": "notify.population_full",
   "resource-depleted": "notify.resource_depleted",
   "outpost-under-attack": "notify.outpost_attack",
@@ -757,17 +773,31 @@ export const RTS_AUDIO = {
   workerInvalid: "voice.worker_invalid",
   workerUnderAttack: "voice.worker_under_attack",
   /**
-   * §40's Archer lines. Four of the Guard's five moments, and deliberately not
-   * the fifth: the design records no stop line for the Archer, so an
-   * Archer-only selection answers `H` and stays silent on `X`. That is an
-   * authoring gap the table can close on its own the day three clips exist —
-   * nothing here has to change for it.
+   * §40's Archer lines — all five of the Guard's moments now that the stop line
+   * has been recorded.
+   *
+   * `archerStop` was the one gap this table described rather than hid: until the
+   * clips landed, an Archer-only selection answered `H` and stayed silent on
+   * `X`, because the fall-through had nowhere left to go (a worker takes no
+   * stance and has no stop line either). Three clips and one field closed it,
+   * exactly as the note here predicted — `RtsApp` was not opened.
    */
   archerSelect: "voice.archer_select",
   archerMove: "voice.archer_move",
   archerAttack: "voice.archer_attack",
   archerHold: "voice.archer_hold",
+  archerStop: "voice.archer_stop",
   archerUnderAttack: "voice.archer_under_attack",
+  /**
+   * The age transition's *notice* — the news half, on the notifications bus.
+   *
+   * Named here rather than reached through the notification kind map because
+   * only one of the two posts that share the `age-upgraded` kind should sound
+   * it; see the note on that map. The player's own transition therefore carries
+   * both this and {@link stingerAgeUp}, the enemy's carries only this, and a
+   * level-up carries neither.
+   */
+  notifyAgeUp: "notify.age_up",
   stingerAgeUp: "stinger.age_up",
   stingerVictory: "stinger.victory",
   stingerDefeat: "stinger.defeat",
@@ -924,10 +954,8 @@ export const RTS_UNIT_VOICE_LINES = [
     move: RTS_AUDIO.archerMove,
     attack: RTS_AUDIO.archerAttack,
     hold: RTS_AUDIO.archerHold,
+    stop: RTS_AUDIO.archerStop,
     underAttack: RTS_AUDIO.archerUnderAttack,
-    // No `stop`: §40 records no line for it. An Archer-only selection answers H
-    // and stays silent on X, which is authoring rather than a gap in the code -
-    // three clips and one field close it.
   },
   {
     role: "worker",

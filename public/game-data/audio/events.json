@@ -1103,6 +1103,16 @@
       "cooldownMs": 250,
       "maxInstances": 1
     },
+    "notify.age_up": {
+      "_note": "Both age-up notices, player's and enemy's, on one clip - the decision in plan §82.11. Two ids playing the same file would not tell them apart (pitchVariation is a random band, not a fixed shift), and what already separates them is louder than a second clip could be: `stinger.age_up` rides the music bus over the player's own transition and never over the enemy's. So the notice reports the *event* and the stinger says *whose*. Cooldown long, like every kind-specific notice: this one only ever plays for its own condition.",
+      "clips": [
+        "sfx-notify-age-up-01"
+      ],
+      "bus": "notifications",
+      "volume": 0.45,
+      "cooldownMs": 1200,
+      "maxInstances": 2
+    },
     "notify.population_full": {
       "_note": "The kind-specific half of the notification sound (Paket 2). These do not replace the three tiers - `notify.info`/`warning`/`alert` still answer every kind with no clip of its own - they replace the tier for the handful production covered. Cooldowns run long here on purpose: a tier sound is shared and so naturally spaced, where a kind-specific one only ever plays for its own condition.",
       "clips": [
@@ -1425,6 +1435,18 @@
         "vo-archer-hold-01",
         "vo-archer-hold-02",
         "vo-archer-hold-03"
+      ],
+      "bus": "voice",
+      "volume": 0.68,
+      "cooldownMs": 400,
+      "maxInstances": 1
+    },
+    "voice.archer_stop": {
+      "_note": "§40's stop line, recorded last of the archer set - until it landed, an archer-only selection answered H and stayed silent on X, because the fall-through had nowhere left to go (workers take no stance). Same split as the Guard's pair: hold promises 'we stay and do not chase', stop says 'whatever we were doing, we are not doing it'. A shade under the Guard's level, like the rest of this set.",
+      "clips": [
+        "vo-archer-stop-01",
+        "vo-archer-stop-02",
+        "vo-archer-stop-03"
       ],
       "bus": "voice",
       "volume": 0.68,

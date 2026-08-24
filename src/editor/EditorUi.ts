@@ -408,6 +408,8 @@ export class EditorUi {
   private contentRefreshTimer = 0;
   private outlinerObjects: EditableSceneObject[] = [];
   private outlinerFilter = "";
+  /** Selection to reveal after SceneApp publishes its fresh Outliner view model. */
+  private outlinerScrollTargetId: string | null = null;
   private outlinerVisibleTypes = new Set<OutlinerFilterType>(
     OUTLINER_FILTER_TYPES.map(({ type }) => type),
   );
@@ -719,6 +721,7 @@ export class EditorUi {
       this.selected = selection;
       this.detailsBaseline = null;
       this.renderDetails(selection);
+      this.outlinerScrollTargetId = selection?.id ?? null;
     };
     this.app.onSceneObjectsChanged = (objects) => this.renderOutliner(objects);
     this.app.onHistoryChanged = (state) => this.renderHistory(state);
@@ -3294,6 +3297,19 @@ export class EditorUi {
       parentObjectsTo: (childIds, parentId) => this.app.parentObjectsTo(childIds, parentId),
       openOutlinerContextMenu: (event, object) => this.openOutlinerContextMenu(event, object),
     });
+    this.revealSelectedOutlinerRow();
+  }
+
+  /** Reveals a scene-picked actor after its fresh Outliner row has rendered. */
+  private revealSelectedOutlinerRow(): void {
+    const targetId = this.outlinerScrollTargetId;
+    this.outlinerScrollTargetId = null;
+    if (!targetId) return;
+
+    const row = Array.from(this.outlinerList.querySelectorAll<HTMLElement>("[data-object-id]")).find(
+      (element) => element.dataset.objectId === targetId,
+    );
+    row?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
   /** Right-click menu for outliner rows: rename / duplicate / group / delete. */

@@ -37994,6 +37994,134 @@
         "packVersion": "0.1"
       },
       "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "sfx-notify-age-up-01",
+      "name": "Notification Age Up 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/sfx/notifications/sfx_notify_age_up_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "notifications"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 27825
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "vo-archer-stop-01",
+      "name": "Voice Archer Stop 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/voice/archer/vo_archer_stop_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "archer"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 17120
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "vo-archer-stop-02",
+      "name": "Voice Archer Stop 02",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/voice/archer/vo_archer_stop_02.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "archer"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 17143
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "vo-archer-stop-03",
+      "name": "Voice Archer Stop 03",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/voice/archer/vo_archer_stop_03.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "archer"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 25609
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
     }
   ]
 }

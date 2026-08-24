@@ -30,7 +30,7 @@ bakılacak altı yer:
 | **Sırada ne var, madde madde** | §69 — kutulu görev listesi |
 | **Hangi ses hangi dosyayla karşılandı** | §81.1 — olay olay üretim kaydı (22 Ağu 2026'da boşaldı) |
 | **Faz 5'te gerçekten ne kaldı** | §82 — üç kovaya ayrılmış; §48–§50'nin kutuları bayat |
-| **Ses üretimi olarak ne kaldı** | §82.17 — iki klip, promptlarıyla |
+| **Ses üretimi olarak ne kaldı** | §82.17 — son iki klip 24 Ağustos'ta indi; kova boş |
 | **Neyin üretilmeyeceği** | §82.11 — kapsam dışı bırakılan kalemler ve gerekçeleri |
 | **Bölgesel ambiyans üretim listesi** | §82.13 |
 | **Ses stili neye kilitlendi** | §47.0 — kalem kalem, referans varlık id'siyle |
@@ -96,7 +96,7 @@ stinger'a gerek yok, aynı işi yapar), **maç başlangıcı** ise perde kalkı�
 | **Faz 2** | Package 1 üretimi (Firefly 12 SFX → Settlement müziği → Guard VO), §70/§71/§72 sırasıyla | ✅ | Gate B (§45, §46) — 22 Ağustos 2026'de geçildi |
 | **Faz 3** | Stil kilidi (§47) + üretim kaydı (§63) | ✅ | 7 stil-kilidi maddesi onaylandı — §47.0 |
 | **Faz 4** | Müzik durum makinesi + crossfade (§28, §35) | ✅ | Durum geçişleri maçta duyuluyor, sinyal kaynağı tanımlı — §35.2 |
-| **Faz 5** | Paket 2–4 (UI/notification/ekonomi → yapı/lojistik → birim/savaş) | 🔨 | Gate C (§67) — çalışma sayfası §82 |
+| **Faz 5** | Paket 2–4 (UI/notification/ekonomi → yapı/lojistik → birim/savaş) | ✅ | Üç kova da kapandı — A/C §82.3, B §82.17. Gate C'nin dört maddesi karşılandı |
 | **Faz 6** | Paket 5 (ambience + müzik) | ✅ | Menü/settlement/expansion/tension/battle ×4, üç stinger, harita yatağı ve yedi bölge yatağı sevk edildi — §51 |
 | **Faz 7** | Paket 6 polish + mix + erişilebilirlik slider'ları (§62) | 🔨 | Gate D — slider'lar (§62.0/§62.2) ve ducking (§82.16) indi; loudness pass, codec testi ve tekrar yorgunluğu kaldı |
 | **Faz 8** | Full-match audio QA (§68) + performans bütçesi doğrulaması (§61) | ⬜ | Gate D |
@@ -197,6 +197,7 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-23 | **Bölge yatakları yere göre çalmıyordu — üç hata (§82.14).** Kullanıcı ortamı temizleyip dinledi ve "kameranın yerine göre değil sırayla çalıyor" dedi; rapor doğruydu ve tek hata değildi. **(1)** Mesafe kameranın gözünden ölçülüyordu: göz 20–40 birim yukarıda ve geride, yani her bölge mesafesinde zoom seviyesi vardı ve aynı noktada zoom yapmak bölge değiştirebiliyordu — ölçüm `focusX`/`focusZ`'ye, zemine ve düzlemsele taşındı (yan kazanç: kare başına statik çapa başına bir `heightAt` gitti). **(2)** Yarıçaplar tahminle seçilmişti; ölçüm bitirdi — haritanın korularının en yakın komşusu 27.5 birim, oyuncunun başlangıcı kendi korusuna 16.1 birim, ve ilk 45/62 yarıçapı komşuların birkaçını birden yutuyordu, yani yatak bir yere *varınca* değil öncekinden yeterince *uzaklaşınca* değişiyordu. Şimdi 18/25, ve çıkış yarıçapının en dar çapa aralığının altında kalması pinlendi — pinlendiği gün işe yaradı, ilk düzeltmenin seçtiği 30'u reddetti. **(3)** Devralan bölge koşulsuz tutuluyordu; küçük haritada bu "sonsuza kadar tut" demek. Kural sıraya bağlandı: giriş yarıçapındaki en yakın kazanır, devralan yalnız kimse bir marj kadar yakın değilken korur, marj da üçüncü bir sabit değil iki yarıçapın farkı. Ayrıca bir kontrol geri alındı: "bölge yatağı dünya yatağının altında olmalı" seviyeyi pinliyordu ve kullanıcının ilk dinleme oturumu (dünya yatağı 0, bölgeler 1) onu regresyon diye raporladı. |
 | 2026-08-23 | **Koru kaldırıldı, nehir kendi çizgisine bağlandı (§82.15).** İkinci dinleme oturumu: kullanıcı beş yatağı onayladı, koruyu reddetti, nehre daha iyi bir çapa önerdi. **Koru** varlığıyla ve mekanizmasıyla gitti — harita geneli ambiyans zaten orman taşıyor, ve bu projenin koruları vahşi orman değil dikilmiş kümeler, yani yatak orada olmayan bir şeyi anlatıyordu; yedi yatak altıya indi ve §82.14'ün "en dar çapa aralığı" testi dayanağını kaybetti (koruların 27.5 birimini okuyordu). **Nehir** landscape spline'ından okunuyor artık: yol iki yerde yarım authored — Level'ın `riverWaters`'ı hangi spline'ın nehir olduğunu söylüyor, çizgiyi Landscape sidecar'ı veriyor — ve `resolveRtsRiverPaths` ikisini Landscape mount olduğu anda birleştiriyor. Çapa artık kameranın baktığı noktaya en yakın *nehir üstü* nokta (merkezde 1.0 birim, oyuncu üssünde 51.7, yani üste yatak yok). Üç şey uygularken çıktı: köşeye snap değil **segment izdüşümü** (6 nokta ~190 birim, en yakın köşe kıyıdan onlarca birim uzak olabilir); `points` bir küme, sıra `segments` zincirinde — authored sırada okumak bugün doğru ama nehrin ortasına editörde nokta eklendiği gün nehri kendi üstüne katlardı; ve tek çapa id'siyle kayan bir nokta, ki bu devralan mesafesinin **yatağın konduğu noktadan** ölçülmesini gerektirdi (handle taşınamıyor, §82.9). `cooldownMs` altı yatakta da 0'a indi: yeniden oturma aynı olayı aynı karede durdurup başlatmak, yani 0 ile crossfade, başka her değerle delik. Latent bir hata kapsam dışı bırakıldı: `rtsLevelAdapter`'ın rota çözümü spline dönüşünü yok sayıyor — bugün ısırmıyor (rotaların hepsi dönüşsüz) ama aynı okumayı yapan ilk nehir denemesi çizgiyi haritanın dışına koydu. |
 | 2026-08-24 | **Ducking indi** (§82.16): §9'un üç öneri satırı ve §52'nin iki kutusu. Yol boyunca üç şey çıktı — duck sabitleri v1.1'den beri **hiçbir yerden çağrılmıyordu**; *mutlak seviye* olarak yazıldıkları için oldukları gibi uygulansalar authored 0.22'lik ambiyansı **yükselteceklerdi** (çarpana çevrildi); ve stinger'lar `music` bus'ında olduğu için bir müzik duck'ı fanfarı kendi kendine kısacaktı (yatak duck'ı `MusicDirector.setDuck` ile bus'a dokunmadan indi). Duck'ı kapatan şey zamanlayıcı değil sesin bitişi — director'a `isPlaying` eklendi. Ayrıca **voice slider'ı** (§62.2, sekiz dil + CJK subset) ve plan tazelendi (Faz 6 ✅, §51/§52 kutuları, §82.7/§82.8/§82.2'nin bayat 'kalan' satırları). 9 yeni sözleşme testi; `test:engine` 1567 yeşil. |
+| 2026-08-24 | **Son iki klip indi ve bağlandı (§82.17).** Kullanıcı `sfx_notify_age_up_01` ve üç `vo_archer_stop` klibini üretti; `audio:manifest` (264 varlık), `events.json`'a iki olay, `RTS_NOTIFICATION_KIND_AUDIO_EVENTS`'e çağ atlamanın iki türü ve archer bloğuna `stop:`. `RtsApp.ts` açılmadı — tablonun kendi notunun öngördüğü gibi. Bir test kırmızıya döndü ve **doğru sebeple**: `resolveUnitVoice("stop", archer)` null bekliyordu, yani *authoring boşluğunu* pinlemişti; boşluk kapandığı için beklenti okçunun kendi repliğine çevrildi, sahipsiz duruş vakası worker'a taşındı. Ayrıca planın "tür haritasına iki satır" talimatı bağlarken **yanlış çıktı**: `age-upgraded` türü çağ geçişini *ve* çağ içi seviye atlamayı birlikte taşıyor, yani çan seviye atlamada da çalacaktı — ayrım postaya taşındı (§82.17). Faz 5 ve Gate C kapandı. |
 
 ---
 
@@ -2937,12 +2938,14 @@ geçiş zamanlamasındaydı — §35.1.
 - [x] Settlement music onaylandı
 - [x] Guard voice onaylandı
 
-## Gate C — Core Audio
+## Gate C — Core Audio ✅ (24 Ağustos 2026)
 
-- [ ] Bütün Tier 1 sesler tamam
-- [ ] Tier 2 ana sesler tamam
-- [ ] Tüm birim savaş seti tamam
-- [ ] Music state sistemi çalışıyor
+- [x] Bütün Tier 1 sesler tamam — §44'ün sekizi de kendi sesine sahip
+- [x] Tier 2 ana sesler tamam — yedisi de bağlı
+- [x] Tüm birim savaş seti tamam — savurma, isabet (hafif/ağır), ok, ölüm, topçu hattı
+- [x] Music state sistemi çalışıyor — §35.2, dört durum + histerezis
+- **Tier 3'ün "yapı idle sesleri"** bağlanmadı ve kapsam kararı verilmedi (§82.17);
+  Gate C'nin dört maddesi bunu istemiyor, o yüzden kapı bunun üstünde durmadı.
 
 ## Gate D — Release Audio
 
@@ -4736,10 +4739,49 @@ kod işi değil — ve derinliklerin doğru olup olmadığı **maçta dinlenerek
 yargılanacak: hepsi `audioBus.ts`'te tek satırlık ayar, testler yalnız ilişkiyi
 tutuyor (duraklat > maç içi ducklar, hiçbiri `notifications`'ı kısmıyor).
 
-## 82.17 Kalan üretim: iki klip (24 Ağustos 2026)
+## 82.17 Son iki üretim kalemi — indi (24 Ağustos 2026)
 
-Faz 5'in B kovasında ses üretimi bekleyen **iki** kalem kaldı. İkisi de kanca
-istemiyor: biri saf tablo, diğeri tabloya tek alan.
+Faz 5'in B kovasında ses üretimi bekleyen iki kalem vardı; **ikisi de aynı gün
+üretildi ve bağlandı.** Aşağıdaki promptlar ve iniş adımları kayıt olarak
+duruyor — hangi sesin neyi cevapladığı, bir sonraki denetimde yeniden
+türetilmesin diye.
+
+**Bağlandı:** `sfx_notify_age_up_01.ogg` → `notify.age_up`;
+`vo_archer_stop_01..03.ogg` → `voice.archer_stop` (`RTS_UNIT_VOICE_LINES`'ın
+archer bloğuna `stop:`, ve `RtsApp.ts` gerçekten açılmadı — tablonun kendi
+notunun öngördüğü gibi).
+
+### Çan bir geçişi duyurur, bir seviye atlamayı değil
+
+§82.11 "tabloya tek olay, `RTS_NOTIFICATION_KIND_AUDIO_EVENTS`'e **iki satır**"
+demişti. Bağlarken bunun yanlış olduğu görüldü, ve sebebi ses tarafında değil:
+`age-upgraded` türü **iki farklı haber** taşıyor. `updateProgression` hem çağ
+geçişini hem de çağ içi **seviye atlamayı** aynı türle postalıyor (metin
+ayrışıyor, tür ayrışmıyor) — ve kodun kendi notu seviye atlamanın "kendi blibi
+ve fazlası değil" olduğunu zaten yazmış. Sese tür üzerinden asılsaydı çağ çanı
+maçta birkaç kez, çağ atlanmadığı hâlde çalardı.
+
+O yüzden ayrım postada: **oyuncunun geçişi** sesi adıyla veriyor
+(`RtsNotificationRequest.sound` tam da bunun için var), **düşmanınki** türe
+asılabiliyor çünkü o tür başka hiçbir şey için postalanmıyor, ve **seviye
+atlama** her zamanki tier blibine düşüyor. Sonuç, §82.11'in istediği ayrımın
+aynısı — tek klip, ve "kimin" sorusunu stinger cevaplıyor:
+
+| Olay | Bildirim sesi | Stinger |
+|---|---|---|
+| Oyuncu çağ atlar | `notify.age_up` (postada adlandırılmış) | ✅ `stinger.age_up` |
+| Düşman çağ atlar | `notify.age_up` (tür haritasından) | — |
+| Çağ içi seviye atlama | `notify.info` (tier) | — |
+
+**Öğrenilen:** bir sesi *bildirim türüne* asmak, o türün tek bir haber taşıdığı
+varsayımıdır ve bu varsayım burada sessizce yanlıştı. Tür haritası hâlâ doğru
+yer — ama yalnız tek anlamı olan türler için.
+
+İki sözleşme testi eklendi: çan bir geçişi cevaplıyor ve `age-upgraded` türüne
+asılı **değil** (seviye atlama tier'da kalıyor), stinger başka bir bus'ta;
+okçu X'i kendi cevaplıyor ama Guard varken yine ona bırakıyor.
+
+**Faz 5'in B kovası böylece boşaldı.**
 
 ### 1. `notify.age_up` ×1 — çağ atlama bildirimi
 

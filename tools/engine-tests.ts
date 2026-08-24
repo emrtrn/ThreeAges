@@ -784,6 +784,8 @@ import {
   rtsRoleNotifyEventIds,
   RTS_UNIT_VOICE_LINES,
   RTS_UNIT_ALARM_VOICE_ORDER,
+  RTS_NOTIFICATION_KIND_AUDIO_EVENTS,
+  rtsNotificationAudioEvent,
   resolveUnitVoice,
 } from "../src/game/rts/audio/rtsAudioEvents";
 import { DEFAULT_RTS_CAMERA_CONFIG } from "../src/game/rts/camera/rtsCameraConfig";
@@ -4853,6 +4855,47 @@ check("RTS audio events: a burning building's sound is a bed, not a per-spawn cr
   }
 });
 
+check("RTS audio events: the age bell answers a transition, never a level-up", () => {
+  // Two decisions meet here, and the second one is why the first is not simply
+  // two rows in the kind map.
+  //
+  // §82.11: both age-ups — the player's and the enemy's — report the same news
+  // and share one clip. Giving the enemy its own id looks like a missing
+  // distinction and would in fact produce two rows that sound identical
+  // (`pitchVariation` is a random band, not a fixed shift); what separates them
+  // is on another bus, in `stinger.age_up`, which only the player's transition
+  // gets.
+  //
+  // And the trap: `age-upgraded` is *also* the kind posted for an in-age
+  // level-up. A sound hung on that kind rings the age bell several times a
+  // match for news the design calls a blip — so the player's transition names
+  // the sound at the post instead, and only the enemy's (posted for nothing
+  // else) can hang it on the kind.
+  const table = readAudioEventTable();
+  const bell = RTS_AUDIO.notifyAgeUp;
+  assert.ok(table.events[bell], `${bell} is not answered by the shipped table`);
+  assert.equal(
+    RTS_NOTIFICATION_KIND_AUDIO_EVENTS["enemy-age-upgraded"],
+    bell,
+    "the enemy's transition is posted for nothing else, so it may hang the bell on its kind",
+  );
+  assert.equal(
+    RTS_NOTIFICATION_KIND_AUDIO_EVENTS["age-upgraded"],
+    undefined,
+    "hanging the bell on `age-upgraded` would ring it for every in-age level-up too",
+  );
+  // A level-up therefore still falls through to its tier, as it always did.
+  assert.equal(rtsNotificationAudioEvent("age-upgraded", "info"), "notify.info");
+  // The half that tells the two transitions apart: a different event, on a
+  // different bus, and the notice must not collapse onto it.
+  assert.notEqual(bell, RTS_AUDIO.stingerAgeUp);
+  assert.notEqual(
+    table.events[bell]!.bus,
+    table.events[RTS_AUDIO.stingerAgeUp]!.bus,
+    "the notice and the stinger must not collapse onto one channel",
+  );
+});
+
 check("RTS unit voice: one speaker per moment, falling through to whoever owns the line", () => {
   // §38-§40's barks resolve through one ordered table, and the two rules that
   // make it correct are the ones a future role would break by accident.
@@ -4883,8 +4926,15 @@ check("RTS unit voice: one speaker per moment, falling through to whoever owns t
   assert.equal(resolveUnitVoice("invalid", picked("guard", "worker")), RTS_AUDIO.workerInvalid);
   // ...and it must not invent one where nobody has a line.
   assert.equal(resolveUnitVoice("work", picked("guard", "archer")), null);
-  assert.equal(resolveUnitVoice("stop", picked("archer")), null);
+  // A worker takes no stance (`issueStance` skips the role outright), so a
+  // worker-only pick is silent on X — the one stance case with no owner left
+  // now that the Archer's stop line has been recorded.
+  assert.equal(resolveUnitVoice("stop", picked("worker")), null);
   assert.equal(resolveUnitVoice("select", picked("siege")), null);
+  // The Archer answers X on its own, and still yields to the Guard when both
+  // are picked: a closed authoring gap must not also change who speaks.
+  assert.equal(resolveUnitVoice("stop", picked("archer")), RTS_AUDIO.archerStop);
+  assert.equal(resolveUnitVoice("stop", picked("guard", "archer")), RTS_AUDIO.guardStop);
 
   // The alarm reads the same table backwards: a raid that wounds a mixed force
   // should surface the voice that is *news*, and a worker cannot answer back.

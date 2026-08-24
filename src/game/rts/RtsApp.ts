@@ -6155,6 +6155,11 @@ export class RtsApp {
                 tier: tierLabel,
               })
             : t("notification.tier.completed", { tier: tierLabel }),
+          // Named at the post, not on the kind: this one kind carries both the
+          // age transition and an in-age level-up, and only the first is what
+          // the age bell announces. A level-up falls through to its severity
+          // tier — the blip it has always had.
+          ...(event.kind === "town" ? { sound: RTS_AUDIO.notifyAgeUp } : {}),
         });
         // §5.11's age-up stinger, and only for the age transition. The card
         // above already sounds — an in-age level-up is *its* blip and nothing
