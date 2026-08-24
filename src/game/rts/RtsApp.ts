@@ -1048,6 +1048,8 @@ export class RtsApp {
   };
   /** The duck currently on the buses, so a steady frame costs one comparison. */
   private activeDuck: BusDuckMix = {};
+  /** Whether the event table has landed — see the debug panel's audio row. */
+  private audioEventsLoaded = false;
   /**
    * The gameplay music playlist, once the table that describes it has landed.
    *
@@ -2659,6 +2661,7 @@ export class RtsApp {
     try {
       const { table, musicStates } = await loadAudioEventTableWithStates();
       this.audioEvents.setTable(table);
+      this.audioEventsLoaded = true;
       this.musicStates = new RtsMusicStateMachine(musicStates);
       // The mix before anything plays through it. Applied here rather than at
       // construction because it is data: a fork that reorders its priorities
@@ -4116,6 +4119,10 @@ export class RtsApp {
         pixelRatio: this.renderer.getPixelRatio(),
       },
       gpu: this.gpuTimer?.stats() ?? null,
+      // Null until the table lands: a budget readout of zeros and a match with no
+      // audio table are opposite findings, and the panel says "yok" for the
+      // second rather than reporting an idle mixer.
+      audio: this.audioEventsLoaded ? this.audioEvents.budgetStats() : null,
       shadows: [
         { label: "aktörler", ...shadowCasters.actors },
         { label: "harita", ...shadowCasters.mapArt },

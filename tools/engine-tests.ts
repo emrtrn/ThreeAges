@@ -4100,6 +4100,90 @@ check("audio event director enforces cooldown, per-event cap and global budget",
   assert.equal(director.trigger("combat.hit", 10), "played");
 });
 
+check("audio budget: the peak is what was heard at once, and the two refusals are told apart", () => {
+  // Audio plan §61 wrote its targets as numbers "to be decided by browser
+  // testing" and nothing ever measured them. What makes the measurement worth
+  // anything is the split below: an event's own cap refusing a fifth copy of a
+  // footstep is the design working, while the *shared* budget refusing anything
+  // means the ceiling is silently choosing which sounds the player hears. A
+  // single "refused" counter would average those two into a number nobody can
+  // act on.
+  const table = normalizeAudioEventTable({
+    schema: 1,
+    events: {
+      "combat.hit": { clips: ["a"], bus: "sfx", maxInstances: 2 },
+      "voice.line": { clips: ["b"], bus: "voice", maxInstances: 1 },
+    },
+  });
+  const handles: AudioPlaybackHandleStub[] = [];
+  const director = new AudioEventDirector(table, {
+    random: () => 0,
+    maxConcurrent: 3,
+    play: () => {
+      const { handle } = fakeAudioHandle();
+      handles.push(handle);
+      return handle;
+    },
+  });
+
+  assert.deepEqual(
+    { active: director.budgetStats().active, peak: director.budgetStats().peak },
+    { active: 0, peak: 0 },
+  );
+  assert.equal(director.trigger("combat.hit", 0), "played");
+  assert.equal(director.trigger("combat.hit", 1), "played");
+  assert.equal(director.trigger("voice.line", 1), "played");
+  // The peak is sampled on advance, not on trigger: a count taken mid-frame
+  // could include a play that had already finished.
+  director.advance();
+  let stats = director.budgetStats();
+  assert.equal(stats.active, 3);
+  assert.equal(stats.peak, 3);
+  assert.equal(stats.limit, 3);
+  // Per channel, because that is how §61 states its targets.
+  assert.deepEqual(
+    stats.byBus.map((entry) => [entry.bus, entry.active, entry.peak]),
+    [
+      ["sfx", 2, 2],
+      ["voice", 1, 1],
+    ],
+  );
+
+  // The event's own cap, and then the shared budget — counted apart.
+  assert.equal(director.trigger("combat.hit", 2), "event-full");
+  assert.equal(director.trigger("voice.line", 2), "event-full");
+  stats = director.budgetStats();
+  assert.equal(stats.eventRefusals, 2);
+  assert.equal(stats.budgetRefusals, 0, "no ceiling was reached; both events refused their own");
+
+  // Free one voice so the per-event cap stops biting first, then fill the budget.
+  handles[0]!.stop();
+  director.advance();
+  assert.equal(director.trigger("combat.hit", 3), "played");
+  assert.equal(director.trigger("voice.line", 4), "event-full");
+  const other = new AudioEventDirector(
+    normalizeAudioEventTable({
+      schema: 1,
+      events: { "combat.hit": { clips: ["a"], bus: "sfx", maxInstances: 8 } },
+    }),
+    { random: () => 0, maxConcurrent: 2, play: () => fakeAudioHandle().handle },
+  );
+  assert.equal(other.trigger("combat.hit", 0), "played");
+  assert.equal(other.trigger("combat.hit", 1), "played");
+  assert.equal(other.trigger("combat.hit", 2), "budget-full");
+  assert.equal(other.budgetStats().budgetRefusals, 1);
+  assert.equal(other.budgetStats().eventRefusals, 0);
+
+  // A peak belongs to a match. Carried into the next one it would report a fight
+  // that no longer happened — the same reason the cooldowns are cleared here.
+  other.reset();
+  const afterReset = other.budgetStats();
+  assert.equal(afterReset.peak, 0);
+  assert.equal(afterReset.active, 0);
+  assert.equal(afterReset.budgetRefusals, 0);
+  assert.deepEqual(afterReset.byBus, []);
+});
+
 check("a duck lasts exactly as long as the sound that asked for it", () => {
   // `isPlaying` exists for ducking and nothing else: a host has to release a
   // duck when its cause ends, and a guessed timer is wrong in both directions
@@ -56022,6 +56106,18 @@ check("Debug panel: the perf readout reports the frame, what it draws and what e
     quality: { level: "high", adaptiveEnabled: true, reductionDepth: 2 },
     scene: { units: 64, structures: 22, caravans: 3, wildlife: 40 },
     graph: { objects: 12_480, meshes: 3_210 },
+    audio: {
+      active: 7,
+      peak: 19,
+      limit: 24,
+      budgetRefusals: 0,
+      eventRefusals: 12,
+      byBus: [
+        { bus: "sfx", active: 5, peak: 16 },
+        { bus: "voice", active: 1, peak: 2 },
+        { bus: "music", active: 1, peak: 1 },
+      ],
+    },
   };
   const text = formatRtsPerfDebug(snapshot).join("\n");
 
@@ -56037,6 +56133,21 @@ check("Debug panel: the perf readout reports the frame, what it draws and what e
   // frame being traversed, not a frame being submitted, and batching further
   // would not touch it.
   assert.match(text, /graf 12,480 düğüm · 3,210 mesh \(geçiş başına gezilir\)/);
+  // The voice budget (audio plan §61), which had never been measured: the
+  // ceiling and the peak on one line because either alone is unreadable, and the
+  // two refusal counts apart because they mean opposite things — an event's own
+  // cap biting is the design working, the shared budget biting is the design
+  // silently choosing which sounds the player hears.
+  assert.match(text, /ses 7\/24 · tepe 19 · red bütçe 0 · olay 12/);
+  // Per channel, because §61 states its targets per channel and a total of 19
+  // is fine or alarming depending on whether it was all effects or all voices.
+  assert.match(text, /sfx 5\/16 · voice 1\/2 · music 1\/1/);
+  // A table that never loaded is said out loud rather than shown as an idle
+  // mixer: a silent match reads the same either way, and only one is a bug.
+  assert.match(
+    formatRtsPerfDebug({ ...snapshot, audio: null }).join("\n"),
+    /ses — olay tablosu yüklenmedi/,
+  );
   // The drawing buffer, not the CSS size: a profile's pixel-ratio cap is exactly
   // the thing that makes those two differ, and per-pixel cost is paid on the
   // former. 1920×1080 at 1.75 is 3360×1890 — nearly four times the pixels of the

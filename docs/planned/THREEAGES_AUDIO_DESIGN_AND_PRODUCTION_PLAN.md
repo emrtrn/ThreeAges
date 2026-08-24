@@ -36,7 +36,8 @@ bakılacak altı yer:
 | **Ses stili neye kilitlendi** | §47.0 — kalem kalem, referans varlık id'siyle |
 | **Kalite kapıları** | §67 (Gate A–D), §45/§46 (Paket 1 kabulü) |
 | **QA nasıl oynanır** | §68.1 — on üç soru, duyulacakları ana göre |
-| **Ölçüm araçları** | §82.18 (loudness), §82.19 (codec) |
+| **Ölçüm araçları** | §82.18 (loudness), §82.19 (codec), §82.22 (ses bütçesi) |
+| **Çalınmayan dosyalar** | §82.23 — iki liste, ikisi aynı şey değil |
 | **QA sonucu ve tarayıcı kararı** | §82.20, §82.21 |
 
 §69 "yapılacaklar", §81.1 "kalanlar" — ikisi kesişir ama aynı şey değildir:
@@ -203,6 +204,7 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-24 | **Son iki klip indi ve bağlandı (§82.17).** Kullanıcı `sfx_notify_age_up_01` ve üç `vo_archer_stop` klibini üretti; `audio:manifest` (264 varlık), `events.json`'a iki olay, `RTS_NOTIFICATION_KIND_AUDIO_EVENTS`'e çağ atlamanın iki türü ve archer bloğuna `stop:`. `RtsApp.ts` açılmadı — tablonun kendi notunun öngördüğü gibi. Bir test kırmızıya döndü ve **doğru sebeple**: `resolveUnitVoice("stop", archer)` null bekliyordu, yani *authoring boşluğunu* pinlemişti; boşluk kapandığı için beklenti okçunun kendi repliğine çevrildi, sahipsiz duruş vakası worker'a taşındı. Ayrıca planın "tür haritasına iki satır" talimatı bağlarken **yanlış çıktı**: `age-upgraded` türü çağ geçişini *ve* çağ içi seviye atlamayı birlikte taşıyor, yani çan seviye atlamada da çalacaktı — ayrım postaya taşındı (§82.17). Faz 5 ve Gate C kapandı. |
 | 2026-08-24 | **Ducking kulakla onaylandı** (§82.16), ve Gate D'nin iki ölçüm maddesi araca çevrildi. `npm run audio:loudness` 264 klibi BS.1770 ile Chromium'un kendi decoder'ından ölçüyor (§82.18): ilk koşu **eşiklerin yanlış olduğunu** söyledi — kanal medyanına göre 186 dosya işaretlenmişti, oysa bir ayak sesiyle bir top aynı bus'ta 20 LU ayrı olmalı; ölçüt olay havuzunun kendi yayılımı oldu ve liste 26 havuz + 3 kırpılmış yatağa indi. `npm run audio:codecs` iki runtime yolunu (Web Audio decode + media element) kurulu her motorda deniyor (§82.19); WebKit ve Firefox kuruldu ve cevap çıktı: Chromium ve Firefox çalıyor, **WebKit Ogg Vorbis'i reddediyor** — yani oyun bugün Safari'de tamamen sessiz açılır ve AAC yedeği bir kapsam kararı bekliyor. Yol boyunca bir **sessiz hata** düzeldi: decode başarısızlığı yutuluyordu, yani Vorbis'i çözemeyen bir tarayıcıda oyun tek satır log basmadan sessiz açılırdı. Kullanıcı kararları: yapı idle sesleri ⛔ kapsam dışı (§82.11 madde 6), müzik indirme boyutu için parça sayısını azaltma fikri park edildi (§61.1), full-match QA onaylandı ve çetelesi §68.1'e yazıldı. |
 | 2026-08-24 | **Full-match QA geçti ve Safari kapsam dışı bırakıldı.** §68'in on üç sorusu bir oturumda oynandı ve **revizyon maddesi çıkmadı** (§82.20); 13. soru 20 dakika için yazılmıştı, 30 dakikada bile tekrar hissi yok. Kesişim kayda değer: §82.18'in işaretlediği 26 dengesiz havuzun hiçbiri maçta duyulmadı, yani ölçüm bir risk listesi, hata listesi değil. Safari kararı **desteklenmeyecek** — ikinci format üretilmiyor, ama sessizlik cevap değil: ana menüde yalnız çalamayan tarayıcıya görünen, sekiz dile çevrilmiş bir satır (§82.21). Kontrol `canPlayType` ve yalnız boş dize 'hayır' sayılıyor; DOM yoksa suçlama yok. İki sözleşme testi, biri sorulan mime'ın sevk edilen format olduğunu tutuyor. |
+| 2026-08-24 | **Ses bütçesi ölçülebilir oldu (§82.22)** ve çalınmayan dosyalar sayıldı (§82.23). `AudioEventDirector` artık tepe eşzamanlılığı ve iki cins reddi ayrı sayıyor — bir olayın kendi kapağının biti tasarımın çalışması, paylaşılan bütçenin biti ise tavanın oyuncunun duyacağı sesleri sessizce seçmesi; tek sayaç ikisini ortalayıp kararsız bir sayı verirdi. `?debug` paneli kanal başına okuyor, çünkü §61'in hedefleri kanal başına. Çalınmayan 29 varlığın **yalnız 9'u** projenin kendi klibi (164 KB, hepsi bilinçli *seçenek*); kalan 20'si Forge starter içeriği (2.8 MB) ve dört SoundCue ile üç test onlara bağlı — silinecek yer orası değil, müzik onun kırk katı. |
 
 ---
 
@@ -2968,11 +2970,13 @@ geçiş zamanlamasındaydı — §35.1.
       **kapsam dışı bırakıldı**, oyuncuya söyleniyor (§82.19, §82.21)
 - [x] Repeat fatigue testi — 30 dakika, tekrar hissi yok (§82.20 madde 13);
       §61.1'in parça sayısı tartışması bu ölçüyü yeniden sordurur
-- [ ] Performance testi — §61'in eşzamanlı ses bütçesi maçta doğrulanmadı
+- [ ] Performance testi — ölçüm indi (§82.22): director tepe/red sayıyor ve
+      `?debug` okuyor; kalan iş bir savaşta panele bakmak
 - [x] No missing event — `test:engine` her tetiklenen adın tabloda karşılığı
       olduğunu ve her klibin manifestte bulunduğunu tutuyor
-- [ ] Final mastering / runtime gain pass — ölçüm indi (§82.18); maçta hiçbir
-      havuz rapor edilmedi, kırpılan üç yatak duruyor
+- [x] Final mastering / runtime gain pass — ölçüm indi (§82.18); maçta hiçbir
+      havuz rapor edilmedi (§82.20) ve "kırpılmış" sanılan üç yatak süreyle
+      ölçülünce temiz çıktı. Yeniden verilecek dosya yok.
 
 ---
 
@@ -4961,9 +4965,9 @@ işaretleniyor, norm değil.
 
 Aynı şekilde iki eşik daha veriden düzeltildi:
 
-- **Peak.** 67 klip 0 dBFS'i aşıyor, neredeyse hepsi 0.1 dB'den az — kayıplı
-  codec'in decode overshoot'u, olağan. Bunları listelemek gerçekten kırpılmış
-  **üç** klibi gömerdi. Eşik +0.5 dBFS oldu; kalanlar sayılıyor, listelenmiyor.
+- **Peak.** 67 klip 0 dBFS'i aşıyor. İlk eşik +0.5 dBFS oldu ve üç bölge yatağını
+  "kırpılmış" diye listeledi — **bu da yanlıştı, ve ikinci bir ölçüm gerektirdi**
+  (aşağıda).
 - **Baştaki sessizlik.** 150 ms üstü yalnız `ui`/`notifications`/`voice`'ta hata,
   çünkü orada ses bir şeye *cevap* veriyor. Sessizlikten yükselen bir müzik
   yatağı hiçbir şeye geç kalmıyor — ve işaretlenen on müzik parçasının hepsi
@@ -4975,12 +4979,44 @@ Aynı şekilde iki eşik daha veriden düzeltildi:
 |---|---|
 | Kanal medyanları | voice **-22.1** (yayılım 7.2 LU — en derli toplu set), music -16.2, sfx -19.4, ui -23.1, notifications -18.5, ambience -31.7 |
 | Dengesiz varyant havuzu | **26 olay** 4 LU üstünde; en kötüleri `notify.info` (11.0), `wildlife.butcher` (8.9), `building.construction_hammer` (8.6), `music.menu` (8.1) |
-| Kırpılma | **3 klip**: `amb_zone_settlement_01` (+2.07 dBFS), `amb_zone_quarry_01` (+1.90), `amb_zone_farmland_01` (+1.55) — limiter'a bastırılmışlar ve decoder sakladığını geri veriyor |
+| Kırpılma | **0 klip** — aşağıdaki ölçümden sonra; üç yatak tepe yüksekliğiyle işaretlenmişti, süreyle bakınca temiz çıktılar |
 | Geç cevap | **0** — tıklamaya cevap veren üç kanalda 150 ms üstü baş sessizliği yok |
 
 `notify.info`'nun 11 LU'su tek başına kayda değer: iki klip, ve biri diğerinin
 üçte biri kadar gürültülü — hangisinin çalacağı rastgele, yani aynı bildirim iki
 farklı seviyede duyuluyor.
+
+### Tepe yüksekliği kırpılma demek değil — ikinci ölçüm (24 Ağustos 2026)
+
+Rapor üç bölge yatağını (+1.5 … +2.1 dBFS) "kırpılmış" diye listeledi ve
+kullanıcı doğru soruyu sordu: *bunun için benden ne isteniyor?* Cevap vermeden
+önce ölçüldü, ve iş çıkmadı:
+
+| Dosya | Tam ölçeği aşan örnek | Oran | En uzun kesintisiz aşım |
+|---|---|---|---|
+| `amb_zone_settlement_01` | 65 | %0.0052 | 0.29 ms |
+| `amb_zone_quarry_01` | 7 | %0.0006 | 0.13 ms |
+| `amb_zone_farmland_01` | 2 | %0.0002 | 0.02 ms |
+| `amb_zone_river_01` (kontrol) | 0 | — | — |
+
+Bu, **kayıplı bir encoder'ın tek tük tepeleri aşması** — her encoder'ın yaptığı
+şey. Limiter'a bastırılmış bir master başka türlü görünür: bozulma *içerikte*
+olduğu için tam ölçekte onlarca milisaniye durur. İkisi tepe okumasında birebir
+aynı, burada hiç benzemiyor.
+
+Üstelik bu boru hattında izole aşımın duyulması **mümkün değil**: Web Audio baştan
+sona float, yalnız çıkış aygıtı kırpıyor, ve tablonun 0.22'de yazdığı bir bus'ta
+1.26'lık bir tepe hedefe ~0.28 olarak varıyor. Oyuncunun slider'ları yalnız
+kısıyor, yani aşağıdan yukarı itecek bir şey de yok.
+
+Araç düzeltildi: kırpılma artık **tepe yüksekliğiyle değil, tam ölçeğin üstünde
+geçirilen süreyle** ölçülüyor (eşik 5 ms — hiçbir encoder overshoot'unun
+ulaşamayacağı, gerçekten limitlenmiş bir master'ın rahatça aştığı bir bant).
+Bugünkü sonuç: **0 kırpılmış klip**, 67'si izole örneklerde aşıyor ve bu bir not,
+bir iş değil.
+
+**Öğrenilen:** bir metrik, ölçtüğü şeyin *adını* taşımıyorsa yanlış iş üretir.
+"Peak > 0 dBFS" kırpılma değildir; kırpılma süredir.
 
 **Kalan iş bir üretim işi:** 26 havuzu eşitlemek ve üç yatağı tepe payı bırakarak
 yeniden vermek. Araç listeyi verdi; kararı kulak verecek.
@@ -5092,9 +5128,9 @@ ayrıca soruldu ve "sorun yok" cevabı aldı. Bu, ölçümü geçersiz kılmıyo
 sırasını değiştiriyor: ölçüm bir *risk listesi*, duyulan bir *hata listesi*
 değil — ve ikisi ayrıştığında karar kulağındır.
 
-Kırpılan üç bölge yatağı (+1.5..+2.1 dBFS) ayrı duruyor: onlar bir denge sorusu
-değil, decode edilirken tepe payı olmayan dosyalar. Yeniden verilmeleri
-dinlemeye bağlı değil.
+Kırpılan sanılan üç bölge yatağı da temizlendi — ama ölçümle, üretimle değil:
+§82.18'in sonundaki ikinci ölçüm, aşımın 0.3 ms'yi geçmeyen izole örnekler
+olduğunu ve bu boru hattında duyulmasının mümkün olmadığını gösterdi.
 
 ## 82.21 Safari desteklenmeyecek — ve sessizlik yerine bir satır (24 Ağustos 2026)
 
@@ -5132,3 +5168,85 @@ hakkında olmaktan çıkarlar.
 
 Konsol tarafı da §82.19'da düzeldi: decode hatası artık url başına bir kez
 raporlanıyor, yani "ses yok" diyen bir hata raporu artık sebebini de taşıyor.
+
+## 82.22 Ses bütçesi ölçülüyor — §61'in sayıları artık okunabiliyor (24 Ağustos 2026)
+
+§61 eşzamanlı ses hedeflerini yazmış ve "kesin değerler browser testleriyle
+belirlenmelidir" demişti. O test hiç yapılmadı, ve **dinleyerek yapılamazdı**:
+oyuncu fazla kalabalık bir *miks* duyar, dolan bir *bütçe* duymaz. İkisi farklı
+bulgular ve düzeltmeleri zıt — biri seviyeleri yeniden ayarlamak, diğeri tavanı
+yükseltmek.
+
+`AudioEventDirector` artık üç şey sayıyor, ve `?debug` paneli bunları okuyor:
+
+```text
+ses 7/24 · tepe 19 · red bütçe 0 · olay 12
+  sfx 5/16 · voice 1/2 · music 1/1
+```
+
+**Tepe, anlık sayı değil.** Bilinmeye değer an — bir topçu hattının bir yakın
+dövüşe ateş ederken alarm çalması — birkaç kare sürüyor ve o anda kimse panele
+bakmıyor. Tepe `advance()`'te, canlı liste zaten budandıktan sonra örnekleniyor;
+budamadan önce ölçmek, bitmiş sesleri de sayan bir tepe verirdi.
+
+**İki reddin ayrı sayılmasının sebebi, sayıların anlamının zıt olması.** Bir
+olayın kendi `maxInstances`'ı beşinci ayak sesini reddettiğinde tasarım
+çalışıyordur. **Paylaşılan bütçe** bir şeyi reddettiğinde ise tavan, oyuncunun
+hangi sesleri duyacağına sessizce karar veriyordur. Tek bir "reddedildi" sayacı
+bu ikisini ortalayıp üzerine hiçbir karar verilemeyecek bir sayı üretirdi.
+
+**Kanal başına, çünkü §61'in hedefleri kanal başına.** Toplam 19, hepsi efektse
+normal, hepsi voice ise alarm verici — ve tek satırlık bir toplam bunu
+söyleyemez.
+
+Ölçüm maça ait: `reset()` tepeyi ve sayaçları da sıfırlıyor, tıpkı cooldown'lar
+gibi — bir sonraki maça taşınan tepe, artık olmamış bir savaşı rapor ederdi.
+
+**Kalan:** panelin `?debug` ile bir savaşta okunması. Bugünkü tavan 24
+(`DEFAULT_MAX_CONCURRENT`); tepe ona yaklaşmıyorsa kullanılmayan bir pay var,
+sürekli dokunuyorsa §61'in bandı bu oyun için dar demektir.
+
+## 82.23 Çalınmayan ses varlıkları — envanter (24 Ağustos 2026)
+
+Kullanıcı "kullanılmayan seslerin listesini çıkar, gerekirse kullanır gerekirse
+silerim" dedi. Liste çıktı ve **iki farklı şeyden oluşuyor**; karıştırılırsa
+yanlış dosya silinir.
+
+### 1. Projenin kendi klipleri — 9 dosya, 164 KB
+
+Hiçbiri kaza değil; her biri bir kararın *kalanı* ve manifestte bilerek duruyor:
+
+| Dosya | Neden çalmıyor |
+|---|---|
+| `sfx_building_complete_01/02/04` | §82.7: tamamlanma krallığın **tek imza sesi**; dördü rastgele çalınsa "dört farklı şey oldu" diye duyulur. Diğer üçü *seçenek* — id değiştirilip dinlenir |
+| `sfx_ui_hover_02/03` | §82.6: hover tek klip; bir saniyede altı butonu tarayan oyuncu için varyant çeşitlilik değil "altı farklı kontrol" diye duyulur |
+| `sfx_ui_panel_open/close_02/03` | Aynı kural (§82.17'de yazıldı): panel sesi kısa aralıkla tekrar eden bir kontrol sesi |
+
+**Öneri: durmaları.** Toplam 164 KB — bir müzik parçasının otuzda biri — ve
+karşılığında "bu sesi beğenmedim, alternatifini dene" bir id düzenlemesi olarak
+kalıyor. Silinirlerse o iş yeniden üretim demek.
+
+`npm run audio:manifest -- --check` bu dokuzu her koşuda `shipped but no event
+plays it` diye zaten listeliyor; ayrı bir araç gerekmiyor.
+
+### 2. Forge starter içeriği — 20 dosya, 2.8 MB
+
+`assets/starter-content/Sounds/` altındakiler. Bunlar **ThreeAges'in kullanılmayan
+sesleri değil**, şablonun demo kütüphanesi — bu depo bir oyun değil bir *oyun
+platformu şablonu* (CLAUDE.md), ve starter içerik onun parçası.
+
+Bugün onlara bağlı olanlar:
+
+- Dört SoundCue varlığı (`SoundCue_Fire`, `Cue_Birds`, `SC_Footstep_Stone`,
+  `DenemeCue`) — editörün cue düzenleyicisinin gerçek örnekleri
+- Üç engine testi (cue değerlendirme, manifest çözümü, Actor audio bileşeni)
+- `structure.fire_loop`'un dolaylı borcu: klip `Fire01`'den **kopyalandı**
+  (§82.18'in notu), yani kaynak dosya starter pakette duruyor
+
+Silmek ~2.8 MB kazandırır ve üç şeyi bozar: dört cue varlığı, üç test, ve
+şablonun "kopyala, kendi projeni kur" vaadi. **Öneri: dokunulmasın** — ThreeAges
+build'inde zaten yer kaplamıyorlar (manifest onları listeler ama runtime yalnız
+adı geçen klibi indirir; ses varlıkları önceden yüklenmez).
+
+Gerçekten kurtarılacak yer aranıyorsa, kaynak orası değil: müzik **118 MB**, yani
+starter içeriğin kırk katı (§61.1'in parça sayısı tartışması).

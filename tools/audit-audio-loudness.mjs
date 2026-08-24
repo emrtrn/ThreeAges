@@ -59,17 +59,28 @@ const EVENTS_PATH = "public/game-data/audio/events.json";
  */
 const VARIANT_SPREAD_LU = 4;
 /**
- * Sample peak above this is flagged as clipping.
+ * How long a clip may sit above full scale before it is worth a re-render.
  *
- * A lossy codec's decoded output overshoots its encoded peak, so almost
- * everything mastered near full scale comes back a hair over 0 dBFS; 67 clips do
- * here, nearly all by less than a tenth of a dB, and flagging those would bury
- * the three that overshoot by 1.5-2 dB. Those three are real: they were mastered
- * into a limiter and the decoder is handing back what the limiter was hiding.
+ * **Peak alone is the wrong flag, and this took a second measurement to learn.**
+ * The first version flagged three ambience beds at +1.5 to +2.1 dBFS as clipped;
+ * counting the offending samples showed 65, 7 and 2 of them out of ~1.25
+ * million, with the longest unbroken run lasting 0.29 ms. That is a lossy
+ * encoder overshooting isolated peaks, which is what every encoder does — not a
+ * master squashed into a limiter, which is what the flag implied.
+ *
+ * The two look identical in a peak reading and nothing alike here: a slammed
+ * master holds full scale for tens of milliseconds at a time, because the
+ * distortion is in the *content*.
+ *
+ * And in this pipeline the isolated kind cannot even be heard: Web Audio is
+ * float throughout and only the output device clamps, so a 1.26 linear peak on
+ * a bus the table authors at 0.22 arrives at about 0.28. The player's sliders
+ * only attenuate, so nothing downstream can push it back up.
+ *
+ * 5 ms total, then — long enough that no encoder overshoot reaches it, short
+ * enough that a genuinely limited master does.
  */
-const PEAK_CEILING_DBFS = 0.5;
-/** Peaks between 0 and {@link PEAK_CEILING_DBFS} are counted, not listed. */
-const PEAK_MARGINAL_DBFS = 0;
+const OVER_SCALE_MS = 5;
 /**
  * Head silence past this delays a sound that is supposed to *answer* something.
  *
@@ -222,11 +233,22 @@ function measureInPage() {
     // measurements. Not shared with the module's constants: this function is
     // serialized into the page and can close over nothing.
     const floor = Math.pow(10, -60 / 20);
+    // Samples past full scale, and the longest unbroken stretch of them — the
+    // pair that separates an encoder's isolated overshoot from a master that was
+    // limited before it was encoded.
+    let overScale = 0;
+    let longestOverRun = 0;
     for (let c = 0; c < buffer.numberOfChannels; c += 1) {
       const data = buffer.getChannelData(c);
+      let overRun = 0;
       for (let i = 0; i < data.length; i += 1) {
         const magnitude = Math.abs(data[i]);
         if (magnitude > peak) peak = magnitude;
+        if (magnitude > 1) {
+          overScale += 1;
+          overRun += 1;
+          if (overRun > longestOverRun) longestOverRun = overRun;
+        } else overRun = 0;
         if (magnitude > floor) {
           if (firstLoud < 0 || i < firstLoud) firstLoud = i;
           if (i > lastLoud) lastLoud = i;
@@ -279,6 +301,8 @@ function measureInPage() {
       sampleRate: rate,
       leadMs: firstLoud < 0 ? 0 : (firstLoud / rate) * 1000,
       tailMs: lastLoud < 0 ? 0 : ((buffer.length - 1 - lastLoud) / rate) * 1000,
+      overScaleMs: (overScale / channels.length / rate) * 1000,
+      overScaleRunMs: (longestOverRun / rate) * 1000,
     };
   };
 }
@@ -368,20 +392,24 @@ Uneven variant pools — ${pools.length} event(s) over ${VARIANT_SPREAD_LU} LU`)
     );
   }
 
-  // 2. Clipping.
+  // 2. Clipping — measured as time spent over full scale, not as peak height.
   const clipped = rows
-    .filter((row) => !row.error && row.peakDbfs > PEAK_CEILING_DBFS)
-    .sort((a, b) => b.peakDbfs - a.peakDbfs);
-  const marginal = rows.filter(
-    (row) => !row.error && row.peakDbfs > PEAK_MARGINAL_DBFS && row.peakDbfs <= PEAK_CEILING_DBFS,
+    .filter((row) => !row.error && row.overScaleMs > OVER_SCALE_MS)
+    .sort((a, b) => b.overScaleMs - a.overScaleMs);
+  const overshoot = rows.filter(
+    (row) => !row.error && row.overScaleMs > 0 && row.overScaleMs <= OVER_SCALE_MS,
   );
   console.log(`
-Clipping — ${clipped.length} clip(s) past ${fixed(PEAK_CEILING_DBFS)} dBFS`);
+Clipping — ${clipped.length} clip(s) over full scale for more than ${OVER_SCALE_MS} ms`);
   for (const row of clipped) {
-    console.log(`   ${row.clipId.padEnd(32)} peak ${fixed(row.peakDbfs, 2).padStart(6)} dBFS   ${fixed(row.lufs)} LUFS`);
+    console.log(
+      `   ${row.clipId.padEnd(32)} ${fixed(row.overScaleMs, 1).padStart(7)} ms over scale ` +
+        `(longest run ${fixed(row.overScaleRunMs, 2)} ms)   peak ${fixed(row.peakDbfs, 2)} dBFS`,
+    );
   }
+  const worstOvershoot = overshoot.reduce((worst, row) => Math.max(worst, row.peakDbfs), -Infinity);
   console.log(
-    `   ${marginal.length} further clip(s) sit between 0 and ${fixed(PEAK_CEILING_DBFS)} dBFS — ordinary decoder overshoot, listed only if you ask for the JSON.`,
+    `   ${overshoot.length} further clip(s) cross it for isolated samples (worst peak ${fixed(worstOvershoot, 2)} dBFS) — ordinary lossy-encoder overshoot, and inaudible in a float pipeline whose buses attenuate.`,
   );
 
   // 3. Slow answers.

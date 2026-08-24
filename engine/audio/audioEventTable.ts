@@ -345,6 +345,29 @@ export function audioEventClipIds(table: AudioEventTable): string[] {
   return [...ids];
 }
 
+/**
+ * What the shared voice budget has cost so far — see
+ * {@link AudioEventDirector.budgetStats}.
+ */
+export interface AudioBudgetStats {
+  /** Plays sounding right now. */
+  readonly active: number;
+  /** The most that were ever sounding at once, since the last reset. */
+  readonly peak: number;
+  /** The ceiling those are measured against. */
+  readonly limit: number;
+  /** Triggers refused because the shared budget was full — the ceiling biting. */
+  readonly budgetRefusals: number;
+  /** Triggers refused by one event's own `maxInstances` — by design, usually. */
+  readonly eventRefusals: number;
+  /** Per channel, busiest first. §61 states its targets per channel, not in total. */
+  readonly byBus: ReadonlyArray<{
+    readonly bus: AudioBusId;
+    readonly active: number;
+    readonly peak: number;
+  }>;
+}
+
 /** Where a trigger happens, and how far it is from the listener. */
 export interface AudioEventTriggerContext {
   /** Emitter world position. Required for a spatial event to be positioned. */
@@ -412,6 +435,25 @@ export class AudioEventDirector {
   private readonly live = new Map<string, AudioPlaybackHandle[]>();
   private liveCount = 0;
   private readonly reportedUnknown = new Set<string>();
+  /**
+   * What the voice budget actually cost, as opposed to what it was set to.
+   *
+   * The plan's §61 gives starting targets — 16–24 important SFX at once, one
+   * music bed, one to three of ambience and voice — and calls them numbers "to
+   * be decided by browser testing". They cannot be decided by listening: a
+   * player hears a mix that is too busy, not a budget that is being hit, and the
+   * two are different findings with opposite fixes (retune the levels, or raise
+   * the ceiling). These counters are what makes the second one visible.
+   *
+   * Peaks rather than instantaneous counts, because the moment worth knowing
+   * about — a siege line firing into a melee while an alarm posts — lasts a few
+   * frames and nobody is reading a debug panel at that instant.
+   */
+  private peakLive = 0;
+  private readonly peakLiveByBus = new Map<AudioBusId, number>();
+  /** Refusals that mean a ceiling was reached, split by which ceiling it was. */
+  private budgetRefusals = 0;
+  private eventRefusals = 0;
 
   constructor(table: AudioEventTable, options: AudioEventDirectorOptions) {
     this.table = table;
@@ -433,6 +475,43 @@ export class AudioEventDirector {
   /** Plays currently sounding, across all events. For the debug panel and tests. */
   activeCount(): number {
     return this.liveCount;
+  }
+
+  /**
+   * What the budget has actually been asked for — §61's verification, as data
+   * rather than as an impression.
+   *
+   * Read by the debug panel; costs nothing when nothing reads it, because the
+   * numbers are accumulated in {@link advance}, which already walks the live
+   * list once a frame for its own reasons.
+   */
+  budgetStats(): AudioBudgetStats {
+    const byBus: Array<{ bus: AudioBusId; active: number; peak: number }> = [];
+    const active = this.liveCountByBus();
+    for (const [bus, peak] of this.peakLiveByBus) {
+      byBus.push({ bus, active: active.get(bus) ?? 0, peak });
+    }
+    byBus.sort((a, b) => b.peak - a.peak);
+    return {
+      active: this.liveCount,
+      peak: this.peakLive,
+      limit: this.maxConcurrent,
+      budgetRefusals: this.budgetRefusals,
+      eventRefusals: this.eventRefusals,
+      byBus,
+    };
+  }
+
+  /** Live plays per bus, walked from the live map (bounded by the budget). */
+  private liveCountByBus(): Map<AudioBusId, number> {
+    const counts = new Map<AudioBusId, number>();
+    for (const [eventId, handles] of this.live) {
+      if (handles.length === 0) continue;
+      const bus = this.table.events[eventId]?.bus;
+      if (!bus) continue;
+      counts.set(bus, (counts.get(bus) ?? 0) + handles.length);
+    }
+    return counts;
   }
 
   /**
@@ -472,6 +551,13 @@ export class AudioEventDirector {
         this.liveCount -= dropped;
       }
       if (handles.length === 0) this.live.delete(eventId);
+    }
+    // Sampled after the prune, so a peak is a count of plays that were all
+    // genuinely sounding in the same frame rather than a sum with finished ones
+    // still in it.
+    if (this.liveCount > this.peakLive) this.peakLive = this.liveCount;
+    for (const [bus, count] of this.liveCountByBus()) {
+      if (count > (this.peakLiveByBus.get(bus) ?? 0)) this.peakLiveByBus.set(bus, count);
     }
   }
 
@@ -513,8 +599,14 @@ export class AudioEventDirector {
     }
 
     const handles = this.live.get(eventId);
-    if (handles && handles.length >= definition.maxInstances) return "event-full";
-    if (this.liveCount >= this.maxConcurrent) return "budget-full";
+    if (handles && handles.length >= definition.maxInstances) {
+      this.eventRefusals += 1;
+      return "event-full";
+    }
+    if (this.liveCount >= this.maxConcurrent) {
+      this.budgetRefusals += 1;
+      return "budget-full";
+    }
 
     const clipId = definition.clips[Math.min(
       definition.clips.length - 1,
@@ -547,6 +639,12 @@ export class AudioEventDirector {
     this.live.clear();
     this.liveCount = 0;
     this.lastPlayedAt.clear();
+    // The measurement belongs to a match, like the cooldowns: a peak carried
+    // into the next one would report a fight that no longer happened.
+    this.peakLive = 0;
+    this.peakLiveByBus.clear();
+    this.budgetRefusals = 0;
+    this.eventRefusals = 0;
   }
 
   /** Builds the engine play options for one trigger, applying the pitch jitter. */

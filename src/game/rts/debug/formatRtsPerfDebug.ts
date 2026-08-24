@@ -87,6 +87,23 @@ export interface RtsPerfDebugSnapshot {
     readonly adaptiveEnabled: boolean;
     readonly reductionDepth: number;
   };
+  /**
+   * What the shared voice budget has cost — audio plan §61, whose targets were
+   * written as "to be decided by browser testing" and had never been measured.
+   *
+   * Null before the audio table has loaded. Reported here rather than in a panel
+   * of its own because the question it answers is a performance question: a
+   * budget that is never approached is headroom nobody is using, and one that is
+   * hit during every fight is silently deciding which sounds the player hears.
+   */
+  readonly audio: {
+    readonly active: number;
+    readonly peak: number;
+    readonly limit: number;
+    readonly budgetRefusals: number;
+    readonly eventRefusals: number;
+    readonly byBus: ReadonlyArray<{ readonly bus: string; readonly active: number; readonly peak: number }>;
+  } | null;
   /** What the simulation is carrying — the load behind the CPU costs above. */
   readonly scene: {
     readonly units: number;
@@ -149,6 +166,27 @@ export function formatRtsPerfDebug(snapshot: RtsPerfDebugSnapshot): string[] {
       lines.push(
         `${label.padEnd(COST_LABEL_WIDTH + 2)} ${cost.averageMs.toFixed(2)} / ${cost.lastMs.toFixed(2)} / ${cost.maxMs.toFixed(2)}`,
       );
+    }
+  }
+
+  const audio = snapshot.audio;
+  if (!audio) {
+    // Said rather than omitted, on the same principle as the gpu line: a mixer
+    // with nothing in it and a table that never loaded look identical in a
+    // silent match, and only one of them is a bug.
+    lines.push("ses — olay tablosu yüklenmedi");
+  } else {
+    // The ceiling and the peak on one line, because either alone is unreadable:
+    // "peak 19" means nothing without knowing the budget was 24.
+    lines.push(
+      `ses ${audio.active}/${audio.limit} · tepe ${audio.peak}` +
+        ` · red bütçe ${groupThousands(audio.budgetRefusals)} · olay ${groupThousands(audio.eventRefusals)}`,
+    );
+    // Per channel, because §61's targets are per channel: one music bed, one to
+    // three of ambience and voice, sixteen to twenty-four important effects.
+    const busy = audio.byBus.filter((entry) => entry.peak > 0);
+    if (busy.length > 0) {
+      lines.push(`  ${busy.map((entry) => `${entry.bus} ${entry.active}/${entry.peak}`).join(" · ")}`);
     }
   }
 
