@@ -66,5 +66,7 @@
   "match.settings.audio.sfx.hint": "Kampf, Arbeit und Welt.",
   "match.settings.audio.ambience.label": "Atmosphäre",
   "match.settings.audio.ambience.hint": "Die Hintergrundkulisse der Karte.",
+  "match.settings.audio.voice.label": "Sprache",
+  "match.settings.audio.voice.hint": "Was deine Einheiten sagen.",
   "match.settings.audio.value": "{value, number, percent}"
 }

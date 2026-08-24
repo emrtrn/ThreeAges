@@ -837,11 +837,18 @@ import {
   AUDIO_BUS_IDS,
   MENU_DUCK_MIX,
   NOTIFICATION_DUCK_MIX,
+  STINGER_DUCK_MIX,
+  STINGER_MUSIC_BED_DUCK,
+  VOICE_DUCK_MIX,
   createDefaultBusVolumes,
+  duckGain,
+  ducksEqual,
   effectiveBusGain,
   isAudioBusId,
+  mergeDucks,
   mergeMixSnapshot,
   normalizeBusVolume,
+  type BusDuckMix,
 } from "../engine/audio/audioBus";
 import {
   SaveGameStore,
@@ -4089,6 +4096,43 @@ check("audio event director enforces cooldown, per-event cap and global budget",
   assert.equal(director.trigger("combat.hit", 10), "played");
 });
 
+check("a duck lasts exactly as long as the sound that asked for it", () => {
+  // `isPlaying` exists for ducking and nothing else: a host has to release a
+  // duck when its cause ends, and a guessed timer is wrong in both directions
+  // — too short and the mix comes back up under the second half of a bark, too
+  // long and it hangs open over silence.
+  const table = normalizeAudioEventTable({
+    schema: 1,
+    events: {
+      "voice.guard_select": { clips: ["a"], maxInstances: 2 },
+      "notify.alert": { clips: ["b"] },
+    },
+  });
+  const handles: AudioPlaybackHandleStub[] = [];
+  const director = new AudioEventDirector(table, {
+    random: () => 0,
+    play: () => {
+      const { handle } = fakeAudioHandle();
+      handles.push(handle);
+      return handle;
+    },
+  });
+  assert.equal(director.isPlaying("voice.guard_select"), false);
+  assert.equal(director.trigger("voice.guard_select", 0), "played");
+  assert.equal(director.isPlaying("voice.guard_select"), true);
+  // Per event, not global: an alarm sounding must not hold the voice duck open.
+  assert.equal(director.trigger("notify.alert", 0), "played");
+  handles[0]!.stop();
+  director.advance();
+  assert.equal(director.isPlaying("voice.guard_select"), false);
+  assert.equal(director.isPlaying("notify.alert"), true);
+  // A refused trigger never arms a duck, because it never became a sound.
+  assert.equal(director.isPlaying("voice.nope"), false);
+  // And a reset drops the lot: a restart must not open ducked by the last match.
+  director.reset();
+  assert.equal(director.isPlaying("notify.alert"), false);
+});
+
 check("audio event pitch jitter stays inside its authored band", () => {
   assert.equal(jitterPitch(0, () => 0.5), 1);
   // The extremes of the generator map to the extremes of the band, and a pitch
@@ -4254,6 +4298,49 @@ check("music director overlaps two tracks and lands the incoming one at full lev
   assert.ok(Math.abs(incoming.gain - volume) < 1e-9, "the incoming track must reach full level");
   assert.ok(!rig.director.crossfading);
   assert.equal(rig.director.nowPlaying(), incoming.clipId);
+});
+
+check("the music bed can be ducked without touching the music bus", () => {
+  // Why the bed has a duck of its own at all: stingers play on the `music` bus,
+  // so ducking that bus under an announcement would duck the announcement. The
+  // handle's gain is the only stage between the two.
+  const settings: MusicPlaylistSettings = { crossfadeSeconds: 4, gapSeconds: 0, segmentSeconds: 100 };
+  const volume = 0.5;
+  const rig = musicRig({ clips: ["one", "two"], volume, settings, durations: { one: 40, two: 40 } });
+  rig.runTo(settings.crossfadeSeconds + 1);
+  const track = rig.played[0]!;
+  assert.ok(Math.abs(track.gain - volume) < 1e-9);
+
+  rig.director.setDuck(0.3);
+  assert.ok(Math.abs(track.gain - volume * 0.3) < 1e-9, "the bed must play at authored × duck");
+  // Derived from the same numbers, so this holds at any tuning or retune.
+  assert.ok(track.gain < volume && track.gain > 0);
+  rig.director.setDuck(1);
+  assert.ok(Math.abs(track.gain - volume) < 1e-9, "releasing the duck restores the authored level");
+});
+
+check("a duck applied mid-crossfade rides the fade instead of fighting it", () => {
+  // The failure this rules out: writing the ducked level straight onto a track
+  // that is still rising jumps it off its curve, which is heard as a click in
+  // the middle of a transition. The ramp owns the gain; the duck only changes
+  // what it is ramping towards.
+  const settings: MusicPlaylistSettings = { crossfadeSeconds: 4, gapSeconds: 0, segmentSeconds: 100 };
+  const volume = 0.5;
+  const duck = 0.4;
+  const rig = musicRig({ clips: ["one", "two"], volume, settings, durations: { one: 20, two: 20 } });
+  rig.runTo(settings.crossfadeSeconds + 1);
+  const handoverAt = 20 - settings.crossfadeSeconds;
+  rig.runTo(handoverAt + settings.crossfadeSeconds / 2);
+  assert.ok(rig.director.crossfading, "the rig must be mid-transition for this check to mean anything");
+  rig.director.setDuck(duck);
+  rig.runTo(handoverAt + settings.crossfadeSeconds / 2 + 1 / 60);
+  const [outgoing, incoming] = rig.played as [MusicHandleStub, MusicHandleStub];
+  // Both halves scale together, so the seam keeps its equal-power shape — the
+  // transition simply happens quieter.
+  const power = Math.sqrt(outgoing.gain ** 2 + incoming.gain ** 2);
+  assert.ok(Math.abs(power - volume * duck) < 0.02, `ducked crossfade power ${power} left the curve`);
+  rig.runTo(handoverAt + settings.crossfadeSeconds + 1);
+  assert.ok(Math.abs(incoming.gain - volume * duck) < 1e-9, "the incoming track lands at the ducked level");
 });
 
 check("music director hands over from the measured duration, not the fallback", () => {
@@ -5225,7 +5312,7 @@ check("RTS audio settings: a player trim scales the authored mix without replaci
 check("RTS audio settings: the volume panel's keys resolve in every shipped locale", () => {
   // A slider whose label falls back to English is a control the player cannot
   // read; unlike most strings these sit in a fixed-width row with no context.
-  const rows = ["master", "music", "sfx", "ambience"];
+  const rows = ["master", "music", "sfx", "ambience", "voice"];
   for (const entry of selectableLocales()) {
     const bundle = readShippedLocale(entry.code);
     for (const row of rows) {
@@ -6185,6 +6272,104 @@ check("NOTIFICATION_DUCK_MIX steps the mix back without touching notifications",
   // design warns against an audible side-chain pump.
   const paused = mergeMixSnapshot(createDefaultBusVolumes(), MENU_DUCK_MIX);
   assert.ok(ducked.music > paused.music, "a notice must duck less than a pause does");
+});
+
+check("every duck leaves the channels that answer the player alone", () => {
+  // A duck names what steps *back*. Two buses may never appear in one: the
+  // alarm channel (a duck that quietened the notice it was making room for
+  // would be self-defeating) and `master` (which is not a channel but the
+  // volume of everything, ducking included).
+  const ducks: Array<[string, BusDuckMix]> = [
+    ["MENU_DUCK_MIX", MENU_DUCK_MIX],
+    ["NOTIFICATION_DUCK_MIX", NOTIFICATION_DUCK_MIX],
+    ["VOICE_DUCK_MIX", VOICE_DUCK_MIX],
+    ["STINGER_DUCK_MIX", STINGER_DUCK_MIX],
+  ];
+  for (const [name, duck] of ducks) {
+    assert.equal(duckGain(duck, "notifications"), 1, `${name} must not duck the alarm channel`);
+    assert.equal(duckGain(duck, "master"), 1, `${name} must not duck master`);
+    // Every bus it does name has to actually move, or the entry is a comment
+    // pretending to be a mix.
+    for (const bus of AUDIO_BUS_IDS) {
+      if (duck[bus] === undefined) continue;
+      assert.ok(duckGain(duck, bus) < 1, `${name} names ${bus} without ducking it`);
+      assert.ok(duckGain(duck, bus) > 0, `${name} silences ${bus} rather than ducking it`);
+    }
+  }
+});
+
+check("a stinger ducks the world but never the bus it plays on", () => {
+  // The trap this pins: stingers are routed to `music` on purpose (they are
+  // written with the score, and a player who muted the music has asked not to
+  // hear them). A duck that pulled the music bus down under a stinger would
+  // therefore pull the stinger down with it — the announcement ducking itself.
+  // The bed is handled where it can be: the director's own gain.
+  assert.equal(duckGain(STINGER_DUCK_MIX, "music"), 1, "a stinger must not duck its own bus");
+  assert.ok(duckGain(STINGER_DUCK_MIX, "ambience") < 1, "the world must step back under a stinger");
+  assert.ok(STINGER_MUSIC_BED_DUCK > 0 && STINGER_MUSIC_BED_DUCK < 1);
+});
+
+check("the pause duck goes deeper than the ducks that ride a live match", () => {
+  // Relationship, not magnitude — every number here is retuned by ear. What
+  // must hold at any tuning: a menu the player opened may take the world well
+  // down, while a duck that fires several times a minute under a running match
+  // must stay shallow or it is heard as the mix breathing.
+  for (const [name, duck] of [
+    ["NOTIFICATION_DUCK_MIX", NOTIFICATION_DUCK_MIX],
+    ["VOICE_DUCK_MIX", VOICE_DUCK_MIX],
+  ] as Array<[string, BusDuckMix]>) {
+    assert.ok(
+      duckGain(duck, "ambience") > duckGain(MENU_DUCK_MIX, "ambience"),
+      `${name} must duck the world less than a pause does`,
+    );
+  }
+  // The voice duck is the gentlest of the in-match three on the bus it aims at:
+  // a bark lands far more often than an alarm or an announcement.
+  assert.ok(duckGain(VOICE_DUCK_MIX, "sfx") > duckGain(STINGER_DUCK_MIX, "sfx"));
+});
+
+check("two ducks at once take the deeper one, not the product", () => {
+  // Two reasons for a bus to be quieter are not a reason for it to be twice as
+  // quiet: multiplying would take `sfx` below what either moment asked for, and
+  // the mix would lurch when whichever one ended first let go.
+  const merged = mergeDucks([NOTIFICATION_DUCK_MIX, VOICE_DUCK_MIX]);
+  const deeper = Math.min(duckGain(NOTIFICATION_DUCK_MIX, "sfx"), duckGain(VOICE_DUCK_MIX, "sfx"));
+  assert.equal(duckGain(merged, "sfx"), deeper);
+  assert.ok(
+    duckGain(merged, "sfx") >
+      duckGain(NOTIFICATION_DUCK_MIX, "sfx") * duckGain(VOICE_DUCK_MIX, "sfx"),
+    "ducks must not compound",
+  );
+  // Order-independent, so the mix never depends on which duck the frame saw first.
+  assert.ok(ducksEqual(merged, mergeDucks([VOICE_DUCK_MIX, NOTIFICATION_DUCK_MIX])));
+  // A bus only one of them names still gets that one's value.
+  assert.equal(duckGain(merged, "music"), duckGain(NOTIFICATION_DUCK_MIX, "music"));
+  // Nothing ducking is a duck that changes nothing.
+  assert.ok(ducksEqual(mergeDucks([]), {}));
+});
+
+check("ducksEqual compares effect, so an absent bus and unity are the same", () => {
+  // The host reconciles its ducks every frame and pushes a ramp only on a real
+  // change; without this a bus written as an explicit 1 would re-ramp the whole
+  // mix sixty times a second.
+  assert.ok(ducksEqual({}, { sfx: 1, music: 1 }));
+  assert.ok(!ducksEqual({}, { sfx: 0.9 }));
+  assert.ok(ducksEqual({ sfx: 0.5 }, { sfx: 0.5, ambience: 1 }));
+});
+
+check("the authored mix, the player's trim and a duck multiply rather than replace", () => {
+  // The failure this rules out is specific and was already live in the project:
+  // the ducks were written as absolute levels, and this game authors `ambience`
+  // at 0.22 — applying MENU_DUCK_MIX's 0.3 as a *level* would have made the
+  // pause menu louder than the match. Ducks are fractions of the intent.
+  const authored = { music: 0.18, ambience: 0.22, sfx: 0.8 };
+  const trim = { music: 0.5, ambience: 1, sfx: 1 };
+  const duck = MENU_DUCK_MIX;
+  for (const bus of ["music", "ambience", "sfx"] as const) {
+    const effective = authored[bus] * trim[bus] * duckGain(duck, bus);
+    assert.ok(effective < authored[bus] * trim[bus], `${bus} must end up quieter, not louder`);
+    assert.ok(effective > 0, `${bus} must be ducked, not silenced`);
+  }
 });
 
 // --- Audio Bus Lite (subsystem, headless) -------------------------------------

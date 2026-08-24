@@ -30,6 +30,7 @@ bakılacak altı yer:
 | **Sırada ne var, madde madde** | §69 — kutulu görev listesi |
 | **Hangi ses hangi dosyayla karşılandı** | §81.1 — olay olay üretim kaydı (22 Ağu 2026'da boşaldı) |
 | **Faz 5'te gerçekten ne kaldı** | §82 — üç kovaya ayrılmış; §48–§50'nin kutuları bayat |
+| **Ses üretimi olarak ne kaldı** | §82.17 — iki klip, promptlarıyla |
 | **Neyin üretilmeyeceği** | §82.11 — kapsam dışı bırakılan kalemler ve gerekçeleri |
 | **Bölgesel ambiyans üretim listesi** | §82.13 |
 | **Ses stili neye kilitlendi** | §47.0 — kalem kalem, referans varlık id'siyle |
@@ -96,8 +97,8 @@ stinger'a gerek yok, aynı işi yapar), **maç başlangıcı** ise perde kalkı�
 | **Faz 3** | Stil kilidi (§47) + üretim kaydı (§63) | ✅ | 7 stil-kilidi maddesi onaylandı — §47.0 |
 | **Faz 4** | Müzik durum makinesi + crossfade (§28, §35) | ✅ | Durum geçişleri maçta duyuluyor, sinyal kaynağı tanımlı — §35.2 |
 | **Faz 5** | Paket 2–4 (UI/notification/ekonomi → yapı/lojistik → birim/savaş) | 🔨 | Gate C (§67) — çalışma sayfası §82 |
-| **Faz 6** | Paket 5 (ambience + müzik) | ⬜ | Gate C |
-| **Faz 7** | Paket 6 polish + mix + erişilebilirlik slider'ları (§62) | 🔨 | Gate D |
+| **Faz 6** | Paket 5 (ambience + müzik) | ✅ | Menü/settlement/expansion/tension/battle ×4, üç stinger, harita yatağı ve yedi bölge yatağı sevk edildi — §51 |
+| **Faz 7** | Paket 6 polish + mix + erişilebilirlik slider'ları (§62) | 🔨 | Gate D — slider'lar (§62.0/§62.2) ve ducking (§82.16) indi; loudness pass, codec testi ve tekrar yorgunluğu kaldı |
 | **Faz 8** | Full-match audio QA (§68) + performans bütçesi doğrulaması (§61) | ⬜ | Gate D |
 
 ### Faz 0 neden Package 1'den önce gelir
@@ -195,6 +196,7 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-23 | **Bölgesel ambiyans indi — 7 klip, 7 olay, kanca (§82.13).** Kullanıcı yedi yatağı üretti (mono/48 kHz/26.00 sn, toplam 4.8 MB) ve aynı gün bağlandı. Olaylar `world.zone_*` adlandı, `ambience.zone_*` değil: editör kataloğu id önekine göre gruplanıyor ve bunlar `world.ambience` ile aynı §5.8 kanalı — yeni bir önek COMBAT'ınkinin yanına ikinci bir istisna olurdu. Yatak `structure.fire_loop`'un desenini alıyor (played dönmeden sahiplenme yok, durdurma başlatılan id ile, tek instance) ve üç karar bunun üstüne bindi: **aynı anda tek yatak** (iki yatak iki yer değil bir bulamaç), **iki yarıçap** 45 giriş / 62 çıkış (tek yarıçapla sınırda park etmiş kamera yatağı bir kare açıp bir kare kapatır — §35'in müzik asimetrisiyle aynı sebep), ve **duraklatınca susmuyor** (çekiç yalan olur, koru koru olmaya devam eder). Korunun çapası ağırlık merkezi: en yakın gövde olsaydı kesilen her ağaç yatağı yana yürütürdü. `stream: true` mevcut sözleşmeye uyularak seçildi — decode 26 sn'de ~5 MB/klip demekti; element yolunun loop dikişi duyulursa sözleşme kanıtla gözden geçirilecek, tek girdi istisna yapılmayacak. Dört sözleşme testi indi, hepsi ilişki pinliyor. |
 | 2026-08-23 | **Bölge yatakları yere göre çalmıyordu — üç hata (§82.14).** Kullanıcı ortamı temizleyip dinledi ve "kameranın yerine göre değil sırayla çalıyor" dedi; rapor doğruydu ve tek hata değildi. **(1)** Mesafe kameranın gözünden ölçülüyordu: göz 20–40 birim yukarıda ve geride, yani her bölge mesafesinde zoom seviyesi vardı ve aynı noktada zoom yapmak bölge değiştirebiliyordu — ölçüm `focusX`/`focusZ`'ye, zemine ve düzlemsele taşındı (yan kazanç: kare başına statik çapa başına bir `heightAt` gitti). **(2)** Yarıçaplar tahminle seçilmişti; ölçüm bitirdi — haritanın korularının en yakın komşusu 27.5 birim, oyuncunun başlangıcı kendi korusuna 16.1 birim, ve ilk 45/62 yarıçapı komşuların birkaçını birden yutuyordu, yani yatak bir yere *varınca* değil öncekinden yeterince *uzaklaşınca* değişiyordu. Şimdi 18/25, ve çıkış yarıçapının en dar çapa aralığının altında kalması pinlendi — pinlendiği gün işe yaradı, ilk düzeltmenin seçtiği 30'u reddetti. **(3)** Devralan bölge koşulsuz tutuluyordu; küçük haritada bu "sonsuza kadar tut" demek. Kural sıraya bağlandı: giriş yarıçapındaki en yakın kazanır, devralan yalnız kimse bir marj kadar yakın değilken korur, marj da üçüncü bir sabit değil iki yarıçapın farkı. Ayrıca bir kontrol geri alındı: "bölge yatağı dünya yatağının altında olmalı" seviyeyi pinliyordu ve kullanıcının ilk dinleme oturumu (dünya yatağı 0, bölgeler 1) onu regresyon diye raporladı. |
 | 2026-08-23 | **Koru kaldırıldı, nehir kendi çizgisine bağlandı (§82.15).** İkinci dinleme oturumu: kullanıcı beş yatağı onayladı, koruyu reddetti, nehre daha iyi bir çapa önerdi. **Koru** varlığıyla ve mekanizmasıyla gitti — harita geneli ambiyans zaten orman taşıyor, ve bu projenin koruları vahşi orman değil dikilmiş kümeler, yani yatak orada olmayan bir şeyi anlatıyordu; yedi yatak altıya indi ve §82.14'ün "en dar çapa aralığı" testi dayanağını kaybetti (koruların 27.5 birimini okuyordu). **Nehir** landscape spline'ından okunuyor artık: yol iki yerde yarım authored — Level'ın `riverWaters`'ı hangi spline'ın nehir olduğunu söylüyor, çizgiyi Landscape sidecar'ı veriyor — ve `resolveRtsRiverPaths` ikisini Landscape mount olduğu anda birleştiriyor. Çapa artık kameranın baktığı noktaya en yakın *nehir üstü* nokta (merkezde 1.0 birim, oyuncu üssünde 51.7, yani üste yatak yok). Üç şey uygularken çıktı: köşeye snap değil **segment izdüşümü** (6 nokta ~190 birim, en yakın köşe kıyıdan onlarca birim uzak olabilir); `points` bir küme, sıra `segments` zincirinde — authored sırada okumak bugün doğru ama nehrin ortasına editörde nokta eklendiği gün nehri kendi üstüne katlardı; ve tek çapa id'siyle kayan bir nokta, ki bu devralan mesafesinin **yatağın konduğu noktadan** ölçülmesini gerektirdi (handle taşınamıyor, §82.9). `cooldownMs` altı yatakta da 0'a indi: yeniden oturma aynı olayı aynı karede durdurup başlatmak, yani 0 ile crossfade, başka her değerle delik. Latent bir hata kapsam dışı bırakıldı: `rtsLevelAdapter`'ın rota çözümü spline dönüşünü yok sayıyor — bugün ısırmıyor (rotaların hepsi dönüşsüz) ama aynı okumayı yapan ilk nehir denemesi çizgiyi haritanın dışına koydu. |
+| 2026-08-24 | **Ducking indi** (§82.16): §9'un üç öneri satırı ve §52'nin iki kutusu. Yol boyunca üç şey çıktı — duck sabitleri v1.1'den beri **hiçbir yerden çağrılmıyordu**; *mutlak seviye* olarak yazıldıkları için oldukları gibi uygulansalar authored 0.22'lik ambiyansı **yükselteceklerdi** (çarpana çevrildi); ve stinger'lar `music` bus'ında olduğu için bir müzik duck'ı fanfarı kendi kendine kısacaktı (yatak duck'ı `MusicDirector.setDuck` ile bus'a dokunmadan indi). Duck'ı kapatan şey zamanlayıcı değil sesin bitişi — director'a `isPlaying` eklendi. Ayrıca **voice slider'ı** (§62.2, sekiz dil + CJK subset) ve plan tazelendi (Faz 6 ✅, §51/§52 kutuları, §82.7/§82.8/§82.2'nin bayat 'kalan' satırları). 9 yeni sözleşme testi; `test:engine` 1567 yeşil. |
 
 ---
 
@@ -2325,35 +2327,40 @@ Varlıklar 22 Ağustos 2026'da üretildi ve girdi; kancaları aynı gün bağlan
 
 # 51. Paket 5 — ambience ve müzik
 
-- [ ] Menu
-- [ ] Settlement
-- [ ] Expansion
-- [ ] Tension
-- [ ] Battle
-- [ ] Age-up stinger
-- [ ] Victory
-- [ ] Defeat
+**Tamamlandı (22–23 Ağustos 2026).** Kutular §29'un sevk kaydına ve diskteki
+dosyalara göre işaretlendi; sayılar plandan farklı çıktığı yerde neden farklı
+olduğu yazıldı.
+
+- [x] Menu ×4
+- [x] Settlement ×4
+- [x] Expansion ×4
+- [x] Tension ×4
+- [x] Battle ×4
+- [x] Age-up stinger
+- [x] Victory
+- [x] Defeat
 - [x] World base ambience — `amb_world_frontier_day_01`
-- [ ] Bölgesel ambiyans ×7 — liste, şartname ve promptlar §82.13'te
-      (orman, nehir, yerleşim, pazar, taş ocağı, altın madeni, tarla)
+- [x] Bölgesel ambiyans ×6 — liste, şartname ve promptlar §82.13'te
+      (nehir, yerleşim, pazar, taş ocağı, altın madeni, tarla; orman üretildi ve
+      §82.15'te geri alındı)
 
 ---
 
 # 52. Paket 6 — polish
 
-- [ ] Random pitch/gain
-- [ ] Concurrent instance limits
-- [ ] Cooldowns
-- [ ] Distance attenuation
-- [ ] Music crossfade
-- [ ] Critical notification ducking
-- [ ] Voice ducking
+- [x] Random pitch/gain — `pitchVariation`, olay başına (§58)
+- [x] Concurrent instance limits — `maxInstances` + global bütçe (§61)
+- [x] Cooldowns — `cooldownMs`, gerçek saniyeyle (§11)
+- [x] Distance attenuation — `refDistance`/`rolloff`/`maxDistance` + sis kapısı
+- [x] Music crossfade — equal-power, parçanın kendi süresinden zamanlanıyor (§35)
+- [x] Critical notification ducking — §82.16
+- [x] Voice ducking — §82.16
 - [ ] Final loudness pass
 - [ ] Browser codec test
-- [ ] Asset preload policy
+- [x] Asset preload policy — yataklar stream, kısa sesler decoded (§61.1)
 - [ ] Low-performance fallback
 - [ ] Mobile kapsam dışı kontrol
-- [ ] Full-match audio fatigue test
+- [ ] Full-match audio fatigue test — §68
 
 ---
 
@@ -2739,8 +2746,10 @@ Duraklat kartında dört slider var, kamera ayarlarının altında, sekiz dile
   yalnız sesle verilmemesi kuralı iki yönlü işler: uyarılarını susturmuş bir
   oyuncu, tasarımın ulaşamadığı bir oyuncudur. Her şeyi kapatmanın dürüst yolu
   `master`'dır ve o zaten bunları da kapatır.
-- `voice` — tek bir replik kaydedilmedi. Var olmayan bir sistemin slider'ı,
-  oyuncunun sürüklediği ve hiçbir şey olmayan bir kontroldür.
+- ~~`voice` — tek bir replik kaydedilmedi. Var olmayan bir sistemin slider'ı,
+  oyuncunun sürüklediği ve hiçbir şey olmayan bir kontroldür.~~ **Bu gerekçe
+  22 Ağustos'ta geçersizleşti** (VO indi) ve slider 24 Ağustos'ta eklendi —
+  §62.2.
 
 Ayarlar `userSettingsStore`'daki `audio.busVolumes` altında, slot'lardan bağımsız
 olarak saklanıyor. Yol boyunca kapanan boşluk buydu: RtsApp bu dosyayı grafik
@@ -2761,6 +2770,25 @@ audio + notification card + visual state
 ```
 
 birlikte kullanılmalıdır.
+
+## 62.2 Voice slider'ı — 24 Ağustos 2026
+
+§62.0 `voice` kanalına slider vermemeyi tek bir gerekçeye dayandırmıştı: proje
+henüz tek replik kaydetmemişti, ve olmayan bir sistemin slider'ı oyuncunun
+sürükleyip hiçbir şey olmadığını gördüğü bir kontroldür. Gerekçe iki gün sonra
+geçersiz oldu — üç rol (guard, archer, worker) 57 klip ile indi — ama madde
+listede kaldı, ve bir denetimde ancak kod ile diskin karşılaştırılmasıyla
+görüldü. **Bir gerekçe, dayandığı olgu değiştiğinde kendiliğinden düşmüyor.**
+
+Bugün beşinci satır eklendi. Gerekçenin tersine dönmesi kayda değer: VO
+İngilizce kalıyor (§37) ve oyun sekiz dile lokalize (§62.1), yani **oyuncunun
+kısmak isteyeceği en muhtemel kanal** yalnız `master` üzerinden ulaşılabilir
+olandı. §62.1'in tablosu bunu zaten güvenli kılıyor — replikler karakter taşır,
+bilgi taşımaz — o yüzden susturulması hiçbir oyun bilgisini kaybettirmiyor.
+
+`ui` ve `notifications` slider almamaya devam ediyor, ve o gerekçe hâlâ ayakta:
+onlar oyunun oyuncuya *cevabı*, ve kritik bilginin yalnız sesle verilmemesi
+kuralı iki yönlü işler.
 
 ## 62.1 Lokalizasyon ile bağ
 
@@ -3588,7 +3616,11 @@ duyulacağına karar verir.
 notify yazmayı gerektirir — §81.1'in yazdığı tuzak. Bu yüzden klip vuruşu kendi
 taşır: önce sendeleme ve teçhizat hışırtısı, sonra ağırlığın oturması.
 
-**Bugün yer tutucu çalıyor** (`starter-snd-impact-light`) ve bu bilinçli:
+**Bugün gerçek klipler çalıyor** — `unit.death` / `unit.death_heavy`, §82.9'da
+indi. Aşağıdaki paragraf yer tutucu döneminden kalma ve *o dönemin gerekçesi*
+olarak duruyor; bugünün durumu değil:
+
+**~~Bugün yer tutucu çalıyor~~** (`starter-snd-impact-light`) ve bu bilinçli:
 §0'ın Faz 0 doktrini — önce hat, sonra ses. Yer tutucunun `combat.body_impact`
 ile karışabilir olması tam olarak Gate C'den önce değiştirilmesinin sebebi.
 `events.json` boş `clips` dizisini bilerek reddediyor, yani olayın var olması
@@ -4074,8 +4106,11 @@ geliyor.
 ### Kalan
 
 `building.complete`'in üç alternatifi bilerek bağlı değil (yukarıdaki karar).
-Tamir (§17), ahşap yapıya top isabeti (§22) ve çağ atlama bildirim ikilisi hâlâ
-klip bekliyor.
+
+**24 Ağustos güncellemesi:** bu paragrafın geri kalanı bayatlamıştı ve
+düzeltiliyor — tamir §82.11'de kapsam dışı bırakıldı, ahşap yapıya top isabeti
+(`structure.impact_wood` ×4) indi, ve çağ atlama **tek** klibe düştü (§82.11
+madde 2), o da §82.17'de tek başına duruyor.
 
 ## 82.8 Rig, işaretin ne demek olduğunu değiştirebilir (23 Ağustos 2026)
 
@@ -4124,11 +4159,12 @@ düşülecek bir yer yok, cevaplanmayan katman yalnızca sessiz. Çözücü gıc
 asla yerine geçen olarak döndürmüyor — testte pinlenmiş, çünkü ikisini
 karıştırmak gıcırtı indiği gün tekerleği susturur.
 
-### Kalan
+### Kalan — kalmadı (23 Ağustos 2026)
 
-`siege.wheel_roll` (×3) ve `siege.carriage_creak` (×3) üretilecek. İkisi de
-`rtsAudioEventIds()` dışında, yani tablo onları cevaplamak **zorunda değil** —
-tıpkı bir varyant gibi, isteğe bağlı olarak inşa edilmiş.
+`siege.wheel_roll` (×3) ve `siege.carriage_creak` (×3) aynı gün indi (§82.9);
+top arabası artık Guard'ın çizmesini değil kendi tekerleğini çalıyor. İkisi de
+`rtsAudioEventIds()` dışında kaldı, yani tablo onları cevaplamak **zorunda
+değil** — tıpkı bir varyant gibi, isteğe bağlı olarak inşa edilmiş.
 
 ## 82.9 Paket 4 indi — ölüm, ağır darbe, topçu hattı (23 Ağustos 2026)
 
@@ -4605,3 +4641,156 @@ spline'ı `rotation: [0,-61,0]` taşıyor ve aynı okumayı yapan ilk deneme onu
 haritanın dışına koydu. Nehir kendi yolunu Landscape sidecar'ından okuyor
 (orası yerel koordinat + terrain konumu), yani bu düzeltmeye ihtiyaç duymadı.
 Rota çözümüne dokunulmadı: orası AI navigasyonu, ve bu oturumun konusu değildi.
+
+## 82.16 Ducking indi — dört sebep, üç mekanizma (24 Ağustos 2026)
+
+§9'un "ducking önerisi" ve §52'nin iki kutusu, planın en uzun süre **yazılı ama
+çalışmayan** maddesiydi. `MENU_DUCK_MIX` ve `NOTIFICATION_DUCK_MIX`
+`engine/audio/audioBus.ts` içinde v1.1'den beri duruyordu, testleri bile vardı —
+ve tüm projede **sıfır çağrı yeri**. Bir sabitin doğru tanımlanmış olması onun
+uygulandığı anlamına gelmiyor, ve bunu yakalayan şey bir test değil, sabitin
+adını arayan bir denetim oldu.
+
+### Ducking bir seviye değil, bir çarpan
+
+Bulunduğu hâliyle inseydi mix'i bozardı. Sabitler **mutlak bus seviyesi** olarak
+yazılmıştı (`ambience: 0.3`) ve §58 aradan geçip miksi tabloya taşıdı: bu oyun
+`ambience`'ı **0.22**'de yazıyor. Duraklat menüsünde ambiyansı 0.3'e "kısmak",
+onu %36 **yükseltmek** olurdu — duck, kıstığı şeyin en gürültülü hâli.
+
+O yüzden model §58.1'in slider modeliyle aynı şekle getirildi:
+
+```text
+etkin bus kazancı = yetkili mix (events.json) × oyuncu çarpanı × duck çarpanı
+```
+
+Üç katman da çarpan, ve hiçbiri diğerini ezmiyor: tablo yeniden ayarlanınca
+`music: 0.6` hâlâ "niyet edilenin altıda beşi" demek.
+
+### Dört sebep
+
+| Sebep | Ne kısılır | Neden bu derinlik |
+|---|---|---|
+| **Duraklat** | müzik, ambiyans, sfx, voice | Oyuncunun kendi açtığı menü — dördün en derini olabilir |
+| **Kritik bildirim** (yalnız `alert`) | müzik, ambiyans, sfx | Alarm kazanmalı; `info` da kıssaydı mix dakikada birkaç kez nefes alırdı |
+| **Voice hattı** | sfx, ambiyans (hafif) | §9 "çok hafif" diyor; bir replik dakikada birkaç kez geliyor |
+| **Stinger** | ambiyans, sfx — **müzik değil** | Aşağıdaki tuzak |
+
+### Stinger kendi bus'ını kısamaz
+
+§5.11 stinger'ları **`music` bus'ına** yolluyor, ve bu bilinçli: skorla birlikte
+yazılıyorlar, müziği susturmuş oyuncu onları da duymak istememiştir. Aynı
+yönlendirme bu duck için bir tuzak: "fanfarın altında müzik geri çekilsin" diye
+müzik bus'ını kısmak, **fanfarı da kısar**.
+
+O yüzden üçüncü mekanizma: `MusicDirector.setDuck()`. Yatağın kendi handle
+kazancı, bus'a hiç dokunmadan. Sabit ikiye bölündü — `STINGER_DUCK_MIX`
+(dünya, bus üzerinden) ve `STINGER_MUSIC_BED_DUCK` (yatak, director üzerinden) —
+ve testte pinlenen şey büyüklükler değil, `STINGER_DUCK_MIX`'in `music`
+**adlandırmadığı**.
+
+Yatak duck'ı fade ile yazılıyor ve yükselmekte olan bir parçaya **hiç
+yazılmıyor**: o parçanın kazancını `stepFadeIn` sürüyor, araya yazmak onu
+eğrisinden atlatır — geçişin ortasında bir tık. Duck yalnız fade'in *hedefini*
+değiştiriyor, o yüzden crossfade ducklanmış hâlde bile equal-power kalıyor
+(testte: ducklanmış geçişin gücü `volume × duck`).
+
+### İki duck aynı anda: çarpım değil, minimum
+
+Bir replik sırasında gelen bir alarm `sfx`'i 0.8 × 0.7 = 0.56'ya indirirdi —
+ikisinin de istemediği bir derinlik, ve hangisi önce biterse orada bir sıçrama.
+`mergeDucks` **minimum** alıyor: iki sebep bir bus'ın daha sessiz olması için iki
+gerekçedir, iki kat sessiz olması için değil. Minimum ayrıca sıradan bağımsız,
+yani mix karenin duck'ları hangi sırada gördüğüne bağlı değil.
+
+### Duck ne kadar sürer: tahmin değil, sesin kendisi
+
+Bir duck'ı **açan** şey tetikleyici (yalnız orası bildirimin kritik olduğunu ya
+da konuşanın bir birim olduğunu bilir), **kapatan** şey ise sesin bitmesi.
+Zamanlayıcı ile kapatmak iki yönde de yanlış: kısa tutarsan mix repliğin ikinci
+yarısının altında geri geliyor, uzun tutarsan sessizliğin üstünde asılı kalıyor.
+
+Bunun için director'a tek bir okuma eklendi — `isPlaying(eventId)`. Sözleşmeyi
+bozmuyor: çağıran hâlâ handle'a erişemiyor, durduramıyor, ne çaldığını
+okuyamıyor; yalnız *bitip bitmediğini* sorabiliyor. Duck sesini en fazla bir
+kare aşıyor (`advance()` karede bir eliyor).
+
+Duraklat duck'ı bu listeye girmiyor: o sesten değil **durumdan** sürülüyor ve
+her kare `flow.phase`'den yeniden hesaplanıyor — `syncAudioBedsPaused`'ın kendi
+notunda yazdığı sebeple, duraklatmanın birden fazla girişi var ve birinde
+kaçırılan kanca miksi çalışan bir maçın üstünde kısık bırakır.
+
+### Aşağı hızlı, yukarı yavaş
+
+`AUDIO_DUCK_ATTACK_SECONDS = 0.08`, `AUDIO_DUCK_RELEASE_SECONDS = 0.45`. Asimetri
+duck ile pump arasındaki farkın kendisi: inişin, kendisini isteyen sese
+yetişmesi gerekiyor; çıkışın böyle bir randevusu yok, ve inişle aynı hızda
+çıkmak mix'i her bildirimde nefes alır hâle getirir. Yavaş çıkış ayrıca art arda
+gelen iki duck'ı tek bir kademe gibi duyuruyor.
+
+### Kalan
+
+Bu bölüm §9'un üç öneri satırının üçünü de karşılıyor. Kalan iki polish maddesi
+(final loudness pass, browser codec testi) ses üretimi ve tarayıcı testi işi,
+kod işi değil — ve derinliklerin doğru olup olmadığı **maçta dinlenerek**
+yargılanacak: hepsi `audioBus.ts`'te tek satırlık ayar, testler yalnız ilişkiyi
+tutuyor (duraklat > maç içi ducklar, hiçbiri `notifications`'ı kısmıyor).
+
+## 82.17 Kalan üretim: iki klip (24 Ağustos 2026)
+
+Faz 5'in B kovasında ses üretimi bekleyen **iki** kalem kaldı. İkisi de kanca
+istemiyor: biri saf tablo, diğeri tabloya tek alan.
+
+### 1. `notify.age_up` ×1 — çağ atlama bildirimi
+
+§82.11 madde 2'nin kararı: tek klip, iki bildirim türü de onu çalıyor. Bugün
+`age-upgraded` ve `enemy-age-upgraded` info/warning tier'ına düşüyor.
+
+```text
+Create a short notification cue for a medieval frontier strategy game, announcing that a kingdom has advanced to a new age.
+
+A brief, bright metallic bell-like accent with a soft low body under it, ringing once and settling. It reports news; it is not a fanfare — the player's own age-up already has a musical stinger over it.
+
+Duration around 0.8 to 1.2 seconds, with a clean tail that does not ring on.
+
+No music, no melody, no chord progression, no voice, no cinematic riser, no long reverb.
+```
+
+**İndiğinde:** klasöre koy → `npm run audio:manifest` → `events.json`'a
+`notify.age_up` girdisi → `RTS_NOTIFICATION_KIND_AUDIO_EVENTS`'e iki satır
+(`age-upgraded`, `enemy-age-upgraded`, ikisi de aynı olayı adlandırıyor).
+
+### 2. Archer "dur" VO ×3 — `voice.archer_stop`
+
+§40'ın stop repliği hiç kaydedilmedi, ve sonucu bugün duyulabilir bir boşluk:
+yalnız okçu seçiliyken **X sessiz**. Guard'ın karşılığı var, Worker duruş emri
+almıyor, yani sıradaki konuşacak kimse yok. §47.0'ın Guard profili referans;
+okçu daha genç ve daha az resmî.
+
+```text
+English male voice line for an archer in a grounded medieval frontier strategy game, acknowledging an order to stop and stand down.
+
+Short, calm, slightly younger and less formal than a line infantry sergeant. Spoken at working distance, not shouted, not whispered.
+
+Lines: "Holding here." / "Stopped." / "As you say."
+
+Dry recording, no reverb, no music, no crowd, no accent affectation.
+```
+
+**İndiğinde:** klasöre koy → `npm run audio:manifest` → `events.json`'a
+`voice.archer_stop` → `RTS_AUDIO`'ya `archerStop` + `RTS_UNIT_VOICE_LINES`'ın
+archer bloğuna `stop:` alanı. `RtsApp.ts` açılmıyor.
+
+### Bunlar dışında kalan üretim kalemi yok
+
+Diskte çalmayan dokuz klip var ve hepsi bilinçli: `sfx_building_complete_01/02/04`
+(§82.7 — tamamlanma tek imza sesi, diğerleri manifestte *seçenek*),
+`sfx_ui_hover_02/03` (§82.6 — hover tek klip, varyant "altı farklı kontrol" diye
+duyuluyor) ve `sfx_ui_panel_open/close_02/03` — sonuncular için yazılı bir karar
+yoktu; **kural hover'ınkiyle aynı**: panel açılışı tekrar eden ve kısa aralıklı
+bir kontrol sesi, varyant onu çeşitlilik değil tutarsızlık yapar. Seçenek olarak
+duruyorlar.
+
+**Tier 3'ün "yapı idle sesleri"** (§44) hiç bağlanmadı ve bir olayı yok
+(`building.build_loop` şantiye, `structure.fire_loop` yangın — ikisi de idle
+değil). Kapsam kararı verilmedi; verildiğinde §82.11'in yanına yazılır.

@@ -436,6 +436,24 @@ export class AudioEventDirector {
   }
 
   /**
+   * Whether any play of one event is still sounding.
+   *
+   * The one thing a caller is allowed to read back about a play, and it exists
+   * for ducking: a duck has to be *released* when the sound that asked for it
+   * ends, and the host has no other way to learn that — `trigger` returns a
+   * verdict, not a handle, precisely so a refused sound can never change the
+   * simulation. This keeps that guarantee (a caller still cannot reach the
+   * handle, stop it, or read its clip) while making the end of a sound
+   * observable.
+   *
+   * Accurate to the last {@link advance}, which the host calls once a frame —
+   * so a duck outlives its sound by at most one frame.
+   */
+  isPlaying(eventId: string): boolean {
+    return (this.live.get(eventId)?.length ?? 0) > 0;
+  }
+
+  /**
    * Drops handles whose clip has finished, freeing both the per-event cap and
    * the global budget. Call once per rendered frame; cheap, since the list it
    * walks is bounded by {@link maxConcurrent}.

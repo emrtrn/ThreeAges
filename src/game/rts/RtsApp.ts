@@ -37,7 +37,19 @@ import {
   MusicDirector,
   type MusicPlaylistSettings,
 } from "@engine/audio/musicDirector";
-import { AUDIO_BUS_IDS, type BusMixSnapshot } from "@engine/audio/audioBus";
+import {
+  AUDIO_BUS_IDS,
+  MENU_DUCK_MIX,
+  NOTIFICATION_DUCK_MIX,
+  STINGER_DUCK_MIX,
+  STINGER_MUSIC_BED_DUCK,
+  VOICE_DUCK_MIX,
+  duckGain,
+  ducksEqual,
+  mergeDucks,
+  type BusDuckMix,
+  type BusMixSnapshot,
+} from "@engine/audio/audioBus";
 import { FrameMetricsMonitor } from "@engine/perf/frameMetrics";
 import { AdaptiveQualityController } from "@engine/perf/adaptiveQuality";
 import { classifyBottleneck } from "@engine/perf/bottleneckClassifier";
@@ -460,6 +472,20 @@ const MISSION_COMMAND_LABEL: Record<MissionGuideCommand, { labelKey: string; sel
 };
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
 const MAX_FRAME_SECONDS = 1 / 15;
+/**
+ * How fast the mix steps back when something starts ducking it, and how slowly
+ * it comes back up — §9's "short ducking, no side-chain pump".
+ *
+ * Asymmetric on purpose, and the asymmetry is the whole difference between a
+ * duck and a pump. Going down has to beat the sound that asked for it, or the
+ * first syllable of a bark lands before the room has been made for it. Coming
+ * back up has no such deadline, and a release as fast as the attack is what
+ * makes a mix audibly breathe around every notice — the release is slow enough
+ * that a second duck arriving inside it is heard as one continuous step rather
+ * than as two.
+ */
+const AUDIO_DUCK_ATTACK_SECONDS = 0.08;
+const AUDIO_DUCK_RELEASE_SECONDS = 0.45;
 /**
  * How long the boot curtain will wait before opening on an unfinished load
  * (plan T3). Generous, because on a cold cache over a slow connection a full
@@ -1001,6 +1027,28 @@ export class RtsApp {
    */
   private authoredBusMix: BusMixSnapshot = {};
   /**
+   * Which moments are currently holding a duck open, as the event id that
+   * started each one.
+   *
+   * An id rather than a flag or a deadline, because the release condition is
+   * "that sound has finished" and the director is the only thing that knows —
+   * `isPlaying` answers it, and a duck therefore lasts exactly as long as its
+   * cause instead of as long as a guessed timer. A guess is wrong in both
+   * directions here: too short and the mix comes back up under the second half
+   * of a bark, too long and it hangs open over silence.
+   *
+   * Three slots rather than a list because the three ducks are different
+   * shapes, and a second alert arriving while one is open should *replace* the
+   * hold, not stack a second copy of the same duck.
+   */
+  private readonly duckHolds: { notice: string | null; voice: string | null; stinger: string | null } = {
+    notice: null,
+    voice: null,
+    stinger: null,
+  };
+  /** The duck currently on the buses, so a steady frame costs one comparison. */
+  private activeDuck: BusDuckMix = {};
+  /**
    * The gameplay music playlist, once the table that describes it has landed.
    *
    * Null until then, and built rather than constructed with the app, because
@@ -1337,10 +1385,12 @@ export class RtsApp {
     onPosted: (event) => {
       // Global, not spatial: a border under attack has a place on the map, but
       // the alarm is addressed to the player, not to the camera's position.
-      this.audioEvents.trigger(
-        event.sound ?? rtsNotificationAudioEvent(event.kind, event.severity),
-        this.audioClock,
-      );
+      const eventId = event.sound ?? rtsNotificationAudioEvent(event.kind, event.severity);
+      const result = this.audioEvents.trigger(eventId, this.audioClock);
+      // Only the top tier ducks, and only when it actually sounded: a refused
+      // trigger that still pulled the mix down would be a duck with nothing
+      // over it — silence, made quieter.
+      if (result === "played" && event.severity === "alert") this.duckHolds.notice = eventId;
     },
   });
   private readonly notificationFeed = new RtsNotificationFeed();
@@ -2632,24 +2682,81 @@ export class RtsApp {
   }
 
   /**
-   * Push the authored mix and the player's trims onto the live buses.
+   * Push the authored mix, the player's trims and the live duck onto the buses.
    *
-   * `authored × player` per bus, so the two never fight: retuning the table
-   * moves everybody's mix without touching a saved setting, and a player's 70%
-   * stays 70% of whatever the game currently intends. Buses with no slider
-   * (`ui`, `notifications`, `voice`) still get their authored level — they are
-   * only exempt from being *trimmed*, not from being mixed.
+   * `authored × player × duck` per bus, so the three never fight: retuning the
+   * table moves everybody's mix without touching a saved setting, a player's 70%
+   * stays 70% of whatever the game currently intends, and a duck is "six tenths
+   * of that" rather than a level of its own. Buses with no slider (`ui`,
+   * `notifications`) still get their authored level — they are only exempt from
+   * being *trimmed*, not from being mixed.
+   *
+   * The multiplication order is why the duck constants can be read at a glance:
+   * every one of them is a fraction of the intended mix, so `music: 0.6` means
+   * the same thing before and after the table is retuned.
    */
-  private applyAudioMix(): void {
+  private applyAudioMix(fadeSeconds = 0): void {
     const snapshot: BusMixSnapshot = {};
     for (const bus of AUDIO_BUS_IDS) {
       const authored = this.authoredBusMix[bus] ?? 1;
       const trim = bus in this.audioSettings
         ? this.audioSettings[bus as keyof RtsAudioSettings]
         : 1;
-      snapshot[bus] = authored * trim;
+      snapshot[bus] = authored * trim * duckGain(this.activeDuck, bus);
     }
-    this.audioSubsystem.applyMixSnapshot(snapshot);
+    this.audioSubsystem.applyMixSnapshot(snapshot, fadeSeconds);
+  }
+
+  /**
+   * Reconcile the ducks — §9's "kısa ducking", and the last piece of §52.
+   *
+   * Reconciled from state every frame rather than hooked onto each transition,
+   * for the reason {@link syncAudioBedsPaused} learned the hard way: pause has
+   * more than one entrance, and a hook missed on one of them leaves the mix
+   * ducked over a running match with nothing to say why. The sound-driven ducks
+   * are armed at their trigger (there is no other moment that knows a notice was
+   * critical) but *released* here, by asking the director whether the sound that
+   * armed them is still going.
+   *
+   * Four causes, and each one names the design line it answers:
+   *
+   * - **Pause** — the player opened a menu; the world steps well back (§59).
+   * - **Critical notice** — the alarm has to win, and the mix under it is what
+   *   it has to win against (§9, §24). Only `alert`: an info notice ducking the
+   *   match would pump several times a minute for news nobody has to act on.
+   * - **Voice line** — nearby combat steps back "very slightly" so a bark stays
+   *   readable over its own squad's fight (§9).
+   * - **Stinger** — the announcement clears the world around it, and the music
+   *   *bed* is pulled down separately because the stinger shares its bus and a
+   *   bus duck would duck the announcement too (see `STINGER_DUCK_MIX`).
+   */
+  private updateAudioDucking(): void {
+    for (const key of ["notice", "voice", "stinger"] as const) {
+      const held = this.duckHolds[key];
+      if (held !== null && !this.audioEvents.isPlaying(held)) this.duckHolds[key] = null;
+    }
+    const ducks: BusDuckMix[] = [];
+    if (this.flow.phase === "paused") ducks.push(MENU_DUCK_MIX);
+    if (this.duckHolds.notice !== null) ducks.push(NOTIFICATION_DUCK_MIX);
+    if (this.duckHolds.voice !== null) ducks.push(VOICE_DUCK_MIX);
+    if (this.duckHolds.stinger !== null) ducks.push(STINGER_DUCK_MIX);
+    // The bed's own gain, not a bus: the stinger is on the music bus with it.
+    // Ramped over the attack rather than stepped, because this one lands on a
+    // track that is already sounding — a step there is heard as a fault in the
+    // music, which is the opposite of the room the duck is trying to make.
+    this.musicDirector?.setDuck(
+      this.duckHolds.stinger !== null ? STINGER_MUSIC_BED_DUCK : 1,
+      AUDIO_DUCK_ATTACK_SECONDS,
+    );
+    const next = mergeDucks(ducks);
+    if (ducksEqual(next, this.activeDuck)) return;
+    // Down fast, up slow. Read before the swap, so "deeper on any bus" is a
+    // comparison against what is actually on the buses right now.
+    const deepening = AUDIO_BUS_IDS.some(
+      (bus) => duckGain(next, bus) < duckGain(this.activeDuck, bus),
+    );
+    this.activeDuck = next;
+    this.applyAudioMix(deepening ? AUDIO_DUCK_ATTACK_SECONDS : AUDIO_DUCK_RELEASE_SECONDS);
   }
 
   /** Store the player's volume trims, apply them, and remember them for next time. */
@@ -2709,6 +2816,10 @@ export class RtsApp {
    */
   private playStinger(eventId: string): void {
     const result = this.audioEvents.trigger(eventId, this.audioClock);
+    // §9's third duck: the world and the bed step back under an announcement.
+    // Armed here rather than in the duck pass because this is the only place
+    // that knows a stinger — not a UI sound, not a notice — is what started.
+    if (result === "played") this.duckHolds.stinger = eventId;
     // Reported, unlike every other sound in this file, and the asymmetry is the
     // point. A footstep that the director refuses is the system working; a
     // stinger fires at most three times a match, at a moment the player is
@@ -2753,7 +2864,22 @@ export class RtsApp {
    */
   private playUnitVoice(moment: RtsVoiceMoment): void {
     const eventId = resolveUnitVoice(moment, (role) => this.selectionHasRole(role));
-    if (eventId) this.playUiAudio(eventId);
+    if (eventId) this.playVoiceAudio(eventId);
+  }
+
+  /**
+   * Fire one spoken line — mechanically {@link playUiAudio} plus §9's gentlest
+   * duck.
+   *
+   * Separate from `playUiAudio` rather than sniffing the id's `voice.` prefix,
+   * so what makes a line duck is the call site's knowledge that a unit is
+   * *speaking*, not a naming convention two systems would then have to keep
+   * agreeing on. Every bark goes through here: the ones the player asked for,
+   * and the alarm nobody clicked.
+   */
+  private playVoiceAudio(eventId: string): void {
+    const result = this.audioEvents.trigger(eventId, this.audioClock);
+    if (result === "played") this.duckHolds.voice = eventId;
   }
 
   /**
@@ -2847,7 +2973,7 @@ export class RtsApp {
       (role) => wounded.has(role),
       RTS_UNIT_ALARM_VOICE_ORDER,
     );
-    if (eventId) this.playUiAudio(eventId);
+    if (eventId) this.playVoiceAudio(eventId);
   }
 
   /**
@@ -3416,6 +3542,9 @@ export class RtsApp {
     // finished. Before this frame's triggers, so a sound that ended is not still
     // holding a slot against the one about to be asked for.
     this.audioEvents.advance();
+    // Straight after the prune, because that is the frame a finished sound
+    // stops being live — and a duck is released by exactly that fact.
+    this.updateAudioDucking();
     // The playlist rides the same real-seconds clock. It *was* outside the
     // paused gate, on the theory that the bed describes the place rather than
     // the work — but a bed that plays over a stopped match also runs its
@@ -7402,9 +7531,11 @@ export class RtsApp {
     // §5.11's two closing stingers, fired with the screen rather than with the
     // condition: this is the moment the player is told, and the sound belongs to
     // the telling. The simulation has already stopped, so the ambience and music
-    // beds keep running underneath. Ducking them under the result is still open,
-    // but no longer blocked: `musicDirector` owns the bed's handles now, so the
-    // fade it would need is one call rather than a missing capability.
+    // beds keep running underneath — and they now step back under the stinger
+    // for as long as it sounds (`playStinger` arms the duck; the music *bed* is
+    // pulled down by the director rather than by its bus, because the stinger
+    // is on that bus with it). A duck, not a stop: the world is still there
+    // when the fanfare ends, which is what the result screen is looking at.
     this.playStinger(outcome === "victory" ? RTS_AUDIO.stingerVictory : RTS_AUDIO.stingerDefeat);
     // §53: the result screen is where the duration is actually read — it is the
     // one moment the match has a final length to report.
@@ -7477,6 +7608,15 @@ export class RtsApp {
     // happened. The beds go with it and are started again immediately, because
     // nothing else on this path calls `beginMatch`.
     this.audioEvents.reset();
+    // The ducks go with the sounds that were holding them. They would clear
+    // themselves on the next frame anyway — `isPlaying` is false for a play the
+    // reset stopped — but the defeat stinger that ended the last match would
+    // then duck the first frame of the new one.
+    this.duckHolds.notice = null;
+    this.duckHolds.voice = null;
+    this.duckHolds.stinger = null;
+    this.activeDuck = {};
+    this.applyAudioMix();
     // The construction bed is not restarted here the way the two permanent beds are: it
     // has no site yet, and the next frame's tick will find one if the new match
     // has one. What must not survive the reset is the *claim* — a site from the

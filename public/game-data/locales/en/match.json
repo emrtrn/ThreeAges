@@ -66,5 +66,7 @@
   "match.settings.audio.sfx.hint": "Combat, work and the world.",
   "match.settings.audio.ambience.label": "Ambience",
   "match.settings.audio.ambience.hint": "The map's background bed.",
+  "match.settings.audio.voice.label": "Voice",
+  "match.settings.audio.voice.hint": "What your units say.",
   "match.settings.audio.value": "{value, number, percent}"
 }

@@ -66,5 +66,7 @@
   "match.settings.audio.sfx.hint": "战斗、劳作与环境。",
   "match.settings.audio.ambience.label": "环境音",
   "match.settings.audio.ambience.hint": "地图的背景声底。",
+  "match.settings.audio.voice.label": "语音",
+  "match.settings.audio.voice.hint": "部队的应答语音。",
   "match.settings.audio.value": "{value, number, percent}"
 }

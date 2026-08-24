@@ -151,6 +151,8 @@ export class MusicDirector {
   private clips: readonly string[];
   /** The live level, likewise — each state may sit at its own gain. */
   private volume: number;
+  /** A multiplier on {@link volume} while something plays over the bed. See {@link setDuck}. */
+  private duck = 1;
   /**
    * A playlist change waiting for a voice to free up.
    *
@@ -208,7 +210,41 @@ export class MusicDirector {
     this.volume = volume;
     // Only a track that has finished rising is at the authored level; one still
     // fading is mid-curve and `stepFadeIn` will carry it to the new value.
-    if (this.current?.atFullVolume) this.current.handle.setVolume(volume);
+    if (this.current?.atFullVolume) this.current.handle.setVolume(this.bedVolume());
+  }
+
+  /**
+   * The level the bed actually plays at: its authored gain, ducked.
+   *
+   * Every fade target reads this rather than {@link volume}, so a duck applied
+   * mid-transition is carried by the ramp already running instead of fighting
+   * it — the crossfade keeps its shape and simply happens quieter.
+   */
+  private bedVolume(): number {
+    return this.volume * this.duck;
+  }
+
+  /**
+   * Pull the bed down (or let it back up) without touching the music bus.
+   *
+   * This exists because of one routing fact: stingers play on the `music` bus,
+   * so the obvious way to clear a bed for an announcement — duck the bus —
+   * ducks the announcement too. The bed's own handle is the only gain between
+   * the two, so this is where a "music steps back under the fanfare" is even
+   * expressible.
+   *
+   * `fadeSeconds` matters more here than anywhere else in this class: a stinger
+   * arrives on the frame the player is told something, and a step change on the
+   * bed under it is heard as a glitch rather than as room being made.
+   */
+  setDuck(multiplier: number, fadeSeconds = 0): void {
+    const next = Number.isFinite(multiplier) ? Math.max(0, multiplier) : 1;
+    if (next === this.duck) return;
+    this.duck = next;
+    // A rising track is mid-ramp and `stepFadeIn` owns its gain; writing here
+    // would jump it off its curve. The outgoing half is stepped every frame for
+    // the same reason and needs nothing either.
+    if (this.current?.atFullVolume) this.current.handle.setVolume(this.bedVolume(), fadeSeconds);
   }
 
   /** True between `start()` and `stop()`, whether or not a clip resolved. */
@@ -319,7 +355,7 @@ export class MusicDirector {
       this.fadingOut = null;
       return;
     }
-    fade.handle.setVolume(this.volume * crossfadeGains(progress).outgoing);
+    fade.handle.setVolume(this.bedVolume() * crossfadeGains(progress).outgoing);
   }
 
   /** Rides the incoming track up, then leaves its gain alone. */
@@ -329,11 +365,11 @@ export class MusicDirector {
     const fade = this.settings.crossfadeSeconds;
     const progress = fade > 0 ? (clockSeconds - track.startedAt) / fade : 1;
     if (progress >= 1) {
-      track.handle.setVolume(this.volume);
+      track.handle.setVolume(this.bedVolume());
       track.atFullVolume = true;
       return;
     }
-    track.handle.setVolume(this.volume * crossfadeGains(progress).incoming);
+    track.handle.setVolume(this.bedVolume() * crossfadeGains(progress).incoming);
   }
 
   /**

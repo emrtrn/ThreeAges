@@ -91,13 +91,30 @@ export function mergeMixSnapshot(volumes: BusVolumes, snapshot: BusMixSnapshot):
 }
 
 /**
- * Example duck for a paused/menu state: pull music + ambience well down and trim
- * sfx and voice, but leave `ui` and `notifications` (and `master`) at full so
- * menu clicks stay crisp and an alert raised while paused still reaches the
- * player. Apply on pause, restore with {@link createDefaultBusVolumes} (or a
- * stored snapshot) on resume.
+ * A duck: what one moment does to the mix *while it lasts*.
+ *
+ * Shaped like a {@link BusMixSnapshot} and read as a **multiplier**, not as a
+ * level — `music: 0.6` means "six tenths of whatever the mix currently intends",
+ * never "0.6". The distinction is the whole reason ducks are typed apart in the
+ * docs even though the shape is shared: a project that authors its mix (an
+ * ambience bed at 0.22, music at 0.18) and then applied these as absolute
+ * volumes would *raise* both — the duck would be the loudest thing about them.
+ *
+ * A bus absent from a duck is untouched, which is how a duck says "this one is
+ * the point": `notifications` never appears in any duck below.
  */
-export const MENU_DUCK_MIX: BusMixSnapshot = {
+export type BusDuckMix = BusMixSnapshot;
+
+/**
+ * Duck for a paused/menu state: pull music + ambience well down and trim sfx and
+ * voice, but leave `ui` and `notifications` (and `master`) alone so menu clicks
+ * stay crisp and an alert raised while paused still reaches the player.
+ *
+ * The deepest of the four, because it is the only one the player *asked* for:
+ * they opened a menu. The other three ride under a live match and must not be
+ * heard as the mix breathing.
+ */
+export const MENU_DUCK_MIX: BusDuckMix = {
   music: 0.25,
   ambience: 0.3,
   sfx: 0.5,
@@ -113,8 +130,84 @@ export const MENU_DUCK_MIX: BusMixSnapshot = {
  * side-chain pump; the goal is that the alert *wins*, not that the mix visibly
  * breathes around it.
  */
-export const NOTIFICATION_DUCK_MIX: BusMixSnapshot = {
+export const NOTIFICATION_DUCK_MIX: BusDuckMix = {
   music: 0.6,
   ambience: 0.7,
   sfx: 0.8,
 };
+
+/**
+ * Duck applied while a unit speaks — the gentlest of the four, and the one with
+ * the narrowest aim.
+ *
+ * The design asks only for "nearby combat down *very slightly*" under a voice
+ * line, so `sfx` is the bus that moves and the rest barely does. Music is left
+ * where it is on purpose: a bark is one or two seconds and lands several times
+ * a minute, so a bed that dipped for each one would pump audibly — the exact
+ * failure the notice duck is also written to avoid, but far more often.
+ */
+export const VOICE_DUCK_MIX: BusDuckMix = {
+  sfx: 0.7,
+  ambience: 0.85,
+};
+
+/**
+ * Duck applied while a stinger announces a change of state (age-up, victory,
+ * defeat) — and the one duck that **cannot name `music`**.
+ *
+ * Stingers ride the `music` bus by design: they are written with the score, and
+ * a player who silenced the music has asked not to hear them. That routing is
+ * also a trap for this duck, because pulling the music bus down here would pull
+ * the stinger down with it — the announcement would duck itself. So the bus
+ * duck clears the *world* around the stinger, and the bed underneath is handled
+ * where it can be handled without touching the bus: `MusicDirector.setDuck`,
+ * which scales the playing track's own gain.
+ */
+export const STINGER_DUCK_MIX: BusDuckMix = {
+  ambience: 0.4,
+  sfx: 0.5,
+};
+
+/** How far the music *bed* is pulled under a stinger — see {@link STINGER_DUCK_MIX}. */
+export const STINGER_MUSIC_BED_DUCK = 0.3;
+
+/**
+ * The strongest duck per bus across everything currently ducking.
+ *
+ * Minimum rather than product, and that is a decision about what a duck means:
+ * two ducks are two reasons for one bus to be quieter, not a reason for it to be
+ * twice as quiet. A critical notice raised while a unit speaks would otherwise
+ * multiply to 0.56 on `sfx` — deeper than either moment asked for, and audible
+ * as a lurch whichever one ends first. Minimum is also order-independent, so the
+ * mix does not depend on which duck the frame happened to see first.
+ */
+export function mergeDucks(ducks: readonly BusDuckMix[]): BusDuckMix {
+  const merged: BusDuckMix = {};
+  for (const duck of ducks) {
+    for (const id of AUDIO_BUS_IDS) {
+      const value = duck[id];
+      if (value === undefined) continue;
+      const next = normalizeBusVolume(value);
+      const current = merged[id];
+      if (current === undefined || next < current) merged[id] = next;
+    }
+  }
+  return merged;
+}
+
+/** One bus's duck multiplier — 1 when nothing is ducking it. */
+export function duckGain(duck: BusDuckMix, bus: AudioBusId): number {
+  const value = duck[bus];
+  return value === undefined ? 1 : normalizeBusVolume(value);
+}
+
+/**
+ * Whether two ducks would leave the mix in the same place.
+ *
+ * By effect, not by shape: an absent bus and a bus at 1 are the same silence,
+ * and a host that reconciles its ducks every frame must be able to say "nothing
+ * changed" without pushing a ramp onto every gain sixty times a second.
+ */
+export function ducksEqual(a: BusDuckMix, b: BusDuckMix): boolean {
+  return AUDIO_BUS_IDS.every((bus) => duckGain(a, bus) === duckGain(b, bus));
+}

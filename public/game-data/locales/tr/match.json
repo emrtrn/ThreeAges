@@ -66,5 +66,7 @@
   "match.settings.audio.sfx.hint": "Savaş, iş ve dünya sesleri.",
   "match.settings.audio.ambience.label": "Ortam",
   "match.settings.audio.ambience.hint": "Haritanın arka plan dokusu.",
+  "match.settings.audio.voice.label": "Konuşma",
+  "match.settings.audio.voice.hint": "Birimlerin verdiği cevaplar.",
   "match.settings.audio.value": "{value, number, percent}"
 }

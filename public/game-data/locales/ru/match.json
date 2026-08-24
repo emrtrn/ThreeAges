@@ -66,5 +66,7 @@
   "match.settings.audio.sfx.hint": "Бой, работа и мир вокруг.",
   "match.settings.audio.ambience.label": "Атмосфера",
   "match.settings.audio.ambience.hint": "Фоновое звучание карты.",
+  "match.settings.audio.voice.label": "Голоса",
+  "match.settings.audio.voice.hint": "Что говорят ваши отряды.",
   "match.settings.audio.value": "{value, number, percent}"
 }

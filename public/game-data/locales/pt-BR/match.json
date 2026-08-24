@@ -66,5 +66,7 @@
   "match.settings.audio.sfx.hint": "Combate, trabalho e mundo.",
   "match.settings.audio.ambience.label": "Ambiente",
   "match.settings.audio.ambience.hint": "O fundo sonoro do mapa.",
+  "match.settings.audio.voice.label": "Vozes",
+  "match.settings.audio.voice.hint": "O que suas unidades dizem.",
   "match.settings.audio.value": "{value, number, percent}"
 }

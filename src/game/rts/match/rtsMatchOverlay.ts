@@ -123,6 +123,7 @@ export interface RtsAudioSettings {
   readonly music: number;
   readonly sfx: number;
   readonly ambience: number;
+  readonly voice: number;
 }
 
 export const DEFAULT_RTS_AUDIO_SETTINGS: RtsAudioSettings = {
@@ -130,6 +131,7 @@ export const DEFAULT_RTS_AUDIO_SETTINGS: RtsAudioSettings = {
   music: 1,
   sfx: 1,
   ambience: 1,
+  voice: 1,
 };
 
 interface AudioSettingRow {
@@ -138,19 +140,28 @@ interface AudioSettingRow {
 }
 
 /**
- * Four channels, each of which is a bus that carries live sound today.
+ * Five channels, each of which is a bus that carries live sound today.
  *
  * `notifications` and `ui` deliberately have no slider: they are the game
  * answering the player, and the accessibility rule that critical information
  * must never be audio-only cuts both ways — a player who has silenced their
  * alerts is a player the design cannot reach. `master` still covers them, which
  * is the honest way to turn everything off.
+ *
+ * `voice` was in that same list for one reason only — the project had not
+ * recorded a line, and a slider for a system that does not exist is a control
+ * the player drags while nothing happens. Three roles now bark, in English over
+ * a localized game (§62.1), which turns the missing slider into the opposite
+ * problem: the one channel a player is most likely to want quieter is the one
+ * they could only reach through `master`. Barks carry character, never
+ * information, so silencing them costs nothing the design relies on.
  */
 const AUDIO_SETTING_ROWS: readonly AudioSettingRow[] = [
   { key: "master", textKey: "match.settings.audio.master" },
   { key: "music", textKey: "match.settings.audio.music" },
   { key: "sfx", textKey: "match.settings.audio.sfx" },
   { key: "ambience", textKey: "match.settings.audio.ambience" },
+  { key: "voice", textKey: "match.settings.audio.voice" },
 ];
 
 /** The percentage under a volume slider, formatted for the active language. */
