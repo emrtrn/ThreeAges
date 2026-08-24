@@ -5250,3 +5250,75 @@ adı geçen klibi indirir; ses varlıkları önceden yüklenmez).
 
 Gerçekten kurtarılacak yer aranıyorsa, kaynak orası değil: müzik **118 MB**, yani
 starter içeriğin kırk katı (§61.1'in parça sayısı tartışması).
+
+### Paketlemenin bugünkü hâli — ölçüldü, iş yapılmadı (24 Ağustos 2026)
+
+Soru soruldu ("paketlerken kullanılmayanları ayrı tutabilir miyiz"), ölçüldü, ve
+**bu oturumda bir şey yapılmadı**. Ölçüm burada duruyor ki bir dahakine yeniden
+türetilmesin:
+
+Vite `public/`'i olduğu gibi kopyalıyor, yani bugün *hiçbir* dosya elenmiyor.
+`dist` **493 MB**: `assets/ThreeAges` 265 MB, `assets/audio` 139 MB,
+`assets/starter-content` **34 MB**, `assets/ui` 25 MB,
+`assets/DevelopmentContent` **22 MB**.
+
+Son ikisi oyunun hiç yüklemediği ağaçlar — starter içeriğe yalnız smoke test
+layout'u ve editörün cue örnekleri, `DevelopmentContent`'e yalnız editörün içerik
+tarayıcısındaki bir aç/kapa düğmesi bakıyor. Dizin düzeyinde ayrılabildikleri
+için budanmaları dosya dosya referans analizi gerektirmiyor: **56 MB, risksiz**.
+Yukarıdaki dokuz klip aynı budamada düşer ve 164 KB eder — yani bu bölümün asıl
+konusu, tablonun en küçük satırı.
+
+## 82.24 Müzik yeniden kodlandı — 117 MB → 41 MB, yirmi parça da duruyor (24 Ağustos 2026)
+
+Kullanıcı boyutu düşürmek için parça elemeyi düşünüyordu: menü 4→1, tension 4→1,
+battle 4→2. Ölçüm başka bir şey söyledi — **sorun parça sayısı değil bit hızıydı**.
+Yirmi parça 398–437 kbps ile sevk ediliyordu, yani bir mikste 0.18 kazançla
+çalan, üstünde efekt ve konuşma olan bir müzik yatağı için gerekenin iki-üç katı.
+
+Orijinal WAV'lardan Adobe Audition ile yeniden export (VBR ~%50, 48 kHz, stereo):
+
+| | önce | sonra |
+|---|---|---|
+| Toplam | 117.32 MB | **40.77 MB** (−76.5 MB, %65) |
+| Parça başına | 5.63–6.26 MB | 1.87–2.32 MB |
+| Bit hızı | 398–437 kbps | 130–162 kbps (ort. 141) |
+| Parça sayısı | 20 | **20** |
+
+Kullanıcının eleme planı 12 parçaya inip ~70 MB kazandıracaktı. Yeniden kodlama
+**daha fazlasını**, hiçbir parçayı kaybetmeden kazandırdı. Eleme kararı artık
+boyut baskısı altında değil, yalnız müzikal tercih olarak duruyor.
+
+**Aynı geçişte loudness eşitlendi, ve asıl kazanç bu olabilir.** Yirmi parça
+-12.1 ile -20.8 LUFS arasına dağılmıştı (8.7 LU); bu, bazı parçaların efektleri
+diğerlerinden belirgin daha fazla bastırması demekti — ve düzeltmesi kod değil
+kaynak dosyaydı. Şimdi:
+
+```text
+20 parça: min -16.7  max -15.5  yayılım 1.16 LU   (hedef -16 LUFS)
+en yüksek tepe: -0.73 dBFS      tam ölçek aşımı: 0 örnek
+```
+
+Yayılım **8.7 LU → 1.16 LU**. Tablodaki `music.*` olay seviyeleri artık her parça
+için aynı şeyi yapıyor, ki `volume` alanının varsaydığı da buydu.
+
+**`audio:loudness` özetindeki 10.3 LU'luk müzik kanalı yayılımı bir çelişki
+değil:** o sayı 23 klip üzerinden, yani üç stinger dahil (`stg-defeat-01` -25.9
+LUFS). Stingerlar bir varyant havuzu değil, kendi `volume`'u olan ayrı olaylar —
+onları yatakların hizasına çekmek bilerek sessiz olan bir yenilgi vuruşunu
+bozardı. Aracın olay-bazlı kontrolü doğru olanı söylüyor: **müzikte 4 LU'yu aşan
+havuz yok.**
+
+**İki tuzak, ikisi de ölçümle yakalandı:**
+
+1. **Dört menü parçası `music/gameplay/` altına export edilmişti.** Manifest
+   onları `music/menu/` altında bekliyor, yani oyun eski 6 MB'lık dosyaları
+   yüklemeye devam ediyordu ve *hiçbir şey hata vermiyordu* — yeni dosyalar
+   manifestte yer bile almadan sessizce duruyordu. Yalnız `ls` ile görüldü.
+2. Baştaki sessizlik (100–400 ms) kırptırılmadı ve kırpılmamalıydı: müzik 18
+   saniyelik crossfade ile giriyor, o sessizlik rampanın içinde kalıyor. Baş
+   sessizliği yalnız tıklamaya cevap veren kanallarda (ui/notifications/voice)
+   kusurdur — `audit-audio-loudness.mjs` zaten yalnız orada bayrak kaldırıyor.
+
+Süre/kanal/örnekleme değişmedi: 20 parça da 120.0 s, stereo, 48 kHz.
+`npm run test:engine` 1571 geçti.
