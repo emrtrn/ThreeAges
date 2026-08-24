@@ -2,6 +2,7 @@
   "menu.title": "Grenzkönigreiche",
   "menu.tagline": "Baue deine Wirtschaft auf, verbinde deine Straßen und zerstöre das feindliche Zentrum.",
   "menu.start_match": "Spiel starten",
+  "menu.audio_unsupported": "Dieser Browser kann das Audioformat des Spiels nicht abspielen; das Match bleibt stumm. Chrome, Edge und Firefox spielen es ab.",
   "menu.loading.title": "Laden",
   "menu.loading.percent": "{ratio, number, percent}",
   "menu.loading.preparing": "Wird vorbereitet…"

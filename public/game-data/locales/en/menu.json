@@ -2,6 +2,7 @@
   "menu.title": "Frontier Kingdoms",
   "menu.tagline": "Build your economy, link your road, and raze the enemy centre.",
   "menu.start_match": "Start Match",
+  "menu.audio_unsupported": "This browser cannot play the game's audio format, so the match will be silent. Chrome, Edge and Firefox play it.",
   "menu.loading.title": "Loading",
   "menu.loading.percent": "{ratio, number, percent}",
   "menu.loading.preparing": "Preparing…"

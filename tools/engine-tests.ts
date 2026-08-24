@@ -749,6 +749,8 @@ import { MovingPlatformSubsystem } from "../engine/physics/movingPlatformSubsyst
 import {
   AudioSubsystem,
   DEFAULT_SPATIAL_ATTENUATION,
+  SHIPPED_AUDIO_MIME,
+  canPlayAudioFormat,
   resolveSpatialPannerConfig,
 } from "../engine/audio/audioSubsystem";
 import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
@@ -6423,6 +6425,66 @@ check("the authored mix, the player's trim and a duck multiply rather than repla
 });
 
 // --- Audio Bus Lite (subsystem, headless) -------------------------------------
+
+check("audio format support: only an empty canPlayType is a no, and no DOM is not evidence", () => {
+  // The check behind the menu's "this browser has no sound" line. Its failure
+  // modes run in both directions and both are bad: warn a browser that would
+  // have coped and the game calls itself broken, stay quiet on one that cannot
+  // and the player gets silence with no cause (audio plan §82.19).
+  const original = globalThis.document;
+  try {
+    // `""` is the browser refusing outright — the only real no.
+    (globalThis as { document?: unknown }).document = {
+      createElement: () => ({ canPlayType: () => "" }),
+    };
+    assert.equal(canPlayAudioFormat(), false);
+    // "maybe" is a hedge, not a refusal, and is treated as yes.
+    (globalThis as { document?: unknown }).document = {
+      createElement: () => ({ canPlayType: () => "maybe" }),
+    };
+    assert.equal(canPlayAudioFormat(), true);
+    (globalThis as { document?: unknown }).document = {
+      createElement: () => ({ canPlayType: () => "probably" }),
+    };
+    assert.equal(canPlayAudioFormat(), true);
+    // An engine build with no `canPlayType` at all cannot be asked, so it is not
+    // accused — Playwright's WebKit is exactly this shape for Web Audio.
+    (globalThis as { document?: unknown }).document = { createElement: () => ({}) };
+    assert.equal(canPlayAudioFormat(), true);
+    // Headless: not knowing is not evidence. A test run must never claim the
+    // shipped format is unplayable.
+    delete (globalThis as { document?: unknown }).document;
+    assert.equal(canPlayAudioFormat(), true);
+  } finally {
+    if (original === undefined) delete (globalThis as { document?: unknown }).document;
+    else (globalThis as { document?: unknown }).document = original;
+  }
+});
+
+check("audio format support: the probed type is the one the project actually ships", () => {
+  // The check is worthless if it asks about a format the game does not use, and
+  // that drift is invisible: both halves keep working, they just stop being
+  // about each other. So the mime is pinned against the shipped files.
+  assert.match(SHIPPED_AUDIO_MIME, /^audio\/ogg;\s*codecs="vorbis"$/u);
+  const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
+    assets?: Array<{ assetType?: unknown; path?: unknown }>;
+  };
+  // Scoped to the project's own audio. Forge's starter content ships a couple of
+  // `.wav` demo sounds, and they are not a counter-example: WAV plays
+  // everywhere, so the single-format risk this check guards is about the 264
+  // files under `assets/audio/` and nothing else.
+  const sounds = (manifest.assets ?? []).filter(
+    (asset) => asset.assetType === "sound" && String(asset.path).includes("assets/audio/"),
+  );
+  assert.ok(sounds.length > 0, "the project must ship some audio for this to mean anything");
+  for (const asset of sounds) {
+    assert.match(
+      String(asset.path),
+      /\.ogg$/u,
+      `${String(asset.path)} is not the format canPlayAudioFormat asks about`,
+    );
+  }
+});
 
 check("audio subsystem seeds every mix bus at unity", () => {
   const audio = new AudioSubsystem();

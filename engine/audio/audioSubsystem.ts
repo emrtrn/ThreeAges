@@ -87,6 +87,35 @@ function positiveOr(value: number | undefined, fallback: number): number {
  * and guaranteeing `maxDistance > refDistance` (an inverted/equal pair would make
  * the PannerNode silent or NaN). Pure: unit-tested without a Web Audio context.
  */
+/**
+ * The media type every clip in this project is shipped as.
+ *
+ * One format, no fallback — a deliberate choice (§8 of the audio plan) with one
+ * consequence worth naming here rather than in a comment somewhere downstream:
+ * a browser that cannot decode it plays *nothing*, not a degraded mix.
+ */
+export const SHIPPED_AUDIO_MIME = 'audio/ogg; codecs="vorbis"';
+
+/**
+ * Whether this browser will play a media type at all — the check that turns
+ * "there is no sound" into something the game can say out loud.
+ *
+ * `canPlayType` answers with an intention (`""` / `"maybe"` / `"probably"`) and
+ * only the empty string is a real answer: it is the browser stating it will not
+ * try. Anything else is treated as yes, because the alternative — warning a
+ * player whose browser said "maybe" and would have coped — is a worse error than
+ * staying quiet.
+ *
+ * Returns `true` where there is no DOM to ask (tests, tooling). Not knowing is
+ * not evidence, and a headless run must never claim the format is unplayable.
+ */
+export function canPlayAudioFormat(mimeType: string = SHIPPED_AUDIO_MIME): boolean {
+  if (typeof document === "undefined") return true;
+  const probe = document.createElement("audio");
+  if (typeof probe.canPlayType !== "function") return true;
+  return probe.canPlayType(mimeType) !== "";
+}
+
 export function resolveSpatialPannerConfig(options: AudioPlayOptions): SpatialPannerConfig {
   const refDistance = positiveOr(options.refDistance, DEFAULT_SPATIAL_ATTENUATION.refDistance);
   const maxCandidate = positiveOr(options.maxDistance, DEFAULT_SPATIAL_ATTENUATION.maxDistance);
@@ -363,6 +392,8 @@ export class AudioSubsystem implements Subsystem, AudioBus {
   private readonly busVolumes: BusVolumes = createDefaultBusVolumes();
   /** Live bus GainNodes, created lazily with the context (`master` → destination). */
   private busNodes: Map<AudioBusId, GainNode> | null = null;
+  /** Urls already reported as undecodable, so the warning is once per clip. */
+  private readonly reportedDecodeFailures = new Set<string>();
 
   constructor(options: AudioSubsystemOptions = {}) {
     this.backend = options.backend ?? "none";
@@ -710,7 +741,24 @@ export class AudioSubsystem implements Subsystem, AudioBus {
       pending = fetch(url)
         .then((response) => response.arrayBuffer())
         .then((data) => context.decodeAudioData(data))
-        .catch(() => null);
+        .catch((error: unknown) => {
+          // Reported, and the reason is a failure mode this used to hide
+          // completely: a browser that cannot decode the shipped codec fails
+          // *every* clip here, and with a silent catch the game simply plays no
+          // sound and says nothing about why. That is the one audio bug a bug
+          // report cannot describe — "there is no sound" reads the same whether
+          // the table failed to load, the context is suspended, or the decoder
+          // refused the format.
+          //
+          // Once per url, like the director's unknown-event report: a clip that
+          // cannot decode is asked for again on every trigger, and an unbounded
+          // log in a per-frame path is its own bug.
+          if (!this.reportedDecodeFailures.has(url)) {
+            this.reportedDecodeFailures.add(url);
+            console.warn(`[audio] could not decode "${url}" — this browser may not support the format:`, error);
+          }
+          return null;
+        });
       this.buffers.set(url, pending);
     }
     return pending;

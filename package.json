@@ -13,6 +13,8 @@
     "build": "npm run test:locales && tsc --noEmit && vite build",
     "check:assets": "node tools/run-asset-manifest-health.mjs",
     "audio:manifest": "node tools/sync-audio-manifest.mjs",
+    "audio:loudness": "node tools/audit-audio-loudness.mjs",
+    "audio:codecs": "node tools/probe-audio-codecs.mjs",
     "inventory:threeages-materials": "node tools/run-threeages-material-inventory.mjs",
     "texture:threeages": "python tools/threeages-texture-pipeline.py",
     "optimize:glb": "node tools/optimize-building-glb.mjs",

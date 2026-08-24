@@ -2,6 +2,7 @@
   "menu.title": "Royaumes des frontières",
   "menu.tagline": "Développez votre économie, reliez vos routes et détruisez le Centre ennemi.",
   "menu.start_match": "Démarrer la partie",
+  "menu.audio_unsupported": "Ce navigateur ne peut pas lire le format audio du jeu : la partie sera silencieuse. Chrome, Edge et Firefox le lisent.",
   "menu.loading.title": "Chargement",
   "menu.loading.percent": "{ratio, number, percent}",
   "menu.loading.preparing": "Préparation…"

@@ -21,6 +21,7 @@
  * suite, which finds the start button through them (plan §9). Reskinning the menu
  * separately would have cost a CSS copy and eight spec rewrites to look identical.
  */
+import { canPlayAudioFormat } from "@engine/audio/audioSubsystem";
 import { onLocaleChanged, t } from "../../localization/LocalizationService";
 import { RtsMatchSetup, type RtsMatchSetupValues } from "../match/rtsMatchSetup";
 import { RtsLanguageSelect } from "./rtsLanguageSelect";
@@ -49,6 +50,22 @@ export class RtsMainMenu {
    * to reach.
    */
   private readonly language = new RtsLanguageSelect("setup");
+  /**
+   * Shown only to a browser that cannot play the shipped audio format, and
+   * absent from the DOM otherwise.
+   *
+   * The project ships Ogg Vorbis alone and WebKit refuses it (audio plan
+   * §82.19), so Safari would run the whole game in silence. Supporting it means
+   * a second encoding of 264 files, which is a scope decision that was made the
+   * other way — and once "no sound here" is the accepted outcome, the only thing
+   * left that would be *wrong* is not saying so. Silence with no explanation
+   * reads as a broken build; a line that names the cause reads as a limitation.
+   *
+   * It belongs on this screen rather than in the match feed for the same reason
+   * the language picker does: it is a fact about the browser, not about the
+   * kingdom, and the player should have it before they commit to a match.
+   */
+  private readonly audioNotice: HTMLParagraphElement | null;
   private readonly stopLocaleWatch: () => void;
   private disposed = false;
 
@@ -100,6 +117,19 @@ export class RtsMainMenu {
     footer.className = "rts-main-menu-footer";
     footer.appendChild(this.language.element);
 
+    // Asked once, here: `canPlayType` is a synchronous string answer and the
+    // menu is the first thing built, so a browser that will be silent is known
+    // before the player has spent anything on a match.
+    if (canPlayAudioFormat()) {
+      this.audioNotice = null;
+    } else {
+      this.audioNotice = document.createElement("p");
+      this.audioNotice.className = "rts-main-menu-notice";
+      this.audioNotice.dataset.rtsAudioNotice = "";
+      this.audioNotice.textContent = t("menu.audio_unsupported");
+      footer.prepend(this.audioNotice);
+    }
+
     this.card.append(heading, this.setup.element, this.actions, footer);
     this.root.append(art, this.card);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
@@ -114,6 +144,7 @@ export class RtsMainMenu {
     this.title.textContent = t("menu.title");
     this.detail.textContent = t("menu.tagline");
     this.startButton.textContent = t("menu.start_match");
+    if (this.audioNotice) this.audioNotice.textContent = t("menu.audio_unsupported");
     this.setup.retranslate();
   }
 

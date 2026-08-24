@@ -2,8 +2,8 @@
   "menu.title": "Пограничные королевства",
   "menu.tagline": "Постройте свою экономику, свяжите свои дороги и сравняйте с землей вражеский центр.",
   "menu.start_match": "Начать матч",
+  "menu.audio_unsupported": "Этот браузер не воспроизводит аудиоформат игры — матч пройдёт без звука. Chrome, Edge и Firefox его воспроизводят.",
   "menu.loading.title": "Загрузка",
   "menu.loading.percent": "{ratio, number, percent}",
   "menu.loading.preparing": "Подготовка…"
 }
-

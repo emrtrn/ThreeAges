@@ -1,1 +1,9 @@
-{"menu.title":"Reinos de la frontera","menu.tagline":"Desarrolla tu economía, conecta tus caminos y destruye el Centro enemigo.","menu.start_match":"Iniciar partida","menu.loading.title":"Cargando","menu.loading.percent":"{ratio, number, percent}","menu.loading.preparing":"Preparando…"}
+{
+  "menu.title": "Reinos de la frontera",
+  "menu.tagline": "Desarrolla tu economía, conecta tus caminos y destruye el Centro enemigo.",
+  "menu.start_match": "Iniciar partida",
+  "menu.audio_unsupported": "Este navegador no puede reproducir el formato de audio del juego, así que la partida será silenciosa. Chrome, Edge y Firefox sí lo reproducen.",
+  "menu.loading.title": "Cargando",
+  "menu.loading.percent": "{ratio, number, percent}",
+  "menu.loading.preparing": "Preparando…"
+}

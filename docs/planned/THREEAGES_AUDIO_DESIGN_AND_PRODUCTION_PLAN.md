@@ -35,6 +35,9 @@ bakılacak altı yer:
 | **Bölgesel ambiyans üretim listesi** | §82.13 |
 | **Ses stili neye kilitlendi** | §47.0 — kalem kalem, referans varlık id'siyle |
 | **Kalite kapıları** | §67 (Gate A–D), §45/§46 (Paket 1 kabulü) |
+| **QA nasıl oynanır** | §68.1 — on üç soru, duyulacakları ana göre |
+| **Ölçüm araçları** | §82.18 (loudness), §82.19 (codec) |
+| **QA sonucu ve tarayıcı kararı** | §82.20, §82.21 |
 
 §69 "yapılacaklar", §81.1 "kalanlar" — ikisi kesişir ama aynı şey değildir:
 §69 üretim adımlarını sayar, §81.1 oyunda o an yanlış ses çalan olayları. Paket 1
@@ -99,7 +102,7 @@ stinger'a gerek yok, aynı işi yapar), **maç başlangıcı** ise perde kalkı�
 | **Faz 5** | Paket 2–4 (UI/notification/ekonomi → yapı/lojistik → birim/savaş) | ✅ | Üç kova da kapandı — A/C §82.3, B §82.17. Gate C'nin dört maddesi karşılandı |
 | **Faz 6** | Paket 5 (ambience + müzik) | ✅ | Menü/settlement/expansion/tension/battle ×4, üç stinger, harita yatağı ve yedi bölge yatağı sevk edildi — §51 |
 | **Faz 7** | Paket 6 polish + mix + erişilebilirlik slider'ları (§62) | 🔨 | Gate D — slider'lar (§62.0/§62.2) ve ducking (§82.16) indi; loudness pass, codec testi ve tekrar yorgunluğu kaldı |
-| **Faz 8** | Full-match audio QA (§68) + performans bütçesi doğrulaması (§61) | ⬜ | Gate D |
+| **Faz 8** | Full-match audio QA (§68) + performans bütçesi doğrulaması (§61) | 🔨 | QA geçti (§82.20); kalan: §61'in eşzamanlı ses bütçesi ve üç kırpılmış yatak |
 
 ### Faz 0 neden Package 1'den önce gelir
 
@@ -198,6 +201,8 @@ test senaryosu ve §47'nin stil kilidi ancak böyle gerçek bir gözlem olur.
 | 2026-08-23 | **Koru kaldırıldı, nehir kendi çizgisine bağlandı (§82.15).** İkinci dinleme oturumu: kullanıcı beş yatağı onayladı, koruyu reddetti, nehre daha iyi bir çapa önerdi. **Koru** varlığıyla ve mekanizmasıyla gitti — harita geneli ambiyans zaten orman taşıyor, ve bu projenin koruları vahşi orman değil dikilmiş kümeler, yani yatak orada olmayan bir şeyi anlatıyordu; yedi yatak altıya indi ve §82.14'ün "en dar çapa aralığı" testi dayanağını kaybetti (koruların 27.5 birimini okuyordu). **Nehir** landscape spline'ından okunuyor artık: yol iki yerde yarım authored — Level'ın `riverWaters`'ı hangi spline'ın nehir olduğunu söylüyor, çizgiyi Landscape sidecar'ı veriyor — ve `resolveRtsRiverPaths` ikisini Landscape mount olduğu anda birleştiriyor. Çapa artık kameranın baktığı noktaya en yakın *nehir üstü* nokta (merkezde 1.0 birim, oyuncu üssünde 51.7, yani üste yatak yok). Üç şey uygularken çıktı: köşeye snap değil **segment izdüşümü** (6 nokta ~190 birim, en yakın köşe kıyıdan onlarca birim uzak olabilir); `points` bir küme, sıra `segments` zincirinde — authored sırada okumak bugün doğru ama nehrin ortasına editörde nokta eklendiği gün nehri kendi üstüne katlardı; ve tek çapa id'siyle kayan bir nokta, ki bu devralan mesafesinin **yatağın konduğu noktadan** ölçülmesini gerektirdi (handle taşınamıyor, §82.9). `cooldownMs` altı yatakta da 0'a indi: yeniden oturma aynı olayı aynı karede durdurup başlatmak, yani 0 ile crossfade, başka her değerle delik. Latent bir hata kapsam dışı bırakıldı: `rtsLevelAdapter`'ın rota çözümü spline dönüşünü yok sayıyor — bugün ısırmıyor (rotaların hepsi dönüşsüz) ama aynı okumayı yapan ilk nehir denemesi çizgiyi haritanın dışına koydu. |
 | 2026-08-24 | **Ducking indi** (§82.16): §9'un üç öneri satırı ve §52'nin iki kutusu. Yol boyunca üç şey çıktı — duck sabitleri v1.1'den beri **hiçbir yerden çağrılmıyordu**; *mutlak seviye* olarak yazıldıkları için oldukları gibi uygulansalar authored 0.22'lik ambiyansı **yükselteceklerdi** (çarpana çevrildi); ve stinger'lar `music` bus'ında olduğu için bir müzik duck'ı fanfarı kendi kendine kısacaktı (yatak duck'ı `MusicDirector.setDuck` ile bus'a dokunmadan indi). Duck'ı kapatan şey zamanlayıcı değil sesin bitişi — director'a `isPlaying` eklendi. Ayrıca **voice slider'ı** (§62.2, sekiz dil + CJK subset) ve plan tazelendi (Faz 6 ✅, §51/§52 kutuları, §82.7/§82.8/§82.2'nin bayat 'kalan' satırları). 9 yeni sözleşme testi; `test:engine` 1567 yeşil. |
 | 2026-08-24 | **Son iki klip indi ve bağlandı (§82.17).** Kullanıcı `sfx_notify_age_up_01` ve üç `vo_archer_stop` klibini üretti; `audio:manifest` (264 varlık), `events.json`'a iki olay, `RTS_NOTIFICATION_KIND_AUDIO_EVENTS`'e çağ atlamanın iki türü ve archer bloğuna `stop:`. `RtsApp.ts` açılmadı — tablonun kendi notunun öngördüğü gibi. Bir test kırmızıya döndü ve **doğru sebeple**: `resolveUnitVoice("stop", archer)` null bekliyordu, yani *authoring boşluğunu* pinlemişti; boşluk kapandığı için beklenti okçunun kendi repliğine çevrildi, sahipsiz duruş vakası worker'a taşındı. Ayrıca planın "tür haritasına iki satır" talimatı bağlarken **yanlış çıktı**: `age-upgraded` türü çağ geçişini *ve* çağ içi seviye atlamayı birlikte taşıyor, yani çan seviye atlamada da çalacaktı — ayrım postaya taşındı (§82.17). Faz 5 ve Gate C kapandı. |
+| 2026-08-24 | **Ducking kulakla onaylandı** (§82.16), ve Gate D'nin iki ölçüm maddesi araca çevrildi. `npm run audio:loudness` 264 klibi BS.1770 ile Chromium'un kendi decoder'ından ölçüyor (§82.18): ilk koşu **eşiklerin yanlış olduğunu** söyledi — kanal medyanına göre 186 dosya işaretlenmişti, oysa bir ayak sesiyle bir top aynı bus'ta 20 LU ayrı olmalı; ölçüt olay havuzunun kendi yayılımı oldu ve liste 26 havuz + 3 kırpılmış yatağa indi. `npm run audio:codecs` iki runtime yolunu (Web Audio decode + media element) kurulu her motorda deniyor (§82.19); WebKit ve Firefox kuruldu ve cevap çıktı: Chromium ve Firefox çalıyor, **WebKit Ogg Vorbis'i reddediyor** — yani oyun bugün Safari'de tamamen sessiz açılır ve AAC yedeği bir kapsam kararı bekliyor. Yol boyunca bir **sessiz hata** düzeldi: decode başarısızlığı yutuluyordu, yani Vorbis'i çözemeyen bir tarayıcıda oyun tek satır log basmadan sessiz açılırdı. Kullanıcı kararları: yapı idle sesleri ⛔ kapsam dışı (§82.11 madde 6), müzik indirme boyutu için parça sayısını azaltma fikri park edildi (§61.1), full-match QA onaylandı ve çetelesi §68.1'e yazıldı. |
+| 2026-08-24 | **Full-match QA geçti ve Safari kapsam dışı bırakıldı.** §68'in on üç sorusu bir oturumda oynandı ve **revizyon maddesi çıkmadı** (§82.20); 13. soru 20 dakika için yazılmıştı, 30 dakikada bile tekrar hissi yok. Kesişim kayda değer: §82.18'in işaretlediği 26 dengesiz havuzun hiçbiri maçta duyulmadı, yani ölçüm bir risk listesi, hata listesi değil. Safari kararı **desteklenmeyecek** — ikinci format üretilmiyor, ama sessizlik cevap değil: ana menüde yalnız çalamayan tarayıcıya görünen, sekiz dile çevrilmiş bir satır (§82.21). Kontrol `canPlayType` ve yalnız boş dize 'hayır' sayılıyor; DOM yoksa suçlama yok. İki sözleşme testi, biri sorulan mime'ın sevk edilen format olduğunu tutuyor. |
 
 ---
 
@@ -2356,11 +2361,14 @@ olduğu yazıldı.
 - [x] Music crossfade — equal-power, parçanın kendi süresinden zamanlanıyor (§35)
 - [x] Critical notification ducking — §82.16
 - [x] Voice ducking — §82.16
-- [ ] Final loudness pass
-- [ ] Browser codec test
+- [ ] Final loudness pass — ölçüm indi (`npm run audio:loudness`, §82.18);
+      kalan iş 26 dengesiz varyant havuzu ve 3 kırpılmış yatak
+- [x] Browser codec test — probe indi (`npm run audio:codecs`, §82.19); Chromium
+      ve Firefox çalıyor, WebKit çalmıyor ve kapsam dışı bırakıldı (§82.21)
 - [x] Asset preload policy — yataklar stream, kısa sesler decoded (§61.1)
 - [ ] Low-performance fallback
-- [ ] Mobile kapsam dışı kontrol
+- [x] Mobile kapsam dışı kontrol — §2 zaten masaüstü tarayıcı diyor; Safari
+      kararı (§82.21) iOS'u da aynı yerden kapsam dışında bırakıyor
 - [ ] Full-match audio fatigue test — §68
 
 ---
@@ -2695,6 +2703,12 @@ MiB yerine küçük bir tampon kalıyor. İkinci kazanç ölçülmedi ama kulakl
 doğrulandı: bir parça artık ilk çalışında 5.8 MB indirme + decode beklemiyor, ve
 o bekleme tam da crossfade'in ortasına düşüyordu.
 
+**İndirme boyutu ayrı bir soru ve açık (24 Ağustos 2026).** Streaming RAM'i
+çözdü, diski çözmedi: müzik 118 MB ile tüm ses varlığının %85'i. Kullanıcının
+önerdiği yön, bitrate düşürmek değil **parça sayısını azaltmak** — bazı
+durumların çalma listesi 4'ten 2'ye inebilir. Tekrar yorgunluğuyla takas
+olduğu için ölçüsü dinlemeyle verilecek; sırası geldiğinde konuşulacak.
+
 Kısa sesler decoded yolda kalır ve kalmalıdır — bir stream zamanlanmış bir
 örneğe değil hazır olduğu ana başlar, ki bu bir kılıç darbesi için yanlış takas.
 Sözleşme testi bunu tutuyor: `music`/`ambience` bus'ındaki yataklar stream eder,
@@ -2949,12 +2963,16 @@ geçiş zamanlamasındaydı — §35.1.
 
 ## Gate D — Release Audio
 
-- [ ] Full-match mix testi
-- [ ] Browser test
-- [ ] Repeat fatigue testi
-- [ ] Performance testi
-- [ ] No missing event
-- [ ] Final mastering / runtime gain pass
+- [x] Full-match mix testi — §68.1'in on üç maddesi, revizyonsuz geçti (§82.20)
+- [x] Browser test — üç motor denendi; WebKit sevk edilen formatı çalmıyor ve
+      **kapsam dışı bırakıldı**, oyuncuya söyleniyor (§82.19, §82.21)
+- [x] Repeat fatigue testi — 30 dakika, tekrar hissi yok (§82.20 madde 13);
+      §61.1'in parça sayısı tartışması bu ölçüyü yeniden sordurur
+- [ ] Performance testi — §61'in eşzamanlı ses bütçesi maçta doğrulanmadı
+- [x] No missing event — `test:engine` her tetiklenen adın tabloda karşılığı
+      olduğunu ve her klibin manifestte bulunduğunu tutuyor
+- [ ] Final mastering / runtime gain pass — ölçüm indi (§82.18); maçta hiçbir
+      havuz rapor edilmedi, kırpılan üç yatak duruyor
 
 ---
 
@@ -2975,6 +2993,58 @@ geçiş zamanlamasındaydı — §35.1.
 - Battle bittikten sonra müzik sakinleşiyor mu?
 - Ambiyans savaş sonrasında dünyayı tekrar hissettiriyor mu?
 - 20 dakika sonunda müzik tekrar hissi veriyor mu?
+
+## 68.1 QA çetelesi — nasıl oynanır (24 Ağustos 2026)
+
+§68'in on üç sorusu doğru sorular ama bir maçın içinde sırasıyla sorulamaz:
+bazıları ilk beş dakikada cevaplanır, bazıları ancak yirminci dakikada
+duyulabilir hâle gelir. Aşağısı aynı liste, **duyulabilecekleri ana göre**
+sıralanmış — ve her satırda "yanlışsa nereye bakılır" var, çünkü bir QA notunun
+tek başına ("savaşta miks çöküyor") ertesi gün yapılabilir bir işi yok.
+
+Tek oturum, **20–30 dakika**, tercihen kulaklıkla bir kez ve hoparlörle bir kez
+(§56). Slider'lar varsayılanda (hepsi 1) — ayarları oynatarak dinlemek başka bir
+test.
+
+### İlk 5 dakika — kurulum sesleri
+
+| Soru (§68) | Ne dinlenir | Yanlışsa nereye bakılır |
+|---|---|---|
+| UI yorucu mu? | Yapı yerleştirme, iptal, panel açma, hover taraması | `events.json` → ilgili olayın `volume`/`cooldownMs` |
+| Worker sesleri fazla mı? | 4–6 işçi aynı anda çalışırken | `unit.footstep`, `unit.chop_impact` — `cooldownMs` ve `maxInstances` |
+| İnşaat sesleri aynı mı geliyor? | Arka arkaya iki bina | `building.construction_hammer` havuzu (§82.18: 8.6 LU yayılım — burası zaten şüpheli) |
+| Lojistik uyarısı kaçırılıyor mu? | Bir yolu kesip bekle | `notify.logistics_cut` seviyesi; ducking artık altını açıyor (§82.16) |
+
+### İlk temas — savaş miksi
+
+| Soru | Ne dinlenir | Yanlışsa nereye bakılır |
+|---|---|---|
+| Savaş başlayınca miks çöküyor mu? | 6+ birim çatışırken bildirim gelmesi | Global bütçe (`maxConcurrent`), `sfx` bus seviyesi |
+| Top her ateşte her şeyi bastırıyor mu? | Topçu + piyade birlikte | `siege.cannon_fire.volume`; §82.10'un ıslık dengesi |
+| Okçular duyuluyor mu? | Ok atışı, savaşın içinde | `combat.arrow_release` / `arrow_flight` seviyeleri |
+| Guard voice gereğinden sık mı? | Art arda emirler | `voice.guard_*` `cooldownMs` |
+| Center attack alarmı yeterince farklı mı? | Merkeze saldırı anı | `notify.center_attack` — tier'dan ayrı klibi var |
+
+### Durum geçişleri — 10–20. dakika
+
+| Soru | Ne dinlenir | Yanlışsa nereye bakılır |
+|---|---|---|
+| Settlement → Expansion → Tension → Battle doğal mı? | Genişleme ve ilk düşman teması | `events.json` → `music.states` eşikleri (§35.2) |
+| Savaş bitince müzik sakinleşiyor mu? | Çatışmadan ~15 sn sonra | `calmSeconds` |
+| Ambiyans savaştan sonra dünyayı geri veriyor mu? | Sessizliğe dönüş | `world.ambience` ve bölge yataklarının seviyesi |
+
+### 20. dakika — yorgunluk
+
+| Soru | Ne dinlenir | Yanlışsa nereye bakılır |
+|---|---|---|
+| Müzik tekrar hissi veriyor mu? | Aynı parçanın ikinci gelişi | Çalma listesi uzunluğu — ve §61.1'in "4'ten 2'ye" tartışması buranın tersi yönde |
+| Bölge yataklarının loop dikişi duyuluyor mu? | Bir bölgede 2+ dakika durmak | 26 sn'lik klipler, §82.13'ün şartnamesi 30–45 diyordu |
+
+### Not almanın tek kuralı
+
+Bir madde "kötü" diye işaretlendiğinde **hangi anda** olduğu yazılsın. Ses
+ayarları olay bazlı, yani "top çok yüksek" tek satırlık bir düzeltme; "savaşta
+bir şeyler yanlıştı" ise ertesi gün yeniden oynanacak bir maç demek.
 
 ---
 
@@ -4343,6 +4413,19 @@ katman**. Bir tur içinde hem yazılıp hem kapatılması, listenin dördüncü 
 gerçekten daraldığının ölçüsü. Ayrıntısı §82.12'de; işaretin kendisi duruyor,
 çünkü ses kancası değil.
 
+### 6. Yapı idle sesleri üretilmeyecek (24 Ağustos 2026)
+
+§44'ün Tier 3 listesindeki "yapı idle sesleri" hiç bağlanmamıştı ve bir olayı
+yoktu (`building.build_loop` şantiye, `structure.fire_loop` yangın — ikisi de
+idle değil). Kullanıcı kararı: **gerek yok.** Kapsam dışı.
+
+Kaybedilen şey ölçülebilir ve küçük: yapının *bulunduğu yer* zaten bir sesi olan
+bir yer — §82.13'ün yedi bölge yatağı tam olarak bunun için üretildi, ve bir
+değirmenin gıcırtısı ile tarla yatağının içindeki değirmen gıcırtısı arasında
+oyuncunun ayırt edeceği bir fark yok. Yapı başına ikinci bir konumlu döngü,
+yatağın altında ikinci bir yatak olurdu (§82.13'ün "aynı anda tek yatak"
+kararının reddettiği şeyin aynısı).
+
 ## 82.12 `throw-release` — kapsam dışı (23 Ağustos 2026)
 
 Bir tur boyunca üretim listesinde durdu, ayrıntılı promptu yazıldı, ve
@@ -4731,6 +4814,12 @@ yetişmesi gerekiyor; çıkışın böyle bir randevusu yok, ve inişle aynı h�
 çıkmak mix'i her bildirimde nefes alır hâle getirir. Yavaş çıkış ayrıca art arda
 gelen iki duck'ı tek bir kademe gibi duyuruyor.
 
+### Kabul — kulakla doğrulandı (24 Ağustos 2026)
+
+Kullanıcı dört ducking'i de maçta dinledi ve onayladı: duraklat, kritik bildirim,
+voice hattı, stinger. Pompalama bildirilmedi, ve fanfar kendi duck'ının altında
+kalmıyor. §52'nin iki kutusu bu dinlemeyle kapandı.
+
 ### Kalan
 
 Bu bölüm §9'un üç öneri satırının üçünü de karşılıyor. Kalan iki polish maddesi
@@ -4836,3 +4925,210 @@ duruyorlar.
 **Tier 3'ün "yapı idle sesleri"** (§44) hiç bağlanmadı ve bir olayı yok
 (`building.build_loop` şantiye, `structure.fire_loop` yangın — ikisi de idle
 değil). Kapsam kararı verilmedi; verildiğinde §82.11'in yanına yazılır.
+
+## 82.18 Loudness ölçüldü — ve eşikler veriden sonra yazıldı (24 Ağustos 2026)
+
+§52'nin "final loudness pass"i ve §55/§57'nin "normalize edilmiş" / "aynı
+loudness" kutuları 264 dosyalık bir dinleme işiydi, ve bir insan iki dosyanın
+seviyesini kafasında yan yana tutamaz. `npm run audio:loudness`
+(`tools/audit-audio-loudness.mjs`) bunu sayıya çeviriyor.
+
+**Ölçüm tarayıcıda yapılıyor, ffmpeg ile değil.** Bu makinede ffmpeg yok ve
+Playwright'ın sevk ettiği `--disable-everything` ile derlenmiş (ne Vorbis
+decoder'ı ne `ebur128`). Chromium Vorbis'i zaten çözüyor, zaten kurulu, **ve
+oyunun çaldığı decode yolunun ta kendisi** — yani ölçülen şey dosya hakkında
+ikinci bir görüş değil, oyuncunun duyduğu şey. Ölçüm ITU-R BS.1770-4 gated
+integrated loudness (K-weighting, 400 ms blok, %75 örtüşme, -70 LUFS mutlak ve
+-10 LU göreli kapı) artı sample peak.
+
+**Araç rapor eder, düzeltmez ve build kırmaz.** Dengeleme tablolarını testten
+uzak tutan kural burada da geçerli: bir büyüklüğü pinleyen check, bir klip
+bilerek yeniden ayarlandığı gün kırmızıya döner ve orada öğretilen şey "testi
+düzelt" olur.
+
+### İlk koşu eşiklerin yanlış olduğunu söyledi
+
+İlk sürüm "kanal medyanından 3 LU sapan her klibi" işaretledi ve **264 dosyanın
+186'sını** listeledi. Bu bir iş listesi değil, ve mesele gürültü değil
+**yanlışlık**: bir ayak sesi ile bir top aynı `sfx` bus'ında ve aralarında 20 LU
+olması gerekiyor. Kanal medyanı, kanalın içeriğini tarif eder — yargılamaz.
+
+Oyuncunun *dengesiz* diye duyduğu şey bir **havuz**: rastgele seçilen dört
+çekiç klibi, ve içlerinden biri 8 LU altta kalırsa bu çeşitlilik değil "çekiç
+ıskaladı" diye duyulur. O yüzden ölçüt olay havuzunun kendi içindeki yayılım
+oldu. Ölçülen medyan yayılım 61 havuzda **3.7 LU**, eşik 4 LU — yani kuyruk
+işaretleniyor, norm değil.
+
+Aynı şekilde iki eşik daha veriden düzeltildi:
+
+- **Peak.** 67 klip 0 dBFS'i aşıyor, neredeyse hepsi 0.1 dB'den az — kayıplı
+  codec'in decode overshoot'u, olağan. Bunları listelemek gerçekten kırpılmış
+  **üç** klibi gömerdi. Eşik +0.5 dBFS oldu; kalanlar sayılıyor, listelenmiyor.
+- **Baştaki sessizlik.** 150 ms üstü yalnız `ui`/`notifications`/`voice`'ta hata,
+  çünkü orada ses bir şeye *cevap* veriyor. Sessizlikten yükselen bir müzik
+  yatağı hiçbir şeye geç kalmıyor — ve işaretlenen on müzik parçasının hepsi
+  buydu. §55'in "başta gereksiz silence yok" maddesi onlara yazılmamıştı.
+
+### Bulgular
+
+| | |
+|---|---|
+| Kanal medyanları | voice **-22.1** (yayılım 7.2 LU — en derli toplu set), music -16.2, sfx -19.4, ui -23.1, notifications -18.5, ambience -31.7 |
+| Dengesiz varyant havuzu | **26 olay** 4 LU üstünde; en kötüleri `notify.info` (11.0), `wildlife.butcher` (8.9), `building.construction_hammer` (8.6), `music.menu` (8.1) |
+| Kırpılma | **3 klip**: `amb_zone_settlement_01` (+2.07 dBFS), `amb_zone_quarry_01` (+1.90), `amb_zone_farmland_01` (+1.55) — limiter'a bastırılmışlar ve decoder sakladığını geri veriyor |
+| Geç cevap | **0** — tıklamaya cevap veren üç kanalda 150 ms üstü baş sessizliği yok |
+
+`notify.info`'nun 11 LU'su tek başına kayda değer: iki klip, ve biri diğerinin
+üçte biri kadar gürültülü — hangisinin çalacağı rastgele, yani aynı bildirim iki
+farklı seviyede duyuluyor.
+
+**Kalan iş bir üretim işi:** 26 havuzu eşitlemek ve üç yatağı tepe payı bırakarak
+yeniden vermek. Araç listeyi verdi; kararı kulak verecek.
+
+## 82.19 Codec: tek format, sessiz başarısızlık, ve yarım cevap (24 Ağustos 2026)
+
+§52'nin "browser codec test" kutusu. Ölçülen ilk gerçek şu: proje **tek format**
+sevk ediyor — 264 dosyanın hepsi Ogg Vorbis, yedek yok — ve bu seçim
+Chromium dışında hiç denenmedi.
+
+### Önce bir sessiz hata düzeldi
+
+`AudioSubsystem.loadBuffer` decode hatasını `.catch(() => null)` ile yutuyordu.
+Vorbis'i çözemeyen bir tarayıcıda bu **her klipte** olur, yani oyun tamamen
+sessiz açılır ve konsolda tek satır çıkmaz. Bir hata raporunun tarif edemeyeceği
+tek ses hatası budur: "ses yok" cümlesi, tablo yüklenmediğinde de, context
+askıdayken de, decoder formatı reddettiğinde de aynı görünür. Artık url başına
+bir kez uyarı basılıyor (director'ın bilinmeyen-olay raporuyla aynı desen —
+per-frame bir yolda sınırsız log kendi başına bir hata).
+
+### Probe iki yolu birden deniyor
+
+`npm run audio:codecs` (`tools/probe-audio-codecs.mjs`) kurulu her motoru
+başlatıp gerçek bir sevk edilmiş klibi çözüyor. **İki yol, çünkü iki decoder:**
+kısa sesler `decodeAudioData` (Web Audio), yataklar ise media element
+(`stream: true`, §61.1). Bir tarayıcı birini destekleyip diğerini
+desteklemeyebilir. `canPlayType` tek başına cevap değil — o bir *niyet* bildirir
+("maybe"/"probably"), decode etmez; raporda bilgi olarak duruyor.
+
+### Cevap: WebKit sevk ettiğimiz formatı çalmıyor
+
+WebKit ve Firefox kuruldu ve üçü de denendi:
+
+```text
+chromium  PLAYS    canPlayType ogg/vorbis: probably   decode ok   element ok
+firefox   PLAYS    canPlayType ogg/vorbis: probably   decode ok   element ok
+webkit    SILENT   canPlayType ogg/vorbis: (empty)    element FAILED   (aac: probably)
+```
+
+**Bulgu:** WebKit Ogg Vorbis'i reddediyor — `canPlayType` boş dönüyor ve gerçek
+bir yatak dosyası yüklenemiyor. Aynı motor AAC için "probably" diyor. Yani
+bugünkü hâliyle oyun Safari'de **tamamen sessiz** açılır, ve bugüne kadar bunu
+söyleyecek tek bir log satırı bile yoktu (yukarıdaki sessiz hata).
+
+**Bir nüans, yanlış ders çıkarılmasın diye:** WebKit'in Web Audio decode satırı
+`FAILED` diyor ama sebebi codec değil — Playwright'ın Windows WebKit derlemesinde
+Web Audio **hiç yok**. Bu o derlemenin özelliği, Safari'nin değil. Araç bu ayrımı
+raporda yapıyor ve verdict'i yalnız `canPlayType` + gerçek element yüklemesi
+üzerinden veriyor; ikisi de codec sorusunu doğrudan cevaplıyor.
+
+Playwright WebKit'i Safari'nin *motoru*, Safari'nin kendisi değil. Ama olumsuz
+cevap bu yönde güvenilir: Ogg Vorbis desteği WebKit'te hiç olmadı, ve bir macOS
+Safari'sinde formatın çalışması için WebKit'in reddettiği bir şeyi platform
+katmanının kabul etmesi gerekirdi.
+
+### Ne gerekiyor
+
+Klip başına ikinci bir format: **mp4 içinde AAC**, çalışma anında `canPlayType`
+ile seçilen. Manifest zaten klip başına yol taşıyor, yani şema değişikliği değil;
+maliyet iki yerde:
+
+- **Üretim:** 264 dosyanın yeniden kodlanması — ve bu makinede ffmpeg yok
+  (§82.18), yani önce o gelir.
+- **İndirme:** kabaca iki katı ses varlığı. Müzik zaten 118 MB olduğu için
+  (§61.1) bu, "parça sayısını azaltma" tartışmasını kendiliğinden öne çekiyor:
+  ikinci format, tam da boyutu düşürmek istenen yerde ikiye katlıyor.
+
+Bu iş **kapsam kararı bekliyor**: Safari desteklenecek mi? Desteklenmeyecekse
+doğru davranış sessizlik değil, açık bir uyarı — oyuncuya "bu tarayıcı sesi
+çalamıyor" diyen bir satır, ve bunun maliyeti bir bildirimden ibaret.
+
+## 82.20 Full-match QA — on üç sorunun on üçü geçti (24 Ağustos 2026)
+
+§68'in listesi, §68.1'in çetelesiyle bir oturumda oynandı. **Tek revizyon
+maddesi çıkmadı** — ilk kez, ve bu bir ses paketinin bittiğinin ölçüsü.
+
+| # | Soru | Sonuç |
+|---|---|---|
+| 1 | İlk 5 dakikada UI yorucu mu? | Hayır |
+| 2 | Worker sesleri fazla mı? | Hayır |
+| 3 | İnşaat sesleri aynı mı geliyor? | Sorun yok |
+| 4 | Savaş başladığında miks çöküyor mu? | Hayır — savaş müziği çalıyor |
+| 5 | Top her ateşte diğer her şeyi bastırıyor mu? | Hayır |
+| 6 | Okçular duyuluyor mu? | Evet |
+| 7 | Guard voice gereğinden sık mı? | Hayır |
+| 8 | Lojistik kesildi uyarısı kaçırılıyor mu? | Hayır |
+| 9 | Center attack alarmı yeterince farklı mı? | Evet |
+| 10 | Settlement → Expansion → Tension → Battle doğal mı? | Evet |
+| 11 | Savaş bitince müzik sakinleşiyor mu? | Evet |
+| 12 | Ambiyans savaş sonrası dünyayı geri veriyor mu? | Evet |
+| 13 | 20 dakika sonunda müzik tekrar hissi veriyor mu? | **30 dakikada bile hayır** |
+
+Son satır plandan fazlasını cevaplıyor: soru 20 dakika için yazılmıştı, oturum
+30 dakika sürdü ve tekrar hissi hâlâ yok. Bunun sebebi ölçülebilir — durum başına
+dört parça, her biri 120 sn, shuffle bag ile dağıtılıyor (§29/§35): bir durumda
+kalınan süre 8 dakikayı geçmeden aynı parça geri gelmiyor, ve durum değişimi
+bag'i zaten kırıyor.
+
+**Bu sonuç §61.1'in "4'ten 2'ye" tartışmasının girdisi.** Parça sayısı yarıya
+inerse aynı ölçü 4 dakikaya düşer, ve 13. sorunun bugünkü cevabı o değişiklikten
+sonra yeniden sorulmalı — bugün geçmiş olması, yarısıyla da geçeceğini
+söylemiyor.
+
+### Loudness raporuyla kesişim
+
+§82.18'in listelediği 26 dengesiz havuzun **hiçbiri maçta rapor edilmedi**.
+İnşaat sesleri (`building.construction_hammer`, ölçülen yayılım 8.6 LU) 3. soruda
+ayrıca soruldu ve "sorun yok" cevabı aldı. Bu, ölçümü geçersiz kılmıyor ama
+sırasını değiştiriyor: ölçüm bir *risk listesi*, duyulan bir *hata listesi*
+değil — ve ikisi ayrıştığında karar kulağındır.
+
+Kırpılan üç bölge yatağı (+1.5..+2.1 dBFS) ayrı duruyor: onlar bir denge sorusu
+değil, decode edilirken tepe payı olmayan dosyalar. Yeniden verilmeleri
+dinlemeye bağlı değil.
+
+## 82.21 Safari desteklenmeyecek — ve sessizlik yerine bir satır (24 Ağustos 2026)
+
+§82.19'un bıraktığı kapsam sorusu cevaplandı: **Safari desteklenmeyecek.** İkinci
+bir format (mp4/AAC) üretilmeyecek; 264 dosyanın yeniden kodlanması ve ses
+varlığının ikiye katlanması, tam da müzik boyutunun küçültülmek istendiği bir
+noktada (§61.1), bir tarayıcı için ödenmeyecek.
+
+**Ama sessizlik bir cevap değil.** Karar "o tarayıcıda ses yok" olduğunda geriye
+kalan tek yanlış, bunu söylememek: açıklamasız sessizlik bozuk bir build gibi
+okunur, sebebini söyleyen bir satır ise bir sınır gibi. Bu yüzden ana menüde,
+dil seçicinin yanında, yalnız çalamayan tarayıcıya görünen bir not:
+
+> Bu tarayıcı oyunun ses biçimini çalamıyor, maç sessiz geçecek. Chrome, Edge ve
+> Firefox çalıyor.
+
+Sekiz dile çevrildi (zh-CN için font alt kümesi yeniden üretildi).
+
+**Neden ana menü, bildirim akışı değil.** Bu tarayıcı hakkında bir olgu, krallık
+hakkında değil — dil seçicinin orada olmasıyla aynı gerekçe. Ayrıca oyuncunun
+maça girmeden önce bilmesi gereken bir şey, sonra öğreneceği bir şey değil.
+
+### Kontrol `canPlayType`, ve yalnız boş dize "hayır" demektir
+
+`canPlayAudioFormat()` (`engine/audio/audioSubsystem.ts`) niyet bildiren üç
+cevaptan yalnız birini reddediyor: `""`. `"maybe"` bir çekince, ret değil, ve
+başa çıkabilecek bir tarayıcıya "sende ses yok" demek, susmaktan daha büyük bir
+hata olurdu. DOM yoksa (test, araç) cevap **evet** — bilmemek kanıt değildir, ve
+headless bir koşu sevk edilen formatı çalamaz ilan edemez.
+
+İki sözleşme testi: kontrolün üç cevabı doğru yorumladığı (ve DOM'suz ortamda
+suçlamadığı), ve sorduğu mime'ın **projenin gerçekten sevk ettiği** format
+olduğu — ikisi ayrışırsa iki taraf da çalışmaya devam eder, sadece birbirleri
+hakkında olmaktan çıkarlar.
+
+Konsol tarafı da §82.19'da düzeldi: decode hatası artık url başına bir kez
+raporlanıyor, yani "ses yok" diyen bir hata raporu artık sebebini de taşıyor.

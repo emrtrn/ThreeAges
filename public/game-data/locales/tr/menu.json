@@ -2,6 +2,7 @@
   "menu.title": "Sınır Krallıkları",
   "menu.tagline": "Ekonomini kur, yolunu bağla ve düşman merkezini yık.",
   "menu.start_match": "Maçı Başlat",
+  "menu.audio_unsupported": "Bu tarayıcı oyunun ses biçimini çalamıyor, maç sessiz geçecek. Chrome, Edge ve Firefox çalıyor.",
   "menu.loading.title": "Yükleniyor",
   "menu.loading.percent": "{ratio, number, percent}",
   "menu.loading.preparing": "Hazırlanıyor…"

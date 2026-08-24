@@ -2,6 +2,7 @@
   "menu.title": "Reinos da Fronteira",
   "menu.tagline": "Construa sua economia, conecte suas estradas e arrase o centro inimigo.",
   "menu.start_match": "Iniciar partida",
+  "menu.audio_unsupported": "Este navegador não reproduz o formato de áudio do jogo, então a partida será silenciosa. Chrome, Edge e Firefox reproduzem.",
   "menu.loading.title": "Carregando",
   "menu.loading.percent": "{ratio, number, percent}",
   "menu.loading.preparing": "Preparando…"

@@ -1093,6 +1093,21 @@ body.rts-route {
   border-top: 1px solid rgb(198 152 64 / 18%);
 }
 
+/* The browser-can't-play-our-audio line (audio plan §82.19). Shares the footer
+   with the language picker and sits to its left, which is why the footer's
+   `justify-content: flex-end` needs the `auto` margin below: the notice is a
+   fact about this browser, the picker is a control, and a line of prose
+   crowding a dropdown reads as a label for it. Muted rather than alarming —
+   nothing is broken and there is nothing to fix. */
+.rts-main-menu-notice {
+  margin: 0 auto 0 0;
+  max-width: 46ch;
+  align-self: center;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgb(226 214 190 / 62%);
+}
+
 /* In the footer the caption sits beside the control on one line; in the pause
    card the `.rts-match-setting` grid already owns the two columns. */
 .rts-main-menu-footer > .rts-language-select {
