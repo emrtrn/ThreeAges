@@ -38,7 +38,6 @@ export type RtsNotificationKind =
   | "supply-linked"
   | "supply-cut"
   | "supply-lost"
-  | "caravan-destroyed"
   | "outpost-under-attack"
   | "center-under-attack"
   | "worker-under-attack"
@@ -97,7 +96,6 @@ const RULES: Readonly<Record<RtsNotificationKind, NotificationRule>> = {
   // re-raising it every fifteen seconds would nag about something the player has
   // already been told and cannot undo except by taking it back.
   "supply-lost": { severity: "alert", displaySeconds: 8, cooldownSeconds: 0 },
-  "caravan-destroyed": { severity: "alert", displaySeconds: 8, cooldownSeconds: 8 },
   "outpost-under-attack": { severity: "alert", displaySeconds: 6, cooldownSeconds: 12 },
   "center-under-attack": { severity: "alert", displaySeconds: 8, cooldownSeconds: 10 },
   // V3 §3.10. The one notice that is not a convenience: a wolf in unscouted

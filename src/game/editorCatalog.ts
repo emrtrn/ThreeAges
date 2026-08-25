@@ -1039,7 +1039,6 @@ const LOGISTICS_FIELDS = [
   { path: "carryCapacity", label: "Sefer başına yük", min: 0, step: 5, hint: "Bir seferde taşınan kaynak. Üreticilerin en küçük 'Yerel tampon' değerini aşamaz: aşarsa kervan binayı her gelişinde boşaltır, tampon hiç dolmaz ve uzak üreticinin gecikmesi hissedilmez." },
   { path: "moveSpeed", label: "Yol hızı", min: 0, step: 0.1, hint: "Kervanın yolda ilerleme hızı. Yavaşlatmak uzak üreticiyi pahalılaştırır — kervan bir gecikmedir." },
   { path: "walkClipSpeed", label: "Yürüme klibi hızı", min: 0, step: 0.1, hint: "Yürüme animasyonunun doğal göründüğü hız. Yol hızıyla arası açılırsa eşek ayaklarını kaydırarak yürür; ikisini birlikte ayarlayın." },
-  { path: "maxHealth", label: "Can", min: 0, step: 5, hint: "Kervan saldırılabilir bir hedeftir; düşük can baskını ödüllendirir." },
   { path: "loadSeconds", label: "Yükleme/boşaltma (sn)", min: 0, step: 0.5, hint: "Yolun iki ucunda beklenen süre; kervanın 'çalışıyor' göründüğü an." },
   { path: "spawnPerProducer", label: "Üretici başına kervan", min: 1, step: 1, hint: "Bağlı her üreticinin yolda tuttuğu eşek sayısı. Tam sayı olmalıdır." },
 ];

@@ -305,7 +305,7 @@ import { PredatorResponseSystem } from "./wildlife/predatorResponseSystem";
 import { WildlifeRetaliationSystem } from "./wildlife/wildlifeRetaliation";
 import { WildlifeSystem } from "./wildlife/wildlifeSystem";
 import { WildlifeView } from "./wildlife/wildlifeView";
-import { Caravan, CaravanSystem, type CaravanDispatch } from "./logistics/caravanSystem";
+import { CaravanSystem, type CaravanDispatch } from "./logistics/caravanSystem";
 import { ProducerCaravanLanes, producerLaneId } from "./logistics/producerCaravanLanes";
 import { CaravanView } from "./logistics/caravanView";
 import { buildingUnlocked, KingdomProgressionSystem, TOWN_REQUIRED_SETTLEMENT_LEVEL, type UpgradableStructure } from "./progression/kingdomProgressionSystem";
@@ -5254,7 +5254,6 @@ export class RtsApp {
       const moved = Math.hypot(x - debt.x, z - debt.z);
       debt.x = x;
       debt.z = z;
-      if (caravan.dying) continue;
       debt.walked += moved;
       if (debt.walked < debt.due) continue;
       debt.walked = 0;
@@ -6044,6 +6043,23 @@ export class RtsApp {
    * an animal walks out of again; a Guard already trading blows with one keeps
    * its own target, which is how a started fight finishes rather than being
    * called off mid-swing.
+   *
+   * Logistics caravans are deliberately **not** here. Shooting one never cut a
+   * supply line: a load is withdrawn from its source only on arrival (KARAR 5),
+   * so a killed donkey lost nothing but its trip, and {@link CaravanSystem}
+   * rebuilt the animal from the lane on the tick after its death window closed.
+   * That left the player an affordance that looked like interdiction and was
+   * not one. Cutting logistics has a single home instead — the ground under the
+   * road (`RoadGraph.passable`), which is also what takes a trade site off
+   * its holder (KARAR 4-A).
+   *
+   * `Caravan` does not merely go unlisted here: it carries no health, no armour
+   * class and no death window, and its balance row authors none. Keeping the
+   * machinery "for a raid rule that may yet want it" was tried and reverted —
+   * unreachable state reads as a live feature to everyone who finds it later,
+   * and an `armorClass` nothing resolves against is a number that gets tuned to
+   * no effect. If a raid rule ever wants a killable donkey it can add all of it
+   * back deliberately, which is cheaper than carrying a decade of ambiguity.
    */
   private combatTargets() {
     return [
@@ -6051,19 +6067,7 @@ export class RtsApp {
       ...this.centers.all(),
       ...this.structures.all(),
       ...this.predators.hostile(),
-      // A donkey is only offered while it is actually travelling and the other
-      // kingdom can see it. This mirrors the predator's state-gated target list:
-      // an army does not peel away from its fight to chase a loading caravan in
-      // fog, but an ambush on a road it controls is a real tactical choice.
-      ...this.caravans.all().filter((caravan) => this.isCaravanAttackable(caravan)),
     ];
-  }
-
-  private isCaravanAttackable(caravan: Caravan): boolean {
-    if (caravan.health.depleted || caravan.dying) return false;
-    if (caravan.phase !== "outbound" && caravan.phase !== "inbound") return false;
-    const observer = caravan.owner === PLAYER_OWNER ? AI_OWNER : PLAYER_OWNER;
-    return this.vision?.isVisible(observer, caravan.position.x, caravan.position.z) ?? true;
   }
 
   /**
@@ -6543,16 +6547,6 @@ export class RtsApp {
   private resolveCombatHit(hit: CombatHit): void {
     this.debugWitness?.recordHit(hit);
     this.creditStructureKill(hit.attacker, hit.target, hit.change.depleted);
-    if (hit.target instanceof Caravan && hit.change.depleted && hit.target.beginDeath()) {
-      this.units.clearAttackTargets(hit.target);
-      if (hit.target.owner === PLAYER_OWNER) {
-        this.notifications.post({
-          kind: "caravan-destroyed",
-          subject: hit.target.id,
-          text: t("notification.caravan_lost"),
-        });
-      }
-    }
     if (hit.target instanceof Unit) {
       retaliateAgainstAttack(hit.target, hit.attacker, this.navigation);
     }

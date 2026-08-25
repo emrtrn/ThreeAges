@@ -9,7 +9,6 @@
   "notification.under_attack.center": "您的中心受到攻击！",
   "notification.under_attack.outpost": "您的前哨受到攻击。",
   "notification.under_attack.workers": "你的 {count} 名工人正遭受攻击！",
-  "notification.caravan_lost": "商队被击中：其货物是丢失.",
   "notification.regional_victory.enemy": "敌人占据战略关口：{time}左.",
   "notification.age.enemy_upgraded": "敌人前进到{age}年龄.",
   "notification.age.completed": "{age}年龄已完成：你的每座建筑现在是{tier}.",

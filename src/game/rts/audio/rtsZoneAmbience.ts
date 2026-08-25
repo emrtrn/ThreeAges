@@ -24,7 +24,8 @@ export type RtsAmbienceZoneKind =
   | "goldmine"
   | "settlement"
   | "market"
-  | "farmland";
+  | "farmland"
+  | "windmill";
 
 /**
  * The bed each zone sounds as. One event per kind, one clip per event.
@@ -41,6 +42,7 @@ export const RTS_ZONE_AMBIENCE: Readonly<Record<RtsAmbienceZoneKind, string>> = 
   settlement: "world.zone_settlement",
   market: "world.zone_market",
   farmland: "world.zone_farmland",
+  windmill: "world.zone_windmill",
 };
 
 /**
@@ -49,6 +51,17 @@ export const RTS_ZONE_AMBIENCE: Readonly<Record<RtsAmbienceZoneKind, string>> = 
  * `command_center` alone carries the settlement rather than `house` as well: one
  * house is not a town, and a kingdom has exactly one centre, so the town bed has
  * exactly one anchor instead of drifting to whichever hut the camera is nearest.
+ *
+ * `windmill` names a zone of its own rather than `farmland`, and that is the
+ * only way a mill bed can exist here: this system holds **one** bed at a time, so
+ * "play the mill alongside the fields" is not available to it — two beds under
+ * `world.ambience` are heard as one mush rather than as two places. As its own
+ * kind it competes on distance like every other zone, which is the honest answer
+ * to a mill standing next to its fields: at the mill you hear the mill, a few
+ * units away in the crop you hear farmland, and the enter/exit gap crossfades.
+ * A mill sound that had to layer *over* the fields would not be a zone bed at
+ * all — it would be a spatial loop attached to the building, `structure.fire_loop`'s
+ * shape, and it would live in the sfx table instead.
  */
 export const RTS_ZONE_AMBIENCE_BUILDINGS: Readonly<Record<string, RtsAmbienceZoneKind>> = {
   command_center: "settlement",
@@ -56,7 +69,7 @@ export const RTS_ZONE_AMBIENCE_BUILDINGS: Readonly<Record<string, RtsAmbienceZon
   quarry: "quarry",
   gold_mine: "goldmine",
   farm: "farmland",
-  windmill: "farmland",
+  windmill: "windmill",
   pasture: "farmland",
 };
 

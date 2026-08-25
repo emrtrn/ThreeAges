@@ -9,7 +9,6 @@
   "notification.under_attack.center": "Ваш Центр атакован!",
   "notification.under_attack.outpost": "Ваш аванпост подвергся нападению.",
   "notification.under_attack.workers": "{count, plural, one {Один из ваших рабочих атакован!} few {# ваших рабочих атакованы!} many {# ваших рабочих атакованы!} other {# ваших рабочих атакованы!}}",
-  "notification.caravan_lost": "Караван подвергся нападению: его груз потерян.",
   "notification.regional_victory.enemy": "Противник удерживает стратегические проходы: {time} слева.",
   "notification.age.enemy_upgraded": "Враг приблизился к эпохе {age}.",
   "notification.age.completed": "Эпоха {age} завершилась: каждое ваше здание теперь называется {tier}.",

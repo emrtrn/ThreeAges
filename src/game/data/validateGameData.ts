@@ -2570,7 +2570,7 @@ export function validateCaravanBalance(value: unknown): CaravanBalance {
   const caravanWhere = `${where}.caravan`;
   const caravan = asObject(obj["caravan"], caravanWhere);
   const positive = (
-    key: "moveSpeed" | "walkClipSpeed" | "maxHealth" | "spawnPerProducer",
+    key: "moveSpeed" | "walkClipSpeed" | "spawnPerProducer",
   ): number => {
     const amount = requireFiniteNumber(caravan, key, caravanWhere);
     if (amount <= 0) throw new GameDataError(`${caravanWhere}.${key}: must be > 0`);
@@ -2582,16 +2582,14 @@ export function validateCaravanBalance(value: unknown): CaravanBalance {
   if (!Number.isInteger(spawnPerProducer)) {
     throw new GameDataError(`${caravanWhere}.spawnPerProducer: must be a whole number of caravans`);
   }
-  const armorClass = requireString(caravan, "armorClass", caravanWhere);
-  if (armorClass !== "light" && armorClass !== "heavy") {
-    throw new GameDataError(`${caravanWhere}.armorClass: must be "light" or "heavy"`);
-  }
+  // No `maxHealth` / `armorClass`: a caravan is not a combat target, so there is
+  // nothing for either to describe. They were authored while a donkey could be
+  // shot, and removing that left them as data no code reads — the kind that is
+  // still tuned by whoever finds it, to no effect.
   return {
     nameKey: requireLocalizationKey(caravan, "nameKey", caravanWhere),
     moveSpeed: positive("moveSpeed"),
     walkClipSpeed: positive("walkClipSpeed"),
-    maxHealth: positive("maxHealth"),
-    armorClass,
     loadSeconds,
     spawnPerProducer,
   };

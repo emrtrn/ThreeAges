@@ -1447,9 +1447,6 @@ export interface CaravanBalance {
    * default would play the clip at a rate the feet do not agree with.
    */
   readonly walkClipSpeed: number;
-  readonly maxHealth: number;
-  /** How a caravan takes damage; livestock-soft, like every other animal. */
-  readonly armorClass: Exclude<UnitArmorClass, "structure">;
   /** Seconds spent standing at each end of the trip, loading or unloading. */
   readonly loadSeconds: number;
   /** Caravans a linked producer keeps on the road (V4 KARAR 2-A: automatic). */

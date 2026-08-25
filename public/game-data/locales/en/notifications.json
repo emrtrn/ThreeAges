@@ -9,7 +9,6 @@
   "notification.under_attack.center": "Your Centre is under attack!",
   "notification.under_attack.outpost": "Your Outpost is under attack.",
   "notification.under_attack.workers": "{count, plural, one {One of your workers is under attack!} other {# of your workers are under attack!}}",
-  "notification.caravan_lost": "The caravan was struck: its cargo is lost.",
   "notification.regional_victory.enemy": "The enemy holds the strategic passes: {time} left.",
   "notification.age.enemy_upgraded": "The enemy advanced to the {age} Age.",
   "notification.age.completed": "The {age} Age is complete: every building of yours is now {tier}.",

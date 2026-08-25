@@ -1555,6 +1555,22 @@
       "maxDistance": 95,
       "rolloff": 5,
       "stream": true
+    },
+    "world.zone_windmill": {
+      "_note": "The mill is a zone of its own rather than a layer over farmland, because the zone system holds one bed at a time by design (§82.13) - two beds under `world.ambience` are heard as one mush, not as two places. So `windmill` moved out of the farmland anchor list: standing at the mill you hear the mill, standing at the fields beside it you hear farmland, and the 18/25 radii cross-fade between them. Same shape and level as its siblings, and the level took a second export to earn. The first delivery came in at -16.2 LUFS against farmland -29.5 - about 13 LU over the bed it crossfades with, which would have made walking from the fields to the mill a jump rather than a crossfade, and it carried the matching symptom of a hot master (peak +2.9 dBFS, 10 ms over full scale, the only ambience clip past 82.18 threshold). It was briefly compensated here with volume 0.065; 82.24 had already settled that a level that far out is fixed in the export, not the table, so it was re-exported to -29 LUFS with a -1 dBTP ceiling and now measures -29.1 / -10.3 dBFS / 0 ms over scale. Hence 0.3, like every other zone: nothing here is compensating for anything.",
+      "clips": [
+        "amb-zone-windmill-01"
+      ],
+      "bus": "ambience",
+      "volume": 1,
+      "loop": true,
+      "cooldownMs": 0,
+      "maxInstances": 1,
+      "spatial": true,
+      "refDistance": 35,
+      "maxDistance": 95,
+      "rolloff": 5,
+      "stream": true
     }
   },
   "_musicStates": "How the match picks which of the four playlists is playing (plan §28/§35). `tensionVisibleEnemies` is enemies the player can actually see through the fog - §35's rule is that seeing one is tension, not battle. `battleActiveFights` counts units of either side holding an attack target. `threatRadius` makes a *seen* enemy that close to the player's centre a battle on its own, before a blow lands, so a siege column walking into the square is not scored as calm. `calmSeconds` is how long a raised state holds after its cause is gone - combat is spiky, and without it the music would flap several times per skirmish. All four are retuned by ear."

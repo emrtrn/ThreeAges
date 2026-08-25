@@ -3,8 +3,6 @@
     "nameKey": "unit.caravan.name",
     "moveSpeed": 1.76,
     "walkClipSpeed": 1.4,
-    "maxHealth": 45,
-    "armorClass": "light",
     "loadSeconds": 2,
     "spawnPerProducer": 1
   }

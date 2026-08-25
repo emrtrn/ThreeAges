@@ -9,7 +9,6 @@
   "notification.under_attack.center": "Merkeziniz saldırı altında!",
   "notification.under_attack.outpost": "Karakolunuz saldırı altında.",
   "notification.under_attack.workers": "{count, plural, =1 {İşçiniz saldırı altında!} other {# işçiniz saldırı altında!}}",
-  "notification.caravan_lost": "Kervan vuruldu: taşıdığı yük kayboldu.",
   "notification.regional_victory.enemy": "Düşman stratejik geçitleri tutuyor: {time} kaldı.",
   "notification.age.enemy_upgraded": "Düşman {age} Çağına geçti.",
   "notification.age.completed": "{age} Çağı tamamlandı: tüm yapılarınız {tier} oldu.",

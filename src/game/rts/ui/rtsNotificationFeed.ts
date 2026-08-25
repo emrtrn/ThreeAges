@@ -17,7 +17,6 @@ const ICON_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "supply-linked": "✓",
   "supply-cut": "⛓",
   "supply-lost": "⚑",
-  "caravan-destroyed": "⚔",
   "outpost-under-attack": "⚔",
   "center-under-attack": "⚔",
   "worker-under-attack": "⚔",
@@ -50,7 +49,6 @@ const ICON_SRC_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "supply-linked": "/assets/ui/icons/notification_logistics_restored.png",
   "supply-cut": "/assets/ui/icons/notification_logistics_cut.png",
   "supply-lost": "/assets/ui/icons/building-market.png",
-  "caravan-destroyed": "/assets/ui/icons/notification_logistics_cut.png",
   "outpost-under-attack": "/assets/ui/icons/building-outpost.png",
   "center-under-attack": "/assets/ui/icons/building-command-center.png",
   // The subject here is a person, not a place — the same worker portrait the

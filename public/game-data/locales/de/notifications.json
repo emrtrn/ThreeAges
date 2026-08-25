@@ -9,7 +9,6 @@
   "notification.under_attack.center": "Dein Zentrum wird angegriffen!",
   "notification.under_attack.outpost": "Dein Außenposten wird angegriffen.",
   "notification.under_attack.workers": "{count, plural, one {Einer deiner Arbeiter wird angegriffen!} other {# deiner Arbeiter werden angegriffen!}}",
-  "notification.caravan_lost": "Die Karawane wurde angegriffen: Ihre Fracht ist verloren.",
   "notification.regional_victory.enemy": "Der Feind hält die strategischen Pässe: noch {time}.",
   "notification.age.enemy_upgraded": "Der Feind ist in das Zeitalter {age} aufgestiegen.",
   "notification.age.completed": "Das Zeitalter {age} ist abgeschlossen: Jedes deiner Gebäude ist jetzt {tier}.",

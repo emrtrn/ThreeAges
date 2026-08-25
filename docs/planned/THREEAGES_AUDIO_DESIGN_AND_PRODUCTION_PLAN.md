@@ -4495,7 +4495,8 @@ yok.
 | 4 | `amb_zone_market_01.ogg` | `market` | Çok düşük insan uğultusu, hafif tahta sandık ve terazi, seyrek madeni para |
 | 5 | `amb_zone_quarry_01.ogg` | `quarry`, `stone_pit` ticaret sahası | Seyrek metal-taş vuruş, moloz kayması, taş tozu hissi |
 | 6 | `amb_zone_goldmine_01.ogg` | `gold_mine` | Kapalı/oyuk akustik, seyrek kazma, uzak damla |
-| 7 | `amb_zone_farmland_01.ogg` | `farm`, `windmill`, `pasture` | Rüzgârda ekin, uzak hayvan (seyrek), değirmen ahşabının yavaş gıcırtısı |
+| 7 | `amb_zone_farmland_01.ogg` | `farm`, `pasture` (`windmill` §82.25'te ayrıldı) | Rüzgârda ekin, uzak hayvan (seyrek), değirmen ahşabının yavaş gıcırtısı |
+| 8 | `amb_zone_windmill_01.ogg` | `windmill` | Dönen kanat, ahşap dişli ve mil, taşın öğütmesi, çuval/tahıl (§82.25) |
 
 **§26'nın köprü satırı listeye alınmadı:** bu haritada köprü varlığı yok — kodda
 geçen "bridge" yalnız yol grafiğinin terimi. Bir köprü authored edildiği gün
@@ -4550,7 +4551,8 @@ işaretleri değil (bir işaret, ilkiyle senkron tutulacak ikinci bir harita olu
 | goldmine | dikilmiş `gold_mine` |
 | settlement | dikilmiş `command_center` (`house` değil — bir ev kasaba değildir) |
 | market | dikilmiş `market` |
-| farmland | dikilmiş `farm` / `windmill` / `pasture` |
+| farmland | dikilmiş `farm` / `pasture` |
+| windmill | dikilmiş `windmill` (§82.25) |
 
 `lumber_camp` bilerek yoktu (koruya dikiliyor, korunun çapasının yanında
 dururdu) ve §82.15 koruyu kaldırınca `timber_camp` de listeden düştü.
@@ -5322,3 +5324,85 @@ havuz yok.**
 
 Süre/kanal/örnekleme değişmedi: 20 parça da 120.0 s, stereo, 48 kHz.
 `npm run test:engine` 1571 geçti.
+
+
+## 82.25 Sekizinci bölge: değirmen — ve iki ölçüm bulgusu (25 Ağustos 2026)
+
+Kullanıcı `amb_zone_windmill_01.ogg`'u ekledi (26.00 sn, mono 48 kHz, 271 KB) ve
+sorusu şuydu: tarlanın bitişiğinde durduğu için farmland ile **paralel** mi
+çalsın, yoksa **yerine** mi?
+
+**Cevabı sistem zaten vermişti: paralel diye bir seçenek yok.** §82.13 aynı anda
+tek yatak tutuyor — iki yatak `world.ambience`'ın altında iki yer değil bir
+bulamaçtır. Yani soru "paralel mi, yerine mi" değil, "kendi bölgesi mi, yoksa
+bina loop'u mu" idi:
+
+- **Kendi bölgesi** (seçilen): `windmill`, `RTS_ZONE_AMBIENCE_BUILDINGS`'te
+  `farmland`'den çıkıp kendi kind'ına geçti. Diğerleri gibi mesafeyle yarışıyor —
+  değirmenin dibinde değirmen, birkaç birim ötede ekinde farmland, aradaki 18/25
+  boşluğu geçişi yapıyor. Bir değirmenin yanındaki tarlaya dürüst cevap bu.
+- **Bina loop'u** (seçilmedi): gerçekten tarlanın *üstüne* binmesi isteniyorsa o
+  bir bölge yatağı değil, `structure.fire_loop`'un şekli — binaya bağlı mekânsal
+  bir loop, ve `sfx` tablosunda yaşardı, `ambience/` klasöründe değil.
+
+`farm` ve `pasture` farmland'de kaldı; farmland yedinci klip olarak duruyor.
+Sözleşme testleri tabloyu geziyor, yani sekizinci kind kendiliğinden kapsandı.
+
+### Bulgu 1 — klip 13 LU sıcak geldi, ikinci export'ta düzeldi
+
+İlk teslimin `audio:loudness --channel ambience` ölçümü:
+
+| klip | LUFS | tepe |
+|---|---|---|
+| `amb-zone-windmill-01` | **-16.2** | **+2.90 dBFS**, 10.0 ms tam ölçek üstü |
+| `amb-zone-settlement-01` | -26.5 | +1.93 |
+| `amb-zone-goldmine-01` | -26.6 | -3.42 |
+| `amb-zone-farmland-01` | -29.5 | +1.01 |
+| `amb-zone-quarry-01` | -32.0 | +1.49 |
+| `amb-zone-river-01` | -33.0 | -14.94 |
+| `amb-zone-market-01` | -38.5 | -16.00 |
+
+Değirmen, **crossfade ettiği klipten 13.3 LU yüksek** geldi. Siblinglerin
+`volume`'u olan 0.3 ile sevk edilse tarladan değirmene yürümek bir geçiş değil
+bir sıçrama olurdu — bölge sisteminin tam da yapmaya çalıştığı şeyin tersi. Aynı
+sıcak master §82.18'in eşiğini de aşırıyordu (ambiyanstaki tek klip). **İki
+belirtinin tek sebebi vardı, yani tek düzeltmesi:** §82.24'ün zaten karara
+bağladığı gibi tablo değil export.
+
+Klip Audition'da yeniden export edildi (BS.1770-3, hedef -29 LUFS, true-peak
+tavan -1 dBTP) ve ikinci ölçüm kapattı:
+
+| | önce | sonra |
+|---|---|---|
+| Integrated | -16.2 LUFS | **-29.1 LUFS** (farmland -29.5) |
+| Tepe | +2.90 dBFS | **-10.33 dBFS** |
+| Tam ölçek üstü | 10.0 ms | **0 ms** |
+| Kanal yayılımı | 35.5 LU | 25.2 LU |
+
+`volume` telafisi (kısa süre 0.065'te durdu) geri alındı — tablo yine kardeşleri
+gibi 0.3. Ambiyansta bakılacak klip kalmadı.
+
+**Toplu match loudness bilerek yapılmadı, ve gerekçesi ölçümde:** `--channel
+ambience`'ın 25.2 LU'luk yayılımı bir kusur değil. `amb-world-frontier-day-01`
+-51.7 LUFS ile *herkesin altındaki* harita geneli yatak, ve klasörü tek hedefe
+eşitlemek onu ~22 dB kaldırıp üstündeki her şeyi gömerdi. Altı bölge klibinin
+-26.5…-38.5 bandı da miksin kendisi: hepsi tabloda aynı 0.3 ile çalıyor, yani
+fark tamamen dosyalardan geliyor ve kulakla ayarlanmış. Seyrek ambiyansta
+integrated LUFS'u sessizlik tabanı domine ettiği için zaten eşitlemenin kötü bir
+ölçüsü. Düzeltilen tek şey **banttan tamamen dışarı düşen** klipti.
+
+### Bulgu 2 — toplu yeniden export'un iki yan etkisi
+
+Aynı geçişte ambiyans klasörünün tamamı yeniden kodlanmış: dünya yatağı
+10.23 MB → 1.68 MB, altı bölge klibi ~700 KB → ~250 KB (toplam 4.8 MB → 1.9 MB).
+Manifest `bytes` alanları buna göre tazelendi — `npm run audio:manifest` yaptı,
+elle yazılacak bir sayı değil. Süre/kanal/örnekleme değişmedi.
+
+İkincisi bir soru bırakıyor: **`amb_zone_forest_01.ogg` geri gelmiş.** §82.15 onu
+bilerek kaldırmıştı (harita geneli ambiyans zaten ormanı taşıyor; bu projenin
+koruları dikilmiş küme, vahşi orman değil). Dosya diskte olduğu için manifest
+senkronu onu `amb-zone-forest-01` olarak kaydetti, ama **hiçbir olay onu
+çalmıyor** ve `RTS_ZONE_AMBIENCE`'ta `forest` kind'ı yok — testlerden biri
+adıyla yokluğunu tutuyor. Yani şu an sevk edilen ama ölü bir 261 KB. Karar
+kullanıcının: §82.15 geri alınacaksa kind + olay yazılır, alınmayacaksa dosya
+silinip senkron tekrar koşturulur.

@@ -30818,7 +30818,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 10228401
+        "bytes": 1683859
       },
       "source": {
         "origin": "project",
@@ -37122,7 +37122,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 772860
+        "bytes": 268248
       },
       "source": {
         "origin": "project",
@@ -37154,7 +37154,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 723162
+        "bytes": 260243
       },
       "source": {
         "origin": "project",
@@ -37186,7 +37186,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 657345
+        "bytes": 232596
       },
       "source": {
         "origin": "project",
@@ -37218,7 +37218,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 672297
+        "bytes": 239687
       },
       "source": {
         "origin": "project",
@@ -37250,7 +37250,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 743721
+        "bytes": 261908
       },
       "source": {
         "origin": "project",
@@ -37282,7 +37282,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 682424
+        "bytes": 240735
       },
       "source": {
         "origin": "project",
@@ -38115,6 +38115,38 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 25609
+      },
+      "source": {
+        "origin": "project",
+        "pack": "Three Ages Audio",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local audio; audio plan Faz 2"
+    },
+    {
+      "id": "amb-zone-windmill-01",
+      "name": "Ambience Zone Windmill 01",
+      "assetType": "sound",
+      "category": "threeages-audio",
+      "path": "assets/audio/ambience/amb_zone_windmill_01.ogg",
+      "tags": [
+        "threeages",
+        "sound",
+        "ambience"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "threeages-audio",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 266170
       },
       "source": {
         "origin": "project",

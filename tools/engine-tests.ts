@@ -51894,6 +51894,11 @@ check("V4 Faz 1: caravan tuning owns movement, not a fixed cargo size", () => {
   // to be after the next balance pass, and the check moves with it.
   const caravan = shippedCaravanBalance();
   assert.equal("carryCapacity" in caravan, false, "each producer now determines its own shipment threshold");
+  // Nor combat tuning: a caravan is not a combat target, so a `maxHealth` or an
+  // `armorClass` here would be data no code reads — and the failure that invites
+  // is the quiet kind, someone tuning a donkey's toughness to no effect.
+  assert.equal("maxHealth" in caravan, false, "a caravan cannot be shot, so it has no health to tune");
+  assert.equal("armorClass" in caravan, false, "a caravan cannot be shot, so it has no armour column");
   assert.ok(caravan.moveSpeed < 2.2, "the donkey moves slower than the first visual pass");
 });
 
@@ -51904,11 +51909,9 @@ check("V4 Faz 1: the caravan validator refuses data that could never make sense"
   };
   refuse({ moveSpeed: 0 }, "a caravan that never arrives starves the producer it serves");
   refuse({ walkClipSpeed: 0 }, "a walk clip with no reference speed cannot be calibrated");
-  refuse({ maxHealth: 0 }, "a caravan has to be a thing that can be killed");
   refuse({ loadSeconds: -1 }, "loading cannot take negative time");
   refuse({ spawnPerProducer: 1.5 }, "half a donkey is not a caravan");
   refuse({ spawnPerProducer: 0 }, "a producer with no caravan would never ship anything");
-  refuse({ armorClass: "structure" }, "a pack animal is not a building");
   refuse({ nameKey: "" }, "the table entry has to name itself");
   // Localization Faz 2's own gate: the field holds a *key*, and a Turkish name
   // pasted back into it would load fine and print ⟦missing:…⟧ one screen away.
@@ -52101,25 +52104,28 @@ check("V4 Faz 5: a cut-road caravan returns without crossing bare ground", () =>
   assert.equal(caravan.position.x, -6, "the return ends on the producer road cell");
 });
 
-check("V4 Faz 5: a killed caravan plays its death window and respects moving-unit fog", () => {
-  const roads = roadGraphOf([[{ x: -2, z: 0 }, { x: 2, z: 0 }]]);
+check("V4 Faz 5: a caravan respects moving-unit fog, and cannot be killed at all", () => {
+  assert.equal(isCaravanVisible("player", 0, 0, () => false, "player"), true, "your own caravan is never fogged");
+  assert.equal(isCaravanVisible("enemy", 0, 0, () => false, "player"), false, "an enemy caravan outside vision is hidden");
+  // This check used to drive a death window here — `health.damage`, `beginDeath`,
+  // `updateDeath`. All three are gone, and their absence is the contract now:
+  // shooting a donkey never cut a supply line (a load leaves its source only on
+  // arrival, KARAR 5, and the lane rebuilt the animal next tick), so it was an
+  // affordance that looked like interdiction and was not one. Cutting logistics
+  // has one home instead, the ground under the road.
   const caravan = new Caravan(
-    "caravan:death",
+    "caravan:mortality",
     1,
     "player",
     { x: -2, z: 0 },
     { x: 2, z: 0 },
     shippedCaravanBalance(),
-    roads,
+    roadGraphOf([[{ x: -2, z: 0 }, { x: 2, z: 0 }]]),
     30,
   );
-  caravan.health.damage(caravan.health.max);
-  assert.equal(caravan.beginDeath(), true, "the first lethal hit starts the Death presentation");
-  assert.equal(caravan.beginDeath(), false, "a dead caravan cannot restart its Death clip");
-  assert.equal(caravan.updateDeath(1), false, "the body remains long enough to be seen falling");
-  assert.equal(caravan.updateDeath(1), true, "the fixed fallback window eventually releases the body");
-  assert.equal(isCaravanVisible("player", 0, 0, () => false, "player"), true, "your own caravan is never fogged");
-  assert.equal(isCaravanVisible("enemy", 0, 0, () => false, "player"), false, "an enemy caravan outside vision is hidden");
+  for (const member of ["health", "armorClass", "dying", "beginDeath", "updateDeath"]) {
+    assert.equal(member in caravan, false, `a caravan is not a combat target, so it has no "${member}"`);
+  }
 });
 
 check("V4 Faz 4: resources reach the wallet only when the caravan arrives", () => {

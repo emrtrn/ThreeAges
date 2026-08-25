@@ -54,15 +54,17 @@ export class CaravanView {
         deltaSeconds,
         planarSpeed: caravan.speed,
         forceWalk: true,
+        // A caravan neither swings nor is shot at nor dies: it is not a combat
+        // target at all (see `RtsApp.combatTargets`), and it carries no health
+        // to flinch or expire from. These three are the actor contract's, so
+        // they are answered rather than omitted — flatly, because there is no
+        // longer any state behind them that could say otherwise.
         attacking: false,
-        dying: caravan.dying,
+        dying: false,
         working: isLoading(caravan.phase),
         carrying: isCaravanCarrying(caravan.phase),
         attackCount: 0,
-        // A caravan never swings, but it is very much shot at — and the pack
-        // animal reporting its real blow count costs nothing until an asset
-        // authors something to play for one.
-        impactCount: caravan.health.impactCount,
+        impactCount: 0,
         cameraDistanceSquared: null,
       });
     }

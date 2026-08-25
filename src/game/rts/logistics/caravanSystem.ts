@@ -1,11 +1,9 @@
 /** Automatic, non-selectable logistics carriers — V4 Faz 3. */
 import { Vector3 } from "three";
 
-import type { CaravanBalance, UnitArmorClass } from "../../data/gameDataTypes";
-import type { CombatTarget } from "../combat/combatTarget";
+import type { CaravanBalance } from "../../data/gameDataTypes";
 import type { RoadCell, RoadGraph } from "../roads/roadGraph";
 import type { UnitOwner } from "../units/unit";
-import { HealthComponent } from "../units/health";
 import type { CaravanDispatch, CaravanLaneProvider } from "./caravanLane";
 import { advanceCaravanRoute, startCaravanRoute, type CaravanRouteState } from "./caravanRoute";
 
@@ -49,15 +47,11 @@ export interface CaravanArrival {
  * One automatically assigned pack animal. It deliberately is not a Unit: it
  * has no orders, selection, population slot or nav occupancy in Faz 3.
  */
-export class Caravan implements CombatTarget {
+export class Caravan {
   readonly position = new Vector3();
-  readonly health: HealthComponent;
-  readonly armorClass: UnitArmorClass;
   facing = 0;
   speed = 0;
   phase: CaravanPhase = "loading";
-  /** A killed donkey stays briefly so its authored Death clip can finish. */
-  private deathElapsed: number | null = null;
   private returningHome = false;
   private destination: RoadCell;
   private remainingLoadSeconds: number;
@@ -85,13 +79,7 @@ export class Caravan implements CombatTarget {
     this.position.set(this.routeState.x, 0, this.routeState.z);
     this.destination = destination;
     this.remainingLoadSeconds = balance.loadSeconds;
-    this.health = new HealthComponent(balance.maxHealth);
-    this.armorClass = balance.armorClass;
     this.carryCapacity = carryCapacity;
-  }
-
-  get dying(): boolean {
-    return this.deathElapsed !== null;
   }
 
   get moveSpeed(): number {
@@ -109,7 +97,6 @@ export class Caravan implements CombatTarget {
     dispatch: CaravanDispatch,
   ): CaravanArrival | null {
     this.speed = 0;
-    if (this.health.depleted) return null;
     this.returningHome = false;
     this.carryCapacity = dispatch.carryCapacity;
     this.destination = destination;
@@ -154,7 +141,7 @@ export class Caravan implements CombatTarget {
    * left the producer buffer and needs no compensating credit.
    */
   beginReturnHome(source: RoadCell): void {
-    if (this.returningHome || this.health.depleted) return;
+    if (this.returningHome) return;
     this.speed = 0;
     this.returningHome = true;
     if (this.phase === "loading") return;
@@ -176,7 +163,7 @@ export class Caravan implements CombatTarget {
   /** Advance an interrupted trip; true once the donkey is safely back at home. */
   updateReturnHome(deltaSeconds: number): boolean {
     this.speed = 0;
-    if (!this.returningHome || this.health.depleted) return this.returningHome;
+    if (!this.returningHome) return this.returningHome;
     if (this.phase === "loading") return true;
     const advanced = advanceCaravanRoute(this.route, this.routeState, this.balance.moveSpeed, deltaSeconds);
     this.routeState = advanced.state;
@@ -188,21 +175,6 @@ export class Caravan implements CombatTarget {
     this.phase = "loading";
     this.remainingLoadSeconds = 0;
     return true;
-  }
-
-  /** Start the authored death window once; true only on its first simulation frame. */
-  beginDeath(): boolean {
-    if (!this.health.depleted || this.deathElapsed !== null) return false;
-    this.deathElapsed = 0;
-    this.speed = 0;
-    return true;
-  }
-
-  /** Two seconds is the safe fallback if an optional Actor has no Death clip. */
-  updateDeath(deltaSeconds: number): boolean {
-    if (this.deathElapsed === null) return false;
-    this.deathElapsed += Math.max(0, deltaSeconds);
-    return this.deathElapsed >= 2;
   }
 
   snapshot(): CaravanSnapshot {
@@ -261,12 +233,6 @@ export class CaravanSystem {
     const active = new Set<string>();
     const arrivals: CaravanArrival[] = [];
     const lanes = this.providers.flatMap((provider) => provider.lanes().map((lane) => ({ lane, provider })));
-    for (const [id, caravan] of this.caravans) {
-      if (!caravan.health.depleted) continue;
-      caravan.beginDeath();
-      if (caravan.updateDeath(deltaSeconds)) this.caravans.delete(id);
-      else active.add(id);
-    }
     for (const { lane, provider } of lanes) {
       const destination = lane.destination;
       if (!destination || !this.roads.route(lane.source, destination, lane.owner)) continue;
@@ -282,8 +248,7 @@ export class CaravanSystem {
         // and the animals standing on it do not change sides with it: keying on
         // the owner retires the old kingdom's fleet down the walk-home path
         // below and raises the new one's, instead of leaving a caravan whose
-        // deliveries the site would then refuse forever — and whose flag an
-        // enemy raider would still read as the wrong kingdom's.
+        // deliveries the site would then refuse forever.
         const id = `caravan:${lane.id}:${lane.owner}:${index}`;
         active.add(id);
         const dispatch = provider.dispatch(lane, claimed)
@@ -293,7 +258,6 @@ export class CaravanSystem {
           caravan = new Caravan(id, lane.id, lane.owner, lane.source, destination, this.balance, this.roads, dispatch.carryCapacity);
           this.caravans.set(id, caravan);
         }
-        if (caravan.health.depleted) continue;
         if (!dispatch.canReceive && caravan.phase === "outbound") {
           caravan.beginReturnHome(lane.source);
           if (!caravan.updateReturnHome(deltaSeconds)) active.add(id);
@@ -311,9 +275,6 @@ export class CaravanSystem {
     // it mid-road; a lane that still knows its source is all that needs.
     for (const caravan of this.caravans.values()) {
       if (active.has(caravan.id)) continue;
-      if (caravan.health.depleted) {
-        continue;
-      }
       const lane = lanes.find((candidate) => candidate.lane.id === caravan.laneId)?.lane;
       if (!lane) continue;
       caravan.beginReturnHome(lane.source);
@@ -345,7 +306,7 @@ export class CaravanSystem {
   private outboundOn(laneId: string): number {
     let count = 0;
     for (const caravan of this.caravans.values()) {
-      if (caravan.laneId === laneId && caravan.phase === "outbound" && !caravan.health.depleted) count += 1;
+      if (caravan.laneId === laneId && caravan.phase === "outbound") count += 1;
     }
     return count;
   }
