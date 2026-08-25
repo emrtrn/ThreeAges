@@ -51,7 +51,7 @@ export interface FoliagePanelOptions {
 const TOOLS: { id: FoliageTool; label: string; tip: string }[] = [
   { id: "select", label: "Select", tip: "Click an instance to select it (Shift/Ctrl toggles)" },
   { id: "lasso", label: "Lasso", tip: "Drag the brush over instances to select them (Ctrl/Alt subtracts)" },
-  { id: "paint", label: "Paint", tip: "Drag to scatter the active foliage type" },
+  { id: "paint", label: "Paint", tip: "Drag to scatter the active foliage type; Shift+drag erases every type under the brush" },
   { id: "erase", label: "Erase", tip: "Drag to erase EVERY foliage type under the brush" },
   { id: "single", label: "Single", tip: "Left-click to place ONE instance (no drag)" },
   { id: "fill", label: "Fill", tip: "Click a surface to fill its whole footprint with the active type" },

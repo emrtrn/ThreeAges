@@ -6,17 +6,17 @@
   "radius": 0.5,
   "density": 1,
   "scaleMin": [
-    2,
-    2,
-    2
+    3,
+    3,
+    3
   ],
   "scaleMax": [
-    2,
-    2,
-    2
+    3,
+    3,
+    3
   ],
   "randomYaw": true,
-  "alignToNormal": true,
+  "alignToNormal": false,
   "zOffsetMin": 0,
   "zOffsetMax": 0,
   "slopeMin": 0,

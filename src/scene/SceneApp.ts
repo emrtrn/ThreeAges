@@ -602,6 +602,7 @@ import {
 } from "@editor/gizmos/interaction";
 import { bindEditorInputEvents } from "@editor/input/bindings";
 import { EditorCameraController } from "@editor/input/editorCameraController";
+import { EditorCameraPoseStore } from "@editor/input/editorCameraPose";
 import { ScenePicker } from "@editor/render-three/scenePicker";
 import { EditorSceneController } from "@editor/scene/EditorSceneController";
 import { floorSnapPosition } from "@editor/render-three/floorSnap";
@@ -1320,6 +1321,8 @@ export class SceneApp {
   private readonly floorPlane = new Plane(new Vector3(0, 1, 0), 0);
   /** Editor viewport camera (fly / orbit / pan / dolly). Editor-only. */
   private readonly cameraController: EditorCameraController;
+  /** Remembers the viewport pose across editor reloads. Editor-only. */
+  private readonly cameraPoseStore: EditorCameraPoseStore | null;
   /** Editor viewport raycasting (selection / gizmo / surface picks). */
   private readonly picker: ScenePicker;
 
@@ -1482,6 +1485,7 @@ export class SceneApp {
       },
       onStatus: (message, tone) => this.onStatus?.(message, tone),
     });
+    this.cameraPoseStore = this.editorEnabled ? new EditorCameraPoseStore() : null;
     this.picker = new ScenePicker({
       camera: () => this.editorViewportCamera(),
       canvas: this.canvas,
@@ -1604,6 +1608,9 @@ export class SceneApp {
 
     this.handleResize();
     window.addEventListener("resize", this.handleResize);
+    // `pagehide` covers reload, navigation and tab close (and unlike `unload` it
+    // fires on mobile/bfcache paths), so the viewport pose survives all of them.
+    if (this.editorEnabled) window.addEventListener("pagehide", this.persistCameraPose);
     // The canvas is a panel-bounded work surface in the editor: its box changes
     // when the outliner/details/content-drawer resize, not only on window resize.
     // Observing the canvas itself catches both, keeping the renderer/camera in
@@ -1628,6 +1635,7 @@ export class SceneApp {
       this.engineApp.update(deltaSeconds);
 
       this.cameraController.update(deltaSeconds);
+      this.cameraPoseStore?.maybeSave(this.camera, now);
       this.updateMeshPaintFlow(deltaSeconds);
       this.updateGizmoScreenScale();
       if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
@@ -1660,7 +1668,9 @@ export class SceneApp {
 
   dispose(): void {
     cancelAnimationFrame(this.frameHandle);
+    this.persistCameraPose();
     window.removeEventListener("resize", this.handleResize);
+    window.removeEventListener("pagehide", this.persistCameraPose);
     this.viewportResizeObserver?.disconnect();
     this.viewportResizeObserver = null;
     this.unbindEditorInput?.();
@@ -2162,6 +2172,21 @@ export class SceneApp {
     this.cameraController.markViewChanged();
     this.cameraController.syncAnglesFromCurrentView();
     this.onStatus?.(`Focused ${selected.label}.`, "info");
+  }
+
+  /**
+   * Binds the pose store to the level being opened and, when that level has a
+   * remembered viewport pose, restores it instead of the default 3/4 framing.
+   * Marking the view as touched keeps the responsive resize pass from re-framing
+   * it once the editor panels settle into their final layout.
+   */
+  private restoreEditorCameraPose(scenePath: string): void {
+    if (!this.cameraPoseStore) return;
+    this.cameraPoseStore.setScenePath(scenePath);
+    if (!this.cameraPoseStore.restore(this.camera)) return;
+    this.cameraController.markViewChanged();
+    this.cameraController.syncAnglesFromCurrentView();
+    this.syncOrthoCameraFromPerspective();
   }
 
   /**
@@ -3294,6 +3319,7 @@ export class SceneApp {
 
   private async loadActiveProjectScene(): Promise<void> {
     this.activeProject = await loadActiveProject();
+    this.restoreEditorCameraPose(this.activeProject.manifest.editor.defaultScene);
     this.assetLoader = new AssetLoader(this.activeProject.manifest, this.renderer);
     this.snapSettings.move = this.activeProject.manifest.editor.gridSize ?? this.snapSettings.move;
     this.snapSettings.moveEnabled =
@@ -6967,13 +6993,16 @@ export class SceneApp {
    * consumed the pointer (so the caller suppresses camera/selection handling).
    * The EditorUi wires this to pointer-down and drag while a foliage tool is live.
    */
-  applyFoliageActionAt(clientX: number, clientY: number): boolean {
+  applyFoliageActionAt(clientX: number, clientY: number, shiftErase = false): boolean {
     if (!this.foliageModeActive) return false;
     const tool = this.foliageToolSettings.tool;
     if (tool === "select") return false;
     const pick = this.picker.pickFoliageSurface(clientX, clientY);
     if (!pick) return false;
-    if (tool === "erase") return this.applyFoliageErase(pick);
+    // Paint temporarily becomes the global erase brush while Shift is held. This
+    // keeps the primary paint workflow under one tool without changing Erase or
+    // Remove's explicit modes (Erase = every type; Remove = active type only).
+    if (tool === "erase" || (tool === "paint" && shiftErase)) return this.applyFoliageErase(pick);
     if (tool === "remove") return this.applyFoliageErase(pick, this.foliageToolSettings.activeTypeId);
     const active = this.foliageActiveType();
     if (!active) {
@@ -7510,7 +7539,7 @@ export class SceneApp {
     if (tool === "lasso") {
       this.applyFoliageLassoAt(event.clientX, event.clientY, event.ctrlKey || event.altKey);
     } else {
-      this.applyFoliageActionAt(event.clientX, event.clientY);
+      this.applyFoliageActionAt(event.clientX, event.clientY, tool === "paint" && event.shiftKey);
     }
     this.foliageStrokePointerId = event.pointerId;
     this.canvas.setPointerCapture(event.pointerId);
@@ -7528,7 +7557,7 @@ export class SceneApp {
       this.applyFoliageLassoAt(event.clientX, event.clientY, event.ctrlKey || event.altKey);
     } else if (tool !== "single" && tool !== "fill") {
       // Single/Fill act exactly once per click — they must not drag-repeat.
-      this.applyFoliageActionAt(event.clientX, event.clientY);
+      this.applyFoliageActionAt(event.clientX, event.clientY, tool === "paint" && event.shiftKey);
     }
     return true;
   }
@@ -13517,6 +13546,15 @@ export class SceneApp {
     const height = this.canvas.clientHeight || window.innerHeight || 1;
     return { width, height };
   }
+
+  /**
+   * Final pose write before the page goes away. The frame loop's throttled save
+   * can be up to one interval stale, and a reload is exactly the moment the pose
+   * has to be exact.
+   */
+  private persistCameraPose = (): void => {
+    this.cameraPoseStore?.save(this.camera);
+  };
 
   private handleResize = (): void => {
     const { width, height } = this.viewportSize();
