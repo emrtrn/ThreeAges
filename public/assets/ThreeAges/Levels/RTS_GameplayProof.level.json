@@ -949,6 +949,46 @@
             0
           ],
           "scale": 5
+        },
+        {
+          "position": [
+            68.9,
+            -1.46,
+            74.4
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            40,
+            0
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            71.62,
+            -0.54,
+            -72.54
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -36,
+            0
+          ],
+          "scale": 3
+        },
+        {
+          "position": [
+            -64.02,
+            0.02,
+            -83.64
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 5
         }
       ]
     },
@@ -1218,7 +1258,18 @@
     },
     {
       "assetId": "river-rock-cluster-c",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -44.88,
+            0.04,
+            -65.12
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 20
+        }
+      ]
     },
     {
       "assetId": "small-river-stones-patch",
@@ -1272,6 +1323,96 @@
           "rotation": [
             0,
             202,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            76.85,
+            -0.29,
+            43.81
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            300,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            76.82,
+            0.3,
+            3.41
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            300,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            76.31,
+            -0.5,
+            -38.25
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            300,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            49.05,
+            -0.5,
+            -78.58
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            206.5,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            8.92,
+            -0.5,
+            -78.58
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            206.5,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            -26.25,
+            -0.5,
+            -78.58
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            206.5,
             0
           ],
           "scale": 2
@@ -2903,7 +3044,7 @@
         }
       ],
       "reflectionMode": "sharedPlanar",
-      "reflectionQuality": "medium",
+      "reflectionQuality": "low",
       "reflectionStrength": 0.6
     }
   ],
