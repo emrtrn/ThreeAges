@@ -1846,6 +1846,7 @@
       "radius": 1
     },
     "vignette": {
+      "enabled": true,
       "intensity": 1,
       "offset": 1
     },
@@ -2452,14 +2453,14 @@
     {
       "id": "blocking-volume-25",
       "position": [
-        39.05,
+        39.47,
         2.06,
-        44.47
+        44.92
       ],
       "name": "Blocking Volume 6 2 2",
       "rotation": [
         0,
-        50,
+        41.5,
         0
       ],
       "scale": 1,
@@ -2472,19 +2473,19 @@
     {
       "id": "blocking-volume-26",
       "position": [
-        44.58,
+        47.33,
         2.06,
-        35.5
+        36.94
       ],
       "name": "Blocking Volume 6 2 2 2",
       "rotation": [
         0,
-        66,
+        51.5,
         0
       ],
       "scale": 1,
       "size": [
-        10,
+        12,
         4,
         4
       ]
@@ -2492,14 +2493,14 @@
     {
       "id": "blocking-volume-27",
       "position": [
-        51.04,
+        53.65,
         2.06,
-        21.88
+        22.08
       ],
       "name": "Blocking Volume 6 2 2 2 2",
       "rotation": [
         0,
-        63.5,
+        75.5,
         0
       ],
       "scale": 1,
@@ -2632,39 +2633,19 @@
     {
       "id": "blocking-volume-34",
       "position": [
-        -33.98,
+        -37.62,
         2.06,
-        -48.94
+        -47.08
       ],
       "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2",
       "rotation": [
         0,
-        219,
+        215.5,
         0
       ],
       "scale": 1,
       "size": [
-        20,
-        4,
-        4
-      ]
-    },
-    {
-      "id": "blocking-volume-35",
-      "position": [
-        -48.83,
-        2.06,
-        -35.07
-      ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2",
-      "rotation": [
-        0,
-        227.5,
-        0
-      ],
-      "scale": 1,
-      "size": [
-        20,
+        30,
         4,
         4
       ]
@@ -2672,19 +2653,19 @@
     {
       "id": "blocking-volume-36",
       "position": [
-        -55.76,
+        -54.68,
         2.06,
-        -13.79
+        -17.15
       ],
       "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2",
       "rotation": [
         0,
-        271,
+        267.5,
         0
       ],
       "scale": 1,
       "size": [
-        25,
+        32,
         4,
         4
       ]

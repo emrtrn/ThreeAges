@@ -173,6 +173,15 @@ export class WildlifeView {
     this.clear();
   }
 
+  /**
+   * The root that actually made it through the latest presentation sync, if any.
+   * Shadow proxies use this rather than duplicating wildlife's fog, spent-body
+   * and enclosed-pasture visibility decisions in a second loop.
+   */
+  presentationRoot(animal: WildlifeAnimal): Object3D | null {
+    return this.handles.get(animal.id)?.root ?? null;
+  }
+
   private handleFor(animal: WildlifeAnimal): RtsPresentationHandle | null {
     const existing = this.handles.get(animal.id);
     if (existing) return existing;

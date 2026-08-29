@@ -177,6 +177,7 @@ import {
 import type { RoomLayout } from "@engine/scene/layout";
 import { UnitSystem } from "./units/unitSystem";
 import { UnitShadowProxies } from "./units/unitShadowProxies";
+import { AnimalShadowProxies } from "./wildlife/animalShadowProxies";
 import {
   RTS_GEAR_KINDS,
   RTS_GEAR_PROP_SLOTS,
@@ -771,10 +772,10 @@ type ShadowCasterCategory = "actors" | "mapArt" | "other";
 function shadowCasterCategory(object: Object3D): ShadowCasterCategory {
   for (let current: Object3D | null = object; current; current = current.parent) {
     if (current.userData.rtsActorPresentation) return "actors";
-    // The unit shadow capsules stand in for actor meshes that no longer cast, so
+    // The unit and animal shadow capsules stand in for actor meshes that no longer cast, so
     // they belong in the actor budget. Billed to "other" they would read as an
     // unexplained cost next to the very saving they pay for.
-    if (current.userData.rtsUnitShadowProxy) return "actors";
+    if (current.userData.rtsUnitShadowProxy || current.userData.rtsAnimalShadowProxy) return "actors";
     if (current.name.startsWith("rts-map-model-")) return "mapArt";
   }
   return "other";
@@ -902,6 +903,8 @@ export class RtsApp {
   private readonly units = new UnitSystem();
   /** Invisible capsule casters that give the non-casting unit meshes a shadow. */
   private readonly unitShadows = new UnitShadowProxies();
+  /** Invisible, species-shaped casters for animated wildlife. */
+  private readonly animalShadows = new AnimalShadowProxies();
   /**
    * The kit a fallen body leaves behind — the other half of the Guard's merged
    * mesh, which cannot shed anything it is welded to.
@@ -1608,6 +1611,7 @@ export class RtsApp {
     // shadow map they are a per-frame matrix rewrite and a draw call that has
     // never written a pixel, on exactly the profile that can least afford it.
     this.unitShadows.setEnabled(settings.shadowsEnabled);
+    this.animalShadows.setEnabled(settings.shadowsEnabled);
     this.authoredWorld?.setRiverWaterReflectionQuality(
       riverReflectionQuality(rtsGraphicsQuality(this.userSettings.graphics.selectedQualityLevel)),
     );
@@ -3197,6 +3201,7 @@ export class RtsApp {
     this.cannonballs.dispose();
     this.cannonScorches.dispose();
     this.unitShadows.dispose();
+    this.animalShadows.dispose();
     this.gearDebris.dispose();
     this.structureDamageVfx.dispose();
     this.unitNotifyVfx.dispose();
@@ -3405,6 +3410,7 @@ export class RtsApp {
     // moving body on the field, and the fog binder treats it the same way.
     this.scene.add(this.wildlifeRoot);
     this.scene.add(this.caravanRoot);
+    this.scene.add(this.animalShadows.root);
     this.scene.add(this.units.root);
     // A sibling of the units rather than a child of each one: the capsules are a
     // single instanced mesh, so they cannot hang off the bodies they stand in
@@ -3685,6 +3691,12 @@ export class RtsApp {
       PLAYER_OWNER,
       (animal) => this.pasture.isLivestockPresentationVisible(animal, (owner) => this.ageOf(owner)),
       (animal) => this.pasture.livestockPresentationOffset(animal),
+    );
+    // After wildlife presentation: the root now carries its exact terrain/pasture
+    // lift and its fog/closed-pen visibility, which the shadow must mirror.
+    this.animalShadows.sync(
+      this.wildlife.all(),
+      (animal) => this.wildlifeView.presentationRoot(animal),
     );
     this.caravanView.sync(this.caravans.all(), dt, this.playerVisibilityTest(), PLAYER_OWNER);
     this.perfMeasure("hayvan/kervan sunumu", herdViewMark);

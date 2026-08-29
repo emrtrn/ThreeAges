@@ -1,6 +1,7 @@
 /** Pure Level marker -> RTS spatial-data adapter (assetization Faz D). */
 import { resolveActorInstanceVariables, type ResolvedActorClass } from "@engine/scene/actorInstance";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
+import { rotatedBoxFootprintXZ } from "@engine/physics/rotatedBox";
 import type { LayoutBlockingVolume, LayoutSplineActor } from "@engine/scene/layout";
 import { resolveBlockingVolume } from "@engine/scene/blockingVolume";
 import type { AnimalBalance, BuildingBalance, ResourceBalance } from "../../data/gameDataTypes";
@@ -285,10 +286,11 @@ export function adaptRtsLevel(
 
 /**
  * RTS navigation is a 2D grid, so a Forge Blocking Volume becomes its
- * conservative horizontal AABB. Upright boxes preserve their authored size;
- * yawed boxes expand only as much as needed to remain safely blocked. This is a
- * gameplay adapter, not a replacement collision system: the generic volume
- * remains authored and rendered by Forge exactly as before.
+ * tight horizontal footprint. The AABB remains the broadphase extent, while a
+ * yawed box also supplies its true oriented rectangle so the empty corners of
+ * that AABB stay walkable. This is a gameplay adapter, not a replacement
+ * collision system: the generic volume remains authored and rendered by Forge
+ * exactly as before.
  */
 function blockingVolumeNavigationBlocker(volume: LayoutBlockingVolume): NavBlocker {
   const resolved = resolveBlockingVolume(volume);
@@ -301,9 +303,17 @@ function blockingVolumeNavigationBlocker(volume: LayoutBlockingVolume): NavBlock
   const yaw = ((volume.rotation?.[1] ?? 0) * Math.PI) / 180;
   const horizontalX = Math.abs(Math.cos(yaw)) * halfX + Math.abs(Math.sin(yaw)) * halfZ;
   const horizontalZ = Math.abs(Math.sin(yaw)) * halfX + Math.abs(Math.cos(yaw)) * halfZ;
+  const yawDeg = volume.rotation?.[1] ?? 0;
+  const footprint = rotatedBoxFootprintXZ(
+    volume.position,
+    [0, 0, 0],
+    [halfX, halfY, halfZ],
+    [0, yawDeg, 0],
+  );
   return {
     min: [volume.position[0] - horizontalX, volume.position[1] - halfY, volume.position[2] - horizontalZ],
     max: [volume.position[0] + horizontalX, volume.position[1] + halfY, volume.position[2] + horizontalZ],
+    ...(footprint ? { footprint } : {}),
   };
 }
 

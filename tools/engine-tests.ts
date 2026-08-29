@@ -515,6 +515,7 @@ import {
 } from "../src/game/rts/units/unit";
 import { UnitShadowProxies } from "../src/game/rts/units/unitShadowProxies";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
+import { AnimalShadowProxies } from "../src/game/rts/wildlife/animalShadowProxies";
 import { WildlifeSystem, wildProfileFor, type RtsHerdDefinition } from "../src/game/rts/wildlife/wildlifeSystem";
 import { PredatorSystem, type PredatorStrike } from "../src/game/rts/wildlife/predatorSystem";
 import {
@@ -33543,6 +33544,55 @@ const shippedAnimalBalance = () => validateAnimalBalance(
   JSON.parse(readFileSync("public/game-data/balance/animals.json", "utf8")) as unknown,
 );
 
+check("RTS animal shadow proxies cast without drawing, follow presentation visibility, and keep species shapes", () => {
+  const wildlife = new WildlifeSystem(shippedAnimalBalance(), [
+    { id: "deer-herd", species: "deer", x: 5, z: -7, count: 1 },
+    { id: "wolf-den", species: "wolf", x: -4, z: 2, count: 1 },
+  ]);
+  const [deer, wolf] = wildlife.all();
+  assert.ok(deer && wolf, "the proxy test has two live animal presentations");
+  const roots = new Map([
+    [deer.id, new Group()],
+    [wolf.id, new Group()],
+  ]);
+  roots.get(deer.id)!.position.set(deer.position.x, 3, deer.position.z);
+  roots.get(wolf.id)!.position.set(wolf.position.x, 1, wolf.position.z);
+
+  const proxies = new AnimalShadowProxies(1);
+  const casterOf = (): InstancedMesh => {
+    const mesh = proxies.root.children[0];
+    assert.ok(mesh instanceof InstancedMesh, "all animals share one instanced shadow batch");
+    return mesh;
+  };
+  const caster = casterOf();
+  assert.equal(caster.castShadow, true, "the batch casts into the shadow map");
+  assert.equal((caster.material as MeshBasicMaterial).colorWrite, false, "but writes no colour pixels");
+  assert.equal(caster.frustumCulled, false, "moving animals cannot be culled by stale instance bounds");
+
+  proxies.sync(wildlife.all(), (animal) => roots.get(animal.id) ?? null);
+  assert.equal(casterOf().count, 2, "every visible presented animal receives a proxy");
+  const matrix = new Matrix4();
+  casterOf().getMatrixAt(0, matrix);
+  const placed = new Vector3().setFromMatrixPosition(matrix);
+  const scale = new Vector3().setFromMatrixScale(matrix);
+  const geometry = casterOf().geometry;
+  geometry.computeBoundingBox();
+  const halfHeight = (scale.y * (geometry.boundingBox!.max.y - geometry.boundingBox!.min.y)) / 2;
+  assert.ok(Math.abs(placed.x - deer.position.x) < 1e-6 && Math.abs(placed.z - deer.position.z) < 1e-6, "the deer proxy follows its presentation root");
+  assert.ok(Math.abs(placed.y - halfHeight - 3) < 1e-6, "the compact capsule rests continuously on the presentation ground height");
+  assert.ok(Math.abs(scale.x - scale.z) < 1e-6, "animals use the same single-piece round footprint as units");
+  casterOf().getMatrixAt(1, matrix);
+  const wolfScale = new Vector3().setFromMatrixScale(matrix);
+  assert.ok(wolfScale.x < scale.x && wolfScale.y < scale.y, "wolves use a smaller body-shadow profile than deer");
+
+  roots.get(wolf.id)!.visible = false;
+  proxies.sync(wildlife.all(), (animal) => roots.get(animal.id) ?? null);
+  assert.equal(casterOf().count, 1, "a fogged or closed-pen animal leaks no shadow");
+  proxies.setEnabled(false);
+  proxies.sync(wildlife.all(), (animal) => roots.get(animal.id) ?? null);
+  assert.equal(casterOf().count, 0, "disabled shadows stop the per-frame layer");
+});
+
 check("V3 Faz 2: fear is typed by what an animal is, not by who is nearby", () => {
   const animals = shippedAnimalBalance();
   // One den and one deer herd, close enough that the wolves are inside the
@@ -38190,7 +38240,14 @@ check("RTS maps Forge Blocking Volumes into conservative navigation blockers", (
     { buildings, resources, animals: shippedAnimalBalance() },
     [{ id: "ridge", position: [4, 2, 6], rotation: [0, 90, 0], size: [8, 6, 2] }],
   );
-  assert.deepEqual(level.navigationBlockers, [{ min: [3, -1, 2], max: [5, 5, 10] }]);
+  const blocker = level.navigationBlockers[0] ?? assert.fail("the Blocking Volume becomes a navigation blocker");
+  assert.deepEqual(blocker.min, [3, -1, 2]);
+  assert.deepEqual(blocker.max, [5, 5, 10]);
+  assert.ok(blocker.footprint && blocker.footprint.length === 4, "a yawed Blocking Volume keeps its tight oriented footprint");
+  assert.ok(
+    blocker.footprint!.some(([x, z]) => Math.abs(x - 3) < 1e-6 && Math.abs(z - 2) < 1e-6),
+    "the footprint follows the rotated thin wall instead of filling its AABB corners",
+  );
 });
 
 check("RTS Walkable Deck volumes raise units without blocking their bridge corridor", () => {

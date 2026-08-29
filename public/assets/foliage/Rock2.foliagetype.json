@@ -22,7 +22,7 @@
   "slopeMin": 0,
   "slopeMax": 90,
   "castShadow": true,
-  "receiveShadow": true,
+  "receiveShadow": false,
   "collision": false,
   "cullStart": 0,
   "cullEnd": 0
