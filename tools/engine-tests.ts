@@ -51684,6 +51684,23 @@ check("RTS grid navigation routes a unit around a static blocker", () => {
   assert.equal(walker.pathTarget, null, "clears the path after reaching the goal");
 });
 
+check("RTS ground orders approach a blocking perimeter from the playable side", () => {
+  const navigation = new RtsNavigation();
+  // The wall spans the field, leaving passable cells on both sides. This is the
+  // same topology as a decorative perimeter authored inside the RTS world
+  // bounds: the clicked outer strip is a real grid island, but not reachable.
+  navigation.setBlockers([{ min: [-72, -1, -2], max: [72, 4, 2] }]);
+  const start = new Vector3(0, 0, 12);
+  const clickedBeyondWall = new Vector3(0, 0, -12);
+
+  assert.equal(navigation.plan(start, clickedBeyondWall), null, "the opposite side is rejected before a full-map route search");
+  const resolved = navigation.resolveGroundMoveTarget(start, clickedBeyondWall);
+  assert.equal(resolved.approached, true, "an unreachable click is turned into an approach order");
+  assert.ok(resolved.point.z > 2, "the resolved point stays on the issuing side of the wall");
+  const path = navigation.plan(start, resolved.point);
+  assert.ok(path && path.length >= 2, "the unit receives an ordinary safe route to the wall edge");
+});
+
 check("RTS blockout draws no map-edge wall, and no ridge box once a Level owns the blockers", () => {
   const names = (group: { traverse(fn: (child: { name: string }) => void): void }): string[] => {
     const found: string[] = [];

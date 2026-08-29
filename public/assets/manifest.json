@@ -38315,6 +38315,121 @@
         "bytes": 447
       },
       "license": "Unknown"
+    },
+    {
+      "id": "log-foliagetype",
+      "name": "Log.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/Log.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 431
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "posts-foliagetype",
+      "name": "Posts.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/Posts.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 440
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "clover1-foliagetype",
+      "name": "Clover1.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/clover1.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 441
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "plant1-foliagetype",
+      "name": "Plant1.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/plant1.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 439
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "plant2-foliagetype",
+      "name": "Plant2.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/plant2.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 443
+      },
+      "license": "Unknown"
     }
   ]
 }

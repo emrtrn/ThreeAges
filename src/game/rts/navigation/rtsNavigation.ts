@@ -27,12 +27,23 @@ const NAV_BOUNDS = [{
  * still comfortably in range, and much more likely to be clear ground.
  */
 const PLAN_ATTACK_RANGE_SHARES = [0.9, 0.6, 0.35] as const;
+const ENDPOINT_PROJECTION_CELL_RADIUS = 2;
+
+/** The ground point a player command should actually route toward. */
+export interface RtsGroundMoveTarget {
+  /** A legal point in the issuing unit's current navigable region. */
+  readonly point: Vector3;
+  /** True when an unreachable requested point was pulled back to an obstacle edge. */
+  readonly approached: boolean;
+}
 
 /** Plans and caches paths for the Phase 1 infantry placeholder. */
 export class RtsNavigation {
   private readonly gridCache = new NavGridCache();
   private blockers: readonly NavBlocker[] = [];
   private revision = 0;
+  private componentGrid: NavGrid | null = null;
+  private componentLabels: Uint32Array | null = null;
 
   /** Replace static blockers and invalidate the cached nav grid. */
   setBlockers(blockers: readonly NavBlocker[]): void {
@@ -56,6 +67,10 @@ export class RtsNavigation {
   plan(start: Vector3, goal: Vector3): Vector3[] | null {
     const grid = this.grid();
     if (!grid) return null;
+    // A perimeter wall can leave valid cells on both sides.  Running A* before
+    // noticing that the endpoints belong to different islands makes a click in
+    // the outer dressing scan most of the map for every selected unit.
+    if (!this.sameComponent(grid, start, goal)) return null;
     const result = searchNavGrid(
       grid,
       [start.x, 0, start.z],
@@ -64,6 +79,36 @@ export class RtsNavigation {
     return result.status === "success"
       ? result.points.map(([x, y, z]) => new Vector3(x, y, z))
       : null;
+  }
+
+  /**
+   * Resolve a player ground command to the furthest safe cell in its requested
+   * direction.  A point across a blocking perimeter is therefore approached
+   * from the playable side rather than treated as a costly, impossible route.
+   *
+   * This deliberately follows the straight command direction only for the
+   * fallback. Ordinary reachable points keep the normal A* route, including
+   * detours around interior obstacles.
+   */
+  resolveGroundMoveTarget(start: Vector3, requested: Vector3): RtsGroundMoveTarget {
+    const grid = this.grid();
+    if (!grid) return { point: requested.clone(), approached: false };
+    const startCell = this.projectedCell(grid, start);
+    if (startCell === null) return { point: requested.clone(), approached: false };
+    const labels = this.componentsFor(grid);
+    const startComponent = labels[startCell] ?? 0;
+    const requestedCell = this.projectedCell(grid, requested);
+    const requestedRawCell = this.cellForPoint(grid, requested.x, requested.z);
+    const requestedIsWalkable = this.insideAuthoredBounds(grid, requested)
+      && this.passableCell(grid, requestedRawCell.x, requestedRawCell.z);
+    if (requestedIsWalkable && requestedCell !== null && (labels[requestedCell] ?? 0) === startComponent) {
+      return { point: requested.clone(), approached: false };
+    }
+    const approachCell = this.lastCellTowardRequestedPoint(grid, labels, startCell, startComponent, requested);
+    return {
+      point: this.pointForCell(grid, approachCell),
+      approached: approachCell !== requestedCell,
+    };
   }
 
   /**
@@ -113,6 +158,127 @@ export class RtsNavigation {
       cellSize: CELL_SIZE,
       safetyMargin: 0,
     });
+  }
+
+  /** Whether both raw endpoints may be projected onto the same passable island. */
+  private sameComponent(grid: NavGrid, start: Vector3, goal: Vector3): boolean {
+    const startCell = this.projectedCell(grid, start);
+    const goalCell = this.projectedCell(grid, goal);
+    if (startCell === null || goalCell === null) return false;
+    const labels = this.componentsFor(grid);
+    const startComponent = labels[startCell] ?? 0;
+    return startComponent !== 0 && startComponent === (labels[goalCell] ?? 0);
+  }
+
+  /** Labels each connected passable island once per baked grid. */
+  private componentsFor(grid: NavGrid): Uint32Array {
+    if (this.componentGrid === grid && this.componentLabels) return this.componentLabels;
+    const labels = new Uint32Array(grid.cols * grid.rows);
+    const queue: number[] = [];
+    let component = 0;
+    for (let cell = 0; cell < labels.length; cell += 1) {
+      if (grid.passable[cell] !== 1 || labels[cell] !== 0) continue;
+      component += 1;
+      labels[cell] = component;
+      queue.push(cell);
+      for (let head = 0; head < queue.length; head += 1) {
+        const current = queue[head]!;
+        const x = current % grid.cols;
+        const z = Math.floor(current / grid.cols);
+        for (let dz = -1; dz <= 1; dz += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            if (dx === 0 && dz === 0) continue;
+            const nextX = x + dx;
+            const nextZ = z + dz;
+            if (!this.passableCell(grid, nextX, nextZ)) continue;
+            // Match gridNavigation's no-corner-cutting diagonal rule.
+            if (dx !== 0 && dz !== 0 && (
+              !this.passableCell(grid, x + dx, z) || !this.passableCell(grid, x, z + dz)
+            )) continue;
+            const next = nextZ * grid.cols + nextX;
+            if (labels[next] !== 0) continue;
+            labels[next] = component;
+            queue.push(next);
+          }
+        }
+      }
+      queue.length = 0;
+    }
+    this.componentGrid = grid;
+    this.componentLabels = labels;
+    return labels;
+  }
+
+  /** Projects a raw point exactly like the grid endpoint policy, within two cells. */
+  private projectedCell(grid: NavGrid, point: Vector3): number | null {
+    if (!this.insideAuthoredBounds(grid, point)) return null;
+    const base = this.cellForPoint(grid, point.x, point.z);
+    if (this.passableCell(grid, base.x, base.z)) return base.z * grid.cols + base.x;
+    let best: { cell: number; distanceSq: number } | null = null;
+    for (let dz = -ENDPOINT_PROJECTION_CELL_RADIUS; dz <= ENDPOINT_PROJECTION_CELL_RADIUS; dz += 1) {
+      for (let dx = -ENDPOINT_PROJECTION_CELL_RADIUS; dx <= ENDPOINT_PROJECTION_CELL_RADIUS; dx += 1) {
+        const x = base.x + dx;
+        const z = base.z + dz;
+        if (!this.passableCell(grid, x, z)) continue;
+        const candidate = this.pointForCell(grid, z * grid.cols + x);
+        const distanceSq = candidate.distanceToSquared(point);
+        if (!best || distanceSq < best.distanceSq) best = { cell: z * grid.cols + x, distanceSq };
+      }
+    }
+    return best?.cell ?? null;
+  }
+
+  /** Finds the last cell before the command ray leaves the issuing island. */
+  private lastCellTowardRequestedPoint(
+    grid: NavGrid,
+    labels: Uint32Array,
+    startCell: number,
+    startComponent: number,
+    requested: Vector3,
+  ): number {
+    const startX = startCell % grid.cols;
+    const startZ = Math.floor(startCell / grid.cols);
+    const end = this.cellForPoint(grid, requested.x, requested.z);
+    const steps = Math.max(1, Math.max(Math.abs(end.x - startX), Math.abs(end.z - startZ)) * 2);
+    let last = startCell;
+    let previous = startCell;
+    for (let step = 1; step <= steps; step += 1) {
+      const t = step / steps;
+      const x = Math.round(startX + (end.x - startX) * t);
+      const z = Math.round(startZ + (end.z - startZ) * t);
+      const cell = z * grid.cols + x;
+      if (cell === previous) continue;
+      previous = cell;
+      if ((labels[cell] ?? 0) !== startComponent) break;
+      last = cell;
+    }
+    return last;
+  }
+
+  private insideAuthoredBounds(grid: NavGrid, point: Vector3): boolean {
+    return !grid.bounds || grid.bounds.some((bound) =>
+      point.x >= bound.min[0] && point.x <= bound.max[0] && point.z >= bound.min[2] && point.z <= bound.max[2]);
+  }
+
+  private cellForPoint(grid: NavGrid, x: number, z: number): { x: number; z: number } {
+    return {
+      x: Math.max(0, Math.min(grid.cols - 1, Math.round((x - grid.originX) / grid.cellSize))),
+      z: Math.max(0, Math.min(grid.rows - 1, Math.round((z - grid.originZ) / grid.cellSize))),
+    };
+  }
+
+  private passableCell(grid: NavGrid, x: number, z: number): boolean {
+    return x >= 0 && z >= 0 && x < grid.cols && z < grid.rows && grid.passable[z * grid.cols + x] === 1;
+  }
+
+  private pointForCell(grid: NavGrid, cell: number): Vector3 {
+    const x = cell % grid.cols;
+    const z = Math.floor(cell / grid.cols);
+    return new Vector3(
+      grid.originX + x * grid.cellSize,
+      grid.floorY[cell] ?? grid.footY,
+      grid.originZ + z * grid.cellSize,
+    );
   }
 
   /**

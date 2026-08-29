@@ -147,12 +147,13 @@ export class CommandSystem {
 
     const point = this.groundPoint(x, y);
     if (!point) return "none";
+    const groundTarget = this.navigation.resolveGroundMoveTarget(selected[0]!.position, point);
 
     this.cancelPendingGroundOrders(selected);
     this.releaseDestinationReservations(selected);
     const destinations = assignGroupDestinations(
       selected,
-      point,
+      groundTarget.point,
       this.navigation,
       [...this.destinationReservations.values()],
       this.formation,
@@ -164,8 +165,8 @@ export class CommandSystem {
     const launchOrder = destinations
       .filter((entry): entry is typeof entry & { path: Vector3[] } => entry.path !== null)
       .sort((left, right) => {
-        const leftDistance = Math.hypot(left.unit.position.x - point.x, left.unit.position.z - point.z);
-        const rightDistance = Math.hypot(right.unit.position.x - point.x, right.unit.position.z - point.z);
+        const leftDistance = Math.hypot(left.unit.position.x - groundTarget.point.x, left.unit.position.z - groundTarget.point.z);
+        const rightDistance = Math.hypot(right.unit.position.x - groundTarget.point.x, right.unit.position.z - groundTarget.point.z);
         return leftDistance - rightDistance || left.unit.id - right.unit.id;
       });
     let launchIndex = 0;
@@ -182,7 +183,9 @@ export class CommandSystem {
     // The first unit starts now; later units are released from update(). This
     // preserves immediate feedback for a one-unit order.
     this.update(0);
-    this.markers.spawn(point);
+    // Amber means the click lay beyond a blocker: the marker names the safe
+    // approach point the squad will actually reach, not an impossible target.
+    this.markers.spawn(groundTarget.point, groundTarget.approached ? "#ffb45e" : undefined);
     return "move";
   }
 
@@ -217,18 +220,19 @@ export class CommandSystem {
     if (selected.length === 0) return;
     const point = this.groundPoint(x, y);
     if (!point) return;
+    const groundTarget = this.navigation.resolveGroundMoveTarget(selected[0]!.position, point);
 
     this.cancelPendingGroundOrders(selected);
     this.releaseDestinationReservations(selected);
     // Attack-move takes the same shape the player picked for an ordinary move:
     // with Serbest gone there is no "no formation" answer, and defaulting to Hat
     // here would silently break the wedge the player just chose.
-    const attackMove = assignGroupDestinations(selected, point, this.navigation, [], this.formation);
+    const attackMove = assignGroupDestinations(selected, groundTarget.point, this.navigation, [], this.formation);
     for (const { unit, destination, path } of attackMove) {
       if (path) unit.setAttackMovePath(path, destination);
       else unit.stop();
     }
-    this.markers.spawn(point, "#ffb45e");
+    this.markers.spawn(groundTarget.point, "#ffb45e");
   }
 
   /** Immediately stop every currently selected unit and clear attack pursuit. */
@@ -274,12 +278,13 @@ export class CommandSystem {
     if (selected.length === 0) return false;
     const point = this.groundPoint(x, y);
     if (!point) return false;
+    const groundTarget = this.navigation.resolveGroundMoveTarget(selected[0]!.position, point);
 
     this.cancelPendingGroundOrders(selected);
     this.releaseDestinationReservations(selected);
     const destinations = assignGroupDestinations(
       selected,
-      point,
+      groundTarget.point,
       this.navigation,
       [...this.destinationReservations.values()],
       this.formation,
@@ -288,8 +293,8 @@ export class CommandSystem {
     const launchOrder = destinations
       .filter((entry): entry is typeof entry & { path: Vector3[] } => entry.path !== null)
       .sort((left, right) => {
-        const leftDistance = Math.hypot(left.unit.position.x - point.x, left.unit.position.z - point.z);
-        const rightDistance = Math.hypot(right.unit.position.x - point.x, right.unit.position.z - point.z);
+        const leftDistance = Math.hypot(left.unit.position.x - groundTarget.point.x, left.unit.position.z - groundTarget.point.z);
+        const rightDistance = Math.hypot(right.unit.position.x - groundTarget.point.x, right.unit.position.z - groundTarget.point.z);
         return leftDistance - rightDistance || left.unit.id - right.unit.id;
       });
     let launchIndex = 0;
@@ -307,7 +312,7 @@ export class CommandSystem {
       launchIndex += 1;
     }
     this.update(0);
-    this.markers.spawn(point, "#79c8ff");
+    this.markers.spawn(groundTarget.point, groundTarget.approached ? "#ffb45e" : "#79c8ff");
     return true;
   }
 

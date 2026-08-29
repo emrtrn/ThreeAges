@@ -196,7 +196,7 @@
         {
           "position": [
             4.2,
-            -0.77,
+            -1.12,
             18.21
           ],
           "scaleLocked": true,
@@ -211,7 +211,7 @@
         {
           "position": [
             -4.98,
-            -0.78,
+            -1.05,
             -17.18
           ],
           "scaleLocked": true,
@@ -1482,7 +1482,203 @@
     },
     {
       "assetId": "wooden-mooring-posts",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            14.19,
+            -0.06,
+            45.85
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -26,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            41.49,
+            -0.06,
+            17.1
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -26,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            39.44,
+            -0.06,
+            16.15
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -26,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            42.63,
+            -0.06,
+            16.21
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -93.5,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            42.39,
+            -0.06,
+            13.89
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -79,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            14.46,
+            -0.05,
+            47.07
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            33,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            12.47,
+            -0.04,
+            48.45
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            33,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            18.62,
+            -0.05,
+            48.7
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            33,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            16.48,
+            -0.06,
+            50.04
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            33,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            15.13,
+            0,
+            42.43
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -21.5,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            17.21,
+            0,
+            43.4
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -21.5,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            19.55,
+            0,
+            44.02
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -4,
+            0
+          ],
+          "scale": 2
+        },
+        {
+          "position": [
+            12.21,
+            -0.03,
+            44.75
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -31,
+            0
+          ],
+          "scale": 2
+        }
+      ]
     },
     {
       "assetId": "mountain-2",
@@ -1505,8 +1701,8 @@
         {
           "position": [
             -5.49,
-            0.31,
-            74.31
+            0.83,
+            76.41
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
@@ -2197,6 +2393,401 @@
         1,
         1
       ]
+    },
+    {
+      "id": "blocking-volume-22",
+      "position": [
+        -28.21,
+        2.23,
+        61.83
+      ],
+      "name": "Blocking Volume 5",
+      "scale": 1,
+      "size": [
+        74,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-23",
+      "position": [
+        16.08,
+        2.06,
+        54.1
+      ],
+      "name": "Blocking Volume 6",
+      "rotation": [
+        0,
+        27,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        20,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-24",
+      "position": [
+        29.38,
+        2.06,
+        49.27
+      ],
+      "name": "Blocking Volume 6 2",
+      "rotation": [
+        0,
+        5.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        10,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-25",
+      "position": [
+        39.05,
+        2.06,
+        44.47
+      ],
+      "name": "Blocking Volume 6 2 2",
+      "rotation": [
+        0,
+        50,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        10,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-26",
+      "position": [
+        44.58,
+        2.06,
+        35.5
+      ],
+      "name": "Blocking Volume 6 2 2 2",
+      "rotation": [
+        0,
+        66,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        10,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-27",
+      "position": [
+        51.04,
+        2.06,
+        21.88
+      ],
+      "name": "Blocking Volume 6 2 2 2 2",
+      "rotation": [
+        0,
+        63.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        20,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-28",
+      "position": [
+        58.99,
+        2.06,
+        3.03
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2",
+      "rotation": [
+        0,
+        71.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        20,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-29",
+      "position": [
+        64.41,
+        2.06,
+        -16.63
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        77.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        20,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-30",
+      "position": [
+        66.43,
+        2.06,
+        -37.02
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        91.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        20,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-31",
+      "position": [
+        61,
+        2.06,
+        -56.06
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        119.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        20,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-32",
+      "position": [
+        24.14,
+        2.06,
+        -62.87
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        182.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        60,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-33",
+      "position": [
+        -15.85,
+        2.06,
+        -58.33
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        196.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        20,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-34",
+      "position": [
+        -33.98,
+        2.06,
+        -48.94
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        219,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        20,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-35",
+      "position": [
+        -48.83,
+        2.06,
+        -35.07
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        227.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        20,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-36",
+      "position": [
+        -55.76,
+        2.06,
+        -13.79
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        271,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        25,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-37",
+      "position": [
+        -58.71,
+        2.06,
+        4.55
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        241.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        15,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-38",
+      "position": [
+        -65.65,
+        2.06,
+        14.42
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        228,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        10,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-39",
+      "position": [
+        -69.26,
+        2.06,
+        24.72
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        275,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        10,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-40",
+      "position": [
+        -66.07,
+        2.06,
+        34.92
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        300,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        10,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-41",
+      "position": [
+        -64.37,
+        2.06,
+        49.12
+      ],
+      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "rotation": [
+        0,
+        268,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        22,
+        4,
+        4
+      ]
     }
   ],
   "splines": [
@@ -2727,7 +3318,8 @@
         0
       ],
       "dataRef": "landscapes/landscape-1.landscape.json",
-      "name": "Landscape"
+      "name": "Landscape",
+      "locked": true
     }
   ],
   "riverWaters": [
