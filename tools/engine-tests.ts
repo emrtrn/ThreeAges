@@ -33376,6 +33376,9 @@ check("RTS animal shadow proxies cast without drawing, follow presentation visib
     [deer.id, new Group()],
     [wolf.id, new Group()],
   ]);
+  const caravan = { id: "caravan:test", position: new Vector3(-2, 0, 4) } as Caravan;
+  const caravanRoot = new Group();
+  caravanRoot.position.set(-2, 2, 4);
   roots.get(deer.id)!.position.set(deer.position.x, 3, deer.position.z);
   roots.get(wolf.id)!.position.set(wolf.position.x, 1, wolf.position.z);
 
@@ -33390,8 +33393,13 @@ check("RTS animal shadow proxies cast without drawing, follow presentation visib
   assert.equal((caster.material as MeshBasicMaterial).colorWrite, false, "but writes no colour pixels");
   assert.equal(caster.frustumCulled, false, "moving animals cannot be culled by stale instance bounds");
 
-  proxies.sync(wildlife.all(), (animal) => roots.get(animal.id) ?? null);
-  assert.equal(casterOf().count, 2, "every visible presented animal receives a proxy");
+  proxies.syncWithCaravans(
+    wildlife.all(),
+    [caravan],
+    (animal) => roots.get(animal.id) ?? null,
+    (candidate) => candidate.id === caravan.id ? caravanRoot : null,
+  );
+  assert.equal(casterOf().count, 3, "every visible animal and caravan presentation receives a proxy");
   const matrix = new Matrix4();
   casterOf().getMatrixAt(0, matrix);
   const placed = new Vector3().setFromMatrixPosition(matrix);
@@ -33405,12 +33413,28 @@ check("RTS animal shadow proxies cast without drawing, follow presentation visib
   casterOf().getMatrixAt(1, matrix);
   const wolfScale = new Vector3().setFromMatrixScale(matrix);
   assert.ok(wolfScale.x < scale.x && wolfScale.y < scale.y, "wolves use a smaller body-shadow profile than deer");
+  casterOf().getMatrixAt(2, matrix);
+  const caravanPlaced = new Vector3().setFromMatrixPosition(matrix);
+  const caravanScale = new Vector3().setFromMatrixScale(matrix);
+  const caravanHalfHeight = (caravanScale.y * (geometry.boundingBox!.max.y - geometry.boundingBox!.min.y)) / 2;
+  assert.ok(Math.abs(caravanPlaced.y - caravanHalfHeight - 2) < 1e-6, "the caravan's compact proxy rests on the road surface");
 
   roots.get(wolf.id)!.visible = false;
-  proxies.sync(wildlife.all(), (animal) => roots.get(animal.id) ?? null);
-  assert.equal(casterOf().count, 1, "a fogged or closed-pen animal leaks no shadow");
+  caravanRoot.visible = false;
+  proxies.syncWithCaravans(
+    wildlife.all(),
+    [caravan],
+    (animal) => roots.get(animal.id) ?? null,
+    (candidate) => candidate.id === caravan.id ? caravanRoot : null,
+  );
+  assert.equal(casterOf().count, 1, "a fogged animal or caravan leaks no shadow");
   proxies.setEnabled(false);
-  proxies.sync(wildlife.all(), (animal) => roots.get(animal.id) ?? null);
+  proxies.syncWithCaravans(
+    wildlife.all(),
+    [caravan],
+    (animal) => roots.get(animal.id) ?? null,
+    (candidate) => candidate.id === caravan.id ? caravanRoot : null,
+  );
   assert.equal(casterOf().count, 0, "disabled shadows stop the per-frame layer");
 });
 

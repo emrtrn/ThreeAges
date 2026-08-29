@@ -20,6 +20,7 @@ import {
 } from "three";
 
 import type { WildlifeAnimal } from "./wildlifeSystem";
+import type { Caravan } from "../logistics/caravanSystem";
 
 const CAP_SEGMENTS = 3;
 const RADIAL_SEGMENTS = 8;
@@ -47,6 +48,7 @@ const PROFILES: Readonly<Record<string, AnimalShadowProfile>> = {
   wolf: { radius: 0.3, height: 0.42 },
   fox: { radius: 0.24, height: 0.3 },
 };
+const CARAVAN_PROFILE: AnimalShadowProfile = { radius: 0.42, height: 0.64 };
 
 export class AnimalShadowProxies {
   readonly root = new Group();
@@ -74,26 +76,40 @@ export class AnimalShadowProxies {
    * not leak its position through a shadow.
    */
   sync(animals: readonly WildlifeAnimal[], presentationRoot: (animal: WildlifeAnimal) => Object3D | null): void {
+    this.syncWithCaravans(animals, [], presentationRoot, () => null);
+  }
+
+  /**
+   * Wildlife and logistics caravans share one invisible caster batch. Their
+   * visible roots decide fog and art visibility before either receives a shadow.
+   */
+  syncWithCaravans(
+    animals: readonly WildlifeAnimal[],
+    caravans: readonly Caravan[],
+    animalPresentationRoot: (animal: WildlifeAnimal) => Object3D | null,
+    caravanPresentationRoot: (caravan: Caravan) => Object3D | null,
+  ): void {
     if (!this.enabled) {
       this.mesh.count = 0;
       return;
     }
-    if (animals.length > this.mesh.instanceMatrix.count) this.grow(animals.length);
+    const required = animals.length + caravans.length;
+    if (required > this.mesh.instanceMatrix.count) this.grow(required);
     const capacity = this.mesh.instanceMatrix.count;
     let written = 0;
     for (const animal of animals) {
       if (written >= capacity) break;
-      const root = presentationRoot(animal);
+      const root = animalPresentationRoot(animal);
       if (!root?.visible) continue;
       const profile = PROFILES[animal.stats.id] ?? DEFAULT_PROFILE;
-      this.position.set(root.position.x, root.position.y + profile.height / 2, root.position.z);
-      // Match the unit proxy exactly: one compact, grounded vertical capsule.
-      // Animal-specific silhouettes made the shadow read as a second model;
-      // this deliberately stays a single continuous contact shadow instead.
-      this.scale.set(profile.radius, profile.height / CAPSULE_LENGTH, profile.radius);
-      this.matrix.makeScale(this.scale.x, this.scale.y, this.scale.z);
-      this.matrix.setPosition(this.position);
-      this.mesh.setMatrixAt(written, this.matrix);
+      this.write(written, root, profile);
+      written += 1;
+    }
+    for (const caravan of caravans) {
+      if (written >= capacity) break;
+      const root = caravanPresentationRoot(caravan);
+      if (!root?.visible) continue;
+      this.write(written, root, CARAVAN_PROFILE);
       written += 1;
     }
     this.mesh.count = written;
@@ -119,6 +135,17 @@ export class AnimalShadowProxies {
     this.mesh.dispose();
     this.mesh = this.createMesh(capacity);
     this.root.add(this.mesh);
+  }
+
+  private write(index: number, root: Object3D, profile: AnimalShadowProfile): void {
+    this.position.set(root.position.x, root.position.y + profile.height / 2, root.position.z);
+    // Match the unit proxy exactly: one compact, grounded vertical capsule.
+    // Animal-specific silhouettes made the shadow read as a second model;
+    // this deliberately stays a single continuous contact shadow instead.
+    this.scale.set(profile.radius, profile.height / CAPSULE_LENGTH, profile.radius);
+    this.matrix.makeScale(this.scale.x, this.scale.y, this.scale.z);
+    this.matrix.setPosition(this.position);
+    this.mesh.setMatrixAt(index, this.matrix);
   }
 
   private createMesh(capacity: number): InstancedMesh {

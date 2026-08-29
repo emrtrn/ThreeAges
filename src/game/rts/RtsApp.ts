@@ -3694,11 +3694,13 @@ export class RtsApp {
     );
     // After wildlife presentation: the root now carries its exact terrain/pasture
     // lift and its fog/closed-pen visibility, which the shadow must mirror.
-    this.animalShadows.sync(
-      this.wildlife.all(),
-      (animal) => this.wildlifeView.presentationRoot(animal),
-    );
     this.caravanView.sync(this.caravans.all(), dt, this.playerVisibilityTest(), PLAYER_OWNER);
+    this.animalShadows.syncWithCaravans(
+      this.wildlife.all(),
+      this.caravans.all(),
+      (animal) => this.wildlifeView.presentationRoot(animal),
+      (caravan) => this.caravanView.presentationRoot(caravan),
+    );
     this.perfMeasure("hayvan/kervan sunumu", herdViewMark);
     // §59: the grid is a simulation fact and `updateFogOfWar` owns it; how far
     // the drawn frontier has eased toward it is presentation, so it runs here on

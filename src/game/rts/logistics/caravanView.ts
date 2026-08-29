@@ -1,5 +1,5 @@
 /** Presentation mirror for automatic logistics caravans. */
-import type { Group } from "three";
+import type { Group, Object3D } from "three";
 
 import type { RtsPresentationHandle } from "../units/unit";
 import type { UnitOwner } from "../units/unit";
@@ -73,6 +73,11 @@ export class CaravanView {
 
   dispose(): void {
     this.clear();
+  }
+
+  /** The root accepted by the latest caravan presentation sync, if one exists. */
+  presentationRoot(caravan: Caravan): Object3D | null {
+    return this.handles.get(caravan.id)?.root ?? null;
   }
 
   private handleFor(caravan: Caravan): RtsPresentationHandle | null {
