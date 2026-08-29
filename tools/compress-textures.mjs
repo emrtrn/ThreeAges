@@ -94,12 +94,17 @@ const mb = (bytes) => (bytes / 1048576).toFixed(2);
 const totalBefore = results.reduce((sum, r) => sum + r.before, 0);
 const totalAfter = results.reduce((sum, r) => sum + r.after, 0);
 
-console.log("dosya".padEnd(34) + "PNG".padStart(9) + "WebP".padStart(10) + "  mod");
+console.log("dosya".padEnd(34) + "kaynak".padStart(9) + "WebP".padStart(10) + "  mod");
 for (const r of results) {
-  console.log(r.file.padEnd(34) + mb(r.before).padStart(9) + mb(r.after).padStart(10) + `  ${r.label}`);
+  const grew = r.after >= r.before ? "  << BUYUDU" : "";
+  console.log(r.file.padEnd(34) + mb(r.before).padStart(9) + mb(r.after).padStart(10) + `  ${r.label}${grew}`);
 }
 console.log("\n" + "TOPLAM".padEnd(34) + mb(totalBefore).padStart(9) + mb(totalAfter).padStart(10)
   + `   (-${(100 - (totalAfter / totalBefore) * 100).toFixed(0)}%)`);
+if (skipped.length) {
+  console.log(`\natlanan (zaten kayipli kaynak, --include-lossy ile dahil et): ${skipped.length}`);
+  for (const s of skipped) console.log(`   ${s.split(/[\\/]/).pop()}`);
+}
 
 if (!write) {
   console.log("\nkuru calisma (--write ile uygula)");
@@ -107,19 +112,16 @@ if (!write) {
 }
 
 const manifest = JSON.parse(readFileSync(MANIFEST, "utf8"));
-const byPath = new Map();
-for (const asset of manifest.assets ?? []) {
-  if (typeof asset.path === "string") byPath.set(asset.path.replace(/^\/+/, ""), asset);
-}
+const publicRel = (p) => p.split("\\").join("/").replace(/^public\//, "");
 
 let repointed = 0;
 for (const r of results) {
-  const webpName = r.file.replace(/\.png$/i, ".webp");
-  writeFileSync(join(DIR, webpName), r.buffer);
-  rmSync(join(DIR, r.file), { force: true });
+  const dest = r.src.replace(/\.(png|jpe?g)$/i, ".webp");
+  writeFileSync(dest, r.buffer);
+  rmSync(r.src, { force: true });
 
-  const oldRel = `assets/ThreeAges/Textures/${r.file}`;
-  const newRel = `assets/ThreeAges/Textures/${webpName}`;
+  const oldRel = publicRel(r.src);
+  const newRel = publicRel(dest);
   for (const asset of manifest.assets ?? []) {
     if (typeof asset.path === "string" && asset.path.replace(/^\/+/, "") === oldRel) {
       asset.path = asset.path.startsWith("/") ? `/${newRel}` : newRel;
@@ -134,4 +136,6 @@ for (const r of results) {
 
 writeFileSync(MANIFEST, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 console.log(`\nYAZILDI: ${results.length} doku donusturuldu, ${repointed} manifest yolu guncellendi`);
-void byPath;
+if (repointed !== results.length) {
+  console.log(`UYARI: ${results.length - repointed} dosyanin manifest kaydi bulunamadi`);
+}

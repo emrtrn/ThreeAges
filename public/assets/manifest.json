@@ -25041,34 +25041,11 @@
       "license": "Unknown"
     },
     {
-      "id": "guard-bc",
-      "name": "Guard_BC",
-      "assetType": "texture",
-      "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Guard/Guard_BC.png",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Characters",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 317240
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "guard-blue-bc",
       "name": "Guard_Blue_BC",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Guard/Guard_Blue_BC.png",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_Blue_BC.webp",
       "tags": [
         "guard",
         "base-color",
@@ -25087,7 +25064,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 2555571
+        "bytes": 331934
       },
       "license": "Generated"
     },
@@ -25096,7 +25073,7 @@
       "name": "Guard_Red_BC",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Guard/Guard_Red_BC.png",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_Red_BC.webp",
       "tags": [
         "guard",
         "base-color",
@@ -25115,7 +25092,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 2570695
+        "bytes": 324614
       },
       "license": "Generated"
     },
@@ -25124,7 +25101,7 @@
       "name": "Guard_N",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Guard/Guard_N.png",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_N.webp",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -25138,7 +25115,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 436382
+        "bytes": 191694
       },
       "license": "Unknown"
     },
@@ -25170,7 +25147,7 @@
       "name": "Guard_ORM",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Guard/Guard_ORM.png",
+      "path": "assets/ThreeAges/Characters/Guard/Guard_ORM.webp",
       "tags": [
         "guard",
         "orm",
@@ -25190,7 +25167,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 229828
+        "bytes": 122968
       },
       "license": "Generated"
     },
@@ -25291,7 +25268,7 @@
       "name": "Archer N",
       "assetType": "texture",
       "category": "Archer",
-      "path": "assets/ThreeAges/Characters/Archer/Archer_N.png",
+      "path": "assets/ThreeAges/Characters/Archer/Archer_N.webp",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -25305,7 +25282,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1474909
+        "bytes": 586642
       },
       "license": "Unknown"
     },
@@ -25383,7 +25360,7 @@
       "name": "Archer Blue BC",
       "assetType": "texture",
       "category": "Archer",
-      "path": "assets/ThreeAges/Characters/Archer/ArcherBlue_BC.png",
+      "path": "assets/ThreeAges/Characters/Archer/ArcherBlue_BC.webp",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -25397,7 +25374,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1682340
+        "bytes": 185124
       },
       "license": "Unknown"
     },
@@ -25406,7 +25383,7 @@
       "name": "Archer Red BC",
       "assetType": "texture",
       "category": "Archer",
-      "path": "assets/ThreeAges/Characters/Archer/ArcherRed_BC.png",
+      "path": "assets/ThreeAges/Characters/Archer/ArcherRed_BC.webp",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -25420,7 +25397,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1685808
+        "bytes": 186220
       },
       "license": "Unknown"
     },
@@ -25540,34 +25517,11 @@
       "license": "Unknown"
     },
     {
-      "id": "worker-cloth-bc",
-      "name": "Worker_Cloth_BC",
-      "assetType": "texture",
-      "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Worker/Worker_Cloth_BC.jpg",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Characters",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 307992
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "worker-cloth-blue-bc",
       "name": "Worker_Cloth_Blue_BC",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Worker/Worker_Cloth_Blue_BC.png",
+      "path": "assets/ThreeAges/Characters/Worker/Worker_Cloth_Blue_BC.webp",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -25581,7 +25535,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 2614714
+        "bytes": 333350
       },
       "license": "Unknown"
     },
@@ -25590,7 +25544,7 @@
       "name": "Worker_Cloth_Red_BC",
       "assetType": "texture",
       "category": "Characters",
-      "path": "assets/ThreeAges/Characters/Worker/Worker_Cloth_Red_BC.png",
+      "path": "assets/ThreeAges/Characters/Worker/Worker_Cloth_Red_BC.webp",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -25604,7 +25558,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 2563586
+        "bytes": 321302
       },
       "license": "Unknown"
     },
