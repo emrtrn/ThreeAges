@@ -569,6 +569,9 @@ const workerCampBufferCapacity = (economy: Readonly<Record<string | number, unkn
     ? Number(economy["workerCapacity"]) * Number(economy["perWorkerPerMinute"]) * 2
     : Number(economy["localBufferCapacity"]);
 
+const workerCarryCapacity = (economy: Readonly<Record<string | number, unknown>>): number =>
+  Number(economy["perWorkerPerMinute"]) / 2;
+
 const BUILDINGS_FIELDS = [
   { path: "label", label: "Ad", hint: "Binanın oyunda ve arayüzde görünen adı." },
   { path: "icon", label: "İkon yolu", hint: "Yapı paletindeki simgenin dosya yolu (public köküne göre)." },
@@ -682,10 +685,12 @@ const BUILDINGS_FIELDS = [
   },
   {
     path: "economy.carryCapacity",
-    label: "Ekonomi: İşçi taşıma kapasitesi",
+    label: "Ekonomi: İşçi taşıma kapasitesi (otomatik)",
     min: 0,
-    step: 1,
-    hint: "İşçinin kampa dönüp boşaltmadan önce taşıdığı maks. yük. Büyük değer = daha az gidiş-geliş = daha yüksek gerçek verim.",
+    step: 0.5,
+    readonly: usesWorkerProduction,
+    derive: workerCarryCapacity,
+    hint: "İşçi başı toplama/dk ÷ 2. İşçinin kampa dönüp boşaltmadan önce taşıdığı maks. yük; toplama hızı değişince otomatik güncellenir.",
   },
   {
     path: "economy.requiresForest",
@@ -890,10 +895,12 @@ const BUILDINGS_FIELDS = [
   },
   {
     path: "progression.settlement.[].economy.carryCapacity",
-    label: "Yerleşim tier: Taşıma kapasitesi",
+    label: "Yerleşim tier: Taşıma kapasitesi (otomatik)",
     min: 0,
-    step: 1,
-    hint: "Bu seviyede işçinin kampa dönmeden taşıdığı maks. yük (Oduncu Kampı).",
+    step: 0.5,
+    readonly: usesWorkerProduction,
+    derive: workerCarryCapacity,
+    hint: "Bu seviyede işçi başı toplama/dk ÷ 2. Toplama hızı değişince otomatik güncellenir.",
   },
   {
     path: "progression.settlement.[].economy.livestockCapacity",
@@ -934,10 +941,12 @@ const BUILDINGS_FIELDS = [
   },
   {
     path: "progression.town.[].economy.carryCapacity",
-    label: "Kasaba tier: Taşıma kapasitesi",
+    label: "Kasaba tier: Taşıma kapasitesi (otomatik)",
     min: 0,
-    step: 1,
-    hint: "Bu seviyede işçinin kampa dönmeden taşıdığı maks. yük (Oduncu Kampı).",
+    step: 0.5,
+    readonly: usesWorkerProduction,
+    derive: workerCarryCapacity,
+    hint: "Bu seviyede işçi başı toplama/dk ÷ 2. Toplama hızı değişince otomatik güncellenir.",
   },
   {
     path: "progression.town.[].economy.livestockCapacity",

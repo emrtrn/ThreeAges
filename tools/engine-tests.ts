@@ -35954,6 +35954,21 @@ check("V2 Faz 3: the pasture's data shape is enforced, and the per-worker rate s
     /localBufferCapacity: must equal workerCapacity/,
     "and a tier's camp buffer follows the same derived rule",
   );
+  refuses(
+    (data) => { data.lumber_camp.economy.carryCapacity = 21; },
+    /carryCapacity: must equal perWorkerPerMinute \/ 2/,
+    "a gathering camp's base carry capacity is derived from its worker rate",
+  );
+  refuses(
+    (data) => { data.quarry.progression.settlement[1].economy.carryCapacity = 31; },
+    /carryCapacity: must equal perWorkerPerMinute \/ 2/,
+    "and a quarry tier cannot independently tune its workers' carry capacity",
+  );
+  refuses(
+    (data) => { delete data.gold_mine.progression.town[2].economy.carryCapacity; },
+    /carryCapacity/,
+    "every source-gathering tier retains the derived carry capacity",
+  );
 
   // The animals-table rule in the other direction: a livestock field on a
   // building that has no pen is refused rather than silently dropped.

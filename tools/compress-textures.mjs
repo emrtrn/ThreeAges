@@ -25,8 +25,14 @@
  * channel keeps full resolution. It buys less (-52% on these maps against -76%
  * for plain lossy) and that difference is the price of not corrupting data.
  *
- *   node tools/compress-textures.mjs             # measure, write nothing
+ * Already-lossy sources are skipped. Re-encoding a JPEG near-losslessly asks the
+ * encoder to preserve that JPEG's own artefacts exactly, which costs *more* than
+ * the original: the Worker's three .jpg maps grew from 0.32 MB to 0.71 MB when
+ * this ran over them. Pass --include-lossy to override.
+ *
+ *   node tools/compress-textures.mjs                       # measure the default dir
  *   node tools/compress-textures.mjs --write
+ *   node tools/compress-textures.mjs public/assets/ThreeAges/Characters --write
  */
 import { readdirSync, readFileSync, writeFileSync, statSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -40,29 +46,48 @@ try {
   process.exit(1);
 }
 
-const DIR = "public/assets/ThreeAges/Textures";
 const MANIFEST = "public/assets/manifest.json";
-const write = process.argv.includes("--write");
+const args = process.argv.slice(2);
+const write = args.includes("--write");
+const includeLossy = args.includes("--include-lossy");
+const dirs = args.filter((a) => !a.startsWith("--"));
+if (dirs.length === 0) dirs.push("public/assets/ThreeAges/Textures");
 
 /** Lossy only where the map is a picture; the data maps keep full-res channels. */
 function encoderFor(name) {
-  if (/_BC\.png$/i.test(name)) return { label: "lossy q90", options: { quality: 90, effort: 6 } };
+  if (/_BC\.[a-z]+$/i.test(name)) return { label: "lossy q90", options: { quality: 90, effort: 6 } };
   return { label: "near-lossless", options: { nearLossless: true, quality: 40, effort: 6 } };
 }
 
-const files = readdirSync(DIR).filter((f) => f.toLowerCase().endsWith(".png")).sort();
-if (files.length === 0) {
-  console.log("no PNG textures found");
+const walk = (dir, out = []) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name);
+    if (entry.isDirectory()) walk(p, out);
+    else out.push(p);
+  }
+  return out;
+};
+
+const candidates = [];
+const skipped = [];
+for (const dir of dirs) {
+  for (const p of walk(dir)) {
+    if (/\.png$/i.test(p)) candidates.push(p);
+    else if (/\.jpe?g$/i.test(p)) (includeLossy ? candidates : skipped).push(p);
+  }
+}
+if (candidates.length === 0) {
+  console.log("donusturulecek doku bulunamadi");
   process.exit(0);
 }
 
 const results = [];
-for (const file of files) {
-  const src = join(DIR, file);
+for (const src of candidates.sort()) {
+  const file = src.split(/[\\/]/).pop();
   const before = statSync(src).size;
   const { label, options } = encoderFor(file);
   const buffer = await sharp(src).webp(options).toBuffer();
-  results.push({ file, before, after: buffer.length, label, buffer });
+  results.push({ src, file, before, after: buffer.length, label, buffer });
 }
 
 const mb = (bytes) => (bytes / 1048576).toFixed(2);

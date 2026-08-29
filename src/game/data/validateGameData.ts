@@ -840,6 +840,11 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       if (gameSettings && (gameSettings.gatherRadius <= 0 || gameSettings.carryCapacity <= 0)) {
         throw new GameDataError(`${economyWhere}: game gatherRadius and carryCapacity must be > 0`);
       }
+      const workerCarryCapacity = forestSettings ?? nodeSettings ?? gameSettings;
+      if (workerCarryCapacity && perWorkerPerMinute !== undefined
+        && workerCarryCapacity.carryCapacity !== perWorkerPerMinute / 2) {
+        throw new GameDataError(`${economyWhere}.carryCapacity: must equal perWorkerPerMinute / 2`);
+      }
       // The pasture's own shape. `gatherRadius` means the same thing it does for a
       // hunting camp — how far a shepherd may go for an animal — and it has to
       // clear the species' `roamRadius` for the same reason, pinned as an engine
@@ -1045,7 +1050,6 @@ function validateBuildingProgression(
     let previousRate = 0;
     let previousWorkerRate = 0;
     let previousBuffer = 0;
-    let previousCarry = 0;
     let previousLivestockCapacity = 0;
     let previousControlRadius = 0;
     let previousConnectedRadius = 0;
@@ -1145,14 +1149,14 @@ function validateBuildingProgression(
           workerRate = workerRateRaw;
           previousWorkerRate = workerRateRaw;
         }
-        const carryRaw = economyData["carryCapacity"];
-        let carryCapacity: number | undefined;
-        if (carryRaw !== undefined) {
-          if (typeof carryRaw !== "number" || !Number.isFinite(carryRaw) || carryRaw < previousCarry) {
-            throw new GameDataError(`${economyWhere}.carryCapacity: may not shrink by tier`);
-          }
-          carryCapacity = carryRaw;
-          previousCarry = carryRaw;
+        const usesWorkerCarryCapacity = base.economy.requiresForest === true
+          || base.economy.requiresResourceNode === true
+          || base.economy.requiresGame === true;
+        const carryCapacity = usesWorkerCarryCapacity
+          ? requireFiniteNumber(economyData, "carryCapacity", economyWhere)
+          : undefined;
+        if (carryCapacity !== undefined && carryCapacity !== rate / 2) {
+          throw new GameDataError(`${economyWhere}.carryCapacity: must equal perWorkerPerMinute / 2`);
         }
         previousWorkerCapacity = workerCapacity;
         previousRate = rate;

@@ -720,11 +720,11 @@
     "economy": {
       "resourceId": "stone",
       "workerCapacity": 3,
-      "perWorkerPerMinute": 20,
-      "localBufferCapacity": 120,
+      "perWorkerPerMinute": 40,
+      "localBufferCapacity": 240,
       "requiresResourceNode": true,
       "gatherRadius": 8,
-      "carryCapacity": 5
+      "carryCapacity": 20
     },
     "progression": {
       "settlement": [
@@ -733,8 +733,9 @@
           "maxHealth": 200,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 20,
-            "localBufferCapacity": 120
+            "perWorkerPerMinute": 40,
+            "localBufferCapacity": 240,
+            "carryCapacity": 20
           }
         },
         {
@@ -742,8 +743,9 @@
           "maxHealth": 220,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 30,
-            "localBufferCapacity": 180
+            "perWorkerPerMinute": 60,
+            "localBufferCapacity": 360,
+            "carryCapacity": 30
           }
         },
         {
@@ -751,8 +753,9 @@
           "maxHealth": 240,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 40,
-            "localBufferCapacity": 240
+            "perWorkerPerMinute": 80,
+            "localBufferCapacity": 480,
+            "carryCapacity": 40
           }
         }
       ],
@@ -762,8 +765,9 @@
           "maxHealth": 260,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 50,
-            "localBufferCapacity": 400
+            "perWorkerPerMinute": 100,
+            "localBufferCapacity": 800,
+            "carryCapacity": 50
           }
         },
         {
@@ -771,8 +775,9 @@
           "maxHealth": 280,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 60,
-            "localBufferCapacity": 480
+            "perWorkerPerMinute": 120,
+            "localBufferCapacity": 960,
+            "carryCapacity": 60
           }
         },
         {
@@ -780,8 +785,9 @@
           "maxHealth": 300,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 70,
-            "localBufferCapacity": 560
+            "perWorkerPerMinute": 140,
+            "localBufferCapacity": 1120,
+            "carryCapacity": 70
           }
         }
       ]
@@ -808,11 +814,11 @@
     "economy": {
       "resourceId": "gold",
       "workerCapacity": 3,
-      "perWorkerPerMinute": 3,
-      "localBufferCapacity": 18,
+      "perWorkerPerMinute": 4,
+      "localBufferCapacity": 24,
       "requiresResourceNode": true,
       "gatherRadius": 8,
-      "carryCapacity": 3
+      "carryCapacity": 2
     },
     "progression": {
       "settlement": [
@@ -821,8 +827,9 @@
           "maxHealth": 200,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 3,
-            "localBufferCapacity": 18
+            "perWorkerPerMinute": 4,
+            "localBufferCapacity": 24,
+            "carryCapacity": 2
           }
         },
         {
@@ -830,8 +837,9 @@
           "maxHealth": 220,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 4,
-            "localBufferCapacity": 24
+            "perWorkerPerMinute": 6,
+            "localBufferCapacity": 36,
+            "carryCapacity": 3
           }
         },
         {
@@ -839,8 +847,9 @@
           "maxHealth": 240,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 5,
-            "localBufferCapacity": 30
+            "perWorkerPerMinute": 8,
+            "localBufferCapacity": 48,
+            "carryCapacity": 4
           }
         }
       ],
@@ -850,8 +859,9 @@
           "maxHealth": 260,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 6,
-            "localBufferCapacity": 48
+            "perWorkerPerMinute": 10,
+            "localBufferCapacity": 80,
+            "carryCapacity": 5
           }
         },
         {
@@ -859,8 +869,9 @@
           "maxHealth": 280,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 7,
-            "localBufferCapacity": 56
+            "perWorkerPerMinute": 12,
+            "localBufferCapacity": 96,
+            "carryCapacity": 6
           }
         },
         {
@@ -868,8 +879,9 @@
           "maxHealth": 300,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 8,
-            "localBufferCapacity": 64
+            "perWorkerPerMinute": 14,
+            "localBufferCapacity": 112,
+            "carryCapacity": 7
           }
         }
       ]
