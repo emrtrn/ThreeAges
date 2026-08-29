@@ -1,19 +1,19 @@
 {
   "schema": 1,
   "type": "foliageType",
-  "name": "Tree3",
-  "meshAssetId": "resource-tree2",
+  "name": "Pebble2",
+  "meshAssetId": "naturemega-pebble-round-2",
   "radius": 0.5,
   "density": 1,
   "scaleMin": [
-    2,
-    2,
-    2
+    1,
+    1,
+    1
   ],
   "scaleMax": [
-    2,
-    2,
-    2
+    1,
+    1,
+    1
   ],
   "randomYaw": true,
   "alignToNormal": true,

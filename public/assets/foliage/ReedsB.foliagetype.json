@@ -1,19 +1,19 @@
 {
   "schema": 1,
   "type": "foliageType",
-  "name": "Tree1",
-  "meshAssetId": "resource-pinetree",
-  "radius": 0.5,
+  "name": "ReedsB",
+  "meshAssetId": "reeds-cluster-b",
+  "radius": 0.1,
   "density": 1,
   "scaleMin": [
-    4,
-    4,
-    4
+    2,
+    2,
+    2
   ],
   "scaleMax": [
-    5,
-    5,
-    5
+    3,
+    3,
+    3
   ],
   "randomYaw": true,
   "alignToNormal": false,

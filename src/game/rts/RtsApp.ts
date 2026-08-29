@@ -2075,6 +2075,12 @@ export class RtsApp {
       () => this.occupancyBlockers(),
       this.territory,
       (structure) => {
+        // A site is already a real structure for vision and the fog-memory
+        // snapshot. Give it the owner's tier immediately, rather than waiting
+        // for completion: otherwise a Settlement Lv2 Farm is remembered as
+        // its default Lv1 record, for which no Farm Actor exists, and its ghost
+        // becomes the explicit magenta placeholder when vision is lost.
+        this.progression.applyToStructure(structure);
         this.applyConstructionVisual(structure);
         this.assignWorkerToConstruction(structure);
         this.beginRoadCommitBatch();

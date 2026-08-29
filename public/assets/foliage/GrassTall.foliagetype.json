@@ -1,19 +1,19 @@
 {
   "schema": 1,
   "type": "foliageType",
-  "name": "Tree1",
-  "meshAssetId": "resource-pinetree",
-  "radius": 0.5,
+  "name": "GrassTall",
+  "meshAssetId": "naturemega-grass-common-tall",
+  "radius": 0.1,
   "density": 1,
   "scaleMin": [
-    4,
-    4,
-    4
+    1,
+    1,
+    1
   ],
   "scaleMax": [
-    5,
-    5,
-    5
+    1,
+    1,
+    1
   ],
   "randomYaw": true,
   "alignToNormal": false,

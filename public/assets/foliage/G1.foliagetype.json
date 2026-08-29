@@ -3,7 +3,7 @@
   "type": "foliageType",
   "name": "G1",
   "meshAssetId": "naturemega-grass-wispy-short",
-  "radius": 0.5,
+  "radius": 0.1,
   "density": 1,
   "scaleMin": [
     0.5,
@@ -16,13 +16,13 @@
     1
   ],
   "randomYaw": true,
-  "alignToNormal": true,
+  "alignToNormal": false,
   "zOffsetMin": 0,
   "zOffsetMax": 0,
   "slopeMin": 0,
   "slopeMax": 90,
-  "castShadow": true,
-  "receiveShadow": true,
+  "castShadow": false,
+  "receiveShadow": false,
   "collision": false,
   "cullStart": 0,
   "cullEnd": 0

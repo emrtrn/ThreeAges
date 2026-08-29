@@ -29400,52 +29400,6 @@
       "license": "Unknown"
     },
     {
-      "id": "tree2-foliagetype",
-      "name": "Tree2.Foliagetype",
-      "assetType": "foliageType",
-      "category": "foliage",
-      "path": "assets/foliage/Tree2.foliagetype.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "foliage",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 434
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "tree3-foliagetype",
-      "name": "Tree3.Foliagetype",
-      "assetType": "foliageType",
-      "category": "foliage",
-      "path": "assets/foliage/Tree3.foliagetype.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "foliage",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 434
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "driftwood-log",
       "name": "Driftwood Log",
       "assetType": "staticMesh",
@@ -38157,10 +38111,10 @@
     },
     {
       "id": "grass-foliagetype",
-      "name": "Grass.Foliagetype",
+      "name": "G2",
       "assetType": "foliageType",
       "category": "foliage",
-      "path": "assets/foliage/Grass.foliagetype.json",
+      "path": "assets/foliage/G2.foliagetype.json",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -38175,6 +38129,190 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 449
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "reedsa-foliagetype",
+      "name": "Reeds A.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/ReedsA.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 436
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "reedsb-foliagetype",
+      "name": "Reeds B.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/ReedsB.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 436
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "grasstall-foliagetype",
+      "name": "Grass Tall.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/GrassTall.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 452
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "rock1-foliagetype",
+      "name": "Rock1.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/Rock1.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 440
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "rock2-foliagetype",
+      "name": "Rock2.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/Rock2.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 440
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "rock3-foliagetype",
+      "name": "Rock3.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/Rock3.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 440
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "pebble1-foliagetype",
+      "name": "Pebble1.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/Pebble1.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 447
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "pebble2-foliagetype",
+      "name": "Pebble2.Foliagetype",
+      "assetType": "foliageType",
+      "category": "foliage",
+      "path": "assets/foliage/Pebble2.foliagetype.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 447
       },
       "license": "Unknown"
     }

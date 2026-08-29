@@ -1,28 +1,28 @@
 {
   "schema": 1,
   "type": "foliageType",
-  "name": "Tree1",
-  "meshAssetId": "resource-pinetree",
+  "name": "Rock3",
+  "meshAssetId": "river-rock-cluster-c",
   "radius": 0.5,
   "density": 1,
   "scaleMin": [
-    4,
-    4,
-    4
+    1,
+    1,
+    1
   ],
   "scaleMax": [
-    5,
-    5,
-    5
+    1,
+    1,
+    1
   ],
   "randomYaw": true,
-  "alignToNormal": false,
+  "alignToNormal": true,
   "zOffsetMin": 0,
   "zOffsetMax": 0,
   "slopeMin": 0,
   "slopeMax": 90,
-  "castShadow": false,
-  "receiveShadow": false,
+  "castShadow": true,
+  "receiveShadow": true,
   "collision": false,
   "cullStart": 0,
   "cullEnd": 0
