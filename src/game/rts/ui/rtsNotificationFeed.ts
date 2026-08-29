@@ -8,6 +8,7 @@
  */
 import type { RtsNotification } from "./rtsNotifications";
 import { markStaticAria, refreshStaticText } from "./rtsStaticText";
+import { publicUrl } from "@engine/assets/publicUrl";
 
 const ICON_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "population-full": "⌂",
@@ -116,7 +117,7 @@ export class RtsNotificationFeed {
       icon.className = "rts-notification-icon";
       icon.setAttribute("aria-hidden", "true");
       const iconImage = document.createElement("img");
-      iconImage.src = ICON_SRC_BY_KIND[notification.kind];
+      iconImage.src = publicUrl(ICON_SRC_BY_KIND[notification.kind]);
       iconImage.alt = "";
       iconImage.decoding = "async";
       // Legacy glyphs remain a robust final fallback if a deployment omits a

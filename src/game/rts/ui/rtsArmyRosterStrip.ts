@@ -25,6 +25,7 @@ import { markStaticAria, refreshStaticText } from "./rtsStaticText";
 import type { ArmyRosterEntry, ArmyRosterView } from "./rtsArmyRosterView";
 import { armyRosterSignature } from "./rtsArmyRosterView";
 import { attachIconFallback } from "./rtsUiIcons";
+import { publicUrl } from "@engine/assets/publicUrl";
 
 interface RosterChip {
   readonly button: HTMLButtonElement;
@@ -106,7 +107,7 @@ export class RtsArmyRosterStrip {
       icon.alt = "";
       icon.setAttribute("aria-hidden", "true");
       if (entry.icon) {
-        icon.src = entry.icon;
+        icon.src = publicUrl(entry.icon);
         attachIconFallback(icon);
       } else {
         // No artwork yet: the count is the whole button rather than a broken

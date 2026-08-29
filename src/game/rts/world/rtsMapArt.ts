@@ -1,6 +1,7 @@
 /** First Age art pass for the RTS blockout's central ridge and resource landmark. */
 import { Box3, Group, Mesh, type Object3D, type WebGLRenderer } from "three";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
+import { publicUrl } from "@engine/assets/publicUrl";
 
 import type { ForestSystem } from "../economy/forestSystem";
 import type { ResourceNodeSnapshot, ResourceNodeSystem } from "../economy/resourceNodeSystem";
@@ -73,7 +74,10 @@ export class RtsMapArt {
       ? (Object.keys(MODELS) as MapModelId[])
       : (Object.keys(MODELS) as MapModelId[]).filter((id) => id !== "ridgeRock");
     const entries = await Promise.all(modelIds
-      .map(async (id) => [id, (await this.loader.loadAsync(MODELS[id])).scene] as const));
+      // `publicUrl` because MODELS holds authored project paths, not deploy URLs:
+      // a packaged build is served from a subpath where the leading slash points
+      // past the game (see engine/assets/publicUrl.ts).
+      .map(async (id) => [id, (await this.loader.loadAsync(publicUrl(MODELS[id]))).scene] as const));
     for (const [id, scene] of entries) this.templates.set(id, scene);
 
     if (includeRidge) root.add(this.createRidge());

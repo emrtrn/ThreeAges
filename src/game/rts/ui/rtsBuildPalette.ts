@@ -33,6 +33,7 @@ import {
   PALETTE_ROAD_ERASE_ICON,
   PALETTE_ROAD_ICON,
 } from "./rtsUiIcons";
+import { publicUrl } from "@engine/assets/publicUrl";
 
 /**
  * §51 "Yapı kategorileri". Grouped by the question the player is asking — "I
@@ -343,7 +344,7 @@ export class RtsBuildPalette {
     if (stats.icon) {
       const icon = document.createElement("img");
       icon.className = "rts-build-choice-icon";
-      icon.src = stats.icon;
+      icon.src = publicUrl(stats.icon);
       icon.alt = "";
       attachIconFallback(icon);
       button.appendChild(icon);
@@ -383,7 +384,7 @@ export class RtsBuildPalette {
     markStaticTitle(button, nameKey);
     const icon = document.createElement("img");
     icon.className = "rts-build-choice-icon";
-    icon.src = mode === "build" ? PALETTE_ROAD_ICON : PALETTE_ROAD_ERASE_ICON;
+    icon.src = publicUrl(mode === "build" ? PALETTE_ROAD_ICON : PALETTE_ROAD_ERASE_ICON);
     icon.alt = "";
     attachIconFallback(icon);
     const label = document.createElement("span");

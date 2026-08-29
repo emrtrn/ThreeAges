@@ -19,6 +19,7 @@ import type { AgeBalance } from "../../data/gameDataTypes";
 import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import { RESOURCE_ORDER, formatInventoryAmount, resourceLabel } from "./resourceLabels";
 import { resourceIconSrc } from "./rtsUiIcons";
+import { publicUrl } from "@engine/assets/publicUrl";
 
 /**
  * The key a hint names, read from the binding table rather than written into the
@@ -67,7 +68,7 @@ export class RtsHudBar {
 
     this.identity.className = "rts-hud-identity";
     this.crest.className = "rts-hud-crest";
-    this.crest.src = "/assets/ui/arma.png";
+    this.crest.src = publicUrl("assets/ui/arma.png");
     this.identity.appendChild(this.crest);
     this.root.appendChild(this.identity);
 
@@ -79,7 +80,7 @@ export class RtsHudBar {
       cell.dataset.rtsResource = resourceId;
       const icon = document.createElement("img");
       icon.className = "rts-hud-resource-icon";
-      icon.src = resourceIconSrc(resourceId);
+      icon.src = publicUrl(resourceIconSrc(resourceId));
       icon.alt = "";
       icon.setAttribute("aria-hidden", "true");
       const label = document.createElement("span");

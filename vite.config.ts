@@ -2229,6 +2229,16 @@ function prunePublicContentPlugin(): Plugin {
 }
 
 export default defineConfig({
+  // Relative, because a published build does not own the origin root. itch.io
+  // serves a project under `html-classic.itch.zone/html/<id>/`, so the default
+  // root-absolute `/assets/index-*.js` in the emitted index.html would resolve
+  // past the game to the host's own root and 404 — a blank page, no error the
+  // player can act on. Vite keeps serving dev at `/` regardless (a relative base
+  // only takes effect for `build`), so the editor and the smoke suite are
+  // untouched. The runtime counterpart is `publicUrl()`
+  // (engine/assets/publicUrl.ts), which every hand-written public path goes
+  // through for the same reason.
+  base: "./",
   plugins: [layoutEditorPlugin(), prunePublicContentPlugin()],
   resolve: {
     alias: {

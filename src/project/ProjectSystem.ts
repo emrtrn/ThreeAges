@@ -1,3 +1,5 @@
+import { publicUrl } from "@engine/assets/publicUrl";
+
 export interface ProjectManifest {
   schema: 1;
   name: string;
@@ -64,12 +66,16 @@ export async function loadActiveProject(): Promise<ActiveProject> {
 }
 
 /**
- * URL for a path relative to the project's public root. Vite serves `public/`
- * at `/` in both dev and the packaged build, so these are plain static URLs.
+ * URL for a path relative to the project's public root.
+ *
+ * Vite serves `public/` at the deploy base — `/` in dev, but a *relative* base
+ * in a build, because a published game is served from a subpath it does not
+ * control (see `publicUrl`). This is the single funnel every project file goes
+ * through — manifest, models, materials, UVW and mesh-paint sidecars, layouts —
+ * so resolving here is what makes the packaged build work off the origin root.
  */
 export function projectFileUrl(publicRelativePath: string): string {
-  const normalized = publicRelativePath.replace(/\\/g, "/").replace(/^\/+/, "");
-  return `/${normalized}`;
+  return publicUrl(publicRelativePath);
 }
 
 export function projectPublicFileUrl(

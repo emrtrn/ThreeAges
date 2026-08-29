@@ -267,7 +267,19 @@ async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const canvas = requireElement<HTMLCanvasElement>("game-canvas");
   const editorEnabled = params.has("editor");
-  const rtsRoute = !editorEnabled && params.has("rts");
+  // Which route a bare URL opens.
+  //
+  // A published build has no query string to carry: itch.io — and any static
+  // host — serves `index.html` bare, so a game reachable only behind `?rts`
+  // hands every player the template's character demo instead of the product.
+  // In a build the game route is therefore the default, and `?rts` stays as an
+  // explicit spelling of the same thing.
+  //
+  // Dev deliberately keeps the character route as the bare default: the editor's
+  // authoring flows and the `/?debug` smoke specs are written against it, and the
+  // editor's own Play button spells `?rts` out in `editor.previewUrl` anyway. A
+  // fork that ships the character runtime instead flips this one condition.
+  const rtsRoute = !editorEnabled && (params.has("rts") || !import.meta.env.DEV);
   // Rotanın imleç işareti. Three Ages imleçleri yalnız haritaya değil, üstündeki
   // HTML katmanına da ait: ana menüde imleç canvas'a değil menü DOM'una isabet
   // ettiği için orada Windows oku görünüyordu. Sınıf gövdede olduğu için menü,

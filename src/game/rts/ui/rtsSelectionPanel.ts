@@ -26,6 +26,7 @@ import {
 import { t } from "../../localization/LocalizationService";
 import { markStaticAria, markStaticText, refreshStaticText } from "./rtsStaticText";
 import { isRtsFormationId, type RtsFormationId } from "../units/formations/rtsFormationTypes";
+import { publicUrl } from "@engine/assets/publicUrl";
 
 export class RtsSelectionPanel {
   private readonly root = document.createElement("section");
@@ -251,8 +252,13 @@ export class RtsSelectionPanel {
     this.renderSlots(content.slots ?? []);
     const portrait = content.portrait ?? null;
     this.portraitImage.hidden = portrait === null;
-    if (portrait && this.portraitImage.src !== new URL(portrait, window.location.origin).href) {
-      this.portraitImage.src = portrait;
+    // Compared against `document.baseURI`, not the origin: a packaged build is
+    // served from a subpath, so `publicUrl` hands back a page-relative URL and
+    // resolving it against the origin root would never match what the element
+    // reports — the portrait would be reassigned (and re-decoded) every frame.
+    const portraitSrc = portrait === null ? null : publicUrl(portrait);
+    if (portraitSrc && this.portraitImage.src !== new URL(portraitSrc, document.baseURI).href) {
+      this.portraitImage.src = portraitSrc;
     }
     const count = content.selectionCount ?? 0;
     this.selectionCount.textContent = count > 0 ? `×${count}` : "";
@@ -297,7 +303,7 @@ export class RtsSelectionPanel {
       entry.title = t("selection.panel.slot_tooltip", { count: slot.count, unit: slot.label });
       if (slot.icon) {
         const icon = document.createElement("img");
-        icon.src = slot.icon;
+        icon.src = publicUrl(slot.icon);
         icon.alt = "";
         entry.appendChild(icon);
       }
@@ -346,7 +352,7 @@ export class RtsSelectionPanel {
       if (card.icon) {
         const icon = document.createElement("img");
         icon.className = "rts-selection-card-image";
-        icon.src = card.icon;
+        icon.src = publicUrl(card.icon);
         // The name sits right below in its own element, so the artwork is
         // decoration here and a repeated alt would double every card.
         icon.alt = "";
@@ -431,7 +437,7 @@ export class RtsSelectionPanel {
       if (target.icon) {
         const image = document.createElement("img");
         image.className = "rts-selection-worker-assignment-image";
-        image.src = target.icon;
+        image.src = publicUrl(target.icon);
         image.alt = "";
         card.appendChild(image);
       }

@@ -1265,6 +1265,7 @@ import {
 } from "../engine/scene/actorScript";
 import { actorPreviewNodes } from "../engine/scene/actorPreview";
 import { defaultForgeMaterialDef, normalizeForgeMaterialDef } from "../engine/assets/material";
+import { publicUrl } from "../engine/assets/publicUrl";
 import {
   ANIMATION_SET_ROLES,
   normalizeAssetSkeleton,
@@ -1910,6 +1911,24 @@ const layout: RoomLayout = {
 };
 ensureDefaultSceneLights(layout);
 const doc = roomLayoutToSceneDocument(layout);
+// Every public file the runtime reaches for — manifest, models, sidecars,
+// layouts, UI art, the KTX2 transcoder — is resolved through `publicUrl`, so a
+// published build served from a subpath it does not own (itch.io hands one out
+// under `html-classic.itch.zone/html/<id>/`) resolves against the page instead
+// of the host's root. Authored paths keep their leading slash — that spelling is
+// the contract in `balance/*.json` and in `UiAssetPath` — so accepting both
+// spellings, and collapsing them to the same answer, is what lets a call site
+// pass either without a bug. Under node there is no Vite base, hence "/".
+check("publicUrl accepts either authored spelling and answers identically", () => {
+  assert.equal(publicUrl("assets/ui/icons/resource-wood.png"), "/assets/ui/icons/resource-wood.png");
+  assert.equal(publicUrl("/assets/ui/icons/resource-wood.png"), "/assets/ui/icons/resource-wood.png");
+});
+check("publicUrl never emits a doubled or backslashed separator", () => {
+  // A doubled slash would read as protocol-relative and leave the origin; a
+  // backslash arrives from a Windows-authored path and is not a URL separator.
+  assert.equal(publicUrl("//assets/x.png"), "/assets/x.png");
+  assert.equal(publicUrl("assets\\ThreeAges\\Props\\Axe.glb"), "/assets/ThreeAges/Props/Axe.glb");
+});
 check("asset manifest validates against the public assets tree", () => {
   const report = validateAssetManifest(assetManifest, {
     publicFiles: listPublicFiles("public/assets"),

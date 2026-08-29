@@ -13,6 +13,7 @@
  */
 import { t } from "../../localization/LocalizationService";
 import type { RtsLoadProgressSnapshot } from "../loading/rtsLoadProgress";
+import { publicUrl } from "@engine/assets/publicUrl";
 
 /**
  * Background art, dropped in by the author (plan §10). Referenced before the
@@ -47,7 +48,7 @@ export class RtsLoadingScreen {
 
     const art = document.createElement("div");
     art.className = "rts-loading-art";
-    art.style.backgroundImage = `url("${LOADING_ART_URL}")`;
+    art.style.backgroundImage = `url("${publicUrl(LOADING_ART_URL)}")`;
 
     const panel = document.createElement("div");
     panel.className = "rts-loading-panel";

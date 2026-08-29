@@ -152,6 +152,31 @@ async function main() {
     structural.push("no .js bundle found (dist looks incomplete)");
   }
 
+  // Deploy-base guard. A published game is served from a subpath it does not
+  // own — itch.io puts it under `html-classic.itch.zone/html/<id>/` — where a
+  // root-absolute `src="/assets/index-*.js"` resolves past the game to the
+  // host's root and 404s. The failure mode is a blank page with no error the
+  // player can act on, and it is invisible locally because `vite preview` and
+  // the dev server both serve from `/`. `base: "./"` in vite.config.ts is what
+  // prevents it; this is what notices if that is ever dropped.
+  const indexHtml = allFiles.find((f) => f.toLowerCase().endsWith("index.html"));
+  if (indexHtml) {
+    let html = "";
+    try {
+      html = await readFile(indexHtml, "utf8");
+    } catch {
+      html = "";
+    }
+    const absolute = [...html.matchAll(/\b(?:src|href)="(\/[^/][^"]*)"/g)].map((m) => m[1]);
+    if (absolute.length > 0) {
+      structural.push(
+        `${rel(indexHtml)} references ${absolute.length} root-absolute path(s) ` +
+          `(${absolute.slice(0, 3).join(", ")}) — a build served from a subpath ` +
+          `would 404 on these. Check \`base\` in vite.config.ts.`,
+      );
+    }
+  }
+
   // --- forbidden-string scan ----------------------------------------------
   const textFiles = allFiles.filter((f) => TEXT_EXT.has(extname(f).toLowerCase()));
   const fails = [];

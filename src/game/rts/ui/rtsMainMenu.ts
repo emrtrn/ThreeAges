@@ -25,6 +25,7 @@ import { canPlayAudioFormat } from "@engine/audio/audioSubsystem";
 import { onLocaleChanged, t } from "../../localization/LocalizationService";
 import { RtsMatchSetup, type RtsMatchSetupValues } from "../match/rtsMatchSetup";
 import { RtsLanguageSelect } from "./rtsLanguageSelect";
+import { publicUrl } from "@engine/assets/publicUrl";
 
 /**
  * Background art, dropped in by the author (plan §10). Referenced before the file
@@ -78,7 +79,7 @@ export class RtsMainMenu {
 
     const art = document.createElement("div");
     art.className = "rts-main-menu-art";
-    art.style.backgroundImage = `url("${MENU_ART_URL}")`;
+    art.style.backgroundImage = `url("${publicUrl(MENU_ART_URL)}")`;
 
     this.card.className = "rts-match-card rts-main-menu-card";
     this.card.dataset.tone = "neutral";
