@@ -4,10 +4,6 @@
   "loadGroups": [],
   "instances": [
     {
-      "assetId": "mountain-group-1",
-      "placements": []
-    },
-    {
       "assetId": "rock-group",
       "placements": [
         {
@@ -41,50 +37,6 @@
           "scale": 2.5
         }
       ]
-    },
-    {
-      "assetId": "resource-gold-1",
-      "placements": []
-    },
-    {
-      "assetId": "resource-gold-2",
-      "placements": []
-    },
-    {
-      "assetId": "resource-gold-3",
-      "placements": []
-    },
-    {
-      "assetId": "resource-rock-1",
-      "placements": []
-    },
-    {
-      "assetId": "resource-rock-2",
-      "placements": []
-    },
-    {
-      "assetId": "resource-rock-3",
-      "placements": []
-    },
-    {
-      "assetId": "mountain-group-2",
-      "placements": []
-    },
-    {
-      "assetId": "mountain-single",
-      "placements": []
-    },
-    {
-      "assetId": "mountainlarge-single",
-      "placements": []
-    },
-    {
-      "assetId": "highpolyplane",
-      "placements": []
-    },
-    {
-      "assetId": "archery-secondage-level1",
-      "placements": []
     },
     {
       "assetId": "rock",
@@ -140,22 +92,6 @@
           "scale": 10.27
         }
       ]
-    },
-    {
-      "assetId": "archery-firstage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "shape:cube",
-      "placements": []
-    },
-    {
-      "assetId": "crate-big-stack2",
-      "placements": []
-    },
-    {
-      "assetId": "barrel",
-      "placements": []
     },
     {
       "assetId": "dock-firstage",
@@ -226,102 +162,6 @@
       ]
     },
     {
-      "assetId": "birchtree-1",
-      "placements": []
-    },
-    {
-      "assetId": "birchtree-2",
-      "placements": []
-    },
-    {
-      "assetId": "bush-flowers",
-      "placements": []
-    },
-    {
-      "assetId": "bush-large-flowers",
-      "placements": []
-    },
-    {
-      "assetId": "bush-large",
-      "placements": []
-    },
-    {
-      "assetId": "bush-small-flowers",
-      "placements": []
-    },
-    {
-      "assetId": "bush-small",
-      "placements": []
-    },
-    {
-      "assetId": "bush",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-1",
-      "placements": []
-    },
-    {
-      "assetId": "birchtree-5",
-      "placements": []
-    },
-    {
-      "assetId": "birchtree-4",
-      "placements": []
-    },
-    {
-      "assetId": "birchtree-3",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-10",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-2",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-3",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-4",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-5",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-6",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-7",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-8",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-9",
-      "placements": []
-    },
-    {
-      "assetId": "flower-1-clump",
-      "placements": []
-    },
-    {
-      "assetId": "flower-1",
-      "placements": []
-    },
-    {
-      "assetId": "flower-2-clump",
-      "placements": []
-    },
-    {
       "assetId": "flower-2",
       "placements": [
         {
@@ -334,98 +174,6 @@
           "scale": 1
         }
       ]
-    },
-    {
-      "assetId": "flower-3-clump",
-      "placements": []
-    },
-    {
-      "assetId": "flower-4-clump",
-      "placements": []
-    },
-    {
-      "assetId": "flower-5-clump",
-      "placements": []
-    },
-    {
-      "assetId": "grass-large-extruded",
-      "placements": []
-    },
-    {
-      "assetId": "grass-large",
-      "placements": []
-    },
-    {
-      "assetId": "grass-small",
-      "placements": []
-    },
-    {
-      "assetId": "mapletree-1",
-      "placements": []
-    },
-    {
-      "assetId": "mapletree-2",
-      "placements": []
-    },
-    {
-      "assetId": "mapletree-3",
-      "placements": []
-    },
-    {
-      "assetId": "mapletree-4",
-      "placements": []
-    },
-    {
-      "assetId": "mapletree-5",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-clover-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-round-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-round-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-round-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-round-4",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-round-5",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-4",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-5",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-6",
-      "placements": []
     },
     {
       "assetId": "naturemega-rock-medium-1",
@@ -859,54 +607,6 @@
       ]
     },
     {
-      "assetId": "naturemega-rock-path-round-small-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-round-small-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-round-small-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-round-thin",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-round-wide",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-square-small-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-square-small-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-square-small-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-square-thin",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-square-wide",
-      "placements": []
-    },
-    {
-      "assetId": "sm-road-asphalt",
-      "placements": []
-    },
-    {
-      "assetId": "forestmountain-landscape",
-      "placements": []
-    },
-    {
       "assetId": "mountain",
       "placements": [
         {
@@ -1072,58 +772,6 @@
       ]
     },
     {
-      "assetId": "naturemega-dead-tree-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-dead-tree-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-dead-tree-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-dead-tree-4",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-dead-tree-5",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-common-tree-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-common-tree-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-common-tree-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-common-tree-4",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-common-tree-5",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-clover-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-bush-common-flowers",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-fern-1",
-      "placements": []
-    },
-    {
       "assetId": "naturemega-mushroom-common",
       "placements": [
         {
@@ -1173,10 +821,6 @@
       ]
     },
     {
-      "assetId": "logs",
-      "placements": []
-    },
-    {
       "assetId": "mine",
       "placements": [
         {
@@ -1212,90 +856,6 @@
       ]
     },
     {
-      "assetId": "houses-firstage-2-level3",
-      "placements": []
-    },
-    {
-      "assetId": "houses-firstage-2-level1",
-      "placements": []
-    },
-    {
-      "assetId": "houses-firstage-2-level2",
-      "placements": []
-    },
-    {
-      "assetId": "resource-pinetree-group",
-      "placements": []
-    },
-    {
-      "assetId": "resource-pinetree",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level2",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-firstage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "shape:sphere",
-      "placements": []
-    },
-    {
-      "assetId": "base-basic-shaded",
-      "placements": []
-    },
-    {
-      "assetId": "barracs",
-      "placements": []
-    },
-    {
-      "assetId": "barracks-firstage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "enemy-watchtower-secondage-level2",
-      "placements": []
-    },
-    {
-      "assetId": "watchtower-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "barracks-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "archery-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-firstage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "barracks-secondage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "test",
-      "placements": []
-    },
-    {
-      "assetId": "barracks-secondage-level2",
-      "placements": []
-    },
-    {
       "assetId": "stone-bridge",
       "placements": [
         {
@@ -1314,10 +874,6 @@
           "scale": 3
         }
       ]
-    },
-    {
-      "assetId": "reeds-cluster-b",
-      "placements": []
     },
     {
       "assetId": "river-rock-cluster-a",
@@ -1368,18 +924,6 @@
           "scale": 10
         }
       ]
-    },
-    {
-      "assetId": "driftwood-log",
-      "placements": []
-    },
-    {
-      "assetId": "reeds-cluster-a",
-      "placements": []
-    },
-    {
-      "assetId": "river-rock-cluster-b",
-      "placements": []
     },
     {
       "assetId": "river-rock-cluster-c",
@@ -1477,10 +1021,6 @@
       ]
     },
     {
-      "assetId": "small-river-stones-patch",
-      "placements": []
-    },
-    {
       "assetId": "wooden-mooring-posts",
       "placements": [
         {
@@ -1530,7 +1070,7 @@
         },
         {
           "position": [
-            42.63,
+            42.65,
             -0.06,
             16.21
           ],
@@ -2026,7 +1566,7 @@
         0.51,
         -1.82
       ],
-      "name": "Blocking Volume 3 2 3",
+      "name": "Blocking Volume 3.12",
       "rotation": [
         0,
         32,
@@ -2051,7 +1591,7 @@
         0.84,
         -2.32
       ],
-      "name": "Blocking Volume 3 2 2",
+      "name": "Blocking Volume 3.11",
       "rotation": [
         0,
         32,
@@ -2076,7 +1616,7 @@
         1.09,
         -2.71
       ],
-      "name": "Blocking Volume 3 2 2 3",
+      "name": "Blocking Volume 3.10",
       "rotation": [
         0,
         32,
@@ -2101,7 +1641,7 @@
         1.36,
         -3.22
       ],
-      "name": "Blocking Volume 3 2 2 2",
+      "name": "Blocking Volume 3.9",
       "rotation": [
         0,
         32,
@@ -2126,7 +1666,7 @@
         1.52,
         -4.07
       ],
-      "name": "Blocking Volume 3 2 2 2 2",
+      "name": "Blocking Volume 3.8",
       "rotation": [
         0,
         32,
@@ -2151,7 +1691,7 @@
         1.37,
         -5.19
       ],
-      "name": "Blocking Volume 3 2 2 2 2 2",
+      "name": "Blocking Volume 3.7",
       "rotation": [
         0,
         32,
@@ -2176,7 +1716,7 @@
         1.18,
         -5.51
       ],
-      "name": "Blocking Volume 3 2 2 2 2 2 2",
+      "name": "Blocking Volume 3.6",
       "rotation": [
         0,
         32,
@@ -2201,7 +1741,7 @@
         0.95,
         -5.82
       ],
-      "name": "Blocking Volume 3 2 2 2 2 2 2 3",
+      "name": "Blocking Volume 3.5",
       "rotation": [
         0,
         32,
@@ -2226,7 +1766,7 @@
         0.75,
         -6.1
       ],
-      "name": "Blocking Volume 3 2 2 2 2 2 2 3 2",
+      "name": "Blocking Volume 3.4",
       "rotation": [
         0,
         32,
@@ -2251,7 +1791,7 @@
         0.57,
         -6.39
       ],
-      "name": "Blocking Volume 3 2 2 2 2 2 2 3 2 2",
+      "name": "Blocking Volume 3.3",
       "rotation": [
         0,
         32,
@@ -2276,7 +1816,7 @@
         0.38,
         -6.71
       ],
-      "name": "Blocking Volume 3 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 3.2",
       "rotation": [
         0,
         32,
@@ -2301,7 +1841,7 @@
         0.16,
         -7.76
       ],
-      "name": "Blocking Volume 3 2 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 3.1",
       "rotation": [
         0,
         32,
@@ -2437,7 +1977,7 @@
         2.06,
         49.27
       ],
-      "name": "Blocking Volume 6 2",
+      "name": "Blocking Volume 7",
       "rotation": [
         0,
         5.5,
@@ -2457,7 +1997,7 @@
         2.06,
         44.92
       ],
-      "name": "Blocking Volume 6 2 2",
+      "name": "Blocking Volume 8",
       "rotation": [
         0,
         41.5,
@@ -2477,7 +2017,7 @@
         2.06,
         36.94
       ],
-      "name": "Blocking Volume 6 2 2 2",
+      "name": "Blocking Volume 9",
       "rotation": [
         0,
         51.5,
@@ -2497,7 +2037,7 @@
         2.06,
         22.08
       ],
-      "name": "Blocking Volume 6 2 2 2 2",
+      "name": "Blocking Volume 10",
       "rotation": [
         0,
         75.5,
@@ -2517,7 +2057,7 @@
         2.06,
         3.03
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2",
+      "name": "Blocking Volume 11",
       "rotation": [
         0,
         71.5,
@@ -2537,7 +2077,7 @@
         2.06,
         -16.63
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2",
+      "name": "Blocking Volume 12",
       "rotation": [
         0,
         77.5,
@@ -2557,7 +2097,7 @@
         2.06,
         -37.02
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 13",
       "rotation": [
         0,
         91.5,
@@ -2577,7 +2117,7 @@
         2.06,
         -56.06
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 14",
       "rotation": [
         0,
         119.5,
@@ -2597,7 +2137,7 @@
         2.06,
         -62.87
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 15",
       "rotation": [
         0,
         182.5,
@@ -2617,7 +2157,7 @@
         2.06,
         -58.33
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 16",
       "rotation": [
         0,
         196.5,
@@ -2637,7 +2177,7 @@
         2.06,
         -47.08
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 17",
       "rotation": [
         0,
         215.5,
@@ -2657,7 +2197,7 @@
         2.06,
         -17.15
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 18",
       "rotation": [
         0,
         267.5,
@@ -2677,7 +2217,7 @@
         2.06,
         4.55
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 19",
       "rotation": [
         0,
         241.5,
@@ -2697,7 +2237,7 @@
         2.06,
         14.42
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 20",
       "rotation": [
         0,
         228,
@@ -2717,7 +2257,7 @@
         2.06,
         24.72
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 21",
       "rotation": [
         0,
         275,
@@ -2737,7 +2277,7 @@
         2.06,
         34.92
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 22",
       "rotation": [
         0,
         300,
@@ -2757,7 +2297,7 @@
         2.06,
         49.12
       ],
-      "name": "Blocking Volume 6 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2",
+      "name": "Blocking Volume 23",
       "rotation": [
         0,
         268,
@@ -2767,6 +2307,146 @@
       "size": [
         22,
         4,
+        4
+      ]
+    },
+    {
+      "id": "blocking-volume-35",
+      "position": [
+        13.32,
+        0.46,
+        45.26
+      ],
+      "name": "Blocking Volume 24",
+      "rotation": [
+        0,
+        61,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        0.5,
+        1,
+        5
+      ]
+    },
+    {
+      "id": "blocking-volume-42",
+      "position": [
+        13.46,
+        0.46,
+        47.76
+      ],
+      "name": "Blocking Volume 24 2",
+      "rotation": [
+        0,
+        124.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        0.5,
+        1,
+        5
+      ]
+    },
+    {
+      "id": "blocking-volume-46",
+      "position": [
+        42.44,
+        0.49,
+        15.2
+      ],
+      "name": "Blocking Volume 24 2 3",
+      "rotation": [
+        0,
+        8,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        0.5,
+        1,
+        5
+      ]
+    },
+    {
+      "id": "blocking-volume-47",
+      "position": [
+        40.49,
+        0.49,
+        16.59
+      ],
+      "name": "Blocking Volume 24 2 3 2",
+      "rotation": [
+        0,
+        65,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        0.5,
+        1,
+        5
+      ]
+    },
+    {
+      "id": "blocking-volume-43",
+      "position": [
+        17.43,
+        0.45,
+        49.36
+      ],
+      "name": "Blocking Volume 24 2 2",
+      "rotation": [
+        0,
+        118.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        0.5,
+        1,
+        5
+      ]
+    },
+    {
+      "id": "blocking-volume-44",
+      "position": [
+        19.17,
+        0.52,
+        43.8
+      ],
+      "name": "Blocking Volume 24 2 2 2",
+      "rotation": [
+        0,
+        80.5,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        0.5,
+        1,
+        3
+      ]
+    },
+    {
+      "id": "blocking-volume-45",
+      "position": [
+        15.79,
+        0.52,
+        42.71
+      ],
+      "name": "Blocking Volume 24 2 2 2 2",
+      "rotation": [
+        0,
+        67,
+        0
+      ],
+      "scale": 1,
+      "size": [
+        0.5,
+        1,
         4
       ]
     }

@@ -4,10 +4,6 @@
   "loadGroups": [],
   "instances": [
     {
-      "assetId": "mountain-group-1",
-      "placements": []
-    },
-    {
       "assetId": "rock-group",
       "placements": [
         {
@@ -41,50 +37,6 @@
           "scale": 2.5
         }
       ]
-    },
-    {
-      "assetId": "resource-gold-1",
-      "placements": []
-    },
-    {
-      "assetId": "resource-gold-2",
-      "placements": []
-    },
-    {
-      "assetId": "resource-gold-3",
-      "placements": []
-    },
-    {
-      "assetId": "resource-rock-1",
-      "placements": []
-    },
-    {
-      "assetId": "resource-rock-2",
-      "placements": []
-    },
-    {
-      "assetId": "resource-rock-3",
-      "placements": []
-    },
-    {
-      "assetId": "mountain-group-2",
-      "placements": []
-    },
-    {
-      "assetId": "mountain-single",
-      "placements": []
-    },
-    {
-      "assetId": "mountainlarge-single",
-      "placements": []
-    },
-    {
-      "assetId": "highpolyplane",
-      "placements": []
-    },
-    {
-      "assetId": "archery-secondage-level1",
-      "placements": []
     },
     {
       "assetId": "rock",
@@ -142,10 +94,6 @@
       ]
     },
     {
-      "assetId": "archery-firstage-level1",
-      "placements": []
-    },
-    {
       "assetId": "shape:cube",
       "placements": [
         {
@@ -170,14 +118,6 @@
           }
         }
       ]
-    },
-    {
-      "assetId": "crate-big-stack2",
-      "placements": []
-    },
-    {
-      "assetId": "barrel",
-      "placements": []
     },
     {
       "assetId": "dock-firstage",
@@ -248,102 +188,6 @@
       ]
     },
     {
-      "assetId": "birchtree-1",
-      "placements": []
-    },
-    {
-      "assetId": "birchtree-2",
-      "placements": []
-    },
-    {
-      "assetId": "bush-flowers",
-      "placements": []
-    },
-    {
-      "assetId": "bush-large-flowers",
-      "placements": []
-    },
-    {
-      "assetId": "bush-large",
-      "placements": []
-    },
-    {
-      "assetId": "bush-small-flowers",
-      "placements": []
-    },
-    {
-      "assetId": "bush-small",
-      "placements": []
-    },
-    {
-      "assetId": "bush",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-1",
-      "placements": []
-    },
-    {
-      "assetId": "birchtree-5",
-      "placements": []
-    },
-    {
-      "assetId": "birchtree-4",
-      "placements": []
-    },
-    {
-      "assetId": "birchtree-3",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-10",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-2",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-3",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-4",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-5",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-6",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-7",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-8",
-      "placements": []
-    },
-    {
-      "assetId": "deadtree-9",
-      "placements": []
-    },
-    {
-      "assetId": "flower-1-clump",
-      "placements": []
-    },
-    {
-      "assetId": "flower-1",
-      "placements": []
-    },
-    {
-      "assetId": "flower-2-clump",
-      "placements": []
-    },
-    {
       "assetId": "flower-2",
       "placements": [
         {
@@ -356,98 +200,6 @@
           "scale": 1
         }
       ]
-    },
-    {
-      "assetId": "flower-3-clump",
-      "placements": []
-    },
-    {
-      "assetId": "flower-4-clump",
-      "placements": []
-    },
-    {
-      "assetId": "flower-5-clump",
-      "placements": []
-    },
-    {
-      "assetId": "grass-large-extruded",
-      "placements": []
-    },
-    {
-      "assetId": "grass-large",
-      "placements": []
-    },
-    {
-      "assetId": "grass-small",
-      "placements": []
-    },
-    {
-      "assetId": "mapletree-1",
-      "placements": []
-    },
-    {
-      "assetId": "mapletree-2",
-      "placements": []
-    },
-    {
-      "assetId": "mapletree-3",
-      "placements": []
-    },
-    {
-      "assetId": "mapletree-4",
-      "placements": []
-    },
-    {
-      "assetId": "mapletree-5",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-clover-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-round-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-round-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-round-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-round-4",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-round-5",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-4",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-5",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-pebble-square-6",
-      "placements": []
     },
     {
       "assetId": "naturemega-rock-medium-1",
@@ -881,54 +633,6 @@
       ]
     },
     {
-      "assetId": "naturemega-rock-path-round-small-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-round-small-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-round-small-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-round-thin",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-round-wide",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-square-small-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-square-small-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-square-small-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-square-thin",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-rock-path-square-wide",
-      "placements": []
-    },
-    {
-      "assetId": "sm-road-asphalt",
-      "placements": []
-    },
-    {
-      "assetId": "forestmountain-landscape",
-      "placements": []
-    },
-    {
       "assetId": "mountain",
       "placements": [
         {
@@ -1034,58 +738,6 @@
       ]
     },
     {
-      "assetId": "naturemega-dead-tree-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-dead-tree-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-dead-tree-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-dead-tree-4",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-dead-tree-5",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-common-tree-1",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-common-tree-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-common-tree-3",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-common-tree-4",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-common-tree-5",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-clover-2",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-bush-common-flowers",
-      "placements": []
-    },
-    {
-      "assetId": "naturemega-fern-1",
-      "placements": []
-    },
-    {
       "assetId": "naturemega-mushroom-common",
       "placements": [
         {
@@ -1135,10 +787,6 @@
       ]
     },
     {
-      "assetId": "logs",
-      "placements": []
-    },
-    {
       "assetId": "mine",
       "placements": [
         {
@@ -1174,90 +822,6 @@
       ]
     },
     {
-      "assetId": "houses-firstage-2-level3",
-      "placements": []
-    },
-    {
-      "assetId": "houses-firstage-2-level1",
-      "placements": []
-    },
-    {
-      "assetId": "houses-firstage-2-level2",
-      "placements": []
-    },
-    {
-      "assetId": "resource-pinetree-group",
-      "placements": []
-    },
-    {
-      "assetId": "resource-pinetree",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level2",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-firstage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "shape:sphere",
-      "placements": []
-    },
-    {
-      "assetId": "base-basic-shaded",
-      "placements": []
-    },
-    {
-      "assetId": "barracs",
-      "placements": []
-    },
-    {
-      "assetId": "barracks-firstage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "enemy-watchtower-secondage-level2",
-      "placements": []
-    },
-    {
-      "assetId": "watchtower-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "barracks-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "archery-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-firstage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "barracks-secondage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "test",
-      "placements": []
-    },
-    {
-      "assetId": "barracks-secondage-level2",
-      "placements": []
-    },
-    {
       "assetId": "stone-bridge",
       "placements": [
         {
@@ -1276,38 +840,6 @@
           "scale": 3
         }
       ]
-    },
-    {
-      "assetId": "reeds-cluster-b",
-      "placements": []
-    },
-    {
-      "assetId": "river-rock-cluster-a",
-      "placements": []
-    },
-    {
-      "assetId": "driftwood-log",
-      "placements": []
-    },
-    {
-      "assetId": "reeds-cluster-a",
-      "placements": []
-    },
-    {
-      "assetId": "river-rock-cluster-b",
-      "placements": []
-    },
-    {
-      "assetId": "river-rock-cluster-c",
-      "placements": []
-    },
-    {
-      "assetId": "small-river-stones-patch",
-      "placements": []
-    },
-    {
-      "assetId": "wooden-mooring-posts",
-      "placements": []
     },
     {
       "assetId": "mountain-2",

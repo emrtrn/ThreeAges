@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "type": "foliageType",
-  "name": "plant2",
-  "meshAssetId": "naturemega-plant-1-big",
+  "name": "Rock4",
+  "meshAssetId": "small-river-stones-patch",
   "radius": 0.5,
   "density": 1,
   "scaleMin": [
@@ -16,13 +16,13 @@
     1
   ],
   "randomYaw": true,
-  "alignToNormal": false,
+  "alignToNormal": true,
   "zOffsetMin": 0,
   "zOffsetMax": 0,
   "slopeMin": 0,
   "slopeMax": 90,
-  "castShadow": false,
-  "receiveShadow": false,
+  "castShadow": true,
+  "receiveShadow": true,
   "collision": false,
   "cullStart": 0,
   "cullEnd": 0

@@ -2130,8 +2130,106 @@ function layoutEditorPlugin(): Plugin {
   };
 }
 
+// Forge keeps its template content (starter-content, DevelopmentContent) and its
+// editor-only sidecars in public/ so a fork can author against them. The shipped
+// game reads none of it, so it is pruned from dist/ after the bundle is written
+// rather than deleted from the repo. `npm run assets:unused` is what proves a
+// path belongs on this list; re-run it before adding one.
+const DIST_PRUNE_DIRS = ["assets/starter-content", "assets/DevelopmentContent"];
+const DIST_PRUNE_FILES = ["assets/ThreeAges/Levels/RTS_CoreMatch.level.json"];
+const DIST_PRUNE_SUFFIXES = [".uvw.json", ".vertexcolors.json", ".bak", ".gitkeep"];
+
+function prunePublicContentPlugin(): Plugin {
+  return {
+    name: "forge-prune-dist",
+    apply: "build",
+    async closeBundle() {
+      const distDir = resolve("dist");
+      let removedFiles = 0;
+      let removedBytes = 0;
+
+      const removePath = async (abs: string): Promise<void> => {
+        let entry;
+        try {
+          entry = await stat(abs);
+        } catch {
+          return;
+        }
+        if (entry.isDirectory()) {
+          for (const child of await readdir(abs)) await removePath(resolve(abs, child));
+          await rm(abs, { recursive: true, force: true });
+          return;
+        }
+        removedFiles += 1;
+        removedBytes += entry.size;
+        await rm(abs, { force: true });
+      };
+
+      const pruneSuffixes = async (dir: string): Promise<void> => {
+        let entries;
+        try {
+          entries = await readdir(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const child of entries) {
+          const abs = resolve(dir, child.name);
+          if (child.isDirectory()) await pruneSuffixes(abs);
+          else if (DIST_PRUNE_SUFFIXES.some((suffix) => child.name.endsWith(suffix))) {
+            await removePath(abs);
+          }
+        }
+      };
+
+      for (const dir of DIST_PRUNE_DIRS) await removePath(resolve(distDir, dir));
+      for (const file of DIST_PRUNE_FILES) await removePath(resolve(distDir, file));
+      await pruneSuffixes(distDir);
+
+      // The manifest indexes every authored asset, so entries whose file just
+      // left dist/ would dangle. Drop exactly those; a surviving entry is one
+      // whose file is still there.
+      const manifestPath = resolve(distDir, "assets/manifest.json");
+      let prunedEntries = 0;
+      try {
+        const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+          assets?: { path?: string; thumbnail?: string }[];
+        };
+        if (Array.isArray(manifest.assets)) {
+          const shipped = async (path?: string): Promise<boolean> => {
+            if (typeof path !== "string" || !path) return true;
+            try {
+              await stat(resolve(distDir, path.replace(/^\/+/, "")));
+              return true;
+            } catch {
+              return false;
+            }
+          };
+          const kept: typeof manifest.assets = [];
+          for (const asset of manifest.assets) {
+            if (!(await shipped(asset.path))) {
+              prunedEntries += 1;
+              continue;
+            }
+            if (!(await shipped(asset.thumbnail))) delete asset.thumbnail;
+            kept.push(asset);
+          }
+          manifest.assets = kept;
+          await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+        }
+      } catch {
+        // No manifest in dist (or unreadable): nothing to prune.
+      }
+
+      const mb = (removedBytes / 1048576).toFixed(1);
+      this.warn(
+        `forge-prune-dist: removed ${removedFiles} file(s), ${mb} MB, and ${prunedEntries} manifest entr(ies) from dist/`,
+      );
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [layoutEditorPlugin()],
+  plugins: [layoutEditorPlugin(), prunePublicContentPlugin()],
   resolve: {
     alias: {
       // Keep in sync with tsconfig.json "paths"
