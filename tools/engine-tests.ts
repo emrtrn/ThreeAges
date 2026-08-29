@@ -33333,9 +33333,12 @@ check("RTS wildlife sidecars name clips the shipped animal models actually carry
   assert.ok(sidecars.length > 0, "at least one animal skeleton sidecar is authored");
 
   for (const sidecarName of sidecars) {
-    const modelName = sidecarName.replace(/\.skeleton\.json$/, ".gltf");
+    const modelName = sidecarName.replace(/\.skeleton\.json$/, ".glb");
+    // The animals ship as binary glTF, so the clip names live in the GLB's JSON
+    // chunk: a 12-byte header, then the chunk's own 8-byte length/type prefix.
+    const container = readFileSync(`${directory}/${modelName}`);
     const model = JSON.parse(
-      readFileSync(`${directory}/${modelName}`, "utf8"),
+      container.subarray(20, 20 + container.readUInt32LE(12)).toString("utf8"),
     ) as { animations?: { name?: string }[] };
     const shipped = new Set((model.animations ?? []).map((clip) => clip.name ?? ""));
     assert.ok(shipped.size > 0, `${modelName} ships animation clips`);
@@ -33356,7 +33359,7 @@ check("RTS wildlife sidecars name clips the shipped animal models actually carry
 
   // The naming convention is the only thing pairing a model with its sidecar.
   assert.equal(
-    skeletonSidecarPath("assets/ThreeAges/Animals/Deer.gltf"),
+    skeletonSidecarPath("assets/ThreeAges/Animals/Deer.glb"),
     "assets/ThreeAges/Animals/Deer.skeleton.json",
   );
 });
@@ -34840,8 +34843,10 @@ check("V3 Faz 1: every shipped species owns a sidecar and an actor", () => {
     const assetId = mesh.props?.assetId ?? assert.fail(`${actorRef} names no assetId`);
     const entry = manifest.assets.find((asset) => asset.id === assetId)
       ?? assert.fail(`${actorRef} names assetId "${assetId}", which the manifest does not carry`);
-    const sidecar = entry.path.replace(/\.gltf$/, ".skeleton.json");
-    assert.notEqual(sidecar, entry.path, `${assetId} is a .gltf the sidecar convention applies to`);
+    // Either glTF container: the sidecar convention keys off the file's stem, so
+    // which one a species ships in is a packaging choice, not a contract.
+    const sidecar = entry.path.replace(/\.(gltf|glb)$/, ".skeleton.json");
+    assert.notEqual(sidecar, entry.path, `${assetId} is a glTF model the sidecar convention applies to`);
     assert.ok(existsSync(`public/${sidecar}`), `species "${id}" needs ${sidecar}`);
   }
 });
