@@ -24034,7 +24034,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 617525
+        "bytes": 12078
       },
       "license": "Unknown"
     },
@@ -24061,7 +24061,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1090962
+        "bytes": 21081
       },
       "license": "Unknown"
     },
@@ -24088,7 +24088,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 835185
+        "bytes": 18091
       },
       "license": "Unknown"
     },
@@ -24115,7 +24115,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 847414
+        "bytes": 17028
       },
       "license": "Unknown"
     },
@@ -24142,7 +24142,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 775271
+        "bytes": 15368
       },
       "license": "Unknown"
     },
@@ -24556,8 +24556,8 @@
       "name": "panel",
       "assetType": "texture",
       "category": "UI/Art",
-      "path": "assets/ui/panel.png",
-      "thumbnail": "assets/ui/panel.png",
+      "path": "assets/ui/panel.webp",
+      "thumbnail": "assets/ui/panel.webp",
       "tags": [
         "ui",
         "art"
@@ -24574,7 +24574,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 2219016
+        "bytes": 263578
       },
       "license": "Unknown"
     },
@@ -24583,8 +24583,8 @@
       "name": "panleHUD-9slice",
       "assetType": "texture",
       "category": "UI/Art",
-      "path": "assets/ui/panleHUD-9slice.png",
-      "thumbnail": "assets/ui/panleHUD-9slice.png",
+      "path": "assets/ui/panleHUD-9slice.webp",
+      "thumbnail": "assets/ui/panleHUD-9slice.webp",
       "tags": [
         "ui",
         "art"
@@ -24601,7 +24601,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1079403
+        "bytes": 137150
       },
       "license": "Unknown"
     },
@@ -24610,8 +24610,8 @@
       "name": "button_danger_9s",
       "assetType": "texture",
       "category": "UI/Skin",
-      "path": "assets/ui/skin/button_danger_9s.png",
-      "thumbnail": "assets/ui/skin/button_danger_9s.png",
+      "path": "assets/ui/skin/button_danger_9s.webp",
+      "thumbnail": "assets/ui/skin/button_danger_9s.webp",
       "tags": [
         "ui",
         "skin"
@@ -24628,7 +24628,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 2271365
+        "bytes": 432772
       },
       "license": "Unknown"
     },
@@ -24637,8 +24637,8 @@
       "name": "button_primary_9s",
       "assetType": "texture",
       "category": "UI/Skin",
-      "path": "assets/ui/skin/button_primary_9s.png",
-      "thumbnail": "assets/ui/skin/button_primary_9s.png",
+      "path": "assets/ui/skin/button_primary_9s.webp",
+      "thumbnail": "assets/ui/skin/button_primary_9s.webp",
       "tags": [
         "ui",
         "skin"
@@ -24655,7 +24655,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 2559720
+        "bytes": 535168
       },
       "license": "Unknown"
     },
@@ -24664,8 +24664,8 @@
       "name": "button_secondary_9s",
       "assetType": "texture",
       "category": "UI/Skin",
-      "path": "assets/ui/skin/button_secondary_9s.png",
-      "thumbnail": "assets/ui/skin/button_secondary_9s.png",
+      "path": "assets/ui/skin/button_secondary_9s.webp",
+      "thumbnail": "assets/ui/skin/button_secondary_9s.webp",
       "tags": [
         "ui",
         "skin"
@@ -24682,7 +24682,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1573955
+        "bytes": 168870
       },
       "license": "Unknown"
     },
@@ -24691,8 +24691,8 @@
       "name": "button_secondary_source",
       "assetType": "texture",
       "category": "UI/Skin",
-      "path": "assets/ui/skin/button_secondary_source.png",
-      "thumbnail": "assets/ui/skin/button_secondary_source.png",
+      "path": "assets/ui/skin/button_secondary_source.webp",
+      "thumbnail": "assets/ui/skin/button_secondary_source.webp",
       "tags": [
         "ui",
         "skin"
@@ -24709,7 +24709,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1416152
+        "bytes": 171072
       },
       "license": "Unknown"
     },
@@ -24718,8 +24718,8 @@
       "name": "modal_frame_9s",
       "assetType": "texture",
       "category": "UI/Skin",
-      "path": "assets/ui/skin/modal_frame_9s.png",
-      "thumbnail": "assets/ui/skin/modal_frame_9s.png",
+      "path": "assets/ui/skin/modal_frame_9s.webp",
+      "thumbnail": "assets/ui/skin/modal_frame_9s.webp",
       "tags": [
         "ui",
         "skin"
@@ -24736,7 +24736,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 2050831
+        "bytes": 279678
       },
       "license": "Unknown"
     },
@@ -24745,8 +24745,8 @@
       "name": "notification_alert_9s",
       "assetType": "texture",
       "category": "UI/Skin",
-      "path": "assets/ui/skin/notification_alert_9s.png",
-      "thumbnail": "assets/ui/skin/notification_alert_9s.png",
+      "path": "assets/ui/skin/notification_alert_9s.webp",
+      "thumbnail": "assets/ui/skin/notification_alert_9s.webp",
       "tags": [
         "ui",
         "skin"
@@ -24763,7 +24763,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1330546
+        "bytes": 168360
       },
       "license": "Unknown"
     },
@@ -24772,8 +24772,8 @@
       "name": "notification_card_9s",
       "assetType": "texture",
       "category": "UI/Skin",
-      "path": "assets/ui/skin/notification_card_9s.png",
-      "thumbnail": "assets/ui/skin/notification_card_9s.png",
+      "path": "assets/ui/skin/notification_card_9s.webp",
+      "thumbnail": "assets/ui/skin/notification_card_9s.webp",
       "tags": [
         "ui",
         "skin"
@@ -24790,7 +24790,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 865331
+        "bytes": 105594
       },
       "license": "Unknown"
     },
@@ -24799,8 +24799,8 @@
       "name": "progress_track_9s",
       "assetType": "texture",
       "category": "UI/Skin",
-      "path": "assets/ui/skin/progress_track_9s.png",
-      "thumbnail": "assets/ui/skin/progress_track_9s.png",
+      "path": "assets/ui/skin/progress_track_9s.webp",
+      "thumbnail": "assets/ui/skin/progress_track_9s.webp",
       "tags": [
         "ui",
         "skin"
@@ -24817,7 +24817,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 120083
+        "bytes": 16622
       },
       "license": "Unknown"
     },
@@ -24826,8 +24826,8 @@
       "name": "selection_portrait_frame",
       "assetType": "texture",
       "category": "UI/Skin",
-      "path": "assets/ui/skin/selection_portrait_frame.png",
-      "thumbnail": "assets/ui/skin/selection_portrait_frame.png",
+      "path": "assets/ui/skin/selection_portrait_frame.webp",
+      "thumbnail": "assets/ui/skin/selection_portrait_frame.webp",
       "tags": [
         "ui",
         "skin"
@@ -24844,7 +24844,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 140281
+        "bytes": 33882
       },
       "license": "Unknown"
     },
@@ -24853,8 +24853,8 @@
       "name": "selection_unit_slot_frame",
       "assetType": "texture",
       "category": "UI/Skin",
-      "path": "assets/ui/skin/selection_unit_slot_frame.png",
-      "thumbnail": "assets/ui/skin/selection_unit_slot_frame.png",
+      "path": "assets/ui/skin/selection_unit_slot_frame.webp",
+      "thumbnail": "assets/ui/skin/selection_unit_slot_frame.webp",
       "tags": [
         "ui",
         "skin"
@@ -24871,7 +24871,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 9697
+        "bytes": 2912
       },
       "license": "Unknown"
     },
@@ -24880,8 +24880,8 @@
       "name": "title_strip_9s",
       "assetType": "texture",
       "category": "UI/Skin",
-      "path": "assets/ui/skin/title_strip_9s.png",
-      "thumbnail": "assets/ui/skin/title_strip_9s.png",
+      "path": "assets/ui/skin/title_strip_9s.webp",
+      "thumbnail": "assets/ui/skin/title_strip_9s.webp",
       "tags": [
         "ui",
         "skin"
@@ -24898,7 +24898,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1162009
+        "bytes": 132658
       },
       "license": "Unknown"
     },

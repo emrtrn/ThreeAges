@@ -64,6 +64,14 @@ function applyLocaleDocumentAttributes(service: LocalizationService): void {
   root.dir = descriptor.direction;
   root.dataset.locale = descriptor.code;
   root.dataset.localeFontGroup = descriptor.fontGroup;
+  // The tab carries the same name the main menu's heading does, rather than a
+  // second product name maintained beside it. `menu.title` *is* the game's name,
+  // so a new `document.title` key would be the same string in nine files with
+  // nothing keeping them in step. Written here, next to `lang` and `dir`, for
+  // the same reason those are: it is a document attribute that follows the
+  // locale, and this function is already the one place a language change
+  // repaints them.
+  document.title = service.t("menu.title");
 }
 
 /**

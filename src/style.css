@@ -78,7 +78,7 @@
   --ta-btn-ink: #2b2010;
   --ta-btn2-bg: #3a2d1c;
   --ta-panel-shadow: inset 0 0 0 1px rgb(0 0 0 / 45%), 0 8px 24px rgb(0 0 0 / 40%);
-  --ta-progress-track: url("/assets/ui/skin/progress_track_9s.png");
+  --ta-progress-track: url("/assets/ui/skin/progress_track_9s.webp");
 }
 
 /* Localization Plan Faz 5: Cinzel's shipped subset is a Latin display face.
@@ -414,7 +414,7 @@ body.rts-route {
   text-align: center;
   background: var(--ta-surface-raised);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/skin/modal_frame_9s.png");
+  border-image-source: url("/assets/ui/skin/modal_frame_9s.webp");
   border-image-slice: 180 fill;
   border-image-width: 30px;
   border-image-repeat: stretch;
@@ -923,7 +923,7 @@ body.rts-route {
   cursor: var(--ta-cursor-pointer);
   background: var(--ta-btn2-bg);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/skin/button_secondary_9s.png");
+  border-image-source: url("/assets/ui/skin/button_secondary_9s.webp");
   border-image-slice: 150 fill;
   border-image-width: 12px;
   border-image-repeat: stretch;
@@ -946,7 +946,7 @@ body.rts-route {
 .rts-match-card button:not([data-danger="true"]):is(:hover, :focus-visible) {
   color: #211508;
   background: var(--ta-btn-bg);
-  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  border-image-source: url("/assets/ui/skin/button_primary_9s.webp");
   text-shadow:
     0 1px 0 rgb(255 237 176 / 72%),
     0 -1px 1px rgb(66 39 8 / 34%);
@@ -955,7 +955,7 @@ body.rts-route {
 .rts-match-card button[data-danger="true"] {
   color: #fff1cf;
   background: #7a3527;
-  border-image-source: url("/assets/ui/skin/button_danger_9s.png");
+  border-image-source: url("/assets/ui/skin/button_danger_9s.webp");
   text-shadow: 0 1px 2px rgb(39 0 0 / 85%);
 }
 
@@ -1326,7 +1326,7 @@ body.rts-route {
   font-size: 24px;
   letter-spacing: 0.055em;
   background: var(--ta-btn-bg);
-  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  border-image-source: url("/assets/ui/skin/button_primary_9s.webp");
   text-shadow:
     0 1px 0 rgb(255 237 176 / 72%),
     0 -1px 1px rgb(66 39 8 / 34%);
@@ -1762,7 +1762,7 @@ body.rts-route {
    */
   background: var(--ta-surface-solid);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/panleHUD-9slice.png");
+  border-image-source: url("/assets/ui/panleHUD-9slice.webp");
   border-image-slice: 150 fill;
   border-image-width: 20px;
   border-image-repeat: stretch;
@@ -2341,7 +2341,7 @@ body.rts-route {
   font-size: 12px;
   background: var(--ta-surface);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/skin/notification_card_9s.png");
+  border-image-source: url("/assets/ui/skin/notification_card_9s.webp");
   border-image-slice: 86 fill;
   border-image-width: 9px;
   border-image-repeat: stretch;
@@ -2381,7 +2381,7 @@ body.rts-route {
 
 .rts-notification[data-severity="alert"] {
   color: #fff1cf;
-  border-image-source: url("/assets/ui/skin/notification_alert_9s.png");
+  border-image-source: url("/assets/ui/skin/notification_alert_9s.webp");
   border-image-slice: 100 fill;
   box-shadow:
     inset 3px 0 0 var(--ta-alert),
@@ -2438,7 +2438,7 @@ body.rts-route {
   cursor: var(--ta-cursor-pointer);
   background: var(--ta-surface-raised);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/skin/title_strip_9s.png");
+  border-image-source: url("/assets/ui/skin/title_strip_9s.webp");
   border-image-slice: 120 fill;
   border-image-width: 8px;
   border-image-repeat: stretch;
@@ -2548,7 +2548,7 @@ body.rts-route {
 .rts-objective-tracker {
   background: var(--ta-surface);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/panel.png");
+  border-image-source: url("/assets/ui/panel.webp");
   border-image-slice: 150 fill;
   border-image-width: 16px;
   border-image-repeat: stretch;
@@ -2571,7 +2571,7 @@ body.rts-route {
   cursor: var(--ta-cursor-pointer);
   background: var(--ta-surface-raised);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/skin/title_strip_9s.png");
+  border-image-source: url("/assets/ui/skin/title_strip_9s.webp");
   border-image-slice: 120 fill;
   border-image-width: 8px;
   border-image-repeat: stretch;
@@ -3623,7 +3623,7 @@ body.rts-route {
   cursor: var(--ta-cursor-pointer);
   background: var(--ta-btn2-bg);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/skin/button_secondary_9s.png");
+  border-image-source: url("/assets/ui/skin/button_secondary_9s.webp");
   border-image-slice: 150 fill;
   border-image-width: 9px;
   border-image-repeat: stretch;
@@ -3634,7 +3634,7 @@ body.rts-route {
 .rts-selection-action:not(:disabled):is(:hover, :focus-visible) {
   color: #211508;
   background: var(--ta-btn-bg);
-  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  border-image-source: url("/assets/ui/skin/button_primary_9s.webp");
   text-shadow:
     0 1px 0 rgb(255 237 176 / 72%),
     0 -1px 1px rgb(66 39 8 / 34%);
@@ -3662,7 +3662,7 @@ body.rts-route {
 .rts-selection-action[data-rts-active="true"] {
   color: #211508;
   background: var(--ta-btn-bg);
-  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  border-image-source: url("/assets/ui/skin/button_primary_9s.webp");
   text-shadow:
     0 1px 0 rgb(255 237 176 / 72%),
     0 -1px 1px rgb(66 39 8 / 34%);
@@ -3739,7 +3739,7 @@ body.rts-route {
 .rts-build-palette {
   background: var(--ta-surface);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/panel.png");
+  border-image-source: url("/assets/ui/panel.webp");
   border-image-slice: 150 fill;
   border-image-width: 22px;
   border-image-repeat: stretch;
@@ -3771,7 +3771,7 @@ body.rts-route {
   text-shadow: 0 1px 2px rgb(0 0 0 / 80%);
   background: var(--ta-btn2-bg);
   border: 1px solid transparent;
-  border-image-source: url("/assets/ui/skin/button_secondary_9s.png");
+  border-image-source: url("/assets/ui/skin/button_secondary_9s.webp");
   border-image-slice: 150 fill;
   border-image-width: 7px;
   border-image-repeat: stretch;
@@ -3791,7 +3791,7 @@ body.rts-route {
 .rts-build-tab[aria-pressed="true"] {
   color: #211508;
   background: var(--ta-btn-bg);
-  border-image-source: url("/assets/ui/skin/button_primary_9s.png");
+  border-image-source: url("/assets/ui/skin/button_primary_9s.webp");
   text-shadow:
     0 1px 0 rgb(255 237 176 / 72%),
     0 -1px 1px rgb(66 39 8 / 34%);

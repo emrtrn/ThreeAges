@@ -11,7 +11,25 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <meta name="theme-color" content="#1a1a2e" />
-    <title>Forge</title>
+    <!--
+      The pre-boot title and language. Both are replaced the moment localization
+      resolves (`applyLocaleDocumentAttributes`), so this pair is only what a tab
+      shows while the bundle is still downloading — and what a crawler that never
+      runs the script reads. English, because that is the wider audience for a
+      published build; the tab follows the player's own language after boot.
+    -->
+    <title>Frontier Kingdoms</title>
+    <meta
+      name="description"
+      content="Build your economy, link your road, and raze the enemy centre — a browser real-time strategy game."
+    />
+    <!--
+      Relative hrefs, not "/favicon.png": a published build is served from a
+      subpath it does not own (see engine/assets/publicUrl.ts), and the leading
+      slash would point at the host's root.
+    -->
+    <link rel="icon" type="image/png" href="./favicon.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
