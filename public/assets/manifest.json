@@ -23209,7 +23209,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 4016584
+        "bytes": 11720
       },
       "license": "Unknown"
     },
@@ -23232,7 +23232,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 4335764
+        "bytes": 330892
       },
       "license": "Unknown"
     },
@@ -23255,7 +23255,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 4712376
+        "bytes": 707496
       },
       "license": "Unknown"
     },
@@ -23278,7 +23278,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 4021668
+        "bytes": 16800
       },
       "license": "Unknown"
     },
@@ -23301,7 +23301,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 4026560
+        "bytes": 21696
       },
       "license": "Unknown"
     },
@@ -35198,6 +35198,122 @@
         "bytes": 444
       },
       "license": "Unknown"
+    },
+    {
+      "id": "threeages-tex-cannon-n",
+      "name": "T_TA_Cannon_N",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Cannon_N.webp",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Cannon_BC.webp",
+      "tags": [
+        "threeages",
+        "texture",
+        "cannon",
+        "n"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 939400
+      },
+      "license": "Extracted from the project's own cannon GLB export"
+    },
+    {
+      "id": "threeages-tex-cannon-orm",
+      "name": "T_TA_Cannon_ORM",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Cannon_ORM.webp",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Cannon_BC.webp",
+      "tags": [
+        "threeages",
+        "texture",
+        "cannon",
+        "orm"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 515536
+      },
+      "license": "Extracted from the project's own cannon GLB export"
+    },
+    {
+      "id": "threeages-tex-cannon-bc",
+      "name": "T_TA_Cannon_BC",
+      "assetType": "texture",
+      "category": "ThreeAges/Textures",
+      "path": "assets/ThreeAges/Textures/T_TA_Cannon_BC.webp",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Cannon_BC.webp",
+      "tags": [
+        "threeages",
+        "texture",
+        "cannon",
+        "bc"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 220760
+      },
+      "license": "Extracted from the project's own cannon GLB export"
+    },
+    {
+      "id": "threeages-mat-cannon",
+      "name": "M_TA_Cannon",
+      "assetType": "material",
+      "category": "ThreeAges/Materials",
+      "path": "assets/ThreeAges/Materials/M_TA_Cannon.material.json",
+      "thumbnail": "assets/ThreeAges/Textures/T_TA_Cannon_BC.webp",
+      "tags": [
+        "threeages",
+        "material",
+        "cannon",
+        "siege"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 727
+      },
+      "license": "Project-local ThreeAges material"
     }
   ]
 }

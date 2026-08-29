@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_TA_Cannon",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "threeages-tex-cannon-bc",
+  "normalTexture": "threeages-tex-cannon-n",
+  "maskTexture": null,
+  "roughnessTexture": null,
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": null,
+  "useBaseColorAlphaForOpacity": false,
+  "emissiveTexture": null,
+  "ormTexture": "threeages-tex-cannon-orm",
+  "uvTiling": {
+    "x": 1,
+    "y": 1
+  },
+  "flipY": false,
+  "roughness": 1,
+  "metalness": 1,
+  "aoIntensity": 0.725,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": null
+}
