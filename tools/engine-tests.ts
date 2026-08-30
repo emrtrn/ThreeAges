@@ -50284,6 +50284,14 @@ check("§59: the fog surface covers the backdrop beyond the playable grid", () =
   );
   assert.ok(outsideBeyondEdge > 0, "apron vertices sample past the texture, where clamping holds");
 
+  // The apron intentionally clears once its nearest border cell is visible.
+  // Outside the Landscape, that must reveal a dark floor behind authored
+  // mountains rather than the bright Sky Atmosphere behind them.
+  const voidBackdrop = view.root.getObjectByName("rts-fog-void-backdrop");
+  assert.ok(voidBackdrop instanceof Mesh, "the off-grid void floor is part of the fog view");
+  assert.equal(voidBackdrop.material.transparent, false, "the void floor is opaque against sky");
+  assert.ok(voidBackdrop.renderOrder < 0, "the void floor renders behind normal world art");
+
   view.dispose();
 });
 
@@ -50316,58 +50324,42 @@ check("§59: backdrop scenery outside the grid is masked by the border it stands
   view.dispose();
 });
 
-check("§59: an unscouted forest is hidden, and stays drawn once explored", () => {
+check("§59: forest depletion controls render candidacy while fog masks pixels", () => {
   // isTreeVisible is the rule syncForest loops over, so this drives the shipped
   // decision rather than a copy of it.
-  let sources: VisionSource[] = [{ owner: "player", x: -30, z: -30, radius: 8 }];
-  const vision = new VisionSystem(() => sources, { cellSize: 2, worldHalfExtent: 40 });
-  vision.refresh();
-  const revealed = (x: number, z: number): boolean => vision.isExplored("player", x, z);
-
   const near = { x: -30, z: -30, depleted: false };
   const far = { x: 30, z: 30, depleted: false };
   const stump = { x: -30, z: -28, depleted: true };
 
-  assert.equal(isTreeVisible(near, revealed), true, "a scouted tree is drawn");
-  assert.equal(isTreeVisible(far, revealed), false, "an unscouted forest is not on the map");
-  assert.equal(isTreeVisible(stump, revealed), false, "depletion still hides a tree in plain sight");
+  assert.equal(isTreeVisible(near), true, "a standing tree reaches the fog material");
+  assert.equal(isTreeVisible(far), true, "unknown-tree hiding is per-pixel, not a pop");
+  assert.equal(isTreeVisible(stump), false, "depletion still hides a tree in plain sight");
 
-  // §40: permanent natural elements stay once seen. The scout leaves; the forest
-  // it walked through must not vanish behind it.
-  sources = [];
-  vision.refresh();
-  assert.equal(isTreeVisible(near, revealed), true, "explored forest survives the scout leaving");
-  assert.equal(isTreeVisible(far, revealed), false, "but the unvisited half is still unknown");
+  assert.equal(isTreeVisible(near), true, "a standing tree remains a fog candidate");
+  assert.equal(isTreeVisible(far), true, "the material mask still owns unknown-ground hiding");
 
   // Flag off: no predicate, so only depletion decides and the map reads as before.
-  assert.equal(isTreeVisible(far, undefined), true, "no fog means every standing tree is drawn");
-  assert.equal(isTreeVisible(stump, undefined), false);
+  assert.equal(isTreeVisible(far), true, "without fog every standing tree is drawn");
+  assert.equal(isTreeVisible(stump), false);
 });
 
 check("a deposit's landmark follows its own node state, not a hand-placed mesh", () => {
   // Deposit art is now one object per authored node, so isResourceNodeVisible is
   // the rule syncResourceNodes loops over — the same contract as isTreeVisible.
-  let sources: VisionSource[] = [{ owner: "player", x: -30, z: -30, radius: 8 }];
-  const vision = new VisionSystem(() => sources, { cellSize: 2, worldHalfExtent: 40 });
-  vision.refresh();
-  const revealed = (x: number, z: number): boolean => vision.isExplored("player", x, z);
-
   const scouted = { x: -30, z: -30, depleted: false };
   const unknown = { x: 30, z: 30, depleted: false };
   const spent = { x: -30, z: -28, depleted: true };
 
-  assert.equal(isResourceNodeVisible(scouted, revealed), true, "a scouted deposit is drawn");
-  assert.equal(isResourceNodeVisible(unknown, revealed), false, "an unscouted deposit is not on the map");
+  assert.equal(isResourceNodeVisible(scouted), true, "a live deposit reaches the fog material");
+  assert.equal(isResourceNodeVisible(unknown), true, "unknown-deposit hiding is per-pixel, not a pop");
   // The whole point of deriving the art from node state: a mined-out deposit
   // stops being a landmark instead of leaving a rock sitting on empty ground.
-  assert.equal(isResourceNodeVisible(spent, revealed), false, "a depleted deposit leaves no landmark");
+  assert.equal(isResourceNodeVisible(spent), false, "a depleted deposit leaves no landmark");
 
-  sources = [];
-  vision.refresh();
-  assert.equal(isResourceNodeVisible(scouted, revealed), true, "explored deposits survive the scout leaving");
+  assert.equal(isResourceNodeVisible(scouted), true, "a live deposit stays a fog candidate");
 
-  assert.equal(isResourceNodeVisible(unknown, undefined), true, "no fog means every live deposit is drawn");
-  assert.equal(isResourceNodeVisible(spent, undefined), false);
+  assert.equal(isResourceNodeVisible(unknown), true, "without fog every live deposit is drawn");
+  assert.equal(isResourceNodeVisible(spent), false);
 });
 
 check("a deposit's mesh stage reads its remaining share, at any tuning", () => {

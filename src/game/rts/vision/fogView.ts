@@ -114,6 +114,18 @@ const SURFACE_VERTEX_SPACING = 1;
 const SURFACE_MARGIN = 60;
 
 /**
+ * The outdoor world is deliberately larger than its playable Landscape: authored
+ * mountains and trees sit beyond the grid, while the Sky Atmosphere fills every
+ * pixel that has no ground. When a border cell becomes visible the fog apron
+ * becomes clear too, which otherwise exposes that bright sky *under* the
+ * off-grid scenery as a horizontal "light tunnel". This floor is the dark void
+ * beneath that scenery. It is much larger than the fog apron so normal camera
+ * zoom never reaches its edge, but sits below all authored terrain and props.
+ */
+const VOID_BACKDROP_HALF_EXTENT = 512;
+const VOID_BACKDROP_Y = -20;
+
+/**
  * World units between terrain height samples, which is finer than the vertices
  * they feed. A Landscape is authored at sub-metre spacing (the shipped field is
  * 0.547), so a grid sampled at the vertex spacing would step straight over the
@@ -139,6 +151,7 @@ export class FogView {
   private readonly material: MeshBasicMaterial;
   private geometry: PlaneGeometry;
   private readonly mesh: Mesh;
+  private readonly voidBackdrop: Mesh<PlaneGeometry, MeshBasicMaterial>;
   private readonly resolution: number;
   /** What the grid says right now, per cell, in 0–255 alpha. */
   private readonly target: Float32Array;
@@ -191,7 +204,6 @@ export class FogView {
     // clear. Every unit test still passes, because the grid itself is correct.
     this.texture.flipY = true;
     this.texture.needsUpdate = true;
-
     this.material = new MeshBasicMaterial({
       color: 0x05070b,
       transparent: true,
@@ -217,6 +229,29 @@ export class FogView {
     // nothing and getting it wrong blanks the overlay at the map edge.
     this.mesh.frustumCulled = false;
     this.root.add(this.mesh);
+
+    // This is opaque on purpose. It writes a near-black floor before the
+    // translucent fog draws, so the sky cannot show through a revealed border
+    // cell. Landscape and authored scenery are closer to the camera and retain
+    // their normal rendering over it.
+    const voidGeometry = new PlaneGeometry(
+      VOID_BACKDROP_HALF_EXTENT * 2,
+      VOID_BACKDROP_HALF_EXTENT * 2,
+    );
+    voidGeometry.rotateX(-Math.PI / 2);
+    const voidMaterial = new MeshBasicMaterial({
+      color: 0x05070b,
+      depthWrite: true,
+      toneMapped: false,
+    });
+    this.voidBackdrop = new Mesh(voidGeometry, voidMaterial);
+    this.voidBackdrop.name = "rts-fog-void-backdrop";
+    this.voidBackdrop.position.y = VOID_BACKDROP_Y;
+    // The Sky dome renders at -1. Render immediately after it, before normal
+    // world art (0) and the transparent fog overlay (4).
+    this.voidBackdrop.renderOrder = -0.5;
+    this.voidBackdrop.frustumCulled = false;
+    this.root.add(this.voidBackdrop);
   }
 
   /**
@@ -318,6 +353,8 @@ export class FogView {
     this.texture.dispose();
     this.material.dispose();
     this.geometry.dispose();
+    this.voidBackdrop.geometry.dispose();
+    this.voidBackdrop.material.dispose();
     this.root.clear();
   }
 

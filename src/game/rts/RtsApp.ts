@@ -140,7 +140,7 @@ import { RTS_PLACEMENT_GRID_SIZE } from "./structures/placementGrid";
 import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "./world/rtsMapBlockout";
 import { resolveRtsSpatialLayout, type RtsSpatialLayout } from "./world/rtsSpatialLayout";
 import type { RtsLevelDefinition } from "./world/rtsLevelAdapter";
-import { RtsMapArt, collectWorldProps } from "./world/rtsMapArt";
+import { RtsMapArt } from "./world/rtsMapArt";
 import {
   levelAuthoredSun,
   levelHasAuthoredSun,
@@ -6949,11 +6949,10 @@ export class RtsApp {
       await this.mapArt.apply(blockout, this.forests, this.resourceNodes, {
         includeRidge: !this.authoredWorldIntended,
       });
-      // §59/GDD 08 §39: resource deposits, ridges and trees must not be readable
-      // in ground the player has never scouted. Registered here rather than at
-      // construction because the art loads asynchronously — at construction time
-      // there is nothing to hide yet.
-      this.fogMask?.apply(collectWorldProps(blockout));
+      // Environment uses the same softened, per-fragment fog as authored
+      // mountains. A Boolean reveal would make a tree pop in when its origin
+      // crosses a cell while its surrounding ground is already half-visible.
+      this.fogMask?.apply(this.mapArt.fogRoots());
       // The art arrives after setup's fog pass, and on the start screen there is
       // no simulation tick coming to catch it up — so the newly built props and
       // forest get their first fog pass here, or they would render unfogged
@@ -7471,10 +7470,9 @@ export class RtsApp {
     const isExplored = this.vision
       ? (x: number, z: number) => this.vision!.isExplored(PLAYER_OWNER, x, z)
       : undefined;
-    this.mapArt.syncForest(this.forests, isExplored);
-    // Deposits follow the identical rule (depleted or unscouted), so they are
-    // refreshed by the same three callers rather than a parallel schedule.
-    this.mapArt.syncResourceNodes(this.resourceNodes, isExplored);
+    this.mapArt.syncForest(this.forests);
+    // Depletion remains object-level; the material mask owns tree/deposit fog.
+    this.mapArt.syncResourceNodes(this.resourceNodes);
     // Faz S6, and a third caller of the same predicate. These boxes are never
     // drawn, so this is not a visual act at all: it is what decides whether a
     // site can be *clicked*, and so what stops a player picking black ground and

@@ -51,6 +51,8 @@ export class RtsMapArt {
   private readonly templates = new Map<MapModelId, Object3D>();
   private readonly treeObjects = new Map<string, Group>();
   private readonly nodeObjects = new Map<string, Group>();
+  /** Environment-only roots that receive the same per-pixel fog as authored art. */
+  private readonly fogMaskRoots: Object3D[] = [];
 
   constructor(renderer: WebGLRenderer) {
     this.loader = createForgeGltfLoader(renderer);
@@ -80,48 +82,39 @@ export class RtsMapArt {
       .map(async (id) => [id, (await this.loader.loadAsync(publicUrl(MODELS[id]))).scene] as const));
     for (const [id, scene] of entries) this.templates.set(id, scene);
 
-    if (includeRidge) root.add(this.createRidge());
-    root.add(this.createResourceNodes(nodes));
-    root.add(this.createForest(forests));
+    if (includeRidge) {
+      const ridge = this.createRidge();
+      root.add(ridge);
+      this.fogMaskRoots.push(ridge);
+    }
+    const resourceNodes = this.createResourceNodes(nodes);
+    const forest = this.createForest(forests);
+    root.add(resourceNodes, forest);
+    this.fogMaskRoots.push(resourceNodes, forest);
   }
 
-  /** Presentation follows the authoritative source state; no visual owns depletion. */
-  /**
-   * @param isRevealed §59: whether the observing kingdom has scouted a point.
-   *   Omitted (the `fogOfWar` flag off) leaves every standing tree visible.
-   *
-   * The fog test lives *here*, inside the one loop that already owns
-   * `tree.visible`, rather than in `FogVisibilityBinder` beside the other hidden
-   * world props. A second writer would fight this one every tick and the trees
-   * would flicker at whichever rate the two ran at. One writer, both reasons a
-   * tree can be invisible — depleted, or never scouted.
-   *
-   * Keyed off `isExplored` rather than `isVisible`, matching the resource
-   * deposits: GDD 08 §40 keeps permanent natural elements on the map once seen.
-   * A forest you walked through does not vanish when the scout leaves.
-   */
-  syncForest(forests: ForestSystem, isRevealed?: (x: number, z: number) => boolean): void {
+  /** Depletion owns object visibility; the material mask owns every fog pixel. */
+  syncForest(forests: ForestSystem): void {
     for (const tree of forests.snapshots()) {
       const object = this.treeObjects.get(tree.id);
       if (!object) continue;
-      object.visible = isTreeVisible(tree, isRevealed);
+      object.visible = isTreeVisible(tree);
     }
   }
 
-  /**
-   * The deposit half of {@link syncForest}, and for the same reason: now that a
-   * deposit is one object per node, its two reasons to be invisible — depleted,
-   * or never scouted — have to be decided by a single writer. The group-level
-   * fog pass in {@link collectWorldProps} no longer covers deposits, so each one
-   * is fogged by its own position instead of the whole cluster's.
-   */
-  syncResourceNodes(nodes: ResourceNodeSystem, isRevealed?: (x: number, z: number) => boolean): void {
+  /** Deposits follow the same split: depletion here, visual fog in the material. */
+  syncResourceNodes(nodes: ResourceNodeSystem): void {
     for (const node of nodes.snapshots()) {
       const object = this.nodeObjects.get(node.id);
       if (!object) continue;
       this.applyResourceNodeStage(object, node);
-      object.visible = isResourceNodeVisible(node, isRevealed);
+      object.visible = isResourceNodeVisible(node);
     }
+  }
+
+  /** Roots that use the world-space fog texture instead of a Boolean reveal. */
+  fogRoots(): readonly Object3D[] {
+    return this.fogMaskRoots;
   }
 
   dispose(): void {
@@ -129,6 +122,7 @@ export class RtsMapArt {
     this.templates.clear();
     this.treeObjects.clear();
     this.nodeObjects.clear();
+    this.fogMaskRoots.length = 0;
   }
 
   /**
@@ -283,30 +277,9 @@ function disposeModel(root: Object3D): void {
 }
 
 /**
- * The map-art subtrees §59 hides until their ground has been scouted.
- *
- * GDD 08 §39 names *resources* and *strategic detail* as what unknown ground
- * must not reveal, and §40 allows terrain form to stay readable — so this
- * returns the central ridge, as a whole group keyed off its own world position.
- *
- * Trees and resource deposits are excluded here but *are* hidden under fog —
- * they go through {@link RtsMapArt.syncForest} /
- * {@link RtsMapArt.syncResourceNodes} instead, because those loops already own
- * `visible` for depletion and two writers would flicker against each other.
- * Same rule, different owner.
- */
-export function collectWorldProps(blockout: Group): Object3D[] {
-  const props: Object3D[] = [];
-  for (const name of ["rts-central-ridge-art"]) {
-    const group = blockout.getObjectByName(name);
-    if (group) props.push(group);
-  }
-  return props;
-}
-
-/**
- * Whether one tree is drawn — the whole of §59's forest rule, extracted so it
- * can be tested for real.
+ * Whether one tree remains a render candidate. Fog is intentionally absent from
+ * this Boolean: the shared world-mask shader makes unknown trees disappear and
+ * remembered ones fade with their surrounding ground, without object popping.
  *
  * {@link RtsMapArt} needs a WebGLRenderer to construct, so a test driving
  * `syncForest` directly would need a GL context; a test that re-implemented the
@@ -315,12 +288,9 @@ export function collectWorldProps(blockout: Group): Object3D[] {
  * `test:engine` exercises.
  */
 export function isTreeVisible(
-  tree: { readonly x: number; readonly z: number; readonly depleted: boolean },
-  isRevealed?: (x: number, z: number) => boolean,
+  tree: { readonly depleted: boolean },
 ): boolean {
-  if (tree.depleted) return false;
-  // No predicate = the `fogOfWar` flag is off; every standing tree is drawn.
-  return !isRevealed || isRevealed(tree.x, tree.z);
+  return !tree.depleted;
 }
 
 /**
@@ -330,9 +300,8 @@ export function isTreeVisible(
  *
  * A depleted deposit stops being drawn, matching
  * {@link ResourceNodeSystem.liveNodeBlockers}: once there is nothing left to
- * extract the ground goes back to being ordinary ground. Fog is keyed off
- * *explored*, not currently visible — GDD 08 §40 keeps a permanent natural
- * element on the map once it has been seen.
+ * extract the ground goes back to being ordinary ground. Its visual fog state
+ * comes from the same per-fragment material mask as the trees and mountains.
  */
 /**
  * Which stage mesh a deposit shows, as an index into its full -> spent list.
@@ -366,9 +335,7 @@ export function resourceNodeStageIndex(
 }
 
 export function isResourceNodeVisible(
-  node: { readonly x: number; readonly z: number; readonly depleted: boolean },
-  isRevealed?: (x: number, z: number) => boolean,
+  node: { readonly depleted: boolean },
 ): boolean {
-  if (node.depleted) return false;
-  return !isRevealed || isRevealed(node.x, node.z);
+  return !node.depleted;
 }
