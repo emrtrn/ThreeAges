@@ -21988,6 +21988,36 @@
       "license": "Project-local RTS effect"
     },
     {
+      "id": "rts-fx-firebrand-impact",
+      "name": "RTS Firebrand Impact",
+      "assetType": "effect",
+      "category": "RTS Damage",
+      "path": "assets/ThreeAges/Effects/FX_RTS_Firebrand_Impact.effect.json",
+      "tags": [
+        "rts",
+        "guard",
+        "firebrand",
+        "fire",
+        "impact",
+        "flipbook"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "RTS Damage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1274
+      },
+      "license": "Project-local RTS effect"
+    },
+    {
       "id": "rts-fx-footstep-dust",
       "name": "RTS Footstep Dust",
       "assetType": "effect",
@@ -35199,6 +35229,29 @@
         "bytes": 727
       },
       "license": "Project-local ThreeAges material"
+    },
+    {
+      "id": "woodentorch",
+      "name": "Wooden Torch",
+      "assetType": "staticMesh",
+      "category": "Props",
+      "path": "assets/ThreeAges/Props/WoodenTorch.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 73348
+      },
+      "license": "Unknown"
     }
   ]
 }

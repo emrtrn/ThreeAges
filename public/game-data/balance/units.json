@@ -28,7 +28,8 @@
       "wood": 0
     },
     "populationCost": 1,
-    "structureAttackVfx": "firebrand"
+    "structureAttackVfx": "firebrand",
+    "impactEffect": "rts-fx-firebrand-impact"
   },
   "archer_placeholder": {
     "nameKey": "unit.archer.name",

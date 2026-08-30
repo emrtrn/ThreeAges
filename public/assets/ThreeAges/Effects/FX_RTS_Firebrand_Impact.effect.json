@@ -1,0 +1,59 @@
+{
+  "schema": 2,
+  "type": "particleEffect",
+  "name": "RTS Firebrand Impact",
+  "category": "RTS Damage",
+  "tags": ["rts", "guard", "firebrand", "fire", "impact", "flipbook"],
+  "system": {
+    "enabled": true,
+    "loop": false,
+    "duration": 0.35,
+    "seed": null,
+    "maxParticles": 12,
+    "bounds": {
+      "mode": "fixed",
+      "min": [-2, -0.5, -2],
+      "max": [2, 4, 2],
+      "showInPreview": true
+    }
+  },
+  "spawn": {
+    "mode": "burst",
+    "rate": 0,
+    "count": 6,
+    "delay": 0,
+    "interval": 0,
+    "shape": "sphere",
+    "radius": 0.32,
+    "boxSize": [0, 0, 0]
+  },
+  "initialize": {
+    "lifetime": [0.42, 0.7],
+    "startSize": [2.2, 3.5],
+    "startColor": "#fff0bd",
+    "startOpacity": 0.95,
+    "direction": [0, 1, 0],
+    "speed": [0.8, 1.7],
+    "spreadAngleDeg": 38,
+    "rotation": [0, 360],
+    "angularVelocity": [-120, 120]
+  },
+  "update": {
+    "gravityScale": -0.1,
+    "drag": 1.6,
+    "acceleration": [0, 0.45, 0],
+    "endSize": [4, 6],
+    "endColor": "#6b1804",
+    "endOpacity": 0,
+    "fadeInTime": 0,
+    "fadeOutTime": 0.24
+  },
+  "renderer": {
+    "type": "sprite",
+    "blendMode": "additive",
+    "softness": 0.55,
+    "sortMode": "none",
+    "texture": "t-fire-subuv",
+    "subUV": {"cols": 6, "rows": 6}
+  }
+}

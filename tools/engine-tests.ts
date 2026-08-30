@@ -503,7 +503,12 @@ import { CANNON_SCORCH_SECONDS, CannonImpactScorches } from "../src/game/rts/com
 import { PendingImpactQueue } from "../src/game/rts/combat/pendingImpacts";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
 import { SupportAuraSystem } from "../src/game/rts/structures/supportAuraSystem";
-import { combatDistance, type CombatTarget } from "../src/game/rts/combat/combatTarget";
+import {
+  combatDistance,
+  structureImpactPoint,
+  surfaceStructureImpactPoint,
+  type CombatTarget,
+} from "../src/game/rts/combat/combatTarget";
 import { AI_PROFILES, MAX_AURA_DAMAGE_RESISTANCE } from "../src/game/data/gameDataTypes";
 import type { AiProfile, BuildingBalanceStats, GamePreset, UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import {
@@ -32884,6 +32889,45 @@ check("RTS a building is selected through the gaps in its own model", () => {
   structures.clear();
 });
 
+check("firebrand presentation lands on visible structure art instead of its click volume", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const structures = new PlacedStructureSystem();
+  const site = structures.place("ai", house, 0, 0);
+  const visual = new Group();
+  // Deliberately narrower than the footprint's persistent input box: an effect
+  // aligned to the box would hover in front of this actual wall.
+  visual.add(new Mesh(new BoxGeometry(2, 3, 2), new MeshStandardMaterial()));
+  visual.position.y = 1.5;
+  structures.setCompletedVisual(site, visual);
+  structures.root.updateMatrixWorld(true);
+
+  const launch = new Vector3(-5, 1.15, 0);
+  const impact = surfaceStructureImpactPoint(
+    launch,
+    site,
+    structures.surfaceMeshes(site),
+    new Raycaster(),
+  );
+  assert.ok(impact.x < -1, "the two-centimetre offset stays outside the visible wall");
+  assert.ok(impact.x > -1.06, "the offset is small rather than a second collision volume");
+  assert.equal(
+    structures.surfaceMeshes(site).length,
+    1,
+    "the persistent click-volume is never offered as an impact surface",
+  );
+
+  const fallback = surfaceStructureImpactPoint(launch, site, [], new Raycaster());
+  assert.deepEqual(
+    fallback,
+    structureImpactPoint(launch, site),
+    "a loading/missing building model retains the former deterministic aim point",
+  );
+  structures.clear();
+});
+
 check("a roster chip's bulk select replaces, and its Shift half adds", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -37459,6 +37503,15 @@ check("unit balance validates combat stats for stable unit ids", () => {
     assert.equal(stats.id, id, `"${id}" carries its key as its id`);
   }
   assert.equal(balance["guard_placeholder"]?.role, "guard");
+  assert.equal(balance["guard_placeholder"]?.structureAttackVfx, "firebrand");
+  const guardBurst = balance["guard_placeholder"]?.impactEffect
+    ?? assert.fail("the Guard names the effect its firebrand bursts into");
+  assert.ok(
+    parseRtsEffectManifest(
+      JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as unknown,
+    ).has(guardBurst),
+    `"${guardBurst}" is a manifested effect asset`,
+  );
   assert.equal(balance["archer_placeholder"]?.attackType, "ranged");
   assert.ok(
     (balance["archer_placeholder"]?.projectileSpeed ?? 0) > 0,
@@ -37594,7 +37647,18 @@ check("unit balance validates combat stats for stable unit ids", () => {
   assert.throws(
     () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, impactEffect: "rts-fx-explosion" } }),
     GameDataError,
-    "only a lobbed shot has a landing to burst at; anywhere else the effect would silently never play",
+    "a unit without a cannonball or firebrand landing cannot silently discard an authored burst",
+  );
+  assert.equal(
+    validateUnitBalance({
+      guard_placeholder: {
+        ...RTS_TEST_UNIT_STATS,
+        structureAttackVfx: "firebrand",
+        impactEffect: "rts-fx-firebrand-impact",
+      },
+    })["guard_placeholder"]?.impactEffect,
+    "rts-fx-firebrand-impact",
+    "the Guard's authored impact burst survives validation",
   );
   assert.throws(
     () => validateUnitBalance({ siege_placeholder: { ...RTS_TEST_SIEGE_STATS, impactEffect: "../secret.effect.json" } }),

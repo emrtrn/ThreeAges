@@ -473,6 +473,25 @@ export class PlacedStructureSystem {
     return [...this.pickObjects.values()];
   }
 
+  /**
+   * Actual rendered triangles for a structure impact effect.
+   *
+   * The click-volume intentionally remains out of this answer: its expanded
+   * box is useful for input, but a torch pinned to it visibly floats in front
+   * of a wall. Construction art is included when it exists; otherwise callers
+   * retain their deterministic footprint fallback.
+   */
+  surfaceMeshes(structure: PlacedStructure): readonly Mesh[] {
+    const visual = this.completedVisual(structure)
+      ?? structure.object.getObjectByName("rts-construction-building-model");
+    if (!visual) return [];
+    const meshes: Mesh[] = [];
+    visual.traverse((child) => {
+      if (child instanceof Mesh) meshes.push(child);
+    });
+    return meshes;
+  }
+
   /** Resolve a raycast hit on a foundation or completed visual back to its site. */
   structureForObject(object: Object3D): PlacedStructure | null {
     for (let current: Object3D | null = object; current; current = current.parent) {

@@ -22,6 +22,7 @@ import {
   Matrix4,
   Mesh,
   type Object3D,
+  Raycaster,
   Scene,
   Vector3,
   type WebGLRenderer,
@@ -193,13 +194,13 @@ import { updateUnitDeaths } from "./units/unitDeath";
 import { retaliateAgainstAttack, updateUnitEngagement } from "./combat/engagementSystem";
 import { ProjectileSystem } from "./combat/projectileSystem";
 import { ThrownRockSystem } from "./combat/thrownRockSystem";
-import { FirebrandSystem } from "./combat/firebrandSystem";
+import { FIREBRAND_LAUNCH_HEIGHT, FirebrandSystem } from "./combat/firebrandSystem";
 import { CannonballSystem } from "./combat/cannonballSystem";
 import { CannonImpactScorches } from "./combat/cannonImpactScorches";
 import { PendingImpactQueue } from "./combat/pendingImpacts";
 import { StructureDefenseSystem } from "./combat/structureDefenseSystem";
 import { SupportAuraSystem } from "./structures/supportAuraSystem";
-import { combatImpactPoint, structureImpactPoint, type CombatTarget } from "./combat/combatTarget";
+import { combatImpactPoint, surfaceStructureImpactPoint, type CombatTarget } from "./combat/combatTarget";
 import { RtsNavigation } from "./navigation/rtsNavigation";
 import { MarqueeOverlay } from "./selection/marqueeOverlay";
 import { SelectionSystem } from "./selection/selectionSystem";
@@ -1346,6 +1347,9 @@ export class RtsApp {
   private readonly projectiles = new ProjectileSystem();
   private readonly thrownRocks = new ThrownRockSystem();
   private readonly firebrands = new FirebrandSystem();
+  /** Reused only for presentation-only torch-to-building surface alignment. */
+  private readonly firebrandImpactRaycaster = new Raycaster();
+  private readonly scratchFirebrandLaunch = new Vector3();
   private readonly cannonballs = new CannonballSystem();
   /** Soft ground scars reported by landed artillery shells; presentation only. */
   private readonly cannonScorches = new CannonImpactScorches();
@@ -3441,6 +3445,9 @@ export class RtsApp {
       // shell arriving is also the one part of a bombardment that happens away
       // from the gun, so it is the only chance the far end has to be heard.
       this.playPointAudio(RTS_AUDIO.shellImpact, position);
+    });
+    this.firebrands.setImpactHandler((effectId, position) => {
+      if (effectId) this.playWorldEffect(effectId, [position.x, position.y, position.z]);
     });
     this.scene.add(this.commandMarkers.root);
   }
@@ -6554,9 +6561,38 @@ export class RtsApp {
     // point-blank attack and same damage, shown as an attempt to burn the
     // structure down (`structureAttackVfx` in balance/units.json).
     if (attackVfx === "firebrand" && shot.target.armorClass === "structure") {
-      this.firebrands.spawn(shot.attacker.position, structureImpactPoint(shot.attacker.position, shot.target));
+      this.firebrands.spawn(
+        shot.attacker.position,
+        this.firebrandImpactPoint(shot.attacker.position, shot.target),
+        shot.attacker.stats.impactEffect ?? null,
+      );
     }
     return 0;
+  }
+
+  /**
+   * Aim the presentation torch at the actual building art, never its input box.
+   *
+   * A combat target can also be a centre, a unit, or a now-removed structure;
+   * those deliberately take the established footprint calculation in
+   * `surfaceStructureImpactPoint`. No health, targeting, or damage timing is
+   * changed by this visual refinement.
+   */
+  private firebrandImpactPoint(from: Vector3, target: CombatTarget): Vector3 {
+    const structure = this.structures.all().find((candidate) => candidate === target);
+    if (!structure) {
+      return surfaceStructureImpactPoint(from, target, [], this.firebrandImpactRaycaster);
+    }
+    // GLTFs may have completed loading or been moved by the completion drop
+    // since the renderer's last world-matrix update. Raycast the current art.
+    structure.object.updateMatrixWorld(true);
+    this.scratchFirebrandLaunch.copy(from).y += FIREBRAND_LAUNCH_HEIGHT;
+    return surfaceStructureImpactPoint(
+      this.scratchFirebrandLaunch,
+      target,
+      this.structures.surfaceMeshes(structure),
+      this.firebrandImpactRaycaster,
+    );
   }
 
   /**
@@ -7861,15 +7897,19 @@ export class RtsApp {
       // The shell's art, which no Actor references because a shot in flight is a
       // pooled mesh rather than a placed Actor. A catalog that maps no such prop
       // leaves the system on its procedural iron sphere.
-      const [cannonball, arrow, rock] = await Promise.all([
+      const [cannonball, arrow, rock, firebrand] = await Promise.all([
         this.actorVisuals.loadPropModel("cannonball"),
         this.actorVisuals.loadPropModel("arrow"),
         this.actorVisuals.loadPropModel("rock"),
+        this.actorVisuals.loadPropModel("firebrand"),
       ]);
       if (this.disposed) return;
       if (cannonball) this.cannonballs.setBallModel(cannonball);
       this.projectiles.setArrowModel(arrow);
       this.thrownRocks.setRockModel(rock);
+      this.firebrands.setTorchModel(firebrand);
+      const fireTexturePath = this.actorVisuals.textureAssetPath("t-fire-subuv");
+      this.firebrands.setFlameTextureUrl(fireTexturePath ? projectFileUrl(fireTexturePath) : null);
       this.warmStructureDamageEffects();
       this.units.setPresentationFactory((unit) =>
         this.actorVisuals?.createUnitPresentation(

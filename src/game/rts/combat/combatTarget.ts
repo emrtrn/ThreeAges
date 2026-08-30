@@ -1,5 +1,5 @@
 /** Shared combat-facing contract for RTS units and damageable structures. */
-import { Vector3 } from "three";
+import { Raycaster, type Object3D, Vector3 } from "three";
 
 import type { BuildingBalanceStats, UnitArmorClass } from "../../data/gameDataTypes";
 import type { HealthComponent } from "../units/health";
@@ -126,6 +126,44 @@ export function structureImpactPoint(from: Vector3, target: CombatTarget): Vecto
   point.x += (dx / length) * radius;
   point.z += (dz / length) * radius;
   return point;
+}
+
+/**
+ * Resolve a burning torch against the rendered surface of its target.
+ *
+ * Combat still resolves against the footprint: this is only the presentation
+ * landing point.  The ray deliberately aims through the building pivot rather
+ * than at {@link structureImpactPoint}'s footprint edge, because an expanded
+ * melee radius can otherwise finish just in front of the authored mesh.  The
+ * first visible mesh hit is the wall/fence/roof the player can actually see.
+ */
+export function surfaceStructureImpactPoint(
+  launchPoint: Vector3,
+  target: CombatTarget,
+  surfaces: readonly Object3D[],
+  raycaster: Raycaster,
+): Vector3 {
+  const fallback = structureImpactPoint(launchPoint, target);
+  if (surfaces.length === 0) return fallback;
+
+  const aim = new Vector3(target.position.x, target.position.y + STRUCTURE_IMPACT_HEIGHT, target.position.z);
+  const direction = aim.sub(launchPoint);
+  const distance = direction.length();
+  if (distance < 1e-4) return fallback;
+
+  raycaster.set(launchPoint, direction.multiplyScalar(1 / distance));
+  raycaster.near = 0.01;
+  // Continue a little beyond the pivot: a tall/tapered authored model may not
+  // occupy the exact centre line until after its logical target point.
+  raycaster.far = distance + Math.max(0.5, target.combatRadius ?? 0);
+  const hit = raycaster.intersectObjects([...surfaces], false)[0];
+  if (!hit?.face) return fallback;
+
+  const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+  // Outward-facing GLTF triangles normally already point towards the Guard.
+  // Correct malformed/inward faces so the small offset never buries the torch.
+  if (normal.dot(launchPoint.clone().sub(hit.point)) < 0) normal.negate();
+  return hit.point.addScaledVector(normal, 0.025);
 }
 
 /** Height a shot lands at on a person — chest height on the placeholder bodies. */

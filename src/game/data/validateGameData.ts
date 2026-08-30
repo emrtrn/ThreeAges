@@ -646,12 +646,11 @@ export function validateUnitBalance(value: unknown): UnitBalance {
       if (typeof impactEffect !== "string" || !MANIFEST_ASSET_ID.test(impactEffect)) {
         throw new GameDataError(`${statsWhere}.impactEffect: must be a manifest asset id`);
       }
-      // A burst needs a landing to burst at, and only the lobbed shot has one.
-      // Authored on a swordsman it would simply never play, which is a typo that
-      // looks like working data until someone watches for an explosion.
-      if (structureAttackVfx !== "cannonball") {
+      // A burst needs a landing to burst at. Both the lobbed cannonball and the
+      // Guard's structure-only firebrand have one; a sword would never play it.
+      if (structureAttackVfx !== "cannonball" && structureAttackVfx !== "firebrand") {
         throw new GameDataError(
-          `${statsWhere}.impactEffect: only units with structureAttackVfx "cannonball" have an impact to show`,
+          `${statsWhere}.impactEffect: only units with a cannonball or firebrand structureAttackVfx have an impact to show`,
         );
       }
     }

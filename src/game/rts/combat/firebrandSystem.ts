@@ -15,14 +15,16 @@
  */
 import {
   AdditiveBlending,
-  ConeGeometry,
+  Box3,
+  DoubleSide,
   Group,
-  IcosahedronGeometry,
   Mesh,
   MeshBasicMaterial,
-  SphereGeometry,
+  Object3D,
+  PlaneGeometry,
+  Texture,
+  TextureLoader,
   Vector3,
-  type BufferGeometry,
 } from "three";
 
 /** World units/s. A thrown torch is heavy — visibly slower than an arrow. */
@@ -40,32 +42,28 @@ const ARC_RATIO = 0.55;
 /** Minimum lift, so a very short throw still visibly goes up and comes down. */
 const MIN_ARC = 0.7;
 /** Height the torch leaves the Guard's hand at. */
-const LAUNCH_HEIGHT = 1.15;
+export const FIREBRAND_LAUNCH_HEIGHT = 1.15;
 /** How long the flame burns at the impact point after it lands. */
 const BURN_SECONDS = 0.55;
 
-const CORE_RADIUS = 0.15;
-const HALO_RADIUS = 0.32;
-const TAIL_RADIUS = 0.17;
-const TAIL_LENGTH = 0.8;
+const TORCH_LENGTH = 0.95;
+const TORCH_FLAME_FORWARD = TORCH_LENGTH * 0.42;
 
 /**
  * Fire is fire for both kingdoms. Ownership is already readable from the Guard
  * that threw it and from the building it lands on, and tinting a flame in team
  * colours would cost it the one thing it has to communicate.
  */
-const CORE_COLOR = "#fff0bd";
-const HALO_COLOR = "#ff7a1c";
-const TAIL_COLOR = "#ff9c2c";
+const FLAME_COLOR = "#fff0bd";
+
+export type FirebrandImpactHandler = (effectId: string | null, position: Vector3) => void;
 
 interface Firebrand {
   readonly group: Group;
-  readonly core: Mesh;
-  readonly tail: Mesh;
-  readonly halo: Mesh;
-  readonly coreMaterial: MeshBasicMaterial;
-  readonly tailMaterial: MeshBasicMaterial;
-  readonly haloMaterial: MeshBasicMaterial;
+  readonly torch: Object3D;
+  /** A small cross-plane sampling one frame of the shared fire flipbook. */
+  readonly flame: Mesh<PlaneGeometry, MeshBasicMaterial>;
+  readonly flameMaterial: MeshBasicMaterial;
   readonly from: Vector3;
   readonly to: Vector3;
   /** Peak lift of this throw's parabola; re-derived from range on every reuse. */
@@ -74,6 +72,31 @@ interface Firebrand {
   /** Flight time so far; once it passes {@link duration} the flame burns down. */
   elapsed: number;
   burn: number;
+  impactEffectId: string | null;
+}
+
+/** Centre and orient the authored torch for pooled flight instances. */
+function fitTorchModel(template: Object3D): Object3D {
+  const holder = new Group();
+  const model = template.clone(true);
+  const bounds = new Box3().setFromObject(model);
+  const size = bounds.getSize(new Vector3());
+  const largest = Math.max(size.x, size.y, size.z);
+  const scale = largest > 0 ? TORCH_LENGTH / largest : 1;
+  const center = bounds.getCenter(new Vector3());
+  model.scale.multiplyScalar(scale);
+  model.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
+  // This prop's handle is +Y. Rotate it so its burning head (-Y) faces the
+  // group's flight direction (-Z after `lookAt`) instead of appearing inverted.
+  model.rotateX(Math.PI / 2);
+  model.traverse((child) => {
+    if (child instanceof Mesh) {
+      child.castShadow = true;
+      child.receiveShadow = false;
+    }
+  });
+  holder.add(model);
+  return holder;
 }
 
 export class FirebrandSystem {
@@ -81,19 +104,55 @@ export class FirebrandSystem {
   private readonly live: Firebrand[] = [];
   /** Spent torches, kept whole (meshes + materials) for the next throw. */
   private readonly pool: Firebrand[] = [];
-  private readonly coreGeometry: BufferGeometry = new IcosahedronGeometry(CORE_RADIUS, 0);
-  private readonly haloGeometry: BufferGeometry = new SphereGeometry(HALO_RADIUS, 8, 6);
-  private readonly tailGeometry: BufferGeometry;
   private readonly scratchAhead = new Vector3();
+  private impactHandler: FirebrandImpactHandler | null = null;
+  private torchTemplate: Object3D | null = null;
+  private flameTexture: Texture | null = null;
+  private flameTextureUrl: string | null = null;
 
   constructor() {
     this.root.name = "rts-firebrands";
-    // Built pointing down -Z with its tip at the origin, so the cone trails
-    // behind a group whose +Z faces the direction of travel.
-    const tail = new ConeGeometry(TAIL_RADIUS, TAIL_LENGTH, 6, 1, true);
-    tail.rotateX(Math.PI / 2);
-    tail.translate(0, 0, -TAIL_LENGTH / 2);
-    this.tailGeometry = tail;
+  }
+
+  /** Use an authored, unlit torch prop as the thrown body. */
+  setTorchModel(template: Object3D | null): void {
+    this.torchTemplate = template ? fitTorchModel(template) : null;
+    this.clear();
+    for (const brand of this.pool) {
+      brand.flameMaterial.dispose();
+      brand.flame.geometry.dispose();
+    }
+    this.pool.length = 0;
+  }
+
+  /**
+   * Bind the same 6x6 fire flipbook the authored particle effects use.
+   *
+   * The image is shared across every pooled torch. Individual planes change UVs,
+   * not texture offsets, so one torch's animation cannot alter another's frame.
+   */
+  setFlameTextureUrl(url: string | null): void {
+    if (url === this.flameTextureUrl) return;
+    this.flameTextureUrl = url;
+    this.flameTexture?.dispose();
+    this.flameTexture = null;
+    this.applyFlameTexture(null);
+    if (!url) return;
+    new TextureLoader().load(url, (texture) => {
+      if (this.flameTextureUrl !== url) {
+        texture.dispose();
+        return;
+      }
+      texture.flipY = false;
+      texture.needsUpdate = true;
+      this.flameTexture = texture;
+      this.applyFlameTexture(texture);
+    });
+  }
+
+  /** Play an authored, data-selected burst on the frame the torch reaches its target. */
+  setImpactHandler(handler: FirebrandImpactHandler | null): void {
+    this.impactHandler = handler;
   }
 
   /**
@@ -103,8 +162,8 @@ export class FirebrandSystem {
    * only the caller knows the target's footprint. A zero-length throw is
    * dropped: it has nothing to animate, and it would divide by zero below.
    */
-  spawn(from: Vector3, to: Vector3): void {
-    const start = new Vector3(from.x, from.y + LAUNCH_HEIGHT, from.z);
+  spawn(from: Vector3, to: Vector3, impactEffectId: string | null = null): void {
+    const start = new Vector3(from.x, from.y + FIREBRAND_LAUNCH_HEIGHT, from.z);
     const end = to.clone();
     const distance = start.distanceTo(end);
     if (distance < 0.01) return;
@@ -115,17 +174,13 @@ export class FirebrandSystem {
     brand.duration = Math.min(MAX_FLIGHT_SECONDS, Math.max(MIN_FLIGHT_SECONDS, distance / THROW_SPEED));
     brand.elapsed = 0;
     brand.burn = 0;
+    brand.impactEffectId = impactEffectId;
     brand.group.position.copy(start);
-    // A recycled torch still wears the flare-out scale it died at; the flight
-    // update overwrites these, but a fresh throw must not depend on that order.
-    brand.core.scale.setScalar(1);
-    brand.halo.scale.setScalar(1);
-    brand.tail.scale.setScalar(1);
-    brand.tail.visible = true;
-    brand.core.visible = true;
-    brand.coreMaterial.opacity = 1;
-    brand.tailMaterial.opacity = 0.75;
-    brand.haloMaterial.opacity = 0.55;
+    // A recycled torch may still wear its impact scale; reset it before flight.
+    brand.torch.visible = true;
+    brand.flame.visible = true;
+    brand.flame.scale.setScalar(1);
+    brand.flameMaterial.opacity = 0.95;
     this.root.add(brand.group);
     this.live.push(brand);
   }
@@ -136,8 +191,12 @@ export class FirebrandSystem {
       const brand = this.live[i]!;
       if (brand.elapsed < brand.duration) {
         brand.elapsed += step;
+        if (brand.elapsed < brand.duration) {
+          this.advanceFlight(brand);
+          continue;
+        }
         this.advanceFlight(brand);
-        continue;
+        this.impactHandler?.(brand.impactEffectId, brand.to);
       }
       brand.burn += step;
       if (brand.burn >= BURN_SECONDS) {
@@ -155,15 +214,14 @@ export class FirebrandSystem {
 
   dispose(): void {
     this.clear();
+    this.impactHandler = null;
     for (const brand of this.pool) {
-      brand.coreMaterial.dispose();
-      brand.tailMaterial.dispose();
-      brand.haloMaterial.dispose();
+      brand.flameMaterial.dispose();
+      brand.flame.geometry.dispose();
     }
     this.pool.length = 0;
-    this.coreGeometry.dispose();
-    this.haloGeometry.dispose();
-    this.tailGeometry.dispose();
+    this.flameTexture?.dispose();
+    this.flameTexture = null;
   }
 
   /** Travel the parabola, face the direction of travel, and flicker. */
@@ -174,24 +232,20 @@ export class FirebrandSystem {
     // through the top of the arc, where the direction of travel flips.
     const ahead = this.positionAt(brand, Math.min(1, progress + 0.05), this.scratchAhead);
     if (ahead.distanceToSquared(brand.group.position) > 1e-6) brand.group.lookAt(ahead);
-    // Cheap deterministic flicker: a torch that pulses reads as burning rather
-    // than as a glowing pebble, and it costs one sine per frame.
+    // The flipbook supplies the flame shape; the tiny scale/opacity variation
+    // keeps several torches from advancing in lockstep.
     const flicker = 1 + Math.sin(brand.elapsed * 47) * 0.14;
-    brand.core.scale.setScalar(flicker);
-    brand.halo.scale.setScalar(1 + Math.sin(brand.elapsed * 31 + 1.3) * 0.12);
-    brand.tail.scale.set(1, 1, 0.8 + flicker * 0.3);
-    brand.core.rotation.x += 0.35;
-    brand.core.rotation.z += 0.27;
+    brand.flame.scale.setScalar(flicker);
+    brand.flameMaterial.opacity = 0.82 + Math.sin(brand.elapsed * 31 + 1.3) * 0.13;
+    this.setFlameFrame(brand, Math.floor(brand.elapsed * 24) % 36);
   }
 
-  /** Flare out at the impact point: the halo swells and fades, the torch is gone. */
+  /** Keep the flipbook flame with the embedded torch while the impact burst fades. */
   private advanceBurn(brand: Firebrand): void {
     const progress = brand.burn / BURN_SECONDS;
-    brand.tail.visible = false;
-    brand.core.visible = progress < 0.45;
-    brand.coreMaterial.opacity = Math.max(0, 1 - progress * 2.4);
-    brand.halo.scale.setScalar(1 + progress * 2.2);
-    brand.haloMaterial.opacity = 0.55 * (1 - progress);
+    brand.flame.scale.setScalar(1 + progress * 0.45);
+    brand.flameMaterial.opacity = Math.max(0, 0.9 * (1 - progress));
+    this.setFlameFrame(brand, Math.floor((brand.elapsed + brand.burn) * 24) % 36);
   }
 
   /** Point on the throw's parabola at `progress` in 0..1, written into `out`. */
@@ -208,41 +262,56 @@ export class FirebrandSystem {
     this.pool.push(brand);
   }
 
+  private applyFlameTexture(texture: Texture | null): void {
+    for (const brand of [...this.live, ...this.pool]) {
+      brand.flameMaterial.map = texture;
+      brand.flameMaterial.needsUpdate = true;
+    }
+  }
+
+  /** Maps an animated frame into this brand's independent plane UVs. */
+  private setFlameFrame(brand: Firebrand, frame: number): void {
+    const frameIndex = ((frame % 36) + 36) % 36;
+    const column = frameIndex % 6;
+    const row = Math.floor(frameIndex / 6);
+    const unit = 1 / 6;
+    const uv = brand.flame.geometry.getAttribute("uv");
+    uv.setXY(0, column * unit, (row + 1) * unit);
+    uv.setXY(1, (column + 1) * unit, (row + 1) * unit);
+    uv.setXY(2, column * unit, row * unit);
+    uv.setXY(3, (column + 1) * unit, row * unit);
+    uv.needsUpdate = true;
+  }
+
   private create(): Firebrand {
     const group = new Group();
-    const coreMaterial = new MeshBasicMaterial({ color: CORE_COLOR, transparent: true, depthWrite: false });
-    const tailMaterial = new MeshBasicMaterial({
-      color: TAIL_COLOR,
+    const flameMaterial = new MeshBasicMaterial({
+      color: FLAME_COLOR,
+      map: this.flameTexture,
       transparent: true,
-      opacity: 0.75,
+      opacity: 0.95,
       depthWrite: false,
+      side: DoubleSide,
       blending: AdditiveBlending,
     });
-    const haloMaterial = new MeshBasicMaterial({
-      color: HALO_COLOR,
-      transparent: true,
-      opacity: 0.55,
-      depthWrite: false,
-      blending: AdditiveBlending,
-    });
-    const core = new Mesh(this.coreGeometry, coreMaterial);
-    const tail = new Mesh(this.tailGeometry, tailMaterial);
-    const halo = new Mesh(this.haloGeometry, haloMaterial);
-    group.add(core, tail, halo);
+    const torch = this.torchTemplate
+      ? this.torchTemplate.clone(true)
+      : new Group();
+    const flame = new Mesh(new PlaneGeometry(0.68, 0.92), flameMaterial);
+    flame.position.z = -TORCH_FLAME_FORWARD;
+    group.add(torch, flame);
     return {
       group,
-      core,
-      tail,
-      halo,
-      coreMaterial,
-      tailMaterial,
-      haloMaterial,
+      torch,
+      flame,
+      flameMaterial,
       from: new Vector3(),
       to: new Vector3(),
       arc: MIN_ARC,
       duration: MIN_FLIGHT_SECONDS,
       elapsed: 0,
       burn: 0,
+      impactEffectId: null,
     };
   }
 }
