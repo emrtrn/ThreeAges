@@ -93,13 +93,14 @@ test("Play the level you edit: ?level= opens that map, whatever the preset names
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level-ref", coreMatch);
 
-  // No `flags=levelAssets` above: naming a Level explicitly is the opt-in. The
-  // preset's own map stays behind the flag, unchanged. Without `?level=` this route
-  // does open on the menu, so the match has to be started before it can be asked
-  // which map it resolved.
+  // Without `?level=`, the preset's own map wins — and since `gameplay_proof`
+  // now authors `levelAssets: true`, that map is the authored Level rather than
+  // the blockout this used to assert. The flag moved into the preset because a
+  // published build is opened with no query string at all, so a map reachable
+  // only behind `?flags=levelAssets` shipped as flat placeholder ground.
   await page.goto("/?rts&debug&preset=gameplay_proof");
   await startRtsMatch(page);
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "blockout");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
 
   await page.goto(`/?rts&debug&preset=gameplay_proof&level=${coreMatch}`);
   await waitForRtsBoot(page);
@@ -114,12 +115,16 @@ test("Assetization Faz D: the opt-in authored Level drives the spatial layout of
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
-  // Default boot resolves the legacy blockout — even though the default preset
-  // carries a levelRef, the levelAssets gate keeps it opt-in. Which Level was
-  // resolved is a fact about the built match, so the match is built first.
+  // The bare boot — no preset, no flags — is what a published build is opened
+  // with, and it must resolve the authored Level. This assertion is the reverse
+  // of what it used to make: the gate is still there (see the engine checks over
+  // `resolveRtsLevelRef`), but the shipping preset now opts into it, because
+  // when it did not, an itch.io upload played the whole game on flat placeholder
+  // ground. Which Level was resolved is a fact about the built match, so the
+  // match is built first.
   await page.goto("/?rts&debug");
   await startRtsMatch(page);
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "blockout");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
 
   // With the flag on, the default preset's shipped Level loads and its markers
   // become the spatial authority for the whole match. Deliberately not named
@@ -142,13 +147,16 @@ test("Landscape Faz 1: the gameplay_proof preset resolves its own authored Level
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
-  // Flag off: even though gameplay_proof now carries a levelRef, the levelAssets
-  // gate keeps it opt-in, so the legacy blockout fallback still drives the match
-  // on the flat placeholder ground.
+  // The published route: no flags in the URL, because a static host serves
+  // `index.html` bare. This used to assert the opposite — blockout on flat
+  // ground — and that is exactly what shipped to itch.io before the preset
+  // authored `levelAssets` itself. Pinning the terrain here, not just the Level,
+  // because the flat placeholder ground is a deliberate fallback: it keeps a
+  // failed load playable, which also means it fails quietly.
   await page.goto("/?rts&debug&preset=gameplay_proof");
   await startRtsMatch(page);
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "blockout");
-  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-ground", "flat");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-ground", "landscape", { timeout: 30_000 });
 
   // Flag on: the preset's own RTS_GameplayProof Level loads and its markers become
   // the spatial authority — the Faz 1 witness that the separate authoring asset is

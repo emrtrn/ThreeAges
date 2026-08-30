@@ -2,7 +2,8 @@
   "id": "gameplay_proof",
   "label": "Gameplay Proof (Ürün A)",
   "flags": {
-    "fogOfWar": false
+    "fogOfWar": false,
+    "levelAssets": true
   },
   "startingResources": {
     "food": 500,

@@ -23,6 +23,7 @@
     "perf:rts": "node tools/rts-perf-report.mjs",
     "perf:worker": "node tools/worker-perf-report.mjs",
     "dialogue:report": "node tools/dialogue-report.mjs",
+    "package:web": "npm run build && node tools/package-web.mjs",
     "verify:dist": "node builder/web/verify-dist.mjs",
     "verify:imports": "node builder/web/verify-imports.mjs",
     "test:engine": "node tools/run-engine-tests.mjs",
