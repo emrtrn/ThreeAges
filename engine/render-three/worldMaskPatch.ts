@@ -82,6 +82,9 @@ const VERTEX_ANCHOR = "#include <project_vertex>";
  */
 const FRAGMENT_ANCHOR = "#include <clipping_planes_fragment>";
 
+/** The lit-material output point, absent from depth-only shaders. */
+const FRAGMENT_COLOR_ANCHOR = "#include <opaque_fragment>";
+
 /**
  * World position, mirroring `project_vertex`'s own sequence exactly.
  *
@@ -136,11 +139,31 @@ const FRAGMENT_PATCH = `${FRAGMENT_ANCHOR}
 			1.0
 		);
 		float worldMaskValue = texture2D( tWorldMask, worldMaskUv ).g;
-		float worldMaskHidden = smoothstep( worldMaskRange.x, worldMaskRange.y, worldMaskValue ) * worldMaskStrength;
+		float worldMaskUnknown = smoothstep( worldMaskRange.x, worldMaskRange.y, worldMaskValue );
+		float worldMaskHidden = worldMaskUnknown * worldMaskStrength;
 		// Strictly greater, so a strength or mask of exactly zero can never discard
 		// (the dither's own range starts at zero) and a mask of one always does.
 		if ( worldMaskHidden > worldMaskDither( gl_FragCoord.xy ) ) discard;
 	}`;
+
+/**
+ * Keeps remembered scenery solid, then tints it with the same near-black used
+ * by the fog surface. This must happen before `opaque_fragment` writes
+ * `outgoingLight`; using transparent/discarded pixels here would expose the
+ * terrain edge or empty space behind a tall mountain.
+ */
+const FRAGMENT_COLOR_PATCH = `{
+	vec2 worldMaskUv = clamp(
+		vec2( 0.5 + vWorldMaskPosition.x / worldMaskSpan, 0.5 - vWorldMaskPosition.y / worldMaskSpan ),
+		0.0,
+		1.0
+	);
+	float worldMaskValue = texture2D( tWorldMask, worldMaskUv ).g;
+	float worldMaskUnknown = smoothstep( worldMaskRange.x, worldMaskRange.y, worldMaskValue );
+	float worldMaskVeil = mix( worldMaskValue, 1.0, worldMaskUnknown ) * worldMaskStrength;
+	outgoingLight = mix( outgoingLight, vec3( 0.0015, 0.0021, 0.0034 ), worldMaskVeil );
+}
+${FRAGMENT_COLOR_ANCHOR}`;
 
 /** Live uniforms shared by every material one mask drives. */
 export interface WorldMaskUniforms {
@@ -254,6 +277,13 @@ function patchShader(shader: ShaderPatch, uniforms: WorldMaskUniforms): void {
     FRAGMENT_ANCHOR,
     FRAGMENT_PATCH,
   )}`;
+  // `MeshDepthMaterial` has no `outgoingLight` or `opaque_fragment`; it still
+  // receives the early unknown-area discard above so hidden scenery cannot cast
+  // a shadow into visible ground. Lit materials additionally receive the solid
+  // remembered-fog tint, which avoids transparency holes at the map boundary.
+  if (shader.fragmentShader.includes(FRAGMENT_COLOR_ANCHOR)) {
+    shader.fragmentShader = shader.fragmentShader.replace(FRAGMENT_COLOR_ANCHOR, FRAGMENT_COLOR_PATCH);
+  }
 }
 
 /**
@@ -265,7 +295,9 @@ function patchShader(shader: ShaderPatch, uniforms: WorldMaskUniforms): void {
 export const WORLD_MASK_SHADER_SOURCE = {
   vertexAnchor: VERTEX_ANCHOR,
   fragmentAnchor: FRAGMENT_ANCHOR,
+  fragmentColorAnchor: FRAGMENT_COLOR_ANCHOR,
   vertexPatch: VERTEX_PATCH,
   fragmentPatch: FRAGMENT_PATCH,
+  fragmentColorPatch: FRAGMENT_COLOR_PATCH,
   fragmentDecls: FRAGMENT_DECLS,
 } as const;

@@ -17,9 +17,9 @@
  * occupies a range of places, and each of them has its own answer. So the test
  * moves to the fragment: {@link FogView}'s texture — the same one the ground
  * overlay draws, already blurred and already eased — is handed to the materials
- * as a world-space mask, and every pixel of scenery is kept or discarded by the
- * fog state of the ground directly beneath it. Half a mountain under unexplored
- * fog draws half a mountain.
+ * as a world-space mask. Every pixel of scenery follows the fog state of the
+ * ground directly beneath it: clear in current sight, half-visible in remembered
+ * fog, and absent in unknown ground.
  *
  * **Why `explored` and not `visible`.** GDD 08 §40 keeps terrain and permanent
  * natural elements on the map once seen, so a ridge you scouted an hour ago is
@@ -55,8 +55,8 @@ import {
  *
  * {@link FogView} draws visible ground at 0, explored at 128/255 ≈ 0.502 and
  * unknown at 1. This sits above explored with room to spare, which is §40 in one
- * number: ground the player has seen keeps its scenery for the rest of the
- * match, however dark the overlay above it gets.
+ * number: ground the player has seen keeps its scenery as a remembered,
+ * half-visible silhouette instead of dropping it entirely.
  */
 const MASK_RANGE_LOW = 0.6;
 
@@ -172,3 +172,28 @@ export class FogMask {
 
 /** Exposed so the engine test can pin the thresholds against `FogView`'s alphas. */
 export const FOG_MASK_RANGE = { low: MASK_RANGE_LOW, high: MASK_RANGE_HIGH } as const;
+
+/**
+ * The fraction of a static-art fragment that the fog removes.
+ *
+ * Mirrors the GLSL expression in `worldMaskPatch.ts`: only the unknown
+ * transition discards a fragment. Remembered terrain remains solid and receives
+ * its separate colour veil through `fogMaskVeilFraction`. Kept here so engine
+ * checks can pin the presentation contract without a WebGL readback.
+ */
+export function fogMaskHiddenFraction(maskValue: number): number {
+  const value = Math.min(1, Math.max(0, maskValue));
+  const width = MASK_RANGE_HIGH - MASK_RANGE_LOW;
+  const edge = width <= 0 ? (value >= MASK_RANGE_HIGH ? 1 : 0) : Math.min(
+    1,
+    Math.max(0, (value - MASK_RANGE_LOW) / width),
+  );
+  return edge * edge * (3 - 2 * edge);
+}
+
+/** The opaque colour tint applied to remembered static scenery. */
+export function fogMaskVeilFraction(maskValue: number): number {
+  const value = Math.min(1, Math.max(0, maskValue));
+  const hidden = fogMaskHiddenFraction(value);
+  return value + (1 - value) * hidden;
+}

@@ -458,7 +458,12 @@ import {
 import { GhostStructureView } from "../src/game/rts/vision/ghostStructureView";
 import { VisionSystemAiFilter } from "../src/game/rts/ai/aiVisionFilter";
 import { FogVisibilityBinder } from "../src/game/rts/vision/fogVisibilityBinder";
-import { FogMask, FOG_MASK_RANGE } from "../src/game/rts/vision/fogMask";
+import {
+  FogMask,
+  FOG_MASK_RANGE,
+  fogMaskHiddenFraction,
+  fogMaskVeilFraction,
+} from "../src/game/rts/vision/fogMask";
 import {
   EXPLORED_ALPHA,
   FogView,
@@ -50102,6 +50107,17 @@ check("§59: §40 memory survives the mask threshold — explored ground keeps i
   assert.ok(
     FOG_MASK_RANGE.low < FOG_MASK_RANGE.high,
     "and there is a band between them to dissolve across",
+  );
+  assert.equal(fogMaskHiddenFraction(normalized(EXPLORED_ALPHA)), 0, "remembered scenery is not punched through");
+  assert.ok(
+    Math.abs(fogMaskVeilFraction(normalized(EXPLORED_ALPHA)) - normalized(EXPLORED_ALPHA)) < 1e-6,
+    "remembered static art receives the same half-fog as the ground without exposing its background",
+  );
+  assert.equal(fogMaskHiddenFraction(normalized(VISIBLE_ALPHA)), 0, "visible scenery remains solid");
+  assert.equal(fogMaskHiddenFraction(normalized(UNKNOWN_ALPHA)), 1, "unknown scenery is fully hidden");
+  assert.ok(
+    WORLD_MASK_SHADER_SOURCE.fragmentColorPatch.includes("outgoingLight = mix"),
+    "the GPU patch tints remembered scenery instead of making holes through it",
   );
 });
 

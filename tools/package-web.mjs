@@ -20,7 +20,8 @@
  * the central directory and its CRC verified against the source file, because a
  * silently corrupt upload is the one failure that looks like success.
  *
- *   node tools/package-web.mjs            # dist/ -> builds/<name>-web-<stamp>.zip
+ *   node tools/package-web.mjs                 # dist/ -> builds/<name>-web-<date>.zip
+ *   node tools/package-web.mjs --label v1.0.1  # ...-web-v1.0.1.zip (CI passes the tag)
  *   node tools/package-web.mjs --out x.zip
  */
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, existsSync } from "node:fs";
@@ -160,10 +161,25 @@ end.writeUInt16LE(files.length, 10);
 end.writeUInt32LE(centralBuffer.length, 12);
 end.writeUInt32LE(offset, 16);
 
+// A release is named by its tag, a local build by its date.
+//
+// Not `slug`: that folds a name down to `[a-z0-9-]` for the *project* name,
+// which would turn `v1.0.1` into `v1-0-1` and lose the version. Dots and
+// underscores are meaningful in a tag and safe in a filename; a slash or a space
+// is neither, so those are what get replaced.
+const labelArg = process.argv.indexOf("--label");
+const rawLabel =
+  labelArg > -1 && process.argv[labelArg + 1]
+    ? process.argv[labelArg + 1]
+    : stamp.toISOString().slice(0, 10);
+const label =
+  rawLabel.trim().replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "") ||
+  stamp.toISOString().slice(0, 10);
+
 const outPath =
   outArg > -1 && process.argv[outArg + 1]
     ? process.argv[outArg + 1]
-    : join(OUT_DIR, `${projectSlug()}-web-${stamp.toISOString().slice(0, 10)}.zip`);
+    : join(OUT_DIR, `${projectSlug()}-web-${label}.zip`);
 mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(outPath, Buffer.concat([...local, centralBuffer, end]));
 

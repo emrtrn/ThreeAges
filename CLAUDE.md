@@ -42,6 +42,11 @@ engine/editor.
   Progress Log); §1–§6 are the Unreal-derived architecture lessons (north star +
   backlog). The completed post-migration cleanup checklist
   (`IMPROVEMENT_CHECKLIST.md`) was removed; its history lives in git.
+- `docs/planned/THREEAGES_PACKAGING_AND_RELEASE.md`: how a published build
+  differs from a local one, the six bugs that difference caused on the way to
+  the first itch.io release, the packaging/preview/release pipeline, and the
+  pre-publish verification ritual. Read it before touching `base`, `publicUrl`,
+  a feature-flag default, or anything under `tools/package-web.mjs`.
 
 ## Working Rules
 
@@ -133,7 +138,18 @@ engine/editor.
 - **CI** (`.github/workflows/ci.yml`) runs `build:verify`
   (`tsc --noEmit` + `vite build` + `test:engine` + `verify:dist --strict`) and
   `check:assets` on every push/PR to `main` — the automated mirror of the local
-  gate. Keep both green; deploy stays out of CI (per-fork concern).
+  gate. Keep both green.
+- **Publishing** is a fork concern, and this repo is a fork, so it lives here:
+  `.github/workflows/release.yml` runs the same gate on a `v*` tag, packages
+  `dist/` with `tools/package-web.mjs`, and attaches the zip to the GitHub
+  Release. `git tag v1.0.1 && git push origin v1.0.1` is the whole ritual; the
+  upload to itch.io stays manual, because a green build is not the same decision
+  as "players should see this now" and no API key belongs in this repo.
+  Locally: `npm run package:web` builds and packages, `npm run preview:package`
+  serves the resulting zip under a subpath the way itch does. **Test a package
+  that way, never by opening `index.html` from disk** — `file://` blocks ES
+  module imports and `fetch`, so the page paints and nothing loads — and never
+  from the origin root, which is where a root-absolute path bug hides.
 - **Save-validator allowlist gotcha:** any new `LayoutPlacement` /
   `LayoutCharacter` / `LayoutLightActor` / `LayoutReflectionPlane` /
   `LayoutBlockingVolume` field — or any new field on a singleton environment actor

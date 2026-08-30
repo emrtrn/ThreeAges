@@ -1,0 +1,81 @@
+name: Release
+
+# Produces the itch.io upload for a tagged version, and nothing else: the zip is
+# attached to a GitHub Release for you to download and upload yourself. There is
+# deliberately no automatic push to itch — no API key lives in this repo, and a
+# green build is not the same decision as "players should see this now".
+#
+# To cut a release:
+#   git tag v1.0.1 && git push origin v1.0.1
+#
+# The gate runs first and the package is only built if it passes, so a tag can
+# never produce an artefact that `main` would have rejected. This is the same
+# `build:verify` CI runs on every push (ci.yml); it is repeated here rather than
+# assumed, because a tag can point at a commit CI never saw.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Only to attach the zip to the Release for this tag. Nothing else is written.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: verify · package · attach to release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Same single gate as ci.yml: verify:imports + tsc + vite build +
+      # test:engine:slow + verify:dist --strict. The strict dist scan is what
+      # catches a root-absolute path in index.html, which is invisible locally
+      # (dev and preview both serve from `/`) and fatal on itch, where the game
+      # is served from a subpath it does not own.
+      - name: Verify
+        run: npm run build:verify
+
+      - name: Asset manifest health
+        run: npm run check:assets
+
+      # `dist/` already exists from build:verify — package it rather than
+      # rebuilding, so the bytes that were verified are the bytes that ship.
+      - name: Package for itch.io
+        run: node tools/package-web.mjs --label "${{ github.ref_name }}"
+
+      # Attached to the Release rather than uploaded as a workflow artifact:
+      # `actions/upload-artifact` wraps whatever it is given in a second zip, so
+      # the download would be a zip containing the zip, and itch would reject the
+      # outer one. A Release asset downloads as the exact file to upload, and it
+      # does not expire after 90 days.
+      #
+      # `gh` is preinstalled on the runner, so this needs no third-party action.
+      - name: Attach the package to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip="$(ls builds/*.zip | head -n 1)"
+          echo "Publishing $zip ($(du -h "$zip" | cut -f1))"
+          gh release create "${{ github.ref_name }}" "$zip" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            || gh release upload "${{ github.ref_name }}" "$zip" --clobber
+
+      - name: How to publish
+        run: |
+          echo "::notice::Release ${{ github.ref_name }} hazir. Zip'i Release sayfasindan indir,"
+          echo "::notice::itch.io > Edit game > Uploads bolumune yukle ve"
+          echo "::notice::'This file will be played in the browser' kutusunu isaretli tut."
