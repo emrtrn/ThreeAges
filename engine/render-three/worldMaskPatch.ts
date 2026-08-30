@@ -124,6 +124,7 @@ const FRAGMENT_DECLS = `uniform sampler2D tWorldMask;
 uniform float worldMaskSpan;
 uniform vec2 worldMaskRange;
 uniform float worldMaskStrength;
+uniform float worldMaskDiscardUnknown;
 varying vec2 vWorldMaskPosition;
 
 float worldMaskDither( const in vec2 fragment ) {
@@ -143,7 +144,7 @@ const FRAGMENT_PATCH = `${FRAGMENT_ANCHOR}
 		float worldMaskHidden = worldMaskUnknown * worldMaskStrength;
 		// Strictly greater, so a strength or mask of exactly zero can never discard
 		// (the dither's own range starts at zero) and a mask of one always does.
-		if ( worldMaskHidden > worldMaskDither( gl_FragCoord.xy ) ) discard;
+		if ( worldMaskDiscardUnknown > 0.5 && worldMaskHidden > worldMaskDither( gl_FragCoord.xy ) ) discard;
 	}`;
 
 /**
@@ -160,7 +161,12 @@ const FRAGMENT_COLOR_PATCH = `{
 	);
 	float worldMaskValue = texture2D( tWorldMask, worldMaskUv ).g;
 	float worldMaskUnknown = smoothstep( worldMaskRange.x, worldMaskRange.y, worldMaskValue );
-	float worldMaskVeil = mix( worldMaskValue, 1.0, worldMaskUnknown ) * worldMaskStrength;
+	// A veil-only environment follows the fog texture's raw (already blurred)
+	// alpha exactly. The discard mode keeps its historical compact-to-black ramp;
+	// applying that ramp to a non-discarded mesh made the dark frontier visibly
+	// harder than the ground surface underneath it.
+	float worldMaskCompactVeil = mix( worldMaskValue, 1.0, worldMaskUnknown );
+	float worldMaskVeil = mix( worldMaskValue, worldMaskCompactVeil, worldMaskDiscardUnknown ) * worldMaskStrength;
 	outgoingLight = mix( outgoingLight, vec3( 0.0015, 0.0021, 0.0034 ), worldMaskVeil );
 }
 ${FRAGMENT_COLOR_ANCHOR}`;
@@ -175,12 +181,16 @@ export interface WorldMaskUniforms {
   readonly worldMaskRange: IUniform<Vector2>;
   /** Global multiplier; zero disables hiding without recompiling anything. */
   readonly worldMaskStrength: IUniform<number>;
+  /** Whether unknown fragments are discarded, rather than only receiving the colour veil. */
+  readonly worldMaskDiscardUnknown: IUniform<number>;
 }
 
 export interface WorldMaskOptions {
   readonly span: number;
   readonly rangeLow: number;
   readonly rangeHigh: number;
+  /** Defaults to true. Environment can set false to remain visible under the fog veil. */
+  readonly discardUnknown?: boolean;
 }
 
 export function createWorldMaskUniforms(options: WorldMaskOptions): WorldMaskUniforms {
@@ -189,6 +199,7 @@ export function createWorldMaskUniforms(options: WorldMaskOptions): WorldMaskUni
     worldMaskSpan: { value: options.span },
     worldMaskRange: { value: new Vector2(options.rangeLow, options.rangeHigh) },
     worldMaskStrength: { value: 1 },
+    worldMaskDiscardUnknown: { value: options.discardUnknown === false ? 0 : 1 },
   };
 }
 
@@ -272,6 +283,7 @@ function patchShader(shader: ShaderPatch, uniforms: WorldMaskUniforms): void {
   shader.uniforms.worldMaskSpan = uniforms.worldMaskSpan;
   shader.uniforms.worldMaskRange = uniforms.worldMaskRange;
   shader.uniforms.worldMaskStrength = uniforms.worldMaskStrength;
+  shader.uniforms.worldMaskDiscardUnknown = uniforms.worldMaskDiscardUnknown;
   shader.vertexShader = `${VERTEX_DECLS}${shader.vertexShader.replace(VERTEX_ANCHOR, VERTEX_PATCH)}`;
   shader.fragmentShader = `${FRAGMENT_DECLS}${shader.fragmentShader.replace(
     FRAGMENT_ANCHOR,

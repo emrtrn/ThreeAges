@@ -8,6 +8,7 @@ import {
   PlaneGeometry,
   ShaderMaterial,
   Texture,
+  type IUniform,
 } from "three";
 import { PLANAR_REFLECTION_EXCLUDED_LAYER } from "./planarReflectionSource";
 
@@ -214,6 +215,7 @@ varying float vRapidness;
 varying float vFoamMask;
 varying float vFlowSpeedMultiplier;
 varying vec4 vReflectionUv;
+varying vec2 vWorldFogPosition;
 uniform float time;
 uniform float flowSpeed;
 uniform float waveAmplitude;
@@ -231,8 +233,10 @@ void main() {
   float wave = sin(wavePhase) + sin(wavePhase * 1.73 + uv.y * 5.0) * 0.35;
   vec3 displaced = position;
   displaced.y += wave * waveAmplitude * centreWeight * (0.65 + rapidness * 0.35);
-  vReflectionUv = reflectionTextureMatrix * modelMatrix * vec4(displaced, 1.0);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+  vec4 worldPosition = modelMatrix * vec4(displaced, 1.0);
+  vWorldFogPosition = worldPosition.xz;
+  vReflectionUv = reflectionTextureMatrix * worldPosition;
+  gl_Position = projectionMatrix * viewMatrix * worldPosition;
 }`;
 
 const FRAGMENT_SHADER = `
@@ -256,6 +260,9 @@ uniform sampler2D foamNoiseMap;
 uniform float hasFoamNoiseMap;
 uniform sampler2D reflectionTexture;
 uniform float reflectionStrength;
+uniform sampler2D fogMask;
+uniform float fogMaskSpan;
+uniform float fogMaskStrength;
 varying vec2 vRiverUv;
 varying float vShoreDistance;
 varying float vWaterDepth;
@@ -263,6 +270,7 @@ varying float vRapidness;
 varying float vFoamMask;
 varying float vFlowSpeedMultiplier;
 varying vec4 vReflectionUv;
+varying vec2 vWorldFogPosition;
 
 // Two inexpensive value-noise layers prevent foam from reading as even,
 // repeating stripes. vRiverUv.x advances along the authored spline, so the
@@ -337,8 +345,22 @@ void main() {
   float bedTransmission = clamp(bedVisibility, 0.0, 1.0) * exp(-max(vWaterDepth, 0.0) / max(absorptionDistance, 0.01));
   float bedOpacity = 1.0 - bedTransmission;
   float alpha = max(opacity * mix(0.62, 1.0, depth) * mix(1.0, 0.7, shore), bedOpacity);
+  vec2 fogUv = clamp(
+    vec2(0.5 + vWorldFogPosition.x / fogMaskSpan, 0.5 - vWorldFogPosition.y / fogMaskSpan),
+    0.0,
+    1.0
+  );
+  float fogVeil = clamp(texture2D(fogMask, fogUv).g * fogMaskStrength, 0.0, 1.0);
+  color = mix(color, vec3(0.0015, 0.0021, 0.0034), fogVeil);
   gl_FragColor = vec4(color, alpha);
 }`;
+
+/** Live fog uniforms can be shared with the RTS mask without a per-frame copy. */
+export interface RiverWaterFogBindings {
+  readonly texture: IUniform<Texture | null>;
+  readonly span: IUniform<number>;
+  readonly strength: IUniform<number>;
+}
 
 export interface RiverWaterRenderItem extends ResolvedRiverWater {
   spline: ForgeLandscapeSpline;
@@ -403,6 +425,9 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         // Per-body, not per-source: bodies may share one reflection capture and
         // still want different amounts of it, so strength stays on the consumer.
         reflectionStrength: { value: item.reflectionSource ? item.reflectionStrength : 0 },
+        fogMask: { value: null },
+        fogMaskSpan: { value: 1 },
+        fogMaskStrength: { value: 0 },
       },
       transparent: true,
       depthWrite: false,
@@ -442,6 +467,15 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.material.uniforms["reflectionStrength"]!.value = binding ? this.authoredReflectionStrength : 0;
   }
 
+  /** Bind the river and every foam child to the live RTS fog texture. */
+  setFogBindings(bindings: RiverWaterFogBindings): void {
+    bindRiverFog(this.material, bindings);
+    for (const child of this.children) {
+      if (!(child instanceof Mesh) || !(child.material instanceof ShaderMaterial)) continue;
+      bindRiverFog(child.material, bindings);
+    }
+  }
+
   dispose(): void {
     for (const child of this.children) {
       if (child instanceof Mesh) {
@@ -458,9 +492,12 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
 
 const RING_FOAM_VERTEX_SHADER = `
 varying vec2 vUv;
+varying vec2 vWorldFogPosition;
 void main() {
   vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+  vWorldFogPosition = worldPosition.xz;
+  gl_Position = projectionMatrix * viewMatrix * worldPosition;
 }`;
 
 const RADIAL_FOAM_FRAGMENT_SHADER = `
@@ -474,7 +511,11 @@ uniform float shoreWaveSpacing;
 uniform float shoreWaveSpeed;
 uniform float shoreWaveReach;
 uniform float shoreWaveBreakupScale;
+uniform sampler2D fogMask;
+uniform float fogMaskSpan;
+uniform float fogMaskStrength;
 varying vec2 vUv;
+varying vec2 vWorldFogPosition;
 
 void main() {
   vec2 centred = vUv - 0.5;
@@ -489,7 +530,13 @@ void main() {
   float radialBands = smoothstep(0.78, 0.96, radialPhase);
   float alpha = radialZone * radialBands * smoothstep(0.34, 0.66, breakup) * intensity * foamOpacity;
   if (alpha <= 0.002) discard;
-  gl_FragColor = vec4(foamColor, alpha);
+  vec2 fogUv = clamp(
+    vec2(0.5 + vWorldFogPosition.x / fogMaskSpan, 0.5 - vWorldFogPosition.y / fogMaskSpan),
+    0.0,
+    1.0
+  );
+  float fogVeil = clamp(texture2D(fogMask, fogUv).g * fogMaskStrength, 0.0, 1.0);
+  gl_FragColor = vec4(mix(foamColor, vec3(0.0015, 0.0021, 0.0034), fogVeil), alpha);
 }`;
 
 /**
@@ -517,6 +564,9 @@ function createRiverWaterRadialFoamObject(
       shoreWaveSpeed: { value: item.shoreWaveSpeed },
       shoreWaveReach: { value: item.shoreWaveReach },
       shoreWaveBreakupScale: { value: item.shoreWaveBreakupScale },
+      fogMask: { value: null },
+      fogMaskSpan: { value: 1 },
+      fogMaskStrength: { value: 0 },
     },
     transparent: true,
     depthWrite: false,
@@ -536,6 +586,12 @@ function createRiverWaterRadialFoamObject(
 }
 
 export type RiverWaterObjectLike = RiverWaterObject;
+
+function bindRiverFog(material: ShaderMaterial, bindings: RiverWaterFogBindings): void {
+  material.uniforms["fogMask"] = bindings.texture;
+  material.uniforms["fogMaskSpan"] = bindings.span;
+  material.uniforms["fogMaskStrength"] = bindings.strength;
+}
 
 export function createRiverWaterObject(item: RiverWaterRenderItem, normalMap: Texture | null): RiverWaterObject {
   return new RiverWaterObject(item, normalMap);

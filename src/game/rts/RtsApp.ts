@@ -149,6 +149,7 @@ import {
   rtsShadowBounds,
 } from "./world/rtsAuthoredWorld";
 import { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
+import { RiverWaterObject } from "@engine/render-three/riverWater";
 import {
   applyProbeEnvMapToObject,
   bakeSphereReflectionCapture,
@@ -6952,7 +6953,7 @@ export class RtsApp {
       // Environment uses the same softened, per-fragment fog as authored
       // mountains. A Boolean reveal would make a tree pop in when its origin
       // crosses a cell while its surrounding ground is already half-visible.
-      this.fogMask?.apply(this.mapArt.fogRoots());
+      this.fogMask?.apply(this.mapArt.fogRoots(), "veil");
       // The art arrives after setup's fog pass, and on the start screen there is
       // no simulation tick coming to catch it up — so the newly built props and
       // forest get their first fog pass here, or they would render unfogged
@@ -7014,7 +7015,7 @@ export class RtsApp {
       // first refresh), so the world is never drawn unfogged for even one frame,
       // and it cuts per fragment — a backdrop mountain that straddles the
       // frontier is drawn up to it rather than waiting to arrive whole.
-      this.fogMask?.apply(handle.staticInstanceMeshes);
+      this.fogMask?.apply(handle.staticInstanceMeshes, "veil");
       // Painted foliage is mounted as its own subtree rather than as layout
       // instances, so it is not in `staticInstanceMeshes` and was drawn across the
       // whole map on ground nobody had scouted. It was left out back when fog was
@@ -7022,7 +7023,18 @@ export class RtsApp {
       // plants could not carry — and the mask that replaced it holds no per-object
       // state at all: patching one chunk material costs the same whether it draws
       // one plant or ten thousand. So it rides the same mask as everything else.
-      if (handle.foliageRoot) this.fogMask?.apply([handle.foliageRoot]);
+      if (handle.foliageRoot) this.fogMask?.apply([handle.foliageRoot], "veil");
+      const environmentFog = this.fogMask?.environmentMaskUniforms;
+      if (environmentFog) {
+        for (const river of handle.riverWaterObjects) {
+          if (!(river instanceof RiverWaterObject)) continue;
+          river.setFogBindings({
+            texture: environmentFog.tWorldMask,
+            span: environmentFog.worldMaskSpan,
+            strength: environmentFog.worldMaskStrength,
+          });
+        }
+      }
       // The world arrives after setup's fog pass, and on the start screen there
       // is no simulation tick coming to catch it up — the same reason the map
       // art does this a few lines into its own loader.

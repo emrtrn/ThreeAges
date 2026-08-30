@@ -50119,6 +50119,10 @@ check("§59: §40 memory survives the mask threshold — explored ground keeps i
     WORLD_MASK_SHADER_SOURCE.fragmentColorPatch.includes("outgoingLight = mix"),
     "the GPU patch tints remembered scenery instead of making holes through it",
   );
+  assert.ok(
+    WORLD_MASK_SHADER_SOURCE.fragmentColorPatch.includes("worldMaskDiscardUnknown"),
+    "veil-only environment follows the fog texture without the discard ramp",
+  );
 });
 
 check("§59: an authored Level placement is masked without game code naming it", () => {
@@ -50156,6 +50160,12 @@ check("§59: an authored Level placement is masked without game code naming it",
 
   assert.equal(mask.maskUniforms.tWorldMask.value, view.maskTexture, "the mask reads the fog view");
   assert.equal(mask.maskUniforms.worldMaskStrength.value, 1, "and hides while the match runs");
+  assert.equal(mask.maskUniforms.worldMaskDiscardUnknown.value, 1, "the default mask still hides unknown pixels");
+  assert.equal(
+    mask.environmentMaskUniforms.worldMaskDiscardUnknown.value,
+    0,
+    "environment can stay visible beneath the same fog-colour veil",
+  );
 
   // Teardown must disable before it drops the texture: three binds a 1x1 *white*
   // texture to a null sampler, which the patch reads as "unknown everywhere" and

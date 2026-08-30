@@ -82,10 +82,12 @@ const MASK_RANGE_HIGH = 0.8;
  */
 export class FogMask {
   private readonly uniforms: WorldMaskUniforms;
+  /** Environment-only variation: colour veil without hiding the mesh's pixels. */
+  private readonly veilUniforms: WorldMaskUniforms;
   /** Depth materials this created, owned here because nothing else can free them. */
   private readonly depthMaterials: MeshDepthMaterial[] = [];
   /** Every material patched so far, so a re-applied world does not double-patch. */
-  private readonly patched = new Set<Material>();
+  private readonly patched = new Map<Material, FogMaskAppearance>();
 
   /**
    * @param span World-unit width the fog texture's 0..1 UV range covers. Must be
@@ -100,11 +102,18 @@ export class FogMask {
       rangeLow: MASK_RANGE_LOW,
       rangeHigh: MASK_RANGE_HIGH,
     });
+    this.veilUniforms = createWorldMaskUniforms({
+      span,
+      rangeLow: MASK_RANGE_LOW,
+      rangeHigh: MASK_RANGE_HIGH,
+      discardUnknown: false,
+    });
   }
 
   /** Point the mask at the fog view's live texture. */
   setTexture(texture: Texture): void {
     this.uniforms.tWorldMask.value = texture;
+    this.veilUniforms.tWorldMask.value = texture;
   }
 
   /**
@@ -118,7 +127,8 @@ export class FogMask {
    * Shadows are patched alongside, per mesh rather than per material, because
    * `customDepthMaterial` is a property of the mesh.
    */
-  apply(roots: readonly Object3D[]): void {
+  apply(roots: readonly Object3D[], appearance: FogMaskAppearance = "hide"): void {
+    const visualUniforms = appearance === "veil" ? this.veilUniforms : this.uniforms;
     for (const root of roots) {
       root.traverse((node) => {
         const mesh = node as Mesh;
@@ -126,8 +136,8 @@ export class FogMask {
         const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         for (const material of materials) {
           if (!material || this.patched.has(material)) continue;
-          applyWorldMask(material, this.uniforms);
-          this.patched.add(material);
+          applyWorldMask(material, visualUniforms);
+          this.patched.set(material, appearance);
         }
         if (!mesh.castShadow) return;
         const depth = applyWorldMaskShadow(mesh, this.uniforms);
@@ -145,6 +155,7 @@ export class FogMask {
    */
   setEnabled(enabled: boolean): void {
     this.uniforms.worldMaskStrength.value = enabled ? 1 : 0;
+    this.veilUniforms.worldMaskStrength.value = enabled ? 1 : 0;
   }
 
   /**
@@ -162,13 +173,22 @@ export class FogMask {
     this.depthMaterials.length = 0;
     this.patched.clear();
     this.uniforms.tWorldMask.value = null;
+    this.veilUniforms.tWorldMask.value = null;
   }
 
   /** The live uniform block, for `test:engine` and the debug overlay. */
   get maskUniforms(): WorldMaskUniforms {
     return this.uniforms;
   }
+
+  /** Live veil-only uniforms, exposed for the environment/fog regression check. */
+  get environmentMaskUniforms(): WorldMaskUniforms {
+    return this.veilUniforms;
+  }
 }
+
+/** What the mask does to an environment mesh's pixels in unknown ground. */
+export type FogMaskAppearance = "hide" | "veil";
 
 /** Exposed so the engine test can pin the thresholds against `FogView`'s alphas. */
 export const FOG_MASK_RANGE = { low: MASK_RANGE_LOW, high: MASK_RANGE_HIGH } as const;
