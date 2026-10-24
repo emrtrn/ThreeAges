@@ -1438,6 +1438,11 @@ export class SceneApp {
     this.renderer = runtimeCore.renderer;
     this.scene = runtimeCore.scene;
     this.camera = runtimeCore.camera;
+    if (this.editorEnabled) {
+      // Keep large landscapes visible when navigating or framing the whole level.
+      this.camera.far = 2000;
+      this.camera.updateProjectionMatrix();
+    }
     this.orthoCamera = new OrthographicCamera(-5, 5, 5, -5, this.camera.near, this.camera.far);
     this.activeCamera = this.camera;
     this.syncOrthoCameraFromPerspective();
